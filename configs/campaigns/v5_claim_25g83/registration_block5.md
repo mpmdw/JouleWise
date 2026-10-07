@@ -1,11 +1,12 @@
 # Registration V5-CLAIM-25G83-B5: the first claim-bearing `_v5` windows (measurement block 5)
 
-Status: **DRAFT, NOT SEALED. Revision 9, 2026-10-07.** Written by Opus 5.5, as lane L6 of the gate-prune workflow
+Status: **DRAFT, NOT SEALED. Revision 10, 2026-10-07.** Written by Opus 5.5, as lane L6 of the gate-prune workflow
 (revision 3, commit `71c91d74`), then as the registration-sync side lane (revision 4, last commit `7261a585`), then
 as the REG lane of gate-prune round 3 (revision 5, last commit `9d63b4df`), then as the REG sync to the frozen head
 (revision 6, last commit `c6843537`), then as the REG sync to the audit fixes and the NEG-8 ruling (revision 7, last
 commit `dc046d4d`), then as the REG final pass to the candidate H_claim `43ac12d0c` (revision 8, last commit
-`30d92227`), then as the REG sync to the int5 head `fe28e5a0c` (revision 9), on
+`30d92227`), then as the REG sync to the int5 head `fe28e5a0c` (revision 9, last commit `bc8ad4ae`), then as the REG
+preparation pass that read the merged census interpreter rule at the int5 head `9b0c680ed` (revision 10), on
 branch `design/2026-10-05-v5-claim-block-draft` (revision 2 is commit `bfd1ee8c`). This file authorizes no arm, no
 launch and no analysis. It binds only when one cold gate (§0.1, §12) seals it together with three companions in the
 same directory:
@@ -19,10 +20,13 @@ same directory:
 A **FILL**, written `FILL[NAME]`, is a value that must be tied to authenticated bytes before the point named in §13.
 It is never a default. One FILL is a marker on values already written: `FILL[B5-FINAL-HASHES]` follows each digest
 computed at an integration head, to be recomputed at the integration's final head. Revision 8 recomputed every one
-at `43ac12d0c`. Revision 9 recomputed every one at `fe28e5a0c`: only the identity pins changed (§4.6 item 3). One
-commit is still to be merged after `fe28e5a0c`, the census interpreter rule of §4.5, so the head that carries it, the
-new candidate H_claim, is itself `FILL[B5-FINAL-HASHES]` (§2 item 1): its integrator reports it, and each digest so
-marked is checked again there. No claim-eligible `_v5` energy exists at this writing, and none was read (§16).
+at `43ac12d0c`. Revision 9 recomputed every one at `fe28e5a0c`: only the identity pins changed (§4.6 item 3). The
+census interpreter rule of §4.5 was merged after `fe28e5a0c` (by int5 commit `84661ddb3`), and the seal preparation
+(the integration's last steps before the seal: these documents placed in the code tree, the whole test suite, the
+sealed inventory) is still adding commits after that merge. So the final head, the new candidate H_claim, is itself
+`FILL[B5-FINAL-HASHES]` (§2 item 1): its integrator reports it, and each digest so marked is checked again there.
+Revision 10 found every such digest unchanged at the int5 head `9b0c680ed` (§13) and filled none of them. No
+claim-eligible `_v5` energy exists at this writing, and none was read (§16).
 
 **What changed from revision 2.** On 2026-10-05 Ed ruled that arming refuses only on a physical hazard, measured
 directly, and that every other check becomes a recorded flag (Ed: "this again feels like in ability to prune silly
@@ -201,7 +205,8 @@ No registered threshold, sizing value or pinned digest changed.
    (`bundle_absent`, N2), and never-run references count toward `references_insufficient` (N3). When the verdict's
    sources do not authenticate, the harvest still maps losses from the claim root's manifests and fails the screen
    instead of leaving a stored screen standing (N1).
-3. **Smaller changes:** the census also recognises an agent run by its npm package path (§4.5, N5); the unusable-pack
+3. **Smaller changes:** the census also recognises an agent run by its npm package path (§4.5, N5; replaced in
+   revision 10 by the rule that reads every argument of a JavaScript runtime); the unusable-pack
    refusal keys on an exception type, not a message (§0.17, N6); a torn flag line with an empty code prefix names no
    code (§6.2, N7); the refusal allowlist gains the GAMMA window reason and the retyped raise (§6.11).
 4. **Fills** (§0.7, §2, §4.6, §5.5, §9.1, §13): `B5-FINAL-HASHES` (every digest recomputed at `43ac12d0c`),
@@ -215,14 +220,16 @@ an agent that had launched it (dry-records finding F1). Two lanes fixed them (`l
 `ca25d9299`; `lane/2026-10-07-neg8-delta-fixes`, `294f6e573`), the orchestrator added a sealed identity pin for the
 reference workload (`754c8c093`), and on Ed's word T3 was removed from the census (`63d2b9bad`, `fe28e5a0c`). The int5
 head is now `fe28e5a0cc6125842ecf4b53f24385c73e4d6dd7` (`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_4.md`). One
-more commit, the census interpreter rule, is being merged after it (§4.5). This revision makes the text say what that
+more commit, the census interpreter rule, was being merged after it when revision 9 was written (§4.5; it is merged
+at `84661ddb3`, and revision 10 restates it from the code). This revision makes the text say what that
 code does. No registered threshold, sizing value or plan tree changed.
 
 1. **The agent census** (§4.5). The probe is now `/usr/bin/pgrep -a -lf '[c]odex|[c]laude'`. `-a` makes `pgrep` list
    the census's own ancestors, which Darwin's `pgrep` otherwise leaves out, so an agent session that launched the arm
    is a hit (F1). The window's own process tree is followed downward only. T3 Code is no longer an agent (Ed,
    2026-10-07). A JavaScript runtime is an agent when any element of its command line names an agent's package or
-   install path, with no option parsing (the pending commit).
+   install path, with no option parsing (then a pending commit, described from the orchestrator's text; revision 10
+   item 1 gives the rule as merged, which is wider).
 2. **NEG-8 references** (§0.12, §4.6 item 3, §6.5). A reference that fails the strict check is lost (reason
    `strict_invalid`) in the verdict writer and its replay, not a reason to fail the screen (A5). Every reference and
    spare is checked against one sealed identity, the new `neg8_reference` pin (A2). A reference or spare that ran
@@ -239,6 +246,40 @@ code does. No registered threshold, sizing value or plan tree changed.
 5. **Fills** (§2 items 1, 2 and 6, §9.1, §13): `B5-FINAL-HASHES` (every digest recomputed at `fe28e5a0c`; the final
    head is itself a FILL), `416-DELTA-RECORD`, `B5-DRY-RENDER-RECORD` and `B5-DRY-ARM-RECORD`.
 6. **Catalog** (`flag_catalog.json`): no code added or removed and no effect changed; five notes rewritten (§13).
+
+**What changed in revision 10.** Revision 9 described one rule, the census's rule for JavaScript runtimes, from the
+text of a commit that had not landed. That commit is now merged (lane `lane/2026-10-07-census-interp`: the rule is
+commit `2524637ae`, the lane's last commit is `455e59b86`, and commit `84661ddb3` merged it into int5). This revision
+reads the merged code at the int5 head `9b0c680ed79d5c7b72b4b39ed04b9fe51dd116d4` and makes the text say what it
+does. It then checks every item of the integration's list of required text changes
+(`/Users/edr/night-archive/gate-prune/REG_PENDING.md`, every section) against this file, the analysis plan and the
+catalog, and repairs the gaps it found. No registered threshold, sizing value, plan tree, pin or catalog effect
+changed. No FILL that waits for the final head or for the seal is filled: `H-CLAIM`, the final head under
+`B5-FINAL-HASHES`, `B5-SEAL-SEATS`, `B5-SEAL-RECORD`, `B5-PLANS-REGENERATED`, `B5-BLIND-CUSTODY-MAP` and
+`B5-RELEASE-EVENT` stay open, and §11 and §12 are unchanged.
+
+1. **The census's rule for JavaScript runtimes, from the merged code** (§4.5; also §2 items 1, 6, 7 and 8, §9.1,
+   §13, §14 Q14 and Q15, §16). Some agents are JavaScript programs, so the process that runs one is a JavaScript
+   runtime (a program that executes JavaScript: `node`, `bun` or `deno`), and the agent shows only in the strings
+   the process was started with, its arguments. Such a process now counts as an agent when any argument holds a path
+   component or word beginning `claude` or `codex`. The matcher no longer tries to work out which argument is the
+   script: that needed a table of the arguments that configure each runtime (its options), and two audits in a row
+   found the table wrong. A runtime that names no agent, but whose arguments say that it runs code no argument names
+   (code written on the command line, or a script fed to the process's input), is undecided and counts as an agent.
+   Revision 9's wording ("names an agent's package or install path") was narrower than the code. §4.5 now builds the
+   rule from the two audit findings that forced it, shows it on nine command lines, and says in which direction it
+   can err.
+2. **Gaps found against the list of required changes.** Each of these was in the list and was missing here or only
+   implied: the spare retry passes `--max-failures k` (§0.12); the census sites that share the matcher are named
+   (§4.5); the lane that audit finding A5 deferred is stated (§9.1); and the analysis plan discloses a hazard whose
+   probe at the arm returned no reading (analysis plan §8.1).
+3. **Sync at `9b0c680ed`** (§13, `B5-REV10-SYNC`). Since `fe28e5a0c` the integration changed the census matcher and
+   its tests, one explanatory comment in the harvest and one test data file, and it added a copy of revision 9 of
+   these documents (commit `763b678a7`). The plan trees, the sizing output, the identity pins, the pin registry and
+   the refusal allowlist are byte-identical to `fe28e5a0c`. Revision 10 exists only on this branch until the seal
+   preparation copies it into the integration.
+4. **Catalog** (`flag_catalog.json`): no code, effect or note changed; its 192 codes agree with the code at
+   `9b0c680ed` (§13).
 
 ## 0. Terms, built in the order they are used
 
@@ -603,7 +644,10 @@ the code and says so.
   `neg8-spares-<stage id>.json` in the chain's transcript directory (a 300 s wall budget, §5.1). It then runs the
   spare set of size k = planned − succeeded (at most the stage's spares) once, into the stage's own runs root, after
   the ordinary 60 s settle and under the ordinary cooldown and admission procedure, provided the collection deadline
-  allows 60 + 180 + 620 × k s (§5.1). The failed attempt's bundle is never moved, re-measured or replaced; both
+  allows 60 + 180 + 620 × k s (§5.1). The run is the stage's own command line with two changes: its config directory
+  is the spare set's, and it passes `--max-failures k` (the runner's limit on failed members before it ends a stage,
+  §5.2), so one failed spare does not stop the spares after it (`chain.spare_argv`). The failed attempt's bundle is
+  never moved, re-measured or replaced; both
   attempts stay in the roster, and the spare takes the slot's role (start, midpoint or end), so the screen reads it
   at that position. Each spare that left a bundle is flagged `member.retried` (DISCLOSE; observed: the stage, the
   slot, k, attempt 2). There is one retry per stage; a second loss at the same stage is evidence about the machine and
@@ -908,15 +952,19 @@ Each is evidenced by a path and SHA-256 before the point named.
    branch `integrate/2026-10-06-gate-prune-3`), the P3 round (lanes `lane/2026-10-06-p3-{harv,haz,drv,wd}`) and
    lane L10, the two audit-fix lanes of 2026-10-07 and the NEG-8 survivors lane (revision 7 list), the cold-pass-2
    fix lane and the rulings Q11 and N8 (revision 8 list), the census-ancestors and NEG-8 delta-fix lanes, the sealed
-   reference pin, the T3 prune and the census interpreter rule (revision 9 list), merged under the merge gates, with
+   reference pin and the T3 prune (revision 9 list) and the census interpreter rule (revision 10 list), merged under
+   the merge gates, with
    one consolidated Fable cold pass over the measurement code changed since `e6b6a0ce` (done at the frozen head
    `a434e363d`, `/Users/edr/night-archive/gate-prune/cold-pass/`) and Fable delta cold passes over the measurement code
    changed from `a434e363d` to the final int5 head. `FILL[H-CLAIM]`. The candidate is the final head of
    `integrate/2026-10-07-int5`: `fe28e5a0cc6125842ecf4b53f24385c73e4d6dd7`
-   (`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_4.md`) plus the merge of the census interpreter rule (lane
-   `lane/2026-10-07-census-interp`, §4.5), whose head is `FILL[B5-FINAL-HASHES]` (the integrator reports it). It
+   (`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_4.md`), plus the census interpreter rule (lane
+   `lane/2026-10-07-census-interp`, last commit `455e59b86f19dcdf4c25ca464dbed17be4e51ec3`, merged into int5 by commit
+   `84661ddb36865c6c478fc7b862d1bc274f1921cd`; §4.5), plus the commits the seal preparation adds after that merge.
+   The final head is `FILL[B5-FINAL-HASHES]` (the integrator reports it). It
    carries the frozen head `a434e363d96621318657418e60b8d14410079d82` (the refusal census and its triage, revision 6
-   list), the three lanes of revision 7, the changes of revision 8 (at `43ac12d0c`) and those of revision 9. The delta
+   list), the three lanes of revision 7, the changes of revision 8 (at `43ac12d0c`), those of revision 9 and the
+   interpreter rule of revision 10. The delta
    cold passes:
    - pass 2, on `a434e363d..821b58f8b` (`/Users/edr/night-archive/gate-prune/cold-pass-2/REPORT.md`), refused on one
      defect, D1 (§0.12); D1 and the notes N1–N3 and N5–N7 are fixed in `d06ab4778`, merged at `ffdca2250`;
@@ -925,11 +973,15 @@ Each is evidenced by a path and SHA-256 before the point named.
    - pass 4, on `43ac12d0c..fe28e5a0c` (`cold-pass-4/REPORT.md`): PASS WITH NOTES; one defect, D1 of that pass, in
      claim-time code (floor extraction cannot receive the harvest archive, §0.12), which the pass judged not to block
      the seal or the arm, assigned to lane L9-NEG8 (analysis plan §11).
-   The interpreter-rule commit is not covered by these passes; its review is part of `FILL[H-CLAIM]`. The four pinned
+   The merge of the interpreter rule (`fe28e5a0c..84661ddb3`) is not covered by these passes; its review, a Fable
+   delta pass over the measurement code changed from `fe28e5a0c` to the final head, is part of `FILL[H-CLAIM]`. The
+   four pinned
    estimator files (`joulewise/reduce.py`, `uncertainty_evidence.py`, `powermetrics_fiducial.py`,
-   `adapters/powermetrics.py`) are byte-identical from `a434e363d` to `fe28e5a0c` (`git diff`, empty, run by this
-   author). The candidate becomes H_claim only through the cold passes, the merge gates and the seal. If H_claim
-   differs from `fe28e5a0c` by more than the interpreter rule, the sync of item 8 is repeated on the difference.
+   `adapters/powermetrics.py`) are byte-identical from `a434e363d` to `fe28e5a0c`, and to the int5 head `9b0c680ed`
+   that revision 10 read (`git diff`, empty, run by this
+   author). The candidate becomes H_claim only through the cold passes, the merge gates and the seal. Revision 10
+   repeated the sync of item 8 on the difference `fe28e5a0c..9b0c680ed` (§13, `B5-REV10-SYNC`); if H_claim differs
+   from `9b0c680ed`, the sync is repeated on that difference.
 2. The #416 pre-arm triple audit has run, and every BLOCKER or MAJOR it found has been sent to a refuter of another
    model family and, if confirmed, fixed (§9.1). **`416-AUDIT-RECORD`** (filled in revision 8): see §9.1. The
    diff-scoped re-audit of the fixes made since has run, and every BLOCKER it found is fixed or assigned to the
@@ -1009,6 +1061,15 @@ Each is evidenced by a path and SHA-256 before the point named.
    one hit, an `npm exec` process, matched only through environment text that `npm exec` leaves in its process title
    (the macOS cryptex path `…/codex.system/…`), not through its arguments. A window launched by `launchd` has no such
    process, so this cannot refuse a window; it can only over-refuse a desk arm while such a process is alive.
+   *The census matcher changed after these records.* Both were written at `fe28e5a0c`. After it, commit `84661ddb3`
+   changed how the census decides a process that runs a JavaScript program (§4.5). The render uses a stand-in
+   census, so it does not exercise the matcher. The dry arm's refusal holds under the merged rule, because one agent
+   is enough to refuse and the seat's own `claude` process is one either way: if it ran as Claude Code's own program
+   file, it is decided by that file's name and location, a rule the commit did not touch; if it ran as a JavaScript
+   program under `node`, its arguments hold the directory name `claude-code`, which the merged rule counts. The
+   command line `node /opt/homebrew/bin/codex exec`, which revision 9 recorded among the dry arm's agents (§13), is
+   an agent under the merged rule as well (computed by this author with the code at `9b0c680ed`, §4.5). The dry arm
+   itself was not run again at `9b0c680ed`; §14 Q15 asks whether it is repeated at the final head.
 7. Before the seal, one machinery smoke of the block-5 cooldown policy has passed (timing ruling item 2): a
    dummy-label stage of three small members run under `quiet_mac_p2_b5.json` and harvested through the cooldown
    join, `campaign_cooldown_evidence` (the check that pairs each member with its cooldown record in the campaign
@@ -1047,17 +1108,21 @@ Each is evidenced by a path and SHA-256 before the point named.
    over to that head. The same search from `d3c107f2f` to `43ac12d0c` finds no added or removed line mentioning the
    cooldown in those three files and no change under `configs/campaign_policies/`, so it carries over to `43ac12d0c`
    as well, and the same search from `43ac12d0c` to `fe28e5a0c` again finds none (the runner's only change there is
-   the `strict_invalid` loss of §0.12), so it carries over to `fe28e5a0c`. The interpreter-rule commit changes only
-   the census matcher; the search is repeated on it at the final head.
+   the `strict_invalid` loss of §0.12), so it carries over to `fe28e5a0c`. From `fe28e5a0c` to the int5 head
+   `9b0c680ed` (searched by this author for revision 10) the runner and the controller did not change, the harvest
+   changed in one explanatory comment that does not mention the cooldown, and `configs/campaign_policies/` did not
+   change, so it carries over to `9b0c680ed`; the search is repeated at the final head if that differs.
 8. The P3 sync points of §13 are each confirmed against the merged code, and this text is corrected where the code
    chose differently (a draft edit, before the seal). **`P3-SYNC-RECORD`** (filled in revision 6): confirmed against
    the frozen head `a434e363d`; the result of each sync point is the table in §13, and the catalog comparison there.
    Revision 7 repeats the sync for the code merged after `a434e363d` (the audit fixes and the NEG-8 lane), against
    the int5 head `d3c107f2f`, in a second table in §13 (`B5-REV7-SYNC`), and revision 8 repeats it for the code
    merged after `d3c107f2f`, against `43ac12d0c`, in a third (`B5-REV8-SYNC`), and revision 9 for the code merged
-   after `43ac12d0c`, against `fe28e5a0c`, in a fourth (`B5-REV9-SYNC`). Together they hold for H_claim only if
-   H_claim is `fe28e5a0c` plus the interpreter-rule commit (item 1); the fourth table lists what is to be confirmed on
-   that commit, and any other difference is synced again.
+   after `43ac12d0c`, against `fe28e5a0c`, in a fourth (`B5-REV9-SYNC`), and revision 10 for what the integration
+   changed after `fe28e5a0c`, against the int5 head `9b0c680ed`, in a fifth (`B5-REV10-SYNC`), which also confirms
+   the interpreter rule that the fourth table listed as still to be checked. Together they hold for H_claim only if
+   H_claim's files under `joulewise/`, `scripts/` and `configs/` are those of `9b0c680ed`, apart from the four
+   documents of item 3; any other difference is synced again.
 
 **Before ALPHA-1's harvest:** the harvest program (lane L5) has passed its Fable final pass and is pinned by an
 addendum to the seal record (§11 item 4). Three requirements that revision 5 listed here are met at the frozen head
@@ -1376,22 +1441,106 @@ list the census's own ancestors too, which it otherwise leaves out.
 *Forcing problem* (dry-records finding F1, 2026-10-07): without `-a`, an agent session that launched the arm was invisible to the census that should have refused it. With `-a`, a desk dry
 arm launched from inside an agent session always refuses at the census (§2 item 6).
 
-That list is a superset, so one matcher (`joulewise/agent_identity.py`, used at every census site) decides each
-listed process by what the kernel says it runs:
+That list is a superset: it holds every process with either string anywhere in its command line, whether or not it
+is an agent. Each process on it is a **listed process**, and one matcher (`joulewise/agent_identity.py`) decides each
+listed process by what the kernel says it runs. A listed process that the matcher counts as an agent is a **hit**.
+For each listed process id the matcher reads two things from the kernel: the **executable**, the path of the program
+file the process is running (`proc_pidpath` on macOS), and the **arguments**, the strings the process was started
+with (`KERN_PROCARGS2`). The first argument is the **process name**, which a program may set to anything. Every
+census that a block-5 window depends on calls this one matcher: the driver's census before the arm, again before the
+launch and every 30 s in the window (`joulewise/night_gate.py` `agent_census`); the hazard arm's own census at its
+start and at GO (`joulewise/hazards/arm.py` `agent_census`); and the watchdog's check that no agent is left before it
+releases a finished window (§5.4). Two older census sites that block 5 never runs call it as well: the quiet-sampler
+admission (`joulewise/quiet_admission.py`) and the retired t0 evidence author
+(`joulewise/arm_readiness_evidence_t0.py`, §11 item 3). The matcher's rules:
 
-- **Executable identity.** A listed process is an agent when its executable or process name starts with `claude` or
-  `codex`, or when its executable sits in a `claude/versions/<version>` or `codex/versions/<version>` install (the
-  Claude Code native binary is `~/.local/share/claude/versions/<version>`).
-- **JavaScript runtimes.** A JavaScript runtime (`node`, `bun`, `deno`) is an agent when any element of its command
-  line names an agent package path (`@anthropic-ai/claude*`, `@openai/codex*`, `claude-code`, or the `claude` or
-  `codex` install directories); its options are not parsed. *Forcing problem:* two successive audit findings (Sol
-  delta audit A4 at `43ac12d0c`, and the Sol re-verification's R1 at `fe28e5a0c`) found launches in which option
-  parsing mistook an option's value for the script: `node --require /tmp/preload.cjs …/claude-code/cli.js` read the
-  preload file as the script, and after that was fixed, `node --trace-require-module all …/@openai/codex/cli.js` read
-  `all` as the script. Each time a live agent read as no agent and the census came back clean. Window processes are
-  Python and shell, never a JavaScript runtime, so the rule cannot match the window. *This rule is the pending commit
-  of lane `lane/2026-10-07-census-interp`;* at `fe28e5a0c` the matcher still parses the options. The head that carries
-  it is `FILL[B5-FINAL-HASHES]` (§2 item 1), and §13 lists what is to be confirmed there.
+- **Executable identity.** A listed process is an agent when the file name of its executable, or its process name,
+  begins `claude` or `codex` (letter case is ignored; examples are `codex`, `codex-code-mode-host` and the Claude
+  desktop app's `Claude`), or when its executable sits in a `claude/versions/<version>` or `codex/versions/<version>`
+  install (the Claude Code native binary is `~/.local/share/claude/versions/<version>`, a file named only by its
+  version number).
+- **JavaScript runtimes.**
+  *Forcing problem.* Some agents have no program file of their own. Claude Code installed from npm (the JavaScript
+  package registry), and the launcher npm installs for Codex (a small JavaScript program that starts the Codex
+  binary), are JavaScript packages. The process that runs one is a **JavaScript
+  runtime**, a program that executes JavaScript (Node.js, Bun or Deno, whose executables are `node`, `bun` and
+  `deno`), and the agent appears only among the runtime's arguments, as the path of the script it was told to run.
+  Executable identity reads such a process as `node`, which is not an agent. Earlier versions of the matcher
+  therefore tried to find *the script* among the arguments. That needs, for every **option** of every runtime (an
+  argument beginning `-` that configures the runtime), the knowledge of whether the next argument is that option's
+  value or the script. Two audits in a row found a launch that this knowledge got wrong, and each time a live agent
+  read as no agent and the census came back clean:
+  - Sol delta audit A4, at `43ac12d0c`: in `node --require /tmp/preload.cjs …/claude-code/cli.js` the matcher took
+    `/tmp/preload.cjs`, the value of `--require` (a file the runtime loads before the script), for the script, and
+    never looked at the Claude Code path after it.
+  - Sol re-verification R1, at `fe28e5a0c`, after A4's fix (`ca25d9299`) had added a table of the options that take
+    a value and a rule that an option beginning `--trace-` takes none: `--trace-require-module` does take one
+    (Node.js v23.7.0 accepts `node --trace-require-module all …/@openai/codex/cli.js`), so the matcher took its
+    value `all` for the script, and a running Codex process was not a hit.
+
+  The second miss showed that the mechanism was wrong, not one table entry. Such tables are a copy of three
+  runtimes' command-line grammars, which change with their releases, and every error in the copy hides an agent.
+
+  *Rule* (orchestrator ruling of 2026-10-07; commit `2524637ae` of lane `lane/2026-10-07-census-interp`, merged into
+  int5 by commit `84661ddb3`; `agent_identity.identify`). The matcher no longer looks for the script, and it never
+  parses a runtime's options. A listed process whose executable's file name, or whose process name, begins `node`,
+  `bun` or `deno` (so `node22` and `bun-1.1` count) is treated as a runtime, and then:
+  1. It is an **agent** when any of its arguments, the process name included, names an agent. To test an argument,
+     the matcher puts it in lower case and cuts it into pieces at every `/`, `\`, white space, quote, bracket and
+     each of the characters `=`, `,`, `;`, `:` and `+`. A piece that begins `claude` or `codex` names an agent. It
+     does not matter where the argument stands: it may be an option's value, the script, or anything after the
+     script.
+  2. Otherwise it is **undecided**, and an undecided process counts as a hit, when its command line says that it
+     runs code which no argument names. That is the case when one of the arguments after the process name is `-`
+     (the script is read from standard input, the process's input stream, so no file name appears), or is `-e`,
+     `-p`, `-pe`, `--eval`, `--print` or `eval` (the code itself is written on the command line), or begins
+     `--eval=` or `--print=`.
+  3. Otherwise it is **not an agent**.
+
+  Every other listed process (a shell, Python, a system tool) is decided by executable identity alone; its arguments
+  are never read.
+
+  *Worked example.* Each verdict below was computed by this author with the merged code at `9b0c680ed`
+  (`agent_identity.identify`); the executable is `/opt/homebrew/bin/node` unless the row says otherwise.
+
+  | Arguments | Pieces that decide | Verdict |
+  |---|---|---|
+  | `node --trace-require-module all /opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js` (the form of R1's launch) | `codex`, `codex.js` | agent |
+  | `node --require /tmp/preload.cjs /Users/x/.npm/lib/node_modules/@anthropic-ai/claude-code/cli.js` (the form of A4's launch) | `claude-code` | agent |
+  | `node /opt/homebrew/bin/codex exec` (the Codex launcher, an agent in the dry arm of §2 item 6) | `codex` | agent |
+  | `npm exec @openai/codex@0.153.3 mcp-server` (one argument: `npm exec` rewrites the process name of its `node` process to this text) | `codex@0.153.3` | agent |
+  | `node -e "require('@openai/codex')"` | `codex`, cut out at the `/` and the quote | agent |
+  | `node -e "console.log(1)" /Users/x/.claude/notes.txt` | none begins `claude` or `codex` (`.claude` begins with a dot); `-e` is present | undecided, a hit |
+  | `node somescript.js --path /Users/x/.claude/custody/attempt3/out` | none; no argument of rule 2 | not an agent |
+  | `python3.13 -B /Users/x/.claude/custody/run.py` (executable `/opt/homebrew/bin/python3.13`) | arguments not read | not an agent |
+  | `zsh /Users/x/.claude/custody/chain.zsh` (executable `/bin/zsh`) | arguments not read | not an agent |
+
+  *In which direction the rule can err.* It can count a process that is no agent: a runtime with any argument
+  holding a piece that begins `claude` or `codex` (`node /Users/x/claude-notes/build.js` is a hit), and a program
+  that is not a JavaScript runtime but whose name begins with one of the three names (Ruby's `bundle` begins `bun`,
+  so it is read by rules 1 to 3). The cost is an arm refused at the census, or a chain stopped in the window. A
+  window is launched by `launchd` on a machine kept for the measurement, and the window's own processes are Python,
+  shell and system tools, which the next rule ignores whatever they run, so no window process can be such a hit.
+
+  It can also miss an agent, in four ways:
+  - a runtime that names its script and whose arguments carry the agent's name only inside a longer piece
+    (`my-codex-tool`, `.claude`). This follows from the test of rule 1, which asks for a piece that *begins* with an
+    agent's name, so that a runtime that merely works under a directory such as `.claude` is not counted;
+  - a runtime that names no agent and reads its program from standard input without the `-` argument
+    (`node --require /Users/x/.claude/hook.cjs`, for example). Telling this from a launch that names its script
+    would need the option parsing that the rule withdrew;
+  - an agent run by an interpreter that is not one of the three runtimes and is not itself named for an agent (a
+    Python program);
+  - an agent whose command line holds neither `codex` nor `claude`, which the probe never lists.
+
+  The census is the doctrine's check that no agent session is alive; it is not the measurement of what an agent
+  would do to a number. That physical hazard, a process using the CPU while a member runs, is measured directly and
+  by no name: the contention hazard judges every process outside the measurement tree against 5% of one core, at
+  the arm's dwell and every 10 s in the window (§4.2), and a member whose request such a process overlapped is
+  removed (`contention.request_overlap`, §6.4). §14 Q14 puts these limits to the seal gate.
+
+  The final head that carries this rule is `FILL[B5-FINAL-HASHES]` (§2 item 1); §13 (`B5-REV10-SYNC`) records what
+  was confirmed at the int5 head `9b0c680ed`.
 - **The caller's own tree.** A process in the caller's own process tree (the driver or the arm and their descendants,
   or a process group led by one of them) is the window itself and is ignored, whatever it runs. The tree runs downward
   only: the caller's ancestors (the shell or agent session that launched it, `launchd`) are not in it and are decided
@@ -2925,7 +3074,7 @@ Refuter outcomes for every BLOCKER and MAJOR, with the reasons for each refutati
 | Astra A2: a missing `chain.started` gives a NULL harvest | BLOCKER | refuted: the driver creates the marker exclusively before the chain spawns | none |
 | Astra A3: an unread probe refuses at the arm; four unreadable censuses stop the chain | BLOCKER | confirmed, MINOR | lane `audit-fixes-1` (§4.1, §4.5) |
 | Astra A4: a missing journal makes every member `contention.unmeasured` / `battery.unmeasured` | BLOCKER | refuted: a member whose contention or battery was never measured cannot be shown clean; the exclusion is kept | none |
-| Astra A5: a missing locator sends members down legacy authentication | MAJOR | confirmed, MINOR | lane `audit-fixes-1` (§0.17), plus a deferred lane |
+| Astra A5: a missing locator sends members down legacy authentication | MAJOR | confirmed, MINOR | lane `audit-fixes-1` (§0.17: the unusable-inventory refusal, and the lineage flags that name the roots whose members will refuse). One lane is deferred until after block 5: carry the fact that a member runs in a block-5 window (the `HAZARD_PACK` route) by a channel other than the lineage locator file (`.joulewise-launch-lineage.json`, §0.12), so that a missing locator no longer sends the member down the authentication of the retired `TRANSACTION_PACK` route (§11 item 3). Until then such a member refuses itself, and the lineage flags and the yield counts show it (§0.17, §5.7) |
 | Astra A6: a missing desk identity file stops the reservation | MAJOR | confirmed, MINOR | lane `audit-fixes-1` (§6.10) |
 | Fable F1: an absent verdict removes the window | MAJOR | refuted: a NUMBER_INTEGRITY exclusion with a re-harvest cure (§7.2); allowlist label fixed | lane `audit-fixes-2` (label only) |
 | Fable F2: an unreadable failed-member list removes the window | MAJOR | refuted: the writer cannot produce it | none |
@@ -2960,9 +3109,9 @@ Every finding of the Sol passes was shown by an executed probe (the report marks
 | A1 (BLOCKER) | an accepted survivor re-screen did not replace the bracket the claims read: 0.5933 J where the survivors' allowance is 0.6383 J (§0.12) | fixed, lane `neg8-delta-fixes` (`6fd863645`): `derived/neg8-allowance.json` and its consumer; re-verified FIXED |
 | A2 (BLOCKER) | a spare that ran another model sat in an unpinned group and raised no identity flag | fixed (`66c956dba`, pin `754c8c093`): the `neg8_reference` unit; re-verified FIXED |
 | A3 (BLOCKER) | absent or unreadable manifests erased a known reference loss, and the stored passing screen stood | fixed (`3cf9d6b2f`): the sealed roster names the references; re-verified FIXED |
-| A4 (should fix) | the census read a `node` option's value as the script, so a live agent read as clean | fixed, lane `census-ancestors` (`ca25d9299`), by parsing options; re-verified FIXED |
+| A4 (should fix) | the census read a `node` option's value as the script, so a live agent read as clean | fixed, lane `census-ancestors` (`ca25d9299`), by parsing options; re-verified FIXED; the parsing was then withdrawn (R1 below) |
 | A5 (should fix) | a strict-invalid reference failed the whole screen instead of being lost | fixed (`294f6e573`): reason `strict_invalid` in writer, replay and harvest; re-verified FIXED |
-| R1 (should fix) | a second `node` option (`--trace-require-module all`) was read as the script: the same class as A4, a second time | the option parsing is withdrawn: the interpreter rule of §4.5 (lane `census-interp`, pending; head `FILL[B5-FINAL-HASHES]`) |
+| R1 (should fix) | a second `node` option (`--trace-require-module all`) was read as the script: the same class as A4, a second time | fixed, lane `census-interp` (`2524637ae`, merged into int5 by `84661ddb3`): the option parsing is withdrawn and every argument of a JavaScript runtime is read (§4.5). The merge came after the four passes above, so no pass has reviewed it yet; its review is part of fixing H_claim (§2 item 1), at the final head `FILL[B5-FINAL-HASHES]` |
 | R2 (BLOCKER) | floor extraction cannot pass the harvest archive, so every block-5 floor cell has no allowance (the same defect as cold pass 4 D1) | lane L9-NEG8 (analysis plan §11): claim-time code, safe direction (refuses) |
 | R3 (BLOCKER) | the claim validator rejects a row whose stored screen failed before reading the harvest's passing survivor re-screen | lane L9-NEG8: claim-time code, safe direction (refuses) |
 
@@ -3107,14 +3256,14 @@ sensitivity line of analysis plan §8.
 |---|---|---|
 | Commit | `H-CLAIM` | Seal |
 | Sealed inventory | `sealed_inventory.json` filled at H_claim | Seal |
-| Dry render, dry arm | `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`: filled in revision 9 (§2 item 6), at `fe28e5a0c`; the render is an L2 harness render | Before ALPHA-1 arms |
+| Dry render, dry arm | `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`: filled in revision 9 (§2 item 6), at `fe28e5a0c`; the render is an L2 harness render. The census matcher changed after `fe28e5a0c`; §2 item 6 says why the dry arm's refusal holds under the merged rule, and §14 Q15 asks whether it is repeated at the final head | Before ALPHA-1 arms |
 | Audit, seats | `416-AUDIT-RECORD`, `416-SEATS`: filled in revision 8 (§9.1); `416-DELTA-RECORD` (the diff-scoped passes over `a434e363d..fe28e5a0c`, §9.1): filled in revision 9; `B5-SEAL-SEATS` | Seal seats at seal |
 | Sizing | `B5-SIZING-OUTPUTS`: draft values at `fe28e5a0c` (§5.5), unchanged since `d3c107f2f`, spares included; pinned at H_claim | Seal |
 | Cooldown smoke | `B5-COOLDOWN-SMOKE-RECORD` (§2 item 7): filled in revision 6 | Seal |
 | Plans | `B5-PLANS-REGENERATED`: every window plan and plan-input file written from the sealed §4.3 block (contention `clean_s` 180) | Before ALPHA-1 arms |
-| P3 sync | `P3-SYNC-RECORD` (§2 item 8), with `P3-BATTERY-CODES` (§6.4, and the table below) and `P3-CLOCK-SKEW-BOUND` (§4.2): filled in revision 6 against `a434e363d`; the revision 7, 8 and 9 sync records below cover the code merged since, against `d3c107f2f`, `43ac12d0c` and `fe28e5a0c` | Seal |
-| Final hashes | `B5-FINAL-HASHES`: filled in revision 8 at `43ac12d0c`; recomputed in revision 9 at `fe28e5a0c` (`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_4.md`), where only the identity pins changed (§0.7 plan trees, §4.6 item 3 identity pins, §5.5 sizing output). Open again for one value: the final head itself, which carries the census interpreter rule (§2 item 1, §4.5); each digest so marked is checked again there | Seal |
-| Refusal allowlist | `roster.run_id_mismatch` listed under the member exclusions of `configs/gates/hazard_refusals.json` (§6.11): done at `d3c107f2f` (audit-fix item 7); `neg8.midpoint_lost_primary` listed under the window exclusions: done at `43ac12d0c` (ruling Q11); the file is unchanged at `fe28e5a0c` | Seal |
+| P3 sync | `P3-SYNC-RECORD` (§2 item 8), with `P3-BATTERY-CODES` (§6.4, and the table below) and `P3-CLOCK-SKEW-BOUND` (§4.2): filled in revision 6 against `a434e363d`; the revision 7, 8, 9 and 10 sync records below cover what was merged since, against `d3c107f2f`, `43ac12d0c`, `fe28e5a0c` and `9b0c680ed` | Seal |
+| Final hashes | `B5-FINAL-HASHES`: filled in revision 8 at `43ac12d0c`; recomputed in revision 9 at `fe28e5a0c` (`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_4.md`), where only the identity pins changed (§0.7 plan trees, §4.6 item 3 identity pins, §5.5 sizing output). Open again for one value: the final head itself, which carries the census interpreter rule (§2 item 1, §4.5); each digest so marked is checked again there. Revision 10 found each of them unchanged at the int5 head `9b0c680ed` (`B5-REV10-SYNC` below); the marks stay until the final head is fixed | Seal |
+| Refusal allowlist | `roster.run_id_mismatch` listed under the member exclusions of `configs/gates/hazard_refusals.json` (§6.11): done at `d3c107f2f` (audit-fix item 7); `neg8.midpoint_lost_primary` listed under the window exclusions: done at `43ac12d0c` (ruling Q11); the file is unchanged at `fe28e5a0c` and at `9b0c680ed` | Seal |
 | Disk | `BACKUP-DESTINATIONS`: filled in revision 4 (§5.6) | Seal |
 | Identity pins | `identity_pins.json` (§4.6 item 3): draft at `fe28e5a0c`, with the sealed `neg8_reference` unit (`754c8c093`) and the spares; pinned at H_claim | Seal |
 | Blinding | `B5-BLIND-CUSTODY-MAP`, `B5-RELEASE-EVENT` | Map at seal; release after the block closes |
@@ -3122,15 +3271,18 @@ sensitivity line of analysis plan §8.
 | Attribution floor | `ATTRIBUTION-FLOOR-BINDING` | Seal |
 | Seal | `B5-SEAL-RECORD` | Seal |
 
-Still open after revision 9: `H-CLAIM` (the candidate is the int5 head `fe28e5a0c` plus the census interpreter rule,
-whose head is `FILL[B5-FINAL-HASHES]`, §2 item 1; it waits for that merge, its review and the merge gates),
+Still open after revision 10: `H-CLAIM` (the candidate is the final head of int5, which carries `fe28e5a0c`, the
+census interpreter rule merged at `84661ddb3`, and the seal preparation's commits; that
+head is `FILL[B5-FINAL-HASHES]`, §2 item 1; it waits for the review of the merge and the merge gates),
 `B5-SEAL-SEATS`, `B5-SEAL-RECORD`, `B5-BLIND-CUSTODY-MAP`, `B5-RELEASE-EVENT`, `ATTRIBUTION-FLOOR-BINDING`,
 `B5-PLANS-REGENERATED`, and the sealed inventory itself. None can be filled from committed bytes: each names a commit,
 a record, a ruling or a regeneration that does not exist yet. `B5-SIZING-OUTPUTS` and the identity pins hold draft
 values, which the seal pins. Filled in revision 6: `B5-COOLDOWN-SMOKE-RECORD`, `P3-SYNC-RECORD`, `P3-BATTERY-CODES`,
 `P3-CLOCK-SKEW-BOUND`. Closed in revision 7: the refusal-allowlist item. Filled in revision 8: `B5-FINAL-HASHES` (open
 again in revision 9 for the final head only), `416-AUDIT-RECORD`, `416-SEATS`; Q11 closed (§14). Filled in revision 9:
-`416-DELTA-RECORD`, `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`; Q12 closed (§14). The analysis plan's own FILLs
+`416-DELTA-RECORD`, `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`; Q12 closed (§14). Revision 10 filled nothing: it
+restated the census interpreter rule from the merged code, added the sync record `B5-REV10-SYNC`, and opened Q14 and
+Q15 (§14). The analysis plan's own FILLs
 (analysis plan §13), including the L9 adapters and lane L9-NEG8, are listed there.
 
 **P3 sync record** (`P3-SYNC-RECORD`, revision 6). Revision 5 described the behaviour below from the rulings, before
@@ -3221,7 +3373,7 @@ detached at that commit; the integration worktree was not touched), from the dif
 | N2: a reference that never ran | `harvest.build_roster` sets `neg8_slot` from each reference stage's `spare_retry`; `_neg8_lost_rows` adds `bundle_absent` rows | changed: §0.12 |
 | N3: never-run references at an endpoint | `whole_window.evaluate_neg8_point_drift` `short_planned_roster`; `run_campaign` `planned_roster_shape` (whole-window mode only) | changed: §0.12, §6.5 |
 | N1: verdict sources that do not authenticate | `harvest._claim_campaign_manifests_as_written`, `_neg8_reference_losses`, `observed.reference_source` on `neg8.screen_failed` | changed: §6.5 |
-| N5: an agent run by its npm package path | `agent_identity.AGENT_PACKAGE_SCOPES`, `AGENT_PACKAGE_DIRS`, `_agent_package_script` | changed: §4.5 |
+| N5: an agent run by its npm package path | `agent_identity.AGENT_PACKAGE_SCOPES`, `AGENT_PACKAGE_DIRS`, `_agent_package_script` (all three removed at `2524637ae`, where the rule of revision 10 replaced them) | changed: §4.5 |
 | N6: the unusable-pack refusal | `window_lineage.PackInventoryUnusableError`; `driver.run_hazard_night` tests the type; allowlist entry moved from BASELINE to NUMBER_INTEGRITY | changed: §0.17, §6.11 |
 | N7: an empty salvaged code prefix | `harvest._malformed_flag_line` and `_candidate_codes`: `if not code` | changed: §6.2 |
 | N4: which allowance the analysis reads after a re-screen | not code at this head (no analysis consumer exists); an L9 requirement | changed: analysis plan §4 step 4, §11 |
@@ -3249,7 +3401,7 @@ not touched), from the diff `43ac12d0c..fe28e5a0c` (14 commits; 19 files under `
 |---|---|---|
 | census lists its ancestors | `night_gate.AGENT_CENSUS_ARGV` and `hazards.arm.AGENT_CENSUS_ARGV` = `/usr/bin/pgrep -a -lf '[c]odex\|[c]laude'` (`c0f37974a`); `agent_identity.filter_census` follows the caller's tree downward only; `arm_census` discovery keeps no `-a` (a diagnostic that reads its own ancestors from the kernel) | changed: §4.5 |
 | T3 removed from the census | `agent_identity.AGENT_PREFIXES` = (`claude`, `codex`); the T3 rules removed from `arm_census`, `t0_rehearsal`, `prewindow.py` and the generators (`63d2b9bad`); `scripts/prewindow_check.sh` keeps its sealed bytes, `t3` included (`fe28e5a0c`; SHA-256 prefix `d8458eea588a746f`, recomputed by this author) | changed: §4.5 |
-| interpreter rule | at `fe28e5a0c` the matcher still parses options (`agent_identity._VALUE_OPTIONS`, `ca25d9299`); the rule of §4.5 is the pending commit of `lane/2026-10-07-census-interp`. **To confirm at the final head:** any command-line element of `node`, `bun` or `deno` that names `@anthropic-ai/claude*`, `@openai/codex*`, `claude-code` or the `claude` or `codex` install directories makes it an agent, with no option parsing; `node /opt/homebrew/bin/codex exec` (an agent in the dry arm) is still an agent; the window's own Python and shell processes are not | changed: §4.5 (to the pending rule) |
+| interpreter rule | at `fe28e5a0c` the matcher still parsed options (`agent_identity._VALUE_OPTIONS`, `ca25d9299`); the rule of §4.5 was then a pending commit of `lane/2026-10-07-census-interp`, and this row listed what to confirm when it landed: any command-line element of `node`, `bun` or `deno` that names `@anthropic-ai/claude*`, `@openai/codex*`, `claude-code` or the `claude` or `codex` install directories makes it an agent, with no option parsing; `node /opt/homebrew/bin/codex exec` (an agent in the dry arm) is still an agent; the window's own Python and shell processes are not. Revision 10 confirmed all three at `9b0c680ed` (`B5-REV10-SYNC` below) | changed in revision 9: §4.5 (to the pending rule); restated from the code in revision 10 |
 | A1: which bracket carries the allowance | `harvest.neg8_allowance` writes `derived/neg8-allowance.json` (`joulewise.b5_neg8_allowance.v1`); `whole_window.harvest_neg8_allowance_bracket`; `whole_window_drift_allowances(..., neg8_harvest_archive=)`; `analyze-claims --neg8-harvest-archive`; the archive bytes read through the governed reader (`bbdae1e86`) | changed: §0.12; analysis plan §3.1, §4, §7.1, §11 |
 | A2: the reference identity unit | `harvest.NEG8_REFERENCE_IDENTITY_UNIT` = `neg8_reference`, `_reference_model_identity` (sealed pin, else strict majority); pin written by `scripts/write_b5_identity_pins.py` (`754c8c093`) | changed: §0.12, §4.6 item 3, §6.3, §6.5 |
 | N8 with call (ii): a reference of another model | `model.identity_mismatch` (member level) and `model.identity_inconsistent_in_window` (window level) both emitted; both EXCLUDE_WINDOW in this catalog; `exclusions.compute` applies EXCLUDE_WINDOW at any scope | changed: §0.12, §6.5 ("window excluded", not "survivors decide"); catalog notes |
@@ -3272,6 +3424,41 @@ The delta added no code and changed no effect. Five notes changed: `model.identi
 allowance record). The code's draft vocabulary (`DRAFT_CODES`) still lacks `model.identity_inconsistent_in_window`,
 `model.identity_underivable` and `whole_window.verdict_unauthenticated` (cold pass 3 N-B, cold pass 4 N-1); this
 catalog classifies all three, and the seal binds this catalog, not the draft.
+
+**Revision 10 sync record** (`B5-REV10-SYNC`). The source list was the whole of the integration's REG list
+(`/Users/edr/night-archive/gate-prune/REG_PENDING.md`, all ten sections; the last gives the orchestrator's final
+sentence for the census interpreter rule), the resume and seal-preparation notes beside it (`RESUME_2026-10-07.md`,
+`SEAL_PREP.md`), and the diff `fe28e5a0c..9b0c680ed` of the integration branch (five commits, eight files). Each row
+was read at the int5 head `9b0c680ed79d5c7b72b4b39ed04b9fe51dd116d4`: in the integration worktree, read only, and in
+a copy of that commit's files made with `git archive` (`/private/tmp/w1007-regprep/snap`), from which the probes and
+tests named below were run.
+
+| Sync point | Code at `9b0c680ed` | Text |
+|---|---|---|
+| interpreter rule | `agent_identity.identify`. `SCRIPT_INTERPRETERS` = (`node`, `bun`, `deno`), tested as a prefix of the executable's file name and of the process name. `_names_agent` cuts each argument with `_COMPONENT_SPLIT` and tests each piece against `AGENT_PREFIXES` = (`claude`, `codex`). `UNNAMED_CODE_ARGS` = {`-`, `-e`, `-p`, `-pe`, `--eval`, `--print`, `eval`} and `UNNAMED_CODE_PREFIXES` = (`--eval=`, `--print=`) give `undecided`, which `filter_census` keeps as a hit (reason `undecided_launch`). The option tables and `_interpreter_launch` are removed (`2524637ae`). The three points revision 9 listed hold: an agent's package or install path in any argument gives `agent`; `node /opt/homebrew/bin/codex exec` is `agent`; Python and shell processes with `.claude` paths are `not_agent`. This author probed 46 command lines, and every verdict is as §4.5 states; the lane's test module `tests.test_agent_identity` passes on the copy (12 tests) | changed: §4.5 (the rule rebuilt from the code, which is wider than revision 9's wording), §2 items 1, 6, 7 and 8, §9.1 (R1), §14 Q14 and Q15 |
+| the lane's second commit | `455e59b86` changes one explanatory comment, that of `harvest._reference_model_identity`: the block-5 pins carry `neg8_reference`, and a reference of another model excludes the window. Its last clause calls `model.identity_underivable` "not in the flag catalog", which was true of the code's draft vocabulary only: this catalog classes it EXCLUDE_MEMBER, and the harvest loads this catalog, never the draft (`harvest` `catalog_path`, `flags.catalog.load_catalog`) | matched: §0.12, §6.3, §6.5; no text change |
+| the documents in the code tree | `763b678a7` places revision 9 of this file, the analysis plan and the catalog, and the stub inventory, under `configs/campaigns/v5_claim_25g83/`, each byte-identical to this branch at `bc8ad4ae` (SHA-256 compared by this author). `9b0c680ed` adds three entries to a test data file, `tests/fixtures/d165_rationale_allowlist.json`, that name line 354 of the analysis plan | no text change here. Revision 10 keeps that sentence of the analysis plan on line 354. §11 and §12 are left to the pass that decides how the sealed inventory lands |
+| census sites | `filter_census` is called by `night_gate.decide_census` (the driver's census, the watchdog's, and `quiet_admission`), by `hazards/arm.agent_census` and by `arm_readiness_evidence_t0._agent_lines_decided` | changed: §4.5 (the sites are named) |
+| spare retry command line | `chain.spare_argv` replaces the stage's config directory with the spare set's and sets `--max-failures` to k | changed: §0.12 |
+| sizing, pins, plan trees | the three `plan_tree.json` (`1d87a309…`, `0cdb3383…`, `8b1d1d71…`), `sizing_b5.json` (`89e7ea70…`), `identity_pins.json` (`a0865895…`) and `configs/pins/registry.json` (`a4a2be94…`) hash as at `fe28e5a0c` (`shasum -a 256` on the copy) | matched; every `B5-FINAL-HASHES` mark is left in place |
+| pinned estimator files; `prewindow_check.sh` | `git diff a434e363d 9b0c680ed` over the four pinned files is empty; `scripts/prewindow_check.sh` is unchanged (SHA-256 prefix `d8458eea588a746f`) | matched: §2 item 1, §4.5 |
+| cooldown smoke carry-over | `scripts/run_campaign.py`, `joulewise/controller.py` and `configs/campaign_policies/` are unchanged since `fe28e5a0c`; the harvest's one changed comment does not mention the cooldown | changed: §2 item 7 (the carry-over to `9b0c680ed` is stated) |
+| refusal allowlist | `configs/gates/hazard_refusals.json` is unchanged since `fe28e5a0c` (2,749 entries; 34 window exclusions and 40 member exclusions). `tests.hazards.test_refusal_allowlist` passes on the copy with this catalog in the tree (23 tests; the one that reads this branch from a clone is skipped there) | matched: §6.11 |
+| the REG list's nine earlier sections | every item checked against this file, the analysis plan and the catalog | present, except the gaps of revision 10 item 2, now repaired: §0.12, §4.5, §9.1; analysis plan §8.1 |
+
+**Catalog comparison** (revision 10). The same script, pointed at the copy of `9b0c680ed`
+(`/Users/edr/night-archive/gate-prune/wave-1007b/reg-prep/check_catalog10.py`), read every code named by those tables
+and compared each with this directory's catalog, and with the copy of the catalog in the integration tree, which is
+the same bytes. Before and after revision 10: 192 codes, none missing, none extra, `collector.unmeasured` deliberately
+absent, the superseded A1 code absent, `load_catalog` OK, and the one documented disagreement (`g3.recompute_failed`,
+§6.5). Nothing merged since `fe28e5a0c` adds a code or changes an effect, and revision 10 changes no note. The
+script trusts the code's tables, so a second script (`scan_literal_codes.py`, same directory) searched every string
+in the 275 Python files under `joulewise/` and `scripts/` for a token shaped like a flag code whose first part is one
+some catalog code uses. It found 187 of the 192 catalog codes written out in full (the other five are the
+`<module>.arm_unmeasured` codes, which the code builds from the module's name), and 75 other tokens, none of which is
+a flag code: they are function names, field paths, file names, journal stage names, the reason strings of the G10
+record, and the pack-scoped window reason `neg8.midpoint_lost_primary` (§0.16). The draft vocabulary still lacks the
+three codes named in revision 9's comparison.
 
 Removed from revision 2 because the mechanism they bound is retired or now measured: `V5-PACK-REGEN-RECORD` and
 `V5-IDLE-SECONDS` (done, PR #481), `B4-*`, `L10-A-RATIFICATION-RECORD`, `Q110-CLOSURE`, `A6-AT-H-CLAIM`,
@@ -3344,6 +3531,24 @@ battery evidence map (§9.2).
   them in one lane, with one design round by Sol and Fable before code. Analysis plan §11 lists what the lane must do.
   Until it lands, no block-5 floor and no contrast resting on a recorded survivor re-screen is claimable (§0.12).
   Nothing here changes collection; a change to the writer would be collection code and is not planned.
+- **Q14. What the census's rule for JavaScript runtimes can miss. Set by orchestrator ruling of 2026-10-07; the seal
+  gate confirms or asks for the tightening below.** §4.5 lists four ways the merged rule can read a live agent as
+  none. Three are older than the rule (a name inside a longer piece, an interpreter that is not a JavaScript runtime,
+  a command line the probe never lists). One belongs to the rule: a runtime that names no agent and reads its program
+  from standard input without the `-` argument is decided not an agent, and the rule cannot see it without parsing
+  the runtime's options, which two audits showed to be the wrong mechanism. One tightening needs no parsing: count
+  *every* listed JavaScript runtime that names no agent as undecided, and so as a hit, whatever its other arguments.
+  Its cost: a window launched by `launchd` runs no JavaScript runtime, so it could refuse or stop a window only while
+  some unrelated runtime with `claude` or `codex` somewhere in its command line is alive on the machine; and it
+  reverses one of the lane's own test cases, a launch that must not count today
+  (`node somescript.js --path …/.claude/…`). It would be a change to collection code, made and reviewed before the
+  seal. Whichever is chosen, the hazard itself, a
+  process using the CPU during a member, stays measured by the contention hazard (§4.2, §6.4).
+- **Q15. The desk dry arm after the matcher change (orchestrator, before ALPHA-1 arms).** `B5-DRY-ARM-RECORD` was
+  produced at `fe28e5a0c`, with the matcher that parsed options. §2 item 6 gives the reason its refusal holds under
+  the merged rule, and the lane's tests include a live `node` launch decided through the production census
+  (`tests.test_agent_identity`, the R1 test). The dry arm took 0.177 s and can only refuse. Either it is run again at
+  the final head and the record refreshed, or the carry-over reasoning of §2 item 6 is accepted as it stands.
 
 ## 15. Where each gate-prune change lives
 
@@ -3489,4 +3694,24 @@ files from `a434e363d`; the ancestry of the lanes with `git merge-base --is-ance
 the SHA-256 of every report and dry record cited (§2 item 6, §9.1); the absence of any cooldown line in the runner,
 controller and harvest diff; and the catalog comparison by script (§13). The census interpreter rule is described
 from the orchestrator's text of the pending commit, which the author could not read; §13 lists what is to be checked
-when it lands. No energy or power value of any window was read.
+when it lands. No energy or power value of any window was read. (Revision 10 replaced that description with one read
+from the merged code.)
+
+For revision 10, the author read: the whole of the integration's REG list (`REG_PENDING.md`, all ten sections), the
+resume and seal-preparation notes (`RESUME_2026-10-07.md`, `SEAL_PREP.md`), the rule carried in review briefs
+(`REVIEW_BRIEF_RULE.md`) and the triple-audit dispositions in `INTEGRATION_TODO.md` (for finding A5's deferred lane);
+the Sol delta audit's finding A4 and the re-verification's finding R1 in their reports (`delta-audit-sol/REPORT.md`,
+`delta-audit-sol-2/REPORT.md`); and this file and the analysis plan from end to end. At the int5 head `9b0c680ed`
+(the integration worktree, read only, and a copy of that commit's files made with `git archive` at
+`/private/tmp/w1007-regprep/snap`) it read: `joulewise/agent_identity.py` whole, and the same file at `43ac12d0c`
+and `fe28e5a0c` for the two mechanisms that failed; the commit messages and the diff `fe28e5a0c..9b0c680ed`; every
+caller of the matcher (`night_gate.py`, `hazards/arm.py`, `quiet_admission.py`, `arm_readiness_evidence_t0.py`, the
+driver's and the watchdog's census calls); the chain's spare-retry command line; the NEG-8 evaluator's survivor
+conditions; the harvest's allowance record writer and its catalog path; the digest census and the D-165 rationale
+census, to learn which lines of these documents a test in the integration tree depends on. Every verdict in §4.5's
+worked example and in its account of the rule's errors was computed with the merged `identify` function (46 command
+lines; the probe scripts are kept beside the catalog scripts in
+`/Users/edr/night-archive/gate-prune/wave-1007b/reg-prep/`). The digests of §13's revision 10 record were computed
+with `shasum -a 256` on the copy; the empty diffs with `git diff`; `tests.test_agent_identity` and
+`tests.hazards.test_refusal_allowlist` were run on the copy with `/opt/homebrew/bin/python3.13 -B`. The dry-arm record's
+census output was not read (§2 item 6). No energy or power value of any window was read.
