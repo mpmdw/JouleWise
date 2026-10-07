@@ -135,6 +135,17 @@ NEG8_IDLE_SUB_POINT_DRIFT_ESTIMAND = (
 NEG8_DRIFT_ESTIMATOR_ID = "d054_point_contrast_guard_v1"
 NEG8_DRIFT_MINIMUM_N = 10
 NEG8_REPLICATED_ENDPOINT_N = 3
+# NEG-8 ruling 2026-10-07 (block-5 registration 0.12): the screen runs on the
+# surviving references, two or three at each endpoint and zero or one at the
+# midpoint, with the bound recomputed for the realised endpoint counts.
+NEG8_SURVIVOR_ENDPOINT_COUNTS = frozenset({2, 3})
+NEG8_SURVIVOR_MIDPOINT_COUNTS = frozenset({0, 1})
+NEG8_SURVIVOR_PROTOCOL = "replicated_endpoints"
+NEG8_COUNT_ADJUSTED_BOUND_FORMULA = (
+    "max(max(mean(largest_n_start)-mean(smallest_n_end),"
+    "mean(largest_n_end)-mean(smallest_n_start)),"
+    "t_0.975,n-1*sample_stddev_j*sqrt(1/n_start+1/n_end))"
+)
 NEG8_DRIFT_BOUND_MAX_AGE_S = 86400
 REGISTERED_NEG8_REFERENCE_CORPUS_DIR = (
     Path(__file__).resolve().parents[1]
@@ -1896,9 +1907,136 @@ def _endpoint_admissible_summary(values: Sequence[Any]) -> dict[str, Any] | None
     }
 
 
+def neg8_count_adjusted_bound(
+    points: Sequence[float], n_start: int, n_end: int
+) -> dict[str, Any] | None:
+    """The NEG-8 bound for an endpoint pair of ``n_start`` and ``n_end`` references.
+
+    ``points`` are the kept corpus energies of one claim family.  U_j is the
+    mean of the corpus's j largest energies and L_j the mean of its j
+    smallest.  The envelope max(U_ns - L_ne, U_ne - L_ns) is the widest gap a
+    start mean of n_s members and an end mean of n_e members drawn from the
+    corpus itself can show; the prediction term t(0.975, n - 1) * s *
+    sqrt(1/n_s + 1/n_e) is the 95% repeatability bound for a difference of
+    two means of those sizes when nothing drifts.  The bound is the larger
+    (block-5 registration 0.12, NEG-8 ruling decision 3).  ``None`` when the
+    points or counts cannot give one (fewer than two finite points, a count
+    outside 1..n).
+    """
+
+    values = [_finite_number(value) for value in points]
+    if (
+        any(value is None for value in values)
+        or len(values) < 2
+        or any(
+            type(count) is not int or count < 1 or count > len(values)
+            for count in (n_start, n_end)
+        )
+    ):
+        return None  # no bound: the caller's screen has no bound to pass
+    ordered = sorted(float(value) for value in values)
+
+    def upper(count: int) -> float:
+        return statistics.fmean(ordered[-count:])
+
+    def lower(count: int) -> float:
+        return statistics.fmean(ordered[:count])
+
+    envelope = max(upper(n_start) - lower(n_end), upper(n_end) - lower(n_start))
+    prediction = (
+        student_t_critical_95(len(ordered) - 1)
+        * statistics.stdev(ordered)
+        * math.sqrt(1.0 / n_start + 1.0 / n_end)
+    )
+    return {
+        "n_start": n_start,
+        "n_end": n_end,
+        "envelope_j": envelope,
+        "prediction_j": prediction,
+        "bound_j": max(envelope, prediction),
+        "formula": NEG8_COUNT_ADJUSTED_BOUND_FORMULA,
+    }
+
+
+def neg8_family_endpoint_bound(
+    artifact: Mapping[str, Any] | None, family: str, n_start: int, n_end: int
+) -> dict[str, Any] | None:
+    """``neg8_count_adjusted_bound`` for one claim family of a derived bound artifact.
+
+    At the planned shape (3, 3) and the legacy shape (1, 1) the artifact's own
+    stored terms are returned, so every bound minted before the survivor rule
+    replays to the same bytes; any other shape is computed from the
+    artifact's corpus members.  ``None`` when the artifact cannot supply it.
+    """
+
+    families = (
+        artifact.get("claim_family_bounds")
+        if isinstance(artifact, Mapping)
+        else None
+    )
+    family_record = families.get(family) if isinstance(families, Mapping) else None
+    estimator = (
+        family_record.get("estimator")
+        if isinstance(family_record, Mapping)
+        else None
+    )
+    if not isinstance(estimator, Mapping):
+        return None
+    stored = {
+        (NEG8_REPLICATED_ENDPOINT_N, NEG8_REPLICATED_ENDPOINT_N): (
+            "replicated_endpoint_sample_range_j",
+            "prediction_two_endpoint_means_j",
+            "replicated_endpoint_bound_j",
+        ),
+        (1, 1): (
+            "sample_range_j",
+            "prediction_two_point_j",
+            "single_member_endpoint_bound_j",
+        ),
+    }.get((n_start, n_end))
+    if stored is not None:
+        envelope, prediction, bound = (
+            _finite_number(estimator.get(field)) for field in stored
+        )
+        if envelope is None or prediction is None or bound is None or bound <= 0.0:
+            return None
+        return {
+            "n_start": n_start,
+            "n_end": n_end,
+            "envelope_j": envelope,
+            "prediction_j": prediction,
+            "bound_j": bound,
+            "formula": NEG8_COUNT_ADJUSTED_BOUND_FORMULA,
+        }
+    corpus = artifact.get("reference_corpus") if isinstance(artifact, Mapping) else None
+    members = corpus.get("members") if isinstance(corpus, Mapping) else None
+    point_field = family_record.get("point_field")
+    if not isinstance(members, list) or not isinstance(point_field, str):
+        return None
+    terms = neg8_count_adjusted_bound(
+        [
+            member.get(point_field) if isinstance(member, Mapping) else None
+            for member in members
+        ],
+        n_start,
+        n_end,
+    )
+    return terms if terms is not None and terms["bound_j"] > 0.0 else None
+
+
 def _family_bound(
-    artifact: Mapping[str, Any] | None, family: str, protocol: str
+    artifact: Mapping[str, Any] | None,
+    family: str,
+    protocol: str,
+    *,
+    n_start: int | None = None,
+    n_end: int | None = None,
 ) -> float | None:
+    if protocol == NEG8_SURVIVOR_PROTOCOL:
+        if n_start is None or n_end is None:
+            return None
+        terms = neg8_family_endpoint_bound(artifact, family, n_start, n_end)
+        return terms["bound_j"] if terms is not None else None
     families = (
         artifact.get("claim_family_bounds")
         if isinstance(artifact, Mapping)
