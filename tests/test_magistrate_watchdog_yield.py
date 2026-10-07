@@ -225,6 +225,32 @@ class DriverRecordsToWatchdogTests(unittest.TestCase):
         state = self.assert_released(driver, watchdog, "collected_window")
         self.assertEqual(10, len(yield_notices(state)))
 
+    def test_a_chain_stop_is_released_on_the_driver_records(self) -> None:
+        driver = DriverHarness(self, "alpha", g10=False, behavior={"reservation_rc": 1})
+        self.assertEqual(driver.driver.EXIT_CHAIN_FAILED, driver.run())
+        result = driver.result()
+        self.assertEqual(("CHAIN_STOPPED", 10), (result["verdict"], result["chain_exit_code"]))
+        self.assertEqual("EMPTY", driver.hazard()["yield"]["yield_status"])
+        self.assertTrue((driver.night / "chain.started").exists())
+        self.assertTrue((driver.night / "chain.exited").exists())
+        watchdog = self.watchdog(driver)
+        decision, state = self.decide(watchdog)
+        self.assertEqual("FENCED", decision.state)       # no courier yet: the dead-man tail holds
+        self.assertEqual([], state.get(RELEASED_TERMINAL, []))
+        self.deliver(driver)
+        self.assert_released(driver, watchdog, "chain_stopped")
+
+    def test_a_live_process_naming_the_custody_holds_the_release(self) -> None:
+        driver = DriverHarness(self, "alpha", g10=False, behavior={"reservation_rc": 1})
+        driver.run()
+        self.deliver(driver)
+        watchdog = self.watchdog(driver)
+        watchdog.processes.rows = [wd.ProcessInfo(
+            4242, 1, "start", f"python3 monitor --config {driver.custody}/hazards/monitor.json")]
+        decision, state = self.decide(watchdog)
+        self.assertEqual("HOLD_CENSUS", decision.state)
+        self.assertEqual([], state.get(RELEASED_TERMINAL, []))
+
 
 if __name__ == "__main__":
     unittest.main()
