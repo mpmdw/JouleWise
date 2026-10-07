@@ -2274,7 +2274,8 @@ class EmittedCodeTests(unittest.TestCase):
         # The gate-prune round-2 and round-3 codes reach the draft through the
         # registration row (REG) before the seal; any other unclassified code fails here.
         missing = set(h.CODES) - set(codes)
-        self.assertEqual(missing - h.PRUNE2_CODES - h.PRUNE3_CODES, set(h.NEVER_CLASSIFIED_CODES))
+        self.assertEqual(missing - h.PRUNE2_CODES - h.PRUNE3_CODES - h.NEG8_SURVIVOR_CODES,
+                         set(h.NEVER_CLASSIFIED_CODES))
         self.assertTrue(h.NEVER_CLASSIFIED_CODES.isdisjoint(codes))
 
     def test_the_design_catalog_classifies_every_int4_code_with_the_drafts_effect(self):
@@ -2287,7 +2288,8 @@ class EmittedCodeTests(unittest.TestCase):
         from joulewise.flags.core import CORE_FLAG_CODES
         codes = json.loads(raw)["codes"]
         emitted = set(h.CODES) | set(DRAFT_CODES) | set(CORE_FLAG_CODES)
-        self.assertEqual(emitted - set(codes), set(h.NEVER_CLASSIFIED_CODES))
+        # The NEG-8 survivors codes reach the design catalog through REG (ruling 2026-10-07).
+        self.assertEqual(emitted - set(codes) - h.NEG8_SURVIVOR_CODES, set(h.NEVER_CLASSIFIED_CODES))
         self.assertEqual({code: (codes[code]["effect"], DRAFT_CODES[code]["effect"]) for code in DRAFT_CODES
                           if code in codes and codes[code]["effect"] != DRAFT_CODES[code]["effect"]}, {})
 

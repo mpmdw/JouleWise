@@ -217,6 +217,12 @@ _CORE_PRUNE_CODES = {
     "member.stderr_uncopied": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     # The harvest (joulewise.b5.harvest).
     "neg8.corpus_member_dropped": _code("NEG8", "REPRESENTATION", DISCLOSE),
+    # NEG-8 ruling 2026-10-07 (registration 0.12): the screen ran on fewer than
+    # (3, 1, 3) references; the midpoint reference was lost.  Disclosed here;
+    # the analysis plan lists neg8.midpoint_lost as claim-excluding for the
+    # primary contrasts until the block's midpoint record says otherwise.
+    "neg8.reference_lost": _code("NEG8", "NUMBER", DISCLOSE),
+    "neg8.midpoint_lost": _code("NEG8", "NUMBER", DISCLOSE),
     "calibration.capture_battery_span": _code("CALIBRATION", "PHYSICS", EXCLUDE_WINDOW),
     "calibration.capture_battery_unmeasured": _code("CALIBRATION", "PHYSICS", EXCLUDE_WINDOW),
     "whole_window.not_passed": _code("NEG8", "NUMBER", DISCLOSE),

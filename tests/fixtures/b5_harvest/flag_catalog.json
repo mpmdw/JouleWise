@@ -726,6 +726,18 @@
       "family": "NEG8",
       "klass": "REPRESENTATION"
     },
+    "neg8.midpoint_lost": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "NEG8",
+      "klass": "NUMBER"
+    },
+    "neg8.reference_lost": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "NEG8",
+      "klass": "NUMBER"
+    },
     "neg8.screen_failed": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",

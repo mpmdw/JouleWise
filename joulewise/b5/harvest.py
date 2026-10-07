@@ -316,6 +316,9 @@ CODES: dict[str, CodeSpec] = {
     "calibration.capture_battery_span": _spec("CALIBRATION", "PHYSICS"),
     "calibration.capture_battery_unmeasured": _spec("CALIBRATION", "PHYSICS"),
     "neg8.corpus_member_dropped": _spec("NEG8", "REPRESENTATION"),
+    # NEG-8 ruling 2026-10-07 (registration 0.12): the survivors screen.
+    "neg8.reference_lost": _spec("NEG8", "NUMBER"),
+    "neg8.midpoint_lost": _spec("NEG8", "NUMBER"),
     # Written by protected-core code on the HAZARD_PACK path into
     # <custody>/flags/core-*.jsonl, or printed behind UNWRITTEN_MARKER when
     # that write failed (N8); the harvest folds them, it never emits them.
@@ -440,6 +443,10 @@ PRUNE3_CODES = frozenset({
     "meter.absent", "meter.drops_excess", "meter.duplicates", "meter.clock_fit_residual",
     "meter.pdtr_gain_out_of_band", "meter.battery_activity", "meter.vbus_out_of_contract",
 })
+# The NEG-8 survivors ruling's codes (2026-10-07, registration 0.12): classified
+# in the L4 draft (joulewise.flags.catalog) and the test fixture; the design
+# branch's draft sealed catalog gains them through REG before the seal.
+NEG8_SURVIVOR_CODES = frozenset({"neg8.reference_lost", "neg8.midpoint_lost"})
 # joulewise.flags.collect.UNMEASURED_BY_COLLECTOR, read and never imported: the
 # flag each arm collector leaves when its checks did not (all) run.
 ARM_COLLECTOR_UNMEASURED = {

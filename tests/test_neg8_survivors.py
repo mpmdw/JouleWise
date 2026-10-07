@@ -394,3 +394,23 @@ class ReplaySurvivorTests(unittest.TestCase):
         self.assertIsNone(problem)
         self.assertTrue(bracket["midpoint_lost"])
         self.assertEqual(bracket["reference_counts"]["midpoint"], 0)
+
+
+class SurvivorCodeCatalogTests(unittest.TestCase):
+    """neg8.reference_lost and neg8.midpoint_lost are DISCLOSE everywhere the harvest reads an effect."""
+
+    def test_the_codes_are_registered_as_disclose(self) -> None:
+        import json
+        from pathlib import Path
+
+        from joulewise.b5 import harvest as h
+        from joulewise.flags.catalog import DRAFT_CODES
+
+        fixture = json.loads((Path(__file__).resolve().parent / "fixtures" / "b5_harvest"
+                              / "flag_catalog.json").read_bytes())["codes"]
+        for code in ("neg8.reference_lost", "neg8.midpoint_lost"):
+            with self.subTest(code=code):
+                self.assertEqual((h.CODES[code].family, h.CODES[code].klass), ("NEG8", "NUMBER"))
+                self.assertEqual(DRAFT_CODES[code]["effect"], "DISCLOSE")
+                self.assertEqual(fixture[code]["effect"], "DISCLOSE")
+                self.assertIn(code, h.NEG8_SURVIVOR_CODES)
