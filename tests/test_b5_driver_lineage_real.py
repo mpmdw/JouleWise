@@ -32,6 +32,7 @@ from unittest import mock
 from joulewise import arm_readiness, window_lineage
 from joulewise.b5 import driver as b5_driver
 from tests import test_window_lineage as fixture
+from tests import child_guard
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WINDOW_PLAN_ID = "REH-window-plan-differs-from-pack-20261006T0000Z"
@@ -154,6 +155,11 @@ class ProductionLineagePublishThenCheckTests(unittest.TestCase):
             checks = b5_driver._production_lineage_check(lineage_request(self.w, boot, later))
         self.assertEqual((False, False), (checks["claim"]["valid"], checks["bound"]["valid"]))
         self.assertIn("a-later-window-calibration", checks["bound"]["error"])
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

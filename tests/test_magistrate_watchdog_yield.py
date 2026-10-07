@@ -25,6 +25,7 @@ from joulewise.b5 import driver as b5_driver
 from scripts import magistrate_watchdog as wd
 from tests import test_magistrate_watchdog as base
 from tests.test_b5_driver import Harness as DriverHarness
+from tests import child_guard
 
 
 RELEASED_TERMINAL = "released_terminal_windows"
@@ -401,6 +402,11 @@ class DriverRecordsToWatchdogTests(unittest.TestCase):
         decision, state = self.decide(watchdog)
         self.assertEqual("HOLD_CENSUS", decision.state)
         self.assertEqual([], state.get(RELEASED_TERMINAL, []))
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

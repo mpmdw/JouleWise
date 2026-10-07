@@ -12,6 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from tests import child_guard
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKER_PATH = REPO_ROOT / "joulewise" / "adapters" / "node_worker.py"
@@ -1285,6 +1286,9 @@ class NodeWorkerTests(unittest.TestCase):
                 stdout=subprocess.PIPE,
                 text=True,
             )
+            # The script loops forever and the try/finally that kills it starts further down:
+            # a failure before that point used to leave it running.
+            child_guard.own(self, process)
             assert process.stdout is not None
             self.assertEqual(process.stdout.readline().strip(), "ready")
             state_dir = root / "state"
@@ -1564,6 +1568,11 @@ class NodeWorkerTests(unittest.TestCase):
         )
         path.chmod(0o755)
         return path
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

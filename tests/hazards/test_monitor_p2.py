@@ -11,6 +11,7 @@ from unittest import mock
 from joulewise.hazards import base, monitor
 from tests.hazards.fakes import FrequencyReader, Process
 from tests.hazards.test_monitor import DRIVER, FakeMac
+from tests import child_guard
 
 
 class ChainTreeRootTests(unittest.TestCase):
@@ -99,6 +100,11 @@ class JournalFsyncTests(unittest.TestCase):
             self.assertTrue(all(journal.fsync_interval_s == monitor.FSYNC_INTERVAL_S
                                 for journal in instance.journals.values()))
             instance.close_session("test")
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

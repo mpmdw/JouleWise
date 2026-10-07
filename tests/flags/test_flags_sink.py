@@ -14,6 +14,7 @@ from unittest import mock
 from joulewise.flags import sink as sink_module
 from joulewise.flags.schema import FlagSchemaError, make_flag, make_interval, make_scope, make_source
 from joulewise.flags.sink import FlagSink, append_json_line, read_flags
+from tests import child_guard
 
 EMITTED = {"wall_s": 1.0, "monotonic_ns": 1, "boot_session_uuid": None}
 
@@ -107,6 +108,8 @@ class FlagSinkTests(unittest.TestCase):
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                    for start in (0, 5, 10)]
         for worker in workers:
+            child_guard.own(self, worker)   # a writer that outlives its 60 s wait is stopped, not left
+        for worker in workers:
             _out, err = worker.communicate(timeout=60)
             self.assertEqual(worker.returncode, 0, err.decode(errors="replace"))
         flags, problems = read_flags(self.path)
@@ -135,6 +138,11 @@ class FlagSinkTests(unittest.TestCase):
         lines = log.read_bytes().splitlines()
         self.assertEqual(json.loads(lines[0]), {"a": 1})
         self.assertEqual(json.loads(lines[-1]), {"b": 2})
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

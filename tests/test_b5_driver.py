@@ -32,6 +32,7 @@ from joulewise.b5 import chain as b5_chain
 from joulewise.b5 import driver as b5_driver
 from joulewise.b5 import plan as b5_plan
 from tests.fixtures.b5_plan import fake_window
+from tests import child_guard
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts/run_night.py"
@@ -1117,6 +1118,11 @@ class UnitTests(unittest.TestCase):
             with (night / b5_driver.MONITOR_JOURNAL).open("a") as handle:
                 handle.write(json.dumps({"event": "stop", "proven_stopped": True}) + "\n")
             self.assertIsNone(b5_driver.reap_orphan_monitor(night, identity=observe_identity))
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

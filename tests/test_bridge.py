@@ -22,6 +22,7 @@ import unittest
 from unittest import mock
 
 from tests.git_fixture import init_git_fixture
+from tests import child_guard
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -272,6 +273,9 @@ class BridgeTests(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+        # The callers read the result after their own assertions; one that fails first
+        # used to leave this child blocked on the lock.
+        child_guard.own(self, process)
         try:
             self.assertIsNotNone(process.stdout)
             ready, _, _ = select.select([process.stdout], [], [], 5)
@@ -431,6 +435,7 @@ class BridgeTests(unittest.TestCase):
             for _ in range(2)
         ]
         for process in processes:
+            child_guard.own_worker(self, process)   # a worker still waiting when queue.get times out is stopped
             process.start()
         results = [queue.get(timeout=10) for _ in processes]
         for process in processes:
@@ -497,6 +502,7 @@ class BridgeTests(unittest.TestCase):
             for operation in ("expand", "acquire")
         ]
         for process in processes:
+            child_guard.own_worker(self, process)   # as above: stopped if a result never arrives
             process.start()
         results = [queue.get(timeout=10) for _ in processes]
         for process in processes:
@@ -1655,6 +1661,11 @@ Delegated responses use a five-part record:
             any("return envelope fields" in violation for violation in violations),
             violations,
         )
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
+
 
 if __name__ == "__main__":
     unittest.main()

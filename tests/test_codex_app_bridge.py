@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
+from tests import child_guard
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -227,6 +228,7 @@ class CodexAppBridgeTests(unittest.TestCase):
             stderr=subprocess.PIPE,
             text=True,
         )
+        child_guard.own(self, process)   # a bridge that ignores SIGTERM past the 10 s wait is killed, not left
         deadline = time.time() + 5
         while time.time() < deadline and not any(
             request["method"] == "thread-follower-start-turn" for request in router.requests
@@ -240,6 +242,11 @@ class CodexAppBridgeTests(unittest.TestCase):
         interrupt = next(item for item in router.requests if item["method"] == "thread-follower-interrupt-turn")
         self.assertEqual(interrupt["version"], 2)
         self.assertFalse(self.lock.exists())
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

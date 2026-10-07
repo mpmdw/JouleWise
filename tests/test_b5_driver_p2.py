@@ -27,6 +27,7 @@ from unittest import mock
 from joulewise import arm_retry, night_gate
 from joulewise.b5 import driver as b5_driver
 from tests.test_b5_driver import FakeArm, Harness, fake_monitor_argv, probe
+from tests import child_guard
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CENSUS = night_gate.AGENT_CENSUS_ARGV
@@ -865,6 +866,11 @@ class SolReviewFixTests(unittest.TestCase):
 
 def stage_yield_lines(night: Path) -> list[dict]:
     return [json.loads(line) for line in (night / b5_driver.STAGE_YIELD).read_text().splitlines()]
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

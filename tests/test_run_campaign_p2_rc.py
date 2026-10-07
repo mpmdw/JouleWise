@@ -45,6 +45,7 @@ from tests.test_run_campaign_hazard_flags import (
     _observe,
     _Stage,
 )
+from tests import child_guard
 
 # Extra member behaviours, keyed on the run id; anything else falls through to
 # the shared fake CLI, which writes a real (mock-telemetry) bundle.
@@ -444,6 +445,10 @@ class SigtermTests(_P2Stage):
                 "--cli-cmd", shlex.join([sys.executable, str(self.cli)]), "--max-failures", "10"]
         stage = subprocess.Popen(argv, cwd=ROOT, env=dict(os.environ), stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE)
+        # The stage starts a member that starts a 30 s sleeper. If the member never reports
+        # ready, the assertion below fails with all three still running: stop the stage and
+        # everything it started (tree=True lists the stage's descendants before it is signalled).
+        child_guard.own(self, stage, tree=True)
         ready = self.marker(runs, "hz-hang-term", "ready")
         deadline = time.monotonic() + 60
         while not ready.exists() and time.monotonic() < deadline and stage.poll() is None:
@@ -846,6 +851,11 @@ class ReviewDrainRecoveryTests(unittest.TestCase):
             marker.unlink()
             with patch.dict(run_campaign._HAZARD_TIMEOUT_MEMORY, {"consecutive": 0}):
                 self.assertIsNone(run_campaign._hazard_drain_requested(hazard))
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

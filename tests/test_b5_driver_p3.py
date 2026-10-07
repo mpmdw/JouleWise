@@ -30,6 +30,7 @@ from joulewise import arm_retry
 from joulewise.b5 import driver as b5_driver
 from tests import process_reaper
 from tests.test_b5_driver import Harness, load_driver
+from tests import child_guard
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -621,6 +622,11 @@ class ChainStoppedTests(unittest.TestCase):
         self.assertEqual(harness.driver.EXIT_CHAIN_FAILED, harness.run())
         self.assertEqual("GO", harness.result()["verdict"])
         self.assertNotIn("stop_from_exit_code", harness.hazard()["chain"])
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":

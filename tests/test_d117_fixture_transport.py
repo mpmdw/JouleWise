@@ -27,6 +27,7 @@ from scripts.package_d117_fixture import (
     load_census,
     package_fixture,
 )
+from tests import child_guard
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -129,6 +130,7 @@ class D117FixtureTransportTests(unittest.TestCase):
                 [find_zstd(), "-q", "-d", "-c", str(archive)],
                 stdout=subprocess.PIPE,
             )
+            child_guard.own(self, process)   # a tar error below must not leave the decoder blocked on its pipe
             assert process.stdout is not None
             with tarfile.open(fileobj=process.stdout, mode="r|") as packaged:
                 members = list(packaged)
@@ -325,6 +327,11 @@ class D117FixtureTransportTests(unittest.TestCase):
             self.assertNotEqual(
                 loaded["custody_manifest_sha256"], file_sha256(PRODUCTION_CENSUS)
             )
+
+
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py).
+child_guard.guard_test_classes(globals())
 
 
 if __name__ == "__main__":
