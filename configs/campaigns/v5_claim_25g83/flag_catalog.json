@@ -56,6 +56,13 @@
       "klass": "PHYSICS",
       "note": "An in-force gauge publication is out of float (|InstantAmperage| or |Amperage| > 200 mA, charging, or external power disconnected), or a 5 s poll inside the span reads charging or disconnected."
     },
+    "battery.smc_unavailable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "SMC B0AC reads (1 Hz) did not cover the span with good, fresh reads at most 5 s apart, so the battery current was judged on the registry InstantAmperage (republished every 60 s), as before the SMC lane."
+    },
     "battery.unmeasured": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
@@ -154,6 +161,13 @@
       "klass": "REPRESENTATION",
       "note": "HAZARD path (core-prune A14): the power-policy label check (CLI label against the recorded binding label, or the runtime policy derived from preflight strings) did not match or could not be read; recorded instead of refusing. A label, not a measured quantity (battery state is judged by the battery codes)."
     },
+    "calibration.refit_cache_miss": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "REPRESENTATION",
+      "note": "The member re-ran the pre-slot calibration refit because the window calibration verdict was absent or did not match. Time only: the refit still verifies the same physics (PLAN2 M1)."
+    },
     "calibration.session_not_bound": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
@@ -181,6 +195,27 @@
       "family": "ROSTER",
       "klass": "NUMBER",
       "note": "A target cell kept fewer than rules.cell_unit_minimum units in a stratum (derived by the exclusion function)."
+    },
+    "census.journal_write_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "A census result could not be appended to the census journal; the census itself ran and collection continued (PLAN2 row 7)."
+    },
+    "census.unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "An in-window agent census could not be read on any of its retries; collection continued. Four consecutive unmeasured censuses stop the chain under their own stop code (PLAN2 row 7)."
+    },
+    "chain.stopped_before_collection": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "The chain journal holds no collection stage: the window is harvested as NO_COLLECTION with every collector run (PLAN2 2.2 F)."
     },
     "clock.frequency_changed": {
       "blinding": "STRUCTURE",
@@ -244,6 +279,20 @@
       "family": "CODE_IDENTITY",
       "klass": "NUMBER",
       "note": "The executed-code comparison could not run. A harvest problem first (registration 7.2)."
+    },
+    "collection.failure_histogram": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION",
+      "note": "The operator logs' error lines grouped by digit-masked text with counts and stages; full texts are withheld (PLAN2 2.2 F)."
+    },
+    "collection.zero_yield": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "ROSTER",
+      "klass": "REPRESENTATION",
+      "note": "The harvest found no bundle present for a COLLECTED window (PLAN2 2.2 F). cell.below_minimum and neg8.bound_not_derived exclude where it matters."
     },
     "contention.kernel_task_share": {
       "blinding": "STRUCTURE",
@@ -595,6 +644,13 @@
       "klass": "NUMBER",
       "note": "Re-reduction is not byte-identical to the stored summary."
     },
+    "member.retried": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "ROSTER",
+      "klass": "REPRESENTATION",
+      "note": "The member was measured by the one retry of the NEG-8 corpus stage (registration 5.2-5.3; PLAN2 row 13). The retry is a fresh measurement; the flag records that it was a retry."
+    },
     "member.span_unknown": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
@@ -609,6 +665,13 @@
       "klass": "NUMBER",
       "note": "Member status is not succeeded."
     },
+    "member.stderr_uncopied": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "The member's stderr file did not reach the stage log, so a core flag printed there behind the unwritten-flag marker could not be read by the harvest. The member may carry an unread exclusion (PLAN2 2.2 E)."
+    },
     "member.strict_validation_failed": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
@@ -622,6 +685,13 @@
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER",
       "note": "The member's target phase (decode or prefill) fails its precheck."
+    },
+    "member.timeout": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "NUMBER",
+      "note": "The member's child was killed at the 1,800 s wall-clock cap. A member stopped by its cap is not a completed measurement (PLAN2 row 8)."
     },
     "member.token_count_mismatch": {
       "blinding": "STRUCTURE",
@@ -643,6 +713,55 @@
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER",
       "note": "The whole-window verdict lists this member among its per-member failures (member_failures) for a reason no other member code carries: environment evidence missing or failed (including the post-run display-asleep and screensaver-off observation of D-078 item 4), CPU-idle criteria or GPU idle admission that do not replay, or an idle-admission attempt that cannot be paired with its telemetry. In-window thermal pressure and an invalid bundle keep their own codes. Emitter pending in the harvest (registration 2, 6.3)."
+    },
+    "meter.absent": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "KM003C whole-machine DC-in stream: no stream file, an absent header, or no samples."
+    },
+    "meter.battery_activity": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "KM003C stream: an SMC B0AC read inside a member window is nonzero (battery discharge or charge)."
+    },
+    "meter.clock_fit_residual": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "KM003C stream: the largest excess latency above the fitted clock envelope exceeds 2 sample periods (40 ms at 50 SPS), or no fit was possible."
+    },
+    "meter.drops_excess": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "KM003C stream: dropped samples exceed 0.5 % of kept plus dropped."
+    },
+    "meter.duplicates": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "KM003C stream: the meter re-delivered samples that the parser dropped."
+    },
+    "meter.pdtr_gain_out_of_band": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "KM003C stream: the median over 1 s bins of mean SMC PDTR over mean meter power is outside 0.95-1.02, or cannot be computed."
+    },
+    "meter.vbus_out_of_contract": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "KM003C stream: a sample's Vbus is outside 26.6-29.4 V (the 28 V EPR contract plus or minus 5 %)."
     },
     "model.identity_inconsistent_in_window": {
       "blinding": "STRUCTURE",
@@ -678,6 +797,20 @@
       "family": "MODEL_IDENTITY",
       "klass": "NUMBER",
       "note": "No pin to compare against. The pins are configs/campaigns/v5_claim_25g83/identity_pins.json (schema joulewise.b5_identity_pins.v1), sealed with this catalog; the plan trees' identity_pin_projection is unprojected and carries none. Fires when the measurement checkout lacks the file (arm collector) or its archived copy has no unit pin (harvest) (registration 4.6 item 3)."
+    },
+    "monitor.crash_loop": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "The hazard monitor kept exiting within 30 s of its start and was restarted with backoff. Members whose spans the monitor did not cover carry battery.unmeasured and contention.unmeasured (EXCLUDE_MEMBER) from the joins (PLAN2 row 11)."
+    },
+    "monitor.outage": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "The hazard monitor wrote no battery or contention reading for the outage bound (about 10 min) and the driver stopped the chain, as it does on disk.low (PLAN2 row 11). The members in the silent stretch carry battery.unmeasured and contention.unmeasured (EXCLUDE_MEMBER) from the joins; this flag records the stop."
     },
     "monitor.probe_in_phase": {
       "blinding": "STRUCTURE",
@@ -749,6 +882,13 @@
       "klass": "REPRESENTATION",
       "note": "Attempt history formality."
     },
+    "records.auxiliary_match_raised": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "The external-member auxiliary configuration match raised an exception. The refusal it causes stands; this flag records its cause (PLAN2 row 5)."
+    },
     "records.checkout_untracked": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -762,6 +902,13 @@
       "family": "RECORDS",
       "klass": "REPRESENTATION",
       "note": "A harvest collector failed; the number-protecting ones also emit their own unmeasured code."
+    },
+    "records.identity_unmeasured_superseded": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "An arm collector's *.identity_unmeasured flag was superseded because the harvest re-derived every check that collector performs (PLAN2 row 12). The original flag is kept in the record."
     },
     "records.lineage_formality": {
       "blinding": "STRUCTURE",
@@ -819,6 +966,13 @@
       "klass": "REPRESENTATION",
       "note": "A receipt formality."
     },
+    "records.runs_root_override": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "The harvest read a runs root given by an override rather than the plan's (PLAN2 row 18)."
+    },
     "records.source_changed_during_harvest": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
@@ -847,6 +1001,13 @@
       "klass": "NUMBER",
       "note": "A bundle with no stamp that places it after chain.started (no sampler, controller or run_started stamp); it is ignored, not used, like an early one. Derived by the exclusion function. Added after the end-to-end rehearsal, round 1 (B7)."
     },
+    "roster.dispatch_unresolved": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "ROSTER",
+      "klass": "REPRESENTATION",
+      "note": "A stage's member dispatch could not be resolved from its config-dir order manifest (J3); its members were taken from the stage input as before (PLAN2 row 14)."
+    },
     "roster.duplicate_run_id": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
@@ -860,6 +1021,13 @@
       "family": "ROSTER",
       "klass": "NUMBER",
       "note": "A bundle bound to another attempt; it is ignored, not used."
+    },
+    "roster.horizon_truncated": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "ROSTER",
+      "klass": "REPRESENTATION",
+      "note": "The chain reached its collection deadline (pre-capture + 86,400 s minus settle, post-capture and margin) and stopped launching members so the post-calibration stays inside the 24 h horizon. The unlaunched members are absent from the roster; cell.below_minimum excludes where that matters (PLAN2 row 17)."
     },
     "roster.no_science_bundles": {
       "blinding": "STRUCTURE",
@@ -881,6 +1049,20 @@
       "family": "ROSTER",
       "klass": "NUMBER",
       "note": "The bundle's metadata.json run_id differs from its directory. A misfiled bundle already fails the per-member config check; this covers a bundle whose own records disagree about which member it is. A kept member needs one identity in every record a later program may key on, or one energy could count under two units or the wrong quad position. Emitter class REPRESENTATION, restated NUMBER here (registration 6.7)."
+    },
+    "stage.members_refused_pre_bundle_identical": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION",
+      "note": "Three consecutive members ended without a bundle and with the same child refusal line (digits masked): a shared, likely deterministic cause (PLAN2 2.2 B, E). Changes no number."
+    },
+    "supervision.pass_failed": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "A step of the driver's one-second supervision pass raised; it is flagged once per step and the pass went on. A record fault never ends the chain (PLAN2 row 10)."
     },
     "teardown.survivors": {
       "blinding": "STRUCTURE",
@@ -951,13 +1133,41 @@
       "family": "NEG8",
       "klass": "REPRESENTATION",
       "note": "The whole-window verdict row does not authenticate against the campaign log."
+    },
+    "yield.harvest_disagrees_with_window": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "The harvest's member counts differ from the driver's in-window stage_yield.jsonl (PLAN2 2.2 F)."
+    },
+    "yield.stage_low": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION",
+      "note": "In-window yield tripwire: a collection stage ended with fewer succeeded members than its min_valid (PLAN2 2.2 A-B). Counts only; changes no number."
+    },
+    "yield.stage_stalled": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION",
+      "note": "In-window yield tripwire: no new bundle directory and no new chain journal line for the stall bound (PLAN2 2.2 B). Changes no number."
+    },
+    "yield.stage_zero": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION",
+      "note": "In-window yield tripwire: a collection stage ended with no bundle present out of a positive planned count (PLAN2 2.2 B). Counts only; changes no number."
     }
   },
   "notes": {
     "aggregate_disclosures": "whole_window.not_passed and g3.recompute_failed are DISCLOSE because they fail on any single member's failure. Their window-level parts are neg8.screen_failed (emitted by the harvest, with the collected-subset re-screen) and calibration.bracket_acceptance_failed; their member-level part is member.whole_window_member_failure.",
     "authority": "registration_block5.md section 6 states these rules in words; this file is normative for each code's effect.",
     "restated_classes": "roster.run_id_mismatch (emitter REPRESENTATION, restated NUMBER here) is the one restatement; its note says why. calibration.ledger_snapshot_refused now keeps its emitter's class, NUMBER.",
-    "status": "DRAFT, NOT SEALED. Revision 4, 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced. Timing-ruling additions, 2026-10-06 (timing lane): thermal.stage_battery_rise and thermal.battery_temperature_unmeasured, both DISCLOSE. Core-prune integration additions, 2026-10-06 (integration lane): the fourteen codes the core-prune lanes emit (DESIGN.md section 5), with the effects given there.",
+    "status": "DRAFT, NOT SEALED. Revision 4, 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced. Timing-ruling additions, 2026-10-06 (timing lane): thermal.stage_battery_rise and thermal.battery_temperature_unmeasured, both DISCLOSE. Core-prune integration additions, 2026-10-06 (integration lane): the fourteen codes the core-prune lanes emit (DESIGN.md section 5), with the effects given there. Gate-prune round-2 integration additions, 2026-10-06 (integration int3): the 30 codes the round-2 lanes (P2-CHAIN, P2-CTL, P2-RC, P2-DRV, P2-HARV), PLAN2 2.2 G and the SMC battery and wall-meter lane emit; member.timeout and member.stderr_uncopied EXCLUDE_MEMBER, every other one DISCLOSE. battery.member_span is unchanged (a council is ruling on it).",
     "unclassified": "A code not listed here is UNCLASSIFIED: it blocks only the release event until classified blind by a cold erratum (registration 7.2). records.malformed_flag and collector.unmeasured are deliberately absent so that they always block release until read."
   },
   "rules": {
