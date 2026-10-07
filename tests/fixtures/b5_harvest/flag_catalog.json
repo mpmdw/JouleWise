@@ -738,6 +738,12 @@
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
+    "monitor.restarted": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION"
+    },
     "neg8.bound_not_derived": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",

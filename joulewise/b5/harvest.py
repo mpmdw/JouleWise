@@ -361,6 +361,8 @@ CODES: dict[str, CodeSpec] = {
     "census.journal_write_failed": _spec("RECORDS", "REPRESENTATION"),
     "supervision.pass_failed": _spec("RECORDS", "REPRESENTATION"),
     "monitor.outage": _spec("DIAGNOSTIC", "PHYSICS"),
+    # Audit-fix batch 1 (item 8): the driver's record of a hazard-monitor restart (DISCLOSE).
+    "monitor.restarted": _spec("DIAGNOSTIC", "REPRESENTATION"),
     # P3-DRV's driver code (the KM003C wall meter's supervision; DISCLOSE):
     "meter.supervision_fault": _spec("DIAGNOSTIC", "PHYSICS"),
     # int4's driver code: the pre-launch lineage check disagreed; recorded, the chain launched.

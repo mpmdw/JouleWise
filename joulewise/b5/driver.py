@@ -881,6 +881,9 @@ class MonitorSupervisor:
         self.started_at: float | None = None
         self.crash_loop = False
         self.on_crash_loop: Callable[[dict[str, Any]], None] | None = None
+        # Audit-fix batch 1 (item 8): called with the restart's details each
+        # time a process is started after the previous one exited or was discarded.
+        self.on_restart: Callable[[dict[str, Any]], None] | None = None
 
     def _record(self, event: str, **fields: Any) -> None:
         try:
@@ -917,10 +920,17 @@ class MonitorSupervisor:
                 start_time = None
         now = stamp()
         if self.down_since is not None:
-            self.gaps.append({"down_from": self.down_since, "up_at": now})
+            gap = {"down_from": self.down_since, "up_at": now}
+            self.gaps.append(gap)
             self._record("restart", pid=process.pid, pgid=process.pid, start_time=start_time,
-                         argv=self.argv, gap={"down_from": self.down_since, "up_at": now})
+                         argv=self.argv, gap=gap)
             self.down_since = None
+            if self.on_restart is not None:
+                try:
+                    self.on_restart({"pid": process.pid, "starts": self.starts, "gap": gap,
+                                     "last_exit": self.exits[-1] if self.exits else None})
+                except Exception as error:  # noqa: BLE001 - a flag is a record
+                    self.errors.append(_error_text(error))
         else:
             self._record("start", pid=process.pid, pgid=process.pid, start_time=start_time, argv=self.argv)
         return True
@@ -2284,6 +2294,23 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
     monitor.on_crash_loop = lambda details: window.flag(
         "monitor.crash_loop", "DIAGNOSTIC", "PHYSICS", stage="window", observed=details,
         detail="the hazard monitor kept exiting within 30 s of its start; it is restarted with backoff")
+
+    def monitor_restarted(details: Mapping[str, Any]) -> None:
+        """Audit-fix batch 1 (item 8): every restart of the hazard monitor is the DISCLOSE flag monitor.restarted.
+
+        The gap itself reaches the members as the modules' unmeasured flags.
+        """
+        gap = details.get("gap") or {}
+        down, up = gap.get("down_from") or {}, gap.get("up_at") or {}
+        raw = [down.get("monotonic_raw_ns"), up.get("monotonic_raw_ns")]
+        window.flag("monitor.restarted", "DIAGNOSTIC", "REPRESENTATION", stage="window",
+                    observed={"pid": details.get("pid"), "starts": details.get("starts"),
+                              "last_exit": details.get("last_exit")},
+                    detail="the hazard monitor was restarted; its journals have a gap between the two sessions",
+                    interval={"monotonic_ns": [down.get("monotonic_ns"), up.get("monotonic_ns")],
+                              "monotonic_raw_ns": raw if None not in raw else None,
+                              "wall_s": [down.get("wall_s"), up.get("wall_s")]})
+    monitor.on_restart = monitor_restarted
     journal_dir = custody.joinpath(*MONITOR_JOURNAL_DIR)
     ready, readiness = await_monitor_ready(monitor, journal_dir)
     hazard["monitor_readiness"] = {"ready": ready, "attempts": readiness}

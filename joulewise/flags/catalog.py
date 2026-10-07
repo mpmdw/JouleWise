@@ -256,6 +256,9 @@ _PRUNE2_CODES = {
     "census.journal_write_failed": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     "supervision.pass_failed": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     "monitor.outage": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    # Audit-fix batch 1 (item 8): the driver now writes it on each restart of
+    # the hazard monitor (the design catalog's classification).
+    "monitor.restarted": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),
 }
 
 # Gate-prune round 3, lane P3-HARV (joulewise.b5.harvest PRUNE3_CODES).  The

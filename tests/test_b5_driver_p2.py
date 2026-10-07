@@ -278,6 +278,26 @@ class MonitorTests(unittest.TestCase):
         self.assertTrue(report["fault"])
         self.assertIn("monitor_crash_loop", report["fault_reasons"])
 
+    def test_each_monitor_restart_is_the_flag_monitor_restarted(self):
+        """Audit-fix batch 1 (item 8). Before: the catalog classified monitor.restarted, and nothing wrote it."""
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\n/bin/sleep 4\nexit 0\n")
+        patch(self, b5_driver, "MONITOR_RESTART_INTERVAL_S", 0.0)
+        harness.monitor_argv = lambda request: fake_monitor_argv(request.custody_root, life=1.0, code=3)
+        self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        starts = harness.hazard()["monitor"]["starts"]
+        self.assertGreaterEqual(starts, 2)
+        restarted = flags(harness, "monitor.restarted")
+        self.assertEqual(starts - 1, len(restarted))
+        first = restarted[0]
+        self.assertEqual(("DIAGNOSTIC", "REPRESENTATION", "window"),
+                         (first["family"], first["klass"], first["scope"]["level"]))
+        self.assertEqual(3, first["observed"]["last_exit"]["returncode"])
+        lo, hi = first["interval"]["monotonic_ns"]
+        self.assertLessEqual(lo, hi)
+        from joulewise.flags.catalog import DRAFT_CODES
+        self.assertEqual("DISCLOSE", DRAFT_CODES["monitor.restarted"]["effect"])
+
     def test_a_silent_monitor_stops_the_chain_like_disk_low(self):
         harness = Harness(self, g10=False)
         harness.replace_chain("#!/bin/zsh -f\n/bin/sleep 8\nexit 0\n")
