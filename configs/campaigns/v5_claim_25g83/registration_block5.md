@@ -1,9 +1,10 @@
 # Registration V5-CLAIM-25G83-B5: the first claim-bearing `_v5` windows (measurement block 5)
 
-Status: **DRAFT, NOT SEALED. Revision 7, 2026-10-07.** Written by Opus 5.5, as lane L6 of the gate-prune workflow
+Status: **DRAFT, NOT SEALED. Revision 8, 2026-10-07.** Written by Opus 5.5, as lane L6 of the gate-prune workflow
 (revision 3, commit `71c91d74`), then as the registration-sync side lane (revision 4, last commit `7261a585`), then
 as the REG lane of gate-prune round 3 (revision 5, last commit `9d63b4df`), then as the REG sync to the frozen head
-(revision 6, last commit `c6843537`), then as the REG sync to the audit fixes and the NEG-8 ruling (revision 7), on
+(revision 6, last commit `c6843537`), then as the REG sync to the audit fixes and the NEG-8 ruling (revision 7, last
+commit `dc046d4d`), then as the REG final pass to the candidate H_claim (revision 8), on
 branch `design/2026-10-05-v5-claim-block-draft` (revision 2 is commit `bfd1ee8c`). This file authorizes no arm, no
 launch and no analysis. It binds only when one cold gate (§0.1, §12) seals it together with three companions in the
 same directory:
@@ -15,10 +16,10 @@ same directory:
   windows run (§11). At this writing it is a stub; it is filled at seal.
 
 A **FILL**, written `FILL[NAME]`, is a value that must be tied to authenticated bytes before the point named in §13.
-It is never a default. One FILL is a marker on values that are already written: `FILL[B5-FINAL-HASHES]` follows each
-digest that was computed at the int5 head `d3c107f2f` (§2 item 1) and must be recomputed at the integration's final
-head before the seal; a value so marked is correct for `d3c107f2f` and may change. No claim-eligible `_v5` energy
-exists at this writing, and none was read (§16).
+It is never a default. One FILL was a marker on values already written: `FILL[B5-FINAL-HASHES]` followed each digest
+computed at the int5 head `d3c107f2f`, to be recomputed at the integration's final head. Revision 8 recomputed every
+one at that final head, `43ac12d0c` (§2 item 1); none changed, and each is now marked "`FILL[B5-FINAL-HASHES]`
+filled". No claim-eligible `_v5` energy exists at this writing, and none was read (§16).
 
 **What changed from revision 2.** On 2026-10-05 Ed ruled that arming refuses only on a physical hazard, measured
 directly, and that every other check becomes a recorded flag (Ed: "this again feels like in ability to prune silly
@@ -178,8 +179,32 @@ audit or cold-pass record a rule came from; no rule depends on them for its mean
    unverified orphans are written (§6.8); model identity can be superseded at harvest (§7.2).
 6. **Re-derived artifacts** (§0.7, §4.2, §4.3, §4.6, §5.5). The spares change the plan trees, the identity pins (which
    record the plan-tree digests), the sizing output and each window's planned disk bytes. Each digest is given at
-   `d3c107f2f` and marked `FILL[B5-FINAL-HASHES]`.
+   `d3c107f2f` and marked `FILL[B5-FINAL-HASHES]` (filled in revision 8).
 7. **Catalog** (`flag_catalog.json`): the fourteen codes above are added with the code's effects (§13).
+
+**What changed in revision 8.** The integration stopped changing at `43ac12d0ce554813278619b8e8e2331c9eb35be2`
+(`integrate/2026-10-07-int5`; `/Users/edr/night-archive/gate-prune/FROZEN_HEAD_3.md`), the candidate for H_claim. Since
+`d3c107f2f` it carries: a Fable delta cold pass's fixes (lane `lane/2026-10-07-coldpass2-fixes`, `d06ab4778`; findings
+D1 and N1–N7 of `/Users/edr/night-archive/gate-prune/cold-pass-2/REPORT.md`); three orchestrator rulings (Q11, the
+evidence-manifest ruling, N8); and test-only fixture repairs. This revision makes the text say what that code does.
+No registered threshold, sizing value or pinned digest changed.
+
+1. **Q11 closed** (§0.12, §0.16, §7.2, §14; analysis plan §2.4). On GAMMA only, an attempt carrying
+   `neg8.midpoint_lost` is not claim-usable (window reason `neg8.midpoint_lost_primary`), so GAMMA is re-armed. On
+   ALPHA and BETA the flag stays disclosed only.
+2. **More ways a NEG-8 reference is lost** (§0.12, §6.5). A reference whose summary cannot be read
+   (`summary_unreadable`, cold pass 2 D1), and a reference whose model identity is not the sealed one or cannot be
+   derived (ruling N8), is lost, not a reason to fail the window. A planned reference that never ran is named
+   (`bundle_absent`, N2), and never-run references count toward `references_insufficient` (N3). When the verdict's
+   sources do not authenticate, the harvest still maps losses from the claim root's manifests and fails the screen
+   instead of leaving a stored screen standing (N1).
+3. **Smaller changes:** the census also recognises an agent run by its npm package path (§4.5, N5); the unusable-pack
+   refusal keys on an exception type, not a message (§0.17, N6); a torn flag line with an empty code prefix names no
+   code (§6.2, N7); the refusal allowlist gains the GAMMA window reason and the retyped raise (§6.11).
+4. **Fills** (§0.7, §2, §4.6, §5.5, §9.1, §13): `B5-FINAL-HASHES` (every digest recomputed at `43ac12d0c`),
+   `416-AUDIT-RECORD` and `416-SEATS` (the pre-arm audit run at the frozen head `a434e363d`, §9.1).
+5. **Analysis plan:** §2.4 follows Q11; §4 names which drift allowance the issuer reads after a harvest re-screen
+   (cold pass 2 N4).
 
 ## 0. Terms, built in the order they are used
 
@@ -332,12 +357,14 @@ The values in this section follow the cold-judge ruling on block-5 per-member ti
   block-5 policy of §0.13:
   **ALPHA** `configs/campaigns/d117_floor_qwen3-1p7b_v5` (Qwen3-1.7B, 4-bit), **BETA**
   `configs/campaigns/d117_floor_qwen3-8b_v5` (Qwen3-8B, 4-bit) and **GAMMA**
-  `configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5` (both models). Their plan-tree SHA-256s at the int5
-  head `d3c107f2f`, after the NEG-8 lane added each reference stage's spare members (§0.12), are ALPHA
+  `configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5` (both models). Their plan-tree SHA-256s at the
+  candidate H_claim `43ac12d0c` (the same as at the int5 head `d3c107f2f`, after the NEG-8 lane added each reference
+  stage's spare members, §0.12) are ALPHA
   `1d87a30955fa978d3a3a22dc0048720691e0128e4a3fe83477fc375d13dd031a`, BETA
   `0cdb33836f4632827bc74be194e388450c53b3314db1c72d9e9904e625868670` and GAMMA
-  `8b1d1d7176f5ee2286038e91df6427e47476c3a4bdee45a1c24687d49d80e3bf` (`FILL[B5-FINAL-HASHES]`), computed by this
-  author with `shasum -a 256` and equal to the `plan_tree.sha256` values the sizing output records (§5.5). Earlier
+  `8b1d1d7176f5ee2286038e91df6427e47476c3a4bdee45a1c24687d49d80e3bf` (`FILL[B5-FINAL-HASHES]` filled), computed by
+  this author with `shasum -a 256` at `43ac12d0c`, equal to each pack's committed `plan_tree.sha256` and to the value
+  its `generate_configs.py --check` printed there (exit 0), and recorded in the sizing output (§5.5). Earlier
   values: at the frozen head `a434e363d`, ALPHA `5218c270…` and BETA `5bab773a…` (as the timing lane `f4cf9047` left
   them) and GAMMA `fb51b4aa…` (after lane L10 gave its interior references distinct run ids, branch
   `lane/2026-10-06-l10-gamma-refs`, commit `c6309e1a`; §2, "Before GAMMA-1 arms"); GAMMA `523864e2…` at the
@@ -418,8 +445,9 @@ printed. GAMMA's two contrasts are its target cells, each over 10 quads.
 
 The rules of this section follow the cold ruling of 2026-10-07 on lost and contaminated references
 (`/Users/edr/night-archive/gate-prune/neg8-council/RULING.md`), as the NEG-8 lane implemented it
-(`lane/2026-10-07-neg8-survivors`, merged in the int5 head `d3c107f2f`). Where the code differs from the ruling's
-wording, the text follows the code and says so.
+(`lane/2026-10-07-neg8-survivors`, merged in the int5 head `d3c107f2f`), with the cold-pass-2 fixes and the
+orchestrator rulings N8 and Q11 of 2026-10-07 (all in the candidate H_claim `43ac12d0c`). Where the code differs from
+the ruling's wording, the text follows the code and says so.
 
 - **Reference member.** A member of one fixed reference workload (Qwen2.5-1.5B, 1024-token prompt, 256 output
   tokens). Each window runs 12 at its start, the **NEG-8 corpus** (NEG-8 is an inherited label from the project's
@@ -467,20 +495,34 @@ wording, the text follows the code and says so.
   |end mean − start mean|. Each member carries half of the allowance (`E_whole_window_drift_allowance_j`), so a
   contrast carries it once in total. The allowance always uses the realised-count bound, on passing windows too, so a
   lost reference widens the uncertainty instead of hiding it.
-- **Lost references.** A reference is **lost** when its bundle is absent, its summary status is not `succeeded`
-  (which includes `member.admission_aborted` and `member.timeout`), it fails strict validation
-  (`member.strict_validation_failed`), or any member-level physics exclusion of §6.4 fires on it
-  (`contention.request_overlap`, `battery.member_span`, `battery.accumulator_excursion`, `thermal.os_level_nonzero`,
-  `thermal.powermetrics_pressure_elevated`, `clock.step_overlap`). Two programs apply the test. The verdict writer
-  drops a reference whose recorded status is not `succeeded` (`run_campaign.py` `_idle_admission_core_evaluation`);
-  the harvest, which alone sees the monitor journals and runs strict validation, drops a reference that carries one
-  of the flags above and re-runs the screen on what survives (`harvest.NEG8_REFERENCE_LOSS_CODES`, `_neg8_rescreen`,
-  with `whole_window._derived_neg8_decision`'s `exclude_bundle_ids`). A lost reference's energy enters neither the
-  screen nor the allowance, for either family. A reference whose physics is *unmeasured* (`contention.unmeasured`,
-  `battery.unmeasured`, `clock.unmeasured`) is **kept**: unknown evidence never authorises an omission (the rule the
-  mint applies to a corpus member, §5.3). The loss test never reads the reference's energy, so no reference can be
-  dropped for its value. A lost reference's physics flags still apply to every science member and calibration they
-  touch; losing the reference cures nothing else.
+- **Lost references.** A reference is **lost** when its bundle is absent; its summary status is not `succeeded`
+  (which includes `member.admission_aborted` and `member.timeout`); its summary cannot be read (reason
+  `summary_unreadable`: no summary file, as after a member is killed at the 1,800 s cap of §5.2, a file that does
+  not decode, or one with no string status); it fails strict validation (`member.strict_validation_failed`); any
+  member-level physics exclusion of §6.4 fires on it (`contention.request_overlap`, `battery.member_span`,
+  `battery.accumulator_excursion`, `thermal.os_level_nonzero`, `thermal.powermetrics_pressure_elevated`,
+  `clock.step_overlap`); or its model identity differs from the sealed pins or cannot be derived from its own record
+  (`model.identity_mismatch`, `model.identity_underivable`, §6.3). The last two are orchestrator ruling N8
+  (2026-10-07): a reference that ran another model, or cannot show which model it ran, measured a different
+  workload, so its energy says nothing about the instrument's drift. (`model.identity_mismatch` is also a window
+  exclusion in its own right, §6.5, so a window with such a reference is removed whatever the screen says;
+  `model.identity_underivable` removes only its member, so there the survivors rule below decides.) Before cold pass
+  2 (finding D1), a reference with no readable summary was counted as present with no energy, which the screen
+  called invalid, so the window was removed even when the stage's spare had succeeded. Two programs apply the test.
+  The verdict writer drops a reference whose recorded status is not `succeeded` or cannot be read (`run_campaign.py`
+  `_idle_admission_core_evaluation`, reasons `status_not_succeeded` and `summary_unreadable`); the harvest, which
+  alone sees the monitor journals, runs strict validation and compares model identities, drops a reference that
+  carries one of the flags above and re-runs the screen on what survives (`harvest.NEG8_REFERENCE_LOSS_CODES`,
+  `_neg8_rescreen`, with `whole_window._derived_neg8_decision`'s `exclude_bundle_ids`; the harvest's
+  `model_identity` step runs before the screen and covers reference members). A reference with several of these
+  flags is named by the first in the order physics, `member.timeout`, `member.admission_aborted`,
+  `member.strict_validation_failed`, `model.identity_mismatch`, `model.identity_underivable`; a member killed at the
+  cap is named `member.timeout`, its physical cause, rather than `summary_unreadable`. A lost reference's energy
+  enters neither the screen nor the allowance, for either family. A reference whose physics is *unmeasured*
+  (`contention.unmeasured`, `battery.unmeasured`, `clock.unmeasured`) is **kept**: unknown evidence never authorises
+  an omission (the rule the mint applies to a corpus member, §5.3). The loss test never reads the reference's
+  energy, so no reference can be dropped for its value. A lost reference's physics flags still apply to every
+  science member and calibration they touch; losing the reference cures nothing else.
 - **One retry, by spare slot.** When a reference stage ends with fewer succeeded members than it planned, the chain,
   before the next stage, counts the stage's members by their summary status alone and writes that count once to
   `neg8-spares-<stage id>.json` in the chain's transcript directory (a 300 s wall budget, §5.1). It then runs the
@@ -497,26 +539,35 @@ wording, the text follows the code and says so.
   collection stage.
 - **The screen on the survivors.** With n_s surviving start references and n_e surviving end references, the screen
   needs n_s ≥ 2 and n_e ≥ 2. With fewer at either endpoint, `neg8.screen_failed` removes the window with
-  `observed.reason` `references_insufficient` and, in `observed.lost`, each lost reference's run id, slot and reason.
-  Between two and three at each endpoint, the screen runs as above with bound(n_s, n_e). The midpoint is not required
-  by the screen. The code names the shapes (`endpoint_protocol`): the planned (3, 1, 3) is
-  `replicated_endpoints_with_midpoint`; any other shape with two or three references at each endpoint and zero or one
-  at the midpoint is `replicated_endpoints`; more references than planned is `neg8_bracket_reference_invalid`.
+  `observed.reason` `references_insufficient` and, in `observed.lost`, each lost reference's run id, slot and
+  reason. References that never ran count the same way (cold pass 2 N3): a planned roster (one that has a midpoint
+  reference, or three references at an endpoint) with fewer than two at an endpoint and no recorded loss is
+  `references_insufficient`, not the older "ambiguous reference" condition, and each planned reference with no
+  bundle is named in `observed.lost` with reason `bundle_absent` (`whole_window.evaluate_neg8_point_drift`,
+  `run_campaign._idle_admission_core_evaluation`). Between two and three at each endpoint, the screen runs as above
+  with bound(n_s, n_e). The midpoint is not required by the screen. The code names the shapes (`endpoint_protocol`):
+  the planned (3, 1, 3) is `replicated_endpoints_with_midpoint`; any other shape with two or three references at
+  each endpoint and zero or one at the midpoint is `replicated_endpoints`; more references than planned is
+  `neg8_bracket_reference_invalid`.
 - **A lost midpoint.** The window keeps its screen result, its allowance (computed as above with the two-value
-  spread) and its numbers, and carries `neg8.midpoint_lost` (DISCLOSE). Because the midpoint is the only reference
-  inside the window, its loss leaves any excursion that reverts by the end unmeasured, so the analysis plan (§2.4)
-  lists `neg8.midpoint_lost` as a claim-excluding flag for the primary contrasts; the window still feeds descriptive
-  numbers, sensitivity lines and the block's drift record. Once the block's midpoint record shows the midpoint never
-  moved the spread beyond the bound, an erratum may downgrade the flag to disclose-only.
+  spread) and its numbers, and carries `neg8.midpoint_lost` (DISCLOSE in the catalog). Because the midpoint is the
+  only reference inside the window, its loss leaves any excursion that reverts by the end unmeasured. What follows
+  depends on the pack. On **GAMMA**, whose window exists for the two primary contrasts, the attempt is not
+  claim-usable: the exclusion function adds the window reason `neg8.midpoint_lost_primary`, so GAMMA is re-armed and
+  the attempt is never analysed (orchestrator ruling Q11 of 2026-10-07, which the seal gate confirms; §7.2, §14 Q11;
+  analysis plan §2.4). On **ALPHA and BETA** the flag is disclosed only, and the window's reported cells and floors
+  stand. Once the block's midpoint record shows the midpoint never moved the spread beyond the bound, an erratum may
+  downgrade the flag to disclose-only on GAMMA too.
 - **Disclosure.** A window whose screen ran on fewer than (3, 1, 3) references records `neg8.reference_lost`
   (DISCLOSE, window level). Its `observed` names each lost reference's run id, slot, reason, status and the outcome
-  of its stage's retry (the spares measured and the spares that succeeded), the realised and planned counts, and the
-  bound's formula; it also names the record that holds bound(n_s, n_e) and its two terms: the whole-window verdict,
-  or `withheld/neg8-rescreen-bracket.json` when the harvest re-ran the screen. *Code differs from the ruling:* the
-  flag itself carries no bound value, because a bound is computed from reference energies and flags are released
-  as structure (§8). A loss that the retry restored (counts back at (3, 1, 3)) records no `neg8.reference_lost`; it
-  is disclosed by the spare's `member.retried` and the lost member's own flag. `derived/neg8-screen.json` records the
-  counts, the formula used and which bound was used.
+  of its stage's retry (the spares measured and the spares that succeeded; a planned reference that never ran is
+  named from the sealed plan tree, with reason `bundle_absent`, cold pass 2 N2), the realised and planned counts,
+  and the bound's formula; it also names the record that holds bound(n_s, n_e) and its two terms: the whole-window
+  verdict, or `withheld/neg8-rescreen-bracket.json` when the harvest re-ran the screen. *Code differs from the
+  ruling:* the flag itself carries no bound value, because a bound is computed from reference energies and flags are
+  released as structure (§8). A loss that the retry restored (counts back at (3, 1, 3)) records no
+  `neg8.reference_lost`; it is disclosed by the spare's `member.retried` and the lost member's own flag.
+  `derived/neg8-screen.json` records the counts, the formula used and which bound was used.
 - *Worked example (synthetic; recomputed by this author with the code's `neg8_count_adjusted_bound`).* Twelve corpus
   gross energies: 99.62, 99.71, 99.80, 99.88, 99.93, 99.97, 100.04, 100.09, 100.15, 100.22, 100.31, 100.38 J;
   s = 0.2353 J, t(0.975, 11) = 2.201; U_3 = 100.3033, L_3 = 99.7100, U_2 = 100.3450, L_2 = 99.6650 J. Planned
@@ -531,7 +582,8 @@ wording, the text follows the code and says so.
   0.6383 J; each member carries 0.3192 J. Had the contaminated end member been kept, the end mean would be
   100.5100 J, the screen statistic 0.5500 J (a near-failure caused by a contender, not by drift) and the spread
   0.5500 J. Had the midpoint also been lost, the spread would be |100.2250 − 99.9600| = 0.2650 J, the allowance
-  unchanged at 0.6383 J, and the window would carry `neg8.midpoint_lost`. The idle-subtracted family subtracts one
+  unchanged at 0.6383 J, and the window would carry `neg8.midpoint_lost` (were this a GAMMA window, the attempt would
+  then not be claim-usable and GAMMA would be re-armed). The idle-subtracted family subtracts one
   idle energy (here 36.00 J) from every corpus and reference energy, so its s, differences and decisions are the
   same. `neg8.reference_lost` names r2 (`member.admission_aborted`; its stage's spare
   `neg8-window-start-spare-1` measured and succeeded) and the third end member (`contention.request_overlap`; no
@@ -632,10 +684,14 @@ that member's unit (§6.3).
   excluded members, the kept units of each cell, and `claim_usable`. A member flag that names its member by bundle id
   instead of run id (the whole-window verdict names members by bundle id) is resolved through the roster's map from
   bundle id to run id; before that fix such an exclusion was silently dropped (Fable audit F9). It reads only each
-  flag's code, scope, interval and id, never an energy, power or duration; its tests prove this by passing bundles whose energy fields raise when
-  read. Identical inputs give byte-identical output.
-- **Claim-usable.** A window is claim-usable when no EXCLUDE_WINDOW code fired and every target cell keeps at least
-  8 of its 10 units in each stratum (§6.6).
+  flag's code, scope, interval and id, and the roster's pack id, never an energy, power or duration; its tests prove
+  this by passing bundles whose energy fields raise when read. Identical inputs give byte-identical output.
+- **Pack-scoped window reason.** A DISCLOSE code that removes the window on one pack only. There is one: on GAMMA
+  (pack id `d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5`), `neg8.midpoint_lost` adds the window reason
+  `neg8.midpoint_lost_primary` (`exclusions.PACK_SCOPED_WINDOW_REASONS`; §0.12, §7.2). The reason appears in the
+  output's `reasons` list like a window-removing code, but it is not a catalog code.
+- **Claim-usable.** A window is claim-usable when no EXCLUDE_WINDOW code fired, no pack-scoped window reason applies,
+  and every target cell keeps at least 8 of its 10 units in each stratum (§6.6).
 
 ### 0.17 Driver, chain, monitor and harvest
 
@@ -656,7 +712,10 @@ that member's unit (§6.3).
   (`night_refused_boot_changed`), because member stamps on the monotonic clocks of two different boots cannot be
   placed on one time axis. (2) The publication still fails after its one retry, 5 s later, because the pack's
   committed inventory is unusable (`night_refused_pack_inventory_unusable`, audit A5): no member's configuration bytes
-  could then be checked against it, and every member would refuse itself. Everything else is recorded and the chain
+  could then be checked against it, and every member would refuse itself. The driver recognises this case by the
+  exception's type, `window_lineage.PackInventoryUnusableError`, which the publisher raises only for it (cold pass 2
+  N6; it used to match the message text, so a reworded message would have launched a chain whose members all
+  refuse). Everything else is recorded and the chain
   launches: a lineage file that is absent, unreadable, rejected by the members' reader, or naming another plan, window
   or bracket session is `records.lineage_prelaunch_mismatch` (DISCLOSE), and a publication that still fails after its
   retry for any other reason is `records.lineage_formality` (DISCLOSE). Both flags carry
@@ -748,16 +807,25 @@ Each is evidenced by a path and SHA-256 before the point named.
    L8 of the gate-prune plan, the timing lane of 2026-10-06 (block-5 policy, idle records and settles; branch
    `lane/2026-10-06-timing-policy`), the core-prune lanes and gate-prune round 2 (integration head `b9d02700a`,
    branch `integrate/2026-10-06-gate-prune-3`), the P3 round (lanes `lane/2026-10-06-p3-{harv,haz,drv,wd}`) and
-   lane L10, the two audit-fix lanes of 2026-10-07 and the NEG-8 survivors lane (revision 7 list), merged under the
-   merge gates, with one consolidated Fable cold pass over the measurement code changed since `e6b6a0ce` (done at the
-   frozen head `a434e363d`, `/Users/edr/night-archive/gate-prune/cold-pass/`) and a Fable delta cold pass over the
-   measurement code changed from `a434e363d` to the final int5 head. `FILL[H-CLAIM]`. The candidate is the final head
-   of `integrate/2026-10-07-int5`: `d3c107f2f` at this writing (`FILL[B5-FINAL-HASHES]`), which carries the frozen head
-   `a434e363d96621318657418e60b8d14410079d82` (the refusal census and its triage, revision 6 list) and the three
-   lanes of revision 7. It becomes H_claim only through the cold passes, the merge gates and the seal. If H_claim
-   differs from the commit this text was synced to, the sync of item 8 is repeated on the difference.
-2. The #416 pre-arm triple audit has run once at H_claim and every verified BLOCKER is cleared (§9.1).
-   `FILL[416-AUDIT-RECORD]`.
+   lane L10, the two audit-fix lanes of 2026-10-07 and the NEG-8 survivors lane (revision 7 list), the cold-pass-2
+   fix lane and the rulings Q11 and N8 (revision 8 list), merged under the merge gates, with one consolidated Fable
+   cold pass over the measurement code changed since `e6b6a0ce` (done at the frozen head `a434e363d`,
+   `/Users/edr/night-archive/gate-prune/cold-pass/`) and a Fable delta cold pass over the measurement code changed
+   from `a434e363d` to the final int5 head. `FILL[H-CLAIM]`. The candidate is the final head of
+   `integrate/2026-10-07-int5`, `43ac12d0ce554813278619b8e8e2331c9eb35be2` (`FILL[B5-FINAL-HASHES]` filled;
+   `/Users/edr/night-archive/gate-prune/FROZEN_HEAD_3.md`), which carries the frozen head
+   `a434e363d96621318657418e60b8d14410079d82` (the refusal census and its triage, revision 6 list), the three lanes
+   of revision 7 and the changes of revision 8. The delta cold pass ran on `a434e363d..821b58f8b`
+   (`/Users/edr/night-archive/gate-prune/cold-pass-2/REPORT.md`) and refused on one defect, D1 (§0.12); D1 and the
+   pass's notes N1–N3 and N5–N7 are fixed in `d06ab4778`, merged at `ffdca2250`. Its re-verification of those fixes
+   and of the commits after `821b58f8b` is part of `FILL[H-CLAIM]`. The four pinned estimator files
+   (`joulewise/reduce.py`, `uncertainty_evidence.py`, `powermetrics_fiducial.py`, `adapters/powermetrics.py`) are
+   byte-identical from `a434e363d` to `43ac12d0c` (`git diff`, empty, run by this author). The candidate becomes
+   H_claim only through the cold passes, the merge gates and the seal. If H_claim differs from `43ac12d0c`, the sync of
+   item 8 is repeated on the difference.
+2. The #416 pre-arm triple audit has run, and every BLOCKER or MAJOR it found has been sent to a refuter of another
+   model family and, if confirmed, fixed (§9.1). **`416-AUDIT-RECORD`** (filled in revision 8): see §9.1. The
+   diff-scoped re-audit of the fixes made since (`a434e363d..43ac12d0c`) has passed: `FILL[416-DELTA-RECORD]`.
 3. This file, the analysis plan, the flag catalog and the sealed inventory are sealed (§12). `FILL[B5-SEAL-RECORD]`.
 4. The three packs as the timing lane regenerated them, with GAMMA as lane L10 changed it and every reference stage
    carrying its spares (§0.7, §0.12), are at H_claim, and their files are in the sealed inventory. The spare configs
@@ -805,13 +873,16 @@ Each is evidenced by a path and SHA-256 before the point named.
    `d3c107f2f` the driver, the chain and the runner did change (revision 7 list), but no added or removed line in
    `scripts/run_campaign.py`, `joulewise/controller.py` or `joulewise/b5/harvest.py` mentions the cooldown, and
    `configs/campaign_policies/` is unchanged (`git diff`, searched by this author), so the smoke's result carries
-   over to that head.
+   over to that head. The same search from `d3c107f2f` to `43ac12d0c` finds no added or removed line mentioning the
+   cooldown in those three files and no change under `configs/campaign_policies/`, so it carries over to the
+   candidate H_claim as well.
 8. The P3 sync points of §13 are each confirmed against the merged code, and this text is corrected where the code
    chose differently (a draft edit, before the seal). **`P3-SYNC-RECORD`** (filled in revision 6): confirmed against
    the frozen head `a434e363d`; the result of each sync point is the table in §13, and the catalog comparison there.
    Revision 7 repeats the sync for the code merged after `a434e363d` (the audit fixes and the NEG-8 lane), against
-   the int5 head `d3c107f2f`, in a second table in §13 (`B5-REV7-SYNC`). Together they hold for H_claim only if
-   H_claim is that head (item 1); otherwise the sync is repeated on the difference.
+   the int5 head `d3c107f2f`, in a second table in §13 (`B5-REV7-SYNC`), and revision 8 repeats it for the code
+   merged after `d3c107f2f`, against the candidate H_claim `43ac12d0c`, in a third (`B5-REV8-SYNC`). Together they
+   hold for H_claim only if H_claim is `43ac12d0c` (item 1); otherwise the sync is repeated on the difference.
 
 **Before ALPHA-1's harvest:** the harvest program (lane L5) has passed its Fable final pass and is pinned by an
 addendum to the seal record (§11 item 4). Three requirements that revision 5 listed here are met at the frozen head
@@ -1128,7 +1199,10 @@ process whose command line contains one of the three strings anywhere. That list
 (`joulewise/agent_identity.py`, used at every census site) decides each listed process by what the kernel says it
 runs, never by its arguments. A listed process is an agent when its executable or process name starts with `claude`,
 `codex`, `t3 code` or `t3code`, when its executable sits in a `claude/versions/<version>` or `codex/versions/<version>`
-install, or when it is `node`, `bun` or `deno` running a script named `claude*` or `codex*`. A process in the
+install, or when it is `node`, `bun` or `deno` running a script named `claude*` or `codex*` or a script whose path
+runs through an agent's npm package directory (`claude-code`, `@anthropic-ai/claude*` or `@openai/codex*`; cold pass 2
+N5: Claude Code started by its real path, `node …/node_modules/@anthropic-ai/claude-code/cli.js`, has the script name
+`cli.js`, which the name rule alone missed). A process in the
 caller's own process tree (the driver or the arm and their descendants, or a process group led by one of them) is the
 window itself and is ignored. A line is decided only when the live process's arguments, joined as `pgrep` joins
 them, equal the listed text, which proves the line is that process and not a reused process id; a line that cannot be
@@ -1170,9 +1244,11 @@ recorded only.
    `9033a69906aab1f0ff5724b5a6c2f3efd623512ee49a7048713e2410e701c794`. That digest covers Python 3.13.1, mlx 0.31.2,
    mlx-lm 0.31.3, mlx-metal 0.31.2, numpy 2.5.1, safetensors 0.8.0, tokenizers 0.22.2 and transformers 5.12.1.
    `scripts/write_b5_identity_pins.py` generated the file from the packs' identity units and 24 block-3 reference
-   bundles of the same two models, without loading a model. Its draft SHA-256 at the int5 head `d3c107f2f` is
-   `f78a27f8c8c921e9b3de3403d6b56ea9da4cee92c23520e8ca24c666ecd95257` (`FILL[B5-FINAL-HASHES]`; computed by this
-   author with `shasum -a 256`, and `scripts/write_b5_identity_pins.py --check` reproduced the file at that commit).
+   bundles of the same two models, without loading a model. Its draft SHA-256 at the candidate H_claim `43ac12d0c`
+   (unchanged from the int5 head `d3c107f2f`) is
+   `f78a27f8c8c921e9b3de3403d6b56ea9da4cee92c23520e8ca24c666ecd95257` (`FILL[B5-FINAL-HASHES]` filled; computed by
+   this author with `shasum -a 256`, and `scripts/write_b5_identity_pins.py --check` reproduced the file at
+   `43ac12d0c`, exit 0).
    The NEG-8 lane changed only the three packs' plan-tree digests in it (`git diff a434e363d d3c107f2f`). Earlier
    drafts: `ccce59f9…` at the frozen head `a434e363d`, after lane L10 (`c6309e1a`); `9c2ecd89…` after the timing
    lane `f4cf9047` and at the integration head `b9d02700a`; `039d3e3c…` at `f8164893`. Each change moved only the
@@ -1459,7 +1535,7 @@ judged against that identity.
 
 ### 5.4 The window's tail
 
-After the post calibration, in this order (`joulewise/b5/driver.py` `run_hazard_night`, at `d3c107f2f`): the chain
+After the post calibration, in this order (`joulewise/b5/driver.py` `run_hazard_night`, at `43ac12d0c`): the chain
 exits and the driver stamps that moment; the driver proves the chain's process group gone (a census of the group
 with no signal, then the existing termination proof) and counts the window's yield (§5.7); G10 runs if the plan asks
 and the chain exited by itself (§3), with the monitor and the meter still journaling; then the driver waits until at
@@ -1499,7 +1575,7 @@ bounds only a hung chain or a dead driver.
   every pack's `T_stream_max_s` to the block's longest, 335 s, at which the frequency gate passes for
   |f| ≤ 3.6306 ppm.
 - **Programmed span.** The programmed span is the chain's length if every member takes its longest allowed path. The
-  rule keeps block 4's conventions and uses the chain at the int5 head `d3c107f2f` (`scripts/size_b5_window.py`, its
+  rule keeps block 4's conventions and uses the chain at the candidate H_claim `43ac12d0c` (`scripts/size_b5_window.py`, its
   `conventions` list):
   - span = (1 + collection stages) × 60 s settle + the collection stages' countdowns (0 s, §5.1) + the pre and post
     calibration pair (770 s) + the bound derivation (320 s) + the corpus prune (320 s) + the window calibration
@@ -1526,12 +1602,12 @@ bounds only a hung chain or a dead driver.
     verdict** (§5.1) is charged 60 s for one refit of about 15 s.
 - **`WINDOW_MAX_S`**, the window's deadline measured from t0, = 60 × ceil((span + 3,300 s) / 60). The 3,300 s is the
   arm's allowance: the dwell cap of 2,700 s plus the census, reads, network-time OFF, collectors and cadence probe.
-- **`B5-SIZING-OUTPUTS`** (draft values at the int5 head `d3c107f2f`; sealed at H_claim):
+- **`B5-SIZING-OUTPUTS`** (draft values at the candidate H_claim `43ac12d0c`; sealed at H_claim):
   `configs/campaigns/v5_claim_25g83/sizing_b5.json`, schema `joulewise.b5_sizing.v1`, SHA-256
-  `89e7ea70be34d855285c7d2c87df42b646d179a632a1e05ed57a4682a961b3aa` at `d3c107f2f` (`FILL[B5-FINAL-HASHES]`; status
-  `UNSEALED_DRAFT`; computed by this author with `shasum -a 256`, and `scripts/size_b5_window.py --check` reproduced
-  it byte for byte at that commit). Earlier drafts: `f114f9b9…` at the frozen head `a434e363d`, before the spares;
-  `a5c6ec05…` at `b9d02700a`; `7c53ebc8…` on lane L10's branch with the older sizer; `b31a27b5…` after the timing lane
+  `89e7ea70be34d855285c7d2c87df42b646d179a632a1e05ed57a4682a961b3aa` at `43ac12d0c`, unchanged from `d3c107f2f`
+  (`FILL[B5-FINAL-HASHES]` filled; status `UNSEALED_DRAFT`; computed by this author with `shasum -a 256`, and
+  `scripts/size_b5_window.py --check` reproduced it byte for byte at `43ac12d0c`, exit 0). Earlier drafts:
+  `f114f9b9…` at the frozen head `a434e363d`, before the spares; `a5c6ec05…` at `b9d02700a`; `7c53ebc8…` on lane L10's branch with the older sizer; `b31a27b5…` after the timing lane
   `f4cf9047`; `9d16edfe…` at `f8164893`. The value in force is the one sealed at H_claim. `scripts/size_b5_window.py` writes it from block 4's committed sizing source
   (`configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json`, SHA-256
   `f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81`) and from the packs' stage graphs, order
@@ -1551,7 +1627,8 @@ bounds only a hung chain or a dead driver.
   | BETA | 19 / 100 | 101,226 s (28.1 h) | 104,580 s (29.05 h) | 32,634 s (9.1 h) | 20,510 s (5.7 h) |
   | GAMMA | 61 / 40 | 87,690 s (24.4 h) | 91,020 s (25.3 h) | 27,747 s (7.7 h) | 17,426 s (4.8 h) |
 
-  The programmed spans and `WINDOW_MAX_S` are read from the sizing output at `d3c107f2f` (`FILL[B5-FINAL-HASHES]`);
+  The programmed spans and `WINDOW_MAX_S` are read from the sizing output at `43ac12d0c` (`FILL[B5-FINAL-HASHES]`
+  filled);
   each span is revision 6's plus the 5,424 s of spare retries (93,402, 95,802 and 82,266 s at `a434e363d`). The
   members column counts the planned roster, without spares; the expected-chain columns assume no spare runs.
 
@@ -1827,6 +1904,8 @@ and one torn flag line left its attempt blocked for ever. Now:
   EXCLUDE_MEMBER code and the line still shows a run id, it adds `records.malformed_flag_member_exclusion_possible`
   (EXCLUDE_MEMBER) on that member. A line that shows no code, or a possible member code but no run id, is disclosed
   only: the rule excludes on what the line shows, never on what it might have said (`harvest._malformed_flag_line`).
+  A line torn just after the opening quote of its code shows an empty prefix, which names no code (cold pass 2 N7;
+  before the fix, the empty prefix matched every code and so removed the window).
   *Worked example (synthetic):* a line torn after `{"code": "calibration.capt` could have been
   `calibration.capture_invalid` (EXCLUDE_WINDOW) among seven candidates, so the window is removed; a line that still
   shows a member's run id and is torn inside `"code": "member.tok` could only have been `member.token_count_mismatch`
@@ -1838,7 +1917,7 @@ and one torn flag line left its attempt blocked for ever. Now:
 |---|---|---|
 | PACK_IDENTITY, CODE_IDENTITY, MODEL_IDENTITY | the pack, the executed code or the model differs from what was sealed, or could not be compared | EXCLUDE_WINDOW (one member whose model identity cannot be derived from its own metadata: EXCLUDE_MEMBER) |
 | CALIBRATION | the bracket is missing, invalid, unbound or fails the acceptance, the ledger it is judged from fails its own integrity checks, a capture saw charging or AC loss, or an earlier capture the acceptance relies on changed | EXCLUDE_WINDOW (DISCLOSE: the desk's ledger-readiness checks before an arm; battery assist during a capture; a changed capture the acceptance does not rely on; a historical file that could not be read; the writers' records of §6.10) |
-| NEG8 | the bound was not derived, the screen failed, the verdict holding the screen is absent, or a verdict that did not pass cannot name its failed members | EXCLUDE_WINDOW (DISCLOSE: the aggregate verdict codes of §6.5, a corpus member dropped for a registered reason or for physics, lost references and a lost midpoint (§0.12; the analysis plan makes a lost midpoint claim-excluding for the primary contrasts), and the verdict producer's own records) |
+| NEG8 | the bound was not derived, the screen failed, the verdict holding the screen is absent, or a verdict that did not pass cannot name its failed members | EXCLUDE_WINDOW (DISCLOSE: the aggregate verdict codes of §6.5, a corpus member dropped for a registered reason or for physics, lost references and a lost midpoint (§0.12; on GAMMA a lost midpoint makes the attempt not claim-usable through the pack-scoped window reason `neg8.midpoint_lost_primary`, §0.16), and the verdict producer's own records) |
 | INSTRUMENT | the pre-calibration screen failed | EXCLUDE_WINDOW (a member that could not read the sampler binary's digest: EXCLUDE_MEMBER, §6.3, unless the harvest re-derived it: DISCLOSE) |
 | CLOCK_SYSTEMATIC | a step during a calibration capture; most recorded anchors not `bounded` | EXCLUDE_WINDOW |
 | MEMBER_VALIDITY | §6.3 | EXCLUDE_MEMBER |
@@ -1868,7 +1947,8 @@ A member is removed from every cell it feeds when any of these is flagged:
   (`member.cooldown_cap_hit`); or its campaign cooldown evidence does not verify (`member.cooldown_evidence_unverified`);
 - its configuration bytes are not in the pack's committed inventory (`member.config_not_in_inventory`; the lineage
   check refuses such a member at write time, so normally its bundle is simply absent);
-- its model identity cannot be derived from its metadata (`model.identity_underivable`);
+- its model identity cannot be derived from its metadata (`model.identity_underivable`; on a NEG-8 reference this
+  also makes the reference lost, §0.12);
 - its #421 per-capture battery pair (the registry read just before and just after its sampler stream, kept as raw
   bytes) is present and failed (`battery.capture_pair_failed`). One failure is disclosed instead: when the pair failed
   on its endpoint current alone (the pair rule tests the unsigned |InstantAmperage| > 200 mA), every failed endpoint
@@ -2104,9 +2184,16 @@ The window is not claim-usable when any of these fired:
 - `neg8.bound_not_derived` (§5.3) and `neg8.screen_failed`; also `whole_window.verdict_absent`, because the NEG-8
   screen's result is held in the whole-window verdict. The screen runs on the surviving references (§0.12, "The
   screen on the survivors"): a lost reference never removes the window by itself; fewer than two survivors at an
-  endpoint does (`observed.reason` `references_insufficient`). Lost references and a lost midpoint are disclosed
-  (`neg8.reference_lost`, `neg8.midpoint_lost`); a corpus member dropped for physics is disclosed
-  (`neg8.corpus_member_dropped`, §5.3).
+  endpoint does (`observed.reason` `references_insufficient`, also when the missing references never ran). Lost
+  references and a lost midpoint are disclosed (`neg8.reference_lost`, `neg8.midpoint_lost`; on GAMMA a lost
+  midpoint also removes the window, §0.12); a corpus member dropped for physics is disclosed
+  (`neg8.corpus_member_dropped`, §5.3). *When the verdict's sources do not authenticate* (cold pass 2 N1). The
+  harvest finds the window's references in the verdict's own source manifests. Before the fix, when those did not
+  authenticate it found no references, so a loss flag on a reference went unseen and the stored screen, which still
+  held that reference's energy, stood. Now the harvest names the window's references from the claim root's campaign manifests as
+  written (`campaign_manifests/*.json`, unauthenticated, used only to name references, never for an energy or a
+  passing screen); when one of them carries a loss flag the re-screen cannot run, and `neg8.screen_failed` is emitted
+  with `observed.reference_source` recording which source named the references.
 - `whole_window.member_failures_unreadable` (NEG8, NUMBER; orchestrator item P4, at `a434e363d`): the whole-window
   verdict did not pass, and its `member_failures` list is absent or rejected by the verdict's own validator
   (`whole_window._validated_member_failures`). Then no failed member can be named, so
@@ -2208,8 +2295,8 @@ capture the acceptance does not rely on, and a historical file that could not be
 probe of the clock, battery, thermal, contention or disk hazard that returned UNMEASURED (`<module>.arm_unmeasured`,
 §4.1); an in-window census that could not be read (`census.unmeasured`, §4.5); a re-derived powermetrics digest
 (`instrument.binary_identity_rederived`, §6.3); lost NEG-8 references, a lost midpoint and a corpus member dropped for
-physics (`neg8.reference_lost`, `neg8.midpoint_lost`, `neg8.corpus_member_dropped`, §0.12, §5.3; the analysis plan
-makes `neg8.midpoint_lost` claim-excluding for the primary contrasts, §2.4 there); a flag line that failed validation,
+physics (`neg8.reference_lost`, `neg8.midpoint_lost`, `neg8.corpus_member_dropped`, §0.12, §5.3; on GAMMA
+`neg8.midpoint_lost` also makes the attempt not claim-usable, §0.16, §7.2); a flag line that failed validation,
 a writer's stand-in line rebuilt into its flag, and an operator log that could not be read (`records.malformed_flag`,
 `records.flag_unbuilt`, `records.operator_log_unreadable`, §6.2, §6.10); a monitor restart (`monitor.restarted`) and a
 recorded monitor or meter group the dead-man left unsignalled (`monitor.orphan_unverified`, §5.4); and the records of
@@ -2377,7 +2464,7 @@ to, say, an earlier window's bracket.
 the whole flag behind a fixed marker (`JOULEWISE_UNWRITTEN_FLAG `) on its error output. The harvest scans the stage
 logs (`operator-logs/*.log`), each member's own error-output file (`operator-logs/member-stderr/*.stderr`), the planned
 operator-log root and the desk transcript for the marker, and absorbs each flag as if written
-(`harvest._unwritten_core_flags`, at `d3c107f2f`). Three outcomes (audit-fix 2, Opus audit F2): a writer's designed
+(`harvest._unwritten_core_flags`, at `43ac12d0c`). Three outcomes (audit-fix 2, Opus audit F2): a writer's designed
 stand-in line (`{code, level, run_id, [observed,] unbuilt}`, printed by `joulewise.flags.core.emit` or the chain's
 flag writer when the flag could not be built or written) is rebuilt as the flag it names, so that flag's catalog
 effect applies and no exclusion is lost, and `records.flag_unbuilt` (DISCLOSE) records the rebuild (a stage or quad
@@ -2405,31 +2492,37 @@ carries a **category**:
 | Category | Meaning (the file's own definition) | Entries | Sites |
 |---|---|---|---|
 | PHYSICS | refuses on a measured physical hazard; names the quantity | 30 | 31 |
-| NUMBER_INTEGRITY | refuses because a number would be wrong or unattributable; names the number | 34 | 57 |
+| NUMBER_INTEGRITY | refuses because a number would be wrong or unattributable; names the number | 35 | 58 |
 | INTERNAL | never stops collection or excludes a window (for example an import-time constant check); names why | 91 | 117 |
-| BASELINE | present at the sweep base `e6b6a0ce` and unchanged; not individually reviewed; frozen | 2,594 | 3,664 |
+| BASELINE | present at the sweep base `e6b6a0ce` and unchanged; not individually reviewed; frozen | 2,593 | 3,663 |
 | DEFERRED_REPRESENTATION | a representation refusal another lane is converting | 0 | 0 |
 
-(Counts computed by this author from the file at the int5 head `d3c107f2f`: entries are list items, sites the sum of
-their `count` fields; 2,749 entries and 3,869 sites in all. At `a434e363d` they were 27/28, 33/56, 90/116 and
-2,598/3,668, 2,748 entries and 3,868 sites. Comparing the two files entry by entry: three BASELINE entries were
+(Counts computed by this author from the file at the candidate H_claim `43ac12d0c`: entries are list items, sites the
+sum of their `count` fields; 2,749 entries and 3,869 sites in all. From `d3c107f2f` one entry changed category: the
+publisher's raise for an unusable pack inventory, retyped `PackInventoryUnusableError` (§0.17), moved from BASELINE
+to NUMBER_INTEGRITY. At `d3c107f2f` the counts were 30/31, 34/57, 91/117 and 2,594/3,664. At `a434e363d` they
+were 27/28, 33/56, 90/116 and 2,598/3,668, 2,748 entries and 3,868 sites. Comparing the files at `a434e363d` and
+`d3c107f2f` entry by entry: three BASELINE entries were
 reviewed into PHYSICS (the arm's dwell refusal, its instrument refusal and the driver's GO-without-PASS reason, §4.1);
 two entries were removed (the in-window census stop on unreadable censuses, PHYSICS, §4.5, and the raise on an
 unknown registry start identity, BASELINE, §6.10); and three were added: the refusal of an unusable pack inventory,
 `night_refused_pack_inventory_unusable`, NUMBER_INTEGRITY (§0.17), the 1,500 s cap on G10's supervised wait, PHYSICS
 (a hung process, §5.4), and the spare-retry helper's exit on an unknown mode, INTERNAL.) The file
-also lists every flag code the catalogs mark EXCLUDE_WINDOW (33 codes: 29 NUMBER_INTEGRITY, 4 PHYSICS, none BASELINE;
-`whole_window.verdict_absent` was relabelled from BASELINE to NUMBER_INTEGRITY) or EXCLUDE_MEMBER (40 codes: 20
-NUMBER_INTEGRITY, 16 PHYSICS, 4 BASELINE), each with the quantity or number it protects. The 33 include
-`g3.recompute_failed`, which the test fixture still marks EXCLUDE_WINDOW (§6.5, §13).
+also lists every flag code the catalogs mark EXCLUDE_WINDOW, and every pack-scoped window reason (§0.16), under
+`window_exclusions` (34 entries: 30 NUMBER_INTEGRITY, 4 PHYSICS, none BASELINE; `whole_window.verdict_absent` was
+relabelled from BASELINE to NUMBER_INTEGRITY), and every EXCLUDE_MEMBER code under `member_exclusions` (40: 20
+NUMBER_INTEGRITY, 16 PHYSICS, 4 BASELINE), each with the quantity or number it protects. The 34 are 33 codes and the
+one pack-scoped reason, `neg8.midpoint_lost_primary` (NUMBER_INTEGRITY, pack GAMMA: "GAMMA's primary contrasts carry a
+drift allowance with no interior-excursion evidence when the arm-boundary midpoint reference is lost"). The 33 codes
+include `g3.recompute_failed`, which the test fixture still marks EXCLUDE_WINDOW (§6.5, §13).
 
 The test `tests/hazards/test_refusal_allowlist.py` scans those modules' syntax trees on every run and fails when:
 a refusal site appears that the file does not list, or a listed site changes its count or its guarding conditions;
 a non-BASELINE entry does not say in at least 30 characters what it protects; a BASELINE entry is new, moved,
 re-guarded or more frequent than in the frozen list `tests/hazards/refusal_baseline_frozen.txt` (whose own SHA-256
 the test pins), so BASELINE can only shrink; a module the hazard path imports is neither scanned nor listed as
-deliberately unscanned; or an excluding catalog code is missing from the file, carries another category, or is
-BASELINE outside six named codes (`calibration.ledger_snapshot_refused`, `whole_window.verdict_absent`,
+deliberately unscanned; or an excluding catalog code or a pack-scoped window reason is missing from the file,
+carries another category, or is BASELINE outside six named codes (`calibration.ledger_snapshot_refused`, `whole_window.verdict_absent`,
 `member.admission_aborted`, `member.cooldown_evidence_unverified`, `member.strict_validation_failed`,
 `member.target_phase_precheck_failed`). So a new refusal cannot enter the hazard path without being classed PHYSICS
 or NUMBER_INTEGRITY (or INTERNAL, which by definition stops nothing) and saying what it protects.
@@ -2468,6 +2561,17 @@ writes one verdict:
 - A pack is re-armed, with a new attempt number, plan, fresh roots and bracket session, until it has a claim-usable
   attempt; then the next pack in the fixed order ALPHA, BETA, GAMMA arms. A pack is never armed again after a
   claim-usable attempt. The scheduler reads only `claim_usable`, never an energy.
+- **A GAMMA attempt that lost its midpoint is re-armed** (orchestrator ruling Q11, 2026-10-07; the seal gate
+  confirms). *Forcing problem:* GAMMA's window exists for its two primary contrasts, and a lost midpoint leaves their
+  drift allowance with no evidence about an excursion inside the window (§0.12). Had the attempt counted as
+  claim-usable, the scheduler would have stopped arming GAMMA and the block would have had no claim-bearing contrast.
+  *Rule:* on GAMMA, `neg8.midpoint_lost` adds the window reason `neg8.midpoint_lost_primary` (§0.16), so the attempt
+  is not claim-usable, both for scheduling and for choosing the analysed window, and GAMMA is re-armed. The rule reads
+  only the roster's pack id and the flag's code, never an energy, so re-arming cannot select on an outcome. On ALPHA
+  and BETA the flag stays disclosed only. For the anti-spiral routing of §7.3 the reason counts in the NEG8 family,
+  the family of the flag it reads. *How often:* the midpoint is lost when it and its one spare both fail at run time,
+  which at the recorded loss rate of 1 member in 37 is about (1/37)² ≈ 0.07% of windows, or when a physics flag found
+  at harvest contaminates it (no spare runs then), for which the block has no rate yet.
 - **Harvest problems first.** When an attempt's only window-removing codes are `*.identity_unmeasured`,
   `whole_window.verdict_absent` or `records.source_changed_during_harvest` (checks that did not run, or ran on moving
   bytes), the cause is the harvest, not the window: R3 and re-harvest on identical bytes before deciding whether to
@@ -2564,10 +2668,50 @@ beside every reported cell and contrast, the number of attempts of its pack and 
 
 ### 9.1 #416: pre-arm triple audit
 
-Once at H_claim, after the seal and before ALPHA-1 arms: a blind full-system audit by three independent model
-families, findings cross-verified, BLOCKERs challenged by a refuter from another family and cleared before arm.
-Seats: `FILL[416-SEATS]`. It runs once per frozen code or protocol change, never per window; a later change to
-collection code (§7.5) triggers a diff-scoped re-audit of that change. No audit work runs during a window.
+Once per frozen code or protocol change, before ALPHA-1 arms: a blind full-system audit by three independent model
+families, every BLOCKER and MAJOR finding challenged by a refuter from another family, and each confirmed one fixed
+before arm. It never runs per window; a later change to collection code (§7.5) triggers a diff-scoped re-audit of
+that change. No audit work runs during a window.
+
+**`416-SEATS`** (filled in revision 8): Astra 6 (`gpt-6-astra`, OpenAI) at effort xhigh, Fable 5.1 (Anthropic) at
+effort high and Opus 5.5 (Anthropic) at effort xhigh. Astra's findings went to Fable 5.1 and Opus 5.5 refuters
+(workflow `wf_3bdbf778-1ad`); Fable's to Opus 5.5 refuters and Opus's to Fable 5.1 refuters (workflow
+`wf_c7886624-d74`), so no finding was judged by its own seat.
+
+**`416-AUDIT-RECORD`** (filled in revision 8). The audit ran on 2026-10-07 at the frozen head
+`a434e363d96621318657418e60b8d14410079d82`, before the seal (the order this section first named, after the seal at
+H_claim, was changed so that the fixes could land before the seal). Records: Astra
+`/Users/edr/night-archive/gate-prune/triple-audit/astra/REPORT.md`, verdict BLOCKERS FOUND; Fable
+`triple-audit/fable/REPORT.md`, verdict ARM-READY (no BLOCKER, four MAJOR); Opus, verdict BLOCKERS FOUND, findings in
+the result of workflow `wf_c7886624-d74` (the seat's report file was not written) and probes in `triple-audit/opus/`.
+Refuter outcomes for every BLOCKER and MAJOR, with the reasons for each refutation in
+`/Users/edr/night-archive/gate-prune/INTEGRATION_TODO.md`:
+
+| Finding | Seat's severity | Refuter | Where it went |
+|---|---|---|---|
+| Astra A1: a contaminated NEG-8 reference kept its weight in the screen and the allowance | BLOCKER | confirmed, MAJOR | NEG-8 council and cold judge (`neg8-council/RULING.md`); lane `neg8-survivors` (§0.12) |
+| Astra A2: a missing `chain.started` gives a NULL harvest | BLOCKER | refuted: the driver creates the marker exclusively before the chain spawns | none |
+| Astra A3: an unread probe refuses at the arm; four unreadable censuses stop the chain | BLOCKER | confirmed, MINOR | lane `audit-fixes-1` (§4.1, §4.5) |
+| Astra A4: a missing journal makes every member `contention.unmeasured` / `battery.unmeasured` | BLOCKER | refuted: a member whose contention or battery was never measured cannot be shown clean; the exclusion is kept | none |
+| Astra A5: a missing locator sends members down legacy authentication | MAJOR | confirmed, MINOR | lane `audit-fixes-1` (§0.17), plus a deferred lane |
+| Astra A6: a missing desk identity file stops the reservation | MAJOR | confirmed, MINOR | lane `audit-fixes-1` (§6.10) |
+| Fable F1: an absent verdict removes the window | MAJOR | refuted: a NUMBER_INTEGRITY exclusion with a re-harvest cure (§7.2); allowlist label fixed | lane `audit-fixes-2` (label only) |
+| Fable F2: an unreadable failed-member list removes the window | MAJOR | refuted: the writer cannot produce it | none |
+| Fable F3: four unreadable censuses stop the chain | MAJOR | confirmed, MINOR; same as A3 | lane `audit-fixes-1` |
+| Fable F4: no analysis program reads `exclusions.json` | MAJOR | refuted as a defect of this head: it is the open L9 lane, required before any claim | L9 (analysis plan §11) |
+| Opus F1: one lost NEG-8 reference removes the window | BLOCKER | confirmed | NEG-8 council and cold judge; lane `neg8-survivors` (§0.12) |
+| Opus F2: one malformed flag line blocks the release for ever | MAJOR | confirmed | lane `audit-fixes-2` (§6.2) |
+| Opus F3: the census matched the window's own processes by string | MAJOR | confirmed | lane `audit-fixes-2` (§4.5) |
+| Opus F4: an unreadable process identity or a torn lock refuses the campaign | MAJOR | confirmed, MINOR | lane `audit-fixes-2` (§6.10) |
+
+The four lanes that carry the fixes, `lane/2026-10-07-audit-fixes-1` (`01232742e`), `lane/2026-10-07-audit-fixes-2`
+(`0571cf8fd`), `lane/2026-10-07-neg8-survivors` (`2011ec285`) and `lane/2026-10-07-coldpass2-fixes` (`d06ab4778`, the
+Fable delta cold pass's fixes to the first three), are all ancestors of the candidate H_claim `43ac12d0c` (`git
+merge-base --is-ancestor`, checked by this author). Lower-severity findings were triaged in the fix lanes without
+refuters. Because the fixes changed collection code after the audit, the rule above calls for a diff-scoped re-audit
+of `a434e363d..43ac12d0c`; it is running (Sol 6.1 at effort xhigh,
+`/Users/edr/night-archive/gate-prune/delta-audit-sol/`), and its record is `FILL[416-DELTA-RECORD]`, due before
+ALPHA-1 arms.
 
 ### 9.2 #421: battery float, and the battery-assist ruling of 2026-10-06
 
@@ -2697,27 +2841,29 @@ sensitivity line of analysis plan §8.
 | Commit | `H-CLAIM` | Seal |
 | Sealed inventory | `sealed_inventory.json` filled at H_claim | Seal |
 | Dry render, dry arm | `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD` | Before ALPHA-1 arms |
-| Audit, seats | `416-AUDIT-RECORD`, `416-SEATS`, `B5-SEAL-SEATS` | Seats at seal; audit before ALPHA-1 |
-| Sizing | `B5-SIZING-OUTPUTS`: draft values at the int5 head `d3c107f2f` (§5.5), spares included; pinned at H_claim | Seal |
+| Audit, seats | `416-AUDIT-RECORD`, `416-SEATS`: filled in revision 8 (§9.1); `416-DELTA-RECORD` (the diff-scoped re-audit of `a434e363d..43ac12d0c`, §9.1); `B5-SEAL-SEATS` | Seal seats at seal; delta re-audit before ALPHA-1 arms |
+| Sizing | `B5-SIZING-OUTPUTS`: draft values at the candidate H_claim `43ac12d0c` (§5.5), spares included; pinned at H_claim | Seal |
 | Cooldown smoke | `B5-COOLDOWN-SMOKE-RECORD` (§2 item 7): filled in revision 6 | Seal |
 | Plans | `B5-PLANS-REGENERATED`: every window plan and plan-input file written from the sealed §4.3 block (contention `clean_s` 180) | Before ALPHA-1 arms |
-| P3 sync | `P3-SYNC-RECORD` (§2 item 8), with `P3-BATTERY-CODES` (§6.4, and the table below) and `P3-CLOCK-SKEW-BOUND` (§4.2): filled in revision 6 against `a434e363d`; the revision 7 sync record below covers the code merged since, against `d3c107f2f` | Seal |
-| Final hashes | `B5-FINAL-HASHES`: every digest computed at `d3c107f2f` and so marked (§0.7 plan trees, §2 item 1 candidate head, §4.6 item 3 identity pins, §5.5 sizing output) is recomputed at the integration's final head (`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_2.md` when it exists) | Seal |
-| Refusal allowlist | `roster.run_id_mismatch` listed under the member exclusions of `configs/gates/hazard_refusals.json` (§6.11): done at `d3c107f2f` (audit-fix item 7) | Seal |
+| P3 sync | `P3-SYNC-RECORD` (§2 item 8), with `P3-BATTERY-CODES` (§6.4, and the table below) and `P3-CLOCK-SKEW-BOUND` (§4.2): filled in revision 6 against `a434e363d`; the revision 7 and revision 8 sync records below cover the code merged since, against `d3c107f2f` and `43ac12d0c` | Seal |
+| Final hashes | `B5-FINAL-HASHES`: filled in revision 8. Every digest so marked (§0.7 plan trees, §2 item 1 candidate head, §4.6 item 3 identity pins, §5.5 sizing output) was recomputed at the integration's final head `43ac12d0c` (`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_3.md`); none changed | Seal |
+| Refusal allowlist | `roster.run_id_mismatch` listed under the member exclusions of `configs/gates/hazard_refusals.json` (§6.11): done at `d3c107f2f` (audit-fix item 7); `neg8.midpoint_lost_primary` listed under the window exclusions: done at `43ac12d0c` (ruling Q11) | Seal |
 | Disk | `BACKUP-DESTINATIONS`: filled in revision 4 (§5.6) | Seal |
-| Identity pins | `identity_pins.json` (§4.6 item 3): draft at `d3c107f2f`, spares included; pinned at H_claim | Seal |
+| Identity pins | `identity_pins.json` (§4.6 item 3): draft at `43ac12d0c` (unchanged from `d3c107f2f`), spares included; pinned at H_claim | Seal |
 | Blinding | `B5-BLIND-CUSTODY-MAP`, `B5-RELEASE-EVENT` | Map at seal; release after the block closes |
 | Boundary | `BOUNDARY-LABEL`: filled in revision 4 (§1) | Seal |
 | Attribution floor | `ATTRIBUTION-FLOOR-BINDING` | Seal |
 | Seal | `B5-SEAL-RECORD` | Seal |
 
-Still open after revision 7: `H-CLAIM` (the candidate is the final int5 head, `d3c107f2f` at this writing, §2 item 1),
-`B5-FINAL-HASHES`, `416-AUDIT-RECORD`, `416-SEATS`, `B5-SEAL-SEATS`, `B5-SEAL-RECORD`, `B5-DRY-RENDER-RECORD`,
-`B5-DRY-ARM-RECORD`, `B5-BLIND-CUSTODY-MAP`, `B5-RELEASE-EVENT`, `ATTRIBUTION-FLOOR-BINDING`, `B5-PLANS-REGENERATED`,
-and the sealed inventory itself. None can be filled from committed bytes: each names a commit, a record, a ruling or
-a regeneration that does not exist yet (`B5-FINAL-HASHES` waits for the integration's final head).
-`B5-SIZING-OUTPUTS` and the identity pins hold draft values. Filled in revision 6: `B5-COOLDOWN-SMOKE-RECORD`,
-`P3-SYNC-RECORD`, `P3-BATTERY-CODES`, `P3-CLOCK-SKEW-BOUND`. Closed in revision 7: the refusal-allowlist item.
+Still open after revision 8: `H-CLAIM` (the candidate is the final int5 head `43ac12d0c`, §2 item 1; it waits for the
+Fable re-verification of the cold-pass-2 fixes and the merge gates), `416-DELTA-RECORD`, `B5-SEAL-SEATS`,
+`B5-SEAL-RECORD`, `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`, `B5-BLIND-CUSTODY-MAP`, `B5-RELEASE-EVENT`,
+`ATTRIBUTION-FLOOR-BINDING`, `B5-PLANS-REGENERATED`, and the sealed inventory itself. None can be filled from
+committed bytes: each names a commit, a record, a ruling or a regeneration that does not exist yet.
+`B5-SIZING-OUTPUTS` and the identity pins hold draft values, which the seal pins. Filled in revision 6:
+`B5-COOLDOWN-SMOKE-RECORD`, `P3-SYNC-RECORD`, `P3-BATTERY-CODES`, `P3-CLOCK-SKEW-BOUND`. Closed in revision 7: the
+refusal-allowlist item. Filled in revision 8: `B5-FINAL-HASHES`, `416-AUDIT-RECORD`, `416-SEATS`; Q11 closed (§14).
+The analysis plan's own FILLs (analysis plan §13), including the L9 adapters, are listed there.
 
 **P3 sync record** (`P3-SYNC-RECORD`, revision 6). Revision 5 described the behaviour below from the rulings, before
 the code had it. Each row was read in the frozen head `a434e363d` (`/Users/edr/code/JouleWise-wt-int4`); the last
@@ -2792,6 +2938,36 @@ documented disagreement only: `g3.recompute_failed`, which the fixture keeps at 
 (`tests/fixtures/b5_harvest/README.md`) against DISCLOSE here (§6.5). The `roster.run_id_mismatch` restatement of
 revision 6 is gone, because the emitter and the fixture now agree with the catalog.
 
+**Revision 8 sync record** (`B5-REV8-SYNC`). The source list was the last section of the integration's REG list
+(`REG_PENDING.md`, "From int5 phase 3 + cold-pass-2 fixes (d06ab4778) + N8 ruling") and the frozen-head record
+`FROZEN_HEAD_3.md`. The earlier sections of that list were checked against revision 7's text and found applied. Each
+row was read in the candidate H_claim `43ac12d0c` (a fresh read-only shared clone at `/private/tmp/regsync3/repo`,
+detached at that commit; the integration worktree was not touched), from the diff `d3c107f2f..43ac12d0c`.
+
+| Sync point | Code at `43ac12d0c` | Text |
+|---|---|---|
+| Q11: GAMMA attempt with a lost midpoint | `exclusions.PACK_SCOPED_WINDOW_REASONS`, `GAMMA_PACK_ID`; `compute` reads the roster's `pack_id` (`b15ea0b4d`); allowlist `window_exclusions` entry `neg8.midpoint_lost_primary` | changed: §0.12, §0.16, §6.2, §6.5, §6.11, §7.2, §14 Q11; analysis plan §2.4 |
+| evidence manifest covers the census decision | `quiet_predicate_campaign.MANIFEST_PATHS` gains `joulewise/agent_identity.py` (`39ac4972d`). That manifest belongs to the quiet-predicate evidence night kind, which block 5 does not run; a block-5 window covers the file through the executed-file inventory and the sealed inventory (§0.18, §11 item 2), which list every file under `joulewise/` | matched: no text change |
+| D1: a reference with no readable summary | `run_campaign._idle_admission_core_evaluation` and `whole_window._derived_neg8_decision`: reason `summary_unreadable`; harvest `NEG8_STATUS_LOSS_CODES` puts `member.timeout` first | changed: §0.12 |
+| N8: model identity of a reference | `harvest.NEG8_REFERENCE_LOSS_CODES` gains `model.identity_mismatch`, `model.identity_underivable` (`c0b824fba`) | changed: §0.12, §6.3 |
+| N2: a reference that never ran | `harvest.build_roster` sets `neg8_slot` from each reference stage's `spare_retry`; `_neg8_lost_rows` adds `bundle_absent` rows | changed: §0.12 |
+| N3: never-run references at an endpoint | `whole_window.evaluate_neg8_point_drift` `short_planned_roster`; `run_campaign` `planned_roster_shape` (whole-window mode only) | changed: §0.12, §6.5 |
+| N1: verdict sources that do not authenticate | `harvest._claim_campaign_manifests_as_written`, `_neg8_reference_losses`, `observed.reference_source` on `neg8.screen_failed` | changed: §6.5 |
+| N5: an agent run by its npm package path | `agent_identity.AGENT_PACKAGE_SCOPES`, `AGENT_PACKAGE_DIRS`, `_agent_package_script` | changed: §4.5 |
+| N6: the unusable-pack refusal | `window_lineage.PackInventoryUnusableError`; `driver.run_hazard_night` tests the type; allowlist entry moved from BASELINE to NUMBER_INTEGRITY | changed: §0.17, §6.11 |
+| N7: an empty salvaged code prefix | `harvest._malformed_flag_line` and `_candidate_codes`: `if not code` | changed: §6.2 |
+| N4: which allowance the analysis reads after a re-screen | not code at this head (no analysis consumer exists); an L9 requirement | changed: analysis plan §4 step 4, §11 |
+| sizing, pins, plan trees | `sizing_b5.json`, `identity_pins.json`, the three `plan_tree.json`: unchanged bytes; `configs/pins/registry.json` `a4a2be94912c4a3c33b1fb04e0f91e9e691290e2a7b7ee98898783ff307033b2`, unchanged | filled: `B5-FINAL-HASHES` |
+
+**Catalog comparison** (revision 8). The same script, pointed at the new clone
+(`/private/tmp/claude-501/-Users-edr-code-JouleWise/0a4039c8-3a55-4151-82ba-e66d8a0e9397/scratchpad/regsync7/check_catalog8.py`),
+read every code named by those tables at `43ac12d0c` and compared each with this directory's catalog. Before revision
+8 (catalog at `dc046d4d`) and after: 192 codes, none missing, none extra, `collector.unmeasured` deliberately absent,
+the superseded A1 code absent, `load_catalog` OK, and the one documented disagreement (`g3.recompute_failed`, §6.5).
+The cold-pass-2 fixes and the rulings added no code; only four notes changed (`neg8.reference_lost`,
+`neg8.midpoint_lost`, `neg8.screen_failed`, `records.malformed_flag_exclusion_possible`). The GAMMA window reason
+`neg8.midpoint_lost_primary` is deliberately not a catalog code (§0.16).
+
 Removed from revision 2 because the mechanism they bound is retired or now measured: `V5-PACK-REGEN-RECORD` and
 `V5-IDLE-SECONDS` (done, PR #481), `B4-*`, `L10-A-RATIFICATION-RECORD`, `Q110-CLOSURE`, `A6-AT-H-CLAIM`,
 `V5-TRANSACTION-GO-01-DISCHARGE`, `AUTH-<label>`, `CAMPAIGN-PERMITTED-BLOCKS`, `STEP6-RECORD`, `CENSUS-ARGV` (§4.5),
@@ -2838,15 +3014,15 @@ battery evidence map (§9.2).
 - **Q10. Whole-machine meter, central band (none; recorded).** The band for ρ is set by the first clean window
   (analysis plan §8.2). If no window of the block is clean, no band is set, and the cross-check reports only the hard
   plausibility band and the spreads. Nothing waits on this.
-- **Q11. A GAMMA attempt whose midpoint was lost (orchestrator before the seal; the seal gate rules).** The NEG-8
-  ruling makes `neg8.midpoint_lost` DISCLOSE in the catalog and claim-excluding for the primary contrasts in the
-  analysis plan (§0.12; analysis plan §2.4). The scheduler reads only `claim_usable` (§7.2), so a GAMMA attempt that
-  is claim-usable but lost its midpoint ends the block's GAMMA arms, and the paper then has no claim-bearing contrast.
-  The ruling did not say whether such an attempt should instead count as not claim-usable for GAMMA's scheduling, so
-  that GAMMA is re-armed. Either answer reads no energy. The midpoint is lost when it and its one spare both fail at
-  run time, which at the recorded 1-in-37 loss rate is about (1/37)² ≈ 0.07% of windows, or when a physics flag found
-  at harvest contaminates it (no spare runs then), for which the block has no rate yet. Until ruled, the text above
-  stands: GAMMA is not re-armed.
+- **Q11. A GAMMA attempt whose midpoint was lost. Closed in revision 8 by orchestrator ruling; the seal gate
+  confirms.** The question: the NEG-8 ruling makes `neg8.midpoint_lost` DISCLOSE in the catalog and claim-excluding
+  for the primary contrasts, but the scheduler reads only `claim_usable`, so a claim-usable GAMMA attempt that lost its
+  midpoint would have ended GAMMA's arms with no claim-bearing contrast. The ruling (2026-10-07): such an attempt is
+  not claim-usable (window reason `neg8.midpoint_lost_primary`) and GAMMA is re-armed; ALPHA and BETA keep the flag
+  disclosed only. Reasons: GAMMA exists for its primary contrasts; the selection reads a pre-registered flag and the
+  pack id, never an energy, so it is blind; and the expected cost is small (about 0.07% of windows, plus
+  contamination found at harvest). Code: `joulewise/flags/exclusions.py` `PACK_SCOPED_WINDOW_REASONS` (commit
+  `b15ea0b4d`), with its allowlist entry (§6.11). Text: §0.12, §0.16, §7.2; analysis plan §2.4.
 
 ## 15. Where each gate-prune change lives
 
@@ -2954,3 +3130,19 @@ member counts; the allowlist counts and the entry-by-entry difference from `haza
 the §0.12 worked example with the code's own `neg8_count_adjusted_bound` and `student_t_critical_95`; the §6.2
 candidate lists from the catalog; and the catalog comparison by script (§13). No energy or power value of any window
 was read.
+
+For revision 8, the author read: the last section of the integration's REG list (`REG_PENDING.md`), checking the
+earlier sections against revision 7's text; `FROZEN_HEAD_3.md`; the relevant entries of `INTEGRATION_TODO.md`; the
+Fable delta cold pass's report (`cold-pass-2/REPORT.md`, D1 and N1–N9); and, for the #416 record, the Astra seat's
+report and run manifest (`triple-audit/astra/`), the Fable seat's report (`triple-audit/fable/REPORT.md`), and the
+Opus seat's findings and every refuter verdict in the results of workflows `wf_c7886624-d74` and `wf_3bdbf778-1ad`.
+At the candidate H_claim `43ac12d0c` (a fresh read-only shared clone at `/private/tmp/regsync3/repo`, detached at that
+commit) it read the commit messages and the diff `d3c107f2f..43ac12d0c` of `joulewise/`, `scripts/` and `configs/`
+(nine files), the exclusion function's pack-scoped reasons and output, the harvest's NEG-8 screen around the loss
+map, and the refusal allowlist. Every number written in this revision was read from a file or computed by the
+author: the plan-tree, sizing, identity-pin and pin-registry digests with `shasum -a 256` at `43ac12d0c`, with the
+three packs' `generate_configs.py --check`, `size_b5_window.py --check`, `write_b5_identity_pins.py --check` and
+`python -m joulewise.b5.reference_spares --check`, all exit 0 there; the per-pack spans from `sizing_b5.json`; the
+allowlist counts by script at both `d3c107f2f` and `43ac12d0c`; the ancestry of the four fix lanes with
+`git merge-base --is-ancestor`; the empty diff of the four pinned estimator files from `a434e363d`; and the catalog
+comparison by script (§13). No energy or power value of any window was read.
