@@ -1198,6 +1198,62 @@ class CalibrationBaselineTests(WindowTestCase):
             [], window_start_s=1.0, window_end_s=2.0, bindings={}, policy=policy, ledger_snapshot=missing)
         self.assertIn("calibration_ledger_baseline_missing", without)
 
+    # Refusal-census triage (a), 2026-10-07.  calibration.ledger_snapshot_refused
+    # (EXCLUDE_WINDOW) fires on any reason of the harvest's ledger snapshot.  The
+    # reasons that can reach it are integrity reasons: the governed writer refuses
+    # to append past any ledger reason (below: another window's open session), the
+    # terminal-pin derivation refuses every parse or state reason before the
+    # snapshot is taken (calibration.no_bracket), and the call passes
+    # require_committed_pin=False and verify_custody=False.  What is left is the
+    # acceptance cutoff missing from this chain, the ledger changing between two
+    # reads, or chain bytes that do not parse.  No split: classified NUMBER_INTEGRITY.
+    def test_the_writer_cannot_leave_another_windows_session_open_under_this_one(self):
+        dangling = "b5t-earlier-window-session"
+        real_append = append_bracket_session_receipt
+        opened = []
+
+        def append(ledger, **kwargs):
+            if not opened:
+                slots = {}
+                for slot in ("pre", "post"):
+                    capture = Path(kwargs["runs_root"]) / "instrument_validation" / f"{dangling}-{slot}"
+                    capture.mkdir(parents=True)
+                    slots[slot] = {**kwargs["slots"][slot], "attempt_id": f"{dangling}-{slot}",
+                                   "custody_locator": str(capture)}
+                real_append(ledger, **{**kwargs, "session_id": dangling, "window_id": "earlier-window",
+                                       "slots": slots})
+                opened.append(dangling)
+                # The earlier window's writer stopped here; its pin was advanced to its head.
+                last = json.loads(Path(ledger).read_bytes().splitlines()[-1])
+                put(Path(kwargs["head_pin_path"]), {"sequence": last["sequence"],
+                                                    "head_digest": last["receipt_digest"],
+                                                    "ledger_schema": LEDGER_SCHEMA})
+            return real_append(ledger, **kwargs)
+
+        from joulewise.calibration_ledger import CalibrationLedgerError
+        with mock.patch(f"{__name__}.append_bracket_session_receipt", side_effect=append), \
+                self.assertRaisesRegex(CalibrationLedgerError, "calibration_ledger_bracket_session_open"):
+            self.window(prefix_ledger=True)
+        self.assertEqual(opened, [dangling])
+
+    def test_a_ledger_integrity_reason_excludes_the_window(self):
+        # The real 376-row acceptance prefix; the acceptance's cutoff digest is
+        # replaced by one that is not in this chain, so the calibration was not
+        # judged on this ledger.
+        window = self.window(prefix_ledger=True)
+        from joulewise import calibration_ledger
+        real_load = calibration_ledger.load_calibration_ledger_snapshot
+
+        def wrong_cutoff(*args, **kwargs):
+            return real_load(*args, **{**kwargs, "baseline_digest": "f" * 64})
+
+        with mock.patch.object(calibration_ledger, "load_calibration_ledger_snapshot", side_effect=wrong_cutoff):
+            window.harvest()
+        flag = next(flag for flag in window.flags() if flag["code"] == "calibration.ledger_snapshot_refused")
+        self.assertEqual(flag["observed"]["reasons"], ["calibration_ledger_baseline_missing"])
+        self.assertEqual(h.Catalog.load(FIXTURES / "flag_catalog.json").effect("calibration.ledger_snapshot_refused"),
+                         "EXCLUDE_WINDOW")
+
     def test_session_bound_to_another_runs_root_is_flagged(self):
         window = self.window(prefix_ledger=True)
         plan = json.loads(window.plan_path.read_bytes())
