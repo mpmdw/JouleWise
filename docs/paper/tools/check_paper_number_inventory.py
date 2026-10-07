@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare each number printed in the paper draft with its source file, and cap the count of numbers not yet compared.
+"""Compare each number printed in the paper draft with the file it was copied from, and cap the count of numbers not yet compared.
 
 WHERE IT LIVES AND HOW TO RUN IT.  The draft is
 ``docs/paper/draft-v2-skeleton.md``, the methods paper that the project's plans
@@ -18,9 +18,9 @@ unittest module runs ``--check`` on the tracked draft, then repeats it on
 scratch copies with one digit changed to prove that the check notices.
 
 THE PROBLEM IT ADDRESSES.  A number in the draft was copied by hand from a
-result file.  Nothing connects the printed digits to that file afterwards, so
-a later edit can change a digit and the paper then states a number that its
-own evidence does not support.  The two older paper checkers compare a
+result file, the number's *source*.  Nothing connects the printed digits to
+that file afterwards, so a later edit can change a digit and the paper then
+states a number that its own evidence does not support.  The two older paper checkers compare a
 printed number with its source only at the sites each was written for:
 ``scripts/check_paper_replay_fence.py`` reads the numbers of two worked
 examples in Section 4, which it finds by their fixed surrounding words, and
@@ -63,11 +63,12 @@ THE MECHANISM, in the order the checker runs it.
    slot holds an identifier or a date), so that a wrong value still matches
    its anchor and is reported as a wrong value rather than as a missing
    anchor.  Each slot then *claims* the literal it matched, which makes that
-   literal accounted for.  Every slot states how its expected text is
-   obtained, in one of three classes:
+   literal accounted for.  Every slot states how its *expected text*, the
+   exact characters the draft should print there, is obtained.  There are
+   three classes:
 
-   - ``bound``: the expected text is re-derived from a *source*, a tracked
-     result file named in the inventory, by a named **rendering rule** that
+   - ``bound``: the expected text is re-derived from the number's source, a
+     tracked file that the inventory names, by a named **rendering rule** that
      fixes sign, rounding and digits (``signed_1`` prints an explicit sign,
      ``+`` or the Unicode minus ``−``, and one decimal; see RENDERERS).
    - ``tied``: the expected text comes from a named constant in the code (a
@@ -85,7 +86,8 @@ THE MECHANISM, in the order the checker runs it.
    **unaccounted**.
 
 3. **Compare.**  For every slot of an anchor that was found, the printed text
-   must equal the expected text character for character.  Equal is ``MATCH``;
+   (the characters the slot matched in the draft) must equal the expected text
+   character for character.  Equal is ``MATCH``;
    anything else is ``MISMATCH``, reported with the line and the anchor.  If
    an anchor is not found (the surrounding words changed), its entry is
    ``ANCHOR_MISSING`` and its numbers are left unaccounted: a moved or
@@ -112,21 +114,47 @@ THE MECHANISM, in the order the checker runs it.
    must render the same text; disagreement is also ``PRED_FAIL``.  A
    ``registry_check`` requires the registry row's printed value to equal the
    rendering, the row's supplier cell to name the same file and field, and the
-   row not to be marked retired; disagreement is ``REG_FAIL``.  A malformed
+   row not to be marked retired (a retired row no longer supplies a number);
+   disagreement is ``REG_FAIL``.  A malformed
    entry, or an expression that cannot be evaluated, is ``ERROR``.
 
 6. **Cap what is not yet compared.**  Most literals are not bound yet: as of
    2026-10-07, 155 are located ``unbound_results`` rows and 853 are
-   unaccounted.  The inventory stores those two counts as *ceilings* under
-   ``ratchet``.  If either count rises above its ceiling the outcome is
+   unaccounted.  The inventory stores those two counts as *ceilings*: a count
+   may fall below its ceiling but must not rise above it.  The working rule is
+   that a ceiling is only ever lowered, as numbers are bound; a ratchet turns
+   one way only, which is why the inventory keeps the two ceilings under the
+   key ``ratchet``.  They are written by hand in the generator and repeated in
+   a test.  If either count rises above its ceiling the outcome is
    ``RATCHET_GROWTH``; a ceiling that is missing or is not a non-negative
-   integer is an ``ERROR``.  The ceilings are written by hand in the generator
-   and repeated in a test; the working rule is that they are only ever
-   lowered, as numbers are bound, which is why the code calls them a ratchet.
-   Two reports are for information only and never fail a check: ``STALE`` (an
-   ``unbound_results`` row whose context string no longer occurs as recorded)
-   and ``CLASS_COUNT_CHANGED`` (the count of numbers written as words differs
-   from the 307 the inventory records).
+   integer is an ``ERROR``.  Two reports are for information only and never
+   fail a check: ``STALE`` (an ``unbound_results`` row whose context string no
+   longer occurs as recorded) and ``CLASS_COUNT_CHANGED`` (the count of numbers
+   written as words differs from the 307 the inventory records).
+
+WHERE EVERY LITERAL ENDS UP.  Each literal ends on exactly one of the five
+numbered lines of the tree below.  A ``+--`` branch is one of the three fates
+of step 2 (claimed by a slot, located by an ``unbound_results`` row, or
+neither), the three lines under the first branch are the slot classes, and
+the bar ``|`` only joins the branches.  The counts are those of 2026-10-07
+and sum to the 1,106 of step 1.
+
+    every literal in the draft                   1,106
+      |
+      +-- claimed by a slot
+      |      bound       87   compared with text re-derived from a source
+      |      tied         1   compared with a constant in the code
+      |      classed     10   compared with fixed text in the inventory
+      +-- located by an unbound_results row
+      |                 155   not compared; counted against a ceiling of 155
+      +-- neither: unaccounted
+                        853   not compared; counted against a ceiling of 853
+
+The inventory has 118 slots (111 bound, 1 tied, 6 classed), yet the tree shows
+98 claimed literals (87 + 1 + 10).  The difference: 19 bound slots hold
+identifiers, which step 1 blanks out, so they are not literals; 5 bound slots
+hold numbers written as words; and each of the 2 classed slots that hold a
+date covers the 3 literals of that date.
 
 WHAT THE CEILINGS DO AND DO NOT CATCH.  A ceiling notices a number only
 through a change of count, never by its value.  Two one-digit edits show both
@@ -144,8 +172,8 @@ the report holds any ``MISMATCH``, ``ANCHOR_MISSING``, ``ANCHOR_AMBIGUOUS``,
 ``REFUSED``, ``PRED_FAIL``, ``REG_FAIL``, ``ERROR`` or ``RATCHET_GROWTH``, and
 exits 0 otherwise.
 
-WHAT IT COMPARES AS OF 2026-10-07.  118 slots: 111 bound, 1 tied and 6
-classed, at three places in the draft.  Two are in Section 4: the subsection
+WHAT IT COMPARES AS OF 2026-10-07.  The 118 slots sit at three places in the
+draft.  Two are in Section 4: the subsection
 "Historical current-method edge result" with the Figure 2 caption, and the
 record-overlap example with its table.  The third is the calibration table of
 Appendix A.3.8.  An audit on 2026-09-29

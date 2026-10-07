@@ -76,6 +76,23 @@ class RealSkeleton(unittest.TestCase):
             self.assertLessEqual(c[name], ceiling)
         self.assertEqual(c["literals"], sum(c[k] for k in ("bound", "tied", "classed", "unbound-results", "unaccounted")))
 
+    def test_slots_by_class_and_kind(self):
+        # The checker's docstring reconciles 118 slots with 98 claimed literals from these six counts.
+        kinds: dict[tuple[str, str], int] = {}
+        for group in INVENTORY["groups"]:
+            for entry in group["entries"]:
+                for slot in entry["slots"].values():
+                    key = (slot["class"], inv.slot_kind(slot))
+                    kinds[key] = kinds.get(key, 0) + 1
+        self.assertEqual(kinds, {
+            ("bound", "number"): 87, ("bound", "text"): 19, ("bound", "word"): 5,
+            ("tied", "number"): 1, ("classed", "number"): 4, ("classed", "text"): 2,
+        })
+        self.assertEqual(sum(kinds.values()), len(self.rep.slots))
+        self.assertEqual(self.rep.counts()["spelled_claimed"], 5)
+        dates = [l.claimed_by for l in self.rep.literals if l.claimed_by in ("a38.heading.first", "a38.heading.last")]
+        self.assertEqual((dates.count("a38.heading.first"), dates.count("a38.heading.last")), (3, 3))
+
     def test_sections_fully_accounted(self):
         # Use section/prose anchors, never physical line positions.
         for start, end in (
