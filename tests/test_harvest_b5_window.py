@@ -2320,11 +2320,14 @@ class JoinTests(unittest.TestCase):
 
     def test_float_reading_at_the_limit_passes(self):
         # No SMC read in these journals: the registry is judged and the fallback disclosed.
-        for current in (-200, 200):
+        # Neither excludes; a discharge is assist (any negative current, ruling
+        # item 1 and review F5), disclosed.
+        for current, expected in ((-200, ["battery.smc_unavailable", "battery.assist"]),
+                                  (200, ["battery.smc_unavailable"])):
             readings = battery_journal([(0, {}), (60, {"instant_amperage_ma": current}), (120, {})])
             codes = [code for code, *_ in h.battery_member_flags([publication_ns(65), publication_ns(70)],
                                                                  readings, self.T)]
-            self.assertEqual(codes, ["battery.smc_unavailable"], current)
+            self.assertEqual(codes, expected, current)
 
     def test_publication_gap_over_120_s_is_unmeasured(self):
         readings = battery_journal([(0, {}), (200, {}), (260, {})], end_s=300)
@@ -2598,6 +2601,12 @@ class L1JournalFormatTests(unittest.TestCase):
                 # recorded join named it battery.member_span; under the battery-assist
                 # ruling (2026-10-06) the harvest discloses it as battery.assist.
                 expected = {"battery.assist" if code == "battery.member_span" else code for code in case["l1_codes"]}
+                if name == "contention_burst":
+                    # L1's in-force rule also takes the first publication after
+                    # the span; that -447 mA snapshot was taken 35 s after the
+                    # span ended, so it is no evidence about the span's current
+                    # and assists nothing in it (review F3).
+                    expected.discard("battery.assist")
                 self.assertEqual(self.l5_codes(span, request) & physics, expected & physics)
         # The cases cover each rule firing at least once.
         fired = set().union(*(case["l1_codes"] for case in self.expected["cases"].values()))

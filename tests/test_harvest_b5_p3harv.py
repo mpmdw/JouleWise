@@ -18,7 +18,9 @@ strict validation, re-reduction and replays; fakes only at the named seams).
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -27,6 +29,7 @@ from unittest import mock
 
 from joulewise import whole_window
 from joulewise.b5 import harvest as h
+from tests import battery_float_fixture
 from tests import test_harvest_b5_window as base
 
 NS = base.NS
@@ -133,8 +136,13 @@ class SmcBatteryRuleTests(unittest.TestCase):
         gap = [second for second in range(0, 300) if not 112 <= second <= 121]
         charging = journal(smc_seconds=gap, registry={120: {"instant_amperage_ma": 447}})
         self.assertEqual(self.codes(charging), ["battery.member_span", "battery.smc_unavailable"])
-        discharge = journal(smc_seconds=gap, registry={120: {"instant_amperage_ma": -447}})
+        # A publication inside the request decides it; one at the request's end
+        # is the post-request snapshot (review F3).
+        discharge = journal(smc_seconds=gap, publications=(0, 60, 115, 180, 240),
+                            registry={115: {"instant_amperage_ma": -447}})
         self.assertEqual(self.codes(discharge), ["battery.smc_unavailable", "battery.assist"])
+        at_end = journal(smc_seconds=gap, registry={120: {"instant_amperage_ma": -447}})
+        self.assertEqual(self.codes(at_end), ["battery.smc_unavailable", "battery.assist_outside_request"])
 
     def test_a_frozen_smc_block_is_not_coverage(self):
         self.assertEqual(self.codes(journal(frozen=True)), ["battery.smc_unavailable"])
@@ -485,6 +493,185 @@ class P3CodeRegistrationTests(unittest.TestCase):
         """Ruling item 4 (Sol): the exclusion codes the battery rule emits are charging, AC loss or missing evidence."""
         self.assertEqual(h.BATTERY_EXCLUDING_CODES,
                          {"battery.member_span", "battery.accumulator_excursion", "battery.unmeasured"})
+
+
+# ---------------------------------------------------------------------------
+# Review round (Sol 6.1, 2026-10-06) fixes F1-F5.
+# ---------------------------------------------------------------------------
+
+FLOAT_UPDATE_S = 1790373525  # float.ioreg's UpdateTime
+
+
+def ioreg_with_current(current_ma: int) -> bytes:
+    """The real float capture with its InstantAmperage set (ioreg prints negatives as unsigned 64-bit)."""
+    raw, count = re.subn(rb'(?m)^(\s+"InstantAmperage" = )[0-9]+$',
+                         lambda match: match.group(1) + str(current_ma % (1 << 64)).encode(),
+                         (battery_float_fixture.FIXTURES / "float.ioreg").read_bytes(), count=1)
+    assert count == 1
+    return raw
+
+
+def pair_record(root: Path, pre_ma: int, post_ma: int) -> dict:
+    """A #421 pair's battery_float record and its raw endpoint bytes under ``root``."""
+    record = {}
+    for phase, current in (("pre", pre_ma), ("post", post_ma)):
+        body = ioreg_with_current(current)
+        path = root / "raw" / f"battery_float.{phase}.ioreg"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+        record[phase] = {"raw_path": f"raw/battery_float.{phase}.ioreg", "wall_time_s": FLOAT_UPDATE_S + 5,
+                         "raw_stdout_sha256": hashlib.sha256(body).hexdigest()}
+    return record
+
+
+class PairEndpointSignTests(unittest.TestCase):
+    """F1: the unsigned #421 current reason is signed from the endpoints' raw bytes before any replacement."""
+
+    def test_the_endpoint_currents_are_signed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            record = pair_record(Path(tmp), 865, -865)
+            self.assertEqual(h.pair_endpoint_currents(record, tmp), {"pre": 865, "post": -865})
+            (Path(tmp) / "raw" / "battery_float.post.ioreg").write_bytes(ioreg_with_current(-866))
+            self.assertEqual(h.pair_endpoint_currents(record, tmp), {"pre": 865, "post": None})  # digest differs
+
+    def test_only_a_discharging_failed_endpoint_qualifies(self):
+        pre = ["pre InstantAmperage exceeds 200 mA"]
+        self.assertFalse(h.pair_discharge_only(pre, {"pre": 865, "post": 0}))
+        self.assertTrue(h.pair_discharge_only(pre, {"pre": -865, "post": 0}))
+        self.assertFalse(h.pair_discharge_only(pre, {"pre": None, "post": -865}))
+        both = pre + ["post InstantAmperage exceeds 200 mA"]
+        self.assertFalse(h.pair_discharge_only(both, {"pre": -865, "post": 865}))
+        self.assertTrue(h.pair_discharge_only(both, {"pre": -865, "post": -300}))
+        self.assertFalse(h.pair_discharge_only(["pre IsCharging is not No"], {"pre": -865}))
+
+    def member_flags(self, endpoint_ma):
+        ledger = h.FlagLedger(plan_id="p", attempt=1, catalog=h.Catalog.load(base.FIXTURES / "flag_catalog.json"),
+                              boot_session_uuid=None)
+        pair = {"status": "battery_float_confounded", "reasons": ["pre InstantAmperage exceeds 200 mA"],
+                "endpoint_ma": endpoint_ma}
+        fake = SimpleNamespace(
+            roster={"members": [{"run_id": "m1", "stage_id": "s1"}]}, emit=ledger.emit, pair_current_only={},
+            pair_missing={}, _precheck_flags=lambda *args: None, _token_flags=lambda *args: None,
+            members={"m1": {"errors": [], "status": "succeeded", "strict_problems": [],
+                            "rereduced": {"identical_to_stored": True}, "anchor_recorded": "bounded",
+                            "anchor_recomputed": "bounded", "battery_pair": pair, "spans": {"member": [1, 2]}}})
+        h._Harvest.member_flags(fake)
+        return fake.pair_current_only
+
+    def test_a_member_pair_with_a_charging_endpoint_is_never_queued_for_replacement(self):
+        self.assertEqual(self.member_flags({"pre": 865, "post": 0}), {})
+        self.assertEqual(set(self.member_flags({"pre": -865, "post": 0})), {"m1"})
+        self.assertEqual(self.member_flags(None), {})
+
+    def test_the_member_assessment_signs_a_current_only_pair(self):
+        verdict = SimpleNamespace(status="battery_float_confounded", reasons=("pre InstantAmperage exceeds 200 mA",))
+        with tempfile.TemporaryDirectory() as tmp:
+            record = pair_record(Path(tmp), 865, 0)
+            with mock.patch("joulewise.battery_float.authenticate_bundle", return_value=verdict), \
+                    mock.patch.object(h, "read_json", return_value={"battery_float": record}):
+                result = h.assess_member({"run_id": "m1", "bundle_path": tmp})
+        self.assertEqual(result["battery_pair"]["endpoint_ma"], {"pre": 865, "post": 0})
+
+
+class StateEvidenceTests(unittest.TestCase):
+    """F2: SMC current coverage does not stand in for the registry's state (IsCharging, ExternalConnected)."""
+
+    def codes(self, readings, span, request):
+        return [code for code, *_ in h.battery_member_flags(span, readings, T, request=request)]
+
+    def test_stale_state_is_missing_evidence_and_a_stopped_monitor_is_not(self):
+        # The last good state read is at second 0; SMC covers the member at 1000-1030.
+        stale = journal(publications=(0,), smc_seconds=range(0, 1100))
+        codes = self.codes(stale, window_ns(1000, 1030), window_ns(1010, 1020))
+        self.assertIn("battery.unmeasured", codes)
+        # R3-5 still holds: state read at 0 s and 60 s, none after the span (the monitor stopped).
+        stopped = journal(publications=(0, 60), smc_seconds=range(0, 140))
+        self.assertEqual(self.codes(stopped, window_ns(100, 130), window_ns(110, 120)),
+                         ["battery.accumulator_unavailable"])
+
+    def test_a_state_gap_inside_the_span_is_missing_evidence(self):
+        readings = journal(publications=(0, 60, 300, 360), smc_seconds=range(0, 400))
+        codes = self.codes(readings, window_ns(100, 310), window_ns(150, 200))
+        self.assertIn("battery.unmeasured", codes)
+
+    def test_holes(self):
+        gap = 120 * NS
+        self.assertEqual(h._state_holes([0, 62 * NS], [100 * NS, 130 * NS], gap), [])
+        self.assertEqual(h._state_holes([0], [100 * NS, 130 * NS], gap), [[0, None]])
+        self.assertEqual(h._state_holes([], [100 * NS, 130 * NS], gap), [[None, None]])
+        self.assertEqual(h._state_holes([0, 300 * NS], [100 * NS, 130 * NS], gap), [[0, 300 * NS]])
+
+
+class AssistPredicateTests(unittest.TestCase):
+    """F3 and F5: the request decides only by its own reads; assist is any discharge on AC and not charging."""
+
+    SPAN = window_ns(100, 130)
+    REQUEST = window_ns(110, 120)
+
+    def join(self, readings):
+        return h.battery_join(self.SPAN, readings, T, request=self.REQUEST)
+
+    def test_a_read_after_the_request_ends_does_not_decide_it(self):
+        # The read at 120.5 s holds over the post-request phase only.
+        flags, _energy = self.join(journal(current=lambda second: -865 if second == 120 else 0))
+        self.assertEqual([code for code, *_ in flags], ["battery.assist_outside_request"])
+        phases = flags[0][1]["phases"]
+        self.assertEqual((phases["request"]["smc_reads_negative"], phases["post_request"]["smc_reads_negative"]),
+                         (0, 1))
+        # The read at 109.5 s holds into the request: it is the request's.
+        flags, _energy = self.join(journal(current=lambda second: -865 if second == 109 else 0))
+        self.assertEqual([code for code, *_ in flags], ["battery.assist"])
+
+    def test_any_discharge_is_assist_with_its_energy_withheld(self):
+        flags, energy = self.join(journal(current=lambda second: -100 if second == 115 else 0))
+        self.assertEqual([code for code, *_ in flags], ["battery.assist"])
+        request = flags[0][1]["phases"]["request"]
+        self.assertEqual((request["smc_reads_negative"], request["smc_reads_below"], request["smc_min_ma"]),
+                         (1, 0, -100))
+        self.assertAlmostEqual(energy["phases"]["request"]["discharged_energy_j"], 0.1 * 12.5)
+
+    def test_discharge_with_charging_or_ac_loss_is_not_assist(self):
+        for override in ({"is_charging": True}, {"external_connected": False}):
+            with self.subTest(override):
+                flags, energy = self.join(journal(current=lambda second: -865 if second == 115 else 0,
+                                                  registry={120: override}))
+                self.assertEqual([code for code, *_ in flags], ["battery.member_span"])
+                self.assertIsNone(energy)
+
+    def test_discharge_with_state_unread_is_still_disclosed(self):
+        flags, energy = self.join(journal(current=lambda second: -865 if second == 115 else 0,
+                                          publications=(120, 180)))
+        codes = [code for code, *_ in flags]
+        self.assertIn("battery.unmeasured", codes)
+        self.assertIn("battery.assist", codes)
+        self.assertTrue(dict((code, observed) for code, observed, _ in flags)["battery.assist"]["state_unread"])
+        self.assertIsNotNone(energy)
+
+
+class CleanCapturePairTests(unittest.TestCase):
+    """F4: a capture join that ran clean (no codes) is clean, so a discharge-only pair failure is disclosed."""
+
+    join = CaptureBatteryAssistTests.join
+
+    def test_a_clean_join_replaces_a_discharge_only_pair_failure(self):
+        readings = journal()
+        capture = {"slot": "post", "battery_pair": "battery_float_confounded", "span": window_ns(100, 130)}
+        fake, ledger = self.join(capture, readings)
+        record = ledger.emit("calibration.capture_battery_pair_failed", level="window", collector="calibration",
+                             observed={"slot": "post", "reasons": ["post InstantAmperage exceeds 200 mA"]})
+        capture["pair_current_only_flag_id"] = record["flag_id"]
+        h._Harvest._capture_battery_joins(fake, readings, T)
+        self.assertEqual([item["code"] for item in ledger.records], ["calibration.capture_battery_pair_assist"])
+
+    def test_a_join_that_did_not_run_keeps_it(self):
+        capture = {"slot": "post", "battery_pair": "battery_float_confounded", "span": window_ns(100, 130)}
+        fake, ledger = self.join(capture, None)
+        record = ledger.emit("calibration.capture_battery_pair_failed", level="window", collector="calibration",
+                             observed={"slot": "post", "reasons": ["post InstantAmperage exceeds 200 mA"]})
+        capture["pair_current_only_flag_id"] = record["flag_id"]
+        h._Harvest._capture_battery_joins(fake, None, T)
+        self.assertEqual(sorted(item["code"] for item in ledger.records),
+                         ["calibration.capture_battery_pair_failed", "calibration.capture_battery_unmeasured"])
 
 
 if __name__ == "__main__":
