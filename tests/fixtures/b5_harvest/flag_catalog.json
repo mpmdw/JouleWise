@@ -732,6 +732,12 @@
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
+    "monitor.orphan_unverified": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION"
+    },
     "monitor.outage": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",

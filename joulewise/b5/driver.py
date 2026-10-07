@@ -45,6 +45,7 @@ drive the real branch with fakes only at those seams.
 
 from __future__ import annotations
 
+import calendar
 import dataclasses
 import hashlib
 import json
@@ -2764,6 +2765,82 @@ def dry_arm(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_census: tu
     return 0 if record["verdict"] == "GO" else rt.EXIT_REFUSED
 
 
+# Audit-fix batch 1 (item 9): the dead-man left a recorded monitor or meter
+# group alone because its identity could not be verified (DISCLOSE).
+ORPHAN_UNVERIFIED = "monitor.orphan_unverified"
+# How far the ps start time (one-second lstart) may sit from the journal's
+# start record, which the supervisor writes right after the spawn.
+ORPHAN_START_TOLERANCE_S = 5.0
+
+
+def _ps_command_matches(pid: int, start_event: Mapping[str, Any]) -> tuple[bool, str]:
+    """Is ``pid`` the process the journal's start event recorded? (``ps`` command line and start time.)
+
+    The recorded argv from its script (the first ``.py`` element) onward, or
+    from its second element when it names none, must appear in the command
+    ``ps`` shows (an interpreter or ``taskpolicy`` may rewrite what precedes
+    it), and the ``ps`` start time must lie within ORPHAN_START_TOLERANCE_S
+    before (or one second after) the event's wall stamp.
+    """
+
+    argv = start_event.get("argv")
+    at = start_event.get("at")
+    wall_s = at.get("wall_s") if isinstance(at, Mapping) else None
+    if not isinstance(argv, list) or not argv or not all(isinstance(item, str) for item in argv):
+        return False, "no recorded command line"
+    if isinstance(wall_s, bool) or not isinstance(wall_s, (int, float)):
+        return False, "no recorded start stamp"
+    script = next((index for index, item in enumerate(argv) if item.endswith(".py")), None)
+    tail = " ".join(argv[script:] if script is not None else argv[1:])
+    if not tail:
+        return False, "recorded command line too short to match"
+    try:
+        result = subprocess.run(["/bin/ps", "-p", str(pid), "-o", "lstart=", "-o", "command="],
+                                capture_output=True, text=True, timeout=5,
+                                env={**os.environ, "LC_ALL": "C", "LANG": "C", "TZ": "UTC"})
+    except (OSError, subprocess.SubprocessError, UnicodeError) as error:
+        return False, f"ps failed: {_error_text(error)}"
+    parts = result.stdout.split(None, 5)
+    if result.returncode != 0 or len(parts) < 6:
+        return False, "ps shows no such process"
+    try:
+        started = calendar.timegm(time.strptime(" ".join(parts[:5]), "%a %b %d %H:%M:%S %Y"))
+    except ValueError:
+        return False, "ps start time unreadable"
+    if tail not in parts[5]:
+        return False, "ps command line differs from the recorded one"
+    if not (wall_s - ORPHAN_START_TOLERANCE_S <= started <= wall_s + 1.0):
+        return False, "ps start time differs from the recorded start"
+    return True, "command line and start time match"
+
+
+def _flag_orphan_unverified(night_dir: Path, journal: str, pgid: int, why: str) -> None:
+    """Record, best effort, that the dead-man left a recorded group alone (DISCLOSE)."""
+
+    custody = Path(night_dir).parent
+    plan_id = attempt = None
+    try:
+        plan = json.loads((custody / "night_plan.json").read_text(encoding="utf-8"))
+        plan_id = plan.get("plan_id")
+        window = plan.get("hazard_window")
+        attempt = window.get("attempt") if isinstance(window, Mapping) else None
+    except (OSError, ValueError, AttributeError):
+        pass
+    fields = {
+        "code": ORPHAN_UNVERIFIED, "family": "DIAGNOSTIC", "klass": "REPRESENTATION",
+        "scope": {"level": "window", "plan_id": plan_id, "attempt": attempt, "stage_id": None,
+                  "run_id": None, "bundle_id": None},
+        "source": {"stage": "window", "collector": "b5.driver.dead_man", "legacy_site": None, "legacy_code": None},
+        "observed": {"journal": journal, "pgid": pgid, "reason": why},
+        "expected": None, "evidence": [],
+        "detail": "the dead-man could not verify the recorded group's identity and left it alone",
+    }
+    try:
+        _emit_flag_production(custody, fields)
+    except Exception:  # noqa: BLE001 - a record; the dead-man's own log keeps the outcome
+        pass
+
+
 def reap_orphan_monitor(night_dir: Path, *, identity: Callable[[int], Any] | None = None,
                         journal: str = MONITOR_JOURNAL) -> dict[str, Any] | None:
     """Dead-man helper: stop a monitor group the driver started and never proved stopped.
@@ -2772,6 +2849,12 @@ def reap_orphan_monitor(night_dir: Path, *, identity: Callable[[int], Any] | Non
     default, ``METER_JOURNAL`` for the wall meter. The group is signalled only
     when its leader is still the process the journal recorded (same start
     time), so a reused pid is never touched.
+
+    Audit-fix batch 1 (item 9): when the journal recorded no start time, or no
+    identity reader is given, the group is never signalled blind. ``ps`` must
+    show the recorded command line (:func:`_ps_command_matches`) on a process
+    started within seconds of the recorded start; otherwise the group is left
+    alone and ``monitor.orphan_unverified`` (DISCLOSE) is recorded.
     """
 
     try:
@@ -2804,6 +2887,13 @@ def reap_orphan_monitor(night_dir: Path, *, identity: Callable[[int], Any] | Non
         observed = identity(pgid)
         if getattr(observed, "state", None) != "LIVE" or getattr(observed, "start_time", None) != last_start["start_time"]:
             return {"pgid": pgid, "signalled": False, "reason": "recorded monitor is not the live process"}
+    else:
+        verified, why = _ps_command_matches(pgid, last_start)
+        if not verified:
+            outcome = {"pgid": pgid, "signalled": False, "reason": f"identity unverified: {why}",
+                       "flag": ORPHAN_UNVERIFIED}
+            _flag_orphan_unverified(Path(night_dir), journal, pgid, why)
+            return outcome
     try:
         os.killpg(pgid, signal.SIGTERM)
     except ProcessLookupError:

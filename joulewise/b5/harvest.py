@@ -363,6 +363,8 @@ CODES: dict[str, CodeSpec] = {
     "monitor.outage": _spec("DIAGNOSTIC", "PHYSICS"),
     # Audit-fix batch 1 (item 8): the driver's record of a hazard-monitor restart (DISCLOSE).
     "monitor.restarted": _spec("DIAGNOSTIC", "REPRESENTATION"),
+    # Item 9: the dead-man left a recorded group it could not identify alone (DISCLOSE).
+    "monitor.orphan_unverified": _spec("DIAGNOSTIC", "REPRESENTATION"),
     # P3-DRV's driver code (the KM003C wall meter's supervision; DISCLOSE):
     "meter.supervision_fault": _spec("DIAGNOSTIC", "PHYSICS"),
     # int4's driver code: the pre-launch lineage check disagreed; recorded, the chain launched.
@@ -531,7 +533,7 @@ NEG8_REFERENCE_INPUT_IDS = frozenset({"start_reference", "start_references", "mi
                                       "end_reference", "end_references"})
 # Codes added by audit-fix batch 1 (2026-10-07) that the design branch's draft
 # sealed catalog gains through the registration row (REG) before the seal.
-AUDFIX1_CODES = frozenset({"neg8.reference_member_excluded",
+AUDFIX1_CODES = frozenset({"neg8.reference_member_excluded", "monitor.orphan_unverified",
                            *(f"{module}.arm_unmeasured" for module in ("clock", "battery", "thermal", "contention",
                                                                        "disk"))})
 PIN_REFUSAL_REASONS = frozenset({"calibration_ledger_head_mismatch", "calibration_ledger_rollback",

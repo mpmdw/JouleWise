@@ -314,6 +314,9 @@ _AUDFIX1_CODES = {
     # window goes on; the in-window monitor measures the module per member span.
     **{f"{module}.arm_unmeasured": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE)
        for module in ("clock", "battery", "thermal", "contention", "disk")},
+    # Item 9: the dead-man left a recorded monitor or meter group alone because
+    # its identity (command line and start time) could not be verified.
+    "monitor.orphan_unverified": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),
 }
 
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
