@@ -1,7 +1,7 @@
 # Analysis plan V5-CLAIM-25G83-B5: what is computed from the claim windows, and how
 
-Status: **DRAFT, NOT SEALED. Revision 4, 2026-10-06** (revision 3 is commit `71c91d74`; revision 4 changes are
-listed in §14). Companion to `registration_block5.md` (the **registration**)
+Status: **DRAFT, NOT SEALED. Revision 5, 2026-10-06** (revision 3 is commit `71c91d74`, revision 4 ends at commit
+`7261a585`; the changes of revisions 4 and 5 are listed in §14). Companion to `registration_block5.md` (the **registration**)
 and `flag_catalog.json` (the **flag catalog**) in the same directory; they are sealed together and none binds alone.
 Terms are those built in registration §0; terms that first appear here are built where they first appear. Every rule
 is fixed before any claim byte exists. Most estimators below are already frozen in committed bytes (the D-179
@@ -411,8 +411,9 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
   with the catalog families of the codes that removed them, and their positions in the window (stage and ordinal),
   so a reader can see whether removals clustered. A unit removed by a RESTRICTED code is shown as "removed (restricted
   code)" until the release event.
-- **Attempt history and conditionality:** every attempt of every pack with its verdict, cause key and flag counts by
-  family, printed as "attempts of this pack: N (causes …)". Fixed sentence: "These numbers are conditional on a window
+- **Attempt history and conditionality:** every attempt of every pack with its verdict, cause key, flag counts by
+  family and yield status with "collected X of Y planned members" (registration §5.7), printed as "attempts of this
+  pack: N (causes …)". Fixed sentence: "These numbers are conditional on a window
   that passed the registered physical-hazard checks at arm and kept at least 8 of 10 units per stratum after the
   registered exclusions."
 - **Sensitivity line (PROPOSED; the seal gate adopts or strikes it, registration §14 Q6).** *Forcing problem:*
@@ -582,7 +583,7 @@ Every printed number is `MEASURED` or `DERIVE`; none is recalculated from prose.
 | Bracket replay with the acceptance's ledger-cutoff baseline in finalization (memo 3.3) | Defect known | (part of L9) |
 | Claim gate re-runs `analyze_claims` and requires byte equality; the `evidence_class` read is fixed (memo 3.7) | Defect known | (part of L9) |
 | Claim verdicts to results-fill input | Absent | `CLAIM-VERDICT-TO-FILL-ADAPTER` |
-| Disclosure producer for §7.3 and §8, including the sensitivity line if adopted and the step-4 p42 exit rule | Absent | `DISCLOSURE-PRODUCER` |
+| Disclosure producer for §7.3 and §8, including the battery-assist line (§8.1), the physics-in-span sensitivity line if adopted, the whole-machine cross-check (§8.2, reading `withheld/meter/`) and the step-4 p42 exit rule | Absent | `DISCLOSURE-PRODUCER` |
 
 Each is written and merged before the release event by seats that have read no claim-window energy, against this
 plan's text, tested on synthetic fixtures (including: one removed repeat gives n_r = 9, the stratified mean and t with
@@ -647,3 +648,22 @@ used by this plan changed.
   (`/Users/edr/night-archive/gate-prune/timing/RULING_fable_cooldown_2026-10-06.md`; registration §0.6). It is
   disclosure only. The ruling's other changes (cooldown rule, 576-record idle baseline, 60 s settles) change how
   members are collected, not how this plan computes from them.
+
+**Revision 5 (2026-10-06, the REG lane of gate-prune round 3).** No estimator, threshold or exclusion used by §4–§7
+changed.
+
+- §8 is split into §8.1 (the disclosures) and §8.2 (the whole-machine cross-check).
+- §8.1: the battery-assist sensitivity line is registered, from the orchestrator's ruling of 2026-10-06
+  (`/Users/edr/night-archive/wallmeter-probe/verify/RULING_battery_assist_2026-10-06.md`, registration §9.2): every
+  reported cell printed with and without units holding an assisted member, neither chosen after the fact. Whether
+  GAMMA's contrasts get it is registration §14 Q9. The physics-in-span sensitivity line no longer cites battery
+  assist, which is disclosed and not an exclusion.
+- §8.1: the battery disclosure gains the per-phase assist counts and the SMC fallback count; `kernel_task`'s share,
+  which an unprivileged `ps` cannot measure, is replaced by the host's total busy CPU; the monitor-cost line adds the
+  meter reader; the battery-temperature line no longer waits for its logging code (at `b9d02700a`); the attempt
+  history adds each attempt's yield.
+- §8.2: the pre-registered descriptive analysis of the whole-machine meter (registration §5.8): ΔE_rail, ΔE_machine
+  and ρ per member and window; per model the median, range and interquartile range of ρ; the hard band
+  0 < ρ ≤ 1 with ΔE_machine − ΔE_rail ≥ 0; the within-model spread, reported only; the central band from the first
+  clean window, disclosed with its identifier. It never gates or enters a number.
+- §11: the disclosure producer's scope grows by the two items above.
