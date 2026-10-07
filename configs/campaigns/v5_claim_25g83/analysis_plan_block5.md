@@ -1,8 +1,8 @@
 # Analysis plan V5-CLAIM-25G83-B5: what is computed from the claim windows, and how
 
-Status: **DRAFT, NOT SEALED. Revision 9, 2026-10-07** (revision 3 is commit `71c91d74`, revision 4 ends at commit
-`7261a585`, revision 5 at `9d63b4df`, revision 6 at `c6843537`, revision 7 at `dc046d4d`, revision 8 at `30d92227`;
-the changes of revisions 4 to 9 are listed in §14). Companion to
+Status: **DRAFT, NOT SEALED. Revision 10, 2026-10-07** (revision 3 is commit `71c91d74`, revision 4 ends at commit
+`7261a585`, revision 5 at `9d63b4df`, revision 6 at `c6843537`, revision 7 at `dc046d4d`, revision 8 at `30d92227`,
+revision 9 at `bc8ad4ae`; the changes of revisions 4 to 10 are listed in §14). Companion to
 `registration_block5.md` (the **registration**) and `flag_catalog.json` (the **flag catalog**) in the same directory;
 they are sealed together and none binds alone. Terms are those built in registration §0; terms that first appear here
 are built where they first appear. Every rule is fixed before any claim byte exists. Most estimators below are already
@@ -472,6 +472,19 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
   pack: N (causes …)". Fixed sentence: "These numbers are conditional on a window
   that passed the registered physical-hazard checks at arm and kept at least 8 of 10 units per stratum after the
   registered exclusions."
+  *A hazard not read at the arm.* *Forcing problem:* since audit finding A3 (registration §9.1; the rule is in
+  registration §0.15 and §4.1) the arm refuses on an unread probe only for the instrument. When the arm's probe of
+  the clock, battery, thermal, contention or disk hazard returns no reading (UNMEASURED), the arm records the flag
+  `<module>.arm_unmeasured` (DISCLOSE) and the window starts, because the monitor measures that hazard during the
+  window. For such a window the fixed sentence would say that it passed a check that never gave a reading. *Rule:*
+  for an analysed attempt that carries any `<module>.arm_unmeasured` flag, the fixed sentence is followed by a
+  second one that names the modules of those flags: "At this window's arm the [clock, battery, thermal, contention,
+  disk] check returned no reading and did not refuse; the monitor measured it during the window." The flag changes
+  no number and removes nothing. *Worked example (synthetic):* during BETA-1's arm the contention dwell (the stretch
+  in which the arm watches for competing processes, registration §4.2) could take no process snapshot, so it ran to
+  its 2,700 s cap and recorded `contention.arm_unmeasured` (registration §4.1), and the window was claim-usable.
+  BETA's cells print the fixed sentence followed by "At this window's arm the contention check returned no reading
+  and did not refuse; the monitor measured it during the window."
 - **Sensitivity line (PROPOSED; the seal gate adopts or strikes it, registration §14 Q6).** *Forcing problem:*
   thermal pressure and contention plausibly correlate with load, most of all on 8B prefill-p2048 members, so removing
   the members they touched could bias a cell's mean downward. (Battery assist, the case that first raised this, is no
@@ -527,7 +540,8 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
 - **Order:** "Every quad ran 1.7B, 8B, 8B, 1.7B in that fixed order; the order was not randomized, and the p-value
   assumes the quad differences are independent."
 - **Conservative contrast interval:** the se_met double count of §7.1 step 3, and the rounded t*.
-- **Battery, thermal, contention, clock:** per window, the hazard measurements at arm, the counts of each
+- **Battery, thermal, contention, clock:** per window, the hazard measurements at arm (each hazard whose probe
+  there returned no reading is named, `<module>.arm_unmeasured`, as above), the counts of each
   physics-in-span code, the count of members with anchor status `bounded` and the largest effective bound, and the
   host's total busy CPU during requests (journaled by the monitor; `kernel_task` cannot be named by an unprivileged
   `ps`, registration §6.8). For battery assist: per window, the number of members with `battery.assist` and with
@@ -659,14 +673,14 @@ Every printed number is `MEASURED` or `DERIVE`; none is recalculated from prose.
 | D-179 issuer implementing §4 (stratified mean, variance, df, B, per-token over kept units; n_r, n_b in the record), projecting each cell independently and preserving the whole-window allowance allocation, reading the re-screened allowance when the harvest re-screened (§4 step 4) | Absent ("No production dispatch exists", `joulewise/paper_reported_energy.py`) | `REPORTED-ENERGY-ISSUER` |
 | Floor extraction over kept units with g(n) (`joulewise/floor_extraction.py`) | The extractor assumes full n | `FLOOR-EXTRACTION-KEPT-UNITS` |
 | Claim gate over kept quads: no `fixed_n_plan_incomplete` for removed quads; leave-one-quad-out over kept quads; finalization binds the exclusions digest | Absent | `GAMMA-MANIFEST-EXCLUSIONS-BINDING` |
-| **Lane L9-NEG8: one NEG-8 survivor logic for every claim consumer** (registration §0.12, §9.1, §14 Q13). It runs after the seal and before any claim, as a gated fix to code that does not run during collection (registration §11 item 1 (ii)), pinned before the release event (§11 item 4), with one design round by Sol and Fable before code. It must: (a) use one strict-invalid predicate in the verdict writer, the replay and the harvest, moving the replay and the harvest to the writer's predicate (structural check, custody triangle, config binding) plus full strict validation, so all three drop exactly the same references, and leaving the writer's bytes unchanged (Fable cold pass 4 N-3); (b) pass the harvest archive through floor extraction (`floor_extraction.extract_cells`), the mint (`scripts/mint_floor_artifact.py`, `mint_floor_artifact_generalized.py`) and `scripts/extract_detection_floors.py`, so a block-5 floor cell gets the allowance the harvest's screen left standing (Sol re-verification R2; cold pass 4 D1); (c) make claim validation authenticate the harvest's survivor screen before the stored-failure veto, so a window whose stored screen failed and whose survivor re-screen passed gets the re-screened allowance, while the membership, provenance and physics checks stay independent (Sol R3); (d) have every claim consumer read the allowance from `derived/neg8-allowance.json` (registration §0.12), never from the stored bracket. Each with a test on a synthetic HAZARD root with and without its archive. | At the int5 head `fe28e5a0c`: the record, its consumer and `analyze-claims --neg8-harvest-archive` exist; (b), (c) and the shared predicate (a) do not. Until the lane lands, every block-5 floor cell refuses (`whole_window_drift_allowance_unrecorded`) and a contrast resting on a recorded survivor re-screen refuses (`whole_window_neg8_verdict_failed`): a HAZARD floor or contrast with a recorded re-screen has no allowance and is not claimable. Both refuse; neither prints a wrong number. | `L9-NEG8` |
+| **Lane L9-NEG8: one NEG-8 survivor logic for every claim consumer** (registration §0.12, §9.1, §14 Q13). It runs after the seal and before any claim, as a gated fix to code that does not run during collection (registration §11 item 1 (ii)), pinned before the release event (§11 item 4), with one design round by Sol and Fable before code. It must: (a) use one strict-invalid predicate in the verdict writer, the replay and the harvest, moving the replay and the harvest to the writer's predicate (structural check, custody triangle, config binding) plus full strict validation, so all three drop exactly the same references, and leaving the writer's bytes unchanged (Fable cold pass 4 N-3); (b) pass the harvest archive through floor extraction (`floor_extraction.extract_cells`), the mint (`scripts/mint_floor_artifact.py`, `mint_floor_artifact_generalized.py`) and `scripts/extract_detection_floors.py`, so a block-5 floor cell gets the allowance the harvest's screen left standing (Sol re-verification R2; cold pass 4 D1); (c) make claim validation authenticate the harvest's survivor screen before the stored-failure veto, so a window whose stored screen failed and whose survivor re-screen passed gets the re-screened allowance, while the membership, provenance and physics checks stay independent (Sol R3); (d) have every claim consumer read the allowance from `derived/neg8-allowance.json` (registration §0.12), never from the stored bracket. Each with a test on a synthetic HAZARD root with and without its archive. | At the int5 head `fe28e5a0c`, and unchanged at `9b0c680ed`: the record, its consumer and `analyze-claims --neg8-harvest-archive` exist; (b), (c) and the shared predicate (a) do not. Until the lane lands, every block-5 floor cell refuses (`whole_window_drift_allowance_unrecorded`) and a contrast resting on a recorded survivor re-screen refuses (`whole_window_neg8_verdict_failed`): a HAZARD floor or contrast with a recorded re-screen has no allowance and is not claimable. Both refuse; neither prints a wrong number. | `L9-NEG8` |
 | Claim gate reads GAMMA's flags: `neg8.midpoint_lost` on the analysed attempt stops the analysis (the exclusion function should have made the attempt not claim-usable, §2.4) | Absent | (part of L9) |
 | `_v5` final pinset and v2 input manifest for the mint; two-producer aggregate floor binding in the claim gate (memo 4.1) | Absent | `V5-FINAL-PINSET`, `V5-V2-INPUT-MANIFEST` |
 | Mint-to-close-out adapter; dominance sidecar wiring (memo 4.3) | Absent | `MINT-TO-CLOSEOUT-ADAPTER` |
 | Bracket replay with the acceptance's ledger-cutoff baseline in finalization (memo 3.3) | Defect known | (part of L9) |
 | Claim gate re-runs `analyze_claims` and requires byte equality; the `evidence_class` read is fixed (memo 3.7) | Defect known | (part of L9) |
 | Claim verdicts to results-fill input | Absent | `CLAIM-VERDICT-TO-FILL-ADAPTER` |
-| Disclosure producer for §7.3 and §8, including the battery-assist line (§8.1), the physics-in-span sensitivity line if adopted, the whole-machine cross-check (§8.2, reading `withheld/meter.json`), the reference-drift line's survivor counts, lost references, spares and lost midpoint (§8.1), and the step-4 p42 exit rule | Absent | `DISCLOSURE-PRODUCER` |
+| Disclosure producer for §7.3 and §8, including the battery-assist line (§8.1), the physics-in-span sensitivity line if adopted, the whole-machine cross-check (§8.2, reading `withheld/meter.json`), the reference-drift line's survivor counts, lost references, spares and lost midpoint (§8.1), the second sentence for a hazard not read at the arm (§8.1), and the step-4 p42 exit rule | Absent | `DISCLOSURE-PRODUCER` |
 
 Each is written and merged before the release event by seats that have read no claim-window energy, against this
 plan's text, tested on synthetic fixtures (including: one removed repeat gives n_r = 9, the stratified mean and t with
@@ -805,3 +819,19 @@ used by §4–§7 changed.
   claimable; both refuse, in the safe direction.
 - §2.4: the floors' relation to the allowance is stated exactly (the value does not use it; the extraction records it
   and refuses without it).
+
+**Revision 10 (2026-10-07, the REG preparation pass at the int5 head `9b0c680ed`).** No estimator, threshold or
+exclusion used by §4–§7 changed.
+
+- §8.1: a window whose arm could not read one of the clock, battery, thermal, contention or disk hazards starts with
+  the flag `<module>.arm_unmeasured` (registration §0.15, §4.1; audit finding A3, in the code since revision 7). The
+  fixed conditionality sentence says the window "passed the registered physical-hazard checks at arm", which is not
+  true of a check that gave no reading, so a second fixed sentence now follows it for such a window and names the
+  hazards. The hazards line names them too. Found by checking the integration's list of required text changes
+  against this plan (registration, revision 10 item 2); the seal gate adopts or rewords the sentence.
+- §11: the disclosure producer's scope grows by that sentence. The state of lane L9-NEG8 is unchanged at `9b0c680ed`:
+  nothing merged since `fe28e5a0c` touches floor extraction, the mint or the claim validator.
+- The registration's revision 10 restates the census's rule for JavaScript runtimes from the merged code
+  (registration §4.5). The census decides whether a window starts or stops; it enters no computation here.
+- Every line above §6's sentence on R_cm keeps its line number, because a test in the integration tree names that
+  sentence by its line (registration §13, revision 10 sync record).
