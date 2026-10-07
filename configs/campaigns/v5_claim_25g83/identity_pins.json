@@ -43,7 +43,7 @@
         "pack_id": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
         "plan_tree": {
           "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json",
-          "sha256": "523864e25be4e94424dcc366b4e8ae2719f41d6c222d36679588a0c6aa087ab6"
+          "sha256": "fb51b4aa0c47fb36bbc838369fd6b5af0db4656becf01ebc5051c9794b8b8bc3"
         },
         "projection_state": "unprojected"
       }

@@ -3009,19 +3009,23 @@ class RehearsalRound1Tests(WindowTestCase):
         self.assertIn("roster.duplicate_run_id", window.exclusions()["reasons"])  # the test catalog's draft effect
         self.assertEqual(h.flag_problems(flag), [])
 
-    def test_b3_the_committed_gamma_pack_launches_its_midpoint_reference_three_times(self):
+    def test_b3_the_committed_gamma_pack_launches_each_run_id_once(self):
         tree = json.loads((self.GAMMA / "plan_tree.json").read_bytes())
         dispatches, unresolved = h.stage_dispatches(tree, self.GAMMA)
         self.assertEqual(unresolved, [])
         duplicated = {run_id: [row["stage_id"] for row in rows] for run_id, rows in dispatches.items() if len(rows) > 1}
-        # Lane L10 gives the three interior references distinct run ids before GAMMA-1; until then the
-        # harvest records this one.
-        self.assertEqual(duplicated, {"neg8-window-midpoint": ["gamma-reference-decode-midpoint",
-                                                               "gamma-reference-arm-boundary",
-                                                               "gamma-reference-prefill-midpoint"]})
+        # Lane L10 (GAMMA-INTERIOR-REFERENCES-01): the three interior references launch distinct run ids.
+        self.assertEqual(duplicated, {})
+        self.assertEqual({run_id: rows[0]["stage_id"] for run_id, rows in dispatches.items()
+                          if rows[0]["stage_id"] in {"gamma-reference-decode-midpoint", "gamma-reference-arm-boundary",
+                                                     "gamma-reference-prefill-midpoint"}},
+                         {"gamma-interior-reference-decode-midpoint": "gamma-reference-decode-midpoint",
+                          "neg8-window-midpoint": "gamma-reference-arm-boundary",
+                          "gamma-interior-reference-prefill-midpoint": "gamma-reference-prefill-midpoint"})
         self.assertEqual(sum(len(rows) for rows in dispatches.values()), 101)
         roster = h.build_roster(self.GAMMA, ROOT)
-        self.assertEqual(len(roster["members"]), 99)
+        self.assertEqual(len(roster["members"]), 101)
+        self.assertEqual(roster["duplicate_listings"], {})
 
     def test_b6_untagged_auxiliary_bundles_are_not_lineage_findings(self):
         """B6: only marker-bearing members carry a lineage stamp.

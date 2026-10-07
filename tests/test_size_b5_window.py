@@ -30,7 +30,8 @@ DRAFT = "configs/campaigns/v5_claim_25g83/sizing_b5.json"
 SOURCE = ROOT / "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json"
 COPIED = ("configs/campaigns/d117_floor_qwen3-1p7b_v5", "configs/campaigns/d117_floor_qwen3-8b_v5",
           "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5", "configs/campaigns/neg8_reference_corpus_v5",
-          "configs/campaigns/window_references_v5", "configs/campaigns/v5_qualification_25g83")
+          "configs/campaigns/window_references_v5", "configs/campaigns/gamma_interior_references_v5",
+          "configs/campaigns/v5_qualification_25g83")
 
 
 def load_script() -> Any:

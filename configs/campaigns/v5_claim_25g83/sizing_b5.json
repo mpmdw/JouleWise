@@ -556,7 +556,7 @@
       "pack_longest_stream_s": 335,
       "plan_tree": {
         "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json",
-        "sha256": "523864e25be4e94424dcc366b4e8ae2719f41d6c222d36679588a0c6aa087ab6"
+        "sha256": "fb51b4aa0c47fb36bbc838369fd6b5af0db4656becf01ebc5051c9794b8b8bc3"
       },
       "programmed_span_s": 73522,
       "science_members": 80,
@@ -630,8 +630,8 @@
           "kind": "campaign_collection",
           "members": 1,
           "order_manifest": {
-            "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
-            "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+            "path": "configs/campaigns/gamma_interior_references_v5/decode_midpoint/order_manifest.json",
+            "sha256": "3c95f138a3757e6ee9cfa8c2d102b8e93eb3a46377c0090f8b3cd9db95b60b53"
           },
           "ordinal": 7,
           "science": false,
@@ -692,8 +692,8 @@
           "kind": "campaign_collection",
           "members": 1,
           "order_manifest": {
-            "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
-            "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+            "path": "configs/campaigns/gamma_interior_references_v5/prefill_midpoint/order_manifest.json",
+            "sha256": "07bfed5eb7c8c09d3b3c2115e7ac12b3667bf0748d0deee4d6326d331db187bd"
           },
           "ordinal": 11,
           "science": false,

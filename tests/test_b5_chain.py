@@ -323,15 +323,21 @@ class StopTests(RenderedChainFixture):
 class GammaRenderTests(RenderedChainFixture):
     pack = "gamma"
 
-    def test_gamma_renders_every_graph_stage_and_exposes_the_interior_reference_collision(self):
+    def test_gamma_renders_every_graph_stage_and_collects_each_interior_reference(self):
         completed = self.run_chain()
         self.assertEqual(0, completed.returncode, completed.stderr)
         calls = [call for call in fake_window.calls(self.measurement) if call["tool"] == "collect"]
-        midpoint = [call for call in calls if call["config_dir"].endswith("window_references_v5/midpoint")]
-        # GAMMA-INTERIOR-REFERENCES-01 (lane L10): three graph stages share one
-        # midpoint config, so the second and third collect nothing new.
-        self.assertEqual(3, len(midpoint))
-        self.assertEqual([1, 0, 0], [len(call["attempted"]) for call in midpoint])
+        # GAMMA-INTERIOR-REFERENCES-01 (lane L10): the three interior reference
+        # stages launch three distinct configs, so each collects its member. The
+        # arm boundary runs the shared NEG-8 midpoint; the two arm midpoints run
+        # the diagnostic copies.
+        interior = [call for call in calls if call["config_dir"].endswith((
+            "window_references_v5/midpoint", "gamma_interior_references_v5/decode_midpoint",
+            "gamma_interior_references_v5/prefill_midpoint"))]
+        self.assertEqual(["gamma_interior_references_v5/decode_midpoint", "window_references_v5/midpoint",
+                          "gamma_interior_references_v5/prefill_midpoint"],
+                         ["/".join(Path(call["config_dir"]).parts[-2:]) for call in interior])
+        self.assertEqual([1, 1, 1], [len(call["attempted"]) for call in interior])
         bundles = fake_window.expected_bundles(self.plan)
         for name, run_ids in bundles.items():
             root = Path(self.plan.hazard_window["runs_roots"][name])

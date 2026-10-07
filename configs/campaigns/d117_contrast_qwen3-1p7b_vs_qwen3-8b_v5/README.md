@@ -28,6 +28,19 @@ places references after science members 20, 40, and 60: both arm midpoints
 plus the decode/prefill boundary; the committed D-134 freeze receipt and its
 plan-tree attachment are the ratification authority for that reading.
 
+Each interior reference has its own run id, because `run_campaign.py` skips a
+run id whose complete bundle already exists in the runs root
+(GAMMA-INTERIOR-REFERENCES-01). The decode/prefill boundary (after member 40,
+the window's temporal midpoint) runs the shared midpoint reference
+`neg8-window-midpoint` and is the NEG-8 midpoint, as in the floor packs. The
+two arm midpoints run `configs/campaigns/gamma_interior_references_v5/`: the
+same config under run ids
+`gamma-interior-reference-decode-midpoint` and
+`gamma-interior-reference-prefill-midpoint`, with the role
+`window_interior_reference_diagnostic`. The whole-window NEG-8 screen reads
+exactly one midpoint, so these two are recorded drift diagnostics and enter
+neither the screen nor the drift allowance.
+
 The prefill prompt is `ISSUED-BY-G2A-PROMPT-PIN`, issued by
 `prefill_pin/prefill_prompt_pin.json`. The pack records the exact
 generated hashes so regeneration can be tested; the D-134 freeze receipt, not

@@ -11,7 +11,7 @@
   },
   "generator": {
     "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/generate_configs.py",
-    "sha256": "ef280970dd37c2ce0f2918dadeaac70ae46639e4ad25d39b2f1479e05206fd9d"
+    "sha256": "0e6f65064b7d1e2a89c7a6a5e9612252451d81f6081c0e518ea919f48a361175"
   },
   "window_identity": {
     "window_id": "plan-d117-contrast-qwen3-1p7b-vs-qwen3-8b-decode-prefill-p2048-v5",
@@ -1726,7 +1726,7 @@
       "successor": "gamma-science-02-decode-contrast-blocks-06-10",
       "input_ref": {
         "kind": "external_input",
-        "input_id": "midpoint_reference"
+        "input_id": "decode_midpoint_reference"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
@@ -1740,7 +1740,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/midpoint"
+                  "value": "configs/campaigns/gamma_interior_references_v5/decode_midpoint"
                 },
                 {
                   "kind": "literal",
@@ -2126,7 +2126,7 @@
       "successor": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "input_ref": {
         "kind": "external_input",
-        "input_id": "midpoint_reference"
+        "input_id": "prefill_midpoint_reference"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
@@ -2140,7 +2140,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/midpoint"
+                  "value": "configs/campaigns/gamma_interior_references_v5/prefill_midpoint"
                 },
                 {
                   "kind": "literal",
@@ -2735,6 +2735,20 @@
       ]
     },
     {
+      "input_id": "decode_midpoint_reference",
+      "manifest_path": "configs/campaigns/gamma_interior_references_v5/decode_midpoint/order_manifest.json",
+      "manifest_sha256": "3c95f138a3757e6ee9cfa8c2d102b8e93eb3a46377c0090f8b3cd9db95b60b53",
+      "manifest_id": "gamma-interior-reference-decode-midpoint-v1",
+      "expected_count": 1,
+      "members": [
+        {
+          "run_id": "gamma-interior-reference-decode-midpoint",
+          "path": "configs/campaigns/gamma_interior_references_v5/decode_midpoint/gamma-interior-reference-decode-midpoint.json",
+          "sha256": "5eeb82d15294dbdd74aec4fa511281b872709db0e5691277c600428fb5cd6c73"
+        }
+      ]
+    },
+    {
       "input_id": "midpoint_reference",
       "manifest_path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
       "manifest_sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21",
@@ -2745,6 +2759,20 @@
           "run_id": "neg8-window-midpoint",
           "path": "configs/campaigns/window_references_v5/midpoint/neg8-window-midpoint.json",
           "sha256": "9d654558c197d18330f0e5fee33ea84fff62e74e311816b783a8ba5857309024"
+        }
+      ]
+    },
+    {
+      "input_id": "prefill_midpoint_reference",
+      "manifest_path": "configs/campaigns/gamma_interior_references_v5/prefill_midpoint/order_manifest.json",
+      "manifest_sha256": "07bfed5eb7c8c09d3b3c2115e7ac12b3667bf0748d0deee4d6326d331db187bd",
+      "manifest_id": "gamma-interior-reference-prefill-midpoint-v1",
+      "expected_count": 1,
+      "members": [
+        {
+          "run_id": "gamma-interior-reference-prefill-midpoint",
+          "path": "configs/campaigns/gamma_interior_references_v5/prefill_midpoint/gamma-interior-reference-prefill-midpoint.json",
+          "sha256": "7e3ea1976ac358da62a864f2b7be3a2504c19022cf7ad9bfd81702ae050ba101"
         }
       ]
     },
