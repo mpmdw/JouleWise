@@ -2592,11 +2592,15 @@ def pair_endpoint_currents(record: Any, root: Path | str) -> dict[str, int | Non
     ``record`` is the pair's ``battery_float`` record (the bundle's
     ``metadata.json`` or the capture's ``instrument_evidence.json``); each
     endpoint's ``raw/battery_float.<pre|post>.ioreg`` is read only when its
-    bytes match the recorded digest, and parsed by the frozen grammar
-    (``battery_float.parse``), the same reading the pair verdict made.
-    Anything that cannot be read is None, which keeps the exclusion.
+    bytes match the recorded digest, and parsed by the frozen grammar at the
+    recorded wall time, the same reading the pair verdict made.  The grammar
+    is reached through ``joulewise.hazards.battery._grammar``, the one
+    registered raw-boundary call (``tests/test_battery_float_consumers.py``
+    RAW_BOUNDARY_PARSE_CALLS): it replays one observation and forms no
+    verdict.  Anything that cannot be read (a stale reading included) is
+    None, which keeps the exclusion.
     """
-    from joulewise import battery_float
+    from joulewise.hazards.battery import _grammar
     out: dict[str, int | None] = {}
     for phase in ("pre", "post"):
         stored = record.get(phase) if isinstance(record, Mapping) else None
@@ -2604,7 +2608,7 @@ def pair_endpoint_currents(record: Any, root: Path | str) -> dict[str, int | Non
         try:
             body = (Path(root) / "raw" / f"battery_float.{phase}.ioreg").read_bytes()
             if isinstance(stored, Mapping) and hashlib.sha256(body).hexdigest() == stored.get("raw_stdout_sha256"):
-                current = battery_float.parse(body, float(stored["wall_time_s"])).get("instant_amperage_ma")
+                current = _grammar(body, float(stored["wall_time_s"])).get("instant_amperage_ma")
         except (OSError, ValueError, TypeError, KeyError):  # battery_float.ProbeError is a ValueError
             current = None
         out[phase] = current if type(current) is int else None
