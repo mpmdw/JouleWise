@@ -227,7 +227,7 @@
   "roster.duplicate_run_id": {"category": "NUMBER_INTEGRITY", "protects": "two bundles claim one run id: member numbers cannot be attributed"},
   "roster.no_science_bundles": {"category": "NUMBER_INTEGRITY", "protects": "no science bundle exists: there is no number"},
   "whole_window.member_failures_unreadable": {"category": "NUMBER_INTEGRITY", "protects": "a whole-window verdict that did not pass and whose member_failures is absent or malformed cannot name its failed members, so member.whole_window_member_failure cannot remove them; every member's number would be kept on a verdict that failed some of them", "added": "P4 2026-10-07"},
-  "whole_window.verdict_absent": {"category": "BASELINE", "note": "the whole-window verdict's own refusals decide it; review with the verdict's B1 lineage raises (census report)"}
+  "whole_window.verdict_absent": {"category": "NUMBER_INTEGRITY", "protects": "the window's NEG-8 drift screen and the verdict's per-member idle-admission replays were never evaluated", "note": "relabelled from BASELINE (audit-fix 2 2026-10-07, refuter of Fable audit F1); the whole-window verdict's own refusals decide it; review with the verdict's B1 lineage raises (census report)"}
  },
  "member_exclusions": {
   "battery.accumulator_excursion": {"category": "PHYSICS", "protects": "battery charge accumulator moved during the member span (#421)"},
