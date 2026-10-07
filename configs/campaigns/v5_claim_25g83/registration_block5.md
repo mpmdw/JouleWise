@@ -1694,7 +1694,15 @@ spare-slot retry decision, which runs spares only when the stage lost members (�
 
 - **The only stops**, all before member 1 (about 13 min into the chain): a failed reservation (chain exit 10), a
   failed pre calibration capture (exit 11), and a pre fiducial bound above the pre screen 0.036462861644980 s
-  (`instrument.precal_screen_failed`, exit 12). The driver records such a window as CHAIN_STOPPED, not GO (§5.7).
+  (exit 12). The chain keeps a **stage journal**, `night/chain-stages.jsonl`: one line for each finished stage, with
+  its id, its kind, its return code and its start and end times. A stop adds one line with the stage id `chain.stop`,
+  the exit code, and the reason as its kind: `reservation_failed`, `pre_calibration_capture_failed` or
+  `pre_calibration_screen_failed`. A stop writes no flag of its own. It leaves the window without a finished
+  bracket session (none was opened, or the one opened never received both captures), so the harvest removes the
+  window by `calibration.no_bracket` (§6.5) and records `chain.stopped_before_collection` (DISCLOSE). (Revision 10
+  named a flag
+  `instrument.precal_screen_failed` for the exit-12 stop. No program writes that flag; it stays in the catalog as a
+  reserved code, §6.2.) The driver records such a window as CHAIN_STOPPED, not GO (§5.7).
   Outside the chain, the driver stops it on `disk.low`, on a census that lists an agent process (§4.5; an unreadable
   census never stops it), when the monitor has written no
   battery or contention reading for about 10 min (`monitor.outage`, PLAN2 row 11), and at the window deadline
@@ -1702,11 +1710,26 @@ spare-slot retry decision, which runs spares only when the stage lost members (�
 - Every other stage records its return code and the chain continues. A chain that reaches its end exits 0 whatever
   its stages returned; the flags, not the return code, decide claim use.
 - **Operator countdowns: 0 s, except 20 s at the post calibration** (registered deviation 5, §10; P2-CHAIN,
-  `joulewise/b5/chain.py` `COLLECTION_ARM_COUNTDOWN_S`, `CALIBRATION_ARM_COUNTDOWN_S`). Each pack stage passes
-  `--arm-countdown-s 20`, a pause written for an operator to step away from the machine before collection. A window
-  runs headless, and every collection stage and the pre calibration already follow a 60 s settle, so the pause waits
-  for nothing: the chain passes 0 on the ten collection stages and the pre slot, saving 11 × 20 = 220 s per window.
-  The post calibration keeps 20 s because no settle precedes it: it follows the last end-triplet member directly.
+  `joulewise/b5/chain.py` `COLLECTION_ARM_COUNTDOWN_S`, `CALIBRATION_ARM_COUNTDOWN_S`). An operator countdown is a
+  pause, set by the argument `--arm-countdown-s`, written for an operator to step away from the machine before a
+  stage captures anything. It has two sources. *The pack:* each of a pack's ten collection stages carries the literal
+  `--arm-countdown-s 20`; the two calibration capture stages carry no countdown argument, and the capture tool's own
+  default is 0 s. *The window runbook* (`docs/phase_2/window_runbook.md`, the written shell procedure for running a
+  window, whose `calibrate_slot` function every live window since block 3 used for its captures): each calibration
+  capture is run with `--arm-countdown-s 20 --sleep-display-before-capture`. A window runs headless, and every collection stage and the pre calibration
+  already follow a 60 s settle, so there the pause waits for nothing. The chain therefore does two things. It
+  replaces 20 with 0 on the ten collection stages. And it adds the runbook's two arguments to each calibration
+  capture, with a countdown of 0 s at the pre slot and 20 s at the post slot; the chain writer refuses to render a
+  calibration stage whose pack template already carries either argument. The second argument,
+  `--sleep-display-before-capture`, makes the capture tool run `pmset displaysleepnow` after the countdown and wait
+  5 s before it captures (if the command fails the capture goes on, §6.10, `display_sleep_action_failed`); §10
+  registers that addition as a deviation of its own. The post calibration keeps 20 s because no settle precedes it:
+  it follows the last end-triplet member directly. *The saving depends on the baseline.* Against the runbook
+  protocol, which pauses 20 s at twelve places (ten collection stages and two calibration captures), the chain
+  pauses once, at the post slot: 11 × 20 = 220 s saved per window. Against the pack's own bytes, the ten collection
+  stages save 10 × 20 = 200 s, the pre slot is unchanged at 0 s and the post slot is 20 s longer. (Revision 10 said
+  that each pack stage passes the literal 20 and that the chain passes 0 on the pre slot; the pre and post
+  countdowns are the chain's additions, and the 220 s is counted against the runbook.)
 - **The window calibration verdict, computed once** (P2-CHAIN and P2-CTL, interface J1). *Forcing problem:* the
   timing estimator's fit of the pre calibration (the **refit**: re-running the pulse fit on the stored 90 MB raw
   capture) is a constant of the window, because its inputs are the same bytes for every member. Yet each member
@@ -1777,8 +1800,10 @@ later, to its whole process tree; the runner proves no sampler process of that m
 row, records `member.timeout` (EXCLUDE_MEMBER) and goes on to the next member. After 2 consecutive timed-out members
 the stage drains: only end references still run, then the post calibration. *Why 1,800 s:* the longest member the
 sizing allows is an 8B member with both admission attempts and the cooldown at its cap, 619 s, plus 77 s of
-bookkeeping; block 3's longest member cycle was 274.9 s. 1,800 s is 2.6 times the first, so it cuts only a member
-that is not progressing.
+bookkeeping, 696 s in all. The longest member cycle block 3 measured (one member's start to the next member's start
+inside a stage, the cooldown included) was 274.9 s in its window `g2a-b3w1-20261004T1305Z` and 406.6 s in its window
+`g2a-w2-20261003T1748Z` (§5.5 names the member sets). 1,800 s is 2.6 times the allowance and 4.4 times the longest
+measured cycle, so it cuts only a member that is not progressing.
 
 **Strict validation moves to the harvest** (PLAN2 M3; P2-RC). In revision 4 the runner strictly validated each bundle
 right after it was written: a fresh reduction including a third refit, about 28–30 s per member, all of which the
@@ -1798,32 +1823,65 @@ from the corpus members that were collected and succeeded, provided there are at
 *Why it matters.* At 1 abort in 37 members (the block 2 and 3 record), the chance that all 12 corpus members succeed
 is (36/37)¹² ≈ 0.72. A rule that needed all 12 would lose about 28% of windows to the corpus alone.
 
-*Implementation at `f8164893` (fix lane fx-harvest), with the protected core unchanged.* Three programs touch the
-bound, in this order:
+*Implementation at `f8164893` (fix lane fx-harvest).* That lane changed the harvest only. It left the core module
+`joulewise/whole_window.py`, which builds, reads and screens the bound, as it was, so the core reader of item 2
+still knows only the full corpus. Three programs touch the bound, in this order:
 
 1. **The chain** derives the bound from a window-local copy of the corpus manifest that lists only the collected
    members that succeeded. It records that copy's path and SHA-256 in the driver's terminal record
    (`night/hazard_result.json`, `neg8_corpus.collected_manifest`).
 2. **The production verdict writer**, which the harvest runs, reads the bound through the core's reader
-   (`whole_window.load_neg8_drift_bound_artifact`, protected). That reader authenticates a bound only against the
+   (`whole_window.load_neg8_drift_bound_artifact`, in that core module). That reader authenticates a bound only against the
    committed 12-member manifest. It therefore treats a 10- or 11-member bound as absent, and the stored NEG-8 screen
    fails with exactly two conditions, `neg8_drift_bound_underived` and its idle-subtracted twin.
 3. **The harvest** decides both questions itself:
-   - *Was the bound derived?* (`neg8_bound`) If the core reader accepts the bound, yes. Otherwise the harvest reads
-     the custodied collected manifest and requires all of the following: its bytes hash to the recorded SHA-256; its
+   - *Was the bound derived?* (`neg8_bound`) The bound must be accepted by one of two routes and must then pass a
+     member check. *Route 1:* the core reader accepts the bound. *Route 2:* otherwise the harvest reads the
+     custodied collected manifest and requires all of the following: its bytes hash to the recorded SHA-256; its
      header equals the committed manifest's; its members are committed members, each once, in committed order; there
      are at least 10 of them; and every member it leaves out did not succeed (a succeeded member left out would be a
-     selected corpus). Then `whole_window.validate_neg8_drift_bound_artifact` checks the bound's arithmetic and corpus
-     identity against those bytes. If both checks pass, the bound counts as derived from the collected subset.
-     Otherwise `neg8.bound_not_derived` removes the window.
+     selected corpus; the one closed list of exceptions is below). Then
+     `whole_window.validate_neg8_drift_bound_artifact` checks the bound's arithmetic and corpus identity against
+     those bytes. If both checks pass, the bound is accepted as derived from the collected subset.
+
+     *The member check* (`harvest.neg8_bound_member_problems`; `derived/neg8-bound.json` records its outcome as
+     `members_rederived`). *Forcing problem:* both routes check the bound's arithmetic and which manifest it names.
+     Neither ties the numbers inside the bound to the bundles that lie in this window's bound root, and a block-5
+     bound carries no launch-lineage stamp of its own that could. *Mechanism:* the check runs whenever the bound
+     root carries the hazard lineage locator (§0.12), which the driver publishes in every block-5 runs root (§0.17),
+     so it runs on every block-5 window. For each corpus member the bound names, all of these must hold: (i) exactly
+     one ordinary bundle directory, not a symbolic link, exists for it in the bound root; (ii) the SHA-256 over that
+     bundle's complete file inventory equals the `bundle_evidence_sha256` the bound recorded for the member; (iii)
+     the bundle's launch lineage authenticates; (iv) its **calibration identity** equals the bound's (a bundle's
+     calibration identity is the SHA-256 of the evidence file, `instrument_evidence.json`, of the pre calibration
+     it was measured under, recorded in its metadata as `instrument_calibration.artifact_sha256`; the bound records
+     the one its corpus shared as `calibration_identity_sha256`); (v) its custody triangle agrees (§0.12) and its
+     summary was produced by the current reducer from real, non-mock sampler records; (vi) it is the **canonical
+     condition**, which is the reference workload of §0.12 as the code tests it (workload profile `df_rq_mid`, 1,024
+     prompt tokens, 256 output tokens, no dataset or suite reference, and a `config.json` whose SHA-256 the bundle's
+     metadata records), and the SHA-256 of its configuration without the run id equals the one the bound records
+     for its corpus; (vii) its gross and its idle-subtracted energy, re-derived from the bundle by the core's own
+     function (`whole_window._reference_energy_evidence`), equal the values the bound recorded for it, to a relative
+     and an absolute tolerance of 10⁻⁹. The members that carry a lineage stamp must also all carry the same one,
+     and the bound's own when the bound names one.
+
+     The bound counts as derived only when a route accepted it and the member check found no problem. In every
+     other case, including a bound that names no member and a member check that itself raises an exception,
+     `neg8.bound_not_derived` removes the window.
    - *Did the screen pass?* The harvest re-screens the window (`_neg8_rescreen`) in three cases: (a) the stored
      screen's only NEG-8 conditions are the two bound-underived ones and the bound was derived from the collected
      subset; (b) a reference the verdict names carries a loss flag that the stored bracket did not drop (§0.12, "Lost
      references"); (c) a corpus member was dropped for physics and the bound re-derived (below). It re-derives the
      NEG-8 bracket with the core's own evaluator (`whole_window._derived_neg8_decision`), over the reference bundles
      the verdict names, with the window's own validated bound (the physics-clean bound if there is one, else the
-     collected-subset bound, else, in case (b) only, the stored bracket's), and with the bound's freshness judged at
-     the verdict's completion time. Re-derived first without the harvest's losses, the bracket must have the stored
+     collected-subset bound, else, in case (b) only, the stored bracket's). The time at which the bound's age is
+     judged is a physical one ("The bound's age", below). The harvest hands the evaluator the verdict's completion
+     time (the verdict row's `evaluation_scope.completed_at`, else the row's time stamp), and on a block-5 runs root
+     the evaluator replaces it with the latest end of a measured window among the end references it reads (a
+     bundle's measured window is its measured request; it ends at the bundle's `sampling_stopped` stamp), when every
+     one of those ends can be read. When only some can be read, it uses the later of the completion time and the
+     latest readable end, so the bound never looks younger than a physical end shows. When none can be read, the
+     completion time stands. (Revision 10 said here only "judged at the verdict's completion time".) Re-derived first without the harvest's losses, the bracket must have the stored
      bracket's endpoints and estimand; if it does not, these are not the bundles the verdict was written from, and
      nothing is evaluated. The decision is then the re-derivation that drops the lost references before aggregation.
      The re-screen alone decides: `neg8.screen_failed` is emitted unless the re-screen ran, passed and listed no
@@ -1838,8 +1896,9 @@ Structure (decisions, conditions, member counts, digests) goes to `derived/neg8-
 
 **Which corpus members the mint may leave out: one closed list.** *Forcing problem:* the bound may rest on 10 or 11
 members, so something must decide which succeeded members are left out, and a loose rule would let a corpus be
-*selected* (an inconvenient but valid member dropped). The NEG-8 mint (`whole_window.py`, at `a434e363d`) gives each
-corpus member one of three verdicts:
+*selected* (an inconvenient but valid member dropped). The **NEG-8 mint** is the core function that builds the bound
+from the corpus bundles (`whole_window._mint_hazard_neg8_drift_bound`, at `a434e363d`; "the mint" here and in §0). It
+gives each corpus member one of three verdicts:
 
 - **keep:** it passes every per-member test the mint applies;
 - **omit:** it fails a registered member-validity test that would also remove a science member. The reasons are a
@@ -1854,8 +1913,10 @@ corpus member one of three verdicts:
   A kept member with no verified numbers cannot enter a bound, so the mint then refuses.
 
 The mint refuses outright (no bound; `neg8.bound_not_derived`) on anything that is not evidence about one member's
-number: an unauthenticated launch lineage, a member that is not the canonical condition, an unrecorded calibration
-identity, a bundle inventory that cannot be sealed, kept members of more than one condition (no majority vote), of
+number: an unauthenticated launch lineage, a member that is not the canonical condition (item 3, test vi), an
+unrecorded calibration identity (item 3, test iv), a bundle inventory that cannot be sealed (the digest of test ii
+cannot be computed: a file cannot be read, or the bundle holds a symbolic link or no file), kept members of more
+than one condition (no majority vote), of
 more than one calibration identity or of two window lineages, or fewer than 10 kept members. The chain's corpus prune
 asks the mint itself which members it drops (`whole_window.neg8_corpus_mint_drops`), so the chain's collected manifest
 and the mint's input are the same bytes. The harvest accepts a left-out succeeded member only for one of the five
@@ -1911,12 +1972,15 @@ judged against that identity.
 
 ### 5.4 The window's tail
 
-After the post calibration, in this order (`joulewise/b5/driver.py` `run_hazard_night`, at `fe28e5a0c`, unchanged since `43ac12d0c`): the chain
-exits and the driver stamps that moment; the driver proves the chain's process group gone (a census of the group
-with no signal, then the existing termination proof) and counts the window's yield (§5.7); G10 runs if the plan asks
-and the chain exited by itself (§3), with the monitor and the meter still journaling; then the driver waits until at
-least 5 s have passed since the chain exited (polling both supervisors meanwhile; after G10 that time has long
-passed) and stops the monitor and the meter (§0.17); last, it writes its terminal record with the window's yield. If
+After the post calibration, in this order (`joulewise/b5/driver.py` `run_hazard_night`, at `fe28e5a0c`, unchanged since `43ac12d0c`): the chain's
+own process exits; inside the same supervision call (`scripts/run_night.py` `_run_chain_once`) the driver takes a
+census of the chain's process group without sending a signal and, if anything survives, terminates the survivors
+and proves them gone; only when that call returns does the driver take its time stamp, which is therefore no
+earlier than the chain's exit and comes after the proof; next it counts the window's yield (§5.7); G10 runs if the
+plan asks and the chain exited by itself (§3), with the monitor and the meter still journaling; then the driver
+waits until at least 5 s have passed since that stamp, and so at least 5 s since the chain exited (polling both
+supervisors meanwhile; after G10 that time has long passed) and stops the monitor and the meter (§0.17); last, it
+writes its terminal record with the window's yield. If
 the chain's exit could not be proven, the monitor and the meter are left running for the dead-man (the watchdog's
 fallback stop). During G10 the driver keeps supervising (cold pass N7, `_run_g10`, `_wait_supervised`): it waits on
 G10's process 5 s at a time (`G10_POLL_S`) under the same 1,500 s cap, and between waits runs the chain's supervision
@@ -1936,13 +2000,31 @@ unidentified group could hit an unrelated process that reused the id.
 **The watchdog releases a finished window at once** (PLAN2 X1; `scripts/magistrate_watchdog.py` at `a434e363d`,
 P2-WD). *Forcing problem:* in revision 4 the watchdog treated a window as running until t0 + `WINDOW_MAX_S` + 300 s
 even after its chain had exited, and launched no headless session meanwhile, so the machine sat idle about 15 h after
-every chain. *Mechanism:* the watchdog releases the window's hold, once and for good (a one-way latch keyed on the
-plan id, the custody root and the SHA-256 of `result.json`), when it sees on one tick: `chain.started` and
-`chain.exited`; the driver's terminal `result.json` with this plan's id and a finite end time no later than now;
-`courier.sent`; and an empty agent census and no driver process. The same release applies to a NULL window and to a
-CHAIN_STOPPED one. A driver that never wrote its first record is released through a create-once
-`night/launch_abandoned.json`. A failed courier keeps the old dead-man timing. After the release, `WINDOW_MAX_S`
-bounds only a hung chain or a dead driver.
+every chain. *Mechanism:* while the watchdog treats a window as running it launches no headless session. That hold
+on launches is the window's **fence**; it begins 180 s before t0. The watchdog releases the fence, once and for good
+(a one-way latch keyed on the plan id, the custody root and the SHA-256 of `result.json`), when on one tick it sees
+both a finished custody directory and a quiet process table. The release exists only for block-5 plans (receipt
+class `HAZARD_PACK`, §0.17).
+
+- *The custody half* (`joulewise/arm_retry.py` `terminal_window_release`). Two files in the window's `night/`
+  directory are always required. One is `courier.sent`: the **courier** is the driver's last step, one headless
+  session that emails Ed the window's structural report (§5.7) and writes `night/courier.sent` once the email is
+  accepted. The other is the driver's terminal `result.json`, carrying this plan's id, the receipt class
+  `HAZARD_PACK` and a finite end time no later than now. Beyond those, the directory must have one of two shapes:
+  - *a collected or a CHAIN_STOPPED window:* `chain.started` and `chain.exited` are both present, and the driver's
+    verdict in `result.json` is one of GO, REFUSED, ABORTED (a chain the driver itself stopped, §5.1) or
+    CHAIN_STOPPED. The driver writes `chain.exited` only once the chain's process group is proven gone (above);
+  - *a NULL window* (a refusal before the chain was started): neither `chain.started` nor `chain.exited` is
+    present, the driver's verdict is REFUSED, and `result.json`'s `chain_exit_code` and `chain_sha256` are both
+    null.
+- *The process half* (`scripts/magistrate_watchdog.py`), on the same tick: the agent census is empty; no driver
+  process is running; and no live process has a command line that names the plan's custody root (the driver, the
+  monitor, the arm's collectors and G10 all carry it). A process table that cannot be read never releases.
+
+A driver that never wrote its first record is released through a create-once `night/launch_abandoned.json`. A
+failed courier keeps the old dead-man timing. After the release, `WINDOW_MAX_S` bounds only a hung chain or a dead
+driver. (Revision 10 required `chain.started` and `chain.exited` for every release, which would never release a
+NULL window, and named two of the three process conditions.)
 
 ### 5.5 Sizing
 
@@ -1989,13 +2071,15 @@ bounds only a hung chain or a dead driver.
   `f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81`) and from the packs' stage graphs, order
   manifests and configs. `--check` reproduces the file byte for byte. The program also refuses unless its arithmetic
   reproduces block 4's committed 22,494 s span and 25,800 s window. Block 4's source names four GAMMA configs to fix
-  which model is 1.7B-class and which 8B; the timing lane's regeneration changed their bytes (their `idle_seconds` and
-  plan tag), so the program reads them at the bytes GAMMA's plan tree now records and lists them under
+  which model is 1.7B-class and which 8B; the timing lane's regeneration changed their bytes (their `idle_seconds`
+  and the entry `calibration-plan-sha256=<digest>` in their `run_metadata.tags`, which names the pack's calibration
+  plan by its SHA-256), so the program reads them at the bytes GAMMA's plan tree now records and lists them under
   `class_map.superseded_block4_configs`; bytes recorded by neither still refuse. Each window plan reads
   `/packs/<label>/programmed_span_s` and `/packs/<label>/T_stream_max_s` from it. Lane L10 changes only GAMMA's
   plan-tree digest and the two diagnostic stages' order-manifest paths and digests; the members per class (61 / 40),
-  the programmed span and `WINDOW_MAX_S` do not change, because each diagnostic stage is still one auxiliary member
-  of the reference class.
+  the programmed span and `WINDOW_MAX_S` do not change, because the sizing still charges each diagnostic stage as
+  one auxiliary member at the reference members' allowance. (That is the sizing's classification only. The yield
+  count of §5.7 classes the same two stages as science stages.)
 
   | Pack | Members, 1.7B-class / 8B | Programmed span | `WINDOW_MAX_S` | Expected chain, block-3 basis | Expected chain, projected |
   |---|---|---|---|---|---|
@@ -2014,9 +2098,10 @@ bounds only a hung chain or a dead driver.
   35,700 s is every member's cooldown at its 300 s cap and 32,725 s is every member's two admission attempts.
   Per-member custody adds 119 × 77 = 9,163 s; the corpus retry 8,304 s; the spare retries 5,424 s; settles,
   calibration, derivation, prune, the window calibration verdict, stage custody and shutdown the other 5,130 s; span
-  98,826 s. Block 3 measured a start-to-start member
-  cycle, cooldown and custody included, with a median of 236.5 s and a maximum of 274.9 s; each member here is
-  charged 672 s (595 + 77).
+  98,826 s. For comparison, block 3's window `g2a-b3w1-20261004T1305Z` measured 16 **cooled member cycles** (the
+  time from one member's start to the next member's start inside a stage, when the next member had a cooldown; the
+  cooldown and the custody are inside it), with a median of 236.5 s, a mean of 242.9 s and a maximum of 274.9 s;
+  each member here is charged 672 s (595 + 77).
 - **Is that right? As a deadline, yes.** A chain stopped at its deadline loses its post calibration, and so the
   whole window. The deadline must therefore never cut a slow window that could still be claim-usable. A chain
   anywhere near this bound would have most members at the cooldown cap, and `member.cooldown_cap_hit` removes such
@@ -2025,8 +2110,9 @@ bounds only a hung chain or a dead driver.
   to a usable tail rather than killed. Since the watchdog releases a finished window at once (§5.4), the generous
   size costs only the time to notice a hung chain or a dead driver.
 - **Expected chain time** (planning only; it gates nothing). Two figures:
-  - *Block-3 basis* (measured, an upper planning figure). Block 3's median start-to-start member cycle at 750 idle
-    records, 236.5 s, plus 10.5 s for an 8B member; per collection stage 60 s settle + 39 s head + 62 s tail (block-3
+  - *Block-3 basis* (measured, an upper planning figure). The median of the 16 cooled member cycles of block 3's
+    window `g2a-b3w1-20261004T1305Z` (above), at 750 idle records, 236.5 s, plus 10.5 s for an 8B member; per
+    collection stage 60 s settle + 39 s head + 62 s tail (block-3
     maxima); fixed 60 s pre-calibration settle + 770 s calibration pair + 320 s bound derivation + 320 s corpus prune
     + 60 s window calibration verdict + 300 s terminal = 1,830 s (scratch `sizing_v2.json`, SHA-256
     `6a82745f47b40c8aa1ea6aefe2c45c2d4cce2b7a7e65d114165057e64fae00de`). Each pack has 10 collection stages.
@@ -2034,7 +2120,13 @@ bounds only a hung chain or a dead driver.
     - BETA: 1,830 + 1,610 + 19 × 236.5 + 100 × 247.0 = 32,634 s ≈ 9.1 h.
     - GAMMA: 1,830 + 1,610 + 61 × 236.5 + 40 × 247.0 = 27,747 s ≈ 7.7 h.
   - *Projected* (not measured; built from the measured block-3 mean cycle and the savings of the changes now in the
-    code). Block 3's mean start-to-start cycle was 257.1 s (PLAN2 §1.1). Per member, subtract 22.9 s for the
+    code). Its starting figure is 257.1 s, the mean start-to-start cycle PLAN2 §1.1 gives for 36 members of block
+    3's two windows (`g2a-w2-20261003T1748Z` and `g2a-b3w1-20261004T1305Z`; PLAN2 gives a median of 234.5 s for the
+    same 36, and this author did not re-derive either). That is a different member set from the 16 cycles of the
+    block-3 basis, so 236.5 s and 257.1 s are not the median and the mean of one sample. For scale, the 26 cooled
+    member cycles of the two windows together have a mean of 262.7 s and a maximum of 406.6 s (recomputed by this
+    author from `/Users/edr/night-archive/gate-prune/timing/member_timing.csv`, timing fields only). Per member,
+    subtract 22.9 s for the
     576-record idle baseline (2,725 s over 119 members, timing ruling), 41.0 s for the 2× cooldown rule (mean wait
     53.9 → 9.1 s over 109 cooldowns, 4,883 s over 119 members, timing ruling) and 56.9 s for the refit done once and
     strict validation moved to the harvest (1,654 + 1,642 + 3,475 s over 119 members, PLAN2 M1–M3): 136.3 s for a
@@ -2044,18 +2136,29 @@ bounds only a hung chain or a dead driver.
     - ALPHA: 1,830 + 10 × 141 + 119 × 136.3 = 19,460 s ≈ 5.4 h.
     - BETA: 1,830 + 1,410 + 19 × 136.3 + 100 × 146.8 = 20,510 s ≈ 5.7 h.
     - GAMMA: 1,830 + 1,410 + 61 × 136.3 + 40 × 146.8 = 17,426 s ≈ 4.8 h.
-  ALPHA-1 measures which figure is right. Each window adds its 4–47 min arm. Below about 119 s from one decode's end
+  ALPHA-1 measures which figure is right. Each window adds its 4–46 min arm (§4.1: about 41 s of reads, collectors
+  and cadence probe, then a dwell of 180 to 2,700 s, so 221 to 2,741 s). Below about 119 s from one decode's end
   to the next idle capture, recovery is untested (archived gaps 119–740 s); ALPHA-1 records idle medians and cooldown
   waits against block 3's 30.6 mW reference as a diagnostic (PLAN2 §1.4 item 4).
 - **Deadline stop.** A chain still running at t0 + `WINDOW_MAX_S` is stopped by the driver; the window then has no
-  post calibration, so it is not claim-usable (`calibration.no_bracket`). The next attempt's per-member allowance
-  becomes the larger of the sizing output's and the stopped attempt's largest observed member cycle, plus the sizing
-  margin, and `WINDOW_MAX_S` is re-derived by the rule above without an erratum (member cycles are structural timing,
-  releasable under §8).
+  post calibration, so it is not claim-usable (`calibration.no_bracket`). Nothing is resized automatically after
+  such a stop. The member allowances and `WINDOW_MAX_S` are outputs of the sealed sizing file: the sizing program
+  takes no observed cycle as an input, and its `--check` reproduces `sizing_b5.json` byte for byte. A larger member
+  allowance is therefore a change to a sealed output. The question first goes to a consult (§0.1); if the consult
+  finds that an allowance must grow, the change is made by a cold erratum (§10) with a new sizing file, which an
+  addendum to the seal record pins by its SHA-256, before the next arm. *Why the case is remote:* the deadline is
+  the programmed span, the chain's length if every member takes its longest allowed path (24.4 to 28.1 h in the
+  table above), plus the arm's 3,300 s; the projected chain is 4.8 to 5.7 h and the block-3 basis 7.7 to 9.1 h. A
+  chain reaches the deadline only by running about three times its slowest expected length, and the collection
+  deadline of §5.1 sends a chain that slow to its post calibration inside the 24 h calibration horizon instead, as
+  the bullet "Is that right?" above says. (Revision 10 registered a rule
+  that resized the next attempt's allowance, without an erratum, to the stopped attempt's largest observed member
+  cycle "plus the sizing margin". No such margin is defined anywhere and no program re-derives an allowance from
+  an observed cycle, so that rule is withdrawn.)
 - **Block duration.** Assume every window is claim-usable on its first attempt. With the watchdog releasing each
   window at its terminal record (§5.4), one window to the next is the window plus about 0.6–1.6 h: the driver's tail
   and courier about 0.1 h, a watchdog tick of up to 5 min, the pin advance and the next plan a few minutes, the
-  harvest 0.5–1.5 h, and the 180 s stand-down lead (PLAN2 §1.3). Adding three arms of 4–47 min, the three windows
+  harvest 0.5–1.5 h, and the 180 s stand-down lead (PLAN2 §1.3). Adding three arms of 4–46 min, the three windows
   take about 18–23 h at the projected chains (15.9 h of chain) and about 28–33 h at the block-3 basis (25.6 h of
   chain), before any re-arm or frequency redraw. (Revision 4, with the
   fence held to t0 + `WINDOW_MAX_S` + 300 s, gave about 71 h before desk gaps.)
@@ -2104,17 +2207,46 @@ power or a duration, so it is releasable structure under §8 item 2. It never st
     members, so a stage whose loss a spare restored still shows that loss in the driver's counts;
   - science stages: ⌈planned × 8 / 10⌉, the stage's share of the 8-of-10 cell minimum (§6.6): 16 of a 20-member quad
     stage, 8 of a 10-member absolute stage. If each member is lost independently with probability 1/37, these trip
-    by chance with probability 1.6 × 10⁻⁴ and 2.1 × 10⁻³, so a trip means a systematic cause.
+    by chance with probability 1.6 × 10⁻⁴ and 2.1 × 10⁻³, so a trip means a systematic cause;
+  - GAMMA's two diagnostic interior-reference stages (`gamma-reference-decode-midpoint` and
+    `gamma-reference-prefill-midpoint`, one member each, §0.12): 1 of 1. The driver sorts a stage by its runs root
+    and its members' roles (`driver._stage_role`). A stage that writes to the bound root, or holds a member with the
+    role `neg8_reference_corpus_member`, is the corpus stage. A stage whose members all have the role
+    `neg8_daily_reference_midpoint` is the midpoint. A stage whose members' roles all begin `neg8_daily_reference`
+    (`…_start`, `…_end`) is a triplet. Every other stage is treated as a science stage. The diagnostic role,
+    `window_interior_reference_diagnostic`, fits none of the first three, so these two stages get the science
+    rule, ⌈1 × 8 / 10⌉ = 1. One lost diagnostic member therefore makes its stage ZERO (no bundle) or LOW (a bundle
+    that did not succeed) and the window's yield status LOW (below). At the same loss rate that happens by chance
+    in 1 − (36/37)² = 5.3% of GAMMA windows, so for these two stages a trip does **not** mean a systematic cause.
+    The diagnostic members enter no claim, and a yield status stops nothing and removes nothing: the only effect is
+    the notice. A LOW that comes from one lost diagnostic member alone is one lost member, not a cause repeated
+    across members, and the process rule of §7.3 does not hold the next arm for it. (Revision 10 did not list this
+    case. Giving the diagnostic role its own minimum, 0 of 1 like the midpoint's, is a code change deferred until
+    after block 5.)
 
   It is written once to `night/yield_plan.json`, outside the plan's `hazard_window` block.
-- **Counting in the window.** After each stage's journal line, at the start of the next settle (never during an idle
-  capture), the driver checks each planned bundle directory: present, and summary status succeeded. Raw-byte
-  validity stays with the harvest. It writes one line to `night/stage_yield.jsonl` with the stage's status: **ZERO**
-  (none of the planned members present), **LOW** (succeeded below min_valid) or **OK**. ZERO and LOW record
-  `yield.stage_zero` or `yield.stage_low` and write `night/yield_alert-<position>.json` once.
-- **Repeated refusals.** The driver reads the campaign log as it grows. Three consecutive members that ended without a
-  bundle for one shared cause (the member's last error line with its digits replaced by `#`, or else its exit code)
-  record `stage.members_refused_pre_bundle_identical`, once per cause.
+- **Counting a stage.** To count a stage the driver checks each planned bundle directory: present, and summary
+  status succeeded. Raw-byte validity stays with the harvest. It writes one line to `night/stage_yield.jsonl` with
+  the stage's status: **ZERO** (none of the planned members present), **LOW** (succeeded below min_valid) or
+  **OK**. ZERO and LOW record `yield.stage_zero` or `yield.stage_low` and write
+  `night/yield_alert-<position>.json` once. *When a stage is counted* (`driver.YieldTripwire`,
+  `YIELD_COUNT_FRESH_S` = 30): the count must never run during an idle capture, so a stage is counted inside the
+  window only in the settle that follows it. That needs two things: the next stage in the chain is a collection
+  stage or the bound derivation (a collection stage starts with a settle, and the derivation captures nothing), and
+  the stage's line in the stage journal (§5.1), when the driver reads it, has an end time between 2 s in the future
+  and 30 s in the past. Every other stage is counted once, at the terminal record, after the chain's process group
+  is gone: the last collection stage, which runs straight into the post calibration, and any stage whose journal
+  line was already older than 30 s or has no numeric end time. Such a stage's yield line, flag and alert file are
+  written only then, so the watchdog can pick that alert up only after the chain has ended.
+- **Repeated refusals.** The **campaign log** is `<runs root>/campaign_log.jsonl`, to which the campaign runner
+  appends one row for each member it launched. The driver reads the rows added since its last read, but only at a
+  stage boundary (in the settle in which it counts the stage) and once more in the terminal pass, never during a
+  stage. Three consecutive members that ended without a bundle for one shared cause record
+  `stage.members_refused_pre_bundle_identical`, once per cause; because of when the log is read, the flag is written
+  when the stage holding the three members ends, not right after the third. The cause is the log row's
+  `child_refusal`: the member's last non-empty error line with its digits replaced by `#`, cut to a fixed length,
+  or, when the member was refused by the launch-lineage check, that check's reason code. A row without one is keyed
+  by its exit code together with whether the member was blocked before it was invoked (`blocked_before_invoke`).
 - **Stall.** No new bundle directory and no new stage journal line for 3,600 s records `yield.stage_stalled`, once.
 - **No process is started for any of this in the window.** A network call would sit inside a settle, the idle
   stretch the next member's cooldown and baseline read. (Revision 6 also cited the agent census, which then matched
@@ -2138,11 +2270,17 @@ power or a duration, so it is releasable structure under §8 item 2. It never st
 - **At the harvest.** `harvest.json` and `derived/window_flags.json` carry planned, present, raw-valid (a stream of at
   least 1 MiB and no missing files) and succeeded, overall and per stage; a spare counts as planned only when the
   retry ran it (its bundle exists), and an unrun spare is never `member.bytes_missing`. The command prints members =
-  raw-valid / planned and the window-removing reasons, and exits 6 when a COLLECTED window has nothing present
-  (`collection.zero_yield`). `collection.failure_histogram` groups every error line of the operator logs by its
-  digit-redacted text (full texts to `withheld/`). A disagreement with the window's own `stage_yield.jsonl` records
-  `yield.harvest_disagrees_with_window`. A window with no collection stage row at all is harvested as
-  **NO_COLLECTION**, with `chain.stopped_before_collection`, every collector still run (§7.1).
+  raw-valid / planned and the window-removing reasons. When members were planned and no bundle is present, the
+  harvest records `collection.zero_yield` whatever its verdict, and the command exits 6 when that verdict is
+  COLLECTED or NO_COLLECTION (§7.1); a chain stopped at exit 10, 11 or 12 therefore records the flag and exits 6.
+  `collection.failure_histogram` reads the **operator logs** (`<custody>/operator-logs/*.log`, one log for each
+  stage's output), takes every line that begins `error:`, and groups those lines by their text with the digits
+  replaced by `#` (full texts to `withheld/failure-texts.json`). A disagreement with the window's own
+  `stage_yield.jsonl` records `yield.harvest_disagrees_with_window`. A window whose stage journal exists and holds
+  no collection stage row is harvested as **NO_COLLECTION**, with `chain.stopped_before_collection`, every collector
+  still run (§7.1). A chain that started and was killed before it wrote any journal line has no stage journal; it
+  is harvested as COLLECTED, without that flag, and `collection.zero_yield` and `calibration.no_bracket` record
+  that nothing was collected.
 
 Every yield code is DISCLOSE (§6.8): `cell.below_minimum` and `neg8.bound_not_derived` already remove a window where
 it matters; the yield exists to say so early and to stop a repeat (§7.3). *Worked example (synthetic).* An ALPHA
@@ -2255,7 +2393,19 @@ reader could not be proven stopped (`joulewise/b5/driver.py`, `MONITOR_BACKOFF_A
 
 ### 6.1 Where flags come from
 
-All flag files are append-only, with an fsync per line.
+How each kind of file in the table is written (an **fsync** is the call that forces written bytes onto the disk):
+
+- the flag files `<custody>/flags/*.jsonl` are append-only, with an fsync after every line;
+- the driver's `night/stage_yield.jsonl` is appended a line at a time, with an fsync after every line;
+- the monitor's journals under `hazards/monitor/` are append-only and written a line at a time, but synced to disk
+  at most once every 5 s and when the journal is closed (`hazards/monitor.py` `FSYNC_INTERVAL_S` = 5.0), so a
+  power loss or kernel panic can lose about the last 5 s of readings;
+- `derived/flags.jsonl` is not appended to: the harvest creates it once, in a single pass, with an fsync after every
+  line;
+- the JSON documents in the table (`arm.json`, `window_flags.json`, `exclusions.json`, the yield alert files) are
+  not line files: each is written whole, once.
+
+(Revision 10 said of all of them: "append-only, with an fsync per line".)
 
 | Stage | File | Writer |
 |---|---|---|
@@ -2294,13 +2444,32 @@ and one torn flag line left its attempt blocked for ever. Now:
 | PACK_IDENTITY, CODE_IDENTITY, MODEL_IDENTITY | the pack, the executed code or the model differs from what was sealed, or could not be compared | EXCLUDE_WINDOW (one member whose model identity cannot be derived from its own metadata: EXCLUDE_MEMBER) |
 | CALIBRATION | the bracket is missing, invalid, unbound or fails the acceptance, the ledger it is judged from fails its own integrity checks, a capture saw charging or AC loss, or an earlier capture the acceptance relies on changed | EXCLUDE_WINDOW (DISCLOSE: the desk's ledger-readiness checks before an arm; battery assist during a capture; a changed capture the acceptance does not rely on; a historical file that could not be read; the writers' records of §6.10) |
 | NEG8 | the bound was not derived, the screen failed, the verdict holding the screen is absent, or a verdict that did not pass cannot name its failed members | EXCLUDE_WINDOW (DISCLOSE: the aggregate verdict codes of §6.5, a corpus member dropped for a registered reason or for physics, lost references and a lost midpoint (§0.12; on GAMMA a lost midpoint makes the attempt not claim-usable through the pack-scoped window reason `neg8.midpoint_lost_primary`, §0.16), and the verdict producer's own records) |
-| INSTRUMENT | the pre-calibration screen failed | EXCLUDE_WINDOW (a member that could not read the sampler binary's digest: EXCLUDE_MEMBER, §6.3, unless the harvest re-derived it: DISCLOSE) |
+| INSTRUMENT | a member that could not read the sampler binary's digest; and one reserved code for a failed pre-calibration screen, which no program writes (the failed screen stops the chain at exit 12 and the window is removed under CALIBRATION by `calibration.no_bracket`, §5.1, §6.5) | the member that could not read the digest: EXCLUDE_MEMBER, §6.3, unless the harvest re-derived it: DISCLOSE; the reserved code: EXCLUDE_WINDOW in the catalog |
 | CLOCK_SYSTEMATIC | a step during a calibration capture; most recorded anchors not `bounded` | EXCLUDE_WINDOW |
 | MEMBER_VALIDITY | §6.3 | EXCLUDE_MEMBER |
 | PHYSICS_IN_SPAN | §6.4 (battery assist is DIAGNOSTIC, not this family) | EXCLUDE_MEMBER |
-| ROSTER | §6.7 | EXCLUDE_MEMBER (window-level roster failures: EXCLUDE_WINDOW; the chain's roster records, such as a retried member or a horizon-truncated tail, §5.1: DISCLOSE) |
-| RECORDS | receipts, lineage formalities and the driver's pre-launch lineage check, attempt history, pin ledger, provenance digests, naming, notices, missing journals, a member's error output not copied, malformed and rebuilt flag lines, unreadable operator logs | DISCLOSE (three exceptions: source bytes changed during the harvest, EXCLUDE_WINDOW; a malformed flag line that could have been a window exclusion, EXCLUDE_WINDOW, or a member exclusion naming a readable member, EXCLUDE_MEMBER) |
-| DIAGNOSTIC | network-time output, clock steps and frequency changes outside any span, G10, s1-structural checks, the battery-temperature rise across a stage (§0.6), battery assist (§6.4), the whole-machine meter (§5.8), the yield counts (§5.7), an unread hazard probe at the arm (§4.1), monitor restarts and orphans left unsignalled (§5.4, §6.8) | DISCLOSE |
+| ROSTER | §6.7 | EXCLUDE_MEMBER in the catalog for five codes. Two of them remove a member under their own name: `roster.run_id_mismatch` and `roster.before_chain_started`. The other three (`roster.not_in_plan`, `roster.foreign_attempt`, `roster.creation_unplaced`) only label a bundle that is ignored; the member such a bundle leaves without a usable bundle is removed as `member.bytes_missing` (§6.7). Window-level roster failures (`roster.duplicate_run_id`, `roster.no_science_bundles`, `cell.below_minimum`, §6.5): EXCLUDE_WINDOW. The chain's and the harvest's roster records, such as a retried member, a horizon-truncated tail (§5.1) or a window with nothing present (§5.7): DISCLOSE |
+| RECORDS | lineage formalities and the driver's pre-launch lineage check, the pin ledger, missing journals, a member's error output not copied, malformed and rebuilt flag lines, unreadable operator logs; and five reserved codes that no program writes (receipts, attempt history, provenance digests, naming, notices; listed below) | DISCLOSE (three exceptions: source bytes changed during the harvest, EXCLUDE_WINDOW; a malformed flag line that could have been a window exclusion, EXCLUDE_WINDOW, or a member exclusion naming a readable member, EXCLUDE_MEMBER) |
+| DIAGNOSTIC | network-time output, clock steps and frequency changes outside any span, G10, s1-structural checks, the battery-temperature rise across a stage (§0.6), battery assist (§6.4), the whole-machine meter (§5.8), the yield counts (§5.7), an unread hazard probe at the arm (§4.1), monitor restarts and orphans left unsignalled (§5.4, §6.8); and three reserved codes that no program writes (listed below) | DISCLOSE |
+
+**Nine reserved codes.** Nine codes are in the catalog although no program writes them at the code this revision
+read (`9b0c680ed`; searched in `joulewise/` and `scripts/` for each code's literal and for code built from parts).
+A code with no emitter cannot fire, so in block 5 these nine remove nothing and disclose nothing. They stay in the
+catalog as **reserved** codes, each with its registered effect (orchestrator ruling of 2026-10-07 on the fidelity
+sweep), and the catalog's note on each says "Reserved: no emitter at H_claim." They are:
+
+- `instrument.precal_screen_failed` (INSTRUMENT, EXCLUDE_WINDOW). Its condition, a pre fiducial bound above the pre
+  screen, stops the chain at exit 12, and the window is removed by `calibration.no_bracket` (§5.1, §6.5);
+- `records.receipt`, `records.attempt_history`, `records.provenance_digest`, `records.naming` and `records.notice`
+  (RECORDS, DISCLOSE). The flag package defines them in one group of seven record formalities
+  (`joulewise/flags/catalog.py`); the other two of the seven do have an emitter: `records.lineage_formality` (the
+  driver, §0.17) and `records.pin_ledger` (the controller, §6.10);
+- `clock.sntp_offset` (the offset from a time server), `monitor.probe_in_phase` (a monitor probe inside a target
+  phase) and `battery.accumulator_diagnostic` (accumulator intervals with no registered unit scale) (all DIAGNOSTIC,
+  DISCLOSE). For the last, the condition can no longer be reached as a flag: without a registered scale the
+  accumulator rule raises an error, which the harvest records as a fault.
+
+`contention.kernel_task_share` is a different case: it has an emitter whose condition cannot occur today (§6.8).
 
 ### 6.3 Member exclusions: validity
 
@@ -2318,7 +2487,13 @@ A member is removed from every cell it feeds when any of these is flagged:
 - its target phase (`phase.decode` for decode members, `phase.prefill` for p2048 members) fails its precheck
   (`member.target_phase_precheck_failed`), including the one precheck test that reads a science energy,
   `anchor_energy_envelope_exceeds_quarter_metric` (`member.anchor_energy_envelope_exceeded`, blinding RESTRICTED). The
-  p42 phase is not a target phase;
+  p42 phase is not a target phase. The catalog's blinding value is each code's default: 191 codes are STRUCTURE and
+  this one is RESTRICTED. The harvest also marks single flags RESTRICTED in two places, whatever their code's
+  default (§8 governs every RESTRICTED flag): a `member.target_phase_precheck_failed` flag one of whose remaining
+  precheck reasons has a name that contains "energy" or "effect" or ends in "_metric"
+  (`harvest.restricted_reason`; in practice the one reason `anchor_energy_envelope_unrecorded`); and the
+  `diagnostic.s1_structural` flag that carries the per-cell precheck counts, always, because whether a precheck is
+  eligible can turn on the energy envelope;
 - the GPU was not idle during its idle baseline (`member.idle_window_suspect`); its cooldown hit the cap
   (`member.cooldown_cap_hit`); or its campaign cooldown evidence does not verify (`member.cooldown_evidence_unverified`);
 - its configuration bytes are not in the pack's committed inventory (`member.config_not_in_inventory`; the lineage
@@ -2343,8 +2518,11 @@ A member is removed from every cell it feeds when any of these is flagged:
 
   The verdict's other two per-member reasons already have their own codes. In-window thermal pressure is
   `thermal.powermetrics_pressure_elevated` (§6.4), and an invalid bundle is `member.strict_validation_failed` and its
-  kin. Leaving those two out keeps each exclusion in one family, which the sensitivity line of analysis plan §8
-  relies on.
+  kin. Leaving those two out keeps each exclusion in one family. The physics-in-span **sensitivity line** of
+  analysis plan §8.1 relies on that: when a unit of a cell was removed by a PHYSICS_IN_SPAN code, the same estimator
+  is printed a second time, beside the primary value, with the PHYSICS_IN_SPAN exclusions not applied and every
+  other family's still applied (the line is proposed; the seal gate adopts or strikes it, §14 Q6). An exclusion
+  that sat in two families would make "not applied" ambiguous.
 
   *Why this rule is needed.* Its environment evidence includes the post-run observation that the displays stayed
   asleep and the screensaver stayed off through the request. That observation is how decision D-078 (item 4) closed
@@ -2357,9 +2535,15 @@ A member is removed from every cell it feeds when any of these is flagged:
   *One case moved* (audit-fix item 6 and the orchestrator's ruling on it, 2026-10-07): a post-run guard observation
   whose collector raised an exception (every reading null, `collector_error` set; §6.10) is no longer missing
   environment evidence to the verdict, so the verdict does not list the member for it. The member is still removed,
-  by `member.target_phase_precheck_failed`: the pinned reducer's environment barrier, which the ruling left
-  unchanged, marks such a record `environment_admission_failed` on the member's target prechecks, because an
-  unmeasured post-run environment cannot show the member clean.
+  by `member.target_phase_precheck_failed`, through the reducer's **environment barrier**. That is the step of the
+  reducer (`joulewise/reduce.py` `_apply_environment_claim_barrier`; the reducer is one of the four pinned estimator
+  files of §2 item 1, whose bytes are unchanged since `a434e363d`) that reads the member's recorded environment
+  evidence, its admission record
+  and its post-run observation, and, when that evidence is missing or failed, writes the reason
+  (`environment_admission_missing` or `environment_admission_failed`) on every precheck of the member, the phase
+  prechecks included, so that none of them is eligible. The ruling left the barrier unchanged: it marks such a
+  record `environment_admission_failed` on the member's target prechecks, because an unmeasured post-run
+  environment cannot show the member clean.
 
 Codes added since revision 4 that remove a member (catalog effect EXCLUDE_MEMBER; their writers are in §6.10):
 
@@ -2379,7 +2563,8 @@ Codes added since revision 4 that remove a member (catalog effect EXCLUDE_MEMBER
 
 Revision 5 also listed `member.stderr_uncopied` here. It is now DISCLOSE (orchestrator, 2026-10-06, at `a434e363d`):
 it records that the copy of a member's error output into the stage log failed, which is a record not written, not
-a measured fault. A flag the member printed there behind the unwritten-flag marker (§6.10) is still recovered,
+a measured fault. A writer that cannot write a flag to its flag file prints the whole flag on its error output
+behind the fixed marker `JOULEWISE_UNWRITTEN_FLAG ` (§6.10). A flag the member printed that way is still recovered,
 because the harvest also scans the member's own error-output file (`operator-logs/member-stderr/`).
 
 ### 6.4 Member exclusions: physics in the member's span
@@ -2408,8 +2593,9 @@ below:
   belongs to a stretch of time when its hold overlaps that stretch for a positive time, so the read in force at a
   stretch's start belongs to it, and a read taken at or after its end belongs to what follows.
 - **Assist**: the battery discharging into the machine while the adapter is connected and the battery is not
-  charging. It is **any** negative B0AC read (ruling item 1) on a span with no read of charging or AC loss. −200 mA
-  is not part of the definition; it is the threshold the assist report counts reads against.
+  charging. It is **any** negative B0AC read (ruling item 1) on a span in which no registry read showed the charging
+  state (IsCharging Yes) or the loss of AC (ExternalConnected No). −200 mA is not part of the definition; it is the
+  threshold the assist report counts reads against.
 
 Rules:
 
@@ -2422,8 +2608,11 @@ Rules:
   the charge accumulator implies a mean charging power above 200 mA × the publication's voltage (units below); or,
   without SMC coverage, the discharge accumulator's mean is **positive** and beyond that limit. The discharge
   accumulator sums discharging ticks only, so a positive mean is inconsistent evidence, not discharge, and without
-  SMC coverage it keeps the exclusion (`observed.sign_inconsistent`). With SMC coverage the same reading is
-  `battery.accumulator_unavailable` (DISCLOSE; cold pass N4): the 1 s SMC reads measure the current directly and
+  SMC coverage it keeps the exclusion. The flag marks it on the interval's own row:
+  `observed.intervals[i].sign_inconsistent` is true (`observed` itself holds `rule`, `intervals` with the first 8
+  rows, `count` and `watts_per_unit`). With SMC coverage the same reading is
+  `battery.accumulator_unavailable` (DISCLOSE; cold pass N4), whose row carries the whole interval entry under the
+  same per-row key: the 1 s SMC reads measure the current directly and
   remove the member for any charging read (`battery.member_span`), so a 60 s registry record that disagrees with
   itself adds no evidence of a hazard. The harvest and the hazard module's copy of the rule (`hazards/battery.py`,
   where the same case was `battery.member_span`) changed together, and a parity test holds them equal. A negative
@@ -2436,13 +2625,19 @@ Rules:
     inside and the first at or after its end. With no read before the start, the stretch from the start to the first
     read counts; with no read after the end, the stretch from the last read to the end counts (the monitor may have
     stopped after the span; while it runs, its 5 s poll writes a line on any state change).
-    *Worked example (synthetic):* span 100–130 s. State reads at 0 s and 62 s and none after: the stretches are
-    62 s and 130 − 62 = 68 s, both at most 120 s, so the state counts as measured. State read only at 0 s: the
-    stretch from 0 s to the span's end is 130 s, more than 120 s, so the member is `battery.unmeasured`.
+    *Worked example (synthetic):* span 100–130 s. State reads at 0 s and 62 s and none after: of the reads at or
+    before the start only the last, at 62 s, is in the set (the read at 0 s plays no part), so one stretch is
+    judged, from 62 s to the span's end, 130 − 62 = 68 s. That is at most 120 s, so the state counts as measured.
+    State read only at 0 s: the stretch from 0 s to the span's end is 130 s, more than 120 s, so the member is
+    `battery.unmeasured`.
   - *Without SMC coverage* (unchanged from revision 4): no registry publication for more than 120 s overlapping the
     span, or an in-force publication lacking a state or current field.
-- `battery.assist` and `battery.assist_outside_request` (both DISCLOSE). Computed only when no read in the span
-  showed charging or AC loss. The member's span is split into **phases**: with a request span inside it,
+- `battery.assist` and `battery.assist_outside_request` (both DISCLOSE). The computation is skipped only on a state
+  read: an in-force publication, or a good 5 s registry poll inside the span, that read IsCharging Yes or
+  ExternalConnected No (rule 2 of `battery.member_span`). A charging-current read above +200 mA (rule 1) removes the
+  member but does not skip the computation: the span's negative reads still give the assist flag, and their
+  discharged energy is still written to the withheld record below. (Revision 10 said no assist was computed in
+  either case.) The member's span is split into **phases**: with a request span inside it,
   `pre_request` (from the span's start to the request: the idle baseline and the warm-up), `request`, and
   `post_request` (from the request's end: the idle drift sentinel); without one, the whole span is one phase,
   `span`. For each phase the flag records: the SMC reads that belong to it (`smc_reads_in_force`), how many are
@@ -2450,10 +2645,15 @@ Rules:
   time below −200 mA (`smc_duration_below_s`), and, without SMC coverage only, the in-force publications taken before
   the phase ends whose InstantAmperage or Amperage is negative (`registry_publications_negative`); also the
   discharge-accumulator intervals beyond the limit that overlap the phase (`accumulator_intervals_over_limit`). A
-  phase is **assisted** when any of these counts is nonzero. The member carries `battery.assist`, the marker the
-  sensitivity line uses (analysis plan §8.1), when the deciding phase (`request`, or `span`) has a negative SMC read,
+  phase is **assisted** when at least one of three of these counts is nonzero: `smc_reads_negative`,
+  `registry_publications_negative` or `accumulator_intervals_over_limit`. (`smc_reads_in_force` is nonzero for every
+  phase the SMC reads cover, and decides nothing.) The member carries `battery.assist` when the deciding phase
+  (`request`, or `span`) has a negative SMC read,
   or, without SMC coverage only, any of the other evidence; it carries `battery.assist_outside_request` when only
-  other phases were assisted, which decides nothing (ruling item 5). With SMC coverage the 1 s reads locate the
+  other phases were assisted, which decides nothing (ruling item 5). `battery.assist` is the marker of the
+  **battery-assist sensitivity line** (analysis plan §8.1): every reported cell is printed as a pair of values, one
+  over all kept units and one over the kept units less every unit that holds a member carrying this flag. With SMC
+  coverage the 1 s reads locate the
   discharge, so an accumulator interval (about 60 s long) that overlaps the request without a negative read in it
   is reported in that phase and does not decide. The discharged energy of each phase, the sum over its negative
   reads of held time (clipped to the phase) × (−B0AC × B0AV), goes to restricted custody
@@ -2464,8 +2664,9 @@ Rules:
 - `battery.accumulator_activity` (DISCLOSE): an accumulator sign with at least one tick on an in-force interval and
   a mean at or below the limit. Every archived calibration capture shows 7–32 discharge ticks at −122 to −151 mW
   while InstantAmperage read 0.
-- `battery.accumulator_unavailable` (DISCLOSE): the accumulator rule could not run on an interval (a field not read
-  at both publications, a counter that went backward, or no voltage); also, with SMC coverage, a gap of more than
+- `battery.accumulator_unavailable` (DISCLOSE): the accumulator rule could not run on an interval, for one of four
+  reasons: a field not read at both publications; a tick counter that went backward; an accumulated value that
+  changed while its tick counter did not; or no voltage at either publication. Also, with SMC coverage, a gap of more than
   120 s between registry publications, over which only the accumulator test goes unevaluated, and a sign-inconsistent
   discharge accumulator (above).
 
@@ -2485,9 +2686,12 @@ IsCharging No throughout. Each read holds 1 s inside the request; the read at 5 
 below −200 mA. The discharged powers are 10.54, 14.62, 4.87 and 1.83 W, so the discharged energy is
 (0.865 + 1.200 + 0.400 + 0.150) A × 12.18 V × 1 s = 31.85 J (to `withheld/`). The member is kept and carries
 `battery.assist`; the −150 mA read alone would have made it so. Had the only negative read fallen in the warm-up, the
-member would carry `battery.assist_outside_request` and stay in both lines of the sensitivity pair. Had one read in
-force been +450 mA, or one registry poll in the span read IsCharging Yes, the member would be removed by
-`battery.member_span`, and no assist would be computed. If between two in-force publications the charge accumulator
+member would carry `battery.assist_outside_request` and stay in both values of the sensitivity pair. Had the read
+at 3 s been +450 mA instead of −150 mA, the member would be removed by `battery.member_span` (rule 1), and the
+assist would still be computed, because a current read does not skip it: the flag is still `battery.assist`, and
+the discharged energy of the three remaining negative reads, (0.865 + 1.200 + 0.400) A × 12.18 V × 1 s = 30.02 J,
+is still written to `withheld/`. Had one registry poll in the span read IsCharging Yes, the member would be removed
+by `battery.member_span` (rule 2) and no assist would be computed. If between two in-force publications the charge accumulator
 gained 40 ticks totalling +216,000 mW·ticks, its mean is +5,400 mW, above 200 mA × 12.18 V = 2,436 mW, and the member
 is removed by `battery.accumulator_excursion`. The same numbers with a negative sign on the discharge accumulator
 remove nothing: with SMC coverage the interval is reported in each phase it overlaps, and only a negative 1 s read in
@@ -2498,9 +2702,19 @@ battery). `thermal.powermetrics_pressure_elevated`: the member's own records sho
 (`environment_admission.thermal_pressure_elevated_in_window`, unchanged). A gap in the OS-level samples
 (`thermal.unmeasured`) is disclosed only, because the member's own records still carry thermal pressure.
 
-**Contention.** `contention.request_overlap`: an outside process (not `kernel_task`) exceeds 0.05 CPU-s/s in a
-10 s interval that overlaps the member's request (request start to request end). `contention.unmeasured`: part of the
-request is covered by no interval. This replaces revision 2's environmental-diagnostic trigger with a member rule.
+**Contention.** Both contention codes are judged over one span: the member's request span (request start to request
+end) when it has one, and otherwise the member's whole span (the hull defined at the top of this section).
+`contention.request_overlap`: an outside process (not `kernel_task`) exceeds 0.05 CPU-s/s in a 10 s interval that
+overlaps that span. `contention.unmeasured`: part of that span is covered by no interval. A member has no request
+span when its `sampling_started` or `sampling_stopped` stamp is missing, and also when both exist but the start is
+later than the stop (`harvest.member_spans`; the join passes `request or member_span`). Both codes remove the
+member, so for such a member a process above the limit, or a gap in the 10 s intervals, anywhere between the start
+of its idle baseline and the end of its idle drift sentinel removes it, where the request-only rule would have
+looked at the request alone. *Worked example (synthetic):* a member's stream ran from 100 s to 205 s and its
+request from 180 s to 200 s, but its `sampling_stopped` stamp was not recorded. A process at 0.09 CPU-s/s in the
+interval 120–130 s, during the idle baseline, would not touch a member judged on 180–200 s; this member is judged
+on its whole span and gets `contention.request_overlap`. (Revision 10 gave only the request-span rule.) This
+replaces revision 2's environmental-diagnostic trigger with a member rule.
 
 **Clock.** `clock.step_overlap`: a `clock.step` falls inside the span. A gap in the 1 Hz journal (`clock.unmeasured`)
 is disclosed only, because the member's own anchor bound stays authoritative and is computed from its own records.
@@ -2512,11 +2726,14 @@ member's own records are too few or too slow for its target phase.
 
 The window is not claim-usable when any of these fired:
 
-- `pack.identity_mismatch`: the pack's plan tree, any configuration, the prompt pin, the extraction spec, or a NEG-8
+- `pack.identity_mismatch`: the pack's plan tree, any configuration, the prompt pin, the extraction spec (a floor
+  pack's `extraction_spec.json`, the file that names the pack's cells, each with its metric and the members or
+  quads that feed it; GAMMA has no such file), or a NEG-8
   or reference manifest differs from its digest in the sealed inventory or the plan tree's own pins, recomputed at
   harvest from preserved bytes; also `lineage.plan_tree_digest_differs`.
 - `code.executed_differs_from_sealed`: the executed-file inventory differs from the sealed inventory; or the chain
-  bytes differ from their sidecar; or the measurement checkout's HEAD is neither H_claim nor H_claim plus pin-only
+  script's bytes differ from the SHA-256 recorded in its **sidecar** (the small file written beside the chain
+  script that holds its digest); or the measurement checkout's HEAD is neither H_claim nor H_claim plus pin-only
   commits; or it has tracked edits, or untracked files under the executed roots (Python could import them).
 - `model.identity_mismatch` (the model, tokenizer or runtime realized at the arm or recorded in any bundle differs
   from the pins of `identity_pins.json`, §4.6 item 3), `model.identity_inconsistent_in_window` (two identities within
@@ -2531,11 +2748,15 @@ The window is not claim-usable when any of these fired:
   other than on discharge alone with the journal confirming it, below), `calibration.bracket_acceptance_failed`
   (evaluated with the acceptance's ledger-cutoff baseline), `calibration.acceptance_mismatch` (the acceptance bytes
   differ from the plan tree's pin), `calibration.session_not_bound` (the bracket session names another plan, window or
-  runs root), `calibration.binding_failed`, and `calibration.no_bracket` (including a chain stopped before its post
-  calibration by `disk.low`, the census or the deadline).
+  runs root), `calibration.binding_failed`, and `calibration.no_bracket`. The last fires when the window's bracket
+  session is absent or was never finished with both captures recorded. That covers every chain that did not reach
+  the end of its post calibration: the chain's own three stops, at exit 10 (the reservation failed), exit 11 (the
+  pre capture failed) and exit 12 (the pre fiducial bound was above the pre screen), §5.1; and a chain the driver
+  stopped before its post calibration, on `disk.low`, on the census, on a monitor outage or at the deadline.
 - `calibration.ledger_snapshot_refused`: the calibration ledger, read up to this window's terminal entry, fails its
   own integrity checks. That means a missing or malformed ledger, a broken digest chain, or the acceptance's cutoff
-  entry (sequence 376 with its recorded head digest) not found in the chain. The bracket's captures and the
+  entry (the ledger's entry number 376, with its recorded head digest; an entry's number is its **sequence**, its
+  position in the append-only ledger) not found in the chain. The bracket's captures and the
   acceptance's screens are authenticated through this ledger. The bracket evaluation reads the same snapshot and
   refuses with the same reasons, so `calibration.bracket_acceptance_failed` fires as well. Classing this code as
   window-removing therefore costs no extra window, and it keeps the window removed even if that propagation changed.
@@ -2587,10 +2808,24 @@ The window is not claim-usable when any of these fired:
   not emit it. An absent verdict file is `whole_window.verdict_absent` instead, and an unparseable one is
   `neg8.screen_failed` (the screen it holds cannot be read) with `whole_window.verdict_unauthenticated`; both remove the
   window already.
-- `instrument.precal_screen_failed`.
-- `clock.systematic`: at least 5 members of the window have a recorded anchor status and more than half of them are
-  not `bounded`.
+- A failed pre-calibration screen removes the window through `calibration.no_bracket`, above. The catalog's code
+  for it, `instrument.precal_screen_failed`, is reserved and never written (§6.2).
+- `clock.systematic`: the harvest takes the recorded anchor status (§0.14) of every member of the window and of each
+  finished calibration capture of its bracket (the pre and the post capture, so at most two). The flag fires when at
+  least 5 of those members and captures together have a recorded status and more than half of the recorded ones
+  are not `bounded` (`harvest.clock_systematic`, threshold `clock_systematic_min_recorded` = 5, §6.9). A capture
+  whose evidence file cannot be read, or carries no anchor status, is not recorded and is left out of both counts; a
+  capture whose status is a string the harvest does not recognise counts as recorded and not bounded. *Worked
+  example (synthetic):* a window that ended early has 3 members with a recorded status, all `bounded`, and both
+  captures recorded, neither `bounded`: 5 are recorded, 2 are not bounded, 2 is not more than half of 5, no flag.
+  With one of the three members also not `bounded`, 3 of 5 are not bounded and the window is removed. (Revision 10
+  counted members only; a calibration capture is not a member, §0.3.)
 - `cell.below_minimum` (§6.6) and `roster.no_science_bundles`.
+- `roster.duplicate_run_id`: the pack's plan tree launches, or lists, one run id more than once (window level;
+  `harvest.roster_dispatch`). *Why it removes the window:* a runs root holds one bundle directory for each run id,
+  and the campaign runner skips a run id whose complete bundle already exists. Every launch of that run id after the
+  first is therefore never measured, and the roster, which is keyed by run id, cannot show which planned positions
+  are missing. (Earlier revisions named this code only in §2; it is one of the catalog's 32 window-removing codes.)
 - `records.source_changed_during_harvest`: bytes the harvest reads changed while it read them. Operating-system
   metadata files that no reducer, validator or harvest step reads (`.DS_Store`, `.localized` and AppleDouble `._*`
   files, which Finder writes when a person browses a runs root) are ignored by all three of its comparisons (Opus
@@ -2604,12 +2839,23 @@ environment guard. Making them window-removing would restore "one aborted member
 2026-10-05 ruling removed. The verdict's checks are not lost: each part acts at its own level through its own code.
 
 - *The NEG-8 screen* (window level): `neg8.screen_failed`. The harvest emits it from the verdict's NEG-8 bracket:
-  a decision other than passed, or any NEG-8 condition (`neg8_gross_point_drift_exceeded`,
-  `neg8_idle_sub_point_drift_exceeded`, `neg8_bracket_missing`, `neg8_bracket_reference_invalid`,
-  `neg8_drift_bound_stale`, the bound-underived conditions). The exceptions are the harvest's re-screens of §5.3
+  a decision other than passed, or any NEG-8 condition (`neg8_bracket_abs_delta_exceeded`, the screen failed on the
+  gross energies; `neg8_bracket_idle_sub_abs_delta_exceeded`, it failed on the idle-subtracted energies;
+  `neg8_bracket_missing`; `neg8_bracket_reference_invalid`; `neg8_drift_bound_stale`; the bound-underived
+  conditions). The exceptions are the harvest's re-screens of §5.3
   (the collected-subset bound, a reference lost at harvest, a corpus member dropped for physics), whose result
-  decides alone. `neg8_bracket_reference_invalid` now means fewer than two survivors at an endpoint or more references
-  than planned (§0.12).
+  decides alone. (Revision 10 printed the first two conditions as `neg8_gross_point_drift_exceeded` and
+  `neg8_idle_sub_point_drift_exceeded`. Those are the names of the code's constants in lower case; the strings a
+  verdict carries are the two above.) `neg8_bracket_reference_invalid` has four causes, each of which removes the
+  window through `neg8.screen_failed`. Two are found by the evaluator (`whole_window.evaluate_neg8_point_drift`):
+  (a) the surviving references fit no accepted shape, which means fewer than two at an endpoint, more than three at
+  an endpoint, or more than one at the midpoint (the one accepted shape with fewer than two is the legacy single
+  pair, one start and one end reference with no midpoint, and only when no reference was recorded as lost; §0.12);
+  (b) a reference the shape requires (start, end, or a midpoint that is present) has a gross energy that is not a
+  finite positive point lying between its lower and upper values, or an idle-subtracted energy that is not finite.
+  Two are found by the verdict writer (`scripts/run_campaign.py`): (c) a reference whose declared NEG-8 role and
+  position disagree or name no valid position; (d) surviving references whose scientific-configuration digests
+  (test vi of §5.3) are missing or not all the same. (Revision 10 gave cause (a) only.)
 - *The calibration bracket* (window level): `calibration.bracket_acceptance_failed`, which the harvest evaluates
   itself.
 - *Each member's own failures* (member level): `member.whole_window_member_failure` (§6.3), which removes only the
@@ -2638,14 +2884,43 @@ This amends D-179 ruling 1 and D-078's no-reduced-mean text, as Ed's 2026-10-05 
   lost with probability 0.027 and a quad with 0.104), against (36/37)¹¹⁹ ≈ 0.04 under revision 2's rule that any
   aborted member aborts the window. Bursts that hit consecutive members make losses cluster within a quad, which this
   figure ignores.
-- **Disclosed beside every cell:** the kept units n_r and n_b, the exclusions by family and their positions in the
+- **Disclosed beside every cell:** the kept units of each stratum, n_r kept repeats and n_b kept quads (`n_repeats`
+  and `n_quads` in the exclusion function's record of the cell), the exclusions by family and their positions in the
   window, and the attempts of the pack with their causes (analysis plan §8).
 
 ### 6.7 Roster
 
-A bundle that is not in the plan's roster (`roster.not_in_plan`), not bound to this attempt (`roster.foreign_attempt`),
-or created before `chain.started` (`roster.before_chain_started`) is ignored, not used; a roster member left without
-an admissible bundle is `member.bytes_missing`.
+*Which bundles count.* The exclusion function (§0.16) is given every bundle directory found in the two runs roots
+(a directory that holds a `metadata.json`) and tests each against four conditions, in this order; the first that
+holds makes the bundle **ignored** (not used for any member), under the label named:
+
+1. its run id is not in the plan's roster: `roster.not_in_plan`;
+2. it is bound to another attempt than this one: `roster.foreign_attempt`;
+3. `chain.started` carries a monotonic time stamp and the bundle has no stamp that places it against that moment:
+   `roster.creation_unplaced`. The stamp that places a bundle is the start of its member span (§6.4); failing that,
+   the earliest monotonic stamp its controller recorded; failing that, the wall time of its run-start event,
+   mapped through the wall and monotonic stamps `chain.started` took at one instant;
+4. that stamp is earlier than `chain.started`'s: `roster.before_chain_started`.
+
+A bundle that meets none of the four is admissible. A roster member left without an admissible bundle is removed
+as `member.bytes_missing`, and one with two admissible bundles as `member.bytes_ambiguous` (§6.3). The ignored
+bundles, with their labels, are listed in `derived/exclusions.json` (`bundles_ignored`).
+
+*What the four codes do, against their catalog effect.* The catalog gives all four the effect EXCLUDE_MEMBER. By
+the label path above, none of them removes a member under its own name: the member is removed as
+`member.bytes_missing`. Only two of them are also written as flags (`harvest.roster_checks`):
+
+- `roster.before_chain_started` is emitted on a roster member whose run started before `chain.started` (by wall
+  time), and that member is removed under this code. It is the only one of the four that ever removes a member
+  under its own name;
+- `roster.not_in_plan` is emitted naming a bundle directory whose run id is outside the roster. The flag names no
+  roster member, so the exclusion function counts it as unmatched and it removes nothing;
+- `roster.foreign_attempt` and `roster.creation_unplaced` are never written as flags; they exist only as labels.
+  `roster.foreign_attempt` cannot arise in a harvest: the harvest binds every bundle in a runs root the plan created
+  for this attempt to this attempt, gives a bundle in any other root no attempt at all, and an unknown attempt
+  matches.
+
+(Revision 10 listed three conditions, without `roster.creation_unplaced`, and did not say which codes act.)
 
 A bundle whose recorded `run_id` (in `metadata.json`) differs from its directory (`roster.run_id_mismatch`) is
 removed. The harvest places a bundle in a cell, a unit and a quad position by its directory name. Each planned member
@@ -2658,10 +2933,13 @@ REPRESENTATION as a restatement). It costs one unit and should never fire.
 
 ### 6.8 Disclosed only
 
-All REPRESENTATION flags: receipts, lineage formalities other than the configuration bytes (`lineage.*` except the
-plan-tree digest), attempt history, the pin ledger, provenance digests, naming, notices, missing or malformed
-monitor journals, missing arm or terminal records, collector failures; the OFF action's output and the time-server
-offset; monitor probes falling inside phases; a missing #421 per-capture pair
+All REPRESENTATION flags: lineage formalities other than the configuration bytes (`lineage.*` except the
+plan-tree digest), the pin ledger, missing or malformed
+monitor journals, missing arm or terminal records, collector failures; the OFF action's output
+(`network_time.off_output`). (Earlier revisions also listed here receipts, attempt history, provenance digests,
+naming and notices, the time-server offset, and monitor probes falling inside phases. Their codes are DISCLOSE in
+the catalog, but no program writes them: with `battery.accumulator_diagnostic` they are eight of the nine reserved
+codes of §6.2 and cannot fire.) Also disclosed only: a missing #421 per-capture pair
 (`battery.capture_pair_missing_covered` when the continuous journal covers the span; `battery.capture_pair_missing`
 otherwise, beside the `battery.unmeasured` that then removes the member); `battery.accumulator_unavailable` (the
 accumulator rule could not run on an interval; the publication rule still applies); clock steps and frequency
@@ -2740,7 +3018,7 @@ those are named, and §6.11 says how the whole list is enforced.
 | sampler or runtime processes survived the member's teardown (A17) | `teardown.survivors` (DISCLOSE) | the next members' contention is measured directly (`contention.request_overlap`) |
 | idle admission's telemetry was missing or short (A18) | `member.idle_admission_telemetry_missing` (EXCLUDE_MEMBER) | a failed threshold (CPU busy, power, GPU) still retries and aborts as before |
 | the window calibration verdict did not match (J1, §5.1) | `calibration.refit_cache_miss` (DISCLOSE); the member refits | the harvest's own refit from the raw bytes |
-| the auxiliary-config comparison raised an exception | `records.auxiliary_match_raised` (DISCLOSE), with the exception text | the pack-identity check at harvest |
+| the auxiliary-config comparison raised an exception, and the exception was swallowed. An **auxiliary** member is one whose config is not among the pack's own science configs: a NEG-8 corpus member, a reference, or one of GAMMA's diagnostic references. Before such a member runs, the controller compares its config with the plan tree's pinned list of external members and with their stage's runs root (`controller._g2b_auxiliary_config_matches`) | the member **still refuses**, before its bundle is created: when the calibration evidence is of revision five or carries the #421 battery record, and no provenance was authenticated for it, the controller raises "revision_five evidence cannot be attached as instrument calibration (auxiliary member match raised <error>)". Only the record is new: `records.auxiliary_match_raised` (DISCLOSE) carries the exception text, and the refusal message names it | the refusal itself: the member leaves no bundle, so it is lost like any other member that did not run (`member.bytes_missing`; a corpus member by §5.3, a reference by §0.12). (Revision 10 listed this row as a refusal turned into a record, decided by "the pack-identity check at harvest"; the refusal was never removed.) |
 
 **The campaign runner, once per stage or member** (`scripts/run_campaign.py`): a member whose child left no readable
 metadata (A4), a stale `campaign.lock` reclaimed under a directory lock after proving its owner dead (A9, V3), the
@@ -2764,8 +3042,13 @@ claim status is `member.cooldown_evidence_unverified` (EXCLUDE_MEMBER) unless th
 member's idle baseline (§0.6). When none is eligible (the stage's first measured member after a refused one, or a
 reference that failed its own quiet checks), revision 4's runner either blocked the next member or ran it with an
 unknown cooldown, which the harvest then removes. *Mechanism:* the runner measures the cooldown anyway, against the
-first reference available in this order: the last eligible idle baseline of this session; else an eligible frozen
-anchor anywhere in the window, the NEG-8 start reference first; else a **self-referenced** test that needs no outside
+first reference available in this order: the last eligible idle baseline of this session; else an eligible **frozen
+anchor** anywhere in the window, the NEG-8 start reference's first (a frozen anchor is an idle baseline that an
+earlier stage of the window stored once in its campaign manifest as a cooldown reference, `cooldown_anchor`, marked
+`immutable_after_freeze` and never updated; it is eligible when it carries that mark, was stored under the same
+campaign policy, by SHA-256, as this stage runs under, comes from a member whose own reference checks passed with
+their provenance recorded, and its idle window was not suspect: `joulewise/cooldown_anchor.py`
+`cooldown_anchor_eligibility`); else a **self-referenced** test that needs no outside
 reference: two adjacent windows of max(the policy's window, 30 s), each with the policy's coverage, the newest
 window's mean power the reference, and the window before it within min(the policy's tolerance, 10%) of it, with
 thermal state nominal and the policy's 300 s cap. The self-referenced test never runs looser than the cooldown-v2
@@ -2782,7 +3065,11 @@ power would still be falling and the test would keep waiting, up to 300 s.
 
 - `desk_identity_differs` (A6-R1): the reservation now measures the OS build, the machine model and the T1 bindings
   (the digest of the sampler binary and the MLX version a capture is bound to) itself, instead of copying a
-  prediction typed at the desk, and records any difference. The writer's own comparison of two
+  prediction typed at the desk, and records any difference. The prediction is two files prepared at the desk and
+  handed to the reservation: the **desk identity epoch** (`--identity-epoch-json`: the OS build, the machine model,
+  a power-policy label, the sampling interval, the estimator revision and the pulse protocol's id) and the **desk
+  T1 bindings** (`--t1-bindings-json`: the same fields, with the digest of the sampler binary, the MLX version, the
+  anchor method's version and the digest of the pulse protocol file). The writer's own comparison of two
   measurements stays a refusal: within one boot minutes apart, a difference is a real identity change.
 - `historical_custody_unverified` (A6-R2/R3): the writer and the reservation skip the committed-pin check and the
   re-hash of every historical calibration file. *Forcing problem:* the reservation re-verified 190 historical files,
@@ -2801,12 +3088,18 @@ power would still be falling and the test would keep waiting, up to 300 s.
 - `desk_identity_unreadable` (audit A6, 2026-10-07): on the `HAZARD_PACK` path a desk identity file the reservation
   reads was missing or malformed. The reservation used to exit 2 (`calibration_reservation_json_invalid`) and the
   chain stopped at the reservation before any measurement; now it measures the identity itself with an empty desk
-  fallback (power policy: the desk epoch's, else the desk T1's, else the plan's `ac_high_power`) and records the
-  file, path and reason. A live read that fails with no desk fallback still refuses.
+  fallback and records the file, path and reason. The power-policy label, which cannot be measured, is the desk
+  identity epoch's when that file gives one, else the desk T1 bindings', else the plan's constant `ac_high_power`.
+  A live read that fails with no desk fallback still refuses.
 
 The executed estimator code differing from the acceptance's (A15) is not a record: it is
 `code.executed_differs_from_sealed` (EXCLUDE_WINDOW). The ledger's integrity refusals stay: a malformed ledger, a
-broken hash chain, a rollback, an identity conflict, a held lease, an unfinished recovery.
+broken hash chain, a rollback, an identity conflict, a held lease, an unfinished recovery. The **lease** is the
+ledger's writer lock: a kernel file lock (`flock`) on the ledger's lock file that one writer holds for its whole
+run, so that two writers never append at once; a writer that finds it held by another refuses
+(`calibration_ledger.CalibrationWriterLease`, refusal `LIVE_WRITER_CONTENTION`). An **unfinished recovery** is a
+ledger that ends in bytes that are not a complete entry, or that records an append begun and not completed
+(`calibration_ledger_recovery_required`); nothing may be appended until those bytes are repaired.
 
 **Historical custody is re-verified at the harvest, once** (`calibration_ledger.historical_custody_report`, lane
 P2-VPF; called by `harvest._Harvest.historical_custody`, at `a434e363d`; the report goes to
@@ -2824,8 +3117,10 @@ this pass removed the window for a changed file in any earlier capture, includin
 number of this window uses, so the removal protected no number of the window it removed. *Mechanism:* the
 harvest reads the window's acceptance (§0.11) and takes the attempt ids of the captures it was derived from (its
 `derivation_corpus` members, which set the pre screen and the bracket screen) and of the captures it judged before
-issuance (its `prior_observation_set`). On the real acceptance these are all 110 governed rows up to sequence 376
-(as the integrator's triage reports, `FROZEN_HEAD.md`). Then:
+issuance (its `prior_observation_set`). On the real acceptance these are all 110 captures the ledger records up to
+its entry number 376, the acceptance's cutoff (§0.11; an entry's number is its sequence, and the entries also
+record bracket sessions, so 376 entries hold 110 captures; the code calls a capture row whose files the ledger
+records by SHA-256 a governed row), as the integrator's triage reports (`FROZEN_HEAD.md`). Then:
 
 - **changed, and relied on:** `calibration.historical_custody_mismatch` (EXCLUDE_WINDOW, `observed.scope`
   `acceptance_relied`). The acceptance's screens are numbers computed from those captures; changed bytes mean the
@@ -2834,7 +3129,12 @@ issuance (its `prior_observation_set`). On the real acceptance these are all 110
 - **changed, not relied on:** `calibration.historical_custody_mismatch_unused` (DISCLOSE; `observed.attempt_ids`
   names the captures). Both codes can fire in one pass.
 - **no row changed, but some row is unreadable, absent or unreachable, the ledger could not be read, or no row was
-  verified:** `calibration.historical_custody_unmeasured` (DISCLOSE; `observed.evicted` counts the evicted files). A
+  verified:** `calibration.historical_custody_unmeasured` (DISCLOSE). Its `observed.evicted` counts captures, not
+  files: one for each ledger capture whose outcome is **absent**, however many of its files are missing. A capture
+  with a missing file and an unreadable one (outcome unreadable), or with its whole directory missing (outcome
+  absent_or_unreachable), is not in that count; `observed.unmeasured` counts every capture that could not be
+  checked, and each capture's per-file states are in its entry's `artifacts` map in
+  `derived/historical-custody.json`. (Revision 10 said `observed.evicted` "counts the evicted files".) A
   file that cannot be read is not evidence of a change, and the ledger's hash chain and pin are still checked. Its
   class is NUMBER, as the emitter gives it (revision 5 had restated it as REPRESENTATION); only its effect is
   DISCLOSE.
@@ -2896,7 +3196,13 @@ unknown registry start identity, BASELINE, §6.10); and three were added: the re
 also lists every flag code the catalogs mark EXCLUDE_WINDOW, and every pack-scoped window reason (§0.16), under
 `window_exclusions` (34 entries: 30 NUMBER_INTEGRITY, 4 PHYSICS, none BASELINE; `whole_window.verdict_absent` was
 relabelled from BASELINE to NUMBER_INTEGRITY), and every EXCLUDE_MEMBER code under `member_exclusions` (40: 20
-NUMBER_INTEGRITY, 16 PHYSICS, 4 BASELINE), each with the quantity or number it protects. The 34 are 33 codes and the
+NUMBER_INTEGRITY, 16 PHYSICS, 4 BASELINE). The 34 window entries and the 36 PHYSICS and NUMBER_INTEGRITY member
+entries each carry a `protects` text that names the quantity or number protected. The four BASELINE member entries
+do not: `member.admission_aborted`, `member.cooldown_evidence_unverified`, `member.strict_validation_failed` and
+`member.target_phase_precheck_failed` carry only a `note` (two say "not reviewed by the census"; two defer to a
+later lane, `LANE_BARRIER`), and the test admits them by name (below). All four are live member exclusions
+(§6.3), so they are a standing exception to the rule above: four exclusions whose reason has not been reviewed
+into one of the two classes. The 34 are 33 codes and the
 one pack-scoped reason, `neg8.midpoint_lost_primary` (NUMBER_INTEGRITY, pack GAMMA: "GAMMA's primary contrasts carry a
 drift allowance with no interior-excursion evidence when the arm-boundary midpoint reference is lost"). The 33 codes
 include `g3.recompute_failed`, which the test fixture still marks EXCLUDE_WINDOW (§6.5, §13).
@@ -2909,8 +3215,15 @@ the test pins), so BASELINE can only shrink; a module the hazard path imports is
 deliberately unscanned; or an excluding catalog code or a pack-scoped window reason is missing from the file,
 carries another category, or is BASELINE outside six named codes (`calibration.ledger_snapshot_refused`, `whole_window.verdict_absent`,
 `member.admission_aborted`, `member.cooldown_evidence_unverified`, `member.strict_validation_failed`,
-`member.target_phase_precheck_failed`). So a new refusal cannot enter the hazard path without being classed PHYSICS
-or NUMBER_INTEGRITY (or INTERNAL, which by definition stops nothing) and saying what it protects.
+`member.target_phase_precheck_failed`). So a new refusal site cannot enter the hazard path without one of four
+classes: PHYSICS or NUMBER_INTEGRITY, saying what it protects; INTERNAL, which by definition stops nothing; or
+**DEFERRED_REPRESENTATION**. That fourth class is for a refusal known to protect neither a physical quantity nor a
+number, which a named lane is already converting into a flag: the test admits it only when the entry names that
+lane in an `owner` field and still gives a `protects` text of at least 30 characters. The same holds for a new
+excluding code, which may be PHYSICS, NUMBER_INTEGRITY or DEFERRED_REPRESENTATION with an owner, and never
+BASELINE. The file holds no DEFERRED_REPRESENTATION entry at `9b0c680ed` (the table's last row), so today every
+non-BASELINE refusal and exclusion is PHYSICS, NUMBER_INTEGRITY or INTERNAL. (Revision 10 named three classes; the
+test admits the fourth.)
 
 *What the scan does not see* (its own docstring): a bare `return False` from an admission predicate, a `continue`
 that skips a member, and a new call to an existing raising function. Those are checked by hand in review
