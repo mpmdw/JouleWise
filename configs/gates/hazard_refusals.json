@@ -226,7 +226,7 @@
   "roster.duplicate_run_id": {"category": "NUMBER_INTEGRITY", "protects": "two bundles claim one run id: member numbers cannot be attributed"},
   "roster.no_science_bundles": {"category": "NUMBER_INTEGRITY", "protects": "no science bundle exists: there is no number"},
   "whole_window.member_failures_unreadable": {"category": "NUMBER_INTEGRITY", "protects": "a whole-window verdict that did not pass and whose member_failures is absent or malformed cannot name its failed members, so member.whole_window_member_failure cannot remove them; every member's number would be kept on a verdict that failed some of them", "added": "P4 2026-10-07"},
-  "whole_window.verdict_absent": {"category": "BASELINE", "note": "the whole-window verdict's own refusals decide it; review with the verdict's B1 lineage raises (census report)"}
+  "whole_window.verdict_absent": {"category": "NUMBER_INTEGRITY", "protects": "no whole-window verdict exists, so the NEG-8 drift allowance and screen and the verdict's member failures do not exist for the window. Includes the harvest's head_pin precondition (_desk_pin_problem, registration rev 6 4.6): the verdict writer binds the bracket through the committed ledger pin and refuses unless it is this session's terminal entry; run anyway, it would append a failed row to the append-only campaign log that no re-run can replace, so the harvest records whole_window.producer_failed (step head_pin, DISCLOSE) and the cure is the pin advance and a re-harvest", "added": "audit-fix batch 1 (item 5), 2026-10-07; was BASELINE"}
  },
  "member_exclusions": {
   "battery.accumulator_excursion": {"category": "PHYSICS", "protects": "battery charge accumulator moved during the member span (#421)"},
