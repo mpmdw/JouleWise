@@ -248,10 +248,10 @@ code does. No registered threshold, sizing value or plan tree changed.
 6. **Catalog** (`flag_catalog.json`): no code added or removed and no effect changed; five notes rewritten (§13).
 
 **What changed in revision 10.** Revision 9 described one rule, the census's rule for JavaScript runtimes, from the
-text of a commit that had not landed. That commit is now merged (lane `lane/2026-10-07-census-interp`: the rule is
-commit `2524637ae`, the lane's last commit is `455e59b86`, and commit `84661ddb3` merged it into int5). This revision
-reads the merged code at the int5 head `9b0c680ed79d5c7b72b4b39ed04b9fe51dd116d4` and makes the text say what it
-does. It then checks every item of the integration's list of required text changes
+text of a commit that had not yet been merged. That commit is now merged (lane `lane/2026-10-07-census-interp`: the
+rule is commit `2524637ae`, the lane's last commit is `455e59b86`, and commit `84661ddb3` merged it into int5). This
+revision reads the merged code at the int5 head `9b0c680ed79d5c7b72b4b39ed04b9fe51dd116d4` and makes the text say
+what it does. It then checks every item of the integration's list of required text changes
 (`/Users/edr/night-archive/gate-prune/REG_PENDING.md`, every section) against this file, the analysis plan and the
 catalog, and repairs the gaps it found. No registered threshold, sizing value, plan tree, pin or catalog effect
 changed. No FILL that waits for the final head or for the seal is filled: `H-CLAIM`, the final head under
@@ -262,7 +262,7 @@ changed. No FILL that waits for the final head or for the seal is filled: `H-CLA
    §13, §14 Q14 and Q15, §16). Some agents are JavaScript programs, so the process that runs one is a JavaScript
    runtime (a program that executes JavaScript: `node`, `bun` or `deno`), and the agent shows only in the strings
    the process was started with, its arguments. Such a process now counts as an agent when any argument holds a path
-   component or word beginning `claude` or `codex`. The matcher no longer tries to work out which argument is the
+   component or word beginning `claude` or `codex`. The census no longer tries to work out which argument is the
    script: that needed a table of the arguments that configure each runtime (its options), and two audits in a row
    found the table wrong. A runtime that names no agent, but whose arguments say that it runs code no argument names
    (code written on the command line, or a script fed to the process's input), is undecided and counts as an agent.
@@ -270,13 +270,15 @@ changed. No FILL that waits for the final head or for the seal is filled: `H-CLA
    rule from the two audit findings that forced it, shows it on nine command lines, and says in which direction it
    can err.
 2. **Gaps found against the list of required changes.** Each of these was in the list and was missing here or only
-   implied: the spare retry passes `--max-failures k` (§0.12); the census sites that share the matcher are named
-   (§4.5); the lane that audit finding A5 deferred is stated (§9.1); and the analysis plan discloses a hazard whose
-   probe at the arm returned no reading (analysis plan §8.1).
+   implied: a failed spare does not stop the spares after it, because the spare retry passes `--max-failures k`
+   (§0.12); the programs that run the census, all through one shared decision code, are named (§4.5); the lane that
+   audit finding A5 deferred is stated (§9.1); and the analysis plan discloses a hazard whose probe at the arm
+   returned no reading (analysis plan §8.1).
 3. **Sync at `9b0c680ed`** (§13, `B5-REV10-SYNC`). Since `fe28e5a0c` the integration changed the census matcher and
    its tests, one explanatory comment in the harvest and one test data file, and it added a copy of revision 9 of
-   these documents (commit `763b678a7`). The plan trees, the sizing output, the identity pins, the pin registry and
-   the refusal allowlist are byte-identical to `fe28e5a0c`. Revision 10 exists only on this branch until the seal
+   these documents (commit `763b678a7`). The plan trees, the sizing output, the identity pins, the pin registry
+   (`configs/pins/registry.json`, the list of every digest written into the tests and configs) and the refusal
+   allowlist (§6.11) are byte-identical to `fe28e5a0c`. Revision 10 exists only on this branch until the seal
    preparation copies it into the integration.
 4. **Catalog** (`flag_catalog.json`): no code, effect or note changed; its 192 codes agree with the code at
    `9b0c680ed` (§13).
@@ -1443,16 +1445,17 @@ arm launched from inside an agent session always refuses at the census (§2 item
 
 That list is a superset: it holds every process with either string anywhere in its command line, whether or not it
 is an agent. Each process on it is a **listed process**, and one matcher (`joulewise/agent_identity.py`) decides each
-listed process by what the kernel says it runs. A listed process that the matcher counts as an agent is a **hit**.
+listed process by what the kernel says it runs (the kernel is the operating system's core, which holds each
+process's real program file and arguments). A listed process that the matcher counts as an agent is a **hit**.
 For each listed process id the matcher reads two things from the kernel: the **executable**, the path of the program
 file the process is running (`proc_pidpath` on macOS), and the **arguments**, the strings the process was started
 with (`KERN_PROCARGS2`). The first argument is the **process name**, which a program may set to anything. Every
 census that a block-5 window depends on calls this one matcher: the driver's census before the arm, again before the
 launch and every 30 s in the window (`joulewise/night_gate.py` `agent_census`); the hazard arm's own census at its
 start and at GO (`joulewise/hazards/arm.py` `agent_census`); and the watchdog's check that no agent is left before it
-releases a finished window (§5.4). Two older census sites that block 5 never runs call it as well: the quiet-sampler
-admission (`joulewise/quiet_admission.py`) and the retired t0 evidence author
-(`joulewise/arm_readiness_evidence_t0.py`, §11 item 3). The matcher's rules:
+releases a finished window (§5.4). Two older census sites that block 5 never runs call it as well: the
+quiet-admission sampler of the earlier night kinds (`joulewise/quiet_admission.py` `sample_interval`) and the retired
+t0 evidence author (`joulewise/arm_readiness_evidence_t0.py`, §11 item 3). The matcher's rules:
 
 - **Executable identity.** A listed process is an agent when the file name of its executable, or its process name,
   begins `claude` or `codex` (letter case is ignored; examples are `codex`, `codex-code-mode-host` and the Claude
