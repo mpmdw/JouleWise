@@ -75,6 +75,12 @@ import time
 import weakref
 from typing import Iterable, Iterator
 
+# The real system calls, taken at import. Tests replace ``time.sleep``, ``time.monotonic`` or
+# ``os.kill`` with fakes (some for a whole class); the checks below must not run on a fake clock
+# or signal through a fake ``kill``.
+_monotonic, _sleep = time.monotonic, time.sleep
+_kill, _killpg, _getpgid, _waitpid, _getpid = os.kill, os.killpg, os.getpgid, os.waitpid, os.getpid
+
 PS_ARGV = ("/bin/ps", "-A", "-ww", "-o", "pid=,ppid=,pgid=,uid=,stat=,etime=,command=")
 PS_TIMEOUT_S = 20.0
 DEFAULT_GRACE_S = 2.0   # stop(): seconds between SIGTERM and SIGKILL
@@ -124,8 +130,8 @@ def table() -> list[Row]:
     """Every process on the machine, except the ``ps`` that produced the list."""
 
     try:
-        lister = subprocess.Popen(PS_ARGV, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                  env={**os.environ, "LC_ALL": "C"})
+        lister = _POPEN(PS_ARGV, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                        env={**os.environ, "LC_ALL": "C"})
     except OSError as error:
         raise ProcessTableUnavailable(f"cannot start ps: {error}") from error
     try:
@@ -188,7 +194,7 @@ def running_descendants(*, known: Iterable[int] = ()) -> list[Row]:
     """Running descendants of this process, without ``known`` pids and the standing helpers."""
 
     skip = set(known) | _standing_helpers()
-    return [row for row in descendants(table(), os.getpid()) if row.pid not in skip and not row.zombie]
+    return [row for row in descendants(table(), _getpid()) if row.pid not in skip and not row.zombie]
 
 
 # --------------------------------------------------------------------------
@@ -198,9 +204,9 @@ def running_descendants(*, known: Iterable[int] = ()) -> list[Row]:
 def _signal(pid: int, number: int, group: bool) -> None:
     try:
         if group:
-            os.killpg(pid, number)
+            _killpg(pid, number)
         else:
-            os.kill(pid, number)
+            _kill(pid, number)
     except (ProcessLookupError, PermissionError):
         pass
 
@@ -209,7 +215,7 @@ def _process_exists(pid: int) -> bool:
     """True until the process has exited and its exit status has been collected."""
 
     try:
-        os.kill(pid, 0)
+        _kill(pid, 0)
     except ProcessLookupError:
         return False
     except PermissionError:
@@ -227,7 +233,7 @@ def _group_has_member(pgid: int) -> bool:
     """
 
     try:
-        os.killpg(pgid, 0)
+        _killpg(pgid, 0)
     except (ProcessLookupError, PermissionError):
         return False
     return True
@@ -244,7 +250,7 @@ def _leads_group(pid: int) -> bool:
     """
 
     try:
-        if os.getpgid(pid) == pid:
+        if _getpgid(pid) == pid:
             return True
     except (ProcessLookupError, PermissionError):
         pass
@@ -260,11 +266,11 @@ def _wait(process, timeout_s: float) -> bool:
 
 
 def _wait_until(gone, timeout_s: float) -> bool:
-    deadline = time.monotonic() + timeout_s
+    deadline = _monotonic() + timeout_s
     while not gone():
-        if time.monotonic() >= deadline:
+        if _monotonic() >= deadline:
             return False
-        time.sleep(0.02)
+        _sleep(0.02)
     return True
 
 
@@ -293,7 +299,7 @@ class _Owned:
 
 _LOCK = threading.Lock()
 _OWNED: dict[int, _Owned] = {}
-_HOME_PID = os.getpid()
+_HOME_PID = _getpid()
 
 
 def stop(process, *, grace_s: float | None = None, tree: bool | None = None) -> None:
@@ -368,29 +374,29 @@ def owned(process, *, grace_s: float = DEFAULT_GRACE_S, tree: bool = False) -> I
 def stop_rows(rows: Iterable[Row], *, grace_s: float = DEFAULT_GRACE_S) -> None:
     """Terminate, wait, then kill the listed processes (a whole group where a row leads one)."""
 
-    own_group = os.getpgid(0)
+    own_group = _getpgid(0)
     targets = [(row.pid, row.pgid == row.pid and row.pgid != own_group) for row in rows]
 
     def gone(pid: int) -> bool:
         with contextlib.suppress(ChildProcessError, OSError):
-            os.waitpid(pid, os.WNOHANG)   # collects the exit status when the process is our own child
+            _waitpid(pid, os.WNOHANG)   # collects the exit status when the process is our own child
         return not _process_exists(pid)
 
     for pid, group in targets:
         _signal(pid, signal.SIGTERM, group)
-    deadline = time.monotonic() + grace_s
+    deadline = _monotonic() + grace_s
     for pid, group in targets:
-        if not _wait_until(lambda: gone(pid), max(0.0, deadline - time.monotonic())):
+        if not _wait_until(lambda: gone(pid), max(0.0, deadline - _monotonic())):
             _signal(pid, signal.SIGKILL, group)
-    deadline = time.monotonic() + KILL_WAIT_S
+    deadline = _monotonic() + KILL_WAIT_S
     for pid, _group in targets:
-        _wait_until(lambda: gone(pid), max(0.0, deadline - time.monotonic()))
+        _wait_until(lambda: gone(pid), max(0.0, deadline - _monotonic()))
 
 
 def _exit_sweep() -> None:
     """At interpreter exit: stop every owned child, then every running descendant."""
 
-    if os.getpid() != _HOME_PID:
+    if _getpid() != _HOME_PID:
         return   # a forked copy of the test process owns nothing
     with _LOCK:
         entries = list(_OWNED.values())
@@ -441,13 +447,18 @@ class Spawn:
 
 
 _RECORDERS: list[list[Spawn]] = []
-_POPEN_INIT = subprocess.Popen.__init__
+# The class itself, taken at import. Production code swaps the name ``subprocess.Popen`` for a
+# function while a sampler starts (joulewise/sampler_teardown.py), and tests replace it with
+# mocks; the recorder must never be installed on one of those.
+_POPEN = subprocess.Popen
+_POPEN_INIT = _POPEN.__init__
+_INSTALLED = False
 
 
 @functools.wraps(_POPEN_INIT)
 def _recording_init(self, *args, **kwargs):
     _POPEN_INIT(self, *args, **kwargs)
-    if _RECORDERS and os.getpid() == _HOME_PID:
+    if _RECORDERS and _getpid() == _HOME_PID:
         leads = bool(kwargs.get("start_new_session")) or kwargs.get("process_group") == 0 or _leads_group(self.pid)
         # The innermost open recorder takes it: a test's own, else the class's.
         _RECORDERS[-1].append(Spawn(self.pid, leads, repr(self.args), weakref.ref(self)))
@@ -456,8 +467,12 @@ def _recording_init(self, *args, **kwargs):
 def start_recording() -> list[Spawn]:
     """Open a recorder: the returned list gains one ``Spawn`` per child started from now on."""
 
-    if subprocess.Popen.__init__ is not _recording_init:
-        subprocess.Popen.__init__ = _recording_init
+    global _INSTALLED
+    if not _INSTALLED:
+        # Once, and never again: a test that wraps Popen.__init__ for its own purpose wraps this
+        # function and puts it back afterwards; installing a second time would undo its wrapper.
+        _POPEN.__init__ = _recording_init
+        _INSTALLED = True
     spawns: list[Spawn] = []
     _RECORDERS.append(spawns)
     return spawns
@@ -476,22 +491,22 @@ def left_spawns(spawns: Iterable[Spawn], settle_s: float = SETTLE_S) -> list[Spa
     """The recorded children still running, or whose group still has members, after ``settle_s``."""
 
     spawns = list(spawns)
-    deadline = time.monotonic() + settle_s
+    deadline = _monotonic() + settle_s
     while True:
         left = [spawn for spawn in spawns if spawn.running() or spawn.group_remains()]
-        if not left or time.monotonic() >= deadline:
+        if not left or _monotonic() >= deadline:
             return left
-        time.sleep(0.05)
+        _sleep(0.05)
 
 
 def left_descendants(known: Iterable[int], settle_s: float = SETTLE_S) -> list[Row]:
     """Running descendants of this process that are not in ``known``, after ``settle_s``."""
 
     known = set(known)
-    deadline = time.monotonic() + settle_s
+    deadline = _monotonic() + settle_s
     left = running_descendants(known=known)
-    while left and time.monotonic() < deadline:
-        time.sleep(0.1)
+    while left and _monotonic() < deadline:
+        _sleep(0.1)
         left = running_descendants(known=known)
     return left
 
