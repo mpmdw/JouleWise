@@ -21,6 +21,7 @@ import time
 import unittest
 import warnings
 from pathlib import Path
+from unittest import mock
 
 from tests import child_guard
 
@@ -131,6 +132,24 @@ class StopTests(unittest.TestCase):
         self.assertTrue(running(grandchild))
         child_guard.stop(parent)
         self.assertTrue(wait_not_running(grandchild), "the child's own child is still running")
+
+    def test_group_check_gives_the_same_answers_when_it_asks_the_process_list(self):
+        # On Linux, signal 0 succeeds for a group that holds only zombies, so the check also asks
+        # the process list. That path is forced here; the answers must not change.
+        switch = mock.patch.object(child_guard, "_SIGNAL_ZERO_REACHES_ZOMBIES", True)
+        switch.start()
+        self.addCleanup(switch.stop)
+        leader = leader_with_member()
+        self.addCleanup(leader.stdout.close)
+        child_guard.own(self, leader)
+        member = int(leader.stdout.readline())
+        self.assertTrue(child_guard._group_has_member(leader.pid))
+        os.kill(leader.pid, signal.SIGKILL)   # the leader only; its sleeper keeps the group alive
+        leader.wait(timeout=10)
+        self.assertTrue(child_guard._group_has_member(leader.pid))
+        child_guard.stop(leader)
+        self.assertTrue(wait_not_running(member))
+        self.assertFalse(child_guard._group_has_member(leader.pid))
 
     def test_stop_leaves_other_processes_alone(self):
         bystander = subprocess.Popen(["/bin/sleep", LONG_S])

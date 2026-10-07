@@ -94,7 +94,10 @@ from typing import Iterable, Iterator
 _monotonic, _sleep = time.monotonic, time.sleep
 _kill, _killpg, _getpgid, _waitpid, _getpid = os.kill, os.killpg, os.getpgid, os.waitpid, os.getpid
 
-PS_ARGV = ("/bin/ps", "-A", "-ww", "-o", "pid=,ppid=,pgid=,uid=,stat=,etime=,command=")
+# One -o per column: with "pid=,ppid=" in a single argument, procps may read ",ppid=" as the
+# heading of the first column (its manual: "use multiple -o options when in doubt").
+PS_ARGV = ("/bin/ps", "-A", "-ww", "-o", "pid=", "-o", "ppid=", "-o", "pgid=", "-o", "uid=",
+           "-o", "stat=", "-o", "etime=", "-o", "command=")
 PS_TIMEOUT_S = 20.0
 DEFAULT_GRACE_S = 2.0   # stop(): seconds between SIGTERM and SIGKILL
 KILL_WAIT_S = 5.0       # stop(): seconds to wait for the exit after SIGKILL
@@ -236,20 +239,30 @@ def _process_exists(pid: int) -> bool:
     return True
 
 
+# Where signal 0 also succeeds for a group that holds only zombies (Linux), the process list
+# is asked whether a member is actually running. macOS answers such a group with an error.
+_SIGNAL_ZERO_REACHES_ZOMBIES = sys.platform != "darwin"
+
+
 def _group_has_member(pgid: int) -> bool:
-    """True while the process group has a member that can be signalled.
+    """True while the process group has a running member.
 
     Signal 0 delivers nothing; the call only reports whether delivery would
     work. No such group: ProcessLookupError. A group holding only zombies:
-    PermissionError on macOS (measured 2026-10-07, macOS 26.6), and both mean
-    nothing in the group is running.
+    PermissionError on macOS (measured 2026-10-07, macOS 26.6), success on
+    Linux. So on Linux a success is checked against the process list.
     """
 
     try:
         _killpg(pgid, 0)
     except (ProcessLookupError, PermissionError):
         return False
-    return True
+    if not _SIGNAL_ZERO_REACHES_ZOMBIES:
+        return True
+    try:
+        return any(row.pgid == pgid and not row.zombie for row in table())
+    except ProcessTableUnavailable:
+        return True
 
 
 def _leads_group(pid: int) -> bool:
