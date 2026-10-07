@@ -1377,3 +1377,114 @@ class SpareRosterAndYieldTests(unittest.TestCase):
         self.assertEqual([item["bundle_id"] for item in bracket["reference_losses"]], ["b5t-neg8-start-2"])
         self.assertAlmostEqual(bracket["claim_families"][ww.NEG8_CLAIM_FAMILY_GROSS]["start"]["mean_j"],
                                (30.30 + 30.34 + 30.33) / 3, places=9)
+
+
+# ---------------------------------------------------------------------------
+# Part 5: block-5 delta audit (Sol 6.1, 2026-10-07) A2: every reference and
+# spare is bound to the reference workload's identity.
+# ---------------------------------------------------------------------------
+
+class ReferenceModelIdentityTests(unittest.TestCase):
+    """``_Harvest.model_identity`` on the real ALPHA roster with the sealed pins (the audit's probe).
+
+    Start r1 fails and its spare runs.  The science members carry their pinned
+    identities; the references and spares carry ``A`` unless a case says
+    otherwise.  Before the fix the spare's own ``.spares`` group had no pin and
+    no sibling, so a spare of another model emitted no flag at all.
+    """
+
+    A, F = ("a" * 64, "b" * 64), ("f" * 64, "b" * 64)
+    PACK = "d117_floor_qwen3-1p7b_v5"
+
+    def run_identity(self, identities: dict[str, tuple[str, str]], *, failed=("neg8-window-start-r1",),
+                     reference_pin=None):
+        import json
+        import tempfile
+        from pathlib import Path
+
+        from joulewise.b5 import harvest as h
+
+        tmp = tempfile.TemporaryDirectory(prefix="neg8-identity-", dir=_hb().REAL_TMP)
+        self.addCleanup(tmp.cleanup)
+        repo, pack = _repo(), _repo() / "configs/campaigns" / self.PACK
+        archive = Path(tmp.name) / "archive"
+        pins = json.loads((repo / "configs/campaigns/v5_claim_25g83/identity_pins.json").read_bytes())
+        if reference_pin is not None:
+            pins["units"][h.NEG8_REFERENCE_IDENTITY_UNIT] = {"model_artifact_sha256": reference_pin[0],
+                                                             "runtime_identity_sha256": reference_pin[1]}
+        _hb().put(archive / "sources/inputs/identity_pins.json", pins)
+        run = object.__new__(h._Harvest)
+        run.pack_copy, run.repo_root_copy, run.archive = pack, repo, archive
+        run.roster, run.identity_checks = h.build_roster(pack, repo), {}
+        tree = _tree(self.PACK)
+        units = tree["arm_attachments"]["identity_pin_projection"]["identity_units"]
+        unit_of = {row["path"]: unit["identity_unit_id"] for unit in units for row in unit["config_inventory"]}
+        prefix = pack.relative_to(repo).as_posix() + "/"
+        run.members = {}
+        for member in run.roster["members"]:
+            if member["kind"] == "science":
+                pin = pins["units"][unit_of[member["config_path"].removeprefix(prefix)]]
+                identity = (pin["model_artifact_sha256"], pin["runtime_identity_sha256"])
+            elif member["run_id"] in identities:
+                identity = identities[member["run_id"]]
+            else:
+                continue
+            run.members[member["run_id"]] = {
+                "status": "failed" if member["run_id"] in failed else "succeeded",
+                "identity": {"model_artifact_sha256": identity[0], "runtime_identity_sha256": identity[1]}}
+        flags = []
+        run.emit = lambda code, **kwargs: flags.append((code, kwargs))
+        run.model_identity()
+        return flags
+
+    def references(self, **overrides) -> dict[str, tuple[str, str]]:
+        identities = {f"neg8-window-{slot}-r{index}": self.A for slot in ("start", "end") for index in (1, 2, 3)}
+        identities.update({"neg8-window-midpoint": self.A, "neg8-window-start-spare-1": self.A})
+        identities.update(overrides)
+        return identities
+
+    @staticmethod
+    def member_flags(flags) -> dict[str, str]:
+        return {kwargs["run_id"]: code for code, kwargs in flags if kwargs.get("level") == "member"}
+
+    def test_a_spare_of_another_model_is_a_member_specific_loss(self) -> None:
+        from joulewise.b5.harvest import NEG8_REFERENCE_LOSS_CODES
+
+        flags = self.run_identity(self.references(**{"neg8-window-start-spare-1": self.F}))
+        self.assertEqual(self.member_flags(flags), {"neg8-window-start-spare-1": "model.identity_mismatch"})
+        self.assertIn("model.identity_mismatch", NEG8_REFERENCE_LOSS_CODES)
+        (observed, expected) = [(kwargs["observed"], kwargs["expected"]) for code, kwargs in flags
+                                if code == "model.identity_mismatch"][0]
+        self.assertEqual((observed["identity_unit"], observed["pin_source"]), ("neg8_reference", "reference_majority"))
+        self.assertEqual(expected, {"model_artifact_sha256": "a" * 64, "runtime_identity_sha256": "b" * 64})
+        self.assertIn("model.identity_inconsistent_in_window", [code for code, _kwargs in flags])
+
+    def test_the_audit_trigger_with_only_the_start_stage_measured(self) -> None:
+        """The probe's exact members: r1 failed, r2 and r3 on A, the spare on F."""
+        identities = {"neg8-window-start-r1": self.A, "neg8-window-start-r2": self.A,
+                      "neg8-window-start-r3": self.A, "neg8-window-start-spare-1": self.F}
+        flags = self.run_identity(identities)
+        self.assertEqual(self.member_flags(flags), {"neg8-window-start-spare-1": "model.identity_mismatch"})
+
+    def test_a_reference_of_another_model_at_any_slot_is_named(self) -> None:
+        flags = self.run_identity(self.references(**{"neg8-window-midpoint": self.F,
+                                                     "neg8-window-end-r2": ("a" * 64, "c" * 64)}))
+        self.assertEqual(self.member_flags(flags), {"neg8-window-midpoint": "model.identity_mismatch",
+                                                    "neg8-window-end-r2": "model.identity_mismatch"})
+
+    def test_no_majority_leaves_every_reference_underivable(self) -> None:
+        identities = {"neg8-window-start-r2": self.A, "neg8-window-start-spare-1": self.F}
+        flags = self.run_identity(identities)
+        self.assertEqual(self.member_flags(flags), {"neg8-window-start-r2": "model.identity_underivable",
+                                                    "neg8-window-start-spare-1": "model.identity_underivable"})
+
+    def test_a_sealed_reference_pin_decides_over_the_majority(self) -> None:
+        flags = self.run_identity(self.references(**{"neg8-window-start-spare-1": self.F}), reference_pin=self.F)
+        named = self.member_flags(flags)
+        self.assertNotIn("neg8-window-start-spare-1", named)
+        self.assertEqual(set(named.values()), {"model.identity_mismatch"})
+        self.assertEqual(len(named), 6)  # r2, r3, the midpoint and the end triplet; r1 failed
+
+    def test_one_identity_everywhere_emits_nothing(self) -> None:
+        self.assertEqual(self.run_identity(self.references()), [])
+

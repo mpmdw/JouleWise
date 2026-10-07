@@ -102,6 +102,11 @@ NEG8_REFERENCE_LOSS_CODES = (*NEG8_PHYSICS_LOSS_CODES, "member.timeout", "member
 # comes first: a member SIGKILLed at the hung-process cap has no summary, and
 # its timeout is the physical cause (cold pass 2 D1).
 NEG8_STATUS_LOSS_CODES = ("member.timeout", "member.admission_aborted", "member.status_not_succeeded")
+# The identity unit of the NEG-8 reference workload: every start, midpoint and
+# end reference and every spare (audit A2).  A sealed pin under this key in the
+# identity pins is the expected identity; without one, the references' strict
+# majority is.
+NEG8_REFERENCE_IDENTITY_UNIT = "neg8_reference"
 NEG8_BOUND_NAME = "neg8-drift-bound.json"      # in the bound runs root (the pack's bound-derivation output)
 HAZARD_RESULT_NAME = "hazard_result.json"      # L2's driver terminal record, night/
 ARM_DECISION_NAME = "arm_decision.json"        # joulewise.b5.driver ARM_DECISION, night/
@@ -5643,6 +5648,11 @@ class _Harvest:
         # stack) compared with a pin is the model check itself, so it may
         # supersede an arm model_identity collector that did not finish.
         science_compared, science_complete = 0, bool(frozen)
+        # Audit A2: every NEG-8 reference and every spare runs the one reference
+        # workload, so they are one identity unit, compared member by member
+        # with the workload's expected identity below.
+        references: dict[str, tuple[str, str]] = {}
+        reference_triples: dict[str, Mapping[str, Any]] = {}
         for member in self.roster["members"]:
             result = self.members.get(member["run_id"])
             if result is None or result.get("status") != "succeeded":
@@ -5650,9 +5660,11 @@ class _Harvest:
             relative = str(member.get("config_path") or "")
             if relative.startswith(pack_relative + "/"):
                 relative = relative[len(pack_relative) + 1:]
-            # Auxiliary members (NEG-8 corpus, references) may run another model;
+            reference = isinstance(member.get("neg8_slot"), str) or isinstance(member.get("spare_slot"), str)
+            # Other auxiliary members (the NEG-8 corpus) may run another model;
             # each auxiliary input is its own consistency group.
-            unit_id = unit_of.get(relative) or f"{member.get('kind')}:{member.get('stage_id')}"
+            unit_id = NEG8_REFERENCE_IDENTITY_UNIT if reference \
+                else unit_of.get(relative) or f"{member.get('kind')}:{member.get('stage_id')}"
             triple = result.get("identity")
             science = member.get("kind") == "science"
             if not isinstance(triple, Mapping):
@@ -5661,6 +5673,10 @@ class _Harvest:
                           collector="model_identity", observed={"error": "identity" in result.get("errors", {})})
                 continue
             seen.setdefault(str(unit_id), set()).add((triple["model_artifact_sha256"], triple["runtime_identity_sha256"]))
+            if reference:
+                references[member["run_id"]] = (triple["model_artifact_sha256"], triple["runtime_identity_sha256"])
+                reference_triples[member["run_id"]] = triple
+                continue
             pins = frozen.get(unit_id)
             if science:
                 science_complete = science_complete and pins is not None
@@ -5670,12 +5686,53 @@ class _Harvest:
                 self.emit("model.identity_mismatch", level="member", run_id=member["run_id"],
                           collector="model_identity", observed=dict(triple),
                           expected={key: pins.get(key) for key in ("model_artifact_sha256", "runtime_identity_sha256")})
+        self._reference_model_identity(references, reference_triples, override)
         for unit_id, identities in sorted(seen.items()):
             if len(identities) > 1:
                 self.emit("model.identity_inconsistent_in_window", level="window", collector="model_identity",
                           observed={"identity_unit": unit_id, "distinct": sorted(map(list, identities))[:8]})
         self.identity_checks["model_identity"] = {"pins": bool(frozen),
                                                   "members_compared": science_complete and science_compared > 0}
+
+    def _reference_model_identity(self, references: Mapping[str, tuple[str, str]],
+                                  triples: Mapping[str, Mapping[str, Any]], pins: Any) -> None:
+        """Each NEG-8 reference and spare against the reference workload's expected identity (audit A2, ruling N8).
+
+        The references at start, midpoint and end and their spares are copies
+        of one reference workload, so all of them must have run one model and
+        one runtime stack.  The expected identity is the sealed pin when the
+        identity pins carry one for the unit ``NEG8_REFERENCE_IDENTITY_UNIT``;
+        otherwise (the block-5 pins carry none) it is the identity a strict
+        majority of the window's references and spares share.  A member whose
+        identity differs is ``model.identity_mismatch``; with no strict
+        majority no member's identity can be told right, and each is
+        ``model.identity_underivable``.  Both are member-level, so the NEG-8
+        screen drops that reference (``NEG8_REFERENCE_LOSS_CODES``) and the
+        survivors rule decides.  No energy is read.
+        """
+        if not references:
+            return
+        pinned = pins.get(NEG8_REFERENCE_IDENTITY_UNIT) if isinstance(pins, Mapping) else None
+        expected: tuple[str, str] | None = None
+        if isinstance(pinned, Mapping) and _is_sha256(pinned.get("model_artifact_sha256")) \
+                and _is_sha256(pinned.get("runtime_identity_sha256")):
+            expected, source = (pinned["model_artifact_sha256"], pinned["runtime_identity_sha256"]), "sealed_pin"
+        else:
+            source = "reference_majority"
+            (top, count), *_rest = Counter(references.values()).most_common()
+            if 2 * count > len(references):
+                expected = top
+        for run_id, identity in sorted(references.items()):
+            if expected is None:
+                self.emit("model.identity_underivable", level="member", run_id=run_id, collector="model_identity",
+                          observed={"error": False, "identity_unit": NEG8_REFERENCE_IDENTITY_UNIT,
+                                    "reason": "reference_identity_without_majority",
+                                    "distinct": len(set(references.values())), "members": len(references)})
+            elif identity != expected:
+                self.emit("model.identity_mismatch", level="member", run_id=run_id, collector="model_identity",
+                          observed={**dict(triples[run_id]), "identity_unit": NEG8_REFERENCE_IDENTITY_UNIT,
+                                    "pin_source": source},
+                          expected={"model_artifact_sha256": expected[0], "runtime_identity_sha256": expected[1]})
 
     # -- launch lineage (lane L3's records audit) ------------------------------
     def lineage_audit(self) -> None:
