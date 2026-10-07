@@ -5447,10 +5447,13 @@ class _Harvest:
         observations, which the calibration writer's screen basis and
         acceptance preflight read, so
         ``calibration_ledger.historical_custody_report`` re-hashes each one.
-        ``mismatch`` (an earlier capture whose bytes changed or went missing)
-        is ``calibration.historical_custody_mismatch`` (EXCLUDE_WINDOW);
-        ``unmeasured`` (the ledger or a row could not be read, or nothing was
-        checked) is ``calibration.historical_custody_unmeasured`` (DISCLOSE).
+        ``mismatch`` (an earlier capture whose present bytes changed) is
+        ``calibration.historical_custody_mismatch`` (EXCLUDE_WINDOW);
+        ``unmeasured`` (the ledger or a row could not be read, a capture was
+        evicted, or nothing was checked) is
+        ``calibration.historical_custody_unmeasured`` (DISCLOSE).  An evicted
+        capture (refusal census 2026-10-06) cannot be checked, which is not the
+        same as being wrong, so it no longer excludes the window.
         The report (locators and attempt ids, no energies) goes to
         ``derived/historical-custody.json``.
         """
@@ -5470,6 +5473,8 @@ class _Harvest:
         elif report.get("status") != "verified":
             self.emit("calibration.historical_custody_unmeasured", level="window", collector="calibration",
                       observed={**summary, "unmeasured": len(report.get("unmeasured") or []),
+                                "evicted": sum(1 for row in report.get("unmeasured") or []
+                                               if isinstance(row, dict) and row.get("evicted") is True),
                                 "reason": report.get("unmeasured_reason")
                                 or ("error" if report.get("error") else "rows_unmeasured"),
                                 "ledger_reasons": list(report.get("ledger_reasons") or [])[:8]})
