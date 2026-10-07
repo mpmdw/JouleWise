@@ -2220,6 +2220,20 @@ class EmittedCodeTests(unittest.TestCase):
         self.assertEqual(missing - h.PRUNE2_CODES - h.PRUNE3_CODES, set(h.NEVER_CLASSIFIED_CODES))
         self.assertTrue(h.NEVER_CLASSIFIED_CODES.isdisjoint(codes))
 
+    def test_the_design_catalog_classifies_every_int4_code_with_the_drafts_effect(self):
+        """int4 sync: no round-2 or round-3 exemption remains; the draft's effects are the catalog's."""
+        raw = (ROOT / SEALED_DIR / "flag_catalog.json").read_bytes() \
+            if (ROOT / SEALED_DIR / "flag_catalog.json").is_file() else design_branch_file(f"{SEALED_DIR}/flag_catalog.json")
+        if raw is None:
+            self.skipTest("neither the sealed catalog nor the block-5 design branch is in this clone")
+        from joulewise.flags.catalog import DRAFT_CODES
+        from joulewise.flags.core import CORE_FLAG_CODES
+        codes = json.loads(raw)["codes"]
+        emitted = set(h.CODES) | set(DRAFT_CODES) | set(CORE_FLAG_CODES)
+        self.assertEqual(emitted - set(codes), set(h.NEVER_CLASSIFIED_CODES))
+        self.assertEqual({code: (codes[code]["effect"], DRAFT_CODES[code]["effect"]) for code in DRAFT_CODES
+                          if code in codes and codes[code]["effect"] != DRAFT_CODES[code]["effect"]}, {})
+
 
 _REAL_SEAMS = h.Seams
 
