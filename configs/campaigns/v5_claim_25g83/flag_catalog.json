@@ -973,6 +973,13 @@
       "klass": "REPRESENTATION",
       "note": "A lineage formality other than configuration bytes."
     },
+    "records.lineage_prelaunch_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "The driver's pre-launch lineage check found a runs-root locator absent, unreadable, rejected by the members' authenticator, or naming another window's plan, window or bracket session. Recorded with the observed and expected values; the chain launches. Only a boot changed since publication refuses (night_refused_boot_changed)."
+    },
     "records.monitor_journal_absent": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
