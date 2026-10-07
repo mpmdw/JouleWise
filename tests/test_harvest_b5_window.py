@@ -1524,8 +1524,9 @@ def write_verdict(window: "Window", *, status: str, decision: str | None, condit
     if decision is not None:
         core["neg8_bracket"] = {"schema_version": NEG8_BRACKET_SCHEMA, "decision": decision,
                                 "passed": decision == "passed", "conditions": sorted(conditions)}
+    # The writer always records member_failures (run_campaign); [] names no failed member.
     put(window.claim / "whole-window-verdict.json", {"status": status, "bundle_ids": [],
-                                                     "idle_admission_core": core})
+                                                     "idle_admission_core": core, "member_failures": []})
 
 
 class Neg8BoundTests(WindowTestCase):
@@ -3650,6 +3651,32 @@ class WholeWindowMemberFailureTests(WindowTestCase):
         self.assertNotIn(self.CODE, window.codes())
         (flag,) = [flag for flag in window.flags() if flag["code"] == "whole_window.not_passed"]
         self.assertEqual("malformed", flag["observed"]["member_failures"])
+        # P4: no failed member can be named, so the per-member exclusion cannot be
+        # applied; the window is excluded (it was only disclosed before).
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "whole_window.member_failures_unreadable"]
+        self.assertEqual(("failed", "malformed"), (flag["observed"]["status"], flag["observed"]["member_failures"]))
+        self.assertIn("whole_window.member_failures_unreadable", window.exclusions()["reasons"])
+
+    def test_p4_a_failed_verdict_without_member_failures_excludes_the_window(self):
+        window = self.window()
+        put(window.claim / "whole-window-verdict.json", {
+            "status": "failed", "bundle_ids": sorted(row[0] for row in MEMBERS),
+            "idle_admission_core": {"conditions": ["environment_admission_failed"]}})
+        window.harvest()
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "whole_window.member_failures_unreadable"]
+        self.assertEqual("absent", flag["observed"]["member_failures"])
+        self.assertIn("whole_window.member_failures_unreadable", window.exclusions()["reasons"])
+        self.assertEqual("EXCLUDE_WINDOW", h.Catalog.load(FIXTURES / "flag_catalog.json").effect(
+            "whole_window.member_failures_unreadable"))
+
+    def test_p4_a_listed_or_passed_verdict_keeps_the_window(self):
+        for status, failures in (("failed", [("b5t-abs-r01", "environment_admission_failed", "display awake")]),
+                                 ("failed", []), ("passed", [])):
+            with self.subTest(status=status, failures=len(failures)):
+                window = Window(self.tmp / f"p4-{status}-{len(failures)}", catalog_overrides=self.ISOLATE)
+                self.write(window, status, failures)
+                window.harvest()
+                self.assertNotIn("whole_window.member_failures_unreadable", window.codes())
 
 
 class FixtureCatalogTests(WindowTestCase):

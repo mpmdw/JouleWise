@@ -292,6 +292,10 @@ _INT4_CODES = {
     # Refusal-census triage (d), 2026-10-07: present bytes differ in an earlier
     # capture this window's acceptance neither derived from nor judged.
     "calibration.historical_custody_mismatch_unused": _code("CALIBRATION", "NUMBER", DISCLOSE),
+    # P4 (orchestrator, 2026-10-06): a whole-window verdict that did not pass
+    # and whose member_failures is absent or malformed names no failed member,
+    # so member.whole_window_member_failure cannot be applied.
+    "whole_window.member_failures_unreadable": _code("NEG8", "NUMBER", EXCLUDE_WINDOW),
 }
 
 DRAFT_CODES: Mapping[str, Mapping[str, str]] = {

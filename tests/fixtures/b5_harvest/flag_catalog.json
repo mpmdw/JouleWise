@@ -906,6 +906,12 @@
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS"
     },
+    "whole_window.member_failures_unreadable": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "NEG8",
+      "klass": "NUMBER"
+    },
     "whole_window.not_passed": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",

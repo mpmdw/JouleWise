@@ -212,6 +212,9 @@ CODES: dict[str, CodeSpec] = {
     "neg8.screen_failed": _spec("NEG8", "NUMBER"),
     "whole_window.not_passed": _spec("NEG8", "NUMBER"),
     "whole_window.verdict_absent": _spec("NEG8", "NUMBER"),
+    # P4 (orchestrator, 2026-10-06): a verdict that did not pass and whose
+    # member_failures is absent or malformed cannot name its failed members.
+    "whole_window.member_failures_unreadable": _spec("NEG8", "NUMBER"),
     # Registration 6.3 and 2: a member the whole-window verdict fails for a reason
     # no other member code carries (WHOLE_WINDOW_MEMBER_FAILURE_REASONS).
     "member.whole_window_member_failure": _spec("MEMBER_VALIDITY", "NUMBER"),
@@ -4260,6 +4263,12 @@ class _Harvest:
             self.emit("whole_window.not_passed", level="window", collector="whole_window",
                       observed={"status": status, "conditions": sorted(map(str, conditions or [])),
                                 "member_failures": member_failures})
+            if member_failures != "listed":
+                # P4: the verdict failed some member, or the window, and does not say which
+                # member; the per-member exclusion cannot be applied, so no member's number
+                # can be kept on it (number integrity).
+                self.emit("whole_window.member_failures_unreadable", level="window", collector="whole_window",
+                          observed={"status": status, "member_failures": member_failures})
         self.neg8_screen(row, authentic=authentic)
 
     def whole_window_member_failures(self, row: Mapping[str, Any]) -> str:
@@ -4277,6 +4286,9 @@ class _Harvest:
         ``"listed"``, ``"absent"`` (a row with no such field: no member can
         be named) or ``"malformed"`` (the validator rejects it too, as
         ``whole_window_verdict_provenance_invalid``; no member is guessed).
+        On a verdict that did not pass, ``"absent"`` or ``"malformed"`` is
+        ``whole_window.member_failures_unreadable`` (EXCLUDE_WINDOW, P4): the
+        per-member exclusion cannot be applied.
         """
         from joulewise.whole_window import _validated_member_failures
         if "member_failures" not in row:
