@@ -375,6 +375,25 @@ class VerdictWriterSurvivorTests(unittest.TestCase):
         self.assertEqual((bracket["decision"], bracket["survivor_screen"]), ("failed", "references_insufficient"))
         self.assertEqual(bracket["reference_counts"], {"start": 1, "midpoint": 1, "end": 3})
 
+    def test_a_strict_invalid_reference_is_lost_not_invalid(self) -> None:
+        """Delta audit A5: a succeeded reference failing strict validation reached the evaluator as None.
+
+        Before the fix the bracket was ``neg8_bracket_reference_invalid``
+        (decision failed) although the survivors pass at (3, 1, 2).
+        """
+        from dataclasses import replace
+
+        members = [replace(member, strict_valid=False, validation_problems=("bundle_strict_invalid",))
+                   if member.bundle_id == "neg8-end-r3" else member
+                   for member in self.references((8.00, 8.02, 7.98), (8.01,), (8.01, 8.03, 7.99))]
+        bracket = self.bracket(members)
+        self.assertNotIn("neg8_bracket_reference_invalid", bracket["conditions"])
+        self.assertEqual((bracket["endpoint_protocol"], bracket["decision"]),
+                         (ww.NEG8_SURVIVOR_PROTOCOL, "passed"), bracket["conditions"])
+        self.assertEqual(bracket["reference_counts"], {"start": 3, "midpoint": 1, "end": 2})
+        self.assertEqual(bracket["reference_losses"], [{"bundle_id": "neg8-end-r3", "position": "end",
+                                                        "reason": "strict_invalid", "status": "succeeded"}])
+
     def test_a_full_trajectory_keeps_the_historical_bracket(self) -> None:
         bracket = self.bracket(self.references((8.00, 8.02, 7.98), (8.5,), (8.01, 8.03, 7.99)))
         self.assertEqual(bracket["endpoint_protocol"], "replicated_endpoints_with_midpoint")
@@ -388,7 +407,10 @@ def write_unreadable_reference(hb, bundle, kind: str) -> None:
 
     ``kind``: ``absent`` (the member child was SIGKILLed after the 1,800 s cap,
     so no summary was finalized), ``malformed`` (undecodable bytes) or
-    ``no_status`` (a summary without a string status).
+    ``no_status`` (a summary without a string status).  ``strict_invalid`` is
+    the delta audit's A5 shape: a readable succeeded summary whose custody
+    triangle disagrees (it names no telemetry source), so the real
+    ``_custody_strict_invalid`` reports it strict-invalid.
     """
     import hashlib
 
@@ -399,6 +421,8 @@ def write_unreadable_reference(hb, bundle, kind: str) -> None:
         (bundle / "summary_metrics.json").write_bytes(b'{"status": "succ')
     elif kind == "no_status":
         hb.put(bundle / "summary_metrics.json", {"gross_energy_j": 30.32})
+    elif kind == "strict_invalid":
+        hb.put(bundle / "summary_metrics.json", {"status": "succeeded", "gross_energy_j": 30.32})
     else:
         assert kind == "absent", kind
 
@@ -439,7 +463,7 @@ class ReplaySurvivorTests(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.root = Path(self._tmp.name)
 
-    def derive(self, points, *, failed=(), exclude=None, unreadable=None):
+    def derive(self, points, *, failed=(), exclude=None, unreadable=None, **kwargs):
         import json
 
         hb = self.hb
@@ -463,7 +487,41 @@ class ReplaySurvivorTests(unittest.TestCase):
         with hb.neg8_reference_gates(points), real_strict_check_for(unreadable):
             return ww._derived_neg8_decision(
                 [json.loads(raw)], self.root, ww._registered_bracket_policy(policy_sha), current=True,
-                point_drift=True, drift_bound_artifact=None, return_bracket=True, exclude_bundle_ids=exclude)
+                point_drift=True, drift_bound_artifact=None, return_bracket=True, exclude_bundle_ids=exclude,
+                **kwargs)
+
+    def test_a_strict_invalid_reference_is_lost_before_aggregation(self) -> None:
+        """Delta audit A5: a readable succeeded summary failing the custody check returned bundle_strict_invalid.
+
+        That failed the harvest's unexcluded re-derivation before its exclusion
+        pass, so a window whose survivors pass at (3, 1, 2) was excluded.
+        """
+        bracket, problem = self.derive(self.hb.neg8_trajectory(0.0), unreadable={"b5t-neg8-end-3": "strict_invalid"})
+        self.assertIsNone(problem)
+        self.assertEqual(bracket["reference_counts"], {"start": 3, "midpoint": 1, "end": 2})
+        self.assertEqual(bracket["reference_losses"], [{"bundle_id": "b5t-neg8-end-3", "position": "end",
+                                                        "reason": "strict_invalid", "status": "succeeded"}])
+        for family in (ww.NEG8_CLAIM_FAMILY_GROSS, ww.NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED):
+            self.assertEqual(bracket["claim_families"][family]["end"]["n"], 2)
+
+    def test_a_replay_drops_a_strict_invalid_reference_only_as_the_stored_bracket_listed_it(self) -> None:
+        """Replaying a stored bracket: a listed strict-invalid loss is verified; an unlisted one refuses or is read."""
+        points = self.hb.neg8_trajectory(0.0)
+        listed = {"stored_strict_losses": {"b5t-neg8-end-2"}}
+        # Listed and verified by the caller's strict validation (no custody disagreement needed).
+        bracket, problem = self.derive(points, **listed, strict_invalid=lambda bundle_id, path: True)
+        self.assertIsNone(problem)
+        self.assertEqual([(item["bundle_id"], item["reason"]) for item in bracket["reference_losses"]],
+                         [("b5t-neg8-end-2", "strict_invalid")])
+        # Listed but the caller's validation finds it valid: read, so the replay differs from the stored bracket.
+        bracket, problem = self.derive(points, **listed, strict_invalid=lambda bundle_id, path: False)
+        self.assertEqual((problem, bracket["endpoint_protocol"]), (None, "replicated_endpoints_with_midpoint"))
+        # Unlisted custody disagreement: the row validator refuses, the harvest's authenticity pass reads it.
+        unlisted = {"stored_strict_losses": set(), "unreadable": {"b5t-neg8-end-3": "strict_invalid"}}
+        self.assertEqual(self.derive(points, **unlisted), (None, "bundle_strict_invalid"))
+        bracket, problem = self.derive(points, **unlisted, unlisted_strict_invalid="read")
+        self.assertIsNone(problem)
+        self.assertEqual(bracket["endpoint_protocol"], "replicated_endpoints_with_midpoint")
 
     def test_a_reference_with_no_readable_summary_is_lost_in_both_harvest_passes(self) -> None:
         """Cold pass 2 D1: ``rederive(None)`` returned ``bundle_strict_invalid`` and the window was excluded.
@@ -562,7 +620,7 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
     ISOLATE = {**_hb().Neg8ScreenTests.ISOLATE}
 
     def run_window(self, name, points, *, stored_points=None, reference_flags=(), corpus_flags=(), failed=(),
-                   references=None, unreadable=()):
+                   references=None, unreadable=(), strict_invalid=()):
         import json
         from unittest import mock
 
@@ -571,20 +629,21 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         window = hb.Window(self.tmp / name, catalog_overrides=self.ISOLATE)
         self.assertIsNone(hb.neg8_corpus(window, list(failed)))
         bound = json.loads((window.bound / "neg8-drift-bound.json").read_bytes())
-        self.write_verdict(window, stored_points or points, bound, references=references, unreadable=unreadable)
+        self.write_verdict(window, stored_points or points, bound, references=references, unreadable=unreadable,
+                           strict_invalid=strict_invalid)
         injected = [(run_id, code) for run_id, code in (*reference_flags, *corpus_flags)]
 
         def meter(run):
             for run_id, code in injected:
                 run.emit(code, level="member", run_id=run_id, collector="monitor", observed={"injected": True})
 
-        with hb.neg8_reference_gates(points), real_strict_check_for(unreadable), \
+        with hb.neg8_reference_gates(points), real_strict_check_for({*unreadable, *strict_invalid}), \
                 mock.patch.object(h._Harvest, "meter_joins", meter):
             window.harvest()
         return window
 
     @staticmethod
-    def write_verdict(window, points, bound, *, references=None, unreadable=()):
+    def write_verdict(window, points, bound, *, references=None, unreadable=(), strict_invalid=()):
         """As ``write_neg8_reference_verdict``, but the writer was given the window's bound.
 
         ``references`` replaces the window's (bundle id, role) list (a spare is
@@ -600,8 +659,8 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         members = []
         for bundle_id, role in references:
             bundle = window.claim / bundle_id
-            if bundle_id in unreadable:
-                write_unreadable_reference(hb, bundle, "absent")
+            if bundle_id in unreadable or bundle_id in strict_invalid:
+                write_unreadable_reference(hb, bundle, "absent" if bundle_id in unreadable else "strict_invalid")
                 members.append({"execution": "invoked", "run_id": bundle_id, "bundle_ids": [bundle_id],
                                 "role": role, "canonical_neg8_workload": True, "scientific_config_sha256": "d" * 64})
                 continue
@@ -615,7 +674,7 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
             "schema_version": "joulewise.campaign_provenance.v1", "campaign_policy": {"sha256": policy_sha},
             "members": members})
         completed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        with hb.neg8_reference_gates(points), real_strict_check_for(unreadable):
+        with hb.neg8_reference_gates(points), real_strict_check_for({*unreadable, *strict_invalid}):
             bracket, problem = ww._derived_neg8_decision(
                 [json.loads(raw)], window.claim, ww._registered_bracket_policy(policy_sha), current=True,
                 point_drift=True, drift_bound_artifact=bound, return_bracket=True,
@@ -770,6 +829,77 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
                     self.assertEqual(flag["observed"]["reference_counts"], counts)
                     self.assertEqual([(row["run_id"], row["reason"]) for row in flag["observed"]["lost"]],
                                      [(killed, "member.timeout")])
+
+    def test_a_strict_invalid_reference_is_lost_and_the_survivors_pass(self) -> None:
+        """Delta audit A5: the writer and the replay drop it alike, so the stored screen authenticates and stands.
+
+        Before the fix the writer's bracket was ``neg8_bracket_reference_invalid``
+        and the harvest's unexcluded re-derivation ``bundle_strict_invalid``.
+        """
+        bad = "b5t-neg8-end-3"
+        window = self.run_window("strict-invalid", self.points(0.0), strict_invalid={bad},
+                                 reference_flags=[(bad, "member.strict_validation_failed")])
+        self.assertNotIn("neg8.screen_failed", window.codes())
+        bracket = self.verdict_row(window)["idle_admission_core"]["neg8_bracket"]
+        self.assertEqual((bracket["decision"], bracket["reference_counts"]),
+                         ("passed", {"start": 3, "midpoint": 1, "end": 2}))
+        (lost,) = [flag for flag in window.flags() if flag["code"] == "neg8.reference_lost"]
+        self.assertEqual([(row["run_id"], row["reason"]) for row in lost["observed"]["lost"]],
+                         [(bad, "member.strict_validation_failed")])
+
+    def test_the_audit_strict_trigger_rescreens_the_survivors(self) -> None:
+        """The audit's probe: the stored (3, 1, 3) bracket holds a reference the replay finds strict-invalid.
+
+        The authenticity pass reads it as the writer did; the exclusion pass
+        drops it.  Before: ``rederivation_failed:bundle_strict_invalid``, nothing evaluated.
+        """
+        import json
+        from pathlib import Path
+        from types import SimpleNamespace
+        from unittest import mock
+
+        hb = _hb()
+        h = hb.h
+        root = self.tmp / "strict-probe"
+        root.mkdir()
+        points = hb.neg8_trajectory(0.0)
+        manifest = {"members": []}
+        for run_id, role in hb.NEG8_REFERENCES:
+            hb.put(root / run_id / "summary_metrics.json", {"status": "succeeded"})
+            hb.put(root / run_id / "metadata.json", {"run_id": run_id})
+            manifest["members"].append({"execution": "invoked", "run_id": run_id, "bundle_ids": [run_id],
+                                        "role": role, "canonical_neg8_workload": True,
+                                        "scientific_config_sha256": "d" * 64})
+        policy = ww._registered_bracket_policy(hb.sha(hb.ROOT / hb.POLICY))
+        bound = bound_artifact(RULING_CORPUS)
+        with hb.neg8_reference_gates(points), \
+                mock.patch.object(ww, "neg8_freshness_bindings_from_metadata", return_value=dict(BINDINGS)):
+            stored, problem = ww._derived_neg8_decision([manifest], root, policy, current=True, point_drift=True,
+                                                        drift_bound_artifact=bound, return_bracket=True,
+                                                        freshness_evaluated_at_s=2000)
+            self.assertIsNone(problem)
+            run = object.__new__(h._Harvest)
+            run.inputs = SimpleNamespace(claim_runs_root=root)
+            run.withheld, run.derived = root / "withheld", root / "derived"
+            run.withheld.mkdir()
+            run.derived.mkdir()
+            run.outputs, run.neg8 = {}, {"derived_from": "registered_corpus"}
+            bad = "b5t-neg8-end-3"
+            ordinary = ww._custody_strict_invalid
+
+            def strict(path, *args, **kwargs):
+                return True if Path(path).name == bad else ordinary(path, *args, **kwargs)
+
+            with mock.patch.object(ww, "_custody_strict_invalid", strict), \
+                    mock.patch.object(h, "verdict_neg8_sources", return_value=([manifest], True, policy)):
+                result = run._neg8_rescreen({"timestamp": "1970-01-01T00:33:20Z"}, stored, set(), authentic=True,
+                                            exclude={bad: "member.strict_validation_failed"}, survivors=True)
+        self.assertEqual(result["problems"], [])
+        self.assertTrue(result["evaluated"])
+        self.assertEqual((result["decision"], result["conditions"]), ("passed", []))
+        self.assertEqual(result["survivors"]["reference_counts"], {"start": 3, "midpoint": 1, "end": 2})
+        written = json.loads((root / "withheld" / "neg8-rescreen-bracket.json").read_bytes())["bracket"]
+        self.assertEqual([item["bundle_id"] for item in written["reference_losses"]], [bad])
 
     def test_a_loss_flagged_reference_is_mapped_when_the_verdict_sources_do_not_authenticate(self) -> None:
         """Cold pass 2 N1: the loss map was empty and the stored screen, holding the contender's energy, stood.

@@ -4637,8 +4637,10 @@ class _Harvest:
             "registered_conditions": sorted(conditions & ww.NEG8_POINT_DRIFT_CONDITION_CODES)}
         screened: Mapping[str, Any] | None = bracket
         if collected or survivors:
+            # The exclusion pass always runs (with no harvest loss too), so a
+            # strict-invalid reference is dropped before aggregation (A5).
             rescreen = self._neg8_rescreen(row, bracket, conditions - underived, authentic=authentic,
-                                           exclude=harvest_losses if survivors else None, survivors=survivors)
+                                           exclude=harvest_losses, survivors=survivors)
             observed["collected_bound_rescreen"] = rescreen
             if survivors:
                 observed["survivor_rescreen"] = {"new_losses": dict(sorted(new_losses.items())),
@@ -4865,8 +4867,11 @@ class _Harvest:
         Authenticity: re-derived without the harvest's exclusions, each
         family's bound-independent fields (endpoints, protocol, point delta)
         must equal the stored bracket's, or these are not the reference
-        bundles the verdict was written from and nothing is evaluated.  With
-        ``exclude`` ({run_id: code}, ``survivors``) the decision is then the
+        bundles the verdict was written from and nothing is evaluated (that
+        pass replays the stored selection: references the stored bracket
+        lists as ``strict_invalid`` are dropped once verified, an unlisted
+        strict-invalid one is read as the writer read it).  With
+        ``exclude`` ({run_id: code}, possibly empty) the decision is then the
         re-derivation that drops those references before aggregation.  The
         collected-bound case alone (no exclusions, no clean bound) still runs
         only when the stored NEG-8 conditions were the two ``*_UNDERIVED``
@@ -4916,11 +4921,28 @@ class _Harvest:
                 else:
                     manifests, current, policy = sources
 
+                    # Delta audit A5: a strict-invalid reference (custody
+                    # triangle, or this harvest's own strict validation) is
+                    # lost before aggregation.  The authenticity pass replays
+                    # the stored bracket's selection: it drops the references
+                    # that bracket lists as strict_invalid and reads an
+                    # unlisted one as the writer did; the exclusion pass then
+                    # drops every strict-invalid reference.
+                    members = getattr(self, "members", None) or {}
+                    stored_strict = {item.get("bundle_id") for item in (bracket or {}).get("reference_losses") or []
+                                     if isinstance(item, Mapping) and item.get("reason") == "strict_invalid"}
+
+                    def harvest_strict_invalid(bundle_id: str, _path: Path) -> bool:
+                        return (members.get(bundle_id) or {}).get("strict_valid") is False
+
                     def rederive(excluded: Mapping[str, str] | None) -> tuple[Any, str | None]:
+                        replay = {"stored_strict_losses": stored_strict, "unlisted_strict_invalid": "read"} \
+                            if excluded is None else {}
                         return ww._derived_neg8_decision(
                             manifests, runs, policy, current=current, point_drift=True,
                             drift_bound_artifact=bound, return_bracket=True,
-                            freshness_evaluated_at_s=evaluated_at, exclude_bundle_ids=excluded)
+                            freshness_evaluated_at_s=evaluated_at, exclude_bundle_ids=excluded,
+                            strict_invalid=harvest_strict_invalid, **replay)
 
                     stored, problem = rederive(None)
                     if problem is not None:
@@ -4931,7 +4953,7 @@ class _Harvest:
                             or stored.get("estimand") != (bracket or {}).get("estimand"):
                         problems.append("rederivation_differs_from_stored_bracket")
                     derived = stored
-                    if not problems and exclude:
+                    if not problems and exclude is not None:
                         derived, problem = rederive(dict(exclude))
                         if problem is not None:
                             problems.append(f"rederivation_failed:{problem}")

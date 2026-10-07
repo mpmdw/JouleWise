@@ -4833,6 +4833,9 @@ def _derived_neg8_decision(
     return_bracket: bool = False,
     freshness_evaluated_at_s: Any = None,
     exclude_bundle_ids: Mapping[str, Any] | None = None,
+    strict_invalid: Any = None,
+    stored_strict_losses: Any = None,
+    unlisted_strict_invalid: Literal["refuse", "read"] = "refuse",
 ) -> tuple[Any, str | None]:
     """Re-derive a verdict from source-member summaries, never the stored row.
 
@@ -4850,6 +4853,20 @@ def _derived_neg8_decision(
     ``exclude_bundle_ids`` ({bundle_id: reason}, the harvest's physics and
     strict-validation losses).  The loss test never reads an energy.  Lost
     references go to the evaluator as ``lost_references``.
+
+    A reference with a readable succeeded summary that is strict-invalid is
+    lost too, as ``strict_invalid`` (delta audit A5; the verdict writer drops
+    a reference whose strict validation failed the same way): strict-invalid
+    is a custody-triangle disagreement (``_custody_strict_invalid``) or the
+    caller's ``strict_invalid(bundle_id, bundle_path)`` (its own strict
+    validation).  When re-deriving a stored bracket, ``stored_strict_losses``
+    names the references that bracket lists as lost for ``strict_invalid``:
+    only those are dropped, each after its strict invalidity is verified (a
+    listed reference that verifies valid is read, so the replay differs), and
+    an unlisted reference whose custody triangle disagrees is
+    ``bundle_strict_invalid`` (``unlisted_strict_invalid="refuse"``, the row
+    validator) or read as the writer read it (``"read"``, the harvest's
+    authenticity pass, whose exclusion pass then drops it).
     """
 
     try:
@@ -4953,6 +4970,29 @@ def _derived_neg8_decision(
                         if stored_status != "succeeded"
                         else None
                     )
+                    if reason is None:
+                        # Delta audit A5: a structurally strict-invalid
+                        # reference is lost before aggregation, not a failure
+                        # of the whole re-derivation.
+                        triangle = _custody_strict_invalid(bundle_path, stored_summary)
+                        listed = (
+                            stored_strict_losses is None
+                            or bundle_id in stored_strict_losses
+                        )
+                        if listed and (
+                            triangle
+                            or (
+                                strict_invalid is not None
+                                and bool(strict_invalid(bundle_id, bundle_path))
+                            )
+                        ):
+                            reason = "strict_invalid"
+                        elif (
+                            triangle
+                            and not listed
+                            and unlisted_strict_invalid != "read"
+                        ):
+                            return None, "bundle_strict_invalid"
                     if reason is not None:
                         lost.append(
                             {
@@ -4967,7 +5007,7 @@ def _derived_neg8_decision(
                             }
                         )
                         continue
-                if _custody_strict_invalid(bundle_path, stored_summary):
+                if not survivors and _custody_strict_invalid(bundle_path, stored_summary):
                     return None, "bundle_strict_invalid"
                 if _current_strict_summary(stored_summary, bundle_path):
                     scientific_sha, canonical = _scientific_config_identity(bundle_path)
@@ -6781,6 +6821,15 @@ def _validate_row_uncached(
                     )
                 ):
                     reasons.add("whole_window_verdict_provenance_invalid")
+                # Delta audit A5: the writer drops a reference whose strict
+                # validation failed; the replay drops exactly those the stored
+                # bracket lists, each re-validated here.
+                stored_strict_losses = {
+                    item.get("bundle_id")
+                    for item in bracket.get("reference_losses") or []
+                    if isinstance(item, Mapping)
+                    and item.get("reason") == "strict_invalid"
+                }
                 derived_value, derived_problem = _derived_neg8_decision(
                     verified_source_manifests,
                     runs_root,
@@ -6789,6 +6838,11 @@ def _validate_row_uncached(
                     point_drift=point_drift,
                     drift_bound_artifact=drift_bound_artifact,
                     return_bracket=point_drift,
+                    strict_invalid=lambda _bundle_id, path: bool(
+                        strict_validate_bundles([path], workers=1)[0]
+                    ),
+                    stored_strict_losses=stored_strict_losses,
+                    unlisted_strict_invalid="refuse",
                     freshness_evaluated_at_s=(
                         bracket.get("bound_freshness", {}).get(
                             "evaluated_at_s"
