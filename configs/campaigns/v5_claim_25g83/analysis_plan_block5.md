@@ -1,7 +1,8 @@
 # Analysis plan V5-CLAIM-25G83-B5: what is computed from the claim windows, and how
 
-Status: **DRAFT, NOT SEALED. Revision 7, 2026-10-07** (revision 3 is commit `71c91d74`, revision 4 ends at commit
-`7261a585`, revision 5 at `9d63b4df`, revision 6 at `c6843537`; the changes of revisions 4 to 7 are listed in §14). Companion to
+Status: **DRAFT, NOT SEALED. Revision 8, 2026-10-07** (revision 3 is commit `71c91d74`, revision 4 ends at commit
+`7261a585`, revision 5 at `9d63b4df`, revision 6 at `c6843537`, revision 7 at `dc046d4d`; the changes of revisions 4
+to 8 are listed in §14). Companion to
 `registration_block5.md` (the **registration**) and `flag_catalog.json` (the **flag catalog**) in the same directory;
 they are sealed together and none binds alone. Terms are those built in registration §0; terms that first appear here
 are built where they first appear. Every rule is fixed before any claim byte exists. Most estimators below are already
@@ -101,7 +102,7 @@ ratios (§6) and the aggregate mint need all three packs and are never computed 
 exception: if a cold gate rules, before any release, that the cause of the END STATE invalidates the analysed
 windows, they are not analysed. The END STATE design record cannot choose otherwise.
 
-### 2.4 A flag that keeps the window but excludes it from the primary contrasts: `neg8.midpoint_lost`
+### 2.4 A lost midpoint reference: `neg8.midpoint_lost`
 
 *Forcing problem.* Each window's whole-window drift allowance (registration §0.12) is the larger of the NEG-8 bound
 and the **spread**: the largest minus the smallest of the start-triplet mean, the midpoint reference's energy and the
@@ -113,30 +114,37 @@ window and reverts by its end is no longer measured, and the allowance can only 
 boundary between the decode and prefill arms, after fifty decode members (forty in GAMMA), the one place where such
 an excursion is physically expected, and no block has yet measured how large these excursions are.
 
-*Rule* (NEG-8 cold ruling of 2026-10-07, decision 2). The flag catalog keeps `neg8.midpoint_lost` DISCLOSE: the window
-keeps its screen result, its allowance and its numbers, and stays claim-usable. This plan lists it as
-**claim-excluding for the primary contrasts**: when GAMMA's analysed attempt carries `neg8.midpoint_lost`, its two
-contrasts (§7) are still computed by §7.1 and recorded with their outcome, but neither may carry a claim. Each is
-printed only as a descriptive estimate with the words "not a claim: the window's midpoint reference was lost
-(neg8.midpoint_lost)", its ceiling is below L2 (`claim_ready_for_l2_l3` is false whatever the outcome, §7.2), and no
-verdict sentence (§9, "Verdict sentences") is printed for it. The window still feeds descriptive numbers, the
-sensitivity lines and the block's drift record (§8.1).
+*Rule* (NEG-8 cold ruling of 2026-10-07, decision 2, made operational by orchestrator ruling Q11 of 2026-10-07,
+which the seal gate confirms; registration §7.2, §14 Q11). The flag catalog keeps `neg8.midpoint_lost` DISCLOSE.
 
-*Scope.* Only GAMMA's attempt decides this, because only its quads enter the contrasts' estimate and its allowance
-enters their D. The floor packs' reported cells are L1 instrument results, not contrasts: a floor window carrying the
-flag keeps its reported cells and floors, with the flag disclosed beside them (§8.1). (The floors themselves do not
-use the drift allowance, §5.)
+- **On GAMMA** the flag removes the attempt from the claims: the sealed exclusion function adds the window reason
+  `neg8.midpoint_lost_primary` (`joulewise.flags.exclusions.PACK_SCOPED_WINDOW_REASONS`), so the attempt is not
+  claim-usable. It is therefore never GAMMA's analysed attempt (§1 item 2); GAMMA is re-armed, and the attempt, like
+  every attempt that is not analysed, is an input to no number and is listed in the attempt history with its cause
+  (§2.1, §8). The rule reads only the roster's pack id and the flag's code, never an energy, so the choice of
+  GAMMA's analysed window cannot depend on its contrasts.
+- **On ALPHA and BETA** the window keeps its screen result, its allowance and its numbers, and stays claim-usable;
+  the flag is disclosed beside its reported cells and floors (§8.1).
 
-*Worked example (synthetic).* GAMMA-1 is claim-usable, but its arm-boundary midpoint reference failed idle admission
-and its spare overlapped a competing process at harvest, so the window carries `neg8.midpoint_lost`. The decode
-contrast computes dbar = 3.0 J with outcome `direction_supported` (as in §7.2's example). It is printed as "3.0 J,
-decision interval [2.7825, 3.2175] J; not a claim: the window's midpoint reference was lost (neg8.midpoint_lost)",
-with no L2 sentence. ALPHA-1 and BETA-1, had they carried the flag, would still print their reported cells as L1.
+*Scope.* Only GAMMA is affected, because only its quads enter the contrasts' estimate and its allowance enters their
+D. The floor packs' reported cells are L1 instrument results, not contrasts. (The floors themselves do not use the
+drift allowance, §5.)
+
+*Check in the claim gate.* By the rule above, GAMMA's analysed attempt never carries `neg8.midpoint_lost`. If the
+claim gate finds the flag on it, the exclusion function and the code disagree: the analysis stops and the step goes
+to R3, as in §2.2.
+
+*Worked example (synthetic).* GAMMA-1's arm-boundary midpoint reference fails idle admission, and its spare
+overlaps a competing process, which the harvest finds, so the window carries `neg8.midpoint_lost`. Its
+`exclusions.json` reads `claim_usable` false with `reasons` [`neg8.midpoint_lost_primary`]. GAMMA-2 is armed; it
+keeps its midpoint and is claim-usable, so GAMMA-2 is the analysed attempt and its decode contrast (dbar = 3.0 J,
+§7.2's example) can reach L2. GAMMA-1's contrasts are never computed. Had ALPHA-1 carried the flag, it would have
+stayed claim-usable, and its reported cells would print as L1 with the flag disclosed.
 
 *What would change it.* Once the block's midpoint record (each window's spread with and without the midpoint,
 computed from reference energies and so read only after the release event) shows that the midpoint never moved the
-spread beyond the bound, a cold erratum may downgrade the flag to disclose-only (registration §0.12, §10). Whether a GAMMA
-attempt carrying it should instead be re-armed is open (registration §14 Q11).
+spread beyond the bound, a cold erratum may downgrade the flag to disclose-only on GAMMA too (registration §0.12,
+§10).
 
 ## 3. Order of operations
 
@@ -225,7 +233,10 @@ prefill-p42 read the decode stages' 50 bundles; prefill-p2048 reads the p2048 st
    (the largest change in the member's phase energy when the whole power trace shifts by any common amount within ±
    its effective clock bound), `E_interpolation_joint_edge_bound_j` (identically 0 for interval-support traces, as all
    48 block-3 phase windows recorded), and `E_whole_window_drift_allowance_j` (half the window's gross-family NEG-8
-   allowance, registration §0.12). For each kind, its stratified average is 0.2 × (mean over the kept repeats) + 0.8 ×
+   allowance, registration §0.12; when the window's `derived/neg8-screen.json` records a harvest re-screen, the
+   allowance is the one in `withheld/neg8-rescreen-bracket.json`, computed on the surviving references, never the
+   whole-window verdict row's, which may still include a reference the harvest found contaminated; cold pass 2 N4;
+   the same holds for D in §7.1). For each kind, its stratified average is 0.2 × (mean over the kept repeats) + 0.8 ×
    (mean over the members of the kept quads); at full n this equals the 50-member average. The three averages are
    summed with `math.fsum` into B. A missing kind refuses the cell; it is never zero by default.
 5. **Endpoints:** `lower = m − h − B`, `upper = m + h + B`, in that order, not clamped at zero.
@@ -415,9 +426,9 @@ runs it only on complete contrasts; L9 makes it run on the kept quads.)
 
 **L2 ceiling.** `claim_ready_for_l2_l3` is true, and the ceiling is `L2`, only when all hold: outcome
 `direction_supported`; `claim_role` primary; `confirmatory_status` confirmatory; the evidence class is not legacy; no
-`loo_verdict_influential`; the direction equals the registered direction (positive); and GAMMA's analysed attempt
-does not carry `neg8.midpoint_lost` (§2.4). Otherwise the ceiling is L1 wording; a contrast that fails only the last
-condition is, in addition, printed as "not a claim" (§2.4). The registration's §1 table cites this definition.
+`loo_verdict_influential`; and the direction equals the registered direction (positive). Otherwise the ceiling is L1
+wording. (A GAMMA attempt carrying `neg8.midpoint_lost` is not claim-usable and is never analysed, §2.4.) The
+registration's §1 table cites this definition.
 
 **Worked example (synthetic).** d_k = 3.1, 2.9, 3.3, 3.0, 2.8, 3.2, 3.1, 2.9, 3.0, 2.7 J, with quad 4 removed: n = 9,
 dbar = 3.0 J, s_d = 0.19365, se_rep = 0.064550. With a quad variance of 0.0100 J² in every quad,
@@ -632,7 +643,7 @@ Every printed number is `MEASURED` or `DERIVE`; none is recalculated from prose.
 | Denominator | none for the contrast; 512 output tokens for the §7.3 per-token difference | none; 2048 prompt tokens | runtime-observed tokens |
 | Holdout | not applicable | not applicable | not applicable |
 | Ceiling; forbidden upgrade | L2 per §7.2; no claim about other prompts, lengths, models or machines | L2; same | L1; no model comparison from these cells |
-| Disqualifiers | §7.2 outcomes and sensitivity codes; `neg8.midpoint_lost` on GAMMA's analysed attempt (§2.4) | same | D-179 refusal codes |
+| Disqualifiers | §7.2 outcomes and sensitivity codes; a GAMMA attempt carrying `neg8.midpoint_lost` is not claim-usable and never analysed (§2.4) | same | D-179 refusal codes |
 | Linked manifests | the finalized manifest, bundle hashes and the exclusions digest | same | projection bindings and the exclusions digest |
 
 ## 11. Analysis code (lane L9), written blind
@@ -640,10 +651,10 @@ Every printed number is `MEASURED` or `DERIVE`; none is recalculated from prose.
 | Need | State at this writing | FILL |
 |---|---|---|
 | Consume `exclusions.json` (`joulewise/analysis_engine/inputs.py`): kept units per cell, removed units excluded everywhere | Absent | `EXCLUSIONS-CONSUMER` |
-| D-179 issuer implementing §4 (stratified mean, variance, df, B, per-token over kept units; n_r, n_b in the record), projecting each cell independently and preserving the whole-window allowance allocation | Absent ("No production dispatch exists", `joulewise/paper_reported_energy.py`) | `REPORTED-ENERGY-ISSUER` |
+| D-179 issuer implementing §4 (stratified mean, variance, df, B, per-token over kept units; n_r, n_b in the record), projecting each cell independently and preserving the whole-window allowance allocation, reading the re-screened allowance when the harvest re-screened (§4 step 4) | Absent ("No production dispatch exists", `joulewise/paper_reported_energy.py`) | `REPORTED-ENERGY-ISSUER` |
 | Floor extraction over kept units with g(n) (`joulewise/floor_extraction.py`) | The extractor assumes full n | `FLOOR-EXTRACTION-KEPT-UNITS` |
 | Claim gate over kept quads: no `fixed_n_plan_incomplete` for removed quads; leave-one-quad-out over kept quads; finalization binds the exclusions digest | Absent | `GAMMA-MANIFEST-EXCLUSIONS-BINDING` |
-| Claim gate reads GAMMA's flags: `neg8.midpoint_lost` on the analysed attempt makes `claim_ready_for_l2_l3` false and marks both contrasts "not a claim" (§2.4, §7.2) | Absent | (part of L9) |
+| Claim gate reads GAMMA's flags: `neg8.midpoint_lost` on the analysed attempt stops the analysis (the exclusion function should have made the attempt not claim-usable, §2.4) | Absent | (part of L9) |
 | `_v5` final pinset and v2 input manifest for the mint; two-producer aggregate floor binding in the claim gate (memo 4.1) | Absent | `V5-FINAL-PINSET`, `V5-V2-INPUT-MANIFEST` |
 | Mint-to-close-out adapter; dominance sidecar wiring (memo 4.3) | Absent | `MINT-TO-CLOSEOUT-ADAPTER` |
 | Bracket replay with the acceptance's ledger-cutoff baseline in finalization (memo 3.3) | Defect known | (part of L9) |
@@ -761,3 +772,15 @@ estimator, threshold or member exclusion used by §4–§7 changed.
 - Two audit fixes need no text here: the exclusion function now resolves member flags scoped by bundle id
   (registration §0.16), and a malformed flag line now carries a conservative exclusion instead of blocking the
   release event (registration §6.2). This plan reads exclusions only from `exclusions.json` (§2.2).
+
+**Revision 8 (2026-10-07, the REG final pass to the candidate H_claim `43ac12d0c`).** No estimator, threshold or
+member exclusion used by §4–§7 changed.
+
+- §2.4: orchestrator ruling Q11 (registration §14 Q11, closed). A GAMMA attempt carrying `neg8.midpoint_lost` is not
+  claim-usable (window reason `neg8.midpoint_lost_primary`), so GAMMA is re-armed and such an attempt is never
+  analysed. Revision 7's "computed and printed as not a claim" path is withdrawn; the claim gate instead stops if it
+  ever finds the flag on GAMMA's analysed attempt. The worked example follows the new rule.
+- §7.2: the L2 condition on `neg8.midpoint_lost` is withdrawn, because no analysed GAMMA attempt can carry it. §10 and
+  §11 follow.
+- §4 step 4 and §11: after a harvest re-screen, the issuer reads the drift allowance from
+  `withheld/neg8-rescreen-bracket.json`, never the verdict row's (Fable cold pass 2, note N4).
