@@ -275,7 +275,9 @@ CODES: dict[str, CodeSpec] = {
     # Roster.
     "roster.not_in_plan": _spec("ROSTER", "NUMBER"),
     "roster.before_chain_started": _spec("ROSTER", "NUMBER"),
-    "roster.run_id_mismatch": _spec("ROSTER", "REPRESENTATION"),
+    # NUMBER since audit-fix batch 1 (item 7): the design catalog's class and
+    # effect (EXCLUDE_MEMBER): the member's records disagree about which member it is.
+    "roster.run_id_mismatch": _spec("ROSTER", "NUMBER"),
     "roster.no_science_bundles": _spec("ROSTER", "NUMBER"),
     # A run id the plan tree launches (or lists) more than once: its later
     # planned positions can never be measured (rehearsal round 1, B3).
