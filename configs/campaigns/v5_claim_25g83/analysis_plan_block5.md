@@ -1,8 +1,8 @@
 # Analysis plan V5-CLAIM-25G83-B5: what is computed from the claim windows, and how
 
-Status: **DRAFT, NOT SEALED. Revision 8, 2026-10-07** (revision 3 is commit `71c91d74`, revision 4 ends at commit
-`7261a585`, revision 5 at `9d63b4df`, revision 6 at `c6843537`, revision 7 at `dc046d4d`; the changes of revisions 4
-to 8 are listed in §14). Companion to
+Status: **DRAFT, NOT SEALED. Revision 9, 2026-10-07** (revision 3 is commit `71c91d74`, revision 4 ends at commit
+`7261a585`, revision 5 at `9d63b4df`, revision 6 at `c6843537`, revision 7 at `dc046d4d`, revision 8 at `30d92227`;
+the changes of revisions 4 to 9 are listed in §14). Companion to
 `registration_block5.md` (the **registration**) and `flag_catalog.json` (the **flag catalog**) in the same directory;
 they are sealed together and none binds alone. Terms are those built in registration §0; terms that first appear here
 are built where they first appear. Every rule is fixed before any claim byte exists. Most estimators below are already
@@ -127,8 +127,9 @@ which the seal gate confirms; registration §7.2, §14 Q11). The flag catalog ke
   the flag is disclosed beside its reported cells and floors (§8.1).
 
 *Scope.* Only GAMMA is affected, because only its quads enter the contrasts' estimate and its allowance enters their
-D. The floor packs' reported cells are L1 instrument results, not contrasts. (The floors themselves do not use the
-drift allowance, §5.)
+D. The floor packs' reported cells are L1 instrument results, not contrasts. (A floor's value does not use the drift
+allowance, §5; the floor extraction only records each window's allowance beside the floor, and refuses a cell when it
+is absent, §3.1 step 4.)
 
 *Check in the claim gate.* By the rule above, GAMMA's analysed attempt never carries `neg8.midpoint_lost`. If the
 claim gate finds the flag on it, the exclusion function and the code disagree: the analysis stops and the step goes
@@ -160,12 +161,12 @@ and "Results fills").
 | 1 | Strict validation of every kept bundle of the three analysed attempts | `python -m joulewise validate-bundle --strict <bundle>` | exit 0 per bundle |
 | 2 | Re-reduction into restricted custody (never inside a bundle) | `python -m joulewise reduce <bundle> --output <custody>/<bundle_id>.rereduced.json` | summary per bundle |
 | 3 | Read the exclusions of each analysed attempt and fix each cell's kept units | lane L9 consumer of `exclusions.json` | kept-unit list per cell, hash-tied |
-| 4 | Floor extraction, ALPHA and BETA separately, each with its pack's `extraction_spec.json`, over kept units | `scripts/extract_detection_floors.py … --hash-bundles` | `joulewise.detection_floor_extraction.v1` ×2 |
+| 4 | Floor extraction, ALPHA and BETA separately, each with its pack's `extraction_spec.json`, over kept units, given the window's harvest archive so that the drift allowance is the one the harvest's NEG-8 screen left standing (registration §0.12) | `scripts/extract_detection_floors.py … --hash-bundles`, with the archive argument that lane L9-NEG8 adds (§11) | `joulewise.detection_floor_extraction.v1` ×2 |
 | 5 | Production mint of the aggregate floor and its dominance replay sidecar; the v2 input manifest feeds only the decode and prefill-p2048 cells | `scripts/mint_floor_artifact_generalized.py` with `FILL[V5-FINAL-PINSET]` and `FILL[V5-V2-INPUT-MANIFEST]` | `joulewise.detection_floor_artifact.v2`; `joulewise.d165_dominance_replay.v1` |
 | 6 | Dominance close-out | adapter `FILL[MINT-TO-CLOSEOUT-ADAPTER]`, then `scripts/build_d165_dominance_closeout.py` | `joulewise.d165_dominance_closeout.v1` |
 | 7 | (removed: revision 2's L10-C rehearsal; the blind dry run of §3.2 runs these steps on the real bytes) | | |
 | 8 | Finalization of GAMMA's prospective manifest with its attachments (whole-window verdict, bracket binding, ledger, aggregate floor, dominance replay sidecar, GAMMA's exclusions) | `scripts/finalize_analysis_manifest.py` | finalized manifest |
-| 9 | Claim gate, one `--evidence-root` per floor pack | `python -m joulewise analyze-claims` | `joulewise.claim_verdicts.v1` |
+| 9 | Claim gate, one `--evidence-root` per floor pack, given the harvest archive of each window whose drift allowance it reads (GAMMA's for the contrasts' D; lane L9-NEG8 makes every claim consumer take it, §11) | `python -m joulewise analyze-claims … --neg8-harvest-archive <archive>` | `joulewise.claim_verdicts.v1` |
 | 10 | Reported-energy projection, each cell independently, so a refusing cell (p42) leaves the others issued | production issuance of `joulewise.paper_reported_energy_projection.v1` through D-173 custody, `FILL[REPORTED-ENERGY-ISSUER]` | one projection record per cell |
 | 11 | Descriptive estimates, disclosures and results fills for adopted placements | §7.3 and §8 by `FILL[DISCLOSURE-PRODUCER]`; adapter `FILL[CLAIM-VERDICT-TO-FILL-ADAPTER]`, then `scripts/render_results_fills.py` and `--validate-rendered` | issued values; validated Markdown |
 | 12 | Results cold gate: re-derive every printed number from the artifacts of steps 3–11 | judge + refuter | gate record |
@@ -233,10 +234,14 @@ prefill-p42 read the decode stages' 50 bundles; prefill-p2048 reads the p2048 st
    (the largest change in the member's phase energy when the whole power trace shifts by any common amount within ±
    its effective clock bound), `E_interpolation_joint_edge_bound_j` (identically 0 for interval-support traces, as all
    48 block-3 phase windows recorded), and `E_whole_window_drift_allowance_j` (half the window's gross-family NEG-8
-   allowance, registration §0.12; when the window's `derived/neg8-screen.json` records a harvest re-screen, the
-   allowance is the one in `withheld/neg8-rescreen-bracket.json`, computed on the surviving references, never the
-   whole-window verdict row's, which may still include a reference the harvest found contaminated; cold pass 2 N4;
-   the same holds for D in §7.1). For each kind, its stratified average is 0.2 × (mean over the kept repeats) + 0.8 ×
+   allowance, registration §0.12). The allowance is the one the harvest's `derived/neg8-allowance.json` names: the
+   verdict row's own bracket when the harvest found no new loss (`stored_verdict`), or, when the harvest re-ran the
+   screen on the surviving references and it passed, the bracket in `withheld/neg8-rescreen-bracket.json`
+   (`survivor_rescreen`), never the verdict row's, which may still include a reference the harvest found
+   contaminated (cold pass 2 N4; Sol delta audit A1). It is read through
+   `whole_window.harvest_neg8_allowance_bracket`, which authenticates the record and recomputes a re-screened
+   allowance; with no record, or one that does not authenticate, there is no allowance and the cell refuses
+   (`whole_window_drift_allowance_unrecorded`). The same holds for D in §7.1. For each kind, its stratified average is 0.2 × (mean over the kept repeats) + 0.8 ×
    (mean over the members of the kept quads); at full n this equals the 50-member average. The three averages are
    summed with `math.fsum` into B. A missing kind refuses the cell; it is never zero by default.
 5. **Endpoints:** `lower = m − h − B`, `upper = m + h + B`, in that order, not clamped at zero.
@@ -654,6 +659,7 @@ Every printed number is `MEASURED` or `DERIVE`; none is recalculated from prose.
 | D-179 issuer implementing §4 (stratified mean, variance, df, B, per-token over kept units; n_r, n_b in the record), projecting each cell independently and preserving the whole-window allowance allocation, reading the re-screened allowance when the harvest re-screened (§4 step 4) | Absent ("No production dispatch exists", `joulewise/paper_reported_energy.py`) | `REPORTED-ENERGY-ISSUER` |
 | Floor extraction over kept units with g(n) (`joulewise/floor_extraction.py`) | The extractor assumes full n | `FLOOR-EXTRACTION-KEPT-UNITS` |
 | Claim gate over kept quads: no `fixed_n_plan_incomplete` for removed quads; leave-one-quad-out over kept quads; finalization binds the exclusions digest | Absent | `GAMMA-MANIFEST-EXCLUSIONS-BINDING` |
+| **Lane L9-NEG8: one NEG-8 survivor logic for every claim consumer** (registration §0.12, §9.1, §14 Q13). It runs after the seal and before any claim, as a gated fix to code that does not run during collection (registration §11 item 1 (ii)), pinned before the release event (§11 item 4), with one design round by Sol and Fable before code. It must: (a) use one strict-invalid predicate in the verdict writer, the replay and the harvest, moving the replay and the harvest to the writer's predicate (structural check, custody triangle, config binding) plus full strict validation, so all three drop exactly the same references, and leaving the writer's bytes unchanged (Fable cold pass 4 N-3); (b) pass the harvest archive through floor extraction (`floor_extraction.extract_cells`), the mint (`scripts/mint_floor_artifact.py`, `mint_floor_artifact_generalized.py`) and `scripts/extract_detection_floors.py`, so a block-5 floor cell gets the allowance the harvest's screen left standing (Sol re-verification R2; cold pass 4 D1); (c) make claim validation authenticate the harvest's survivor screen before the stored-failure veto, so a window whose stored screen failed and whose survivor re-screen passed gets the re-screened allowance, while the membership, provenance and physics checks stay independent (Sol R3); (d) have every claim consumer read the allowance from `derived/neg8-allowance.json` (registration §0.12), never from the stored bracket. Each with a test on a synthetic HAZARD root with and without its archive. | At the int5 head `fe28e5a0c`: the record, its consumer and `analyze-claims --neg8-harvest-archive` exist; (b), (c) and the shared predicate (a) do not. Until the lane lands, every block-5 floor cell refuses (`whole_window_drift_allowance_unrecorded`) and a contrast resting on a recorded survivor re-screen refuses (`whole_window_neg8_verdict_failed`): a HAZARD floor or contrast with a recorded re-screen has no allowance and is not claimable. Both refuse; neither prints a wrong number. | `L9-NEG8` |
 | Claim gate reads GAMMA's flags: `neg8.midpoint_lost` on the analysed attempt stops the analysis (the exclusion function should have made the attempt not claim-usable, §2.4) | Absent | (part of L9) |
 | `_v5` final pinset and v2 input manifest for the mint; two-producer aggregate floor binding in the claim gate (memo 4.1) | Absent | `V5-FINAL-PINSET`, `V5-V2-INPUT-MANIFEST` |
 | Mint-to-close-out adapter; dominance sidecar wiring (memo 4.3) | Absent | `MINT-TO-CLOSEOUT-ADAPTER` |
@@ -685,7 +691,7 @@ record, and exercised by the blind dry run (§3.2) before the release.
 
 ## 13. FILLs specific to this plan
 
-Still open: `B5-ANALYSIS-CUSTODY-ROOT`, `B5-BLIND-DRY-RUN-RECORD`, `EXCLUSIONS-CONSUMER`, `REPORTED-ENERGY-ISSUER`,
+Still open: `B5-ANALYSIS-CUSTODY-ROOT`, `B5-BLIND-DRY-RUN-RECORD`, `EXCLUSIONS-CONSUMER`, `L9-NEG8`, `REPORTED-ENERGY-ISSUER`,
 `FLOOR-EXTRACTION-KEPT-UNITS`, `GAMMA-MANIFEST-EXCLUSIONS-BINDING`, `V5-FINAL-PINSET`, `V5-V2-INPUT-MANIFEST`,
 `MINT-TO-CLOSEOUT-ADAPTER`, `CLAIM-VERDICT-TO-FILL-ADAPTER`, `DISCLOSURE-PRODUCER`, `DISCLOSURE-SITES`, and, shared
 with the registration, `ATTRIBUTION-FLOOR-BINDING`. Each names code, a record or a ruling that does not exist yet.
@@ -784,3 +790,18 @@ member exclusion used by §4–§7 changed.
   §11 follow.
 - §4 step 4 and §11: after a harvest re-screen, the issuer reads the drift allowance from
   `withheld/neg8-rescreen-bracket.json`, never the verdict row's (Fable cold pass 2, note N4).
+
+**Revision 9 (2026-10-07, the REG sync to the int5 head `fe28e5a0c`).** No estimator, threshold or member exclusion
+used by §4–§7 changed.
+
+- §4 step 4 (and D in §7.1): the drift allowance is the one `derived/neg8-allowance.json` names, read through
+  `whole_window.harvest_neg8_allowance_bracket`; with no authenticated record there is no allowance and the cell
+  refuses (Sol delta audit A1, fixed in the harvest at `6fd863645`).
+- §3.1 steps 4 and 9: floor extraction and the claim gate are given the window's harvest archive; the claim gate's
+  argument exists (`--neg8-harvest-archive`), floor extraction's comes with lane L9-NEG8.
+- §11: lane L9-NEG8 (registration §9.1, §14 Q13): one strict-invalid predicate, the archive through floor extraction
+  and the mint, survivor-screen authentication ahead of the stored-failure veto, and every claim consumer reading the
+  allowance record. Until it lands, no block-5 floor and no contrast resting on a recorded survivor re-screen is
+  claimable; both refuse, in the safe direction.
+- §2.4: the floors' relation to the allowance is stated exactly (the value does not use it; the extraction records it
+  and refuses without it).
