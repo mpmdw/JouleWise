@@ -16,6 +16,15 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+# CI skips its ordinary test jobs when a change touches only files under docs/ or
+# root-level Markdown files, but it always runs this module (the "fences" job of
+# .github/workflows/ci.yml).  Importing the paper-number inventory's test classes
+# makes that run also compare the numbers printed in the Paper A draft with their
+# sources.  A test class added to that module must be added to this list.
+from tests.test_paper_number_inventory import (  # noqa: F401
+    AuditMutations, Mutations, Ratchets, RealSkeleton, Renderers, SourceRefusal,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
