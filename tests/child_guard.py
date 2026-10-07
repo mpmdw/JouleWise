@@ -541,11 +541,15 @@ def check_descendants(label: str, known: Iterable[int], *, settle_s: float = SET
         "tests.child_guard.own(self, process):\n  " + "\n  ".join(lines))
 
 
+_GUARDED_CLASSES: set[type] = set()   # classes whose class-level check is pending
+
+
 def fails_on_leftover_children(cls=None, *, settle_s: float = SETTLE_S):
     """Class decorator: a test, or the class, that leaves a child running is reported as failed.
 
     ``settle_s`` is how long a child that is already on its way out may take to
-    finish exiting before it counts as left behind.
+    finish exiting before it counts as left behind. Decorating a class and also
+    a class it inherits from checks each test and each class once, not twice.
     """
 
     def decorate(klass):
@@ -554,14 +558,18 @@ def fails_on_leftover_children(cls=None, *, settle_s: float = SETTLE_S):
 
         @classmethod
         def setUpClass(inner):   # noqa: N802 (unittest hook)
+            if inner in _GUARDED_CLASSES:   # an outer decoration already watches this class
+                return class_setup(inner)
             label = f"{inner.__module__}.{inner.__qualname__}"
             try:
                 known = {row.pid for row in running_descendants()}
             except ProcessTableUnavailable:
                 known = None
             spawns = start_recording()
+            _GUARDED_CLASSES.add(inner)
 
             def after_class():
+                _GUARDED_CLASSES.discard(inner)
                 stop_recording(spawns)
                 problems = []
                 for check in ((lambda: check_spawns(f"The class fixtures of {label}", spawns, settle_s=settle_s)),
@@ -579,6 +587,9 @@ def fails_on_leftover_children(cls=None, *, settle_s: float = SETTLE_S):
 
         @functools.wraps(test_run)
         def run(self, result=None):
+            if getattr(self, "_child_guard_watching", False):   # an outer decoration already watches this test
+                return test_run(self, result)
+            self._child_guard_watching = True
             spawns = start_recording()
 
             def after_test():
@@ -591,9 +602,29 @@ def fails_on_leftover_children(cls=None, *, settle_s: float = SETTLE_S):
                 return test_run(self, result)
             finally:
                 stop_recording(spawns)   # a skipped test runs no cleanups
+                self._child_guard_watching = False
 
         klass.setUpClass = setUpClass
         klass.run = run
         return klass
 
     return decorate(cls) if cls is not None else decorate
+
+
+def guard_test_classes(namespace: dict, *, settle_s: float = SETTLE_S) -> list[type]:
+    """Apply ``fails_on_leftover_children`` to every test class a module defines.
+
+    Call it once at the bottom of a test module, as
+    ``child_guard.guard_test_classes(globals())``. Classes the module only
+    imported from elsewhere are left to their own module. Returns the classes
+    it decorated.
+    """
+
+    import unittest
+
+    module = namespace.get("__name__")
+    decorated = []
+    for value in list(namespace.values()):
+        if isinstance(value, type) and issubclass(value, unittest.TestCase) and value.__module__ == module:
+            decorated.append(fails_on_leftover_children(value, settle_s=settle_s))
+    return decorated

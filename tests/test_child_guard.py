@@ -324,6 +324,51 @@ class GuardTests(unittest.TestCase):
 
         self.assertEqual([], problems(self.guarded(body)))
 
+    def test_decorating_a_class_and_its_base_checks_each_test_once(self):
+        kept = []
+        open_recorders = len(child_guard._RECORDERS)
+
+        class Base(unittest.TestCase):
+            @classmethod
+            def setUpClass(cls):
+                super().setUpClass()
+
+        class Throwaway(child_guard.fails_on_leftover_children(settle_s=0.2)(Base)):
+            @classmethod
+            def setUpClass(cls):
+                super().setUpClass()
+                cls.fixture = subprocess.Popen(["/bin/sleep", LONG_S])
+                kept.append(cls.fixture)
+
+            def test_it(inner):
+                kept.append(subprocess.Popen(["/bin/sleep", LONG_S]))
+
+        result = run_class(child_guard.fails_on_leftover_children(settle_s=0.2)(Throwaway))
+        self.assertEqual(1, len(result.failures), problems(result))   # the test's child, reported once
+        self.assertEqual(1, len(result.errors), problems(result))     # the class fixture, reported once
+        self.assertEqual(1, result.failures[0][1].count("is still running"))
+        self.assertEqual(1, result.errors[0][1].count("is still running"))
+        self.assertEqual(open_recorders, len(child_guard._RECORDERS))
+        self.assertFalse(any(running(child.pid) for child in kept))
+
+    def test_guard_test_classes_decorates_the_classes_a_module_defines_and_no_others(self):
+        kept = []
+
+        class Local(unittest.TestCase):
+            def test_it(inner):
+                kept.append(subprocess.Popen(["/bin/sleep", LONG_S]))
+
+        class Imported(unittest.TestCase):
+            def test_it(inner):
+                kept.append(child_guard.own(inner, subprocess.Popen(["/bin/sleep", LONG_S])))
+
+        Imported.__module__ = "tests.some_other_module"
+        namespace = {"__name__": Local.__module__, "Local": Local, "Imported": Imported, "helper": object()}
+        self.assertEqual([Local], child_guard.guard_test_classes(namespace, settle_s=0.2))
+        self.assertEqual(1, len(run_class(Local).failures))
+        self.assertEqual([], problems(run_class(Imported)))
+        self.assertFalse(any(running(child.pid) for child in kept))
+
     def test_a_skipped_test_leaves_no_recorder_open(self):
         before = len(child_guard._RECORDERS)
 
