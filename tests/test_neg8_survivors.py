@@ -798,6 +798,43 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         self.assertIn("source_manifest_unauthenticated", flag["observed"]["collected_bound_rescreen"]["problems"])
         self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
 
+    def test_a_loss_flagged_reference_is_named_by_the_roster_when_no_manifest_reads(self) -> None:
+        """Delta audit A3: sources fail and the claim root's manifests are absent; the loss map was {}.
+
+        The stored screen passed with the contaminated end reference inside it
+        and stood, with no ``neg8.screen_failed``.  The sealed roster names the
+        reference, the loss is mapped, the re-screen cannot run and the window
+        is excluded.
+        """
+        from unittest import mock
+
+        h = _hb().h
+        points = self.points(0.0, **{"b5t-neg8-end-3": 30.40})
+
+        def roster(pack_root, repo_root, real=h.build_roster):
+            # The harness pack's roster has no reference members; a real pack's
+            # marks each with its slot (``build_roster``), as added here.
+            value = real(pack_root, repo_root)
+            for run_id, role in _hb().NEG8_REFERENCES:
+                slot = role.rsplit("_", 1)[1]
+                value["members"].append({
+                    "run_id": run_id, "kind": "auxiliary", "ordinal": None, "stage_id": f"{slot}_reference",
+                    "role": f"{slot}_reference", "block_id": None, "position": None, "arm": None,
+                    "config_path": None, "config_sha256": None, "cells": [], "neg8_slot": slot})
+            return value
+
+        with mock.patch.object(h, "verdict_neg8_sources", lambda row, runs: "source_manifest_absent"), \
+                mock.patch.object(h, "_claim_campaign_manifests_as_written", lambda runs: []), \
+                mock.patch.object(h, "build_roster", roster):
+            window = self.run_window("no-manifests", points,
+                                     reference_flags=[("b5t-neg8-end-3", "contention.request_overlap")])
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+        # (The harness's synthetic reference bundles, once roster members, also fail its strict check.)
+        self.assertEqual(flag["observed"]["survivor_rescreen"]["new_losses"]["b5t-neg8-end-3"],
+                         "contention.request_overlap")
+        self.assertEqual(flag["observed"]["reference_source"]["verdict_sources_problem"], "source_manifest_absent")
+        self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+
     def test_unauthenticated_sources_with_no_loss_flag_leave_the_stored_screen(self) -> None:
         from unittest import mock
 
@@ -1488,3 +1525,78 @@ class ReferenceModelIdentityTests(unittest.TestCase):
     def test_one_identity_everywhere_emits_nothing(self) -> None:
         self.assertEqual(self.run_identity(self.references()), [])
 
+
+# ---------------------------------------------------------------------------
+# Part 6: delta audit A3: the sealed roster names the references, so a known
+# loss always reaches the survivors re-screen.
+# ---------------------------------------------------------------------------
+
+class RosterNamedReferenceLossTests(unittest.TestCase):
+    """``_Harvest._neg8_reference_losses`` and ``neg8_screen`` with the audit's probe objects."""
+
+    def setUp(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        self._tmp = tempfile.TemporaryDirectory(prefix="neg8-roster-", dir=_hb().REAL_TMP)
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp = Path(self._tmp.name)
+
+    def harvest(self, flags, roster, *, stored_lost=()):
+        from types import SimpleNamespace
+
+        h = _hb().h
+        run = object.__new__(h._Harvest)
+        (self.tmp / "runs").mkdir(exist_ok=True)
+        run.inputs = SimpleNamespace(claim_runs_root=self.tmp / "runs")
+        run.flags = SimpleNamespace(records=[{"code": code, "scope": {"level": "member", "run_id": run_id}}
+                                             for run_id, code in flags])
+        run.roster = {"members": roster}
+        run.neg8, run.outputs = {"derived_from": "registered_corpus"}, {}
+        run.derived, run.withheld = self.tmp / "derived", self.tmp / "withheld"
+        run.derived.mkdir(exist_ok=True)
+        run.withheld.mkdir(exist_ok=True)
+        self.emitted = []
+        run.emit = lambda code, **kwargs: self.emitted.append((code, kwargs))
+        bracket = evaluate(bound_artifact(RULING_CORPUS), [100.0] * 3, [100.1], [100.2] * 3)
+        if stored_lost:
+            bracket = evaluate(bound_artifact(RULING_CORPUS), [100.0] * 3, [100.1], [100.2] * 2, lost=[
+                {"bundle_id": run_id, "position": "end", "reason": "status_not_succeeded", "status": "failed"}
+                for run_id in stored_lost])
+        row = {"timestamp": "1970-01-01T00:33:20Z",
+               "idle_admission_core": {"conditions": [], "neg8_bracket": bracket}}
+        return run, row
+
+    def test_the_audit_trigger_maps_the_loss_and_fails_the_screen(self) -> None:
+        """Before: losses {} and nothing emitted; the stored passing screen stood."""
+        from unittest import mock
+
+        h = _hb().h
+        run, row = self.harvest([("end-3", "contention.request_overlap")],
+                                [{"run_id": "end-3", "neg8_slot": "end", "kind": "auxiliary"}])
+        with mock.patch.object(h, "verdict_neg8_sources", return_value="source_manifest_absent"):
+            self.assertEqual(run._neg8_reference_losses(row), {"end-3": "contention.request_overlap"})
+            self.assertEqual(run.neg8_screen(row), "screen_failed")
+        (observed,) = [kwargs["observed"] for code, kwargs in self.emitted if code == "neg8.screen_failed"]
+        self.assertEqual(observed["reference_source"]["source"], "claim_campaign_manifests_unauthenticated")
+        self.assertFalse(observed["collected_bound_rescreen"]["evaluated"])
+
+    def test_a_measured_spare_is_named_by_the_roster(self) -> None:
+        from unittest import mock
+
+        h = _hb().h
+        run, row = self.harvest([("start-spare-1", "battery.member_span")],
+                                [{"run_id": "start-spare-1", "spare_slot": "start", "kind": "auxiliary"}])
+        with mock.patch.object(h, "verdict_neg8_sources", return_value="source_manifest_unauthenticated"):
+            self.assertEqual(run._neg8_reference_losses(row), {"start-spare-1": "battery.member_span"})
+
+    def test_an_unauthenticated_stored_loss_list_never_lets_the_stored_screen_stand(self) -> None:
+        """The stored bracket says the flagged reference was already dropped; unauthenticated, that is not trusted."""
+        from unittest import mock
+
+        h = _hb().h
+        run, row = self.harvest([("end-3", "member.timeout")],
+                                [{"run_id": "end-3", "neg8_slot": "end", "kind": "auxiliary"}], stored_lost=["end-3"])
+        with mock.patch.object(h, "verdict_neg8_sources", return_value="source_manifest_absent"):
+            self.assertEqual(run.neg8_screen(row), "screen_failed")
+        self.assertIn("neg8.screen_failed", [code for code, _kwargs in self.emitted])

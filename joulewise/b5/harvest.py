@@ -4615,8 +4615,14 @@ class _Harvest:
         if conditions:
             reasons.append("neg8_conditions")
         harvest_losses = self._neg8_reference_losses(row)
+        # The stored bracket's own loss list is trusted only when its sources
+        # authenticate: otherwise every known loss goes to the re-screen, which
+        # then cannot run, so an unauthenticated source never leaves a passing
+        # screen standing over a loss-flagged reference (delta audit A3).
+        source = getattr(self, "neg8_reference_source", None)
+        sources_authentic = isinstance(source, Mapping) and source.get("source") == "verdict_sources"
         stored_lost = {item.get("bundle_id") for item in (bracket or {}).get("reference_losses") or []
-                       if isinstance(item, Mapping)}
+                       if isinstance(item, Mapping)} if sources_authentic else set()
         new_losses = {run_id: code for run_id, code in harvest_losses.items() if run_id not in stored_lost}
         clean_bound = getattr(self, "neg8_clean_bound", None)
         survivors = bool(new_losses) or clean_bound is not None
@@ -4712,7 +4718,10 @@ class _Harvest:
         and ``neg8.screen_failed`` is emitted, instead of a stored screen that
         holds the reference's energy standing silently.  The fallback names
         references only; it never supplies an energy or a passing screen.
-        ``self.neg8_reference_source`` records which source was used.
+        ``self.neg8_reference_source`` records which source was used.  The
+        sealed roster's planned references and spares are always named too
+        (delta audit A3), so absent or unreadable manifests cannot erase a
+        known loss.
         """
         from joulewise import whole_window as ww
         runs = getattr(getattr(self, "inputs", None), "claim_runs_root", None)
@@ -4737,6 +4746,15 @@ class _Harvest:
                 if ww._neg8_position(member.get("role"), member.get("sentinel_position")) in ("start", "midpoint",
                                                                                                 "end"):
                     references.update(item for item in member.get("bundle_ids") or [] if isinstance(item, str))
+        # Delta audit A3: the sealed roster (the plan tree) names every planned
+        # reference (``neg8_slot``) and every spare (``spare_slot``) whatever
+        # the manifests say, so a known loss always reaches the survivors
+        # re-screen even when no manifest reads.  A spare that never ran
+        # carries no flag, so naming it adds no loss.
+        for member in (getattr(self, "roster", None) or {}).get("members") or []:
+            if isinstance(member, Mapping) and isinstance(member.get("run_id"), str) \
+                    and (isinstance(member.get("neg8_slot"), str) or isinstance(member.get("spare_slot"), str)):
+                references.add(member["run_id"])
         order = {code: index for index, code in enumerate(NEG8_REFERENCE_LOSS_CODES)}
         losses: dict[str, str] = {}
         for flag in self.flags.records:
