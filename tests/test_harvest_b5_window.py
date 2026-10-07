@@ -2764,8 +2764,15 @@ class BatteryRuleParityTests(unittest.TestCase):
         "smc_discharge": ({"smc": lambda second: -800}, {"battery.assist"}),
         "smc_small_discharge": ({"smc": lambda second: -100}, {"battery.assist"}),
         "smc_charge_inside_span": ({"smc": lambda second: 800 if second == 15 else 0}, {"battery.member_span"}),
+        # Cold pass N4: with the 1 Hz SMC reads covering the span, a sign-inconsistent
+        # discharge accumulator is disclosed, not excluded (before: battery.member_span).
         "smc_discharge_with_rose_accumulator": ({"smc": lambda second: -800, "later_telemetry": DISCHARGE_ROSE},
-                                                {"battery.member_span", "battery.assist"}),
+                                                {"battery.accumulator_unavailable", "battery.assist"}),
+        "smc_zero_with_rose_accumulator": ({"smc": lambda second: 0, "later_telemetry": DISCHARGE_ROSE},
+                                           {"battery.accumulator_unavailable"}),
+        "smc_charge_with_rose_accumulator": ({"smc": lambda second: 800 if second == 15 else 0,
+                                              "later_telemetry": DISCHARGE_ROSE},
+                                             {"battery.member_span", "battery.accumulator_unavailable"}),
     }
 
     def test_hazard_and_harvest_copies_decide_alike(self):
@@ -2789,6 +2796,20 @@ class BatteryRuleParityTests(unittest.TestCase):
         self.assertIn(code, h.BATTERY_EXCLUDING_CODES)
         catalog = json.loads((FIXTURES / "flag_catalog.json").read_text())
         self.assertEqual("EXCLUDE_MEMBER", catalog["codes"][code]["effect"])
+
+
+    def test_a_sign_inconsistent_accumulator_under_smc_coverage_is_disclosed(self):
+        """Cold pass N4: the SMC measured the current over the span; the record disagreeing with itself is disclosed."""
+        flags = h.accumulator_member_flags(
+            h.battery_publications(parsed(self.journal(later_telemetry=self.DISCHARGE_ROSE)))[:2], self.T,
+            discharge_out=(rows := []), smc_covered=True)
+        self.assertEqual([], rows)
+        ((code, observed, _interval),) = flags
+        self.assertEqual("battery.accumulator_unavailable", code)
+        (row,) = observed["intervals"]
+        self.assertEqual((40, 5400.0), (row["sign_inconsistent"]["ticks"], row["sign_inconsistent"]["mean_per_tick"]))
+        catalog = json.loads((FIXTURES / "flag_catalog.json").read_text())
+        self.assertEqual("DISCLOSE", catalog["codes"][code]["effect"])
 
 
 class L1JournalFormatTests(unittest.TestCase):

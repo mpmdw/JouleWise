@@ -2556,7 +2556,8 @@ def battery_join(span: Sequence[int], readings: Sequence[Reading], thresholds: M
                                                 "max_gap_s": SMC_MAX_GAP_S},
                     _hole_interval(smc_holes[0])))
     discharge_rows: list[dict[str, Any]] = []
-    out.extend(accumulator_member_flags(in_force_pubs, thresholds, discharge_out=discharge_rows))
+    out.extend(accumulator_member_flags(in_force_pubs, thresholds, discharge_out=discharge_rows,
+                                        smc_covered=covered))
     # Assist is discharge on AC and not charging (ruling item 1).  A span
     # with a read of IsCharging Yes or ExternalConnected No is excluded
     # (battery.member_span) and its discharge is not assist (review F5).  A
@@ -2719,7 +2720,7 @@ def pair_discharge_only(reasons: Any, currents: Any) -> bool:
 
 
 def accumulator_member_flags(in_force_publications: Sequence[Publication], thresholds: Mapping[str, Any], *,
-                             discharge_out: list[dict[str, Any]] | None = None
+                             discharge_out: list[dict[str, Any]] | None = None, smc_covered: bool = False
                              ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
     """The accumulator rule of registration 6.4, on L1's own interval reader.
 
@@ -2734,7 +2735,11 @@ def accumulator_member_flags(in_force_publications: Sequence[Publication], thres
     ``discharge_out`` for ``battery.assist``; a positive discharge mean beyond
     it (the discharge-only accumulator rose: sign-inconsistent) stays
     ``battery.accumulator_excursion``, marked ``sign_inconsistent``, as in the
-    hazard copy (P3-HAZ review F2); a nonzero mean at or below the
+    hazard copy (P3-HAZ review F2), unless ``smc_covered`` (the 1 Hz SMC B0AC
+    reads cover the span, so the current was measured directly and any
+    charging is the SMC rule's): then it is ``battery.accumulator_unavailable``
+    (DISCLOSE; cold pass N4), a registry record disagreeing with itself, not a
+    measured hazard; a nonzero mean at or below the
     limit is ``battery.accumulator_activity``; a sign that
     cannot be read, or an interval without a voltage, is
     ``battery.accumulator_unavailable`` (the publication rule still applies).
@@ -2779,7 +2784,16 @@ def accumulator_member_flags(in_force_publications: Sequence[Publication], thres
                 # not discharge, and keeps the exclusion, as in
                 # joulewise.hazards.battery.span_findings (P3-HAZ review F2).
                 entry["sign_inconsistent"] = True
-                excursions.append(entry)
+                if smc_covered:
+                    # Cold pass N4: the SMC reads measure the current over the
+                    # span; the self-contradicting record is disclosed.
+                    unavailable_rows.append({"interval_monotonic_ns": interval,
+                                             "update_times_s": [earlier.update_time_s, later.update_time_s],
+                                             "unavailable": {label: "sign-inconsistent (the discharge "
+                                                             "accumulator rose); the SMC reads cover the span"},
+                                             "sign_inconsistent": entry})
+                else:
+                    excursions.append(entry)
             elif discharge_out is not None:
                 discharge_out.append(entry)
     out: list[tuple[str, dict[str, Any], dict[str, Any]]] = []

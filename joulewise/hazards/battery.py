@@ -871,7 +871,9 @@ def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any]
       Voltage) is :func:`assist_finding`; none is disclosed for a span that
       read IsCharging Yes or ExternalConnected No (ruling item 1).  Discharge
       alone never excludes; a positive discharge-accumulator mean beyond the
-      limit is sign-inconsistent and stays ``battery.member_span``.
+      limit is sign-inconsistent and stays ``battery.member_span``, unless
+      the SMC B0AC reads cover the span (then ``battery.accumulator_unavailable``,
+      disclosed: cold pass N4).
 
     The publications in force are the last one at or before the start,
     every one inside the span and the first one at or after the end.
@@ -971,11 +973,15 @@ def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any]
             elif mean > 0:
                 # The discharge accumulator sums negative ticks only; a positive
                 # mean beyond the limit is sign-inconsistent evidence, not
-                # discharge, and keeps the exclusion (review F2).
-                found.append(finding("battery.member_span", span=span,
-                                     observed={**delta, "voltage_mv": voltage}, expected=limit_mw,
+                # discharge. Without SMC coverage it keeps the exclusion
+                # (review F2); with the 1 Hz SMC reads covering the span the
+                # current was measured directly, so the self-contradicting
+                # record is disclosed (cold pass N4; the harvest copy agrees).
+                found.append(finding("battery.accumulator_unavailable" if smc_covered else "battery.member_span",
+                                     span=span, observed={**delta, "voltage_mv": voltage}, expected=limit_mw,
                                      interval=interval,
-                                     detail=detail + " (sign-inconsistent: the discharge accumulator rose)"))
+                                     detail=detail + " (sign-inconsistent: the discharge accumulator rose"
+                                     + ("; the SMC reads cover the span)" if smc_covered else ")")))
             else:  # discharge beyond the limit: battery assist, disclosed below
                 discharge_intervals.append(list(interval["monotonic_ns"]))
     if not state_bad:
