@@ -564,6 +564,12 @@
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER"
     },
+    "meter.supervision_fault": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS"
+    },
     "model.identity_inconsistent_in_window": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",

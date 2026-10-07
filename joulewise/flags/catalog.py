@@ -166,6 +166,9 @@ _DISCLOSE_CODES = {
     "meter.pdtr_gain_out_of_band": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "meter.battery_activity": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "meter.vbus_out_of_contract": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    # Lane P3-DRV: the driver could not start, keep up (crash loop) or prove
+    # stopped the meter process. Changes no number; the meter never refuses.
+    "meter.supervision_fault": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "g10.discharged": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "g10.not_discharged": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "diagnostic.s1_structural": _code("DIAGNOSTIC", "REPRESENTATION", DISCLOSE),

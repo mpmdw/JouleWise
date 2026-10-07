@@ -347,6 +347,8 @@ CODES: dict[str, CodeSpec] = {
     "census.journal_write_failed": _spec("RECORDS", "REPRESENTATION"),
     "supervision.pass_failed": _spec("RECORDS", "REPRESENTATION"),
     "monitor.outage": _spec("DIAGNOSTIC", "PHYSICS"),
+    # P3-DRV's driver code (the KM003C wall meter's supervision; DISCLOSE):
+    "meter.supervision_fault": _spec("DIAGNOSTIC", "PHYSICS"),
     # Emitted by this harvest:
     "records.runs_root_override": _spec("RECORDS", "REPRESENTATION"),
     "yield.harvest_disagrees_with_window": _spec("RECORDS", "REPRESENTATION"),
@@ -389,6 +391,8 @@ PRUNE2_CODES = frozenset({
     # Registered at integration (int3): the other lanes' remaining round-2 codes.
     "member.stderr_uncopied", "records.auxiliary_match_raised", "census.journal_write_failed",
     "supervision.pass_failed", "monitor.outage",
+    # Registered at the P3 round (lane P3-DRV).
+    "meter.supervision_fault",
 })
 # joulewise.flags.collect.UNMEASURED_BY_COLLECTOR, read and never imported: the
 # flag each arm collector leaves when its checks did not (all) run.

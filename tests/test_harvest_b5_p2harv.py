@@ -349,6 +349,8 @@ class Prune2CodeRegistrationTests(unittest.TestCase):
         "census.journal_write_failed": ("RECORDS", "REPRESENTATION", "DISCLOSE"),
         "supervision.pass_failed": ("RECORDS", "REPRESENTATION", "DISCLOSE"),
         "monitor.outage": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
+        # Registered at the P3 round (lane P3-DRV).
+        "meter.supervision_fault": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
     }
 
     def test_every_round_two_code_is_classified_everywhere(self):
