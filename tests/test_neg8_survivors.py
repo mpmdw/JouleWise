@@ -722,6 +722,41 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
                     self.assertEqual([(row["run_id"], row["reason"]) for row in flag["observed"]["lost"]],
                                      [(killed, "member.timeout")])
 
+    def test_a_loss_flagged_reference_is_mapped_when_the_verdict_sources_do_not_authenticate(self) -> None:
+        """Cold pass 2 N1: the loss map was empty and the stored screen, holding the contender's energy, stood.
+
+        The stored screen passes with the contaminated end reference inside it;
+        the verdict's source manifests do not authenticate.  The references are
+        named from the claim root's campaign manifests as written, the loss is
+        mapped, the re-screen cannot run, and the window carries
+        ``neg8.screen_failed`` with the source recorded.
+        """
+        from unittest import mock
+
+        h = _hb().h
+        points = self.points(0.0, **{"b5t-neg8-end-3": 30.40})
+        with mock.patch.object(h, "verdict_neg8_sources", lambda row, runs: "source_manifest_unauthenticated"):
+            window = self.run_window("unauthenticated-sources", points,
+                                     reference_flags=[("b5t-neg8-end-3", "contention.request_overlap")])
+        stored = __import__("json").loads((window.claim / "whole-window-verdict.json").read_bytes())
+        self.assertEqual(stored["idle_admission_core"]["neg8_bracket"]["decision"], "passed")
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+        self.assertEqual(flag["observed"]["reference_source"],
+                         {"source": "claim_campaign_manifests_unauthenticated",
+                          "verdict_sources_problem": "source_manifest_unauthenticated"})
+        self.assertEqual(flag["observed"]["survivor_rescreen"]["new_losses"],
+                         {"b5t-neg8-end-3": "contention.request_overlap"})
+        self.assertIn("source_manifest_unauthenticated", flag["observed"]["collected_bound_rescreen"]["problems"])
+        self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+
+    def test_unauthenticated_sources_with_no_loss_flag_leave_the_stored_screen(self) -> None:
+        from unittest import mock
+
+        h = _hb().h
+        with mock.patch.object(h, "verdict_neg8_sources", lambda row, runs: "source_manifest_unauthenticated"):
+            window = self.run_window("unauthenticated-clean", self.points(0.0))
+        self.assertFalse({"neg8.screen_failed", "neg8.reference_lost"} & window.codes())
+
     def test_an_unmeasured_reference_is_kept(self) -> None:
         window = self.run_window("unmeasured", self.points(0.0),
                                  reference_flags=[("b5t-neg8-end-1", "contention.unmeasured")])

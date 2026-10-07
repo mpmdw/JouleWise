@@ -847,6 +847,28 @@ def _epoch_s(text: Any) -> float | None:
     return moment.timestamp() if moment.tzinfo is not None else None
 
 
+def _claim_campaign_manifests_as_written(runs_root: Path) -> list[Mapping[str, Any]]:
+    """Every decodable ``campaign_manifests/*.json`` object under the claim root, unauthenticated.
+
+    Used only to name a window's NEG-8 references when the verdict's own
+    sources do not authenticate (``_Harvest._neg8_reference_losses``); an
+    unreadable file is skipped.
+    """
+    manifests: list[Mapping[str, Any]] = []
+    try:
+        paths = sorted((Path(runs_root) / "campaign_manifests").glob("*.json"))
+    except OSError:
+        return manifests
+    for path in paths:
+        try:
+            value = json.loads(path.read_bytes())
+        except (OSError, ValueError):
+            continue
+        if isinstance(value, Mapping):
+            manifests.append(value)
+    return manifests
+
+
 def verdict_neg8_sources(row: Mapping[str, Any], runs_root: Path) \
         -> tuple[list[Mapping[str, Any]], bool, Mapping[str, Any]] | str:
     """The inputs from which ``validate_whole_window_verdict_row`` re-derives a row's NEG-8 bracket.
@@ -4588,6 +4610,9 @@ class _Harvest:
         if isinstance(screened, Mapping) and screened.get("survivor_screen") == "references_insufficient":
             observed["reason"] = "references_insufficient"
             observed["lost"] = self._neg8_lost_rows(screened, harvest_losses)
+        reference_source = getattr(self, "neg8_reference_source", None)
+        if isinstance(reference_source, Mapping) and reference_source.get("source") != "verdict_sources":
+            observed["reference_source"] = dict(reference_source)
         self.emit("neg8.screen_failed", level="window", collector="whole_window", observed=observed)
 
     def _neg8_reference_losses(self, row: Mapping[str, Any]) -> dict[str, str]:
@@ -4596,8 +4621,16 @@ class _Harvest:
         The references are the invoked start, midpoint and end members of the
         verdict's own source manifests (``verdict_neg8_sources``); the codes
         are ``NEG8_REFERENCE_LOSS_CODES`` at member level, the first in that
-        order naming the loss.  No energy is read.  Empty when the sources do
-        not read (the stored screen then stands, as before the rule).
+        order naming the loss.  No energy is read.
+
+        When the verdict's sources do not authenticate, the references are
+        read from the claim root's campaign manifests as written
+        (``campaign_manifests/*.json``, unauthenticated; cold pass 2 N1), so a
+        loss-flagged reference is still mapped: the re-screen then cannot run
+        and ``neg8.screen_failed`` is emitted, instead of a stored screen that
+        holds the reference's energy standing silently.  The fallback names
+        references only; it never supplies an energy or a passing screen.
+        ``self.neg8_reference_source`` records which source was used.
         """
         from joulewise import whole_window as ww
         runs = getattr(getattr(self, "inputs", None), "claim_runs_root", None)
@@ -4605,12 +4638,17 @@ class _Harvest:
             return {}
         try:
             sources = verdict_neg8_sources(row, runs)
-        except Exception:
-            return {}
+        except Exception as exc:
+            sources = f"sources_raised:{type(exc).__name__}"
         if isinstance(sources, str):
-            return {}
+            manifests = _claim_campaign_manifests_as_written(Path(runs))
+            self.neg8_reference_source = {"source": "claim_campaign_manifests_unauthenticated",
+                                          "verdict_sources_problem": sources}
+        else:
+            manifests = sources[0]
+            self.neg8_reference_source = {"source": "verdict_sources"}
         references: set[str] = set()
-        for manifest in sources[0]:
+        for manifest in manifests:
             for member in manifest.get("members") or [] if isinstance(manifest, Mapping) else []:
                 if not isinstance(member, Mapping) or member.get("execution") != "invoked":
                     continue
