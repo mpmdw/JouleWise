@@ -6554,12 +6554,15 @@ class CourierReapingTests(unittest.TestCase):
     # moment, not of the driver. child_start_up_s() measures it in the same run and the
     # budget is never smaller than START_UP_HEADROOM times the measurement.
     #
-    # The bound asserted on the whole call is the property under test: a delivered
-    # courier costs its budget plus a prompt stop. STOP_ALLOWANCE_S is the room for that
-    # stop on a quiet machine; it grows with the measured start-up and is capped at
-    # STOP_ALLOWANCE_CAP_S, below the smallest duration the driver shows when a courier
-    # does NOT stop promptly: 30 s (GROUP_WAIT_S, its wait between SIGTERM and SIGKILL),
-    # then 60 s (the first retry backoff, and the stand-in's own sleep).
+    # The bound asserted on the whole call is the property under test. A delivered
+    # courier that keeps running costs the time the driver must wait for it (the budget,
+    # or the dead-man epoch when that comes first) plus a prompt stop. One that exits by
+    # itself costs no wait: the driver sees the delivery at its next one-second poll and
+    # reaps the child. STOP_ALLOWANCE_S is the room for the poll and the stop on a quiet
+    # machine; it grows with the measured start-up and is capped at STOP_ALLOWANCE_CAP_S,
+    # below the smallest duration the driver shows when a courier does NOT stop promptly:
+    # 30 s (GROUP_WAIT_S, its wait between SIGTERM and SIGKILL), then 60 s (the first
+    # retry backoff, and the stand-in's own sleep).
     START_UP_HEADROOM = 10
     HANG_BUDGET_S = 1.0
     EXIT_BUDGET_S = 2.0
@@ -6596,10 +6599,10 @@ class CourierReapingTests(unittest.TestCase):
         if budget is None:
             budget = self.HANG_BUDGET_S if hang else self.EXIT_BUDGET_S
         budget = max(budget, start_up_allowance)
-        waited = budget
+        waited = budget if hang else 0.0
         if deadman_after_s is not None:
             deadman_after_s = max(deadman_after_s, start_up_allowance)
-            waited = min(budget, deadman_after_s)
+            waited = min(waited, deadman_after_s)
         bound = waited + min(self.STOP_ALLOWANCE_S + start_up_allowance, self.STOP_ALLOWANCE_CAP_S)
         child = self.root / "courier.py"
         child.write_text(
@@ -6632,8 +6635,8 @@ class CourierReapingTests(unittest.TestCase):
                 deadman_epoch_s=deadman_epoch_s)
         elapsed = time.monotonic() - started
         self.assertLess(elapsed, bound,
-                        f"a delivered courier took {elapsed:.1f} s; its budget was {waited:.2f} s and a prompt "
-                        f"stop fits in {bound - waited:.1f} s more (measured child start-up "
+                        f"a delivered courier took {elapsed:.1f} s; the driver had to wait {waited:.2f} s for it "
+                        f"and a prompt stop fits in {bound - waited:.1f} s more (measured child start-up "
                         f"{start_up_allowance / self.START_UP_HEADROOM:.3f} s)")
         self.assertEqual(structural.read_bytes(), before)
         self.assertTrue(outcome["sent"])
