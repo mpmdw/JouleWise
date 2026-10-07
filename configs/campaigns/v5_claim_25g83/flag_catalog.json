@@ -19,14 +19,21 @@
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS",
-      "note": "An accumulator interval between in-force publications implies a mean battery power beyond 200 mA x V (0.001 W per unit, lane L1 units check): the charge accumulator above it (charging), or a positive discharge-accumulator mean beyond it, which a discharge-only sum cannot produce (sign-inconsistent; observed sign_inconsistent, as the hazard copy keeps it battery.member_span). A negative discharge-accumulator mean beyond the limit is battery assist (battery.assist, DISCLOSE) and never this code (ruling of 2026-10-06)."
+      "note": "An accumulator interval between in-force publications implies a mean battery power beyond 200 mA x V (0.001 W per unit, lane L1 units check): the charge accumulator above it (charging), or, without SMC coverage, a positive discharge-accumulator mean beyond it, which a discharge-only sum cannot produce (sign-inconsistent; observed.sign_inconsistent). With SMC coverage the sign-inconsistent case is battery.accumulator_unavailable (DISCLOSE; cold pass N4, 2026-10-07), in the harvest and the hazard copy alike, because the 1 s SMC reads measure the current directly and catch any charging. A negative discharge-accumulator mean beyond the limit is battery assist (battery.assist, DISCLOSE) and never this code (ruling of 2026-10-06)."
     },
     "battery.accumulator_unavailable": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
-      "note": "The accumulator rule could not be evaluated on an interval; the publication rule still applies (60 s limitation)."
+      "note": "The accumulator rule could not be evaluated on an interval (a field not read at both publications, a counter that went backward, no voltage); the publication rule still applies. Also, with SMC coverage: a gap of more than 120 s between registry publications (only the accumulator test goes unevaluated), and a sign-inconsistent discharge accumulator (a positive discharge mean beyond the limit, a registry record disagreeing with itself; cold pass N4, 2026-10-07)."
+    },
+    "battery.arm_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Audit A3 (2026-10-07): the arm's battery probe returned UNMEASURED, meaning the probe failed or timed out, which is not a measured hazard. The driver records it here and in hazards/arm.json (\"unmeasured\", with the phase and reasons) and the arm goes on; only the instrument's UNMEASURED refuses (registration 0.15, 4.1). The monitor journals the battery over every member span, and the member rule of section 6.4 (including battery.unmeasured) decides each member."
     },
     "battery.assist": {
       "blinding": "STRUCTURE",
@@ -236,14 +243,14 @@
       "effect": "DISCLOSE",
       "family": "CALIBRATION",
       "klass": "REPRESENTATION",
-      "note": "HAZARD path (core-prune A6-R1 to R3, A7, A8): a calibration writer or reservation record check that used to refuse (desk-predicted identity, committed pin or historical custody, a stale head pin, pmset displaysleepnow failing, binding strings missing from the powermetrics header) is recorded instead; observed.kind names the fact. Every kind has this one effect."
+      "note": "HAZARD path (core-prune A6-R1 to R3, A7, A8): a calibration writer or reservation record check that used to refuse (desk-predicted identity, committed pin or historical custody, a stale head pin, pmset displaysleepnow failing, binding strings missing from the powermetrics header) is recorded instead; observed.kind names the fact. Kind desk_identity_unreadable (audit A6, 2026-10-07): a desk identity file the reservation reads was missing or malformed; the reservation measures the identity itself and uses an empty desk fallback. Every kind has this one effect."
     },
     "campaign.runner_record_flagged": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION",
-      "note": "HAZARD path (core-prune A4, A9, A13, A16, A20, V3): a campaign-runner record check that used to stop the stage (absent child metadata after a crash, a stale campaign lock, the GAMMA campaign-log analysis identity, an exception while writing a record or the stage verdict) is recorded instead; observed.kind names the fact. Window or member scope. Every kind has this one effect."
+      "note": "HAZARD path (core-prune A4, A9, A13, A16, A20, V3): a campaign-runner record check that used to stop the stage (absent child metadata after a crash, a stale campaign lock, the GAMMA campaign-log analysis identity, an exception while writing a record or the stage verdict) is recorded instead; observed.kind names the fact. Kinds added later: cooldown_fallback_reference (PLAN2 s2-05); registry_start_time_unavailable (the active-campaign registry entry was published with no start time because the ps identity probe returned UNKNOWN; Opus audit F4, 2026-10-07); torn_lock_cleared (an empty or unparseable campaign.lock reclaimed only when its inode is at least 30 s old, lsof shows no process holding it open, and no active-campaign entry naming the runs root belongs to a LIVE or UNKNOWN process; any probe failure keeps the lock). Window or member scope. Every kind has this one effect."
     },
     "cell.below_minimum": {
       "blinding": "STRUCTURE",
@@ -264,7 +271,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
-      "note": "An in-window agent census could not be read on any of its retries; collection continued. Four consecutive unmeasured censuses stop the chain under their own stop code (PLAN2 row 7)."
+      "note": "An in-window agent census could not be read on any of its retries; collection continued. Since audit A3 (2026-10-07) it never stops the chain; observed.consecutive counts consecutive unreadable censuses. A census that lists an agent process still stops the chain. The arm's censuses (first step and just before GO) still refuse when they cannot be read."
     },
     "chain.stopped_before_collection": {
       "blinding": "STRUCTURE",
@@ -272,6 +279,13 @@
       "family": "RECORDS",
       "klass": "REPRESENTATION",
       "note": "The chain journal holds no collection stage: the window is harvested as NO_COLLECTION with every collector run (PLAN2 2.2 F)."
+    },
+    "clock.arm_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Audit A3 (2026-10-07): the arm's clock probe returned UNMEASURED, meaning the probe failed or timed out, which is not a measured hazard. The driver records it here and in hazards/arm.json (\"unmeasured\", with the phase and reasons) and the arm goes on; only the instrument's UNMEASURED refuses (registration 0.15, 4.1). Every member still carries its own clock-anchor bound, computed from its own records, and the monitor journals the anchor at 1 Hz (clock.step_overlap, section 6.4)."
     },
     "clock.frequency_changed": {
       "blinding": "STRUCTURE",
@@ -350,6 +364,13 @@
       "klass": "REPRESENTATION",
       "note": "The harvest found no bundle present for a COLLECTED window (PLAN2 2.2 F). cell.below_minimum and neg8.bound_not_derived exclude where it matters."
     },
+    "contention.arm_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Audit A3 (2026-10-07): the arm's contention probe returned UNMEASURED, meaning the probe failed or timed out, which is not a measured hazard. The driver records it here and in hazards/arm.json (\"unmeasured\", with the phase and reasons) and the arm goes on; only the instrument's UNMEASURED refuses (registration 0.15, 4.1). A dwell whose every snapshot failed ends at its 2,700 s cap with this flag; a measured dirty dwell still refuses. The monitor measures contention over every request (contention.request_overlap, contention.unmeasured, both EXCLUDE_MEMBER)."
+    },
     "contention.kernel_task_share": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -385,6 +406,13 @@
       "klass": "REPRESENTATION",
       "note": "s1's structural checks run on ALPHA-1's bytes (registration 3)."
     },
+    "disk.arm_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Audit A3 (2026-10-07): the arm's disk probe returned UNMEASURED, meaning the probe failed or timed out, which is not a measured hazard. The driver records it here and in hazards/arm.json (\"unmeasured\", with the phase and reasons) and the arm goes on; only the instrument's UNMEASURED refuses (registration 0.15, 4.1). The monitor reads free disk every 60 s in the window and stops the chain below 10 GiB (disk.low)."
+    },
     "disk.low": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -397,7 +425,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "REPRESENTATION",
-      "note": "HAZARD path (core-prune A11): the member environment guard recorded an unknown status or a capture error at idle admission (not a measured quiet-state violation, which is env.member_quiet_state_violated). Since refusal-census triage c (2026-10-07) this includes the finding collector_raised: the guard's collector raised an exception, so that one observation is recorded as unmeasured (all readings null, collector_error naming the exception) and the member runs; before the fix the member failed. The other observations' readings still apply. The post-run observation is collected the same way but adds no finding here: an unmeasured post-run observation is missing environment evidence to the whole-window verdict (environment_admission_failed), so the member is removed by member.whole_window_member_failure. The reducer's environment claim barrier is unchanged."
+      "note": "HAZARD path (core-prune A11): the member environment guard recorded an unknown status or a capture error (not a measured quiet-state violation, which is env.member_quiet_state_violated). This includes the finding collector_raised (refusal-census triage c): the guard's collector raised an exception, so that one observation is recorded as unmeasured (all readings null, collector_error naming the exception) and the member runs; the other observations' readings still apply. Since audit-fix item 6 (2026-10-07) the post-run observation is disclosed the same way (phase post_run) and the whole-window verdict no longer counts it as missing environment evidence. By the orchestrator's ruling that change is confined to the verdict path: the pinned reducer's environment claim barrier still reads such a record as environment_admission_failed on the target prechecks, so the member is removed by member.target_phase_precheck_failed, because an unmeasured post-run environment cannot show the member clean."
     },
     "env.member_quiet_state_violated": {
       "blinding": "STRUCTURE",
@@ -469,12 +497,19 @@
       "klass": "NUMBER",
       "note": "Aggregate: G3's F5-2 independent recompute of the whole-window verdict did not find a clean pass. Not window-removing for the same reason as whole_window.not_passed; its parts act through neg8.screen_failed, calibration.bracket_acceptance_failed and member.whole_window_member_failure (registration 6.5)."
     },
+    "instrument.binary_identity_rederived": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "INSTRUMENT",
+      "klass": "NUMBER",
+      "note": "Cold pass N1 / Fable audit F10 (2026-10-07): the member could not read its powermetrics digest (instrument.binary_identity_unmeasured), but the harvest ran on the member's collection boot (extra.launch_lineage.collection_boot_session_id equals the harvest's boot), hashed the executable the member recorded (device.powermetrics.executable_path) and found the calibrated digest (instrument_calibration.bindings.powermetrics_sha256). The binary is a system file that changes only across a reboot, so the unmeasured flag is moved here whole and no longer removes the member. A different digest, another or unknown boot, or an unreadable executable keeps the exclusion."
+    },
     "instrument.binary_identity_unmeasured": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "INSTRUMENT",
       "klass": "NUMBER",
-      "note": "HAZARD path (core-prune A14): the powermetrics binary digest for this member's invocation could not be read, so the member cannot be tied to the calibrated binary. A present digest that differs from the calibrated one still refuses."
+      "note": "HAZARD path (core-prune A14): the powermetrics binary digest for this member's invocation could not be read, so the member cannot be tied to the calibrated binary. A present digest that differs from the calibrated one still refuses. Superseded by instrument.binary_identity_rederived (DISCLOSE) when the harvest, on the member's collection boot, hashes the recorded executable and finds the calibrated digest (cold pass N1, 2026-10-07)."
     },
     "instrument.cadence_ratio_below_threshold": {
       "blinding": "STRUCTURE",
@@ -705,7 +740,7 @@
       "effect": "DISCLOSE",
       "family": "ROSTER",
       "klass": "REPRESENTATION",
-      "note": "The member was measured by the one retry of the NEG-8 corpus stage (registration 5.2-5.3; PLAN2 row 13). The retry is a fresh measurement; the flag records that it was a retry."
+      "note": "The member was measured by a retry: the one retry of the NEG-8 corpus stage (registration 5.1, 5.3; PLAN2 row 13), or the spare-slot retry of a window reference stage, in which case it is a spare run because a member of that stage did not succeed (registration 0.12; observed names the stage, slot and spare count, attempt 2). The retry is a fresh measurement; the flag records that it was a retry. The failed attempt's bundle is never touched."
     },
     "member.span_unknown": {
       "blinding": "STRUCTURE",
@@ -768,7 +803,7 @@
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER",
-      "note": "The whole-window verdict lists this member among its per-member failures (member_failures) for a reason no other member code carries: environment evidence missing or failed (including the post-run display-asleep and screensaver-off observation of D-078 item 4), CPU-idle criteria or GPU idle admission that do not replay, or an idle-admission attempt that cannot be paired with its telemetry. In-window thermal pressure and an invalid bundle keep their own codes. The harvest emits one flag per such member at int4 (harvest.WHOLE_WINDOW_MEMBER_FAILURE_REASONS: the verdict's member_failures reason codes less thermal_pressure_elevated_in_window and whole_window_bundle_invalid), with its reasons and details; verdict authenticity does not gate it, and an absent or malformed list on a verdict that did not pass names no member, so the window is removed instead (whole_window.member_failures_unreadable, EXCLUDE_WINDOW; also recorded on whole_window.not_passed as observed.member_failures)."
+      "note": "The whole-window verdict lists this member among its per-member failures (member_failures) for a reason no other member code carries: environment evidence missing or failed (including the post-run display-asleep and screensaver-off observation of D-078 item 4), CPU-idle criteria or GPU idle admission that do not replay, or an idle-admission attempt that cannot be paired with its telemetry. In-window thermal pressure and an invalid bundle keep their own codes. The harvest emits one flag per such member at int4 (harvest.WHOLE_WINDOW_MEMBER_FAILURE_REASONS: the verdict's member_failures reason codes less thermal_pressure_elevated_in_window and whole_window_bundle_invalid), with its reasons and details; verdict authenticity does not gate it, and an absent or malformed list on a verdict that did not pass names no member, so the window is removed instead (whole_window.member_failures_unreadable, EXCLUDE_WINDOW; also recorded on whole_window.not_passed as observed.member_failures). Since audit-fix item 6 (2026-10-07) the verdict does not list a member for a post-run guard observation whose collector raised (env.member_guard_flagged, phase post_run); that member is removed by member.target_phase_precheck_failed instead."
     },
     "meter.absent": {
       "blinding": "STRUCTURE",
@@ -852,7 +887,7 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "MODEL_IDENTITY",
       "klass": "NUMBER",
-      "note": "The model identity comparison could not run. A harvest problem first (registration 7.2)."
+      "note": "The model identity comparison could not run. A harvest problem first (registration 7.2). An arm collector's model.identity_unmeasured is superseded (records.identity_unmeasured_superseded) when the harvest compared every succeeded science member's identity with the pins; a science member whose identity cannot be derived keeps it."
     },
     "model.identity_unpinned": {
       "blinding": "STRUCTURE",
@@ -867,6 +902,13 @@
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
       "note": "The hazard monitor kept exiting within 30 s of its start and was restarted with backoff. Members whose spans the monitor did not cover carry battery.unmeasured and contention.unmeasured (EXCLUDE_MEMBER) from the joins (PLAN2 row 11)."
+    },
+    "monitor.orphan_unverified": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "REPRESENTATION",
+      "note": "Audit-fix item 9 (2026-10-07): the dead-man found a recorded monitor or meter process group whose leader it could not identify (no recorded start time, or ps did not show the recorded command line on a process that started between 5 s before and 1 s after the journal's start stamp), so it sent no signal; the outcome names why. Written to the window's driver flags. Signalling an unidentified group could hit a reused process id."
     },
     "monitor.outage": {
       "blinding": "STRUCTURE",
@@ -887,28 +929,42 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "REPRESENTATION",
-      "note": "More than one monitor session (session_start line) in the window's monitor journal: the monitor was restarted, and the gap appears as the modules' unmeasured flags. Named by joulewise.hazards.monitor.window_events; at the frozen head a434e363d no production path writes it into the window's flags (the harvest takes clock events from joulewise.hazards.clock directly and reports restarts through monitor.crash_loop and monitor.outage). Classified so that it never blocks release if a later harvest emits it."
+      "note": "Audit-fix item 8 (2026-10-07): the driver writes it, window level, on each restart of the hazard monitor (its supervisor's on_restart), with the restart's process id, start count and previous exit, and the gap as its interval. The gap also appears as the modules' unmeasured flags over the member spans it touched. The meter's restarts stay meter.supervision_fault."
     },
     "neg8.bound_not_derived": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "NEG8",
       "klass": "NUMBER",
-      "note": "The NEG-8 bound was not derived: neither the core reader (all 12 corpus members) nor the harvest's collected-subset validation (at least 10 of 12, committed order, only unsucceeded members left out, bound arithmetic and corpus identity checked against the custodied manifest) accepts it (registration 5.3)."
+      "note": "The NEG-8 bound was not derived: neither the core reader (all 12 corpus members) nor the harvest's collected-subset validation (at least 10 of 12, committed order, only unsucceeded members left out, bound arithmetic and corpus identity checked against the custodied manifest) accepts it (registration 5.3); or the harvest's physics drop of corpus members (NEG-8 ruling 2026-10-07) left fewer than 10 clean members, or its clean bound did not validate (observed.source corpus_physics)."
     },
     "neg8.corpus_member_dropped": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "NEG8",
       "klass": "REPRESENTATION",
-      "note": "Core-prune N2: a succeeded NEG-8 corpus member was left out of the bound's custodied manifest because the core's NEG-8 mint drops it for a registered member-validity reason (the harvest's NEG8_ACCEPTED_DROP_REASONS). Any other left-out succeeded member makes a selected corpus and gives neg8.bound_not_derived."
+      "note": "A succeeded NEG-8 corpus member was left out of the bound. Two sources. (1) Core-prune N2: the core's NEG-8 mint dropped it for a registered member-validity reason (the harvest's NEG8_ACCEPTED_DROP_REASONS, imported from whole_window.NEG8_MINT_DROP_REASONS). (2) NEG-8 ruling 2026-10-07 (registration 5.3): the harvest, after the monitor joins, found a member-level physics exclusion of section 6.4 on it (contention.request_overlap, battery.member_span, battery.accumulator_excursion, thermal.os_level_nonzero, thermal.powermetrics_pressure_elevated, clock.step_overlap); observed.source harvest_physics, observed.reason the first such code. The bound is then re-derived from the clean members (derived/neg8-clean-corpus.json; the bound in withheld/neg8-clean-bound.json) and the screen re-run against it. Any other left-out succeeded member makes a selected corpus and gives neg8.bound_not_derived."
+    },
+    "neg8.midpoint_lost": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "NEG8",
+      "klass": "NUMBER",
+      "note": "NEG-8 ruling 2026-10-07 (registration 0.12): the midpoint reference was lost and its spare did not restore it, so the screen ran without it (the screen never needed it) and the drift allowance used the two-value spread |end mean - start mean|. Window level; observed names the lost midpoint. DISCLOSE here: the window keeps its screen result and its numbers. analysis_plan_block5.md section 2.4 lists this code as claim-excluding for GAMMA's two primary contrasts until the block's midpoint record shows the midpoint never moved the spread beyond the bound; then an erratum may downgrade it."
+    },
+    "neg8.reference_lost": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "NEG8",
+      "klass": "NUMBER",
+      "note": "NEG-8 ruling 2026-10-07 (registration 0.12): the NEG-8 screen ran on fewer than the planned 3 start, 1 midpoint and 3 end references. A reference is lost when its summary status is not succeeded (including member.admission_aborted and member.timeout), it fails strict validation, or a member-level physics exclusion of section 6.4 fires on it; its energy enters neither the screen nor the allowance. Window level. observed names each lost reference (run id, slot, reason, status, the spares measured and succeeded at its stage), the realised and planned counts, the survivor-screen state, the bound formula, and the record that holds the bound and its two terms (the whole-window verdict, or withheld/neg8-rescreen-bracket.json); the bound is an energy and stays restricted. A loss the spare-slot retry restored is disclosed by member.retried and the lost member's own flag, not by this code. Fewer than two survivors at an endpoint is neg8.screen_failed (observed.reason references_insufficient)."
     },
     "neg8.screen_failed": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "NEG8",
       "klass": "NUMBER",
-      "note": "The NEG-8 screen failed: the verdict's NEG-8 bracket is absent or not passed, or lists a NEG-8 condition (neg8_gross_point_drift_exceeded, neg8_idle_sub_point_drift_exceeded, neg8_bracket_missing, neg8_bracket_reference_invalid, neg8_drift_bound_stale, the bound-underived conditions). When the only conditions are the bound-underived ones and the bound was derived from the collected subset, the harvest's re-screen against that bound decides alone (registration 5.3)."
+      "note": "The NEG-8 screen failed: the verdict's NEG-8 bracket is absent or not passed, or lists a NEG-8 condition (neg8_gross_point_drift_exceeded, neg8_idle_sub_point_drift_exceeded, neg8_bracket_missing, neg8_bracket_reference_invalid, neg8_drift_bound_stale, the bound-underived conditions). The harvest's re-screen decides alone in three cases: the bound was derived from the collected 10 or 11 corpus members and the only conditions are the bound-underived ones; a reference the verdict names carries a loss flag the stored bracket did not drop (a section 6.4 physics exclusion, member.timeout, member.admission_aborted, member.strict_validation_failed), so the screen re-runs on the survivors; or a corpus member was dropped for physics and the bound re-derived (registration 0.12, 5.3; NEG-8 ruling 2026-10-07). Fewer than two survivors at an endpoint fails with observed.reason references_insufficient and observed.lost naming each lost reference; more references than planned is neg8_bracket_reference_invalid. A re-screen that cannot run leaves the screen failed."
     },
     "network_time.off_output": {
       "blinding": "STRUCTURE",
@@ -966,26 +1022,54 @@
       "klass": "REPRESENTATION",
       "note": "A harvest collector failed; the number-protecting ones also emit their own unmeasured code."
     },
+    "records.flag_unbuilt": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Audit-fix 2: a writer that could not build or write its flag printed its designed stand-in line ({code, level, run_id, [observed,] unbuilt}; joulewise.flags.core.emit and the chain's flag writer). The harvest rebuilt the flag the line names, so that flag's catalog effect applies and no exclusion is lost; a stage or quad fact, or a member fact with no run id, is applied to the whole window. This code records the rebuild."
+    },
     "records.identity_unmeasured_superseded": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION",
-      "note": "An arm collector's *.identity_unmeasured flag was superseded because the harvest re-derived every check that collector performs (PLAN2 row 12). The original flag is kept in the record."
+      "note": "An arm collector's *.identity_unmeasured flag was superseded because the harvest re-derived every check that collector performs (PLAN2 row 12): pack, checkout and executed code; and, since Opus audit F5 (2026-10-07), model identity, when the harvest read the pins and compared the identity of every succeeded science member (at least one) with a pin. The original flag is kept in the record."
     },
     "records.lineage_formality": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION",
-      "note": "A lineage formality other than configuration bytes; also the driver's launch-lineage publication that failed after its one retry (the chain still launches)."
+      "note": "A lineage formality other than configuration bytes; also the driver's launch-lineage publication that failed after its one retry (the chain still launches, except for an unusable pack inventory, which refuses the window as night_refused_pack_inventory_unusable). observed.science_members_expected_to_refuse lists the runs roots whose locator is not valid and could not be read, where members would take the legacy path and refuse (audit A5, 2026-10-07)."
     },
     "records.lineage_prelaunch_mismatch": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION",
-      "note": "The driver's pre-launch lineage check found a runs-root locator absent, unreadable, rejected by the members' authenticator, or naming another window's plan, window or bracket session. Recorded with the observed and expected values; the chain launches. Only a boot changed since publication refuses (night_refused_boot_changed)."
+      "note": "The driver's pre-launch lineage check found a runs-root locator absent, unreadable, rejected by the members' authenticator, or naming another window's plan, window or bracket session. Recorded with the observed and expected values and observed.science_members_expected_to_refuse (audit A5); the chain launches. Only a boot changed since publication refuses (night_refused_boot_changed)."
+    },
+    "records.malformed_flag": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "A flag line that failed validation: torn, not JSON, or not a valid joulewise.flag.v1 record. DISCLOSE since audit-fix 2 (Opus triple audit F2, 2026-10-07); it used to be deliberately unclassified, which blocked release with no cure. What the line still shows of its code decides whether one of the two conservative exclusions below is added: records.malformed_flag_exclusion_possible or records.malformed_flag_member_exclusion_possible."
+    },
+    "records.malformed_flag_exclusion_possible": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "RECORDS",
+      "klass": "NUMBER",
+      "note": "Audit-fix 2: a malformed flag line's code, whole or as the prefix it was torn inside, could be an EXCLUDE_WINDOW code of the catalog in force, so a window exclusion may have been lost; the window is removed. observed lists the candidate codes and the line's SHA-256."
+    },
+    "records.malformed_flag_member_exclusion_possible": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "RECORDS",
+      "klass": "NUMBER",
+      "note": "Audit-fix 2: a malformed flag line's code could not be a window exclusion but could be an EXCLUDE_MEMBER code, and the line still shows a run id; that member is removed. A possible member code with no readable run id is disclosed only (records.malformed_flag): the rule excludes only on what the line still shows."
     },
     "records.monitor_journal_absent": {
       "blinding": "STRUCTURE",
@@ -1014,6 +1098,13 @@
       "family": "RECORDS",
       "klass": "REPRESENTATION",
       "note": "A notice formality."
+    },
+    "records.operator_log_unreadable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Audit-fix 2: an operator log, a member error-output file or a log directory that the harvest scans for unwritten flags (registration 6.10) could not be read, so a flag printed there may be unseen."
     },
     "records.pin_ledger": {
       "blinding": "STRUCTURE",
@@ -1048,7 +1139,7 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "RECORDS",
       "klass": "NUMBER",
-      "note": "Bytes the harvest reads changed while it read them; the harvested numbers may not be the collected ones. A harvest problem first (registration 7.2)."
+      "note": "Bytes the harvest reads changed while it read them; the harvested numbers may not be the collected ones. A harvest problem first (registration 7.2). Operating-system metadata files that no reducer, validator or harvest step reads (.DS_Store, .localized, and AppleDouble ._* files) are ignored by all three comparisons (Opus audit F7, 2026-10-07)."
     },
     "records.terminal_record_absent": {
       "blinding": "STRUCTURE",
@@ -1125,7 +1216,7 @@
       "effect": "EXCLUDE_MEMBER",
       "family": "ROSTER",
       "klass": "NUMBER",
-      "note": "The bundle's metadata.json run_id differs from its directory. A misfiled bundle already fails the per-member config check; this covers a bundle whose own records disagree about which member it is. A kept member needs one identity in every record a later program may key on, or one energy could count under two units or the wrong quad position. Emitter class REPRESENTATION, restated NUMBER here (registration 6.7)."
+      "note": "The bundle's metadata.json run_id differs from its directory. A misfiled bundle already fails the per-member config check; this covers a bundle whose own records disagree about which member it is. A kept member needs one identity in every record a later program may key on, or one energy could count under two units or the wrong quad position (registration 6.7). The emitter and the test fixture now carry the same class and effect (audit-fix item 7, 2026-10-07); configs/gates/hazard_refusals.json lists it as a NUMBER_INTEGRITY member exclusion."
     },
     "stage.members_refused_pre_bundle_identical": {
       "blinding": "STRUCTURE",
@@ -1147,6 +1238,13 @@
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
       "note": "HAZARD path (core-prune A17): the sampler teardown report or the runtime cleanup after the member's measured window was not clean; recorded instead of failing the member (no further signals are sent). The next members' physics is measured by the contention journal (contention.request_overlap) and their own idle admission."
+    },
+    "thermal.arm_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Audit A3 (2026-10-07): the arm's thermal probe returned UNMEASURED, meaning the probe failed or timed out, which is not a measured hazard. The driver records it here and in hazards/arm.json (\"unmeasured\", with the phase and reasons) and the arm goes on; only the instrument's UNMEASURED refuses (registration 0.15, 4.1). The monitor journals the OS thermal level every 5 s, and each member's own records carry thermal pressure (section 6.4)."
     },
     "thermal.battery_temperature_unmeasured": {
       "blinding": "STRUCTURE",
@@ -1248,11 +1346,11 @@
     }
   },
   "notes": {
-    "aggregate_disclosures": "whole_window.not_passed and g3.recompute_failed are DISCLOSE because they fail on any single member's failure. Their window-level parts are neg8.screen_failed (emitted by the harvest, with the collected-subset re-screen) and calibration.bracket_acceptance_failed; their member-level part is member.whole_window_member_failure.",
+    "aggregate_disclosures": "whole_window.not_passed and g3.recompute_failed are DISCLOSE because they fail on any single member's failure. Their window-level parts are neg8.screen_failed (emitted by the harvest, with its re-screens: the collected-subset bound, the survivors, the physics-clean corpus) and calibration.bracket_acceptance_failed; their member-level part is member.whole_window_member_failure.",
     "authority": "registration_block5.md section 6 states these rules in words; this file is normative for each code's effect.",
-    "restated_classes": "roster.run_id_mismatch (emitter REPRESENTATION, restated NUMBER here) is the one restatement; its note says why. calibration.ledger_snapshot_refused now keeps its emitter's class, NUMBER.",
-    "status": "DRAFT, NOT SEALED. Revision 4, 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced. Timing-ruling additions, 2026-10-06 (timing lane): thermal.stage_battery_rise and thermal.battery_temperature_unmeasured, both DISCLOSE. Core-prune integration additions, 2026-10-06 (integration lane): the fourteen codes the core-prune lanes emit (DESIGN.md section 5), with the effects given there. Gate-prune round-2 integration additions, 2026-10-06 (integration int3): the 30 codes the round-2 lanes (P2-CHAIN, P2-CTL, P2-RC, P2-DRV, P2-HARV), PLAN2 2.2 G and the SMC battery and wall-meter lane emit; member.timeout and member.stderr_uncopied EXCLUDE_MEMBER, every other one DISCLOSE. battery.member_span is unchanged (a council is ruling on it). Revision 5, 2026-10-06 (REG lane, gate-prune round 3): battery.assist (DISCLOSE) added and the battery notes rewritten to the battery-assist ruling (charging, AC loss and missing evidence exclude; discharge is disclosed); calibration.historical_custody_mismatch (EXCLUDE_WINDOW) and calibration.historical_custody_unmeasured (DISCLOSE) added for the harvest's historical custody pass; contention.kernel_task_share noted as unable to fire. Checked against integration head b9d02700a: every code the harvest CODES table, DRAFT_CODES and CORE_FLAG_CODES name is classified; member.whole_window_member_failure and monitor.restarted are classified but not in the harvest table. Integration int4 sync, 2026-10-06 (gate-prune round 3 plus L10): added the five remaining P3-HARV codes (battery.assist_outside_request, battery.capture_pair_assist, calibration.capture_battery_assist, calibration.capture_battery_pair_assist, records.window_not_launched) and P3-DRV's meter.supervision_fault, all DISCLOSE; battery.assist is any negative B0AC (-200 mA is the reporting threshold) with observed.state_unread; battery.unmeasured gains the 120 s registry state-hole rule under SMC coverage; the other battery notes describe the int4 code (a sign-inconsistent discharge accumulator stays battery.accumulator_excursion; discharge-only pair failures the journal confirms are the *_pair_assist codes); member.whole_window_member_failure is emitted. Checked against int4: every code the harvest CODES table, DRAFT_CODES and CORE_FLAG_CODES name is classified; monitor.restarted is classified but not in the harvest table. calibration.historical_custody_unmeasured is REPRESENTATION here and NUMBER in the code's draft (DISCLOSE either way). Integrator int4 frozen-head sync, 2026-10-07: member.stderr_uncopied becomes DISCLOSE (RECORDS, REPRESENTATION; a record not written); the two historical custody notes are rewritten to the refusal census's split (present bytes that differ: mismatch; missing, evicted or unreadable: unmeasured, disclosed). registration_block5.md section 6 still lists member.stderr_uncopied among the codes that remove a member; REG must move it. Integrator frozen-head triage (d), 2026-10-07: calibration.historical_custody_mismatch is scoped to the captures this window's acceptance relies on (derivation corpus and prior observation set); calibration.historical_custody_mismatch_unused (DISCLOSE) added for the others. P4, 2026-10-07: whole_window.member_failures_unreadable (EXCLUDE_WINDOW) added. Revision 6, 2026-10-07 (REG sync to the frozen head a434e363d): calibration.historical_custody_unmeasured takes the emitter's class NUMBER (effect DISCLOSE unchanged); notes rewritten for monitor.restarted (named by the monitor module, written by no production path), env.member_guard_flagged (collector_raised), records.pin_ledger (pack_root_layout), records.lineage_formality (failed lineage publication) and clock.unmeasured (the read-skew rule). Checked against a434e363d: every code named by harvest.CODES, DRAFT_CODES, CORE_FLAG_CODES, km003c_parse.CODES and window_lineage.FINDING_CODES is classified with DRAFT_CODES' family, class, effect and blinding; the only restatement is roster.run_id_mismatch.",
-    "unclassified": "A code not listed here is UNCLASSIFIED: it blocks only the release event until classified blind by a cold erratum (registration 7.2). records.malformed_flag and collector.unmeasured are deliberately absent so that they always block release until read."
+    "restated_classes": "No restatement remains: roster.run_id_mismatch, the one code this catalog restated (NUMBER, EXCLUDE_MEMBER), now has that class in the emitter and the test fixture as well (audit-fix item 7, 2026-10-07). calibration.ledger_snapshot_refused keeps its emitter's class, NUMBER.",
+    "status": "DRAFT, NOT SEALED. Revision 7, 2026-10-07; revision 4 was 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced. Timing-ruling additions, 2026-10-06 (timing lane): thermal.stage_battery_rise and thermal.battery_temperature_unmeasured, both DISCLOSE. Core-prune integration additions, 2026-10-06 (integration lane): the fourteen codes the core-prune lanes emit (DESIGN.md section 5), with the effects given there. Gate-prune round-2 integration additions, 2026-10-06 (integration int3): the 30 codes the round-2 lanes (P2-CHAIN, P2-CTL, P2-RC, P2-DRV, P2-HARV), PLAN2 2.2 G and the SMC battery and wall-meter lane emit; member.timeout and member.stderr_uncopied EXCLUDE_MEMBER, every other one DISCLOSE. battery.member_span is unchanged (a council is ruling on it). Revision 5, 2026-10-06 (REG lane, gate-prune round 3): battery.assist (DISCLOSE) added and the battery notes rewritten to the battery-assist ruling (charging, AC loss and missing evidence exclude; discharge is disclosed); calibration.historical_custody_mismatch (EXCLUDE_WINDOW) and calibration.historical_custody_unmeasured (DISCLOSE) added for the harvest's historical custody pass; contention.kernel_task_share noted as unable to fire. Checked against integration head b9d02700a: every code the harvest CODES table, DRAFT_CODES and CORE_FLAG_CODES name is classified; member.whole_window_member_failure and monitor.restarted are classified but not in the harvest table. Integration int4 sync, 2026-10-06 (gate-prune round 3 plus L10): added the five remaining P3-HARV codes (battery.assist_outside_request, battery.capture_pair_assist, calibration.capture_battery_assist, calibration.capture_battery_pair_assist, records.window_not_launched) and P3-DRV's meter.supervision_fault, all DISCLOSE; battery.assist is any negative B0AC (-200 mA is the reporting threshold) with observed.state_unread; battery.unmeasured gains the 120 s registry state-hole rule under SMC coverage; the other battery notes describe the int4 code (a sign-inconsistent discharge accumulator stays battery.accumulator_excursion; discharge-only pair failures the journal confirms are the *_pair_assist codes); member.whole_window_member_failure is emitted. Checked against int4: every code the harvest CODES table, DRAFT_CODES and CORE_FLAG_CODES name is classified; monitor.restarted is classified but not in the harvest table. calibration.historical_custody_unmeasured is REPRESENTATION here and NUMBER in the code's draft (DISCLOSE either way). Integrator int4 frozen-head sync, 2026-10-07: member.stderr_uncopied becomes DISCLOSE (RECORDS, REPRESENTATION; a record not written); the two historical custody notes are rewritten to the refusal census's split (present bytes that differ: mismatch; missing, evicted or unreadable: unmeasured, disclosed). registration_block5.md section 6 still lists member.stderr_uncopied among the codes that remove a member; REG must move it. Integrator frozen-head triage (d), 2026-10-07: calibration.historical_custody_mismatch is scoped to the captures this window's acceptance relies on (derivation corpus and prior observation set); calibration.historical_custody_mismatch_unused (DISCLOSE) added for the others. P4, 2026-10-07: whole_window.member_failures_unreadable (EXCLUDE_WINDOW) added. Revision 6, 2026-10-07 (REG sync to the frozen head a434e363d): calibration.historical_custody_unmeasured takes the emitter's class NUMBER (effect DISCLOSE unchanged); notes rewritten for monitor.restarted (named by the monitor module, written by no production path), env.member_guard_flagged (collector_raised), records.pin_ledger (pack_root_layout), records.lineage_formality (failed lineage publication) and clock.unmeasured (the read-skew rule). Checked against a434e363d: every code named by harvest.CODES, DRAFT_CODES, CORE_FLAG_CODES, km003c_parse.CODES and window_lineage.FINDING_CODES is classified with DRAFT_CODES' family, class, effect and blinding; the only restatement is roster.run_id_mismatch. Revision 7, 2026-10-07 (REG sync to integrate/2026-10-07-int5, head d3c107f2f at this writing): fourteen codes added. Audit-fix batch 1: clock, battery, thermal, contention and disk .arm_unmeasured and monitor.orphan_unverified (DISCLOSE). Audit-fix batch 2: records.malformed_flag (DISCLOSE; no longer deliberately unclassified), records.malformed_flag_exclusion_possible (EXCLUDE_WINDOW), records.malformed_flag_member_exclusion_possible (EXCLUDE_MEMBER), records.flag_unbuilt, records.operator_log_unreadable and instrument.binary_identity_rederived (DISCLOSE). NEG-8 survivors ruling: neg8.reference_lost and neg8.midpoint_lost (DISCLOSE; the analysis plan makes neg8.midpoint_lost claim-excluding for GAMMA's primary contrasts). Batch 1's interim A1 window exclusion is superseded by that ruling and is not listed. Notes rewritten for the battery accumulator pair (sign-inconsistent case under SMC coverage), census.unmeasured (never stops), instrument.binary_identity_unmeasured (supersession), monitor.restarted (now written), the NEG-8 codes, member.retried (spare-slot retry), the runner and writer record kinds, the lineage records, source changes during the harvest, identity supersession, the post-run guard record and roster.run_id_mismatch. Checked by script against d3c107f2f: every code named by harvest.CODES, DRAFT_CODES, CORE_FLAG_CODES, km003c_parse.CODES, window_lineage.FINDING_CODES and the monitor's literal codes is classified here with the draft's family, class, effect and blinding, except collector.unmeasured (deliberately absent); no restatement remains.",
+    "unclassified": "A code not listed here is UNCLASSIFIED: it blocks only the release event until classified blind by a cold erratum (registration 7.2), which the loader accepts. No code is kept permanently unclassified any more (audit-fix 2, 2026-10-07): records.malformed_flag is DISCLOSE with two conservative exclusions beside it. collector.unmeasured (a collector the flag package does not know) is still deliberately absent, so it blocks release until a cold erratum classifies it."
   },
   "rules": {
     "cell_unit_minimum": 8
