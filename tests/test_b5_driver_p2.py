@@ -341,9 +341,53 @@ class LineageTests(unittest.TestCase):
         self.assertIn("records.lineage_formality", codes)
         self.assertIn(b5_driver.LINEAGE_PRELAUNCH_MISMATCH, codes)
         mismatch = next(item for item in harness.flags if item["code"] == b5_driver.LINEAGE_PRELAUNCH_MISMATCH)
-        self.assertEqual({"claim", "bound"}, set(mismatch["observed"]))
+        self.assertEqual({"claim", "bound", "science_members_expected_to_refuse"}, set(mismatch["observed"]))
         self.assertEqual(harness.plan.hazard_window["pack"]["pack_plan_id"], mismatch["expected"]["plan_id"])
         self.assertFalse((harness.night / "refusal.json").exists())
+        # Audit A5: with no readable locator, the members of both roots take the
+        # legacy path and refuse (launch_consumption_missing); both flags say so.
+        formality = next(item for item in harness.flags if item["code"] == "records.lineage_formality")
+        for flag in (mismatch, formality):
+            self.assertEqual(["bound", "claim"], flag["observed"]["science_members_expected_to_refuse"])
+
+    def test_a5_an_unusable_pack_inventory_refuses_before_launch(self):
+        """Audit A5 (2026-10-07). Before: flagged and launched; every tagged member then refused."""
+        from joulewise import window_lineage
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+        patch(self, b5_driver, "LINEAGE_RETRY_S", 0.0)
+        calls = []
+
+        def unusable(request):
+            calls.append(request)
+            raise window_lineage.LineagePublicationError(
+                "pack inventory is unusable: plan_tree.json: [Errno 2] No such file or directory")
+        harness.publish_lineage = unusable
+        harness.lineage_valid = False
+        self.assertEqual(harness.driver.EXIT_REFUSED, harness.run())
+        self.assertEqual(2, len(calls))
+        result = harness.result()
+        self.assertEqual(("REFUSED", b5_driver.REFUSED_PACK_INVENTORY_UNUSABLE),
+                         (result["verdict"], result["aborted_reason"]))
+        self.assertEqual("lineage_pack_inventory", harness.hazard()["stage_reached"])
+        self.assertFalse((harness.night / "chain.started").exists())
+        refusal = json.loads((harness.night / "refusal.json").read_text())
+        self.assertEqual([], harness.driver.validate_refusal(refusal))
+        self.assertEqual(2, refusal["refusal"]["evidence"]["attempts"])
+
+    def test_a5_any_other_publication_failure_still_launches(self):
+        from joulewise import window_lineage
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+        patch(self, b5_driver, "LINEAGE_RETRY_S", 0.0)
+
+        def unwritable(request):
+            raise window_lineage.LineagePublicationError("locator could not be written: [Errno 13] Permission denied")
+        harness.publish_lineage = unwritable
+        self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        self.assertTrue((harness.night / "chain.started").exists())
+        formality = next(item for item in harness.flags if item["code"] == "records.lineage_formality")
+        self.assertEqual([], formality["observed"]["science_members_expected_to_refuse"])  # the locators read valid
 
     def test_a_locator_absent_after_a_successful_publication_is_republished_once(self):
         harness = Harness(self, g10=False)

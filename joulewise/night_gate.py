@@ -69,6 +69,7 @@ HAZARD_DRIVER_REASON_CODES = frozenset(
         "night_refused_instrument_not_sampling",  # the hazard monitor never journaled before launch (row 11)
         "night_refused_boot_changed",            # the boot changed since the lineage was published (row 9; physics)
         "night_refused_launch_abandoned",        # the watchdog released this launch (J4) before the arm
+        "night_refused_pack_inventory_unusable",  # lineage unpublishable: pack inventory unusable (audit A5)
     }
 )
 # 2026-09-05: D-165 v2 relabel supersedes the v1 registration digest

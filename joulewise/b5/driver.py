@@ -16,7 +16,8 @@ Inside the launchd job, after t0, this branch runs:
    window goes on. An arm that raised or timed out as a whole stays NULL (the
    instrument is then unverified);
 3. a final census, then the launch-lineage files (``joulewise.window_lineage``)
-   into both runs roots;
+   into both runs roots (refused only on a changed boot, or on a pack whose
+   config inventory is unusable, audit A5);
 4. the executed-file inventory of the measurement checkout (local reads only);
 5. the hazard monitor (``scripts/hazard_monitor.py``) in its own process group
    under ``taskpolicy -b``; a one-second supervision pass restarts it if it dies.
@@ -85,9 +86,15 @@ REFUSED_INSTRUMENT_NOT_SAMPLING = "night_refused_instrument_not_sampling"
 # was published, so monotonic clocks do not join (doctrine 2026-10-05).
 REFUSED_BOOT_CHANGED = "night_refused_boot_changed"
 REFUSED_LAUNCH_ABANDONED = "night_refused_launch_abandoned"
+# Audit A5 (2026-10-07): the lineage could not be published because the pack's
+# config inventory is unusable, so no member's config bytes can be checked
+# against the sealed inventory and every tagged member would refuse anyway.
+REFUSED_PACK_INVENTORY_UNUSABLE = "night_refused_pack_inventory_unusable"
+# window_lineage.publish_window_lineage's message for that case.
+PACK_INVENTORY_UNUSABLE_MESSAGE = "pack inventory is unusable"
 if {REFUSED_HAZARD, STOPPED_DISK_LOW, STOPPED_CENSUS_UNMEASURED, STOPPED_MONITOR_OUTAGE,
         REFUSED_INSTRUMENT_NOT_SAMPLING, REFUSED_BOOT_CHANGED,
-        REFUSED_LAUNCH_ABANDONED} != set(night_gate.HAZARD_DRIVER_REASON_CODES):
+        REFUSED_LAUNCH_ABANDONED, REFUSED_PACK_INVENTORY_UNUSABLE} != set(night_gate.HAZARD_DRIVER_REASON_CODES):
     raise RuntimeError("hazard driver codes drifted from night_gate.HAZARD_DRIVER_REASON_CODES")
 
 NETWORK_TIME_OFF_ARGV = ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", "off")
@@ -2135,9 +2142,12 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
     # way members read them (PLAN2 row 9). Physics refuses; everything else is
     # a flag (doctrine 2026-10-05): a publication failure, an absent locator or
     # any bookkeeping disagreement is recorded and the chain launches. A
-    # publication that failed, or left a locator absent, is retried once. The
-    # one refusal is a boot that changed since the lineage was published:
-    # monotonic clocks do not join across a reboot.
+    # publication that failed, or left a locator absent, is retried once. Two
+    # refusals remain: a boot that changed since the lineage was published
+    # (physics: monotonic clocks do not join across a reboot), and a
+    # publication that still fails because the pack's config inventory is
+    # unusable (number integrity, audit A5: no member's config bytes can be
+    # checked against the sealed inventory, so every tagged member would refuse).
     if window.boot is None:
         window.boot = seams.boot_session_uuid()
     roots = plan.hazard_window["runs_roots"]
@@ -2150,16 +2160,20 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
         boot_session_uuid=window.boot)
     lineage_record: dict[str, Any] = {"schema": LINEAGE_SCHEMA, "requested": stamp(), "attempts": []}
     lineage_error: str | None = None
+    inventory_unusable = False
 
     def publish(attempt: int) -> None:
-        nonlocal lineage_error
+        nonlocal lineage_error, inventory_unusable
         try:
             published = seams.publish_lineage(lineage_request)
             lineage_record.update(published=True, result=json.loads(json.dumps(published, default=str)))
             lineage_record["attempts"].append({"attempt": attempt, "published": True})
             lineage_error = None
+            inventory_unusable = False
         except Exception as error:  # noqa: BLE001
             lineage_error = _error_text(error)
+            inventory_unusable = (type(error).__name__ == "LineagePublicationError"
+                                  and str(error).startswith(PACK_INVENTORY_UNUSABLE_MESSAGE))
             lineage_record["attempts"].append({"attempt": attempt, "published": False, "error": lineage_error})
 
     def verify() -> Any:
@@ -2183,11 +2197,21 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
             time.sleep(LINEAGE_RETRY_S)
             publish(2)
             locators = verify()
+    # Audit A5: members find HAZARD mode through the locator itself
+    # (window_lineage.is_hazard_runs_root). In a root whose locator is absent
+    # or unreadable after the retry, every marker-bearing member takes the
+    # legacy path and refuses (launch_consumption_missing); the flags say so.
+    expected_to_refuse = sorted(role for role in ("claim", "bound")
+                                if role_entry(locators, role).get("valid") is not True
+                                and "sha256" not in role_entry(locators, role))
     if lineage_error is not None:
         lineage_record.update(published=False, error=lineage_error)
         window.flag("records.lineage_formality", "RECORDS", "REPRESENTATION",
-                    observed={"error": lineage_error, "attempts": len(lineage_record["attempts"])},
-                    detail="the hazard-window lineage could not be published before launch")
+                    observed={"error": lineage_error, "attempts": len(lineage_record["attempts"]),
+                              "science_members_expected_to_refuse": expected_to_refuse},
+                    detail="the hazard-window lineage could not be published before launch"
+                           + ("; members in the " + " and ".join(expected_to_refuse) + " runs root will refuse "
+                              "(launch_consumption_missing)" if expected_to_refuse else ""))
     else:
         lineage_record["published"] = True
     invalid = sorted(role for role in ("claim", "bound") if role_entry(locators, role).get("valid") is not True)
@@ -2210,6 +2234,13 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
                       + " and ".join(boot_changed) + " runs root; monotonic clocks do not join across a "
                       "reboot, so the chain was not launched",
                       {"roots": boot_changed, "boots": boots, "lineage_record": f"night/{LINEAGE_RECORD}"})
+    if lineage_error is not None and inventory_unusable:
+        return refuse("lineage_pack_inventory", REFUSED_PACK_INVENTORY_UNUSABLE,
+                      "the launch lineage could not be published because the pack's config inventory is "
+                      "unusable; no member's config bytes can be checked against the sealed inventory, so every "
+                      "tagged member would refuse; the chain was not launched",
+                      {"error": lineage_error, "attempts": len(lineage_record["attempts"]),
+                       "lineage_record": f"night/{LINEAGE_RECORD}"})
     if invalid:
         try:
             expected = lineage_identity(plan.hazard_window)
@@ -2221,6 +2252,7 @@ def run_hazard_night(rt: Any, plan_path: Path, plan: Any, probes: Any, initial_c
                     for role in invalid}
         if isinstance(locators, Mapping) and "error" in locators:
             observed["check_error"] = locators["error"]
+        observed["science_members_expected_to_refuse"] = expected_to_refuse
         window.flag(LINEAGE_PRELAUNCH_MISMATCH, "RECORDS", "REPRESENTATION", observed=observed,
                     expected={**expected, "boot_session_id": window.boot},
                     detail="the pre-launch lineage check disagrees with this window in the "
