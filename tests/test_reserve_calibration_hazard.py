@@ -470,6 +470,54 @@ class DeskIdentityTests(unittest.TestCase):
         flag = kinds(self.custody)["desk_identity_differs"]
         self.assertEqual(flag["observed"]["unreadable"], ["hardware_model"])
 
+    def test_unreadable_desk_identity_json_is_flagged_and_the_measured_vectors_reserve(self) -> None:
+        """Audit A6 (2026-10-07). Before: exit 2, calibration_reservation_json_invalid, before any live read."""
+        from joulewise.b5.plan import POWER_POLICY
+        for case in ("deleted", "not json", "a list", "both deleted"):
+            with self.subTest(case=case):
+                self.setUp()
+                make_hazard(self.runs_root, self.custody)
+                if case in ("deleted", "both deleted"):
+                    self.desk_epoch.unlink()
+                else:
+                    self.desk_epoch.write_text("not json\n" if case == "not json" else "[1, 2]\n")
+                if case == "both deleted":
+                    self.desk_t1.unlink()
+                code, out, err = self.main()
+                self.assertEqual(code, 0, out + err)
+                self.assertEqual(json.loads(out)["status"], "reserved")
+                self.assertEqual(sorted(self.sysctl_calls), ["hw.model", "kern.osversion"])
+                epoch = open_receipt(self.w.ledger, self.session_id)["slots"]["pre"]["identity_epoch"]
+                self.assertEqual((epoch["os_build"], epoch["hardware_model"], epoch["power_policy"]),
+                                 ("25G83", "Mac15,9", POWER_POLICY))
+                self.assertEqual(POWER_POLICY, "ac_high_power")
+                (flag,) = [row for row in flags(self.custody)
+                           if row["observed"].get("kind") == "desk_identity_unreadable"
+                           and row["observed"]["file"] == "identity_epoch"]
+                self.assertEqual(flag["code"], "calibration.writer_record_flagged")
+                self.assertEqual((flag["observed"]["file"], flag["observed"]["path"]),
+                                 ("identity_epoch", str(self.desk_epoch)))
+                self.assertEqual(flag["source"]["legacy_code"], RefusalCode.RESERVATION_JSON_INVALID.value)
+                differs = kinds(self.custody)["desk_identity_differs"]
+                self.assertIn("power_policy", differs["observed"]["fields"])  # the desk epoch named none
+                if case == "both deleted":
+                    # Neither desk file names a policy: the plan's constant, recorded as such.
+                    self.assertEqual(differs["observed"]["power_policy"],
+                                     {"desk": None, "plan": POWER_POLICY, "recorded": POWER_POLICY})
+                    self.assertEqual({row["observed"]["file"] for row in flags(self.custody)
+                                      if row["observed"].get("kind") == "desk_identity_unreadable"},
+                                     {"identity_epoch", "t1_bindings"})
+                else:
+                    self.assertNotIn("power_policy", differs["observed"])  # the desk T1's policy is the plan's
+
+    def test_unreadable_desk_identity_json_still_refuses_on_the_legacy_path(self) -> None:
+        self.desk_epoch.write_text("not json\n")
+        code, out, err = self.main("--allow-uncommitted-pin-for-test")
+        self.assertNotEqual(code, 0)
+        self.assertIn(RefusalCode.RESERVATION_JSON_INVALID.value, err)
+        self.assertEqual(self.sysctl_calls, [])
+        self.assertEqual(flags(self.custody), [])
+
 
 if __name__ == "__main__":
     unittest.main()

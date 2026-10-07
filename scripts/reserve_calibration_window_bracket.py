@@ -63,9 +63,13 @@ def _hazard_measured_identity(
     The desk JSON is a hand-prepared prediction; the reservation records the
     measured values instead, so the writer's kept R1 comparison compares two
     measurements taken in one boot minutes apart.  A field whose read raises
-    keeps the desk value.  The power policy is a label and stays the desk's.
-    Returns ``(epoch, t1, observed)``; ``observed`` is None when the measured
-    vectors equal the desk JSON and every read succeeded.
+    keeps the desk value.  The power policy is a label: the desk epoch's, else
+    the desk T1's, else the window plan's constant
+    (``joulewise.b5.plan.POWER_POLICY``, the value ``window.env`` and the
+    chain's capture writer use).  A desk file that could not be read reaches
+    here as an empty mapping (audit A6).  Returns ``(epoch, t1, observed)``;
+    ``observed`` is None when the measured vectors equal the desk JSON, every
+    read succeeded and the power policy is the plan's.
     """
 
     from joulewise.calibration_ledger import (  # noqa: PLC0415
@@ -88,15 +92,19 @@ def _hazard_measured_identity(
 
         return getattr(mx, "__version__", None)
 
+    from joulewise.b5.plan import POWER_POLICY  # noqa: PLC0415
+
     sampler = Path(
         writer.POWER_METRICS if HAZARD_SAMPLER_BINARY is None else HAZARD_SAMPLER_BINARY
     )
+    desk_policy = desk_epoch.get("power_policy") or desk_t1.get("power_policy")
+    power_policy = desk_policy or POWER_POLICY
     epoch = {
         "os_build": read("os_build", lambda: writer._sysctl_identity("kern.osversion"),
                          desk_epoch.get("os_build")),
         "hardware_model": read("hardware_model", lambda: writer._sysctl_identity("hw.model"),
                                desk_epoch.get("hardware_model")),
-        "power_policy": desk_epoch.get("power_policy"),
+        "power_policy": power_policy,
         "sampling_interval_ms": writer.SAMPLING_INTERVAL_MS,
         "estimator_revision": writer.RESIDUAL_REGION_METHOD,
         "pulse_protocol_id": writer.PROTOCOL_ID,
@@ -116,7 +124,7 @@ def _hazard_measured_identity(
         | {field for field in T1_FIELDS if t1.get(field) != desk_t1.get(field)}
     )
     observed = None
-    if differing or unreadable:
+    if differing or unreadable or desk_policy != POWER_POLICY:
         observed = {
             "kind": "desk_identity_differs",
             "fields": differing,
@@ -125,7 +133,27 @@ def _hazard_measured_identity(
             "measured": {field: str(t1.get(field)) for field in differing},
             "unreadable": sorted(unreadable),
         }
+        if desk_policy != POWER_POLICY:
+            observed["power_policy"] = {"desk": desk_policy, "plan": POWER_POLICY,
+                                        "recorded": power_policy}
     return epoch, t1, observed
+
+
+def _hazard_desk_object(path: Path) -> tuple[Mapping[str, Any], str | None]:
+    """A desk identity file on HAZARD: ``(mapping, None)``, or ``({}, reason)`` when unreadable.
+
+    Audit A6 (2026-10-07): on HAZARD the desk JSON is only the fallback for a
+    live read that fails, so a missing or malformed file is a record, never a
+    refusal.  The legacy path keeps :func:`_json_object`'s refusal.
+    """
+
+    try:
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return {}, f"{type(exc).__name__}: {exc}"[:300]
+    if not isinstance(value, Mapping):
+        return {}, f"not a JSON object ({type(value).__name__})"
+    return value, None
 
 
 def _json_object(path: Path) -> Mapping[str, Any]:
@@ -305,15 +333,29 @@ def main(argv: list[str] | None = None) -> int:
         hazard_identity = None
         if hazard is not None:
             # Measured before the CustodyDeadline exists, so the live reads are
-            # never charged to the custody allowance.
-            hazard_identity = _hazard_measured_identity(
-                _json_object(args.identity_epoch_json), _json_object(args.t1_bindings_json)
-            )
+            # never charged to the custody allowance.  An unreadable desk file
+            # is a flag (audit A6); the measured vectors do not need it.
+            desk = {}
+            for name, path in (("identity_epoch", args.identity_epoch_json),
+                               ("t1_bindings", args.t1_bindings_json)):
+                desk[name], reason = _hazard_desk_object(path)
+                if reason is not None:
+                    flags_core.emit(
+                        hazard, "calibration.writer_record_flagged", level="window",
+                        observed={"kind": "desk_identity_unreadable", "file": name, "path": str(path),
+                                  "reason": reason},
+                        legacy_site="scripts/reserve_calibration_window_bracket.py:_json_object",
+                        legacy_code=RefusalCode.RESERVATION_JSON_INVALID.value,
+                        detail="a desk-prepared identity file could not be read; the reservation "
+                               "recorded the measured identity vectors",
+                    )
+            hazard_identity = _hazard_measured_identity(desk["identity_epoch"], desk["t1_bindings"])
         if args.execute or args.verify_only:
             custody_deadline = CustodyDeadline(args.custody_budget_s, args.custody_deadline_epoch_s)
-        epoch = _json_object(args.identity_epoch_json)
-        t1 = _json_object(args.t1_bindings_json)
-        if hazard_identity is not None:
+        if hazard_identity is None:
+            epoch = _json_object(args.identity_epoch_json)
+            t1 = _json_object(args.t1_bindings_json)
+        else:
             epoch, t1, identity_observed = hazard_identity
             if identity_observed is not None:
                 flags_core.emit(
