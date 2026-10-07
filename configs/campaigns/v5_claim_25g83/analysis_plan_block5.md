@@ -1,14 +1,15 @@
 # Analysis plan V5-CLAIM-25G83-B5: what is computed from the claim windows, and how
 
-Status: **DRAFT, NOT SEALED. Revision 5, 2026-10-06** (revision 3 is commit `71c91d74`, revision 4 ends at commit
-`7261a585`; the changes of revisions 4 and 5 are listed in §14). Companion to `registration_block5.md` (the **registration**)
-and `flag_catalog.json` (the **flag catalog**) in the same directory; they are sealed together and none binds alone.
-Terms are those built in registration §0; terms that first appear here are built where they first appear. Every rule
-is fixed before any claim byte exists. Most estimators below are already frozen in committed bytes (the D-179
-contract, the floor packs' `extraction_spec.json`, GAMMA's `analysis_manifest_v3.json`); this plan ties those bytes,
-states the arithmetic so that it can be recomputed by hand, and fixes what they leave open: inputs, exclusions, the
-estimator when units are removed, order of operations, disclosures and what is printed from which artifact. Numbers
-in worked examples are **synthetic** and labelled so; they are not measurements.
+Status: **DRAFT, NOT SEALED. Revision 6, 2026-10-07** (revision 3 is commit `71c91d74`, revision 4 ends at commit
+`7261a585`, revision 5 at `9d63b4df`; the changes of revisions 4 to 6 are listed in §14). Companion to
+`registration_block5.md` (the **registration**) and `flag_catalog.json` (the **flag catalog**) in the same directory;
+they are sealed together and none binds alone. Terms are those built in registration §0; terms that first appear here
+are built where they first appear. Every rule is fixed before any claim byte exists. Most estimators below are already
+frozen in committed bytes (the D-179 contract, the floor packs' `extraction_spec.json`, GAMMA's
+`analysis_manifest_v3.json`); this plan ties those bytes, states the arithmetic so that it can be recomputed by hand,
+and fixes what they leave open: inputs, exclusions, the estimator when units are removed, order of operations,
+disclosures and what is printed from which artifact. Numbers in worked examples are **synthetic** and labelled so;
+they are not measurements.
 
 **What changed from revision 2.** Revision 2 analysed the one attempt per pack whose verdict was PASS, and a PASS
 window had every member valid, so no member was ever excluded after collection. Under Ed's 2026-10-05 ruling a
@@ -309,7 +310,8 @@ first and third §5 examples: absolute R = 0.5730 / 0.4745 = 1.21 (fails); compa
 
 ### 7.1 Frozen inputs and arithmetic
 
-Frozen in GAMMA's `analysis_manifest_v3.json` (re-tied at seal; GAMMA's pack changes before GAMMA-1, registration §2).
+Frozen in GAMMA's `analysis_manifest_v3.json` (re-tied at seal). Lane L10 changed GAMMA's interior references
+(registration §2), not this manifest.
 
 | Contrast id | Metric | Sides (A, B) | Planned quads |
 |---|---|---|---|
@@ -427,17 +429,28 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
 - **Battery-assist sensitivity line (REGISTERED; ruling of 2026-10-06, registration §9.2).** *Forcing problem:*
   battery assist (the battery helping the adapter, registration §6.4) is disclosed, not excluded, because excluding
   it would select members by load. A reader still needs to see whether the members it touched move the number.
-  *Rule:* an **assist member** is a kept member whose `battery.assist` flag records at least one read below −200 mA
-  inside its measured request; reads in prepare, idle baseline and warm-up do not make an assist member. For every
-  reported cell (§4) the same estimator is computed twice: over the kept units (the primary value), and over the kept
-  units with every unit that contains an assist member removed (a quad with one assist member is removed whole, as
-  in §2.2). Both are printed, side by side, as "with assisted members" and "without assisted members (n_r = …,
-  n_b = …)", with the count of assist members per stratum. Neither value is chosen after the fact; the first is the
-  reported cell. If removing assisted units leaves fewer than 8 units in a stratum, the second value is still printed,
-  with its n and the words "below the registered minimum of 8 units", and it decides nothing. *Worked example
-  (synthetic, the §4 data).* If repeat 3 (9.9 J) and quad 7 (mean 10.2 J) contain assist members, the second value
-  uses n_r = 9, n_b = 9: fmean(r) = 10.01111 J, fmean(b) = 10.2 J, m = 0.2 × 10.01111 + 0.8 × 10.2 = 10.16222 J, printed
-  beside the primary 10.16 J. Whether GAMMA's contrasts also get this line is open (registration §14 Q9).
+  *Rule:* an **assist member** is a kept member that carries the flag `battery.assist`. The harvest gives that flag
+  only when the member's measured request was assisted: at least one SMC battery-current read below 0 mA held into
+  the request (any negative read; −200 mA is only the threshold the flag's report counts against), or, when the SMC
+  reads did not cover the member, a negative registry current or a discharge accumulator beyond its limit in the
+  request. Assist seen only before or after the request (`battery.assist_outside_request`) does not make an assist
+  member. For every reported cell (§4) the same estimator is computed twice: over the kept units (the primary value),
+  and over the kept units with every unit that contains an assist member removed (a quad with one assist member is
+  removed whole, as in §2.2). Both are printed, side by side, as "with assisted members" and "without assisted
+  members (n_r = …, n_b = …)", with the count of assist members per stratum. Neither value is chosen after the fact;
+  the first is the reported cell. If removing assisted units leaves fewer than 8 units in a stratum, the second value
+  is still printed, with its n and the words "below the registered minimum of 8 units", and it decides nothing.
+  *Worked example (synthetic, the §4 data).* If repeat 3 (9.9 J) and quad 7 (mean 10.2 J) contain assist members, the
+  second value uses n_r = 9, n_b = 9: fmean(r) = 10.01111 J, fmean(b) = 10.2 J, m = 0.2 × 10.01111 + 0.8 × 10.2 =
+  10.16222 J, printed beside the primary 10.16 J.
+  *GAMMA's contrasts* (adopted, registration §14 Q9): each contrast is also computed without every kept quad that
+  holds an assist member, by §7.1 steps 1–4 (dbar and its metrology interval), and printed beside the primary
+  estimate as "without quads holding assisted members (n = …)", with the count of such quads. It has no Holm test, no
+  floor decision and no outcome; it decides nothing, and below 8 quads it carries the words "below the registered
+  minimum of 8 quads". *Worked example (synthetic, the §7.1 data).* If quad 3 (d = 3.3 J) holds an 8B assist member,
+  the line uses the other 8 kept quads: dbar = 2.9625 J, s_d = 0.16850, se_rep = 0.059574; with the same quad
+  variance of 0.0100 J², se_met = 0.035355 and se_total = 0.069276; t* = 2.365, so the interval is
+  [2.7987, 3.1263] J, printed beside the primary 3.0 J and [2.8325, 3.1675] J.
 - **Monitor cost:** the hazard monitor's own CPU time per window and the number of its probes that fell inside target
   phases (registration §0.17), and the meter reader's CPU time (registration §5.8), with the fixed sentence "The
   hazard monitor ran on efficiency cores at background priority during collection, and the whole-machine meter's
@@ -463,12 +476,14 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
 - **Battery, thermal, contention, clock:** per window, the hazard measurements at arm, the counts of each
   physics-in-span code, the count of members with anchor status `bounded` and the largest effective bound, and the
   host's total busy CPU during requests (journaled by the monitor; `kernel_task` cannot be named by an unprivileged
-  `ps`, registration §6.8). For battery assist: per window and per phase (prepare, idle baseline, warm-up, measured
-  request), the number of members with `battery.assist`, the number of reads below −200 mA, the minimum B0AC (the
-  battery current read from the SMC, registration §4.2) and the
-  total duration below −200 mA; the discharged energies are released with the other energies after the release
-  event. Per window, the count of members whose current was judged on the registry because the SMC did not cover them
-  (`battery.smc_unavailable`).
+  `ps`, registration §6.8). For battery assist: per window, the number of members with `battery.assist` and with
+  `battery.assist_outside_request`, and of calibration captures with `calibration.capture_battery_assist`; and per
+  phase (registration §6.4: before the measured request, the request, after it), the number of negative SMC reads,
+  the number below −200 mA, the minimum B0AC (the battery current read from the SMC, registration §4.2) and the total
+  held time below −200 mA. The discharged energies (`withheld/battery-assist.json`) are released with the other
+  energies after the release event. Per window, the count of members whose current was judged on the registry
+  because the SMC did not cover them (`battery.smc_unavailable`), and of #421 pairs disclosed as discharge
+  (`battery.capture_pair_assist`, `calibration.capture_battery_pair_assist`).
 - **Reference drift:** each window's NEG-8 screen result, allowance and corpus size (10, 11 or 12). For a corpus of 10
   or 11, also disclose that the bound was validated against the collected members and that the harvest's re-screen,
   not the stored verdict, decided the screen (registration §5.3; `derived/neg8-bound.json`, `derived/neg8-screen.json`).
@@ -478,7 +493,7 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
   `thermal.stage_battery_rise` (rise above 3 K, no plateau) or `thermal.battery_temperature_unmeasured` named.
   Fixed sentence for a flagged stage: "Stage S warmed by X K without levelling off; the window's NEG-8 screen
   [passed/failed], and the reported numbers rest on that screen, not on this reading." It changes no number and
-  removes nothing. A stage with no reading (the logging code is at `b9d02700a`; a failed read is
+  removes nothing. A stage with no reading (the logging code is at `a434e363d`; a failed read is
   `thermal.battery_temperature_unmeasured`) reads "battery temperature not recorded for this stage".
 - **G10:** its result and the redraw cycles that followed (registration §3).
 - **p42:** "The 42-token prefill of the decode workload is shorter than one power record and could not be resolved;
@@ -497,15 +512,16 @@ energy from member to member is a question the rails cannot answer; the whole-ma
 This section fixes, before any byte exists, exactly what is computed from it, so that nothing about it is chosen
 after the numbers are seen.
 
-*Inputs.* For each kept or removed member of each analysed attempt (the meter describes every collected member) and
-each analysed window of that member (its measured request; and its prefill and decode phases where the bundle records
-phase boundaries), the harvest's restricted record `withheld/meter/<run_id>.json` gives three numbers, defined in
-registration §5.8: **ΔE_rail**, the processor-rail energy above the member's idle baseline; **ΔE_machine**, the energy
-entering the machine (the meter's DC input plus the battery's discharge, −B0AC × B0AV) above the same baseline; and
-**ρ** = ΔE_rail ÷ ΔE_machine, the rails' share. It also gives the member's `meter.*` flags and whether the battery
-term was available.
+*Inputs.* For each kept or removed member of each analysed attempt (the meter describes every collected member), over
+its measured request (the harvest's request span; at `a434e363d` the harvest computes no phase-level figures,
+registration §5.8), the harvest's restricted record `withheld/meter.json` (one file per window, one row per member)
+gives three numbers, defined in registration §5.8: **ΔE_rail**, the processor-rail energy above the member's idle
+baseline; **ΔE_machine**, the energy entering the machine (the meter's DC input plus the battery's discharge, −B0AC ×
+B0AV) above the same baseline; and **ρ** = ΔE_rail ÷ ΔE_machine, the rails' share. The row also says whether the
+battery term was available. The member's and the window's `meter.*` flags are read from the harvest's flags
+(`derived/flags.jsonl`).
 
-*What is reported, per pack, model and window kind:*
+*What is reported, per pack and model:*
 
 1. per member: ΔE_rail, ΔE_machine and ρ;
 2. per model: the median of ρ, its minimum and maximum, and its interquartile range (the 25th and 75th percentiles,
@@ -586,7 +602,7 @@ Every printed number is `MEASURED` or `DERIVE`; none is recalculated from prose.
 | Bracket replay with the acceptance's ledger-cutoff baseline in finalization (memo 3.3) | Defect known | (part of L9) |
 | Claim gate re-runs `analyze_claims` and requires byte equality; the `evidence_class` read is fixed (memo 3.7) | Defect known | (part of L9) |
 | Claim verdicts to results-fill input | Absent | `CLAIM-VERDICT-TO-FILL-ADAPTER` |
-| Disclosure producer for §7.3 and §8, including the battery-assist line (§8.1), the physics-in-span sensitivity line if adopted, the whole-machine cross-check (§8.2, reading `withheld/meter/`) and the step-4 p42 exit rule | Absent | `DISCLOSURE-PRODUCER` |
+| Disclosure producer for §7.3 and §8, including the battery-assist line (§8.1), the physics-in-span sensitivity line if adopted, the whole-machine cross-check (§8.2, reading `withheld/meter.json`) and the step-4 p42 exit rule | Absent | `DISCLOSURE-PRODUCER` |
 
 Each is written and merged before the release event by seats that have read no claim-window energy, against this
 plan's text, tested on synthetic fixtures (including: one removed repeat gives n_r = 9, the stratified mean and t with
@@ -670,3 +686,16 @@ changed.
   0 < ρ ≤ 1 with ΔE_machine − ΔE_rail ≥ 0; the within-model spread, reported only; the central band from the first
   clean window, disclosed with its identifier. It never gates or enters a number.
 - §11: the disclosure producer's scope grows by the two items above.
+
+**Revision 6 (2026-10-07, the REG sync to the frozen head `a434e363d`).** No estimator, threshold or exclusion used by
+§4–§7 changed.
+
+- §8.1: an assist member is one carrying `battery.assist`, which the code gives for **any** negative SMC read in the
+  measured request (−200 mA is only the report's threshold), not "at least one read below −200 mA"; the per-phase
+  battery disclosure uses the code's phases (before the request, the request, after it) and adds the counts of
+  `battery.assist_outside_request`, capture assist and the discharge-only #421 pairs.
+- §8.1: the battery-assist line also covers GAMMA's contrasts (registration §14 Q9, adopted by the orchestrator's
+  ruling of 2026-10-06), with a worked example on the §7.1 data.
+- §8.2 and §11: the harvest's meter record is one file per window, `withheld/meter.json`, over each member's measured
+  request only; the per-phase figures revision 5 named are not produced.
+- §7.1: GAMMA's analysis manifest is unchanged by lane L10, which is in the frozen head.
