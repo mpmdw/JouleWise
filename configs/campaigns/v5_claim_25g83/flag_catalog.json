@@ -133,6 +133,20 @@
       "klass": "NUMBER",
       "note": "Pre or post calibration capture missing, not valid, or its artifacts differ from the ledger's recorded digests."
     },
+    "calibration.historical_custody_mismatch": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "CALIBRATION",
+      "klass": "NUMBER",
+      "note": "The harvest re-hashed the historical calibration files the ledger records (calibration_ledger.historical_custody_report, once per window) and at least one differs from the SHA-256 its ledger entry recorded. The acceptance's screens and the bracket are judged against those captures, so the evidence is not what was judged. The slots skip this re-hash on the HAZARD path (calibration.writer_record_flagged, historical_custody_unverified). Wired by P3-HARV (orchestrator mapping of 2026-10-06)."
+    },
+    "calibration.historical_custody_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "REPRESENTATION",
+      "note": "historical_custody_report status unmeasured: a historical calibration file could not be read (for example evicted from local iCloud storage) or no observation was checked. An unreadable file is not evidence of change; the hash chain and the pin are still checked. Name proposed here; confirmed at the P3 sync (registration 13)."
+    },
     "calibration.ledger_not_ready": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -1174,7 +1188,7 @@
     "aggregate_disclosures": "whole_window.not_passed and g3.recompute_failed are DISCLOSE because they fail on any single member's failure. Their window-level parts are neg8.screen_failed (emitted by the harvest, with the collected-subset re-screen) and calibration.bracket_acceptance_failed; their member-level part is member.whole_window_member_failure.",
     "authority": "registration_block5.md section 6 states these rules in words; this file is normative for each code's effect.",
     "restated_classes": "roster.run_id_mismatch (emitter REPRESENTATION, restated NUMBER here) is the one restatement; its note says why. calibration.ledger_snapshot_refused now keeps its emitter's class, NUMBER.",
-    "status": "DRAFT, NOT SEALED. Revision 4, 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced. Timing-ruling additions, 2026-10-06 (timing lane): thermal.stage_battery_rise and thermal.battery_temperature_unmeasured, both DISCLOSE. Core-prune integration additions, 2026-10-06 (integration lane): the fourteen codes the core-prune lanes emit (DESIGN.md section 5), with the effects given there. Gate-prune round-2 integration additions, 2026-10-06 (integration int3): the 30 codes the round-2 lanes (P2-CHAIN, P2-CTL, P2-RC, P2-DRV, P2-HARV), PLAN2 2.2 G and the SMC battery and wall-meter lane emit; member.timeout and member.stderr_uncopied EXCLUDE_MEMBER, every other one DISCLOSE. battery.member_span is unchanged (a council is ruling on it).",
+    "status": "DRAFT, NOT SEALED. Revision 4, 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced. Timing-ruling additions, 2026-10-06 (timing lane): thermal.stage_battery_rise and thermal.battery_temperature_unmeasured, both DISCLOSE. Core-prune integration additions, 2026-10-06 (integration lane): the fourteen codes the core-prune lanes emit (DESIGN.md section 5), with the effects given there. Gate-prune round-2 integration additions, 2026-10-06 (integration int3): the 30 codes the round-2 lanes (P2-CHAIN, P2-CTL, P2-RC, P2-DRV, P2-HARV), PLAN2 2.2 G and the SMC battery and wall-meter lane emit; member.timeout and member.stderr_uncopied EXCLUDE_MEMBER, every other one DISCLOSE. battery.member_span is unchanged (a council is ruling on it). Revision 5, 2026-10-06 (REG lane, gate-prune round 3): battery.assist (DISCLOSE) added and the battery notes rewritten to the battery-assist ruling (charging, AC loss and missing evidence exclude; discharge is disclosed); calibration.historical_custody_mismatch (EXCLUDE_WINDOW) and calibration.historical_custody_unmeasured (DISCLOSE) added for the harvest's historical custody pass; contention.kernel_task_share noted as unable to fire. Checked against integration head b9d02700a: every code the harvest CODES table, DRAFT_CODES and CORE_FLAG_CODES name is classified; member.whole_window_member_failure and monitor.restarted are classified but not in the harvest table.",
     "unclassified": "A code not listed here is UNCLASSIFIED: it blocks only the release event until classified blind by a cold erratum (registration 7.2). records.malformed_flag and collector.unmeasured are deliberately absent so that they always block release until read."
   },
   "rules": {
