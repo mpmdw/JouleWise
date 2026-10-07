@@ -1660,6 +1660,7 @@ def analyze_claims(
     output_path: Path | None = None,
     legacy_l1_mechanics: bool = False,
     legacy_allowlist: frozenset[tuple[str, str]] | None = None,
+    neg8_harvest_archive: Path | None = None,
     _floor_request_factory: _FloorRequestFactory | None = None,
     _pair_stochastic_factory: _PairStochasticFactory | None = None,
 ) -> dict[str, Any]:
@@ -1689,6 +1690,7 @@ def analyze_claims(
         mode="read_replay",
         strict_validator=strict_validator,
         evidence_roots=evidence_roots,
+        neg8_harvest_archive=neg8_harvest_archive,
     )
     if inputs.manifest.get("schema_version") == FINALIZED_ANALYSIS_MANIFEST_V3_SCHEMA:
         transported_contrasts = [

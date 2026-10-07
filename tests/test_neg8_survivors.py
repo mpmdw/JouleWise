@@ -884,6 +884,94 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         self.assertTrue(flag["observed"]["survivor_rescreen"]["corpus_clean_bound"])
         self.assertNotIn("neg8.bound_not_derived", window.codes())
 
+    def allowance_record(self, window) -> dict:
+        import json
+        return json.loads((window.archive / "derived" / "neg8-allowance.json").read_bytes())
+
+    @staticmethod
+    def verdict_row(window) -> dict:
+        import json
+        return json.loads((window.claim / "whole-window-verdict.json").read_bytes())
+
+    def test_the_survivor_rescreen_is_the_bracket_the_allowance_consumer_reads(self) -> None:
+        """Audit A1: the survivor bracket stayed in withheld/ while the consumer read the stored one.
+
+        Trigger: an end reference is contaminated by a contender, the stored
+        screen holds its energy, the harvest drops it and re-screens at
+        (3, 1, 2).  The allowance must be the re-screen's (bound(3, 2)), not
+        the stored (3, 3) bracket's.
+        """
+        import hashlib
+        probe = _hb().Window(self.tmp / "probe", catalog_overrides=self.ISOLATE)
+        _hb().neg8_corpus(probe)
+        contaminated = self.points(0.0, **{"b5t-neg8-end-3": 30.34 + 0.5 * self.bound_j(probe)})
+        window = self.run_window("allowance", contaminated,
+                                 reference_flags=[("b5t-neg8-end-3", "contention.request_overlap")])
+        self.assertNotIn("neg8.screen_failed", window.codes())
+        record = self.allowance_record(window)
+        self.assertEqual(record["source"], "survivor_rescreen")
+        withheld = window.archive / "withheld" / "neg8-rescreen-bracket.json"
+        self.assertEqual(record["survivor_bracket"], {"path": "withheld/neg8-rescreen-bracket.json",
+                                                      "sha256": hashlib.sha256(withheld.read_bytes()).hexdigest()})
+        self.assertEqual(self.screen_record(window)["survivor_bracket"], record["survivor_bracket"])
+        self.assertNotIn('_j"', (window.archive / "derived" / "neg8-allowance.json").read_text())
+        row = self.verdict_row(window)
+        bracket, problem = ww.harvest_neg8_allowance_bracket(window.archive, row)
+        self.assertIsNone(problem)
+        self.assertEqual(bracket["reference_counts"], {"start": 3, "midpoint": 1, "end": 2})
+        stored = row["idle_admission_core"]["neg8_bracket"]
+        gross = ww.NEG8_CLAIM_FAMILY_GROSS
+        survivor_allowance = bracket["drift_allowances"][gross]["allowance_j"]
+        self.assertNotEqual(survivor_allowance, stored["drift_allowances"][gross]["allowance_j"])
+        corpus = [30.0 + 0.1 * index for index in range(1, 13)]
+        self.assertAlmostEqual(survivor_allowance, ww.neg8_count_adjusted_bound(corpus, 3, 2)["bound_j"], places=9)
+        # A recorded re-screen whose bracket does not authenticate never falls back to the stored one.
+        __import__("os").chmod(withheld, 0o600)
+        _hb().put(withheld, {"schema": "joulewise.b5_neg8_screen.v1", "bracket": stored})
+        self.assertEqual(ww.harvest_neg8_allowance_bracket(window.archive, row),
+                         (None, "survivor_bracket_unauthenticated"))
+
+    def test_a_clean_window_names_the_stored_bracket(self) -> None:
+        window = self.run_window("allowance-clean", self.points(0.0))
+        self.assertEqual(self.allowance_record(window)["source"], "stored_verdict")
+        row = self.verdict_row(window)
+        self.assertEqual(ww.harvest_neg8_allowance_bracket(window.archive, row),
+                         (row["idle_admission_core"]["neg8_bracket"], None))
+        other = {**row, "timestamp": "1970-01-01T00:00:00Z"}
+        self.assertEqual(ww.harvest_neg8_allowance_bracket(window.archive, other),
+                         (None, "allowance_record_names_another_row"))
+
+    def test_a_failed_screen_supplies_no_allowance(self) -> None:
+        window = self.run_window("allowance-failed", self.points(0.0), reference_flags=[
+            ("b5t-neg8-start-1", "thermal.os_level_nonzero"), ("b5t-neg8-start-3", "clock.step_overlap")])
+        self.assertIn("neg8.screen_failed", window.codes())
+        self.assertEqual(self.allowance_record(window)["source"], "none")
+        self.assertEqual(ww.harvest_neg8_allowance_bracket(window.archive, self.verdict_row(window)),
+                         (None, "screen_not_passed"))
+
+    def test_a_clean_corpus_bound_is_authenticated_for_the_allowance(self) -> None:
+        """Registration 5.3: the clean bound (two corpus members dropped for physics) carries the allowance."""
+        import hashlib
+        import json
+        hb = _hb()
+        window = self.run_window("allowance-corpus", self.points(0.0), corpus_flags=[
+            (hb.CORPUS_IDS[0], "contention.request_overlap"), (hb.CORPUS_IDS[11], "thermal.os_level_nonzero")])
+        self.assertNotIn("neg8.screen_failed", window.codes())
+        record = self.allowance_record(window)
+        self.assertEqual((record["source"], record["bound_used"]), ("survivor_rescreen", "corpus_physics_clean"))
+        clean_path = window.archive / "withheld" / "neg8-clean-bound.json"
+        self.assertEqual(record["clean_bound"]["sha256"], hashlib.sha256(clean_path.read_bytes()).hexdigest())
+        physics = json.loads((window.archive / "derived" / "neg8-corpus-physics.json").read_bytes())
+        self.assertEqual(physics["clean_bound"], {key: record["clean_bound"][key] for key in ("path", "sha256")})
+        row = self.verdict_row(window)
+        bracket, problem = ww.harvest_neg8_allowance_bracket(window.archive, row)
+        self.assertIsNone(problem)
+        self.assertAlmostEqual(bracket["drift_allowances"][ww.NEG8_CLAIM_FAMILY_GROSS]["allowance_j"], 0.7, places=9)
+        __import__("os").chmod(clean_path, 0o600)
+        clean_path.write_bytes(clean_path.read_bytes() + b" ")
+        self.assertEqual(ww.harvest_neg8_allowance_bracket(window.archive, row),
+                         (None, "clean_bound_unauthenticated"))
+
     def test_a_corpus_left_below_ten_clean_members_is_not_derived(self) -> None:
         hb = _hb()
         window = self.run_window("below-ten", self.points(0.0), failed=[hb.CORPUS_IDS[5]], corpus_flags=[
@@ -892,6 +980,132 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         self.assertEqual(flag["observed"]["source"], "corpus_physics")
         self.assertIn("clean_members_below_minimum", flag["observed"]["problems"])
         self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
+
+
+class SurvivorAllowanceConsumerTests(unittest.TestCase):
+    """Audit A1: ``whole_window_drift_allowances`` reads the bracket the harvest's screen left standing.
+
+    The ruling's worked example: the stored (3, 1, 3) bracket holds the
+    contaminated end member (101.08 J) and gives the allowance bound(3, 3) =
+    0.5933 J; the survivors (3, 1, 2) give bound(3, 2) = 0.6383 J.  The
+    archive is written by the harvest's own ``neg8_allowance``; the row's
+    replay and refusal barriers (``_validate_row``,
+    ``whole_window_refusal_reasons``) are stubbed as in the audit's probe.
+    """
+
+    START, MIDPOINT, END = [100.02, 99.91, 99.95], [100.20], [100.26, 100.19, 101.08]
+
+    def setUp(self) -> None:
+        import json
+        import tempfile
+        from pathlib import Path
+
+        from joulewise.b5 import harvest as h
+        from tests import test_harvest_b5_window as hb
+
+        self.h, self.hb = h, hb
+        self._tmp = tempfile.TemporaryDirectory(prefix="neg8-allowance-", dir=hb.REAL_TMP)
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name) / "runs"
+        self.archive = Path(self._tmp.name) / "archive"
+        self.root.mkdir()
+        bound = bound_artifact(RULING_CORPUS)
+        self.stored = evaluate(bound, self.START, self.MIDPOINT, self.END)
+        self.survivor = evaluate(bound, self.START, self.MIDPOINT, self.END[:2], lost=[
+            {"bundle_id": "end-3", "position": "end", "reason": "contention.request_overlap", "status": None}])
+        self.row = {"record_type": "idle_admission_whole_window_verdict", "bundle_ids": ["science-1"],
+                    "evaluation_basis": {"sha256": "a" * 64, "member_occurrences": [{"bundle_id": "science-1"}]},
+                    "idle_admission_core": {"neg8_bracket": self.stored}}
+        (self.root / "campaign_log.jsonl").write_text(json.dumps(self.row) + "\n")
+
+    def write_archive(self, source: str, *, bracket=None) -> None:
+        """The harvest's records for this row: its own writer, as ``neg8_deferred_screen`` calls it."""
+        h = self.h
+        run = object.__new__(h._Harvest)
+        run.archive, run.outputs = self.archive, {}
+        run.withheld, run.derived = self.archive / "withheld", self.archive / "derived"
+        if source == "survivor_rescreen":
+            digest = h.write_json_once(run.withheld / "neg8-rescreen-bracket.json",
+                                       {"schema": h.NEG8_SCREEN_SCHEMA, "bracket": bracket or self.survivor})
+            run.neg8_rescreen_binding = {
+                "survivor_bracket": {"path": "withheld/neg8-rescreen-bracket.json", "sha256": digest},
+                "bound": self.stored["drift_bound_artifact"], "bound_used": "stored_bracket", "clean_bound": None}
+        run.neg8_allowance(self.row, source)
+        h.write_json_once(self.archive / "harvest.json", {"outputs": dict(run.outputs)})
+
+    def allowances(self, **kwargs):
+        from unittest import mock
+
+        with mock.patch.object(ww, "whole_window_refusal_reasons", return_value=()), \
+                mock.patch.object(ww, "_validate_row", return_value=(True, None)):
+            return ww.whole_window_drift_allowances(self.root, {"science-1"}, **kwargs)
+
+    def gross_j(self, result) -> float:
+        self.assertEqual(result.status, "allowances")
+        return result.allowances[ww.NEG8_CLAIM_FAMILY_GROSS]["allowance_j"]
+
+    def test_the_stored_bracket_is_the_ruling_example_before_the_screen(self) -> None:
+        self.assertAlmostEqual(self.gross_j(self.allowances()), 0.5933, places=4)
+
+    def test_a_survivor_rescreen_supplies_the_survivor_allowance(self) -> None:
+        """Before the fix the consumer returned 0.5933 J (the stored bracket) here."""
+        self.write_archive("survivor_rescreen")
+        result = self.allowances(neg8_harvest_archive=self.archive)
+        self.assertAlmostEqual(self.gross_j(result), 0.6383, places=4)
+        idle = result.allowances[ww.NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED]["allowance_j"]
+        self.assertAlmostEqual(idle, 0.6383, places=4)
+        self.assertEqual(result.allowances[ww.NEG8_CLAIM_FAMILY_GROSS]["whole_window_evaluation_basis_sha256"],
+                         "a" * 64)
+
+    def test_a_kept_stored_screen_supplies_the_stored_allowance(self) -> None:
+        self.write_archive("stored_verdict")
+        self.assertAlmostEqual(self.gross_j(self.allowances(neg8_harvest_archive=self.archive)), 0.5933, places=4)
+
+    def test_a_hazard_window_without_its_harvest_archive_refuses(self) -> None:
+        """Before the fix a HAZARD window's consumer read the stored (contaminated) bracket: 0.5933 J."""
+        from unittest import mock
+
+        with mock.patch.object(ww, "_is_hazard_runs_root", return_value=True):
+            self.assertEqual(self.allowances().status, "absent")
+            self.write_archive("survivor_rescreen")
+            self.assertAlmostEqual(self.gross_j(self.allowances(neg8_harvest_archive=self.archive)), 0.6383,
+                                   places=4)
+
+    def test_a_recorded_rescreen_that_does_not_authenticate_refuses(self) -> None:
+        import json
+
+        cases = {
+            "withheld bytes replaced": lambda: (self.archive / "withheld" / "neg8-rescreen-bracket.json").write_bytes(
+                json.dumps({"schema": self.h.NEG8_SCREEN_SCHEMA, "bracket": self.stored}).encode()),
+            "allowance record replaced": lambda: (self.archive / "derived" / "neg8-allowance.json").write_bytes(
+                (self.archive / "derived" / "neg8-allowance.json").read_bytes().replace(
+                    b"survivor_rescreen", b"stored_verdict")),
+            "harvest record absent": lambda: (self.archive / "harvest.json").unlink(),
+        }
+        for label, tamper in cases.items():
+            with self.subTest(label):
+                import shutil
+                shutil.rmtree(self.archive, ignore_errors=True)
+                self.write_archive("survivor_rescreen")
+                tamper()
+                self.assertEqual(self.allowances(neg8_harvest_archive=self.archive).status, "absent")
+
+    def test_a_survivor_bracket_whose_allowance_does_not_recompute_refuses(self) -> None:
+        """Consistent hashes over a wrong number: the families' allowance arithmetic is replayed."""
+        import copy
+
+        forged = copy.deepcopy(self.survivor)
+        for family in (ww.NEG8_CLAIM_FAMILY_GROSS, ww.NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED):
+            forged["claim_families"][family]["drift_allowance_j"] = 0.5933
+            forged["drift_allowances"][family]["allowance_j"] = 0.5933
+        self.write_archive("survivor_rescreen", bracket=forged)
+        self.assertEqual(ww.harvest_neg8_allowance_bracket(self.archive, self.row),
+                         (None, "survivor_arithmetic_differs"))
+        self.assertEqual(self.allowances(neg8_harvest_archive=self.archive).status, "absent")
+
+    def test_a_failed_screen_supplies_no_allowance(self) -> None:
+        self.write_archive("screen_failed")
+        self.assertEqual(self.allowances(neg8_harvest_archive=self.archive).status, "absent")
 
 
 # ---------------------------------------------------------------------------

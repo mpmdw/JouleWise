@@ -7138,6 +7138,199 @@ def whole_window_refusal_reasons(
     return ()
 
 
+# Block-5 audit A1: the harvest's record of which NEG-8 bracket a window's
+# allowance comes from (``joulewise.b5.harvest``, ``derived/neg8-allowance.json``).
+NEG8_HARVEST_ALLOWANCE_SCHEMA = "joulewise.b5_neg8_allowance.v1"
+NEG8_HARVEST_ALLOWANCE_RECORD = "derived/neg8-allowance.json"
+NEG8_HARVEST_SURVIVOR_BRACKET = "withheld/neg8-rescreen-bracket.json"
+NEG8_HARVEST_CLEAN_BOUND = "withheld/neg8-clean-bound.json"
+NEG8_HARVEST_CLEAN_CORPUS = "derived/neg8-clean-corpus.json"
+
+
+def _archive_bytes(
+    archive: Path, entry: Any, expected_path: str
+) -> bytes | None:
+    """The bytes of ``{path, sha256}`` in ``archive``, if the path is the expected one and they hash to it."""
+
+    if (
+        not isinstance(entry, Mapping)
+        or entry.get("path") != expected_path
+        or not _sha256_text(entry.get("sha256"))
+    ):
+        return None
+    try:
+        raw = (archive / expected_path).read_bytes()
+    except OSError:
+        return None
+    return raw if hashlib.sha256(raw).hexdigest() == entry["sha256"] else None
+
+
+def _json_object_bytes(raw: bytes | None) -> Mapping[str, Any] | None:
+    if raw is None:
+        return None
+    try:
+        value = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, Mapping) else None
+
+
+def harvest_neg8_allowance_bracket(
+    archive_root: Path | None, row: Mapping[str, Any]
+) -> tuple[Mapping[str, Any] | None, str | None]:
+    """The NEG-8 bracket whose allowances a claim on ``row`` may carry, from the harvest archive.
+
+    Returns ``(bracket, None)`` or ``(None, problem)``.  The harvest's
+    ``derived/neg8-allowance.json`` must be the bytes ``harvest.json`` lists
+    under ``outputs`` and must name this row (canonical SHA-256 of the row and
+    its evaluation basis).  Its ``source`` decides:
+
+    * ``stored_verdict``: the harvest's screen kept the stored bracket; it is
+      the row's own ``idle_admission_core.neg8_bracket``.
+    * ``survivor_rescreen``: the harvest dropped lost references or re-derived
+      the bound (registration 0.12, 5.3) and the re-screen passed; the bracket
+      is ``withheld/neg8-rescreen-bracket.json``, at the SHA-256 the record
+      names.  Its decision must be passed with no condition, its bound
+      artifact must be the one the record names (canonical SHA-256) and
+      validate, a clean corpus bound must be the withheld bytes the record
+      names and validate against the clean corpus manifest the record names,
+      and each family's allowance, excursion and bound are recomputed from the
+      bracket's endpoint summaries.
+    * anything else (the screen failed or could not run): no allowance.
+
+    A recorded re-screen whose bracket does not authenticate never falls back
+    to the stored bracket (number integrity, audit A1).
+    """
+
+    if archive_root is None:
+        return None, "harvest_archive_required"
+    archive = Path(archive_root)
+    try:
+        harvest_record = json.loads((archive / "harvest.json").read_bytes())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None, "harvest_record_unreadable"
+    outputs = (
+        harvest_record.get("outputs")
+        if isinstance(harvest_record, Mapping)
+        else None
+    )
+    digest = (
+        outputs.get(NEG8_HARVEST_ALLOWANCE_RECORD)
+        if isinstance(outputs, Mapping)
+        else None
+    )
+    record = _json_object_bytes(
+        _archive_bytes(
+            archive,
+            {"path": NEG8_HARVEST_ALLOWANCE_RECORD, "sha256": digest},
+            NEG8_HARVEST_ALLOWANCE_RECORD,
+        )
+    )
+    if record is None or record.get("schema") != NEG8_HARVEST_ALLOWANCE_SCHEMA:
+        return None, "allowance_record_unauthenticated"
+    verdict = record.get("verdict")
+    basis = row.get("evaluation_basis")
+    basis_sha = basis.get("sha256") if isinstance(basis, Mapping) else None
+    try:
+        row_sha = canonical_sha256(row)
+    except (TypeError, ValueError):
+        return None, "verdict_row_unhashable"
+    if (
+        not isinstance(verdict, Mapping)
+        or verdict.get("row_sha256") != row_sha
+        or verdict.get("evaluation_basis_sha256") != basis_sha
+    ):
+        return None, "allowance_record_names_another_row"
+    source = record.get("source")
+    core = row.get("idle_admission_core")
+    stored = core.get("neg8_bracket") if isinstance(core, Mapping) else None
+    if source == "stored_verdict":
+        return (stored, None) if isinstance(stored, Mapping) else (
+            None,
+            "stored_bracket_absent",
+        )
+    if source != "survivor_rescreen":
+        return None, "screen_not_passed"
+    wrapper = _json_object_bytes(
+        _archive_bytes(
+            archive, record.get("survivor_bracket"), NEG8_HARVEST_SURVIVOR_BRACKET
+        )
+    )
+    bracket = wrapper.get("bracket") if wrapper is not None else None
+    if not isinstance(bracket, Mapping):
+        return None, "survivor_bracket_unauthenticated"
+    if bracket.get("decision") != "passed" or bracket.get("conditions") != []:
+        return None, "survivor_bracket_not_passed"
+    artifact = bracket.get("drift_bound_artifact")
+    try:
+        artifact_sha = canonical_sha256(artifact)
+    except (TypeError, ValueError):
+        return None, "survivor_bound_unhashable"
+    if artifact_sha != record.get(
+        "bound_artifact_sha256"
+    ) or not validate_neg8_drift_bound_artifact(artifact):
+        return None, "survivor_bound_unauthenticated"
+    clean = record.get("clean_bound")
+    if record.get("bound_used") == "corpus_physics_clean" or clean is not None:
+        bound_wrapper = _json_object_bytes(
+            _archive_bytes(
+                archive,
+                clean,
+                NEG8_HARVEST_CLEAN_BOUND,
+            )
+        )
+        corpus_raw = _archive_bytes(
+            archive,
+            clean.get("corpus_manifest") if isinstance(clean, Mapping) else None,
+            NEG8_HARVEST_CLEAN_CORPUS,
+        )
+        if (
+            bound_wrapper is None
+            or corpus_raw is None
+            or bound_wrapper.get("bound") != artifact
+            or not validate_neg8_drift_bound_artifact(
+                artifact,
+                reference_corpus_bytes=corpus_raw,
+                require_corpus_identity=True,
+            )
+        ):
+            return None, "clean_bound_unauthenticated"
+    elif record.get("bound_used") == "stored_bracket" and (
+        not isinstance(stored, Mapping)
+        or stored.get("drift_bound_artifact") != artifact
+    ):
+        return None, "survivor_bound_differs_from_stored"
+    families = bracket.get("claim_families")
+    if not isinstance(families, Mapping) or set(families) != {
+        NEG8_CLAIM_FAMILY_GROSS,
+        NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED,
+    }:
+        return None, "survivor_families_invalid"
+    for family, value in families.items():
+        try:
+            recomputed = _family_drift_record(
+                family=family,
+                start=value["start"],
+                midpoint=value.get("midpoint"),
+                end=value["end"],
+                protocol=value["endpoint_protocol"],
+                artifact=artifact,
+                duration_s=value.get("window_duration_s"),
+            )
+        except (KeyError, TypeError, ValueError):
+            return None, "survivor_arithmetic_unreadable"
+        if any(
+            recomputed.get(key) != value.get(key)
+            for key in (
+                "drift_allowance_j",
+                "trajectory_excursion_max_j",
+                "derived_repeatability_bound_j",
+            )
+        ):
+            return None, "survivor_arithmetic_differs"
+    return bracket, None
+
+
 def whole_window_drift_allowances(
     runs_root: Path,
     referenced_bundle_ids: set[str],
@@ -7145,12 +7338,20 @@ def whole_window_drift_allowances(
     evaluation_basis_sha256: str | None = None,
     consumption_session: AuthenticatedConsumptionSession | None = None,
     consumption_semantics_id: str | None = None,
+    neg8_harvest_archive: Path | None = None,
 ) -> WholeWindowDriftAllowanceResult:
     """Return authenticated family allowances for the selected passing basis.
 
     ``legacy`` is reserved for basis-less frozen replay. ``absent`` means a
     current/basis-bearing row did not preserve a complete authenticated
     allowance wire; callers must refuse rather than treating it as zero.
+
+    ``neg8_harvest_archive`` is the window's block-5 harvest archive.  When it
+    is given, and always on a HAZARD runs root, the allowances come from the
+    bracket the harvest's NEG-8 screen left standing
+    (:func:`harvest_neg8_allowance_bracket`): the stored bracket, or the
+    survivor re-screen's bracket when the harvest dropped lost references or
+    re-derived the bound; anything that does not authenticate is ``absent``.
     """
 
     root = Path(runs_root)
@@ -7296,6 +7497,25 @@ def whole_window_drift_allowances(
         or not _sha256_text(basis.get("sha256"))
     ):
         return WholeWindowDriftAllowanceResult("absent", {})
+    if neg8_harvest_archive is not None or _is_hazard_runs_root(root):
+        # Block-5 audit A1: on a HAZARD window the harvest alone sees the
+        # monitor journals, so the allowance the claim carries is the one the
+        # harvest's screen left standing (the stored bracket, or the survivor
+        # re-screen's), bound to this row; without that record, refuse.
+        harvested, _problem = harvest_neg8_allowance_bracket(
+            neg8_harvest_archive, candidates[0]
+        )
+        if harvested is None:
+            return WholeWindowDriftAllowanceResult("absent", {})
+        bracket = harvested
+    return _bracket_drift_allowances(bracket, basis)
+
+
+def _bracket_drift_allowances(
+    bracket: Any, basis: Mapping[str, Any]
+) -> WholeWindowDriftAllowanceResult:
+    """The two families' allowances of one NEG-8 bracket, or ``absent``."""
+
     allowances = (
         bracket.get("drift_allowances")
         if isinstance(bracket, Mapping)
@@ -7356,6 +7576,7 @@ __all__ = [
     "NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED",
     "NEG8_DRIFT_BOUND_SCHEMA",
     "NEG8_DRIFT_BOUND_MAX_AGE_S",
+    "NEG8_HARVEST_ALLOWANCE_SCHEMA",
     "NEG8_DRIFT_ESTIMATOR_ID",
     "NEG8_POINT_DRIFT_ESTIMAND",
     "CustodyTelemetryIdentity",
@@ -7389,6 +7610,7 @@ __all__ = [
     "custody_telemetry_identity",
     "evaluate_neg8_point_drift",
     "evaluate_neg8_bound_freshness",
+    "harvest_neg8_allowance_bracket",
     "load_neg8_drift_bound_artifact",
     "launch_lineage_refusal_reasons",
     "mint_neg8_drift_bound_artifact",
