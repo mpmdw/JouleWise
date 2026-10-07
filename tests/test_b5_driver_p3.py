@@ -29,6 +29,7 @@ from unittest import mock
 from joulewise import arm_retry
 from joulewise.b5 import driver as b5_driver
 from tests import process_reaper
+from tests import runner_isolation
 from tests.test_b5_driver import Harness, load_driver
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -543,6 +544,12 @@ class DeadManMeterTests(unittest.TestCase):
             (night / b5_driver.METER_JOURNAL).write_text(json.dumps(
                 {"event": "start", "pid": process.pid, "pgid": process.pid, "start_time": None, "argv": argv,
                  "at": b5_driver.stamp()}) + "\n")
+            # The reaper identifies the group by the command line ps shows. The dead-man runs
+            # it hours after the spawn; this test runs it milliseconds after, when ps can
+            # still show only "(python3.13)" and the reaper then rightly declines
+            # (tests/runner_isolation.py, item 3). Wait for the event the test needs, the
+            # child's own arguments being readable, instead of assuming it has happened.
+            runner_isolation.wait_until_ps_shows(process.pid, " ".join(argv[1:]))
             self.assertIsNone(b5_driver.reap_orphan_monitor(night))
             self.assertIsNone(process.poll())
             self.assertTrue(b5_driver.reap_orphan_monitor(night, journal=b5_driver.METER_JOURNAL)["signalled"])
@@ -558,6 +565,9 @@ class DeadManMeterTests(unittest.TestCase):
             process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
                                        start_new_session=True)
             self.addCleanup(process_reaper.kill_and_wait, process)
+            # The third case below expects "start time differs", which the reaper reports only
+            # after the command line matched; so ps must already show the child's arguments.
+            runner_isolation.wait_until_ps_shows(process.pid, "-c import time; time.sleep(60)")
             for label, start in (
                     ("no command line", {"event": "start", "pid": process.pid, "pgid": process.pid}),
                     ("another command line", {"event": "start", "pid": process.pid, "pgid": process.pid,
