@@ -236,15 +236,20 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
     if not verdict.passed:
         return finish(NULL, "instrument", _refusals([verdict]))
 
-    # 6. Dwell: contention in 30 s intervals, the clock at 1 Hz.
+    # 6. Dwell: contention in 30 s intervals, the clock at 1 Hz.  A preempted
+    # anchor read is re-read against the arm's own skew bound (rule iii).
+    def clock_sample() -> dict[str, Any]:
+        return clock.sample(ctx, frequency_reader=seams.frequency_reader,
+                            max_skew_ns=int(thresholds["clock"]["skew_max_ns"]))
+
     dwell_started = ctx.stamp()
     boot_start = _boot(seams, ctx)
-    samples = [clock.sample(ctx, frequency_reader=seams.frequency_reader)]
+    samples = [clock_sample()]
     dwell = contention.run_dwell(
         ctx, thresholds["contention"], tree_roots=config.tree_roots,
-        on_tick=lambda: samples.append(clock.sample(ctx, frequency_reader=seams.frequency_reader)),
+        on_tick=lambda: samples.append(clock_sample()),
         tick_s=config.dwell_tick_s, host_reader=seams.host_cpu)
-    samples.append(clock.sample(ctx, frequency_reader=seams.frequency_reader))
+    samples.append(clock_sample())
     boot_end = _boot(seams, ctx)
     contention_verdict = recorder.hazard(
         "dwell", dwell, contention.judge(dwell, thresholds["contention"]))
@@ -264,7 +269,7 @@ def run(config: ArmConfig, seams: Seams | None = None) -> ArmResult:
         recorder.hazard("final", final_thermal,
                         thermal.judge(final_thermal, thresholds["thermal"])),
     ]
-    samples.append(clock.sample(ctx, frequency_reader=seams.frequency_reader))
+    samples.append(clock_sample())
     series = clock.series(samples, boot_start=boot_start, boot_end=_boot(seams, ctx),
                           started=dwell_started, finished=ctx.stamp())
     finals.append(recorder.hazard("dwell_and_go", series, clock.judge(series, thresholds["clock"])))

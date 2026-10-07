@@ -32,6 +32,22 @@ changes, and the member join ``clock.step_overlap``.  The per-member 5 ms
 anchor bound computed by ``uncertainty_evidence`` stays authoritative and is
 not touched here.
 
+Read skew in the window (mock rehearsal round 3, R3-1).  The anchor is
+REALTIME minus the midpoint of the two RAW reads around it, so a read whose
+RAW reads are ``s`` apart places the anchor anywhere within +-s/2 of its true
+value.  A residual between two samples therefore carries up to
+(s1 + s2) / 2 of read error.  On 10-06 a ``ps`` child preempted the reads
+and gave skews of 3.9-8.3 ms: up to 4 ms of anchor error, read as a false
+``clock.step`` and ``clock.step_overlap``.  The in-window bound is
+``step_ns / 4`` (250 us at the 1 ms step threshold): with both samples at or
+under it the read error in a residual is at most step_ns / 4, so a residual
+above step_ns still holds at least 3/4 of step_ns of real clock movement.
+:func:`sample` re-reads the anchor up to ``ANCHOR_TRIES`` (5) times until
+one read is within the bound; when none is, the sample is recorded as
+unmeasured (anchor None, error, the rejected reads kept), never compared.
+The member join discloses such a sample as ``clock.unmeasured``.  The arm's
+own dwell samples keep the arm's 1 ms bound (rule (iii)).
+
 The form of the T-0 author check (``arm_readiness_evidence_t0.py:1213-1269``)
 is ported here, not imported.
 """
@@ -66,6 +82,22 @@ DEFAULT_THRESHOLDS: dict[str, Any] = {
     "step_ns": 1_000_000,           # in-window step between consecutive samples
 }
 THRESHOLD_KEYS = tuple(DEFAULT_THRESHOLDS)
+
+# The in-window read-skew bound as a fraction of the step threshold (see the
+# module docstring), and the number of anchor reads a sample may take.
+# Derived, not DEFAULT_THRESHOLDS keys: window plans copy every
+# DEFAULT_THRESHOLDS key from the sealed registration (joulewise/b5/plan.py).
+SKEW_DIVISOR_OF_STEP = 4
+ANCHOR_TRIES = 5
+
+
+def window_skew_max_ns(step_ns: int = DEFAULT_THRESHOLDS["step_ns"]) -> int:
+    """The in-window anchor read-skew bound: ``step_ns // 4`` (250 us at 1 ms)."""
+
+    return int(step_ns) // SKEW_DIVISOR_OF_STEP
+
+
+WINDOW_SKEW_MAX_NS = window_skew_max_ns()
 
 FrequencyReader = Callable[[], Mapping[str, Any]]
 BootReader = Callable[[Context], str]
@@ -117,26 +149,58 @@ def _anchor_record(ctx: Context) -> dict[str, int]:
             "anchor_ns": anchor.realtime_ns - anchor.monotonic_raw_ns}
 
 
+def read_anchor(ctx: Context, *, max_skew_ns: int, tries: int = ANCHOR_TRIES,
+                rejected: list[dict[str, int]] | None = None,
+                ) -> tuple[dict[str, int] | None, list[dict[str, int]]]:
+    """Up to ``tries`` anchor reads: ``(first read with 0 <= skew <= max_skew_ns, rejected reads)``.
+
+    The anchor is None when every read was rejected.  A read that raises
+    propagates (a clock that cannot be read is a probe failure, not a skew).
+    Rejected reads are appended to ``rejected`` when the caller passes a
+    list, so the reads rejected before a read that raises are kept (review F6).
+    """
+
+    rejected = [] if rejected is None else rejected
+    for _ in range(max(1, int(tries))):
+        anchor = _anchor_record(ctx)
+        if 0 <= anchor["read_skew_ns"] <= max_skew_ns:
+            return anchor, rejected
+        rejected.append(anchor)
+    return None, rejected
+
+
 def sample(ctx: Context, *, frequency_reader: FrequencyReader | None = read_frequency,
-           ) -> dict[str, Any]:
+           max_skew_ns: int = WINDOW_SKEW_MAX_NS, tries: int = ANCHOR_TRIES) -> dict[str, Any]:
     """One light reading: the anchor, plus f unless ``frequency_reader`` is None.
 
     Returns a JSON-able sample with its own three-clock stamps and an
-    ``error`` (None when every requested read succeeded).
+    ``error`` (None when every requested read succeeded).  The anchor is
+    re-read (:func:`read_anchor`) until its read skew is within
+    ``max_skew_ns``; when no read of ``tries`` is, ``anchor`` is None, the
+    rejected reads are kept as ``rejected_anchors`` and ``error`` starts
+    with ``clock.unmeasured``: the sample is unmeasured, never a step.
     """
 
     started = ctx.stamp()
-    error = None
+    errors = []
     anchor = frequency = None
+    rejected: list[dict[str, int]] = []
     try:
-        anchor = _anchor_record(ctx)
+        anchor, _ = read_anchor(ctx, max_skew_ns=max_skew_ns, tries=tries, rejected=rejected)
+        if anchor is None:
+            skews = [item["read_skew_ns"] for item in rejected]
+            errors.append(f"clock.unmeasured: anchor read skew above {max_skew_ns} ns on all "
+                          f"{len(rejected)} reads ({min(skews)}-{max(skews)} ns)")
         if frequency_reader is not None:
             frequency = dict(kernel_clock.validate_probe(dict(frequency_reader())))
     except Exception as exc:  # any probe failure is UNMEASURED, never a pass
-        error = f"{type(exc).__name__}: {exc}"
+        errors.append(f"{type(exc).__name__}: {exc}")
     finished = ctx.stamp()
-    return {"started": started.to_json(), "finished": finished.to_json(), "anchor": anchor,
-            "frequency": frequency, "error": error}
+    out = {"started": started.to_json(), "finished": finished.to_json(), "anchor": anchor,
+           "frequency": frequency, "error": "; ".join(errors) or None}
+    if rejected:
+        out["rejected_anchors"] = rejected
+    return out
 
 
 def measure(ctx: Context, *, frequency_reader: FrequencyReader = read_frequency,
@@ -147,14 +211,20 @@ def measure(ctx: Context, *, frequency_reader: FrequencyReader = read_frequency,
     values: dict[str, Any] = {"anchor": None, "frequency": None, "boot_session_uuid": None}
     raw: list[RawRef] = []
     error = None
+    rejected: list[dict[str, int]] = []
     try:
         values["boot_session_uuid"] = boot_reader(ctx)
-        values["anchor"] = _anchor_record(ctx)
+        # Re-read a preempted anchor (R3-1) against the arm's own 1 ms bound;
+        # when every read is over it, the last is judged and refuses (rule iii).
+        anchor, _ = read_anchor(ctx, max_skew_ns=DEFAULT_THRESHOLDS["skew_max_ns"], rejected=rejected)
+        values["anchor"] = anchor if anchor is not None else rejected[-1]
         frequency = dict(kernel_clock.validate_probe(dict(frequency_reader())))
         values["frequency"] = frequency
         raw.append(ctx.keep_raw("timex.bin", bytes.fromhex(frequency["raw_hex"])))
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
+    if rejected:  # kept even when a later read raised (review F6)
+        values["rejected_anchors"] = rejected
     finished = ctx.stamp()
     return Measurement(MODULE, "instant", values, tuple(raw), started, finished, error)
 
@@ -296,15 +366,21 @@ def window_events(samples: Sequence[Mapping[str, Any]], *, step_ns: int = 1_000_
     the elapsed RAW time, so a step that falls across a failed sample is still
     seen.  A sample that read its anchor but failed only its f read keeps its
     anchor.  Samples before the first f read cannot be judged.
+
+    An anchor whose read skew is over :func:`window_skew_max_ns` of
+    ``step_ns`` (or unknown) is unmeasured and skipped like a failed read:
+    its anchor error could be most of a step (R3-1).  The f such a sample
+    read is still used (review F5): a frequency change is recorded where it
+    was read, and the f in force for the next comparison is the latest read.
     """
 
+    max_skew_ns = window_skew_max_ns(step_ns)
     events: list[dict[str, Any]] = []
-    word = None       # the f in force at ``previous``
-    previous = None   # the last sample that read an anchor
+    word = None       # the latest f read (in force at ``previous`` or read since)
+    previous = None   # the last sample that read a usable anchor
     for item in samples:
-        if not item.get("anchor"):
-            continue
-        if previous is not None and word is not None:
+        usable = usable_anchor(item, max_skew_ns)
+        if usable and previous is not None and word is not None:
             moved = residual_ns(previous["anchor"], item["anchor"], word)
             if abs(moved) > step_ns:
                 events.append({"code": "clock.step", "interval": _interval(previous, item),
@@ -316,8 +392,28 @@ def window_events(samples: Sequence[Mapping[str, Any]], *, step_ns: int = 1_000_
                                "interval": _interval(previous or item, item),
                                "observed": frequency["raw_word"], "expected": word})
             word = frequency["raw_word"]
-        previous = item
+        if usable:
+            previous = item
     return events
+
+
+def usable_anchor(item: Mapping[str, Any], max_skew_ns: int = WINDOW_SKEW_MAX_NS) -> bool:
+    """True when the sample read an anchor with 0 <= read skew <= ``max_skew_ns``."""
+
+    anchor = item.get("anchor")
+    if not isinstance(anchor, Mapping):
+        return False
+    skew = anchor.get("read_skew_ns")
+    return isinstance(skew, int) and not isinstance(skew, bool) and 0 <= skew <= max_skew_ns
+
+
+def skew_unmeasured(item: Mapping[str, Any], max_skew_ns: int = WINDOW_SKEW_MAX_NS) -> bool:
+    """True for a sample left unmeasured by its read skew: every anchor read was
+    rejected (``rejected_anchors`` and no anchor), or its anchor is over the bound."""
+
+    if item.get("anchor"):
+        return not usable_anchor(item, max_skew_ns)
+    return bool(item.get("rejected_anchors"))
 
 
 def _interval(first: Mapping[str, Any], second: Mapping[str, Any]) -> dict[str, list[int]]:
@@ -334,9 +430,13 @@ def span_findings(samples: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
 
     ``span`` is ``{"monotonic_ns": [start, stop]}`` in the controller's
     ``time.monotonic_ns`` domain (the member's sampler stream).
+    ``clock.unmeasured`` is a coverage gap longer than ``max_gap_ns``, or a
+    sample inside the span left unmeasured by its read skew
+    (:func:`skew_unmeasured`), which is disclosed and never compared.
     """
 
     start, stop = span["monotonic_ns"]
+    max_skew_ns = window_skew_max_ns(step_ns)
     found = []
     for event in window_events(samples, step_ns=step_ns):
         a, b = event["interval"]["monotonic_ns"]
@@ -344,25 +444,40 @@ def span_findings(samples: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
             found.append(finding("clock.step_overlap", span=span, observed=event["observed"],
                                  expected=step_ns, interval=event["interval"],
                                  detail="the wall clock stepped inside the member's stream"))
-    gap = coverage_gap(samples, start, stop, max_gap_ns)
+    gap = coverage_gap(samples, start, stop, max_gap_ns, max_skew_ns=max_skew_ns)
     if gap is not None:
         found.append(finding("clock.unmeasured", span=span, observed=gap, expected=max_gap_ns,
                              detail="the 1 Hz clock journal has a gap overlapping the stream"))
+    skewed = [item for item in samples if skew_unmeasured(item, max_skew_ns)
+              and start <= item["finished"]["monotonic_ns"] <= stop]
+    if skewed:
+        found.append(finding(
+            "clock.unmeasured", span=span, expected=max_skew_ns,
+            observed={"rule": "read_skew", "samples": len(skewed),
+                      "read_skews_ns": [[read["read_skew_ns"] for read in
+                                         (item.get("rejected_anchors") or [item.get("anchor") or {}])
+                                         if isinstance(read, Mapping) and "read_skew_ns" in read]
+                                        for item in skewed[:8]]},
+            interval={"monotonic_ns": [skewed[0]["started"]["monotonic_ns"],
+                                       skewed[-1]["finished"]["monotonic_ns"]]},
+            detail=(f"{len(skewed)} clock sample(s) in the stream read no anchor within "
+                    f"{max_skew_ns} ns of read skew (preempted reads); unmeasured, not compared")))
     return found
 
 
 def coverage_gap(samples: Sequence[Mapping[str, Any]], start: int, stop: int,
-                 max_gap_ns: int) -> list[int] | None:
+                 max_gap_ns: int, *, max_skew_ns: int = WINDOW_SKEW_MAX_NS) -> list[int] | None:
     """The first [a, b] monotonic gap longer than ``max_gap_ns`` that overlaps [start, stop].
 
-    Readings that read an anchor are the points (a failed f read does not
-    blind the step check); the span is covered when a good reading lies
-    within ``max_gap_ns`` before its start and after its stop and no two
-    consecutive good readings inside it are further apart than ``max_gap_ns``.
+    Readings that read a usable anchor (:func:`usable_anchor`) are the points
+    (a failed f read does not blind the step check); the span is covered when
+    a good reading lies within ``max_gap_ns`` before its start and after its
+    stop and no two consecutive good readings inside it are further apart
+    than ``max_gap_ns``.
     """
 
     return base_coverage_gap(
-        [item["finished"]["monotonic_ns"] for item in samples if item.get("anchor")],
+        [item["finished"]["monotonic_ns"] for item in samples if usable_anchor(item, max_skew_ns)],
         start, stop, max_gap_ns)
 
 

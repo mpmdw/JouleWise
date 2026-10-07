@@ -48,6 +48,10 @@ class FakeClocks:
         self.steps: list[tuple[int, int]] = []  # (raw_ns at which, step_ns)
         self.read_cost_ns = read_cost_ns
         self.skew_ns = skew_ns  # extra RAW time inside each REALTIME read
+        # Extra RAW time inside the next anchor REALTIME reads (clock_gettime_ns
+        # only, not stamps), one entry per read: a read preempted by another
+        # process between its RAW, REALTIME and RAW reads (rehearsal R3-1).
+        self.preempt_ns: list[int] = []
         self.sleeps: list[float] = []
 
     # time base
@@ -80,7 +84,10 @@ class FakeClocks:
 
     def clock_gettime_ns(self, clock_id: int) -> int:
         if clock_id == time.CLOCK_REALTIME:
-            return self.realtime_ns()
+            value = self.realtime_ns()
+            if self.preempt_ns:
+                self.raw_ns += self.preempt_ns.pop(0)
+            return value
         if clock_id == time.CLOCK_MONOTONIC_RAW:
             return self.monotonic_raw_ns()
         raise AssertionError(f"unexpected clock id {clock_id}")

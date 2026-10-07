@@ -58,6 +58,9 @@ CATALOG_R3_BATTERY = {
     "battery.accumulator_unavailable": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
     # lane 2026-10-06-smc-battery-meter: the registry fallback when SMC B0AC is unread
     "battery.smc_unavailable": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
+    # the battery-assist ruling of 2026-10-06: discharge on AC is disclosed
+    "battery.assist": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
+    "battery.assist_outside_request": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE"),
 }
 
 
@@ -72,7 +75,8 @@ class BatteryNamingTests(unittest.TestCase):
     def test_l4_battery_vocabulary_matches_the_catalog(self) -> None:
         l4 = {code: _entry(DRAFT_CODES, code) for code in DRAFT_CODES
               if code == "battery.member_span" or code == "battery.unmeasured"
-              or code.startswith("battery.accumulator_") or code == "battery.smc_unavailable"}
+              or code.startswith("battery.accumulator_") or code == "battery.smc_unavailable"
+              or code.startswith("battery.assist")}
         self.assertEqual(l4, CATALOG_R3_BATTERY)
 
     def test_sealed_catalog_battery_entries_match_l4_when_present(self) -> None:
@@ -92,8 +96,12 @@ class BatteryNamingTests(unittest.TestCase):
         rig.setUp()
         smc = rig.smc_lines(600)  # the monitor's 1 s SMC B0AC reads, 0 mA
         scenarios = {
-            # the 09-30 0555Z publication: -447 mA on AC, judged on the registry (no SMC reads)
-            "publication": rig.series(10, special={3: {"instant": -447}}),
+            # the 09-30 0555Z publication: -447 mA on AC, judged on the registry (no SMC
+            # reads); the publication at 120 s, in force at the span's start (one taken
+            # after the stop measured a later member: P3-HAZ review F3)
+            "publication": rig.series(10, special={2: {"instant": -447}}),
+            # a +447 mA charging publication, judged on the registry
+            "charging": rig.series(10, special={3: {"instant": 447}}),
             # the 10-06 probe burst: B0AC -865 mA between clean publications
             "smc_burst": rig.series(10) + rig.smc_lines(600, current={150: -865}),
             # 20 discharge ticks averaging -3 W between two 0 mA publications
@@ -106,8 +114,12 @@ class BatteryNamingTests(unittest.TestCase):
         emitted: dict[str, set[str]] = {}
         for name, readings in scenarios.items():
             emitted[name] = {f["code"] for f in battery.span_findings(readings, rig.span(130, 170))}
-        self.assertEqual(emitted["publication"], {"battery.smc_unavailable", "battery.member_span"})
-        self.assertEqual(emitted["smc_burst"], {"battery.member_span"})
+        # Ruling 2026-10-06: discharge on AC is battery.assist (DISCLOSE); charging excludes.
+        self.assertEqual(emitted["publication"], {"battery.smc_unavailable", "battery.assist"})
+        self.assertEqual(emitted["charging"], {"battery.smc_unavailable", "battery.member_span"})
+        self.assertEqual(emitted["smc_burst"], {"battery.assist"})
+        # with SMC B0AC reading 0 the accumulator's interval mean is disclosed apart
+        self.assertEqual(emitted["accumulator_excursion"], {"battery.assist_outside_request"})
         self.assertEqual(emitted["assist"], {"battery.accumulator_activity"})
         self.assertEqual(emitted["counter_reset"], {"battery.accumulator_unavailable"})
         catalog = draft_catalog()

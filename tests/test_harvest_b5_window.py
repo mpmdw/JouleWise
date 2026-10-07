@@ -2370,6 +2370,14 @@ class JoinTests(unittest.TestCase):
                 theirs = {l1_name.get(finding["code"], finding["code"])
                           for finding in l1.span_findings(journal.lines, span, limits)
                           if finding["code"] not in ("battery.unmeasured", "battery.smc_unavailable")}
+                if name == "excursion":
+                    # A discharge accumulator above the limit is battery assist under the
+                    # ruling of 2026-10-06: L1 discloses it (battery.assist).  This tree's
+                    # harvest copy still names it battery.accumulator_excursion; P3-HARV's
+                    # discloses it as assist (no accumulator code).  Both readings pass here.
+                    self.assertIn("battery.assist", theirs)
+                    theirs.discard("battery.assist")
+                    ours.discard("battery.accumulator_excursion")
                 self.assertEqual(ours, theirs)
 
     def test_thermal_nonzero_and_unmeasured(self):
@@ -2452,6 +2460,59 @@ class JoinTests(unittest.TestCase):
                 "monotonic_raw_ns": second * NS, "read_skew_ns": 0, "realtime_ns": 0},
                 "frequency": frequency_probe(big)})
         self.assertEqual(h.clock_steps(parsed(drift_only), self.T)[0], [])
+
+    def preempted_clock_journal(self, sample_30: str, step_at_ns: int | None = None) -> L1Journal:
+        """60 samples at 1 Hz, f every 5 s, with sample 30 written as the monitor writes a preempted read.
+
+        ``sample_30``: ``"rejected"`` (every read rejected: no anchor, the reads kept, a
+        clock.unmeasured error) or ``"recorded"`` (a journal from before the re-read: an
+        8.3 ms skew anchor, 4.15 ms low).
+        """
+        journal = L1Journal("clock")
+        for second in range(60):
+            raw = second * NS + RAW_OFFSET_NS
+            anchor = 10**15 + DRIFT_WORD * (second * NS) // (kernel_clock.FREQUENCY_SCALE * 10**6) \
+                + (2_000_000 if step_at_ns is not None and second * NS >= step_at_ns else 0)
+            values, error = clock_values(raw, anchor, frequency=second % 5 == 0), None
+            if second == 30 and sample_30 == "rejected":
+                rejected = [dict(values["anchor"], read_skew_ns=8_000_400)] * 5
+                values, error = {"anchor": None, "frequency": values["frequency"], "rejected_anchors": rejected}, \
+                    "clock.unmeasured: anchor read skew above 250000 ns on all 5 reads (8000400-8000400 ns)"
+            elif second == 30 and sample_30 == "recorded":
+                values["anchor"] = dict(values["anchor"], anchor_ns=anchor - 4_150_000, read_skew_ns=8_300_400)
+            journal.write("reading", second * NS - 600, second * NS, values=values, error=error)
+        return journal
+
+    def test_a_real_step_beside_a_rejected_clock_read_is_still_seen(self):
+        """Review F1: a fully rejected sample used to break the chain and hide a real step."""
+        journal = self.preempted_clock_journal("rejected", step_at_ns=30 * NS + NS // 2)
+        steps, changes = h.clock_steps(parsed(journal), self.T)
+        self.assertEqual([step["interval_monotonic_ns"] for step in steps], [[29 * NS - 600, 31 * NS]])
+        self.assertAlmostEqual(steps[0]["residual_move_ns"], 2_000_000, delta=1_000)
+        self.assertEqual(changes, [])
+
+    def test_a_preempted_clock_read_is_never_a_step_and_is_disclosed(self):
+        """R3-1 in the harvest copy: a recorded anchor over the skew bound is not compared;
+        a member over a preempted sample gets clock.unmeasured (read_skew), a clear one nothing."""
+        for case in ("rejected", "recorded"):
+            with self.subTest(case):
+                readings = parsed(self.preempted_clock_journal(case))
+                self.assertEqual(h.clock_steps(readings, self.T), ([], []))
+                found = h.clock_member_flags([28 * NS, 32 * NS], readings, self.T)
+                self.assertEqual([(code, observed.get("rule"), observed.get("samples"))
+                                  for code, observed, _interval in found],
+                                 [("clock.unmeasured", "read_skew", 1)])
+                self.assertEqual(found[0][2], {"monotonic_ns": [30 * NS - 600, 30 * NS]})
+                self.assertEqual(h.clock_member_flags([40 * NS, 50 * NS], readings, self.T), [])
+
+    def test_an_f_read_beside_a_rejected_clock_read_still_records_the_change(self):
+        """Review F5 in the harvest copy: the f a preempted sample read is still used."""
+        journal = self.preempted_clock_journal("rejected")
+        line = journal.lines[30]
+        line["values"]["frequency"] = frequency_probe(round(-3.0 * kernel_clock.FREQUENCY_SCALE))
+        _steps, changes = h.clock_steps(parsed(journal), self.T)
+        self.assertEqual([(change["monotonic_ns"], change["ppm"]) for change in changes],
+                         [(30 * NS, -3.0), (35 * NS, DRIFT_WORD / kernel_clock.FREQUENCY_SCALE)])
 
     def test_disk_low_from_targets_and_marker(self):
         journal = L1Journal("disk")
@@ -2586,7 +2647,18 @@ class L1JournalFormatTests(unittest.TestCase):
                 # registry fallback (battery.smc_unavailable) on every span.
                 live = {finding["code"] for finding in monitor.member_findings(
                     journals, span=case["span"], request=case["request"])} - {"battery.smc_unavailable"}
-                self.assertEqual(sorted(live), case["l1_codes"])
+                # The recorded excursion is the -447 mA discharge (publication 3): the
+                # recorded join named it battery.member_span; under the battery-assist
+                # ruling (2026-10-06) L1 discloses it as battery.assist.  For
+                # contention_burst the recorded member_span came only from that
+                # publication 35 s after the span's stop (the old in-force rule); a
+                # snapshot taken after the stop measured a later member (P3-HAZ review
+                # F3, the harvest copy's rule), so it is not this member's assist.
+                after_stop_only = name == "contention_burst"
+                expected = sorted({"battery.assist" if code == "battery.member_span" else code
+                                   for code in case["l1_codes"]
+                                   if not (after_stop_only and code == "battery.member_span")})
+                self.assertEqual(sorted(live), expected)
 
 
 class RecordTests(unittest.TestCase):

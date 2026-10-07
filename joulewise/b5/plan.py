@@ -565,14 +565,42 @@ def ledger_head_status(measurement: Path) -> dict[str, Any]:
                 "reasons": [f"snapshot_failed:{type(exc).__name__}"],
                 "blocking": [f"snapshot_failed:{type(exc).__name__}"]}
     reasons = sorted({str(getattr(reason, "value", reason)) for reason in snapshot.refusal_reasons})
+    open_sessions = sorted(session.session_id for session in snapshot.bracket_sessions
+                           if session.state == "open")
     return {
         "physical": {"sequence": snapshot.head_sequence, "head_digest": snapshot.head_digest},
         "pinned": {"sequence": snapshot.committed_head_sequence, "head_digest": snapshot.committed_head_digest},
-        "open_sessions": sorted(session.session_id for session in snapshot.bracket_sessions
-                                if session.state == "open"),
+        "open_sessions": open_sessions,
+        "open_session_next_slots": {session_id: _open_session_next_slot(ledger, pin, session_id, measurement)
+                                    for session_id in open_sessions},
         "reasons": reasons,
         "blocking": sorted(set(reasons) & LEDGER_HEAD_BLOCKING_REASONS),
     }
+
+
+def _open_session_next_slot(ledger: Path, pin: Path, session_id: str, measurement: Path) -> dict[str, Any]:
+    """Read-only: an open bracket session's next slot and the custody state there.
+
+    ``custody_state`` ``complete`` means the slot's capture custody is whole
+    but was never finalized into the ledger (the chain stopped between the
+    capture and its finalize): ``abort-session`` refuses that with
+    ``calibration_custody_complete_use_resume`` and the cure is
+    ``resume-finalize`` (rehearsal round 3, R3-6).  A status that cannot be
+    read is recorded with its error and the refusal names the abort, as before.
+    """
+
+    from joulewise.calibration_ledger import calibration_session_status
+
+    try:
+        status = calibration_session_status(
+            ledger, pin, session_id=session_id, require_committed_pin=True, repo_root=Path(measurement),
+            custody_mode="read_replay", custody_state_scope="next_slot")
+    except Exception as exc:  # noqa: BLE001 - the desk refusal still names a cure
+        return {"next_slot": None, "custody_state": None, "error": f"{type(exc).__name__}: {exc}"}
+    next_slot = status.get("next_slot")
+    slot = (status.get("slots") or {}).get(next_slot) or {}
+    return {"next_slot": next_slot, "custody_state": slot.get("custody_state"),
+            "refusal_code": status.get("refusal_code"), "error": None}
 
 
 def ledger_head_refusal(status: Mapping[str, Any], measurement: Path) -> str:
@@ -590,8 +618,22 @@ def ledger_head_refusal(status: Mapping[str, Any], measurement: Path) -> str:
             f"pin-only commit of {HEAD_PIN_RELATIVE}, registration section 11 item 1(i)), before that "
             "window's harvest")
     if "calibration_ledger_bracket_session_open" in status.get("blocking", ()):
-        cure = ("abort the open bracket session first (recover_calibration_ledger.py abort-session; a chain "
-                "that stopped before its post-calibration leaves it open), then " + cure)
+        slots = status.get("open_session_next_slots") or {}
+        complete = {session_id: entry["next_slot"] for session_id, entry in sorted(slots.items())
+                    if isinstance(entry, Mapping) and entry.get("custody_state") == "complete"}
+        if complete:
+            # R3-6: the capture's custody is whole but was never finalized;
+            # abort-session refuses it (calibration_custody_complete_use_resume).
+            named = "; ".join(f"recover_calibration_ledger.py resume-finalize --session-id {session_id} "
+                              f"--slot {slot} --plan <that window's frozen reservation plan>"
+                              for session_id, slot in complete.items())
+            cure = ("finalize the open bracket session's complete capture custody first (" + named + "; "
+                    "abort-session refuses complete custody with calibration_custody_complete_use_resume); "
+                    "if the session is still open after that, abort it (recover_calibration_ledger.py "
+                    "abort-session), then " + cure)
+        else:
+            cure = ("abort the open bracket session first (recover_calibration_ledger.py abort-session; a chain "
+                    "that stopped before its post-calibration leaves it open), then " + cure)
     return (f"the measurement checkout's calibration ledger cannot be reserved: {', '.join(status['blocking'])} "
             f"(physical head sequence {physical.get('sequence')}, committed pin sequence "
             f"{pinned.get('sequence')}, checkout {measurement}); the chain's reservation would refuse it at "
