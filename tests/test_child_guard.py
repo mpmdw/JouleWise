@@ -459,6 +459,24 @@ class ExitSweepTests(unittest.TestCase):
         self.assertTrue(wait_not_running(child), "the child of the interrupted run is still running")
         self.assertTrue(wait_not_running(member), "the owned child's orphaned group member is still running")
 
+    def test_a_helper_process_that_only_imports_the_module_sweeps_nothing(self):
+        # Tests start helper processes that import test modules, and with them this module. Such a
+        # helper may leave a child on purpose for the test to deal with; its exit must not sweep.
+        script = textwrap.dedent("""
+            import subprocess, sys
+            from tests import child_guard
+            from tests import test_child_guard   # a guarded test module, imported but not run
+            child = subprocess.Popen(["/bin/sleep", "{long_s}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(child.pid, flush=True)
+            """).format(long_s=LONG_S)
+        run = subprocess.run([sys.executable, "-B", "-c", script], cwd=REPO_ROOT, capture_output=True,
+                             text=True, timeout=120)
+        self.assertEqual(0, run.returncode, run.stderr)
+        child = int(run.stdout)
+        self.addCleanup(lambda: running(child) and os.kill(child, signal.SIGKILL))
+        time.sleep(0.5)
+        self.assertTrue(running(child), "the helper's exit stopped a child it had left running")
+
     TERMINATED = textwrap.dedent("""
         import subprocess, sys, time, unittest
         from tests import child_guard

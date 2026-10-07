@@ -24,7 +24,7 @@ Words used below, built from what the operating system does:
   the members stay alive and their parent becomes process 1, so the parent ids
   no longer lead back here. They are found through the group id instead.
 
-The three parts:
+The parts:
 
 ``own(test, process)``
     Call it on the line after a test starts a child. It registers
@@ -33,29 +33,39 @@ The three parts:
     SIGTERM, waits ``grace_s`` seconds for the exit, then sends SIGKILL and
     waits again; when the child leads a process group, both signals go to the
     whole group, and members still alive after the leader has exited are
-    stopped the same way.
+    stopped the same way. ``tree=True`` is for a child that starts processes
+    without leading a group: its descendants are listed before it is signalled
+    and stopped after it. ``own_worker`` does the same for a
+    ``multiprocessing.Process``; ``owned`` is the ``with`` form.
 
-``fails_on_leftover_children``
-    A class decorator. After each test's own cleanups it looks at every child
-    the test started through ``subprocess.Popen``: one still running, or one
-    whose process group still has members, is stopped, and the test is reported
-    as an error that names the test, the process id and the command line. After
-    the class's last cleanup it lists every process on the machine once
-    (``ps``) and does the same for any running descendant of this process that
-    did not exist when the class began; that covers children started by other
-    means (``multiprocessing``, ``os.fork``, a child of a child).
+``fails_on_leftover_children`` and ``guard_test_classes(globals())``
+    The first is a class decorator; the second applies it to every test class
+    a module defines and is called once at the bottom of the module. After each
+    test's own cleanups the guard looks at every child the test started through
+    ``subprocess.Popen``: one still running three seconds later, or one whose
+    process group still has members, is stopped, and the test is reported as
+    failed with the test's name, the process id and the command line. After the
+    class's last cleanup it lists every process on the machine (``ps``) and
+    does the same for a descendant of this process that did not exist when the
+    class began and is still running three seconds later; that covers children
+    started by other means (``multiprocessing``, ``os.fork``, a child of a
+    child). Where ``ps`` is denied (some sandboxes), only the first check runs.
 
 The exit sweep
     unittest does not run a test's cleanups when the run is interrupted with
     Ctrl-C (KeyboardInterrupt): measured on Python 3.13.1, 2026-10-07, a child
     registered with ``addCleanup(child.kill)`` was still alive after the
-    interrupted run exited. So importing this module registers an ``atexit``
-    function that stops every child registered with ``own`` and every running
-    descendant when the interpreter exits. ``atexit`` functions do not run when
-    the process dies of a signal, so when the first guarded class starts, the
-    same sweep is also installed as the handler of SIGTERM and SIGHUP (what an
-    outer time limit or a closed terminal sends); after the sweep the process
-    dies of that signal as before. Nothing can run on SIGKILL.
+    interrupted run exited. So the first guarded test, or the first ``own``
+    call, registers an ``atexit`` function that stops every child registered
+    with ``own`` and every running descendant when the interpreter exits.
+    ``atexit`` functions do not run when the process dies of a signal, so when
+    the first guarded class starts, the same sweep is also installed as the
+    handler of SIGTERM and SIGHUP (what an outer time limit or a closed
+    terminal sends); after the sweep the process dies of that signal as before.
+    Importing this module arms nothing: a helper process that only imports a
+    test module is left alone. Nothing can run on SIGKILL; for that case
+    ``tests/fixture_signatures.json`` lets ``scripts/fixture_orphan_census.py``
+    name the usual stand-in children afterwards.
 
 Not covered, by construction: a process that left this process's family (its
 parent exited, so its parent id is 1) and is not in a group led by a child
@@ -354,6 +364,7 @@ def own(test, process, *, grace_s: float = DEFAULT_GRACE_S, tree: bool = False):
     are passed to ``stop``.
     """
 
+    _arm_exit_sweep()
     entry = _Owned(process, process.returncode is None and _leads_group(process.pid), grace_s, tree)
     with _LOCK:
         _OWNED[id(process)] = entry
@@ -430,9 +441,8 @@ def _exit_sweep() -> None:
         stop_rows(running_descendants())
 
 
-atexit.register(_exit_sweep)
-
 _SWEEP_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
+_EXIT_ARMED = False
 _SIGNALS_ARMED = False
 
 
@@ -451,6 +461,21 @@ def _forked_child_keeps_the_default() -> None:
             signal.signal(number, signal.SIG_DFL)
 
 
+def _arm_exit_sweep() -> None:
+    """Register the exit sweep (once), when this process first runs a guarded class or owns a child.
+
+    Not at import: helper processes that tests start also import test modules
+    (a ``python -c "from tests.x import worker"`` child, a fixture daemon), and
+    what such a helper leaves running when it exits is the business of the
+    test that started it. Only a process that actually runs tests sweeps.
+    """
+
+    global _EXIT_ARMED
+    if not _EXIT_ARMED and _getpid() == _HOME_PID:
+        _EXIT_ARMED = True
+        atexit.register(_exit_sweep)
+
+
 def _arm_signal_sweep() -> None:
     """Have a terminated test run stop its children before it dies (once, when a guarded class starts).
 
@@ -458,12 +483,12 @@ def _arm_signal_sweep() -> None:
     do not run for a signal that is not handled: measured 2026-10-07, a child
     of a terminated run stayed alive. The handler is installed only where the
     signal still has its default action, only from the main thread, and never
-    at import (a multiprocessing worker imports test modules too, and its
-    signals are the tests' business). A forked copy of this process gets the
+    at import (see ``_arm_exit_sweep``). A forked copy of this process gets the
     default action back.
     """
 
     global _SIGNALS_ARMED
+    _arm_exit_sweep()
     if _SIGNALS_ARMED or _getpid() != _HOME_PID or threading.current_thread() is not threading.main_thread():
         return
     _SIGNALS_ARMED = True
@@ -674,6 +699,7 @@ def fails_on_leftover_children(cls=None, *, settle_s: float = SETTLE_S):
         def run(self, result=None):
             if getattr(self, "_child_guard_watching", False):   # an outer decoration already watches this test
                 return test_run(self, result)
+            _arm_exit_sweep()
             self._child_guard_watching = True
             spawns = start_recording()
 
