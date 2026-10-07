@@ -172,6 +172,78 @@ class AgentIdentityTests(unittest.TestCase):
             with self.subTest(argv=argv):
                 self.assertIs(expected, agent_identity.is_agent(executable, argv))
 
+    def test_interpreter_option_operands_are_not_read_as_the_script(self):
+        """Sol delta audit A4: ``node --require /tmp/preload.cjs …/claude-code/cli.js`` read the preload as the script."""
+        node, modules = "/opt/homebrew/bin/node", "/opt/homebrew/lib/node_modules"
+        cli = f"{modules}/@anthropic-ai/claude-code/cli.js"
+        agents = [
+            ("node", "--require", "/tmp/preload.cjs", cli),  # the audit's exact trigger
+            ("node", "-r", "/tmp/preload.cjs", cli, "-p", "x"),
+            ("node", "--import", "/tmp/loader.mjs", cli),
+            ("node", "--loader", "/tmp/loader.mjs", "--no-warnings", cli),
+            ("node", "--inspect-port", "9229", cli),
+            ("node", "-C", "development", cli),
+            ("node", "--require", "/tmp/preload.cjs", "/opt/homebrew/bin/codex", "exec"),
+            ("node", "--import=/tmp/loader.mjs", cli),
+            ("node", "--", cli),
+            # An agent package anywhere among the interpreter's own arguments.
+            ("node", "--require", f"{modules}/@anthropic-ai/claude-code/preload.js", "/tmp/app.js"),
+            ("node", "-e", f"require('{cli}')"),
+            ("bun", "--preload", "/tmp/p.ts", "run", f"{modules}/@openai/codex/dist/main.js"),
+            ("bun", "x", "@anthropic-ai/claude-code"),
+        ]
+        for argv in agents:
+            with self.subTest(argv=argv):
+                executable = f"/opt/homebrew/bin/{argv[0]}"
+                self.assertEqual("agent", agent_identity.identify(executable, argv))
+                self.assertIs(True, agent_identity.is_agent(executable, argv))
+        # Launch forms that cannot be parsed with confidence stay hits (undecided).
+        undecided = [
+            ("node", "--some-future-option", "/tmp/value", cli),
+            ("node", "-pe", "1"),
+            ("node", "-e", "process.exit(0)", "codex"),
+            ("node", "-", "claude"),
+        ]
+        for argv in undecided:
+            with self.subTest(argv=argv):
+                self.assertEqual("undecided", agent_identity.identify(node, argv))
+                self.assertIs(True, agent_identity.is_agent(node, argv))
+        # Window-path controls: argument substrings only, never an agent.
+        window = [
+            ("node", "scripts/run.mjs", f"{ATTEMPT3_ROOT}/codex"),
+            ("node", "--require", f"{ATTEMPT3_ROOT}/preload.cjs", "scripts/run.mjs", "claude"),
+            ("node", "--no-warnings", "--inspect-port", "9229", "scripts/run.mjs", cli),
+            ("node", "--version"),
+        ]
+        for argv in window:
+            with self.subTest(argv=argv):
+                self.assertEqual("not_agent", agent_identity.identify(node, argv))
+        for executable, argv in (("/usr/bin/python3", ("python3", "-m", "scripts.run_campaign", ATTEMPT3_ROOT)),
+                                 ("/bin/zsh", ("/bin/zsh", "-f", f"{ATTEMPT3_ROOT}/chain.zsh"))):
+            with self.subTest(argv=argv):
+                self.assertEqual("not_agent", agent_identity.identify(executable, argv))
+
+    def test_an_undecided_interpreter_launch_is_kept_with_its_reason(self):
+        # A stand-in kernel view: the census line is decided against it as against a live pid.
+        rows = {
+            4101: ("/opt/homebrew/bin/node", ("node", "--some-future-option", "/tmp/value", "b5-gamma-attempt3")),
+            4102: ("/opt/homebrew/bin/node", ("node", "--require", "/tmp/preload.cjs",
+                                              "/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js")),
+            4103: ("/opt/homebrew/bin/node", ("node", "scripts/run.mjs", ATTEMPT3_ROOT)),
+        }
+
+        def inspector(pid):
+            executable, argv = rows[pid]
+            return agent_identity.ProcessInfo(pid, 1, pid, executable, argv)
+
+        stdout = "".join(f"{pid} {' '.join(argv)}\n" for pid, (_, argv) in rows.items())
+        decided = agent_identity.filter_census(stdout, inspector=inspector)
+        self.assertEqual([(4101, "undecided_launch"), (4102, "agent_executable")],
+                         [(item["pid"], item["reason"]) for item in decided.kept])
+        self.assertEqual([(4103, "not_agent_executable")],
+                         [(item["pid"], item["reason"]) for item in decided.ignored])
+        self.assertNotIn("4103 ", decided.kept_text)
+
     def test_the_hazard_arm_census_uses_the_same_matcher(self):
         window = self.window_process()
 
