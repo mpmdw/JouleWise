@@ -163,6 +163,9 @@ HAZARD_ARTIFACTS = (
     "executed_inventory.json",
     "lineage.json",
     "monitor_supervision.jsonl",
+    # The wall meter's supervision journal (starts, exits, stop proof). Its
+    # stream (power samples) stays in custody under hazards/meter/.
+    "meter_supervision.jsonl",
     "chain.exit-census.json",
     "g10.json",
     "g10.driver.json",
@@ -4577,6 +4580,14 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
             reaped = {"error": f"{type(error).__name__}: {error}"}
         if reaped is not None:
             _append_log(custody_root, f"dead-man hazard monitor cleanup: {json.dumps(reaped, sort_keys=True)}")
+        # The same for the KM003C wall meter (its own group and journal).
+        try:
+            reaped = hazard_driver.reap_orphan_monitor(night_dir, identity=observe_identity,
+                                                       journal=hazard_driver.METER_JOURNAL)
+        except Exception as error:  # noqa: BLE001 - cleanup evidence only
+            reaped = {"error": f"{type(error).__name__}: {error}"}
+        if reaped is not None:
+            _append_log(custody_root, f"dead-man wall meter cleanup: {json.dumps(reaped, sort_keys=True)}")
 
     probes = make_probes()
     probe, census_refusal = agent_census(probes)
