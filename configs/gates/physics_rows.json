@@ -6592,7 +6592,7 @@
    "line_at_base": 4279,
    "mapping": "unchanged in core: scripts/run_campaign.py:campaign_cooldown_before_member",
    "site": "scripts/run_campaign.py:campaign_cooldown_before_member",
-   "test": "tests/test_run_campaign.py::CampaignMeasurementRegistryTests::test_failing_identity_probe_refuses_cleanly_and_releases_lock",
+   "test": "tests/test_run_campaign.py::CampaignMeasurementRegistryTests::test_failing_identity_probe_publishes_without_a_start_time",
    "test_matched_on": "unavailable"
   },
   {
@@ -6609,7 +6609,7 @@
    "line_at_base": 4302,
    "mapping": "unchanged in core: scripts/run_campaign.py:campaign_cooldown_before_member",
    "site": "scripts/run_campaign.py:campaign_cooldown_before_member",
-   "test": "tests/test_run_campaign.py::CampaignMeasurementRegistryTests::test_failing_identity_probe_refuses_cleanly_and_releases_lock",
+   "test": "tests/test_run_campaign.py::CampaignMeasurementRegistryTests::test_failing_identity_probe_publishes_without_a_start_time",
    "test_matched_on": "unavailable"
   },
   {
