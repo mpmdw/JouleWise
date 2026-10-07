@@ -2339,7 +2339,8 @@ def battery_join(span: Sequence[int], readings: Sequence[Reading], thresholds: M
     * without SMC coverage only, the registry InstantAmperage/Amperage above
       +limit at a publication in force;
     * ``battery.accumulator_excursion``: the charge accumulator's mean above
-      limit x voltage between in-force publications;
+      limit x voltage between in-force publications, or a sign-inconsistent
+      (positive) discharge-accumulator mean beyond it;
     * ``battery.unmeasured`` (the missing-evidence predicate): with SMC
       coverage, no publication in force at or before the span's start, an
       in-force publication missing IsCharging/ExternalConnected, or a gap
@@ -2613,9 +2614,12 @@ def accumulator_member_flags(in_force_publications: Sequence[Publication], thres
     accumulated value per counted tick (mW on L1's units check) or why that
     sign cannot be read.  With the registered scale (W per accumulator unit,
     0.001) a charge mean above limit_ma x the publication's voltage is
-    ``battery.accumulator_excursion``; a discharge mean above it is battery
-    assist (ruling 2026-10-06): never an excursion, its row goes to
-    ``discharge_out`` for ``battery.assist``; a nonzero mean at or below the
+    ``battery.accumulator_excursion``; a negative discharge mean beyond it is
+    battery assist (ruling 2026-10-06): never an excursion, its row goes to
+    ``discharge_out`` for ``battery.assist``; a positive discharge mean beyond
+    it (the discharge-only accumulator rose: sign-inconsistent) stays
+    ``battery.accumulator_excursion``, marked ``sign_inconsistent``, as in the
+    hazard copy (P3-HAZ review F2); a nonzero mean at or below the
     limit is ``battery.accumulator_activity``; a sign that
     cannot be read, or an interval without a voltage, is
     ``battery.accumulator_unavailable`` (the publication rule still applies).
@@ -2653,6 +2657,13 @@ def accumulator_member_flags(in_force_publications: Sequence[Publication], thres
             if entry["mean_w"] <= limit_w:
                 activity.append(entry)
             elif label == "charge":
+                excursions.append(entry)
+            elif mean > 0:
+                # The discharge accumulator sums discharge ticks only (negative);
+                # a positive mean beyond the limit is sign-inconsistent evidence,
+                # not discharge, and keeps the exclusion, as in
+                # joulewise.hazards.battery.span_findings (P3-HAZ review F2).
+                entry["sign_inconsistent"] = True
                 excursions.append(entry)
             elif discharge_out is not None:
                 discharge_out.append(entry)

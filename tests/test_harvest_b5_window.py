@@ -2611,6 +2611,113 @@ class JoinTests(unittest.TestCase):
         self.assertEqual(h.member_spans({}, []), {"member": None, "request": None})
 
 
+@unittest.skipUnless(L1_AVAILABLE, "lane L1's joulewise.hazards is not in this tree")
+class BatteryRuleParityTests(unittest.TestCase):
+    """The hazard copy (``joulewise.hazards.battery.span_findings``) and the harvest
+    copy (``harvest.battery_member_flags``) of the member battery rule decide the
+    same way on the same journal (battery-assist ruling 2026-10-06, item 4: no
+    contradictory discharge exclusion anywhere).
+
+    The harvest names the accumulator exclusion ``battery.accumulator_excursion``
+    where the hazard copy names it ``battery.member_span``; both are
+    EXCLUDE_MEMBER, so they are compared as one code.
+    """
+
+    T = REGISTERED_HARVEST_THRESHOLDS
+    LIMITS = {"limit_ma": 200, "max_update_age_s": 180, "max_unobserved_s": 120}
+    SPAN = (10, 20)
+    # Discharge accumulator, 40 ticks between publications 0 and 60 (limit 200 mA x
+    # 12.18 V = 2,436 mW): -5,400 mW is assist; +5,400 mW (the accumulator rose,
+    # which a discharge-only sum cannot do) is sign-inconsistent and excluded.
+    DISCHARGE_OVER = {**STEADY_TELEMETRY, "AccumulatedBatteryDischarge": -2_216_000,
+                      "BatteryDischargeAccumulatorCount": 22710}
+    DISCHARGE_UNDER = {**STEADY_TELEMETRY, "AccumulatedBatteryDischarge": -2_002_600,
+                       "BatteryDischargeAccumulatorCount": 22690}
+    DISCHARGE_ROSE = {**STEADY_TELEMETRY, "AccumulatedBatteryDischarge": -1_784_000,
+                      "BatteryDischargeAccumulatorCount": 22710}
+    DISCHARGE_ROSE_UNDER = {**STEADY_TELEMETRY, "AccumulatedBatteryDischarge": -1_997_400,
+                            "BatteryDischargeAccumulatorCount": 22690}
+    CHARGE_OVER = {**STEADY_TELEMETRY, "AccumulatedBatteryPower": 1_216_000, "BatteryPowerAccumulatorCount": 4767}
+
+    def journal(self, *, later_telemetry=None, registry=None, smc=None):
+        """Publications at 0, 60 and 120 s (the span is 10-20 s), each with the ``registry`` overrides;
+        the accumulators move between 0 and 60 s; SMC B0AC once a second when given."""
+        journal = L1Journal("battery")
+        for index, second in enumerate((0, 60, 120)):
+            telemetry = dict(STEADY_TELEMETRY if index == 0 or later_telemetry is None else later_telemetry)
+            overrides = dict(registry or {})
+            effect = publication_ns(second)
+            journal.write("reading", effect + 2 * NS, effect + 2 * NS + 1_000,
+                          values=battery_values(second + 10_000, power_telemetry=telemetry, **overrides))
+        if smc is not None:
+            from joulewise.hazards import battery as l1
+            for index, second in enumerate(range(-30, 150)):
+                poll = publication_ns(0) + second * NS + 500_000_000
+                values = {"B0AC": smc(second), "B0AV": 12500, "PDTR": 60.0, "PSTR": 60.0 + index / 1000,
+                          "PPBR": 0.0}
+                sample = l1.smc_sample(lambda values=values: {"values": values, "errors": {}})
+                journal.write("reading", poll - 400_000, poll, values={"source": "smc", "smc": sample})
+        journal.lines.sort(key=lambda line: line["finished"]["monotonic_ns"])
+        return journal
+
+    def both(self, journal):
+        from joulewise.hazards import battery as l1
+        span = [publication_ns(self.SPAN[0]), publication_ns(self.SPAN[1])]
+        harvest = {"battery.member_span" if code == "battery.accumulator_excursion" else code
+                   for code, *_ in h.battery_member_flags(span, parsed(journal), self.T)}
+        hazard = {finding["code"] for finding in l1.span_findings(journal.lines, {"monotonic_ns": span},
+                                                                  self.LIMITS)}
+        return harvest, hazard
+
+    CASES = {
+        # name: (journal keywords, expected codes in both copies, smc_unavailable aside)
+        "steady": ({}, set()),
+        "discharge_accumulator_over_limit": ({"later_telemetry": DISCHARGE_OVER}, {"battery.assist"}),
+        "discharge_accumulator_under_limit": ({"later_telemetry": DISCHARGE_UNDER},
+                                              {"battery.accumulator_activity"}),
+        "discharge_accumulator_rose_over_limit": ({"later_telemetry": DISCHARGE_ROSE}, {"battery.member_span"}),
+        "discharge_accumulator_rose_under_limit": ({"later_telemetry": DISCHARGE_ROSE_UNDER},
+                                                   {"battery.accumulator_activity"}),
+        "charge_accumulator_over_limit": ({"later_telemetry": CHARGE_OVER}, {"battery.member_span"}),
+        "registry_discharge": ({"registry": {"instant_amperage_ma": -500, "amperage_ma": -480}},
+                               {"battery.assist"}),
+        "registry_small_discharge": ({"registry": {"instant_amperage_ma": -50, "amperage_ma": -40}},
+                                     {"battery.assist"}),
+        "registry_charge": ({"registry": {"instant_amperage_ma": 500, "amperage_ma": 480}},
+                            {"battery.member_span"}),
+        "charging_state_with_discharge": ({"registry": {"is_charging": True, "instant_amperage_ma": -500,
+                                                        "amperage_ma": -480}}, {"battery.member_span"}),
+        "smc_zero": ({"smc": lambda second: 0}, set()),
+        "smc_discharge": ({"smc": lambda second: -800}, {"battery.assist"}),
+        "smc_small_discharge": ({"smc": lambda second: -100}, {"battery.assist"}),
+        "smc_charge_inside_span": ({"smc": lambda second: 800 if second == 15 else 0}, {"battery.member_span"}),
+        "smc_discharge_with_rose_accumulator": ({"smc": lambda second: -800, "later_telemetry": DISCHARGE_ROSE},
+                                                {"battery.member_span", "battery.assist"}),
+    }
+
+    def test_hazard_and_harvest_copies_decide_alike(self):
+        for name, (keywords, expected) in self.CASES.items():
+            with self.subTest(name):
+                harvest, hazard = self.both(self.journal(**keywords))
+                self.assertEqual(harvest, hazard)
+                self.assertEqual(expected, harvest - {"battery.smc_unavailable"})
+
+    def test_a_sign_inconsistent_discharge_accumulator_stays_an_exclusion_in_the_harvest(self):
+        """P3-HAZ review F2, mirrored: a positive discharge-accumulator mean over the limit is not assist."""
+        flags = h.accumulator_member_flags(
+            h.battery_publications(parsed(self.journal(later_telemetry=self.DISCHARGE_ROSE)))[:2], self.T,
+            discharge_out=(rows := []))
+        self.assertEqual([], rows)
+        ((code, observed, _interval),) = flags
+        self.assertEqual("battery.accumulator_excursion", code)
+        (row,) = observed["intervals"]
+        self.assertEqual(("discharge", 40, 5400.0, True),
+                         (row["accumulator"], row["ticks"], row["mean_per_tick"], row["sign_inconsistent"]))
+        self.assertIn(code, h.BATTERY_EXCLUDING_CODES)
+        catalog = json.loads((FIXTURES / "flag_catalog.json").read_text())
+        self.assertEqual("EXCLUDE_MEMBER", catalog["codes"][code]["effect"])
+
+
 class L1JournalFormatTests(unittest.TestCase):
     """Review F1: the harvest reads the journals L1's monitor writes.
 
