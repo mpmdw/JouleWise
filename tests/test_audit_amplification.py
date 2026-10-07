@@ -248,5 +248,14 @@ class PowermetricsDegenerateAmplification(unittest.TestCase):
             samples_from_raw_powermetrics(b"\0\0", plist_anchor_offset_s=0.0)
 
 
+# Test hygiene (2026-10-07): a test or class in this module that leaves a child process running
+# is reported as failed, and the child is stopped (tests/child_guard.py). The import sits here,
+# below every test, because configs/pins/registry.json records the digest literals in this file
+# by line number: a line added above them would make those records stale.
+from tests import child_guard  # noqa: E402
+
+child_guard.guard_test_classes(globals())
+
+
 if __name__ == "__main__":
     unittest.main()
