@@ -3441,7 +3441,11 @@ and one torn flag line left its attempt blocked for ever. Now:
   whole or as the prefix it was torn inside, and lists every code it could have been among the codes that a program
   writing flag files before the harvest can emit (`harvest.PRE_HARVEST_CODES`, held equal to those writers' code tables
   by a test); a code that only the harvest emits is never a candidate, because the harvest derives it again from the
-  preserved bytes, so a damaged line cannot have lost it. If any candidate is an
+  preserved bytes, so a damaged line cannot have lost it. A line that is malformed but still shows its whole code has that code as its
+  only candidate, whether or not a program writing before the harvest emits it (`harvest._candidate_codes`); no such
+  program emits a harvest-only code, so a whole harvest-only code in a file written before the harvest would be a record
+  no writer produced, and the rule still excludes on what the line shows, in the direction that removes more, never
+  less. If any candidate is an
   EXCLUDE_WINDOW code, it adds `records.malformed_flag_exclusion_possible` (EXCLUDE_WINDOW). Otherwise, if any is an
   EXCLUDE_MEMBER code and the line still shows a run id, it adds `records.malformed_flag_member_exclusion_possible`
   (EXCLUDE_MEMBER) on that member. A line that shows no code, or a possible member code but no run id, is disclosed
@@ -3452,9 +3456,12 @@ and one torn flag line left its attempt blocked for ever. Now:
   `calibration.capture_battery_pair_unverified` (DISCLOSE): the four window-removing codes with that prefix are
   emitted by the harvest alone, so the line is disclosed and removes nothing. A line torn after
   `{"code": "model.identity_m` could have been the arm collector's `model.identity_mismatch` (EXCLUDE_WINDOW), so the
-  window is removed. A line that still shows a member's run id and is torn inside `"code": "member.tok` could only
-  have been `member.token_count_mismatch` (EXCLUDE_MEMBER), so that member is removed (candidate lists computed from
-  the catalog and the writers' code tables).
+  window is removed. A line that still shows a member's run id and is torn inside `"code": "member.tok` names no candidate: the only
+  catalog code with that prefix, `member.token_count_mismatch` (EXCLUDE_MEMBER), is emitted by the harvest alone, which
+  derives it again from the preserved bytes, so the line is disclosed and removes nothing. A line that still shows a
+  member's run id and is torn inside `"code": "member.tim` could only have been the member writer's `member.timeout`
+  (EXCLUDE_MEMBER; `harvest.PRE_HARVEST_CORE_CODES`), so that member is removed (candidate lists computed from the
+  catalog and the writers' code tables, `harvest.PRE_HARVEST_CODES` at the harvest lane's head `c10257418`).
   *Where the narrowed list lives.* Limiting the candidates to the codes of programs that write before the harvest is
   the seal gate's ruling of stage 1 (2026-10-07, its item RF-3; revision 11 listed every catalog code as a
   candidate, so a torn copy of a disclosed flag could remove a window). The constant `harvest.PRE_HARVEST_CODES` and
@@ -4531,7 +4538,7 @@ Each attempt that is not claim-usable has a **cause key**: the hazard modules th
 its window-removing codes. The key is built only from records that are released during the block (§8). The arm
 record (`hazards/arm.json`, §4.1) names the hazard modules that refused. `harvest.json` lists the window-removing
 codes that fired (`exclude_window_reasons`, §7.1), and the catalog gives each code's family. An attempt removed by
-`cell.below_minimum` is keyed by that code. Which member exclusions removed the cell's units is written only in
+`cell.below_minimum` is keyed by that code, which counts as a family of its own for this rule. Which member exclusions removed the cell's units is written only in
 the three `derived/` files that §8 item 2 restricts (`derived/exclusions.json` names each excluded member's
 codes), and that item, as the seal gate's stage 1 wrote it, allows one read of those files during the block, the
 read of `claim_usable`. So two consecutive attempts of a pack that both fall below the cell minimum share a cause
