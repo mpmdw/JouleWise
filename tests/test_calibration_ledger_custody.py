@@ -1431,6 +1431,11 @@ class ProbeCustodyGatewayCensusTests(unittest.TestCase):
         "_read_contained_nofollow": False,
         "_governed_raw_nofollow": False,
         "_custody_state": False,
+        # Refusal census (2026-10-06): the harvest's one artifact-aware historical
+        # pass. A full read, so probe_custody's own guard refuses it under the
+        # night budget marker and historical_custody_report records the row
+        # unmeasured (test_calibration_ledger_historical_custody_report).
+        "_historical_custody_outcome": False,
     }
 
     def test_every_probe_custody_call_site_is_metadata_only_or_guarded(self):

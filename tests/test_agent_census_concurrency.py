@@ -3,7 +3,7 @@
 These are process-list checks, not quiet-machine measurements. Assert owned
 PIDs only: an interactive agent may legitimately be present at the bench.
 
-Bench-only: the marker processes are named claude/codex/t3 and are visible to
+Bench-only: the marker processes are named claude/codex and are visible to
 a live watchdog census (a HOLD_CENSUS event, harmless outside a plan span);
 never run this module inside an armed plan span. 300 synchronized rounds per
 pattern keep the old-pattern control decisive (bench 2026-09-20: 300/300 hits).
@@ -158,7 +158,7 @@ class AgentCensusConcurrencyTests(unittest.TestCase):
     def test_synchronized_peer_censuses_do_not_match(self):
         """Old literal at agent_census's exec site detects sibling pgrep PIDs."""
         self.assertEqual([], self._overlap_hits(AGENT_CENSUS_ARGV))
-        old_argv = (*AGENT_CENSUS_ARGV[:2], "|".join(("codex", "claude", "t3")))
+        old_argv = (*AGENT_CENSUS_ARGV[:-1], "|".join(("codex", "claude")))
         control_hits = self._overlap_hits(old_argv)
         if not control_hits:
             self.skipTest("INCONCLUSIVE: 2 x 300 old-pattern probes had zero peer hits; scheduler did not expose overlap")
@@ -192,7 +192,7 @@ class AgentCensusConcurrencyTests(unittest.TestCase):
     def test_owned_agent_markers_are_still_listed(self):
         """Foreign agent-name argv must remain visible at agent_census's exec site."""
         with tempfile.TemporaryDirectory(prefix="census-markers-") as directory:
-            for name in ("codex", "claude", "t3"):
+            for name in ("codex", "claude"):
                 with self.subTest(agent=name):
                     marker = Path(directory) / name
                     marker.symlink_to("/bin/sleep")

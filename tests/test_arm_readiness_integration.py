@@ -79,6 +79,7 @@ T0_EVIDENCE_AUTHOR_REASON_CODES = frozenset(
         "evidence_author_t0_identity_epoch_missing",
         "evidence_author_t0_input_changed",
         "evidence_author_t0_internal_error",
+        "evidence_author_t0_kernel_frequency_changed",
         "evidence_author_t0_launch_manifest_missing",
         "evidence_author_t0_launch_recipe_underivable",
         "evidence_author_t0_ledger_readiness_missing",
@@ -388,9 +389,14 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
             _probe_result,
             author_environment,
             author_arm_readiness_evidence_t0,
+            fixture_clock_budget,
             make_t0_fixture,
             passing_probe,
         )
+        from joulewise import kernel_clock, v5_qualification
+        from tests.test_kernel_clock import frequency_probe
+        self.enterContext(mock.patch.object(kernel_clock, "read_kernel_frequency", return_value=frequency_probe()))
+        self.enterContext(mock.patch.object(v5_qualification, "authenticated_clock_budget", side_effect=fixture_clock_budget))
 
         now = time.monotonic_ns()
         temporary, repository, pack, custody, context, _inputs = make_t0_fixture(
@@ -415,16 +421,19 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
         before = {path: Path(path).read_bytes() for path in authored["receipt_paths"]}
         for pattern, kind in (
             ("XProtect", "MAINTENANCE_CENSUS"),
-            ("[c]odex|[c]laude|[t]3", "PROCESS_CENSUS"),
+            ("[c]odex|[c]laude", "PROCESS_CENSUS"),
         ):
             for exit_code, stdout in (
-                (0, "123 forbidden-process\n"), (2, ""), (1, "123 stale-output\n")
+                ((0, "123 5.1 XProtect\n"), (2, ""), (0, "malformed\n"))
+                if kind == "MAINTENANCE_CENSUS" else
+                ((0, "123 forbidden-process\n"), (2, ""), (1, "123 stale-output\n"))
             ):
                 with self.subTest(pattern=pattern, exit_code=exit_code, stdout=stdout):
                     observed = []
 
                     def bad_probe(argv, *, cwd):
-                        if argv[0] == "/usr/bin/pgrep" and pattern in argv[-1]:
+                        if ((kind == "MAINTENANCE_CENSUS" and tuple(argv) == ("/bin/ps", "-Ao", "pid=,pcpu=,args="))
+                                or (kind == "PROCESS_CENSUS" and argv[0] == "/usr/bin/pgrep" and pattern in argv[-1])):
                             observed.append(tuple(argv))
                             return _probe_result(
                                 argv, cwd, exit_code=exit_code, stdout=stdout
@@ -443,9 +452,8 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
                         caught.exception.reason_code,
                         f"evidence_author_t0_{kind.lower()}_underivable",
                     )
-                    self.assertIn(
-                        "census found a forbidden process", str(caught.exception)
-                    )
+                    self.assertIn("maintenance" if kind == "MAINTENANCE_CENSUS" else
+                                  "census found a forbidden process", str(caught.exception))
                     self.assertEqual(
                         before, {path: Path(path).read_bytes() for path in before}
                     )

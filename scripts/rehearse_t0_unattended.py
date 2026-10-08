@@ -21,6 +21,8 @@ from joulewise.arm_readiness import _production_inventory as _read_production_in
 
 MANIFEST_NAME = "t0-rehearsal-bundle.json"
 MANIFEST_SCHEMA = "joulewise.t0_unattended_rehearsal_bundle.v1"
+QUALIFICATION_MANIFEST_NAME = "s1-qualification-bundle.json"
+QUALIFICATION_MANIFEST_SCHEMA = "joulewise.v5_s1_qualification_bundle.v1"
 RECORD_NAMES = frozenset(
     {
         "execution",
@@ -116,7 +118,8 @@ def _production_inventory(plan):
         raise BundleLoadError(str(exc)) from exc
 
 
-def load_evidence_bundle(root: Path | str, *, home=None, inventory=None) -> t0_rehearsal.EvidenceBundle:
+def load_evidence_bundle(root: Path | str, *, home=None, inventory=None,
+                         manifest_name=MANIFEST_NAME, require_observed=False) -> t0_rehearsal.EvidenceBundle:
     """Read one fixed-layout custody tree without synthesizing evidence."""
 
     try:
@@ -128,7 +131,23 @@ def load_evidence_bundle(root: Path | str, *, home=None, inventory=None) -> t0_r
         raise BundleLoadError(f"custody root is unavailable: {root}: {exc}") from exc
     if custody.is_symlink() or not custody.is_dir():
         raise BundleLoadError("custody root must be a regular directory")
-    manifest_path = custody / MANIFEST_NAME
+    qualification = manifest_name == QUALIFICATION_MANIFEST_NAME
+    if manifest_name not in {MANIFEST_NAME, "t0-rehearsal-initial.json", QUALIFICATION_MANIFEST_NAME}:
+        raise BundleLoadError("invalid rehearsal manifest name")
+    provenance_path = custody / "rehearsal-provenance.json"
+    if require_observed:
+        try:
+            provenance = readiness.parse_json_bytes(_regular_bytes(provenance_path, label="producer provenance"), require_canonical=True)
+            if (provenance.get("schema_version") != "joulewise.t0_rehearsal_producer_provenance.v1"
+                    or provenance.get("proof_scope") != ("OBSERVED_G2B_SHAKEDOWN" if qualification else "OBSERVED_REHEARSAL")):
+                raise BundleLoadError("fixture or unlabelled evidence cannot be presented as real rehearsal")
+            for reference in provenance["source_records"]:
+                path = Path(reference["path"])
+                if readiness.sha256_bytes(_regular_bytes(path, label="producer source")) != reference["sha256"]:
+                    raise BundleLoadError("producer source digest mismatch")
+        except (ValueError, KeyError, TypeError) as exc:
+            raise BundleLoadError(str(exc)) from exc
+    manifest_path = custody / manifest_name
     manifest_raw = _regular_bytes(manifest_path, label="rehearsal bundle manifest")
     try:
         manifest_value = readiness.parse_json_bytes(
@@ -139,16 +158,17 @@ def load_evidence_bundle(root: Path | str, *, home=None, inventory=None) -> t0_r
     if (
         not isinstance(manifest_value, Mapping)
         or set(manifest_value) != _MANIFEST_KEYS
-        or manifest_value.get("schema_version") != MANIFEST_SCHEMA
+        or manifest_value.get("schema_version") != (QUALIFICATION_MANIFEST_SCHEMA if qualification else MANIFEST_SCHEMA)
     ):
         raise BundleLoadError("bundle manifest schema or exact keys are invalid")
     records = manifest_value.get("records")
+    expected_names = RECORD_NAMES - {"g7_control", "rehearsal_receipt"} if qualification else RECORD_NAMES - {"g7_control"}
     if (not isinstance(records, Mapping)
-            or set(records) not in (RECORD_NAMES, RECORD_NAMES - {"g7_control"})):
+            or set(records) not in ((expected_names,) if qualification else (RECORD_NAMES, expected_names))):
         raise BundleLoadError("bundle manifest record census is not exact")
     record_paths = {
         name: _safe_relative(records[name], label=f"records.{name}")
-        for name in sorted(RECORD_NAMES - {"g7_control"})
+        for name in sorted(expected_names)
     }
     control_artifact = None
     if "g7_control" in records:
@@ -212,7 +232,7 @@ def load_evidence_bundle(root: Path | str, *, home=None, inventory=None) -> t0_r
     if control_artifact is not None:
         artifacts = (*artifacts, control_artifact)
     manifest_artifact = next(
-        (item for item in artifacts if item.relative_path == MANIFEST_NAME), None
+        (item for item in artifacts if item.relative_path == manifest_name), None
     )
     if manifest_artifact is None:
         raise BundleLoadError("manifest disappeared during custody census")
@@ -257,7 +277,8 @@ def main(
     args = _parser().parse_args(argv)
     root = args.fixture_root if args.fixture_root is not None else args.custody_root
     try:
-        bundle = load_evidence_bundle(root, home=home, inventory=inventory)
+        bundle = load_evidence_bundle(root, home=home, inventory=inventory,
+                                      require_observed=args.custody_root is not None)
         verdict = t0_rehearsal.evaluate_rehearsal(bundle)
     except BundleLoadError as exc:
         verdict = {
@@ -267,6 +288,7 @@ def main(
             "gates": [],
             "load_issues": [str(exc)],
         }
+    verdict["proof_scope"] = "DESK_FIXTURE_MAPPING_ONLY" if args.fixture_root is not None else "OBSERVED_REHEARSAL"
     output = sys.stdout.buffer if stdout is None else stdout
     output.write(readiness.render_json(verdict))
     if verdict["overall_verdict"] == "PASS":

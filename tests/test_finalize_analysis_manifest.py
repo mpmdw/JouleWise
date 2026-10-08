@@ -18,6 +18,23 @@ from tests.test_d165_dominance_closeout import (
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# The finalizer binds the calibration ledger baseline to the issued acceptance
+# cutoff. The synthetic fixture's ledger starts at genesis, so its consumers
+# read the fixture's genesis acceptance (fixture["acceptance_path"]) instead of
+# the production artifact, as every other finalize test does in process
+# (tests.test_analysis_integration.pinned_genesis_acceptance). This child runs
+# the real CLI main() under that same routing; argv[1] is the acceptance path
+# and the CLI arguments follow it unchanged.
+_ACCEPTANCE_ROUTED_CLI = """
+import sys
+from pathlib import Path
+from tests.test_analysis_integration import pinned_genesis_acceptance
+from scripts.finalize_analysis_manifest import main
+with pinned_genesis_acceptance({"acceptance_path": Path(sys.argv[1])}):
+    code = main(sys.argv[2:])
+raise SystemExit(code)
+"""
+
 
 class FinalizeSidecarCLITests(unittest.TestCase):
     def matching_sidecar(self, fixture: dict, source: Path) -> tuple[dict, bytes]:
@@ -50,7 +67,7 @@ class FinalizeSidecarCLITests(unittest.TestCase):
 
     def command(self, fixture: dict) -> list[str]:
         return [
-            sys.executable, "-B", str(ROOT / "scripts/finalize_analysis_manifest.py"),
+            sys.executable, "-B", "-c", _ACCEPTANCE_ROUTED_CLI, str(fixture["acceptance_path"]),
             "--prospective-manifest", str(fixture["prospective_path"]),
             "--plan-tree", str(fixture["plan_tree_path"]),
             "--custody-root", str(fixture["root"]),

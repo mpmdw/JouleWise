@@ -26,6 +26,7 @@ CURRENT_FAMILY_SUFFIX = "_v5"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.b5.reference_spares import attach_spare_retries  # noqa: E402
 from joulewise.campaign_generator_core import (  # noqa: E402
     actual_pack_paths,
     make_render_json,
@@ -539,7 +540,10 @@ def generation_hardware() -> dict[str, Any]:
         **HARDWARE,
         "notes": f"{HARDWARE['notes']}; pack status {emitted_draft_status()}.",
     }
-SAMPLING = {"power_hz": 10.0, "idle_seconds": 75.0, "warmup_seconds": 5.0}
+# idle_seconds 57.6: the adapter asks powermetrics for ceil(57.6 / 0.1) = 576 records, and the sampler
+# delivers one every ~130.5 ms, so the idle capture lasts about 75 s (75.0-75.9 s over block 3's 37
+# captures). Block-5 timing ruling, 2026-10-06 (idle capture by duration, 75 s).
+SAMPLING = {"power_hz": 10.0, "idle_seconds": 57.6, "warmup_seconds": 5.0}
 
 
 def dominance_criterion_registration() -> dict[str, Any]:
@@ -1224,7 +1228,7 @@ REFERENCE_CADENCE_AUTHORITY = (
 STAGE_SPECS: tuple[dict[str, Any], ...] = ()
 REFERENCE_AFTER_STAGE: dict[str, str] = {}
 
-POLICY_PATH = Path("configs/campaign_policies/quiet_mac_p2_production.json")
+POLICY_PATH = Path("configs/campaign_policies/quiet_mac_p2_b5.json")
 NEG8_MANIFEST_PATH = Path("configs/campaigns/neg8_reference_corpus_v5/order_manifest.json")
 NEG8_CORPUS_PATH = Path(
     "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
@@ -1238,6 +1242,139 @@ MID_REF_MANIFEST_PATH = Path(
 END_REF_MANIFEST_PATH = Path(
     "configs/campaigns/window_references_v5/end_triplet/order_manifest.json"
 )
+
+# GAMMA-INTERIOR-REFERENCES-01 (lane L10).  The window has three interior
+# reference stages (after science members 20, 40 and 60).  run_campaign skips
+# a run id whose complete bundle already exists in its runs root, so the three
+# stages must not all launch the shared one-member midpoint input.  The NEG-8
+# whole-window screen accepts exactly one midpoint-role reference (shape
+# 3 start + 1 midpoint + 3 end), so:
+#   * the arm boundary (after member 40, the window's temporal midpoint, the
+#     same place ALPHA and BETA run theirs) launches the shared midpoint
+#     reference `neg8-window-midpoint` and is the NEG-8 midpoint;
+#   * the two arm midpoints launch copies of that config, byte for byte except
+#     `run_id`, under configs/campaigns/gamma_interior_references_v5/ (outside
+#     the pack, like the other window references), whose order manifests carry
+#     a non-NEG-8 role.  They are measured and harvested as recorded drift
+#     diagnostics; the NEG-8 screen and the drift allowance do not read them.
+# The generator does not write those files; it refuses unless their committed
+# bytes are exactly what `interior_reference_bytes` derives from the shared
+# midpoint reference.
+INTERIOR_REFERENCE_ROOT = Path("configs/campaigns/gamma_interior_references_v5")
+INTERIOR_DIAGNOSTIC_ROLE = "window_interior_reference_diagnostic"
+INTERIOR_DIAGNOSTIC_REFERENCES: tuple[dict[str, str], ...] = (
+    {
+        "stage_id": "gamma-reference-decode-midpoint",
+        "input_id": "decode_midpoint_reference",
+        "directory": "decode_midpoint",
+        "run_id": "gamma-interior-reference-decode-midpoint",
+        "placement": "after science member 20, the decode arm's midpoint",
+    },
+    {
+        "stage_id": "gamma-reference-prefill-midpoint",
+        "input_id": "prefill_midpoint_reference",
+        "directory": "prefill_midpoint",
+        "run_id": "gamma-interior-reference-prefill-midpoint",
+        "placement": "after science member 60, the prefill arm's midpoint",
+    },
+)
+INTERIOR_DIAGNOSTIC_BY_STAGE = {
+    row["stage_id"]: row for row in INTERIOR_DIAGNOSTIC_REFERENCES
+}
+SHARED_MIDPOINT_RUN_ID = "neg8-window-midpoint"
+
+
+def interior_reference_paths(row: Mapping[str, str]) -> tuple[Path, Path]:
+    """(order manifest, member config) of one diagnostic reference, repository-relative."""
+
+    directory = INTERIOR_REFERENCE_ROOT / row["directory"]
+    return directory / "order_manifest.json", directory / f"{row['run_id']}.json"
+
+
+def interior_reference_bytes(row: Mapping[str, str]) -> tuple[bytes, bytes]:
+    """(order manifest bytes, config bytes) for one diagnostic interior reference.
+
+    The config is the shared midpoint config with only `run_id` changed, so its
+    scientific identity (run_campaign hashes the normalized config without
+    `run_id`) equals the NEG-8 midpoint's.
+    """
+
+    source_manifest = json.loads((REPO_ROOT / MID_REF_MANIFEST_PATH).read_bytes())
+    source_row, = source_manifest["executed_order"]
+    if source_row["run_id"] != SHARED_MIDPOINT_RUN_ID:
+        raise ValueError("shared midpoint reference run id drifted")
+    source_raw = (REPO_ROOT / MID_REF_MANIFEST_PATH.parent / source_row["config"]).read_bytes()
+    needle = f'"run_id": "{SHARED_MIDPOINT_RUN_ID}"'.encode()
+    if source_raw.count(needle) != 1:
+        raise ValueError("shared midpoint config does not carry exactly one run_id")
+    config_raw = source_raw.replace(needle, f'"run_id": "{row["run_id"]}"'.encode())
+    if json.loads(config_raw) != dict(json.loads(source_raw), run_id=row["run_id"]):
+        raise ValueError("interior reference config differs beyond run_id")
+    replacements = {
+        "config": interior_reference_paths(row)[1].name,
+        "run_id": row["run_id"],
+        "role": INTERIOR_DIAGNOSTIC_ROLE,
+    }
+    member = {
+        key: replacements.get(key, value)
+        for key, value in source_row.items()
+        if key != "sentinel_position"
+    }
+    manifest = {
+        "schema_version": source_manifest["schema_version"],
+        "manifest_id": f"{row['run_id']}-v1",
+        "plan_id": source_manifest["plan_id"],
+        "calibration_plan_sha256": source_manifest["calibration_plan_sha256"],
+        "ordering_note": (
+            f"One same-condition interior reference, {row['placement']}, of the "
+            "GAMMA contrast window. It repeats the shared midpoint reference's "
+            "config under its own run id. Its role is not a NEG-8 role, so the "
+            "whole-window NEG-8 screen and drift allowance do not read it; it is a "
+            "recorded drift diagnostic."
+        ),
+        "planned_n_bundles": 1,
+        "executed_order": [member],
+    }
+    return (json.dumps(manifest, indent=2) + "\n").encode("utf-8"), config_raw
+
+
+def interior_reference_inputs() -> dict[str, dict[str, Any]]:
+    """The diagnostic interior references' external-input rows, by stage id.
+
+    Refuses unless each committed order manifest and config is byte-identical
+    to what `interior_reference_bytes` derives from the shared midpoint.
+    """
+
+    inputs: dict[str, dict[str, Any]] = {}
+    for row in INTERIOR_DIAGNOSTIC_REFERENCES:
+        manifest_rel, config_rel = interior_reference_paths(row)
+        manifest_raw, config_raw = interior_reference_bytes(row)
+        for relative, expected in ((manifest_rel, manifest_raw), (config_rel, config_raw)):
+            if (REPO_ROOT / relative).read_bytes() != expected:
+                raise ValueError(
+                    f"interior reference bytes differ from the shared midpoint derivation: {relative}"
+                )
+        inputs[row["stage_id"]] = build_external_manifest(row["input_id"], manifest_rel)
+    return inputs
+
+
+def interior_reference_stage(stage_id: str) -> tuple[Any, ...]:
+    """The stage-graph tuple of one interior reference stage."""
+
+    row = INTERIOR_DIAGNOSTIC_BY_STAGE.get(stage_id)
+    if row is None:
+        input_id = "midpoint_reference"
+        config_dir = MID_REF_MANIFEST_PATH.parent.as_posix()
+    else:
+        input_id = row["input_id"]
+        config_dir = interior_reference_paths(row)[0].parent.as_posix()
+    return (
+        stage_id,
+        "campaign_collection",
+        1,
+        {"kind": "external_input", "input_id": input_id},
+        [campaign_command(stage_id, config_dir, "claim_runs_root")],
+    )
 
 
 def render_suite_manifest_bytes(value: dict[str, Any]) -> bytes:
@@ -2273,23 +2410,11 @@ def build_stage_graph(stage_manifests: dict[str, dict[str, Any]]) -> list[dict[s
         )
         if stage["last_block"] == 5:
             stages.append(
-                (
-                    "gamma-reference-decode-midpoint",
-                    "campaign_collection",
-                    1,
-                    {"kind": "external_input", "input_id": "midpoint_reference"},
-                    [campaign_command("gamma-reference-decode-midpoint", MID_REF_MANIFEST_PATH.parent.as_posix(), "claim_runs_root")],
-                )
+                interior_reference_stage("gamma-reference-decode-midpoint")
             )
         else:
             stages.append(
-                (
-                    "gamma-reference-arm-boundary",
-                    "campaign_collection",
-                    1,
-                    {"kind": "external_input", "input_id": "midpoint_reference"},
-                    [campaign_command("gamma-reference-arm-boundary", MID_REF_MANIFEST_PATH.parent.as_posix(), "claim_runs_root")],
-                )
+                interior_reference_stage("gamma-reference-arm-boundary")
             )
     for stage in STAGE_SPECS[2:]:
         stage_id = f"gamma-science-{stage['subcampaign_id'].replace('_', '-')}"
@@ -2304,13 +2429,7 @@ def build_stage_graph(stage_manifests: dict[str, dict[str, Any]]) -> list[dict[s
         )
         if stage["last_block"] == 5:
             stages.append(
-                (
-                    "gamma-reference-prefill-midpoint",
-                    "campaign_collection",
-                    1,
-                    {"kind": "external_input", "input_id": "midpoint_reference"},
-                    [campaign_command("gamma-reference-prefill-midpoint", MID_REF_MANIFEST_PATH.parent.as_posix(), "claim_runs_root")],
-                )
+                interior_reference_stage("gamma-reference-prefill-midpoint")
             )
     stages.append(
         (
@@ -2399,7 +2518,9 @@ def build_stage_graph(stage_manifests: dict[str, dict[str, Any]]) -> list[dict[s
         rows.append(
             stage_row(stage_id, index, kind, count, predecessor, successor, input_ref, commands)
         )
-    return rows
+    # NEG-8 ruling 2026-10-07 (registration 0.12): each window reference stage
+    # pins its spare members for the chain's spare-slot retry.
+    return attach_spare_retries(rows, REPO_ROOT)
 
 
 def family_tree_rows(
@@ -2976,6 +3097,19 @@ places references after science members 20, 40, and 60: both arm midpoints
 plus the decode/prefill boundary; the committed D-134 freeze receipt and its
 plan-tree attachment are the ratification authority for that reading.
 
+Each interior reference has its own run id, because `run_campaign.py` skips a
+run id whose complete bundle already exists in the runs root
+(GAMMA-INTERIOR-REFERENCES-01). The decode/prefill boundary (after member 40,
+the window's temporal midpoint) runs the shared midpoint reference
+`neg8-window-midpoint` and is the NEG-8 midpoint, as in the floor packs. The
+two arm midpoints run `configs/campaigns/gamma_interior_references_v5/`: the
+same config under run ids
+`gamma-interior-reference-decode-midpoint` and
+`gamma-interior-reference-prefill-midpoint`, with the role
+`window_interior_reference_diagnostic`. The whole-window NEG-8 screen reads
+exactly one midpoint, so these two are recorded drift diagnostics and enter
+neither the screen nor the drift allowance.
+
 The prefill prompt is `ISSUED-BY-G2A-PROMPT-PIN`, issued by
 `prefill_pin/prefill_prompt_pin.json`. The pack records the exact
 generated hashes so regeneration can be tested; the D-134 freeze receipt, not
@@ -3244,6 +3378,7 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
     analysis_sha = sha256_bytes(analysis_bytes)
     write_bytes(out / "analysis_manifest_v3.json", analysis_bytes)
 
+    interior = interior_reference_inputs()
     external_inputs = [
         build_external_manifest("neg8_bound_corpus", NEG8_MANIFEST_PATH),
         {
@@ -3252,7 +3387,9 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
             "sha256": repo_sha(NEG8_CORPUS_PATH),
         },
         build_external_manifest("start_references", START_REF_MANIFEST_PATH),
+        interior["gamma-reference-decode-midpoint"],
         build_external_manifest("midpoint_reference", MID_REF_MANIFEST_PATH),
+        interior["gamma-reference-prefill-midpoint"],
         build_external_manifest("end_references", END_REF_MANIFEST_PATH),
     ]
     stage_graph = build_stage_graph(stage_manifest_refs)

@@ -286,6 +286,30 @@ class MeasurementLivenessTests(unittest.TestCase):
         entry.path.write_text('')
         self.assertFalse(self.census().clear)
 
+    def test_unknown_identity_publishes_a_null_start_time(self):
+        """Opus triple audit F4a: before, publish_campaign raised and the stage was lost."""
+        self.observer = lambda pid: live.Identity("UNKNOWN")
+        entry = self.entry()
+        self.assertIsNone(json.loads(entry.path.read_text())["start_time"])
+        self.assertIn(b'"start_time": null', entry.payload)
+
+    def test_census_reads_a_null_start_entry_by_state_and_write_time(self):
+        self.observer = lambda pid: live.Identity("UNKNOWN")
+        entry = self.entry()
+        os.utime(entry.path, (1_788_000_000, 1_788_000_000))  # 2026-08-29 UTC, before START
+        cases = (
+            ("reused: started after the entry was written", live.Identity("LIVE", START), True, "reused PID"),
+            ("live owner: started before", live.Identity("LIVE", "Tue Aug 4 01:02:03 2026"), False, None),
+            ("dead owner", live.Identity("DEAD"), True, "dead owner"),
+        )
+        for label, identity, clear, warning in cases:
+            with self.subTest(label):
+                self.observer = lambda pid, identity=identity: identity
+                result = self.census()
+                self.assertEqual(clear, result.clear, result)
+                if warning:
+                    self.assertIn(warning, result.warnings[0])
+
     def test_publication_failure_cleans_partial_entry(self):
         with patch.object(live.os, "fsync", side_effect=OSError("fixture fsync")):
             with self.assertRaisesRegex(OSError, "fixture fsync"):

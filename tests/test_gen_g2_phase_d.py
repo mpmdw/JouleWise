@@ -218,6 +218,53 @@ class G2aNightChainTests(unittest.TestCase):
         self.assertNotIn("# acceptance artifact d079_calibration_acceptance_v2_n17_r3", chain)
 
 
+class RunbookSymbolAnchorTests(unittest.TestCase):
+    """Runbook anchors are byte-exact symbols, not line numbers (lane L7)."""
+
+    def setUp(self) -> None:
+        self.generator = _load_generator()
+        self.runbook = self.generator.RUNBOOK_PATH.read_text(encoding="utf-8")
+
+    def test_every_anchor_is_found_once_in_order(self) -> None:
+        located = self.generator.locate_pinned_anchors(self.runbook)
+        symbols = [symbol for symbol, _pin_line, _text in self.generator.PINNED_ANCHORS]
+        self.assertEqual(list(located), symbols)
+        self.assertEqual(sorted(located.values()), list(located.values()))
+        lines = self.runbook.splitlines()
+        for symbol, _pin_line, text in self.generator.PINNED_ANCHORS:
+            self.assertEqual(lines[located[symbol] - 1], text)
+
+    def test_line_shift_above_the_anchors_is_not_drift(self) -> None:
+        # The #479 failure: an unrelated runbook note moved every later line.
+        shifted = "<!-- unrelated note -->\n\n" + self.runbook
+        self.generator.validate_pinned_anchors(shifted)
+        self.assertEqual(self.generator.render_generated_region(shifted),
+                         self.generator.render_generated_region(self.runbook))
+        self.assertEqual(self.generator.render_g2a_generated_region(shifted),
+                         self.generator.render_g2a_generated_region(self.runbook))
+        located = self.generator.locate_pinned_anchors(shifted)
+        self.assertEqual(located["settle_sleep"],
+                         self.generator.locate_pinned_anchors(self.runbook)["settle_sleep"] + 2)
+
+    def test_edited_anchor_is_refused_with_its_pin_label(self) -> None:
+        mutated = self.runbook.replace('  /bin/sleep "$SETTLE_S"', "  /bin/sleep 999", 1)
+        with self.assertRaisesRegex(ValueError, "pinned anchor 1516 drifted: symbol settle_sleep occurs 0"):
+            self.generator.render_generated_region(mutated)
+
+    def test_deleted_duplicated_and_reordered_anchors_are_refused(self) -> None:
+        settle = '  settle || return $?\n'
+        deleted = self.runbook.replace(settle, "", 1)
+        duplicated = self.runbook.replace(settle, settle + settle, 1)
+        first = "run_stage_list() {\n"
+        second = 'screen_pre_calibration "$PRE_CAL_CUSTODY"\n'
+        reordered = (self.runbook.replace(first, "\0", 1).replace(second, first, 1).replace("\0", second, 1))
+        for label, text in (("deleted", deleted), ("duplicated", duplicated), ("reordered", reordered)):
+            with self.subTest(label=label):
+                self.assertNotEqual(text, self.runbook)
+                with self.assertRaisesRegex(ValueError, "runbook pinned anchor [0-9]+ drifted"):
+                    self.generator.validate_pinned_anchors(text)
+
+
 class G2bOneBlockChainTests(unittest.TestCase):
     def setUp(self):
         self.generator = _load_generator()
@@ -249,7 +296,7 @@ class G2bOneBlockChainTests(unittest.TestCase):
         self.assertIn('post-bracket-terminal-boundary.json', self.chain)
 
     @unittest.skipUnless(shutil.which("zsh"), "zsh required for generated chain")
-    def test_rendered_g2b_dispatches_unique_75_second_idle_run_ids(self):
+    def test_rendered_g2b_dispatches_unique_duration_sized_idle_run_ids(self):
         """Execute the rendered dispatch body with a read-only roster collector."""
         pack = REPO_ROOT / "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
         tree = json.loads((pack / "plan_tree.json").read_bytes())
@@ -278,7 +325,7 @@ class G2bOneBlockChainTests(unittest.TestCase):
                 "    if limited and row['block_index'] > 1: continue\n"
                 "    config = json.loads((directory / row['config']).read_bytes())\n"
                 "    assert config['run_id'] == row['run_id']\n"
-                "    assert config['sampling']['idle_seconds'] == 75.0\n"
+                "    assert config['sampling']['idle_seconds'] == 57.6\n"
                 "    print(config['run_id'])\n"
                 "sys.exit(3 if limited else 0)\n"
             )
@@ -300,10 +347,10 @@ class G2bOneBlockChainTests(unittest.TestCase):
             self.assertEqual(len(set(run_ids)), 23)
             self.assertEqual(sum("contrast-b01-" in run_id for run_id in run_ids), 4)
             self.assertEqual(sum("midpoint" in run_id for run_id in run_ids), 1)
-            midpoint_stage = next(row for row in tree["stage_graph"]
-                                  if row["stage_id"] == "gamma-reference-decode-midpoint")
+            # G2-b's one midpoint dispatch is the shared NEG-8 midpoint reference, which GAMMA
+            # runs at its arm boundary (lane L10).
             external = next(row for row in tree["external_inputs"]
-                            if row["input_id"] == midpoint_stage["input_ref"]["input_id"])
+                            if row["input_id"] == "midpoint_reference")
             self.assertEqual(run_ids[19], external["members"][0]["run_id"])
 
     @unittest.skipUnless(shutil.which("zsh"), "zsh required for generated chain")

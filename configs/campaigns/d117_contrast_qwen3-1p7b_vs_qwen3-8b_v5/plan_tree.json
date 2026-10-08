@@ -4,14 +4,14 @@
   "plan": {
     "path": "calibration_plan.json",
     "plan_id": "plan-d117-contrast-qwen3-1p7b-vs-qwen3-8b-decode-prefill-p2048-v5",
-    "actual_sha256": "75fe8d58462ebdd1a258ec6dad2784d384588b5a42f5a8dc567d539cc9c4ec40",
-    "declared_sha256": "75fe8d58462ebdd1a258ec6dad2784d384588b5a42f5a8dc567d539cc9c4ec40",
+    "actual_sha256": "b37cb5333e74570dc533a8c12816d96e20d7a1da50d0b9072afc4c9ef0654368",
+    "declared_sha256": "b37cb5333e74570dc533a8c12816d96e20d7a1da50d0b9072afc4c9ef0654368",
     "sidecar_path": "calibration_plan.sha256",
-    "sidecar_sha256": "3c94af6a49ba966e979a816496ac10842e024112d0c1ca9be7810c636aea59ee"
+    "sidecar_sha256": "9fea656f0aef731d6aef1b04a6fb3b6244de7ea3eccb203ab6d7d5c853378f3d"
   },
   "generator": {
     "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/generate_configs.py",
-    "sha256": "a9ee5db306771d1bb64fda0a0742127bcc635b9ee8036bf9db6cef9afbff8ffd"
+    "sha256": "917ec90a0bd390bfc42c237cf8467c79124cbe1c43380d332baf20e89d6d9002"
   },
   "window_identity": {
     "window_id": "plan-d117-contrast-qwen3-1p7b-vs-qwen3-8b-decode-prefill-p2048-v5",
@@ -28,8 +28,8 @@
     "freeze_ratification": "as_generated_pre_d134_freeze; the committed D-134 freeze receipt and its plan-tree attachment are the ratification authority for this reference-cadence declaration"
   },
   "campaign_policy": {
-    "path": "configs/campaign_policies/quiet_mac_p2_production.json",
-    "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd"
+    "path": "configs/campaign_policies/quiet_mac_p2_b5.json",
+    "sha256": "ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60"
   },
   "acceptance_policy": {
     "selection": "issued_d116_artifact_only",
@@ -85,7 +85,7 @@
       "ordinal": 1,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a1.json",
-      "config_sha256": "a759df76561a351488e2da1b88c667c4163f1c09dbd7e857efe469130125647f",
+      "config_sha256": "132b33a8ee2718c17a15a532175c80069df3c11cfa98d8b19d468ba86e2b0af4",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -98,7 +98,7 @@
       "ordinal": 2,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1.json",
-      "config_sha256": "82995cf098267785b541ee45f163aae2e0b6f485472733a9d787521ed92d6cad",
+      "config_sha256": "4566b18d26ca744b00ae690572ee0cfef003c2f0c2194419c48f3944e24e14c3",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -111,7 +111,7 @@
       "ordinal": 3,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b2.json",
-      "config_sha256": "e234fabfd5a5e69f8b5a64659a3f9dde8b080d628fdb449b5635771920210503",
+      "config_sha256": "98d272e33f6ac7f39aaac1b345a62ffd4ece472ad2ead6c819efd434004d910b",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -124,7 +124,7 @@
       "ordinal": 4,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a2.json",
-      "config_sha256": "ff75a3dc0ee6c992c2ee4356204ac0598255e0ba71f354c71ea0e70dc5a318e3",
+      "config_sha256": "c0e9f01845f4c5f72a09fb9d159bda2897de0ff718a81fced7d5b49917c1763e",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -137,7 +137,7 @@
       "ordinal": 5,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-a1.json",
-      "config_sha256": "98d5ff0ce994915a3823b8038910153000431d4c5b634e82cb689e3bcea08cb4",
+      "config_sha256": "2ec0db0d1597828ce7387cd18227e0410fd87164448bf2b0a6a28b7bbca5f0fd",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -150,7 +150,7 @@
       "ordinal": 6,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-b1.json",
-      "config_sha256": "f194a0997e00ca4c679d2e1b08c25d45a3d4a20a466fc54098ac9b4fed5344c7",
+      "config_sha256": "640a002b1f14e7db91051629b4e58ba3cebec5a3420c8b0ce9cb0d8c53257b2f",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -163,7 +163,7 @@
       "ordinal": 7,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-b2.json",
-      "config_sha256": "beeec9dbd4a1e370b131e4bdca17d56db447b0d640c05da3068b1e042912a125",
+      "config_sha256": "f38da9f28afab367e5a05a133122b00ce2e1a455a15778ac5f6a01701bcd9a31",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -176,7 +176,7 @@
       "ordinal": 8,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-a2.json",
-      "config_sha256": "22867c69b4b24947a3114f9f7113b9df6069bea59e90dd8fb19f5d4aec04c9ba",
+      "config_sha256": "a64fd327ad42fd7918ae5c8cef1820e53595cf972d8c97df4ef8d3e70c66e7db",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -189,7 +189,7 @@
       "ordinal": 9,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-a1.json",
-      "config_sha256": "c80f58d8ba8ddf283730ceb7a660466d1c0dbbcb31859b6e02ce7aadb209b98e",
+      "config_sha256": "b47b2d2d8bf3027205c71e84e4fea8adaa3cefdeeb61fd084135a91cae50582b",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -202,7 +202,7 @@
       "ordinal": 10,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-b1.json",
-      "config_sha256": "56cf93554b0b3141a4d0c28b40009872a793d3575311c9986de592f9fa49646f",
+      "config_sha256": "93c92488ca7080961eda8890ac811501e97eeb67a02ac2fc0c99215c43bdb551",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -215,7 +215,7 @@
       "ordinal": 11,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-b2.json",
-      "config_sha256": "8e54e579468e89dd36f051e530b8f78c1e657fd2a3870c08b71088dbed36b340",
+      "config_sha256": "4717f056830f9a929d768552af5567e17dc1b012132fac83a8e7068fa78bf914",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -228,7 +228,7 @@
       "ordinal": 12,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-a2.json",
-      "config_sha256": "ead5dce9a7fa20608cca889cea46598f9d21a164402d9cd65a2b66a8405aa121",
+      "config_sha256": "e99d88b4006cd51309cd52e879f12d7e86049078b098818ae7161200c531ca57",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -241,7 +241,7 @@
       "ordinal": 13,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-a1.json",
-      "config_sha256": "ce5c905f4757252ae50b0144298e966f44af39b2abf86614f728a952bfa1151c",
+      "config_sha256": "52357e0aebbdba596124de024effd302ad26b03d06cf9e18dfe0b609b4c45f67",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -254,7 +254,7 @@
       "ordinal": 14,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-b1.json",
-      "config_sha256": "fa6e7431e834ff6e9ff7d45b089df785c8eb27cdf7b56a39a8edd19a09d0ab7c",
+      "config_sha256": "bd226efd289e60375b23c668bd7c03f8f5ba26c1ce06fc6b54d98624352a9ccf",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -267,7 +267,7 @@
       "ordinal": 15,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-b2.json",
-      "config_sha256": "efcb064abe6d80e7f5966173e112cb40f6622f3a644cddbf582a73f125e16e43",
+      "config_sha256": "ce696f5fee4637a8c3a8e223e50012abd6ce9fbf04fcb5cd928598587dac5f10",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -280,7 +280,7 @@
       "ordinal": 16,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-a2.json",
-      "config_sha256": "ffee644a9b10e1b35065f27e767b27f4767b1c685c40e163213cf6d64a69326a",
+      "config_sha256": "db94df5e14e1cad32de8b58c333d355b0b744e5ab3ce9cc7ef62e2d44ee2f090",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -293,7 +293,7 @@
       "ordinal": 17,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-a1.json",
-      "config_sha256": "65cdd63e4cbe9e623d175ea0234246179623db48cc656d583fa45443e21bab8d",
+      "config_sha256": "a803df2abbf085487c27977b22f1d74701f3d57a2b532793dce19b7b28b05fd7",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -306,7 +306,7 @@
       "ordinal": 18,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-b1.json",
-      "config_sha256": "d338db2156b9d4edc800921924422fdfd9b297ffd4efa9be107ee3ea1a5c77fa",
+      "config_sha256": "54c873ee8f8cdcedf43dcf8b414ed1d4eab4a207f77e60537abe240b5afbfc87",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -319,7 +319,7 @@
       "ordinal": 19,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-b2.json",
-      "config_sha256": "ecfa66bb3ac8d89221da8172459a648fef1ac74f41dd9425699cfb056d64e2ef",
+      "config_sha256": "ba6810cd51a9e2c2d594d9654850c2e37eaccf73deee995a96dc2cda10528948",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -332,7 +332,7 @@
       "ordinal": 20,
       "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-a2.json",
-      "config_sha256": "4df7e4486bb339bf8c3383ddcab1db18dfd1d00828be888dc9c10cd331e9b59f",
+      "config_sha256": "2cac3238810bc648979514b1873b1b3eaee7575aeaa31f62f54f2c69ac7fc621",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -345,7 +345,7 @@
       "ordinal": 21,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-a1.json",
-      "config_sha256": "2001faa115d3d2f0604dabb1791466518146cfb5e765ed42fb22fa27d426a6bf",
+      "config_sha256": "a3f2e22d9e800078b93e8d2e99d8cdd2b4f6773319b69d7020aa90780c560a41",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -358,7 +358,7 @@
       "ordinal": 22,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-b1.json",
-      "config_sha256": "f67a6082ecd41988e677654a9e3736c8dd9f189d49ddb005732cfb76c418590c",
+      "config_sha256": "2ac12b60bae2c2c8b3dfd80ee4c95a3002a3d1593f4a7c304f0369a87c0a9476",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -371,7 +371,7 @@
       "ordinal": 23,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-b2.json",
-      "config_sha256": "2d66d41798c197cda9ad0d591dabe9a2771baf5819d009eb8bf2854a330e183f",
+      "config_sha256": "06ae951d9bb18a8b8edb6eec1c9bf5def6a0d7207e8b6c26d010541868069bc7",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -384,7 +384,7 @@
       "ordinal": 24,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-a2.json",
-      "config_sha256": "7fadd4b6c49de3b1774fb6dfd6a296c4a349f8295a6c963283baa9ff9a657d83",
+      "config_sha256": "2a82210597dfc6cfb758739b5bb20cad573d999f0b774eb42fb363b0227e69b6",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -397,7 +397,7 @@
       "ordinal": 25,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-a1.json",
-      "config_sha256": "9cc574a7558c5e26de08748ebb2d3b364ee201e13592f4a9061b0414f6895a5b",
+      "config_sha256": "4ff04f814d5cc39f818e1623a1862dd99f85da84196ca8f6e11def3264f4db75",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -410,7 +410,7 @@
       "ordinal": 26,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-b1.json",
-      "config_sha256": "543bbac4c4598463502ad1ffc05f98ab5971f70071b7be8a3897278f8baceba3",
+      "config_sha256": "5d441c447050380b0722656c340de24f69df14a5ccf73623c6c97d2deef86047",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -423,7 +423,7 @@
       "ordinal": 27,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-b2.json",
-      "config_sha256": "f12950c87b0c0eaa718173051a424354b976685b97d9ba381f15d2923eb3ef2a",
+      "config_sha256": "82d146d166cd82755bb5db325b4a83b1f2cf0886aad5cd31624c7508d500ceac",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -436,7 +436,7 @@
       "ordinal": 28,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-a2.json",
-      "config_sha256": "1777f11dc32b66b705223de50084329ccd0fce69bb99cf27f5750cc569207e6a",
+      "config_sha256": "42f35c180b922792295b284892d65a43e7db4a6163ca16a7e7f71cc78ee85b18",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -449,7 +449,7 @@
       "ordinal": 29,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-a1.json",
-      "config_sha256": "6517d184a6c92821613dffde0d2e046e5be3b5c7316782f3dadc7b88a8a119f8",
+      "config_sha256": "11c482664e70e5b829b4075ddbc04ca1ffbff72a94315bb79a7a3e6a16291a67",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -462,7 +462,7 @@
       "ordinal": 30,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b1.json",
-      "config_sha256": "666d2aa31eff93835d6d8b8aefd63ecf6aa6cbfec181f2d9dfd44e34849751e2",
+      "config_sha256": "cde0b94986766e6d86ef6ba25ff989a761a7dfe5364b86c68cf430a61d3da826",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -475,7 +475,7 @@
       "ordinal": 31,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b2.json",
-      "config_sha256": "79a870739b341c5ca4996eebefcff4924c42e9166a2c54b36effb4e10950b851",
+      "config_sha256": "7b680e56da70b49b1f0ed71e9433b0c534b4111863e5d799da1bba75bd3d0421",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -488,7 +488,7 @@
       "ordinal": 32,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-a2.json",
-      "config_sha256": "12763229d6a753497330ba4a33cf08d0bf2944327f388bfed92ceeeb8144ecc0",
+      "config_sha256": "17b754ceb0d7923eecadd2bf17c429d703bae09e8cc97c87ff39737ff629ccdc",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -501,7 +501,7 @@
       "ordinal": 33,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-a1.json",
-      "config_sha256": "aa6db54309d8321bfeec23b8c91a1311c5c62cd590e9259aa4fc28c9037f592c",
+      "config_sha256": "e3760026e8bbec8cc2c0ffe4b10a4deda8827dc94dd6188a61638f8db886992c",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -514,7 +514,7 @@
       "ordinal": 34,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-b1.json",
-      "config_sha256": "15420ac36ab4bc40e3a9e95cb214febdbfc4bdac141af95e9bdbf70ece0eea1d",
+      "config_sha256": "13e11152fa2952086d55c30be4a0cf01adea7fdbabc3533fb9f3cc8168d780c0",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -527,7 +527,7 @@
       "ordinal": 35,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-b2.json",
-      "config_sha256": "17bf391a8c117c914a88126d236242fc0e8ddecdaa6a443e31c43fc1c4867db6",
+      "config_sha256": "5e420c793356a708cb214eee8b0fb5c2de8d0fd30afa517b64c886f4c6ec0fe8",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -540,7 +540,7 @@
       "ordinal": 36,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-a2.json",
-      "config_sha256": "299a144c7b2ded796e7f1741feecdd92c0503c4ecd19a175be67066c2ff62f27",
+      "config_sha256": "69530cd03638815ef78452edfabcd284bb00c62de589c72808a9b57188f8b2d4",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -553,7 +553,7 @@
       "ordinal": 37,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-a1.json",
-      "config_sha256": "6f2aa4e003ae9426c29eedc75b751b1a4b69d2e573ac0d5534f2704c5b377f70",
+      "config_sha256": "ff05cba792090386ac0197028748580747dc6cbf740bff5ed5d63e0c84021103",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -566,7 +566,7 @@
       "ordinal": 38,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-b1.json",
-      "config_sha256": "86c8104ebfa446a35eab1fba91d7daead79c2478a44317ea72efdf182d746bf9",
+      "config_sha256": "7c6d261f1e0c64b216b6e9fb89e277504cb13b24bc54c9b53c9f349abb23d4dd",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -579,7 +579,7 @@
       "ordinal": 39,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-b2.json",
-      "config_sha256": "c085869b82a252be4fe2b90adb4951069450739d87d7bb8e94f9d584bb213aea",
+      "config_sha256": "553f250ce769d10ea04dc00a2f400b1f9f2a813aae3721c9c14f3c08939fb481",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -592,7 +592,7 @@
       "ordinal": 40,
       "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-a2.json",
-      "config_sha256": "87dd70260280eb0054bca65c5b5a6e75ef4a589727a0a3fb48da329a3bc14f40",
+      "config_sha256": "52b0edc7b7d39817f771e3d47a4e8404a620ec507f051ea4b363960e9fec9fc3",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -605,7 +605,7 @@
       "ordinal": 41,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a1.json",
-      "config_sha256": "2b511e961925807a66ad9c9fb55b8e7cb8eac59a01004a3d5c8ae46af0c65936",
+      "config_sha256": "9424fa822da257659aa8c9820dd308db50d1c3643b1f62162f5dbabc0f37b84b",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -618,7 +618,7 @@
       "ordinal": 42,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b1.json",
-      "config_sha256": "4f88e6d3e6709b63adc3c1521c8a89340779eb9281b3912204c6fed3ee3e7a16",
+      "config_sha256": "448f6db0a14cbdc8963ff94a37677d81b7ffc1a9856a06d11d43d7b55a31d3fd",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -631,7 +631,7 @@
       "ordinal": 43,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b2.json",
-      "config_sha256": "3809342d114961f5fea701ef319233c8c99dba049b3d573874243cf4f6ec81d8",
+      "config_sha256": "fc58032058e6af1bdf977f41bb9067d4a7a1186b76ebef1475c6bc4917374d58",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -644,7 +644,7 @@
       "ordinal": 44,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a2.json",
-      "config_sha256": "94bf97af201c6f23c1eb9b11265c71c4f08c4fe480aa67a3a6794c11846d18fa",
+      "config_sha256": "833aef8b871f31a6342174c90ba68534958d71957e5403a58bc0c91f304de322",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -657,7 +657,7 @@
       "ordinal": 45,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a1.json",
-      "config_sha256": "1c403a897ef2634c9575ea8d6bf63ea7ef41c5ecca1912f87902715063fe14bd",
+      "config_sha256": "92165a908004ff7c8d63ac678fbc6bf7609942e49b412ff6cf18151ce981c11f",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -670,7 +670,7 @@
       "ordinal": 46,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b1.json",
-      "config_sha256": "3c00eb7b061d62ede2b0c04dd8e09d8c13cea8ae81c2f689b170a71334143dde",
+      "config_sha256": "e0c2626b641085add1b4701694bffd84f6f4f99edb9ec7813d5b17fe94cfdbcd",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -683,7 +683,7 @@
       "ordinal": 47,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b2.json",
-      "config_sha256": "a99426ea216027e3a98351dab617b5489feecec6776b576a257765f2d3ebeb69",
+      "config_sha256": "771538dd06726af88c590b5fe4a3918920792a93f64b96e583f5f9b090e4ded2",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -696,7 +696,7 @@
       "ordinal": 48,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a2.json",
-      "config_sha256": "df96ac1552fe8c6d14918a29ca96df48c86363c9919a2ed8338a4b52bc22c084",
+      "config_sha256": "8c230fb0c842a804dbb363dce25d7e0d6485043316fa8a234c4be9fd43b423ca",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -709,7 +709,7 @@
       "ordinal": 49,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a1.json",
-      "config_sha256": "3924283711bc7435795360dbe3d6204b0d23bc3c90770c47e850ddb07ebb82fd",
+      "config_sha256": "da2e4c2e896ddeb46fe6e81b072acb65f29c86bb5001433a50483eaf1b39d959",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -722,7 +722,7 @@
       "ordinal": 50,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b1.json",
-      "config_sha256": "8f7ad022f069e454c86eb842b731fcb74141b8d44b92a7b0429140d26fff4a70",
+      "config_sha256": "952fe48ee9e1bbfb21df3e8e1ce121051f981aa24c56045ac19aabfacb424cc3",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -735,7 +735,7 @@
       "ordinal": 51,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b2.json",
-      "config_sha256": "0e12fa72b2b52dffb0e8211f268b0fd653de6711d886a4310c8ad1cc91bedf7f",
+      "config_sha256": "59bf5b70f32061594ba083af0512b418c5978b6909ca0821b23e0686056e21fd",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -748,7 +748,7 @@
       "ordinal": 52,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a2.json",
-      "config_sha256": "588f2221cd27158dd9dea6b4f0d10d77d20c3d6c22b1e7c980e5849ac8f7c649",
+      "config_sha256": "76e303f95824919444ca68984c84cb18178c0ed207cd5751626cdd2b79af2553",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -761,7 +761,7 @@
       "ordinal": 53,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a1.json",
-      "config_sha256": "14eb4ca8073954ede3b93581e84a77837517dc516595cd76deea691e1ab33215",
+      "config_sha256": "26f2c0a3779160591104d9efcd7294ccf695c02722b9e1c000d64842f2214346",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -774,7 +774,7 @@
       "ordinal": 54,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b1.json",
-      "config_sha256": "3bda2d5753c45f4b90f23fd8a8dfebfe681f1877a96ea0757f728f3aaabbef0a",
+      "config_sha256": "3425c26e6afdd863b283d3acbe8f187880cfbcb614bbfca9bdc46a787fb38f1a",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -787,7 +787,7 @@
       "ordinal": 55,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b2.json",
-      "config_sha256": "455d484ef83809ee2a8dece4c58e62a3eeabe0d2a07877a8b089cbcf8390ed8c",
+      "config_sha256": "34a5ed4987739e4dcad5e17e317393e8a3b0ea600a3a9e48e1db9f219c075c35",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -800,7 +800,7 @@
       "ordinal": 56,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a2.json",
-      "config_sha256": "2895b77dbbdd1ad6a557d1ea5b201ceac41339cc6224ffd516f3155f610eca5a",
+      "config_sha256": "79c4051cfe7607f441ab8ef00b0e02d3197d577a94e4cb4d6a4e1db59914bb5b",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -813,7 +813,7 @@
       "ordinal": 57,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a1.json",
-      "config_sha256": "6d27df29d2df683a59dcb59935e751ab7ac8503f7ce494f641358a23e37c857b",
+      "config_sha256": "10984d4eb42a4714415d40519cdfef050c5fec187b4a6a713ed84ad2f35a187d",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -826,7 +826,7 @@
       "ordinal": 58,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b1.json",
-      "config_sha256": "1ff2d42f2c36eb8f06dde40b3b78a1892a01ba36ac77eeeea3367298ba1a1981",
+      "config_sha256": "676436956e01a3a9d7e79cc07f11d90d9bef5da3264c275ef3712e1fe2ce8c06",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -839,7 +839,7 @@
       "ordinal": 59,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b2.json",
-      "config_sha256": "9acebceec7c6dfef2e3b7171ff53dc6379b6df7132a1e02ad51fca167c8bbc66",
+      "config_sha256": "eea7c618681e68e4f78f7e37e8910209e4dbfae5e1c5a9a90749a2994180ea4d",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -852,7 +852,7 @@
       "ordinal": 60,
       "stage_id": "gamma-science-03-prefill-p2048-contrast-blocks-01-05",
       "config_path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a2.json",
-      "config_sha256": "bc3c1ef74f0b873e6d0e684242e58a75cf3fcabe229d1da35b894282466cb792",
+      "config_sha256": "a4d1bbef7bb4886e01508f90c83ee4b21ed6339f189068c39bb4289530ba7ae1",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -865,7 +865,7 @@
       "ordinal": 61,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-a1.json",
-      "config_sha256": "e6420d18f5ae9046bac31283d74586807ed5ec30626732db9e37ae99bb4191b2",
+      "config_sha256": "3eb900114562630b4a53c6dd3610ffbbb3ec22673516ccbd9204ef22d16059de",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -878,7 +878,7 @@
       "ordinal": 62,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-b1.json",
-      "config_sha256": "c65eb23db554fb25cafeebf35e7c09f93ee6de6224cdc0fe99ad694573414169",
+      "config_sha256": "2227816a9481fb2952242b9ebac6f83c49beec428cf5cf072bf34a7a7dbe0e66",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -891,7 +891,7 @@
       "ordinal": 63,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-b2.json",
-      "config_sha256": "94505c39c77d93e765fa92ad5b493e6bbdc1ec9d685909067f27be5079e05c94",
+      "config_sha256": "a234d74a0fbcf7fc36c0f676578794cade09957f6d1895603dea99cef80fae6c",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -904,7 +904,7 @@
       "ordinal": 64,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-a2.json",
-      "config_sha256": "76698f458902c56e403e3a040fc6b5c86f90eedc8ef460c8c765f761b577d59b",
+      "config_sha256": "6aafcda13f6120eb64e67102749e0cefcb0c6124112b16f0bd3b8b425b1061e9",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -917,7 +917,7 @@
       "ordinal": 65,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-a1.json",
-      "config_sha256": "d87230c9fc1116b566b7d813b1bfb26cd367f1216330ebdb0c3cc4cac69c8d7f",
+      "config_sha256": "02733d54b7b899ea412fdcbca6fcb46bb509b54e118c611d705584a54a5c66fb",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -930,7 +930,7 @@
       "ordinal": 66,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-b1.json",
-      "config_sha256": "918eb3f11ece27167ee2e9e9736ea92e63a60d8cd0c3e7287ae5f8eb5508e75a",
+      "config_sha256": "bf074cdd3abcbc0b475577ec0514668c91266728ca91eaeb64c88619f3ff644d",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -943,7 +943,7 @@
       "ordinal": 67,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-b2.json",
-      "config_sha256": "ca9f4d1eb9862f42dc63f3d311094109e5bbe4d5b6f4bb0216d5657e50d4f657",
+      "config_sha256": "ea2a423de420089d773aa83409d2247a2a8d9d0e1ca4a9a1f3c7226432dc5fde",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -956,7 +956,7 @@
       "ordinal": 68,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-a2.json",
-      "config_sha256": "a66817dfc36df94cf619cb6219dfe368816fec0e1094dcd34feb946b84a6cea2",
+      "config_sha256": "01d58b4ee985ba88194918be9d44e4541794d4f1fdd133aedc359995cea3052b",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -969,7 +969,7 @@
       "ordinal": 69,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-a1.json",
-      "config_sha256": "d1b14aeaeb900faa4df74bf8dded2ced318ee71c966310bd51ecf186dc24fd79",
+      "config_sha256": "0aaff272c9e26be2d6b2222b312815b573480c9505d7f76195a330733201ba85",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -982,7 +982,7 @@
       "ordinal": 70,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-b1.json",
-      "config_sha256": "f4a14fe7b58d31325936550c5c8c13b2dcf193d0191a749bbdde7c3940ab87b4",
+      "config_sha256": "337c3a57cd19d3c08302595f8ebcff5bf08be59377f173b4dca635f5cfa5c3e6",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -995,7 +995,7 @@
       "ordinal": 71,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-b2.json",
-      "config_sha256": "5c09808d32a2eba36f4d0d08c5d7d2a3006c29269b9d7d413183d371351f54ab",
+      "config_sha256": "74c6ca7fbb87e6ad43a6fda705388e9e69e55fdf3d326ec81360acd1720f001c",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -1008,7 +1008,7 @@
       "ordinal": 72,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-a2.json",
-      "config_sha256": "8b8a12f9b0bdf98c3a2c2f9a90508da66c962926815100cacf9edd3f9acb9eda",
+      "config_sha256": "e18eed91a7e7d5d64f10ea0d6d0d0ef96a7ba970c3a98f930bd4d17ceb0ab589",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -1021,7 +1021,7 @@
       "ordinal": 73,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-a1.json",
-      "config_sha256": "8252f8b7cdb86ea193777696515a2c7bb8c757e7b00dbe27debc39eb8d17f03c",
+      "config_sha256": "3f82724e41dc7347ebd27dcd28c2c30dac686107dc0b72e32df702d9947f6a52",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -1034,7 +1034,7 @@
       "ordinal": 74,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-b1.json",
-      "config_sha256": "13148209d982c604c05c2b9d43b10a16cf1c36df160f2d0e22bf49db7011caac",
+      "config_sha256": "a9d937b5a68846740c916743a293c58a4006da9c333c2e6249bfab3da95999f9",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -1047,7 +1047,7 @@
       "ordinal": 75,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-b2.json",
-      "config_sha256": "ed67016b7f42a681233c179c566c3cad09277a690106800d5086fee8092baced",
+      "config_sha256": "a4a9f0b754dbf07fd8097233267ae8cb7ccd3ea89ef0c8e15841e4971fb7f069",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -1060,7 +1060,7 @@
       "ordinal": 76,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-a2.json",
-      "config_sha256": "4cd8768a4f94f543cb3a566702cd2a9850e3cd5597c64317c4958a4c2eec1f7d",
+      "config_sha256": "290dc8e9878839fcefbc65142cece809fb23131365d287c1ffa895c5e4c7aaba",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -1073,7 +1073,7 @@
       "ordinal": 77,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-a1.json",
-      "config_sha256": "495aef6a364a6b30f9cb56aba67863db176dc16931a9f8a770a41b2e2a6c6823",
+      "config_sha256": "b75cd505a76cd30612d53e00764afe016bb346cecf0d2a11f9c0c7c1c08ffe86",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -1086,7 +1086,7 @@
       "ordinal": 78,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-b1.json",
-      "config_sha256": "fbc0f698e89c1afb5e28ed74b25089dc940d1b82572603c995c2aad9fcb64b2a",
+      "config_sha256": "92d677c49edaf058d2075db03eb85700928fbca07131a5d7bd81dc8e12535d57",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -1099,7 +1099,7 @@
       "ordinal": 79,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-b2.json",
-      "config_sha256": "61e7e8b1fd7c2f11ad0091f2ae820bc6fc107c6f3ac865bf8dbb5a3a3e689d7f",
+      "config_sha256": "7a4c97a253cc6b56caf820208a80ec49b6f1ac0f35677367cc107760ed5ea74a",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -1112,7 +1112,7 @@
       "ordinal": 80,
       "stage_id": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "config_path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-a2.json",
-      "config_sha256": "e45f5929b45ccdddfdbc3d4f2b5f44851261a8ad0ff422093866a4b82e9cfceb",
+      "config_sha256": "00c635601f69dad0a0742a5c8da2e2d70c42e43053d3abd6fb3ad0b2c73ec923",
       "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p2048",
@@ -1407,7 +1407,7 @@
                 },
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
                 },
                 {
                   "kind": "literal",
@@ -1565,7 +1565,7 @@
                 },
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
                 },
                 {
                   "kind": "literal",
@@ -1614,6 +1614,52 @@
             ]
           }
         ]
+      },
+      "spare_retry": {
+        "schema_version": "joulewise.b5_reference_spare_retry.v1",
+        "slot": "start",
+        "max_spares": 3,
+        "rule": "NEG-8 ruling 2026-10-07, registration 0.12: after the stage, when fewer members succeeded than planned, the chain runs the spare set of size (planned - succeeded), once, into the same runs root, under the collection deadline; each spare measured is flagged member.retried",
+        "members": [
+          {
+            "run_id": "neg8-window-start-spare-1",
+            "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_3/neg8-window-start-spare-1.json",
+            "sha256": "b8dc33e33deef3cb95af9981a7c0b31e15c7d0511f9f4c4e51d08fa95167c8ec"
+          },
+          {
+            "run_id": "neg8-window-start-spare-2",
+            "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_3/neg8-window-start-spare-2.json",
+            "sha256": "e8a0e8b7ff7b2e29c616dc62cc6f25a3b797cacd91f14f9c1b78c1b184b9a71d"
+          },
+          {
+            "run_id": "neg8-window-start-spare-3",
+            "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_3/neg8-window-start-spare-3.json",
+            "sha256": "7229fcd9a5c10cad4af0d4baf821a2cb6a3b9e6db084578734a9dde25ac2eecf"
+          }
+        ],
+        "spare_sets": [
+          {
+            "count": 1,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_1/order_manifest.json",
+              "sha256": "756ffff40f4fa6d5a1a76cd866ad21f6ba0e18f0981ce3ad12e03566042f9e5f"
+            }
+          },
+          {
+            "count": 2,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_2/order_manifest.json",
+              "sha256": "284be660ba99e7f1abdba5ad1c424224cea91de59e6277ca8c40296309a407cc"
+            }
+          },
+          {
+            "count": 3,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/start_triplet_spares_3/order_manifest.json",
+              "sha256": "2090dd9aca021991840c8e98291e88acffed577b09daaedb1f18b97fe57dd3b0"
+            }
+          }
+        ]
       }
     },
     {
@@ -1627,7 +1673,7 @@
         "kind": "pack_manifest",
         "path": "01_decode_contrast_blocks_01_05/order_manifest.json",
         "manifest_id": "d117-gamma-01-decode-contrast-blocks-01-05-order-v1",
-        "sha256": "70fedf20da5a3e7c023ebd80f5d01d6c7014a0c593eb5f9b28b186e1e768d84a"
+        "sha256": "8f7aec4ee14dc3da04304bac4279a969f80538ecee63ab5fd0683395ff1d4807"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
@@ -1666,7 +1712,7 @@
                 },
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
                 },
                 {
                   "kind": "literal",
@@ -1726,7 +1772,7 @@
       "successor": "gamma-science-02-decode-contrast-blocks-06-10",
       "input_ref": {
         "kind": "external_input",
-        "input_id": "midpoint_reference"
+        "input_id": "decode_midpoint_reference"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
@@ -1740,7 +1786,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/midpoint"
+                  "value": "configs/campaigns/gamma_interior_references_v5/decode_midpoint"
                 },
                 {
                   "kind": "literal",
@@ -1765,7 +1811,7 @@
                 },
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
                 },
                 {
                   "kind": "literal",
@@ -1827,7 +1873,7 @@
         "kind": "pack_manifest",
         "path": "02_decode_contrast_blocks_06_10/order_manifest.json",
         "manifest_id": "d117-gamma-02-decode-contrast-blocks-06-10-order-v1",
-        "sha256": "97d8e733db122181dc0a0d306b3e1ba02245222306b4989f3d8afe86f141ce98"
+        "sha256": "43ea7a08d02fbf32905e4bd517495314a565f6734ee68a8e35f9641a78eb196a"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
@@ -1866,7 +1912,7 @@
                 },
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
                 },
                 {
                   "kind": "literal",
@@ -1965,7 +2011,7 @@
                 },
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
                 },
                 {
                   "kind": "literal",
@@ -2014,6 +2060,28 @@
             ]
           }
         ]
+      },
+      "spare_retry": {
+        "schema_version": "joulewise.b5_reference_spare_retry.v1",
+        "slot": "midpoint",
+        "max_spares": 1,
+        "rule": "NEG-8 ruling 2026-10-07, registration 0.12: after the stage, when fewer members succeeded than planned, the chain runs the spare set of size (planned - succeeded), once, into the same runs root, under the collection deadline; each spare measured is flagged member.retried",
+        "members": [
+          {
+            "run_id": "neg8-window-midpoint-spare-1",
+            "path": "configs/campaigns/window_reference_spares_v5/midpoint_spares_1/neg8-window-midpoint-spare-1.json",
+            "sha256": "a8912381c6eea48cb0d9f670615504d161935f4996e6c4258a83f88949e12109"
+          }
+        ],
+        "spare_sets": [
+          {
+            "count": 1,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/midpoint_spares_1/order_manifest.json",
+              "sha256": "34559b89c110fe2ce3092c074618d106c4d5ff959f2f04d65f322a9e10d86908"
+            }
+          }
+        ]
       }
     },
     {
@@ -2027,7 +2095,7 @@
         "kind": "pack_manifest",
         "path": "03_prefill_p2048_contrast_blocks_01_05/order_manifest.json",
         "manifest_id": "d117-gamma-03-prefill-p2048-contrast-blocks-01-05-order-v1",
-        "sha256": "07ca39f9e378568a316e61493e3df29fce95900a85cbcddcbdcd95f6e30034e0"
+        "sha256": "62d9dcaa0012eab48083c75040c1191c9331474831ee95f7bcd09bd0e6115767"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
@@ -2066,7 +2134,7 @@
                 },
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
                 },
                 {
                   "kind": "literal",
@@ -2126,7 +2194,7 @@
       "successor": "gamma-science-04-prefill-p2048-contrast-blocks-06-10",
       "input_ref": {
         "kind": "external_input",
-        "input_id": "midpoint_reference"
+        "input_id": "prefill_midpoint_reference"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
@@ -2140,7 +2208,7 @@
               "arguments": [
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaigns/window_references_v5/midpoint"
+                  "value": "configs/campaigns/gamma_interior_references_v5/prefill_midpoint"
                 },
                 {
                   "kind": "literal",
@@ -2165,7 +2233,7 @@
                 },
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
                 },
                 {
                   "kind": "literal",
@@ -2227,7 +2295,7 @@
         "kind": "pack_manifest",
         "path": "04_prefill_p2048_contrast_blocks_06_10/order_manifest.json",
         "manifest_id": "d117-gamma-04-prefill-p2048-contrast-blocks-06-10-order-v1",
-        "sha256": "1b307173ff107ad44b0bb5a41817eee045d4e0def02cb58c16a42d25214f47cd"
+        "sha256": "ab9c9c248f02239f405b71c9a17dec92b3f5d93427a2849ef0c81ee02100133f"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
@@ -2266,7 +2334,7 @@
                 },
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
                 },
                 {
                   "kind": "literal",
@@ -2365,7 +2433,7 @@
                 },
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
                 },
                 {
                   "kind": "literal",
@@ -2412,6 +2480,52 @@
             "success_exit_codes": [
               0
             ]
+          }
+        ]
+      },
+      "spare_retry": {
+        "schema_version": "joulewise.b5_reference_spare_retry.v1",
+        "slot": "end",
+        "max_spares": 3,
+        "rule": "NEG-8 ruling 2026-10-07, registration 0.12: after the stage, when fewer members succeeded than planned, the chain runs the spare set of size (planned - succeeded), once, into the same runs root, under the collection deadline; each spare measured is flagged member.retried",
+        "members": [
+          {
+            "run_id": "neg8-window-end-spare-1",
+            "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_3/neg8-window-end-spare-1.json",
+            "sha256": "8136cc9af53efaaaceb2d42965e292d187fc4a265f62e487934c07554e4fc2c2"
+          },
+          {
+            "run_id": "neg8-window-end-spare-2",
+            "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_3/neg8-window-end-spare-2.json",
+            "sha256": "c65e16766658a1cf0350728f6bbd7968ff855690c6fe61fc23a6df51e50c8fae"
+          },
+          {
+            "run_id": "neg8-window-end-spare-3",
+            "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_3/neg8-window-end-spare-3.json",
+            "sha256": "3faaaab2ed92bda9558b38fa51708c14b4a30cf6cf0c2b74909f9ba5b7db6017"
+          }
+        ],
+        "spare_sets": [
+          {
+            "count": 1,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_1/order_manifest.json",
+              "sha256": "8e5e78a0566a083175cc0fa7f40b77bf8d0dec5009618489241e078ec0587a24"
+            }
+          },
+          {
+            "count": 2,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_2/order_manifest.json",
+              "sha256": "6af8b489da25584c35f120a019caec34b1baef6dc55a7782a43e8d953fbd6760"
+            }
+          },
+          {
+            "count": 3,
+            "order_manifest": {
+              "path": "configs/campaigns/window_reference_spares_v5/end_triplet_spares_3/order_manifest.json",
+              "sha256": "d6317a3aa566b841e6dd7797fb2d0554a4ec3e26804b4298ead7e8cbffec1f87"
+            }
           }
         ]
       }
@@ -2543,7 +2657,7 @@
                 },
                 {
                   "kind": "repo_path",
-                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
                 },
                 {
                   "kind": "literal",
@@ -2646,62 +2760,62 @@
         {
           "run_id": "neg8-refcorpus-r01",
           "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r01.json",
-          "sha256": "6bccecc46fe1bd093357d4aa270c19325af28084c6b5bacd0cc3cc6630dd893e"
+          "sha256": "e7a227e01bf23cabb7297f35c4ff1d795503ab6f7809723e95eee000d1457fd0"
         },
         {
           "run_id": "neg8-refcorpus-r02",
           "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r02.json",
-          "sha256": "c9b42b48ad7bd9d815b6cd200072477b1d1874546703f64a9144ea89a37422eb"
+          "sha256": "c2f71f8165d8c2bac7387617b13800a9a8f0d989277bdb886f10d0ee4cd7778b"
         },
         {
           "run_id": "neg8-refcorpus-r03",
           "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r03.json",
-          "sha256": "b46790c56480340275ccd31dccd6e1754d2145cca1782c88b4f51be310bb86c5"
+          "sha256": "b3573b125d26a5011632e8ffe4cb7c016f4d7515e7e9236fa6b521eebd22c4cf"
         },
         {
           "run_id": "neg8-refcorpus-r04",
           "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r04.json",
-          "sha256": "5e0f25d616072fb4fa48cb2b6ccd25f69299c417ea80f35bc99f3733b2980878"
+          "sha256": "fb2617c0ea9d51c95dbd4056772e66499948028bbc3698b8f54617df652c5c6b"
         },
         {
           "run_id": "neg8-refcorpus-r05",
           "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r05.json",
-          "sha256": "6606cb9963839bd6bd2715fa84afccd56db0f3273c3e162a15e6117768159564"
+          "sha256": "5dc5fed92a0a0a1c6d37dc4e82264fce77540bb73768455a038c2b26ea4f098d"
         },
         {
           "run_id": "neg8-refcorpus-r06",
           "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r06.json",
-          "sha256": "6fae93773ce9b69c1c192a24f43622939a094bd4e2296267b421fb59aa3951e9"
+          "sha256": "388c0de4f5c804d4a26669be093fbc7286f371033358f0db43a281db3cd73f2a"
         },
         {
           "run_id": "neg8-refcorpus-r07",
           "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r07.json",
-          "sha256": "dab4a8a5f727df0da02c542a584a9582f079450e7e716b1c99b67844b71b0fe4"
+          "sha256": "2f27b299a3b5abb35e7405e60146fce966cc1de86589768517d9811930e248f8"
         },
         {
           "run_id": "neg8-refcorpus-r08",
           "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r08.json",
-          "sha256": "7d842daf967a1d7a4c47c35eb3cac139122c3bdb2707eaad2578d20e5c75594d"
+          "sha256": "05158a589d0d40180d576beb11fe9d108f0618acf4cded24075ca07d3b26293c"
         },
         {
           "run_id": "neg8-refcorpus-r09",
           "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r09.json",
-          "sha256": "547a3b0d7bd5f3b55f72a8d64cefc8698e25df927dd6fdd3a64103b6073ecadd"
+          "sha256": "ec69d73ad8dbc171b91a2b069ddf5254ab61421ac671c1c23c11c61312efdb1d"
         },
         {
           "run_id": "neg8-refcorpus-r10",
           "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r10.json",
-          "sha256": "c688d052cac174b56fb7a8229fabe1f648959fe017797395acde33b8f91e1a8d"
+          "sha256": "83a094a81ee4fd92b8bd35030da94deec5405220e40952f3e29dd28cff9ca361"
         },
         {
           "run_id": "neg8-refcorpus-r11",
           "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r11.json",
-          "sha256": "2b85317e04427ff315ec07503d2cd718b300ae46011be1f11dcc4fd13a4a01d9"
+          "sha256": "de18b97dd27333a1796bd376d0618ad53f1186780078bb7e9412b3433b9ee604"
         },
         {
           "run_id": "neg8-refcorpus-r12",
           "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r12.json",
-          "sha256": "2a7c24642198d4774072c0e946cf165f7510ef6ae50c96f589c1ac6f816ae46d"
+          "sha256": "7f83d942b2f1e8d8017572794af9ddc35f4d9a58f45d32745412d6b477701796"
         }
       ]
     },
@@ -2720,17 +2834,31 @@
         {
           "run_id": "neg8-window-start-r1",
           "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r1.json",
-          "sha256": "353b6633bb28c09ca2add77b4ce3db2e73952e7a3eb53c4e1dfa08259e9fb478"
+          "sha256": "b53803244ff03c924e0cd602a16dcc17d4d46c5366ff00e4cf829cdfed959d73"
         },
         {
           "run_id": "neg8-window-start-r2",
           "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r2.json",
-          "sha256": "f1bcb1b5323562e738893f94ce7acf867d39543d5bee58a7a165600b98420013"
+          "sha256": "476e8bed55fca99b56ab736cc7ccaf2725d0fabd55959f8a5ecf27af51691ed6"
         },
         {
           "run_id": "neg8-window-start-r3",
           "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r3.json",
-          "sha256": "6a5ac82869c38922c543c8d9c7d64e1fc8dc8d166afeffc8c78b1fb75c4b0847"
+          "sha256": "ff5c1ca2cc03caae9adc9e14a60bc9a362089d4490d106e4e8d67b719acf3bf9"
+        }
+      ]
+    },
+    {
+      "input_id": "decode_midpoint_reference",
+      "manifest_path": "configs/campaigns/gamma_interior_references_v5/decode_midpoint/order_manifest.json",
+      "manifest_sha256": "3c95f138a3757e6ee9cfa8c2d102b8e93eb3a46377c0090f8b3cd9db95b60b53",
+      "manifest_id": "gamma-interior-reference-decode-midpoint-v1",
+      "expected_count": 1,
+      "members": [
+        {
+          "run_id": "gamma-interior-reference-decode-midpoint",
+          "path": "configs/campaigns/gamma_interior_references_v5/decode_midpoint/gamma-interior-reference-decode-midpoint.json",
+          "sha256": "5eeb82d15294dbdd74aec4fa511281b872709db0e5691277c600428fb5cd6c73"
         }
       ]
     },
@@ -2744,7 +2872,21 @@
         {
           "run_id": "neg8-window-midpoint",
           "path": "configs/campaigns/window_references_v5/midpoint/neg8-window-midpoint.json",
-          "sha256": "1332cf4a4e48ac9d8f6be3593270084089b5e7e74953aa4aee43084b231041af"
+          "sha256": "9d654558c197d18330f0e5fee33ea84fff62e74e311816b783a8ba5857309024"
+        }
+      ]
+    },
+    {
+      "input_id": "prefill_midpoint_reference",
+      "manifest_path": "configs/campaigns/gamma_interior_references_v5/prefill_midpoint/order_manifest.json",
+      "manifest_sha256": "07bfed5eb7c8c09d3b3c2115e7ac12b3667bf0748d0deee4d6326d331db187bd",
+      "manifest_id": "gamma-interior-reference-prefill-midpoint-v1",
+      "expected_count": 1,
+      "members": [
+        {
+          "run_id": "gamma-interior-reference-prefill-midpoint",
+          "path": "configs/campaigns/gamma_interior_references_v5/prefill_midpoint/gamma-interior-reference-prefill-midpoint.json",
+          "sha256": "7e3ea1976ac358da62a864f2b7be3a2504c19022cf7ad9bfd81702ae050ba101"
         }
       ]
     },
@@ -2758,17 +2900,17 @@
         {
           "run_id": "neg8-window-end-r1",
           "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r1.json",
-          "sha256": "62e16d11cd4d3c5d44744ff390374ea009a6fae8988845e1f82a860e28571bd0"
+          "sha256": "2ab090947a29b42e7c1886a66ed201a01442fe65e0e3f4ee21050e202385b1ab"
         },
         {
           "run_id": "neg8-window-end-r2",
           "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r2.json",
-          "sha256": "3c85f630e6eb0002dfdfdb5ce09816497298b9fbec546e66390723a7d8dea2e8"
+          "sha256": "030341d83440b94c4bd5af5e9cf69637f57b77ef6f313dea69ad84cecb4c8ce4"
         },
         {
           "run_id": "neg8-window-end-r3",
           "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r3.json",
-          "sha256": "aa0933348c3afd0d925a841a23701559324e4204f6dad21a5ace939134b7d535"
+          "sha256": "1fa5258a37bc5c772e22566328b321586917872444e675831f032ce445268c80"
         }
       ]
     }
@@ -2879,83 +3021,83 @@
           "config_inventory": [
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a1.json",
-              "sha256": "a759df76561a351488e2da1b88c667c4163f1c09dbd7e857efe469130125647f"
+              "sha256": "132b33a8ee2718c17a15a532175c80069df3c11cfa98d8b19d468ba86e2b0af4"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a2.json",
-              "sha256": "ff75a3dc0ee6c992c2ee4356204ac0598255e0ba71f354c71ea0e70dc5a318e3"
+              "sha256": "c0e9f01845f4c5f72a09fb9d159bda2897de0ff718a81fced7d5b49917c1763e"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-a1.json",
-              "sha256": "98d5ff0ce994915a3823b8038910153000431d4c5b634e82cb689e3bcea08cb4"
+              "sha256": "2ec0db0d1597828ce7387cd18227e0410fd87164448bf2b0a6a28b7bbca5f0fd"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-a2.json",
-              "sha256": "22867c69b4b24947a3114f9f7113b9df6069bea59e90dd8fb19f5d4aec04c9ba"
+              "sha256": "a64fd327ad42fd7918ae5c8cef1820e53595cf972d8c97df4ef8d3e70c66e7db"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-a1.json",
-              "sha256": "c80f58d8ba8ddf283730ceb7a660466d1c0dbbcb31859b6e02ce7aadb209b98e"
+              "sha256": "b47b2d2d8bf3027205c71e84e4fea8adaa3cefdeeb61fd084135a91cae50582b"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-a2.json",
-              "sha256": "ead5dce9a7fa20608cca889cea46598f9d21a164402d9cd65a2b66a8405aa121"
+              "sha256": "e99d88b4006cd51309cd52e879f12d7e86049078b098818ae7161200c531ca57"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-a1.json",
-              "sha256": "ce5c905f4757252ae50b0144298e966f44af39b2abf86614f728a952bfa1151c"
+              "sha256": "52357e0aebbdba596124de024effd302ad26b03d06cf9e18dfe0b609b4c45f67"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-a2.json",
-              "sha256": "ffee644a9b10e1b35065f27e767b27f4767b1c685c40e163213cf6d64a69326a"
+              "sha256": "db94df5e14e1cad32de8b58c333d355b0b744e5ab3ce9cc7ef62e2d44ee2f090"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-a1.json",
-              "sha256": "65cdd63e4cbe9e623d175ea0234246179623db48cc656d583fa45443e21bab8d"
+              "sha256": "a803df2abbf085487c27977b22f1d74701f3d57a2b532793dce19b7b28b05fd7"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-a2.json",
-              "sha256": "4df7e4486bb339bf8c3383ddcab1db18dfd1d00828be888dc9c10cd331e9b59f"
+              "sha256": "2cac3238810bc648979514b1873b1b3eaee7575aeaa31f62f54f2c69ac7fc621"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-a1.json",
-              "sha256": "2001faa115d3d2f0604dabb1791466518146cfb5e765ed42fb22fa27d426a6bf"
+              "sha256": "a3f2e22d9e800078b93e8d2e99d8cdd2b4f6773319b69d7020aa90780c560a41"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-a2.json",
-              "sha256": "7fadd4b6c49de3b1774fb6dfd6a296c4a349f8295a6c963283baa9ff9a657d83"
+              "sha256": "2a82210597dfc6cfb758739b5bb20cad573d999f0b774eb42fb363b0227e69b6"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-a1.json",
-              "sha256": "9cc574a7558c5e26de08748ebb2d3b364ee201e13592f4a9061b0414f6895a5b"
+              "sha256": "4ff04f814d5cc39f818e1623a1862dd99f85da84196ca8f6e11def3264f4db75"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-a2.json",
-              "sha256": "1777f11dc32b66b705223de50084329ccd0fce69bb99cf27f5750cc569207e6a"
+              "sha256": "42f35c180b922792295b284892d65a43e7db4a6163ca16a7e7f71cc78ee85b18"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-a1.json",
-              "sha256": "6517d184a6c92821613dffde0d2e046e5be3b5c7316782f3dadc7b88a8a119f8"
+              "sha256": "11c482664e70e5b829b4075ddbc04ca1ffbff72a94315bb79a7a3e6a16291a67"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-a2.json",
-              "sha256": "12763229d6a753497330ba4a33cf08d0bf2944327f388bfed92ceeeb8144ecc0"
+              "sha256": "17b754ceb0d7923eecadd2bf17c429d703bae09e8cc97c87ff39737ff629ccdc"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-a1.json",
-              "sha256": "aa6db54309d8321bfeec23b8c91a1311c5c62cd590e9259aa4fc28c9037f592c"
+              "sha256": "e3760026e8bbec8cc2c0ffe4b10a4deda8827dc94dd6188a61638f8db886992c"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-a2.json",
-              "sha256": "299a144c7b2ded796e7f1741feecdd92c0503c4ecd19a175be67066c2ff62f27"
+              "sha256": "69530cd03638815ef78452edfabcd284bb00c62de589c72808a9b57188f8b2d4"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-a1.json",
-              "sha256": "6f2aa4e003ae9426c29eedc75b751b1a4b69d2e573ac0d5534f2704c5b377f70"
+              "sha256": "ff05cba792090386ac0197028748580747dc6cbf740bff5ed5d63e0c84021103"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-a2.json",
-              "sha256": "87dd70260280eb0054bca65c5b5a6e75ef4a589727a0a3fb48da329a3bc14f40"
+              "sha256": "52b0edc7b7d39817f771e3d47a4e8404a620ec507f051ea4b363960e9fec9fc3"
             }
           ],
           "model_runtime_config": {
@@ -3008,83 +3150,83 @@
           "config_inventory": [
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a1.json",
-              "sha256": "2b511e961925807a66ad9c9fb55b8e7cb8eac59a01004a3d5c8ae46af0c65936"
+              "sha256": "9424fa822da257659aa8c9820dd308db50d1c3643b1f62162f5dbabc0f37b84b"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-a2.json",
-              "sha256": "94bf97af201c6f23c1eb9b11265c71c4f08c4fe480aa67a3a6794c11846d18fa"
+              "sha256": "833aef8b871f31a6342174c90ba68534958d71957e5403a58bc0c91f304de322"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a1.json",
-              "sha256": "1c403a897ef2634c9575ea8d6bf63ea7ef41c5ecca1912f87902715063fe14bd"
+              "sha256": "92165a908004ff7c8d63ac678fbc6bf7609942e49b412ff6cf18151ce981c11f"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-a2.json",
-              "sha256": "df96ac1552fe8c6d14918a29ca96df48c86363c9919a2ed8338a4b52bc22c084"
+              "sha256": "8c230fb0c842a804dbb363dce25d7e0d6485043316fa8a234c4be9fd43b423ca"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a1.json",
-              "sha256": "3924283711bc7435795360dbe3d6204b0d23bc3c90770c47e850ddb07ebb82fd"
+              "sha256": "da2e4c2e896ddeb46fe6e81b072acb65f29c86bb5001433a50483eaf1b39d959"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-a2.json",
-              "sha256": "588f2221cd27158dd9dea6b4f0d10d77d20c3d6c22b1e7c980e5849ac8f7c649"
+              "sha256": "76e303f95824919444ca68984c84cb18178c0ed207cd5751626cdd2b79af2553"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a1.json",
-              "sha256": "14eb4ca8073954ede3b93581e84a77837517dc516595cd76deea691e1ab33215"
+              "sha256": "26f2c0a3779160591104d9efcd7294ccf695c02722b9e1c000d64842f2214346"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-a2.json",
-              "sha256": "2895b77dbbdd1ad6a557d1ea5b201ceac41339cc6224ffd516f3155f610eca5a"
+              "sha256": "79c4051cfe7607f441ab8ef00b0e02d3197d577a94e4cb4d6a4e1db59914bb5b"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a1.json",
-              "sha256": "6d27df29d2df683a59dcb59935e751ab7ac8503f7ce494f641358a23e37c857b"
+              "sha256": "10984d4eb42a4714415d40519cdfef050c5fec187b4a6a713ed84ad2f35a187d"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-a2.json",
-              "sha256": "bc3c1ef74f0b873e6d0e684242e58a75cf3fcabe229d1da35b894282466cb792"
+              "sha256": "a4d1bbef7bb4886e01508f90c83ee4b21ed6339f189068c39bb4289530ba7ae1"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-a1.json",
-              "sha256": "e6420d18f5ae9046bac31283d74586807ed5ec30626732db9e37ae99bb4191b2"
+              "sha256": "3eb900114562630b4a53c6dd3610ffbbb3ec22673516ccbd9204ef22d16059de"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-a2.json",
-              "sha256": "76698f458902c56e403e3a040fc6b5c86f90eedc8ef460c8c765f761b577d59b"
+              "sha256": "6aafcda13f6120eb64e67102749e0cefcb0c6124112b16f0bd3b8b425b1061e9"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-a1.json",
-              "sha256": "d87230c9fc1116b566b7d813b1bfb26cd367f1216330ebdb0c3cc4cac69c8d7f"
+              "sha256": "02733d54b7b899ea412fdcbca6fcb46bb509b54e118c611d705584a54a5c66fb"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-a2.json",
-              "sha256": "a66817dfc36df94cf619cb6219dfe368816fec0e1094dcd34feb946b84a6cea2"
+              "sha256": "01d58b4ee985ba88194918be9d44e4541794d4f1fdd133aedc359995cea3052b"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-a1.json",
-              "sha256": "d1b14aeaeb900faa4df74bf8dded2ced318ee71c966310bd51ecf186dc24fd79"
+              "sha256": "0aaff272c9e26be2d6b2222b312815b573480c9505d7f76195a330733201ba85"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-a2.json",
-              "sha256": "8b8a12f9b0bdf98c3a2c2f9a90508da66c962926815100cacf9edd3f9acb9eda"
+              "sha256": "e18eed91a7e7d5d64f10ea0d6d0d0ef96a7ba970c3a98f930bd4d17ceb0ab589"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-a1.json",
-              "sha256": "8252f8b7cdb86ea193777696515a2c7bb8c757e7b00dbe27debc39eb8d17f03c"
+              "sha256": "3f82724e41dc7347ebd27dcd28c2c30dac686107dc0b72e32df702d9947f6a52"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-a2.json",
-              "sha256": "4cd8768a4f94f543cb3a566702cd2a9850e3cd5597c64317c4958a4c2eec1f7d"
+              "sha256": "290dc8e9878839fcefbc65142cece809fb23131365d287c1ffa895c5e4c7aaba"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-a1.json",
-              "sha256": "495aef6a364a6b30f9cb56aba67863db176dc16931a9f8a770a41b2e2a6c6823"
+              "sha256": "b75cd505a76cd30612d53e00764afe016bb346cecf0d2a11f9c0c7c1c08ffe86"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-a2.json",
-              "sha256": "e45f5929b45ccdddfdbc3d4f2b5f44851261a8ad0ff422093866a4b82e9cfceb"
+              "sha256": "00c635601f69dad0a0742a5c8da2e2d70c42e43053d3abd6fb3ad0b2c73ec923"
             }
           ],
           "model_runtime_config": {
@@ -3138,83 +3280,83 @@
           "config_inventory": [
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1.json",
-              "sha256": "82995cf098267785b541ee45f163aae2e0b6f485472733a9d787521ed92d6cad"
+              "sha256": "4566b18d26ca744b00ae690572ee0cfef003c2f0c2194419c48f3944e24e14c3"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b2.json",
-              "sha256": "e234fabfd5a5e69f8b5a64659a3f9dde8b080d628fdb449b5635771920210503"
+              "sha256": "98d272e33f6ac7f39aaac1b345a62ffd4ece472ad2ead6c819efd434004d910b"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-b1.json",
-              "sha256": "f194a0997e00ca4c679d2e1b08c25d45a3d4a20a466fc54098ac9b4fed5344c7"
+              "sha256": "640a002b1f14e7db91051629b4e58ba3cebec5a3420c8b0ce9cb0d8c53257b2f"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b02-b2.json",
-              "sha256": "beeec9dbd4a1e370b131e4bdca17d56db447b0d640c05da3068b1e042912a125"
+              "sha256": "f38da9f28afab367e5a05a133122b00ce2e1a455a15778ac5f6a01701bcd9a31"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-b1.json",
-              "sha256": "56cf93554b0b3141a4d0c28b40009872a793d3575311c9986de592f9fa49646f"
+              "sha256": "93c92488ca7080961eda8890ac811501e97eeb67a02ac2fc0c99215c43bdb551"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b03-b2.json",
-              "sha256": "8e54e579468e89dd36f051e530b8f78c1e657fd2a3870c08b71088dbed36b340"
+              "sha256": "4717f056830f9a929d768552af5567e17dc1b012132fac83a8e7068fa78bf914"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-b1.json",
-              "sha256": "fa6e7431e834ff6e9ff7d45b089df785c8eb27cdf7b56a39a8edd19a09d0ab7c"
+              "sha256": "bd226efd289e60375b23c668bd7c03f8f5ba26c1ce06fc6b54d98624352a9ccf"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b04-b2.json",
-              "sha256": "efcb064abe6d80e7f5966173e112cb40f6622f3a644cddbf582a73f125e16e43"
+              "sha256": "ce696f5fee4637a8c3a8e223e50012abd6ce9fbf04fcb5cd928598587dac5f10"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-b1.json",
-              "sha256": "d338db2156b9d4edc800921924422fdfd9b297ffd4efa9be107ee3ea1a5c77fa"
+              "sha256": "54c873ee8f8cdcedf43dcf8b414ed1d4eab4a207f77e60537abe240b5afbfc87"
             },
             {
               "path": "01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b05-b2.json",
-              "sha256": "ecfa66bb3ac8d89221da8172459a648fef1ac74f41dd9425699cfb056d64e2ef"
+              "sha256": "ba6810cd51a9e2c2d594d9654850c2e37eaccf73deee995a96dc2cda10528948"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-b1.json",
-              "sha256": "f67a6082ecd41988e677654a9e3736c8dd9f189d49ddb005732cfb76c418590c"
+              "sha256": "2ac12b60bae2c2c8b3dfd80ee4c95a3002a3d1593f4a7c304f0369a87c0a9476"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b06-b2.json",
-              "sha256": "2d66d41798c197cda9ad0d591dabe9a2771baf5819d009eb8bf2854a330e183f"
+              "sha256": "06ae951d9bb18a8b8edb6eec1c9bf5def6a0d7207e8b6c26d010541868069bc7"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-b1.json",
-              "sha256": "543bbac4c4598463502ad1ffc05f98ab5971f70071b7be8a3897278f8baceba3"
+              "sha256": "5d441c447050380b0722656c340de24f69df14a5ccf73623c6c97d2deef86047"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b07-b2.json",
-              "sha256": "f12950c87b0c0eaa718173051a424354b976685b97d9ba381f15d2923eb3ef2a"
+              "sha256": "82d146d166cd82755bb5db325b4a83b1f2cf0886aad5cd31624c7508d500ceac"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b1.json",
-              "sha256": "666d2aa31eff93835d6d8b8aefd63ecf6aa6cbfec181f2d9dfd44e34849751e2"
+              "sha256": "cde0b94986766e6d86ef6ba25ff989a761a7dfe5364b86c68cf430a61d3da826"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b08-b2.json",
-              "sha256": "79a870739b341c5ca4996eebefcff4924c42e9166a2c54b36effb4e10950b851"
+              "sha256": "7b680e56da70b49b1f0ed71e9433b0c534b4111863e5d799da1bba75bd3d0421"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-b1.json",
-              "sha256": "15420ac36ab4bc40e3a9e95cb214febdbfc4bdac141af95e9bdbf70ece0eea1d"
+              "sha256": "13e11152fa2952086d55c30be4a0cf01adea7fdbabc3533fb9f3cc8168d780c0"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b09-b2.json",
-              "sha256": "17bf391a8c117c914a88126d236242fc0e8ddecdaa6a443e31c43fc1c4867db6"
+              "sha256": "5e420c793356a708cb214eee8b0fb5c2de8d0fd30afa517b64c886f4c6ec0fe8"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-b1.json",
-              "sha256": "86c8104ebfa446a35eab1fba91d7daead79c2478a44317ea72efdf182d746bf9"
+              "sha256": "7c6d261f1e0c64b216b6e9fb89e277504cb13b24bc54c9b53c9f349abb23d4dd"
             },
             {
               "path": "02_decode_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b10-b2.json",
-              "sha256": "c085869b82a252be4fe2b90adb4951069450739d87d7bb8e94f9d584bb213aea"
+              "sha256": "553f250ce769d10ea04dc00a2f400b1f9f2a813aae3721c9c14f3c08939fb481"
             }
           ],
           "model_runtime_config": {
@@ -3267,83 +3409,83 @@
           "config_inventory": [
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b1.json",
-              "sha256": "4f88e6d3e6709b63adc3c1521c8a89340779eb9281b3912204c6fed3ee3e7a16"
+              "sha256": "448f6db0a14cbdc8963ff94a37677d81b7ffc1a9856a06d11d43d7b55a31d3fd"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b2.json",
-              "sha256": "3809342d114961f5fea701ef319233c8c99dba049b3d573874243cf4f6ec81d8"
+              "sha256": "fc58032058e6af1bdf977f41bb9067d4a7a1186b76ebef1475c6bc4917374d58"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b1.json",
-              "sha256": "3c00eb7b061d62ede2b0c04dd8e09d8c13cea8ae81c2f689b170a71334143dde"
+              "sha256": "e0c2626b641085add1b4701694bffd84f6f4f99edb9ec7813d5b17fe94cfdbcd"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b02-b2.json",
-              "sha256": "a99426ea216027e3a98351dab617b5489feecec6776b576a257765f2d3ebeb69"
+              "sha256": "771538dd06726af88c590b5fe4a3918920792a93f64b96e583f5f9b090e4ded2"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b1.json",
-              "sha256": "8f7ad022f069e454c86eb842b731fcb74141b8d44b92a7b0429140d26fff4a70"
+              "sha256": "952fe48ee9e1bbfb21df3e8e1ce121051f981aa24c56045ac19aabfacb424cc3"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b03-b2.json",
-              "sha256": "0e12fa72b2b52dffb0e8211f268b0fd653de6711d886a4310c8ad1cc91bedf7f"
+              "sha256": "59bf5b70f32061594ba083af0512b418c5978b6909ca0821b23e0686056e21fd"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b1.json",
-              "sha256": "3bda2d5753c45f4b90f23fd8a8dfebfe681f1877a96ea0757f728f3aaabbef0a"
+              "sha256": "3425c26e6afdd863b283d3acbe8f187880cfbcb614bbfca9bdc46a787fb38f1a"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b04-b2.json",
-              "sha256": "455d484ef83809ee2a8dece4c58e62a3eeabe0d2a07877a8b089cbcf8390ed8c"
+              "sha256": "34a5ed4987739e4dcad5e17e317393e8a3b0ea600a3a9e48e1db9f219c075c35"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b1.json",
-              "sha256": "1ff2d42f2c36eb8f06dde40b3b78a1892a01ba36ac77eeeea3367298ba1a1981"
+              "sha256": "676436956e01a3a9d7e79cc07f11d90d9bef5da3264c275ef3712e1fe2ce8c06"
             },
             {
               "path": "03_prefill_p2048_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b05-b2.json",
-              "sha256": "9acebceec7c6dfef2e3b7171ff53dc6379b6df7132a1e02ad51fca167c8bbc66"
+              "sha256": "eea7c618681e68e4f78f7e37e8910209e4dbfae5e1c5a9a90749a2994180ea4d"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-b1.json",
-              "sha256": "c65eb23db554fb25cafeebf35e7c09f93ee6de6224cdc0fe99ad694573414169"
+              "sha256": "2227816a9481fb2952242b9ebac6f83c49beec428cf5cf072bf34a7a7dbe0e66"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b06-b2.json",
-              "sha256": "94505c39c77d93e765fa92ad5b493e6bbdc1ec9d685909067f27be5079e05c94"
+              "sha256": "a234d74a0fbcf7fc36c0f676578794cade09957f6d1895603dea99cef80fae6c"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-b1.json",
-              "sha256": "918eb3f11ece27167ee2e9e9736ea92e63a60d8cd0c3e7287ae5f8eb5508e75a"
+              "sha256": "bf074cdd3abcbc0b475577ec0514668c91266728ca91eaeb64c88619f3ff644d"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b07-b2.json",
-              "sha256": "ca9f4d1eb9862f42dc63f3d311094109e5bbe4d5b6f4bb0216d5657e50d4f657"
+              "sha256": "ea2a423de420089d773aa83409d2247a2a8d9d0e1ca4a9a1f3c7226432dc5fde"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-b1.json",
-              "sha256": "f4a14fe7b58d31325936550c5c8c13b2dcf193d0191a749bbdde7c3940ab87b4"
+              "sha256": "337c3a57cd19d3c08302595f8ebcff5bf08be59377f173b4dca635f5cfa5c3e6"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b08-b2.json",
-              "sha256": "5c09808d32a2eba36f4d0d08c5d7d2a3006c29269b9d7d413183d371351f54ab"
+              "sha256": "74c6ca7fbb87e6ad43a6fda705388e9e69e55fdf3d326ec81360acd1720f001c"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-b1.json",
-              "sha256": "13148209d982c604c05c2b9d43b10a16cf1c36df160f2d0e22bf49db7011caac"
+              "sha256": "a9d937b5a68846740c916743a293c58a4006da9c333c2e6249bfab3da95999f9"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b09-b2.json",
-              "sha256": "ed67016b7f42a681233c179c566c3cad09277a690106800d5086fee8092baced"
+              "sha256": "a4a9f0b754dbf07fd8097233267ae8cb7ccd3ea89ef0c8e15841e4971fb7f069"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-b1.json",
-              "sha256": "fbc0f698e89c1afb5e28ed74b25089dc940d1b82572603c995c2aad9fcb64b2a"
+              "sha256": "92d677c49edaf058d2075db03eb85700928fbca07131a5d7bd81dc8e12535d57"
             },
             {
               "path": "04_prefill_p2048_contrast_blocks_06_10/d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b10-b2.json",
-              "sha256": "61e7e8b1fd7c2f11ad0091f2ae820bc6fc107c6f3ac865bf8dbb5a3a3e689d7f"
+              "sha256": "7a4c97a253cc6b56caf820208a80ec49b6f1ac0f35677367cc107760ed5ea74a"
             }
           ],
           "model_runtime_config": {
@@ -3513,7 +3655,7 @@
   },
   "downstream_contract": {
     "analysis_manifest_path": "analysis_manifest_v3.json",
-    "analysis_manifest_sha256": "7607641467cc3737f7ffa17bb2ab9901eb9c0cb750a132b7239f378bd4f1bbb5",
+    "analysis_manifest_sha256": "4342ea609ec7f57fbb21860440995ac8f2038d93ed508f8d7bb72a540c86050d",
     "consumer_family_declaration_path": "consumer_family_declaration.json",
     "consumer_family_declaration_sha256": "2875c95356812799553614b95dfc5c3237fa396dc70c03c71a91c2a764f3e464",
     "binding_mode": "declaration_only"

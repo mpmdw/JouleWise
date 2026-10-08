@@ -59,7 +59,10 @@ from joulewise.calibration_ledger import (
     load_calibration_ledger_snapshot,
 )
 # Pinned verdict descriptors are pointwise dereferences, not catalog discovery.
-from joulewise.campaign_provenance import load_authenticated_campaign_manifest
+from joulewise.campaign_provenance import (
+    load_authenticated_campaign_catalog,
+    load_authenticated_campaign_manifest,
+)
 from joulewise.reduce import (
     _rederive_summary_for_authenticated_fiducial_bound,
     _verify_instrument_calibration,
@@ -132,6 +135,17 @@ NEG8_IDLE_SUB_POINT_DRIFT_ESTIMAND = (
 NEG8_DRIFT_ESTIMATOR_ID = "d054_point_contrast_guard_v1"
 NEG8_DRIFT_MINIMUM_N = 10
 NEG8_REPLICATED_ENDPOINT_N = 3
+# NEG-8 ruling 2026-10-07 (block-5 registration 0.12): the screen runs on the
+# surviving references, two or three at each endpoint and zero or one at the
+# midpoint, with the bound recomputed for the realised endpoint counts.
+NEG8_SURVIVOR_ENDPOINT_COUNTS = frozenset({2, 3})
+NEG8_SURVIVOR_MIDPOINT_COUNTS = frozenset({0, 1})
+NEG8_SURVIVOR_PROTOCOL = "replicated_endpoints"
+NEG8_COUNT_ADJUSTED_BOUND_FORMULA = (
+    "max(max(mean(largest_n_start)-mean(smallest_n_end),"
+    "mean(largest_n_end)-mean(smallest_n_start)),"
+    "t_0.975,n-1*sample_stddev_j*sqrt(1/n_start+1/n_end))"
+)
 NEG8_DRIFT_BOUND_MAX_AGE_S = 86400
 REGISTERED_NEG8_REFERENCE_CORPUS_DIR = (
     Path(__file__).resolve().parents[1]
@@ -1165,6 +1179,23 @@ def neg8_freshness_bindings_from_metadata(
 ) -> dict[str, str] | None:
     """Derive the revalidation binding vector from one reference bundle."""
 
+    fields = neg8_freshness_binding_fields(metadata)
+    if fields is None or any(value is None for value in fields.values()):
+        return None
+    return fields  # type: ignore[return-value]
+
+
+def neg8_freshness_binding_fields(
+    metadata: Any,
+) -> dict[str, str | None] | None:
+    """Each freshness binding of one bundle, ``None`` where it is unrecorded.
+
+    ``neg8_freshness_bindings_from_metadata`` needs all three.  HAZARD_PACK
+    readers use the fields one by one: the calibration identity is a physical
+    fact about the instrument; the os_build and power-supply strings are
+    records, disclosed rather than refused (doctrine 2026-10-05).
+    """
+
     if not isinstance(metadata, Mapping):
         return None
     snapshots: list[Mapping[str, Any]] = []
@@ -1237,15 +1268,11 @@ def neg8_freshness_bindings_from_metadata(
         ),
         None,
     )
-    if (
-        os_build is None
-        or power_identity is None
-        or calibration_sha is None
-    ):
-        return None
     return {
         "os_build": os_build,
-        "power_supply_identity_sha256": canonical_sha256(power_identity),
+        "power_supply_identity_sha256": (
+            canonical_sha256(power_identity) if power_identity is not None else None
+        ),
         "calibration_identity_sha256": calibration_sha,
     }
 
@@ -1278,12 +1305,31 @@ def build_neg8_freshness_observation(
     else:
         binding_status = "resolved"
         observed = dict(next(iter(unique.values())))
+    # The calibration identity resolved on its own (V2, doctrine 2026-10-05):
+    # it alone of the three bindings refuses a bound; os_build and the
+    # power-supply strings are disclosed by evaluate_neg8_bound_freshness.
+    calibrations = [
+        (
+            binding
+            if binding is not None
+            else neg8_freshness_binding_fields(metadata) or {}
+        ).get("calibration_identity_sha256")
+        for binding, metadata in zip(bindings, metadata_values)
+    ]
+    if not calibrations or any(value is None for value in calibrations):
+        calibration_status, calibration = "missing", None
+    elif len(set(calibrations)) != 1:
+        calibration_status, calibration = "conflict", None
+    else:
+        calibration_status, calibration = "resolved", calibrations[0]
     return {
         "evaluated_at_s": timestamp,
         "binding_status": binding_status,
         "bindings": observed,
         "member_count": len(bindings),
         "resolved_member_count": len(resolved),
+        "calibration_binding_status": calibration_status,
+        "calibration_identity_sha256": calibration,
     }
 
 
@@ -1326,7 +1372,26 @@ def evaluate_neg8_bound_freshness(
             triggers.append("freshness_fields_invalid")
         else:
             expires_at = derived_at + max_age
-    if (
+    # An observation built by build_neg8_freshness_observation resolves the
+    # calibration identity separately.  Then only the calibration identity
+    # and the clock decide freshness; os_build and power-supply strings that
+    # are missing, conflicting or changed are disclosed (V2).  Hand-built
+    # observations without that split keep the original all-three rule.
+    split = isinstance(observation, Mapping) and (
+        "calibration_binding_status" in observation
+    )
+    disclosed: list[str] = []
+    if split:
+        if (
+            observation.get("calibration_binding_status") != "resolved"
+            or evaluated_at is None
+        ):
+            triggers.append("freshness_observation_unresolved")
+        elif observation.get("binding_status") != "resolved":
+            disclosed.append(
+                f"binding_observation_{observation.get('binding_status')}"
+            )
+    elif (
         not isinstance(observation, Mapping)
         or observation.get("binding_status") != "resolved"
         or not isinstance(observed, Mapping)
@@ -1350,14 +1415,28 @@ def evaluate_neg8_bound_freshness(
         ("power_supply_identity_sha256", "power_supply_change"),
         ("calibration_identity_sha256", "calibration_identity_change"),
     ):
-        if (
+        if split and field == "calibration_identity_sha256":
+            if (
+                isinstance(artifact_bindings, Mapping)
+                and observation.get("calibration_binding_status") == "resolved"
+                and artifact_bindings.get(field)
+                != observation.get("calibration_identity_sha256")
+            ):
+                triggers.append(trigger)
+        elif (
             isinstance(artifact_bindings, Mapping)
             and isinstance(observed, Mapping)
             and artifact_bindings.get(field) != observed.get(field)
         ):
-            triggers.append(trigger)
+            (disclosed if split else triggers).append(trigger)
     unique_triggers = list(dict.fromkeys(triggers))
+    disclosure = (
+        {"disclosed_binding_changes": list(dict.fromkeys(disclosed))}
+        if disclosed
+        else {}
+    )
     return {
+        **disclosure,
         "decision": "stale" if unique_triggers else "fresh",
         "condition": (
             CONDITION_NEG8_DRIFT_BOUND_STALE
@@ -1828,9 +1907,136 @@ def _endpoint_admissible_summary(values: Sequence[Any]) -> dict[str, Any] | None
     }
 
 
+def neg8_count_adjusted_bound(
+    points: Sequence[float], n_start: int, n_end: int
+) -> dict[str, Any] | None:
+    """The NEG-8 bound for an endpoint pair of ``n_start`` and ``n_end`` references.
+
+    ``points`` are the kept corpus energies of one claim family.  U_j is the
+    mean of the corpus's j largest energies and L_j the mean of its j
+    smallest.  The envelope max(U_ns - L_ne, U_ne - L_ns) is the widest gap a
+    start mean of n_s members and an end mean of n_e members drawn from the
+    corpus itself can show; the prediction term t(0.975, n - 1) * s *
+    sqrt(1/n_s + 1/n_e) is the 95% repeatability bound for a difference of
+    two means of those sizes when nothing drifts.  The bound is the larger
+    (block-5 registration 0.12, NEG-8 ruling decision 3).  ``None`` when the
+    points or counts cannot give one (fewer than two finite points, a count
+    outside 1..n).
+    """
+
+    values = [_finite_number(value) for value in points]
+    if (
+        any(value is None for value in values)
+        or len(values) < 2
+        or any(
+            type(count) is not int or count < 1 or count > len(values)
+            for count in (n_start, n_end)
+        )
+    ):
+        return None  # no bound: the caller's screen has no bound to pass
+    ordered = sorted(float(value) for value in values)
+
+    def upper(count: int) -> float:
+        return statistics.fmean(ordered[-count:])
+
+    def lower(count: int) -> float:
+        return statistics.fmean(ordered[:count])
+
+    envelope = max(upper(n_start) - lower(n_end), upper(n_end) - lower(n_start))
+    prediction = (
+        student_t_critical_95(len(ordered) - 1)
+        * statistics.stdev(ordered)
+        * math.sqrt(1.0 / n_start + 1.0 / n_end)
+    )
+    return {
+        "n_start": n_start,
+        "n_end": n_end,
+        "envelope_j": envelope,
+        "prediction_j": prediction,
+        "bound_j": max(envelope, prediction),
+        "formula": NEG8_COUNT_ADJUSTED_BOUND_FORMULA,
+    }
+
+
+def neg8_family_endpoint_bound(
+    artifact: Mapping[str, Any] | None, family: str, n_start: int, n_end: int
+) -> dict[str, Any] | None:
+    """``neg8_count_adjusted_bound`` for one claim family of a derived bound artifact.
+
+    At the planned shape (3, 3) and the legacy shape (1, 1) the artifact's own
+    stored terms are returned, so every bound minted before the survivor rule
+    replays to the same bytes; any other shape is computed from the
+    artifact's corpus members.  ``None`` when the artifact cannot supply it.
+    """
+
+    families = (
+        artifact.get("claim_family_bounds")
+        if isinstance(artifact, Mapping)
+        else None
+    )
+    family_record = families.get(family) if isinstance(families, Mapping) else None
+    estimator = (
+        family_record.get("estimator")
+        if isinstance(family_record, Mapping)
+        else None
+    )
+    if not isinstance(estimator, Mapping):
+        return None
+    stored = {
+        (NEG8_REPLICATED_ENDPOINT_N, NEG8_REPLICATED_ENDPOINT_N): (
+            "replicated_endpoint_sample_range_j",
+            "prediction_two_endpoint_means_j",
+            "replicated_endpoint_bound_j",
+        ),
+        (1, 1): (
+            "sample_range_j",
+            "prediction_two_point_j",
+            "single_member_endpoint_bound_j",
+        ),
+    }.get((n_start, n_end))
+    if stored is not None:
+        envelope, prediction, bound = (
+            _finite_number(estimator.get(field)) for field in stored
+        )
+        if envelope is None or prediction is None or bound is None or bound <= 0.0:
+            return None
+        return {
+            "n_start": n_start,
+            "n_end": n_end,
+            "envelope_j": envelope,
+            "prediction_j": prediction,
+            "bound_j": bound,
+            "formula": NEG8_COUNT_ADJUSTED_BOUND_FORMULA,
+        }
+    corpus = artifact.get("reference_corpus") if isinstance(artifact, Mapping) else None
+    members = corpus.get("members") if isinstance(corpus, Mapping) else None
+    point_field = family_record.get("point_field")
+    if not isinstance(members, list) or not isinstance(point_field, str):
+        return None
+    terms = neg8_count_adjusted_bound(
+        [
+            member.get(point_field) if isinstance(member, Mapping) else None
+            for member in members
+        ],
+        n_start,
+        n_end,
+    )
+    return terms if terms is not None and terms["bound_j"] > 0.0 else None
+
+
 def _family_bound(
-    artifact: Mapping[str, Any] | None, family: str, protocol: str
+    artifact: Mapping[str, Any] | None,
+    family: str,
+    protocol: str,
+    *,
+    n_start: int | None = None,
+    n_end: int | None = None,
 ) -> float | None:
+    if protocol == NEG8_SURVIVOR_PROTOCOL:
+        if n_start is None or n_end is None:
+            return None
+        terms = neg8_family_endpoint_bound(artifact, family, n_start, n_end)
+        return terms["bound_j"] if terms is not None else None
     families = (
         artifact.get("claim_family_bounds")
         if isinstance(artifact, Mapping)
@@ -1878,14 +2084,50 @@ def _family_drift_record(
     trajectory_points = [float(start["mean_j"]), float(end["mean_j"])]
     if midpoint is not None:
         trajectory_points.insert(1, float(midpoint["mean_j"]))
+    # A lost midpoint leaves the two-value spread |end mean - start mean|.
     excursion = max(trajectory_points) - min(trajectory_points)
-    derived_bound = _family_bound(artifact, family, protocol)
+    survivor_terms = (
+        neg8_family_endpoint_bound(
+            artifact, family, int(start["n"]), int(end["n"])
+        )
+        if protocol == NEG8_SURVIVOR_PROTOCOL
+        else None
+    )
+    derived_bound = (
+        survivor_terms["bound_j"]
+        if survivor_terms is not None
+        else None
+        if protocol == NEG8_SURVIVOR_PROTOCOL
+        else _family_bound(artifact, family, protocol)
+    )
     allowance = (
         max(excursion, derived_bound)
         if derived_bound is not None
         else None
     )
+    survivor_fields: dict[str, Any] = (
+        {
+            "endpoint_counts": {
+                "start": int(start["n"]),
+                "midpoint": int(midpoint["n"]) if midpoint is not None else 0,
+                "end": int(end["n"]),
+            },
+            "bound_envelope_j": (
+                survivor_terms["envelope_j"] if survivor_terms is not None else None
+            ),
+            "bound_prediction_j": (
+                survivor_terms["prediction_j"]
+                if survivor_terms is not None
+                else None
+            ),
+            "bound_formula": NEG8_COUNT_ADJUSTED_BOUND_FORMULA,
+        }
+        # The planned (3, 1, 3) and legacy records keep their historical bytes.
+        if protocol == NEG8_SURVIVOR_PROTOCOL
+        else {}
+    )
     return {
+        **survivor_fields,
         "claim_family": family,
         "endpoint_protocol": protocol,
         "start": dict(start),
@@ -1940,8 +2182,24 @@ def evaluate_neg8_point_drift(
     midpoint_idle_subtracted_j: Any = None,
     window_duration_s: Any = None,
     bound_freshness_observation: Any = None,
+    lost_references: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Gate both claim families and mint non-vanishing drift allowances."""
+    """Gate both claim families and mint non-vanishing drift allowances.
+
+    ``lost_references`` (NEG-8 ruling 2026-10-07, registration 0.12) lists
+    the references the caller dropped before aggregation, each
+    ``{bundle_id, position, reason}``; the values passed are the survivors.
+    The planned shape (3, 1, 3) is ``replicated_endpoints_with_midpoint``; any
+    other survivor shape with two or three references at each endpoint and
+    zero or one at the midpoint is ``replicated_endpoints``, screened against
+    the count-adjusted bound.  The legacy single pair (1, 0, 1) is accepted
+    only when no reference was lost, so a modern roster that lost references
+    never downgrades to it.  Fewer than two survivors at an endpoint, or more
+    references than planned, is ``neg8_bracket_reference_invalid``; with a
+    loss behind it, or on a planned roster (a midpoint, or a full triplet at
+    an endpoint) whose missing references were never run, the record names
+    ``references_insufficient``.
+    """
 
     conditions: set[str] = set()
     artifact = (
@@ -1987,7 +2245,14 @@ def evaluate_neg8_point_drift(
         len(midpoint_idle_values),
         len(end_idle_values),
     )
-    if gross_counts == (1, 0, 1) and idle_counts == (1, 0, 1):
+    losses = [
+        dict(item) for item in (lost_references or ()) if isinstance(item, Mapping)
+    ]
+    if (
+        gross_counts == (1, 0, 1)
+        and idle_counts == (1, 0, 1)
+        and not losses
+    ):
         protocol = "legacy_single_member_endpoints"
     elif (
         gross_counts
@@ -1999,6 +2264,13 @@ def evaluate_neg8_point_drift(
         and idle_counts == gross_counts
     ):
         protocol = "replicated_endpoints_with_midpoint"
+    elif (
+        gross_counts[0] in NEG8_SURVIVOR_ENDPOINT_COUNTS
+        and gross_counts[1] in NEG8_SURVIVOR_MIDPOINT_COUNTS
+        and gross_counts[2] in NEG8_SURVIVOR_ENDPOINT_COUNTS
+        and idle_counts == gross_counts
+    ):
+        protocol = NEG8_SURVIVOR_PROTOCOL
     else:
         protocol = "invalid"
     if not start_gross_values or not end_gross_values:
@@ -2013,7 +2285,9 @@ def evaluate_neg8_point_drift(
     midpoint_idle = _endpoint_point_summary(midpoint_idle_values)
     end_idle = _endpoint_point_summary(end_idle_values)
     required_summaries = (start_gross, end_gross, start_idle, end_idle)
-    if protocol == "replicated_endpoints_with_midpoint":
+    if protocol == "replicated_endpoints_with_midpoint" or (
+        protocol == NEG8_SURVIVOR_PROTOCOL and gross_counts[1] == 1
+    ):
         required_summaries = (*required_summaries, midpoint_gross, midpoint_idle)
     if any(summary is None for summary in required_summaries):
         conditions.add("neg8_bracket_reference_invalid")
@@ -2030,6 +2304,7 @@ def evaluate_neg8_point_drift(
         and end_idle is not None
         and (
             protocol == "legacy_single_member_endpoints"
+            or (protocol == NEG8_SURVIVOR_PROTOCOL and gross_counts[1] == 0)
             or (midpoint_gross is not None and midpoint_idle is not None)
         )
     ):
@@ -2114,10 +2389,65 @@ def evaluate_neg8_point_drift(
         decision = "failed"
     else:
         decision = "passed"
+    # A planned roster short of references with no loss recorded: a reference
+    # whose stage never ran it is absent from every list (cold pass 2 N3).  A
+    # midpoint, or a full triplet at an endpoint, is never the legacy pair.
+    short_planned_roster = bool(
+        not losses
+        and gross_counts[0] <= NEG8_REPLICATED_ENDPOINT_N
+        and gross_counts[1] <= 1
+        and gross_counts[2] <= NEG8_REPLICATED_ENDPOINT_N
+        and (
+            gross_counts[1] == 1
+            or NEG8_REPLICATED_ENDPOINT_N in (gross_counts[0], gross_counts[2])
+        )
+        and min(gross_counts[0], gross_counts[2])
+        < min(NEG8_SURVIVOR_ENDPOINT_COUNTS)
+    )
+    # Recorded only when a reference was lost or the survivor protocol ran, so
+    # a full (3, 1, 3) or legacy bracket keeps its historical bytes.
+    survivor_record: dict[str, Any] = (
+        {
+            "reference_counts": {
+                "start": gross_counts[0],
+                "midpoint": gross_counts[1],
+                "end": gross_counts[2],
+            },
+            "planned_reference_counts": {
+                "start": NEG8_REPLICATED_ENDPOINT_N,
+                "midpoint": 1,
+                "end": NEG8_REPLICATED_ENDPOINT_N,
+            },
+            "reference_losses": losses,
+            "midpoint_lost": protocol == NEG8_SURVIVOR_PROTOCOL
+            and gross_counts[1] == 0,
+            "survivor_screen": (
+                "references_insufficient"
+                if (losses or short_planned_roster)
+                and (
+                    gross_counts[0] < min(NEG8_SURVIVOR_ENDPOINT_COUNTS)
+                    or gross_counts[2] < min(NEG8_SURVIVOR_ENDPOINT_COUNTS)
+                )
+                else "more_references_than_planned"
+                if protocol == "invalid"
+                and (
+                    gross_counts[0] > NEG8_REPLICATED_ENDPOINT_N
+                    or gross_counts[1] > 1
+                    or gross_counts[2] > NEG8_REPLICATED_ENDPOINT_N
+                )
+                else "invalid"
+                if protocol == "invalid"
+                else "evaluated"
+            ),
+        }
+        if losses or protocol == NEG8_SURVIVOR_PROTOCOL or short_planned_roster
+        else {}
+    )
     return {
         "schema_version": NEG8_BRACKET_SCHEMA,
         "estimand": NEG8_POINT_DRIFT_ESTIMAND,
         "endpoint_protocol": protocol,
+        **survivor_record,
         "decision": decision,
         "passed": decision == "passed",
         "conditions": sorted(conditions),
@@ -2448,6 +2778,8 @@ def _authenticated_bundle_launch_lineage_set(
     """Directly authenticate one identical lineage across exact bundles."""
 
     lineages: list[dict[str, Any]] = []
+    tagged_paths: list[Path] = []
+    untagged_paths: list[Path] = []
     for path in bundle_paths:
         config = _read_json_object(path / "config.json")
         metadata = _read_json_object(path / "metadata.json")
@@ -2468,8 +2800,13 @@ def _authenticated_bundle_launch_lineage_set(
                 if isinstance(raw_lineage, Mapping)
                 else dict(authenticated)
             )
+            tagged_paths.append(Path(path))
+        else:
+            untagged_paths.append(Path(path))
     if not lineages:
         return None
+    if _any_hazard_lineage(lineages):
+        return _hazard_member_lineage(lineages, tagged_paths, untagged_paths)
     if len(lineages) != len(bundle_paths) or len(
         {canonical_sha256(lineage) for lineage in lineages}
     ) != 1:
@@ -2480,13 +2817,184 @@ def _authenticated_bundle_launch_lineage_set(
     return lineages[0]
 
 
+# ---------------------------------------------------------------------------
+# HAZARD_PACK windows (joulewise.hazard_window_lineage.v1)
+#
+# A block-5 window's lineage is published once, before the chain starts, into
+# its two dedicated runs roots.  Only members whose config carries the
+# ``launch_lineage_required`` tag (the science members) stamp it into their
+# bundles; NEG-8 daily references, auxiliaries, the calibration captures and
+# the NEG-8 reference corpus are collected from untagged configs and carry no
+# stamp.  The ARM-path rules below would therefore refuse every hazard window
+# (members "do not carry one identical lineage", calibration and bound
+# lineages "absent").  The hazard branch authenticates the same physical
+# facts from bytes the window already preserves instead:
+#
+# * members: every stamp is identical, and every unstamped member sits in the
+#   same runs-root directory as a stamped one (its bytes are pinned by the
+#   evaluation basis's member_occurrences digests);
+# * calibrations: the bracket's pre/post endpoints are the ledger session and
+#   attempts the lineage named before the chain started (the bracket evaluator
+#   already authenticated those endpoints against the ledger), and the evidence
+#   bytes match the bracket's digest;
+# * bound: a consumed bound's reference-corpus members are bundles in the
+#   lineage's bound runs root whose complete file inventories still hash to the
+#   digests the bound recorded.  A bound that was not consumed authenticates
+#   nothing and refuses nothing.
+#
+# Dispatch is on the schema only: no ARM-schema lineage reaches these helpers.
+
+
+def _is_hazard_lineage(value: object) -> bool:
+    from joulewise import window_lineage  # noqa: PLC0415
+
+    return window_lineage.is_hazard_lineage(value)
+
+
+def _any_hazard_lineage(lineages: Sequence[Mapping[str, Any]]) -> bool:
+    return any(_is_hazard_lineage(lineage) for lineage in lineages)
+
+
+def _hazard_member_lineage(
+    lineages: Sequence[Mapping[str, Any]],
+    tagged_paths: Sequence[Path],
+    untagged_paths: Sequence[Path],
+) -> dict[str, Any]:
+    """One hazard lineage across stamped members; unstamped ones by root."""
+
+    if not all(_is_hazard_lineage(lineage) for lineage in lineages) or len(
+        {canonical_sha256(lineage) for lineage in lineages}
+    ) != 1:
+        raise LaunchLineageError(
+            "launch_lineage_conflict",
+            "window members do not carry one identical authenticated lineage",
+        )
+    try:
+        tagged_roots = {path.resolve().parent for path in tagged_paths}
+        stray = [
+            path
+            for path in untagged_paths
+            if path.resolve().parent not in tagged_roots
+        ]
+    except (OSError, RuntimeError) as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"window member path cannot be resolved: {exc}",
+        ) from exc
+    if stray:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "unstamped window member is outside the stamped members' runs root: "
+            + ", ".join(sorted(path.name for path in stray)[:4]),
+        )
+    from joulewise import window_lineage  # noqa: PLC0415
+
+    # "Unstamped" must mean a readable config without the lineage tag, not a
+    # tagged science member whose config.json cannot be read.
+    unreadable = [
+        path for path in untagged_paths if not window_lineage._bundle_config_untagged(path)
+    ]
+    if unreadable:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "window member without a lineage stamp has no readable untagged config: "
+            + ", ".join(sorted(path.name for path in unreadable)[:4]),
+        )
+    return dict(lineages[0])
+
+
+def _hazard_calibration_binding(
+    descriptor: Mapping[str, Any],
+    role: str,
+    member_lineage: Mapping[str, Any],
+) -> None:
+    """Bind one unstamped capture to the window's ledger session and attempt."""
+
+    context = member_lineage.get("window_context")
+    expected_attempt = (
+        context.get(f"{role}_attempt_id") if isinstance(context, Mapping) else None
+    )
+    if (
+        descriptor.get("bracket_session_id")
+        != member_lineage.get("bracket_session_id")
+        or not isinstance(expected_attempt, str)
+        or descriptor.get("attempt_id") != expected_attempt
+    ):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"whole-window {role} calibration is not the window's bracket "
+            "session endpoint (session "
+            f"{descriptor.get('bracket_session_id')!r}, attempt "
+            f"{descriptor.get('attempt_id')!r})",
+        )
+
+
+def _hazard_bound_corpus_binding(
+    drift_bound_artifact: Mapping[str, Any],
+    member_lineage: Mapping[str, Any],
+) -> None:
+    """Re-hash every consumed corpus member in the window's bound runs root."""
+
+    corpus = drift_bound_artifact.get("reference_corpus")
+    members = corpus.get("members") if isinstance(corpus, Mapping) else None
+    context = member_lineage.get("window_context")
+    bound_root = (
+        context.get("bound_runs_root") if isinstance(context, Mapping) else None
+    )
+    if not isinstance(members, list) or not members or not isinstance(bound_root, str):
+        raise LaunchLineageError(
+            "launch_consumption_invalid",
+            "whole-window NEG-8 bound names no reference-corpus members",
+        )
+    from joulewise import window_lineage  # noqa: PLC0415
+
+    # The recorded root, or where window_lineage.relocated_custody says it
+    # now lives (an archived or copied window).
+    root = window_lineage.current_root(bound_root)
+    for member in members:
+        bundle_id = member.get("bundle_id") if isinstance(member, Mapping) else None
+        expected = (
+            member.get("bundle_evidence_sha256") if isinstance(member, Mapping) else None
+        )
+        paths = (
+            ordinary_present_bundle_paths(root, bundle_id)
+            if isinstance(bundle_id, str) and bundle_id
+            else []
+        )
+        if len(paths) != 1 or paths[0].is_symlink():
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                f"NEG-8 bound corpus member {bundle_id!r} is not exactly one "
+                f"bundle in the window's bound runs root {root}",
+            )
+        try:
+            actual = _bundle_evidence_sha256(paths[0])
+        except (OSError, ValueError) as exc:
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                f"NEG-8 bound corpus member {bundle_id!r} cannot be re-hashed: {exc}",
+            ) from exc
+        if actual != expected:
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                f"NEG-8 bound corpus member {bundle_id!r} bytes differ from the bound",
+            )
+
+
 def _calibration_launch_lineages(
     calibration_bracket: Mapping[str, Any],
     *,
     require_completion: bool,
+    member_lineage: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Reopen both selected calibration evidence files and their receipts."""
+    """Reopen both selected calibration evidence files and their receipts.
 
+    ``member_lineage`` matters only when it is a hazard lineage: then a
+    capture whose evidence carries no lineage is bound to the window through
+    its ledger session and attempt instead (see the HAZARD_PACK note above).
+    """
+
+    hazard = member_lineage is not None and _is_hazard_lineage(member_lineage)
     result: list[dict[str, Any]] = []
     for role in ("pre", "post"):
         descriptor = calibration_bracket.get(role)
@@ -2525,6 +3033,11 @@ def _calibration_launch_lineages(
                 f"whole-window {role} calibration evidence digest is invalid",
             )
         lineage = evidence.get("launch_lineage")
+        if hazard and not isinstance(lineage, Mapping):
+            assert member_lineage is not None
+            _hazard_calibration_binding(descriptor, role, member_lineage)
+            result.append(dict(member_lineage))
+            continue
         if not isinstance(lineage, Mapping):
             raise LaunchLineageError(
                 "launch_consumption_missing",
@@ -2555,14 +3068,36 @@ def _authenticate_whole_window_launch_sources(
             "launch_consumption_missing",
             "whole-window calibration bracket is absent",
         )
+    hazard = _is_hazard_lineage(member_lineage)
     lineages = [
         member_lineage,
-        *_calibration_launch_lineages(
-            calibration_bracket,
-            require_completion=require_completion,
+        *(
+            _calibration_launch_lineages(
+                calibration_bracket,
+                require_completion=require_completion,
+                member_lineage=member_lineage,
+            )
+            if hazard
+            else _calibration_launch_lineages(
+                calibration_bracket,
+                require_completion=require_completion,
+            )
         ),
     ]
-    if require_bound:
+    if require_bound and hazard:
+        # A bound that was not consumed (absent or not validated) put nothing
+        # into the numbers; the NEG-8 bracket then reports it underived.
+        if isinstance(drift_bound_artifact, Mapping):
+            bound_lineage = drift_bound_artifact.get("launch_lineage")
+            if isinstance(bound_lineage, Mapping):
+                authenticated_bound = authenticate_launch_lineage(
+                    bound_lineage,
+                    require_completion=require_completion,
+                )
+                lineages.append(dict(authenticated_bound["launch_lineage"]))
+            else:
+                _hazard_bound_corpus_binding(drift_bound_artifact, member_lineage)
+    elif require_bound:
         bound_lineage = (
             drift_bound_artifact.get("launch_lineage")
             if isinstance(drift_bound_artifact, Mapping)
@@ -2687,6 +3222,20 @@ def authenticate_window_launch_lineage(
             "launch_consumption_missing",
             "whole-window evaluation basis carrying launch lineage is absent",
         )
+    # Partial replay by design (b1 F1, P2-B1).  On a HAZARD window an
+    # unstamped capture is bound by the bracket descriptor's session and
+    # attempt ids; those ids are ledger-authenticated only by the full row
+    # replay (_validate_row_uncached -> _current_core_rederivation_reasons,
+    # which re-derives the bracket from the ledger before this check runs).
+    # This reader cannot run that replay itself: a minted-semantics row
+    # replays only inside a ready AuthenticatedConsumptionSession, which needs
+    # the caller's ledger snapshot and bracket binding.  Its floor-mint
+    # callers supply one: bind_v2_floor_artifact_evidence passes every artifact
+    # through the pinned binder (scripts/mint_floor_artifact.py
+    # _authenticated_consumption_summaries -> whole_window_refusal_reasons with
+    # a session), the common-mode recomputation runs the same replay, and the
+    # generalized mint binds every artifact it builds that way.  So no artifact
+    # rests on this partial replay alone.
     for row in candidates:
         reasons = _whole_window_row_launch_refusal_reasons(row, root)
         if reasons:
@@ -3475,6 +4024,37 @@ def _reference_energy_evidence(
 ) -> tuple[dict[str, float] | None, float | None, str | None]:
     """Re-derive both current NEG-8 claim-family points from primary bytes."""
 
+    gross, idle_subtracted, problem, _cause = _reference_energy_evidence_detail(
+        bundle_path, require_idle_subtracted=require_idle_subtracted
+    )
+    return gross, idle_subtracted, problem
+
+
+# Causes behind a ``_reference_energy_evidence`` problem, for the HAZARD_PACK
+# mint's per-member verdict (core-prune N2 / NONCORE R1).  Only the first two
+# are evidence about the member's number; every other cause means the
+# evaluation could not run or saw something it cannot classify.
+ENERGY_CAUSE_PRECHECK_INELIGIBLE = "precheck_ineligible"
+ENERGY_CAUSE_REDUCTION_MISMATCH = "reduction_mismatch"
+
+
+def _reference_energy_evidence_detail(
+    bundle_path: Path,
+    *,
+    require_idle_subtracted: bool = True,
+) -> tuple[dict[str, float] | None, float | None, str | None, str | None]:
+    """``_reference_energy_evidence`` plus the cause of its problem.
+
+    The first three values are exactly ``_reference_energy_evidence``'s.  The
+    cause is ``None`` when there is no problem, ``precheck_ineligible`` when
+    the fresh reduction succeeded and a required gate says ``eligible: False``,
+    ``reduction_mismatch`` when the fresh reduction disagrees with the stored
+    summary (a different status, a stored number absent or different), and
+    otherwise a name for why the evidence could not be classified
+    (``reduction_unavailable``, ``precheck_absent``, ``precheck_unknown``,
+    ``reduction_incomplete``, ``not_current_strict``).
+    """
+
     stored_summary = _read_json_object(bundle_path / "summary_metrics.json")
     stored_gross = _gross_fields(stored_summary)
     stored_idle = (
@@ -3484,13 +4064,17 @@ def _reference_energy_evidence(
     )
     reducer_version = _summary_reducer_version(stored_summary)
     if not _current_strict_summary(stored_summary, bundle_path):
-        return (
-            stored_gross,
-            stored_idle,
+        problem = (
             None
             if stored_gross is not None
             and (stored_idle is not None or not require_idle_subtracted)
-            else "provenance",
+            else "provenance"
+        )
+        return (
+            stored_gross,
+            stored_idle,
+            problem,
+            None if problem is None else "not_current_strict",
         )
     try:
         # Deliberately output-free: reduce_bundle is pure over the bundle and
@@ -3500,7 +4084,7 @@ def _reference_energy_evidence(
 
         reduced = reduce_bundle(bundle_path, reducer_version=reducer_version).to_dict()
     except Exception:  # noqa: BLE001 - any reducer/evidence failure refuses.
-        return None, None, "provenance"
+        return None, None, "provenance", "reduction_unavailable"
     fresh_gross = _gross_fields(reduced)
     fresh_idle = _finite_number(reduced.get("idle_subtracted_energy_j"))
     prechecks = reduced.get("window_evidence_precheck")
@@ -3525,7 +4109,25 @@ def _reference_energy_evidence(
             )
         )
     ):
-        return None, None, "provenance"
+        gates = [gross_gate, *((idle_gate,) if require_idle_subtracted else ())]
+        if reduced.get("status") != "succeeded":
+            # A stored success that a fresh reduction does not reproduce is a
+            # mismatch; a stored non-success is not this function's verdict.
+            cause = (
+                ENERGY_CAUSE_REDUCTION_MISMATCH
+                if isinstance(stored_summary, Mapping)
+                and stored_summary.get("status") == "succeeded"
+                else "stored_not_succeeded"
+            )
+        elif any(not isinstance(gate, Mapping) for gate in gates):
+            cause = "precheck_absent"
+        elif any(gate.get("eligible") is False for gate in gates):
+            cause = ENERGY_CAUSE_PRECHECK_INELIGIBLE
+        elif any(gate.get("eligible") is not True for gate in gates):
+            cause = "precheck_unknown"
+        else:
+            cause = "reduction_incomplete"
+        return None, None, "provenance", cause
     if stored_gross is None or any(
         not math.isclose(
             stored_gross[field], fresh_gross[field], rel_tol=1e-9, abs_tol=1e-9
@@ -3541,8 +4143,8 @@ def _reference_energy_evidence(
             )
         )
     ):
-        return None, None, "conflict"
-    return fresh_gross, fresh_idle, None
+        return None, None, "conflict", ENERGY_CAUSE_REDUCTION_MISMATCH
+    return fresh_gross, fresh_idle, None, None
 
 
 def _gross_energy_evidence(
@@ -3612,6 +4214,8 @@ def mint_neg8_drift_bound_artifact(
         raise ValueError(
             f"NEG-8 reference corpus requires n >= {NEG8_DRIFT_MINIMUM_N}"
         )
+    if _is_hazard_runs_root(root):
+        return _mint_hazard_neg8_drift_bound(root, manifest, raw)
 
     evidence_members: list[dict[str, Any]] = []
     freshness_bindings: list[dict[str, str]] = []
@@ -3733,6 +4337,393 @@ def mint_neg8_drift_bound_artifact(
     return artifact
 
 
+# ---------------------------------------------------------------------------
+# HAZARD_PACK NEG-8 mint (bound runs root carries a hazard lineage locator)
+#
+# The ARM-path mint above is all-or-nothing: one corpus member that fails a
+# per-member predicate, or a power-supply/os_build string that differs across
+# members, raises and no bound exists, so the window loses its NEG-8 screen.
+# On a hazard window (doctrine 2026-10-05) the mint instead gives every corpus
+# member one of three verdicts (core-prune DESIGN N2, interface I3; the
+# orchestrator's NONCORE R1 ruling of 2026-10-06):
+#
+# * keep: the member passes every per-member predicate;
+# * omit (drop): the member fails a registered member-validity predicate that
+#   would exclude a science member.  The reasons form a closed set,
+#   NEG8_MINT_DROP_REASONS: status_not_succeeded, not_current_strict_mint,
+#   custody_triangle_disagrees, precheck_ineligible (the fresh re-reduction's
+#   gross or idle-subtracted gate says eligible: False) and
+#   reduction_mismatch (the fresh re-reduction differs from the stored
+#   summary).  The bound is derived from the rest;
+# * indeterminate: the energy evaluation could not run or could not classify
+#   what it saw (a reducer exception, an absent or unknown gate, a missing
+#   fresh number).  The member is KEPT: unknown evidence
+#   never authorizes an omission.  A kept member with no verified numbers
+#   cannot enter a bound, so the mint then raises;
+#
+# and refuses (raises, so no bound is derived and the harvest reports
+# neg8.bound_not_derived) on anything that is not evidence about one member's
+# number: an unauthenticated launch lineage (launch_lineage:*), a member that
+# is not the canonical condition (not_canonical_condition), a member whose
+# calibration identity is unrecorded (calibration_identity_unrecorded), a
+# bundle inventory that cannot be sealed (bundle_inventory_invalid), kept
+# members of more than one condition (condition_differs; no majority vote),
+# kept members of more than one calibration identity, two window lineages, or
+# fewer than NEG8_DRIFT_MINIMUM_N kept members.
+#
+# The power-supply and os_build strings are records: the bound records the
+# value most members agree on (or an explicit "unrecorded" value), and a
+# mismatch against the references is disclosed by the freshness evaluation.
+# The artifact binds to the manifest the mint actually used: the input bytes
+# when nothing is dropped, else the input with the dropped members removed,
+# rendered exactly as the chain's PRUNE_HELPER renders a pruned manifest, so
+# a pruner that drops the same members (``neg8_corpus_mint_drops``) writes the
+# identical bytes.
+#
+# Freshness (V1, PLAN2 row 2): the bound's ``derived_at_s`` is the end of the
+# latest kept corpus member's measured window, a physical time recorded in
+# the bundles, not the clock of whoever runs the mint.  A desk re-mint
+# therefore yields the same artifact as the chain's, and the 24 h horizon is
+# counted from the corpus measurement, at or before the in-chain derivation
+# (``_hazard_bound_derived_at_s``).
+
+NEG8_UNRECORDED_OS_BUILD = "unrecorded"
+NEG8_UNRECORDED_POWER_SUPPLY_SHA256 = canonical_sha256(
+    {"power_supply_identity": "unrecorded"}
+)
+# The closed set of reasons for which the HAZARD mint leaves a corpus member
+# out of the bound.  joulewise/b5/harvest.py NEG8_ACCEPTED_DROP_REASONS must
+# equal this set (the harvest accepts exactly the mint's drops).
+NEG8_MINT_DROP_REASONS = frozenset(
+    {
+        "status_not_succeeded",
+        "not_current_strict_mint",
+        "custody_triangle_disagrees",
+        ENERGY_CAUSE_PRECHECK_INELIGIBLE,
+        ENERGY_CAUSE_REDUCTION_MISMATCH,
+    }
+)
+
+
+def _is_hazard_runs_root(root: Path) -> bool:
+    from joulewise import window_lineage  # noqa: PLC0415
+
+    return window_lineage.is_hazard_runs_root(root)
+
+
+def _neg8_majority(values: Sequence[Any]) -> Any:
+    """The most common non-None value; ties go to the latest in order."""
+
+    counts: dict[Any, int] = {}
+    for value in values:
+        if value is not None:
+            counts[value] = counts.get(value, 0) + 1
+    if not counts:
+        return None
+    best = max(counts.values())
+    return [value for value in values if counts.get(value) == best][-1]
+
+
+def _measured_window_end_s(bundle_path: Path) -> float | None:
+    """End of a bundle's measured window (its ``sampling_stopped`` stamp)."""
+
+    try:
+        window = BundleReader(bundle_path).measured_window()
+    except (BundleReadError, OSError, TypeError, ValueError, KeyError):
+        return None
+    if window is None or window.end_s < window.start_s:
+        return None
+    return _finite_number(window.end_s)
+
+
+def _hazard_neg8_corpus_selection(
+    root: Path, manifest: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Give every corpus member its verdict once.
+
+    Returns ``{"rows", "drops", "indeterminate", "refusals"}``: the kept rows
+    (each with verified evidence), the dropped members ``{bundle_id, reason}``
+    (reason in :data:`NEG8_MINT_DROP_REASONS`), the kept members whose evidence
+    could not be classified ``{bundle_id, reason}``, and the refusals
+    ``{bundle_id, reason}`` (``bundle_id`` None for a cross-member refusal).
+    """
+
+    rows: list[dict[str, Any]] = []
+    drops: list[dict[str, str]] = []
+    indeterminate: list[dict[str, str]] = []
+    refusals: list[dict[str, Any]] = []
+    identities: list[tuple[str, Any]] = []
+    seen_ids: set[str] = set()
+    for member in manifest.get("members", []):
+        if not isinstance(member, Mapping) or set(member) != {
+            "bundle_id",
+            "bundle_path",
+        }:
+            raise ValueError("NEG-8 corpus member descriptor has invalid keys")
+        bundle_id = member.get("bundle_id")
+        bundle_path = _safe_source_path(root, member.get("bundle_path"))
+        if (
+            not isinstance(bundle_id, str)
+            or not bundle_id
+            or bundle_id in seen_ids
+            or bundle_path is None
+        ):
+            raise ValueError("NEG-8 corpus member is invalid, duplicated, or unsafe")
+        seen_ids.add(bundle_id)
+
+        def drop(reason: str) -> None:
+            assert reason in NEG8_MINT_DROP_REASONS, reason
+            drops.append({"bundle_id": bundle_id, "reason": reason})
+
+        def refuse(reason: str) -> None:
+            refusals.append({"bundle_id": bundle_id, "reason": reason})
+
+        summary = (
+            _read_json_object(bundle_path / "summary_metrics.json")
+            if bundle_path.is_dir()
+            else None
+        )
+        # The registered status rule (the harvest's _corpus_member_status):
+        # an absent bundle or a summary that does not say succeeded.
+        if not isinstance(summary, Mapping) or summary.get("status") != "succeeded":
+            drop("status_not_succeeded")
+            continue
+        metadata = _read_json_object(bundle_path / "metadata.json")
+        config = _read_json_object(bundle_path / "config.json")
+        try:
+            authenticated_launch = authenticate_bundle_launch_lineage(
+                bundle_path,
+                config=config,
+                metadata=metadata,
+                require_completion=False,
+            )
+        except LaunchLineageError as exc:
+            refuse(f"launch_lineage:{exc.reason_code}")
+            continue
+        lineage = None
+        if authenticated_launch is not None:
+            extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
+            lineage = extra.get("launch_lineage") if isinstance(extra, Mapping) else None
+            if not isinstance(lineage, Mapping):
+                refuse("launch_lineage:launch_consumption_invalid")
+                continue
+        if _custody_strict_invalid(bundle_path, summary, metadata):
+            drop("custody_triangle_disagrees")
+            continue
+        if not _current_strict_summary(summary, bundle_path):
+            drop("not_current_strict_mint")
+            continue
+        identity, canonical = _scientific_config_identity(bundle_path)
+        if identity is None or not canonical:
+            refuse("not_canonical_condition")
+            continue
+        identities.append((bundle_id, identity))
+        gross, idle_subtracted, problem = _reference_energy_evidence(bundle_path)
+        if problem is not None or gross is None or idle_subtracted is None:
+            # Classify only a failure (rare): the same evaluation again, with
+            # its cause.  A cause it cannot reproduce is not a drop reason.
+            _gross, _idle, _problem, cause = _reference_energy_evidence_detail(
+                bundle_path
+            )
+            if cause in NEG8_MINT_DROP_REASONS:
+                drop(cause)
+            else:
+                indeterminate.append(
+                    {"bundle_id": bundle_id, "reason": cause or "energy_unclassified"}
+                )
+            continue
+        fields = neg8_freshness_binding_fields(metadata) or {}
+        if fields.get("calibration_identity_sha256") is None:
+            refuse("calibration_identity_unrecorded")
+            continue
+        try:
+            evidence_sha = _bundle_evidence_sha256(bundle_path)
+        except (OSError, ValueError):
+            refuse("bundle_inventory_invalid")
+            continue
+        rows.append(
+            {
+                "descriptor": dict(member),
+                "identity": identity,
+                "lineage": lineage,
+                "fields": fields,
+                "span_end_s": _measured_window_end_s(bundle_path),
+                "evidence": {
+                    "bundle_id": bundle_id,
+                    "point_gross_j": gross["point_j"],
+                    "point_idle_subtracted_j": idle_subtracted,
+                    "bundle_evidence_sha256": evidence_sha,
+                },
+            }
+        )
+    # Every kept member (verified or indeterminate) must be one condition.
+    # There is no majority vote: a corpus of two conditions is not a corpus.
+    dropped_ids = {row["bundle_id"] for row in drops}
+    kept_identities = {
+        identity for bundle_id, identity in identities if bundle_id not in dropped_ids
+    }
+    if len(kept_identities) > 1:
+        refusals.append({"bundle_id": None, "reason": "condition_differs"})
+    order = [
+        member.get("bundle_id")
+        for member in manifest.get("members", [])
+        if isinstance(member, Mapping)
+    ]
+    for listed in (drops, indeterminate):
+        listed.sort(key=lambda row: order.index(row["bundle_id"]))
+    return {
+        "rows": rows,
+        "drops": drops,
+        "indeterminate": indeterminate,
+        "refusals": refusals,
+    }
+
+
+def _describe_members(rows: Sequence[Mapping[str, Any]]) -> str:
+    return ", ".join(
+        f"{row.get('bundle_id') or '<corpus>'}={row.get('reason')}" for row in rows
+    )
+
+
+def _raise_on_refusals(selection: Mapping[str, Any]) -> None:
+    refusals = selection["refusals"]
+    if refusals:
+        raise ValueError(
+            "NEG-8 reference corpus refused (a reason that is not evidence about "
+            "a member's number): " + _describe_members(refusals)
+        )
+
+
+def neg8_corpus_member_verdicts(
+    runs_root: Path, corpus_manifest_path: Path
+) -> dict[str, list[dict[str, Any]]]:
+    """Every corpus member's HAZARD mint verdict (DESIGN N2, interface I3).
+
+    ``{"drops", "indeterminate", "refusals"}`` as
+    :func:`_hazard_neg8_corpus_selection` computes them, without raising on a
+    refusal: for a reader that wants to report why a bound cannot exist.
+    """
+
+    raw = read_authentication_input(
+        Path(corpus_manifest_path),
+        grammar="json",
+        label="NEG-8 reference corpus manifest",
+    )
+    manifest = json.loads(raw)
+    if not isinstance(manifest, Mapping):
+        raise ValueError("NEG-8 reference corpus manifest is not an object")
+    selection = _hazard_neg8_corpus_selection(Path(runs_root).resolve(), manifest)
+    return {key: selection[key] for key in ("drops", "indeterminate", "refusals")}
+
+
+def neg8_corpus_mint_drops(
+    runs_root: Path, corpus_manifest_path: Path
+) -> list[dict[str, str]]:
+    """Members a HAZARD_PACK mint would drop, with the predicate each failed.
+
+    For the chain's corpus pruner: dropping exactly these members (and
+    rendering the pruned manifest as PRUNE_HELPER does) yields the manifest
+    bytes the hazard mint binds its bound to.  Every reason is in
+    :data:`NEG8_MINT_DROP_REASONS`.  Indeterminate members are kept (not
+    listed).  Raises like the mint when the manifest itself is unusable or
+    when the corpus refuses (a launch-lineage, condition, calibration-record
+    or inventory reason), so no caller prunes a corpus the mint would refuse.
+    """
+
+    raw = read_authentication_input(
+        Path(corpus_manifest_path),
+        grammar="json",
+        label="NEG-8 reference corpus manifest",
+    )
+    manifest = json.loads(raw)
+    if not isinstance(manifest, Mapping):
+        raise ValueError("NEG-8 reference corpus manifest is not an object")
+    selection = _hazard_neg8_corpus_selection(Path(runs_root).resolve(), manifest)
+    _raise_on_refusals(selection)
+    return selection["drops"]
+
+
+def _hazard_bound_derived_at_s(rows: Sequence[Mapping[str, Any]]) -> float:
+    """The bound's derivation time: the latest kept member's measured-window end.
+
+    Every kept member passed a fresh reduction, which raises without a
+    measured window (reduce.py ``_ReduceError``: "no measured_run window"), so
+    each real kept member has one; the maximum is taken over those that read
+    (a subset can only make the bound older, never fresher).  A corpus with
+    no readable end has no physical derivation time, so the mint refuses
+    (raises) rather than date the bound by its own clock (P2-B1 review F2).
+    """
+
+    ends = [row["span_end_s"] for row in rows if row.get("span_end_s") is not None]
+    if not ends:
+        raise ValueError("NEG-8 reference corpus: no kept member has a measured window end")
+    return max(ends)
+
+
+def _mint_hazard_neg8_drift_bound(
+    root: Path, manifest: Mapping[str, Any], raw: bytes
+) -> dict[str, Any]:
+    selection = _hazard_neg8_corpus_selection(root, manifest)
+    _raise_on_refusals(selection)
+    rows, drops = selection["rows"], selection["drops"]
+    if selection["indeterminate"]:
+        raise ValueError(
+            "NEG-8 reference corpus keeps members whose evidence could not be "
+            "verified (kept, never dropped, so no bound can be derived): "
+            + _describe_members(selection["indeterminate"])
+        )
+    if len(rows) < NEG8_DRIFT_MINIMUM_N:
+        raise ValueError(
+            f"NEG-8 reference corpus keeps {len(rows)} members after drops "
+            f"(n >= {NEG8_DRIFT_MINIMUM_N} required): "
+            + _describe_members(drops)
+        )
+    calibrations = {row["fields"]["calibration_identity_sha256"] for row in rows}
+    if len(calibrations) != 1:
+        raise ValueError(
+            "NEG-8 reference corpus members do not share one calibration identity"
+        )
+    lineages = {
+        canonical_sha256(row["lineage"]): row["lineage"]
+        for row in rows
+        if row["lineage"] is not None
+    }
+    if len(lineages) > 1:
+        raise ValueError(
+            "launch_lineage_conflict: NEG-8 reference members do not share one lineage"
+        )
+    os_build = _neg8_majority([row["fields"].get("os_build") for row in rows])
+    power = _neg8_majority(
+        [row["fields"].get("power_supply_identity_sha256") for row in rows]
+    )
+    bound_raw = raw
+    if drops:
+        pruned = dict(manifest)
+        pruned["members"] = [row["descriptor"] for row in rows]
+        bound_raw = (json.dumps(pruned, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    artifact = build_neg8_drift_bound_artifact(
+        corpus_id=manifest.get("corpus_id"),
+        condition_id=manifest.get("condition_id"),
+        manifest_sha256=hashlib.sha256(bound_raw).hexdigest(),
+        scientific_config_sha256=rows[0]["identity"],
+        members=[row["evidence"] for row in rows],
+        derivation_timestamp_s=_hazard_bound_derived_at_s(rows),
+        freshness_bindings={
+            "os_build": os_build if os_build is not None else NEG8_UNRECORDED_OS_BUILD,
+            "power_supply_identity_sha256": (
+                power if power is not None else NEG8_UNRECORDED_POWER_SUPPLY_SHA256
+            ),
+            "calibration_identity_sha256": next(iter(calibrations)),
+        },
+        launch_lineage=next(iter(lineages.values())) if lineages else None,
+    )
+    if not _neg8_corpus_identity_matches_bytes(
+        artifact["reference_corpus"], bound_raw
+    ):
+        raise ValueError("NEG-8 drift-bound corpus identity did not bind to manifest bytes")
+    return artifact
+
+
 REGISTERED_POLICY_DIR = (
     Path(__file__).resolve().parents[1] / "configs" / "campaign_policies"
 )
@@ -3841,6 +4832,10 @@ def _derived_neg8_decision(
     drift_bound_artifact: Any = None,
     return_bracket: bool = False,
     freshness_evaluated_at_s: Any = None,
+    exclude_bundle_ids: Mapping[str, Any] | None = None,
+    strict_invalid: Any = None,
+    stored_strict_losses: Any = None,
+    unlisted_strict_invalid: Literal["refuse", "read"] = "refuse",
 ) -> tuple[Any, str | None]:
     """Re-derive a verdict from source-member summaries, never the stored row.
 
@@ -3849,6 +4844,29 @@ def _derived_neg8_decision(
     committed 0925480 ``runs_root / bundle_id`` resolution unconditionally
     (frozen-arm purity — a custody improvement must never change a frozen
     row's disposition in either direction).
+
+    On the current point-drift path the screen runs on the surviving
+    references (NEG-8 ruling 2026-10-07, registration 0.12): a reference
+    whose stored summary records a status other than ``succeeded``, or whose
+    summary does not read (``summary_unreadable``), is lost (the verdict
+    writer drops the same references), and so is one named in
+    ``exclude_bundle_ids`` ({bundle_id: reason}, the harvest's physics and
+    strict-validation losses).  The loss test never reads an energy.  Lost
+    references go to the evaluator as ``lost_references``.
+
+    A reference with a readable succeeded summary that is strict-invalid is
+    lost too, as ``strict_invalid`` (delta audit A5; the verdict writer drops
+    a reference whose strict validation failed the same way): strict-invalid
+    is a custody-triangle disagreement (``_custody_strict_invalid``) or the
+    caller's ``strict_invalid(bundle_id, bundle_path)`` (its own strict
+    validation).  When re-deriving a stored bracket, ``stored_strict_losses``
+    names the references that bracket lists as lost for ``strict_invalid``:
+    only those are dropped, each after its strict invalidity is verified (a
+    listed reference that verifies valid is read, so the replay differs), and
+    an unlisted reference whose custody triangle disagrees is
+    ``bundle_strict_invalid`` (``unlisted_strict_invalid="refuse"``, the row
+    validator) or read as the writer read it (``"read"``, the harvest's
+    authenticity pass, whose exclusion pass then drops it).
     """
 
     try:
@@ -3863,7 +4881,19 @@ def _derived_neg8_decision(
         "end": [],
     }
     reference_metadata: list[Mapping[str, Any] | None] = []
+    end_reference_paths: list[Path] = []
     invalid_role = False
+    survivors = bool(current and point_drift)
+    excluded = (
+        {
+            str(key): value
+            for key, value in exclude_bundle_ids.items()
+            if isinstance(key, str)
+        }
+        if survivors and isinstance(exclude_bundle_ids, Mapping)
+        else {}
+    )
+    lost: list[dict[str, Any]] = []
     for manifest in manifests:
         manifest_paths = (
             _manifest_bundle_paths([manifest], runs_root) if current else None
@@ -3918,7 +4948,66 @@ def _derived_neg8_decision(
                         )
                     continue
                 stored_summary = _read_json_object(bundle_path / "summary_metrics.json")
-                if _custody_strict_invalid(bundle_path, stored_summary):
+                if survivors:
+                    stored_status = (
+                        stored_summary.get("status")
+                        if isinstance(stored_summary, Mapping)
+                        else None
+                    )
+                    # A recorded status other than succeeded is a loss, and so
+                    # is a summary that does not read (absent after a SIGKILL,
+                    # undecodable, or with no string status): the verdict
+                    # writer drops the same reference as ``summary_unreadable``
+                    # (cold pass 2 D1).  Both are decided here, before the
+                    # custody strict check, so a summary-less reference is
+                    # lost rather than failing the whole re-derivation.
+                    reason = (
+                        excluded[bundle_id]
+                        if bundle_id in excluded
+                        else "summary_unreadable"
+                        if not isinstance(stored_status, str)
+                        else "status_not_succeeded"
+                        if stored_status != "succeeded"
+                        else None
+                    )
+                    if reason is None:
+                        # Delta audit A5: a structurally strict-invalid
+                        # reference is lost before aggregation, not a failure
+                        # of the whole re-derivation.
+                        triangle = _custody_strict_invalid(bundle_path, stored_summary)
+                        listed = (
+                            stored_strict_losses is None
+                            or bundle_id in stored_strict_losses
+                        )
+                        if listed and (
+                            triangle
+                            or (
+                                strict_invalid is not None
+                                and bool(strict_invalid(bundle_id, bundle_path))
+                            )
+                        ):
+                            reason = "strict_invalid"
+                        elif (
+                            triangle
+                            and not listed
+                            and unlisted_strict_invalid != "read"
+                        ):
+                            return None, "bundle_strict_invalid"
+                    if reason is not None:
+                        lost.append(
+                            {
+                                "bundle_id": bundle_id,
+                                "position": position,
+                                "reason": reason,
+                                "status": (
+                                    stored_status
+                                    if isinstance(stored_status, str)
+                                    else None
+                                ),
+                            }
+                        )
+                        continue
+                if not survivors and _custody_strict_invalid(bundle_path, stored_summary):
                     return None, "bundle_strict_invalid"
                 if _current_strict_summary(stored_summary, bundle_path):
                     scientific_sha, canonical = _scientific_config_identity(bundle_path)
@@ -3942,21 +5031,50 @@ def _derived_neg8_decision(
                 if problem is not None:
                     return None, problem
                 references[position].append((gross, idle_subtracted))
+                if position == "end":
+                    end_reference_paths.append(bundle_path)
                 if point_drift:
                     reference_metadata.append(
                         _read_json_object(bundle_path / "metadata.json")
                     )
+    if (
+        point_drift
+        and current
+        and end_reference_paths
+        and _is_hazard_runs_root(runs_root)
+    ):
+        # V1 (PLAN2 row 2): on a HAZARD_PACK window the bound's freshness is
+        # judged at the end of the last end reference's measured window, the
+        # moment the bound is last used, as the verdict writer evaluates it.
+        # Re-derive that time from the bundles instead of trusting the row's
+        # stored value; a row evaluated at any other clock then conflicts.
+        # When an end reference's window does not read, the stored value
+        # stands (the writer then used its own, later, clock), but never
+        # earlier than a physical end that does read: an earlier time would
+        # make the bound look fresher (P2-B1 review F2).
+        end_times = [_measured_window_end_s(path) for path in end_reference_paths]
+        readable = [value for value in end_times if value is not None]
+        if readable and len(readable) == len(end_times):
+            freshness_evaluated_at_s = max(readable)
+        elif readable:
+            stored_at = _finite_number(freshness_evaluated_at_s)
+            if stored_at is not None:
+                freshness_evaluated_at_s = max(stored_at, max(readable))
     legacy_pair = (
         len(references["start"]) == 1
         and not references["midpoint"]
         and len(references["end"]) == 1
+        and not lost
     )
     replicated = (
         len(references["start"]) == NEG8_REPLICATED_ENDPOINT_N
         and len(references["midpoint"]) == 1
         and len(references["end"]) == NEG8_REPLICATED_ENDPOINT_N
     )
-    shape_valid = legacy_pair or (point_drift and replicated)
+    # The survivor protocol: the evaluator classifies any realised shape (two
+    # or three at each endpoint, the midpoint optional) and names one with too
+    # few or too many references; frozen replay keeps the two exact shapes.
+    shape_valid = legacy_pair or (point_drift and replicated) or survivors
     start_gross = (
         [item[0] for item in references["start"]]
         if shape_valid
@@ -4000,6 +5118,7 @@ def _derived_neg8_decision(
                 reference_metadata,
                 evaluated_at_s=freshness_evaluated_at_s,
             ),
+            lost_references=lost if survivors else None,
         )
         return (bracket if return_bracket else bracket["decision"], None)
     start = start_gross[0] if legacy_pair and start_gross else None
@@ -4238,6 +5357,10 @@ def _current_core_rederivation_reasons(
                     bundle_path=path,
                     measured_window_start_s=window.start_s,
                     measured_window_end_s=window.end_s,
+                    # The verdict writer's own setting (run_campaign
+                    # _idle_admission_core_evaluation; ruling on audit-fix
+                    # batch 1 item 6): the re-derivation must agree with it.
+                    post_run_collector_raised_unmeasured=True,
                 )
             )
         else:
@@ -5172,6 +6295,196 @@ def validate_whole_window_verdict_row(
     )
 
 
+# ---------------------------------------------------------------------------
+# Member strict validation for a HAZARD_PACK whole-window verdict, in parallel
+# (PLAN2 row 1).  Every member still gets the full strict validation
+# (``cli.validate_bundle(path, strict=True)``: structure, a fresh reduction
+# compared with the stored summary, uncertainty and raw-to-trace checks); only
+# the wall clock changes.  Serially an ALPHA window's 107 claim-root bundles
+# take about 3,700 s (34.5 s each), past the harvest's 1,800 s budget.
+#
+# Each worker process keeps one plain physics cache across the bundles it
+# validates and passes it to ``validate_bundle(..., physics_cache=...)`` once
+# that keyword exists (interface J2, owned by P2-CTL; a hit happens only after
+# every hash check has run).  Until then the validator is called exactly as
+# before.  The pool is spawned (no forked state) and lives in the verdict
+# process's process group, so a harvest that kills the group kills it too.
+
+WHOLE_WINDOW_WORKERS_ENV = "JOULEWISE_WHOLE_WINDOW_WORKERS"
+WHOLE_WINDOW_DEFAULT_MAX_WORKERS = 8
+_STRICT_WORKER_PHYSICS_CACHE: dict[Any, Any] | None = None
+
+
+def whole_window_strict_workers(member_count: int) -> int:
+    """Worker processes for ``member_count`` strict validations.
+
+    ``JOULEWISE_WHOLE_WINDOW_WORKERS`` (a positive integer) overrides the
+    default of ``min(8, cpu_count - 2)``; the result is at least 1 and never
+    more than the members.  1 means in-process, serially.
+    """
+
+    import os  # noqa: PLC0415
+
+    requested = os.environ.get(WHOLE_WINDOW_WORKERS_ENV)
+    workers: int | None = None
+    if requested is not None:
+        try:
+            workers = int(requested.strip())
+        except ValueError:
+            workers = None
+        if workers is not None and workers < 1:
+            workers = None
+    if workers is None:
+        workers = min(
+            WHOLE_WINDOW_DEFAULT_MAX_WORKERS, max(1, (os.cpu_count() or 1) - 2)
+        )
+    return max(1, min(workers, member_count))
+
+
+def _accepts_physics_cache(validator: Any) -> bool:
+    import inspect  # noqa: PLC0415
+
+    try:
+        return "physics_cache" in inspect.signature(validator).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _strict_validation_problems(
+    path: Path, validator: Any, physics_cache: dict[Any, Any] | None
+) -> list[str]:
+    """One member's strict-validation problems, as the verdict writer records them."""
+
+    try:
+        if physics_cache is not None and _accepts_physics_cache(validator):
+            return list(validator(path, strict=True, physics_cache=physics_cache))
+        return list(validator(path, strict=True))
+    except Exception as exc:  # noqa: BLE001 - validator failure is invalid
+        return [f"strict validation raised {type(exc).__name__}: {exc}"]
+
+
+def _strict_validation_worker(path_text: str) -> list[str]:
+    """Process-pool entry point: the real validator and this worker's cache."""
+
+    global _STRICT_WORKER_PHYSICS_CACHE
+    from joulewise.cli import validate_bundle  # noqa: PLC0415
+
+    if _STRICT_WORKER_PHYSICS_CACHE is None:
+        _STRICT_WORKER_PHYSICS_CACHE = {}
+    return _strict_validation_problems(
+        Path(path_text), validate_bundle, _STRICT_WORKER_PHYSICS_CACHE
+    )
+
+
+def strict_validate_bundles(
+    paths: Sequence[Path],
+    *,
+    workers: int,
+    validator: Any = None,
+) -> list[list[str]]:
+    """Strict-validation problems for each path, in input order.
+
+    ``validator`` defaults to ``cli.validate_bundle``.  With ``workers`` > 1
+    and the real validator the paths are validated in a spawned process pool;
+    a substituted validator (a test double) cannot cross a process boundary,
+    so it runs in process.  A worker that dies leaves its paths to be
+    validated in process, so every path gets a result.
+    """
+
+    from joulewise.cli import validate_bundle as real_validator  # noqa: PLC0415
+
+    validator = real_validator if validator is None else validator
+    results: list[list[str] | None] = [None] * len(paths)
+    if workers > 1 and len(paths) > 1 and validator is real_validator:
+        import multiprocessing  # noqa: PLC0415
+        from concurrent.futures import ProcessPoolExecutor  # noqa: PLC0415
+
+        try:
+            with ProcessPoolExecutor(
+                max_workers=min(workers, len(paths)),
+                mp_context=multiprocessing.get_context("spawn"),
+            ) as pool:
+                futures = [
+                    pool.submit(_strict_validation_worker, str(path))
+                    for path in paths
+                ]
+                for index, future in enumerate(futures):
+                    try:
+                        results[index] = list(future.result())
+                    except Exception:  # noqa: BLE001 - redo it in process
+                        results[index] = None
+        except Exception:  # noqa: BLE001 - a pool that cannot start: in process
+            pass
+    cache: dict[Any, Any] = {}
+    return [
+        result
+        if result is not None
+        else _strict_validation_problems(Path(path), validator, cache)
+        for path, result in zip(paths, results)
+    ]
+
+
+def hazard_window_membership_id(runs_root: Path, records: Sequence[Any]) -> str:
+    """Membership id of a HAZARD_PACK window: its whole manifest catalog.
+
+    The digest of the sorted {path, sha256, size} descriptors of exactly the
+    policy-matching campaign manifests in the window's dedicated runs root
+    (the same derivation run_campaign uses for a null-identity binding).
+    """
+
+    root = Path(runs_root).resolve()
+    descriptors = sorted(
+        (
+            {
+                "path": Path(record.path).resolve().relative_to(root).as_posix(),
+                "sha256": hashlib.sha256(record.raw_bytes).hexdigest(),
+                "size": len(record.raw_bytes),
+            }
+            for record in records
+        ),
+        key=lambda row: str(row["path"]),
+    )
+    return hashlib.sha256(
+        json.dumps(
+            descriptors,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _hazard_membership_replay_reasons(
+    row: Mapping[str, Any], runs_root: Path, policy_sha: Any
+) -> set[str]:
+    """A hazard verdict must cover the window's complete current catalog."""
+
+    catalog = load_authenticated_campaign_catalog(
+        Path(runs_root), Path(runs_root) / "campaign_log.jsonl"
+    )
+    records = [
+        record
+        for record in (catalog or [])
+        if isinstance(record.value.get("campaign_policy"), Mapping)
+        and record.value["campaign_policy"].get("sha256") == policy_sha
+    ]
+    membership = row.get("window_membership")
+    try:
+        expected = hazard_window_membership_id(runs_root, records) if records else None
+    except (OSError, ValueError):
+        expected = None
+    if (
+        catalog is None
+        or expected is None
+        or not isinstance(membership, Mapping)
+        or membership.get("membership_id") != expected
+        or membership.get("binding") is not None
+    ):
+        return {"whole_window_verdict_provenance_invalid"}
+    return set()
+
+
 def _validate_row_uncached(
     row: Mapping[str, Any],
     runs_root: Path,
@@ -5271,6 +6584,13 @@ def _validate_row_uncached(
         != canonical_sha256(sorted(bundle_ids))
     ):
         reasons.add("whole_window_verdict_provenance_invalid")
+    if (
+        row_semantics != SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+        and _is_hazard_runs_root(runs_root)
+    ):
+        reasons.update(
+            _hazard_membership_replay_reasons(row, runs_root, policy_sha)
+        )
 
     core = row.get("idle_admission_core")
     if not isinstance(core, Mapping) or core.get("schema_version") != IDLE_ADMISSION_CORE_SCHEMA:
@@ -5501,6 +6821,15 @@ def _validate_row_uncached(
                     )
                 ):
                     reasons.add("whole_window_verdict_provenance_invalid")
+                # Delta audit A5: the writer drops a reference whose strict
+                # validation failed; the replay drops exactly those the stored
+                # bracket lists, each re-validated here.
+                stored_strict_losses = {
+                    item.get("bundle_id")
+                    for item in bracket.get("reference_losses") or []
+                    if isinstance(item, Mapping)
+                    and item.get("reason") == "strict_invalid"
+                }
                 derived_value, derived_problem = _derived_neg8_decision(
                     verified_source_manifests,
                     runs_root,
@@ -5509,6 +6838,11 @@ def _validate_row_uncached(
                     point_drift=point_drift,
                     drift_bound_artifact=drift_bound_artifact,
                     return_bracket=point_drift,
+                    strict_invalid=lambda _bundle_id, path: bool(
+                        strict_validate_bundles([path], workers=1)[0]
+                    ),
+                    stored_strict_losses=stored_strict_losses,
+                    unlisted_strict_invalid="refuse",
                     freshness_evaluated_at_s=(
                         bracket.get("bound_freshness", {}).get(
                             "evaluated_at_s"
@@ -5858,6 +7192,209 @@ def whole_window_refusal_reasons(
     return ()
 
 
+# Block-5 audit A1: the harvest's record of which NEG-8 bracket a window's
+# allowance comes from (``joulewise.b5.harvest``, ``derived/neg8-allowance.json``).
+NEG8_HARVEST_ALLOWANCE_SCHEMA = "joulewise.b5_neg8_allowance.v1"
+NEG8_HARVEST_ALLOWANCE_RECORD = "derived/neg8-allowance.json"
+NEG8_HARVEST_SURVIVOR_BRACKET = "withheld/neg8-rescreen-bracket.json"
+NEG8_HARVEST_CLEAN_BOUND = "withheld/neg8-clean-bound.json"
+NEG8_HARVEST_CLEAN_CORPUS = "derived/neg8-clean-corpus.json"
+
+
+def _archive_bytes(
+    archive: Path, entry: Any, expected_path: str
+) -> bytes | None:
+    """The bytes of ``{path, sha256}`` in ``archive``, if the path is the expected one and they hash to it."""
+
+    if (
+        not isinstance(entry, Mapping)
+        or entry.get("path") != expected_path
+        or not _sha256_text(entry.get("sha256"))
+    ):
+        return None
+    try:
+        # Through the governed reader, so an authenticated consumption
+        # session records the harvest bytes the claim's allowance rests on.
+        raw = read_authentication_input(
+            archive / expected_path,
+            grammar="json",
+            label=f"harvest archive {expected_path}",
+        )
+    except OSError:
+        return None
+    return raw if hashlib.sha256(raw).hexdigest() == entry["sha256"] else None
+
+
+def _json_object_bytes(raw: bytes | None) -> Mapping[str, Any] | None:
+    if raw is None:
+        return None
+    try:
+        value = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, Mapping) else None
+
+
+def harvest_neg8_allowance_bracket(
+    archive_root: Path | None, row: Mapping[str, Any]
+) -> tuple[Mapping[str, Any] | None, str | None]:
+    """The NEG-8 bracket whose allowances a claim on ``row`` may carry, from the harvest archive.
+
+    Returns ``(bracket, None)`` or ``(None, problem)``.  The harvest's
+    ``derived/neg8-allowance.json`` must be the bytes ``harvest.json`` lists
+    under ``outputs`` and must name this row (canonical SHA-256 of the row and
+    its evaluation basis).  Its ``source`` decides:
+
+    * ``stored_verdict``: the harvest's screen kept the stored bracket; it is
+      the row's own ``idle_admission_core.neg8_bracket``.
+    * ``survivor_rescreen``: the harvest dropped lost references or re-derived
+      the bound (registration 0.12, 5.3) and the re-screen passed; the bracket
+      is ``withheld/neg8-rescreen-bracket.json``, at the SHA-256 the record
+      names.  Its decision must be passed with no condition, its bound
+      artifact must be the one the record names (canonical SHA-256) and
+      validate, a clean corpus bound must be the withheld bytes the record
+      names and validate against the clean corpus manifest the record names,
+      and each family's allowance, excursion and bound are recomputed from the
+      bracket's endpoint summaries.
+    * anything else (the screen failed or could not run): no allowance.
+
+    A recorded re-screen whose bracket does not authenticate never falls back
+    to the stored bracket (number integrity, audit A1).
+    """
+
+    if archive_root is None:
+        return None, "harvest_archive_required"
+    archive = Path(archive_root)
+    try:
+        harvest_record = json.loads(
+            read_authentication_input(
+                archive / "harvest.json", grammar="json", label="harvest record"
+            )
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None, "harvest_record_unreadable"
+    outputs = (
+        harvest_record.get("outputs")
+        if isinstance(harvest_record, Mapping)
+        else None
+    )
+    digest = (
+        outputs.get(NEG8_HARVEST_ALLOWANCE_RECORD)
+        if isinstance(outputs, Mapping)
+        else None
+    )
+    record = _json_object_bytes(
+        _archive_bytes(
+            archive,
+            {"path": NEG8_HARVEST_ALLOWANCE_RECORD, "sha256": digest},
+            NEG8_HARVEST_ALLOWANCE_RECORD,
+        )
+    )
+    if record is None or record.get("schema") != NEG8_HARVEST_ALLOWANCE_SCHEMA:
+        return None, "allowance_record_unauthenticated"
+    verdict = record.get("verdict")
+    basis = row.get("evaluation_basis")
+    basis_sha = basis.get("sha256") if isinstance(basis, Mapping) else None
+    try:
+        row_sha = canonical_sha256(row)
+    except (TypeError, ValueError):
+        return None, "verdict_row_unhashable"
+    if (
+        not isinstance(verdict, Mapping)
+        or verdict.get("row_sha256") != row_sha
+        or verdict.get("evaluation_basis_sha256") != basis_sha
+    ):
+        return None, "allowance_record_names_another_row"
+    source = record.get("source")
+    core = row.get("idle_admission_core")
+    stored = core.get("neg8_bracket") if isinstance(core, Mapping) else None
+    if source == "stored_verdict":
+        return (stored, None) if isinstance(stored, Mapping) else (
+            None,
+            "stored_bracket_absent",
+        )
+    if source != "survivor_rescreen":
+        return None, "screen_not_passed"
+    wrapper = _json_object_bytes(
+        _archive_bytes(
+            archive, record.get("survivor_bracket"), NEG8_HARVEST_SURVIVOR_BRACKET
+        )
+    )
+    bracket = wrapper.get("bracket") if wrapper is not None else None
+    if not isinstance(bracket, Mapping):
+        return None, "survivor_bracket_unauthenticated"
+    if bracket.get("decision") != "passed" or bracket.get("conditions") != []:
+        return None, "survivor_bracket_not_passed"
+    artifact = bracket.get("drift_bound_artifact")
+    try:
+        artifact_sha = canonical_sha256(artifact)
+    except (TypeError, ValueError):
+        return None, "survivor_bound_unhashable"
+    if artifact_sha != record.get(
+        "bound_artifact_sha256"
+    ) or not validate_neg8_drift_bound_artifact(artifact):
+        return None, "survivor_bound_unauthenticated"
+    clean = record.get("clean_bound")
+    if record.get("bound_used") == "corpus_physics_clean" or clean is not None:
+        bound_wrapper = _json_object_bytes(
+            _archive_bytes(
+                archive,
+                clean,
+                NEG8_HARVEST_CLEAN_BOUND,
+            )
+        )
+        corpus_raw = _archive_bytes(
+            archive,
+            clean.get("corpus_manifest") if isinstance(clean, Mapping) else None,
+            NEG8_HARVEST_CLEAN_CORPUS,
+        )
+        if (
+            bound_wrapper is None
+            or corpus_raw is None
+            or bound_wrapper.get("bound") != artifact
+            or not validate_neg8_drift_bound_artifact(
+                artifact,
+                reference_corpus_bytes=corpus_raw,
+                require_corpus_identity=True,
+            )
+        ):
+            return None, "clean_bound_unauthenticated"
+    elif record.get("bound_used") == "stored_bracket" and (
+        not isinstance(stored, Mapping)
+        or stored.get("drift_bound_artifact") != artifact
+    ):
+        return None, "survivor_bound_differs_from_stored"
+    families = bracket.get("claim_families")
+    if not isinstance(families, Mapping) or set(families) != {
+        NEG8_CLAIM_FAMILY_GROSS,
+        NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED,
+    }:
+        return None, "survivor_families_invalid"
+    for family, value in families.items():
+        try:
+            recomputed = _family_drift_record(
+                family=family,
+                start=value["start"],
+                midpoint=value.get("midpoint"),
+                end=value["end"],
+                protocol=value["endpoint_protocol"],
+                artifact=artifact,
+                duration_s=value.get("window_duration_s"),
+            )
+        except (KeyError, TypeError, ValueError):
+            return None, "survivor_arithmetic_unreadable"
+        if any(
+            recomputed.get(key) != value.get(key)
+            for key in (
+                "drift_allowance_j",
+                "trajectory_excursion_max_j",
+                "derived_repeatability_bound_j",
+            )
+        ):
+            return None, "survivor_arithmetic_differs"
+    return bracket, None
+
+
 def whole_window_drift_allowances(
     runs_root: Path,
     referenced_bundle_ids: set[str],
@@ -5865,12 +7402,20 @@ def whole_window_drift_allowances(
     evaluation_basis_sha256: str | None = None,
     consumption_session: AuthenticatedConsumptionSession | None = None,
     consumption_semantics_id: str | None = None,
+    neg8_harvest_archive: Path | None = None,
 ) -> WholeWindowDriftAllowanceResult:
     """Return authenticated family allowances for the selected passing basis.
 
     ``legacy`` is reserved for basis-less frozen replay. ``absent`` means a
     current/basis-bearing row did not preserve a complete authenticated
     allowance wire; callers must refuse rather than treating it as zero.
+
+    ``neg8_harvest_archive`` is the window's block-5 harvest archive.  When it
+    is given, and always on a HAZARD runs root, the allowances come from the
+    bracket the harvest's NEG-8 screen left standing
+    (:func:`harvest_neg8_allowance_bracket`): the stored bracket, or the
+    survivor re-screen's bracket when the harvest dropped lost references or
+    re-derived the bound; anything that does not authenticate is ``absent``.
     """
 
     root = Path(runs_root)
@@ -6016,6 +7561,25 @@ def whole_window_drift_allowances(
         or not _sha256_text(basis.get("sha256"))
     ):
         return WholeWindowDriftAllowanceResult("absent", {})
+    if neg8_harvest_archive is not None or _is_hazard_runs_root(root):
+        # Block-5 audit A1: on a HAZARD window the harvest alone sees the
+        # monitor journals, so the allowance the claim carries is the one the
+        # harvest's screen left standing (the stored bracket, or the survivor
+        # re-screen's), bound to this row; without that record, refuse.
+        harvested, _problem = harvest_neg8_allowance_bracket(
+            neg8_harvest_archive, candidates[0]
+        )
+        if harvested is None:
+            return WholeWindowDriftAllowanceResult("absent", {})
+        bracket = harvested
+    return _bracket_drift_allowances(bracket, basis)
+
+
+def _bracket_drift_allowances(
+    bracket: Any, basis: Mapping[str, Any]
+) -> WholeWindowDriftAllowanceResult:
+    """The two families' allowances of one NEG-8 bracket, or ``absent``."""
+
     allowances = (
         bracket.get("drift_allowances")
         if isinstance(bracket, Mapping)
@@ -6076,6 +7640,7 @@ __all__ = [
     "NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED",
     "NEG8_DRIFT_BOUND_SCHEMA",
     "NEG8_DRIFT_BOUND_MAX_AGE_S",
+    "NEG8_HARVEST_ALLOWANCE_SCHEMA",
     "NEG8_DRIFT_ESTIMATOR_ID",
     "NEG8_POINT_DRIFT_ESTIMAND",
     "CustodyTelemetryIdentity",
@@ -6109,6 +7674,7 @@ __all__ = [
     "custody_telemetry_identity",
     "evaluate_neg8_point_drift",
     "evaluate_neg8_bound_freshness",
+    "harvest_neg8_allowance_bracket",
     "load_neg8_drift_bound_artifact",
     "launch_lineage_refusal_reasons",
     "mint_neg8_drift_bound_artifact",

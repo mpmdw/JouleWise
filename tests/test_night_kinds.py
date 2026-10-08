@@ -80,6 +80,12 @@ def commit_fixture(source, message):
                     "commit", "-qm", message], check=True, env=env)
 
 
+# Manifest files the archived base commit H predates; the fixture supplies the
+# current bytes (agent_identity: the census identity matcher, in
+# quiet_predicate_campaign.MANIFEST_PATHS since 2026-10-07).
+SUPPLIED_AFTER_BASE = ("joulewise/night_kinds.py", "joulewise/network_time_off.py", "joulewise/agent_identity.py")
+
+
 def render_fixture():
     ensure_base_source()
     measurement = BASE_SOURCE
@@ -99,11 +105,13 @@ def render_fixture():
     write_night_plan(plan_path, plan)
     plan_bytes = plan_path.read_bytes()
     # The fixed measurement H is the archived base commit. It predates the
-    # table and OFF helper, so supply those new tracked files to the current
-    # authoring code. All pre-existing paths still come from H through tracked_bytes.
+    # table, the OFF helper and the census identity matcher (agent_identity,
+    # in the manifest since 2026-10-07), so supply those new tracked files to
+    # the current authoring code. All pre-existing paths still come from H
+    # through tracked_bytes.
     original_tracked_bytes = quiet_predicate_campaign.tracked_bytes
     def tracked_bytes(root, head, name):
-        if name in {"joulewise/night_kinds.py", "joulewise/network_time_off.py"}:
+        if name in SUPPLIED_AFTER_BASE:
             return (ROOT / name).read_bytes()
         return original_tracked_bytes(root, head, name)
     with mock.patch.object(quiet_predicate_campaign, "tracked_bytes", side_effect=tracked_bytes):
@@ -266,7 +274,7 @@ class NightKindTests(unittest.TestCase):
         base["chain_sha256"] = base["chain_sha256"].replace(old_wrapper_digest, relocated_wrapper_digest)
         old_manifest = json.loads(base["manifest"])
         new_manifest = json.loads(actual["manifest"])
-        added = ("joulewise/night_kinds.py", "joulewise/network_time_off.py")
+        added = SUPPLIED_AFTER_BASE
         self.assertEqual(set(new_manifest), set(old_manifest))
         self.assertEqual({k: v for k, v in new_manifest.items() if k != "files"},
                          {k: v for k, v in old_manifest.items() if k != "files"})
@@ -354,7 +362,7 @@ class NightKindTests(unittest.TestCase):
         row = replace(kind_row("quiet_predicate_evidence"), window_max_s=8999)
         original = quiet_predicate_campaign.tracked_bytes
         def tracked(root, head, name):
-            if name in {"joulewise/night_kinds.py", "joulewise/network_time_off.py"}:
+            if name in SUPPLIED_AFTER_BASE:
                 return (ROOT / name).read_bytes()
             return original(root, head, name)
         with mock.patch.object(quiet_predicate_campaign, "kind_row", return_value=row), \
@@ -415,8 +423,8 @@ class NightKindTests(unittest.TestCase):
 
     def prepare_candidate_head(self, *, window_max_s=None):
         # Clone the committed candidate H locally; no network or machine action.
-        # Census-clean like the fixture root: a random suffix containing "t3"
-        # would make the generator refuse the plan path.
+        # Census-clean like the fixture root: a path containing a census
+        # substring would make the generator refuse the plan path.
         head_dir = _census_clean_tempdir(prefix="head-", dir=FIXTURE, ignore_cleanup_errors=True)
         self.addCleanup(head_dir.cleanup)
         work = Path(head_dir.name)

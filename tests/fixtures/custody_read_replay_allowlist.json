@@ -187,5 +187,51 @@
     "ordinal": 1,
     "line": 121,
     "reason": "Synthetic fixture replays a committed ledger with verify_custody=False in a disposable Git root to build Revision 6 test records; it never reads or modifies live evidence."
+  },
+  {
+    "file": "joulewise/analysis_manifest_v3.py",
+    "function": "_authenticate_finalization_inputs",
+    "call": "load_calibration_ledger_snapshot",
+    "ordinal": 1,
+    "line": 3649,
+    "reason": "load_calibration_ledger_snapshot replays the finalized bracket ledger at the issued acceptance cutoff; the enclosing finalizer writes an analysis manifest, never a calibration receipt or mutable ledger custody."
+  },
+  {
+    "file": "scripts/check_window_provenance.py",
+    "function": "_acceptance_replay_snapshot",
+    "call": "load_calibration_ledger_snapshot",
+    "ordinal": 1,
+    "line": 320,
+    "reason": "load_calibration_ledger_snapshot replays a retained acceptance-cutoff snapshot with verify_custody=False for read-only provenance assertions; no receipt issuance or ledger mutation."
+  },
+  {
+    "file": "scripts/harvest_v5_g2b_window.py",
+    "function": "physical_snapshot",
+    "call": "load_calibration_ledger_snapshot",
+    "ordinal": 1,
+    "line": 117,
+    "reason": "load_calibration_ledger_snapshot replays the archived physical ledger against the authenticated frozen seed with custody verification, without appending or issuing."
+  },
+  {
+    "file": "scripts/harvest_v5_g2b_window.py",
+    "function": "bracket_assessment",
+    "call": "load_calibration_ledger_snapshot",
+    "ordinal": 1,
+    "line": 297,
+    "reason": "load_calibration_ledger_snapshot replays the archived ledger at the issued acceptance cutoff after a separate seed authentication; produces diagnostic bracket assessment without changing custody."
+  },
+  {
+    "file": "joulewise/b5/plan.py",
+    "function": "ledger_head_status",
+    "ordinal": 1,
+    "line": 424,
+    "reason": "Desk pre-check of the measurement ledger head against its committed pin (write_window_plan refusal; advance_ledger_pin before/after status); verify_custody=False and the result only names blocking reasons, while the pin advance itself runs the guarded advance_calibration_head_pin path."
+  },
+  {
+    "file": "joulewise/b5/harvest.py",
+    "function": "_Harvest._desk_pin_problem",
+    "ordinal": 1,
+    "line": 4077,
+    "reason": "Desk pre-check that the committed pin is the bracket session's terminal head before the verdict writer runs (rehearsal R2-1); the same snapshot the writer loads (require_committed_pin=True), verify_custody=False, and the result only names why no verdict is written."
   }
 ]

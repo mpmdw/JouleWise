@@ -17,13 +17,14 @@ import time
 import unittest
 from unittest.mock import patch
 
-# The generator refuses any path carrying a census substring ("codex", "claude",
-# "t3"); a random tempfile suffix can contain "t3" (seen once: case-qa4uqbt3),
-# so every fixture directory is re-drawn until its name is census-clean.
+# The generator refuses any path carrying a census substring ("codex",
+# "claude"; before the T3 prune of 2026-10-07 also "t3", which a random
+# tempfile suffix could contain), so every fixture directory is re-drawn until
+# its name is census-clean.
 try:  # the generator's own guard list is the source of truth
     from scripts.gen_derivation_night import CENSUS_SUBSTRINGS as _CENSUS_SUBSTRINGS
 except ImportError:  # pragma: no cover - defensive fallback for a moved module
-    _CENSUS_SUBSTRINGS = ("codex", "claude", "t3")
+    _CENSUS_SUBSTRINGS = ("codex", "claude")
 
 
 def _census_clean_tempdir(**kwargs):
@@ -67,7 +68,7 @@ class NoticeProtocolTextTests(unittest.TestCase):
         }
 
     def setUp(self):
-        temp = tempfile.TemporaryDirectory(dir="/tmp")
+        temp = tempfile.TemporaryDirectory(dir=tempfile.gettempdir())
         self.addCleanup(temp.cleanup)
         self.addCleanup_path = Path(temp.name)
         self.protocols = ROOT / "configs/campaigns/quiet_predicate_evidence_01"
@@ -289,7 +290,7 @@ class ArgumentsTests(unittest.TestCase):
                           roots_under=ROOT, staging_under=ROOT / "staging")
 
     def test_real_lock_verifier_and_builder_recipe(self):
-        with _census_clean_tempdir(prefix="recipe-", dir="/tmp") as tmp:
+        with _census_clean_tempdir(prefix="recipe-", dir=tempfile.gettempdir()) as tmp:
             root = Path(tmp).resolve()
             (root / "env").mkdir()
             (root / "env/mac-measurement-lock.txt").write_text("# lock\na==1\nb==2\n")
@@ -314,7 +315,7 @@ class ArgumentsTests(unittest.TestCase):
 class PrepareTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.temp = _census_clean_tempdir(prefix="night-entry-", dir="/tmp")
+        cls.temp = _census_clean_tempdir(prefix="night-entry-", dir=tempfile.gettempdir())
         cls.base = Path(cls.temp.name).resolve()
         cls.remote = cls.base / "remote.git"
         subprocess.run(["git", "clone", "--bare", "-q", "--no-hardlinks", str(ROOT), str(cls.remote)], check=True)
@@ -557,6 +558,67 @@ class PrepareTests(unittest.TestCase):
                 path.rmdir()
             else:
                 path.unlink()
+
+    def _installer_battery_fixture(self, name):
+        """Point the child installer's battery probe at fixture capture `name`."""
+        home = Path(os.environ["HOME"])
+        self.assertTrue(battery_float_fixture.install_user_site_runner(home))
+        site = Path(subprocess.check_output(
+            [sys.executable, "-c", "import site; print(site.getusersitepackages())"],
+            env={**os.environ, "HOME": str(home)}, text=True).strip())
+        custom = site / "usercustomize.py"
+        text = custom.read_text(encoding="utf-8")
+        self.assertIn("_fixture.runner()", text)
+        custom.write_text(text.replace("_fixture.runner()", f"_fixture.runner({name!r})"), encoding="utf-8")
+
+    def test_render_seals_the_installers_battery_records(self):
+        """The real installer (block-4 X4) retains its battery reading next to
+        the plan it validates; under --render-only that is the staging
+        directory. Render seals exactly those records, so a completed
+        preparation resumes, drift in them refuses, and an unsealed one refuses."""
+        first = entry.prepare(**self.kw)
+        stage = Path(first["staging"])
+        records = sorted(stage.glob("battery-float-install-check-*"))
+        self.assertEqual(sorted(p.suffix for p in records), [".ioreg", ".json"])
+        self.assertEqual(records[0].stem, records[1].stem)
+        for path in records:
+            self.assertEqual(first["digests"][str(path)], entry.digest(path))
+        reading = json.loads(next(p for p in records if p.suffix == ".json").read_bytes())
+        self.assertEqual(reading["phase"], "validate_install")
+        self.assertEqual(reading["plan_id"], first["plan_id"])
+        self.assertEqual(entry.prepare(**self.kw), first)
+        for path in records:
+            raw = path.read_bytes()
+            path.write_bytes(raw + b" ")
+            with self.subTest(drift=path.name), self.assertRaisesRegex(entry.Refused, "sealed-byte drift"):
+                entry.prepare(**self.kw)
+            path.write_bytes(raw)
+        stray = stage / "battery-float-install-check-1.json"
+        stray.write_bytes(records[1].read_bytes())
+        with self.assertRaisesRegex(entry.Refused, "^unknown or uncheckpointed staging output$"):
+            entry.prepare(**self.kw)
+        stray.unlink()
+        self.assertEqual(entry.prepare(**self.kw), first)
+
+    def test_a_render_refused_on_battery_is_retried_and_seals_the_refused_reading(self):
+        """The installer refuses a battery not at float after retaining the
+        reading in the staging directory, before any render output. A later
+        prepare retries the render and seals the refused reading with its own."""
+        self._installer_battery_fixture("charging-synthetic-from-real.ioreg")
+        with self.assertRaisesRegex(entry.Refused, "install_night_agent.sh failed.*battery not at float"):
+            entry.prepare(**self.kw)
+        stage = next((self.base_dir / "staging").glob("*/prepare.json")).parent
+        refused = sorted(stage.glob("battery-float-install-check-*"))
+        self.assertEqual(sorted(p.suffix for p in refused), [".ioreg", ".json"])
+        self.assertFalse((stage / "render").exists())
+        self._installer_battery_fixture("float.ioreg")
+        state = entry.prepare(**self.kw)
+        records = sorted(stage.glob("battery-float-install-check-*"))
+        self.assertEqual(len(records), 4)
+        self.assertTrue(set(refused) < set(records))
+        for path in records:
+            self.assertEqual(state["digests"][str(path)], entry.digest(path))
+        self.assertEqual(entry.prepare(**self.kw), state)
 
     def test_cross_device_refused_before_clone(self):
         original = Path.stat
@@ -885,7 +947,7 @@ class LifecycleTests(unittest.TestCase):
     def setUp(self):
         from tests.git_fixture import init_git_fixture
         from tests.test_arm_census import observation, row
-        temporary = _census_clean_tempdir(prefix="lifecycle-", dir="/tmp")
+        temporary = _census_clean_tempdir(prefix="lifecycle-", dir=tempfile.gettempdir())
         self.addCleanup(temporary.cleanup)
         self.base = Path(temporary.name).resolve()
         self.canonical = self.base / "canonical"
@@ -896,7 +958,7 @@ class LifecycleTests(unittest.TestCase):
         (self.canonical / "env/mac-measurement-lock.txt").write_text("fixture==1\n")
         (self.canonical / "joulewise").mkdir()
         (self.canonical / "joulewise/__init__.py").write_text("")
-        for name in ("night_gate.py", "battery_float.py", "night_kinds.py", "corecaptured_loop.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
+        for name in ("night_gate.py", "agent_identity.py", "battery_float.py", "night_kinds.py", "corecaptured_loop.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
             shutil.copy2(ROOT / "joulewise" / name, self.canonical / "joulewise" / name)
         clone_route = {"test_retry_uses_clone_retry_route": "retry",
                        "test_retry_uses_clone_cold_gate_route": "cold_gate"}.get(self._testMethodName)
@@ -905,7 +967,8 @@ class LifecycleTests(unittest.TestCase):
             retry.write_text(retry.read_text() + f"\ndef classify_abort(cause):\n    return {clone_route!r}\n")
         if self._testMethodName == "test_b6_clone_old_census_literal_is_reported":
             gate = self.canonical / "joulewise/night_gate.py"
-            gate.write_text(gate.read_text().replace("[c]odex|[c]laude|[t]3", "codex|claude|t3"))
+            gate.write_text(gate.read_text().replace('AGENT_CENSUS_PATTERN = "[c]odex|[c]laude"',
+                                                     'AGENT_CENSUS_PATTERN = "codex|claude"'))
         self.arrival = int(time.time()) - 1000
         self.old = self.commit("old", self.arrival - 100)
         self.head = self.commit("fix", self.arrival)
@@ -1024,17 +1087,19 @@ class LifecycleTests(unittest.TestCase):
             return json.loads((self.stage / "lifecycle/check.json").read_text())
         return entry.check(**self.kw)
 
-    def test_check_passes_and_writes_only_check_json(self):
+    def test_check_passes_and_retains_check_and_raw_battery_observation(self):
         def snapshot():
             return {str(p): (p.read_bytes(), p.stat().st_mtime_ns) for p in self.base.rglob("*") if p.is_file()}
         before = snapshot()
         record = self.checked()
         after = snapshot()
         self.assertTrue(record["rehearsal_ready"])
+        battery = record["checks"]["battery_float"]
         self.assertEqual(set(after) - set(before), {str(self.stage / "lifecycle/check.json"),
-            str(self.stage.parent / ".locks" / (self.stage.name + ".lock"))})
+            str(self.stage.parent / ".locks" / (self.stage.name + ".lock")),
+            battery["record"]["path"], battery["raw"]["path"]})
         self.assertEqual(before, {p: after[p] for p in before})
-        self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude|[t]3")
+        self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude")
         self.assertIn(20, record["checks"]["census"]["owned_helpers"])
         self.assertFalse(any("launchctl" in str(c) for c in self.calls))
 
@@ -1083,6 +1148,9 @@ class LifecycleTests(unittest.TestCase):
                 self.assertEqual(battery["observation"]["probe_error"], verdict == "fail")
                 self.assertEqual(battery["observation"]["raw_stdout_sha256"],
                                  hashlib.sha256(stdout).hexdigest())
+                self.assertEqual(Path(battery["raw"]["path"]).read_bytes(), stdout)
+                self.assertEqual(json.loads(Path(battery["record"]["path"]).read_bytes()), battery["observation"])
+                self.assertEqual(battery["observation"]["plan_id"], json.loads((self.stage / "prepare.json").read_bytes())["plan_id"])
 
     def test_corecaptured_arm_toggles_once_and_counts_only_post_toggle_spawns(self):
         raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
@@ -2308,6 +2376,8 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(observation["probe_error"])
         self.assertIn("framing: byte", observation["reasons"][0])
         self.assertEqual(observation["raw_stdout_sha256"], hashlib.sha256(smuggle).hexdigest())
+        self.assertEqual((attempt / "battery-float-at-publication.ioreg").read_bytes(), smuggle)
+        self.assertIsNotNone(observation["plan_id"])
 
     def test_b6_clone_old_census_literal_is_reported(self):
         with patch.object(entry, "CENSUS_FIX", self.tip):
@@ -2315,7 +2385,7 @@ class LifecycleTests(unittest.TestCase):
                 entry.check(**self.kw)
         record = json.loads(self.journal("check.json").read_text())
         self.assertIn("census fix", record["checks"]["canonical"]["reason"])
-        self.assertEqual(record["checks"]["census"]["argv"][-1], "codex|claude|t3")
+        self.assertEqual(record["checks"]["census"]["argv"][-1], "codex|claude")
 
     def test_b6_classification_runs_inside_clone(self):
         original = entry.run
@@ -2326,7 +2396,7 @@ class LifecycleTests(unittest.TestCase):
             return original(argv, **kwargs)
         with patch.object(entry, "run", side_effect=spy):
             record = self.checked()
-        self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude|[t]3")
+        self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude")
         self.assertTrue(executions)
         self.assertTrue(all(argv[:3] == [self.root / ".venv/bin/python", "-B", "-c"] and
                             kw["cwd"] == self.root for argv, kw in executions))

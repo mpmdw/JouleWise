@@ -1,0 +1,1466 @@
+{
+  "auxiliary": {
+    "gamma-bound-collection": 7140,
+    "gamma-bound-derivation": 60,
+    "gamma-reference-decode-midpoint": 595,
+    "gamma-reference-end": 1785,
+    "gamma-reference-start": 1785
+  },
+  "blindness": "Only archive timestamp_s, elapsed_ns and named duration/clock fields are decoded. Raw bytes are hashed for custody; no archive energy/power scalar is decoded, printed or retained. No s1 input exists or is used.",
+  "blockers": [],
+  "classification": "Prospective production source allowances, not hard latency guarantees. Auxiliary model timing is an approved small-model proxy (ruling 76 A.3).",
+  "controls": {
+    "arm_capability_horizon_s": 300,
+    "check_offset_s": 120,
+    "courier_offset_s": 720,
+    "deadman_offset_s": 4020,
+    "nonvolatile_horizon_s": 21600,
+    "shutdown_offset_s": 420,
+    "volatile_horizon_s": 1200
+  },
+  "derivations": {
+    "bound_references": "12*595 +3*595 +1*595 +3*595 +60 derivation =11365; 19 auxiliary captures; no undispatched GAMMA references",
+    "deadlines": {
+      "courier_deadline_offset_s": 26400,
+      "deadman_formula": "60*ceil((t0+25800+300+3600)/60); if t0 is minute-aligned: t0+29700",
+      "deadman_unrounded_offset_s": 29700,
+      "driver_completion_check": "run_night._completion_epoch_s line2078 uses window+300 for its dead-man sanity check, not an absolute courier deadline; bounded courier runtime is300 s after launch. Latest emergency+delivery allowance is window+600, per writer.deadlines.",
+      "emergency_shutdown_offset_s": 26100,
+      "latest_chain_start_offset_s": 3306
+    },
+    "fixed_settles": "6*600 + 5*20 =3700, exactly rendered one-block chain",
+    "frequency_gate": {
+      "bound_ms": 4.8457,
+      "frequency_margin_ppm": 0.25,
+      "h_max_ms": 3.6,
+      "margin_ms": 0.1543,
+      "maximum_abs_f_ppm": 3.6305970149253732,
+      "maximum_abs_f_ppm_exact": "973/268",
+      "old_bound_ms": 5.79646,
+      "old_refusal_clears_inequality": true,
+      "old_t_stream_max_s": 613,
+      "passes": true,
+      "placement_margin_ms": 0.1,
+      "t_stream_max_s": 335,
+      "today_f_ppm": -3.17
+    },
+    "idle_slice": {
+      "attempt_allowance_s": 110,
+      "attempt_margin_s": 6.446274757385254,
+      "captured_s_max": 100.302795309,
+      "captured_s_min": 97.666852821,
+      "formula": "ceil(75 / (100 ms / 1000)) = 750 native records; actual slice = sum(elapsed_ns) / 1e9",
+      "formula_allowance": "2 * 110 + 3 * (5 commands * 3 s) + 10 s sentinel; zero backoff; first guard precedes main sampler, three subsequent guards lie inside it",
+      "idle_admission_s": 275,
+      "no_extra_45_s": "Old 275 s already came from idle-75 block-3 evidence; do not add 45 s per attempt again.",
+      "observed_attempt_max_s": 103.55372524261475,
+      "record_mean_s_max": 0.133737060412,
+      "record_mean_s_min": 0.130222470428
+    },
+    "member_phases": {
+      "cooldown": "production cap 300 s; separately captured, remains a wall-time member term",
+      "forced_decode": "ceil(1.5 * observed 512-token decode) + 1 s: small 5, large 13",
+      "load": "ceil(1.5 * observed prepare stage max): small 3, large 6; runtime load field is a subset",
+      "prefill": "ceil(1.5 * maximum at 4096 tokens): small 2, large 9; conservative for prompt-0 decode contrast",
+      "warmup": "ceil(1.5 * stage maximum): small 10, large 16"
+    },
+    "pack_t0": {
+      "author_allowance_s": 120,
+      "authority": "Ruling 76 addendum E item 2",
+      "consuming_start_allowance_s": 120,
+      "formula": "120 author + 120 verification + 120 consuming start = 360 s, after the six-step T-0 stage",
+      "seconds": 360,
+      "verification_allowance_s": 120
+    },
+    "post_quiet": "420 s two backups/close-out/OFF design allocation, outside quiet span",
+    "pre_post_calibration": "2*(240 sampler +20 countdown +5 pause +120 screen/allocation) =770; observed sampler maximum196.8432228565, margin43.1567771435",
+    "stage_custody": {
+      "basis": "Approved labelled allocations in record44 and ruling76 A.3; remaining stage/custody proxies are not hardware measurements.",
+      "formula": "5*180 stage overhead +23*45 reductions +2*240 bracket writer custody +300 reservation +120 terminal custody +23*(15+17) native sampler custody =3571",
+      "full_member_accounting": "Full envelopes use E_small627, E_large651, E_ABBA2556, bound/references11973, and legacy custody2835. The v1 writer uses six-term subtotals595/619/2428/11365 plus custody3571; both total22494 with pack_t0360. Do not add the736 s twice.",
+      "legacy_custody_s": 2835,
+      "native_sampler_custody_s": 736,
+      "reduction_allowance_s": 45,
+      "reductions_observed_max_s": 28.1126492023468
+    },
+    "stream_max": {
+      "auxiliary": "Each NEG-8/reference member uses the 314 s small proxy, not stage sum 12*314/3*314. No direct timing for auxiliary model; proxy approved in ruling 76 A.3.",
+      "calibration_lower_bound": {
+        "formula": "3*BASELINE_S + WARMUP_PULSE_COUNT*(PULSE_DURATION_S+1.5) + pulse_schedule(59)[-1][1]",
+        "margin_to_60_s": 136.703125,
+        "production_source": "scripts/gen_g2_phase_d.py:85; joulewise/powermetrics_fiducial.py:383; scripts/validate_powermetrics_fiducial.py:2393-2494",
+        "programmed_span_s": 196.703125
+      },
+      "cooldown_separation": [
+        "joulewise/controller.py:1607",
+        "scripts/run_campaign.py:4300",
+        "scripts/run_campaign.py:4310",
+        "joulewise/controller.py:2847",
+        "joulewise/adapters/powermetrics.py:291"
+      ],
+      "formula": "max(15+(275-10)+10+2+5+17, 15+(275-10)+16+9+13+17, 240) = 335 s; exclude load, separate sentinel and separate cooldown",
+      "helper_streams": "Ruling 76 addendum E item 3 requires >=60 s for every anchor-bearing science, NEG-8, reference and bracket stream. Cooldown subwindows and the separate post-run sentinel have no clock anchor and are exempt; whole unanchored auxiliary stages use the nonsampling roster.",
+      "main_stream_lower_bound": {
+        "basis": "750 records: 749 endpoint intervals before warmup/measured phases; not a hard bound on future record cadence; reject partial/aborted captures as failed evidence",
+        "comparable_margin_to_60_s": 37.54572803000001,
+        "comparable_min_idle_endpoint_span_s": 97.54572803,
+        "minimum_source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r05/raw/powermetrics_idle.plist",
+          "sha256": "07b498e81507ec0903bbcf699dc5bd98e3a0fcb6c91fa19eac7b39a9f1966b71"
+        },
+        "nominal_endpoint_span_s": 74.9,
+        "nominal_margin_to_60_s": 14.9
+      },
+      "native_sampler_overhead": {
+        "accounting": "32 s for each of23 captures is charged once to fixed.stage_custody; full E_small/E_large/auxiliary envelopes add32 to the legacy six-term subtotal.",
+        "per_member_wall_s": 32,
+        "startup_s": 15,
+        "winddown_formula": "ceil(post-window dwell1 + max anchor lag5 + 2/10 Hz + drain margin0.25 + terminate/communicate10) =17",
+        "winddown_s": 17
+      }
+    },
+    "t0_stage_cap": {
+      "author_allowance_s": 120,
+      "authority": "Ruling 76 addendum E items 1-2",
+      "band_s": [
+        3180,
+        3480
+      ],
+      "clean_dwell_cap_s": 2700,
+      "clean_dwell_min_s": 600,
+      "enforcement": "Source-bound writer band; run_night._capture_qualification_t0 uses the authenticated plan cap as the six-step subprocess timeout.",
+      "formula": "2700 dwell cap + 600 for the other five captures and OFF margin = 3300 s",
+      "g4_ceiling_s": 3600,
+      "g4_margin_s": 180,
+      "limitation": "Post-stage authoring and ARM verification remain prospective allowances; this derivation is not live/hardware validation.",
+      "off_overlap": "The one clean dwell follows OFF; OFF settling overlaps it. No second dwell or separate 600 s OFF term is added.",
+      "other_captures_and_off_margin_s": 600,
+      "r0_to_author_allowance_s": 3420,
+      "seconds": 3300,
+      "window_enforcement": "qualification_start_deadline applies the chain-pinned source allowance only to block-4 G2B_SHAKEDOWN transaction packs with fixed.t0_stage_cap. The writer supplies sizing at initial deadline validation; runtime reads the published sizing file. Earlier packs, rehearsal and derivation plans retain span+2700."
+    },
+    "terminal_shutdown": "300 s physical-ahead STOP/shell exit design allocation; separate from driver emergency grace300",
+    "window": {
+      "formula": "60*ceil((22494+3300)/60)=25800",
+      "latest_chain_start_formula": "t0 + 25800 - 22494 = t0 + 3306",
+      "outside_stage_reason": "The six-step T-0 stage includes the single clean dwell and runs inside the window before the programmed chain. Ruling 76 addendum E replaces addendum D item 2.",
+      "outside_t0_stage_cap_s": 3300,
+      "prerequisite_boundary": "t0 - T0_STAGE_CAP_S is the conservative declared pre-stage control boundary; the driver separately checks ordering against actual fresh captures.",
+      "programmed_formula": "360 + 3700 + 770 + 11365 + (2*595+2*619) + 3571 + 300 = 22494",
+      "record44_full_member_formula": "360 + 3700 + 770 + 11973 + (2*627+2*651) + 2835 + 300 = 22494"
+    }
+  },
+  "diagnostic_anchor_half_width_s": 0.003597711938684421,
+  "fixed": {
+    "fixed_settles": 3700,
+    "pack_t0": 360,
+    "pre_post_calibration": 770,
+    "stage_custody": 3571,
+    "t0_stage_cap": 3300,
+    "terminal_shutdown": 300
+  },
+  "head": "bda1c180cf156ecedcbe01a6010390dcd724c8cc",
+  "members": {
+    "large": {
+      "cooldown": 300,
+      "forced_decode": 13,
+      "idle_admission": 275,
+      "load": 6,
+      "prefill": 9,
+      "warmup": 16
+    },
+    "small": {
+      "cooldown": 300,
+      "forced_decode": 5,
+      "idle_admission": 275,
+      "load": 3,
+      "prefill": 2,
+      "warmup": 10
+    }
+  },
+  "observed_max_effective_bound_s": 0.004017182870691257,
+  "provenance": {
+    "authority": [
+      {
+        "git_commit": "6c7ee40055acd0b514023ec0d4327fe5aaaceb37",
+        "git_object": "8ed23f48bde56f29bc161fa76e366e133da37bbd",
+        "path": "docs/process_traces/2026-10-04-desk-day-v5/44-block4-sizing.md",
+        "sha256": "3e9a2fb3ea3472a07d7faf32ace32c9676c89096117048126b5cffb291655158"
+      },
+      {
+        "git_commit": "6c7ee40055acd0b514023ec0d4327fe5aaaceb37",
+        "git_object": "00c2cdadde5fd7bf3f7e3b261f7ac92ce55b9666",
+        "path": "configs/campaigns/v5_qualification_25g83/registration_block4_draft.md",
+        "sha256": "336ac80747662923d0a83a48a64cc268a1a36d3040896673e617b756364e061f"
+      },
+      {
+        "git_commit": "c08abb1a182b53ea8a55e6987c02163688b6b173",
+        "git_object": "17b28a87613fde76a4d2c7b5be58274243dd5aa1",
+        "path": "docs/process_traces/2026-10-04-desk-day-v5/76-r1-fold-ruling.md",
+        "sha256": "87c2a2de9ad69da8dbbbd75ae3b66e4c7a7cc7b0544363a1f7124c7c21492ac9"
+      },
+      {
+        "path": "/Users/edr/night-archive/ia-0a40/MEMO.md",
+        "sha256": "49c87ff8b67694c6512766463d40b2121b1b97ef530d328067986e5b8576cbba",
+        "source_pointer": "lines 206-236 (1.8, 1.9), 282-295 (1.14)"
+      }
+    ],
+    "cadence_captures": [
+      {
+        "endpoint_span_s": 97.768846607,
+        "max_record_s": 0.138145541,
+        "mean_record_s": 0.13052891558666668,
+        "min_record_s": 0.118227666,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r01/raw/powermetrics_idle.plist",
+          "sha256": "b7fe3a5d9b42ec3f90427963c04d7c5e57b1ad8bcaaa4055e4c9ea9d7d265eba"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.89668669
+      },
+      {
+        "endpoint_span_s": 98.805072268,
+        "max_record_s": 0.1406605,
+        "mean_record_s": 0.13189190469066667,
+        "min_record_s": 0.113495708,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/raw/powermetrics_idle.plist",
+          "sha256": "b2d4991c7c554352a65d7a9b247b59e66e05a064ef52c33003deb9a241da5250"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 98.918928518
+      },
+      {
+        "endpoint_span_s": 98.923724764,
+        "max_record_s": 0.138304416,
+        "mean_record_s": 0.13207308540666668,
+        "min_record_s": 0.116041875,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/raw/powermetrics_idle_attempt_1.plist",
+          "sha256": "e02d72e4d23484c9e80d524bc11eeeb1cca4656cd5235b1a8aaeaef312f04861"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 99.054814055
+      },
+      {
+        "endpoint_span_s": 98.805072268,
+        "max_record_s": 0.1406605,
+        "mean_record_s": 0.13189190469066667,
+        "min_record_s": 0.113495708,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/raw/powermetrics_idle_attempt_2.plist",
+          "sha256": "b2d4991c7c554352a65d7a9b247b59e66e05a064ef52c33003deb9a241da5250"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 98.918928518
+      },
+      {
+        "endpoint_span_s": 97.790761107,
+        "max_record_s": 0.136883375,
+        "mean_record_s": 0.13055908019733334,
+        "min_record_s": 0.116946333,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r03/raw/powermetrics_idle.plist",
+          "sha256": "2e88f4ca8f59a137d156af59c6d2b602b28938b32c7d0048a046943656659a6a"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.919310148
+      },
+      {
+        "endpoint_span_s": 97.817610549,
+        "max_record_s": 0.136628291,
+        "mean_record_s": 0.13059915623066667,
+        "min_record_s": 0.117656458,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r04/raw/powermetrics_idle.plist",
+          "sha256": "7041fa5eb1ba3bab7c794267d67953c7dde2edc69d4c88d45a38a142db7a5d39"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.949367173
+      },
+      {
+        "endpoint_span_s": 97.54572803,
+        "max_record_s": 0.141278833,
+        "mean_record_s": 0.130222470428,
+        "min_record_s": 0.11616825,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r05/raw/powermetrics_idle.plist",
+          "sha256": "07b498e81507ec0903bbcf699dc5bd98e3a0fcb6c91fa19eac7b39a9f1966b71"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.666852821
+      },
+      {
+        "endpoint_span_s": 97.816273886,
+        "max_record_s": 0.137304791,
+        "mean_record_s": 0.130589407736,
+        "min_record_s": 0.115101666,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p1024-r01/raw/powermetrics_idle.plist",
+          "sha256": "9fd409698535bb9e34c0545a1da801337e91a49c4f2c7db4422e6f120e351fcf"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.942055802
+      },
+      {
+        "endpoint_span_s": 97.796456639,
+        "max_record_s": 0.136976916,
+        "mean_record_s": 0.13056852801866667,
+        "min_record_s": 0.116654375,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p1024-r02/raw/powermetrics_idle.plist",
+          "sha256": "f9af47e91ae581560ba64bc053f29096feeabba802e56cea18b9039ff50fbbeb"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.926396014
+      },
+      {
+        "endpoint_span_s": 98.671234674,
+        "max_record_s": 0.136428833,
+        "mean_record_s": 0.13173685556533335,
+        "min_record_s": 0.117392916,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p1024-r03/raw/powermetrics_idle.plist",
+          "sha256": "892323c1b0f153b4cc05305e188c3b728a2de7114c320c830db0c9070653cf2b"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 98.802641674
+      },
+      {
+        "endpoint_span_s": 97.785770812,
+        "max_record_s": 0.136616208,
+        "mean_record_s": 0.13055298063733334,
+        "min_record_s": 0.120178458,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p1024-r04/raw/powermetrics_idle.plist",
+          "sha256": "d6a034886f5f5880c643f9527ddf878eda258763eeabbc792631035f3d393a47"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.914735478
+      },
+      {
+        "endpoint_span_s": 97.709053685,
+        "max_record_s": 0.136447041,
+        "mean_record_s": 0.13045549657866667,
+        "min_record_s": 0.118137166,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p1024-r05/raw/powermetrics_idle.plist",
+          "sha256": "7c5681c88af6232e083e228701343f50020b2c1bb432ead6745a8078c24f5a77"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.841622434
+      },
+      {
+        "endpoint_span_s": 97.604208228,
+        "max_record_s": 0.137393166,
+        "mean_record_s": 0.130310651636,
+        "min_record_s": 0.120828208,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p2048-r01/raw/powermetrics_idle.plist",
+          "sha256": "069d394980b5f65f131619515d0c0c021de29f29f8e14bc2a327e06f10ff92ad"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.732988727
+      },
+      {
+        "endpoint_span_s": 97.827391136,
+        "max_record_s": 0.1365755,
+        "mean_record_s": 0.13060804534666667,
+        "min_record_s": 0.116040708,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p2048-r02/raw/powermetrics_idle.plist",
+          "sha256": "b396ff88f391952254f5273163a371657b6732c8c918712c749846a0ccb16a10"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.95603401
+      },
+      {
+        "endpoint_span_s": 98.317708562,
+        "max_record_s": 0.146377583,
+        "mean_record_s": 0.13126551186,
+        "min_record_s": 0.116412541,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p2048-r03/raw/powermetrics_idle.plist",
+          "sha256": "8ed8fdacd71811d9d7b4b634ac197ce8c408dd6d4d0c779924c8a144101bc7e7"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 98.449133895
+      },
+      {
+        "endpoint_span_s": 100.190028976,
+        "max_record_s": 0.139056083,
+        "mean_record_s": 0.133737060412,
+        "min_record_s": 0.112766333,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p2048-r03/raw/powermetrics_idle_attempt_2.plist",
+          "sha256": "a24b943d4f68d36688fa60b233720ac00d02d2b765ed5a67670c4e1220fe2001"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 100.302795309
+      },
+      {
+        "endpoint_span_s": 97.753524029,
+        "max_record_s": 0.137052083,
+        "mean_record_s": 0.130510271816,
+        "min_record_s": 0.116048625,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p0512-r01/raw/powermetrics_idle.plist",
+          "sha256": "d440e18bd186f7f1ac08f8f6a03b50af07cfc13b9d9e4afa20c4ef1f66c6fea9"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.882703862
+      },
+      {
+        "endpoint_span_s": 98.178962661,
+        "max_record_s": 0.138134416,
+        "mean_record_s": 0.13107689210266665,
+        "min_record_s": 0.11802775,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p1024-r01/raw/powermetrics_idle.plist",
+          "sha256": "55f904f2a69b018bde9f476d66b2cfb1a03f81afd6c6f143d91e06af1bc46c82"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 98.307669077
+      },
+      {
+        "endpoint_span_s": 97.771033118,
+        "max_record_s": 0.136290541,
+        "mean_record_s": 0.130535619712,
+        "min_record_s": 0.11634125,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p2048-r01/raw/powermetrics_idle.plist",
+          "sha256": "b08a1f5e7b34aec737b01b7f2341339d2a2a9f807fe8ed79fba445746ec094e2"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.901714784
+      },
+      {
+        "endpoint_span_s": 97.831852847,
+        "max_record_s": 0.138342916,
+        "mean_record_s": 0.130616940684,
+        "min_record_s": 0.11514825,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/raw/powermetrics_idle.plist",
+          "sha256": "66cb315a7a086e5b3a9408f76ddf5506c46bff77e3bc4e58fdd3adfcd8cc2bc9"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.962705513
+      },
+      {
+        "endpoint_span_s": 97.710004396,
+        "max_record_s": 0.138175291,
+        "mean_record_s": 0.13045521730533333,
+        "min_record_s": 0.115512375,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p0512-r01/raw/powermetrics_idle.plist",
+          "sha256": "e2340127ceca1c05f20b7cf5dc3298b8a92990b17dd238b9609ab4966e466979"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.841412979
+      },
+      {
+        "endpoint_span_s": 97.749748895,
+        "max_record_s": 0.1372335,
+        "mean_record_s": 0.13050176402666666,
+        "min_record_s": 0.120893166,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p0512-r02/raw/powermetrics_idle.plist",
+          "sha256": "faa117747ec41335f74a604fe77751af8ee12fd6ec3d6ecbaebc9f33c3ade563"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.87632302
+      },
+      {
+        "endpoint_span_s": 97.709162961,
+        "max_record_s": 0.136733958,
+        "mean_record_s": 0.13045419772533334,
+        "min_record_s": 0.117004083,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p0512-r03/raw/powermetrics_idle.plist",
+          "sha256": "fcb68a5135c4432a4106067617e14fe739405526b17fc0fd7dd65414b3ade9c7"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.840648294
+      },
+      {
+        "endpoint_span_s": 98.181418832,
+        "max_record_s": 0.140945541,
+        "mean_record_s": 0.131083686164,
+        "min_record_s": 0.116931041,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p0512-r04/raw/powermetrics_idle.plist",
+          "sha256": "a048c797010749ffcfb45a41de36790750950195b62eedd5a3352bbbb78bdf52"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 98.312764623
+      },
+      {
+        "endpoint_span_s": 97.763280371,
+        "max_record_s": 0.137947666,
+        "mean_record_s": 0.13052765088266666,
+        "min_record_s": 0.117558083,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p0512-r05/raw/powermetrics_idle.plist",
+          "sha256": "2a40b290f1c744e554e2129632e5590f039c0e27c574906c96a1e7fc5ea88417"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.895738162
+      },
+      {
+        "endpoint_span_s": 97.690311533,
+        "max_record_s": 0.136307416,
+        "mean_record_s": 0.130425349488,
+        "min_record_s": 0.116047833,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p1024-r01/raw/powermetrics_idle.plist",
+          "sha256": "f5c6945ecd7dc1378de549b24f1a9938f8659d02abe466c4069fff221ff03864"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.819012116
+      },
+      {
+        "endpoint_span_s": 98.493224343,
+        "max_record_s": 0.13783425,
+        "mean_record_s": 0.13149048979066666,
+        "min_record_s": 0.1156565,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p1024-r02/raw/powermetrics_idle.plist",
+          "sha256": "99d8479c1ef93fa6197ddfeaf7e0b5d7ed2eee1fd6aeb4b6d78f718fd7ee487b"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 98.617867343
+      },
+      {
+        "endpoint_span_s": 97.62844211,
+        "max_record_s": 0.13691425,
+        "mean_record_s": 0.13034430047866666,
+        "min_record_s": 0.119133166,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p1024-r03/raw/powermetrics_idle.plist",
+          "sha256": "9c6f1dca255b2521edbe5a40e8360136742cc55bdad35f200b01e8405199761d"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.758225359
+      },
+      {
+        "endpoint_span_s": 97.916375132,
+        "max_record_s": 0.137179291,
+        "mean_record_s": 0.13072600678666665,
+        "min_record_s": 0.115821541,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p1024-r04/raw/powermetrics_idle.plist",
+          "sha256": "8c89698d65c27dc4490fa57af26e7e7ca56495c9180e24b13f9b6d5451e44a1e"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 98.04450509
+      },
+      {
+        "endpoint_span_s": 97.771713683,
+        "max_record_s": 0.136551416,
+        "mean_record_s": 0.13053311046533334,
+        "min_record_s": 0.11566925,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p1024-r05/raw/powermetrics_idle.plist",
+          "sha256": "8fb432d531783f010b71b77541f497cb7b789aa2d24555f0267c1cebd785f474"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.899832849
+      },
+      {
+        "endpoint_span_s": 97.632333446,
+        "max_record_s": 0.138036208,
+        "mean_record_s": 0.130349300372,
+        "min_record_s": 0.114959375,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p2048-r01/raw/powermetrics_idle.plist",
+          "sha256": "be261eb10a083ce0348a293b270afded4be1b76e5eebb1f4d552d2ae5181dd9d"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.761975279
+      },
+      {
+        "endpoint_span_s": 98.574282723,
+        "max_record_s": 0.137141666,
+        "mean_record_s": 0.131605100852,
+        "min_record_s": 0.115597958,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p2048-r02/raw/powermetrics_idle.plist",
+          "sha256": "a5e4cb176e0db31901f3350a1e72775fddd017b578b136e52a59ebef9016d653"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 98.703825639
+      },
+      {
+        "endpoint_span_s": 97.703467112,
+        "max_record_s": 0.136859125,
+        "mean_record_s": 0.13043311792666668,
+        "min_record_s": 0.118050458,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p2048-r03/raw/powermetrics_idle.plist",
+          "sha256": "a8ddf2514ce7f00538c68bb5128573ba024844e8bd26e13e2e2a744a486a9cf9"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.824838445
+      },
+      {
+        "endpoint_span_s": 97.66296352,
+        "max_record_s": 0.135165833,
+        "mean_record_s": 0.13038849419333332,
+        "min_record_s": 0.116447,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p2048-r04/raw/powermetrics_idle.plist",
+          "sha256": "115bd8deb8dcfb2abdcc2710653d2ef320ac596556ff56f392d2be68ddbf7fb3"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.791370645
+      },
+      {
+        "endpoint_span_s": 97.810851608,
+        "max_record_s": 0.137136375,
+        "mean_record_s": 0.13057765186533332,
+        "min_record_s": 0.117183708,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p2048-r05/raw/powermetrics_idle.plist",
+          "sha256": "75637599c41ff1b8c37958e75dcb03596647957dc3d9cb3096344fb4e4674426"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.933238899
+      },
+      {
+        "endpoint_span_s": 97.717393896,
+        "max_record_s": 0.136990125,
+        "mean_record_s": 0.13046397669466667,
+        "min_record_s": 0.121138875,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r01/raw/powermetrics_idle.plist",
+          "sha256": "f4bfe96103c309d83dd4bb80d8a3e9c2113a772e14b82b10a787c9f6cd0054fa"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.847982521
+      },
+      {
+        "endpoint_span_s": 97.811065437,
+        "max_record_s": 0.136922416,
+        "mean_record_s": 0.13059022852666666,
+        "min_record_s": 0.117237916,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r02/raw/powermetrics_idle.plist",
+          "sha256": "54aba72fc636df32c299bf5c7a6369a0fa4ce19b9ee6c02b956f8e26aade5546"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.942671395
+      },
+      {
+        "endpoint_span_s": 97.781191732,
+        "max_record_s": 0.136936125,
+        "mean_record_s": 0.13054607669733334,
+        "min_record_s": 0.117582208,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r03/raw/powermetrics_idle.plist",
+          "sha256": "787d1446c567c78f471c37b515b7a64859ce8f4c4e80e2c0e72a9d45f623d194"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.909557523
+      },
+      {
+        "endpoint_span_s": 97.783804579,
+        "max_record_s": 0.136303333,
+        "mean_record_s": 0.13054980177066666,
+        "min_record_s": 0.118626666,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r04/raw/powermetrics_idle.plist",
+          "sha256": "8e5028f65bc900f597868352f57ab3699817a0d22d4228cbd18ec3a0f3d49e78"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.912351328
+      },
+      {
+        "endpoint_span_s": 97.763384981,
+        "max_record_s": 0.143005083,
+        "mean_record_s": 0.13052743580666668,
+        "min_record_s": 0.11793575,
+        "records": 750,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r05/raw/powermetrics_idle.plist",
+          "sha256": "0c754a0b8788298acc0c90cea7a8ae26643da215ea114cff3ac775079a893e75"
+        },
+        "source_pointer": "all plist records: /elapsed_ns (only this timing field decoded)",
+        "sum_elapsed_s": 97.895576855
+      }
+    ],
+    "config_inventory": [
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a1",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a1.json",
+          "sha256": "a759df76561a351488e2da1b88c667c4163f1c09dbd7e857efe469130125647f"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1.json",
+          "sha256": "82995cf098267785b541ee45f163aae2e0b6f485472733a9d787521ed92d6cad"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b2",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b2.json",
+          "sha256": "e234fabfd5a5e69f8b5a64659a3f9dde8b080d628fdb449b5635771920210503"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a2",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/01_decode_contrast_blocks_01_05/d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a2.json",
+          "sha256": "ff75a3dc0ee6c992c2ee4356204ac0598255e0ba71f354c71ea0e70dc5a318e3"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-refcorpus-r01",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r01.json",
+          "sha256": "6bccecc46fe1bd093357d4aa270c19325af28084c6b5bacd0cc3cc6630dd893e"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-refcorpus-r02",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r02.json",
+          "sha256": "c9b42b48ad7bd9d815b6cd200072477b1d1874546703f64a9144ea89a37422eb"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-refcorpus-r03",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r03.json",
+          "sha256": "b46790c56480340275ccd31dccd6e1754d2145cca1782c88b4f51be310bb86c5"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-refcorpus-r04",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r04.json",
+          "sha256": "5e0f25d616072fb4fa48cb2b6ccd25f69299c417ea80f35bc99f3733b2980878"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-refcorpus-r05",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r05.json",
+          "sha256": "6606cb9963839bd6bd2715fa84afccd56db0f3273c3e162a15e6117768159564"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-refcorpus-r06",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r06.json",
+          "sha256": "6fae93773ce9b69c1c192a24f43622939a094bd4e2296267b421fb59aa3951e9"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-refcorpus-r07",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r07.json",
+          "sha256": "dab4a8a5f727df0da02c542a584a9582f079450e7e716b1c99b67844b71b0fe4"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-refcorpus-r08",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r08.json",
+          "sha256": "7d842daf967a1d7a4c47c35eb3cac139122c3bdb2707eaad2578d20e5c75594d"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-refcorpus-r09",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r09.json",
+          "sha256": "547a3b0d7bd5f3b55f72a8d64cefc8698e25df927dd6fdd3a64103b6073ecadd"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-refcorpus-r10",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r10.json",
+          "sha256": "c688d052cac174b56fb7a8229fabe1f648959fe017797395acde33b8f91e1a8d"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-refcorpus-r11",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r11.json",
+          "sha256": "2b85317e04427ff315ec07503d2cd718b300ae46011be1f11dcc4fd13a4a01d9"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-refcorpus-r12",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/neg8_reference_corpus_v5/neg8-refcorpus-r12.json",
+          "sha256": "2a7c24642198d4774072c0e946cf165f7510ef6ae50c96f589c1ac6f816ae46d"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-window-end-r1",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r1.json",
+          "sha256": "62e16d11cd4d3c5d44744ff390374ea009a6fae8988845e1f82a860e28571bd0"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-window-end-r2",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r2.json",
+          "sha256": "3c85f630e6eb0002dfdfdb5ce09816497298b9fbec546e66390723a7d8dea2e8"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-window-end-r3",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/window_references_v5/end_triplet/neg8-window-end-r3.json",
+          "sha256": "aa0933348c3afd0d925a841a23701559324e4204f6dad21a5ace939134b7d535"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-window-midpoint",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/window_references_v5/midpoint/neg8-window-midpoint.json",
+          "sha256": "1332cf4a4e48ac9d8f6be3593270084089b5e7e74953aa4aee43084b231041af"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-window-start-r1",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r1.json",
+          "sha256": "353b6633bb28c09ca2add77b4ce3db2e73952e7a3eb53c4e1dfa08259e9fb478"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-window-start-r2",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r2.json",
+          "sha256": "f1bcb1b5323562e738893f94ce7acf867d39543d5bee58a7a165600b98420013"
+        }
+      },
+      {
+        "idle_records": 750,
+        "requested_interval_ms": 100,
+        "run_id": "neg8-window-start-r3",
+        "sampling_idle_seconds": 75.0,
+        "source": {
+          "path": "configs/campaigns/window_references_v5/start_triplet/neg8-window-start-r3.json",
+          "sha256": "6a5ac82869c38922c543c8d9c7d64e1fc8dc8d166afeffc8c78b1fb75c4b0847"
+        }
+      }
+    ],
+    "production": [
+      {
+        "source": {
+          "path": "scripts/write_v5_qualification_plan.py",
+          "sha256": "24442f8825c27bd6be639ab8212d206ac1185987c1e599471c7f258bd368dc42"
+        },
+        "source_pointer": "size_window: source-bound T0 stage cap, stream bounds and WINDOW_MAX_S; deadlines; write_qualification prerequisite boundary"
+      },
+      {
+        "source": {
+          "path": "scripts/capture_t0_step.py",
+          "sha256": "57a752735b64460ab2131e0646fd9fa95257b3cdf9896200f42aa5855f1a0ca9"
+        },
+        "source_pointer": "47-55 six steps; 416-423 dwell cap; 634 missing command caps; 736-779 R0/OFF; 825-837 OFF boundary; 952-953 ordering"
+      },
+      {
+        "source": {
+          "path": "scripts/run_night.py",
+          "sha256": "60eeaae1bd530189f08b04b1b8075b3ec93d51c5839226ff9b6b76516836ec5c"
+        },
+        "source_pointer": "deadline constants; deadman_epoch; _admit_qualification_clean_dwell (single 600-2700 s dwell); _capture_qualification_t0 (authenticated plan stage cap); run_night (capture/author at t0)"
+      },
+      {
+        "source": {
+          "path": "joulewise/controller.py",
+          "sha256": "02a5b869f3b4408ffe1907d4899e0fc1aca1ffa5969f46fc401e7861723c1da7"
+        },
+        "source_pointer": "1306-1363 retry guards; 1521-1537 warmup; 1603-1607 main sampler stops; 2808-2847 cooldown own idle capture"
+      },
+      {
+        "source": {
+          "path": "joulewise/adapters/powermetrics.py",
+          "sha256": "70f47086b2445e88d0cb25ed2d47751dfd99843d0cf1e149f2fe630c5116e5e4"
+        },
+        "source_pointer": "59 readiness15; 67-69 drain0.25/lag5; 257-295 separate bounded capture; 452-482 sole main sampler; 623-627 drain; 1021-1038 separate sentinel; 1460-1470 idle record count; 1664-1671 stop10"
+      },
+      {
+        "source": {
+          "path": "joulewise/environment.py",
+          "sha256": "10d4654e2f88e8e182b115db87294cf3da22ea5fedfcdb7004c164acfcbb70de"
+        },
+        "source_pointer": "17 per-command 3 s; 464-515 five guard commands = 15 s"
+      },
+      {
+        "source": {
+          "path": "joulewise/schemas.py",
+          "sha256": "f47fbf68c2c4a931854995d1258425b476c4bc8a686dfccf011d9caef092cc3b"
+        },
+        "source_pointer": "474 default retry_backoff_s 0; campaign policy post-window dwell"
+      },
+      {
+        "source": {
+          "path": "joulewise/kernel_clock.py",
+          "sha256": "306753287372d799f96ec49936a837789acb7f1e16a87cdc1eeb3806c570c6f0"
+        },
+        "source_pointer": "96-111 exact frequency gate"
+      },
+      {
+        "source": {
+          "path": "joulewise/t0_rehearsal.py",
+          "sha256": "2a0aec2b2c2c3eb02ff2787f6d4df0a06d62435d604e842b82c87c9e2d92dc72"
+        },
+        "source_pointer": "912-914 G4 600-3600 s span"
+      },
+      {
+        "source": {
+          "path": "scripts/run_campaign.py",
+          "sha256": "c23d7fd7e5ed2c2ff3c89cb4e778dd5f20a85d0d937048486e2de32b9b42a427"
+        },
+        "source_pointer": "4300-4321 separate cooldown adapter/run id"
+      },
+      {
+        "source": {
+          "path": "scripts/gen_g2_phase_d.py",
+          "sha256": "c1cad1ff3636e5777745889e4228987994f6f571cb900cbe1756f0fdf010ff51"
+        },
+        "source_pointer": "render_generated_region(v5_references=True) one-block dispatches"
+      },
+      {
+        "source": {
+          "path": "configs/campaign_policies/quiet_mac_p2_production.json",
+          "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd"
+        },
+        "source_pointer": "/idle_admission/retry_attempts; /cooldown/cap_s; /cooldown/subwindow_s; /post_window_sampling_dwell_s"
+      },
+      {
+        "source": {
+          "path": "scripts/prewindow_check.sh",
+          "sha256": "1e83727860570bd6e4fea9453d877591279db8ad6bdafe3dda5f537a4822bb03"
+        },
+        "source_pointer": "42 MIN_CLEAN_DWELL_S = 600"
+      },
+      {
+        "source": {
+          "path": "joulewise/powermetrics_fiducial.py",
+          "sha256": "bcdfeec06a03525cc6f6c700f2e2e6d10341af1323e4f9355b68ee47eb5bd30c"
+        },
+        "source_pointer": "61-66 59-pulse timing constants; 383-400 pulse_schedule"
+      },
+      {
+        "source": {
+          "path": "scripts/validate_powermetrics_fiducial.py",
+          "sha256": "3dc75857161b6bb9504f439d282bd39c2c5375e863cda1a514551a42d98b8a3f"
+        },
+        "source_pointer": "2393-2494 calibration main sampler baseline/warmup/pulse sequence"
+      },
+      {
+        "source": {
+          "path": "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md",
+          "sha256": "1e022927b3eefe84e9ac7028ba0a0d62554760437f1e6229e1a0aa564fe7c7b0"
+        },
+        "source_pointer": "approved custody allocation basis"
+      },
+      {
+        "source": {
+          "path": "joulewise/night_gate.py",
+          "sha256": "72971505590fc95a608c4ba93b099d31b2572cb9c8862dafa950b80258bc2b68"
+        },
+        "source_pointer": "qualification_start_deadline: authenticated stage-cap window; legacy span+2700 preserved"
+      }
+    ],
+    "timing_evidence": {
+      "calclock.anchor_only_bound_s": {
+        "seconds": 0.0018319634425905114,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w2-20260927-77b1bee2/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w2-20260927-d06/instrument_evidence.json",
+          "sha256": "3b5097b8bad7c5a3f3d41b7b7480c6a196f7487ca7e08ec07440804a3309a363"
+        },
+        "source_pointer": "/clock_anchor/anchor_only_bound_s"
+      },
+      "calclock.numeric_padding_s": {
+        "seconds": 1e-06,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w1-20260927-3ba66eeb/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d02/instrument_evidence.json",
+          "sha256": "e9c2ebbc5d63f5002289b578be370417493e4a94924c5c29495e44242ab779bf"
+        },
+        "source_pointer": "/clock_anchor/numeric_padding_s"
+      },
+      "calclock.rate_fit_baseline_s": {
+        "seconds": 197.920038488,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w2-20260927-77b1bee2/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w2-20260927-d04/instrument_evidence.json",
+          "sha256": "6306915494c8192df280b07781903b5ad19434f2701311651ac20bfa183615b3"
+        },
+        "source_pointer": "/clock_anchor/rate_fit_baseline_s"
+      },
+      "calclock.rho": {
+        "seconds": 7.778972106962934e-06,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w1-20260927-3ba66eeb/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d12/instrument_evidence.json",
+          "sha256": "5f1fba020a660762a46b9c78a1f700a48df2d75d30142690822b984cca86f68a"
+        },
+        "source_pointer": "derived: /clock_anchor/wall_minus_monotonic_span_s / /clock_anchor/rate_fit_baseline_s"
+      },
+      "calclock.stamp_resolution_s": {
+        "seconds": 1.0000000000000002e-06,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w1-20260927-3ba66eeb/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d02/instrument_evidence.json",
+          "sha256": "e9c2ebbc5d63f5002289b578be370417493e4a94924c5c29495e44242ab779bf"
+        },
+        "source_pointer": "/clock_anchor/stamp_resolution_s"
+      },
+      "calclock.wall_minus_monotonic_span_s": {
+        "seconds": 0.051981210708618164,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w1-20260927-3ba66eeb/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d08/instrument_evidence.json",
+          "sha256": "912b2d14c06dea981e67ffa14adb0f7d11344ab0be66710a7983e596b161bc19"
+        },
+        "source_pointer": "/clock_anchor/wall_minus_monotonic_span_s"
+      },
+      "calibration.sampler": {
+        "seconds": 196.8432228565216,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d079-epoch-25g83-derivation-w1-20260927-3ba66eeb/custody-root/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d08/events.jsonl",
+          "sha256": "0ed2ea8035d247ed744e233f13df2214024ace7408e357a5effb34f64475caaa"
+        },
+        "source_pointer": "JSONL[125].timestamp_s - JSONL[0].timestamp_s"
+      },
+      "clock.anchor_only_bound_s": {
+        "seconds": 0.003597711938684421,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/metadata.json",
+          "sha256": "63bd62a1ca1652a0b9194885f75a4d59a8afde1b06d274dbfee21b6352d66c80"
+        },
+        "source_pointer": "/uncertainty_evidence/clock_anchor/anchor_only_bound_s"
+      },
+      "clock.effective_max": {
+        "seconds": 0.004017182870691257,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2/g2a-root/runs/g2a-large-p4096-r01/metadata.json",
+          "sha256": "63bd62a1ca1652a0b9194885f75a4d59a8afde1b06d274dbfee21b6352d66c80"
+        },
+        "source_pointer": "/uncertainty_evidence/clock_anchor/effective_clock_anchor_bound_s"
+      },
+      "clock.numeric_padding_s": {
+        "seconds": 1e-06,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r01/metadata.json",
+          "sha256": "055cd018af46c36f3e0ac77208146cfe32ea20c4b88793fc75db8d695613b535"
+        },
+        "source_pointer": "/uncertainty_evidence/clock_anchor/numeric_padding_s"
+      },
+      "clock.rate_fit_baseline_s": {
+        "seconds": 217.489778134,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/metadata.json",
+          "sha256": "4b45e84b7416c77560656697c2d570df0566f727f604ad0bcda7422fd52aa16a"
+        },
+        "source_pointer": "/uncertainty_evidence/clock_anchor/rate_fit_baseline_s"
+      },
+      "clock.rho": {
+        "seconds": 3.27862190264707e-06,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r02/metadata.json",
+          "sha256": "79577c376f90412bb11658068616a0cf7c77c5452c924c22c430e1eefcffb734"
+        },
+        "source_pointer": "derived: /uncertainty_evidence/clock_anchor/wall_minus_monotonic_span_s / /uncertainty_evidence/clock_anchor/rate_fit_baseline_s"
+      },
+      "clock.stamp_resolution_s": {
+        "seconds": 1.0000000000000002e-06,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r01/metadata.json",
+          "sha256": "055cd018af46c36f3e0ac77208146cfe32ea20c4b88793fc75db8d695613b535"
+        },
+        "source_pointer": "/uncertainty_evidence/clock_anchor/stamp_resolution_s"
+      },
+      "clock.wall_minus_monotonic_span_s": {
+        "seconds": 0.0007040500640869141,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/metadata.json",
+          "sha256": "4b45e84b7416c77560656697c2d570df0566f727f604ad0bcda7422fd52aa16a"
+        },
+        "source_pointer": "/uncertainty_evidence/clock_anchor/wall_minus_monotonic_span_s"
+      },
+      "large.admission_attempt": {
+        "seconds": 101.54775500297546,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p1024-r01/metadata.json",
+          "sha256": "638a0b187ba1c0f9dbf2b36ce59080f4c4822d4ba40c9d1528777c379ff11085"
+        },
+        "source_pointer": "difference: /environment_admission/attempts/0/end_s - /environment_admission/attempts/0/start_s"
+      },
+      "large.cleanup": {
+        "seconds": 0.0190582275390625,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p1024-r01/events.jsonl",
+          "sha256": "9a0eb25ebbfb3366a25449575014a7ac28bac05ca81b746bcbd2fbb1d0f4296a"
+        },
+        "source_pointer": "JSONL[536].timestamp_s - JSONL[535].timestamp_s"
+      },
+      "large.decode": {
+        "seconds": 7.531263113021851,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[530].timestamp_s - JSONL[17].timestamp_s"
+      },
+      "large.full_member": {
+        "seconds": 175.17604875564575,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[539].timestamp_s - JSONL[0].timestamp_s"
+      },
+      "large.generation_setup": {
+        "seconds": 0.00015878677368164062,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p1024-r01/events.jsonl",
+          "sha256": "9a0eb25ebbfb3366a25449575014a7ac28bac05ca81b746bcbd2fbb1d0f4296a"
+        },
+        "source_pointer": "JSONL[14].timestamp_s - JSONL[13].timestamp_s"
+      },
+      "large.idle_baseline": {
+        "seconds": 106.87252402305603,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p1024-r01/events.jsonl",
+          "sha256": "9a0eb25ebbfb3366a25449575014a7ac28bac05ca81b746bcbd2fbb1d0f4296a"
+        },
+        "source_pointer": "JSONL[6].timestamp_s - JSONL[5].timestamp_s"
+      },
+      "large.idle_drift_sentinel": {
+        "seconds": 7.729466915130615,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[534].timestamp_s - JSONL[533].timestamp_s"
+      },
+      "large.load": {
+        "seconds": 1.0060889720916748,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p0512-r01/metadata.json",
+          "sha256": "39f4dd77c00d3e9b8667314de1f3419b3ba4eb87f48ea4b45f7666395aaf1829"
+        },
+        "source_pointer": "/adapters/runtime/prepare_metadata/load_wall_time_s"
+      },
+      "large.measured_run": {
+        "seconds": 23.58442497253418,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[532].timestamp_s - JSONL[9].timestamp_s"
+      },
+      "large.prefill": {
+        "seconds": 5.499452114105225,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[16].timestamp_s - JSONL[15].timestamp_s"
+      },
+      "large.prepare": {
+        "seconds": 3.543833017349243,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p0512-r01/events.jsonl",
+          "sha256": "2e831dcc4da72e34caa1cfe49a9a56adf00dd98bb920396c480c29b5ffdbf461"
+        },
+        "source_pointer": "JSONL[4].timestamp_s - JSONL[3].timestamp_s"
+      },
+      "large.reduce": {
+        "seconds": 23.927138090133667,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[538].timestamp_s - JSONL[537].timestamp_s"
+      },
+      "large.tokenize": {
+        "seconds": 0.013760089874267578,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[12].timestamp_s - JSONL[11].timestamp_s"
+      },
+      "large.validate": {
+        "seconds": 0.004819154739379883,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p2048-r01/events.jsonl",
+          "sha256": "4727aee881bf68b8a8f223c816f494a75bc211d442e21671dd534d33ad77ecba"
+        },
+        "source_pointer": "JSONL[2].timestamp_s - JSONL[1].timestamp_s"
+      },
+      "large.warmup": {
+        "seconds": 10.53489375114441,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-large-p4096-r01/events.jsonl",
+          "sha256": "60525bc3859b49714ed482fd56e7b45bb5a5c5750005a1fe74edbf643cfbc26b"
+        },
+        "source_pointer": "JSONL[8].timestamp_s - JSONL[7].timestamp_s"
+      },
+      "small.admission_attempt": {
+        "seconds": 103.55372524261475,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p2048-r03/metadata.json",
+          "sha256": "68c575cbb3ccd7e97f93a9dbbddcc2642c3d39eb22044d66342b8bb258e28a47"
+        },
+        "source_pointer": "difference: /environment_admission/attempts/1/end_s - /environment_admission/attempts/1/start_s"
+      },
+      "small.cleanup": {
+        "seconds": 0.016691923141479492,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r05/events.jsonl",
+          "sha256": "acc07d06a859ce285fb4ee53802e33b79004309fee8674f3e639e187bc672af9"
+        },
+        "source_pointer": "JSONL[536].timestamp_s - JSONL[535].timestamp_s"
+      },
+      "small.decode": {
+        "seconds": 2.6607329845428467,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r01/events.jsonl",
+          "sha256": "96e0044724266963e06910b9c439d4d4fade8df4e9c430894cadaf52b3023210"
+        },
+        "source_pointer": "JSONL[530].timestamp_s - JSONL[17].timestamp_s"
+      },
+      "small.full_member": {
+        "seconds": 270.5376479625702,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/events.jsonl",
+          "sha256": "c48967480324396dbecceae205db55abc2b3bbe1729a171b210ae74f9894d97b"
+        },
+        "source_pointer": "JSONL[539].timestamp_s - JSONL[0].timestamp_s"
+      },
+      "small.generation_setup": {
+        "seconds": 0.000179290771484375,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p1024-r02/events.jsonl",
+          "sha256": "08d8259aadbd6f8be08f0ebd5c0ec2bea0cdeeebdc3cdf0d6eabb751456e728d"
+        },
+        "source_pointer": "JSONL[14].timestamp_s - JSONL[13].timestamp_s"
+      },
+      "small.idle_baseline": {
+        "seconds": 209.79530096054077,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/events.jsonl",
+          "sha256": "c48967480324396dbecceae205db55abc2b3bbe1729a171b210ae74f9894d97b"
+        },
+        "source_pointer": "JSONL[6].timestamp_s - JSONL[5].timestamp_s"
+      },
+      "small.idle_drift_sentinel": {
+        "seconds": 7.673356056213379,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p0512-r02/events.jsonl",
+          "sha256": "92d08502fd89ebf2276107a6e6043c193f20f78db2866c0208665f7054bbf35e"
+        },
+        "source_pointer": "JSONL[534].timestamp_s - JSONL[533].timestamp_s"
+      },
+      "small.load": {
+        "seconds": 0.4582388401031494,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p0512-r01/metadata.json",
+          "sha256": "420cc22700b8966c578b17f5eadd1fce0be672226f5bc054161b2c5244aa6247"
+        },
+        "source_pointer": "/adapters/runtime/prepare_metadata/load_wall_time_s"
+      },
+      "small.measured_run": {
+        "seconds": 17.926040172576904,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/events.jsonl",
+          "sha256": "c48967480324396dbecceae205db55abc2b3bbe1729a171b210ae74f9894d97b"
+        },
+        "source_pointer": "JSONL[532].timestamp_s - JSONL[9].timestamp_s"
+      },
+      "small.prefill": {
+        "seconds": 1.3214471340179443,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r02/events.jsonl",
+          "sha256": "64734b5789b8c9a9dd50a1a62712f6560d3576ad1c7cc2f3127a332cd140e51f"
+        },
+        "source_pointer": "JSONL[16].timestamp_s - JSONL[15].timestamp_s"
+      },
+      "small.prepare": {
+        "seconds": 1.671717882156372,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r01/events.jsonl",
+          "sha256": "406b716a725f6132ae9a5a761de3908d3caaa5b30ec545d6cde64ddf6bb15460"
+        },
+        "source_pointer": "JSONL[4].timestamp_s - JSONL[3].timestamp_s"
+      },
+      "small.reduce": {
+        "seconds": 28.1126492023468,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p0512-r02/events.jsonl",
+          "sha256": "c48967480324396dbecceae205db55abc2b3bbe1729a171b210ae74f9894d97b"
+        },
+        "source_pointer": "JSONL[538].timestamp_s - JSONL[537].timestamp_s"
+      },
+      "small.tokenize": {
+        "seconds": 0.022682905197143555,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r01/events.jsonl",
+          "sha256": "96e0044724266963e06910b9c439d4d4fade8df4e9c430894cadaf52b3023210"
+        },
+        "source_pointer": "JSONL[12].timestamp_s - JSONL[11].timestamp_s"
+      },
+      "small.validate": {
+        "seconds": 0.004945993423461914,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261003T1748Z/g2a-root/runs/g2a-small-p1024-r05/events.jsonl",
+          "sha256": "e283c7f4cda77b1a413dec03367fe5ad561be01ccbe6a51cf081fddc7f9ed0af"
+        },
+        "source_pointer": "JSONL[2].timestamp_s - JSONL[1].timestamp_s"
+      },
+      "small.warmup": {
+        "seconds": 6.3994879722595215,
+        "source": {
+          "path": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z/g2a-root/runs/g2a-small-p4096-r01/events.jsonl",
+          "sha256": "96e0044724266963e06910b9c439d4d4fade8df4e9c430894cadaf52b3023210"
+        },
+        "source_pointer": "JSONL[8].timestamp_s - JSONL[7].timestamp_s"
+      }
+    }
+  },
+  "rho_per_s": 8e-06,
+  "schema_version": "joulewise.v5_qualification_sizing_source.v2",
+  "stamp_resolution_s": 1.0000000000000002e-06,
+  "status": "PROVISIONAL: prospective source-bound allowances under ruling 76 addendum E; cold seal and live qualification remain lead-owned; not arm-ready",
+  "streams": {
+    "bracket": 240,
+    "large": 335,
+    "small": 314
+  },
+  "totals": {
+    "E_ABBA_L": 2428,
+    "E_ABBA_full": 2556,
+    "E_large_L": 619,
+    "E_large_full": 651,
+    "E_small_L": 595,
+    "E_small_full": 627,
+    "NIGHT_PROGRAMMED_SPAN_S_s1": 22494,
+    "T_bound_and_references": 11365,
+    "T_bound_and_references_full": 11973,
+    "T_stream_max": 335,
+    "WINDOW_MAX_S_s1": 25800,
+    "gamma_bound_collection_full": 7524,
+    "gamma_reference_decode_midpoint_full": 627,
+    "gamma_reference_end_full": 1881,
+    "gamma_reference_start_full": 1881,
+    "latest_start_offset_s": 3306,
+    "post_quiet_backup_close_off_s": 420
+  }
+}

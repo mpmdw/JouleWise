@@ -1,0 +1,18 @@
+{
+  "archive": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2/g2a-root",
+  "description": "Exact block-3 battery authenticator inputs; no measurement validation claim.",
+  "storage": "The archive runs/ subtree is stored as capture-tree/; replay restores runs/ in scratch.",
+  "files": {
+    "runs/g2a-small-p0512-r01/events.jsonl": "8994e4c26dec1ae84eb88623586b00e9c52a49bef203739519b1f2b6a7092c40",
+    "runs/g2a-small-p0512-r01/instrument_calibration/instrument_evidence.json": "dc267c54bf9d5c7b957f081c7612f2c7dc69790409a4761afb36a8c9bca1072f",
+    "runs/g2a-small-p0512-r01/metadata.json": "420cc22700b8966c578b17f5eadd1fce0be672226f5bc054161b2c5244aa6247",
+    "runs/instrument_validation/d117-g2a-prefill-probe-20261004T1305Z-cal-post/instrument_evidence.json": "0b6681ceac747f150e79e7c29ef7d314c9d485835b454549ee40d971f9a9248b",
+    "runs/instrument_validation/d117-g2a-prefill-probe-20261004T1305Z-cal-post/raw/battery_float.post.ioreg": "70ab71cf67823b0c5882ad46e0231843f3e13bb74da0da5f13a2cdfe0a21f756",
+    "runs/instrument_validation/d117-g2a-prefill-probe-20261004T1305Z-cal-post/raw/battery_float.pre.ioreg": "0a87b9e08d3a20636aa2338644124ec5ff949370304458d2095c1c0ca1b77ca2",
+    "runs/instrument_validation/d117-g2a-prefill-probe-20261004T1305Z-cal-pre/instrument_evidence.json": "dc267c54bf9d5c7b957f081c7612f2c7dc69790409a4761afb36a8c9bca1072f",
+    "runs/instrument_validation/d117-g2a-prefill-probe-20261004T1305Z-cal-pre/raw/battery_float.post.ioreg": "7bba8cda4989c9eab2003d1308d3789a6d627af0256997f011e4460548016cd1",
+    "runs/instrument_validation/d117-g2a-prefill-probe-20261004T1305Z-cal-pre/raw/battery_float.pre.ioreg": "9eea291a850768b0ffe913df74c5e70616997958260eee5760f29caeab816438",
+    "t0-receipt.json": "8ecbd43409af67b709a36b831740308e340d69c678ded25ad2b596e5d3dd396e"
+  },
+  "t0_receipt_archive": "/Users/edr/night-archive/harvest-d117-g2a-prefill-probe-20261004T1305Z-r2/night-custody/night/receipt.json"
+}

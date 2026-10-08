@@ -40,6 +40,7 @@ from joulewise.analysis_manifest_v3 import (  # noqa: E402
     finalize_prospective_analysis_manifest_v3,
 )
 from joulewise.calibration_ledger import load_calibration_ledger_snapshot  # noqa: E402
+from joulewise.calibration_bracketing import load_calibration_acceptance_bound  # noqa: E402
 from joulewise.schemas import CampaignPolicy  # noqa: E402
 from joulewise.whole_window import (  # noqa: E402
     AuthenticatedConsumptionSession,
@@ -84,27 +85,37 @@ class AssertionFailure(RuntimeError):
     """A governed assertion failed without escaping as a traceback."""
 
 
+REPORT_SCHEMA = "joulewise.window_provenance_report.v1"
+
+
 class Reporter:
     def __init__(self) -> None:
         self.passed = 0
         self.skipped = 0
         self.failed = 0
+        # One row per printed assertion line, for --report-json consumers
+        # (the block-5 harvest turns FAIL rows into recorded flags).
+        self.rows: list[dict[str, str]] = []
 
     def assertion(self, assertion_id: str, check: Callable[[], str]) -> bool:
         try:
             evidence = check()
         except Exception as exc:  # Every exception belongs to its assertion.
             self.failed += 1
-            print(f"FAIL {assertion_id} {type(exc).__name__}: {exc}")
+            detail = f"{type(exc).__name__}: {exc}"
+            print(f"FAIL {assertion_id} {detail}")
+            self.rows.append({"id": assertion_id, "status": "FAIL", "detail": detail})
             return False
         else:
             self.passed += 1
             print(f"PASS {assertion_id} {evidence}")
+            self.rows.append({"id": assertion_id, "status": "PASS", "detail": str(evidence)})
             return True
 
     def skip(self, assertion_id: str, evidence: str) -> None:
         self.skipped += 1
         print(f"SKIP {assertion_id} {evidence}")
+        self.rows.append({"id": assertion_id, "status": "SKIP", "detail": evidence})
 
     def summary(self) -> int:
         print(
@@ -258,6 +269,94 @@ def _frozen_expected_roster(
     return roster, source, digest
 
 
+def _stage_runs_root_binding(stage: Mapping[str, Any]) -> str | None:
+    """The launch binding a plan-tree collection stage passes to ``--runs-dir``."""
+
+    launch = stage.get("launch")
+    commands = launch.get("commands") if isinstance(launch, Mapping) else None
+    for command in commands if isinstance(commands, list) else []:
+        template = command.get("argv_template") if isinstance(command, Mapping) else None
+        arguments = template.get("arguments") if isinstance(template, Mapping) else None
+        arguments = arguments if isinstance(arguments, list) else []
+        for flag, value in zip(arguments, arguments[1:]):
+            if (
+                isinstance(flag, Mapping)
+                and flag.get("kind") == "literal"
+                and flag.get("value") == "--runs-dir"
+                and isinstance(value, Mapping)
+                and value.get("kind") == "binding"
+            ):
+                return value.get("value")
+    return None
+
+
+def _window_reference_roster(
+    plan_tree_path: Path,
+    repo_root: Path,
+) -> tuple[list[str], str]:
+    """The pinned reference members a full window launches into its claim runs root.
+
+    Every ``campaign_collection`` stage of the plan tree whose ``input_ref`` is
+    an external input and whose ``--runs-dir`` is ``claim_runs_root`` (the
+    window references; the NEG-8 corpus goes to the bound root).  Each input's
+    order manifest is read at ``repo_root / manifest_path``, its bytes must
+    hash to the pinned ``manifest_sha256``, and its ``executed_order`` run ids
+    must equal the plan tree's member rows.
+    """
+
+    tree = _read_object(plan_tree_path, "plan tree")
+    external = tree.get("external_inputs")
+    rows = external.get("manifests") if isinstance(external, Mapping) else external
+    inputs = {
+        str(row.get("input_id") or row.get("external_input_id")): row
+        for row in rows or []
+        if isinstance(row, Mapping)
+    }
+    graph = tree.get("stage_graph")
+    if not isinstance(graph, list):
+        raise AssertionFailure("plan tree stage_graph is absent or malformed")
+    claim_inputs: list[str] = []
+    for stage in graph:
+        if not isinstance(stage, Mapping) or stage.get("kind") != "campaign_collection":
+            continue
+        reference = stage.get("input_ref")
+        if not isinstance(reference, Mapping) or reference.get("kind") != "external_input":
+            continue
+        if _stage_runs_root_binding(stage) != "claim_runs_root":
+            continue
+        input_id = str(reference.get("input_id"))
+        if input_id not in claim_inputs:
+            claim_inputs.append(input_id)
+    run_ids: list[str] = []
+    digests: list[str] = []
+    for input_id in claim_inputs:
+        row = inputs.get(input_id)
+        if not isinstance(row, Mapping):
+            raise AssertionFailure(f"plan tree external input {input_id} is absent")
+        relative = row.get("manifest_path")
+        expected_sha = row.get("manifest_sha256")
+        if not isinstance(relative, str) or not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
+            raise AssertionFailure(f"external input {input_id} manifest_path is absent or unsafe")
+        raw = (repo_root / relative).read_bytes()
+        observed_sha = hashlib.sha256(raw).hexdigest()
+        if observed_sha != expected_sha:
+            raise AssertionFailure(
+                f"external input {input_id} manifest sha256 mismatch observed={observed_sha} "
+                f"expected={expected_sha}"
+            )
+        order = _read_object(repo_root / relative, f"external input {input_id} order manifest")
+        executed = order.get("executed_order")
+        if not isinstance(executed, list):
+            raise AssertionFailure(f"external input {input_id} executed_order is absent or malformed")
+        ordered = [entry.get("run_id") for entry in executed if isinstance(entry, Mapping)]
+        listed = [member.get("run_id") for member in row.get("members") or [] if isinstance(member, Mapping)]
+        if ordered != listed or any(not isinstance(item, str) or not item for item in ordered):
+            raise AssertionFailure(f"external input {input_id} members disagree with its order manifest")
+        run_ids.extend(item for item in ordered if item not in run_ids)
+        digests.append(f"{input_id}:{observed_sha}")
+    return run_ids, ",".join(digests)
+
+
 def _science_records(
     records: Sequence[tuple[Path, Mapping[str, Any]]],
     prospective: Mapping[str, Any],
@@ -310,21 +409,48 @@ def _assert_exact_member_set(
         )
 
 
+def _acceptance_replay_snapshot(args: argparse.Namespace) -> Any:
+    path = getattr(args, "acceptance", None)
+    acceptance = load_calibration_acceptance_bound(path) if path is not None else load_calibration_acceptance_bound()
+    if acceptance is None:
+        raise AssertionFailure("calibration acceptance artifact is absent or invalid")
+    cutoff = acceptance["ledger_cutoff"]
+    return load_calibration_ledger_snapshot(
+        args.calibration_ledger, args.head_pin, require_committed_pin=False,
+        verify_custody=False, mode="read_replay",
+        baseline_sequence=cutoff["sequence"], baseline_digest=cutoff["head_digest"],
+    )
+
+
+PIN_RELATION_PHYSICAL_AHEAD = "physical_ahead"
+PIN_RELATION_EQUAL = "equal"
+# The terminal boundary each desk order leaves (--expected-pin-relation):
+# block 2's R-6 stop checks before the pin advance, so the committed pin is
+# behind the session's terminal head (calibration_ledger_head_mismatch); block
+# 5 advances the pin between chain exit and harvest, so the committed pin is
+# the terminal head and the committed snapshot refuses nothing.
+BOUNDARY_SHAPES = {
+    PIN_RELATION_PHYSICAL_AHEAD: "calibration_ledger_head_mismatch",
+    PIN_RELATION_EQUAL: None,
+}
+
+
 def _ratified_g2_boundary_snapshot(
     args: argparse.Namespace,
     binding: Mapping[str, Any],
 ) -> tuple[Any, Mapping[str, Any]]:
-    """Authenticate the R-6 physical-ahead stop without advancing its pin."""
+    """Authenticate the terminal boundary of the expected desk order.
+
+    Default: the R-6 physical-ahead stop, checked without advancing its pin.
+    ``--expected-pin-relation equal`` (block 5): the pin was advanced to the
+    session's terminal head before the harvest.  Either way the candidate must
+    be the physical head of an exact ledger snapshot.
+    """
 
     record = _read_object(
         args.terminal_boundary_record, "post-bracket terminal boundary record"
     )
-    snapshot = load_calibration_ledger_snapshot(
-        args.calibration_ledger,
-        args.head_pin,
-        require_committed_pin=False,
-        verify_custody=False,
-    )
+    snapshot = _acceptance_replay_snapshot(args)
     if snapshot.refusal_reasons:
         raise AssertionFailure(
             "reviewed-refresh ledger snapshot is not exact "
@@ -334,15 +460,20 @@ def _ratified_g2_boundary_snapshot(
     if not isinstance(session_id, str) or not session_id:
         raise AssertionFailure("bracket binding session_id is absent or malformed")
     candidate = record.get("terminal_head_pin_candidate")
+    relation = getattr(args, "expected_pin_relation", None) or PIN_RELATION_PHYSICAL_AHEAD
+    refusal_code = BOUNDARY_SHAPES[relation]
+    committed_reasons = record.get("committed_pin_refusal_reasons")
     if (
         record.get("session_id") != session_id
         or record.get("session_state") != "finalized"
-        or record.get("pin_relation") != "physical_ahead"
-        or record.get("refusal_code") != "calibration_ledger_head_mismatch"
+        or record.get("pin_relation") != relation
+        or record.get("refusal_code") != refusal_code
+        or (refusal_code is None and committed_reasons not in (None, []))
         or not isinstance(candidate, Mapping)
     ):
+        shape = "mismatch" if relation == PIN_RELATION_PHYSICAL_AHEAD else "advanced-pin"
         raise AssertionFailure(
-            "ratified post-bracket boundary record is not the expected mismatch shape "
+            f"ratified post-bracket boundary record is not the expected {shape} shape "
             f"session_state={record.get('session_state')} "
             f"pin_relation={record.get('pin_relation')} "
             f"refusal_code={record.get('refusal_code')} candidate={candidate}"
@@ -397,6 +528,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--whole-window-verdict", required=True, type=Path)
     parser.add_argument("--calibration-ledger", required=True, type=Path)
     parser.add_argument("--head-pin", type=Path)
+    parser.add_argument("--acceptance", type=Path, help="file-pinned acceptance whose ledger cutoff is replayed")
     parser.add_argument(
         "--terminal-boundary-record",
         type=Path,
@@ -412,6 +544,42 @@ def build_parser() -> argparse.ArgumentParser:
             "optional finalized v3; when present S11-A2 uses "
             "lineage.collection_manifest_id, otherwise it uses the prospective "
             "pack manifest_id"
+        ),
+    )
+    parser.add_argument(
+        "--full-window",
+        action="store_true",
+        help=(
+            "a whole collected window (block-5 HAZARD_PACK), not a one-block "
+            "shakedown: S11-A2/A3, F5-1 and F5-3 expect every science member of "
+            "the pack's root_order_manifest; F5-2 and F5-4 expect those plus the "
+            "pinned window-reference members the plan tree launches into the claim "
+            "runs root (--plan-tree, default <pack-root>/plan_tree.json; manifests "
+            "read under --repo-root, default the checkout that holds the pack)"
+        ),
+    )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        help="measurement checkout for --full-window reference manifests (default <pack-root>/../../..)",
+    )
+    parser.add_argument(
+        "--expected-pin-relation",
+        choices=sorted(BOUNDARY_SHAPES),
+        default=PIN_RELATION_PHYSICAL_AHEAD,
+        help=(
+            "the terminal boundary F5-2/F5-3 require: physical_ahead (default; the "
+            "R-6 stop checked before the pin advance, refusal "
+            "calibration_ledger_head_mismatch) or equal (block 5: the pin advanced "
+            "to the session's terminal head before the harvest, no refusal)"
+        ),
+    )
+    parser.add_argument(
+        "--window-membership-binding",
+        type=Path,
+        help=(
+            "joulewise.whole_window_membership_binding.v1 the whole-window verdict "
+            "was written with; F5-4 resolves membership with it"
         ),
     )
     parser.add_argument(
@@ -446,6 +614,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--scratch-dir",
         type=Path,
         help="required for refusal mode; receives an automatically removed custody copy",
+    )
+    parser.add_argument(
+        "--report-json",
+        type=Path,
+        help=(
+            "also write every assertion's id, status and detail as JSON to this "
+            "new file (created once; never overwritten); stdout is unchanged"
+        ),
     )
     # Mirror scripts/finalize_analysis_manifest.py exactly.
     parser.add_argument("--prospective-manifest", type=Path)
@@ -527,6 +703,7 @@ def _run_expect_refusal(args: argparse.Namespace) -> int:
                     calibration_ledger_path=paths["calibration_ledger"],
                     aggregate_floor_artifact_path=paths["aggregate_floor_artifact"],
                     output_dir=paths["output_dir"],
+                    acceptance_bound_path=getattr(args, "acceptance", None),
                 )
             except AnalysisManifestFinalizationError as exc:
                 observed = frozenset({exc.reason_code})
@@ -555,7 +732,7 @@ def _run_expect_refusal(args: argparse.Namespace) -> int:
         return 1
 
 
-def _run_assertions(args: argparse.Namespace) -> int:
+def _run_assertions(args: argparse.Namespace, reporter: Reporter | None = None) -> int:
     required = (
         "runs_root",
         "pack_root",
@@ -571,7 +748,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
         args, ("terminal_boundary_record",)
     ):
         return 2
-    reporter = Reporter()
+    reporter = reporter if reporter is not None else Reporter()
     # A relative --runs-root is anchored under --custody-root, exactly as the
     # finalizer anchors relative paths under its custody root
     # (analysis_manifest_v3.py:1428-1436, :1482-1490), never under the CWD.
@@ -605,9 +782,15 @@ def _run_assertions(args: argparse.Namespace) -> int:
         return reporter.summary()
 
     science = _science_records(records, prospective)
+    # selected_ids: the science members (S11-A2/A3, F5-1, F5-3).
+    # window_ids: every member the whole-window verdict covers (F5-2, F5-4):
+    # the science members, plus in --full-window the claim-root references.
     selected_ids: set[str] = set()
+    window_ids: set[str] = set()
     cooldowns: dict[str, Mapping[str, Any]] = {}
     f5_membership_probe_ready = False
+    full_window = bool(getattr(args, "full_window", False))
+    boundary_relation = getattr(args, "expected_pin_relation", None) or PIN_RELATION_PHYSICAL_AHEAD
 
     def check_nr14_layout() -> str:
         # Preserve the caller's lexical spelling just as the finalizer does at
@@ -674,7 +857,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
     reporter.assertion("S11-A1", check_a1)
 
     def check_a2() -> str:
-        nonlocal selected_ids, cooldowns, f5_membership_probe_ready
+        nonlocal selected_ids, window_ids, cooldowns, f5_membership_probe_ready
         pack_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
         if not any(
             manifest.get("analysis_manifest_sha256") == pack_sha
@@ -686,7 +869,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
         roster, roster_source, roster_sha = _frozen_expected_roster(
             args.pack_root,
             prospective,
-            one_block=finalized is None,
+            one_block=finalized is None and not full_window,
         )
         expected_ids = set(roster)
         # Preserve the authenticated frozen roster as the downstream comparison
@@ -694,6 +877,16 @@ def _run_assertions(args: argparse.Namespace) -> int:
         # F5-1..4 are independent exact-set assertions, not aliases that may be
         # skipped after S11-A2 finds the first mismatch.
         selected_ids = expected_ids
+        window_ids = set(expected_ids)
+        if full_window:
+            plan_tree = args.plan_tree or args.pack_root / "plan_tree.json"
+            repo_root = args.repo_root or args.pack_root.resolve().parents[2]
+            references, reference_sha = _window_reference_roster(plan_tree, repo_root)
+            overlap = sorted(set(references) & expected_ids)
+            if overlap:
+                raise AssertionFailure(f"reference run ids are also science run ids={overlap}")
+            window_ids = expected_ids | set(references)
+            roster_source += f" window_mode=full references={len(references)} reference_manifests={reference_sha}"
         missing_bundles = sorted(
             run_id
             for run_id in expected_ids
@@ -829,7 +1022,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
         verdict_ids = {
             item for item in verdict.get("bundle_ids", []) if isinstance(item, str)
         }
-        _assert_exact_member_set("F5-2 verdict", selected_ids, verdict_ids)
+        _assert_exact_member_set("F5-2 verdict", window_ids, verdict_ids)
         basis = verdict.get("evaluation_basis")
         basis_sha = basis.get("sha256") if isinstance(basis, Mapping) else None
         semantics_id = (
@@ -851,27 +1044,22 @@ def _run_assertions(args: argparse.Namespace) -> int:
             binding = _read_object(args.bracket_binding, "bracket binding")
             snapshot, candidate = _ratified_g2_boundary_snapshot(args, binding)
         else:
-            snapshot = load_calibration_ledger_snapshot(
-                args.calibration_ledger,
-                args.head_pin,
-                require_committed_pin=False,
-                verify_custody=False,
-            )
+            snapshot = _acceptance_replay_snapshot(args)
         session = AuthenticatedConsumptionSession(
             runs_root,
-            selected_ids,
+            window_ids,
             evaluation_basis_sha256=basis_sha if isinstance(basis_sha, str) else None,
             mode="read_replay",
             consumption_semantics_id=str(semantics_id),
             calibration_ledger_snapshot=snapshot,
         )
         session._prepare(
-            bundle_paths={bundle_id: runs_root / bundle_id for bundle_id in selected_ids},
+            bundle_paths={bundle_id: runs_root / bundle_id for bundle_id in window_ids},
             policy=CampaignPolicy.from_mapping(dict(registered_policy)),
         )
         reasons = whole_window_refusal_reasons(
             runs_root,
-            selected_ids,
+            window_ids,
             evaluation_basis_sha256=basis_sha if isinstance(basis_sha, str) else None,
             consumption_session=session,
             consumption_semantics_id=str(semantics_id),
@@ -883,7 +1071,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
                 f"status={status} reasons={list(reasons)}"
             )
         boundary = (
-            f" boundary=physical_ahead candidate_sequence={candidate['sequence']}"
+            f" boundary={boundary_relation} candidate_sequence={candidate['sequence']}"
             if candidate is not None
             else ""
         )
@@ -927,7 +1115,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
             )
         return (
             f"runs_root={identity['runs_root']} binding_digest={binding['binding_digest']} "
-            f"boundary=physical_ahead candidate_sequence={candidate['sequence']}"
+            f"boundary={boundary_relation} candidate_sequence={candidate['sequence']}"
         )
 
     if a2_passed or f5_membership_probe_ready:
@@ -963,7 +1151,11 @@ def _run_assertions(args: argparse.Namespace) -> int:
             raise AssertionFailure("whole-window policy sha256 missing")
         from scripts.run_campaign import _whole_window_campaign_membership
 
-        membership = _whole_window_campaign_membership(runs_root, policy_sha)
+        membership = _whole_window_campaign_membership(
+            runs_root,
+            policy_sha,
+            membership_binding_path=getattr(args, "window_membership_binding", None),
+        )
         if membership.conditions:
             raise AssertionFailure(
                 f"whole-window membership refused: {list(membership.conditions)}"
@@ -975,7 +1167,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
             for source in membership.sources
         }
         _assert_exact_member_set(
-            "F5-4 whole-window membership", selected_ids, set(selected_by_id)
+            "F5-4 whole-window membership", window_ids, set(selected_by_id)
         )
         excluded: list[str] = []
         survivors: list[str] = []
@@ -1007,11 +1199,25 @@ def _run_assertions(args: argparse.Namespace) -> int:
     return reporter.summary()
 
 
+def _write_report(path: Path, exit_code: int, rows: Sequence[Mapping[str, str]]) -> None:
+    payload = {"schema": REPORT_SCHEMA, "exit_code": exit_code, "assertions": list(rows)}
+    with path.open("x", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.expect_finalize_refusal:
-        return _run_expect_refusal(args)
-    return _run_assertions(args)
+        code = _run_expect_refusal(args)
+        rows = [{"id": "FINALIZE-REFUSAL", "status": "PASS" if code == 0 else "FAIL",
+                 "detail": f"exit_code={code}"}]
+    else:
+        reporter = Reporter()
+        code = _run_assertions(args, reporter)
+        rows = reporter.rows or [{"id": "CLI", "status": "FAIL", "detail": f"exit_code={code}"}]
+    if args.report_json is not None:
+        _write_report(args.report_json, code, rows)
+    return code
 
 
 if __name__ == "__main__":

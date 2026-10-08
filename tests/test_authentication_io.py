@@ -48,6 +48,7 @@ AUTHENTICATION_SURFACE = (
     "joulewise/environment_admission.py",
     "joulewise/detection_floor.py",
     "joulewise/salvage_dangler.py",
+    "scripts/restore_v5_null_reservation.py",
 )
 NON_AUTHENTICATION_WRITERS = {
     "_fsync_parent_directory",
@@ -58,28 +59,28 @@ NON_AUTHENTICATION_WRITERS = {
 CLASSIFIED_NON_AUTHENTICATION_READS = {
     # Append-only publisher idempotence check over its own prospective output;
     # this is writer state, not evidence admitted to analysis or paper custody.
-    "joulewise/analysis_manifest_v3.py:_write_append_only:4011:read_bytes",
+    "joulewise/analysis_manifest_v3.py:_write_append_only:4024:read_bytes",
     # Locked recheck of the same publisher-owned output before atomic creation;
     # routing it into an evidence session would misclassify mutable writer state.
-    "joulewise/analysis_manifest_v3.py:_write_append_only:4029:read_bytes",
+    "joulewise/analysis_manifest_v3.py:_write_append_only:4042:read_bytes",
     # Parent directory descriptor used only for fsync durability after publish;
     # no file content is read through this descriptor.
-    "joulewise/analysis_manifest_v3.py:_write_append_only:4035:os.open",
+    "joulewise/analysis_manifest_v3.py:_write_append_only:4048:os.open",
     # Linux mountinfo describes OS filesystem topology, not project evidence.
-    "joulewise/calibration_ledger.py:_filesystem_type:3439:read_text",
+    "joulewise/calibration_ledger.py:_filesystem_type:3491:read_text",
     # The lock sidecar descriptor is used for inode/lock state, never content.
-    "joulewise/calibration_ledger.py:_open_slot_sidecar:3543:os.open",
+    "joulewise/calibration_ledger.py:_open_slot_sidecar:3595:os.open",
     # O_RDWR descriptor factory for the writer lane; its read-consumers are
     # classified at their own sites (_locked_append writer-exempt;
     # repair/abandon below). This supersedes the earlier "append handle"
     # description, which its callers falsified.
-    "joulewise/calibration_ledger.py:open_append_descriptor:3874:os.open",
+    "joulewise/calibration_ledger.py:open_append_descriptor:3926:os.open",
     # The exclusive genesis staging descriptor receives newly written output.
-    "joulewise/calibration_ledger.py:publish_genesis_payload:3819:os.open",
+    "joulewise/calibration_ledger.py:publish_genesis_payload:3871:os.open",
     # The parent dirfd binds a pathname slot and cannot supply evidence content.
-    "joulewise/calibration_ledger.py:resolve_ledger_lease_identity:3491:os.open",
+    "joulewise/calibration_ledger.py:resolve_ledger_lease_identity:3543:os.open",
     # The ledger fd is fstat-only here to bind inode identity, not read bytes.
-    "joulewise/calibration_ledger.py:resolve_ledger_lease_identity:3505:os.open",
+    "joulewise/calibration_ledger.py:resolve_ledger_lease_identity:3557:os.open",
     # Writer-lease repair scan of possibly-corrupt physical ledger bytes;
     # recovery/operator lane only (callers: governed exit paths
     # resume_finalize_bracket_session/abort_calibration_session,
@@ -87,13 +88,13 @@ CLASSIFIED_NON_AUTHENTICATION_READS = {
     # scripts/validate_powermetrics_fiducial.py), not reachable from the v2
     # mint evidence-read perimeter. Registration is inapplicable because the
     # bytes' integrity is the thing under repair.
-    "joulewise/calibration_ledger.py:repair_calibration_ledger:4505:os.fdopen",
+    "joulewise/calibration_ledger.py:repair_calibration_ledger:4557:os.fdopen",
     # Writer-lease tail-abandonment scan of possibly-corrupt physical ledger
     # bytes; recovery/operator lane only (caller:
     # scripts/recover_calibration_ledger.py), not reachable from the v2 mint
     # evidence-read perimeter. Registration is inapplicable because the
     # bytes' integrity is the thing under repair.
-    "joulewise/calibration_ledger.py:abandon_calibration_ledger_tail:4562:os.fdopen",
+    "joulewise/calibration_ledger.py:abandon_calibration_ledger_tail:4614:os.fdopen",
 }
 ISSUED_REDUCE_SHA256 = (
     "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"

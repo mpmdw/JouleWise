@@ -106,6 +106,10 @@ jobs:
           python-version: "3.11"
       - name: State kernel and generated-view drift
         run: python scripts/gen_state.py --check
+      - name: Hard-coded pins that protect a number are current
+        # Kind-P pins (configs/pins/registry.json) and the generators' --check
+        # modes. A stale pin prints "run python scripts/repin.py --write <name>".
+        run: python scripts/repin.py --check
       - name: Documentation freshness
         run: python -m unittest -v tests.test_docs_freshness
       - name: Historical receipt semantics

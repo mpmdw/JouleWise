@@ -284,8 +284,9 @@ class G2aAuthoringTests(unittest.TestCase):
             self.assertEqual(list((base/'stage').iterdir()), [])
 
     def test_authoring_fences_refuse_before_publication(self):
-        cases = [('plan_id', 'night-CODEX'), ('plan_id', 'night-claude'), ('plan_id', 'night-T3'),
-                 ('g2a_root', Path('/tmp/ClAuDe-probe')), ('night_root', Path('/tmp/t3')),
+        # T3 is no longer a census substring (T3 prune, Ed 2026-10-07).
+        cases = [('plan_id', 'night-CODEX'), ('plan_id', 'night-claude'),
+                 ('g2a_root', Path('/tmp/ClAuDe-probe')), ('night_root', Path('/tmp/codex')),
                  ('measurement_root', Path('/tmp/measurement')), ('measurement_root', Path('/Users/edr/night-custody/measurement')),
                  ('t0_epoch_s', 6001), ('t0_epoch_s', 5340), ('window_max_s', 18147),
                  ('measurement_head', 'bad')]

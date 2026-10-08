@@ -42,7 +42,7 @@
   },
   "sampling": {
     "power_hz": 10.0,
-    "idle_seconds": 75.0,
+    "idle_seconds": 57.6,
     "warmup_seconds": 5.0
   },
   "run_metadata": {
@@ -55,7 +55,7 @@
       "comparative-contrast",
       "measurement-arm=prefill_p2048",
       "df-condition=sw-prefill-p2048-b-qwen3-8b",
-      "calibration-plan-sha256=75fe8d58462ebdd1a258ec6dad2784d384588b5a42f5a8dc567d539cc9c4ec40",
+      "calibration-plan-sha256=b37cb5333e74570dc533a8c12816d96e20d7a1da50d0b9072afc4c9ef0654368",
       "calibration-abba-block-id=d117-prefill-p2048-contrast-b07",
       "calibration-abba-label=B",
       "calibration-abba-sequence-index=2",

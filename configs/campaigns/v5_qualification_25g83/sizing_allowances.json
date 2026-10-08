@@ -1,0 +1,594 @@
+{
+  "schema_version": "joulewise.v5_qualification_sizing_allowances.v1",
+  "sizing": {
+    "fixed": {
+      "pack_t0": {
+        "seconds": 360,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/fixed/pack_t0"
+      },
+      "fixed_settles": {
+        "seconds": 3700,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/fixed/fixed_settles"
+      },
+      "pre_post_calibration": {
+        "seconds": 770,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/fixed/pre_post_calibration"
+      },
+      "stage_custody": {
+        "seconds": 3571,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/fixed/stage_custody"
+      },
+      "terminal_shutdown": {
+        "seconds": 300,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/fixed/terminal_shutdown"
+      },
+      "t0_stage_cap": {
+        "seconds": 3300,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/fixed/t0_stage_cap"
+      }
+    },
+    "members": {
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a1": {
+        "load": {
+          "seconds": 3,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/small/load"
+        },
+        "warmup": {
+          "seconds": 10,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/small/warmup"
+        },
+        "prefill": {
+          "seconds": 2,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/small/prefill"
+        },
+        "forced_decode": {
+          "seconds": 5,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/small/forced_decode"
+        },
+        "cooldown": {
+          "seconds": 300,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/small/cooldown"
+        },
+        "idle_admission": {
+          "seconds": 275,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/small/idle_admission"
+        }
+      },
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1": {
+        "load": {
+          "seconds": 6,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/large/load"
+        },
+        "warmup": {
+          "seconds": 16,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/large/warmup"
+        },
+        "prefill": {
+          "seconds": 9,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/large/prefill"
+        },
+        "forced_decode": {
+          "seconds": 13,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/large/forced_decode"
+        },
+        "cooldown": {
+          "seconds": 300,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/large/cooldown"
+        },
+        "idle_admission": {
+          "seconds": 275,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/large/idle_admission"
+        }
+      },
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b2": {
+        "load": {
+          "seconds": 6,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/large/load"
+        },
+        "warmup": {
+          "seconds": 16,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/large/warmup"
+        },
+        "prefill": {
+          "seconds": 9,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/large/prefill"
+        },
+        "forced_decode": {
+          "seconds": 13,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/large/forced_decode"
+        },
+        "cooldown": {
+          "seconds": 300,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/large/cooldown"
+        },
+        "idle_admission": {
+          "seconds": 275,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/large/idle_admission"
+        }
+      },
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a2": {
+        "load": {
+          "seconds": 3,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/small/load"
+        },
+        "warmup": {
+          "seconds": 10,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/small/warmup"
+        },
+        "prefill": {
+          "seconds": 2,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/small/prefill"
+        },
+        "forced_decode": {
+          "seconds": 5,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/small/forced_decode"
+        },
+        "cooldown": {
+          "seconds": 300,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/small/cooldown"
+        },
+        "idle_admission": {
+          "seconds": 275,
+          "source": {
+            "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+            "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+          },
+          "source_pointer": "/members/small/idle_admission"
+        }
+      }
+    },
+    "auxiliary": {
+      "gamma-bound-collection": {
+        "seconds": 7140,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/auxiliary/gamma-bound-collection"
+      },
+      "gamma-reference-start": {
+        "seconds": 1785,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/auxiliary/gamma-reference-start"
+      },
+      "gamma-reference-decode-midpoint": {
+        "seconds": 595,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/auxiliary/gamma-reference-decode-midpoint"
+      },
+      "gamma-reference-end": {
+        "seconds": 1785,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/auxiliary/gamma-reference-end"
+      },
+      "gamma-bound-derivation": {
+        "seconds": 60,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/auxiliary/gamma-bound-derivation"
+      }
+    },
+    "streams": {
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a1": {
+        "seconds": 314,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/streams/small"
+      },
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1": {
+        "seconds": 335,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/streams/large"
+      },
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b2": {
+        "seconds": 335,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/streams/large"
+      },
+      "d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-a2": {
+        "seconds": 314,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/streams/small"
+      },
+      "gamma-bound-collection": {
+        "seconds": 314,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/streams/small"
+      },
+      "gamma-reference-start": {
+        "seconds": 314,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/streams/small"
+      },
+      "gamma-reference-decode-midpoint": {
+        "seconds": 314,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/streams/small"
+      },
+      "gamma-reference-end": {
+        "seconds": 314,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/streams/small"
+      },
+      "gamma-calibration-pre": {
+        "seconds": 240,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/streams/bracket"
+      },
+      "gamma-calibration-post": {
+        "seconds": 240,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/streams/bracket"
+      }
+    },
+    "clock": {
+      "diagnostic_anchor_half_width_s": 0.003597711938684421,
+      "stamp_resolution_s": 1.0000000000000002e-06,
+      "rho_per_s": 8e-06,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "observed_max_effective_bound": {
+        "seconds": 0.004017182870691257,
+        "source": {
+          "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+          "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+        },
+        "source_pointer": "/observed_max_effective_bound_s"
+      }
+    }
+  },
+  "totals": {
+    "E_small_L": {
+      "seconds": 595,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/E_small_L"
+    },
+    "E_large_L": {
+      "seconds": 619,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/E_large_L"
+    },
+    "E_ABBA_L": {
+      "seconds": 2428,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/E_ABBA_L"
+    },
+    "T_bound_and_references": {
+      "seconds": 11365,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/T_bound_and_references"
+    },
+    "NIGHT_PROGRAMMED_SPAN_S_s1": {
+      "seconds": 22494,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/NIGHT_PROGRAMMED_SPAN_S_s1"
+    },
+    "WINDOW_MAX_S_s1": {
+      "seconds": 25800,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/WINDOW_MAX_S_s1"
+    },
+    "latest_start_offset_s": {
+      "seconds": 3306,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/latest_start_offset_s"
+    },
+    "post_quiet_backup_close_off_s": {
+      "seconds": 420,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/post_quiet_backup_close_off_s"
+    },
+    "T_stream_max": {
+      "seconds": 335,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/T_stream_max"
+    },
+    "E_small_full": {
+      "seconds": 627,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/E_small_full"
+    },
+    "E_large_full": {
+      "seconds": 651,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/E_large_full"
+    },
+    "E_ABBA_full": {
+      "seconds": 2556,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/E_ABBA_full"
+    },
+    "T_bound_and_references_full": {
+      "seconds": 11973,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/T_bound_and_references_full"
+    },
+    "gamma_bound_collection_full": {
+      "seconds": 7524,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/gamma_bound_collection_full"
+    },
+    "gamma_reference_start_full": {
+      "seconds": 1881,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/gamma_reference_start_full"
+    },
+    "gamma_reference_decode_midpoint_full": {
+      "seconds": 627,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/gamma_reference_decode_midpoint_full"
+    },
+    "gamma_reference_end_full": {
+      "seconds": 1881,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/totals/gamma_reference_end_full"
+    }
+  },
+  "controls": {
+    "volatile_horizon_s": {
+      "seconds": 1200,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/controls/volatile_horizon_s"
+    },
+    "nonvolatile_horizon_s": {
+      "seconds": 21600,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/controls/nonvolatile_horizon_s"
+    },
+    "arm_capability_horizon_s": {
+      "seconds": 300,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/controls/arm_capability_horizon_s"
+    },
+    "check_offset_s": {
+      "seconds": 120,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/controls/check_offset_s"
+    },
+    "shutdown_offset_s": {
+      "seconds": 420,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/controls/shutdown_offset_s"
+    },
+    "courier_offset_s": {
+      "seconds": 720,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/controls/courier_offset_s"
+    },
+    "deadman_offset_s": {
+      "seconds": 4020,
+      "source": {
+        "path": "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json",
+        "sha256": "f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81"
+      },
+      "source_pointer": "/controls/deadman_offset_s"
+    }
+  }
+}

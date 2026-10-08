@@ -101,13 +101,19 @@ def publish_campaign(runs_root: Path, nonce: str, *, pid: int | None = None,
                      start_time: str | None = None,
                      parent: Path | None = None,
                      observer: Callable[[int], Identity] | None = None) -> RegistryEntry:
-    """Publish before child dispatch; failure prevents measurement acquisition."""
+    """Publish before child dispatch.
+
+    An unavailable start identity (the ps probe returned UNKNOWN) is published
+    as ``"start_time": null``; it no longer raises (Opus triple audit F4a: the
+    raise made run_campaign return 2 and lost the stage to a failed probe).
+    The caller flags it (``campaign.runner_record_flagged``), and the census
+    judges such an entry by the process state and the entry's own write time
+    (:func:`_inspect_identity`).
+    """
     pid = os.getpid() if pid is None else pid
     if start_time is None:
         identity = (observer or observe_identity)(pid)
         start_time = identity.start_time if identity.state == "LIVE" else None
-    if type(pid) is not int or pid <= 0 or _start_token(start_time) is None or not nonce:
-        raise RuntimeError("campaign start identity unavailable")
     registry = (custody_parent() if parent is None else parent) / "active-campaigns"
     registry.mkdir(parents=True, exist_ok=True)
     payload = (json.dumps({"schema": REGISTRY_SCHEMA, "pid": pid,
@@ -163,6 +169,19 @@ def _valid_exit(record: dict) -> bool:
             and type(record.get("monotonic_ns")) is int)
 
 
+def _started_after_written(start: str, path: Path) -> bool:
+    """True when the ``lstart`` token (UTC, 1 s precision) is more than 1 s after ``path``'s mtime."""
+    import calendar
+    import time
+
+    try:
+        started = calendar.timegm(time.strptime(start, "%a %b %d %H:%M:%S %Y"))
+        written = path.stat().st_mtime
+    except (OSError, ValueError, OverflowError):
+        return False
+    return started > written + 1
+
+
 def _inspect_identity(record: dict, path: Path, result: Census,
                       observer: Callable[[int], Identity]) -> None:
     pid = record.get("pid")
@@ -174,6 +193,13 @@ def _inspect_identity(record: dict, path: Path, result: Census,
         return
     token = _start_token(record.get("start_time"))
     observed = _start_token(identity.start_time)
+    if identity.state == "LIVE" and token is None and observed is not None \
+            and _started_after_written(observed, path):
+        # An entry published without a start time (publish_campaign, probe
+        # UNKNOWN): a live process that started after the entry was written
+        # cannot be its writer, so the pid was reused.
+        result.warnings.append(f"stale reused PID (entry has no start time): {path}")
+        return
     if identity.state != "LIVE" or token is None or observed is None:
         raise ValueError(f"identity unavailable or legacy live PID: {path}")
     if token != observed:

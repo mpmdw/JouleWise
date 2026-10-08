@@ -12,6 +12,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from joulewise.analysis_manifest_v3 import (
@@ -64,7 +65,7 @@ def _tree_digest(root: Path) -> dict[str, str]:
 
 
 def _normal_argv(fixture: dict) -> list[str]:
-    return [
+    return ["--acceptance", str(fixture["root"] / "genesis-acceptance.json"),
         "--runs-root",
         str(fixture["runs_root"]),
         "--pack-root",
@@ -117,8 +118,11 @@ def _run(argv: list[str]) -> tuple[int, str]:
     return code, stdout.getvalue()
 
 
-def _install_s11_checker_fixture(root: Path) -> dict:
+def _install_s11_checker_fixture(root: Path, *, full_window: bool = False) -> dict:
+    """The G2-b one-block shakedown window (default), or with ``full_window`` every stage's members."""
+    from tests.test_calibration_bracketing import _unissued_acceptance_fixture_bytes
     fixture = install_synthetic_finalization_fixture(root)
+    (root / "genesis-acceptance.json").write_bytes(_unissued_acceptance_fixture_bytes())
     runs_root = fixture["runs_root"]
     manifest_path = runs_root / "campaign_manifests" / "synthetic.json"
     manifest = json.loads(manifest_path.read_text())
@@ -134,9 +138,10 @@ def _install_s11_checker_fixture(root: Path) -> dict:
     expected_ids = {
         row["run_id"] for row in order["executed_order"] if row["block_index"] == 1
     }
-    manifest["members"] = [
-        member for member in manifest["members"] if member["run_id"] in expected_ids
-    ]
+    if not full_window:
+        manifest["members"] = [
+            member for member in manifest["members"] if member["run_id"] in expected_ids
+        ]
     for index, member in enumerate(manifest["members"]):
         member["role"] = (
             run_campaign_module.NEG8_REFERENCE_ROLE
@@ -935,6 +940,68 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertEqual(self._fail_ids(output), ["F5-2", "F5-3"], output)
             self.assertIn("not the expected mismatch shape", output)
 
+    def test_block5_desk_order_advanced_pin_passes_with_expected_pin_relation_equal(self) -> None:
+        """Rehearsal round 2, R2-1: block 5 advances the pin before the harvest (registration 11).
+
+        Its terminal boundary records the committed pin equal to the session's
+        terminal head and no refusal.  With --expected-pin-relation equal that
+        shape passes and the R-6 physical-ahead shape is refused; without the
+        option the R-6 shape alone is accepted, as before.
+        """
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            record = json.loads(fixture["terminal_boundary_record"].read_text())
+            r6 = dict(record)
+            record.update(pin_relation="equal", refusal_code=None, committed_pin_refusal_reasons=[])
+            _write_json(fixture["terminal_boundary_record"], record)
+            code, output = _run([*_normal_argv(fixture), "--expected-pin-relation", "equal"])
+            self.assertEqual(code, 0, output)
+            self.assertIn("boundary=equal", output)
+            self.assertEqual(self._fail_ids(output), [], output)
+            # The same record under the default (R-6) expectation is a premature advance.
+            code, output = _run(_normal_argv(fixture))
+            self.assertEqual(self._fail_ids(output), ["F5-2", "F5-3"], output)
+            # A committed snapshot that refused something is not the advanced-pin shape.
+            record["committed_pin_refusal_reasons"] = ["calibration_ledger_head_uncommitted"]
+            _write_json(fixture["terminal_boundary_record"], record)
+            code, output = _run([*_normal_argv(fixture), "--expected-pin-relation", "equal"])
+            self.assertEqual(self._fail_ids(output), ["F5-2", "F5-3"], output)
+            # The R-6 shape is refused when the block-5 order is expected.
+            _write_json(fixture["terminal_boundary_record"], r6)
+            code, output = _run([*_normal_argv(fixture), "--expected-pin-relation", "equal"])
+            self.assertEqual(self._fail_ids(output), ["F5-2", "F5-3"], output)
+            self.assertIn("not the expected advanced-pin shape", output)
+
+    def test_f5_4_resolves_membership_with_the_desk_membership_binding(self) -> None:
+        """Rehearsal round 2, R2-2a: F5-4 resolves membership as the verdict writer did, with its binding."""
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            policy = (Path(__file__).resolve().parents[1] / "configs" / "campaign_policies"
+                      / "quiet_mac_p2_production.json")
+            policy_sha = hashlib.sha256(policy.read_bytes()).hexdigest()
+            binding = fixture["root"] / "window-membership-binding.json"
+            # No manifest in this window lacks an analysis-manifest identity: the exhaustive binding is empty.
+            _write_json(binding, {"schema_version": "joulewise.whole_window_membership_binding.v1",
+                                  "campaign_policy_sha256": policy_sha, "source_campaign_manifests": [],
+                                  "membership_id": run_campaign_module.whole_window_membership_id([])})
+            import scripts.run_campaign as checker_run_campaign  # the module F5-4 imports from
+
+            real = checker_run_campaign._whole_window_campaign_membership
+            with mock.patch.object(checker_run_campaign, "_whole_window_campaign_membership",
+                                   side_effect=real) as resolver:
+                code, output = _run([*_normal_argv(fixture), "--window-membership-binding", str(binding)])
+            self.assertEqual(code, 0, output)
+            self.assertIn("PASS F5-4 ", output)
+            self.assertEqual(resolver.call_args.kwargs["membership_binding_path"], binding)
+            # A binding that is not exhaustive refuses the catalog, so F5-4 fails: the binding is read.
+            _write_json(binding, {"schema_version": "joulewise.whole_window_membership_binding.v1",
+                                  "campaign_policy_sha256": policy_sha,
+                                  "source_campaign_manifests": [{"path": "x.json", "sha256": "0" * 64, "size": 1}],
+                                  "membership_id": "0" * 64})
+            code, output = _run([*_normal_argv(fixture), "--window-membership-binding", str(binding)])
+            self.assertEqual(self._fail_ids(output), ["F5-4"], output)
+            self.assertIn("whole-window membership refused", output)
+
     def test_missing_terminal_candidate_fails_f5_2_and_f5_3(self) -> None:
         with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
@@ -1193,6 +1260,213 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             code, output = _run(argv)
             self.assertNotEqual(code, 0, output)
             self.assertEqual(self._fail_ids(output), ["NR14-LAYOUT"], output)
+
+
+_ACCEPTANCE_R2 = (
+    Path(__file__).resolve().parents[1]
+    / "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
+)
+_PREFIX_376 = (
+    Path(__file__).resolve().parent
+    / "fixtures/v5_qualification_harvest/acceptance-prefix-376.jsonl.zlib.b85"
+)
+
+
+class FullWindowRosterTests(unittest.TestCase):
+    """Rehearsal round 1, B4: a block-5 claim window holds every stage of the pack.
+
+    G3's default roster is G2-b's shakedown (stage 1, block 1). On a whole
+    multi-stage window it reported every later member as extra, so S11-A2,
+    F5-1 and F5-3 failed and F5-2 (the one independent recompute of the
+    whole-window verdict) could never pass.
+    """
+
+    GAMMA_V5 = Path(__file__).resolve().parents[1] / "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+    REPO = Path(__file__).resolve().parents[1]
+
+    @staticmethod
+    def _plan_tree_without_claim_references(fixture: dict) -> Path:
+        """A plan tree whose stage graph launches no reference input into the claim root.
+
+        The synthetic window's NEG-8 references are science members tagged as
+        such (install_synthetic_finalization_fixture), so its whole-window
+        roster is its root order alone.
+        """
+        path = fixture["root"] / "plan_tree.full_window_test.json"
+        _write_json(path, {"stage_graph": [], "external_inputs": []})
+        return path
+
+    def test_a_whole_multi_stage_window_passes_in_full_window_mode(self) -> None:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp), full_window=True)
+            prospective = fixture["prospective"]
+            root_order = json.loads(
+                (fixture["prospective_path"].parent / prospective["root_order_manifest"]["path"]).read_text())
+            members = {row["run_id"] for row in root_order["executed_order"]}
+            self.assertGreater(len(prospective["stage_manifests"]), 1)
+            verdict = json.loads(fixture["verdict_path"].read_text())
+            self.assertEqual(set(verdict["bundle_ids"]), members)
+            # The break: one-block semantics on the whole window.
+            code, output = _run(_normal_argv(fixture))
+            self.assertEqual(code, 1, output)
+            self.assertRegex(output, r"FAIL S11-A2 .*member set mismatch missing=\[\] extra=\[")
+            # The fix: the full-window roster.
+            plan_tree = self._plan_tree_without_claim_references(fixture)
+            code, output = _run(_normal_argv(fixture) + ["--full-window", "--plan-tree", str(plan_tree)])
+            self.assertEqual(code, 0, output)
+            for assertion_id in ("NR14-LAYOUT", "S11-A1", "S11-A2", "S11-A3", "S11-A5",
+                                 "F5-1", "F5-2", "F5-3", "F5-4"):
+                self.assertIn(f"PASS {assertion_id} ", output)
+            self.assertIn(f"expected={len(members)} ", output)
+            self.assertIn("window_mode=full references=0", output)
+
+    def test_the_v5_gamma_whole_window_roster_adds_the_nine_claim_root_references(self) -> None:
+        from scripts.check_window_provenance import _window_reference_roster
+        references, digests = _window_reference_roster(self.GAMMA_V5 / "plan_tree.json", self.REPO)
+        # Lane L10: the two arm-midpoint diagnostic references have their own run ids.
+        self.assertEqual(references, ["neg8-window-start-r1", "neg8-window-start-r2", "neg8-window-start-r3",
+                                      "gamma-interior-reference-decode-midpoint", "neg8-window-midpoint",
+                                      "gamma-interior-reference-prefill-midpoint", "neg8-window-end-r1",
+                                      "neg8-window-end-r2", "neg8-window-end-r3"])
+        self.assertEqual([item.split(":")[0] for item in digests.split(",")],
+                         ["start_references", "decode_midpoint_reference", "midpoint_reference",
+                          "prefill_midpoint_reference", "end_references"])
+        # The NEG-8 corpus is collected into the bound root and is not a claim-root member.
+        self.assertFalse(any(item.startswith("neg8-refcorpus") for item in references))
+        # A reference manifest whose bytes differ from the plan tree's pin is refused.
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            repo = Path(tmp)
+            relative = "configs/campaigns/window_references_v5/midpoint/order_manifest.json"
+            for name in ("window_references_v5/start_triplet", "window_references_v5/midpoint",
+                         "window_references_v5/end_triplet", "gamma_interior_references_v5/decode_midpoint",
+                         "gamma_interior_references_v5/prefill_midpoint"):
+                source = self.REPO / f"configs/campaigns/{name}/order_manifest.json"
+                target = repo / f"configs/campaigns/{name}/order_manifest.json"
+                target.parent.mkdir(parents=True)
+                target.write_bytes(source.read_bytes())
+            (repo / relative).write_bytes((repo / relative).read_bytes() + b"\n")
+            from scripts.check_window_provenance import AssertionFailure
+            with self.assertRaisesRegex(AssertionFailure, "midpoint_reference manifest sha256 mismatch"):
+                _window_reference_roster(self.GAMMA_V5 / "plan_tree.json", repo)
+
+
+class AcceptanceCutoffReplayTests(unittest.TestCase):
+    """Memo 3.3: every F5-2 ledger replay carries the acceptance's cutoff.
+
+    Without ``baseline_sequence``/``baseline_digest`` the bracket refuses
+    ``calibration_ledger_baseline_missing`` on good bytes, so the desk check
+    would FAIL a sound window.  The block-5 harvest relies on this checker
+    for G3, and the block-4 test file that also covers it is retired later.
+    """
+
+    def _args(self, root: Path) -> tuple[SimpleNamespace, dict]:
+        import base64
+        import zlib
+        from joulewise import calibration_bracketing as brackets
+        from joulewise import calibration_ledger as ledger
+
+        cutoff = brackets.load_calibration_acceptance_bound(_ACCEPTANCE_R2)["ledger_cutoff"]
+        ledger_path = root / "ledger.jsonl"
+        ledger_path.write_bytes(zlib.decompress(base64.b85decode(_PREFIX_376.read_bytes())))
+        pin = root / "pin.json"
+        pin_value = {"sequence": cutoff["sequence"], "head_digest": cutoff["head_digest"],
+                     "ledger_schema": ledger.LEDGER_SCHEMA}
+        _write_json(pin, pin_value)
+        boundary = root / "terminal-boundary.json"
+        _write_json(boundary, {"session_id": "cutoff-probe", "session_state": "finalized",
+                               "pin_relation": "physical_ahead",
+                               "refusal_code": "calibration_ledger_head_mismatch",
+                               "terminal_head_pin_candidate": pin_value})
+        args = SimpleNamespace(calibration_ledger=ledger_path, head_pin=pin, acceptance=_ACCEPTANCE_R2,
+                               terminal_boundary_record=boundary)
+        return args, cutoff
+
+    def test_both_f52_snapshot_sites_replay_with_the_acceptance_cutoff(self) -> None:
+        from joulewise import calibration_bracketing as brackets
+        from joulewise.schemas import CalibrationBracketingPolicy
+        from scripts import check_window_provenance as checker
+
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            args, cutoff = self._args(Path(tmp))
+            calls = []
+            real = checker.load_calibration_ledger_snapshot
+
+            def spy(*positional, **keywords):
+                calls.append(keywords)
+                return real(*positional, **keywords)
+
+            with mock.patch.object(checker, "load_calibration_ledger_snapshot", side_effect=spy):
+                finalized_site = checker._acceptance_replay_snapshot(args)
+                g2_site, _candidate = checker._ratified_g2_boundary_snapshot(
+                    args, {"session_id": "cutoff-probe"})
+            self.assertEqual(len(calls), 2)
+            for keywords in calls:
+                self.assertEqual(keywords["mode"], "read_replay")
+                self.assertEqual((keywords["baseline_sequence"], keywords["baseline_digest"]),
+                                 (cutoff["sequence"], cutoff["head_digest"]))
+            policy = CalibrationBracketingPolicy(require_bracket=True, calibration_bracket_max_drift_s=0.05)
+
+            def reasons(snapshot):
+                return brackets.evaluate_calibration_bracket(
+                    [], window_start_s=1.0, window_end_s=2.0, bindings={}, policy=policy,
+                    ledger_snapshot=snapshot)[1]
+
+            for snapshot in (finalized_site, g2_site):
+                self.assertEqual(snapshot.baseline_sequence, cutoff["sequence"])
+                self.assertNotIn("calibration_ledger_baseline_missing", reasons(snapshot))
+            # The same replay without the cutoff is exactly the memo-3.3 refusal.
+            without = real(args.calibration_ledger, args.head_pin, require_committed_pin=False,
+                           verify_custody=False, mode="read_replay")
+            self.assertIn("calibration_ledger_baseline_missing", reasons(without))
+
+    def test_acceptance_without_a_cutoff_fails_the_assertion_not_the_process(self) -> None:
+        from scripts import check_window_provenance as checker
+
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            args, _cutoff = self._args(Path(tmp))
+            with mock.patch.object(checker, "load_calibration_acceptance_bound", return_value=None):
+                with self.assertRaisesRegex(checker.AssertionFailure, "acceptance artifact is absent"):
+                    checker._acceptance_replay_snapshot(args)
+
+
+class ReportJsonTests(unittest.TestCase):
+    """--report-json mirrors the printed assertion lines for machine consumers."""
+
+    def test_report_rows_match_printed_lines_and_file_is_created_once(self) -> None:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            report = Path(tmp) / "report.json"
+            code, output = _run([*_normal_argv(fixture), "--report-json", str(report)])
+            value = json.loads(report.read_text())
+            self.assertEqual(value["schema"], "joulewise.window_provenance_report.v1")
+            self.assertEqual(value["exit_code"], code)
+            printed = [line.split(" ", 2)[:2] for line in output.splitlines()
+                       if line.split(" ", 1)[0] in {"PASS", "FAIL", "SKIP"}]
+            self.assertEqual([[row["status"], row["id"]] for row in value["assertions"]], printed)
+            self.assertEqual(code, 0, output)
+            with self.assertRaises(FileExistsError):
+                _run([*_normal_argv(fixture), "--report-json", str(report)])
+
+    def test_report_records_cli_failures(self) -> None:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            root = Path(tmp)
+            report = root / "report.json"
+            code, _output = _run(["--runs-root", str(root), "--custody-root", str(root),
+                                  "--bracket-binding", str(root / "b.json"),
+                                  "--whole-window-verdict", str(root / "v.json"),
+                                  "--calibration-ledger", str(root / "l.jsonl"),
+                                  "--report-json", str(report)])
+            self.assertEqual(code, 2)
+            self.assertEqual(json.loads(report.read_text())["assertions"],
+                             [{"id": "CLI", "status": "FAIL", "detail": "exit_code=2"}])
+            refusal = root / "refusal-report.json"
+            code, _output = _run(["--expect-finalize-refusal", "--runs-root", str(root), "--custody-root",
+                                  str(root), "--bracket-binding", str(root / "b.json"),
+                                  "--whole-window-verdict", str(root / "v.json"),
+                                  "--calibration-ledger", str(root / "l.jsonl"),
+                                  "--report-json", str(refusal)])
+            self.assertEqual(code, 2)
+            self.assertEqual(json.loads(refusal.read_text())["assertions"][0]["id"], "FINALIZE-REFUSAL")
 
 
 if __name__ == "__main__":

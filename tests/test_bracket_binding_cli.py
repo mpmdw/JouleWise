@@ -841,7 +841,10 @@ class BracketBindingCliTests(unittest.TestCase):
                 self.assertEqual(refusal["status"], "REFUSE")
                 self.assertEqual(
                     refusal["reason"],
-                    "analysis_finalization_bracket_binding_mismatch",
+                    # The endpoint now reaches ledger authentication first.
+                    # The digest and root cases above still reach the binding guard.
+                    "analysis_finalization_ledger_head_mismatch" if name == "endpoint_receipt"
+                    else "analysis_finalization_bracket_binding_mismatch",
                 )
                 self.assertFalse(_finalized_path(fixture).exists())
 

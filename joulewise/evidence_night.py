@@ -29,6 +29,13 @@ KIND = kind_row("quiet_predicate_evidence").kind
 REMOTE = "https://github.com/mpmdw/JouleWise"
 SCHEMA = "joulewise.evidence_prepare.v1"
 STEPS = ("clone", "venv", "plan", "wrapper", "render", "complete")
+# The installer's validation (scripts/install_night_agent.sh, also under
+# --render-only) retains each battery-float reading next to the plan it was
+# given (joulewise/night_agent_install.py, block-4 X4). For the render step
+# that directory is the staging directory, so these records are installer
+# custody, not unknown output: render seals them, and a render refused by the
+# installer leaves them for the retried render to seal.
+INSTALL_BATTERY_RECORD = re.compile(r"battery-float-install-check-[0-9]+\.(?:ioreg|json)")
 # Activation records 19/21: every arm needs a supervisor started after the
 # canonical fast-forward; H must include the bracketed census cure. D-183:
 # `check` performs that fast-forward itself when nothing is loaded.
@@ -462,6 +469,14 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
             expected_stage.add("night_plan.json")
         if "render" in done:
             expected_stage.add("render")
+            # Exactly the installer battery records the render step sealed.
+            expected_stage.update(Path(p).name for p in state["digests"]
+                                  if Path(p).parent == stage and INSTALL_BATTERY_RECORD.fullmatch(Path(p).name))
+        else:
+            # A render the installer refused (for example, battery not at
+            # float) leaves its retained readings; the retried render seals them.
+            expected_stage.update(p.name for p in stage.iterdir()
+                                  if INSTALL_BATTERY_RECORD.fullmatch(p.name) and p.is_file() and not p.is_symlink())
         if {p.name for p in stage.iterdir()} != expected_stage:
             raise Refused("unknown or uncheckpointed staging output")
         if "render" in done:
@@ -583,7 +598,11 @@ s['boundaries']={'install close EXCLUDED':s['install_close_epoch_s'],
 print(json.dumps(s))
 """
             state["schedule"] = json.loads(run([python, "-B", "-c", code, plan], cwd=root))
-            checkpoint(state_path, state, "render", sorted(p for p in render.rglob("*") if p.is_file()))
+            battery_records = sorted(p for p in stage.iterdir() if INSTALL_BATTERY_RECORD.fullmatch(p.name))
+            if any(p.is_symlink() or not p.is_file() for p in battery_records):
+                raise Refused("installer battery record is not a regular file")
+            checkpoint(state_path, state, "render",
+                       sorted(p for p in render.rglob("*") if p.is_file()) + battery_records)
         if "complete" not in done:
             state["notice_draft"] = render_notice(state)
             state["frozen_triple"] = [state["plan_id"], str(root), resolved_head]
@@ -1370,11 +1389,14 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
                     phase="arm_check", runner=lambda argv: runner(argv, timeout=battery_float.PROBE_TIMEOUT_S),
                     plan_id=state.get("plan_id"),
                 )
+                from joulewise.v5_qualification import persist_battery_observation
+                retained = persist_battery_observation(
+                    lifecycle_dir(candidate), f"battery-float-arm-check-{observed['monotonic_before_ns']}", observed, _raw)
                 try:
                     battery_float.require_pass(observed)
                 except (battery_float.ProbeError, ValueError) as exc:
-                    raise Refused(f"battery float: {exc}", evidence={"observation": observed}) from exc
-                return {"observation": observed}
+                    raise Refused(f"battery float: {exc}", evidence={"observation": observed, **retained}) from exc
+                return {"observation": observed, **retained}
             inspect("battery_float", check_battery_float)
             # Each arm predicate follows its own row flag, as at t0. An
             # unflagged kind records `skipped`; an unreadable kind fails closed.
@@ -1805,7 +1827,8 @@ def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl
                 phase="publish_install", runner=lambda argv: runner(argv, timeout=battery_float.PROBE_TIMEOUT_S),
                 plan_id=state.get("plan_id"),
             )
-            saved_json(attempt / "battery-float-at-publication.json", battery_observation)
+            from joulewise.v5_qualification import persist_battery_observation
+            persist_battery_observation(attempt, "battery-float-at-publication", battery_observation, _battery_raw)
             try:
                 battery_float.require_pass(battery_observation)
             except (battery_float.ProbeError, ValueError) as exc:

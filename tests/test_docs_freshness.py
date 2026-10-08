@@ -64,6 +64,13 @@ MAGISTRATE_RULING_EXEMPTIONS = {
     # This pre-install stage-1 ruling is explicitly closed by the B1 ruling.
     "2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md",
 }
+# A ruling kept as a byte copy of a cold gate's own file cannot gain a section:
+# the block-5 seal gate pins the SHA-256 of this copy (the seal record beside
+# it, section 5), and the sealed registration prints its file name. Its executed
+# evidence is its own section 2, "Trust anchors and checks".
+RULING_BYTE_COPY_EXEMPTIONS = {
+    "2026-10-07-block5-seal/RULING_STAGE1.md",
+}
 DATED_DIRECTORY = re.compile(r"\d{4}-\d{2}-\d{2}(?:-.+)?")
 
 FORBIDDEN_VOLATILE_FACTS = {
@@ -148,6 +155,8 @@ def _dated_magistrate_rulings() -> list[Path]:
         path
         for path in _dated_process_trace_files("**/*RULING*.md", "2026-09-03")
         if not path.name.startswith("NEEDS-RULING-")
+        and path.relative_to(ROOT / "docs/process_traces").as_posix()
+        not in RULING_BYTE_COPY_EXEMPTIONS
     }
     selected = sorted(magistrate | rulings)
     assert selected, "dated ruling selector unexpectedly selected no files"

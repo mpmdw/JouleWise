@@ -23,6 +23,8 @@ import signal as _signal
 import subprocess as _subprocess
 import tempfile as _tempfile
 import time as _time
+from joulewise.dwell import final_clean_dwell as _final_clean_dwell
+from joulewise import prewindow as _prewindow
 from dataclasses import dataclass as _dataclass, field as _field, replace as _replace
 from datetime import datetime as _datetime
 from decimal import Decimal as _Decimal
@@ -38,6 +40,7 @@ from joulewise import arm_readiness as _readiness
 from joulewise import battery_float as _battery_float
 from joulewise import calibration_ledger as _ledger
 from joulewise import clock_reference as _clock_reference
+from joulewise import kernel_clock as _kernel_clock
 from joulewise import identity_pins as _identity
 
 
@@ -57,14 +60,22 @@ _MIN_BACKUP_FREE_BYTES = 20 * 1024**3
 _PROBE_TIMEOUT_SECONDS = 45
 # The battery-float probe carries its own ruled bound (final texts v1.1 §5.1).
 _PROBE_TIMEOUT_OVERRIDES = {_battery_float.IOREG_BATTERY_ARGV: _battery_float.PROBE_TIMEOUT_S}
+_MAINTENANCE_CPU_SAMPLES = 2
+_MAINTENANCE_CPU_INTERVAL_S = 1
+# The two new read-only probes use 11 s of the retired OFF site's 45 s
+# allowance, preserving the existing 610 s post-R1 admission horizon.
+_PROBE_TIMEOUT_OVERRIDES[_prewindow.PS_ARGV] = 5
 # Census browser executables in app bundles, rather than every command line
 # mentioning a browser name; OS extensions and services must not block the row.
 _BROWSER_CENSUS_PATTERN = r"/Contents/MacOS/(Safari|Google Chrome|Chromium|firefox)( |$)"
 _MONITOR_CENSUS_PATTERN = r"powermetrics|window-chain|run_campaign|tail -f|(^|/)watch( |$)"
 _RUNNING_REPOSITORY = _Path(__file__).resolve().parents[1]
 _AUTHORING_ARTIFACTS = (
+    "joulewise/dwell.py",
+    "joulewise/prewindow.py",
     "joulewise/network_time_off.py",
     "joulewise/clock_reference.py",
+    "joulewise/kernel_clock.py",
     "joulewise/arm_readiness_evidence_t0.py",
     "scripts/author_arm_evidence_t0.py",
     "scripts/capture_t0_step.py",
@@ -449,7 +460,8 @@ def _execute_probe(argv: _Sequence[str], *, cwd: _Path) -> _ProbeResult:
     timeout_s = _PROBE_TIMEOUT_OVERRIDES.get(tuple(argv), _PROBE_TIMEOUT_SECONDS)
     try:
         with _tempfile.TemporaryFile() as stdout, _tempfile.TemporaryFile() as stderr:
-            process = _subprocess.Popen(
+            from joulewise.t0_rehearsal import observed_popen
+            process = observed_popen(
                 list(argv),
                 cwd=cwd,
                 env=environment,
@@ -474,6 +486,8 @@ def _execute_probe(argv: _Sequence[str], *, cwd: _Path) -> _ProbeResult:
             stderr.seek(0)
             stdout_raw = stdout.read()
             stderr_raw = stderr.read()
+            if hasattr(process, "observe_output"):
+                process.observe_output(stdout_raw)
     except (OSError, _subprocess.SubprocessError) as exc:
         raise ValueError(f"probe could not execute: {exc}") from exc
     if timed_out:
@@ -547,7 +561,10 @@ def _capture(
             ],
             str(exc),
         ) from exc
-    if set(value) != _CAPTURE_KEYS or value.get("schema_version") != _COMMAND_SCHEMA:
+    capture_keys = _CAPTURE_KEYS
+    if step_id == "clock-reference" and "kernel_frequency" in value:
+        capture_keys = _CAPTURE_KEYS | {"kernel_frequency", "t_stream_max_s"}
+    if set(value) != capture_keys or value.get("schema_version") != _COMMAND_SCHEMA:
         raise _underivable(kind, f"{step_id} command capture schema/keys are invalid")
     if value.get("step_id") != step_id:
         raise _underivable(kind, f"{step_id} command capture names a different step")
@@ -753,9 +770,39 @@ def _captured_clock_reference(
     if value["anchor_read_skew_ns"] > 1_000_000:
         raise _underivable(kind, "R0 anchor read skew exceeds 1000000 ns")
     agreement = _reference_agreement(legs, kind=kind, label="R0 reference")
+    try:
+        frequency = _kernel_clock.validate_probe(capture.get("kernel_frequency"))
+    except ValueError as exc:
+        raise _underivable(kind, str(exc)) from exc
+    if (_readiness.requires_t0_frequency_gate(context.pack_root)
+            and capture.get("t_stream_max_s") is None):
+        raise _underivable(kind, "qualification kernel frequency gate is missing")
+    value = {**value, "kernel_frequency": frequency,
+             "t_stream_max_s": capture.get("t_stream_max_s")}
     result = (value, identity, agreement)
     context.values["clock_reference"] = result
     return result
+
+
+def _authenticate_clock_sizing(context: _Context, r0: dict[str, _Any], *, kind: str) -> None:
+    """Binding replay is mandatory before a clock row can be returned/published.
+
+    Refusal precedence (ruling 76 F.2 / X11 F1): missing chain, then anchor
+    continuity, then sizing. G10's isolated copy can prove an anchor refusal;
+    a copy can never acquire a PASS by bypassing the original-path binding.
+    """
+    binding_path = context.custody_pack_root / _INPUT_DIRECTORY / "kernel-frequency-binding.json"
+    if (_readiness.requires_t0_frequency_gate(context.pack_root)
+            or binding_path.exists() or binding_path.is_symlink()):
+        from joulewise.v5_qualification import authenticated_clock_budget, reference
+        try:
+            maximum, refs = authenticated_clock_budget(binding_path.parent, context.pack_root)
+            if r0["t_stream_max_s"] != maximum:
+                raise ValueError("R0 stream maximum differs from authenticated sizing")
+        except (OSError, ValueError) as exc:
+            raise _underivable(kind, str(exc)) from exc
+        r0["clock_sizing_binding"] = reference(binding_path)
+        context.values["clock_sizing_artifacts"] = refs
 
 
 def _arm_context(
@@ -907,7 +954,7 @@ def _launch_manifest(
         raise _underivable(kind, "window-chain.zsh does not bind exactly the reviewed repository")
     if _re.search(r"(?m)^QUARANTINE_ROOT=", chain_text):
         raise _underivable(kind, "window-chain.zsh overrides the sibling quarantine binding")
-    expected_prewindow_script = context.repository / "scripts/prewindow_check.sh"
+    expected_prewindow_script = context.repository / "joulewise/prewindow.py"
     readiness_attachment = context.tree.get("arm_attachments", {}).get(
         "arm_readiness", {}
     )
@@ -922,9 +969,9 @@ def _launch_manifest(
         else None
     )
     expected_prewindow = [
-        "/bin/bash",
+        str(context.repository / ".venv/bin/python"),
         str(expected_prewindow_script),
-        "--wait",
+        "--t0-wait",
         "--timeout-min",
         "45",
         "--window",
@@ -932,8 +979,7 @@ def _launch_manifest(
     ]
     if (
         len(prewindow) != len(expected_prewindow)
-        or _Path(prewindow[0]).name != "bash"
-        or prewindow[1:] != expected_prewindow[1:]
+        or prewindow != expected_prewindow
     ):
         raise _underivable(
             kind,
@@ -948,7 +994,12 @@ def _launch_manifest(
         or _Path(launch[4]).resolve() != resolved_window
     ):
         raise _underivable(kind, "launch command is not the exact foreground single-launch recipe")
-    artifacts = (manifest_identity, env_identity, chain_identity, arm_identity)
+    try:
+        stage = _readiness.authenticated_stage_list(resolved_window, chain_raw)
+    except (OSError, ValueError) as exc:
+        raise _underivable(kind, str(exc)) from exc
+    artifacts = (manifest_identity, env_identity, chain_identity, arm_identity,
+                 *((stage,) if stage is not None else ()))
     result = (value, artifacts, assignments)
     context.values["launch_manifest"] = result
     return result
@@ -1142,6 +1193,23 @@ def _fresh_clock_reference_batch(
     )
 
 
+def _require_window_chain_presence(context: _Context, *, kind: str) -> None:
+    # Presence precedes the sizing replay. Full launch/custody authentication
+    # still runs before publication; G10's copy is allowed only to refuse.
+    path = context.custody_pack_root / _INPUT_DIRECTORY / "launch-manifest.json"
+    try:
+        manifest, _identity, _raw = _canonical_object(path, kind=kind, label="launch manifest")
+    except T0EvidenceAuthoringError as exc:
+        raise _refuse(kind, "evidence_author_t0_launch_manifest_missing", str(exc)) from exc
+    chain_root = manifest.get("window_plan_root")
+    if not isinstance(chain_root, str) or not _Path(chain_root).is_absolute():
+        raise _underivable(kind, "launch manifest window plan root is invalid")
+    try:
+        _input_identity(_Path(chain_root) / "window-chain.zsh", kind=kind, label="window-chain.zsh")
+    except T0EvidenceAuthoringError as exc:
+        raise _missing_artifact(kind, "window_chain", str(exc)) from exc
+
+
 def _derive_clock_attestation(context: _Context) -> _DerivedRow:
     kind = "CLOCK_ATTESTATION"
     r0, r0_identity, _r0_agreement = _captured_clock_reference(
@@ -1178,14 +1246,28 @@ def _derive_clock_attestation(context: _Context) -> _DerivedRow:
         raise _underivable(kind, "T-0 RAW anchor span is below 600000000000 ns")
     if span > _MAX_T0_SEQUENCE_AGE_NS:
         raise _underivable(kind, "T-0 RAW anchor span exceeds 3600000000000 ns")
-    anchor_delta = abs(
-        (author_anchor.realtime_ns - author_anchor.monotonic_raw_ns)
-        - (r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"])
-    )
-    if anchor_delta > 5_000_000:
+    anchor_movement = ((author_anchor.realtime_ns - author_anchor.monotonic_raw_ns)
+                       - (r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"]))
+    anchor_delta = abs(anchor_movement)
+    try:
+        r0_frequency = _kernel_clock.validate_probe(r0.get("kernel_frequency"))
+        author_frequency = _kernel_clock.validate_probe(_kernel_clock.read_kernel_frequency())
+        residual = _kernel_clock.anchor_residual_ns(anchor_movement, span, r0_frequency)
+        stream_max = r0.get("t_stream_max_s")
+        if stream_max is not None and not _kernel_clock.frequency_gate(r0_frequency, stream_max)["passes"]:
+            raise ValueError("R0 kernel frequency exceeds the stream clock budget")
+    except (OSError, ValueError) as exc:
+        raise _underivable(kind, str(exc)) from exc
+    # Keep the registered G10 refusal when a real resync exceeds the residual
+    # bound, even if that intervention also changes the frequency word.
+    if residual > 5_000_000:
         raise _underivable(kind, "R0-to-author RAW anchor delta exceeds 5000000 ns")
+    if author_frequency["raw_word"] != r0_frequency["raw_word"]:
+        raise _refuse(kind, "evidence_author_t0_kernel_frequency_changed",
+                      "R0-to-author kernel frequency word changed")
     if author_anchor.read_skew_ns > 1_000_000:
         raise _underivable(kind, "author anchor read skew exceeds 1000000 ns")
+    _authenticate_clock_sizing(context, r0, kind=kind)
     r1_finished_raw = author_anchor.monotonic_raw_ns
     r1_duration = r1_finished_raw - r1_started_raw
     value = {
@@ -1207,20 +1289,28 @@ def _derive_clock_attestation(context: _Context) -> _DerivedRow:
         "anchor_monotonic_raw_ns": author_anchor.monotonic_raw_ns,
         "anchor_read_skew_ns": author_anchor.read_skew_ns,
         "anchor_delta_ns": anchor_delta,
+        "anchor_check_version": _kernel_clock.ANCHOR_CHECK_VERSION,
+        "r0_kernel_frequency": r0_frequency,
+        "kernel_frequency": author_frequency,
+        "anchor_residual_ns": float(residual),
+        "t_stream_max_s": stream_max,
         "t0_span_ns": span,
         "r1_batch_started_monotonic_raw_ns": r1_started_raw,
         "r1_batch_finished_monotonic_raw_ns": r1_finished_raw,
         "r1_batch_duration_ns": r1_duration,
         "r1_batch_finished_monotonic_ns": r1_finished_monotonic_ns,
     }
+    if "clock_sizing_binding" in r0:
+        value["clock_sizing_binding"] = r0["clock_sizing_binding"]
     return _DerivedRow(
         "clock.correct_and_prior_state",
         kind,
         value,
         "PROBE",
-        input_artifacts=(r0_identity, disable_identity),
+        input_artifacts=(r0_identity, disable_identity, *context.values.get("clock_sizing_artifacts", ())),
         probes=r1_probes,
-        derivation={"sample_policy_id": _clock_reference.SAMPLE_POLICY_ID},
+        derivation={"sample_policy_id": _clock_reference.SAMPLE_POLICY_ID,
+                    "r1_batch_started_monotonic_ns": r1_started_monotonic_ns},
     )
 
 
@@ -1310,11 +1400,13 @@ def _prewindow_capture(
         raise _underivable(kind, "prewindow capture differs from the frozen command")
     if capture["finished_monotonic_ns"] - capture["started_monotonic_ns"] < _MIN_IDLE_NS:
         raise _underivable(kind, "prewindow capture does not prove the required ten-minute idle")
-    if "TIMED OUT" in capture["stdout"] or "BLOCK" in capture["stdout"] or _re.search(
-        r"READY after [0-9]+ min\.", capture["stdout"]
-    ) is None:
+    if not _final_clean_dwell(capture["stdout"]):
         raise _underivable(kind, "prewindow capture does not end in READY")
-    return capture, identity, artifacts
+    module_identity, _raw = _committed_artifact(
+        context.repository, "joulewise/prewindow.py", kind=kind)
+    dwell_identity = {**module_identity,
+                      "path": str(context.repository / module_identity["path"])}
+    return capture, identity, (*artifacts, dwell_identity)
 
 
 def _expect_absent(result: _ProbeResult, *, kind: str, label: str) -> None:
@@ -1322,7 +1414,7 @@ def _expect_absent(result: _ProbeResult, *, kind: str, label: str) -> None:
         raise _underivable(kind, f"fresh {label} census found a forbidden process")
 
 
-def _maintenance_probe(context: _Context, *, kind: str) -> _ProbeResult:
+def _maintenance_probe(context: _Context, *, kind: str) -> tuple[_ProbeResult, ...]:
     probe = _fresh_probe(
         context,
         kind,
@@ -1330,11 +1422,26 @@ def _maintenance_probe(context: _Context, *, kind: str) -> _ProbeResult:
         (
             "/usr/bin/pgrep",
             "-lf",
-            "XProtect|mds_stores|mdworker|mdbulkimport|backupd|photoanalysisd|softwareupdated|Spotlight|mediaanalysisd",
+            _prewindow.CONTAMINANTS,
         ),
     )
-    _expect_absent(probe, kind=kind, label="maintenance")
-    return probe
+    if probe.exit_code not in (0, 1) or probe.stderr.strip():
+        raise _underivable(kind, "fresh maintenance pgrep probe failed")
+    probes = [probe]
+    for index in range(_MAINTENANCE_CPU_SAMPLES):
+        if index:
+            _time.sleep(_MAINTENANCE_CPU_INTERVAL_S)
+        sample = _fresh_probe(context, kind, f"maintenance CPU {index + 1}", _prewindow.PS_ARGV)
+        probes.append(sample)
+        if sample.exit_code != 0 or sample.stderr.strip():
+            raise _underivable(kind, "fresh maintenance CPU probe failed")
+        try:
+            busy = _prewindow.busy_contaminants(sample.stdout)
+        except ValueError as exc:
+            raise _underivable(kind, "fresh maintenance CPU probe malformed") from exc
+        if busy:
+            raise _underivable(kind, "fresh maintenance census found a process above 5.0% CPU")
+    return tuple(probes)
 
 
 def _derive_background_quiet(context: _Context) -> _DerivedRow:
@@ -1347,7 +1454,7 @@ def _derive_background_quiet(context: _Context) -> _DerivedRow:
         {"observation_status": "PASS", "fresh_maintenance_census": True},
         "PROBE",
         input_artifacts=(prewindow_identity, *manifest_artifacts),
-        probes=(probe,),
+        probes=probe,
     )
 
 
@@ -1513,9 +1620,12 @@ def _derive_ledger(context: _Context) -> _DerivedRow:
     expected_recovery_script = str(
         context.repository / "scripts/recover_calibration_ledger.py"
     )
+    assignments = _launch_manifest(context, kind=kind)[2]
     expected_diagnostic = [
         expected_python,
         expected_recovery_script,
+        "--ledger", assignments["CALIBRATION_LEDGER"],
+        "--head-pin", assignments["LEDGER_HEAD_PIN"],
         "readiness",
         "--phase",
         "pre-reserve",
@@ -1557,12 +1667,17 @@ def _derive_ledger(context: _Context) -> _DerivedRow:
         or _Path(reservation["cwd"]).resolve() != context.repository
     ):
         raise _underivable(kind, "reservation did not execute from the reviewed checkout")
+    if any(flags[flag] != assignments[name] for flag, name in
+           (("--ledger", "CALIBRATION_LEDGER"), ("--head-pin", "LEDGER_HEAD_PIN"))):
+        raise _underivable(kind, "reservation ledger inputs differ from the pinned environment")
     head_pin = _Path(str(flags["--head-pin"]))
-    if head_pin.resolve() != (context.repository / "configs/calibration/calibration_ledger_head.json").resolve():
-        raise _underivable(kind, "reservation head pin is not the reviewed checkout pin")
+    try:
+        head_pin_relative = head_pin.relative_to(context.repository).as_posix()
+    except ValueError as exc:
+        raise _underivable(kind, "reservation head pin is not in the reviewed checkout") from exc
     head_pin_identity, _head_pin_raw = _committed_artifact(
         context.repository,
-        "configs/calibration/calibration_ledger_head.json",
+        head_pin_relative,
         kind=kind,
     )
     recovery_identity, _recovery_raw = _committed_artifact(
@@ -1725,6 +1840,25 @@ def _derive_machine_readiness(context: _Context) -> _DerivedRow:
     )
 
 
+def _agent_lines_decided(probe: _ProbeResult) -> _ProbeResult:
+    """The agent probe judged by the shared matcher (joulewise/agent_identity.py).
+
+    The census argv carries -a (dry-records F1, 2026-10-07), so it lists this
+    process's ancestors; a driver whose argv carries a ``claude`` path is not an
+    agent and an agent ancestor is.  The recorded probe stays the raw one.
+    """
+
+    from joulewise import agent_identity
+
+    if not probe.stdout.strip():
+        return probe
+    decided = agent_identity.filter_census(probe.stdout, own_tree_root=_os.getpid())
+    if not decided.ignored:
+        return probe
+    exit_code = 1 if not decided.kept_text.strip() and probe.exit_code == 0 else probe.exit_code
+    return _replace(probe, exit_code=exit_code, stdout=decided.kept_text)
+
+
 def _derive_process_census(context: _Context) -> _DerivedRow:
     from joulewise.night_gate import AGENT_CENSUS_ARGV
 
@@ -1736,7 +1870,7 @@ def _derive_process_census(context: _Context) -> _DerivedRow:
         _fresh_probe(context, kind, "monitor", ("/usr/bin/pgrep", "-lf", _MONITOR_CENSUS_PATTERN)),
     )
     for label, probe in zip(("keep-awake", "agent", "browser", "monitor"), probes, strict=True):
-        _expect_absent(probe, kind=kind, label=label)
+        _expect_absent(_agent_lines_decided(probe) if label == "agent" else probe, kind=kind, label=label)
     return _DerivedRow(
         "t0.no_stray_keepawake",
         kind,
@@ -2325,6 +2459,7 @@ def author_arm_readiness_evidence_t0(
     )
     context.values["frozen_plan"] = frozen_plan
     rows = _required_rows(context)
+    _require_window_chain_presence(context, kind="CLOCK_ATTESTATION")
     source_dir = context.custody_pack_root / _SOURCE_DIRECTORY
     evidence_dir = context.custody_pack_root / _EVIDENCE_DIRECTORY
     if source_dir.exists() or evidence_dir.exists():

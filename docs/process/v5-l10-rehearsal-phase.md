@@ -368,6 +368,8 @@ prospective, calibration, and G2-b inputs at L10-A.
 
 #### 5. Finalization exact refusal — L10-A / BENCH / BOUNDARY-PROVEN
 
+2026-10-05 recipe correction: the finalizer requires `output_dir == custody_root`; the old `analysis-output` subdirectory produced `analysis_finalization_noncanonical` before member-cover validation.
+
 The staged root is the `--custody-root`; the G2-b source root is never passed
 as a finalizer input. The scratch directory is a sibling of the staged root,
 so the checker can copy the staged custody without changing the source:
@@ -402,7 +404,7 @@ test -z "$(/bin/ls -A "$L10_A_STAGING_ROOT/floors")"
   --bracket-binding "$L10_A_STAGING_ROOT/g2b/bracket-binding.json" \
   --calibration-ledger "$L10_A_STAGING_ROOT/calibration/calibration_observation_ledger.jsonl" \
   --aggregate-floor-artifact "$L10_A_STAGING_ROOT/floors/d117-v5-aggregate-floor.json" \
-  --output-dir "$L10_A_STAGING_ROOT/analysis-output" \
+  --output-dir "$L10_A_STAGING_ROOT" \
   > "$L10_CUSTODY_ROOT/transcripts/l10-a-finalization.txt"
 test -d "$CUSTODY_ROOT/floors"
 test ! -e "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json"

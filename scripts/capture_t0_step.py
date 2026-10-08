@@ -25,8 +25,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise import network_time_off, arm_readiness_evidence_t0 as t0
+from joulewise import network_time_off, kernel_clock, arm_readiness_evidence_t0 as t0
 from joulewise import arm_readiness as readiness  # noqa: E402
+from joulewise.dwell import final_clean_dwell
 from joulewise.arm_readiness_evidence_t0 import (  # noqa: E402
     WINDOW_ENV_KEYS,
     WindowEnvironmentParseError,
@@ -413,9 +414,9 @@ def _load_context(
 
     boot_session_id = _current_boot_session_id()
     prewindow_command = (
-        "/bin/bash",
-        str(repository / "scripts/prewindow_check.sh"),
-        "--wait",
+        str(repository / ".venv/bin/python"),
+        str(repository / "joulewise/prewindow.py"),
+        "--t0-wait",
         "--timeout-min",
         "45",
         "--window",
@@ -494,6 +495,8 @@ def _command_for_step(context: CaptureContext, step_id: str) -> tuple[str, ...]:
         return (
             python,
             str(context.repository / "scripts/recover_calibration_ledger.py"),
+            "--ledger", values["CALIBRATION_LEDGER"],
+            "--head-pin", values["LEDGER_HEAD_PIN"],
             "readiness",
             "--phase",
             "pre-reserve",
@@ -566,7 +569,8 @@ def _require_sequence(context: CaptureContext, step_id: str) -> None:
             )
             if (
                 not isinstance(value, Mapping)
-                or set(value) != CAPTURE_KEYS
+                or set(value) != (CAPTURE_KEYS | {"kernel_frequency", "t_stream_max_s"}
+                    if prior == "clock-reference" and "kernel_frequency" in value else CAPTURE_KEYS)
                 or value.get("schema_version") != COMMAND_CAPTURE_SCHEMA
                 or value.get("step_id") != prior
                 or value.get("argv") != list(_command_for_step(context, prior))
@@ -613,6 +617,7 @@ def _require_sequence(context: CaptureContext, step_id: str) -> None:
 
 
 def _execute(argv: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[bytes]:
+    environment = dict(GOVERNED_SUBPROCESS_ENVIRONMENT)
     try:
         return subprocess.run(
             list(argv),
@@ -621,7 +626,7 @@ def _execute(argv: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[b
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
-            env=GOVERNED_SUBPROCESS_ENVIRONMENT,
+            env=environment,
             timeout=30 if "systemsetup" in " ".join(argv) or "collect_clock_reference.py" in " ".join(argv) else None,
         )
     except (OSError, subprocess.SubprocessError) as exc:
@@ -656,11 +661,7 @@ def _validate_result(
                 "E-7a contains a failed or missing quiet-Mac predicate",
             )
     elif step_id == "prewindow-check":
-        if (
-            "TIMED OUT" in stdout
-            or "BLOCK" in stdout
-            or re.search(r"READY after [0-9]+ min\.", stdout) is None
-        ):
+        if not final_clean_dwell(stdout):
             raise _refuse(
                 "evidence_author_t0_capture_result_invalid",
                 "E-7b did not end in the governed READY result",
@@ -728,7 +729,7 @@ def _validate_result(
             )
 
 
-def _arm_reference(context, execute, monotonic_ns):
+def _arm_reference(context, execute, monotonic_ns, *, frequency_probe=None):
     """Resync only on fresh empty arm roots; OFF even on resync failure."""
     path = context.input_root / network_time_off.RECEIPT_BASENAME
     if path.exists() or path.is_symlink() or (context.input_root / "clock-reference.json").exists():
@@ -740,6 +741,8 @@ def _arm_reference(context, execute, monotonic_ns):
     resync = False
     try:
         for attempt in range(25):
+            frequency_before = (kernel_clock.validate_probe(frequency_probe())
+                                if frequency_probe is not None else None)
             completed = execute(_command_for_step(context, "clock-reference"), cwd=context.repository)
             finished = monotonic_ns()
             try:
@@ -749,6 +752,11 @@ def _arm_reference(context, execute, monotonic_ns):
                 t0._reference_agreement(legs, kind="CLOCK_ATTESTATION", label="arm reference")
                 if completed.returncode != 0:
                     raise ValueError("reference command failed")
+                if frequency_probe is not None:
+                    frequency = kernel_clock.validate_probe(frequency_probe())
+                    if frequency["raw_word"] != frequency_before["raw_word"]:
+                        raise ValueError("kernel frequency changed during R0 batch")
+                    completed.kernel_frequency = frequency
                 return completed, finished
             except (ValueError, t0.T0EvidenceAuthoringError):
                 if finished >= deadline or attempt == 24:
@@ -793,7 +801,23 @@ def _capture_step_with_dependencies(
     started = monotonic_ns()
     try:
         if step_id == "clock-reference":
-            completed, finished = _arm_reference(context, execute, monotonic_ns)
+            completed, finished = _arm_reference(context, execute, monotonic_ns,
+                                                 frequency_probe=kernel_clock.read_kernel_frequency)
+            r0_frequency = completed.kernel_frequency
+            after_off_frequency = kernel_clock.validate_probe(kernel_clock.read_kernel_frequency())
+            if after_off_frequency["raw_word"] != r0_frequency["raw_word"]:
+                raise ValueError("kernel frequency changed during R0; fresh R0 required")
+            gate_path = context.input_root / "kernel-frequency-gate.json"
+            stream_max = None
+            if gate_path.exists() or gate_path.is_symlink():
+                gate = kernel_clock.validate_gate(readiness.parse_json_bytes(
+                    _regular_bytes(gate_path, label="kernel frequency gate"), require_canonical=True))
+                from joulewise.v5_qualification import authenticated_clock_budget
+                stream_max, _binding = authenticated_clock_budget(context.input_root, context.pack_root)
+                if not kernel_clock.frequency_gate(r0_frequency, stream_max)["passes"]:
+                    raise ValueError("R0 kernel frequency exceeds the stream clock budget")
+            elif readiness.requires_t0_frequency_gate(context.pack_root):
+                raise ValueError("qualification kernel frequency gate is missing")
         elif step_id == "clock-disable":
             off = network_time_off.read_receipt(
                 context.input_root / network_time_off.RECEIPT_BASENAME,
@@ -831,6 +855,8 @@ def _capture_step_with_dependencies(
         "finished_monotonic_ns": finished,
         "boot_session_id": starting_boot,
     }
+    if step_id == "clock-reference":
+        capture.update(kernel_frequency=r0_frequency, t_stream_max_s=stream_max)
     if completed.returncode != 0:
         raise _refuse(
             "evidence_author_t0_capture_command_failed",
@@ -908,7 +934,7 @@ class _ArgumentParser(argparse.ArgumentParser):
 
 def _parser() -> argparse.ArgumentParser:
     parser = _ArgumentParser(description=__doc__)
-    parser.add_argument("step_id", choices=STEP_ORDER)
+    parser.add_argument("step_id", choices=(*STEP_ORDER, "sequence"))
     parser.add_argument("--pack-root", required=True, type=Path)
     parser.add_argument("--custody-root", required=True, type=Path)
     parser.add_argument("--window-plan-root", required=True, type=Path)
@@ -919,12 +945,11 @@ def main(argv: list[str] | None = None) -> int:
     args: argparse.Namespace | None = None
     try:
         args = _parser().parse_args(argv)
-        result = capture_step(
-            args.step_id,
-            args.pack_root,
-            args.custody_root,
-            args.window_plan_root,
-        )
+        steps = STEP_ORDER if args.step_id == "sequence" else (args.step_id,)
+        results = [capture_step(step, args.pack_root, args.custody_root, args.window_plan_root)
+                   for step in steps]
+        result = ({"status": "PASS", "step_id": "sequence", "captures": results}
+                  if args.step_id == "sequence" else results[0])
     except CaptureT0Error as exc:
         result = {
             "status": "REFUSE",

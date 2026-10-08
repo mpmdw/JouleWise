@@ -258,6 +258,35 @@ def _is_sha256(value: object) -> bool:
     return isinstance(value, str) and _SHA256_RE.fullmatch(value) is not None
 
 
+def _tail_is_one_session_extension(
+    tail: Sequence[Mapping[str, Any]], session: "CalibrationBracketSession"
+) -> bool:
+    """Whether ``tail`` is exactly one session's open row and its own rows."""
+
+    business_tail = [
+        row for row in tail if row.get("schema_version") != CONTROL_SCHEMA
+    ]
+    return bool(
+        tail
+        and business_tail
+        and business_tail[0].get("event") == BRACKET_SESSION_OPEN_EVENT
+        and business_tail[0].get("sequence") == session.capability_sequence
+        and all(
+            (
+                row.get("schema_version") == CONTROL_SCHEMA
+                and (
+                    row.get("event") == ABANDONMENT_EVENT
+                    or row.get("event") == APPEND_INTENT_EVENT
+                    and row.get("target_core", {}).get("session_id")
+                    == session.session_id
+                )
+            )
+            or row.get("session_id") == session.session_id
+            for row in tail
+        )
+    )
+
+
 def _normalized_vector(
     value: Mapping[str, Any] | None,
     fields: Sequence[str],
@@ -426,27 +455,50 @@ class CalibrationLedgerSnapshot:
         if len(open_sessions) != 1:
             return False
         session = open_sessions[0]
-        tail = self.receipts[self.committed_head_sequence :]
-        business_tail = [
-            row for row in tail if row.get("schema_version") != CONTROL_SCHEMA
+        return _tail_is_one_session_extension(
+            self.receipts[self.committed_head_sequence :], session
+        )
+
+    @property
+    def is_open_bracket_extension_past_stale_pin(self) -> bool:
+        """The extension shape, anchored at the reservation instead of the pin.
+
+        HAZARD_PACK path only (gate-prune core lane VPF, erratum
+        s3-reservation-stop): a head pin that the physical chain still
+        contains but that lags the reservation is a record, not a refusal.
+        Everything else stays: the reasons are exactly the open-session and
+        head-mismatch pair (no rollback, no pending attempt, no malformed or
+        broken chain), the pin is inside the physical chain, exactly one
+        session is open, and every row after the reservation's anchor is that
+        session's.  Equal to :attr:`is_governed_open_bracket_extension` when
+        the pin is not stale.
+        """
+
+        allowed = {
+            "calibration_ledger_bracket_session_open",
+            "calibration_ledger_head_mismatch",
+        }
+        if (
+            set(self.refusal_reasons) != allowed
+            or self.committed_head_sequence is None
+            or self.committed_head_digest is None
+            or not _physical_chain_contains_pin(
+                self.receipts,
+                (int(self.committed_head_sequence), str(self.committed_head_digest)),
+            )
+        ):
+            return False
+        open_sessions = [
+            session for session in self.bracket_sessions if session.state == "open"
         ]
-        return bool(
-            tail
-            and business_tail
-            and business_tail[0].get("event") == BRACKET_SESSION_OPEN_EVENT
-            and business_tail[0].get("sequence") == session.capability_sequence
-            and all(
-                (
-                    row.get("schema_version") == CONTROL_SCHEMA
-                    and (
-                        row.get("event") == ABANDONMENT_EVENT
-                        or row.get("event") == APPEND_INTENT_EVENT
-                        and row.get("target_core", {}).get("session_id")
-                        == session.session_id
-                    )
-                )
-                or row.get("session_id") == session.session_id
-                for row in tail
+        if len(open_sessions) != 1:
+            return False
+        session = open_sessions[0]
+        return any(
+            _tail_is_one_session_extension(self.receipts[anchor:], session)
+            for anchor in range(
+                int(self.committed_head_sequence),
+                max(int(self.committed_head_sequence), session.capability_sequence - 1) + 1,
             )
         )
 
@@ -4815,6 +4867,7 @@ def append_bracket_session_receipt(
     repo_root: Path = REPO_ROOT,
     _stage_boundary: Any | None = None,
     custody_deadline: CustodyDeadline | None = None,
+    pin_relation_record: dict[str, Any] | None = None,
 ) -> Mapping[str, Any]:
     """Atomically reserve exactly one immutable ordered-slot capability.
 
@@ -4822,6 +4875,13 @@ def append_bracket_session_receipt(
     and deliberately not checked again while either already-reserved slot is
     finalized. Claim evaluation remains impossible until the terminal head
     pin is emitted, reviewed, and committed.
+
+    ``pin_relation_record`` (a dict, HAZARD_PACK path only; erratum
+    s3-reservation-stop) turns the equality into a record: a pin that the
+    physical chain contains (the physical head is ahead of it) is accepted,
+    the session is appended to the physical tail, and the relation is written
+    into the dict.  A pin the chain does not contain (rollback or a divergent
+    chain) still refuses ``RESERVATION_HEAD_MISMATCH``.
     """
 
     session_identity, normalized_slots = validate_bracket_session_reservation_inputs(
@@ -4852,7 +4912,25 @@ def append_bracket_session_receipt(
     def build(receipts: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
         predecessor = receipts[-1]["receipt_digest"] if receipts else GENESIS_DIGEST
         if (len(receipts), predecessor) != pin:
-            raise CalibrationLedgerError(RefusalCode.RESERVATION_HEAD_MISMATCH)
+            if pin_relation_record is None or not _physical_chain_contains_pin(
+                receipts, pin
+            ):
+                raise CalibrationLedgerError(RefusalCode.RESERVATION_HEAD_MISMATCH)
+            pin_relation_record.update(
+                relation=PinRelation.PHYSICAL_AHEAD.value,
+                pin_sequence=pin[0],
+                pin_digest=pin[1],
+                physical_sequence=len(receipts),
+                physical_digest=str(predecessor),
+            )
+        elif pin_relation_record is not None:
+            pin_relation_record.update(
+                relation=PinRelation.EXACT.value,
+                pin_sequence=pin[0],
+                pin_digest=pin[1],
+                physical_sequence=len(receipts),
+                physical_digest=str(predecessor),
+            )
         observations, sessions, reasons = _attempts_and_observations(receipts)
         del observations
         if reasons:
@@ -5691,8 +5769,25 @@ def calibration_readiness(
     require_committed_pin: bool = True,
     repo_root: Path = REPO_ROOT,
     custody_deadline: CustodyDeadline | None = None,
+    verify_custody: bool | None = None,
+    allow_stale_pin: bool = False,
 ) -> CalibrationReadiness:
-    """Evaluate the D-117 composite readiness predicate for one exact phase."""
+    """Evaluate the D-117 composite readiness predicate for one exact phase.
+
+    ``verify_custody`` ``None`` (the default) verifies historical custody
+    exactly when ``enforcing_under_lease``.  ``False`` is the HAZARD_PACK
+    writer path only (gate-prune core lane VPF, A6-R2/R3): the window's own
+    capture bytes are re-verified at harvest, and the upcoming slot's custody
+    state below is still read.
+
+    ``allow_stale_pin`` is the same HAZARD path (erratum s3-reservation-stop):
+    a pin the physical chain contains but that lags the physical head
+    (``PHYSICAL_AHEAD``) does not block ``pre-reserve``, and ``pre-slot``
+    judges the extension shape from the reservation
+    (:attr:`CalibrationLedgerSnapshot.is_open_bracket_extension_past_stale_pin`).
+    Rollback, a divergent chain, an open session at ``pre-reserve``, recovery
+    and writer contention still refuse.
+    """
 
     if phase not in {"pre-reserve", "pre-slot", "terminal"}:
         raise CalibrationLedgerError(
@@ -5709,7 +5804,9 @@ def calibration_readiness(
         require_committed_pin=require_committed_pin,
         # The enforcing gate authenticates every finalized observation in the
         # snapshot, not merely the custody path for the upcoming slot.
-        verify_custody=enforcing_under_lease,
+        verify_custody=(
+            enforcing_under_lease if verify_custody is None else verify_custody
+        ),
         mode=mode,
         repo_root=repo_root,
         custody_deadline=custody_deadline,
@@ -5742,7 +5839,9 @@ def calibration_readiness(
             refusal = RefusalCode.LIVE_WRITER_CONTENTION
         elif open_sessions:
             refusal = RefusalCode.PRE_RESERVE_NOT_READY
-        elif relation is not PinRelation.EXACT:
+        elif relation is not PinRelation.EXACT and not (
+            allow_stale_pin and relation is PinRelation.PHYSICAL_AHEAD
+        ):
             refusal = RefusalCode.RESERVATION_HEAD_MISMATCH
     elif phase == "pre-slot":
         session = snapshot.bracket_session_by_id.get(str(session_id))
@@ -5812,7 +5911,11 @@ def calibration_readiness(
             or session.state != "open"
             or slot != next_slot
             or attempt_id != expected_attempt
-            or not snapshot.is_governed_open_bracket_extension
+            or not (
+                snapshot.is_open_bracket_extension_past_stale_pin
+                if allow_stale_pin
+                else snapshot.is_governed_open_bracket_extension
+            )
         ):
             refusal = RefusalCode.PRE_SLOT_NOT_READY
     else:
@@ -6483,6 +6586,197 @@ def head_pin_for_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
     return _head_pin_for_valid_receipt(receipt)
 
 
+HISTORICAL_CUSTODY_REPORT_SCHEMA = "joulewise.calibration_historical_custody_report.v1"
+
+
+def _historical_custody_outcome(
+    observation: LedgerObservation, repo_root: Path, *,
+    mode: Literal["read_replay", "issuing"] = "issuing",
+) -> tuple[str, dict[str, str]]:
+    """One artifact-aware custody pass over one historical observation.
+
+    Returns ``(outcome, artifacts)``.  ``artifacts`` maps each governed
+    artifact to ``matched``, ``hash_mismatch``, ``missing`` or ``unreadable``.
+    ``outcome`` is ``changed`` when any present artifact's bytes differ from
+    the ledger's hash (or the row names no artifacts and is not abandoned),
+    else ``unreadable`` when any artifact is present but could not be read,
+    else ``absent`` when any artifact is missing, else ``verified``; and
+    ``absent_or_unreachable`` when the capture directory is missing or did
+    not answer the bounded probe.  One pass, so a mismatch once observed is
+    never reported as absence (Sol 6.1 review F7, 2026-10-06).  Reads go
+    through ``probe_custody`` and ``read_authentication_input``, as the
+    writer's own pass does; under the night's budget marker the probe raises,
+    and the caller reports the row unmeasured.
+    """
+
+    if not observation.artifact_sha256:
+        if observation.disposition == "abandoned":
+            return "verified", {}
+        return "changed", {}
+    root = Path(observation.custody_locator)
+    if not root.is_absolute():
+        root = Path(repo_root) / root
+
+    def inspect(path: Path) -> dict[str, str]:
+        outcomes: dict[str, str] = {}
+        for relative, expected in observation.artifact_sha256.items():
+            candidate = path / relative
+            try:
+                present = candidate.is_file()
+            except OSError:
+                outcomes[relative] = "unreadable"
+                continue
+            if not present:
+                outcomes[relative] = "missing"
+                continue
+            try:
+                raw = read_authentication_input(
+                    candidate, grammar="raw",
+                    label=f"calibration ledger historical custody {observation.attempt_id} {relative}",
+                )
+            except OSError:
+                outcomes[relative] = "unreadable"
+                continue
+            outcomes[relative] = (
+                "matched" if hashlib.sha256(raw).hexdigest() == expected else "hash_mismatch"
+            )
+        return outcomes
+
+    artifacts = probe_custody(root, inspect, lambda: None, mode=mode)
+    if artifacts is None:
+        return "absent_or_unreachable", {}
+    states = set(artifacts.values())
+    if "hash_mismatch" in states:
+        return "changed", artifacts
+    if "unreadable" in states:
+        return "unreadable", artifacts
+    if "missing" in states:
+        return "absent", artifacts
+    return "verified", artifacts
+
+
+def historical_custody_report(
+    ledger_path: Path,
+    *,
+    repo_root: Path = REPO_ROOT,
+    mode: Literal["read_replay", "issuing"] = "issuing",
+    exclude_session_id: str | None = None,
+) -> dict[str, Any]:
+    """One full historical custody pass, observation by observation; never raises.
+
+    Gate prune 2, P2-VPF S5 (finding t3-10 and its verifier): on a HAZARD
+    window no slot and no reservation re-hashes the historical observations
+    (A6-R2/R3, erratum s3-reservation-stop), so the harvest runs this one full
+    pass and flags any observation that does not verify.  The historical
+    observations matter to a window's numbers: the writer's screen basis and
+    acceptance preflight read them.
+
+    The pass reads the physical ledger itself (no head pin, no lease, no
+    deadline), re-derives every governed (locator, artifact hash) pair from
+    the authenticated rows, and re-hashes the bytes through the same probe
+    the writer's unbounded pass uses (``_custody_reasons``).  Each observation
+    is judged separately, so one evicted or changed capture names itself and
+    does not hide the others.  ``exclude_session_id`` leaves out one bracket
+    session's rows (the harvested window's own captures, which the harvest
+    already checks byte for byte).
+
+    ``status`` is ``verified`` when every observation verified (at least one),
+    ``mismatch`` when any observation's bytes are present and differ from the
+    ledger's hash (or its row names no artifacts), and ``unmeasured`` when none
+    failed that way but the ledger or an observation could not be read, or when
+    no observation was checked at all (``unmeasured_reason``
+    ``no_observations_checked``; the count left out by ``exclude_session_id``
+    is ``excluded_observations``).  This function is a desk reader: under the
+    night's custody budget marker the unbounded probe refuses, and those rows
+    are reported ``unmeasured``.
+
+    Refusal census 2026-10-06: each observation is judged in one
+    artifact-aware pass (``_historical_custody_outcome``).  Present bytes that
+    differ from the ledger hash are a ``mismatch``.  Missing files (evicted to
+    iCloud, archived, deleted) whose present siblings all match are
+    ``unmeasured`` with ``outcome`` ``absent`` and ``evicted: True``; a present
+    file that cannot be read is ``unreadable``, and a capture directory that
+    is missing or does not answer the bounded probe is
+    ``absent_or_unreachable``, both ``unmeasured`` with ``evicted: False``.
+    Absent or unreadable bytes cannot be checked; they are not shown to be
+    wrong.
+    """
+
+    report: dict[str, Any] = {
+        "schema_version": HISTORICAL_CUSTODY_REPORT_SCHEMA,
+        "ledger_path": str(ledger_path),
+        "mode": mode,
+        "excluded_session_id": exclude_session_id,
+        "status": "unmeasured",
+        "head_sequence": None,
+        "head_digest": None,
+        "ledger_reasons": [],
+        "observations": 0,
+        "verified": 0,
+        "mismatched": [],
+        "unmeasured": [],
+    }
+    try:
+        raw = read_authentication_input(
+            Path(ledger_path), grammar="jsonl",
+            label="physical calibration observation ledger (historical custody report)",
+        )
+        receipts, parse_reasons = _parse_ledger(raw)
+        observations, sessions, state_reasons = _attempts_and_observations(receipts)
+        report["head_sequence"] = len(receipts)
+        report["head_digest"] = (
+            str(receipts[-1]["receipt_digest"]) if receipts else GENESIS_DIGEST
+        )
+        report["ledger_reasons"] = sorted(set(parse_reasons) | set(state_reasons))
+        governed = list(_custody_observations(observations, sessions))
+        rows = [
+            observation
+            for observation in governed
+            if exclude_session_id is None
+            or observation.bracket_session_id != exclude_session_id
+        ]
+    except Exception as exc:  # noqa: BLE001 - a report never raises
+        report["error"] = f"{type(exc).__name__}: {exc}"[:300]
+        return report
+    report["observations"] = len(rows)
+    report["excluded_observations"] = len(governed) - len(rows)
+    for observation in rows:
+        entry = {
+            "attempt_id": observation.attempt_id,
+            "custody_locator": observation.custody_locator,
+            "bracket_session_id": observation.bracket_session_id,
+        }
+        try:
+            outcome, artifacts = _historical_custody_outcome(observation, Path(repo_root), mode=mode)
+        except Exception as exc:  # noqa: BLE001 - this row is unmeasured
+            report["unmeasured"].append({**entry, "error": f"{type(exc).__name__}: {exc}"[:300]})
+            continue
+        if outcome == "verified":
+            report["verified"] += 1
+        elif outcome == "changed":
+            report["mismatched"].append({**entry, "reasons": ["calibration_ledger_custody_invalid"],
+                                         "artifacts": artifacts})
+        else:
+            report["unmeasured"].append({**entry, "reasons": ["calibration_ledger_custody_invalid"],
+                                         "outcome": outcome, "evicted": outcome == "absent",
+                                         "artifacts": artifacts})
+    if report["mismatched"]:
+        report["status"] = "mismatch"
+    elif report["unmeasured"] or set(report["ledger_reasons"]) - {
+        RefusalCode.LEDGER_BRACKET_SESSION_OPEN.value,
+    }:
+        report["status"] = "unmeasured"
+    elif report["verified"] == 0:
+        # Nothing was re-hashed (an empty or truncated ledger, or every row
+        # excluded): no custody was measured, so none is reported verified
+        # (P2-VPF review R4).
+        report["status"] = "unmeasured"
+        report["unmeasured_reason"] = "no_observations_checked"
+    else:
+        report["status"] = "verified"
+    return report
+
+
 __all__ = [
     "CustodyDeadline",
     "bounded_custody_reasons",
@@ -6558,6 +6852,7 @@ __all__ = [
     "finalize_bracket_session_slot",
     "generate_historical_custody_manifest",
     "head_pin_for_receipt",
+    "historical_custody_report",
     "inspect_calibration_ledger",
     "load_calibration_ledger_snapshot",
     "normalize_calibration_custody_path",

@@ -177,21 +177,28 @@ END_MARKER = "<!-- END GENERATED: g2-phase-d-governed-chain -->"
 G2A_BEGIN_MARKER = "<!-- BEGIN GENERATED: g2a-governed-bracket -->"
 G2A_END_MARKER = "<!-- END GENERATED: g2a-governed-bracket -->"
 
-# These are the magistrate-pinned source anchors.  Validation is deliberately
-# line-and-byte exact; a moved or edited anchor must be reviewed and re-pinned.
-PINNED_ANCHORS = {
-    1367: ".venv/bin/python scripts/recover_calibration_ledger.py readiness \\",
-    1372: ".venv/bin/python scripts/reserve_calibration_window_bracket.py \\",
-    1388: "  --execute",
-    1476: "# First executable action: consume the inherited one-use FD and mint start",
-    1501: 'NEG8_DRIFT_BOUND="$BOUND_RUNS_ROOT/neg8-drift-bound.json"',
-    1516: '  /bin/sleep "$SETTLE_S"',
-    1596: "  settle || return $?",
-    1613: "run_stage_list() {",
-    1623: 'cd "$REPO"',
-    1653: 'screen_pre_calibration "$PRE_CAL_CUSTODY"',
-    1687: 'echo "$(timestamp) measurement_complete" >> "$OPERATOR_LOG_ROOT/window-chain.log"',
-}
+# These are the magistrate-pinned source anchors, held as symbols rather than
+# line numbers (lane L7, 2026-10-05). Each anchor is an exact, byte-equal
+# runbook line that must occur exactly once after the previous anchor, so an
+# edited, deleted, duplicated or reordered anchor still refuses, while an
+# unrelated edit that only shifts line numbers (as the runbook note in #479
+# did) no longer breaks generation. ``pin_line`` is the line the anchor held
+# when it was pinned; it labels error messages and is never compared.
+PINNED_ANCHORS = (
+    # (symbol, pin_line, exact line)
+    ("reservation_readiness", 1367, ".venv/bin/python scripts/recover_calibration_ledger.py readiness \\"),
+    ("reservation_bracket", 1372, ".venv/bin/python scripts/reserve_calibration_window_bracket.py \\"),
+    ("reservation_execute", 1388, "  --execute"),
+    ("chain_first_action", 1476, "# First executable action: consume the inherited one-use FD and mint start"),
+    ("neg8_drift_bound", 1501, 'NEG8_DRIFT_BOUND="$BOUND_RUNS_ROOT/neg8-drift-bound.json"'),
+    ("settle_sleep", 1516, '  /bin/sleep "$SETTLE_S"'),
+    ("stage_settle", 1596, "  settle || return $?"),
+    ("run_stage_list", 1613, "run_stage_list() {"),
+    ("chain_cd_repo", 1623, 'cd "$REPO"'),
+    ("pre_calibration_screen", 1653, 'screen_pre_calibration "$PRE_CAL_CUSTODY"'),
+    ("measurement_complete", 1687,
+     'echo "$(timestamp) measurement_complete" >> "$OPERATOR_LOG_ROOT/window-chain.log"'),
+)
 
 SOURCE_START = "```zsh\n#!/bin/zsh\nset -euo pipefail\n"
 SOURCE_END = (
@@ -332,13 +339,13 @@ def author_g2a_window(args, *, now=time.time):
         if getattr(args, name) is None:
             raise ValueError(f"--new-g2a-window requires --{name.replace('_', '-')}")
     roots = [args.measurement_root, args.night_root, args.g2a_root, args.new_g2a_window]
-    if any(re.search(r"codex|claude|t3", str(value), re.IGNORECASE)
+    if any(re.search(r"codex|claude", str(value), re.IGNORECASE)
            for value in [args.plan_id, *roots]):
-        raise ValueError("plan id and paths must not contain codex, claude or t3")
+        raise ValueError("plan id and paths must not contain codex or claude")
     if any(not path.is_absolute() for path in roots):
         raise ValueError("window paths must be absolute")
-    if any(re.search(r"codex|claude|t3", str(path.resolve()), re.IGNORECASE) for path in roots):
-        raise ValueError("resolved paths must not contain codex, claude or t3")
+    if any(re.search(r"codex|claude", str(path.resolve()), re.IGNORECASE) for path in roots):
+        raise ValueError("resolved paths must not contain codex or claude")
     measurement = args.measurement_root.resolve()
     parent = Path("/Users/edr/night-custody/measurement")
     if parent not in measurement.parents:
@@ -391,15 +398,28 @@ def _replace_once(source: str, old: str, new: str, *, label: str) -> str:
     return source.replace(old, new, 1)
 
 
-def validate_pinned_anchors(runbook: str) -> None:
+def locate_pinned_anchors(runbook: str) -> dict[str, int]:
+    """Return each anchor symbol's current 1-based line, refusing any drift."""
+
     lines = runbook.splitlines()
-    for line_number, symbol in PINNED_ANCHORS.items():
-        if line_number > len(lines) or lines[line_number - 1] != symbol:
-            observed = lines[line_number - 1] if line_number <= len(lines) else "<EOF>"
+    located: dict[str, int] = {}
+    previous = 0  # 0-based index just after the previous anchor
+    previous_symbol = "start of runbook"
+    for symbol, pin_line, text in PINNED_ANCHORS:
+        hits = [index for index in range(previous, len(lines)) if lines[index] == text]
+        if len(hits) != 1:
             raise ValueError(
-                f"runbook pinned anchor {line_number} drifted: "
-                f"observed={observed!r} expected={symbol!r}"
+                f"runbook pinned anchor {pin_line} drifted: symbol {symbol} occurs "
+                f"{len(hits)} times after {previous_symbol} (expected exactly once): {text!r}"
             )
+        located[symbol] = hits[0] + 1
+        previous = hits[0] + 1
+        previous_symbol = symbol
+    return located
+
+
+def validate_pinned_anchors(runbook: str) -> None:
+    locate_pinned_anchors(runbook)
 
 
 def extract_runbook_chain(runbook: str) -> str:

@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Mapping, Protocol
 
-from joulewise import battery_float, corecaptured_loop
+from joulewise import agent_identity, battery_float, corecaptured_loop
 from joulewise.night_kinds import NIGHT_KINDS, kind_row
 
 
@@ -41,6 +41,36 @@ RECEIPT_CLASSES = (
     "DIAGNOSTIC_NO_PACK",
     "REHEARSAL_STUB",
     "TRANSACTION_PACK",
+)
+# Block 5's hazard path (gate-prune plan, lane L2; Ed's ruling "Physics
+# refuses; everything else is a flag", 2026-10-05). A HAZARD_PACK window is
+# armed inside the launchd job by the hazard modules (joulewise.hazards) and
+# driven by joulewise/b5/driver.py. It never reaches evaluate_night or the
+# C1-C5 gate receipt, so RECEIPT_CLASSES -- the gate-evaluated classes every
+# receipt validator and class table iterate -- is unchanged, and the plan
+# parser accepts the union below.
+HAZARD_PACK = "HAZARD_PACK"
+PLAN_RECEIPT_CLASSES = RECEIPT_CLASSES + (HAZARD_PACK,)
+HAZARD_PLAN_SCHEMA = "joulewise.night_plan.v5"
+HAZARD_PLAN_SCHEMA_VERSION = 5
+HAZARD_WINDOW_SCHEMA = "joulewise.hazard_window.v1"
+# The six physical hazards that alone may refuse an arm (doctrine item 1).
+HAZARD_MODULES = ("clock", "battery", "thermal", "contention", "disk", "instrument")
+# Refusal codes only a HAZARD_PACK driver writes. They live in their own
+# registry: the gate and driver registries above are pinned exactly by the
+# retired path's tests and by arm_retry's cold-gate table.
+HAZARD_DRIVER_REASON_CODES = frozenset(
+    {
+        "night_refused_hazard",    # a hazard module refused (or the instrument was UNMEASURED) at arm (NULL window)
+        "night_stopped_disk_low",  # free space fell under the in-window floor; the driver stopped the chain
+        # PLAN2 P2-DRV (gate prune round 2):
+        "night_stopped_census_unmeasured",       # retired 2026-10-07 (audit A3): no emitter; earlier records read
+        "night_stopped_monitor_outage",          # no battery or contention reading for the outage bound (row 11)
+        "night_refused_instrument_not_sampling",  # the hazard monitor never journaled before launch (row 11)
+        "night_refused_boot_changed",            # the boot changed since the lineage was published (row 9; physics)
+        "night_refused_launch_abandoned",        # the watchdog released this launch (J4) before the arm
+        "night_refused_pack_inventory_unusable",  # lineage unpublishable: pack inventory unusable (audit A5)
+    }
 )
 # 2026-09-05: D-165 v2 relabel supersedes the v1 registration digest
 # 1c0a4a119fa06984ff38082781e06bc9bd90f07eae7165359718dfb063783a2b (bytes retained in Git history).
@@ -175,7 +205,19 @@ def probe_payload_kind(text):
     return kind
 # Brackets preserve agent matches but exclude peer pgrep argv: overlapping
 # driver/chain censuses self-matched and aborted the 2026-09-20 pilot night.
-AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3")
+# ``-a``: Darwin pgrep leaves the calling process's ancestors out of its list
+# unless asked, so an agent session that launched the census (the desk dry arm
+# run from an agent's shell) was invisible to it (dry-records finding F1,
+# 2026-10-07).  With ``-a`` the ancestors are listed like any other process and
+# agent_identity decides each: launchd and a shell running chain.zsh are not
+# agent executables and are ignored, the caller's own tree is ignored, and an
+# agent ancestor stays a hit.  pgrep never lists itself, with or without -a.
+# T3 is no longer an agent control plane and is not censused
+# (Ed, 2026-10-07: "I've abandoned all t3 integration as a control plane so you can prune all that out");
+# journals recorded with the former ``[t]3`` alternative still resolve
+# through t0_rehearsal's registry of historical census argvs.
+AGENT_CENSUS_PATTERN = "[c]odex|[c]laude"
+AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-a", "-lf", AGENT_CENSUS_PATTERN)
 
 PMSET_BATT_ARGV = ("/usr/bin/pmset", "-g", "batt")
 IOREG_BATTERY_ARGV = battery_float.IOREG_BATTERY_ARGV
@@ -257,6 +299,8 @@ NIGHT_DRIVER_REASON_CODES = frozenset(
 )
 if NIGHT_GATE_REASON_CODES & NIGHT_DRIVER_REASON_CODES != {"night_refused_bind_expired"}:
     raise RuntimeError("night gate and driver reason-code registries overlap")
+if HAZARD_DRIVER_REASON_CODES & (NIGHT_GATE_REASON_CODES | NIGHT_DRIVER_REASON_CODES):
+    raise RuntimeError("hazard driver reason codes overlap the gate or driver registries")
 
 # First-refusal precedence.  Probe failures use ``night_probe_error`` at the
 # position of the probe that failed rather than forming a separate phase.
@@ -389,6 +433,9 @@ class NightPlan:
     registration_path: str | None
     pack_night: dict[str, object] | None = None
     quiet_admission: dict[str, object] | None = None
+    previous_attempt: dict[str, object] | None = None
+    block_archive_root: str | None = None
+    null_reservation_restore: dict[str, object] | None = None
 
     @staticmethod
     def from_mapping(value: Mapping[str, object]) -> "NightPlan":
@@ -396,14 +443,26 @@ class NightPlan:
             raise PlanError("night_plan_malformed", "plan must be an object")
         keys = set(value)
         is_pack = value.get("receipt_class") == "TRANSACTION_PACK"
-        is_quiet = value.get("schema") == QUIET_PLAN_SCHEMA and not is_pack
+        is_hazard = value.get("receipt_class") == HAZARD_PACK
+        is_quiet = value.get("schema") == QUIET_PLAN_SCHEMA and not is_pack and not is_hazard
         expected_keys = _PLAN_KEYS | {"pack_night"} if is_pack else _PLAN_KEYS
+        if is_hazard:
+            expected_keys = _PLAN_KEYS | {"hazard_window"}
+        history_keys = {"previous_attempt", "block_archive_root"}
+        if keys & history_keys:
+            expected_keys |= history_keys
+            if not is_pack:
+                raise PlanError("night_plan_malformed", "attempt history requires a pack plan")
+        if "null_reservation_restore" in keys:
+            expected_keys |= history_keys | {"null_reservation_restore"}
         if is_quiet:
             expected_keys = expected_keys | {"quiet_admission"}
         expected_schema = PACK_PLAN_SCHEMA if is_pack else PLAN_SCHEMA
         expected_version = PACK_PLAN_SCHEMA_VERSION if is_pack else PLAN_SCHEMA_VERSION
         if is_quiet:
             expected_schema, expected_version = QUIET_PLAN_SCHEMA, QUIET_PLAN_SCHEMA_VERSION
+        if is_hazard:
+            expected_schema, expected_version = HAZARD_PLAN_SCHEMA, HAZARD_PLAN_SCHEMA_VERSION
         if keys != expected_keys:
             missing = sorted(repr(item) for item in expected_keys - keys)
             extra = sorted(repr(item) for item in keys - expected_keys)
@@ -450,7 +509,7 @@ class NightPlan:
 
         plan_id = require_text("plan_id")
         receipt_class = require_text("receipt_class")
-        if receipt_class not in RECEIPT_CLASSES:
+        if receipt_class not in PLAN_RECEIPT_CLASSES:
             raise PlanError("night_plan_malformed", "receipt_class is not registered")
         t0_epoch_s = require_number("t0_epoch_s")
         authored_epoch_s = require_number("authored_epoch_s")
@@ -531,6 +590,14 @@ class NightPlan:
                 "night_plan_malformed",
                 f"registration_path is required for {receipt_class}",
             )
+        previous = value.get("previous_attempt")
+        archive_root = value.get("block_archive_root")
+        restore = value.get("null_reservation_restore")
+        if keys & history_keys:
+            try:
+                validate_attempt_bindings(previous, archive_root, restore)
+            except ValueError as exc:
+                raise PlanError("night_plan_malformed", str(exc)) from exc
         quiet_admission = None
         if is_quiet:
             from joulewise.quiet_admission import validate_policy
@@ -538,6 +605,30 @@ class NightPlan:
                 quiet_admission = validate_policy(value["quiet_admission"], window_max_s=window_max_s)
             except (ValueError, OverflowError) as exc:
                 raise PlanError("night_plan_malformed", str(exc)) from exc
+        if is_hazard:
+            for name, text in (("custody_root", custody_root), ("chain_path", chain_path),
+                               ("chain_sha256_path", chain_sha256_path)):
+                if not os.path.isabs(text):
+                    raise PlanError("night_plan_malformed", f"HAZARD_PACK {name} must be an absolute path")
+            try:
+                hazard_window = validate_hazard_window(value.get("hazard_window"))
+            except ValueError as exc:
+                raise PlanError("night_plan_malformed", f"hazard_window: {exc}") from exc
+            return HazardNightPlan(
+                plan_id=plan_id,
+                receipt_class=receipt_class,
+                t0_epoch_s=t0_epoch_s,
+                window_max_s=window_max_s,
+                authored_epoch_s=authored_epoch_s,
+                repo_head=repo_head,
+                measurement_root=measurement_root,
+                measurement_head=measurement_head,
+                chain_path=chain_path,
+                chain_sha256_path=chain_sha256_path,
+                custody_root=custody_root,
+                registration_path=registration,
+                hazard_window=hazard_window,
+            )
         return NightPlan(
             plan_id=plan_id,
             receipt_class=receipt_class,
@@ -553,7 +644,175 @@ class NightPlan:
             registration_path=registration,
             pack_night=pack_night,
             quiet_admission=quiet_admission,
+            previous_attempt=previous,
+            block_archive_root=archive_root,
+            null_reservation_restore=restore,
         )
+
+
+def validate_attempt_bindings(previous, archive_root, restore=None):
+    """Validate the create-once history shapes without reading mutable evidence."""
+    def locator(value):
+        return (isinstance(value, Mapping) and set(value) == {"path", "sha256"}
+                and isinstance(value["path"], str) and os.path.isabs(value["path"])
+                and isinstance(value["sha256"], str) and _SHA256_RE.fullmatch(value["sha256"]))
+    if not (isinstance(previous, Mapping) and set(previous) == {"none"} and previous["none"] is True):
+        if not locator(previous) or Path(previous["path"]).name != "harvest.json":
+            raise ValueError("previous_attempt_required_or_invalid")
+    if (not isinstance(archive_root, str) or not os.path.isabs(archive_root)
+            or any(p.is_symlink() for p in (Path(archive_root), *Path(archive_root).parents))):
+        raise ValueError("block_archive_root_required_or_invalid")
+    if restore is not None and not locator(restore):
+        raise ValueError("null_reservation_restore_invalid")
+
+
+@dataclass(frozen=True)
+class HazardNightPlan(NightPlan):
+    """A block-5 HAZARD_PACK plan: the v2 fields plus the window's hazard record.
+
+    ``hazard_window`` is written by ``scripts/write_b5_window_plan.py`` and is
+    the only place the driver, the hazard modules and the lineage writer read
+    the window's pack, launch bindings, thresholds and G10 request from.
+    """
+
+    hazard_window: dict[str, object] = field(default_factory=dict)
+
+
+_HAZARD_WINDOW_KEYS = {
+    "schema", "attempt", "pack", "bracket_session_id", "bindings", "runs_roots",
+    "T_stream_max_s", "planned_bytes", "member_count", "thresholds", "g10",
+    "programmed_span_s", "t0_stage_cap_s", "settle_s", "window_env", "registration",
+    "chain_deviations", "disk_volumes", "stages",
+}
+_HAZARD_PACK_KEYS = {
+    "pack_id", "pack_root", "pack_sha256", "plan_tree_sha256", "pack_plan_id",
+    "window_id", "evidence_root_id",
+}
+# The fourteen launch bindings every v5 pack declares in
+# arm_attachments.launch.bindings; the window plan writer binds all of them.
+HAZARD_LAUNCH_BINDINGS = (
+    "repo_root", "ledger_path", "claim_runs_root", "bound_runs_root",
+    "operator_log_root", "pre_calibration_dir", "post_calibration_dir",
+    "claim_backup_destination", "bound_backup_destination", "bracket_session_id",
+    "pre_attempt_id", "post_attempt_id", "identity_epoch_json", "t1_bindings_json",
+)
+
+
+def validate_hazard_window(value: object) -> dict[str, object]:
+    """Structural check of a HAZARD_PACK plan's ``hazard_window``.
+
+    Only shape and type: the values that the driver needs in order to run at
+    all. Identity and provenance are recorded and judged at harvest, never here.
+    """
+
+    def text(item: object, where: str) -> str:
+        if not isinstance(item, str) or not item or any(c in item for c in "\0\n\r"):
+            raise ValueError(f"{where} must be a non-empty single-line string")
+        return item
+
+    def absolute(item: object, where: str) -> str:
+        item = text(item, where)
+        if not os.path.isabs(item):
+            raise ValueError(f"{where} must be an absolute path")
+        return item
+
+    def digest(item: object, where: str, *, nullable: bool = False) -> str | None:
+        if item is None and nullable:
+            return None
+        if not isinstance(item, str) or _SHA256_RE.fullmatch(item) is None:
+            raise ValueError(f"{where} must be a SHA-256 hex digest")
+        return item
+
+    def finite(item: object, where: str, *, positive: bool = True) -> float:
+        if isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item):
+            raise ValueError(f"{where} must be a finite number")
+        if item < 0 or (positive and item <= 0):
+            raise ValueError(f"{where} must be {'positive' if positive else 'non-negative'}")
+        return item
+
+    def integer(item: object, where: str, minimum: int) -> int:
+        if type(item) is not int or item < minimum:
+            raise ValueError(f"{where} must be an integer >= {minimum}")
+        return item
+
+    if not isinstance(value, Mapping) or set(value) != _HAZARD_WINDOW_KEYS:
+        missing = sorted(_HAZARD_WINDOW_KEYS - set(value)) if isinstance(value, Mapping) else []
+        extra = sorted(set(value) - _HAZARD_WINDOW_KEYS) if isinstance(value, Mapping) else []
+        raise ValueError(f"keys are not exact (missing={missing}, extra={extra})")
+    if value["schema"] != HAZARD_WINDOW_SCHEMA:
+        raise ValueError(f"schema must be {HAZARD_WINDOW_SCHEMA}")
+    integer(value["attempt"], "attempt", 1)
+    pack = value["pack"]
+    if not isinstance(pack, Mapping) or set(pack) != _HAZARD_PACK_KEYS:
+        raise ValueError("pack keys are not exact")
+    for name in ("pack_id", "pack_plan_id", "window_id", "evidence_root_id"):
+        text(pack[name], "pack." + name)
+    if Path(absolute(pack["pack_root"], "pack.pack_root")).name != pack["pack_id"]:
+        raise ValueError("pack.pack_root basename must equal pack.pack_id")
+    digest(pack["pack_sha256"], "pack.pack_sha256", nullable=True)
+    digest(pack["plan_tree_sha256"], "pack.plan_tree_sha256")
+    text(value["bracket_session_id"], "bracket_session_id")
+    bindings = value["bindings"]
+    if not isinstance(bindings, Mapping) or set(bindings) != set(HAZARD_LAUNCH_BINDINGS):
+        raise ValueError("bindings must name exactly the fourteen launch bindings")
+    for name in HAZARD_LAUNCH_BINDINGS:
+        text(bindings[name], "bindings." + name)
+    if bindings["bracket_session_id"] != value["bracket_session_id"]:
+        raise ValueError("bindings.bracket_session_id must equal bracket_session_id")
+    roots = value["runs_roots"]
+    if not isinstance(roots, Mapping) or set(roots) != {"claim", "bound"}:
+        raise ValueError("runs_roots must name claim and bound")
+    for name in ("claim", "bound"):
+        if absolute(roots[name], "runs_roots." + name) != bindings[name + "_runs_root"]:
+            raise ValueError(f"runs_roots.{name} must equal bindings.{name}_runs_root")
+    finite(value["T_stream_max_s"], "T_stream_max_s")
+    integer(value["planned_bytes"], "planned_bytes", 0)
+    integer(value["member_count"], "member_count", 0)
+    thresholds = value["thresholds"]
+    if not isinstance(thresholds, Mapping) or set(thresholds) != set(HAZARD_MODULES):
+        raise ValueError("thresholds must name exactly the six hazard modules")
+    for name in HAZARD_MODULES:
+        if not isinstance(thresholds[name], Mapping):
+            raise ValueError(f"thresholds.{name} must be an object")
+    if type(value["g10"]) is not bool:
+        raise ValueError("g10 must be a boolean")
+    integer(value["programmed_span_s"], "programmed_span_s", 1)
+    finite(value["t0_stage_cap_s"], "t0_stage_cap_s")
+    finite(value["settle_s"], "settle_s", positive=False)
+    window_env = value["window_env"]
+    if not isinstance(window_env, Mapping) or set(window_env) != {"path", "sha256"}:
+        raise ValueError("window_env must be a {path, sha256} locator")
+    absolute(window_env["path"], "window_env.path")
+    digest(window_env["sha256"], "window_env.sha256")
+    registration = value["registration"]
+    if registration is not None:
+        if not isinstance(registration, Mapping) or set(registration) != {"path", "sha256"}:
+            raise ValueError("registration must be null or a {path, sha256} locator")
+        text(registration["path"], "registration.path")
+        digest(registration["sha256"], "registration.sha256")
+    deviations = value["chain_deviations"]
+    if not isinstance(deviations, list) or not all(isinstance(item, str) and item for item in deviations):
+        raise ValueError("chain_deviations must be a list of non-empty strings")
+    volumes = value["disk_volumes"]
+    if not isinstance(volumes, list) or not volumes:
+        raise ValueError("disk_volumes must be a non-empty list")
+    for index, item in enumerate(volumes):
+        absolute(item, f"disk_volumes[{index}]")
+    stages = value["stages"]
+    if not isinstance(stages, list) or not stages:
+        raise ValueError("stages must be a non-empty list")
+    for index, stage in enumerate(stages):
+        where = f"stages[{index}]"
+        if not isinstance(stage, Mapping) or set(stage) != {
+                "stage_id", "kind", "ordinal", "expected_count", "in_chain"}:
+            raise ValueError(f"{where} keys are not exact")
+        text(stage["stage_id"], where + ".stage_id")
+        text(stage["kind"], where + ".kind")
+        integer(stage["ordinal"], where + ".ordinal", 1)
+        integer(stage["expected_count"], where + ".expected_count", 0)
+        if type(stage["in_chain"]) is not bool:
+            raise ValueError(f"{where}.in_chain must be a boolean")
+    return json.loads(json.dumps(value))
 
 
 @dataclass(frozen=True)
@@ -694,9 +953,32 @@ def _run(probes: CensusProbes, argv: tuple[str, ...]) -> ProbeResult:
     return result
 
 
-def agent_census(probes: CensusProbes) -> tuple[ProbeResult, Refusal | None]:
+def decide_census(result: ProbeResult, *, own_tree_root: int | None = None) -> ProbeResult:
+    """The census probe with every listed non-agent process removed (agent_identity).
+
+    pgrep's list is a regular expression over command lines, so a window whose
+    ids or paths contain ``codex`` or ``claude`` (or, before the T3 prune, ``t3``) listed its own
+    processes (Opus triple audit F3).  A line survives only when the kernel says
+    that pid runs an agent executable, or when it cannot be decided.  The raw
+    exit code and every ignored pid with its executable go to ``stderr``; a
+    list left empty by the filter reads as pgrep's own no-match (exit 1).
+    """
+
+    if not result.stdout.strip():
+        return result
+    decided = agent_identity.filter_census(result.stdout, own_tree_root=own_tree_root)
+    if not decided.ignored:
+        return result
+    note = f"pgrep exit {result.exit_code}; {decided.note()}"
+    exit_code = 1 if not decided.kept_text.strip() and result.exit_code == 0 else result.exit_code
+    return replace(result, exit_code=exit_code, stdout=decided.kept_text,
+                   stderr=(result.stderr + ("\n" if result.stderr else "") + note))
+
+
+def agent_census(probes: CensusProbes, *, own_tree_root: int | None = None
+                 ) -> tuple[ProbeResult, Refusal | None]:
     try:
-        result = _run(probes, AGENT_CENSUS_ARGV)
+        result = decide_census(_run(probes, AGENT_CENSUS_ARGV), own_tree_root=own_tree_root)
     except ProbeError as exc:
         try:
             observed_monotonic_ns = _safe_monotonic_ns(probes)
@@ -987,6 +1269,13 @@ def _authenticate_pack_records(plan: NightPlan):
         records[field] = _pack_object(path, field, locator["sha256"])
     authorization = records["authorization_record"]
     keys = {"purpose", "attempt_id", "claim_eligible", "pack_sha256", "permitted_chain_sha256", "permitted_blocks", "authority"}
+    if plan.previous_attempt is not None:
+        keys |= {"previous_attempt", "block_archive_root"}
+        if plan.null_reservation_restore is not None:
+            keys.add("null_reservation_restore")
+        for field in keys - {"purpose", "attempt_id", "claim_eligible", "pack_sha256", "permitted_chain_sha256", "permitted_blocks", "authority"}:
+            if authorization.get(field) != getattr(plan, field):
+                raise PackNightRefusal("authorization_record." + field)
     if set(authorization) != keys:
         raise PackNightRefusal("authorization_record.keys")
     for field in ("pack_sha256", "permitted_chain_sha256"):
@@ -1170,11 +1459,116 @@ def _pack_rehearsal_roots(plan, arm, purpose):
         raise PackNightRefusal("rehearsal_clone_prefix_invalid: measurement_root")
 
 
+def qualification_start_deadline(plan, chain_text, purpose, *, sizing=None):
+    """Authenticate the block-4 sizing literals before ARM/GO admission.
+
+    Other pack chains have no qualification marker and retain their existing
+    policy. The writer pins this marker and these literals into authorization.
+    """
+    if not re.search(r"^export V5_QUALIFICATION_OCCURRENCE=", chain_text, re.MULTILINE):
+        return None
+    if purpose not in {"T0_REHEARSAL", "G2B_SHAKEDOWN"}:
+        raise PackNightRefusal("qualification non-claim purpose required")
+    marker = chain_literal(chain_text, "V5_QUALIFICATION_OCCURRENCE")
+    expected = {"r1"} if purpose == "T0_REHEARSAL" else {"s1", "s2"}
+    if marker not in expected:
+        raise PackNightRefusal("qualification occurrence/purpose")
+    span = chain_literal(chain_text, "NIGHT_PROGRAMMED_SPAN_S")
+    latest = chain_literal(chain_text, "NIGHT_LATEST_CHAIN_START_EPOCH_S")
+    if not isinstance(span, str) or re.fullmatch(r"[1-9][0-9]*", span) is None:
+        raise PackNightRefusal("qualification programmed span")
+    span = int(span)
+    window_cap = 2700
+    pack_t0 = None
+    if (plan.receipt_class == "TRANSACTION_PACK" and purpose == "G2B_SHAKEDOWN"
+            and marker in {"s1", "s2"} and isinstance(plan.pack_night, Mapping)):
+        from joulewise import arm_readiness as readiness
+        # During initial staging the writer has verified sizing but has not
+        # published its custody file yet. Runtime uses the same chain-pinned
+        # bytes. Older packs without a stage allowance keep the original cap.
+        supplied = sizing is not None
+        sizing_path = (Path(plan.custody_root) / plan.pack_night["pack_id"]
+                       / "arm_readiness.t0.inputs/kernel-frequency-sizing.json")
+        if not supplied:
+            try:
+                sizing = readiness.parse_json_bytes(sizing_path.read_bytes())
+            except (OSError, ValueError):
+                sizing = None
+        inner = sizing.get("sizing", sizing) if isinstance(sizing, Mapping) else {}
+        fixed = inner.get("fixed", {}) if isinstance(inner, Mapping) else {}
+        if isinstance(fixed, Mapping) and "t0_stage_cap" in fixed:
+            from scripts import write_v5_qualification_plan as writer
+            expected_sizing = chain_literal(chain_text, "NIGHT_CLOCK_SIZING_SHA256")
+            if re.fullmatch(r"[0-9a-f]{64}", expected_sizing) is None:
+                raise PackNightRefusal("qualification stage sizing pin")
+            if supplied:
+                if readiness.sha256_bytes(readiness.render_json(sizing)) != expected_sizing:
+                    raise PackNightRefusal("qualification stage sizing sha256 mismatch")
+            else:
+                sizing = readiness.parse_json_bytes(_pack_bytes(
+                    sizing_path, "qualification_stage_sizing", expected_sizing))
+            window_cap = writer.allowance(writer.sizing_adapter(sizing)["fixed"]["t0_stage_cap"])
+            pack_t0 = writer.allowance(writer.sizing_adapter(sizing)["fixed"]["pack_t0"])
+            if not 0 < pack_t0 < span:
+                raise PackNightRefusal("qualification remaining chain span")
+            if not 3180 <= window_cap <= 3480:
+                raise PackNightRefusal("qualification t0_stage_cap_band")
+    if plan.window_max_s != 60 * math.ceil((span + window_cap) / 60):
+        raise PackNightRefusal("qualification window/dwell cap")
+    deadline = (plan.t0_epoch_s + float(window_cap + pack_t0) if pack_t0 is not None
+                else plan.t0_epoch_s + plan.window_max_s - span)
+    if (not isinstance(latest, str) or re.fullmatch(r"[0-9]+", latest) is None
+            or not math.ceil(plan.t0_epoch_s) <= int(latest) <= math.floor(deadline)):
+        raise PackNightRefusal("qualification latest chain start")
+    return int(latest)
+
+
+def authenticate_arm_context(plan, context=None, *, legacy_rehearsal=False):
+    """Bind qualification context bytes through the already pinned chain."""
+    from joulewise import arm_readiness as readiness
+    text = _pack_bytes(Path(plan.chain_path), "window_chain").decode("utf-8")
+    legacy_rehearsal = legacy_rehearsal and "export V5_QUALIFICATION_OCCURRENCE=" not in text
+    path = Path(plan.custody_root) / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs/arm-context.json"
+    expected = None
+    if "export NIGHT_ARM_CONTEXT_SHA256=" in text:
+        expected = chain_literal(text, "NIGHT_ARM_CONTEXT_SHA256")
+        if re.fullmatch(r"[0-9a-f]{64}", expected) is None:
+            raise PackNightRefusal("arm_context pin invalid")
+    elif "export V5_QUALIFICATION_OCCURRENCE=" in text:
+        raise PackNightRefusal("arm_context pin missing")
+    # Historical T0_REHEARSAL custody predates the native input directory.
+    # Its authenticated ARM remains the context source; qualification always
+    # requires the chain-pinned native input, including for rehearsal purposes.
+    if legacy_rehearsal and expected is None and not path.exists() and not path.is_symlink() and context is not None:
+        pinned = context
+    else:
+        pinned = _pack_object(path, "arm_context", expected)
+    try:
+        pinned = dict(readiness.validate_arm_context(pinned))
+    except ValueError as exc:
+        raise PackNightRefusal("arm_context invalid") from exc
+    if context is not None and pinned != context:
+        raise PackNightRefusal("arm_context differs from pinned input")
+    root, custody = Path(pinned["custody_root"]), Path(plan.custody_root)
+    if (not root.is_absolute() or ".." in root.parts
+            or any(p.is_symlink() for p in (root, *root.parents))
+            or root.resolve() != root or custody.resolve() != custody
+            or root in custody.parents or custody in root.parents
+            or root == custody and not legacy_rehearsal):
+        raise PackNightRefusal("arm_context custody roots must be absolute, distinct and non-nested")
+    return pinned
+
+
 def _evaluate_pack_conditions(plan, probes, rows, arm_path):
     """Derive C1/C2 from bound custody bytes, never caller condition labels."""
     from joulewise import arm_readiness as readiness
 
     prepared = _authenticate_pack_records(plan)
+    deadline = qualification_start_deadline(
+        plan, _pack_bytes(Path(plan.chain_path), "qualification_chain").decode("utf-8"),
+        prepared["authorization_record"]["purpose"])
+    if deadline is not None and _clock_value(probes, "epoch") > deadline:
+        raise PlanError("night_window_expired", "qualification latest chain start exceeded")
     rows["C1"] = _MutableCondition("PASS", None,
         [plan.pack_night[key]["path"] for key in ("authorization_record", "confirmation_record")],
         dict(prepared["authorization_record"]))
@@ -1194,10 +1588,12 @@ def _evaluate_pack_conditions(plan, probes, rows, arm_path):
     arm = _pack_object(path, "arm_receipt", verified["receipt_sha256"])
     _pack_digest(plan, arm)
     if (arm["status"] != "PASS" or arm["arm_disposition"] != "GO"
-            or arm["pack"]["plan_id"] != plan.plan_id
-            or arm["reviewed_main"]["head_commit"] != plan.repo_head
-            or arm["arm_context"]["custody_root"] != plan.custody_root):
+            or arm["pack"]["plan_id"] != (readiness._pack_record(prepared["root"])["plan_id"]
+                                           if plan.previous_attempt is not None else plan.plan_id)
+            or arm["reviewed_main"]["head_commit"] != plan.repo_head):
         raise PackNightRefusal("arm_receipt.plan/HEAD/custody/disposition")
+    authenticate_arm_context(plan, arm["arm_context"],
+                             legacy_rehearsal=prepared["authorization_record"]["purpose"] == "T0_REHEARSAL")
     if (arm["boot_session_id"] != readiness._current_boot_session_id()
             or _clock_value(probes, "monotonic") >= arm["valid_until_monotonic_ns"]):
         raise PackNightRefusal("arm_receipt.boot/expiry")
@@ -1865,6 +2261,9 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
     authorize an interval plan.
     """
     del pack_conditions
+    if plan.receipt_class == HAZARD_PACK:
+        raise PlanError("night_receipt_class_invalid",
+                        "HAZARD_PACK windows are armed by joulewise.hazards in the driver, never by evaluate_night")
     rows = _initial_conditions(plan.receipt_class)
     evidence = []
     pack_arm = None

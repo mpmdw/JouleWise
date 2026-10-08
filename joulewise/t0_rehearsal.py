@@ -1,4 +1,4 @@
-"""Mechanical judgment for the ruled zero-operator T-0 rehearsal.
+"""Mechanical judgment for historical T-0 rehearsal and s1 qualification.
 
 A *rehearsal evidence bundle* is an immutable set of custodied artifacts plus
 their already-parsed values.  This module performs no collection and launches
@@ -8,6 +8,9 @@ ten-gate table and returns ``PASS``, ``FAIL``, or ``UNRULED`` with the evidence
 it used.  ``compose_overall_verdict`` is the sole composition rule: one FAIL
 makes the rehearsal FAIL; otherwise any UNRULED makes it INCOMPLETE; only ten
 PASS results can make it PASS.
+
+``evaluate_qualification`` uses the ruling-76 eight-gate subset and records
+G6/G7 as NOT_APPLICABLE. It does not change the historical verdict wire format.
 
 The terms used below are mechanical.  A *custody document* is a canonical JSON
 artifact found under the declared T-0 namespace.  A *RAW anchor* is
@@ -21,6 +24,15 @@ contained by, any such root.
 
 from __future__ import annotations
 import json
+import os
+import stat
+import subprocess
+import time
+import queue
+import threading
+import uuid
+from contextvars import ContextVar
+from contextlib import contextmanager
 import re
 from dataclasses import dataclass
 from decimal import Decimal
@@ -32,6 +44,7 @@ from unittest import mock
 
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
+from joulewise import kernel_clock
 from joulewise import clock_reference
 from joulewise import network_time_off
 
@@ -41,16 +54,20 @@ REHEARSAL_WINDOW_PREFIX = "rehearsal-t0-unattended-"
 G7_CONTROL_SCHEMA = "joulewise.pack_night_g7_control.v1"
 
 EXECUTION_SCHEMA = "joulewise.t0_unattended_execution_record.v1"
+QUALIFICATION_EXECUTION_SCHEMA = "joulewise.v5_qualification_execution_record.v1"
+QUALIFICATION_STAGE_SCHEMA = "joulewise.v5_qualification_lifecycle_stage.v1"
 D149_SCHEMA = "joulewise.t0_unattended_d149_go_receipt.v1"
 REHEARSAL_RECEIPT_SCHEMA = "joulewise.t0_unattended_rehearsal_receipt.v1"
 PROCESS_LINEAGE_SCHEMA = "joulewise.t0_unattended_process_lineage.v1"
 LIFECYCLE_SCHEMA = "joulewise.t0_unattended_lifecycle.v1"
+QUALIFICATION_LIFECYCLE_SCHEMA = "joulewise.v5_qualification_lifecycle.v1"
 FALSIFIER_SCHEMA = "joulewise.t0_unattended_falsifier_controls.v1"
 POSITIVE_CONTROL_SCHEMA = "joulewise.t0_unattended_anchor_positive_control.v1"
 
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
 _HID_IDLE_RE = re.compile(r'^\s*"HIDIdleTime"\s*=\s*([0-9]+)\s*$')
-_AGENT_TOKEN_RE = re.compile(r"(?:^|[/\s])(codex|claude|t3)(?:[/\s]|$)", re.I)
+# T3 is no longer an agent (Ed, 2026-10-07: "I've abandoned all t3 integration as a control plane so you can prune all that out").
+_AGENT_TOKEN_RE = re.compile(r"(?:^|[/\s])(codex|claude)(?:[/\s]|$)", re.I)
 _CLOCK_ROW_DEFINITION = {
     "applicability_rule": "ALWAYS",
     "evaluation_phase": "ARM_ONLY",
@@ -145,6 +162,219 @@ _POSITIVE_CONTROL_KEYS = {
     "anchor_after_ns",
     "author_refusal_reason_code",
 }
+
+
+# An opt-in journal records observations at spawn/wait, never PASS labels.
+# Keep it in-process: an inherited shell variable cannot select fixture data.
+_PROCESS_JOURNAL = ContextVar("rehearsal_process_journal", default=None)
+PROCESS_EVENT_SCHEMA = "joulewise.t0_rehearsal_process_event.v1"
+
+
+def append_observation(path: Path, value: Mapping[str, Any]) -> None:
+    from joulewise.calibration_ledger import canonical_json_bytes
+    payload = canonical_json_bytes(value) + b"\n"
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
+    try:
+        if os.write(descriptor, payload) != len(payload):
+            raise OSError("short observation write")
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+class _ProcessJournal:
+    """A capped queue keeps custody I/O off the process supervision seams."""
+    def __init__(self, path, *, observe_only=False):
+        self.path = Path(path)
+        self.observe_only = observe_only
+        self.journal_id = str(uuid.uuid4())
+        self.pending = queue.Queue(maxsize=1024)
+        self.count = 0
+        self.error = None
+        self.writer = threading.Thread(target=self._write, daemon=True,
+                                       name="rehearsal-process-journal")
+        self.writer.start()
+
+    def _write(self):
+        try:
+            while True:
+                value = self.pending.get()
+                if value is None:
+                    append_observation(self.path, {
+                        "schema_version": PROCESS_EVENT_SCHEMA, "event": "seal",
+                        "journal_id": self.journal_id, "record_count": self.count})
+                    return
+                append_observation(self.path, value)
+                self.count += 1
+        except Exception as exc:
+            self.error = str(exc)
+
+    def emit(self, value):
+        value = dict(value, journal_id=self.journal_id)
+        try:
+            self.pending.put_nowait(value)
+        except queue.Full:
+            # Retain control of the child even if its observation was lost.
+            # This context can never seal successfully after overflow.
+            self.error = "process observation queue overflow"
+
+    def close(self):
+        try:
+            self.pending.put_nowait(None)
+        except queue.Full:
+            self.error = "process observation queue overflow"
+        self.writer.join(timeout=2)
+        if self.writer.is_alive() or self.error is not None:
+            if not self.observe_only:
+                raise ValueError("process observation journal incomplete: " + (self.error or "drain timed out"))
+            # Missing seal is itself fail-closed evidence even if this write fails.
+            try:
+                append_observation(self.path.with_name("producer-faults.jsonl"), {
+                    "schema_version": "joulewise.v5_qualification_producer_fault.v1",
+                    "producer": "process_journal", "status": "REFUSED"})
+            except Exception:
+                pass
+
+
+@contextmanager
+def process_journal(path: Path, *, observe_only=False):
+    journal = _ProcessJournal(path, observe_only=observe_only)
+    token = _PROCESS_JOURNAL.set(journal)
+    try:
+        yield journal
+    finally:
+        _PROCESS_JOURNAL.reset(token)
+        journal.close()
+
+
+class ObservedProcess(subprocess.Popen):
+    """Popen with retained DEVNULL descriptor custody and observed reaping.
+
+    fd0 is identified from the actual descriptor supplied to Popen, rather
+    than inferred later from argv. A non-DEVNULL launch is retained as such.
+    """
+    def __init__(self, args, **kwargs):
+        self._journal = _PROCESS_JOURNAL.get()
+        self._exit_recorded = False
+        self._timed_out = False
+        self._command = list(args) if not isinstance(args, str) else [args]
+        self._spawned_ns = time.monotonic_ns()
+        self._fd0 = "unobserved"
+        descriptor = None
+        if self._journal is not None and kwargs.get("stdin") == subprocess.DEVNULL:
+            try:
+                descriptor = os.open(os.devnull, os.O_RDONLY)
+                actual, expected = os.fstat(descriptor), os.stat(os.devnull)
+                if (stat.S_ISCHR(actual.st_mode) and
+                        (actual.st_dev, actual.st_ino, actual.st_rdev) ==
+                        (expected.st_dev, expected.st_ino, expected.st_rdev)):
+                    self._fd0 = "/dev/null"
+                kwargs["stdin"] = descriptor
+            except BaseException:
+                if not self._journal.observe_only:
+                    raise
+                self._journal.error = "fd0 observation fault"
+        try:
+            super().__init__(args, **kwargs)
+        finally:
+            if descriptor is not None:
+                try:
+                    os.close(descriptor)
+                except BaseException:
+                    if not self._journal.observe_only:
+                        raise
+                    self._journal.error = "fd0 observation close fault"
+        self._event("spawn", None)
+
+    def _event(self, event, exit_code):
+        if self._journal is not None:
+            try:
+                value = {
+                    "schema_version": PROCESS_EVENT_SCHEMA, "event": event,
+                    "pid": self.pid, "argv": self._command,
+                    "stdin_fd0_target": self._fd0, "exit_code": exit_code,
+                    "timed_out": self._timed_out,
+                    "monotonic_ns": time.monotonic_ns(),
+                    "spawned_monotonic_ns": self._spawned_ns,
+                }
+                self._journal.emit(value)
+            except BaseException:
+                if not self._journal.observe_only:
+                    raise
+                self._journal.error = "process event producer fault"
+
+    def communicate(self, *args, **kwargs):
+        stdout, stderr = super().communicate(*args, **kwargs)
+        self.observe_output(stdout)
+        return stdout, stderr
+
+    def observe_output(self, stdout):
+        if self._journal is not None and self._command[:1] == ["/usr/bin/pgrep"]:
+            try:
+                self._journal.emit({"schema_version": PROCESS_EVENT_SCHEMA,
+                    "event": "output", "pid": self.pid, "argv": self._command,
+                    "spawned_monotonic_ns": self._spawned_ns,
+                    "stdout": stdout.decode("utf-8", errors="replace") if isinstance(stdout, bytes) else stdout})
+            except BaseException:
+                if not self._journal.observe_only:
+                    raise
+                self._journal.error = "process output producer fault"
+
+    def _observe_exit(self, code):
+        if code is not None and not self._exit_recorded:
+            self._event("exit", code)
+            self._exit_recorded = True
+        return code
+
+    def wait(self, *args, **kwargs):
+        return self._observe_exit(super().wait(*args, **kwargs))
+
+    def poll(self):
+        return self._observe_exit(super().poll())
+
+
+def observed_process_type():
+    return subprocess.Popen if _PROCESS_JOURNAL.get() is None else ObservedProcess
+
+
+def observed_popen(args, **kwargs):
+    if _PROCESS_JOURNAL.get() is None:
+        return subprocess.Popen(args, **kwargs)
+    kwargs.setdefault("stdin", subprocess.DEVNULL)
+    return ObservedProcess(args, **kwargs)
+
+
+def observed_run(args, **kwargs):
+    """subprocess.run semantics with the same spawn/reap journal seam."""
+    if _PROCESS_JOURNAL.get() is None:
+        return subprocess.run(args, **kwargs)
+    input = kwargs.pop("input", None)
+    capture_output = kwargs.pop("capture_output", False)
+    timeout = kwargs.pop("timeout", None)
+    check = kwargs.pop("check", False)
+    if input is not None:
+        if "stdin" in kwargs:
+            raise ValueError("stdin and input arguments may not both be used")
+        kwargs["stdin"] = subprocess.PIPE
+    if capture_output:
+        if "stdout" in kwargs or "stderr" in kwargs:
+            raise ValueError("stdout/stderr with capture_output")
+        kwargs.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if input is None:
+        kwargs.setdefault("stdin", subprocess.DEVNULL)
+    with ObservedProcess(args, **kwargs) as process:
+        process._timed_out = False
+        try:
+            stdout, stderr = process.communicate(input, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process._timed_out = True
+            process.kill()
+            process.communicate()
+            raise
+        code = process.wait()
+        if check and code:
+            raise subprocess.CalledProcessError(code, args, output=stdout, stderr=stderr)
+        return subprocess.CompletedProcess(args, code, stdout, stderr)
 
 
 class GateStatus(str, Enum):
@@ -424,6 +654,132 @@ def _verify_artifact_reference(
     return artifact
 
 
+# Ruling 76 F.1: full argv, never the executable, selects census semantics.
+# Regex slots below are individual dynamic arguments; every literal argument
+# and the argv length must match. Sources are the consuming code, not a list
+# inferred from the executable. test_v5_block4_x12b inventories the call sites
+# and runs the entire real author roster through journal -> assembler -> G1.
+_ARG = re.compile(r"[\s\S]+")
+_IDS = re.compile(r"[1-9][0-9]*(?:,[1-9][0-9]*)*")
+_PYTHON = re.compile(r"(?:.*/)?python(?:3(?:\.[0-9]+)?)?")
+_REPO_SCRIPT = lambda name: re.compile(r".*/" + re.escape(name))
+_ZERO = {"exit_code": 0}
+_ABSENT = {"exit_code": 1, "stdout": ""}
+_CENSUS = {"exit_codes": [0, 1]}
+
+QUALIFICATION_PROCESS_OUTCOMES = (
+    # Author and driver absence censuses; only these require empty stdout.
+    (("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1868; joulewise/night_gate.py:agent_census"),
+    # The census before the T3 prune (2026-10-07), kept so journals recorded
+    # with it still resolve to their registered outcome.
+    (("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude|[t]3"), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1849; joulewise/night_gate.py:agent_census"),
+    # The same census before -a (dry-records F1, 2026-10-07), kept so journals
+    # recorded before that change still resolve to their registered outcome.
+    (("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1849; joulewise/night_gate.py:736"),
+    (("/usr/bin/pgrep", "-x", "caffeinate"), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1848"),
+    (("/usr/bin/pgrep", "-lf", t0_author._BROWSER_CENSUS_PATTERN), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1850"),
+    (("/usr/bin/pgrep", "-lf", t0_author._MONITOR_CENSUS_PATTERN), _ABSENT, "joulewise/arm_readiness_evidence_t0.py:1851"),
+    (("/usr/bin/pgrep", "-lf", t0_author._prewindow.CONTAMINANTS), _CENSUS, "joulewise/arm_readiness_evidence_t0.py:1425"),
+    # A live group is a normal intermediate poll, not a failed sequence.
+    (("/usr/bin/pgrep", "-lf", "-g", _IDS, "."), _CENSUS, "scripts/run_night.py:4431; scripts/run_night.py:4486"),
+    (("/bin/ps", "-o", "pgid=,pid=,command=", "-p", _IDS), _ZERO, "scripts/run_night.py:4515"),
+    (t0_author._prewindow.PS_ARGV, _ZERO, "joulewise/arm_readiness_evidence_t0.py:1434"),
+    (("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:530; joulewise/night_gate.py:1868"),
+    (("/usr/bin/pmset", "-g", "therm"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1480; joulewise/night_gate.py:1745"),
+    (("/usr/bin/pmset", "-g", "batt"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1961; joulewise/night_gate.py:1657"),
+    (("/usr/bin/pmset", "-g", "custom"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1962"),
+    (("/usr/bin/pmset", "-g"), _ZERO, "joulewise/night_gate.py:1698"),
+    (("/usr/sbin/system_profiler", "SPPowerDataType", "-json"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1963"),
+    (t0_author._battery_float.IOREG_BATTERY_ARGV, _ZERO, "joulewise/arm_readiness_evidence_t0.py:1985; joulewise/night_gate.py:1684"),
+    (("/usr/bin/sudo", "-n", "/usr/bin/powermetrics", "-i", "200", "-n", "1"), _ZERO, "joulewise/arm_readiness_evidence_t0.py:1932"),
+    (("sudo", "-n", "/usr/bin/powermetrics", "-n", "300", "-b", "0", "-i", "100", "--samplers", "cpu_power,gpu_power,ane_power,thermal", "--format", "plist", "-o", _ARG), _ZERO, "scripts/run_night.py:4709"),
+    (("/usr/bin/defaults", "-currentHost", "read", "com.apple.screensaver", "idleTime"), _ZERO, "joulewise/night_gate.py:1633"),
+    (("/usr/sbin/sysctl", "-n", "vm.loadavg"), _ZERO, "joulewise/night_gate.py:1721"),
+    (("/usr/bin/log", "show", "--last", "10m", "--style", "syslog", "--predicate", 'process == "launchd" AND eventMessage CONTAINS "corecaptured"'), _ZERO, "joulewise/night_gate.py:1783"),
+    # Stage commands, including R0's optional resync and unconditional OFF.
+    ((_PYTHON, _REPO_SCRIPT("scripts/collect_clock_reference.py")), _ZERO, "scripts/capture_t0_step.py:746"),
+    (("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", "on"), _ZERO, "scripts/capture_t0_step.py:765"),
+    (network_time_off.OFF_ARGV, _ZERO, "scripts/capture_t0_step.py:771"),
+    (("/bin/bash", _REPO_SCRIPT("scripts/quiet_mac_prep.sh")), _ZERO, "scripts/capture_t0_step.py:834; joulewise/arm_readiness_evidence_t0.py:1506"),
+    ((_PYTHON, _REPO_SCRIPT("joulewise/prewindow.py"), "--t0-wait", "--timeout-min", "45", "--window", _ARG), _ZERO, "scripts/capture_t0_step.py:834"),
+    ((_PYTHON, _REPO_SCRIPT("scripts/recover_calibration_ledger.py"), "--ledger", _ARG, "--head-pin", _ARG, "readiness", "--phase", "pre-reserve", "--session-id", _ARG, "--plan", _ARG), _ZERO, "scripts/capture_t0_step.py:834"),
+    ((_PYTHON, _REPO_SCRIPT("scripts/reserve_calibration_window_bracket.py"), "--ledger", _ARG, "--head-pin", _ARG, "--session-id", _ARG, "--window-id", _ARG, "--plan-id", _ARG, "--plan-sha256", _ARG, "--plan", _ARG, "--evidence-root-id", _ARG, "--runs-root", _ARG, "--pre-attempt-id", _ARG, "--post-attempt-id", _ARG, "--pre-custody-locator", _ARG, "--post-custody-locator", _ARG, "--identity-epoch-json", _ARG, "--t1-bindings-json", _ARG, "--execute"), _ZERO, "scripts/capture_t0_step.py:834"),
+    # Driver launches and read-only probes. Parameter slots are full argv
+    # fields, not a command prefix or executable-wide rule.
+    (("/bin/zsh", _ARG), _ZERO, "scripts/run_night.py:737; scripts/run_night.py:1000; scripts/run_night.py:4664; scripts/run_night.py:4790"),
+    (("/bin/zsh", "-c", "sleep 2; echo REHEARSAL"), _ZERO, "scripts/run_night.py:4008"),
+    ((_PYTHON, _REPO_SCRIPT("scripts/capture_t0_step.py"), "sequence", "--pack-root", _ARG, "--custody-root", _ARG, "--window-plan-root", _ARG), _ZERO, "scripts/run_night.py:3790"),
+    ((_PYTHON, _REPO_SCRIPT("scripts/launch_window.py"), "--pack-root", _ARG, "--arm-receipt", _ARG, "--arm-readiness-custody-root", _ARG, "--launch-manifest", _ARG, "--night-plan", _ARG, "--go-receipt", _ARG, "--step6-confirmation-table", _ARG, "--expected-confirmation-digest", _ARG), _ZERO, "scripts/run_night.py:2481"),
+    (("/usr/bin/caffeinate", "-is", "/bin/zsh", _ARG, _ARG), _ZERO, "scripts/capture_t0_step.py:425; scripts/run_night.py:2481"),
+    ((_PYTHON, "-B", _REPO_SCRIPT("scripts/run_night.py"), "run", "--plan", _ARG), _ZERO, "scripts/produce_t0_rehearsal_bundle.py:199"),
+    ((_PYTHON, "-B", _REPO_SCRIPT("scripts/run_night.py"), "run", "--plan", _ARG, "--courier-bin", _ARG), _ZERO, "scripts/produce_t0_rehearsal_bundle.py:199"),
+    ((_PYTHON, "-B", _REPO_SCRIPT("scripts/run_night.py"), "_bind-worker", "--kind", _ARG, "--job-id", _ARG, "--result-fd", _ARG, "--request", _ARG), _ZERO, "scripts/run_night.py:2711"),
+    ((_PYTHON, "-B", "-m", "joulewise.quiet_admission", "--observation", "--sample-interval-s", _ARG, "--observer-pid", _ARG, "--job-id", _ARG, "--result-fd", _ARG), _ZERO, "scripts/run_night.py:2711"),
+    ((_PYTHON, "-B", _REPO_SCRIPT("scripts/run_night.py"), "_probe-worker", "--plan", _ARG, "--receipt", _ARG, "--progress", _ARG, "--deadline", _ARG), _ZERO, "scripts/run_night.py:4588"),
+    ((_ARG, "-p", _ARG, "--output-format", "text", "--allowedTools", _ARG), _ZERO, "scripts/run_night.py:1793"),
+    ((_ARG, "--wait", "--timeout-s", _ARG), _ZERO, "scripts/run_night.py:3652"),
+    (("git", "-C", _ARG, "rev-parse", "HEAD"), _ZERO, "scripts/run_night.py:419; scripts/run_night.py:425"),
+    (("git", "-C", _ARG, "remote", "get-url", "origin"), _ZERO, "scripts/run_night.py:1351"),
+    (("git", "clone", "--depth", "1", _ARG, _ARG), _ZERO, "scripts/run_night.py:1360"),
+    (("git", "-C", _ARG, "checkout", "-B", _ARG), _ZERO, "scripts/run_night.py:1368"),
+    (("git", "-C", _ARG, "add", _ARG), _ZERO, "scripts/run_night.py:1398"),
+    (("git", "-C", _ARG, "commit", "-m", _ARG), _ZERO, "scripts/run_night.py:1405"),
+    (("git", "-C", _ARG, "push", "origin", _ARG), _ZERO, "scripts/run_night.py:1412"),
+    (("/usr/bin/git", "-c", "core.fsmonitor=false", "-C", _ARG, "--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=all"), _ZERO, "joulewise/night_gate.py:1484"),
+    (("/usr/bin/git", "-C", _ARG, "show", _ARG), _ZERO, "joulewise/night_gate.py:1606"),
+    # R1 ignores every nonzero leg; quorum still requires two parsed successes.
+    *((tuple(clock_reference.build_sntp_argv(server)), {"exit_codes": "any"},
+       "joulewise/arm_readiness_evidence_t0.py:1167") for server in clock_reference.SERVER_ROSTER),
+)
+
+
+def qualification_process_registration(argv):
+    if not isinstance(argv, (list, tuple)) or not all(isinstance(arg, str) for arg in argv):
+        return None
+    for template, outcome, consumer in QUALIFICATION_PROCESS_OUTCOMES:
+        if len(argv) == len(template) and all(
+                slot.fullmatch(arg) is not None if isinstance(slot, re.Pattern) else slot == arg
+                for slot, arg in zip(template, argv)):
+            return outcome, consumer
+    return None
+
+
+def qualification_process_outcome(argv):
+    registered = qualification_process_registration(argv)
+    # Imported subprocess helpers and historical fixture commands require
+    # success. Unknown census argv never inherit an absence/maintenance rule.
+    if registered is None:
+        return {"unregistered": True} if argv and argv[0] == "/usr/bin/pgrep" else dict(_ZERO)
+    outcome = dict(registered[0])
+    if isinstance(outcome.get("exit_codes"), list):
+        outcome["exit_codes"] = list(outcome["exit_codes"])
+    return outcome
+
+
+def qualification_process_completed(process):
+    expected = qualification_process_outcome(process.get("argv"))
+    code = process.get("exit_code")
+    codes = expected.get("exit_codes", [expected.get("exit_code")])
+    return (process.get("expected_outcome") == expected and not expected.get("unregistered")
+            and process.get("state") == "EXITED" and type(code) is int
+            and (codes == "any" or code in codes)
+            and ("stdout" not in expected or process.get("stdout") == expected["stdout"])
+            and process.get("timed_out") is False)
+
+
+# Shared by the plan writer, desk producer and G9. night_custody is the
+# plan's custody root; custody is the separate ARM context custody root.
+QUALIFICATION_BACKUP_SOURCE_FIELDS = {
+    "custody": "custody_root", "claim_runs": "claim_runs_root",
+    "bound_runs": "bound_runs_root", "night_custody": None,
+}
+
+
+def qualification_backup_sources(plan_custody, arm_context):
+    return {name: str(plan_custody) if key is None else arm_context.get(key)
+            for name, key in QUALIFICATION_BACKUP_SOURCE_FIELDS.items()}
+
+
 def evaluate_g1(bundle: EvidenceBundle) -> GateResult:
     """Evaluate noninteractive execution from the per-process fd-0 record.
 
@@ -445,30 +801,39 @@ def evaluate_g1(bundle: EvidenceBundle) -> GateResult:
         )
     if error is not None or value is None:
         return _result("G1", name, GateStatus.FAIL, error or "invalid execution record", artifact.citation())
-    if set(value) != _EXECUTION_KEYS or value.get("schema_version") != EXECUTION_SCHEMA:
+    qualified = value.get("schema_version") == QUALIFICATION_EXECUTION_SCHEMA
+    if set(value) != _EXECUTION_KEYS or value.get("schema_version") not in {EXECUTION_SCHEMA, QUALIFICATION_EXECUTION_SCHEMA}:
         return _result("G1", name, GateStatus.FAIL, "execution record schema is invalid", artifact.citation())
     processes = value.get("processes")
     if not isinstance(processes, list) or not processes:
         return _result("G1", name, GateStatus.FAIL, "execution record has no governed process census", artifact.citation())
     top_levels = 0
     for index, process in enumerate(processes):
-        if not isinstance(process, Mapping) or set(process) != _EXECUTION_PROCESS_KEYS:
+        keys = ((_EXECUTION_PROCESS_KEYS - {"prompt_count", "eof_refusal"}) |
+                {"expected_outcome", "stdout"}) if qualified else _EXECUTION_PROCESS_KEYS
+        if not isinstance(process, Mapping) or set(process) != keys:
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} record is malformed", artifact.citation())
         if process.get("role") == "top_level":
             top_levels += 1
         if process.get("stdin_fd0_target") != "/dev/null":
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} stdin was not bound to /dev/null", artifact.citation())
-        if process.get("state") != "EXITED" or process.get("exit_code") != 0:
+        expected = qualification_process_outcome(process.get("argv")) if qualified else {"exit_code": 0}
+        if qualified and process.get("expected_outcome") != expected:
+            return _result("G1", name, GateStatus.FAIL, f"governed process {index} expected outcome is not registered", artifact.citation())
+        if (not qualification_process_completed(process) if qualified else
+                process.get("state") != "EXITED" or process.get("exit_code") != 0):
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} did not complete successfully", artifact.citation())
-        if process.get("prompt_count") != 0:
+        if not qualified and process.get("prompt_count") != 0:
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} recorded a surviving prompt", artifact.citation())
-        if process.get("eof_refusal") is not False:
+        if not qualified and process.get("eof_refusal") is not False:
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} recorded an EOF refusal", artifact.citation())
         if process.get("timed_out") is not False:
             return _result("G1", name, GateStatus.FAIL, f"governed process {index} hung or timed out", artifact.citation())
     if top_levels != 1 or value.get("sequence_completed") is not True:
         return _result("G1", name, GateStatus.FAIL, "top-level T-0 sequence did not record one complete execution", artifact.citation())
-    return _result("G1", name, GateStatus.PASS, "top-level and all governed processes completed with fd 0 at /dev/null and no prompt, EOF refusal, or hang", artifact.citation())
+    message = ("all governed processes met registered outcomes with fd 0 at /dev/null, no timeout and a complete sequence"
+               if qualified else "top-level and all governed processes completed with fd 0 at /dev/null and no prompt, EOF refusal, or hang")
+    return _result("G1", name, GateStatus.PASS, message, artifact.citation())
 
 
 def evaluate_g2(bundle: EvidenceBundle) -> GateResult:
@@ -575,6 +940,11 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
         value = source_facts[0].get("value")
         if not isinstance(value, Mapping) or receipt_fact.get("value") != value:
             raise ValueError("clock receipt value differs from the published source")
+        keys = (readiness._CLOCK_PROBE_RESIDUAL_VALUE_KEYS if "anchor_check_version" in value
+                else readiness._CLOCK_PROBE_VALUE_KEYS)
+        if set(value) not in (keys, keys | {"clock_sizing_binding"}) or (
+                "clock_sizing_binding" in value and "anchor_check_version" not in value):
+            raise ValueError("clock fact keys do not match its recorded anchor semantics")
         if receipt_fact.get("source_sha256") != source_artifact.sha256:
             raise ValueError("clock receipt source SHA-256 does not match custodied source bytes")
 
@@ -644,7 +1014,39 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
             (value["anchor_realtime_ns"] - value["anchor_monotonic_raw_ns"])
             - (value["r0_anchor_realtime_ns"] - value["r0_anchor_monotonic_raw_ns"])
         )
-        if anchor_delta > 5_000_000:
+        if "anchor_check_version" in value:
+            if value["anchor_check_version"] != kernel_clock.ANCHOR_CHECK_VERSION:
+                raise ValueError("unsupported anchor check version")
+            frequency = kernel_clock.validate_probe(value.get("r0_kernel_frequency"))
+            if frequency != r0_capture.get("kernel_frequency"):
+                raise ValueError("published R0 frequency differs from custodied probe")
+            if value.get("t_stream_max_s") != r0_capture.get("t_stream_max_s"):
+                raise ValueError("published stream maximum differs from R0 custody")
+            binding = value.get("clock_sizing_binding")
+            required_binding = value.get("t_stream_max_s") is not None
+            if binding is not None or required_binding:
+                from joulewise.v5_qualification import authenticated_clock_budget
+                bound = _verify_artifact_reference(bundle, binding, label="clock sizing binding")
+                maximum, refs = authenticated_clock_budget(bound.path.parent, Path(bound.value["pack_root"]))
+                for ref in refs:
+                    _verify_artifact_reference(bundle, ref, label="clock sizing input")
+                    if ref not in input_refs:
+                        raise ValueError("clock sizing input is not attested by G4 source")
+                if value.get("t_stream_max_s") != maximum:
+                    raise ValueError("published stream maximum differs from authenticated sizing")
+            current = kernel_clock.validate_probe(value.get("kernel_frequency"))
+            residual = kernel_clock.anchor_residual_ns(
+                (value["anchor_realtime_ns"] - value["anchor_monotonic_raw_ns"])
+                - (value["r0_anchor_realtime_ns"] - value["r0_anchor_monotonic_raw_ns"]), span, frequency)
+            if current["raw_word"] != frequency["raw_word"]:
+                raise ValueError("R0-to-author kernel frequency word changed")
+            if (residual > 5_000_000 or type(value.get("anchor_residual_ns")) is not float
+                    or value["anchor_residual_ns"] != float(residual)):
+                raise ValueError("RAW anchor residual exceeds 5000000 ns or differs from arithmetic")
+            if (value.get("t_stream_max_s") is not None
+                    and not kernel_clock.frequency_gate(frequency, value["t_stream_max_s"])["passes"]):
+                raise ValueError("R0 kernel frequency exceeds the stream clock budget")
+        elif anchor_delta > 5_000_000:
             raise ValueError("RAW anchor delta exceeds 5000000 ns")
         if value.get("t0_span_ns") != span:
             raise ValueError("published T-0 span differs from RAW endpoint arithmetic")
@@ -719,8 +1121,8 @@ def evaluate_g5(bundle: EvidenceBundle) -> GateResult:
 
     Historical clock mode uses the consumption instant on its recorded boot;
     it never requires a completed night's GO to remain live on today's boot.
-    ARM semantics are nevertheless re-derived explicitly (ordinary historical
-    launch replay intentionally skips that step).
+    Recorded ARM semantics are authenticated without re-deriving today's
+    reviewed head or volatile evidence budget.
     """
     name = "PACK GO EVALUATION"
     artifact, value, error = _json_record(bundle, "d149_go")
@@ -755,7 +1157,7 @@ def evaluate_g5(bundle: EvidenceBundle) -> GateResult:
         table, digest = readiness._consumed_confirmation_pair(record, None, None)
         arm, arm_path, pack_root, _pack = readiness._replay_consumed_arm(
             None, record, path, require_current_boot=False, require_unexpired=False,
-            replay_arm_semantics=True, step6_confirmation_table=table,
+            replay_arm_semantics=False, step6_confirmation_table=table,
             expected_confirmation_digest=digest)
         readiness.verify_consumed_launch(pack_root, path, require_current_boot=False)
         issued = go["issued_monotonic_ns"]
@@ -974,6 +1376,156 @@ def evaluate_g8(bundle: EvidenceBundle) -> GateResult:
     return _result("G8", name, GateStatus.PASS, "pre-launch census binds the agent lineage, the agent exited before capture, and every capture census is agent-free", artifact.citation())
 
 
+def _verified_tree_members(source, destination, files):
+    if not source.is_absolute() or not destination.is_absolute() or not isinstance(files, Mapping) or not files:
+        raise ValueError("backup lacks independently verified file census")
+    if _contains(source, destination) or _contains(destination, source):
+        raise ValueError("backup source/destination overlap")
+    for relative, digest in files.items():
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts or not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest):
+            raise ValueError("backup member escapes tree or has invalid digest")
+        for root in (source, destination):
+            member = root / path
+            if any(p.is_symlink() for p in (member, *member.parents)) or not member.is_file() or readiness.sha256_bytes(member.read_bytes()) != digest:
+                raise ValueError("backup member digest mismatch")
+    actual = {p.relative_to(destination).as_posix(): readiness.sha256_bytes(p.read_bytes())
+              for p in destination.rglob("*") if p.is_file()}
+    if any(p.is_symlink() for p in destination.rglob("*")) or actual != files:
+        raise ValueError("backup destination census mismatch")
+
+
+def network_time_remained_off(observation):
+    """The permitted OFF setter proves continuity only on its already-off result."""
+    return (isinstance(observation, Mapping)
+            and type(observation.get("exit_code")) is int and observation["exit_code"] == 0
+            and observation.get("argv") == list(network_time_off.OFF_ARGV)
+            and isinstance(observation.get("stdout"), str)
+            and " ".join(observation["stdout"].split()).casefold().rstrip(".").rstrip() == "network time is already off")
+
+
+def _qualified_desk_stage(bundle, facts, stage_id, evidence):
+    record_artifact = _verify_artifact_reference(bundle, facts.get("plan_record"), label="s1 desk plan")
+    record = record_artifact.value
+    go = bundle.record("d149_go").value
+    if (not isinstance(record, Mapping) or record.get("schema_version") != "joulewise.v5_qualification_plan_record.v1"
+            or record.get("occurrence") not in {"s1", "s2"} or record.get("head") != go.get("repo_head")
+            or record.get("plan", {}).get("sha256") != go.get("plan_sha256")):
+        raise ValueError("desk stage is not bound to the s1 plan")
+    plan = _verify_artifact_reference(bundle, record.get("plan"), label="s1 plan")
+    if not isinstance(plan.value, Mapping) or not isinstance(plan.value.get("plan_id"), str):
+        raise ValueError("desk stage lacks its s1 plan identity")
+    evidence.append(record_artifact.citation())
+    destinations = record.get("backup_destinations", {})
+    sources = record.get("desk_sources", {})
+    if set(destinations) != {"claim", "bound"} or set(sources) != set(QUALIFICATION_BACKUP_SOURCE_FIELDS):
+        raise ValueError("s1 plan lacks backup destinations or sources")
+    arm = _artifact_for_path(bundle, str(bundle.custody_root / go["pack_id"] / "arm_readiness.receipts"
+        / (go["arm_receipt"]["receipt_id"] + ".json")))
+    if arm is None or not isinstance(arm.value, Mapping) or arm.sha256 != go["arm_receipt"]["sha256"]:
+        raise ValueError("desk stage lacks its s1 ARM roots")
+    from types import SimpleNamespace
+    from joulewise import night_gate
+    plan_custody = plan.value.get("custody_root")
+    if plan_custody != str(bundle.custody_root):
+        raise ValueError("desk plan custody differs from the bundle")
+    chain = Path(plan.value.get("chain_path", ""))
+    if (not chain.is_absolute() or any(p.is_symlink() for p in (chain, *chain.parents))
+            or not chain.is_file() or readiness.sha256_bytes(chain.read_bytes()) != go.get("window_chain_sha256")
+            or plan.value.get("pack_night", {}).get("pack_id") != go.get("pack_id")):
+        raise ValueError("desk plan chain is not authenticated by GO")
+    if night_gate.chain_literal(chain.read_text(), "V5_QUALIFICATION_OCCURRENCE") != record["occurrence"]:
+        raise ValueError("desk occurrence differs from the GO-authenticated chain")
+    try:
+        context = night_gate.authenticate_arm_context(SimpleNamespace(**plan.value), arm.value.get("arm_context"))
+    except (ValueError, OSError) as exc:
+        raise ValueError("desk ARM context differs from the authenticated plan: " + str(exc)) from exc
+    expected_sources = qualification_backup_sources(plan_custody, context)
+    expected_destinations = {role: context.get(role + "_backup_destination") for role in ("claim", "bound")}
+    if sources != expected_sources or destinations != expected_destinations:
+        raise ValueError("desk backup roots differ from the s1 ARM/plan")
+    paths = [Path(destinations[role]) for role in ("claim", "bound")]
+    if any(not p.is_absolute() for p in paths) or _contains(paths[0], paths[1]) or _contains(paths[1], paths[0]):
+        raise ValueError("backup destinations are not independent")
+    if stage_id.endswith("backup"):
+        role = "claim" if stage_id == "claim_backup" else "bound"
+        if facts.get("destination") != destinations[role] or set(facts.get("copies", {})) != set(sources):
+            raise ValueError("backup does not cover both s1 runs roots and custody")
+        for name, copy in facts["copies"].items():
+            destination = Path(facts["destination"]) / name / "runs"
+            if copy.get("source") != sources[name] or copy.get("destination") != str(destination):
+                raise ValueError("backup copy source/destination differs from plan")
+            _verified_tree_members(Path(sources[name]), destination, copy.get("files"))
+    elif stage_id == "close_out":
+        stop_artifact = _verify_artifact_reference(bundle, facts.get("stop"), label="s1 STOP")
+        stop = stop_artifact.value
+        if (not isinstance(stop, Mapping) or stop.get("session_state") != "finalized"
+                or stop.get("pin_relation") != "physical_ahead" or stop.get("refusal_code") != "calibration_ledger_head_mismatch"
+                or stop.get("terminal_head_pin_candidate") is None):
+            raise ValueError("s1 close-out lacks physical_ahead STOP")
+        runsheet = _verify_artifact_reference(bundle, facts.get("runsheet"), label="Phase G runsheet")
+        if b"### G1 \xe2\x80\x94 post-run assertions" not in runsheet.raw:
+            raise ValueError("s1 close-out lacks Phase G authority")
+        assertions = facts.get("phase_g", {})
+        if (assertions.get("whole_window_verdict_count") != 1
+                or any(assertions.get(key) is not True for key in ("no_extra_bundles", "no_scratch_residue", "pack_unchanged"))
+                or assertions.get("pack_sha256") != record.get("pack_night", {}).get("pack_sha256")
+                or not isinstance(assertions.get("git_status"), str)
+                or any(line and not line.startswith("##") for line in assertions["git_status"].splitlines())):
+            raise ValueError("s1 close-out Phase G assertions failed")
+        if assertions.get("head") != record["head"]:
+            from joulewise.v5_qualification import pin_only_head_extension
+            extension = pin_only_head_extension(plan.value["measurement_root"], record["head"], assertions.get("head"))
+            if extension is None or assertions.get("head_extension") != extension:
+                raise ValueError("s1 close-out head extension is not authenticated H_pin")
+            if extension["terminal_head_pin"] != stop["terminal_head_pin_candidate"]:
+                raise ValueError("s1 close-out H_pin differs from the STOP terminal candidate")
+        elif assertions.get("head_extension") is not None:
+            raise ValueError("s1 close-out unexpected head extension")
+        log = _verify_artifact_reference(bundle, assertions.get("campaign_log"), label="Phase G campaign log")
+        rows = [readiness.parse_json_bytes(line) for line in log.raw.splitlines() if line.strip()]
+        if sum(row.get("record_type") == "idle_admission_whole_window_verdict" for row in rows) != 1:
+            raise ValueError("Phase G requires exactly one whole-window verdict")
+        if set(assertions.get("expected_bundles", {})) != {"claim_runs", "bound_runs"} or set(assertions.get("runs_tree", {})) != {"claim_runs", "bound_runs"}:
+            raise ValueError("Phase G runs census missing")
+        for role, expected in assertions["expected_bundles"].items():
+            root = Path(sources[role])
+            actual = {p.name for p in root.iterdir() if p.is_dir()
+                      and p.name not in {"instrument_validation", "campaign_manifests"}}
+            if actual != set(expected):
+                raise ValueError("Phase G bundle census mismatch")
+        files = assertions.get("custody_files")
+        if not isinstance(files, Mapping) or not files:
+            raise ValueError("Phase G custody SHA-256 census absent")
+        for relative, digest in files.items():
+            path = Path(relative)
+            if path.is_absolute() or ".." in path.parts:
+                raise ValueError("Phase G custody path escapes tree")
+            member = Path(sources["custody"]) / path
+            if any(p.is_symlink() for p in (member, *member.parents)) or readiness.sha256_bytes(member.read_bytes()) != digest:
+                raise ValueError("Phase G custody digest mismatch")
+        evidence.extend((stop_artifact.citation(), runsheet.citation(), log.citation()))
+    if stage_id in {"close_out", "restore"}:
+        off_artifact = _verify_artifact_reference(bundle, facts.get("off_receipt"), label="s1 window OFF receipt")
+        off = network_time_off.admit(readiness.parse_json_bytes(off_artifact.raw))
+        identity = {key: off[key] for key in ("plan_id", "window_id", "boot_id")}
+        if (off["window_id"] != record.get("window_id") or off["plan_id"] != plan.value["plan_id"]
+                or off["boot_id"].lower() != go.get("boot_session_id", "").lower()):
+            raise ValueError("s1 OFF receipt window identity mismatch")
+        if stage_id == "close_out" and facts.get("off_identity") != identity:
+            raise ValueError("s1 close-out missing window OFF identity")
+        evidence.append(off_artifact.citation())
+    if stage_id == "restore":
+        standdown = _verify_artifact_reference(bundle, facts.get("standdown"), label="s1 stand-down")
+        observation = standdown.value
+        if (not isinstance(observation, Mapping)
+                or observation.get("schema_version") != "joulewise.t0_rehearsal_standdown_observation.v1"
+                or observation.get("boot_session_id") != go.get("boot_session_id")
+                or not observation.get("exits") or observation.get("after", {}).get("processes") != []):
+            raise ValueError("restore lacks observed stand-down")
+        evidence.append(standdown.citation())
+
+
 def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
     """Evaluate the complete launch-through-restore lifecycle."""
 
@@ -983,7 +1535,8 @@ def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
         return _result("G9", name, GateStatus.FAIL, error or "lifecycle record is absent")
     evidence = [artifact.citation()]
     try:
-        if set(value) != _LIFECYCLE_KEYS or value.get("schema_version") != LIFECYCLE_SCHEMA:
+        qualified = value.get("schema_version") == QUALIFICATION_LIFECYCLE_SCHEMA
+        if set(value) != _LIFECYCLE_KEYS or value.get("schema_version") not in {LIFECYCLE_SCHEMA, QUALIFICATION_LIFECYCLE_SCHEMA}:
             raise ValueError("lifecycle record schema is invalid")
         stages = value.get("stages")
         if not isinstance(stages, list) or [stage.get("stage_id") if isinstance(stage, Mapping) else None for stage in stages] != list(_LIFECYCLE_STAGES):
@@ -996,12 +1549,103 @@ def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
                 raise ValueError(f"lifecycle stage {stage_id} is not complete")
             used = _verify_artifact_reference(bundle, stage.get("evidence"), label=f"lifecycle {stage_id}")
             evidence.append(used.citation())
+            facts = used.value
+            if qualified and (not isinstance(facts, Mapping) or facts.get("schema_version") != QUALIFICATION_STAGE_SCHEMA):
+                raise ValueError("qualification stage lacks observed s1 evidence")
+            if isinstance(facts, Mapping) and facts.get("schema_version") in {"joulewise.t0_rehearsal_lifecycle_stage.v1", QUALIFICATION_STAGE_SCHEMA}:
+                if facts.get("stage_id") != stage_id:
+                    raise ValueError("lifecycle producer stage was swapped")
+                if stage_id in {"launch", "capability_consumption"}:
+                    source = _verify_artifact_reference(bundle, facts.get("source"), label=f"{stage_id} source")
+                    evidence.append(source.citation())
+                    source_value = readiness.parse_json_bytes(source.raw, require_canonical=True)
+                    if not isinstance(source_value, Mapping):
+                        raise ValueError(f"{stage_id} source has no observed record")
+                    if stage_id == "launch" and (not _real_int(source_value.get("pid"))
+                            or source_value["pid"] <= 0 or not _real_int(source_value.get("monotonic_ns"))):
+                        raise ValueError("launch source lacks observed pid/time")
+                    if stage_id == "capability_consumption" and not source.path.name.endswith(".consumed.json"):
+                        raise ValueError("capability source is not a retained consumption")
+                if qualified and stage_id == "capture":
+                    refs = facts.get("artifacts")
+                    raw_refs = facts.get("sampler_artifacts")
+                    if not isinstance(refs, list) or not refs or not isinstance(raw_refs, list) or not raw_refs:
+                        raise ValueError("s1 capture lacks metadata and sampler artifacts")
+                    for ref in refs:
+                        used_capture = _verify_artifact_reference(bundle, ref, label="s1 capture")
+                        if used_capture.path.name != "metadata.json" or not isinstance(used_capture.value, Mapping):
+                            raise ValueError("s1 capture is not retained metadata")
+                        evidence.append(used_capture.citation())
+                    for ref in raw_refs:
+                        used_raw = _verify_artifact_reference(bundle, ref, label="s1 sampler")
+                        if used_raw.path.name != "powermetrics.raw.txt" or not used_raw.raw:
+                            raise ValueError("s1 sampler witness is absent")
+                        evidence.append(used_raw.citation())
+                if qualified and stage_id in {"claim_backup", "bound_backup", "close_out", "restore"}:
+                    _qualified_desk_stage(bundle, facts, stage_id, evidence)
+                if not qualified and stage_id in {"capture", "close_out"}:
+                    references = facts.get("artifacts" if stage_id == "capture" else "sources")
+                    if not isinstance(references, list) or len(references) != 2:
+                        raise ValueError(f"{stage_id} lacks both activity artifacts")
+                    for reference in references:
+                        activity = _verify_artifact_reference(bundle, reference, label=f"{stage_id} activity")
+                        if (not isinstance(activity.value, Mapping)
+                                or activity.value.get("schema_version") != "joulewise.t0_rehearsal_activity.v1"
+                                or activity.value.get("claim_eligible") is not False):
+                            raise ValueError(f"{stage_id} activity is not non-inference evidence")
+                        evidence.append(activity.citation())
+                    if stage_id == "close_out":
+                        closed = _verify_artifact_reference(bundle, facts.get("ledger_close_out"), label="ledger close-out")
+                        if (not isinstance(closed.value, Mapping) or closed.value.get("status") != "aborted"
+                                or closed.value.get("terminal_result") != "session_aborted"):
+                            raise ValueError("close-out does not record the unused bracket abort")
+                        backup_records = facts.get("backup_records")
+                        if not isinstance(backup_records, list) or len(backup_records) != 2:
+                            raise ValueError("close-out lacks both backup records")
+                        for reference in backup_records:
+                            _verify_artifact_reference(bundle, reference, label="close-out backup")
+                if stage_id == "restore":
+                    if facts.get("network_time") != "OFF" or facts.get("stand_down") is not True:
+                        raise ValueError("restore-ON is forbidden")
+                    observation = facts.get("observation", {})
+                    if not network_time_remained_off(observation):
+                        raise ValueError("restore lacks observed already-OFF setter witness")
+                    off_artifact = _verify_artifact_reference(bundle, facts.get("off_receipt"), label="restore OFF receipt")
+                    network_time_off.admit(readiness.parse_json_bytes(off_artifact.raw))
+                if not qualified and stage_id in {"claim_backup", "bound_backup"}:
+                    files = facts.get("files")
+                    source, destination = Path(facts.get("source", "")), Path(facts.get("destination", ""))
+                    if not source.is_absolute() or not destination.is_absolute() or not isinstance(files, Mapping) or not files:
+                        raise ValueError("backup lacks independently verified file census")
+                    if _contains(source, destination) or _contains(destination, source):
+                        raise ValueError("backup source/destination overlap")
+                    for relative, digest in files.items():
+                        path = Path(relative)
+                        if path.is_absolute() or ".." in path.parts:
+                            raise ValueError("backup member escapes tree")
+                        for root in (source, destination):
+                            member = root / path
+                            if any(p.is_symlink() for p in (member, *member.parents)) or not member.is_file() or readiness.sha256_bytes(member.read_bytes()) != digest:
+                                raise ValueError("backup member digest mismatch")
+        producer_stages = [bundle.artifact(stage["evidence"]["path"]) if not Path(stage["evidence"]["path"]).is_absolute()
+                           else _artifact_for_path(bundle, stage["evidence"]["path"]) for stage in stages]
+        observed = [item.value for item in producer_stages if item is not None and isinstance(item.value, Mapping)
+                    and item.value.get("schema_version") in {"joulewise.t0_rehearsal_lifecycle_stage.v1", QUALIFICATION_STAGE_SCHEMA}]
+        if observed:
+            if len(observed) != len(_LIFECYCLE_STAGES):
+                raise ValueError("mixed lifecycle producer and fixture evidence")
+            stamps = [item.get("monotonic_ns") for item in observed]
+            if any(not _real_int(stamp) for stamp in stamps) or stamps != sorted(stamps):
+                raise ValueError("lifecycle observed order is invalid")
+            backups = [Path(item["destination"]) for item in observed if item["stage_id"] in {"claim_backup", "bound_backup"}]
+            if _contains(backups[0], backups[1]) or _contains(backups[1], backups[0]):
+                raise ValueError("backup destinations are not independent")
         if value.get("operator_actions_at_t0") != 0:
             raise ValueError("operator action occurred during T-0")
         interventions = value.get("human_interventions")
         if not isinstance(interventions, list) or interventions:
             raise ValueError("human intervention occurred during the rehearsal")
-    except ValueError as exc:
+    except (ValueError, OSError, TypeError, KeyError, readiness.ArmReadinessError) as exc:
         return _result("G9", name, GateStatus.FAIL, str(exc), *evidence)
     return _result("G9", name, GateStatus.PASS, "launch, capability consumption, capture, both backups, close-out, and restore are complete with zero human intervention", *evidence)
 
@@ -1037,6 +1681,12 @@ def _run_real_author_boundary(
             "r0_batch_finished_monotonic_raw_ns"
         ],
     }
+    frequency = inputs.get("r0_kernel_frequency")
+    if frequency is None:
+        frequency = {"schema_version": kernel_clock.PROBE_SCHEMA, "modes": 0,
+                     "raw_word": 0, "ppm": 0.0, "call_status": 0,
+                     "timex_status": 0, "errno": 0, "raw_hex": bytes(kernel_clock.Timex()).hex()}
+    r0.update(kernel_frequency=frequency, t_stream_max_s=inputs.get("t_stream_max_s"))
     disable = {
         "exit_code": 0,
         "argv": ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", "off"],
@@ -1082,6 +1732,10 @@ def _run_real_author_boundary(
             mock.patch.object(t0_author, "_captured_clock_reference", return_value=(r0, {"path": "r0", "sha256": "0" * 64}, agreement)),
             mock.patch.object(t0_author, "_capture", return_value=(disable, {"path": "off", "sha256": "1" * 64})),
             mock.patch.object(t0_author, "_fresh_clock_reference_batch", side_effect=fresh),
+            # This software-only numeric boundary has no plan custody. The
+            # native author/G10 compositions separately replay the binding.
+            mock.patch.object(t0_author, "_authenticate_clock_sizing"),
+            mock.patch.object(kernel_clock, "read_kernel_frequency", return_value=frequency),
         ):
             t0_author._derive_clock_attestation(context)
     except t0_author.T0EvidenceAuthoringError as exc:
@@ -1104,6 +1758,8 @@ def _run_real_arm_boundary(
         "monotonic_raw_ns": value.get("anchor_monotonic_raw_ns"),
         "read_skew_ns": 1_000,
     }
+    if value.get("anchor_check_version") == kernel_clock.ANCHOR_CHECK_VERSION:
+        live["kernel_frequency"] = value["kernel_frequency"]
     rows, refusals = readiness._evaluate_rows(
         [_CLOCK_ROW_DEFINITION],
         {str(receipt.get("evidence_id")): receipt},
@@ -1203,11 +1859,48 @@ def evaluate_g10(bundle: EvidenceBundle) -> GateResult:
             raise ValueError("privileged anchor positive control lacks network-time re-enable/forced-resync evidence")
         before = positive.get("anchor_before_ns")
         after = positive.get("anchor_after_ns")
-        if not _real_int(before) or not _real_int(after) or abs(after - before) <= 5_000_000:
+        if not _real_int(before) or not _real_int(after):
+            raise ValueError("privileged anchor positive control endpoints are invalid")
+        support_root = positive_artifact.path.parent
+        movement_artifact = _artifact_for_path(bundle, str(support_root / "anchor-movement.json"))
+        if movement_artifact is None:
+            retained = [item for item in bundle.artifacts
+                        if item.path.name == "positive-control.json"
+                        and item.path.is_relative_to(bundle.custody_root / "records/g10-custody")
+                        and item.raw == positive_artifact.raw]
+            if len(retained) == 1:
+                support_root = retained[0].path.parent
+                movement_artifact = _artifact_for_path(bundle, str(support_root / "anchor-movement.json"))
+        movement = movement_artifact.value if movement_artifact is not None else None
+        if isinstance(movement, Mapping) and "anchor_check_version" in movement:
+            if movement["anchor_check_version"] != kernel_clock.ANCHOR_CHECK_VERSION:
+                raise ValueError("unsupported positive-control anchor semantics")
+            before_artifact = _artifact_for_path(bundle, str(support_root / "before.json"))
+            after_artifact = _artifact_for_path(bundle, str(support_root / "after.json"))
+            if before_artifact is None or after_artifact is None:
+                raise ValueError("positive-control residual stamps are absent")
+            stamps = (before_artifact.value, after_artifact.value)
+            frequency = kernel_clock.validate_probe(stamps[0].get("kernel_frequency"))
+            kernel_clock.validate_probe(stamps[1].get("kernel_frequency"))
+            if (stamps[0]["realtime_ns"] - stamps[0]["monotonic_raw_ns"] != before
+                    or stamps[1]["realtime_ns"] - stamps[1]["monotonic_raw_ns"] != after):
+                raise ValueError("positive-control endpoints differ from residual stamps")
+            residual = kernel_clock.anchor_residual_ns(after - before,
+                stamps[1]["monotonic_raw_ns"] - stamps[0]["monotonic_raw_ns"], frequency)
+            if (movement.get("absolute_movement_ns") != abs(after - before)
+                    or movement.get("residual_movement_ns") != float(residual)):
+                raise ValueError("positive-control residual differs from arithmetic")
+            moved = residual > 5_000_000
+        else:
+            moved = abs(after - before) > 5_000_000
+        if not moved:
             raise ValueError("privileged anchor positive control did not visibly move the RAW anchor beyond 5 ms")
         if positive.get("author_refusal_reason_code") != "evidence_author_t0_clock_attestation_underivable":
             raise ValueError("privileged anchor positive control did not record the real author refusal code")
-    except ValueError as exc:
+        if bundle.manifest.value.get("schema_version") == "joulewise.v5_s1_qualification_bundle.v1":
+            from joulewise.v5_qualification import replay_g10_custody
+            evidence.append({"g10_custody": replay_g10_custody(bundle.custody_root, positive, bundle=bundle)})
+    except (ValueError, OSError, KeyError, TypeError) as exc:
         return _result("G10", name, GateStatus.FAIL, str(exc), *evidence)
     return _result("G10", name, GateStatus.PASS, "real author and arm paths enforce 5 ms +/- 1 ns, and Ed's adjacent privileged control visibly moved the RAW anchor", *evidence)
 
@@ -1243,6 +1936,40 @@ def evaluate_rehearsal(bundle: EvidenceBundle) -> dict[str, object]:
     }
 
 
+def evaluate_qualification(bundle: EvidenceBundle, *, purpose="G2B_SHAKEDOWN") -> dict[str, object]:
+    """Ruling 76 subset, with retired gates recorded explicitly, never PASS.
+
+    The historical ten-gate entry point and its wire format are unchanged.
+    """
+    if purpose != "G2B_SHAKEDOWN":
+        raise ValueError("qualification requires G2B_SHAKEDOWN")
+    go = bundle.record("d149_go")
+    if (go is None or not isinstance(go.value, Mapping)
+            or go.value.get("purpose") != purpose
+            or go.value.get("authorization", {}).get("claim_eligible") is not False):
+        raise ValueError("qualification GO purpose/claim binding")
+    rows, live = [], []
+    for index, evaluator in enumerate(GATE_EVALUATORS, 1):
+        if index in (6, 7):
+            rows.append({"gate_id": f"G{index}", "name": "RETIRED LIVE GATE",
+                         "status": "NOT_APPLICABLE", "basis": "retired_by_ruling_76"})
+        else:
+            result = evaluator(bundle)
+            required_schema = {1: ("execution", QUALIFICATION_EXECUTION_SCHEMA),
+                               9: ("lifecycle", QUALIFICATION_LIFECYCLE_SCHEMA)}.get(index)
+            if required_schema:
+                record = bundle.record(required_schema[0])
+                if record is None or not isinstance(record.value, Mapping) or record.value.get("schema_version") != required_schema[1]:
+                    result = _result(f"G{index}", result.name, GateStatus.FAIL, "s1 qualification observation schema required")
+            live.append(result.status)
+            rows.append(result.to_dict())
+    return {"schema_version": "joulewise.v5_s1_qualification_verdict.v1",
+            "purpose": purpose, "overall_verdict": compose_overall_verdict(live).value,
+            "gate_counts": {status: sum(row["status"] == status for row in rows)
+                            for status in ("PASS", "FAIL", "UNRULED", "NOT_APPLICABLE")},
+            "gates": rows, "load_issues": list(bundle.load_issues)}
+
+
 __all__ = [
     "D149_SCHEMA",
     "EXECUTION_SCHEMA",
@@ -1254,6 +1981,9 @@ __all__ = [
     "GateResult",
     "GateStatus",
     "LIFECYCLE_SCHEMA",
+    "QUALIFICATION_EXECUTION_SCHEMA",
+    "QUALIFICATION_LIFECYCLE_SCHEMA",
+    "QUALIFICATION_STAGE_SCHEMA",
     "OverallVerdict",
     "POSITIVE_CONTROL_SCHEMA",
     "PROCESS_LINEAGE_SCHEMA",
@@ -1273,5 +2003,6 @@ __all__ = [
     "evaluate_g9",
     "evaluate_g10",
     "evaluate_rehearsal",
+    "evaluate_qualification",
     "parse_hid_idle_time",
 ]

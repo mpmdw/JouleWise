@@ -13,6 +13,8 @@ from unittest import mock
 
 from joulewise import arm_readiness as readiness
 from joulewise import clock_reference
+from joulewise import kernel_clock
+from tests.test_kernel_clock import frequency_probe
 from joulewise import network_time_off
 from joulewise import t0_rehearsal as rehearsal
 from scripts import rehearse_t0_unattended as cli
@@ -156,6 +158,11 @@ def install_t0_inventory(fixture):
     from joulewise import arm_readiness_evidence_t0 as author
     from tests.test_arm_readiness_schemas import sample_evidence
     root = fixture.custody / fixture.pack.name
+    if Path(fixture.arm["arm_context"]["custody_root"]) == fixture.custody:
+        capture_root = fixture.custody.with_name(fixture.custody.name + "-captures")
+        capture_root.mkdir(exist_ok=True)
+        fixture.arm["arm_context"]["custody_root"] = str(capture_root)
+    _write_json(root / author._INPUT_DIRECTORY / "arm-context.json", fixture.arm["arm_context"])
     recipe_path = root / fixture.arm["evidence"][0]["path"]
     recipe = readiness.parse_json_bytes(recipe_path.read_bytes())
     source_path = root / recipe["facts"][0]["source_path"]
@@ -168,6 +175,8 @@ def install_t0_inventory(fixture):
                                  started=now - 100 + index * 2,
                                  finished=now - 99 + index * 2)
         value["boot_session_id"] = fixture.arm["boot_session_id"]
+        if step == "clock-reference":
+            value.update(kernel_frequency=frequency_probe(), t_stream_max_s=None)
         _write_json(path, value)
         source["input_artifacts"].append(fixture._artifact(path))
         paths.append(path)
@@ -440,6 +449,14 @@ class FixtureBuilder:
         try:
             # Reuse this bundle's context without weakening the case's setUp.
             fixture._set_up_fixture(self.base.resolve(), existing_context=True)
+            # Native context is retained under plan custody; its ARM root is
+            # a separate, non-nested tree just as in qualification custody.
+            self.arm_custody_root = Path(fixture.arm["arm_context"]["custody_root"])
+            assert self.arm_custody_root != self.root
+            assert self.root not in self.arm_custody_root.parents
+            assert self.arm_custody_root not in self.root.parents
+            native = self.root / fixture.pack.name / "arm_readiness.t0.inputs/arm-context.json"
+            assert readiness.parse_json_bytes(native.read_bytes()) == fixture.arm["arm_context"]
             evidence = install_t0_inventory(fixture)
             inputs = fixture._consumer_inputs()
             go = inputs["authenticated_go_receipt"]
@@ -665,6 +682,98 @@ class FixtureBuilder:
 
 
 class T0RehearsalTests(unittest.TestCase):
+    def test_g10_reads_residual_stamps_from_retained_control_tree(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = FixtureBuilder(Path(temporary)).build()
+            positive = json.loads((root / "records/positive-control.json").read_bytes())
+            support = root / "records/g10-custody/native-control"
+            _write_json(support / "positive-control.json", positive)
+            frequency = frequency_probe()
+            _write_json(support / "before.json", {"realtime_ns": positive["anchor_before_ns"],
+                "monotonic_raw_ns": 0, "kernel_frequency": frequency})
+            _write_json(support / "after.json", {"realtime_ns": positive["anchor_after_ns"] + 1000,
+                "monotonic_raw_ns": 1000, "kernel_frequency": frequency})
+            movement = {"anchor_check_version": kernel_clock.ANCHOR_CHECK_VERSION,
+                "absolute_movement_ns": 5_000_001, "residual_movement_ns": 5_000_001.}
+            _write_json(support / "anchor-movement.json", movement)
+            result = rehearsal.evaluate_g10(fixture_bundle(root))
+            self.assertEqual(result.status, rehearsal.GateStatus.PASS, result.message)
+            movement["residual_movement_ns"] = 0.
+            _write_json(support / "anchor-movement.json", movement)
+            result = rehearsal.evaluate_g10(fixture_bundle(root))
+            self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
+            self.assertIn("residual differs", result.message)
+
+    def test_g4_replays_versioned_drift_step_and_slew_from_raw_custody(self):
+        from dataclasses import replace
+        from fractions import Fraction
+        from joulewise import v5_qualification as qualification
+        from tests.test_v5_qualification_plan import PlanWriterTests
+
+        plan_fixture = PlanWriterTests()
+        plan_fixture.setUp()
+        self.addCleanup(plan_fixture.doCleanups)
+        frequency = frequency_probe(-207749)
+        plan_fixture.input["kernel_frequency"] = frequency
+        for stream in plan_fixture.input["sizing"]["streams"]:
+            plan_fixture.input["sizing"]["streams"][stream] = plan_fixture.allow(320)
+        plan_fixture.write()
+        input_root = plan_fixture.custody / plan_fixture.pack.name / "arm_readiness.t0.inputs"
+        maximum, sizing_refs = qualification.authenticated_clock_budget(input_root, plan_fixture.pack)
+        self.assertEqual(maximum, 320.)
+        # Retain the writer's independently authenticated inputs in G4 custody.
+        sizing_artifacts = tuple(rehearsal.EvidenceArtifact(
+            ref["path"], Path(ref["path"]), Path(ref["path"]).read_bytes(), ref["sha256"],
+            qualification.read(Path(ref["path"])) if ref["path"].endswith(".json") else None,
+        ) for ref in sizing_refs)
+        with tempfile.TemporaryDirectory() as temporary:
+            builder = FixtureBuilder(Path(temporary))
+            root = builder.build()
+            source_path = builder.sources / "clock-correct-and-prior-state.json"
+            receipt_path = builder.receipts / "evidence-t0-clock-correct-and-prior-state.json"
+            source_original = json.loads(source_path.read_bytes())
+            source_original["input_artifacts"].extend(sizing_refs)
+            receipt_original = json.loads(receipt_path.read_bytes())
+            capture_path = builder.inputs / "clock-reference.json"
+            capture = json.loads(capture_path.read_bytes())
+            capture.update(kernel_frequency=frequency, t_stream_max_s=maximum)
+            _write_json(capture_path, capture)
+            for seconds, step, end_word, expected, reason in (
+                    (1600, 0, -207749, rehearsal.GateStatus.PASS, None),
+                    (3600, 0, -207749, rehearsal.GateStatus.PASS, None),
+                    (1000, 6_000_000, -207749, rehearsal.GateStatus.FAIL,
+                     "RAW anchor residual exceeds 5000000 ns"),
+                    (1000, 1000, -207748, rehearsal.GateStatus.FAIL,
+                     "R0-to-author kernel frequency word changed")):
+                with self.subTest(seconds=seconds, step=step, end_word=end_word):
+                    source = copy.deepcopy(source_original)
+                    receipt = copy.deepcopy(receipt_original)
+                    value = source["facts"][0]["value"]
+                    span = seconds * 10**9
+                    movement = round(Fraction(-207749 * span, 65536 * 10**6)) + step
+                    endpoint = value["r0_anchor_monotonic_raw_ns"] + span
+                    value.update(anchor_check_version=kernel_clock.ANCHOR_CHECK_VERSION,
+                        r0_kernel_frequency=frequency, kernel_frequency=frequency_probe(end_word),
+                        t_stream_max_s=maximum, t0_span_ns=span,
+                        clock_sizing_binding=qualification.reference(input_root / "kernel-frequency-binding.json"),
+                        anchor_monotonic_raw_ns=endpoint, anchor_realtime_ns=OFFSET_NS + endpoint + movement,
+                        anchor_delta_ns=abs(movement),
+                        anchor_residual_ns=float(kernel_clock.anchor_residual_ns(movement, span, frequency)),
+                        r1_batch_started_monotonic_raw_ns=endpoint - 1000,
+                        r1_batch_finished_monotonic_raw_ns=endpoint)
+                    for ref in source["input_artifacts"]:
+                        if ref["path"].endswith("clock-reference.json"):
+                            ref["sha256"] = readiness.sha256_bytes(capture_path.read_bytes())
+                    _write_json(source_path, source)
+                    receipt["facts"][0].update(value=copy.deepcopy(value),
+                        source_sha256=readiness.sha256_bytes(source_path.read_bytes()))
+                    _write_json(receipt_path, receipt)
+                    bundle = fixture_bundle(root)
+                    result = rehearsal.evaluate_g4(replace(bundle, artifacts=bundle.artifacts + sizing_artifacts))
+                    self.assertEqual(result.status, expected, result.message)
+                    if reason is not None:
+                        self.assertIn(reason, result.message)
+
     maxDiff = None
 
     def _run_rehearsal_arm_liveness_boundary(
@@ -991,25 +1100,33 @@ class T0RehearsalTests(unittest.TestCase):
         self.assertEqual(parsed["overall_verdict"], "PASS")
         self.assertEqual(output.getvalue(), readiness.render_json(parsed))
 
-    def test_real_custody_cli_mode_uses_the_same_evidence_only_loader(self) -> None:
+    def test_real_custody_cli_refuses_unlabelled_fixture_evidence(self) -> None:
         _temporary, root, _verdict = self._evaluate()
         output = io.BytesIO()
         with fixture_replay(root):
             code = cli.main(["--custody-root", str(root)], stdout=output, home=root.parents[1], inventory=fixture_inventory(root))
         parsed = readiness.parse_json_bytes(output.getvalue(), require_canonical=True)
-        self.assertEqual(code, 0)
-        self.assertEqual(parsed["gate_counts"], {"PASS": 10, "FAIL": 0, "UNRULED": 0})
+        self.assertEqual(code, 2)
+        self.assertEqual(parsed["overall_verdict"], "FAIL")
+        self.assertIn("producer provenance", parsed["load_issues"][0])
 
 
 class PackGoReplayTests(unittest.TestCase):
     """Real GO/consumption replay; synthetic ARM semantics and T0 prerequisites."""
 
     def setUp(self):
-        from tests.test_arm_readiness import PackNightConsumerTests
+        from tests.test_arm_readiness import PackNightConsumerTests, LaunchConsumptionV2Tests
         self.case = PackNightConsumerTests()
-        self.case.setUp()
+        self.case.fixture = LaunchConsumptionV2Tests()
+        self.case.fixture.setUp()
+        self.case.addCleanup(self.case.fixture.doCleanups)
         self.addCleanup(self.case.doCleanups)
         self.fixture = self.case.fixture
+        _write_json(self.fixture.custody / self.fixture.pack.name /
+                    "arm_readiness.t0.inputs/arm-context.json", self.fixture.arm["arm_context"])
+        self.case.inputs = self.fixture._consumer_inputs()
+        self.case.consumption = (self.fixture.custody / self.fixture.pack.name /
+                                "arm_readiness.consumptions/arm-0001.consumed.json")
         self.case.rewrite_go(lambda go: go["conditions"][3].update(
             evidence=copy.deepcopy(go["conditions"][1]["evidence"])))
         self.case.consume()
@@ -1021,9 +1138,7 @@ class PackGoReplayTests(unittest.TestCase):
             go, artifacts, {"d149_go": go.relative_path}, (), issues)
 
     def evaluate(self):
-        with mock.patch.object(readiness, "_derive_arm_semantics_for_verification",
-                return_value=(self.fixture.arm["rows"], self.fixture.arm["refusals"])):
-            return rehearsal.evaluate_g5(self.bundle())
+        return rehearsal.evaluate_g5(self.bundle())
 
     def rebind(self):
         def references(go):
@@ -1064,12 +1179,11 @@ class PackGoReplayTests(unittest.TestCase):
         self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
         self.assertIn("G2B_SHAKEDOWN", result.message)
 
-    def test_g5_requires_arm_semantic_replay_and_real_t0_inventory(self):
+    def test_g5_uses_recorded_arm_semantics_and_real_t0_inventory(self):
         with mock.patch.object(readiness, "_derive_arm_semantics_for_verification",
                 return_value=([], [{"reason": "refused"}])):
             result = rehearsal.evaluate_g5(self.bundle())
-        self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
-        self.assertIn("PASS/GO", result.message)
+        self.assertEqual(result.status, rehearsal.GateStatus.PASS, result.message)
         with mock.patch.object(readiness, "_authenticate_go_t0_evidence", REAL_G5_T0_AUTHENTICATOR):
             result = self.evaluate()
         self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
@@ -1127,7 +1241,7 @@ class PackGoReplayTests(unittest.TestCase):
             readiness.gnu_sidecar(readiness.sha256_bytes(path.read_bytes()), path.name))
         result = self.evaluate()
         self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
-        self.assertIn("superseded", result.message)
+        self.assertIn("higher-numbered ARM", result.message)
 
 
 if __name__ == "__main__":

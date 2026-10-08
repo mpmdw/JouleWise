@@ -274,5 +274,23 @@
     "line": 66,
     "phrase": "physical common-time",
     "reason": "Migration inventory explicitly denies physical common-time replay; R_cm uses the shared-energy-sign/local-corner numerator."
+  },
+  {
+    "path": "configs/campaigns/v5_claim_25g83/analysis_plan_block5.md",
+    "line": 354,
+    "phrase": "common-time",
+    "reason": "Block-5 analysis plan (section on dominance ratios) explicitly denies the retired rationale: R_cm passing licenses no physical-common-time robustness claim (D-165 addendum 2026-09-04)."
+  },
+  {
+    "path": "configs/campaigns/v5_claim_25g83/analysis_plan_block5.md",
+    "line": 354,
+    "phrase": "common-time robustness",
+    "reason": "Block-5 analysis plan (section on dominance ratios) explicitly denies the retired rationale: R_cm passing licenses no physical-common-time robustness claim (D-165 addendum 2026-09-04)."
+  },
+  {
+    "path": "configs/campaigns/v5_claim_25g83/analysis_plan_block5.md",
+    "line": 354,
+    "phrase": "physical common-time",
+    "reason": "Block-5 analysis plan (section on dominance ratios) explicitly denies the retired rationale: R_cm passing licenses no physical-common-time robustness claim (D-165 addendum 2026-09-04)."
   }
 ]

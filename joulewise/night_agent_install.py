@@ -632,6 +632,18 @@ class Prepared:
         return selected
 
     def render(self, labels, require_published=True):
+        qualified = False
+        if self.plan.receipt_class == "TRANSACTION_PACK" and getattr(self.plan, "pack_night", None) is not None:
+            locator = self.plan.pack_night["authorization_record"]
+            try:
+                path = Path(locator["path"])
+                if path.is_absolute() and not any(p.is_symlink() for p in (path, *path.parents)):
+                    raw = path.read_bytes()
+                    if _digest_bytes(raw) == locator["sha256"]:
+                        authorization = json.loads(raw)
+                        qualified = isinstance(authorization, dict) and authorization.get("purpose") == "G2B_SHAKEDOWN"
+            except (OSError, ValueError):
+                pass  # Routing adds observation; the driver still authenticates launch authority.
         # Validate the future installed argv even when reading staged plan bytes.
         plan_path = (self.plan_path if require_published else
                      (Path(self.plan.custody_root) / "night_plan.json").resolve())
@@ -653,7 +665,14 @@ class Prepared:
             values.update({"@@{}@@".format(key.upper()): str(value) for key, value in calendar.items()})
             payload = re.sub(r"com\.joulewise\.night|@@[A-Z_]+@@",
                 lambda match: escape(values.get(match.group(0), match.group(0))), text).encode("utf-8")
-            if plistlib.loads(payload).get("ProcessType") != "Interactive":
+            rendered = plistlib.loads(payload)
+            if not index and qualified:
+                rendered["ProgramArguments"] = [self.python,
+                    str(self.repo / "scripts/produce_t0_rehearsal_bundle.py"), "run-driver",
+                    "--plan", str(plan_path), "--timeout-s", str(self.plan.window_max_s),
+                    "--courier-bin", self.courier]
+                payload = plistlib.dumps(rendered, sort_keys=False)
+            if rendered.get("ProcessType") != "Interactive":
                 raise Refused(3, "ProcessType must be exactly Interactive: " + label)
             yield label, payload
 
@@ -723,6 +742,13 @@ def _digest(path):
 def _digest_bytes(value):
     import hashlib
     return hashlib.sha256(value).hexdigest()
+
+
+def _digest_or_none(path):
+    try:
+        return _digest(path)
+    except OSError:
+        return None
 
 
 def interpreter_identity(python):
@@ -1233,11 +1259,30 @@ def validate_install(args, repo):
     # (Prepared.launch_context) and before admission's mkdir; it follows plan
     # validation so the reading is as fresh as the read-only phase allows.
     battery_observation, _battery_raw = battery_float.observe(
-        phase="validate_install", runner=BATTERY_PROBE_RUNNER)
+        phase="validate_install", runner=BATTERY_PROBE_RUNNER, plan_id=plan.plan_id)
+    # This module also runs from minimal installer clones. Keep this custody
+    # write independent of the desk harvester and its analysis imports.
+    directory = args.plan.parent
+    if any(path.is_symlink() for path in (directory, *directory.parents)):
+        raise Refused(3, "battery observation custody traverses a symlink")
+    name = "battery-float-install-check-{}".format(battery_observation["monotonic_before_ns"])
+    for suffix, raw in ((".ioreg", _battery_raw),
+                        (".json", (json.dumps(battery_observation, sort_keys=True) + "\n").encode())):
+        with (directory / (name + suffix)).open("xb") as stream:
+            os.chmod(stream.name, 0o600)
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+    hazard = plan.receipt_class == "HAZARD_PACK"
     try:
         battery_float.require_pass(battery_observation)
     except (battery_float.ProbeError, ValueError) as exc:
-        raise Refused(3, "battery not at float: {}".format(exc)) from exc
+        if not hazard:
+            raise Refused(3, "battery not at float: {}".format(exc)) from exc
+        # Block 5: the arm-time battery hazard module inside the launchd job
+        # is the gate. Install time only records this reading (written above).
+        print("battery not at float at install (recorded only; the arm-time battery module "
+              "is the gate): {}".format(exc), file=sys.stderr)
     prepared = Prepared(plan, args.plan, repo, python, template, str(Path(courier).resolve()),
                         courier_path, schedule, run_night.install_spans_for_day,
                         getattr(args, "probe_timeout_s", 600))
@@ -1260,6 +1305,17 @@ def validate_install(args, repo):
         supplied = getattr(args, field, None)
         if supplied is not None and supplied != schedule["night_calendar"][field.capitalize()]:
             raise Refused(2, "--{} must match the plan calendar".format(field))
+    if hazard:
+        # A HAZARD_PACK chain is never executed at install: it refuses both
+        # inspection modes, and the instrument cadence probe runs inside the
+        # launchd job at arm (the hazard instrument module), not here. The
+        # chain's bytes are recorded against their sidecar at launch.
+        if args.render_only is not None:
+            print(json.dumps({"payload_kind": "hazard_pack", "chain_sha256": _digest_or_none(plan.chain_path),
+                              "input_digests": None,
+                              "detail": "HAZARD_PACK: no reservation inspection; the arm runs in the launchd job"},
+                             sort_keys=True))
+        return prepared
     if args.render_only is not None:
         from joulewise import night_gate
         chain = Path(plan.chain_path)
@@ -1402,6 +1458,9 @@ def main(argv=None):
         repo = Path(__file__).resolve().parents[1]
         if args.launchd_probe:
             prepared = validate_install(args, repo)
+            if prepared.plan.receipt_class == "HAZARD_PACK":
+                raise Refused(2, "HAZARD_PACK windows have no install-time launchd probe: the instrument "
+                                 "cadence probe runs inside the launchd job at arm")
             launchd_probe(prepared, adapter.executable, shield, args.probe_timeout_s, args.probe_max_age_s)
             return 0
         def validate():

@@ -293,7 +293,7 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
             shutil.copy2(ROOT / relative, repository / relative)
         # Prospective reference inputs may be uncommitted alongside the
         # generators, so the clone must grade those working-tree bytes too.
-        for directory in ("neg8_reference_corpus_v5", "window_references_v5"):
+        for directory in ("neg8_reference_corpus_v5", "window_references_v5", "window_reference_spares_v5"):
             relative = Path("configs/campaigns") / directory
             shutil.copytree(ROOT / relative, repository / relative, dirs_exist_ok=True)
         return repository
@@ -941,7 +941,7 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
                     )
                     self.assertEqual(len(configs), 100)
                     for path in configs:
-                        self.assertEqual(json.loads(path.read_bytes())["sampling"]["idle_seconds"], 75.0)
+                        self.assertEqual(json.loads(path.read_bytes())["sampling"]["idle_seconds"], 57.6)
                     decode_configs = configs[:50]
                     prefill_configs = configs[50:]
                     decode_manifest = json.loads(

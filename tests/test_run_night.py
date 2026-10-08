@@ -31,6 +31,7 @@ from zoneinfo import ZoneInfo
 from joulewise.measurement_liveness import Identity
 from joulewise import calibration_ledger, night_gate
 from joulewise.night_plan_writer import write_night_plan
+from tests import process_reaper
 from tests.git_fixture import init_git_fixture
 from tests import battery_float_fixture
 
@@ -1192,7 +1193,7 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual([], calls)
         prepare.assert_not_called()
         author.assert_not_called()
-        self.assertEqual(("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"), events[0])
+        self.assertEqual(("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"), events[0])
         night = self.custody / "night"
         for name in ("receipt.json", "refusal.json"):
             record = json.loads((night / name).read_text())
@@ -1375,7 +1376,7 @@ runpy.run_path(script, run_name='__main__')
             pass
         def killed_during_probe(pid):
             record = json.loads((night / "chain.started").read_text())
-            self.assertEqual(set(record), {"pid", "pgid", "epoch_s"})
+            self.assertEqual(set(record), {"pid", "pgid", "epoch_s", "monotonic_ns"})
             self.assertEqual(record["pid"], pid)
             self.assertEqual(self.driver._read_started_pgid(night / "chain.started"), pid)
             with self.assertRaises(OSError):
@@ -1401,7 +1402,7 @@ runpy.run_path(script, run_name='__main__')
             self.assertEqual(target, night / "chain.started")
             before = json.loads(target.read_text())
             after = json.loads(source.read_text())
-            self.assertEqual(set(before), {"pid", "pgid", "epoch_s"})
+            self.assertEqual(set(before), {"pid", "pgid", "epoch_s", "monotonic_ns"})
             self.assertEqual({k: after[k] for k in before}, before)
             self.assertEqual(after["start_time"], "Tue Sep 8 01:02:03 2026")
             replace(source, target)
@@ -1420,7 +1421,7 @@ runpy.run_path(script, run_name='__main__')
         night = self.custody / "night"
         claim = json.loads((night / "chain.started").read_text())
         self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
-        self.assertEqual(set(claim), {"pid", "pgid", "epoch_s", "start_time"})
+        self.assertEqual(set(claim), {"pid", "pgid", "epoch_s", "start_time", "monotonic_ns"})
         self.assertEqual(claim["start_time"], "Tue Sep 8 01:02:03 2026")
         self.identity_mock.assert_called_once_with(claim["pid"])
         self.assertNotEqual(claim["pid"], os.getpid())
@@ -1552,7 +1553,7 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual("night_aborted_agent_present", result["aborted_reason"])
         self.assertEqual("night_aborted_agent_present", refusal["refusal"]["reason"])
         self.assertEqual("20 claude\n", result["census_hits"][0]["stdout"])
-        self.assertEqual(["/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"], result["census_hits"][0]["argv"])
+        self.assertEqual(["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], result["census_hits"][0]["argv"])
 
     def test_courier_uses_one_launch_three_retries_and_every_backoff(self) -> None:
         plan = self.driver._load_plan(self.plan_path)
@@ -2685,10 +2686,11 @@ runpy.run_path(script, run_name='__main__')
         self.assertLess(self.driver.install_close_epoch(plan),
                         plan.t0_epoch_s - REQUEST_LEAD_S)
 
-    def test_fixed_epoch_install_close_is_1799999400(self) -> None:
+    def test_fixed_epoch_install_close_is_1799999700(self) -> None:
+        # t0 - PLAN_LEAD_S (180 s since PLAN2 A2) - INSTALL_CLOSE_MARGIN_S (120 s).
         plan = replace(self.driver._load_plan(self.plan_path), t0_epoch_s=1800000000,
                        window_max_s=9000)
-        self.assertEqual(1799999400, self.driver.install_close_epoch(plan))
+        self.assertEqual(1799999700, self.driver.install_close_epoch(plan))
 
     def test_fixed_epoch_deadman_is_1800012900(self) -> None:
         plan = replace(self.driver._load_plan(self.plan_path), t0_epoch_s=1800000000,
@@ -3957,7 +3959,16 @@ class PackNightProducerTests(unittest.TestCase):
         confirmation_ref = self.write(self.custody / "confirmation.json", self.confirmation)
         self.manifest = self.inputs / "launch-manifest.json"
         self.write(self.manifest, {"schema_version": readiness.LAUNCH_MANIFEST_SCHEMA})
-        self.write(self.inputs / "arm-context.json", {"custody_root": str(self.custody)})
+        from tests.test_arm_readiness_schemas import arm_context
+        context = arm_context(self.root)
+        context["custody_root"] = str(self.root / "arm-root")
+        for key in readiness.ARM_CONTEXT_KEYS - readiness.ARM_CONTEXT_NON_PATH_KEYS:
+            path = Path(context[key])
+            if key == "waiver_path":
+                path.write_bytes(b"[]\n")
+            else:
+                path.mkdir(parents=True, exist_ok=True)
+        self.write(self.inputs / "arm-context.json", context)
         self.plan = night_gate.NightPlan(plan_id="pack-plan", receipt_class="TRANSACTION_PACK",
             t0_epoch_s=datetime(2026, 9, 2, 1, 0).timestamp(), window_max_s=60,
             authored_epoch_s=datetime(2026, 9, 2, 0, 59).timestamp(), repo_head=HEAD,
@@ -4038,6 +4049,8 @@ class PackNightProducerTests(unittest.TestCase):
         def spawn(command, **kwargs):
             self.events.append("LAUNCH")
             self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
+            self.assertEqual(kwargs["env"]["ARM_RECEIPT"], str(self.arm_path))
+            self.assertEqual(kwargs["env"]["LAUNCH_MANIFEST"], str(self.manifest))
             calls.append(command)
             import socket
             channel = socket.socket(fileno=os.dup(kwargs["pass_fds"][0]))
@@ -4280,7 +4293,7 @@ class PackNightProducerTests(unittest.TestCase):
         self.assertEqual("REFUSED", result["verdict"])
         self.assertEqual("night_refused_agent_present", result["aborted_reason"])
         census = json.loads((night / "censuses.jsonl").read_text().splitlines()[0])
-        self.assertEqual(["/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"], census["argv"])
+        self.assertEqual(["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], census["argv"])
         self.assertEqual("20 claude\n", census["stdout"])
         self.assertFalse((night / "go_receipt.json").exists())
 
@@ -4408,6 +4421,10 @@ class PackNightProducerTests(unittest.TestCase):
                         case._window_id = case.custody.name if prefixed else "production-window"
                         case.authorization.update(purpose="T0_REHEARSAL" if rehearsal else "CAMPAIGN_TRANSACTION",
                             authority="T0-UNATTENDED-01" if rehearsal else "V5-TRANSACTION-GO-01")
+                        if rehearsal:
+                            context = json.loads((case.inputs / "arm-context.json").read_bytes())
+                            context["custody_root"] = str(case.custody)
+                            case.write(case.inputs / "arm-context.json", context)
                         ref = case.write(case.custody / "authorization.json", case.authorization)
                         case.plan = replace(case.plan, measurement_root=str(measurement),
                             pack_night={**case.plan.pack_night, "authorization_record": ref})
@@ -6064,7 +6081,7 @@ class CourierDeliveryBoundaryTests(unittest.TestCase):
     admitted_night = EvidenceProbeTests.admitted_night
 
     def run_terminated_night(self, after_chain=lambda night: None, *, wait=True,
-                             termination_proven=True):
+                             termination_proven=True, courier_process=None):
         """Seat-78 chain fixture; real result, inventory, argv and courier flow."""
         from tests.test_night_gate import EvidenceRegistrationTests, make_plan
         source = EvidenceRegistrationTests().source()
@@ -6082,7 +6099,7 @@ class CourierDeliveryBoundaryTests(unittest.TestCase):
 
         def accepted_delivery(*args, **kwargs):
             (night / 'courier.sent').write_text('accepted fixture email')
-            return mock.Mock()
+            return courier_process if courier_process is not None else mock.Mock(wait=mock.Mock(return_value=0))
 
         with ExitStack() as stack:
             for name, replacement in (
@@ -6114,6 +6131,21 @@ class CourierDeliveryBoundaryTests(unittest.TestCase):
             courier.assert_not_called()
             prompt = None
         return code, prompt
+
+    def test_delivered_courier_timeout_preserves_successful_chain_verdict(self):
+        process = mock.Mock(pid=4242)
+        process.wait.side_effect = [subprocess.TimeoutExpired('fixture-courier', 0), -signal.SIGTERM]
+        process.poll.return_value = -signal.SIGTERM
+        with mock.patch.object(self.driver, '_signal_group'):
+            code, _ = self.run_terminated_night(courier_process=process)
+        self.assertEqual(code, self.driver.EXIT_GO)
+        result = json.loads((self.f.custody / 'night/result.json').read_text())
+        self.assertEqual(result['verdict'], 'GO')
+        self.assertEqual(result['chain_exit_code'], 0)
+        outcome = json.loads((self.f.custody / 'night/courier.json').read_text())
+        self.assertTrue(outcome['sent'])
+        self.assertTrue(outcome['timed_out'])
+        self.assertEqual(outcome['exit_code'], -signal.SIGTERM)
 
     def assert_artifact_error(self, error):
         result = json.loads((self.f.custody / 'night/result.json').read_text())
@@ -6489,3 +6521,465 @@ class EvidenceProbeFailureTests(unittest.TestCase):
                 mock.patch.object(self.driver.subprocess,'run',return_value=subprocess.CompletedProcess([],0,marker,'')):
             self.assertEqual(self.driver._evidence_probe_worker(self.f.plan,self.f.plan_path,receipt,time.monotonic()+2,lambda *args:None),2)
         self.assertIn('changed during',json.loads(receipt.read_text())['refusal_code'])
+
+
+class CourierReapingTests(unittest.TestCase):
+    """Benign local children exercise the real delivery and observation path."""
+
+    def setUp(self):
+        from scripts import run_night
+        self.driver = run_night
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.night = self.root / "night"
+        self.night.mkdir()
+        self.journal = self.night / "process-observations.jsonl"
+        self.children = []
+        self.addCleanup(self.reap_children)
+
+    def reap_children(self):
+        for process in self.children:
+            if process.returncode is None:
+                process._journal = None
+                process.kill()
+                process.wait(timeout=5)
+
+    def delivered_child(self, *, hang=False, code=0, budget=2, deadman_epoch_s=None):
+        from joulewise import t0_rehearsal as t0
+        child = self.root / "courier.py"
+        child.write_text(
+            "from pathlib import Path\nimport time\n"
+            f"Path({str(self.night / 'courier.sent')!r}).write_text('fixture delivery')\n"
+            + ("time.sleep(60)\n" if hang else f"raise SystemExit({code})\n")
+        )
+        structural = self.night / "result.json"
+        structural.write_text('{"verdict":"PASS","chain_exit_code":0}\n')
+        before = structural.read_bytes()
+        spawn = t0.observed_popen
+        def retain(*args, **kwargs):
+            process = spawn(*args, **kwargs)
+            self.children.append(process)
+            return process
+        started = time.monotonic()
+        with t0.process_journal(self.journal, observe_only=True), \
+                mock.patch.object(t0, "observed_popen", side_effect=retain), \
+                mock.patch.object(self.driver, "_courier_prelaunch", return_value=[sys.executable, "-B", str(child)]), \
+                mock.patch.object(self.driver, "COURIER_DEADLINE_S", budget):
+            outcome = self.driver.run_courier(
+                self.root, types.SimpleNamespace(plan_id="s1-local"), child,
+                deadman_epoch_s=deadman_epoch_s)
+        self.assertLess(time.monotonic() - started, 5)
+        self.assertEqual(structural.read_bytes(), before)
+        self.assertTrue(outcome["sent"])
+        self.assertEqual(outcome["attempted"], 1)
+        self.assertIsNone(outcome["last_error"])
+        self.assertTrue((self.night / "courier.sent").is_file())
+        self.assertFalse((self.night / "courier.lock").exists())
+        events = [json.loads(line) for line in self.journal.read_bytes().splitlines()]
+        self.assertEqual([event["event"] for event in events], ["spawn", "exit", "seal"])
+        self.assertEqual(events[-1]["record_count"], 2)
+        self.assertIsNotNone(self.children[0].returncode)
+        self.assertEqual(events[1]["exit_code"], self.children[0].returncode)
+        self.assertEqual(events[1]["exit_code"], outcome["exit_code"])
+        self.assertEqual(events[1]["timed_out"], outcome["timed_out"])
+        attempt = json.loads((self.night / "courier.attempts.jsonl").read_text())
+        self.assertEqual(attempt["exit_code"], outcome["exit_code"])
+        self.assertEqual(attempt["timed_out"], outcome["timed_out"])
+        return outcome
+
+    def test_delivered_courier_is_reaped_before_journal_seal(self):
+        outcome = self.delivered_child()
+        self.assertEqual(outcome["exit_code"], 0)
+        self.assertFalse(outcome["timed_out"])
+
+    def test_still_running_delivered_courier_records_timeout_without_revoking_delivery(self):
+        outcome = self.delivered_child(hang=True, budget=0.2)
+        self.assertTrue(outcome["timed_out"])
+        self.assertEqual(outcome["exit_code"], -signal.SIGTERM)
+
+    def test_delivered_courier_nonzero_exit_does_not_revoke_delivery(self):
+        outcome = self.delivered_child(code=7)
+        self.assertEqual(outcome["exit_code"], 7)
+        self.assertFalse(outcome["timed_out"])
+
+    def test_delivered_courier_exit_wait_respects_deadman_epoch(self):
+        outcome = self.delivered_child(hang=True, deadman_epoch_s=time.time() + 0.2)
+        self.assertTrue(outcome["timed_out"])
+
+    def test_exit_wait_uses_remaining_attempt_budget_capped_by_deadman(self):
+        for deadman, expected in ((None, 50.0), (1020.0, 20.0)):
+            with self.subTest(deadman=deadman):
+                process = mock.Mock()
+                process.wait.return_value = 0
+                with mock.patch.object(self.driver, "_courier_prelaunch", return_value=["fixture"]), \
+                        mock.patch.object(self.driver.t0_rehearsal, "observed_popen", return_value=process), \
+                        mock.patch.object(self.driver, "_wait_for_courier", return_value=(True, True)), \
+                        mock.patch.object(self.driver, "COURIER_DEADLINE_S", 300), \
+                        mock.patch.object(self.driver.time, "monotonic", side_effect=[100.0, 350.0]), \
+                        mock.patch.object(self.driver.time, "time", return_value=1000.0):
+                    outcome = self.driver.run_courier(
+                        self.root, types.SimpleNamespace(plan_id="s1-local"), Path("fixture"),
+                        deadman_epoch_s=deadman)
+                process.wait.assert_called_once_with(timeout=expected)
+                self.assertTrue(outcome["sent"])
+
+
+class Ruling76DriverTests(unittest.TestCase):
+    def test_durable_record_excludes_raw_logs_for_every_nonclaim_purpose(self):
+        driver = _load_driver()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            for purpose in ('G2B_SHAKEDOWN', 'T0_REHEARSAL', 'CAMPAIGN_TRANSACTION', 'DIAGNOSTIC_NO_PACK'):
+                custody = root / purpose; night = custody / 'night'; night.mkdir(parents=True)
+                for name in ('chain.stdout.log', 'chain.stderr.log'):
+                    (night / name).write_text('private per-member duration energy power\n')
+                plan = types.SimpleNamespace(plan_id='fixture', receipt_class=('DIAGNOSTIC_NO_PACK' if purpose == 'DIAGNOSTIC_NO_PACK' else 'TRANSACTION_PACK'))
+                def git(argv, **kwargs):
+                    if argv[:4] == ['git', 'clone', '--depth', '1']: Path(argv[-1]).mkdir()
+                    return types.SimpleNamespace(stdout='fixture-origin\n', returncode=0)
+                with mock.patch.object(driver.t0_rehearsal, 'observed_run', side_effect=git), \
+                     mock.patch.object(driver.night_gate, '_authenticate_pack_records', return_value={'authorization_record': {'purpose': purpose}}):
+                    self.assertIsNone(driver._durable_record(custody, night, plan))
+                    destination = custody / 'results-clone/docs/process_traces/night-results/fixture'
+                    for name in ('chain.stdout.log', 'chain.stderr.log'):
+                        self.assertEqual((destination / name).exists(), purpose == 'CAMPAIGN_TRANSACTION')
+                        self.assertTrue((night / name).exists())
+                    # A stale local copy must not survive the next nonclaim publish.
+                    if purpose != 'CAMPAIGN_TRANSACTION':
+                        (destination / 'chain.stdout.log').write_text('stale leak')
+                        driver._durable_record(custody, night, plan)
+                        self.assertFalse((destination / 'chain.stdout.log').exists())
+
+    def test_observer_faults_do_not_change_success_or_failure_chain_rc(self):
+        for code, error in ((0, RuntimeError('fixture producer')), (5, RuntimeError('fixture producer')),
+                            (0, SystemExit(19)), (5, SystemExit(19))):
+            fixture = PackNightProducerTests('test_driver_self_authors_arm_before_go_and_pins_all_eight_flags')
+            fixture.setUp()
+            try:
+                driver = fixture.driver
+                with mock.patch.object(driver, '_run_chain_once', return_value=(code, None, 1, [], True)), \
+                     mock.patch('scripts.produce_t0_rehearsal_bundle.observe_s1_lifecycle', side_effect=error):
+                    result = driver.run_night(fixture.plan_path)
+                self.assertEqual(result, driver.EXIT_GO if code == 0 else driver.EXIT_CHAIN_FAILED)
+                self.assertEqual(json.loads((fixture.custody / 'night/result.json').read_bytes())['chain_exit_code'], code)
+                self.assertTrue((fixture.custody / 'night/producer-faults.jsonl').exists())
+            finally:
+                fixture.doCleanups()
+
+    def test_a1_and_a2_author_verify_then_return_without_go_or_launcher(self):
+        from scripts import check_v5_arm_abort as checker
+        for occurrence in ('a1', 'a2'):
+            fixture = PackNightProducerTests('test_driver_self_authors_arm_before_go_and_pins_all_eight_flags')
+            fixture.setUp()
+            try:
+                driver = fixture.driver
+                context_path = fixture.custody / 'arm-only-context.json'
+                context = {'occurrence': occurrence, 'arm_context':
+                           json.loads((fixture.inputs / 'arm-context.json').read_bytes())}
+                fixture.write(context_path, context)
+                prepared = driver._prepare_pack_night(fixture.plan, fixture.plan_path, fixture.raw)
+                with mock.patch.object(checker, 'context_at', return_value=(context, fixture.plan, prepared)), \
+                     mock.patch.object(checker, 'absence', return_value={key: True for key in checker.ABSENCE_KEYS}), \
+                     mock.patch.object(driver, '_admit_qualification_control_order'), \
+                     mock.patch.object(driver, '_capture_qualification_t0'), \
+                     mock.patch.object(driver, '_admit_network_time_off'), \
+                     mock.patch.object(driver, '_admit_derivation_clean_dwell'), \
+                     mock.patch.object(driver, '_derivation_start_budget', return_value={}), \
+                     mock.patch.object(driver, '_produce_pack_go') as go, \
+                     mock.patch.object(driver, '_pack_launcher_argv') as launcher, \
+                     mock.patch.object(driver, '_run_chain_once') as chain:
+                    result = driver.arm_only(context_path)
+                self.assertEqual(result['status'], 'PASS')
+                self.assertEqual(result['occurrence'], occurrence)
+                self.assertIsNone(result['go_receipt'])
+                go.assert_not_called(); launcher.assert_not_called(); chain.assert_not_called()
+                self.assertEqual(fixture.events.count('T0'), 1)
+                self.assertEqual(fixture.events.count('ARM'), 1)
+                self.assertEqual(fixture.events.count('VERIFY'), 1)
+                self.assertTrue((fixture.custody / 'night/arm-only.json').exists())
+                self.assertFalse((fixture.custody / 'night/go_receipt.json').exists())
+            finally:
+                fixture.doCleanups()
+
+    def test_qualification_reuses_native_dwell_once_and_enforces_cap(self):
+        driver = _load_driver()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            night = root / 'night'; night.mkdir()
+            inputs = root / 'pack/arm_readiness.t0.inputs'; inputs.mkdir(parents=True)
+            command = ['/bin/bash', '/fixture/prewindow_check.sh', '--wait', '--timeout-min', '45', '--window', 'gamma']
+            plan = types.SimpleNamespace(custody_root=str(root), pack_night={'pack_id': 'pack'}, plan_id='fixture')
+            manifest = {'prewindow_command': command}
+            (inputs / 'launch-manifest.json').write_bytes(driver.readiness.render_json(manifest))
+            capture = {'step_id': 'prewindow-check', 'exit_code': 0, 'boot_session_id': BOOT_UUID,
+                'argv': command, 'started_monotonic_ns': 0, 'finished_monotonic_ns': 600_000_000_000}
+            for elapsed, passed in ((600_000_000_000, True), (599_999_999_999, False), (2_700_000_000_001, False)):
+                (inputs / 'prewindow-check.json').write_bytes(driver.readiness.render_json(dict(capture, finished_monotonic_ns=elapsed)))
+                with mock.patch.object(driver.readiness, '_current_boot_session_id', return_value=BOOT_UUID), \
+                     mock.patch.object(driver, '_derivation_budget_remaining', return_value=100), \
+                     mock.patch.object(driver.t0_rehearsal, 'observed_run') as run:
+                    if passed:
+                        driver._admit_qualification_clean_dwell(plan, night, {})
+                        record = json.loads((night / 'clean_dwell.json').read_bytes())
+                        self.assertTrue(record['reused_native_t0_capture'])
+                        self.assertEqual(record['timeout_s'], 2700)
+                    else:
+                        with self.assertRaises(night_gate.PackNightRefusal):
+                            driver._admit_qualification_clean_dwell(plan, night, {})
+                    run.assert_not_called()
+                (night / 'clean_dwell.json').unlink(missing_ok=True)
+
+    def test_prior_controls_precede_actual_t0_and_dwell_not_only_declared_time(self):
+        from scripts import check_v5_arm_abort as checker
+        driver = _load_driver()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            inputs = root / 'pack/arm_readiness.t0.inputs'; inputs.mkdir(parents=True)
+            plan = types.SimpleNamespace(custody_root=str(root), pack_night={'pack_id': 'pack'})
+            for name in driver.t0_author._CAPTURE_FILES.values():
+                (inputs / name).write_bytes(driver.readiness.render_json({
+                    'boot_session_id': BOOT_UUID, 'started_monotonic_ns': 1000}))
+            control = {'schema_version': checker.CONTROL_SCHEMA, 'occurrence': 'a1', 'verdict': 'PASS',
+                'refusal_reason_code': 'readiness_record_expired', 'boot_session_id': BOOT_UUID,
+                'checked_monotonic_ns': 999, 'absence': {key: True for key in checker.ABSENCE_KEYS}}
+            refs = {}
+            for label in ('a1', 'a2'):
+                path = root / (label + '.json')
+                path.write_bytes(driver.readiness.render_json(dict(control, occurrence=label)))
+                refs[label + '_control'] = {'path': str(path), 'sha256': driver._sha256_path(path)}
+            for occurrence in ('a2', 's1'):
+                with self.subTest(occurrence=occurrence), mock.patch.object(
+                        driver.readiness, '_current_boot_session_id', return_value=BOOT_UUID):
+                    driver._admit_qualification_control_order(plan, {'occurrence': occurrence, 'prerequisites': refs})
+            for field, value in (('checked_monotonic_ns', 1000), ('checked_monotonic_ns', 1001),
+                                 ('boot_session_id', 'other-boot'), ('refusal_reason_code', 'other-refusal')):
+                path = root / 'a2.json'
+                path.write_bytes(driver.readiness.render_json(dict(control, occurrence='a2', **{field: value})))
+                refs['a2_control']['sha256'] = driver._sha256_path(path)
+                with self.subTest(field=field, value=value), mock.patch.object(
+                        driver.readiness, '_current_boot_session_id', return_value=BOOT_UUID):
+                    with self.assertRaises(night_gate.PackNightRefusal):
+                        driver._admit_qualification_control_order(plan, {'occurrence': 's1', 'prerequisites': refs})
+
+
+class QualificationT0StageCapTests(unittest.TestCase):
+    """The capture transport uses the authenticated record's source-bound cap."""
+    def setUp(self):
+        self.f = PackNightProducerTests()
+        self.f.setUp()
+        self.addCleanup(self.f.doCleanups)
+        self.driver = self.f.driver
+        self.night = self.f.custody / 'night'
+        self.night.mkdir(exist_ok=True)
+        self.record_path = self.f.custody / 'qualification-plan-record.json'
+
+    def bind_cap(self, cap, *, arm_only=False):
+        from scripts import write_v5_qualification_plan as writer
+        from joulewise.night_plan_writer import night_plan_mapping
+        source = self.f.root / 'stage-cap-source.json'
+        self.f.write(source, {'seconds': cap})
+        sizing = self.f.inputs / 'kernel-frequency-sizing.json'
+        sizing_ref = self.f.write(sizing, {'fixed': {'t0_stage_cap': {
+            'seconds': cap, 'source': writer.locator(source), 'source_pointer': '/seconds'}}})
+        self.record = {'head': self.f.plan.repo_head, 'pack_night': self.f.plan.pack_night,
+                       'sizing': {'t0_stage_cap_s': cap}, 'plan': writer.locator(self.f.plan_path)}
+        plan_path = self.f.plan_path
+        if arm_only:
+            plan_path = self.f.custody / 'arm-only-context.json'
+            self.record.update(schema_version=writer.ARM_ONLY_SCHEMA,
+                               plan_binding=night_plan_mapping(self.f.plan))
+            self.f.write(plan_path, self.record)
+        else:
+            self.f.write(self.record_path, self.record)
+        # Authentication itself is covered by ClockSizingTests; only the native
+        # transport is mocked here. The returned plan/sizing bytes and their
+        # locators are real, so record/source substitution still fails closed.
+        sources = ({}, writer.locator(plan_path), sizing_ref, {}, {})
+        return sources
+
+    def capture(self, sources, operation):
+        from joulewise import v5_qualification as qualification
+        with mock.patch.object(qualification, 'authenticated_clock_budget', return_value=(100., sources)) as authenticate, \
+             mock.patch.object(self.driver.t0_rehearsal, 'observed_run', side_effect=operation) as run, \
+             mock.patch.object(self.driver, '_chain_environment', return_value={}):
+            self.driver._capture_qualification_t0(self.f.plan)
+        authenticate.assert_called_once_with(self.f.inputs, self.f.plan.pack_night['pack_root'])
+        return run
+
+    def complete(self, argv, **kwargs):
+        from scripts import capture_t0_step as capture
+        for name in capture.STEP_FILENAMES.values():
+            self.f.write(self.f.inputs / name, {'fixture': True})
+        return subprocess.CompletedProcess(argv, 0, b'fixture stdout', b'fixture stderr')
+
+    def test_s1_capture_uses_plan_cap_instead_of_3600_or_fixed_3300(self):
+        sources = self.bind_cap(3340)
+        run = self.capture(sources, self.complete)
+        self.assertEqual(run.call_args.kwargs['timeout'], 3340)
+        self.assertIs(run.call_args.kwargs['stdin'], subprocess.DEVNULL)
+        self.assertEqual((self.night / 't0-capture.stdout.json').read_bytes(), b'fixture stdout')
+
+    def test_arm_only_capture_uses_its_own_plan_record_cap(self):
+        sources = self.bind_cap(3180, arm_only=True)
+        run = self.capture(sources, self.complete)
+        self.assertEqual(run.call_args.kwargs['timeout'], 3180)
+
+    def test_record_cannot_substitute_an_unbound_stage_cap(self):
+        sources = self.bind_cap(3300)
+        self.record['sizing']['t0_stage_cap_s'] = 3600
+        self.f.write(self.record_path, self.record)
+        with self.assertRaisesRegex(night_gate.PackNightRefusal, 'stage cap binding'):
+            self.capture(sources, self.complete)
+        self.assertFalse((self.night / 't0-capture.stdout.json').exists())
+
+    def test_mutated_sizing_bytes_are_refused_before_capture(self):
+        sources = self.bind_cap(3300)
+        Path(sources[2]['path']).write_bytes(b'{}\n')
+        with self.assertRaises(night_gate.PackNightRefusal):
+            self.capture(sources, self.complete)
+        self.assertFalse((self.night / 't0-capture.stdout.json').exists())
+
+    def test_timeout_preserves_partial_output_and_refuses(self):
+        sources = self.bind_cap(3300)
+        def timeout(argv, **kwargs):
+            self.assertEqual(kwargs['timeout'], 3300)
+            raise subprocess.TimeoutExpired(argv, kwargs['timeout'], output=b'partial', stderr=b'timed out')
+        with self.assertRaisesRegex(night_gate.PackNightRefusal, 'stage timed out'):
+            self.capture(sources, timeout)
+        self.assertEqual((self.night / 't0-capture.stdout.json').read_bytes(), b'partial')
+        self.assertEqual((self.night / 't0-capture.stderr.txt').read_bytes(), b'timed out')
+
+
+class HazardPackPrimitiveTests(unittest.TestCase):
+    """Gate-prune lane L2: the shared driver primitives the HAZARD_PACK branch adds.
+
+    The branch itself is driven end to end in tests/test_b5_driver.py.
+    """
+
+    def setUp(self):
+        from tests.fixtures.b5_plan import fake_window
+        self.driver = _load_driver()
+        self.temporary = tempfile.TemporaryDirectory(prefix="run-night-hazard-")
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        now = time.time()
+        mapping = fake_window.hazard_plan_mapping(self.root, plan_id="b5-alpha-1", t0_epoch_s=float(int(now)),
+                                                  window_max_s=3600, authored_epoch_s=now - 60)
+        self.plan = night_gate.NightPlan.from_mapping(mapping)
+        self.night = Path(self.plan.custody_root) / "night"
+        self.night.mkdir(parents=True)
+        self.chain = Path(self.plan.chain_path)
+
+    def probes(self):
+        return night_gate.Probes(
+            run=lambda argv: _probe(tuple(argv), exit_code=1),
+            now_epoch_s=time.time, monotonic_ns=time.monotonic_ns,
+            read_text=lambda path: Path(path).read_text(), checkout_head=lambda: HEAD,
+            measurement_head=lambda _root: HEAD)
+
+    def run_chain(self, text, **keywords):
+        self.chain.write_text(text)
+        claim = self.driver._claim_chain_start(self.night)
+        return self.driver._run_chain_once(self.chain, self.plan, self.probes(), self.night, claim,
+                                           command=["/bin/zsh", "-f", str(self.chain)], **keywords)
+
+    def test_hazard_refusal_codes_validate_only_for_the_hazard_class(self):
+        for reason in sorted(night_gate.HAZARD_DRIVER_REASON_CODES):
+            with self.subTest(reason=reason):
+                document = {"schema": self.driver.REFUSAL_SCHEMA, "receipt_class": "HAZARD_PACK",
+                            "plan_id": "b5-alpha-1", "verdict": "REFUSED",
+                            "refusal": {"reason": reason, "detail": "d", "evidence": None}}
+                self.assertEqual([], self.driver.validate_refusal(document))
+                document["receipt_class"] = "DIAGNOSTIC_NO_PACK"
+                self.assertIn("refusal.reason: is not registered", self.driver.validate_refusal(document))
+        self.assertTrue(set(self.driver._CODES.values())
+                        <= night_gate.NIGHT_GATE_REASON_CODES | night_gate.NIGHT_DRIVER_REASON_CODES)
+
+    def test_hazard_chain_environment_imports_nothing_from_the_qualification_path(self):
+        with mock.patch.dict(sys.modules, {"joulewise.v5_qualification": None}):
+            environment = self.driver._chain_environment(self.plan, self.night)
+        self.assertEqual(str(self.night), environment["NIGHT_DIR"])
+        self.assertEqual(str(self.night / "network_time_off.json"), environment["JOULEWISE_NETWORK_TIME_OFF_RECEIPT"])
+        self.assertNotIn("NIGHT_VERIFY_ONLY", environment)
+
+    def test_supervision_stop_terminates_the_group_and_returns_its_refusal(self):
+        calls = []
+
+        def supervise():
+            calls.append(time.monotonic())
+            if len(calls) < 2:
+                return None
+            return {"reason": "night_stopped_disk_low", "detail": "fixture floor", "evidence": {"free_bytes": 1}}
+
+        started = time.monotonic()
+        exit_code, abort, _count, _hits, proven = self.run_chain("/bin/sleep 120\n", supervise=supervise)
+        self.assertLess(time.monotonic() - started, 60)
+        self.assertTrue(proven)
+        self.assertEqual("night_stopped_disk_low", abort["reason"])
+        self.assertEqual(1, abort["evidence"]["free_bytes"])
+        self.assertIn("group_census", abort["evidence"])
+        self.assertTrue((self.night / "chain.exited").exists())
+
+    def test_supervision_that_raises_never_ends_the_chain(self):
+        def supervise():
+            raise RuntimeError("fixture supervision fault")
+
+        exit_code, abort, *_rest, proven = self.run_chain("/bin/sleep 1\nexit 7\n", supervise=supervise)
+        self.assertEqual((7, None, True), (exit_code, abort, proven))
+        self.assertIn("fixture supervision fault", (Path(self.plan.custody_root) / "night.log").read_text())
+
+    def test_natural_exit_census_proves_survivors_gone_before_recording_the_exit(self):
+        exit_code, abort, *_rest, proven = self.run_chain("/bin/sleep 120 &\nexit 0\n", census_group_on_exit=True)
+        self.assertEqual((0, None, True), (exit_code, abort, proven))
+        census = json.loads((self.night / "chain.exit-census.json").read_text())
+        self.assertFalse(census["absent"])
+        self.assertTrue(census["proven"])
+        exited = json.loads((self.night / "chain.exited").read_text())
+        self.assertEqual(0, exited["exit_code"])
+
+    def test_natural_exit_census_is_off_for_other_callers(self):
+        exit_code, abort, *_rest, proven = self.run_chain("exit 0\n")
+        self.assertEqual((0, None, True), (exit_code, abort, proven))
+        self.assertFalse((self.night / "chain.exit-census.json").exists())
+
+    def test_hazard_rerun_is_refused_once_an_arm_has_run(self):
+        (self.night / "arm_decision.json").write_text("{}")
+        self.assertEqual(self.night / "arm_decision.json", self.driver._existing_record(self.night, self.plan))
+        other = replace(self.plan, receipt_class="DIAGNOSTIC_NO_PACK")
+        self.assertIsNone(self.driver._existing_record(self.night, other))
+
+    def test_run_accepts_dry_arm_only_as_a_run_flag(self):
+        parser = self.driver.build_parser()
+        self.assertTrue(parser.parse_args(["run", "--plan", "p.json", "--dry-arm"]).dry_arm)
+        with self.assertRaises(SystemExit), redirect_stdout(io.StringIO()), \
+                mock.patch("sys.stderr", io.StringIO()):
+            parser.parse_args(["dead-man", "--plan", "p.json", "--dry-arm"])
+
+    def test_dead_man_stops_the_hazard_monitor_a_dead_driver_left_running(self):
+        from tests.fixtures.b5_plan import fake_window
+        from joulewise.b5 import driver as hazard_driver
+        now = time.time()
+        mapping = fake_window.hazard_plan_mapping(self.root / "late", plan_id="b5-alpha-1",
+                                                  t0_epoch_s=float(int(now) - 7200), window_max_s=600,
+                                                  authored_epoch_s=now - 8000)
+        plan_path = self.root / "late-plan.json"
+        plan_path.write_text(json.dumps(mapping))
+        night = Path(mapping["custody_root"]) / "night"
+        night.mkdir(parents=True)
+        for name in ("chain.started", "chain.exited"):
+            (night / name).write_text(json.dumps({"pid": None, "pgid": None, "exit_code": 0,
+                                                  "epoch_s": now, "monotonic_ns": 1}))
+        monitor = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
+        self.addCleanup(process_reaper.kill_and_wait, monitor)
+        identity = self.driver.observe_identity(monitor.pid)
+        (night / hazard_driver.MONITOR_JOURNAL).write_text(json.dumps(
+            {"event": "start", "pid": monitor.pid, "pgid": monitor.pid, "start_time": identity.start_time}) + "\n")
+        self.driver.make_probes = self.probes
+        self.driver._resolve_courier_bin = lambda _bin: (Path("/fixture/courier"), None, None)
+        self.driver._durable_record = mock.Mock(return_value=None)
+        self.driver.run_courier = mock.Mock(return_value={"attempted": 1, "sent": True, "heartbeat_seen": True,
+                                                          "last_error": None})
+        self.assertEqual(self.driver.EXIT_GO, self.driver.dead_man(plan_path))
+        self.assertEqual(-signal.SIGTERM, monitor.wait(timeout=10))
+        self.assertIn("dead-man hazard monitor cleanup", (Path(mapping["custody_root"]) / "night.log").read_text())

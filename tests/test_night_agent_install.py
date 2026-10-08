@@ -232,7 +232,7 @@ class FakeLaunchctl:
 
 class FakeLaunchctlTests(unittest.TestCase):
     def setUp(self):
-        temporary = tempfile.TemporaryDirectory(prefix="iw-txn-instrument-", dir="/tmp")
+        temporary = tempfile.TemporaryDirectory(prefix="iw-txn-instrument-", dir=tempfile.gettempdir())
         self.addCleanup(temporary.cleanup)
         self.fake = FakeLaunchctl(Path(temporary.name) / "fake")
 
@@ -366,7 +366,7 @@ print(json.dumps({"version": list(sys.version_info[:3]),
                                             if name == "joulewise"
                                             or name.startswith("joulewise."))}))
 '''
-        with tempfile.TemporaryDirectory(prefix="iw-txn-system-python-", dir="/tmp") as root:
+        with tempfile.TemporaryDirectory(prefix="iw-txn-system-python-", dir=tempfile.gettempdir()) as root:
             completed = subprocess.run(
                 ["/usr/bin/python3", "-B", "-S", "-c", script, str(repo)],
                 cwd=root,
@@ -838,7 +838,7 @@ def run_signal_cell(machine, prepared, fake, root, options, trace, save_trace):
 
 class TransactionTests(unittest.TestCase):
     def fixture(self, priors=False):
-        temporary = tempfile.TemporaryDirectory(prefix="iw-txn-matrix-", dir="/tmp")
+        temporary = tempfile.TemporaryDirectory(prefix="iw-txn-matrix-", dir=tempfile.gettempdir())
         self.addCleanup(temporary.cleanup)
         fixture = TransactionFixture(temporary.name, priors)
         self.assertEqual(fixture.now, float(fixture.clock_file.read_text()))
@@ -847,7 +847,7 @@ class TransactionTests(unittest.TestCase):
     @contextlib.contextmanager
     def cell(self, priors=False):
         # SubTest does not run TestCase cleanups until the entire product ends.
-        with tempfile.TemporaryDirectory(prefix="iw-txn-cell-", dir="/tmp") as root:
+        with tempfile.TemporaryDirectory(prefix="iw-txn-cell-", dir=tempfile.gettempdir()) as root:
             fixture = TransactionFixture(root, priors)
             self.assertEqual(fixture.now, float(fixture.clock_file.read_text()))
             yield fixture
@@ -1563,7 +1563,7 @@ class CapabilityTests(SignalTestCase):
         super().setUp()
         from joulewise import night_agent_install as engine
         self.engine = engine
-        temporary = tempfile.TemporaryDirectory(prefix="iw-txn-capability-", dir="/tmp")
+        temporary = tempfile.TemporaryDirectory(prefix="iw-txn-capability-", dir=tempfile.gettempdir())
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.fake = FakeLaunchctl(self.root / "fake")
@@ -2321,7 +2321,7 @@ class RenderedProcessTypeTests(unittest.TestCase):
             root = Path(directory)
             calendar = {"Month": 9, "Day": 25, "Hour": 22, "Minute": 0}
             prepared = installer.Prepared(
-                SimpleNamespace(custody_root=str(root), plan_id="test"),
+                SimpleNamespace(custody_root=str(root), plan_id="test", receipt_class="DIAGNOSTIC_NO_PACK"),
                 root / "night_plan.json", repo, sys.executable,
                 (repo / "configs/launchd/com.joulewise.night.plist.template").read_text(),
                 "/bin/true", "/usr/bin:/bin",
@@ -2362,7 +2362,7 @@ class RenderedProcessTypeTests(unittest.TestCase):
             root = Path(directory)
             calendar = {"Month": 9, "Day": 25, "Hour": 22, "Minute": 0}
             prepared = installer.Prepared(
-                SimpleNamespace(custody_root=str(root), plan_id="test"),
+                SimpleNamespace(custody_root=str(root), plan_id="test", receipt_class="DIAGNOSTIC_NO_PACK"),
                 root / "night_plan.json", repo, sys.executable,
                 (repo / "configs/launchd/com.joulewise.night.plist.template").read_text(),
                 "/bin/true", "/usr/bin:/bin",
@@ -2394,6 +2394,117 @@ class RenderedProcessTypeTests(unittest.TestCase):
                             else:
                                 with self.assertRaisesRegex(installer.Refused, "ProcessType must be exactly Interactive"):
                                     prepared.launch_context()
+
+
+
+class HazardPackInstallTests(unittest.TestCase):
+    """Gate-prune lane L2: the installer accepts HAZARD_PACK plans.
+
+    The install-time battery reading is recorded, never a refusal (the
+    arm-time battery module is the gate), the chain is never executed at
+    install, and there is no install-time launchd probe for this class.
+    """
+
+    def setUp(self):
+        from datetime import datetime
+        from tests.fixtures.b5_plan import fake_window
+        from joulewise import night_agent_install
+        self.engine = night_agent_install
+        self.repo = Path(__file__).resolve().parents[1]
+        self.temporary = tempfile.TemporaryDirectory(prefix="install-hazard-")
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        head = subprocess.check_output(["/usr/bin/git", "-C", str(self.repo), "rev-parse", "HEAD"], text=True).strip()
+        now = time.time()
+        t0 = (int(now) // 60 + 24 * 60) * 60
+        custody = self.root / "custody"
+        custody.mkdir()
+        mapping = fake_window.hazard_plan_mapping(
+            self.root, plan_id="b5-alpha-1", t0_epoch_s=float(t0), window_max_s=3900, authored_epoch_s=now - 60,
+            repo_head=head, measurement_head=head, measurement_root=self.repo, custody_root=custody)
+        self.chain = Path(mapping["chain_path"])
+        self.chain.write_text("#!/bin/zsh -f\ntouch " + str(self.root / "CHAIN-EXECUTED") + "\n")
+        Path(mapping["chain_sha256_path"]).write_text(
+            hashlib.sha256(self.chain.read_bytes()).hexdigest() + "  chain.zsh\n")
+        self.plan_path = custody / "night_plan.json"
+        self.plan_path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n")
+        bin_dir = self.root / "bin"
+        bin_dir.mkdir()
+        courier = bin_dir / "claude"
+        courier.write_text("#!/bin/sh\nexit 99\n")
+        courier.chmod(0o755)
+        self.path = str(bin_dir) + os.pathsep + os.environ.get("PATH", "")
+
+    def install(self, *arguments, capture="charging-synthetic-from-real.ioreg"):
+        import contextlib
+        import io
+        from unittest import mock
+        from tests import battery_float_fixture
+        calls = []
+        real_run = subprocess.run
+
+        def recorded(argv, *args, **kwargs):
+            calls.append([str(item) for item in argv])
+            return real_run(argv, *args, **kwargs)
+
+        out, err = io.StringIO(), io.StringIO()
+        saved = {number: signal.getsignal(number) for number in self.engine.SIGNALS}
+        try:
+            with mock.patch.dict(os.environ, {"PATH": self.path}), \
+                    mock.patch.object(self.engine, "BATTERY_PROBE_RUNNER", battery_float_fixture.runner(capture)), \
+                    mock.patch.object(subprocess, "run", side_effect=recorded), \
+                    contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = self.engine.main(["--plan", str(self.plan_path), "--python", sys.executable, *arguments])
+        finally:
+            for number, handler in saved.items():
+                signal.signal(number, handler)
+        return code, out.getvalue(), err.getvalue(), calls
+
+    def test_render_only_accepts_a_hazard_plan_and_only_records_a_charging_battery(self):
+        rendered = self.root / "rendered"
+        code, out, err, calls = self.install("--render-only", str(rendered))
+        self.assertEqual(0, code, err)
+        self.assertIn("recorded only", err)
+        observation = next(self.plan_path.parent.glob("battery-float-install-check-*.json"))
+        self.assertFalse(json.loads(observation.read_text())["passed"])
+        self.assertTrue(any(line.startswith("{") and '"hazard_pack"' in line for line in out.splitlines()))
+        self.assertTrue(all(str(self.chain) not in argv for argv in calls), "install executed the chain")
+        self.assertTrue(any("preflight" in argv for argv in calls), "the driver preflight still runs")
+        self.assertFalse((self.root / "CHAIN-EXECUTED").exists())
+        for label in LABELS:
+            self.assertTrue((rendered / (label + ".plist")).is_file())
+
+    def test_there_is_no_install_time_launchd_probe_for_this_class(self):
+        # The installer first requires that a launchctl program exists, and
+        # only then reads the plan and refuses the probe for this class. macOS
+        # has /bin/launchctl; Linux has none, so there the first check stopped
+        # the installer ("launchctl executable not found") before the refusal
+        # under test. A stand-in named launchctl, first on the test's PATH,
+        # meets that requirement on every system. It also keeps this test off
+        # the real launchctl: were it ever run, it would leave a marker file.
+        stand_in = self.root / "bin" / "launchctl"
+        marker = self.root / "LAUNCHCTL-EXECUTED"
+        stand_in.write_text("#!/bin/sh\ntouch " + str(marker) + "\nexit 97\n")
+        stand_in.chmod(0o755)
+        code, _out, err, calls = self.install("--launchd-probe")
+        self.assertEqual(2, code)
+        self.assertIn("no install-time launchd probe", err)
+        self.assertFalse(any(argv and argv[0].endswith("launchctl") for argv in calls))
+        self.assertFalse(marker.exists(), "the installer ran launchctl")
+        self.assertFalse((self.root / "CHAIN-EXECUTED").exists())
+
+    def test_without_a_launchctl_program_the_probe_request_stops_at_that_check(self):
+        # The counterpart: with no launchctl on PATH at all (every Linux
+        # machine), the installer says so and runs nothing.
+        from unittest import mock
+        empty = self.root / "no-launchctl-here"
+        empty.mkdir()
+        with mock.patch.object(self, "path", str(empty)):
+            code, _out, err, calls = self.install("--launchd-probe")
+        self.assertEqual(2, code)
+        self.assertEqual("launchctl executable not found\n", err)
+        self.assertEqual([], calls)
+        self.assertFalse((self.root / "CHAIN-EXECUTED").exists())
 
 
 if __name__ == "__main__":

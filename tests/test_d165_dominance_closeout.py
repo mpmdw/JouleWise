@@ -343,6 +343,7 @@ def _production_sources() -> tuple[dict, dict, dict]:
         manifest = finalize_prospective_analysis_manifest_v3(
             fixture["prospective_path"],
             plan_tree_path=fixture["plan_tree_path"],
+            acceptance_bound_path=fixture["acceptance_path"],
             custody_root=fixture["root"],
             runs_root=fixture["runs_root"],
             whole_window_verdict_path=fixture["verdict_path"],
@@ -935,6 +936,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 finalize_prospective_analysis_manifest_v3(
                     fixture["prospective_path"],
                     plan_tree_path=fixture["plan_tree_path"],
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                     runs_root=fixture["runs_root"],
                     whole_window_verdict_path=fixture["verdict_path"],
@@ -1909,6 +1911,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 manifest = finalize_prospective_analysis_manifest_v3(
                     fixture["prospective_path"],
                     plan_tree_path=fixture["plan_tree_path"],
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                     runs_root=fixture["runs_root"],
                     whole_window_verdict_path=fixture["verdict_path"],

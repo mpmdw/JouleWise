@@ -101,11 +101,8 @@ class ArmCensusTests(unittest.TestCase):
         for executable, args, permitted in (
             ("/bin/claude", (), True),
             ("/bin/claude", ("--resume", "session"), True),
-            ("/bin/node", ("--require", "loader", "/opt/t3-code/dist/cli.js"), True),
-            ("/bin/node", ("/opt/t3-code/dist/helper.js",), False),
-            ("/bin/node", ("/x/t3-code-fork/y.js",), False),
-            ("/bin/node", ("other.js", "/opt/t3-code/dist/cli.js"), False),
-            ("/Applications/T3 Code.app/Contents/MacOS/T3 Code", (), False),
+            # The T3 Code CLI is no root since the T3 prune (Ed, 2026-10-07).
+            ("/bin/node", ("--require", "loader", "/opt/t3-code/dist/cli.js"), False),
             ("/fake/claude/versions/2.1.3", (), False),
             ("/bin/notclaude", (), False),
             ("/bin/echo", ("claude",), False),
@@ -151,7 +148,7 @@ class ArmCensusTests(unittest.TestCase):
             ("/bin/claude", ("--print=json", "task"), "claude_print"),
         )
         for executable, args, category in cases:
-            for root in (row(20, 1, "/bin/claude"), row(20, 1, "/bin/node", "/opt/t3-code/dist/cli.js")):
+            for root in (row(20, 1, "/bin/claude"),):
                 with self.subTest(executable=executable, args=args, root=root.executable):
                     fixture = observation(root, row(30, 20, "/bin/zsh", "-c", "tool"),
                         row(40, 30, executable, *args), row(50, 20, "/bin/codex", "mcp-server"), hits=(20, 50))
@@ -246,7 +243,6 @@ class ArmCensusTests(unittest.TestCase):
         for root in (
             row(20, 1, "/bin/claude"),
             row(20, 1, "/bin/claude", "--print=json", "magistrate"),
-            row(20, 1, "/bin/node", "/opt/t3-code/dist/cli.js"),
         ):
             with self.subTest(root=root):
                 fixture = observation(
@@ -334,7 +330,7 @@ class ArmCensusTests(unittest.TestCase):
         with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
             arm_census.ARM_DISCOVERY_ARGV, 0, "20\n", "")) as run:
             observed = arm_census.observe_arm_census(caller_pid=90, reader=reader)
-        run.assert_called_once_with(("/usr/bin/pgrep", "-f", "[c]odex|[c]laude|[t]3"),
+        run.assert_called_once_with(("/usr/bin/pgrep", "-f", "[c]odex|[c]laude"),
                                     capture_output=True, text=True, check=False, timeout=30)
         self.assertEqual(1, reader.inventory_calls)
         self.assertEqual([20, 30, 40], reader.reads)
@@ -456,7 +452,7 @@ class ArmCensusTests(unittest.TestCase):
         self.assertEqual("night_refused_agent_present", receipt.refusal.reason)
         self.assertEqual("FAIL", next(c.status for c in receipt.conditions if c.condition_id == "C3"))
         self.assertEqual("20 claude\n", receipt.refusal.evidence[0].stdout)
-        self.assertEqual(("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"), receipt.refusal.evidence[0].argv)
+        self.assertEqual(("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"), receipt.refusal.evidence[0].argv)
         source.results[night_gate.AGENT_CENSUS_ARGV] = result(night_gate.AGENT_CENSUS_ARGV, exit_code=1)
         with mock.patch.object(night_gate, "D166_REGISTRATION_SHA256",
                                hashlib.sha256(source.text[stub.registration_path].encode()).hexdigest()):

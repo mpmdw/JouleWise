@@ -1,0 +1,1109 @@
+"""Battery hazard: the Mac is on battery, charging, or its battery current is not ~0.
+
+Two sources (lane 2026-10-06-smc-battery-meter):
+
+- **State** (on AC or not, charging or not) comes from
+  ``/usr/sbin/ioreg -r -c AppleSmartBattery``; the exact stdout bytes are kept.
+- **Current** comes from the SMC key ``B0AC`` (battery current in mA, negative
+  = discharging), read in process by :mod:`joulewise.hazards.smc` once a
+  second in the window and once at each arm read.  The registry's
+  ``InstantAmperage`` is republished only every 60 s; the wall-meter probe of
+  2026-10-06 saw B0AC bursts to -865 mA during inference while every registry
+  value read 0.  ``InstantAmperage`` stays in every record as a cross-check
+  and is judged only when no SMC reading is available, which is disclosed as
+  ``battery.smc_unavailable``.
+
+The registry side, as before:  The frozen BFG grammar (``battery_float.parse``)
+reads ExternalConnected, IsCharging, InstantAmperage (signed), Amperage
+(gauge-averaged), UpdateTime and Voltage; it is reused, not edited.  The
+``PowerTelemetryData`` accumulators and the adapter wattage are read by a
+separate line reader in this module.
+
+Arm (plan §2.3): ExternalConnected Yes; IsCharging No; |SMC B0AC| <= 200 mA
+(|InstantAmperage| <= 200 mA when B0AC cannot be read); the ioreg reading no
+older than 180 s.  An ioreg probe or parse failure is UNMEASURED and refuses.
+
+In the window the monitor polls every 5 s and keeps the raw bytes whenever
+UpdateTime changes (a new gauge publication; the gauge publishes every 60 s).
+The 5 s poll reads the grammar's six fields in process
+(:class:`RegistryReader`, about 0.03 ms of CPU against 13 ms for an ``ioreg``
+child); ``ioreg`` itself runs only when one of them changes, so each
+publication is read once, by the grammar, within 5 s of appearing.  The
+monitor also reads the SMC keys once a second and journals each read as a
+battery ``reading`` line with ``values = {"source": "smc", "smc": {...}}``.
+The member rule of plan §3.4 is :func:`span_findings`; its current half is
+:func:`smc_span_findings`.
+
+Battery assist (ruling 2026-10-06, ``RULING_battery_assist_2026-10-06.md``):
+in a member's span, discharge on AC while not charging (a negative battery
+current, or a discharge-accumulator mean beyond 200 mA x V; the reads below
+-200 mA are counted in its report) is ``battery.assist`` (DISCLOSE;
+``battery.assist_outside_request`` when only the phases around the measured
+request were assisted, which decides nothing): the processor rails are regulated downstream of the supply, so
+their energy does not depend on whether the adapter or the battery supplied
+it, and excluding assisted members would select members by load.  Charging
+(above +200 mA, IsCharging Yes, a charge-accumulator mean above 200 mA x V),
+AC loss (ExternalConnected No) and missing evidence stay exclusions
+(``battery.member_span``, ``battery.unmeasured``).  The arm is unchanged: at
+idle it refuses on ExternalConnected No, IsCharging Yes or |B0AC| > 200 mA of
+either sign, because idle discharge on AC means the adapter is not supplying
+the machine.
+
+Accumulator units (lane L1 check, 2026-10-05, on recorded and live bytes)
+-------------------------------------------------------------------------
+Data: 66 distinct archived publications with ``PowerTelemetryData`` (UpdateTime
+1790373525 to 1791193581: the 09-25 float captures, every c1 and c2
+calibration capture of 10-01, block 3's 10-03 and 10-04 captures and the
+premortem desk reads of 10-05) plus a live desk read at UpdateTime 1791249441.
+
+1. ``SystemPowerIn`` is the adapter input power in mW: it equals
+   ``SystemVoltageIn`` (mV) x ``SystemCurrentIn`` (mA) / 1000 to within 1.7 %
+   on all 66 publications (e.g. 27139 mV x 2047 mA = 55.55 W against 54919;
+   27408 x 496 = 13.59 W against 13619).
+2. ``SystemLoad`` = ``SystemPowerIn`` - ``BatteryPower`` (mW).  The one
+   publication with a nonzero instant BatteryPower (c2 d06 post, UpdateTime
+   1790899521) reads SystemPowerIn 91581, SystemLoad 91715, BatteryPower -134:
+   91581 - (-134) = 91715 exactly.  BatteryPower > 0 is charging, < 0 is
+   discharging.  The gauge's InstantAmperage read 0 at that same publication.
+3. Each ``Accumulated*`` field adds its instantaneous mW value once per tick;
+   each ``*AccumulatorCount`` counts ticks.  Ticks run at 0.980 to 0.991 per
+   UpdateTime second over all 65 intervals (594 per 600 s; 178 per 180 s;
+   51795 per 52320 s), so one tick is about 1.01 s and accumulated/count is
+   the mean power in mW over the counted ticks.  Between consecutive publications
+   dAccumulatedSystemPowerIn / dSystemPowerInAccumulatorCount gives a mean
+   input power (32.6 W during a calibration capture, 3.2 W idle) consistent
+   with the instantaneous readings.
+4. BatteryPower is split by sign into two accumulators:
+   ``AccumulatedBatteryPower`` / ``BatteryPowerAccumulatorCount`` sum the
+   charging ticks (positive), ``AccumulatedBatteryDischarge`` /
+   ``BatteryDischargeAccumulatorCount`` sum the discharging ticks (negative;
+   ioreg prints them as unsigned 64-bit two's complement).  Proven by an exact
+   identity on every one of the 65 consecutive-publication intervals:
+   d(AccumulatedSystemLoad) - d(AccumulatedSystemPowerIn)
+       = -(d(AccumulatedBatteryDischarge) + d(AccumulatedBatteryPower)),
+   with zero residual on all 65 (e.g. 81318250 = 81460902 - 142652 across
+   09-25 20:47 to 10-01 06:17).
+5. Positive control on a real event: between the 09-25 20:47 publication
+   (discharge count 7627) and the 10-01 06:17 t0 publication (22670), the
+   discharge accumulator gained 15043 ticks at a mean of -5415 mW.  The
+   archived 10-01 04:24:54Z gauge reading inside that interval (the 0555Z
+   attempt) was -447 mA at 12180 mV = -5444 mW.  They agree within 0.6 %.
+6. The battery assists briefly even on a 140 W adapter: each of the 28
+   archived calibration captures (180 or 240 s between its pre and post
+   publications) shows 7-32 discharge ticks at a mean of -122 to -151 mW
+   (about -11 mA at 12.2 V) while InstantAmperage read 0 at both bounding
+   publications.  That is far below the 2.4 W rule; it is disclosed as
+   ``battery.accumulator_activity``.
+   ``BatteryPowerAccumulatorCount`` stayed at 4727 (no charging tick) from
+   10-01 to the live read of 10-05.
+
+So the unit of ``AccumulatedBatteryPower`` (and of the discharge
+accumulator) per count is mW, i.e. about mJ per tick, and the accumulator
+rule of §3.4 is applied: on an interval between two publications that
+overlaps a member's span, |d(accumulated)/d(count)| above 200 mA x the
+publication's Voltage (2.436 W at 12180 mV) excludes the member for the
+charge sign and is disclosed as ``battery.assist`` for the discharge sign.
+"""
+
+from __future__ import annotations
+
+import ctypes
+import json
+import re
+import sys
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
+from typing import Any
+
+from joulewise import battery_float
+from joulewise.hazards import smc
+from joulewise.hazards.base import (
+    PASS, REFUSE, UNMEASURED, Context, Measurement, Verdict, coverage_gap, finding,
+    require_thresholds, row,
+)
+
+MODULE = "battery"
+IOREG_BATTERY_ARGV = battery_float.IOREG_BATTERY_ARGV
+PROBE_TIMEOUT_S = battery_float.PROBE_TIMEOUT_S
+ProbeError = battery_float.ProbeError
+
+DEFAULT_THRESHOLDS: dict[str, Any] = {
+    "limit_ma": battery_float.LIMIT_MA,                  # 200 mA, #421
+    "max_update_age_s": battery_float.MAX_UPDATE_AGE_S,  # 180 s
+    "max_unobserved_s": 120,  # in window: no publication for longer -> battery.unmeasured
+}
+# In window: B0AC refreshes once a second and the monitor reads it once a
+# second; a span with a gap longer than this between good B0AC reads (or none
+# at all) falls back to the registry current rule and is disclosed as
+# battery.smc_unavailable.  Read as ``thresholds.get("smc_max_gap_s", ...)``,
+# not a DEFAULT_THRESHOLDS key: window plans copy every DEFAULT_THRESHOLDS key
+# from the sealed registration (joulewise/b5/plan.py), which predates it.
+SMC_MAX_GAP_S = 5
+SMC_CURRENT_KEY = "B0AC"   # mA, signed; negative = discharging
+SMC_VOLTAGE_KEY = "B0AV"   # mV
+SMC_UNAVAILABLE = "battery.smc_unavailable"
+# Ruling 2026-10-06 (night-archive wallmeter-probe/verify/RULING_battery_assist):
+# discharge on AC in a member's span is disclosed, never excluded.
+ASSIST = "battery.assist"
+# The same disclosure when only the phases outside the measured request
+# (prepare, idle baseline, warm-up, the post-request sentinel) were assisted:
+# they are reported and decide nothing (ruling item 5).
+ASSIST_OUTSIDE_REQUEST = "battery.assist_outside_request"
+ARM_THRESHOLD_KEYS = ("limit_ma", "max_update_age_s")
+
+ACCUMULATOR_FIELDS = (
+    "BatteryPower", "AccumulatedBatteryPower", "BatteryPowerAccumulatorCount",
+    "AccumulatedBatteryDischarge", "BatteryDischargeAccumulatorCount",
+    "SystemPowerIn", "AccumulatedSystemPowerIn", "SystemPowerInAccumulatorCount",
+    "SystemLoad", "AccumulatedSystemLoad", "SystemLoadAccumulatorCount",
+    "SystemVoltageIn", "SystemCurrentIn", "PowerTelemetryErrorCount",
+)
+_TOP_LINE = re.compile(rb'^ {6}"(PowerTelemetryData|AdapterDetails)" = \{(.*)\}$', re.M)
+_INT_MEMBER = re.compile(rb'"([A-Za-z0-9_]+)"=([0-9]{1,20})(?=[,}]|$)')
+_UPDATE_TIME = re.compile(rb'^ {6}"UpdateTime" = ([0-9]{1,20})$', re.M)
+
+
+# --------------------------------------------------------------------------
+# Reading
+
+
+def _signed64(text: bytes) -> int:
+    value = int(text)
+    if value >= 2 ** 64:
+        raise ValueError("integer exceeds 64 bits")
+    return value - 2 ** 64 if value >= 2 ** 63 else value
+
+
+def read_accumulators(raw: bytes) -> dict[str, Any]:
+    """The separate line reader: top-level PowerTelemetryData and AdapterDetails.
+
+    Returns ``{"power_telemetry": {field: int|None}, "adapter_watts": int|None}``.
+    Absent lines give None values; a malformed member is skipped, never guessed.
+    """
+
+    telemetry: dict[str, int | None] = {name: None for name in ACCUMULATOR_FIELDS}
+    watts = None
+    for match in _TOP_LINE.finditer(raw):
+        name, body = match.group(1), match.group(2)
+        members = {key.decode(): value for key, value in _INT_MEMBER.findall(body)}
+        if name == b"PowerTelemetryData":
+            for field in ACCUMULATOR_FIELDS:
+                if field in members:
+                    telemetry[field] = _signed64(members[field])
+        elif name == b"AdapterDetails" and "Watts" in members:
+            watts = _signed64(members["Watts"])
+    return {"power_telemetry": telemetry, "adapter_watts": watts}
+
+
+def update_time(raw: bytes) -> int | None:
+    """The top-level UpdateTime without the full grammar (the monitor's cheap check)."""
+
+    match = _UPDATE_TIME.search(raw)
+    return int(match.group(1)) if match else None
+
+
+# --------------------------------------------------------------------------
+# The in-process poll
+
+
+REGISTRY_CLASS = b"AppleSmartBattery"
+# The six top-level properties the frozen grammar judges (ExternalConnected,
+# IsCharging, InstantAmperage, Amperage, UpdateTime, Voltage).
+REGISTRY_KEYS = ("UpdateTime", "ExternalConnected", "IsCharging", "InstantAmperage", "Amperage",
+                 "Voltage")
+_CF_STRING_ENCODING_UTF8 = 0x08000100
+_CF_NUMBER_SINT64 = 4
+
+
+class RegistryReader:
+    """The grammar's six fields read in process from the AppleSmartBattery entry
+    of the IO registry: the same properties ``ioreg -r -c AppleSmartBattery``
+    prints, without a child process.
+
+    ``read()`` returns ``{key: int | bool | None}`` (None: the property is
+    absent); InstantAmperage and Amperage come back signed.  Each read matches
+    the service afresh (``IOServiceGetMatchingService``) and copies one
+    property at a time (``IORegistryEntryCreateCFProperty``): read-only, and a
+    driver that re-registers is never read through a stale entry.  Raises
+    OSError off macOS, when the service is absent, or on an unexpected value
+    type.  tests/hazards/test_battery.py checks it against ``ioreg`` live.
+
+    It is a trigger, never a measurement: the monitor runs ``ioreg``, whose
+    bytes the frozen grammar judges and the custody keeps, whenever a value
+    read here changes.
+    """
+
+    def __init__(self) -> None:
+        if sys.platform != "darwin":
+            raise OSError("the IO registry requires macOS")
+        iokit = ctypes.CDLL("/System/Library/Frameworks/IOKit.framework/IOKit")
+        cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+        iokit.IOServiceMatching.restype = ctypes.c_void_p
+        iokit.IOServiceMatching.argtypes = [ctypes.c_char_p]
+        iokit.IOServiceGetMatchingService.restype = ctypes.c_uint
+        iokit.IOServiceGetMatchingService.argtypes = [ctypes.c_uint, ctypes.c_void_p]
+        iokit.IORegistryEntryCreateCFProperty.restype = ctypes.c_void_p
+        iokit.IORegistryEntryCreateCFProperty.argtypes = [ctypes.c_uint, ctypes.c_void_p,
+                                                          ctypes.c_void_p, ctypes.c_uint]
+        iokit.IOObjectRelease.restype = ctypes.c_int
+        iokit.IOObjectRelease.argtypes = [ctypes.c_uint]
+        cf.CFStringCreateWithCString.restype = ctypes.c_void_p
+        cf.CFStringCreateWithCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32]
+        cf.CFGetTypeID.restype = ctypes.c_ulong
+        cf.CFGetTypeID.argtypes = [ctypes.c_void_p]
+        cf.CFNumberGetTypeID.restype = ctypes.c_ulong
+        cf.CFBooleanGetTypeID.restype = ctypes.c_ulong
+        cf.CFNumberGetValue.restype = ctypes.c_bool
+        cf.CFNumberGetValue.argtypes = [ctypes.c_void_p, ctypes.c_long, ctypes.c_void_p]
+        cf.CFBooleanGetValue.restype = ctypes.c_bool
+        cf.CFBooleanGetValue.argtypes = [ctypes.c_void_p]
+        cf.CFRelease.argtypes = [ctypes.c_void_p]
+        self._iokit, self._cf = iokit, cf
+        self._number, self._boolean = cf.CFNumberGetTypeID(), cf.CFBooleanGetTypeID()
+        self._keys: dict[str, int] = {}
+        for name in REGISTRY_KEYS:
+            ref = cf.CFStringCreateWithCString(None, name.encode("ascii"), _CF_STRING_ENCODING_UTF8)
+            if not ref:
+                self.close()
+                raise OSError(f"CFStringCreateWithCString({name}) failed")
+            self._keys[name] = ref
+
+    def read(self) -> dict[str, int | bool | None]:
+        matching = self._iokit.IOServiceMatching(REGISTRY_CLASS)
+        if not matching:
+            raise OSError("IOServiceMatching(AppleSmartBattery) failed")
+        service = self._iokit.IOServiceGetMatchingService(0, matching)  # consumes ``matching``
+        if not service:
+            raise OSError("no AppleSmartBattery service in the IO registry")
+        try:
+            return {name: self._value(service, name, key) for name, key in self._keys.items()}
+        finally:
+            self._iokit.IOObjectRelease(service)
+
+    def _value(self, service: int, name: str, key: int) -> int | bool | None:
+        ref = self._iokit.IORegistryEntryCreateCFProperty(service, key, None, 0)
+        if not ref:
+            return None
+        try:
+            kind = self._cf.CFGetTypeID(ref)
+            if kind == self._boolean:
+                return bool(self._cf.CFBooleanGetValue(ref))
+            if kind == self._number:
+                value = ctypes.c_int64()
+                if not self._cf.CFNumberGetValue(ref, _CF_NUMBER_SINT64, ctypes.byref(value)):
+                    raise OSError(f"{name} is not an exact 64-bit integer")
+                return value.value
+            raise OSError(f"{name} has CF type id {kind}, not a number or boolean")
+        finally:
+            self._cf.CFRelease(ref)
+
+    def close(self) -> None:
+        for ref in self._keys.values():
+            self._cf.CFRelease(ref)
+        self._keys = {}
+
+
+def _grammar(raw: bytes, wall_time_s: float) -> dict[str, Any]:
+    """The frozen BFG grammar on one captured ioreg document.
+
+    The only place this package calls the grammar.  It replays one observation
+    at a given wall time and never consumes or produces a window verdict, the
+    raw-boundary use that ``tests/test_battery_float_consumers.py`` registers
+    by its exact call text.
+    """
+
+    return battery_float.parse(raw, wall_time_s)
+
+
+def parse_reading(raw: bytes, wall_time_s: float) -> dict[str, Any]:
+    """The frozen grammar's fields plus the accumulators.  Raises ProbeError on a
+    reading the grammar refuses; a stale reading is returned with its age (the
+    judge refuses it)."""
+
+    try:
+        parsed = _grammar(raw, wall_time_s)
+    except ProbeError as exc:
+        age = getattr(exc, "update_age_s", None)
+        if age is None:
+            raise
+        # Stale is a judged property, not a probe failure: re-read the same
+        # bytes at the gauge's own UpdateTime to obtain the fields.
+        parsed = _grammar(raw, wall_time_s - age)
+        parsed["update_age_s"] = age
+    values = {
+        "external_connected": parsed["external_connected"],
+        "is_charging": parsed["is_charging"],
+        "instant_amperage_ma": parsed["instant_amperage_ma"],
+        "amperage_ma": parsed["amperage_ma"],
+        "voltage_mv": parsed["voltage_mv"],
+        "update_time_s": parsed["update_time_s"],
+        "update_age_s": parsed["update_age_s"],
+        "fully_charged": parsed["fully_charged"],
+        "current_capacity_pct": parsed["current_capacity_pct"],
+    }
+    values.update(read_accumulators(raw))
+    return values
+
+
+SmcRead = Callable[[], Mapping[str, Any]]
+
+
+def smc_sample(read: SmcRead | None, ctx: Context | None = None) -> dict[str, Any]:
+    """One SMC read as journaled: ``{"values", "errors", "started", "finished"}``.
+
+    ``read`` returns :meth:`smc.Reader.read`'s shape; None, or a read that
+    raises, gives every key an error.  Never raises.
+    """
+
+    started = ctx.stamp().to_json() if ctx is not None else None
+    if read is None:
+        sample: dict[str, Any] = {"values": {key: None for key in smc.KEYS},
+                                  "errors": {key: "no SMC reader" for key in smc.KEYS}}
+    else:
+        try:
+            got = read()
+            sample = {"values": dict(got.get("values") or {}), "errors": dict(got.get("errors") or {})}
+        except Exception as exc:  # a reader that raises is a failed read, never a crash
+            sample = {"values": {key: None for key in smc.KEYS},
+                      "errors": {key: f"{type(exc).__name__}: {exc}" for key in smc.KEYS}}
+    if ctx is not None:
+        sample["started"] = started
+        sample["finished"] = ctx.stamp().to_json()
+    return sample
+
+
+def smc_current(sample: Mapping[str, Any] | None) -> tuple[int | None, str | None]:
+    """``(B0AC in mA, None)`` from a journaled SMC sample, or ``(None, why not)``."""
+
+    if not isinstance(sample, Mapping):
+        return None, "no SMC sample"
+    value = (sample.get("values") or {}).get(SMC_CURRENT_KEY)
+    error = (sample.get("errors") or {}).get(SMC_CURRENT_KEY)
+    if error:  # a value beside an error is not trusted
+        return None, str(error)
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None, f"{SMC_CURRENT_KEY} is {value!r}, not an integer"
+    return value, None
+
+
+def measure(ctx: Context, *, smc_read: SmcRead | None = None) -> Measurement:
+    """The arm's instant read: ioreg (state, the frozen grammar) and one SMC read (current).
+
+    ``smc_read`` is the SMC seam (:func:`smc.read_once` in production through
+    ``arm.Seams``); None records the SMC as unavailable and the judge falls
+    back to the registry's InstantAmperage.
+    """
+
+    started = ctx.stamp()
+    completed = ctx.run(IOREG_BATTERY_ARGV, PROBE_TIMEOUT_S)
+    sample = smc_sample(smc_read, ctx)
+    raw_refs = (ctx.keep_raw("battery.ioreg", completed.stdout),)
+    current, why = smc_current(sample)
+    values: dict[str, Any] = {"argv": list(IOREG_BATTERY_ARGV), "returncode": completed.returncode,
+                              "stderr": completed.stderr.decode("utf-8", errors="replace"),
+                              "smc": sample, "smc_current_ma": current, "smc_unavailable": why}
+    error = None
+    if completed.error:
+        error = f"ioreg could not run: {completed.error}"
+    elif completed.timed_out:
+        error = f"ioreg timed out after {PROBE_TIMEOUT_S} s"
+    elif completed.returncode != 0:
+        error = f"ioreg exit code {completed.returncode}"
+    else:
+        try:
+            values.update(parse_reading(completed.stdout, started.wall_ns / 1e9))
+        except ValueError as exc:  # ProbeError is a ValueError
+            error = f"ioreg bytes refused by the BFG grammar: {exc}"
+    finished = ctx.stamp()
+    return Measurement(MODULE, "instant", values, raw_refs, started, finished, error)
+
+
+# --------------------------------------------------------------------------
+# Judge
+
+
+def judge(measurement: Measurement, thresholds: Mapping[str, Any]) -> Verdict:
+    limits = require_thresholds(MODULE, thresholds, ARM_THRESHOLD_KEYS)
+    if measurement.module != MODULE:
+        raise ValueError("battery.judge received another module's measurement")
+    if measurement.error:
+        return Verdict(MODULE, UNMEASURED, (measurement.error,), limits)
+    values = measurement.values
+    current, why = smc_current(values.get("smc"))
+    # The current rule reads SMC B0AC; the registry InstantAmperage is judged
+    # only when B0AC could not be read (disclosed as battery.smc_unavailable).
+    reasons = list(reading_reasons(values, limits, include_amperage=False,
+                                   include_instant=current is None))
+    if current is not None and abs(current) > limits["limit_ma"]:
+        reasons.append(f"|SMC B0AC| {abs(current)} mA > {limits['limit_ma']} mA")
+    if values["update_age_s"] > limits["max_update_age_s"]:
+        reasons.append(f"UpdateTime stale: {values['update_age_s']:g} s > "
+                       f"{limits['max_update_age_s']} s")
+    observed = {key: values[key] for key in ("external_connected", "is_charging",
+                                             "instant_amperage_ma", "amperage_ma",
+                                             "update_age_s", "voltage_mv")}
+    observed["adapter_watts"] = values.get("adapter_watts")
+    observed["current_source"] = "smc" if current is not None else "registry"
+    observed["smc_current_ma"] = current
+    observed["smc"] = values.get("smc")
+    observed["flags"] = ([] if current is not None else
+                         [{"code": SMC_UNAVAILABLE, "detail": f"SMC B0AC not read ({why}); "
+                           "the registry InstantAmperage was judged instead"}])
+    return Verdict(MODULE, REFUSE if reasons else PASS, tuple(reasons), limits, observed)
+
+
+def reading_reasons(values: Mapping[str, Any], limits: Mapping[str, Any], *,
+                    include_amperage: bool, include_instant: bool = True) -> list[str]:
+    """The registry rule on one reading.  ``include_instant``/``include_amperage``
+    judge the registry's InstantAmperage/Amperage; both are off when SMC B0AC
+    covers the current (the state fields are always judged)."""
+
+    reasons = []
+    if values["external_connected"] is not True:
+        reasons.append("ExternalConnected is not Yes (on battery)")
+    if values["is_charging"] is not False:
+        reasons.append("IsCharging is not No (charging)")
+    if include_instant and abs(values["instant_amperage_ma"]) > limits["limit_ma"]:
+        reasons.append(f"|InstantAmperage| {abs(values['instant_amperage_ma'])} mA > "
+                       f"{limits['limit_ma']} mA")
+    amperage = values.get("amperage_ma")
+    if include_amperage and amperage is not None and abs(amperage) > limits["limit_ma"]:
+        reasons.append(f"|Amperage| {abs(amperage)} mA > {limits['limit_ma']} mA")
+    return reasons
+
+
+# --------------------------------------------------------------------------
+# Accumulators and the member rule (plan §3.4)
+
+
+ACCUMULATOR_SIGNS = (("charge", "AccumulatedBatteryPower", "BatteryPowerAccumulatorCount"),
+                     ("discharge", "AccumulatedBatteryDischarge",
+                      "BatteryDischargeAccumulatorCount"))
+
+
+def accumulator_interval(earlier: Mapping[str, Any], later: Mapping[str, Any]) -> dict[str, Any]:
+    """Mean battery power between two publications, split by sign, in mW.
+
+    ``charge_mean_mw`` = d(AccumulatedBatteryPower) / d(BatteryPowerAccumulatorCount)
+    and ``discharge_mean_mw`` = d(AccumulatedBatteryDischarge) /
+    d(BatteryDischargeAccumulatorCount), each over its own nonzero ticks
+    (None when no tick of that sign occurred).
+
+    Each sign is read on its own.  ``<sign>_unavailable`` is None when that
+    sign's rule can be evaluated, otherwise the reason it cannot: a field not
+    read at both publications, a counter that went backward (a reboot or gauge
+    reset), or energy that moved with no tick.  ``available`` is True only
+    when both signs can be evaluated.
+    """
+
+    a = earlier.get("power_telemetry") or {}
+    b = later.get("power_telemetry") or {}
+    result: dict[str, Any] = {}
+    for label, total, count in ACCUMULATOR_SIGNS:
+        result[f"{label}_ticks"] = None
+        result[f"{label}_mean_mw"] = None
+        result[f"{label}_unavailable"] = None
+        if any(item.get(name) is None for item in (a, b) for name in (total, count)):
+            result[f"{label}_unavailable"] = f"{total} or {count} not read at both publications"
+            continue
+        ticks = b[count] - a[count]
+        energy = b[total] - a[total]
+        result[f"{label}_ticks"] = ticks
+        result[f"{label}_energy_mw_ticks"] = energy
+        if ticks < 0:
+            result[f"{label}_unavailable"] = f"{count} went backward by {-ticks}: a counter reset"
+        elif ticks == 0 and energy != 0:
+            result[f"{label}_unavailable"] = f"{total} moved by {energy} with no {count} tick"
+        elif ticks:
+            result[f"{label}_mean_mw"] = energy / ticks
+    result["available"] = all(result[f"{label}_unavailable"] is None
+                              for label, _total, _count in ACCUMULATOR_SIGNS)
+    return result
+
+
+def publications(readings: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Distinct gauge publications from monitor journal readings, in time order.
+
+    A publication is the first good reading carrying a new UpdateTime.  Its
+    time is UpdateTime mapped into the controller's monotonic domain through
+    that reading's own (wall, monotonic) stamp pair.
+    """
+
+    seen: dict[int, dict[str, Any]] = {}
+    for item in readings:
+        values = item.get("values") or {}
+        if item.get("error") or values.get("update_time_s") is None:
+            continue
+        key = values["update_time_s"]
+        if key in seen:
+            continue
+        stamp = item["started"]
+        offset_ns = stamp["wall_ns"] - stamp["monotonic_ns"]
+        seen[key] = {"update_time_s": key, "monotonic_ns": key * 1_000_000_000 - offset_ns,
+                     "values": values, "reading": item}
+    return [seen[key] for key in sorted(seen)]
+
+
+def smc_samples(readings: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Every SMC read in battery journal readings, in time order.
+
+    A reading carries one when its ``values`` hold an ``smc`` sample (the
+    monitor's 1 s ``source: smc`` lines, and the SMC read attached to each
+    ``ioreg`` line).  Its time is the sample's own ``finished`` stamp when it
+    has one, else the line's.  ``current_ma`` is B0AC, or None with ``error``.
+    ``fresh`` is False for a good read whose five SMC values all equal the
+    previous good read's: the SMC republishes the block about once a second
+    (largest gap between changes 1.01 s over 580 s of recorded idle, load and
+    recovery on 10-06), so an unchanged block is a repeat, not a new reading.
+    """
+
+    out = []
+    for item in readings:
+        values = item.get("values") or {}
+        sample = values.get("smc")
+        if not isinstance(sample, Mapping):
+            continue
+        stamp = sample.get("finished") or item.get("finished") or {}
+        moment = stamp.get("monotonic_ns")
+        if isinstance(moment, bool) or not isinstance(moment, int):
+            continue
+        current, why = smc_current(sample)
+        if current is None and values.get("source") == "smc" and item.get("error"):
+            why = item["error"]
+        block = tuple((sample.get("values") or {}).get(key) for key in smc.KEYS)
+        out.append({"monotonic_ns": moment, "current_ma": current, "error": why,
+                    "voltage_mv": (sample.get("values") or {}).get(SMC_VOLTAGE_KEY), "block": block})
+    out.sort(key=lambda entry: entry["monotonic_ns"])
+    previous = None
+    for entry in out:
+        if entry["current_ma"] is None:
+            entry["fresh"] = False
+            continue
+        entry["fresh"] = entry["block"] != previous
+        previous = entry["block"]
+    return out
+
+
+def current_disposition(current_ma: float | int | None, limit_ma: float | int) -> str | None:
+    """The member rule's reading of one battery current (ruling 2026-10-06).
+
+    ``"charge"`` when the current is above +``limit_ma`` (charging: the
+    member is excluded, ``battery.member_span``); ``"assist"`` when it is
+    below -``limit_ma`` (the battery assisting the adapter on AC: disclosed);
+    None within the limit or when there is no current.  Positive = charging,
+    negative = discharging, for B0AC and the registry's
+    InstantAmperage/Amperage alike (``verify/b0ac_validation.md``).
+    """
+
+    if current_ma is None or isinstance(current_ma, bool):
+        return None
+    if current_ma > limit_ma:
+        return "charge"
+    if current_ma < -limit_ma:
+        return "assist"
+    return None
+
+
+def _in_force(entries: Sequence[Mapping[str, Any]], window: Sequence[int]) -> list[Mapping[str, Any]]:
+    """The entries in force for ``window`` (time-ordered ``monotonic_ns``): the last
+    at or before its start, every one inside it, the first at or after its stop."""
+
+    start, stop = window
+    before = [entry for entry in entries if entry["monotonic_ns"] <= start]
+    inside = [entry for entry in entries if start < entry["monotonic_ns"] < stop]
+    after = [entry for entry in entries if entry["monotonic_ns"] >= stop]
+    return ([before[-1]] if before else []) + inside + ([after[0]] if after else [])
+
+
+def assist_phases(span: Mapping[str, Any], request: Mapping[str, Any] | None
+                  ) -> list[tuple[str, list[int], bool]]:
+    """``(phase, [start, stop], decides)`` for a member span (ruling item 5).
+
+    With a request window inside the span: ``pre_request`` (prepare's tail,
+    idle baseline, warm-up), ``request`` (the measured run) and
+    ``post_request``; only the request decides the member's assist marker.
+    Without a request inside the span, the whole span is one deciding phase,
+    ``span``.  (The same phases as the harvest copy, ``harvest.battery_phases``.)
+    """
+
+    start, stop = span["monotonic_ns"]
+    window = (request or {}).get("monotonic_ns") if isinstance(request, Mapping) else None
+    if not window or not start <= window[0] <= window[1] <= stop:
+        return [("span", [start, stop], True)]
+    phases = []
+    if start < window[0]:
+        phases.append(("pre_request", [start, window[0]], False))
+    phases.append(("request", [window[0], window[1]], True))
+    if window[1] < stop:
+        phases.append(("post_request", [window[1], stop], False))
+    return phases
+
+
+def smc_phase(good: Sequence[Mapping[str, Any]], window: Sequence[int], limit_ma: float | int,
+              hold_ns: int) -> tuple[dict[str, Any], dict[str, Any], list[int]]:
+    """``(structure, energy, negative stamps)`` of the good SMC B0AC reads over one phase window.
+
+    ``good`` is the good reads of :func:`smc_samples` in time order.  Each
+    read holds its value until the next good read, never longer than
+    ``hold_ns`` (a read older than the coverage gap stands for nothing).  A
+    read belongs to the phase when its hold overlaps the window for a
+    positive time: the read in force at the start does; a read taken at or
+    after the stop does not (it measured the next phase; review F3).  This is
+    the harvest copy's rule (``harvest._smc_phase``).
+
+    Structure (public; no energy): ``smc_reads_in_force`` (the reads that
+    belong to the phase), ``smc_reads_negative`` (of those, B0AC below 0 mA:
+    assist, ruling item 1), ``smc_reads_below`` (B0AC below -``limit_ma``),
+    ``smc_min_ma`` and ``smc_duration_below_s`` (the clipped held time of the
+    reads below -``limit_ma``).  Energy (to ``withheld/`` only):
+    ``discharged_energy_j`` = the clipped held time of each read below 0 mA
+    times -B0AC x B0AV / 10^6 W, and ``voltage_unread_s`` for held time
+    whose read has no positive integer B0AV.  The stamps are those of the
+    negative reads.
+
+    Example: limit 200 mA, window [100 s, 110 s], reads every second at 0 mA
+    except -865 mA at 104 s (B0AV 12180 mV): 10 reads belong (100 s to
+    109 s; the read at 110 s measured the next phase), 1 negative, 1 below,
+    minimum -865 mA, 1.0 s below, 10.53570 J.
+    """
+
+    reads: list[Mapping[str, Any]] = []
+    below_ns = unread_ns = 0
+    joules = 0.0
+    for index, entry in enumerate(good):
+        begin = entry["monotonic_ns"]
+        end = begin + hold_ns
+        if index + 1 < len(good):
+            end = min(end, good[index + 1]["monotonic_ns"])
+        lo, hi = max(begin, window[0]), min(end, window[1])
+        if hi <= lo:
+            continue
+        reads.append(entry)
+        if entry["current_ma"] < -limit_ma:
+            below_ns += hi - lo
+        if entry["current_ma"] < 0:
+            voltage = entry.get("voltage_mv")
+            if isinstance(voltage, int) and not isinstance(voltage, bool) and voltage > 0:
+                joules += -entry["current_ma"] * voltage / 1e6 * (hi - lo) / 1e9
+            else:
+                unread_ns += hi - lo
+    negative = [entry for entry in reads if entry["current_ma"] < 0]
+    structure = {"smc_reads_in_force": len(reads),
+                 "smc_reads_negative": len(negative),
+                 "smc_reads_below": sum(1 for entry in reads if entry["current_ma"] < -limit_ma),
+                 "smc_min_ma": min((entry["current_ma"] for entry in reads), default=None),
+                 "smc_duration_below_s": round(below_ns / 1e9, 3)}
+    energy = {"discharged_energy_j": joules, "voltage_unread_s": round(unread_ns / 1e9, 3)}
+    return structure, energy, [entry["monotonic_ns"] for entry in negative]
+
+
+def smc_span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
+                      thresholds: Mapping[str, Any] = DEFAULT_THRESHOLDS,
+                      ) -> tuple[list[dict[str, Any]], bool]:
+    """The charging half of the 200 mA rule on SMC B0AC, and its coverage: ``(findings, covered)``.
+
+    The good B0AC reads in force are the last at or before the span's start,
+    every one inside it and the first at or after its stop (the publication
+    rule's conservative choice).  Any in-force read above +``limit_ma``
+    (charging) gives one ``battery.member_span`` (EXCLUDE_MEMBER) listing
+    them.  Reads below -``limit_ma`` (battery assist on AC) never exclude;
+    :func:`span_findings` discloses them (``battery.assist``).
+
+    ``covered`` is True when good, fresh reads (:func:`smc_samples`: the SMC
+    block changed since the previous read, so a frozen SMC does not count as
+    coverage) lie no more than ``smc_max_gap_s`` apart across the whole span
+    (:func:`base.coverage_gap`); otherwise ``battery.smc_unavailable``
+    (DISCLOSE) is added and the caller judges the registry current instead.
+
+    Example: limit 200 mA, span [100 s, 110 s], reads every second reading 0
+    except +865 mA at 104 s: one member_span (1 of 12 in-force reads above the
+    limit), covered.  The same span with no read between 101 s and 109 s:
+    smc_unavailable (an 8 s gap > 5 s), not covered.
+    """
+
+    limit = thresholds["limit_ma"]
+    max_gap_ns = int(thresholds.get("smc_max_gap_s", SMC_MAX_GAP_S) * 1_000_000_000)
+    start, stop = span["monotonic_ns"]
+    samples = smc_samples(readings)
+    good = [entry for entry in samples if entry["current_ma"] is not None]
+    in_force = _in_force(good, (start, stop))
+    found: list[dict[str, Any]] = []
+    charging = [entry for entry in in_force if current_disposition(entry["current_ma"], limit) == "charge"]
+    if charging:
+        worst = max(charging, key=lambda entry: entry["current_ma"])
+        found.append(finding(
+            "battery.member_span", span=span, expected=limit,
+            observed={"source": "smc", "key": SMC_CURRENT_KEY, "rule": "charging",
+                      "over_limit": charging[:8], "over_count": len(charging),
+                      "in_force_count": len(in_force), "max_abs_ma": worst["current_ma"]},
+            interval={"monotonic_ns": [charging[0]["monotonic_ns"], charging[-1]["monotonic_ns"]]},
+            detail=(f"SMC B0AC above +{limit} mA (charging) in {len(charging)} of {len(in_force)} "
+                    f"reads in force (largest {worst['current_ma']:+d} mA)")))
+    fresh = [entry for entry in good if entry["fresh"]]
+    gap = coverage_gap([entry["monotonic_ns"] for entry in fresh], start, stop, max_gap_ns)
+    if gap is not None:
+        errors = sorted({entry["error"] for entry in samples
+                         if entry["current_ma"] is None and entry["error"]})
+        if len(fresh) < len(good):
+            errors.append(f"{len(good) - len(fresh)} reads repeated the previous SMC block unchanged")
+        found.append(finding(
+            SMC_UNAVAILABLE, span=span, expected=max_gap_ns / 1e9,
+            observed={"gap_monotonic_ns": gap, "good_reads": len(good), "fresh_reads": len(fresh),
+                      "reads": len(samples), "errors": errors[:4]},
+            interval={"monotonic_ns": gap},
+            detail=(f"no good, fresh SMC B0AC read for more than {max_gap_ns / 1e9:g} s overlapping the "
+                    "span; the registry InstantAmperage/Amperage rule was applied instead"
+                    + (f" (errors: {'; '.join(errors[:2])})" if errors else ""))))
+    return found, gap is None
+
+
+def assist_finding(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
+                   request: Mapping[str, Any] | None, publications_in_force: Sequence[Mapping[str, Any]],
+                   discharge_intervals: Sequence[Sequence[int]], *, limit_ma: float | int,
+                   smc_covered: bool, hold_ns: int = SMC_MAX_GAP_S * 1_000_000_000,
+                   state_unread: bool = False) -> dict[str, Any] | None:
+    """The member's battery-assist disclosure (ruling 2026-10-06, items 1 and 5), or None.
+
+    Assist is a negative battery current on AC while not charging (ruling
+    item 1); the caller drops a span whose state read charging or AC loss.
+    For each phase of :func:`assist_phases` it counts the evidence of
+    discharge: SMC B0AC reads below 0 mA (:func:`smc_phase`, by hold
+    overlap); without SMC coverage only, registry publications in force for
+    the phase and taken before it ends whose InstantAmperage or Amperage is
+    below 0 mA; and discharge-accumulator intervals over their limit
+    (``discharge_intervals``, closed) that overlap the phase.  A phase is
+    assisted when any of these is nonzero.  The member is marked
+    ``battery.assist`` (the sensitivity line's marker) when a deciding phase
+    (the request, or the span without one) has negative SMC reads, or,
+    without SMC coverage, any of the other evidence; otherwise, when some
+    phase is assisted, ``battery.assist_outside_request``.  With SMC
+    coverage the 1 s B0AC reads locate the discharge, so a ~60 s accumulator
+    interval that overlaps the request without a negative read in it is
+    reported in that phase's ``accumulator_intervals_over_limit`` and does not
+    decide (review F4: the detail says so).  Both codes are DISCLOSE.  The
+    discharged energy per phase is under ``withheld`` (it goes to
+    ``withheld/`` only), never in ``observed``.  ``state_unread`` marks a
+    span with a publication in force whose IsCharging or ExternalConnected
+    was not read (excluded elsewhere; its discharge is still disclosed).
+    This is the harvest copy's predicate (``harvest._battery_assist``).
+    """
+
+    good = [entry for entry in smc_samples(readings) if entry["current_ma"] is not None]
+    phases: dict[str, Any] = {}
+    energies: dict[str, Any] = {}
+    seen = decided = False
+    request_other = False
+    stamps: list[int] = []
+    for name, window, decides in assist_phases(span, request):
+        structure, energy, negative = smc_phase(good, window, limit_ma, hold_ns)
+        low = [] if smc_covered else [
+            pub for pub in _in_force(publications_in_force, window)
+            if pub["monotonic_ns"] < window[1]
+            and any(_is_number(pub["values"].get(key)) and pub["values"][key] < 0
+                    for key in ("instant_amperage_ma", "amperage_ma"))]
+        rows = [interval for interval in discharge_intervals
+                if interval[0] <= window[1] and window[0] <= interval[1]]
+        registry_values = [pub["values"].get(key) for pub in low
+                           for key in ("instant_amperage_ma", "amperage_ma")]
+        structure.update({
+            "decides": decides, "registry_publications_negative": len(low),
+            "registry_min_ma": min((value for value in registry_values if _is_number(value)), default=None),
+            "accumulator_intervals_over_limit": len(rows)})
+        phases[name], energies[name] = structure, energy
+        smc_assisted = bool(negative)
+        other = bool(low or rows)
+        seen = seen or smc_assisted or other
+        if decides and (smc_assisted or (other and not smc_covered)):
+            decided = True
+        if decides and other:
+            request_other = True
+        stamps += negative
+    if not seen:
+        return None
+    code = ASSIST if decided else ASSIST_OUTSIDE_REQUEST
+    if decided:
+        detail = "battery assist on AC (negative battery current) in the measured request"
+    elif request_other:
+        detail = ("battery assist on AC (negative battery current) not located in the measured request: "
+                  "its SMC B0AC reads were all at or above 0 mA, and an accumulator interval over the "
+                  "limit that overlaps it is reported in its phase")
+    else:
+        detail = "battery assist on AC (negative battery current) outside the measured request only"
+    item = finding(
+        code, span=span, expected=0,
+        observed={"rule": "battery_assist_ruling_2026_10_06", "limit_ma": limit_ma,
+                  "current_source": "smc" if smc_covered else "smc_partial_registry_fallback",
+                  "state_unread": state_unread, "request_assist": decided, "phases": phases},
+        interval={"monotonic_ns": [min(stamps), max(stamps)] if stamps else None},
+        detail=detail + "; disclosed, never excluded")
+    item["withheld"] = {"phases": energies, "smc_covered": smc_covered}
+    return item
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def span_findings(readings: Sequence[Mapping[str, Any]], span: Mapping[str, Any],
+                  thresholds: Mapping[str, Any] = DEFAULT_THRESHOLDS, *,
+                  request: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
+    """``battery.member_span``, ``battery.assist``, ``battery.assist_outside_request``,
+    ``battery.accumulator_activity``, ``battery.accumulator_unavailable``,
+    ``battery.unmeasured`` and ``battery.smc_unavailable``.
+
+    ``span`` is ``{"monotonic_ns": [start, stop], ...}`` (the member's
+    sampler stream, controller ``time.monotonic_ns``); ``request`` its
+    request window, when known.  The member rule under the battery-assist
+    ruling of 2026-10-06:
+
+    - **Excluded** (``battery.member_span``, EXCLUDE_MEMBER): a current above
+      +200 mA (charging) on an SMC B0AC read in force
+      (:func:`smc_span_findings`), or on the registry's
+      InstantAmperage/Amperage at a publication in force when B0AC does not
+      cover the span; IsCharging not No or ExternalConnected not Yes at a
+      publication in force (an unread state is not a pass); IsCharging Yes or
+      ExternalConnected No on any good registry read inside the span; a
+      charge-accumulator mean above 200 mA x Voltage.  No publication for
+      more than ``max_unobserved_s`` overlapping the span is
+      ``battery.unmeasured`` (EXCLUDE_MEMBER).
+    - **Disclosed**: discharge on AC while not charging (a negative current
+      by the same sources, or a discharge-accumulator mean beyond 200 mA x
+      Voltage) is :func:`assist_finding`; none is disclosed for a span that
+      read IsCharging Yes or ExternalConnected No (ruling item 1).  Discharge
+      alone never excludes; a positive discharge-accumulator mean beyond the
+      limit is sign-inconsistent and stays ``battery.member_span``, unless
+      the SMC B0AC reads cover the span (then ``battery.accumulator_unavailable``,
+      disclosed: cold pass N4).
+
+    The publications in force are the last one at or before the start,
+    every one inside the span and the first one at or after the end.
+    Conservative by design: it can also flag a neighbouring member.
+    """
+
+    limits = dict(thresholds)
+    limit = limits["limit_ma"]
+    start, stop = span["monotonic_ns"]
+    found, smc_covered = smc_span_findings(readings, span, limits)
+    pubs = publications(readings)
+    in_force = _in_force(pubs, (start, stop))
+    # Ruling item 1: assist is discharge on AC while not charging.  A span with
+    # a read of IsCharging Yes or ExternalConnected No is excluded and its
+    # discharge is not assist; an unread state is excluded (missing evidence)
+    # and its discharge is still disclosed, marked state_unread.
+    state_bad = state_unread = False
+    for pub in in_force:
+        state_bad = state_bad or (pub["values"].get("is_charging") is True
+                                  or pub["values"].get("external_connected") is False)
+        state_unread = state_unread or (pub["values"].get("is_charging") is None
+                                        or pub["values"].get("external_connected") is None)
+        reasons = reading_reasons(pub["values"], limits, include_amperage=False, include_instant=False)
+        if not smc_covered:
+            for key, label in (("instant_amperage_ma", "InstantAmperage"), ("amperage_ma", "Amperage")):
+                value = pub["values"].get(key)
+                if current_disposition(value, limit) == "charge":
+                    reasons.append(f"{label} {value:+} mA > +{limit} mA (charging)")
+        if reasons:
+            found.append(finding(
+                "battery.member_span", span=span, observed=_observed(pub), expected=limits,
+                detail="; ".join(reasons), evidence=pub["reading"].get("raw") or (),
+                interval={"monotonic_ns": [pub["monotonic_ns"], pub["monotonic_ns"]]}))
+    for item in readings:
+        # Every good registry read inside the span, a new publication or not:
+        # a state change between publications (charging begins, the adapter is
+        # lost) is seen where it was read (the harvest copy's per-poll rule).
+        values = item.get("values") or {}
+        moment = (item.get("finished") or {}).get("monotonic_ns")
+        if (item.get("error") or "external_connected" not in values
+                or isinstance(moment, bool) or not isinstance(moment, int)
+                or not start <= moment <= stop):
+            continue
+        reasons = []
+        if values.get("is_charging") is True:
+            reasons.append("IsCharging is Yes (charging)")
+        if values.get("external_connected") is False:
+            reasons.append("ExternalConnected is No (on battery)")
+        if reasons:
+            state_bad = True
+            found.append(finding(
+                "battery.member_span", span=span, expected=limits, detail="; ".join(reasons),
+                observed={key: values.get(key) for key in ("update_time_s", "external_connected",
+                                                           "is_charging")},
+                evidence=item.get("raw") or (), interval={"monotonic_ns": [moment, moment]}))
+    discharge_intervals: list[list[int]] = []
+    for earlier, later in zip(in_force, in_force[1:]):
+        delta = accumulator_interval(earlier["values"], later["values"])
+        voltage = later["values"].get("voltage_mv") or earlier["values"].get("voltage_mv")
+        interval = {"monotonic_ns": [earlier["monotonic_ns"], later["monotonic_ns"]]}
+        unavailable = {label: delta[f"{label}_unavailable"]
+                       for label, _total, _count in ACCUMULATOR_SIGNS
+                       if delta[f"{label}_unavailable"]}
+        if not voltage:
+            unavailable = {label: "Voltage not read at either publication"
+                           for label, _total, _count in ACCUMULATOR_SIGNS}
+        if unavailable:
+            # The rule did not run for this sign on this interval: disclosed,
+            # never silently passed.
+            found.append(finding(
+                "battery.accumulator_unavailable", span=span,
+                observed={**delta, "voltage_mv": voltage, "unavailable": unavailable},
+                expected=None, interval=interval,
+                detail=(f"accumulator rule not evaluated between publications "
+                        f"{earlier['update_time_s']} and {later['update_time_s']}: "
+                        + "; ".join(f"{label}: {reason}"
+                                    for label, reason in sorted(unavailable.items())))))
+        if not voltage:
+            continue
+        limit_mw = limit * voltage / 1000
+        for label, _total, _count in ACCUMULATOR_SIGNS:
+            mean = delta[f"{label}_mean_mw"]
+            if label in unavailable or mean is None:
+                continue
+            detail = (f"{label} accumulator mean {mean:+.1f} mW over "
+                      f"{delta[f'{label}_ticks']} ticks between publications "
+                      f"{earlier['update_time_s']} and {later['update_time_s']}; "
+                      f"limit {limit_mw:.1f} mW")
+            if abs(mean) <= limit_mw:
+                found.append(finding("battery.accumulator_activity", span=span,
+                                     observed={**delta, "voltage_mv": voltage}, expected=limit_mw,
+                                     interval=interval, detail=detail))
+            elif label == "charge":
+                found.append(finding("battery.member_span", span=span,
+                                     observed={**delta, "voltage_mv": voltage}, expected=limit_mw,
+                                     interval=interval, detail=detail + " (charging)"))
+            elif mean > 0:
+                # The discharge accumulator sums negative ticks only; a positive
+                # mean beyond the limit is sign-inconsistent evidence, not
+                # discharge. Without SMC coverage it keeps the exclusion
+                # (review F2); with the 1 Hz SMC reads covering the span the
+                # current was measured directly, so the self-contradicting
+                # record is disclosed (cold pass N4; the harvest copy agrees).
+                found.append(finding("battery.accumulator_unavailable" if smc_covered else "battery.member_span",
+                                     span=span, observed={**delta, "voltage_mv": voltage}, expected=limit_mw,
+                                     interval=interval,
+                                     detail=detail + " (sign-inconsistent: the discharge accumulator rose"
+                                     + ("; the SMC reads cover the span)" if smc_covered else ")")))
+            else:  # discharge beyond the limit: battery assist, disclosed below
+                discharge_intervals.append(list(interval["monotonic_ns"]))
+    if not state_bad:
+        assist = assist_finding(readings, span, request, in_force, discharge_intervals, limit_ma=limit,
+                                smc_covered=smc_covered, state_unread=state_unread,
+                                hold_ns=int(limits.get("smc_max_gap_s", SMC_MAX_GAP_S) * 1_000_000_000))
+        if assist is not None:
+            found.append(assist)
+    gap = coverage_gap([p["monotonic_ns"] for p in pubs], start, stop,
+                       int(limits["max_unobserved_s"] * 1_000_000_000))
+    if gap is not None:
+        found.append(finding("battery.unmeasured", span=span, observed=gap,
+                             expected=limits["max_unobserved_s"],
+                             detail="no gauge publication observed for more than "
+                                    f"{limits['max_unobserved_s']} s overlapping the span"))
+    return found
+
+
+def _observed(pub: Mapping[str, Any]) -> dict[str, Any]:
+    values = pub["values"]
+    return {key: values.get(key) for key in ("update_time_s", "external_connected",
+                                             "is_charging", "instant_amperage_ma",
+                                             "amperage_ma", "voltage_mv")}
+
+
+# Inventory rows (configs/gates/physics_rows.json) whose physical check this
+# module performs.  tests/hazards/test_physics_coverage.py keeps the two in step.
+#
+# PROTECTS is _PROTECTS_WRITTEN plus the rows of the frozen BFG module
+# (joulewise/battery_float.py) that this module now evaluates through it.  Those
+# rows are read from the coverage map on first use, not written here: the
+# consumer guard (tests/test_battery_float_consumers.py) reserves the names of
+# the grammar's primitives as strings in any production file that names its
+# module, and two of those keys name one.  tests/hazards/test_battery.py pins
+# the loaded rows literally, so the coverage check stays two-sided.
+COVERAGE_MAP = Path(__file__).resolve().parents[2] / "configs" / "gates" / "physics_rows.json"
+FROZEN_GRAMMAR_FILE = "joulewise/battery_float.py"
+_PROTECTS_WRITTEN: tuple[tuple[str, str, str, int], ...] = (
+    # base line 1136: AC state, supply, negotiation and power policy match the frozen policy. The produ...
+    row("joulewise/arm_readiness.py", "<module>",
+        "predicate t0.power_path.v1", 1),
+    # base line 1970: On battery: live `pmset -g batt` does not report 'AC Power'.
+    row("joulewise/arm_readiness_evidence_t0.py", "_derive_power",
+        "evidence_author_t0_power_preflight_underivable", 1),
+    # base line 1999: The ioreg battery-float probe errored (grammar, staleness, read failure).
+    row("joulewise/arm_readiness_evidence_t0.py", "_derive_power",
+        "evidence_author_t0_power_preflight_underivable", 5),
+    # base line 2002: Battery not at float: charging, or nonzero current (IsCharging, InstantAmperage).
+    row("joulewise/arm_readiness_evidence_t0.py", "_derive_power",
+        "evidence_author_t0_power_preflight_underivable", 6),
+    # base line 1254: ioreg battery probe could not be run/parsed, or UpdateTime older than MAX_UPDATE_...
+    row("joulewise/night_agent_install.py", "validate_install",
+        "battery_float.observe ProbeError (uncaught here; Transaction catch-all exit 1)", 1),
+    # base line 1272: Live ioreg reading: AC connected, not charging, |InstantAmperage| <= 200 mA, righ...
+    row("joulewise/night_agent_install.py", "validate_install",
+        "battery not at float (Refused 3)", 1),
+    # base line 1664: live pmset -g batt output contains 'AC Power'
+    row("joulewise/night_gate.py", "_check_machine",
+        "night_refused_not_quiet (ac_power)", 1),
+    # base line 1693: ioreg probe ran and its bytes parsed under the frozen BFG grammar
+    row("joulewise/night_gate.py", "_check_machine",
+        "night_probe_error (battery_float probe_error)", 1),
+    # base line 1695: ioreg AppleSmartBattery: ExternalConnected Yes, IsCharging No, |InstantAmperage|...
+    row("joulewise/night_gate.py", "_check_machine",
+        "night_refused_battery_float", 1),
+    # base line 954: re-parses raw ioreg battery output at the arm, publication and t0 boundaries: on...
+    row("joulewise/v5_qualification.py", "battery_boundaries",
+        "battery passed=False (probe error, timeout, rc!=0, wrong argv, parse failure, or parsed not passed)", 1),
+    # base line 148: raw ioreg shows AC attached, not charging, at float
+    row("scripts/check_v5_arm_abort.py", "battery_sources",
+        "battery_float.require_pass", 1),
+    # base line 694: Boundary (arm/publication/T-0) and per-bundle raw ioreg readings show AC power an...
+    row("scripts/harvest_v5_g2b_window.py", "harvest",
+        "battery_observation_not_passed (RECOVER; also lines 642, 645)", 1),
+    # base line 88: raw ioreg battery records at arm/publication/t0 show on-battery or charging
+    row("scripts/harvest_v5_qualification.py", "harvest",
+        "battery_boundary_not_passed (admission-abort branch)", 1),
+    # base line 110: raw ioreg battery records show on battery or charging at a boundary
+    row("scripts/harvest_v5_qualification.py", "harvest",
+        "battery_boundary_not_passed", 1),
+)
+
+# Proxy rows on paths block 5 no longer runs that this module's direct
+# measurement replaces (configs/gates/physics_rows.json, "retired_proxy").
+SUPERSEDES: tuple[tuple[str, str, str, int], ...] = (
+    # base line 7168: The POWER_PREFLIGHT receipt says AC state, negotiation, supply and power policy m...
+    row("joulewise/arm_readiness.py", "_evaluate_rows",
+        "readiness_dependency_refused (row t0.power_path)", 1),
+    # base line 1976: The system_profiler SPPowerDataType output is not JSON.
+    row("joulewise/arm_readiness_evidence_t0.py", "_derive_power",
+        "evidence_author_t0_power_preflight_underivable", 3),
+    # base line 1984: No connected adapter with a known positive wattage is found.
+    row("joulewise/arm_readiness_evidence_t0.py", "_derive_power",
+        "evidence_author_t0_power_preflight_underivable", 4),
+    # base line 74: First line of pmset -g batt contains 'AC Power'.
+    row("joulewise/prewindow.py", "t0_check",
+        "BLOCK not on AC power", 1),
+    # base line 78: pmset ran.
+    row("joulewise/prewindow.py", "t0_check",
+        "BLOCK power probe failed", 1),
+    # base line 111: First line of pmset -g batt contains 'AC Power'.
+    row("scripts/prewindow_check.sh", "check_once",
+        "BLOCK not on AC power", 1),
+)
+
+
+def frozen_grammar_rows(path: Path = COVERAGE_MAP) -> tuple[tuple[str, str, str, int], ...]:
+    """The coverage map's ``protects`` rows of the frozen BFG module assigned to battery."""
+
+    document = json.loads(Path(path).read_text())
+    return tuple(row(entry["key"]["file"], entry["key"]["function"], entry["key"]["code"],
+                     entry["key"]["occurrence"])
+                 for entry in document["rows"]
+                 if entry["key"]["file"] == FROZEN_GRAMMAR_FILE
+                 and entry.get("disposition") == "protects" and entry.get("module") == MODULE)
+
+
+def __getattr__(name: str) -> Any:
+    # PEP 562: PROTECTS is built on first use, so importing this module (the arm,
+    # the monitor) never depends on reading the coverage map.
+    if name == "PROTECTS":
+        value = _PROTECTS_WRITTEN + frozen_grammar_rows()
+        globals()["PROTECTS"] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

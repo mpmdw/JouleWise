@@ -14,6 +14,7 @@ import contextlib
 import dataclasses
 import datetime as dt
 import fcntl
+import fnmatch
 import hashlib
 import json
 import math
@@ -38,13 +39,17 @@ if str(REPO_ROOT) in sys.path:
 sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.night_gate import (  # noqa: E402
+    HAZARD_PACK,
     NightPlan,
     ProbeResult,
     PLAN_MAX_AGE_S,
     PlanError,
     agent_census,
 )
-from joulewise.arm_retry import terminal_zero_capture_refusal  # noqa: E402
+from joulewise.arm_retry import (  # noqa: E402
+    terminal_window_release,
+    terminal_zero_capture_refusal,
+)
 from joulewise.zero_capture_facts import zero_capture_facts  # noqa: E402
 from scripts.run_night import (  # noqa: E402
     COURIER_DEADLINE_S,
@@ -71,26 +76,45 @@ POSITIVE_CONTROL_REF = "refs/heads/main"
 DRIVER_PROBE_ARGV = ("/usr/bin/pgrep", "-lf", "[r]un_night\\.py")
 
 # LEAD-MARGIN-01: 2b4476cb / hands-free-week file 15 introduced the resident
-# fence and cooperative/TERM/KILL ladder plus an untouched-idle allowance.
-# D-180 retained the span; D-181 permits windows whenever the machine is quiet.
-# PLAN=REQUEST at t0-8 min fences launches; the five-minute exit request is
-# a courtesy. TERM at t0-6 min overrides it after two minutes, then KILL at
-# t0-5 min follows one minute later.
+# fence and cooperative/TERM/KILL ladder. D-180 retained the span; D-181
+# permits windows whenever the machine is quiet.
+# PLAN=REQUEST at t0-180 s fences launches; the 90 s exit request is a
+# courtesy. TERM at t0-90 s overrides it, then KILL at t0-60 s (PLAN2 A2,
+# finding t2-12). PLAN_LEAD_S must stay >= REQUEST_LEAD_S: plan_span_active
+# and relevant_standdown_plan depend on that order.
 # The t0 census needs the magistrate, supervisor, and every Codex child gone.
-# With e^(-5/60) per 5 s sample, 300/360 s retain 0.674%/0.248% of excess
-# load. KILL/TERM leave 285/345 s after a nominal 15 s latency allowance:
-# 0.865%/0.318% remains; KILL clears load 2.0 for excess below about 116-173
-# at base 1.0-0.5. Poll/signalling/census/exit latency consumes this budget.
-# This budget is an opportunity to settle, not a guarantee of passing t0.
-# The 10 s resident poll fits the 120/60 s phase gaps (12/6 polls; nominal
-# observation slack 110/50 s). launchd's 300 s StartInterval starts/recovers
+# Real cooperative exits took 20-31 s after the request (magistrate events,
+# c1/c2/d117), so REQUEST at t0-180 s leaves about 150 s of margin. The arm's
+# own dwell measures contention after t0; agent-free time before t0 is not
+# credited to it, which is why the lead is short.
+# The 10 s resident poll fits the 90/30 s phase gaps (9/3 polls; nominal
+# observation slack 80/20 s). launchd's 300 s StartInterval starts/recovers
 # the supervisor and cannot guarantee these phases after supervisor failure.
 # Blocked I/O or scheduling can also delay enforcement. The unchanged t0
-# gates refuse a surviving tree or excess load: this is the fail-closed backstop.
-PLAN_LEAD_S = 8 * 60
-REQUEST_LEAD_S = 8 * 60
-TERM_LEAD_S = 6 * 60
-KILL_LEAD_S = 5 * 60
+# census refuses a surviving tree: this is the fail-closed backstop.
+PLAN_LEAD_S = 180
+REQUEST_LEAD_S = 180
+TERM_LEAD_S = 90
+KILL_LEAD_S = 60
+STANDDOWN_EXIT_WITHIN_S = 90
+# PLAN2 X1 launch liveness (s3-fence, interface J4): a HAZARD_PACK driver
+# writes night/censuses.jsonl within seconds of launch (run_night.py, before
+# the HAZARD branch). With no night/ record this long after t0 the launch is
+# treated as abandoned, after the census-backed observation below.
+LAUNCH_LIVENESS_S = 900
+LAUNCH_ABANDONED_NAME = "launch_abandoned.json"
+LAUNCH_ABANDONED_SCHEMA = "joulewise.launch_abandoned.v1"
+TERMINAL_RELEASE_STATE_KEY = "released_terminal_windows"
+# PLAN2 yield C: the driver's in-window alert files (joulewise/b5/driver.py
+# YIELD_ALERT and YIELD_ALERT_SCHEMA; a test pins the match).
+YIELD_ALERT_GLOB = "yield_alert-*.json"
+YIELD_ALERT_SCHEMA = "joulewise.b5_yield_alert.v1"
+YIELD_ALERT_FIELDS = ("code", "stage_id", "ordinal", "role", "planned", "present",
+                      "succeeded", "min_valid", "status", "rc")
+YIELD_ALERT_STATE_KEY = "queued_yield_alerts"
+YIELD_ALERT_ERROR_KEY = "yield_alert_reader_errors"
+# The driver writes about 400 bytes; anything far larger is queued unread.
+YIELD_ALERT_MAX_BYTES = 64 * 1024
 SUPERVISOR_POLL_S = 10
 REMOTE_STOP_PROBE_CADENCE_S = 5 * 60
 STOP_COOPERATIVE_S = 9 * 60
@@ -282,6 +306,11 @@ class Storage:
 
     def read_bytes(self, path: Path) -> bytes:
         return path.read_bytes()
+
+    def read_bytes_bounded(self, path: Path, limit: int) -> bytes:
+        """At most ``limit + 1`` bytes, so a caller can tell an oversized file."""
+        with path.open("rb") as handle:
+            return handle.read(limit + 1)
 
     def list_directory(self, path: Path) -> Sequence[Path]:
         # Unlike glob/exists, iterdir propagates unreadable-directory errors.
@@ -752,10 +781,9 @@ def load_plans(storage: Storage, *, now_epoch_s: float | None = None) -> PlanSna
     return PlanSnapshot(tuple(plans), tuple(errors), tuple(diagnostics))
 
 
-def installed_agent_fence(
+def _installed_agent_plans(
     now: dt.datetime, storage: Storage, *, launch_agents_dir: Path | None = None,
-    state: Mapping[str, Any] | None = None,
-) -> str | None:
+) -> list[NightPlan]:
     """Read installed agents independently of custody discovery; fail closed."""
     directory = launch_agents_dir or Path.home() / "Library" / "LaunchAgents"
     try:
@@ -765,8 +793,8 @@ def installed_agent_fence(
         # directory symlink is unreadable and must still fail closed.
         if storage.exists(directory):
             raise ValueError(f"unreadable LaunchAgents directory: {directory}")
-        return None
-    reasons = []
+        return []
+    plans = []
     for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
         plist = directory / f"{label}.plist"
         if plist not in entries:
@@ -785,12 +813,20 @@ def installed_agent_fence(
             if plan.authored_epoch_s > now.timestamp():
                 raise ValueError("installed plan authored_epoch_s is in the future")
             deadman_epoch(plan)
-            if plan_span_active(plan, now.timestamp(), storage, state):
-                reasons.append(f"installed_plan:{plan.plan_id}")
+            plans.append(plan)
         except (OSError, ValueError, OverflowError, TypeError, KeyError, IndexError, PlanError,
                 plistlib.InvalidFileException, ExpatError) as exc:
             raise ValueError(f"unreadable installed agent {plist}: {exc}") from exc
-    return "; ".join(reasons) or None
+    return plans
+
+
+def installed_agent_fence(
+    now: dt.datetime, storage: Storage, *, launch_agents_dir: Path | None = None,
+    state: Mapping[str, Any] | None = None,
+) -> str | None:
+    plans = _installed_agent_plans(now, storage, launch_agents_dir=launch_agents_dir)
+    return "; ".join(f"installed_plan:{plan.plan_id}" for plan in plans
+                     if plan_span_active(plan, now.timestamp(), storage, state)) or None
 
 
 def plan_completion_epoch(plan: NightPlan) -> float:
@@ -835,19 +871,372 @@ def _release_key(plan: NightPlan, storage: Storage) -> str | None:
     return f"{plan.plan_id}:{plan.custody_root}:{digest}"
 
 
+def _watchdog_state(
+    plan: NightPlan, storage: Storage, state: Mapping[str, Any] | None
+) -> Mapping[str, Any]:
+    if state is not None:
+        return state
+    # evidence_night passes Storage(plan custody root); the watchdog state
+    # is a sibling under the same night-custody parent.
+    custody = Path(plan.custody_root).expanduser().resolve(strict=False)
+    state_storage = (Storage(custody.parent / "magistrate")
+                     if storage.root == custody else storage)
+    return load_state(state_storage)
+
+
 def _release_observed(
     plan: NightPlan, storage: Storage, state: Mapping[str, Any] | None
 ) -> bool:
-    if state is None:
-        # evidence_night passes Storage(plan custody root); the watchdog state
-        # is a sibling under the same night-custody parent.
-        custody = Path(plan.custody_root).expanduser().resolve(strict=False)
-        state_storage = (Storage(custody.parent / "magistrate")
-                         if storage.root == custody else storage)
-        state = load_state(state_storage)
+    state = _watchdog_state(plan, storage, state)
     released = state.get("released_zero_capture_refusals", [])
     key = _release_key(plan, storage)
     return key is not None and isinstance(released, list) and key in released
+
+
+# ---------------------------------------------------------------------------
+# PLAN2 X1: terminal-window and launch-liveness early release.
+#
+# Both reuse the zero-capture release shape: the custody files only make a
+# plan a release *candidate*; decide() records the release, one way, only on
+# a tick where the agent census is empty, the driver probe is empty and no
+# live process names the plan's custody root. They are latched under their
+# own state key, so evidence_night's D-182 successor check, which reads
+# released_zero_capture_refusals, is unchanged.
+
+
+def _night_dir(plan: NightPlan) -> Path:
+    return Path(plan.custody_root) / "night"
+
+
+def _terminal_window_kind(
+    plan: NightPlan, now_epoch_s: float, storage: Storage
+) -> str | None:
+    """The allowed terminal shape for this plan's custody files, or None."""
+
+    night = _night_dir(plan)
+    try:
+        result: object = json.loads(storage.read_text(night / "result.json"))
+    except (OSError, ValueError, TypeError):
+        return None
+    decision = terminal_window_release(
+        result, plan_id=plan.plan_id, receipt_class=plan.receipt_class,
+        now_epoch_s=now_epoch_s,
+        chain_started=storage.exists(night / "chain.started"),
+        chain_exited=storage.exists(night / "chain.exited"),
+        courier_sent=storage.exists(night / "courier.sent"))
+    return decision.reason if decision.allowed else None
+
+
+def _night_records(plan: NightPlan, storage: Storage) -> list[str] | None:
+    """Names in night/ other than the watchdog's own marker; None if unreadable."""
+
+    night = _night_dir(plan)
+    try:
+        entries = storage.list_directory(night)
+    except FileNotFoundError:
+        if storage.exists(night):
+            return None
+        return []
+    except OSError:
+        return None
+    return sorted(entry.name for entry in entries if entry.name != LAUNCH_ABANDONED_NAME)
+
+
+def _launch_marker_honored(
+    plan: NightPlan, storage: Storage, *, launch_agents_dir: Path | None = None
+) -> bool:
+    """J4 gate: a late driver for this plan must refuse on launch_abandoned.json.
+
+    The driver lane (P2-DRV) makes run_night's ``_existing_record`` treat the
+    marker as a night record. Until the driver this plan would run carries
+    that reader, a late launchd fire could pass its existing-record check and
+    measure under a released span, so the liveness release stays off (Sol
+    review R2). The driver is the run_night.py named by an installed
+    com.joulewise.night plist for this plan, else this checkout's own copy.
+    """
+
+    plan_path = (Path(plan.custody_root) / "night_plan.json").resolve(strict=False)
+    directory = launch_agents_dir or Path.home() / "Library" / "LaunchAgents"
+    plist = directory / "com.joulewise.night.plist"
+    drivers: list[Path] = []
+    try:
+        if storage.exists(plist):
+            argv = plistlib.loads(storage.read_bytes(plist))["ProgramArguments"]
+            if (isinstance(argv, list) and argv.count("--plan") == 1
+                    and Path(argv[argv.index("--plan") + 1]).resolve(strict=False) == plan_path):
+                drivers.append(Path(argv[1]))
+        if not drivers:
+            drivers.append(REPO_ROOT / "scripts" / "run_night.py")
+        return all(f'"{LAUNCH_ABANDONED_NAME}"'.encode("utf-8") in storage.read_bytes(path)
+                   for path in drivers)
+    except (OSError, ValueError, TypeError, KeyError, IndexError,
+            plistlib.InvalidFileException, ExpatError):
+        return False
+
+
+def _launch_liveness_candidate(
+    plan: NightPlan, now_epoch_s: float, storage: Storage
+) -> bool:
+    """A HAZARD_PACK plan whose driver left no night/ record by t0 + 900 s."""
+
+    if plan.receipt_class != HAZARD_PACK:
+        return False
+    if not (plan.t0_epoch_s + LAUNCH_LIVENESS_S < now_epoch_s
+            <= deadman_epoch(plan) + COURIER_LOCK_FRESH_S):
+        return False
+    return _night_records(plan, storage) == [] and _launch_marker_honored(plan, storage)
+
+
+def _launch_abandoned_key(plan: NightPlan, storage: Storage) -> str | None:
+    path = _night_dir(plan) / LAUNCH_ABANDONED_NAME
+    try:
+        raw = storage.read_bytes(path)
+        marker = json.loads(raw)
+    except (OSError, ValueError, TypeError):
+        return None
+    if (not isinstance(marker, dict) or marker.get("schema") != LAUNCH_ABANDONED_SCHEMA
+            or marker.get("plan_id") != plan.plan_id):
+        return None
+    return (f"{plan.plan_id}:{plan.custody_root}:{LAUNCH_ABANDONED_NAME}:"
+            f"{hashlib.sha256(raw).hexdigest()}")
+
+
+def _terminal_release_keys(plan: NightPlan, storage: Storage) -> set[str]:
+    keys = {_release_key(plan, storage), _launch_abandoned_key(plan, storage)}
+    return {key for key in keys if key is not None}
+
+
+def _terminal_release_observed(
+    plan: NightPlan, now_epoch_s: float, storage: Storage,
+    state: Mapping[str, Any] | None,
+) -> bool:
+    """True once decide() latched a release whose custody evidence still holds.
+
+    The caller has already ruled out an open chain (chain.started without
+    chain.exited); an open chain always holds the span, latch or not.
+    """
+
+    state = _watchdog_state(plan, storage, state)
+    released = state.get(TERMINAL_RELEASE_STATE_KEY, [])
+    if not isinstance(released, list):
+        return False
+    if _terminal_window_kind(plan, now_epoch_s, storage) is not None:
+        key = _release_key(plan, storage)
+        if key is not None and key in released:
+            return True
+    # Launch liveness: valid only while night/ still holds no driver record. A
+    # late driver that slipped past the marker re-fences the span with its
+    # first record, before its arm (Sol review R3); the census latch itself
+    # stays one way.
+    key = _launch_abandoned_key(plan, storage)
+    return key is not None and key in released and _night_records(plan, storage) == []
+
+
+def _window_processes(plan: NightPlan, snapshot: Sequence[ProcessInfo]) -> list[ProcessInfo]:
+    """Live processes whose command line names this plan's custody root.
+
+    The night driver (--plan <custody>/night_plan.json), the hazard monitor
+    (--config <custody>/hazards/...), the arm collectors (--custody <custody>)
+    and G10 (<custody>/night) all carry it, so this is the plan-scoped
+    complement of the global driver probe.
+    """
+
+    roots = {str(Path(plan.custody_root)).rstrip("/"),
+             str(Path(plan.custody_root).expanduser().resolve(strict=False)).rstrip("/")}
+    # The root as a whole argument (--custody <root>, --custody=<root>,
+    # quoted) or as a path prefix (<root>/...), never a sibling sharing a
+    # prefix (<root>0/...) (Sol review R4).
+    pattern = re.compile(r"(?:^|[\s=\"'])(?:" + "|".join(map(re.escape, sorted(roots)))
+                         + r")(?=$|[/\s\"'])")
+    return [row for row in snapshot
+            if "<defunct>" not in row.command.casefold()
+            and pattern.search(row.command) is not None]
+
+
+def _write_launch_abandoned(
+    plan: NightPlan, storage: Storage, now: dt.datetime
+) -> None:
+    """Create night/launch_abandoned.json once (interface J4; P2-DRV reads it)."""
+
+    custody = Storage(Path(plan.custody_root), dry_run=storage.dry_run)
+    path = _night_dir(plan) / LAUNCH_ABANDONED_NAME
+    if storage.exists(path):
+        return
+    try:
+        custody.exclusive_json(path, {
+            "schema": LAUNCH_ABANDONED_SCHEMA,
+            "plan_id": plan.plan_id,
+            "receipt_class": plan.receipt_class,
+            "t0_epoch_s": plan.t0_epoch_s,
+            "observed_epoch_s": now.timestamp(),
+            "liveness_s": LAUNCH_LIVENESS_S,
+            "writer": "scripts/magistrate_watchdog.py",
+            "detail": ("no night/ record from the driver after t0 + liveness_s; agent census, "
+                       "driver probe and plan-scoped process table were empty on one tick. "
+                       "Contract (J4): a driver treats this marker as an existing night "
+                       "record and measures nothing; after writing its first night record it "
+                       "re-checks for this marker and refuses before the arm if present. The "
+                       "watchdog writes this marker first and then re-checks for driver "
+                       "records, and the release lapses once any driver record appears."),
+        })
+    except (OSError, RuntimeError):
+        # FileExistsError: another tick wrote it. Anything else: no marker,
+        # so no key and no release on this tick.
+        return
+
+
+# ---------------------------------------------------------------------------
+# PLAN2 yield C (P2-DRV F5): in-window yield alerts.
+#
+# The HAZARD_PACK driver's yield tripwire writes night/yield_alert-<ordinal>.json
+# once per stage counted ZERO or LOW (joulewise/b5/driver.py YieldTripwire).
+# The driver runs no subprocess in the window to report it; the watchdog's own
+# tick reads those files (no subprocess) and queues each alert once into
+# notice_pending, so the magistrate tells Ed at its next activation. Reading
+# never changes a fence, a release or a launch decision.
+
+
+def _yield_alert_window(plan: NightPlan, now_epoch_s: float) -> bool:
+    """A HAZARD_PACK plan from its stand-down lead to its dead-man tail."""
+
+    if plan.receipt_class != HAZARD_PACK:
+        return False
+    try:
+        return (plan.t0_epoch_s - PLAN_LEAD_S <= now_epoch_s
+                <= _yield_alert_expiry(plan))
+    except (OverflowError, ValueError):
+        return False
+
+
+def _yield_alert_expiry(plan: NightPlan) -> float:
+    return deadman_epoch(plan) + COURIER_LOCK_FRESH_S
+
+
+def _yield_alert_prefix(plan: NightPlan) -> str:
+    return f"{plan.plan_id}:{plan.custody_root}:"
+
+
+def _yield_alert_reason(plan: NightPlan, name: str, alert: object) -> tuple[str, dict[str, Any] | None]:
+    if (not isinstance(alert, dict) or alert.get("schema") != YIELD_ALERT_SCHEMA
+            or alert.get("plan_id") != plan.plan_id
+            or any(key not in alert for key in YIELD_ALERT_FIELDS)):
+        return (f"plan {plan.plan_id}: unrecognized yield alert record night/{name}; "
+                "read it in custody"), None
+    facts = {key: alert[key] for key in YIELD_ALERT_FIELDS}
+    return (f"plan {plan.plan_id}: stage {facts['stage_id']} ({facts['role']}) yield "
+            f"{facts['status']}: {facts['succeeded']} of {facts['planned']} planned members "
+            f"succeeded, {facts['present']} bundles present, minimum {facts['min_valid']}, "
+            f"stage rc {facts['rc']}; collection continues"), facts
+
+
+def _note_yield_alert_errors(
+    storage: Storage, state: dict[str, Any], errors: Sequence[str], now_epoch_s: float,
+) -> None:
+    """Record reader failures once per distinct set, so a failing reader is never silent."""
+
+    if not errors:
+        state.pop(YIELD_ALERT_ERROR_KEY, None)
+        return
+    distinct = sorted(set(errors))
+    if state.get(YIELD_ALERT_ERROR_KEY) == distinct:
+        return
+    state[YIELD_ALERT_ERROR_KEY] = distinct
+    storage.append_jsonl(storage.root / "events.jsonl", {
+        "schema": EVENT_SCHEMA, "kind": "yield_alert_reader_error", "errors": distinct,
+        "epoch_s": now_epoch_s,
+    })
+
+
+def queue_yield_alerts(
+    plans: Sequence[NightPlan], storage: Storage, state: dict[str, Any], now: dt.datetime,
+) -> list[str]:
+    """Queue each new night/yield_alert-*.json into notice_pending once.
+
+    An alert is identified by plan, custody root and file name, kept under its
+    own state key (with the plan's dead-man tail as its expiry) so a notice
+    acknowledgement, or a plan briefly missing from discovery, never re-queues
+    it. A file that does not parse or cannot be read yet is retried on the next
+    tick (the driver may be mid write); once the window's result.json exists it
+    is queued as unreadable. A file above YIELD_ALERT_MAX_BYTES is queued
+    unread. Read failures are recorded as a yield_alert_reader_error event.
+    Returns the queued keys.
+    """
+
+    now_epoch_s = now.timestamp()
+    in_window = [plan for plan in plans if _yield_alert_window(plan, now_epoch_s)]
+    recorded = state.get(YIELD_ALERT_STATE_KEY, {})
+    if not isinstance(recorded, dict):
+        recorded = {}
+    seen: dict[str, float] = {
+        key: expiry for key, expiry in recorded.items()
+        if isinstance(key, str) and isinstance(expiry, (int, float))
+        and not isinstance(expiry, bool) and expiry >= now_epoch_s
+    }
+    queued: list[str] = []
+    errors: list[str] = []
+    for plan in in_window:
+        night = _night_dir(plan)
+        try:
+            names = sorted(entry.name for entry in storage.list_directory(night)
+                           if fnmatch.fnmatchcase(entry.name, YIELD_ALERT_GLOB))
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            errors.append(f"{night}: {type(exc).__name__}: {exc}")
+            continue
+        for name in names:
+            key = _yield_alert_prefix(plan) + name
+            if key in seen:
+                continue
+            path = night / name
+            raw: bytes | None
+            try:
+                raw = storage.read_bytes_bounded(path, YIELD_ALERT_MAX_BYTES)
+            except OSError as exc:
+                if not storage.exists(night / "result.json"):
+                    errors.append(f"{path}: {type(exc).__name__}: {exc}")
+                    continue
+                raw = None
+            alert: object = None
+            if raw is not None and len(raw) <= YIELD_ALERT_MAX_BYTES:
+                try:
+                    alert = json.loads(raw)
+                except ValueError:
+                    if not storage.exists(night / "result.json"):
+                        continue
+            reason, facts = _yield_alert_reason(plan, name, alert)
+            notice_id = f"yield-alert-{key}"
+            notices = state.setdefault("notice_pending", [])
+            if not any(isinstance(item, dict) and item.get("id") == notice_id for item in notices):
+                notices.append({
+                    "id": notice_id, "kind": "yield_alert", "epoch_s": now_epoch_s,
+                    "reason": reason, "plan_id": plan.plan_id, "path": str(path),
+                    "sha256": (hashlib.sha256(raw).hexdigest()
+                               if raw is not None and len(raw) <= YIELD_ALERT_MAX_BYTES else None),
+                    "alert": facts,
+                })
+            storage.append_jsonl(storage.root / "events.jsonl", {
+                "schema": EVENT_SCHEMA, "kind": "yield_alert_queued", "plan_id": plan.plan_id,
+                "key": key, "alert": facts, "epoch_s": now_epoch_s,
+            })
+            seen[key] = _yield_alert_expiry(plan)
+            queued.append(key)
+    # Legacy plans never add the key: their state.json stays as it was.
+    if seen or YIELD_ALERT_STATE_KEY in state:
+        state[YIELD_ALERT_STATE_KEY] = dict(sorted(seen.items()))
+    _note_yield_alert_errors(storage, state, errors, now_epoch_s)
+    return queued
+
+
+def plan_released(
+    plan: NightPlan, now_epoch_s: float, storage: Storage,
+    state: Mapping[str, Any] | None = None,
+) -> bool:
+    """Either early release (zero-capture refusal or PLAN2 X1) is latched."""
+
+    return ((_delivered_zero_capture_refusal(plan, now_epoch_s, storage)
+             and _release_observed(plan, storage, state))
+            or _terminal_release_observed(plan, now_epoch_s, storage, state))
 
 
 def plan_span_active(
@@ -864,8 +1253,7 @@ def plan_span_active(
     )
     if chain_open:
         return True
-    if (_delivered_zero_capture_refusal(plan, now_epoch_s, storage)
-            and _release_observed(plan, storage, state)):
+    if plan_released(plan, now_epoch_s, storage, state):
         return False
     if now_epoch_s <= plan_completion_epoch(plan):
         return True
@@ -883,9 +1271,12 @@ def plan_is_armed(
     if plan.authored_epoch_s > now_epoch_s:
         return False
     night = Path(plan.custody_root) / "night"
-    if storage.exists(night / "chain.started"):
-        if not storage.exists(night / "chain.exited"):
-            return True
+    started = storage.exists(night / "chain.started")
+    if started and not storage.exists(night / "chain.exited"):
+        return True
+    if _terminal_release_observed(plan, now_epoch_s, storage, state):
+        return False
+    if started:
         if _terminal_refusal_result(night, storage) is not None:
             return (now_epoch_s <= plan_completion_epoch(plan)
                     or (not storage.exists(night / "courier.sent")
@@ -1518,18 +1909,39 @@ def _remote_probe_allowed(storage: Storage, deps: Dependencies, state: Mapping[s
     snapshot = load_plans(storage, now_epoch_s=now.timestamp())
     if snapshot.errors:
         raise ValueError("; ".join(snapshot.errors))
-    # Re-read the clock after the filesystem reads, so a span that starts
-    # during them is still seen before any transport (review F3).
+    installed = _installed_agent_plans(now, storage)
+    # Evaluate both sources with the same fresh clock after all file reads.
     now = deps.wall_now().astimezone()
     return not any(
-        plan_span_active(plan, now.timestamp(), storage, state) for plan in snapshot.plans
-    ) and installed_agent_fence(now, storage, state=state) is None
+        plan_span_active(plan, now.timestamp(), storage, state)
+        for plan in (*snapshot.plans, *installed)
+    )
 
 
 def _probe_remote_stop(storage: Storage, deps: Dependencies, state: Mapping[str, Any]) -> StopObservation:
     if deps.git_probe is remote_stop_probe:
         return remote_stop_probe(probe_allowed=lambda: _remote_probe_allowed(storage, deps, state))
     return deps.git_probe()
+
+
+def _launch_fence(storage: Storage, deps: Dependencies, state: Mapping[str, Any]) -> Decision | None:
+    """Refresh both fence sources and time at each launch boundary."""
+    try:
+        now = deps.wall_now().astimezone()
+        snapshot = load_plans(storage, now_epoch_s=now.timestamp())
+        if snapshot.errors:
+            return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
+        installed = _installed_agent_plans(now, storage)
+        now = deps.wall_now().astimezone()
+        if any(plan_span_active(plan, now.timestamp(), storage, state) for plan in snapshot.plans):
+            return Decision("FENCED", "plan span active at launch boundary")
+        reasons = [f"installed_plan:{plan.plan_id}" for plan in installed
+                   if plan_span_active(plan, now.timestamp(), storage, state)]
+        if reasons:
+            return Decision("FENCED", "; ".join(reasons))
+    except (OSError, ValueError, OverflowError) as exc:
+        return Decision("HOLD_UNSAFE", f"launch_fence: {exc}")
+    return None
 
 
 def decide(
@@ -1547,6 +1959,13 @@ def decide(
 
     snapshot = plan_snapshot or load_plans(storage, now_epoch_s=wall.timestamp())
     plans = list(snapshot.plans)
+    # PLAN2 yield C: file reads only; never changes the decision below.
+    try:
+        queue_yield_alerts(plans, storage, state, wall)
+    except Exception as exc:  # noqa: BLE001 - an alert is a notice, never a hold
+        with contextlib.suppress(Exception):
+            _note_yield_alert_errors(
+                storage, state, [f"reader: {type(exc).__name__}: {exc}"], wall.timestamp())
     if snapshot.errors:
         return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
     # Delivery is only a candidate for release. The courier and driver can
@@ -1562,6 +1981,16 @@ def decide(
             if plan.t0_epoch_s - PLAN_LEAD_S <= wall.timestamp() <= plan_completion_epoch(plan)
             and _delivered_zero_capture_refusal(plan, wall.timestamp(), storage)
         ]
+        # PLAN2 X1: a terminal window (collected, chain-stopped, or a
+        # HAZARD_PACK NULL refusal) once its courier was delivered.
+        terminal_candidates = [
+            plan for plan in plans
+            if plan.t0_epoch_s - PLAN_LEAD_S <= wall.timestamp() <= plan_completion_epoch(plan)
+            and _terminal_window_kind(plan, wall.timestamp(), storage) is not None
+        ]
+        liveness_candidates = [
+            plan for plan in plans if _launch_liveness_candidate(plan, wall.timestamp(), storage)
+        ]
     except (OverflowError, ValueError) as exc:
         return Decision("HOLD_UNSAFE", f"night_plan_malformed: t0_epoch_s/window_max_s: {exc}")
     # The release is one-way. Once an empty census has been observed after
@@ -1574,16 +2003,70 @@ def decide(
     released = sorted({key for key in released if isinstance(key, str) and key in loaded})
     pending = [(plan, key) for plan in release_candidates
                if (key := _release_key(plan, storage)) is not None and key not in released]
+    terminal_released = state.get(TERMINAL_RELEASE_STATE_KEY, [])
+    if not isinstance(terminal_released, list):
+        terminal_released = []
+    terminal_loaded = set().union(*(_terminal_release_keys(plan, storage) for plan in plans))
+    terminal_released = sorted({key for key in terminal_released
+                                if isinstance(key, str) and key in terminal_loaded})
+    pending_terminal = [(plan, key) for plan in terminal_candidates
+                        if (key := _release_key(plan, storage)) is not None
+                        and key not in terminal_released]
+    pending_liveness = [plan for plan in liveness_candidates
+                        if _launch_abandoned_key(plan, storage) not in terminal_released]
     release_census: CensusObservation | None = None
     release_driver: CensusObservation | None = None
-    if pending:
+    release_held = False
+    if pending or pending_terminal or pending_liveness:
         release_census = deps.census()
         release_driver = (deps.driver_probe() if deps.driver_probe is not None else
                           CensusObservation(False, -1, "", "driver probe unavailable"))
         append_census_event(storage, state, wall, release_census, release_driver)
-        if release_census.empty and release_driver.empty:
+        release_held = not (release_census.empty and release_driver.empty)
+        if not release_held:
             released = sorted(set(released) | {key for _plan, key in pending})
+        if not release_held and (pending_terminal or pending_liveness):
+            try:
+                process_rows: Sequence[ProcessInfo] | None = deps.processes.snapshot()
+            except Exception:  # noqa: BLE001 - an unreadable table never releases
+                process_rows = None
+            newly: list[tuple[NightPlan, str, str]] = []
+            for plan, key in pending_terminal:
+                live = None if process_rows is None else _window_processes(plan, process_rows)
+                if live is None or live:
+                    release_held = True
+                    continue
+                kind = _terminal_window_kind(plan, wall.timestamp(), storage)
+                if kind is not None and _release_key(plan, storage) == key:
+                    newly.append((plan, key, kind))
+            for plan in pending_liveness:
+                live = None if process_rows is None else _window_processes(plan, process_rows)
+                if live is None or live:
+                    release_held = True
+                    continue
+                _write_launch_abandoned(plan, storage, wall)
+                # A driver record that appeared meanwhile cancels the release.
+                key = _launch_abandoned_key(plan, storage)
+                if key is not None and _night_records(plan, storage) == []:
+                    newly.append((plan, key, "launch_abandoned"))
+            for plan, key, kind in newly:
+                terminal_released = sorted(set(terminal_released) | {key})
+                storage.append_jsonl(storage.root / "events.jsonl", {
+                    "schema": EVENT_SCHEMA, "kind": "terminal_release", "release_kind": kind,
+                    "plan_id": plan.plan_id, "key": key, "epoch_s": wall.timestamp(),
+                })
+                if kind == "launch_abandoned":
+                    notices = state.setdefault("notice_pending", [])
+                    notice_id = f"launch-abandoned-{key}"
+                    if not any(isinstance(item, dict) and item.get("id") == notice_id
+                               for item in notices):
+                        notices.append({
+                            "id": notice_id, "kind": "launch_failure", "epoch_s": wall.timestamp(),
+                            "reason": (f"plan {plan.plan_id}: no night driver record by t0 + "
+                                       f"{LAUNCH_LIVENESS_S} s; launch abandoned and span released"),
+                        })
     state["released_zero_capture_refusals"] = released
+    state[TERMINAL_RELEASE_STATE_KEY] = terminal_released
     try:
         armed = armed_plans(plans, wall.timestamp(), storage, state)
         conflicts = plan_conflicts(armed)
@@ -1640,9 +2123,9 @@ def decide(
         census = release_census or deps.census()
         if release_census is None:
             append_census_event(storage, state, wall, census)
-        if release_census is not None and (not census.empty or
-                                           release_driver is not None and not release_driver.empty):
-            return Decision("HOLD_CENSUS", "agent census or driver probe non-empty after delivered refusal",
+        if release_census is not None and release_held:
+            return Decision("HOLD_CENSUS", "agent census, driver probe or plan process table non-empty "
+                            "after delivered refusal or terminal window",
                             adopt=owner is not None)
         if owner is not None:
             phase = standdown_phase(min(active_plans, key=lambda item: item.t0_epoch_s), wall.timestamp())
@@ -1671,7 +2154,7 @@ def decide(
         return Decision(waiting_state, "backoff has not expired")
     if lock is not None:
         return Decision("HOLD_UNSAFE", "magistrate.lock could not be cleared")
-    return Decision("LAUNCHING", "all launch predicates clear", launch=True)
+    return _launch_fence(storage, deps, state) or Decision("LAUNCHING", "all launch predicates clear", launch=True)
 
 
 def resolve_session_binary(path: Path) -> Path:
@@ -1920,7 +2403,7 @@ class ResidentSupervisor:
             "requested_epoch_s": now.timestamp(),
             "requested_monotonic": self.deps.monotonic(),
             # Courtesy only: a plan's absolute TERM/KILL deadlines still win.
-            "exit_within_s": 300,
+            "exit_within_s": STANDDOWN_EXIT_WITHIN_S,
         }
         if plan is not None:
             value.update(
@@ -2549,6 +3032,13 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
     if not decision.launch and not decision.adopt:
         return decision
 
+    if decision.launch:
+        fence = _launch_fence(storage, deps, state)
+        if fence is not None:
+            now = deps.wall_now().astimezone()
+            transition(storage, state, fence.state, fence.reason, now)
+            storage.atomic_json(storage.root / "state.json", state)
+            return fence
     pid = os.fork()
     if pid:
         return decision

@@ -21,7 +21,8 @@ from types import ModuleType, SimpleNamespace
 from typing import Mapping
 from unittest import mock
 
-from joulewise import network_time_off
+from joulewise import network_time_off, kernel_clock
+from tests.test_kernel_clock import frequency_probe
 import joulewise.arm_readiness as readiness
 import joulewise.arm_readiness_evidence as generic_evidence
 import joulewise.arm_readiness_evidence_t0 as t0
@@ -193,6 +194,33 @@ def _valid_session_receipt(context: dict, plan_sha256: str, tree: dict) -> dict:
     )
 
 
+def _fixture_child_environment(repository: Path) -> dict[str, str]:
+    """Environment for the fixture's freeze and arm child processes.
+
+    The synthetic identity is frozen by one child process, re-derived in this
+    test process by the T-0 author, and re-derived again by the arm child.
+    The runtime identity includes installed distribution versions (the mlx
+    adapter reads ``importlib.metadata.version("mlx")``), so all three must
+    see the same Python path. Putting only the fixture repository on a
+    child's PYTHONPATH dropped whatever this process was given there: with
+    the project venv's site-packages on PYTHONPATH, the author saw mlx 0.31.2
+    and the freeze child saw no mlx, and the author correctly refused
+    "live U11 input derivation differs from the frozen projection". The
+    fixture repository stays first, so its synthetic ``mlx_lm`` and its copy
+    of ``joulewise`` still shadow any installed ones.
+    """
+
+    inherited = os.environ.get("PYTHONPATH")
+    entries = [str(repository)]
+    if inherited:
+        entries.append(inherited)
+    return {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(entries),
+        "PYTHONDONTWRITEBYTECODE": "1",
+    }
+
+
 def _install_synthetic_identity_inputs(
     repository: Path,
     pack: Path,
@@ -302,11 +330,28 @@ def stream_generate(model, tokenizer, prompt, *, max_tokens=1, sampler=None):
             "realtime_ns": clock_anchor_override.realtime_ns,
             "monotonic_raw_ns": clock_anchor_override.monotonic_raw_ns,
             "read_skew_ns": clock_anchor_override.read_skew_ns,
+            "kernel_frequency": frequency_probe(),
         }
         customization += (
             "arm_readiness._sample_live_clock_anchor = "
             f"lambda: {live_anchor!r}\n"
         )
+    customization += (
+        "from joulewise import kernel_clock, v5_qualification as _q\n"
+        "from scripts import write_v5_qualification_plan as _writer\n"
+        "from pathlib import Path as _Path\n"
+        "from unittest import mock as _mock\n"
+        f"kernel_clock.read_kernel_frequency = lambda: {frequency_probe()!r}\n"
+        "_clock_budget = _q.authenticated_clock_budget\n"
+        "def _fixture_budget(inputs, pack):\n"
+        "    repo = _Path(pack).parents[2]\n"
+        "    def checkout(value):\n"
+        "        if _Path(value) != repo: raise ValueError('fixture clock checkout mismatch')\n"
+        "        return repo\n"
+        "    with _mock.patch.object(_writer, 'pack_roster', return_value=([], [], ['pre', 'post'], [])), _mock.patch.object(arm_readiness, '_authenticate_launcher_identity', side_effect=checkout):\n"
+        "        return _clock_budget(inputs, pack)\n"
+        "_q.authenticated_clock_budget = _fixture_budget\n"
+    )
     (repository / "sitecustomize.py").write_text(
         customization,
         encoding="utf-8",
@@ -338,6 +383,87 @@ def _patched_sys_module(name: str, module: object):
             sys.modules[name] = previous
 
 
+from joulewise import v5_qualification as _qualification
+_REAL_CLOCK_BUDGET = _qualification.authenticated_clock_budget
+
+
+def fixture_clock_budget(inputs, pack):
+    """Replay real sizing/custody; specify only this small fixture's roster/checkout."""
+    from scripts import write_v5_qualification_plan as writer
+    repository = Path(pack).parents[2]
+    def checkout(value):
+        if Path(value) != repository:
+            raise readiness.LaunchLineageError("fixture checkout differs from clock plan")
+        return repository
+    with (mock.patch.object(writer, "pack_roster", return_value=([], [], ["pre", "post"], [])),
+          mock.patch.object(readiness, "_authenticate_launcher_identity", side_effect=checkout)):
+        return _REAL_CLOCK_BUDGET(inputs, pack)
+
+
+def install_clock_sizing_inputs(repository, pack, custody, *, maximum=320.):
+    """Source-bound synthetic sizing; the small test pack has a specified roster."""
+    from joulewise import v5_qualification as q, night_gate
+    from scripts import write_v5_qualification_plan as writer
+    root = custody / pack.name / t0._INPUT_DIRECTORY
+    window = custody / 'window-plan'
+    source = root / 'clock-sizing-source.json'
+    _write_json(source, {'seconds': maximum, 'pack_t0_s': 360, 't0_stage_cap_s': 3300,
+        'basis': 'synthetic fixture only',
+        'diagnostic_anchor_half_width_s': .001, 'stamp_resolution_s': 1e-9,
+        'rho_per_s': 1e-6})
+    allowance = {'seconds': maximum, 'source': q.reference(source), 'source_pointer': '/seconds'}
+    observed = root / 'clock-observed-bound.json'
+    _write_json(observed, {'seconds': .004, 'basis': 'synthetic fixture only'})
+    sizing = root / 'clock-sizing.json'
+    sizing_value = {'fixed': {name: allowance for name in writer.FIXED_COMPONENTS['s1']},
+        'members': {}, 'auxiliary': {}, 'streams': {name: allowance for name in ('pre', 'post')},
+        'clock': {'diagnostic_anchor_half_width_s': .001, 'stamp_resolution_s': 1e-9,
+            'rho_per_s': 1e-6, 'source': q.reference(source),
+            'observed_max_effective_bound': {'seconds': .004, 'source': q.reference(observed),
+                                           'source_pointer': '/seconds'}}}
+    for name in ('pack_t0', 't0_stage_cap'):
+        sizing_value['fixed'][name] = {
+            'seconds': 360 if name == 'pack_t0' else 3300,
+            'source': q.reference(source), 'source_pointer': '/' + name + '_s'}
+    window_max_s = writer.size_window('s1', sizing_value, brackets=('pre', 'post'))['window_max_s']
+    _write_json(sizing, sizing_value)
+    chain = window / 'window-chain.zsh'
+    text = re.sub(r'^export NIGHT_(?:CLOCK_(?:SIZING_SHA256|STREAM_MAX_S)|ARM_CONTEXT_SHA256)=.*\n', '', chain.read_text(), flags=re.M)
+    chain.write_text(f'export NIGHT_CLOCK_SIZING_SHA256="{q.sha(sizing)}"\n'
+                    + f'export NIGHT_CLOCK_STREAM_MAX_S="{maximum}"\n'
+                    + f'export NIGHT_ARM_CONTEXT_SHA256="{q.sha(root / "arm-context.json")}"\n' + text)
+    sidecar = chain.with_name(chain.name + '.sha256')
+    sidecar.write_bytes(readiness.gnu_sidecar(q.sha(chain), chain.name))
+    tree, _ = readiness._plan_tree(pack)
+    head = readiness.reviewed_main(pack)['head_commit']
+    digest = readiness.committed_pack_tree_sha256(pack)
+    auth = root / 'clock-sizing-authorization.json'
+    _write_json(auth, {'purpose': 'G2B_SHAKEDOWN', 'attempt_id': tree['plan']['plan_id'] + '/1',
+        'claim_eligible': False, 'pack_sha256': digest, 'permitted_chain_sha256': q.sha(chain),
+        'permitted_blocks': 1, 'authority': 'D-171 §3'})
+    table = root / 'clock-sizing-confirmation-table.json'
+    _write_json(table, {'fixture': True})
+    confirmation = root / 'clock-sizing-confirmation.json'
+    _write_json(confirmation, {'table_path': str(table), 'table_sha256': q.sha(table),
+        'transcript_sha256': '0'*64,
+        'confirmed_at': {'epoch_s': 1., 'iso8601_utc': '1970-01-01T00:00:01.000000Z'}})
+    plan = root / 'clock-sizing-plan.json'
+    _write_json(plan, {'schema': night_gate.PACK_PLAN_SCHEMA, 'schema_version': 3,
+        'plan_id': tree['plan']['plan_id'], 'receipt_class': 'TRANSACTION_PACK',
+        't0_epoch_s': 1., 'authored_epoch_s': 0., 'window_max_s': window_max_s,
+        'repo_head': head, 'measurement_root': str(repository), 'measurement_head': head,
+        'chain_path': str(chain), 'chain_sha256_path': str(sidecar),
+        'custody_root': str(custody), 'registration_path': None,
+        'pack_night': {'pack_id': pack.name, 'pack_root': str(pack), 'pack_sha256': digest,
+            'attempt_ordinal': 1, 'authorization_record': q.reference(auth),
+            'confirmation_record': q.reference(confirmation)}})
+    _write_json(root / 'kernel-frequency-binding.json', {
+        'schema': 'joulewise.v5_qualification_clock_binding.v1', 'occurrence': 's1',
+        'plan': q.reference(plan), 'sizing': q.reference(sizing),
+        'plan_id': tree['plan']['plan_id'], 'pack_root': str(pack), 'pack_sha256': digest})
+    _write_json(root / 'kernel-frequency-gate.json', kernel_clock.frequency_gate(frequency_probe(), maximum))
+
+
 def make_t0_fixture(
     *,
     boot_session_id: str = TEST_BOOT_SESSION_ID,
@@ -355,9 +481,14 @@ def make_t0_fixture(
     clear_initial_arm(custody, pack.name)
     if real_identity:
         shutil.copytree(ROOT / "joulewise", repository / "joulewise", dirs_exist_ok=True)
+        shutil.copytree(ROOT / "scripts", repository / "scripts", dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     for relative in (
         "joulewise/network_time_off.py",
+        "joulewise/dwell.py",
+        "joulewise/prewindow.py",
         "joulewise/clock_reference.py",
+        "joulewise/kernel_clock.py",
         "joulewise/arm_readiness_evidence_t0.py",
         "joulewise/identity_pins.py",
         "scripts/author_arm_evidence_t0.py",
@@ -425,7 +556,7 @@ def make_t0_fixture(
                 str(pack),
             ],
             cwd=repository,
-            env={**os.environ, "PYTHONPATH": str(repository), "PYTHONDONTWRITEBYTECODE": "1"},
+            env=_fixture_child_environment(repository),
             text=True,
             capture_output=True,
         )
@@ -475,15 +606,15 @@ def make_t0_fixture(
         ):
             install_passing_dry_run(pack, custody)
 
-    context = arm_context(Path(temporary.name) / "context")
+    context = arm_context(Path(temporary.name).resolve() / "context")
     input_root = custody / pack.name / t0._INPUT_DIRECTORY
     _write_json(input_root / "arm-context.json", context)
 
     plan_sha = readiness._pack_identity(pack, tree)["plan_sha256"]
     plan_path = pack / "calibration_plan.json"
-    epoch_path = Path(temporary.name) / "identity-epoch.json"
-    t1_path = Path(temporary.name) / "t1-bindings.json"
-    ledger_path = Path(temporary.name) / "production-ledger.jsonl"
+    epoch_path = Path(temporary.name).resolve() / "identity-epoch.json"
+    t1_path = Path(temporary.name).resolve() / "t1-bindings.json"
+    ledger_path = Path(temporary.name).resolve() / "production-ledger.jsonl"
     session_receipt = _valid_session_receipt(context, plan_sha, tree)
     _write_json(epoch_path, session_receipt["slots"]["pre"]["identity_epoch"])
     _write_json(t1_path, session_receipt["slots"]["pre"]["t1_bindings"])
@@ -528,9 +659,9 @@ def make_t0_fixture(
     chain_path = window_root / "window-chain.zsh"
     chain_path.write_text(f"#!/bin/zsh\nREPO={repository}\n")
     prewindow_argv = [
-        "/bin/bash",
-        str(repository / "scripts/prewindow_check.sh"),
-        "--wait",
+        str(repository / ".venv/bin/python"),
+        str(repository / "joulewise/prewindow.py"),
+        "--t0-wait",
         "--timeout-min",
         "45",
         "--window",
@@ -666,7 +797,7 @@ def make_t0_fixture(
             repository,
             time_origin + 400,
             time_origin + 400 + t0._MIN_IDLE_NS,
-            stdout="READY after 10 min.\n",
+            stdout="continuous clean dwell 0/600s (check 1)\ncontinuous clean dwell 600/600s (check 2)\nREADY after 10 min.\n",
             boot_session_id=boot_session_id,
         ),
         "ledger-readiness.json": _capture(
@@ -674,6 +805,8 @@ def make_t0_fixture(
             [
                 str(repository / ".venv/bin/python"),
                 str(repository / "scripts/recover_calibration_ledger.py"),
+                "--ledger", str(ledger_path),
+                "--head-pin", str(repository / "configs/calibration/calibration_ledger_head.json"),
                 "readiness",
                 "--phase",
                 "pre-reserve",
@@ -720,6 +853,9 @@ def make_t0_fixture(
         "plan_id": tree["plan"]["plan_id"], "window_id": tree["window_identity"]["window_id"],
         "epoch_s": now_epoch - (now_monotonic_ns - off_finished) / 1e9,
         "monotonic_s": off_finished / 1e9})
+    captures["clock-reference.json"].update(kernel_frequency=frequency_probe(), t_stream_max_s=320.)
+    _write_json(input_root / "kernel-frequency-gate.json", kernel_clock.frequency_gate(frequency_probe(), 320.))
+    install_clock_sizing_inputs(repository, pack, custody)
     for name, value in captures.items():
         _write_json(input_root / name, value)
 
@@ -780,6 +916,8 @@ def passing_probe(argv, *, cwd):
         )
     if "/usr/bin/pgrep" in command:
         return _probe_result(command, cwd, exit_code=1)
+    if command == t0._prewindow.PS_ARGV:
+        return _probe_result(command, cwd, stdout="1 0.0 launchd\n")
     if command[-2:] == ("-g", "therm"):
         return _probe_result(
             command,
@@ -820,6 +958,8 @@ def author_environment(
     now_monotonic_ns: int = SYNTHETIC_MONOTONIC_NS,
     synthetic_clock: bool = True,
     sample_anchor=None,
+    kernel_frequency=None,
+    real_clock_budget: bool = False,
 ):
     if probe is passing_probe and boot_session_id != TEST_BOOT_SESSION_ID:
         def selected_probe(argv, *, cwd):
@@ -829,8 +969,15 @@ def author_environment(
     else:
         selected_probe = probe
     with contextlib.ExitStack() as stack:
+        stack.enter_context(mock.patch.object(kernel_clock, "read_kernel_frequency",
+            return_value=frequency_probe() if kernel_frequency is None else kernel_frequency))
+        if not real_clock_budget:
+            stack.enter_context(mock.patch.object(_qualification, "authenticated_clock_budget",
+                                                   side_effect=fixture_clock_budget))
+        stack.enter_context(mock.patch.object(t0._time, "sleep"))
         stack.enter_context(mock.patch.object(t0, "_RUNNING_REPOSITORY", repository))
-        stack.enter_context(mock.patch.object(t0, "_execute_probe", side_effect=selected_probe))
+        if selected_probe is not None:
+            stack.enter_context(mock.patch.object(t0, "_execute_probe", side_effect=selected_probe))
         if real_offline:
             head = subprocess.run(
                 ["git", "rev-parse", "HEAD"],
@@ -929,12 +1076,61 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 + SYNTHETIC_MONOTONIC_NS,
                 "monotonic_raw_ns": SYNTHETIC_MONOTONIC_NS,
                 "read_skew_ns": 1_000,
+                "kernel_frequency": frequency_probe(),
             },
         )
         publication_patcher.start()
         clock_patcher.start()
+        sizing_patcher = mock.patch.object(
+            _qualification, "authenticated_clock_budget", side_effect=fixture_clock_budget
+        )
+        sizing_patcher.start()
+        self.addCleanup(sizing_patcher.stop)
         self.addCleanup(clock_patcher.stop)
         self.addCleanup(publication_patcher.stop)
+
+    def test_new_floor_t0_authoring_requires_frequency_gate_by_profile(self):
+        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        self.assertNotEqual(pack.name, "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5")
+        path = inputs / "clock-reference.json"
+        capture = json.loads(path.read_bytes()); capture["t_stream_max_s"] = None
+        _write_json(path, capture)
+        with author_environment(repository), self.assertRaises(T0EvidenceAuthoringError) as caught:
+            author_arm_readiness_evidence_t0(pack, custody)
+        self.assertEqual(caught.exception.reason_code, "evidence_author_t0_clock_attestation_underivable")
+        self.assertIn("frequency gate is missing", str(caught.exception))
+
+    def test_versioned_receipts_author_steady_negative_drift_at_long_spans(self):
+        from fractions import Fraction
+        frequency = frequency_probe(-207749)
+        now = 5_000_000_000_000
+        for seconds in (1600, 3600):
+            with self.subTest(seconds=seconds):
+                temporary, repository, pack, custody, _, inputs = make_t0_fixture(now_monotonic_ns=now)
+                try:
+                    span = seconds * 10**9
+                    self._replace_r0(inputs, anchor_raw=now - span,
+                                     anchor_realtime=SYNTHETIC_REALTIME_OFFSET_NS + now - span)
+                    path = inputs / "clock-reference.json"
+                    capture = json.loads(path.read_bytes())
+                    capture.update(kernel_frequency=frequency, t_stream_max_s=320.)
+                    _write_json(path, capture)
+                    drift = round(Fraction(-207749 * span, 65536 * 10**6))
+                    endpoint = t0._clock_reference.ClockAnchor(SYNTHETIC_REALTIME_OFFSET_NS + now + drift, now, 1000)
+                    with author_environment(repository, now_monotonic_ns=now,
+                                            sample_anchor=lambda: endpoint, kernel_frequency=frequency):
+                        result = author_arm_readiness_evidence_t0(pack, custody)
+                    receipt = next(json.loads(Path(p).read_bytes()) for p in result["receipt_paths"]
+                                   if json.loads(Path(p).read_bytes())["kind"] == "CLOCK_ATTESTATION")
+                    value = receipt["facts"][0]["value"]
+                    self.assertEqual(value["anchor_check_version"], kernel_clock.ANCHOR_CHECK_VERSION)
+                    self.assertGreater(value["anchor_delta_ns"], 5_000_000)
+                    self.assertLess(value["anchor_residual_ns"], 1)
+                    self.assertTrue(readiness._clock_probe_predicate_passes(
+                        receipt, value, readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE))
+                finally:
+                    temporary.cleanup()
 
     def test_generated_gamma_roots_pass_and_legacy_keys_are_refused(self) -> None:
         from tests import test_d117_contrast_v5_pack as gamma_fixture
@@ -1075,7 +1271,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
 
     def test_t0_liveness_constant_is_derived_from_the_post_r1_probe_census(self) -> None:
-        """The ruled 610 s = eleven 45 s sites + one 10 s battery site + 105 s.
+        """The ruled 610 s retains room for WO-CENSUS-SEMANTICS' CPU probes.
 
         What this test pins: the PROVENANCE ARITHMETIC of cold gate T26
         item 3, which states the constant as eleven governed post-R1 probe
@@ -1083,7 +1279,9 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         work. Each factor is read from the code (the sites by an AST
         census of direct ``_fresh_probe`` calls, the timeout from the
         module constant), so an edit to either factor fails here while
-        the constant stays 610 s. The one site inside
+        the constant stays 610 s. The added CPU call site runs twice, with a
+        five-second timeout and a one-second pause, spending 11 s of the
+        retired OFF site's 45 s spare allowance. The one site inside
         ``_fresh_clock_reference_batch`` IS R1 and is excluded.
 
         What this test does NOT protect: the runtime R1→stamp envelope.
@@ -1161,14 +1359,21 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         self.assertEqual(sites_by_function.pop("_fresh_clock_reference_batch"), 1)
         post_r1_sites = len(direct_call_names) - 1
         self.assertEqual(sum(sites_by_function.values()), post_r1_sites)
-        self.assertEqual(post_r1_sites, 11, sites_by_function)
+        self.assertEqual(post_r1_sites, 12, sites_by_function)
+        self.assertEqual(sites_by_function["_maintenance_probe"], 2)
         self.assertEqual(t0._PROBE_TIMEOUT_SECONDS, 45)
-        # The retired second OFF leaves 45 s of the existing budget spare.
+        self.assertEqual(t0._MAINTENANCE_CPU_SAMPLES, 2)
+        self.assertEqual(t0._MAINTENANCE_CPU_INTERVAL_S, 1)
+        self.assertEqual(t0._PROBE_TIMEOUT_OVERRIDES[t0._prewindow.PS_ARGV], 5)
+        # One site is the 10 s battery probe; another is the repeated 5 s
+        # CPU probe. Charge both executions and the inter-sample pause.
         self.assertGreaterEqual(
             readiness._T0_R1_TO_VALIDITY_ORIGIN_LIVENESS_NS,
             (
-                (post_r1_sites - 1) * t0._PROBE_TIMEOUT_SECONDS
+                (post_r1_sites - 2) * t0._PROBE_TIMEOUT_SECONDS
                 + t0._PROBE_TIMEOUT_OVERRIDES[t0._battery_float.IOREG_BATTERY_ARGV]
+                + t0._MAINTENANCE_CPU_SAMPLES * t0._PROBE_TIMEOUT_OVERRIDES[t0._prewindow.PS_ARGV]
+                + (t0._MAINTENANCE_CPU_SAMPLES - 1) * t0._MAINTENANCE_CPU_INTERVAL_S
                 + 105
             )
             * 1_000_000_000,
@@ -2348,6 +2553,17 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                     self.assertEqual(source["derivation"]["policy"], network_time_off.SCHEMA)
                     self.assertTrue(any(ref["path"].endswith(network_time_off.RECEIPT_BASENAME)
                                         for ref in source["input_artifacts"]))
+                if row["row_id"] == "t0.background_quiet":
+                    module = repository / "joulewise/prewindow.py"
+                    self.assertIn({"path": str(module),
+                                   "sha256": hashlib.sha256(module.read_bytes()).hexdigest()},
+                                  source["input_artifacts"])
+                    manifest = json.loads((_inputs / "launch-manifest.json").read_bytes())
+                    self.assertEqual(manifest["prewindow_command"], [
+                        str(repository / ".venv/bin/python"), str(module), "--t0-wait",
+                        "--timeout-min", "45", "--window", "alpha"])
+                    self.assertFalse(any(ref["path"].endswith("scripts/prewindow_check.sh")
+                                         for ref in source["input_artifacts"]))
                 self.assertEqual(source["facts"][0]["fact_id"], row["predicate_id"])
                 self.assertEqual(source["facts"][0]["value"], fact["value"])
                 independently_observed_rows.append(row["row_id"])
@@ -2613,7 +2829,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             "PROCESS_CENSUS",
             (
                 ("/usr/bin/pgrep", "-x", "caffeinate"),
-                ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"),
+                ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"),
                 (
                     "/usr/bin/pgrep",
                     "-lf",
@@ -2680,7 +2896,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         """
         commands = (
             ("/usr/bin/pgrep", "-x", "caffeinate"),
-            ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"),
+            ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"),
             ("/usr/bin/pgrep", "-lf", t0._BROWSER_CENSUS_PATTERN),
             ("/usr/bin/pgrep", "-lf", t0._MONITOR_CENSUS_PATTERN),
         )
@@ -2857,7 +3073,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             ("CLOCK_ATTESTATION", lambda _r, _p, _c, _x: ( _x / "clock-reference.json").unlink(), {}),
             ("CLOCK_PROBE", lambda _repo, _pack, _custody, inputs: (inputs / network_time_off.RECEIPT_BASENAME).unlink(), {}),
             ("TERMINAL_REVIEW", lambda *_args: None, {"patch_message": True}),
-            ("MAINTENANCE_CENSUS", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, exit_code=0, stdout="123 XProtect\n") if "XProtect" in " ".join(argv) else passing_probe(argv, cwd=cwd)}),
+            ("MAINTENANCE_CENSUS", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, stdout="123 5.1 XProtect\n") if tuple(argv) == t0._prewindow.PS_ARGV else passing_probe(argv, cwd=cwd)}),
             ("ROOT_PREFLIGHT", lambda _r, _p, c, _x: (Path(c["claim_runs_root"]) / "campaign.lock").write_text("busy\n"), {}),
             ("MACHINE_PREFLIGHT", lambda _r, _p, _c, x: _write_json(x / "quiet-mac-prep.json", {**json.loads((x / "quiet-mac-prep.json").read_text()), "stdout": "READY.\n"}), {}),
             ("LEDGER_RESERVATION", lambda _r, _p, _c, x: _write_json(x / "ledger-reservation.json", {**json.loads((x / "ledger-reservation.json").read_text()), "stdout": json.dumps({"status": "refused"})}), {}),
@@ -2963,7 +3179,9 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         with author_environment(repository, probe=recording_probe):
             author_arm_readiness_evidence_t0(pack, custody)
         self.assertIn(t0._battery_float.IOREG_BATTERY_ARGV, seen)
-        self.assertEqual(t0._PROBE_TIMEOUT_OVERRIDES, {t0._battery_float.IOREG_BATTERY_ARGV: 10})
+        self.assertEqual(t0._PROBE_TIMEOUT_OVERRIDES, {
+            t0._battery_float.IOREG_BATTERY_ARGV: 10, t0._prewindow.PS_ARGV: 5,
+        })
         source = json.loads(
             (custody / pack.name / t0._SOURCE_DIRECTORY / "t0-power-path.json").read_text()
         )
@@ -3016,7 +3234,17 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
         fact = receipt["facts"][0]
         self.assertEqual(fact["source_kind"], "PROBE")
-        self.assertEqual(set(fact["value"]), readiness._CLOCK_PROBE_VALUE_KEYS)
+        self.assertEqual(
+            set(fact["value"]),
+            readiness._CLOCK_PROBE_RESIDUAL_VALUE_KEYS | {"clock_sizing_binding"},
+        )
+        self.assertEqual(
+            fact["value"]["clock_sizing_binding"],
+            _qualification.reference(_inputs / "kernel-frequency-binding.json"),
+        )
+        self.assertEqual(fact["value"]["anchor_check_version"], kernel_clock.ANCHOR_CHECK_VERSION)
+        self.assertEqual(fact["value"]["r0_kernel_frequency"], frequency_probe())
+        self.assertEqual(fact["value"]["kernel_frequency"], frequency_probe())
         boolean_names = {
             name for name, value in fact["value"].items() if isinstance(value, bool)
         }
@@ -3388,7 +3616,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             completed = subprocess.run(
                 command,
                 cwd=repository,
-                env={**os.environ, "PYTHONPATH": str(repository), "PYTHONDONTWRITEBYTECODE": "1"},
+                env=_fixture_child_environment(repository),
                 text=True,
                 capture_output=True,
             )

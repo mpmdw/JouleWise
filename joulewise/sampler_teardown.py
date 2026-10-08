@@ -22,6 +22,7 @@ import signal
 import struct
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
@@ -110,22 +111,32 @@ class SamplerTeardown:
         return self._process is not None
 
     @contextmanager
-    def intercept_popen(self) -> Iterator[None]:
+    def intercept_popen(self, *, owner_thread_only: bool = False) -> Iterator[None]:
         """Adopt the first ``Popen`` made by the wrapped adapter start call.
 
         The wrapper restores the original constructor *before* it spawns, so
         helper subprocesses and teardown censuses cannot be captured.  This is
         intentionally a single-operator, single-sampler seam under D-139 A1.
+
+        ``owner_thread_only`` (HAZARD, PLAN2 M4): only the thread that entered
+        the seam can be adopted; a concurrent helper thread (the controller's
+        guard probe) passes straight through to the original constructor.
+        The default (legacy) adopts the first sampler spawn from any thread.
         """
 
         original_popen = subprocess.Popen
         captured = False
+        owner = threading.get_ident() if owner_thread_only else None
 
         def parent_popen(*args: Any, **kwargs: Any) -> _CustodiedProcess:
             nonlocal captured
             command = args[0] if args else kwargs.get("args", [])
             command_argv = _argv(command)
-            capture_this = not captured and self._is_sampler_spawn(command_argv)
+            capture_this = (
+                not captured
+                and (owner is None or threading.get_ident() == owner)
+                and self._is_sampler_spawn(command_argv)
+            )
             if capture_this:
                 captured = True
                 if subprocess.Popen is parent_popen:

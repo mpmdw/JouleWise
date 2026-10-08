@@ -456,7 +456,7 @@ class NightGateTests(unittest.TestCase):
 
     def test_production_argv_constants_are_pinned(self) -> None:
         self.assertEqual(
-            ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"),
+            ("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"),
             night_gate.AGENT_CENSUS_ARGV,
         )
         self.assertEqual(
@@ -529,7 +529,7 @@ class NightGateTests(unittest.TestCase):
         observed, refusal = census([peer])
         self.assertIsNone(refusal)
         self.assertEqual("", observed.stdout)
-        for command in ("/usr/bin/claude -p", "node codex mcp-server", "t3 code",
+        for command in ("/usr/bin/claude -p", "node codex mcp-server",
                         # Refuter 10 F1: a foreign agent whose argv also names pgrep
                         # must stay visible; a pgrep-line post-filter would hide it.
                         "/usr/bin/claude -p inspect /usr/bin/pgrep"):
@@ -570,7 +570,7 @@ class NightGateTests(unittest.TestCase):
         _, refusal = night_gate.agent_census(source.probes())
         self.assertEqual("night_refused_agent_present", refusal.reason)
         self.assertIn("25658 /Applications/ChatGPT.app", refusal.detail)
-        self.assertEqual(("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"), night_gate.AGENT_CENSUS_ARGV)
+        self.assertEqual(("/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"), night_gate.AGENT_CENSUS_ARGV)
 
     def test_a_nonmatch_exit_with_output_still_refuses_the_census(self) -> None:
         source = FakeProbeSource()
@@ -2169,3 +2169,70 @@ class EvidenceRegistrationTests(unittest.TestCase):
         self.assertIn('It never starts `collect`, `load` or power sampling.', runbook)
         self.assertIn('You have no scientific decision authority', courier)
         self.assertIn('night/evidence_busy_cores.jsonl', courier)
+
+
+class HazardPackPlanTests(unittest.TestCase):
+    """Gate-prune lane L2: the HAZARD_PACK class is parsed here and never gate-evaluated."""
+
+    def mapping(self, **changes):
+        from tests.fixtures.b5_plan import fake_window
+        value = fake_window.hazard_plan_mapping(Path("/fixture/b5"), plan_id="b5-alpha-1",
+                                                t0_epoch_s=1_800_000_000.0, authored_epoch_s=1_799_999_000.0)
+        value.update(changes)
+        return value
+
+    def test_hazard_plan_parses_to_its_own_class_with_the_window_record(self):
+        plan = night_gate.NightPlan.from_mapping(self.mapping())
+        self.assertIsInstance(plan, night_gate.HazardNightPlan)
+        self.assertIsInstance(plan, night_gate.NightPlan)
+        self.assertEqual(night_gate.HAZARD_PACK, plan.receipt_class)
+        self.assertEqual(self.mapping()["hazard_window"], plan.hazard_window)
+        self.assertIsNone(plan.pack_night)
+        self.assertIsNone(plan.quiet_admission)
+
+    def test_gate_evaluated_classes_and_their_registries_are_unchanged(self):
+        self.assertEqual(("DIAGNOSTIC_NO_PACK", "REHEARSAL_STUB", "TRANSACTION_PACK"), night_gate.RECEIPT_CLASSES)
+        self.assertEqual(night_gate.RECEIPT_CLASSES + ("HAZARD_PACK",), night_gate.PLAN_RECEIPT_CLASSES)
+        self.assertNotIn(night_gate.HAZARD_PACK, night_gate.class_table())
+        self.assertEqual({"night_refused_hazard", "night_stopped_disk_low",
+                          "night_stopped_census_unmeasured", "night_stopped_monitor_outage",
+                          "night_refused_instrument_not_sampling", "night_refused_boot_changed",
+                          "night_refused_launch_abandoned", "night_refused_pack_inventory_unusable"},
+                         set(night_gate.HAZARD_DRIVER_REASON_CODES))
+        self.assertFalse(night_gate.HAZARD_DRIVER_REASON_CODES
+                         & (night_gate.NIGHT_GATE_REASON_CODES | night_gate.NIGHT_DRIVER_REASON_CODES))
+
+    def test_evaluate_night_refuses_to_judge_a_hazard_plan(self):
+        plan = night_gate.NightPlan.from_mapping(self.mapping())
+        with self.assertRaises(night_gate.PlanError) as caught:
+            night_gate.evaluate_night(plan, FakeProbeSource().probes())
+        self.assertEqual("night_receipt_class_invalid", caught.exception.reason)
+
+    def test_hazard_plan_shape_is_exact(self):
+        cases = {
+            "v2 schema": {"schema": night_gate.PLAN_SCHEMA, "schema_version": 2},
+            "quiet schema": {"schema": night_gate.QUIET_PLAN_SCHEMA, "schema_version": 4},
+            "no window": {"hazard_window": None},
+            "relative chain": {"chain_path": "chain.zsh"},
+            "relative custody": {"custody_root": "custody"},
+        }
+        for label, change in cases.items():
+            with self.subTest(case=label):
+                with self.assertRaises(night_gate.PlanError):
+                    night_gate.NightPlan.from_mapping(self.mapping(**change))
+        for extra in ("pack_night", "quiet_admission", "previous_attempt"):
+            with self.subTest(extra=extra):
+                value = self.mapping()
+                value[extra] = {}
+                with self.assertRaises(night_gate.PlanError):
+                    night_gate.NightPlan.from_mapping(value)
+        value = self.mapping()
+        del value["hazard_window"]
+        with self.assertRaises(night_gate.PlanError):
+            night_gate.NightPlan.from_mapping(value)
+
+    def test_a_hazard_window_on_another_class_is_refused(self):
+        value = night_plan_mapping(make_plan())
+        value["hazard_window"] = self.mapping()["hazard_window"]
+        with self.assertRaises(night_gate.PlanError):
+            night_gate.NightPlan.from_mapping(value)

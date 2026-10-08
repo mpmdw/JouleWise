@@ -21,6 +21,7 @@ import queue
 import resource
 import socket
 from contextlib import ExitStack
+from contextvars import copy_context
 from dataclasses import asdict, replace
 from datetime import date, datetime, time as wall_time, timedelta, timezone
 from pathlib import Path
@@ -146,6 +147,31 @@ _WRITE_ONCE_RECORDS = (
     "courier.json",
 )
 _QUIET_WRITE_ONCE_RECORDS = _WRITE_ONCE_RECORDS + ("quiet_samples.jsonl",)
+# HAZARD_PACK (joulewise/b5/driver.py): an arm already ran this night.
+# "launch_abandoned.json" is the watchdog's J4 marker (PLAN2 X1 launch
+# liveness): the watchdog released this plan's span because no driver record
+# appeared by t0 + its liveness bound, so a late launchd fire measures nothing.
+LAUNCH_ABANDONED_MARKER = "launch_abandoned.json"
+_HAZARD_WRITE_ONCE_RECORDS = _WRITE_ONCE_RECORDS + ("arm_decision.json", "hazard_result.json",
+                                                    "launch_abandoned.json")
+# The HAZARD_PACK driver's structure-only records, published with the night.
+HAZARD_ARTIFACTS = (
+    "hazard_result.json",
+    "arm_decision.json",
+    "network_time_off.action.json",
+    "arm_collectors.json",
+    "executed_inventory.json",
+    "lineage.json",
+    "monitor_supervision.jsonl",
+    # The wall meter's supervision journal (starts, exits, stop proof). Its
+    # stream (power samples) stays in custody under hazards/meter/.
+    "meter_supervision.jsonl",
+    "chain.exit-census.json",
+    "g10.json",
+    "g10.driver.json",
+    # PLAN2 yield D: per-stage member counts (structure only, registration 8 item 2).
+    "stage_yield.jsonl",
+)
 
 
 def _build_code_map(codes: set[str] | frozenset[str]) -> dict[str, str]:
@@ -261,11 +287,7 @@ def validate_refusal(value: Mapping[str, object]) -> list[str]:
         defects.append("refusal: keys must match the driver refusal schema exactly")
     if value.get("schema") != REFUSAL_SCHEMA:
         defects.append(f"schema: must be {REFUSAL_SCHEMA}")
-    if value.get("receipt_class") not in {
-        "DIAGNOSTIC_NO_PACK",
-        "REHEARSAL_STUB",
-        "TRANSACTION_PACK",
-    }:
+    if value.get("receipt_class") not in set(night_gate.PLAN_RECEIPT_CLASSES):
         defects.append("receipt_class: invalid")
     if not isinstance(value.get("plan_id"), str) or not value.get("plan_id"):
         defects.append("plan_id: must be a non-empty string")
@@ -278,7 +300,10 @@ def validate_refusal(value: Mapping[str, object]) -> list[str]:
     if set(refusal) != {"reason", "detail", "evidence"}:
         defects.append("refusal.refusal: keys must match exactly")
     reason = refusal.get("reason")
-    if reason not in NIGHT_DRIVER_REASON_CODES | NIGHT_GATE_REASON_CODES:
+    registered = NIGHT_DRIVER_REASON_CODES | NIGHT_GATE_REASON_CODES
+    if value.get("receipt_class") == night_gate.HAZARD_PACK:
+        registered = registered | night_gate.HAZARD_DRIVER_REASON_CODES
+    if reason not in registered:
         defects.append("refusal.reason: is not registered")
     if not isinstance(refusal.get("detail"), str) or not refusal.get("detail"):
         defects.append("refusal.detail: must be a non-empty string")
@@ -358,7 +383,7 @@ def _probe_runner(argv: tuple[str, ...] | list[str]) -> ProbeResult:
             # Obligation R2-11: the battery grammar judges the exact stdout
             # bytes, so this probe is captured without text mode (universal
             # newlines would turn a CR into an LF before the grammar sees it).
-            completed = subprocess.run(
+            completed = t0_rehearsal.observed_run(
                 command,
                 capture_output=True,
                 timeout=timeout_s,
@@ -372,7 +397,7 @@ def _probe_runner(argv: tuple[str, ...] | list[str]) -> ProbeResult:
                 monotonic_ns=time.monotonic_ns(),
                 stdout_bytes=completed.stdout,
             )
-        completed = subprocess.run(
+        completed = t0_rehearsal.observed_run(
             command,
             capture_output=True,
             text=True,
@@ -589,7 +614,8 @@ def _complete_chain_start(descriptor: int, process: subprocess.Popen[Any],
                           night_dir: Path) -> int:
     # start_new_session=True makes the child the process-group leader.
     pgid = process.pid
-    record = {"pid": process.pid, "pgid": pgid, "epoch_s": time.time()}
+    record = {"pid": process.pid, "pgid": pgid, "epoch_s": time.time(),
+              "monotonic_ns": time.monotonic_ns()}
     try:
         # Publish the dead-man's complete identity before any subprocess probe.
         _write_all(descriptor, _json_bytes(record))
@@ -710,10 +736,22 @@ def _chain_environment(plan: NightPlan, night_dir: Path) -> dict[str, str]:
     environment.pop("NIGHT_VERIFY_ONLY", None)
     environment.pop("NIGHT_RESERVATION_ARGV_ONLY", None)
     environment.pop("EVIDENCE_PROCESS_JOURNAL", None)
-    off_path = night_dir / network_time_off.RECEIPT_BASENAME
-    if plan.receipt_class == "TRANSACTION_PACK":
-        off_path = (night_dir.parent / plan.pack_night["pack_id"] /
-                    "arm_readiness.t0.inputs" / network_time_off.RECEIPT_BASENAME)
+    if plan.receipt_class == night_gate.HAZARD_PACK:
+        # Block 5's chain reads only NIGHT_DIR and its own literals. Its OFF
+        # is an arm action recorded in the night directory, so nothing from
+        # the retired qualification path is imported here.
+        environment["JOULEWISE_NETWORK_TIME_OFF_RECEIPT"] = str(
+            night_dir / network_time_off.RECEIPT_BASENAME)
+        return environment
+    from joulewise import v5_qualification
+    off_path = v5_qualification.off_receipt_path(plan, night_dir)
+    chain = Path(plan.chain_path) if getattr(plan, "chain_path", None) is not None else None
+    if plan.receipt_class == "TRANSACTION_PACK" and chain is not None:
+        window = chain.parent / "window.env"
+        if window.is_file() and chain.is_file() and "export V5_QUALIFICATION_OCCURRENCE=" in chain.read_text():
+            assignments = t0_author.parse_window_environment(window.read_bytes())
+            for key in ("CALIBRATION_LEDGER", "LEDGER_HEAD_PIN"):
+                environment[key] = assignments[key]
     environment["JOULEWISE_NETWORK_TIME_OFF_RECEIPT"] = str(off_path)
     return environment
 
@@ -727,7 +765,7 @@ def reservation_input_paths(plan: NightPlan, plan_path: Path) -> list[Path]:
     """
     environment = _chain_environment(plan, Path(plan.custody_root) / "night")
     environment.update(NIGHT_VERIFY_ONLY="1", NIGHT_RESERVATION_ARGV_ONLY="1")
-    completed = subprocess.run(["/bin/zsh", plan.chain_path], env=environment,
+    completed = t0_rehearsal.observed_run(["/bin/zsh", plan.chain_path], env=environment,
         stdin=subprocess.DEVNULL, capture_output=True, timeout=10, check=True)
     if not completed.stdout.endswith(b"\0"):
         raise ValueError("input_digests: chain did not describe reservation arguments")
@@ -941,8 +979,27 @@ def _run_chain_once(
     command: list[str] | None = None,
     abort_on_census: bool = True,
     shutdown_monotonic: float | None = None,
+    extra_env: dict[str, str] | None = None,
+    supervise: Any = None,
+    census_group_on_exit: bool = False,
+    census: Any = None,
+    append_census: Any = None,
 ) -> tuple[int | None, dict[str, Any] | None, int, list[dict[str, Any]], bool]:
-    """Run exactly one child session and continuously census it."""
+    """Run exactly one child session and continuously census it.
+
+    ``census`` and ``append_census`` (HAZARD_PACK only; PLAN2 rows 7 and 10)
+    replace ``agent_census(probes)`` and ``_append_census``. The HAZARD census
+    retries an unmeasured probe and returns a refusal only for a positive
+    detection or for a run of unmeasured censuses (its own hazard code, which
+    the abort keeps); its append never raises.
+
+    ``supervise`` (HAZARD_PACK only) is called once per loop pass, about once a
+    second. It keeps the hazard monitor alive and may return a refusal
+    mapping, which stops the chain exactly as an in-chain census hit does.
+    ``census_group_on_exit`` runs a no-signal census of the chain's process
+    group when the chain exits on its own and proves any survivors gone before
+    the exit is recorded (memo 3.M).
+    """
 
     with ExitStack() as resources:
         channel = child_channel = None
@@ -966,24 +1023,34 @@ def _run_chain_once(
         return _run_chain_once_impl(chain_path, plan, probes, night_dir,
             claim_descriptor, command=command, abort_on_census=abort_on_census,
             shutdown_monotonic=shutdown_monotonic, channel=channel,
-            child_channel=child_channel, start_fd_env=start_fd_env)
+            child_channel=child_channel, start_fd_env=start_fd_env, extra_env=extra_env,
+            supervise=supervise, census_group_on_exit=census_group_on_exit,
+            census=census, append_census=append_census)
 
 
 def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                          *, command, abort_on_census, shutdown_monotonic,
-                         channel, child_channel, start_fd_env):
+                         channel, child_channel, start_fd_env, extra_env=None,
+                         supervise=None, census_group_on_exit=False, census=None,
+                         append_census=None):
 
     census_path = night_dir / "censuses.jsonl"
     stdout_path = night_dir / "chain.stdout.log"
     stderr_path = night_dir / "chain.stderr.log"
     with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
+        os.chmod(stdout_path, 0o600)
+        os.chmod(stderr_path, 0o600)
         environment = _chain_environment(plan, night_dir)
+        if extra_env:
+            if plan.receipt_class != "TRANSACTION_PACK" or set(extra_env) != {"ARM_RECEIPT", "LAUNCH_MANIFEST"}:
+                raise ValueError("pack launcher environment keys")
+            environment.update(extra_env)
         launch_options = {}
         if child_channel is not None:
             environment[start_fd_env] = str(child_channel.fileno())
             launch_options["pass_fds"] = (child_channel.fileno(),)
         try:
-            process = subprocess.Popen(
+            process = t0_rehearsal.observed_popen(
                 command if command is not None else ["/bin/zsh", str(chain_path)],
                 stdin=subprocess.DEVNULL,
                 stdout=stdout,
@@ -1096,6 +1163,8 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
             first_signal = None
 
         next_census = time.monotonic()
+        hid_observed = False
+        s1_observations = _s1_observation_enabled(plan)
         while process.poll() is None or awaiting_start:
             if awaiting_start:
                 if deadline.expired():
@@ -1135,6 +1204,12 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                 if process.poll() is not None:
                     break
             now = time.monotonic()
+            if claimed and not hid_observed and s1_observations:
+                def hid_operation():
+                    from scripts.produce_t0_rehearsal_bundle import observe_hid
+                    return observe_hid(night_dir)
+                _qualification_observe(night_dir, "hid", hid_operation)
+                hid_observed = True
             # Three checks, because the two calls between them can each block
             # without bound: the census probe and the census append. The
             # watchdog thread covers a block that never returns at all; these
@@ -1145,13 +1220,13 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                 if fired is not None:
                     return exceeded(fired)
             if now >= next_census:
-                probe, refusal = agent_census(probes)
+                probe, refusal = census() if census is not None else agent_census(probes)
                 if deadline.expired():
                     fired = deadline.fire()
                     if fired is not None:
                         return exceeded(fired)
                 record = _census_record(probe, refusal)
-                _append_census(census_path, probe, refusal)
+                (append_census or _append_census)(census_path, probe, refusal)
                 census_count += 1
                 if deadline.expired():
                     fired = deadline.fire()
@@ -1187,18 +1262,51 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                                 census_hits,
                                 False,
                             )
+                        # A HAZARD census stop that is not an agent (PLAN2 row
+                        # 7: censuses unmeasured) keeps its own code and detail.
+                        hazard_reason = getattr(refusal, "reason", None)
+                        if hazard_reason in night_gate.HAZARD_DRIVER_REASON_CODES:
+                            abort_reason = hazard_reason
+                            abort_detail = str(getattr(refusal, "detail", "") or hazard_reason)
+                        else:
+                            abort_reason = _CODES["aborted_agent_present"]
+                            abort_detail = "agent census refused while the chain was running"
                         return (
                             process.poll(),
-                            _refusal_mapping(
-                                _CODES["aborted_agent_present"],
-                                "agent census refused while the chain was running",
-                                record,
-                            ),
+                            _refusal_mapping(abort_reason, abort_detail, record),
                             census_count,
                             census_hits,
                             True,
                         )
                 next_census = now + CENSUS_INTERVAL_S
+            if supervise is not None and claimed and process.poll() is None:
+                try:
+                    stop = supervise()
+                except Exception as error:  # noqa: BLE001 - supervision never ends a chain by accident
+                    stop = None
+                    try:
+                        _append_log(Path(plan.custody_root), f"chain supervision raised {type(error).__name__}: {error}")
+                    except OSError:
+                        pass
+                if stop is not None:
+                    fired = deadline.cancel()
+                    if fired is not None:
+                        return exceeded(fired)
+                    evidence = {}
+                    proven = _terminate_process_group(
+                        process, night_dir, pgid=pgid, evidence=evidence, pending_dir=night_dir)
+                    if not proven:
+                        _write_json(night_dir / "chain.unkilled",
+                                    {"pgid": pgid, "epoch_s": time.time(),
+                                     "group_census": list(evidence.get("group_census", []))})
+                        return (process.poll(), _refusal_mapping(
+                            _CODES["chain_alive"], "process-group termination could not be proven",
+                            {"trigger": stop.get("reason"), **evidence}), census_count, census_hits, False)
+                    stop_evidence = stop.get("evidence")
+                    stop_evidence = dict(stop_evidence) if isinstance(stop_evidence, Mapping) else {"detail": stop_evidence}
+                    stop_evidence["group_census"] = list(evidence.get("group_census", []))
+                    return (process.poll(), _refusal_mapping(stop["reason"], stop["detail"], stop_evidence),
+                            census_count, census_hits, True)
             # Never sleep past either instant.
             time.sleep(min(1.0, max(0.01, min(
                 next_census - time.monotonic(), deadline.remaining()))))
@@ -1232,6 +1340,32 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
             # exact document as evidence under the existing driver code.
             return (None, _refusal_mapping(_CODES["chain_launch_failed"], detail, evidence),
                     census_count, census_hits, proven)
+        if census_group_on_exit:
+            # wait() proved only the direct child gone. A no-signal census of
+            # the group decides whether anything it started is still running;
+            # survivors are terminated and proven gone before the exit is
+            # recorded, so nothing the chain left behind overlaps G10 or harvest.
+            absent, survivors = _group_census(pgid)
+            exit_census = {"schema": "joulewise.chain_exit_census.v1", "pgid": pgid,
+                           "exit_code": exit_code, "absent": absent, "survivors": survivors,
+                           "epoch_s": time.time(), "monotonic_ns": time.monotonic_ns()}
+            if not absent:
+                evidence = {"natural_exit_survivors": survivors}
+                proven = _terminate_process_group(process, night_dir, pgid=pgid,
+                                                  evidence=evidence, pending_dir=night_dir)
+                exit_census.update(terminated=True, proven=proven,
+                                   group_census=list(evidence.get("group_census", [])))
+                _write_json(night_dir / "chain.exit-census.json", exit_census)
+                if not proven:
+                    _write_json(night_dir / "chain.unkilled",
+                                {"pgid": pgid, "epoch_s": time.time(),
+                                 "group_census": list(evidence.get("group_census", []))})
+                    return (exit_code, _refusal_mapping(
+                        _CODES["chain_alive"],
+                        "chain exited but its process group could not be proven gone", evidence),
+                        census_count, census_hits, False)
+                return exit_code, None, census_count, census_hits, True
+            _write_json(night_dir / "chain.exit-census.json", exit_census)
         _record_chain_exit(night_dir, exit_code)
         return exit_code, None, census_count, census_hits, True
 
@@ -1288,6 +1422,10 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
         night_dir / "evidence_envelopes.jsonl",
         night_dir / "evidence_cleanup.json",
         night_dir / "evidence_outcome.json",
+        # HAZARD_PACK structure-only driver records (joulewise/b5/driver.py).
+        # Stage timings, monitor journals, arm measurements and flags stay in
+        # custody; these files carry verdicts, return codes and digests.
+        *(night_dir / name for name in HAZARD_ARTIFACTS),
     ]
     artifacts = [entry for path in paths
                  if (entry := _artifact_entry(custody_root, path)) is not None]
@@ -1326,7 +1464,7 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
 
     omitted: list[str] = []
     try:
-        origin = subprocess.run(
+        origin = t0_rehearsal.observed_run(
             ["git", "-C", str(REPO_ROOT), "remote", "get-url", "origin"],
             capture_output=True,
             text=True,
@@ -1335,7 +1473,7 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
         ).stdout.strip()
         clone = custody_root / "results-clone"
         if not clone.exists():
-            subprocess.run(
+            t0_rehearsal.observed_run(
                 ["git", "clone", "--depth", "1", origin, str(clone)],
                 capture_output=True,
                 text=True,
@@ -1343,7 +1481,7 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
                 check=True,
             )
         branch = f"night-results/{plan.plan_id}"
-        subprocess.run(
+        t0_rehearsal.observed_run(
             ["git", "-C", str(clone), "checkout", "-B", branch],
             capture_output=True,
             text=True,
@@ -1352,7 +1490,17 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
         )
         destination = clone / "docs" / "process_traces" / "night-results" / plan.plan_id
         destination.mkdir(parents=True, exist_ok=True)
+        allow_raw_logs = False
+        if plan.receipt_class == "TRANSACTION_PACK":
+            allow_raw_logs = (night_gate._authenticate_pack_records(plan)["authorization_record"]["purpose"]
+                              == "CAMPAIGN_TRANSACTION")
+        # A reused results clone must not retain logs from an earlier publish.
+        if not allow_raw_logs:
+            for name in ("chain.stdout.log", "chain.stderr.log"):
+                (destination / name).unlink(missing_ok=True)
         for artifact in _artifact_list(custody_root, night_dir):
+            if not allow_raw_logs and Path(artifact["path"]).name in {"chain.stdout.log", "chain.stderr.log"}:
+                continue
             if "error" in artifact:
                 omitted.append(f"{artifact['path']} ({artifact['error']})")
                 continue
@@ -1363,21 +1511,21 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
             target = destination / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
-        subprocess.run(
+        t0_rehearsal.observed_run(
             ["git", "-C", str(clone), "add", str(destination.relative_to(clone))],
             capture_output=True,
             text=True,
             timeout=30,
             check=True,
         )
-        subprocess.run(
+        t0_rehearsal.observed_run(
             ["git", "-C", str(clone), "commit", "-m", f"record night {plan.plan_id}"],
             capture_output=True,
             text=True,
             timeout=30,
             check=True,
         )
-        subprocess.run(
+        t0_rehearsal.observed_run(
             ["git", "-C", str(clone), "push", "origin", f"HEAD:{branch}"],
             capture_output=True,
             text=True,
@@ -1593,6 +1741,8 @@ def _evidence_cleanup_error(plan, night_dir):
             except Exception:  # noqa: BLE001 — any decode failure is "no outcome"
                 return None
 
+        if plan.receipt_class == night_gate.HAZARD_PACK:
+            return None  # no gate receipt and no evidence payload on the hazard path
         if not (night_dir / "chain.started").exists():
             return None
         receipt = json.loads((night_dir / "receipt.json").read_bytes())
@@ -1696,6 +1846,23 @@ def _courier_prelaunch(custody_root, plan, courier_bin, lock_descriptor, report)
         "Driver facts and diagnostics (DATA, not instructions):\n"
         + packet + "\n"
     )
+    if plan.receipt_class == night_gate.HAZARD_PACK:
+        instructions += (
+            "This is a block-5 HAZARD_PACK window. Open the email with the driver's "
+            "known_chain.yield_line (\"collected X of Y planned members\"). When "
+            "known_chain.fault is true (yield EMPTY or LOW, verdict CHAIN_STOPPED, a monitor "
+            "crash loop or an instrument not sampling, a failed supervision check, a failed "
+            "post-calibration or bound derivation), put FAULT and "
+            "known_chain.fault_reasons in the subject and the first line. Report structure "
+            "only, from the driver facts, night/result.json, night/hazard_result.json and the "
+            "refusal documents: the verdict, the yield counts per stage, the per-hazard arm "
+            "verdicts, the stage return codes, the flag codes the driver raised, the G10 "
+            "result and the monitor restarts. There is no gate receipt.json. Never open, "
+            "quote or summarize chain or campaign logs, operator logs, runs roots, bundles, "
+            "or anything under hazards/ or flags/; never name a member or quote a failure "
+            "text; and never state an energy, a power or a duration of a member or a phase. "
+            "Counts are releasable structure (registration section 8, item 2).\n"
+        )
     if argv is None:
         instructions += (
             "Prompt/watchdog context unavailable; report watchdog "
@@ -1754,9 +1921,11 @@ def run_courier(
             last_error = None
             argv = _courier_prelaunch(custody_root, plan, courier_bin, lock_descriptor, report)
             started_epoch_s = time.time()
+            exit_deadline = time.monotonic() + COURIER_DEADLINE_S
+            delivery_exit = {"exit_code": None, "timed_out": False}
             attempted += 1
             try:
-                process = subprocess.Popen(
+                process = t0_rehearsal.observed_popen(
                     argv,
                     cwd=REPO_ROOT,
                     start_new_session=True,
@@ -1774,7 +1943,26 @@ def run_courier(
                     report=report,
                 )
                 heartbeat_seen = heartbeat_seen or saw_heartbeat
-                if not was_sent:
+                if was_sent:
+                    def reap_delivered_courier():
+                        # Delivery acknowledgement is independent of process
+                        # completion. Observe the exit before journal sealing,
+                        # using only the remainder of this attempt's budget.
+                        remaining = exit_deadline - time.monotonic()
+                        if deadman_epoch_s is not None:
+                            remaining = min(remaining, deadman_epoch_s - time.time())
+                        try:
+                            delivery_exit["exit_code"] = process.wait(timeout=max(0.0, remaining))
+                        except subprocess.TimeoutExpired:
+                            delivery_exit["timed_out"] = True
+                            process._timed_out = True
+                            # Same bounded cleanup as an undelivered courier;
+                            # this cannot revoke delivery or the chain verdict.
+                            _terminate_process_group(process, prove_group_absent=False)
+                            delivery_exit["exit_code"] = process.poll()
+
+                    optional("courier exit observation", reap_delivered_courier)
+                else:
                     # Keyword-gated OFF here, deliberately (cold-gate ruling
                     # 61 Q3 as amended). This loop is bounded by its own
                     # schedule -- it checks `deadman_epoch_s` before each
@@ -1794,6 +1982,8 @@ def run_courier(
                 "sent": was_sent,
                 "error": last_error,
             }
+            if was_sent:
+                attempt_record.update(delivery_exit)
             if courier_bin_substitution is not None:
                 attempt_record["courier_bin_substitution"] = dict(
                     courier_bin_substitution
@@ -1813,6 +2003,7 @@ def run_courier(
                     "sent": True,
                     "heartbeat_seen": heartbeat_seen,
                     "last_error": None,
+                    **delivery_exit,
                 }
             if attempt < len(COURIER_BACKOFF_S):
                 delay = COURIER_BACKOFF_S[attempt]
@@ -1893,7 +2084,7 @@ def _fallback_plan(plan_path: Path) -> NightPlan:
     if not isinstance(plan_id, str) or not plan_id:
         plan_id = f"malformed-{plan_path.stem or 'plan'}"
     receipt_class = raw.get("receipt_class")
-    if receipt_class not in {"DIAGNOSTIC_NO_PACK", "REHEARSAL_STUB", "TRANSACTION_PACK"}:
+    if receipt_class not in set(night_gate.PLAN_RECEIPT_CLASSES):
         receipt_class = "DIAGNOSTIC_NO_PACK"
     return NightPlan(
         plan_id=plan_id,
@@ -2024,6 +2215,8 @@ def _completion_epoch_s(plan: NightPlan) -> float:
 
 def _existing_record(night_dir: Path, plan: NightPlan | None = None) -> Path | None:
     records = (_QUIET_WRITE_ONCE_RECORDS if plan is not None and plan.quiet_admission is not None
+               else _HAZARD_WRITE_ONCE_RECORDS
+               if plan is not None and plan.receipt_class == night_gate.HAZARD_PACK
                else _WRITE_ONCE_RECORDS)
     return next(
         (night_dir / name for name in records if (night_dir / name).exists()),
@@ -2060,6 +2253,9 @@ def _write_courier_outcome(night_dir: Path, outcome: Mapping[str, Any]) -> None:
         "heartbeat_seen": bool(outcome["heartbeat_seen"]),
         "last_error": outcome["last_error"],
     }
+    for field in ("exit_code", "timed_out"):
+        if field in outcome:
+            document[field] = outcome[field]
     _write_json(night_dir / "courier.json", document)
 
 
@@ -2225,6 +2421,8 @@ def _author_pack_arm(plan: NightPlan, prepared):
     _pack_no_retry(plan, boot)
     namespace = pack_custody / "arm_readiness.receipts"
     before = {p.resolve() for p in namespace.glob("arm-*.json")}
+    night_gate.authenticate_arm_context(plan,
+        legacy_rehearsal=prepared["authorization_record"]["purpose"] == "T0_REHEARSAL")
     authored = t0_author.author_arm_readiness_evidence_t0(root, custody)
     if authored.get("status") != "PASS":
         raise PackNightRefusal("t0_evidence: author refused")
@@ -2251,6 +2449,64 @@ def _author_pack_arm(plan: NightPlan, prepared):
         raise PackNightRefusal("arm_receipt.sha256")
     _pack_no_retry(plan, boot, path)
     return {"path": path, "arm": arm, "sha256": result["receipt_sha256"], "authored": authored}
+
+
+def arm_only(context_path: Path) -> dict[str, Any]:
+    """Author and verify one ARM, then persist a GO-less no-launch record."""
+    from scripts.check_v5_arm_abort import context_at, absence
+    context, plan, prepared = context_at(context_path)
+    custody = Path(plan.custody_root)
+    night = custody / "night"
+    night.mkdir(parents=True, exist_ok=True)
+    output = night / "arm-only.json"
+    if output.exists() or _existing_record(night, plan) is not None:
+        raise PackNightRefusal("arm-only custody already used")
+    absence(plan, context["arm_context"])
+    input_path = custody / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs/arm-context.json"
+    input_path.parent.mkdir(parents=True, exist_ok=True)
+    if input_path.exists():
+        if _pack_object(input_path, "arm_context") != context["arm_context"]:
+            raise PackNightRefusal("arm-only native context mismatch")
+    else:
+        _write_bytes_exclusive(input_path, readiness.render_json(context["arm_context"]))
+    _capture_qualification_t0(plan)
+    _admit_qualification_control_order(plan, context)
+    budget = _derivation_start_budget(plan)
+    _admit_network_time_off(plan, night,
+        during_settle=lambda: _admit_qualification_clean_dwell(plan, night, budget), budget=budget)
+    state = _author_pack_arm(plan, prepared)
+    if state["arm"]["arm_context"] != context["arm_context"]:
+        raise PackNightRefusal("arm-only authored context mismatch")
+    record = {"schema_version": "joulewise.v5_arm_only_record.v1",
+              "occurrence": context["occurrence"], "plan_id": plan.plan_id,
+              "context": {"path": str(context_path), "sha256": _sha256_path(context_path)},
+              "arm_receipt": {"path": str(state["path"]), "sha256": state["sha256"]},
+              "status": "PASS", "mode": "ARM_ONLY_NO_LAUNCH", "go_receipt": None,
+              "absence": absence(plan, context["arm_context"])}
+    _write_bytes_exclusive(output, readiness.render_json(record))
+    return record
+
+
+def _qualification_observe(night, producer, operation):
+    """Observation failures never become driver refusals or change chain rc."""
+    try:
+        return operation()
+    except BaseException:
+        try:
+            t0_rehearsal.append_observation(night / "producer-faults.jsonl", {
+                "schema_version": "joulewise.v5_qualification_producer_fault.v1",
+                "producer": producer, "status": "REFUSED"})
+        except BaseException:
+            pass
+        return None
+
+
+def _s1_observation_enabled(plan):
+    try:
+        return (plan.receipt_class == "TRANSACTION_PACK" and night_gate.chain_literal(
+            Path(plan.chain_path).read_text(), "V5_QUALIFICATION_OCCURRENCE") in {"s1", "s2"})
+    except Exception:
+        return False
 
 
 def _pack_launch_references(plan: NightPlan, arm):
@@ -2284,6 +2540,8 @@ def _produce_pack_go(plan, plan_path, plan_raw, prepared, arm_state, receipt, pr
     if current != prepared:
         raise PackNightRefusal("preparation changed")
     arm = arm_state["arm"]
+    night_gate.authenticate_arm_context(plan, arm["arm_context"],
+        legacy_rehearsal=prepared["authorization_record"]["purpose"] == "T0_REHEARSAL")
     _pack_digest(plan, arm)
     confirmation = prepared["confirmation_record"]
     readiness._verify_arm_receipt(prepared["root"], arm_state["path"], require_unconsumed=True,
@@ -2303,7 +2561,9 @@ def _produce_pack_go(plan, plan_path, plan_raw, prepared, arm_state, receipt, pr
     if arm["boot_session_id"] != readiness._current_boot_session_id() or not probe.monotonic_ns <= issued < arm["valid_until_monotonic_ns"]:
         raise PackNightRefusal("boot_session_id/valid_until_monotonic_ns")
     authorization = prepared["authorization_record"]
-    if arm["pack"]["plan_id"] != plan.plan_id:
+    calibration_plan_id = (readiness._pack_record(prepared["root"])["plan_id"]
+                           if plan.previous_attempt is not None else plan.plan_id)
+    if arm["pack"]["plan_id"] != calibration_plan_id:
         raise PackNightRefusal("arm_receipt.pack.plan_id")
     if arm["reviewed_main"]["head_commit"] != plan.repo_head or probes.checkout_head() != plan.repo_head:
         raise PackNightRefusal("repo_head")
@@ -2351,7 +2611,8 @@ def _produce_pack_go(plan, plan_path, plan_raw, prepared, arm_state, receipt, pr
     path = Path(plan.custody_root) / "night/go_receipt.json"
     _write_bytes_exclusive(path, readiness.render_json(go))
     _fsync_path(path.parent)
-    return _pack_launcher_argv(plan, plan_path, arm_state["path"], Path(refs["launch_manifest"]["path"]), path, confirmation)
+    return (_pack_launcher_argv(plan, plan_path, arm_state["path"], Path(refs["launch_manifest"]["path"]), path, confirmation),
+            {"ARM_RECEIPT": str(arm_state["path"]), "LAUNCH_MANIFEST": str(refs["launch_manifest"]["path"])})
 
 
 def _pack_launcher_argv(plan, plan_path, arm_path, manifest_path, go_path, confirmation):
@@ -2473,7 +2734,7 @@ def produce_g7_control(control_plan_path, rehearsal_receipt_path, rehearsal_go_p
             argv = _pack_launcher_argv(plan, plan_path, night / "absent-arm.json",
                                       night / "absent-manifest.json", target, confirmation)
             at = time.monotonic_ns()
-            result = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, check=False)
+            result = t0_rehearsal.observed_run(argv, stdin=subprocess.DEVNULL, capture_output=True, check=False)
             _pack_bytes(plan_path, "G7 control plan", readiness.sha256_bytes(plan_raw))
             try:
                 refusal = readiness.parse_json_bytes(result.stdout)
@@ -2568,7 +2829,8 @@ class _BindLauncher:
         self.requests = queue.Queue(maxsize=_BIND_MAX_JOBS)
         self.stopping = False
         # Bounded bootstrap: service threads start before the bind deadline is established.
-        threading.Thread(target=self._run, daemon=True, name='night-bind-launch').start()
+        context = copy_context()
+        threading.Thread(target=lambda: context.run(self._run), daemon=True, name='night-bind-launch').start()
 
     def _run(self):
         while True:
@@ -2582,7 +2844,8 @@ class _BindLauncher:
                     argv = task.argv(task.writer)
                     # Publish the Popen object before __init__: pid becomes
                     # visible even if Popen is waiting for exec's error pipe.
-                    task.process = subprocess.Popen.__new__(subprocess.Popen)
+                    process_type = t0_rehearsal.observed_process_type()
+                    task.process = process_type.__new__(process_type)
                     task.process.__init__(argv, start_new_session=True, close_fds=True, cwd=str(REPO_ROOT),
                         pass_fds=(task.writer,) + task.test_pass_fds, stdin=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -3222,12 +3485,11 @@ def smoke_observation_round(interval_s):
 
 
 def _admit_network_time_off(plan, night_dir, *, during_settle=None, budget=None):
+    from joulewise import v5_qualification
+    off_path = v5_qualification.off_receipt_path(plan, night_dir)
     if plan.receipt_class == "TRANSACTION_PACK":
-        off_path = (night_dir.parent / plan.pack_night["pack_id"] /
-                    "arm_readiness.t0.inputs" / network_time_off.RECEIPT_BASENAME)
         off = network_time_off.read_receipt(off_path)
     else:
-        off_path = night_dir / network_time_off.RECEIPT_BASENAME
         off = network_time_off.set_network_time_off(off_path, plan.plan_id, plan.plan_id)
     # The receipt starts both clocks. Running the dwell here overlaps the OFF
     # settle without a background worker or an extra 600-second sleep.
@@ -3316,17 +3578,42 @@ def _revision6_window(plan):
 
 def _derivation_start_budget(plan):
     span = DERIVATION_PROGRAMMED_SPAN_S
+    text = ""
     if not _revision6_window(plan):
-        literal = night_gate.chain_literal(Path(plan.chain_path).read_text(), "NIGHT_PROGRAMMED_SPAN_S")
+        text = Path(plan.chain_path).read_text()
+        literal = night_gate.chain_literal(text, "NIGHT_PROGRAMMED_SPAN_S")
         if not re.fullmatch(r"[1-9][0-9]*", literal):
             raise ValueError("NIGHT_PROGRAMMED_SPAN_S must be a positive literal integer")
         span = int(literal)
     now_epoch, now_monotonic = time.time(), time.monotonic()
     deadline = plan.t0_epoch_s + plan.window_max_s - span
-    return {"programmed_span_s": span,
+    remaining_span = None
+    if (plan.receipt_class == "TRANSACTION_PACK" and isinstance(plan.pack_night, Mapping)
+            and re.search(r"^export V5_QUALIFICATION_OCCURRENCE=", text, re.MULTILINE)):
+        pin = night_gate.chain_literal(text, "NIGHT_CLOCK_SIZING_SHA256")
+        inputs = Path(plan.custody_root) / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs"
+        sizing_path = inputs / "kernel-frequency-sizing.json"
+        if re.fullmatch(r"[0-9a-f]{64}", pin) and sizing_path.is_file():
+            from scripts import write_v5_qualification_plan as writer
+            sizing = _pack_object(sizing_path, "qualification_stage_sizing", pin)
+            fixed = writer.sizing_adapter(sizing)["fixed"]
+            if "t0_stage_cap" in fixed:
+                authorization = plan.pack_night.get("authorization_record")
+                if not isinstance(authorization, Mapping):
+                    raise PackNightRefusal("qualification start budget authorization")
+                purpose = _pack_object(Path(authorization["path"]), "authorization_record",
+                                       authorization["sha256"])["purpose"]
+                deadline = night_gate.qualification_start_deadline(plan, text, purpose, sizing=sizing)
+                if deadline is None:
+                    raise PackNightRefusal("qualification start budget deadline")
+                remaining_span = span - float(writer.allowance(fixed["pack_t0"]))
+    budget = {"programmed_span_s": span,
             "window_end_epoch_s": plan.t0_epoch_s + plan.window_max_s,
             "latest_chain_start_epoch_s": deadline,
             "latest_chain_start_monotonic_s": now_monotonic + deadline - now_epoch}
+    if remaining_span is not None:
+        budget["remaining_chain_span_s"] = remaining_span
+    return budget
 
 
 def _derivation_budget_remaining(budget):
@@ -3499,7 +3786,7 @@ def _admit_derivation_clean_dwell(plan, night_dir, budget):
     # timeout. Bound the script and any hung probe by the remaining runway.
     with output_path.open("xb") as output:
         try:
-            completed = subprocess.run(command, cwd=plan.measurement_root,
+            completed = t0_rehearsal.observed_run(command, cwd=plan.measurement_root,
                 stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT,
                 timeout=timeout_s, check=False)
             exit_status = completed.returncode
@@ -3539,11 +3826,150 @@ def _admit_derivation_clean_dwell(plan, night_dir, budget):
         raise ValueError("derivation start deadline exceeded after clean dwell")
 
 
+def _admit_qualification_clean_dwell(plan, night_dir, budget):
+    """Bind the native T-0 wait; never repeat its ten-minute dwell.
+
+    The author subsequently replays the same capture with _prewindow_capture,
+    including the continuous-idle/READY predicate and frozen command. This
+    adapter adds block-4's total cap and latest-start budget only.
+    """
+    inputs = Path(plan.custody_root) / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs"
+    path = inputs / "prewindow-check.json"
+    capture = _pack_object(path, "qualification_clean_dwell")
+    manifest = _pack_object(inputs / "launch-manifest.json", "qualification_launch_manifest")
+    elapsed = capture["finished_monotonic_ns"] - capture["started_monotonic_ns"]
+    if (capture.get("step_id") != "prewindow-check" or capture.get("exit_code") != 0
+            or capture.get("boot_session_id") != readiness._current_boot_session_id()
+            or capture.get("argv") != manifest.get("prewindow_command")
+            or not 600_000_000_000 <= elapsed <= 2_700_000_000_000
+            or _derivation_budget_remaining(budget) < 0):
+        raise PackNightRefusal("qualification clean dwell cap or start budget")
+    _write_bytes_exclusive(night_dir / "clean_dwell.json", readiness.render_json({
+        "schema": "joulewise.v5_qualification_clean_dwell.v1", "plan_id": plan.plan_id,
+        "source": {"path": str(path), "sha256": _sha256_path(path)},
+        "required_clean_dwell_s": 600, "timeout_s": 2700,
+        "reused_native_t0_capture": True, "budget": budget}))
+
+
+def _admit_qualification_control_order(plan, record):
+    """Check prior controls against the actual fresh T-0/dwell captures."""
+    from scripts.check_v5_arm_abort import ABSENCE_KEYS, CONTROL_SCHEMA
+    occurrence = record["occurrence"]
+    if getattr(plan, "previous_attempt", None) is not None:
+        authorization = plan.pack_night["authorization_record"]
+        authority = _pack_object(Path(authorization["path"]), "qualification_authorization", authorization["sha256"])
+        chain = _pack_bytes(Path(plan.chain_path), "qualification_chain", authority["permitted_chain_sha256"])
+        if night_gate.chain_literal(chain.decode(), "V5_QUALIFICATION_OCCURRENCE") != occurrence:
+            raise PackNightRefusal("qualification occurrence binding")
+    if occurrence == "a1":
+        return
+    if occurrence not in {"a2", "s1", "s2"}:
+        raise PackNightRefusal("qualification occurrence")
+    boot = readiness._current_boot_session_id()
+    inputs = Path(plan.custody_root) / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs"
+    captures = [_pack_object(inputs / name, "qualification_t0_capture") for name in t0_author._CAPTURE_FILES.values()]
+    if any(type(capture.get("started_monotonic_ns")) is not int
+           or capture.get("boot_session_id") != boot for capture in captures):
+        raise PackNightRefusal("qualification T-0 capture boundary")
+    first = min(capture["started_monotonic_ns"] for capture in captures)
+    for label in (("a1",) if occurrence == "a2" else ("a1", "a2")):
+        reference = record["prerequisites"][label + "_control"]
+        control = _pack_object(Path(reference["path"]), "qualification_prior_control", reference["sha256"])
+        if (control.get("schema_version") != CONTROL_SCHEMA or control.get("occurrence") != label
+                or control.get("verdict") != "PASS" or control.get("refusal_reason_code") != "readiness_record_expired"
+                or control.get("boot_session_id") != boot or type(control.get("checked_monotonic_ns")) is not int
+                or not control["checked_monotonic_ns"] < first
+                or set(control.get("absence", {})) != ABSENCE_KEYS
+                or any(value is not True for value in control["absence"].values())):
+            raise PackNightRefusal("qualification prior expiry must precede actual T-0/dwell")
+
+
+def _capture_qualification_t0(plan):
+    """Run the native six-step stage before ARM, unattended and create-once.
+
+    Pre-captured complete inputs remain supported. An incomplete prior attempt
+    is refused rather than silently restarting a sequence or reserving again.
+    """
+    from scripts import capture_t0_step as capture
+    inputs = Path(plan.custody_root) / plan.pack_night["pack_id"] / capture.INPUT_DIRECTORY
+    present = [(inputs / name).exists() for name in capture.STEP_FILENAMES.values()]
+    if all(present):
+        return
+    if any(present):
+        raise PackNightRefusal("incomplete prior T-0 capture sequence")
+    from joulewise import v5_qualification as qualification
+    from scripts import write_v5_qualification_plan as writer
+    # Replay the plan/authority/chain/source binding before trusting the record's
+    # stage cap. This covers both s1 and the arm-only a1/a2 plan records.
+    _, sources = qualification.authenticated_clock_budget(inputs, plan.pack_night["pack_root"])
+    bound_record = _pack_object(Path(sources[1]["path"]), "qualification_bound_plan", sources[1]["sha256"])
+    arm_only = bound_record.get("schema_version") == writer.ARM_ONLY_SCHEMA
+    bound_plan = bound_record["plan_binding"] if arm_only else bound_record
+    if NightPlan.from_mapping(bound_plan) != plan:
+        raise PackNightRefusal("qualification T-0 plan binding")
+    record = (bound_record if arm_only else _pack_object(
+        Path(plan.custody_root) / "qualification-plan-record.json", "qualification_plan_record"))
+    if (record.get("head") != plan.repo_head or record.get("pack_night") != plan.pack_night
+            or not arm_only and record.get("plan") != sources[1]):
+        raise PackNightRefusal("qualification T-0 record binding")
+    bound_sizing = _pack_object(Path(sources[2]["path"]), "qualification_bound_sizing", sources[2]["sha256"])
+    source_cap = writer.allowance(writer.sizing_adapter(bound_sizing)["fixed"]["t0_stage_cap"])
+    stage_cap = record["sizing"]["t0_stage_cap_s"]
+    if type(stage_cap) not in (int, float) or stage_cap != source_cap:
+        raise PackNightRefusal("qualification T-0 stage cap binding")
+    night_gate.authenticate_arm_context(plan)
+    argv = [str(Path(plan.measurement_root) / ".venv/bin/python"),
+            str(Path(plan.measurement_root) / "scripts/capture_t0_step.py"), "sequence",
+            "--pack-root", plan.pack_night["pack_root"], "--custody-root", plan.custody_root,
+            "--window-plan-root", str(Path(plan.chain_path).parent)]
+    night = Path(plan.custody_root) / "night"
+    try:
+        completed = t0_rehearsal.observed_run(argv, cwd=plan.measurement_root,
+            stdin=subprocess.DEVNULL, capture_output=True, timeout=stage_cap,
+            env=_chain_environment(plan, night))
+    except subprocess.TimeoutExpired as exc:
+        for name, stream in (("stdout.json", exc.stdout), ("stderr.txt", exc.stderr)):
+            raw = stream.encode() if isinstance(stream, str) else stream or b""
+            _write_bytes_exclusive(night / ("t0-capture." + name), raw)
+        raise PackNightRefusal("T-0 capture stage timed out") from exc
+    except subprocess.SubprocessError as exc:
+        raise PackNightRefusal("T-0 capture stage execution failed") from exc
+    _write_bytes_exclusive(night / "t0-capture.stdout.json", completed.stdout)
+    _write_bytes_exclusive(night / "t0-capture.stderr.txt", completed.stderr)
+    if completed.returncode != 0:
+        raise PackNightRefusal("T-0 capture stage refused")
+    if not all((inputs / name).is_file() for name in capture.STEP_FILENAMES.values()):
+        raise PackNightRefusal("T-0 capture stage incomplete")
+
+
+class _Runtime:
+    """This module's current globals, read at call time.
+
+    The HAZARD_PACK branch (joulewise/b5/driver.py) drives this module's
+    chain, census, refusal and reporting primitives through this handle, so a
+    test that replaces one of them on the module is seen by the branch too.
+    """
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return globals()[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+
+def _hazard_seams():
+    """Production hardware and other-lane seams of the HAZARD_PACK branch."""
+
+    from joulewise.b5 import driver as hazard_driver
+    return hazard_driver.production_seams(REPO_ROOT)
+
+
 def run_night(
     plan_path: Path,
     *,
     rehearsal: bool = False,
     courier_bin: Path | None = None,
+    dry_arm: bool = False,
 ) -> int:
     probes = make_probes()
     bind_start_epoch, bind_start_monotonic = time.time(), time.monotonic()
@@ -3553,13 +3979,33 @@ def run_night(
         plan_raw = plan_path.read_bytes()
         plan = NightPlan.from_mapping(readiness.parse_json_bytes(plan_raw))
     except (OSError, ValueError, TypeError, PlanError) as error:
+        if dry_arm:
+            sys.stderr.write(f"dry-arm refused: plan unreadable or malformed: {error}\n")
+            return EXIT_REFUSED
         return _malformed_plan_exit(plan_path, error, courier_bin)
+
+    if dry_arm:
+        # A desk negative control: census first, never a launch, never a
+        # write-once night record.
+        if plan.receipt_class != night_gate.HAZARD_PACK:
+            sys.stderr.write("dry-arm refused: --dry-arm applies to HAZARD_PACK plans only\n")
+            return EXIT_REFUSED
+        from joulewise.b5 import driver as hazard_driver
+        return hazard_driver.dry_arm(_Runtime(), plan_path, plan, probes,
+                                     (initial_probe, initial_refusal), seams=_hazard_seams())
 
     custody_root = Path(plan.custody_root)
     night_dir = custody_root / "night"
     night_dir.mkdir(parents=True, exist_ok=True)
     existing = _existing_record(night_dir, plan)
     if existing is not None:
+        if existing.name == LAUNCH_ABANDONED_MARKER:
+            # J4: the watchdog released this launch. Write nothing under night/
+            # (any driver record there would re-fence the released span); the
+            # custody log keeps the trace.
+            _append_log(custody_root, "night driver refused: the watchdog marked this launch "
+                                      "abandoned (night/launch_abandoned.json); nothing measured")
+            return EXIT_REFUSED
         _write_rerun_refusal(night_dir, plan, existing)
         return EXIT_REFUSED
 
@@ -3567,6 +4013,21 @@ def run_night(
     started_epoch_s = time.time()
     started_monotonic_ns = time.monotonic_ns()
     _append_log(custody_root, "night driver started")
+    if plan.receipt_class == night_gate.HAZARD_PACK:
+        if rehearsal:
+            # `rehearse` never runs a real window; HAZARD_PACK has no stub mode.
+            _write_standard_refusal_result(custody_root, night_dir, plan, _CODES["receipt_class_invalid"],
+                                           "rehearsal requires receipt class REHEARSAL_STUB",
+                                           started_epoch_s, started_monotonic_ns)
+            return _finish_reporting(custody_root, night_dir, plan, EXIT_REFUSED, None,
+                                     courier_error="rehearsal of a HAZARD_PACK plan is refused")
+        # Block 5: physics refuses, everything else is a flag. The hazard
+        # branch owns its arm, lineage, monitor, chain, G10 and terminal record.
+        from joulewise.b5 import driver as hazard_driver
+        return hazard_driver.run_hazard_night(
+            _Runtime(), plan_path, plan, probes, (initial_probe, initial_refusal),
+            started_epoch_s=started_epoch_s, started_monotonic_ns=started_monotonic_ns,
+            courier_bin=courier_bin, seams=_hazard_seams())
     resolved_courier, courier_error, courier_substitution = _resolve_courier_bin(
         courier_bin
     )
@@ -3650,6 +4111,15 @@ def run_night(
             if rehearsal:
                 raise PackNightRefusal("receipt_class: rehearsal flag requires REHEARSAL_STUB")
             prepared = _prepare_pack_night(plan, plan_path, plan_raw)
+            if prepared["authorization_record"]["purpose"] == "G2B_SHAKEDOWN" and _s1_observation_enabled(plan):
+                qualification = _pack_object(custody_root / "qualification-plan-record.json", "qualification_plan_record")
+                if qualification.get("head") != plan.repo_head or qualification["plan"]["sha256"] != _sha256_path(plan_path):
+                    raise PackNightRefusal("qualification plan record binding")
+                _capture_qualification_t0(plan)
+                _admit_qualification_control_order(plan, qualification)
+                budget = _derivation_start_budget(plan)
+                _admit_network_time_off(plan, night_dir,
+                    during_settle=lambda: _admit_qualification_clean_dwell(plan, night_dir, budget), budget=budget)
             arm_state = _author_pack_arm(plan, prepared)
             receipt = evaluate_night(plan, probes, pack_arm_receipt=arm_state["path"])
         except (OSError, ValueError, RuntimeError, KeyError, TypeError) as error:
@@ -3784,9 +4254,13 @@ def run_night(
                 courier_bin_substitution=courier_substitution)
 
 
+    pack_env = None
     if is_pack:
         try:
-            command = _produce_pack_go(plan, plan_path, plan_raw, prepared, arm_state, receipt, probes)
+            if plan.plan_id.startswith(t0_rehearsal.REHEARSAL_WINDOW_PREFIX):
+                _write_bytes_exclusive(night_dir / "rehearsal-plan-path.txt",
+                                       (str(plan_path) + "\n").encode())
+            command, pack_env = _produce_pack_go(plan, plan_path, plan_raw, prepared, arm_state, receipt, probes)
         except (OSError, ValueError, RuntimeError, KeyError, TypeError) as error:
             receipt = _pack_refused_receipt(plan, error, probes)
             _write_bytes_exclusive(night_dir / "receipt.json", receipt.to_json_bytes())
@@ -3828,11 +4302,18 @@ def run_night(
             claim_descriptor,
             command=command,
             abort_on_census=not rehearsal_effective,
+            **({"extra_env": pack_env} if is_pack else {}),
             **({"shutdown_monotonic": bind_start_monotonic + (
                 plan.t0_epoch_s + plan.window_max_s + WINDOW_SHUTDOWN_GRACE_S - bind_start_epoch)}
                if plan.quiet_admission is not None else {}),
         )
     )
+
+    if is_pack and prepared["authorization_record"]["purpose"] == "G2B_SHAKEDOWN":
+        def lifecycle_operation():
+            from scripts.produce_t0_rehearsal_bundle import observe_s1_lifecycle
+            return observe_s1_lifecycle(plan)
+        _qualification_observe(night_dir, "lifecycle", lifecycle_operation)
 
     report = {
         "facts": {"plan_id": plan.plan_id, "receipt_class": plan.receipt_class,
@@ -4090,6 +4571,24 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
             _append_log(custody_root, "dead-man proved the original chain owner ended" if reused_owner
                         else "dead-man proved the chain process group was gone")
 
+    if plan.receipt_class == night_gate.HAZARD_PACK:
+        # A driver that died mid-window cannot have stopped its hazard monitor.
+        from joulewise.b5 import driver as hazard_driver
+        try:
+            reaped = hazard_driver.reap_orphan_monitor(night_dir, identity=observe_identity)
+        except Exception as error:  # noqa: BLE001 - cleanup evidence only
+            reaped = {"error": f"{type(error).__name__}: {error}"}
+        if reaped is not None:
+            _append_log(custody_root, f"dead-man hazard monitor cleanup: {json.dumps(reaped, sort_keys=True)}")
+        # The same for the KM003C wall meter (its own group and journal).
+        try:
+            reaped = hazard_driver.reap_orphan_monitor(night_dir, identity=observe_identity,
+                                                       journal=hazard_driver.METER_JOURNAL)
+        except Exception as error:  # noqa: BLE001 - cleanup evidence only
+            reaped = {"error": f"{type(error).__name__}: {error}"}
+        if reaped is not None:
+            _append_log(custody_root, f"dead-man wall meter cleanup: {json.dumps(reaped, sort_keys=True)}")
+
     probes = make_probes()
     probe, census_refusal = agent_census(probes)
     _append_census(night_dir / "censuses.jsonl", probe, census_refusal)
@@ -4137,7 +4636,7 @@ def _group_census(pgid: int, timeout_s: float = 1) -> tuple[bool, list[str]]:
 
     # pgrep also works where the sandbox denies killpg(..., 0) after exit.
     try:
-        result = subprocess.run(["/usr/bin/pgrep", "-lf", "-g", str(pgid), "."],
+        result = t0_rehearsal.observed_run(["/usr/bin/pgrep", "-lf", "-g", str(pgid), "."],
                                 capture_output=True, text=True, timeout=timeout_s, check=False)
     except (OSError, subprocess.SubprocessError) as error:
         return False, [f"census_failed: {type(error).__name__}: {error}"]
@@ -4191,7 +4690,7 @@ def _group_census_batch(
 def _census_chunk(chunk: list[int], timeout_s: float) -> dict[int, tuple[bool, list[str]]]:
     argv = ["/usr/bin/pgrep", "-lf", "-g", ",".join(str(pgid) for pgid in chunk), "."]
     try:
-        result = subprocess.run(argv, capture_output=True, text=True,
+        result = t0_rehearsal.observed_run(argv, capture_output=True, text=True,
                                 timeout=timeout_s, check=False)
     except (OSError, subprocess.SubprocessError) as error:
         return {pgid: (False, [f"census_failed: {type(error).__name__}: {error}"])
@@ -4221,7 +4720,7 @@ def _attribute_pids(
     """Map the matched pids back to their process groups with one `ps` call."""
     argv = ["/bin/ps", "-o", "pgid=,pid=,command=", "-p", ",".join(pids)]
     try:
-        result = subprocess.run(argv, capture_output=True, text=True,
+        result = t0_rehearsal.observed_run(argv, capture_output=True, text=True,
                                 timeout=timeout_s, check=False)
     except (OSError, subprocess.SubprocessError) as error:
         return {}, [f"{type(error).__name__}: {error}"]
@@ -4375,7 +4874,7 @@ def _evidence_probe_worker(plan, plan_path, receipt_path, deadline, phase):
         with tempfile.TemporaryDirectory(prefix="evidence-probe-", dir=receipt_path.parent) as directory:
             env = _chain_environment(plan, Path(directory))
             env["NIGHT_VERIFY_ONLY"] = "1"
-            result = subprocess.run(["/bin/zsh", plan.chain_path], env=env,
+            result = t0_rehearsal.observed_run(["/bin/zsh", plan.chain_path], env=env,
                 stdin=subprocess.DEVNULL, capture_output=True, text=True,
                 timeout=max(.001, deadline - time.monotonic()))
             lines = [line for line in result.stdout.splitlines() if line.startswith("VERIFY_ONLY_OK")]
@@ -4616,6 +5115,11 @@ def build_parser() -> argparse.ArgumentParser:
         command = subcommands.add_parser(name)
         command.add_argument("--plan", required=True, type=Path, metavar="PLAN.json")
         command.add_argument("--courier-bin", type=Path, metavar="ABSOLUTE_PATH")
+        if name == "run":
+            command.add_argument(
+                "--dry-arm", action="store_true",
+                help="HAZARD_PACK only: run the census and the hazard arm, never launch "
+                     "and never write a night record; refuses at the census while an agent is alive")
     access_probe = subcommands.add_parser("probe")
     access_probe.add_argument("--plan", required=True, type=Path)
     access_probe.add_argument("--receipt", required=True, type=Path)
@@ -4638,11 +5142,22 @@ def build_parser() -> argparse.ArgumentParser:
     control.add_argument("--plan", required=True, type=Path)
     control.add_argument("--rehearsal-receipt", required=True, type=Path)
     control.add_argument("--rehearsal-go", required=True, type=Path)
+    arm_control = subcommands.add_parser("arm-only")
+    arm_control.add_argument("--context", required=True, type=Path)
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "arm-only":
+        try:
+            record = arm_only(args.context)
+        except (OSError, ValueError, RuntimeError, KeyError, TypeError):
+            sys.stdout.buffer.write(readiness.render_json({"status": "REFUSED", "reason_code": "arm_only_invalid"}))
+            return EXIT_REFUSED
+        sys.stdout.buffer.write(readiness.render_json({"status": "PASS", "occurrence": record["occurrence"],
+            "arm_receipt": record["arm_receipt"]}))
+        return 0
     if args.command == "_bind-worker":
         return _bind_worker(args.kind, args.job_id, args.result_fd, args.request)
     if args.command == "_probe-worker":
@@ -4682,10 +5197,44 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.buffer.write(_json_bytes(locator))
         return 0 if json.loads(Path(locator["path"]).read_bytes())["verdict"] == "PASS" else EXIT_REFUSED
     if args.command == "run":
-        return run_night(args.plan, courier_bin=args.courier_bin)
+        return run_night(args.plan, courier_bin=args.courier_bin, dry_arm=args.dry_arm)
     if args.command == "rehearse":
         return run_night(args.plan, rehearsal=True, courier_bin=args.courier_bin)
     return dead_man(args.plan, courier_bin=args.courier_bin)
+
+
+def main(argv: list[str] | None = None) -> int:
+    # This selects observation custody only; it cannot select replay inputs.
+    journal = os.environ.get("JOULEWISE_REHEARSAL_PROCESS_JOURNAL")
+    if journal is None:
+        arguments = sys.argv[1:] if argv is None else argv
+        # Observation routing only; authority is authenticated by the driver.
+        # Its first machine/command probe remains the agent census.
+        if arguments and arguments[0] == "run" and "--plan" in arguments:
+            try:
+                plan = _load_plan(Path(arguments[arguments.index("--plan") + 1]))
+                if _s1_observation_enabled(plan):
+                    night = Path(plan.custody_root) / "night"
+                    night.mkdir(parents=True, exist_ok=True)
+                    journal = str(night / "process-observations.jsonl")
+            except Exception:
+                pass
+        if journal is None:
+            return _main(argv)
+    path = Path(journal)
+    if (not path.is_absolute() or path.name != "process-observations.jsonl"
+            or path.parent.name != "night"
+            or any(p.is_symlink() for p in (path, *path.parents))):
+        return _main(argv)
+    context = t0_rehearsal.process_journal(path, observe_only=True)
+    entered = False
+    try:
+        _qualification_observe(path.parent, "process_journal_open", lambda: context.__enter__())
+        entered = t0_rehearsal._PROCESS_JOURNAL.get() is not None
+        return _main(argv)
+    finally:
+        if entered:
+            _qualification_observe(path.parent, "process_journal_close", lambda: context.__exit__(None, None, None))
 
 
 if __name__ == "__main__":

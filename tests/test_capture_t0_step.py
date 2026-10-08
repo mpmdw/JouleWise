@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import io
 import json
 import os
 import re
@@ -23,9 +24,51 @@ from tests.test_arm_readiness_evidence_t0 import (
     _clock_reference_value,
     author_arm_readiness_evidence_t0,
     author_environment,
-    make_t0_fixture,
+    make_t0_fixture as _base_make_t0_fixture,
 )
 from joulewise import network_time_off, arm_readiness as readiness
+
+
+def make_t0_fixture():
+    fixture = _base_make_t0_fixture()
+    # This producer exercises X10's sizing replay at authoring. Update the
+    # older shared fixture prospectively, rebinding each custody digest.
+    from joulewise import v5_qualification as q
+    from scripts import write_v5_qualification_plan as writer
+    inputs = fixture[5]
+    source_path = inputs / "clock-sizing-source.json"
+    source = q.read(source_path)
+    source["t0_stage_cap_s"] = 3300
+    source_path.write_bytes(readiness.render_json(source))
+    source_ref = q.reference(source_path)
+    sizing_path = inputs / "clock-sizing.json"
+    sizing = q.read(sizing_path)
+    for group in (sizing["fixed"], sizing["streams"]):
+        for allowance in group.values():
+            allowance["source"] = source_ref
+    sizing["clock"]["source"] = source_ref
+    sizing["fixed"]["t0_stage_cap"] = {
+        "seconds": 3300, "source": source_ref, "source_pointer": "/t0_stage_cap_s"}
+    sizing_path.write_bytes(readiness.render_json(sizing))
+    plan_path = inputs / "clock-sizing-plan.json"
+    plan = q.read(plan_path)
+    plan["window_max_s"] = writer.size_window("s1", sizing, brackets=("pre", "post"))["window_max_s"]
+    chain = Path(plan["chain_path"])
+    chain.write_text(re.sub(r'(?m)^export NIGHT_CLOCK_SIZING_SHA256=.*$',
+                           'export NIGHT_CLOCK_SIZING_SHA256="' + q.sha(sizing_path) + '"',
+                           chain.read_text()))
+    Path(plan["chain_sha256_path"]).write_bytes(readiness.gnu_sidecar(q.sha(chain), chain.name))
+    auth_path = inputs / "clock-sizing-authorization.json"
+    auth = q.read(auth_path)
+    auth["permitted_chain_sha256"] = q.sha(chain)
+    auth_path.write_bytes(readiness.render_json(auth))
+    plan["pack_night"]["authorization_record"] = q.reference(auth_path)
+    plan_path.write_bytes(readiness.render_json(plan))
+    binding_path = inputs / "kernel-frequency-binding.json"
+    binding = q.read(binding_path)
+    binding.update(plan=q.reference(plan_path), sizing=q.reference(sizing_path))
+    binding_path.write_bytes(readiness.render_json(binding))
+    return fixture
 
 
 class _Clock:
@@ -41,6 +84,66 @@ class _Clock:
 
 class CaptureT0StepTests(unittest.TestCase):
     maxDiff = None
+
+    def setUp(self):
+        from tests.test_kernel_clock import frequency_probe
+        patcher = mock.patch.object(capture.kernel_clock, "read_kernel_frequency", return_value=frequency_probe())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        from joulewise import v5_qualification as q
+        def budget(inputs, pack):
+            path = inputs / "kernel-frequency-binding.json"
+            return 320., (q.reference(path),) if path.is_file() else ()
+        sizing = mock.patch.object(q, "authenticated_clock_budget", side_effect=budget)
+        sizing.start()
+        self.addCleanup(sizing.stop)
+
+    def test_r0_frequency_gate_refuses_changed_draw_before_capture_publication(self):
+        from joulewise import kernel_clock
+        from tests.test_kernel_clock import frequency_probe
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            context = SimpleNamespace(input_root=root, repository=root,
+                pack_root=root / "fixture", boot_session_id=TEST_BOOT_SESSION_ID)
+            (root / "kernel-frequency-gate.json").write_bytes(readiness.render_json(
+                kernel_clock.frequency_gate(frequency_probe(-207749), 320)))
+            completed = subprocess.CompletedProcess(["/fixture/reference"], 0, b"{}\n", b"")
+            completed.kernel_frequency = frequency_probe(12 * 65536)
+            with (mock.patch.object(capture, "_load_context", return_value=context),
+                  mock.patch.object(capture, "_prepare_derived_inputs", return_value=[]),
+                  mock.patch.object(capture, "_require_sequence"),
+                  mock.patch.object(capture, "_command_for_step", return_value=("/fixture/reference",)),
+                  mock.patch.object(capture, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID),
+                  mock.patch.object(capture, "_arm_reference", return_value=(completed, 20)),
+                  mock.patch.object(kernel_clock, "read_kernel_frequency", return_value=completed.kernel_frequency),
+                  self.assertRaises(capture.CaptureT0Error) as caught):
+                capture._capture_step_with_dependencies("clock-reference", root, root, root,
+                                                       monotonic_ns=lambda: 10)
+            self.assertEqual(caught.exception.reason_code, "evidence_author_t0_capture_result_invalid")
+            self.assertIn("stream clock budget", str(caught.exception))
+            self.assertFalse((root / "clock-reference.json").exists())
+
+    def test_r0_frequency_gate_is_required_for_registry_profile_on_renamed_pack(self):
+        from tests.test_kernel_clock import frequency_probe
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            context = SimpleNamespace(input_root=root, repository=root,
+                pack_root=root / "renamed-alpha", boot_session_id=TEST_BOOT_SESSION_ID)
+            completed = subprocess.CompletedProcess(["/fixture/reference"], 0, b"{}\n", b"")
+            completed.kernel_frequency = frequency_probe()
+            with (mock.patch.object(capture, "_load_context", return_value=context),
+                  mock.patch.object(capture, "_prepare_derived_inputs", return_value=[]),
+                  mock.patch.object(capture, "_require_sequence"),
+                  mock.patch.object(capture, "_command_for_step", return_value=("/fixture/reference",)),
+                  mock.patch.object(capture, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID),
+                  mock.patch.object(capture, "_arm_reference", return_value=(completed, 20)),
+                  mock.patch.object(readiness, "requires_t0_frequency_gate", return_value=True) as obligation,
+                  self.assertRaises(capture.CaptureT0Error) as caught):
+                capture._capture_step_with_dependencies("clock-reference", root, root, root,
+                                                       monotonic_ns=lambda: 10)
+            obligation.assert_called_once_with(context.pack_root)
+            self.assertIn("frequency gate is missing", str(caught.exception))
+            self.assertFalse((root / "clock-reference.json").exists())
 
     @staticmethod
     def _terminal_review_message(tree_oid: str, packs: tuple[str, ...]) -> str:
@@ -156,7 +259,13 @@ class CaptureT0StepTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
+        retained = {path.name: path.read_bytes() for path in input_root.iterdir()
+                    if path.name in {"kernel-frequency-gate.json", "kernel-frequency-binding.json"}
+                    or path.name.startswith("clock-sizing") or path.name == "clock-observed-bound.json"}
         shutil.rmtree(input_root)
+        input_root.mkdir()
+        for name, raw in retained.items():
+            (input_root / name).write_bytes(raw)
         return (
             temporary,
             repository,
@@ -205,9 +314,9 @@ class CaptureT0StepTests(unittest.TestCase):
                     b"OK: post-arm evidence reports screensaver disengaged.\nREADY.\n"
                 )
                 stderr = b""
-            elif Path(command[1]).name == "prewindow_check.sh":
+            elif Path(command[1]).name == "prewindow.py":
                 clock.advance(600)
-                stdout = b"READY after 10 min.\n"
+                stdout = b"continuous clean dwell 0/600s (check 1)\ncontinuous clean dwell 600/600s (check 2)\nREADY after 10 min.\n"
                 stderr = b""
             elif Path(command[1]).name == "recover_calibration_ledger.py":
                 stdout = json.dumps(
@@ -245,21 +354,31 @@ class CaptureT0StepTests(unittest.TestCase):
                 + (clock.value - SYNTHETIC_MONOTONIC_NS) / 1e9)
             wall.start()
             self.addCleanup(wall.stop)
-            for step_id in capture.STEP_ORDER:
-                result = capture._capture_step_for_test(
-                    step_id,
-                    pack,
-                    custody,
-                    window_root,
-                    execute=execute,
-                    monotonic_ns=clock.monotonic_ns,
-                )
-                self.assertEqual(result["status"], "PASS")
+            buffer = io.BytesIO()
+            with mock.patch.object(capture, "_execute", side_effect=execute), \
+                 mock.patch.object(capture.time, "monotonic_ns", side_effect=clock.monotonic_ns), \
+                 mock.patch.object(capture.sys, "stdout", SimpleNamespace(buffer=buffer)):
+                code = capture.main(["sequence", "--pack-root", str(pack), "--custody-root", str(custody),
+                                     "--window-plan-root", str(window_root)])
+            self.assertEqual(code, 0, buffer.getvalue())
+            result = json.loads(buffer.getvalue())
+            self.assertEqual([row["step_id"] for row in result["captures"]], list(capture.STEP_ORDER))
+            from tests.test_kernel_clock import frequency_probe
+            r0_capture = json.loads((input_root / "clock-reference.json").read_bytes())
+            self.assertEqual(r0_capture["kernel_frequency"], frequency_probe())
+            self.assertEqual(r0_capture["t_stream_max_s"], 320.)
+            self.assertEqual(json.loads(r0_capture["stdout"])["anchor_monotonic_raw_ns"],
+                             SYNTHETIC_MONOTONIC_NS - 900 * 1_000_000_000)
 
         self.assertEqual(
             {path.name for path in input_root.iterdir()},
             {
                 "network_time_off.json",
+                "kernel-frequency-gate.json",
+                "kernel-frequency-binding.json",
+                "clock-sizing-source.json", "clock-observed-bound.json", "clock-sizing.json",
+                "clock-sizing-plan.json", "clock-sizing-authorization.json",
+                "clock-sizing-confirmation.json", "clock-sizing-confirmation-table.json",
                 "arm-context.json",
                 "clock-disable.json",
                 "clock-reference.json",
@@ -369,7 +488,7 @@ class CaptureT0StepTests(unittest.TestCase):
             ),
         ):
             context = capture._load_context(pack, custody, custody / "window-plan")
-        input_root.mkdir(parents=True)
+        input_root.mkdir(parents=True, exist_ok=True)
         outputs = {
             "clock-reference": (
                 readiness.render_json(
@@ -397,7 +516,7 @@ class CaptureT0StepTests(unittest.TestCase):
                 60,
             ),
             "prewindow-check": (
-                "READY after 10 min.\n",
+                "continuous clean dwell 0/600s (check 1)\ncontinuous clean dwell 600/600s (check 2)\nREADY after 10 min.\n",
                 "",
                 100,
                 100 + 600 * 1_000_000_000,
@@ -700,7 +819,7 @@ class CaptureT0StepTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fake_bin = Path(directory)
             commands = {
-                "ps": "printf '%s\\n' 'edr 123 50.0 0.0 0 0 ?? R 0:00 0:00 /usr/libexec/XProtectRemediator'\n",
+                "ps": "case \"$*\" in '-Ao pid=,pcpu=,args=') printf '%s\\n' '123 50.0 /usr/libexec/XProtectRemediator';; *) printf '%s\\n' 'edr 123 50.0 0.0 0 0 ?? R 0:00 0:00 /usr/libexec/XProtectRemediator';; esac\n",
                 "uptime": "printf '%s\\n' '12:00  up 1 day, load averages: 0.10 0.20 0.30'\n",
                 "pmset": "printf \"%s\\n\" \"Now drawing from 'AC Power'\"\n",
                 "df": "printf '%s\\n' 'Filesystem blocks Used Available Capacity Mounted' '/dev/disk 1 1 100 1% /'\n",
@@ -727,6 +846,16 @@ class CaptureT0StepTests(unittest.TestCase):
         self.assertIn("background daemon active", completed.stdout)
         self.assertNotIn("999", completed.stdout)
         self.assertIn("NOT READY.", completed.stdout)
+
+    def test_t0_dwell_command_uses_module_without_an_environment_switch(self):
+        repository = Path("/fixture/checkout")
+        argv = (str(repository / ".venv/bin/python"),
+                str(repository / "joulewise/prewindow.py"), "--t0-wait",
+                "--timeout-min", "45", "--window", "gamma")
+        with mock.patch.object(capture.subprocess, "run", return_value=subprocess.CompletedProcess(argv, 0)) as run:
+            capture._execute(argv, cwd=repository)
+            self.assertEqual(run.call_args.args[0], list(argv))
+            self.assertEqual(run.call_args.kwargs["env"], capture.GOVERNED_SUBPROCESS_ENVIRONMENT)
 
     def test_refuses_dollar_bearing_window_environment(self) -> None:
         (
@@ -910,11 +1039,14 @@ class CaptureT0StepTests(unittest.TestCase):
             script = repository / "scripts/prewindow_check.sh"
             script.parent.mkdir()
             script.write_text(source + unreachable_live_table, encoding="utf-8")
+            policy = repository / "joulewise/prewindow.py"
+            policy.parent.mkdir()
+            policy.write_bytes((source_repository / "joulewise/prewindow.py").read_bytes())
 
             fake_bin = repository / "fake-bin"
             fake_bin.mkdir()
             commands = {
-                "ps": "exit 0\n",
+                "ps": "case \"$*\" in '-Ao pid=,pcpu=,args=') printf '%s\\n' '1 0.0 launchd';; *) exit 0;; esac\n",
                 "uptime": (
                     "printf '%s\\n' "
                     "'12:00 up 1 day, load averages: 0.10 0.20 0.30'\n"

@@ -56,6 +56,10 @@ READERS = {
     "joulewise/whole_window.py": ("issued acceptance and bracket rows", "outside the derivation scope"),
     "joulewise/detection_floor.py": ("bracket rows", "outside the derivation scope"),
     "scripts/mint_floor_artifact_generalized.py": ("bracket rows", "outside the derivation scope"),
+    "scripts/b5_window_calibration_verdict.py": (
+        "bracket rows (block-5 window pre slot)", "outside the derivation scope: reads only the block-5 window's "
+        "own pre-slot capture, the one every member's controller attachment already reads, and writes its "
+        "stored and refit bound into the J1 cache-key verdict beside it (lane P2-CHAIN; registered at int3)"),
     "joulewise/controller.py": (
         "refuses Revision 5 except authenticated G2-a/G2-b pre slots", "legacy instrument calibration attachment raises "
         "'revision_five evidence cannot be attached as instrument calibration'; "

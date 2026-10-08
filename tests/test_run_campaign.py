@@ -213,19 +213,32 @@ class CampaignMeasurementRegistryTests(unittest.TestCase):
             child.assert_not_called()
         self.assertEqual(self.entries(), [])
 
-    def test_failing_identity_probe_refuses_cleanly_and_releases_lock(self):
+    def test_failing_identity_probe_publishes_without_a_start_time(self):
+        """Opus triple audit F4a: an UNKNOWN identity probe no longer loses the stage.
+
+        Before: publish_campaign raised 'campaign start identity unavailable' and
+        run_campaign returned 2 without dispatching any member."""
+        class MockChildStop(Exception):
+            pass
         for axi in (False, True):
+            records = []
+
+            def child(*args, **kwargs):
+                (entry,) = self.entries()
+                records.append(json.loads(entry.read_text()))
+                raise MockChildStop("mock child stopped")
             stderr = io.StringIO()
             with self.subTest(axi=axi), patch.dict(os.environ, {
                 "JOULEWISE_IDENTITY_PROBE": "/usr/bin/true",
-            }), patch.object(run_campaign_module, "observe_identity", wraps=self.live.observe_identity), patch.object(run_campaign_module, "run_authenticated_campaign_child") as child, redirect_stderr(stderr):
-                self.assertEqual(self.invoke(axi=axi), 2)
-                self.assertEqual(stderr.getvalue().splitlines()[-1],
-                                 "error: campaign start identity unavailable")
-                self.assertNotIn("Traceback", stderr.getvalue())
+            }), patch.object(run_campaign_module, "observe_identity", wraps=self.live.observe_identity), patch.object(run_campaign_module, "run_authenticated_campaign_child", side_effect=child) as launch, redirect_stderr(stderr):
+                with self.assertRaisesRegex(MockChildStop, "mock child stopped"):
+                    self.invoke(axi=axi)
+                launch.assert_called_once()
+                self.assertEqual([(record["pid"], record["start_time"]) for record in records],
+                                 [(os.getpid(), None)])
+                self.assertNotIn("campaign start identity unavailable", stderr.getvalue())
                 self.assertFalse((self.runs / 'campaign.lock').exists())
                 self.assertEqual(self.entries(), [])
-                child.assert_not_called()
 
     def test_registry_publication_error_releases_campaign_lock(self):
         for axi in (False, True):
@@ -8909,6 +8922,109 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertEqual(observed, expected)
         self.assertEqual(len(observed), len(set(observed)))
 
+    def test_item6_ruling_verdict_path_discloses_a_collector_raised_post_run(
+        self,
+    ) -> None:
+        # Orchestrator ruling on audit-fix batch 1 item 6 (2026-10-07): on the
+        # whole-window verdict path, a HAZARD post-run guard record whose
+        # collector raised (every reading null, collector_error) is unmeasured
+        # evidence, disclosed by the controller's env.member_guard_flagged; it
+        # is not environment_admission_failed, so the harvest does not remove
+        # the member as member.whole_window_member_failure.  The reducer's
+        # barrier keeps it failed (tests/test_controller_hazard_flags.py).
+        # A legacy-shaped null reading with no collector_error, and a
+        # measured awake display, still fail the member here.
+        from joulewise.environment_admission import post_run_environment_refusals
+
+        binding = self._binding()
+        raised = {
+            "capture_duration_s": 0.0,
+            "capture_skipped": False,
+            "captured_at_s": 1.0,
+            "collector_error": "OSError: [Errno 5] Input/output error: 'system_profiler'",
+            "display_power_state": None,
+            "errors": {"collector": "OSError"},
+            "hid_idle_s": None,
+            "screensaver_delay_s": None,
+            "screensaver_engaged": None,
+            "screensaver_module": None,
+        }
+        legacy_unknown = {
+            key: value for key, value in raised.items() if key != "collector_error"
+        }
+        awake = {**raised, "display_power_state": "any_awake"}
+        cases = (
+            ("raised", raised, False),
+            ("legacy-unknown", legacy_unknown, True),
+            ("awake", awake, True),
+        )
+        for label, observation, fails in cases:
+            with self.subTest(label=label):
+                member = self._member(
+                    f"item6-{label}", records=_clean_idle_records()
+                )
+                member.metadata["environment"]["post_run_observation"] = dict(
+                    observation
+                )
+                self.assertEqual(
+                    post_run_environment_refusals(member.metadata),
+                    ("environment_admission_failed",),
+                )
+                result = run_campaign_module._idle_admission_core_evaluation(
+                    [member], binding
+                )
+                failures = {
+                    (failure["member_id"], failure["reason_code"])
+                    for failure in result.member_failures
+                }
+                self.assertEqual(
+                    (member.bundle_id, "environment_admission_failed")
+                    in failures,
+                    fails,
+                )
+                self.assertEqual(
+                    "environment_admission_failed"
+                    in result.core["conditions"],
+                    fails,
+                )
+
+    def test_item6_ruling_verdict_path_passes_the_flag_to_the_strict_validator(
+        self,
+    ) -> None:
+        # The strict current-mint validator is reached through
+        # _current_member_environment_refusals; the verdict writer sets the
+        # verdict-only keyword there too, and the readiness path does not.
+        seen: list[dict] = []
+
+        def spy(evaluation, **keywords):
+            seen.append(dict(keywords))
+            return ()
+
+        binding = self._binding()
+        member = self._member("item6-spy", records=_clean_idle_records())
+        with patch.object(
+            run_campaign_module, "_current_member_environment_refusals", spy
+        ):
+            run_campaign_module._idle_admission_core_evaluation([member], binding)
+        self.assertEqual(
+            seen, [{"post_run_collector_raised_unmeasured": True}]
+        )
+        source = inspect.getsource(run_campaign_module._member_readiness_reasons)
+        self.assertIn("_current_member_environment_refusals(evaluation)", source)
+        self.assertNotIn("post_run_collector_raised_unmeasured", source)
+        # The verdict validator re-derives the writer's conditions with the
+        # same setting; the pinned reducer never names it (old default).
+        from joulewise import reduce as reducer
+        from joulewise import whole_window
+
+        rederivation = inspect.getsource(
+            whole_window._current_core_rederivation_reasons
+        )
+        self.assertIn("post_run_collector_raised_unmeasured=True", rederivation)
+        self.assertNotIn(
+            "post_run_collector_raised_unmeasured", inspect.getsource(reducer)
+        )
+
     def test_global_neg8_condition_has_no_fabricated_member_failure(
         self,
     ) -> None:
@@ -9001,19 +9117,11 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertEqual(section["neg8_bracket"]["decision"], "failed")
 
     def test_neg8_bound_binding_changes_trigger_stale_refusal(self) -> None:
+        # Doctrine 2026-10-05 (V2): only the calibration identity still makes
+        # the bound stale; os_build and power-supply changes are disclosed
+        # (test_neg8_bound_os_and_power_changes_are_disclosed_not_stale).
         binding = self._binding()
         cases = (
-            (
-                "os_build_change",
-                {"os_build": "25F85"},
-            ),
-            (
-                "power_supply_change",
-                {
-                    "adapter_watts": 96,
-                    "adapter_description": "96W USB-C Power Adapter",
-                },
-            ),
             (
                 "calibration_identity_change",
                 {"calibration_identity_sha256": "d" * 64},
@@ -9046,6 +9154,94 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     "neg8_drift_bound_stale", section["conditions"]
                 )
                 self.assertEqual(section["neg8_bracket"]["decision"], "failed")
+
+    def test_neg8_bound_os_and_power_changes_are_disclosed_not_stale(self) -> None:
+        binding = self._binding()
+        cases = (
+            ("os_build_change", {"os_build": "25F85"}),
+            (
+                "power_supply_change",
+                {
+                    "adapter_watts": 96,
+                    "adapter_description": "96W USB-C Power Adapter",
+                },
+            ),
+            ("binding_observation_missing", {"adapter_watts": None}),
+        )
+        for disclosed, overrides in cases:
+            with self.subTest(disclosed=disclosed):
+                members = [
+                    self._member(
+                        f"neg8-v2-{disclosed}-{position}",
+                        records=_clean_idle_records(),
+                        gross_energy_j=8.0 + index * 0.01,
+                        neg8_position=position,
+                        **overrides,
+                    )
+                    for index, position in enumerate(("start", "end"))
+                ]
+                section = run_campaign_module.idle_admission_core_verdict(
+                    members,
+                    binding,
+                    whole_window=True,
+                    neg8_drift_bound=self._drift_bound(),
+                )
+                freshness = section["neg8_bracket"]["bound_freshness"]
+                self.assertEqual(freshness["decision"], "fresh")
+                self.assertEqual(freshness["triggered_rederivation_reasons"], [])
+                self.assertIn(disclosed, freshness["disclosed_binding_changes"])
+                self.assertNotIn("neg8_drift_bound_stale", section["conditions"])
+
+    def test_whole_window_writer_evaluates_freshness_at_the_end_reference(self) -> None:
+        # V1: the verdict writer measures the bound's 24 h horizon at the end
+        # of the end reference's measured window, not at the desk clock.
+        binding = self._binding()
+        derived_at = time.time() - NEG8_DRIFT_BOUND_MAX_AGE_S - 3600.0
+        bound = self._drift_bound(derived_at_s=derived_at)
+        members = [
+            self._member(
+                f"neg8-v1-{position}",
+                records=_clean_idle_records(),
+                gross_energy_j=8.0 + index * 0.01,
+                neg8_position=position,
+            )
+            for index, position in enumerate(("start", "end"))
+        ]
+        end_at = derived_at + 7200.0
+        for index, member in enumerate(members):
+            start = derived_at + 600.0 + index * 3000.0
+            stop = end_at if index else start + 600.0
+            (member.bundle_path / "events.jsonl").write_text(
+                "".join(
+                    json.dumps(
+                        {
+                            "phase": "measured_run",
+                            "event_type": event,
+                            "timestamp_s": stamp,
+                            "message": event,
+                            "metadata": {},
+                        }
+                    )
+                    + "\n"
+                    for event, stamp in (
+                        ("sampling_started", start),
+                        ("sampling_stopped", stop),
+                    )
+                )
+            )
+        desk = run_campaign_module._idle_admission_core_evaluation(
+            members, binding, whole_window=True, neg8_drift_bound=bound
+        ).core["neg8_bracket"]["bound_freshness"]
+        self.assertIn("validity_horizon_expired", desk["triggered_rederivation_reasons"])
+        writer = run_campaign_module._idle_admission_core_evaluation(
+            members,
+            binding,
+            whole_window=True,
+            neg8_drift_bound=bound,
+            freshness_at_end_reference=True,
+        ).core["neg8_bracket"]["bound_freshness"]
+        self.assertEqual(writer["evaluated_at_s"], end_at)
+        self.assertEqual(writer["decision"], "fresh")
 
     def test_unissued_prefreshness_bound_wire_is_malformed_and_underived(self) -> None:
         binding = self._binding()

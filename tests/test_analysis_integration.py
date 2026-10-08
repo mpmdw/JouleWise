@@ -11,7 +11,7 @@ import json
 import shutil
 import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import ExitStack, contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
@@ -140,6 +140,29 @@ PRODUCTION_TELEMETRY_IDENTITY = CustodyTelemetryIdentity(
     summary_backend_class="powermetrics",
     triangle_agrees=True,
 )
+
+
+@contextmanager
+def pinned_genesis_acceptance(fixture: dict):
+    """Route consumers without an acceptance argument through the real loader."""
+
+    from joulewise.calibration_bracketing import load_calibration_acceptance_bound
+
+    def load_pinned_acceptance(path=fixture["acceptance_path"]):
+        return load_calibration_acceptance_bound(path)
+
+    with ExitStack() as stack:
+        for module in (
+            "joulewise.analysis_manifest_v3",
+            "joulewise.analysis_engine.inputs",
+        ):
+            stack.enter_context(
+                mock.patch(
+                    f"{module}.load_calibration_acceptance_bound",
+                    side_effect=load_pinned_acceptance,
+                )
+            )
+        yield
 
 
 def fixture_calibration_ledger_snapshot() -> CalibrationLedgerSnapshot:
@@ -701,11 +724,13 @@ class AnalysisIntegrationTests(unittest.TestCase):
         counterfactual input then strips findings from the produced audit row.
         """
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             fixture = install_synthetic_finalization_fixture(Path(tmp))
+            stack.enter_context(pinned_genesis_acceptance(fixture))
             finalized = finalize_prospective_analysis_manifest_v3(
                 fixture["prospective_path"],
                 plan_tree_path=fixture["plan_tree_path"],
+                acceptance_bound_path=fixture["acceptance_path"],
                 custody_root=fixture["root"],
                 runs_root=fixture["runs_root"],
                 whole_window_verdict_path=fixture["verdict_path"],
@@ -812,13 +837,15 @@ class AnalysisIntegrationTests(unittest.TestCase):
     def test_finalized_gamma_runs_real_engine_then_isolates_math_layers(self):
         """Real synthetic end-to-end pass followed by isolated math seams."""
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             fixture = install_synthetic_finalization_fixture(
                 Path(tmp), shared_family=True
             )
+            stack.enter_context(pinned_genesis_acceptance(fixture))
             finalized = finalize_prospective_analysis_manifest_v3(
                 fixture["prospective_path"],
                 plan_tree_path=fixture["plan_tree_path"],
+                acceptance_bound_path=fixture["acceptance_path"],
                 custody_root=fixture["root"],
                 runs_root=fixture["runs_root"],
                 whole_window_verdict_path=fixture["verdict_path"],
@@ -1076,14 +1103,16 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
 
     def test_governed_transport_finalizes_then_refuses_with_pending_ruling_code(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             fixture = install_synthetic_finalization_fixture(
                 Path(tmp),
                 transport_mode="governed_transport",
             )
+            stack.enter_context(pinned_genesis_acceptance(fixture))
             finalized = finalize_prospective_analysis_manifest_v3(
                 fixture["prospective_path"],
                 plan_tree_path=fixture["plan_tree_path"],
+                acceptance_bound_path=fixture["acceptance_path"],
                 custody_root=fixture["root"],
                 runs_root=fixture["runs_root"],
                 whole_window_verdict_path=fixture["verdict_path"],
@@ -1117,11 +1146,13 @@ class AnalysisIntegrationTests(unittest.TestCase):
     def test_finalized_load_boundary_maps_wrong_typed_sites_to_closed_vocabulary(
         self,
     ):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             fixture = install_synthetic_finalization_fixture(Path(tmp))
+            stack.enter_context(pinned_genesis_acceptance(fixture))
             finalized = finalize_prospective_analysis_manifest_v3(
                 fixture["prospective_path"],
                 plan_tree_path=fixture["plan_tree_path"],
+                acceptance_bound_path=fixture["acceptance_path"],
                 custody_root=fixture["root"],
                 runs_root=fixture["runs_root"],
                 whole_window_verdict_path=fixture["verdict_path"],
@@ -1194,11 +1225,13 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         self.assertIn(FINALIZED_MALFORMED_VALUE_CODE, FINALIZED_REFUSAL_CODES)
         self.assertIn(FINALIZED_INTERNAL_ERROR_CODE, FINALIZED_REFUSAL_CODES)
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             fixture = install_synthetic_finalization_fixture(Path(tmp))
+            stack.enter_context(pinned_genesis_acceptance(fixture))
             finalize_prospective_analysis_manifest_v3(
                 fixture["prospective_path"],
                 plan_tree_path=fixture["plan_tree_path"],
+                acceptance_bound_path=fixture["acceptance_path"],
                 custody_root=fixture["root"],
                 runs_root=fixture["runs_root"],
                 whole_window_verdict_path=fixture["verdict_path"],
@@ -1232,8 +1265,9 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     self.assertIs(raised.exception.__cause__, injected)
 
     def test_authenticated_nested_bundle_conflicts_with_run_id_rejoin(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             fixture = install_synthetic_finalization_fixture(Path(tmp))
+            stack.enter_context(pinned_genesis_acceptance(fixture))
             runs = fixture["runs_root"]
             campaign_manifest_path = (
                 runs / "campaign_manifests" / "synthetic.json"
@@ -1398,6 +1432,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 finalized = finalize_prospective_analysis_manifest_v3(
                     fixture["prospective_path"],
                     plan_tree_path=fixture["plan_tree_path"],
+                    acceptance_bound_path=fixture["acceptance_path"],
                     custody_root=fixture["root"],
                     runs_root=runs,
                     whole_window_verdict_path=fixture["verdict_path"],
@@ -6207,22 +6242,30 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
                     if "load_authenticated_campaign_manifest" in imported:
                         dereference_importers.add(relative)
 
+        # whole_window.py: the HAZARD_PACK verdict validator replays the
+        # window's complete catalog against the row's membership_id
+        # (_hazard_membership_replay_reasons).
         self.assertEqual(
             catalog_calls,
             {
                 "joulewise/analysis_engine/inputs.py": 2,
+                "joulewise/whole_window.py": 1,
                 "scripts/run_campaign.py": 4,
             },
         )
-        self.assertEqual(sum(catalog_calls.values()), 6)
+        self.assertEqual(sum(catalog_calls.values()), 7)
         self.assertEqual(catalog_importers, set(catalog_calls))
+        # Pointwise dereference of pinned descriptors: the whole-window
+        # verdict validator, and the block-5 harvest's NEG-8 re-screen
+        # (joulewise.b5.harvest.verdict_neg8_sources), which mirrors that
+        # validator's source selection at each recorded SHA-256.
         self.assertEqual(
             dereference_calls,
-            {"joulewise/whole_window.py": 1},
+            {"joulewise/whole_window.py": 1, "joulewise/b5/harvest.py": 1},
         )
         self.assertEqual(
             dereference_importers,
-            {"joulewise/whole_window.py"},
+            {"joulewise/whole_window.py", "joulewise/b5/harvest.py"},
         )
 
     def test_b2_wrong_schema_duplicate_or_unreadable_catalog_refuses_join(self):

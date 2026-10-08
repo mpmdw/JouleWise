@@ -12,7 +12,7 @@ import re
 import subprocess
 import sys
 
-from joulewise.night_gate import AGENT_CENSUS_ARGV, NightPlan, PlanError
+from joulewise.night_gate import AGENT_CENSUS_ARGV, AGENT_CENSUS_PATTERN, NightPlan, PlanError
 from joulewise.quiet_guard_process import (
     DarwinProcessReader,
     DarwinProcessRecord,
@@ -21,10 +21,17 @@ from joulewise.quiet_guard_process import (
     SysctlDarwinProcessReader,
 )
 
-# Same discovery population as the night gate, but PID-only output prevents
-# multiline argv text from being mistaken for additional process hits.
-# Do not add -a: own ancestors are read separately, preserving that population.
-ARM_DISCOVERY_ARGV = (AGENT_CENSUS_ARGV[0], "-f", *AGENT_CENSUS_ARGV[2:])
+# Same pattern as the night gate, but PID-only output prevents multiline argv
+# text from being mistaken for additional process hits.  Deliberately without
+# the night gate's -a (dry-records F1, 2026-10-07): this diagnostic reads the
+# caller's own ancestors separately from the kernel table (_ancestors,
+# _own_root) and classifies the caller's own agent session as its own chain
+# (exempt, with its workloads scanned), not as a foreign hit, so listing the
+# ancestors in discovery would add only processes it already reads and
+# exempts as the caller's own chain.  The hazard path's
+# census (night_gate.agent_census, hazards.arm.agent_census) does use -a: there
+# an agent ancestor is a live agent session and refuses.
+ARM_DISCOVERY_ARGV = (AGENT_CENSUS_ARGV[0], "-f", AGENT_CENSUS_PATTERN)
 
 
 @dataclass(frozen=True)
@@ -123,9 +130,8 @@ def _interactive_root(row: DarwinProcessRecord) -> bool:
         return role not in {"daemon", "bg-pty-host", "--bg-pty-host", "bg-spare", "--bg-spare"} and not any(
             arg == "-p" or arg.startswith("--print") for arg in args
         )
-    if name in {"node", "nodejs"}:
-        script, _, _ = _command(row)
-        return script.endswith("/t3-code/dist/cli.js")
+    # The T3 Code CLI (node .../t3-code/dist/cli.js) was an interactive root
+    # until the T3 prune (Ed, 2026-10-07: "I've abandoned all t3 integration as a control plane so you can prune all that out").
     return False
 
 

@@ -32,8 +32,10 @@ import hashlib
 import json
 import math
 import os
+import re
 import secrets
 import shlex
+import signal
 import stat
 import subprocess
 import sys
@@ -162,6 +164,9 @@ from joulewise.whole_window import (  # noqa: E402
     SupersessionRecorderError,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     build_neg8_freshness_observation,
+    hazard_window_membership_id,
+    strict_validate_bundles,
+    whole_window_strict_workers,
     build_evaluation_basis,
     build_neg8_drift_bound_artifact,
     build_row_provenance,
@@ -184,6 +189,7 @@ from joulewise.salvage_dangler import (  # noqa: E402
     SalvageAuthorizationError,
     authorize_salvage_dangler_exclusion,
 )
+from joulewise import window_lineage as _window_lineage  # noqa: E402
 from joulewise.calibration_bracketing import (  # noqa: E402
     calibration_bracket_for_bundles,
     load_calibration_acceptance_bound,
@@ -213,6 +219,9 @@ STATUSES = (
     "incomplete_existing",
     "config_error",
     "dry_run",
+    # HAZARD path only (gate-prune P2-RC row 8); the legacy path never sets them.
+    "timeout",
+    "drained",
 )
 ORDER_MANIFEST_NAME = "order_manifest.json"
 ANALYSIS_MANIFEST_NAME = "analysis_manifest.json"
@@ -246,6 +255,10 @@ NEG8_REFERENCE_MIDPOINT_ROLE = "neg8_daily_reference_midpoint"
 NEG8_REFERENCE_END_ROLE = "neg8_daily_reference_end"
 FLOOR_MEMBER_ROLES = frozenset({"absolute_repeat", "comparative_abba_member"})
 CAMPAIGN_STOP_SCHEMA = "joulewise.campaign_stop.v1"
+# Membership group of a HAZARD_PACK window (one group per dedicated runs root).
+# Used only when the runs root carries a hazard locator, so a manifest whose
+# analysis_manifest_id happens to equal it elsewhere keeps the old grouping.
+HAZARD_WINDOW_MEMBERSHIP_KEY = "<hazard-window>"
 # Campaign return-code registry: 0 success, 1 failure, 2 usage/preflight,
 # 3 governed block limit, 130 interruption (main's KeyboardInterrupt handler).
 CAMPAIGN_STOP_RETURN_CODES = MappingProxyType({"max_blocks_reached": 3})
@@ -435,6 +448,9 @@ class MemberEvaluation:
     sentinel_position: str | None = None
     scientific_config_sha256: str | None = None
     canonical_neg8_workload: bool = False
+    # HAZARD (P2-RC M3): "deferred_to_harvest" when only the structural check
+    # ran in the window; ``strict_valid`` is then that check's boolean.
+    strict_validation: str | None = None
 
     def failure_classes(self) -> tuple[str, ...]:
         classes: list[str] = []
@@ -511,6 +527,8 @@ class MemberEvaluation:
             ),
             "rerun_required": self.rerun_required,
         }
+        if self.strict_validation is not None:
+            row["strict_validation"] = self.strict_validation
         if self.waiver is not None:
             row["waiver"] = {
                 "target_kind": self.waiver.target_kind,
@@ -684,6 +702,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("config_dir", nargs="?", help="Directory containing generated JSON configs")
     parser.add_argument("--runs-dir", default="runs", help="Bundle output directory")
     parser.add_argument("--log", help="JSONL campaign log path")
+    parser.add_argument("--calibration-ledger", default=os.environ.get("CALIBRATION_LEDGER"),
+                        help="Selected calibration observation ledger")
+    parser.add_argument("--head-pin", default=os.environ.get("LEDGER_HEAD_PIN"),
+                        help="Selected committed calibration ledger head pin")
     parser.add_argument("--dry-run", action="store_true", help="Print plan without invoking benchmarks")
     parser.add_argument(
         "--backup",
@@ -1656,14 +1678,14 @@ def append_log(
     """
 
     if lock_token is None:
-        raise RuntimeError("campaign log append requires a held campaign.lock")
+        raise CampaignLockOwnershipError("campaign log append requires a held campaign.lock")
     ownership = _validated_campaign_lock_ownership(lock_token)
     resolved_log_parent = Path(log_path).resolve(strict=False).parent
     if (
         resolved_log_parent != ownership.runs_root
         and os.path.lexists(resolved_log_parent / "campaign.lock")
     ):
-        raise RuntimeError(
+        raise CampaignLockOwnershipError(
             "campaign log append cannot use a foreign lock token for lockable "
             f"root {resolved_log_parent}"
         )
@@ -1918,8 +1940,16 @@ def _refuse_marker_bearing_axi(configs: Sequence[Path]) -> None:
 def authenticate_campaign_child_launch_lineage(
     outer_authentication: Mapping[str, Any] | None,
     bundle_paths: Sequence[Path],
+    hazard: Any = None,
+    absent: list[Path] | None = None,
 ) -> None:
-    """Bind finalized child metadata to the lineage authenticated preflight."""
+    """Bind finalized child metadata to the lineage authenticated preflight.
+
+    HAZARD (``hazard`` and ``absent`` given): a bundle whose ``metadata.json``
+    is missing, unreadable or not JSON (a member that died mid-run) is
+    appended to ``absent`` and skipped.  Readable metadata whose lineage or
+    locator digest differs still raises ``launch_lineage_conflict``.
+    """
 
     if outer_authentication is None:
         return
@@ -1939,6 +1969,9 @@ def authenticate_campaign_child_launch_lineage(
         try:
             metadata = json.loads((bundle_path / "metadata.json").read_bytes())
         except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            if hazard is not None and absent is not None:
+                absent.append(bundle_path)
+                continue
             raise LaunchLineageError(
                 "launch_lineage_conflict",
                 f"child bundle lacks readable launch metadata: {bundle_path}",
@@ -1969,6 +2002,8 @@ def run_authenticated_campaign_child(
     env: Mapping[str, str] | None,
     outer_authentication: Mapping[str, Any] | None,
     bundle_paths: Sequence[Path],
+    hazard: Any = None,
+    absent: list[Path] | None = None,
 ) -> subprocess.CompletedProcess[Any]:
     """Run one ordinary child and authenticate its preserved bundle stamps."""
 
@@ -1976,6 +2011,8 @@ def run_authenticated_campaign_child(
     authenticate_campaign_child_launch_lineage(
         outer_authentication,
         bundle_paths,
+        hazard=hazard,
+        absent=absent,
     )
     return completed
 
@@ -2812,13 +2849,37 @@ def evaluate_member(
     info: ConfigInfo,
     waivers: WaiverMap,
     cooldown_evidence: dict[str, Any] | None = None,
+    hazard: Any = None,
 ) -> MemberEvaluation:
+    if hazard is not None and _hazard_metadata_undecodable(bundle_dir):
+        # HAZARD (A4): bytes a crashed child left undecodable are the
+        # absent-metadata fact already flagged; every reader below re-decodes
+        # them, so the member is evaluated as failed here.  Legacy: unchanged.
+        return MemberEvaluation(
+            bundle_id=bundle_dir.name,
+            bundle_path=bundle_dir,
+            config_name=info.path.name,
+            status=None,
+            strict_valid=False,
+            validation_problems=("metadata.json is not UTF-8 (member failed mid-run)",),
+            preceding_campaign_cooldown=cooldown_evidence,
+            declared_role=info.role,
+            sentinel_position=info.sentinel_position,
+            scientific_config_sha256=info.scientific_config_sha256,
+            canonical_neg8_workload=info.canonical_neg8_workload,
+            strict_validation=HAZARD_STRICT_VALIDATION_DEFERRED,
+        )
+    # HAZARD (P2-RC M3): the window runs the structural check only; the fresh
+    # re-reduction, uncertainty, rich-telemetry and raw-to-trace checks run at
+    # the desk verdict and the harvest.  The custody triangle, prompt-hash,
+    # config-binding and anchor-fallback checks below run on both paths.
+    strict_deferred = hazard is not None
     status, malformed = summary_status(bundle_dir / "summary_metrics.json")
     problems: list[str] = []
     strict_valid = False
     if bundle_dir.exists():
         try:
-            problems = validate_bundle(bundle_dir, strict=True)
+            problems = validate_bundle(bundle_dir, strict=not strict_deferred)
         except Exception as exc:
             problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
         strict_valid = not problems
@@ -2918,6 +2979,9 @@ def evaluate_member(
         sentinel_position=info.sentinel_position,
         scientific_config_sha256=info.scientific_config_sha256,
         canonical_neg8_workload=info.canonical_neg8_workload,
+        strict_validation=(
+            HAZARD_STRICT_VALIDATION_DEFERRED if strict_deferred else None
+        ),
     )
 
 
@@ -2926,6 +2990,8 @@ def evaluate_members(
     runs_dir: Path,
     waivers: WaiverMap,
     cooldown_by_bundle: dict[str, dict[str, Any]] | None = None,
+    *,
+    hazard: Any = None,
 ) -> list[MemberEvaluation]:
     cooldown_by_bundle = cooldown_by_bundle or {}
     return [
@@ -2934,6 +3000,7 @@ def evaluate_members(
             info=info,
             waivers=waivers,
             cooldown_evidence=cooldown_by_bundle.get(bundle_dir.name),
+            **_hazard_kwargs(hazard),
         )
         for bundle_dir in expected_member_dirs(info, runs_dir)
     ]
@@ -3203,11 +3270,19 @@ def campaign_block_limit(
     launch_authentication: Mapping[str, Any] | None,
     order_entries: Sequence[OrderEntry],
     items: Sequence[ConfigInfo | ConfigError],
+    hazard: Any = None,
 ) -> CampaignBlockLimit | None:
-    """Validate bounded science before member 1; leave the legacy path untouched."""
+    """Validate bounded science before member 1; leave the legacy path untouched.
+
+    HAZARD with no ``--max-blocks``: no limit, and the launch record chain is
+    not re-read (the HAZARD purpose applies no limit; the harvest's lineage
+    audit reports that chain).  ``--max-blocks`` still takes today's path.
+    """
 
     if requested is not None and (type(requested) is not int or requested < 1):
         raise ValueError("--max-blocks must be >= 1")
+    if hazard is not None and launch_authentication is not None and requested is None:
+        return None
     # Other purposes retain every ordinary stage, including reference corpora,
     # without a block limit. G2-b's bracket reference configs are unauthenticated.
     if launch_authentication is not None:
@@ -3289,7 +3364,7 @@ _CAMPAIGN_LOCK_OWNERSHIP: dict[Path, CampaignLockToken] = {}
 _CAMPAIGN_LOCK_OWNERSHIP_LOCK = threading.Lock()
 
 
-def acquire_campaign_lock(runs_dir: Path) -> CampaignLockToken:
+def acquire_campaign_lock(runs_dir: Path, *, hazard: Any = None) -> CampaignLockToken:
     runs_root = Path(runs_dir).resolve(strict=False)
     runs_root.mkdir(parents=True, exist_ok=True)
     lock_path = runs_root / "campaign.lock"
@@ -3306,14 +3381,17 @@ def acquire_campaign_lock(runs_dir: Path) -> CampaignLockToken:
     try:
         fd = os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     except FileExistsError as exc:
-        try:
-            existing = lock_path.read_text(encoding="utf-8").strip()
-        except OSError:
-            existing = "<unreadable>"
-        raise RuntimeError(
-            f"another campaign appears to be running (lock {lock_path}, created {existing}); "
-            "if no campaign is running, delete the lock file and retry"
-        ) from exc
+        if hazard is not None:
+            fd = _hazard_reclaim_stale_campaign_lock(lock_path, runs_root, hazard)
+        else:
+            try:
+                existing = lock_path.read_text(encoding="utf-8").strip()
+            except OSError:
+                existing = "<unreadable>"
+            raise CampaignLockOwnershipError(
+                f"another campaign appears to be running (lock {lock_path}, created {existing}); "
+                "if no campaign is running, delete the lock file and retry"
+            ) from exc
     try:
         acquired_stat = os.fstat(fd)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -3365,24 +3443,24 @@ def _validated_campaign_lock_ownership(
     """Return acquisition identity only for this process's live lock."""
 
     if not isinstance(token, CampaignLockToken):
-        raise RuntimeError(
+        raise CampaignLockOwnershipError(
             "campaign provenance log write requires held lock acquired by this process"
         )
     lock_path = token.lock_path
     if lock_path.name != "campaign.lock":
-        raise RuntimeError("campaign log append requires a campaign.lock token")
+        raise CampaignLockOwnershipError("campaign log append requires a campaign.lock token")
     resolved_lock_path = lock_path.resolve(strict=False)
     with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
         current_token = _CAMPAIGN_LOCK_OWNERSHIP.get(resolved_lock_path)
     if current_token is not token:
-        raise RuntimeError(
+        raise CampaignLockOwnershipError(
             "campaign provenance log write requires held lock acquired by this process"
         )
     if (
         resolved_lock_path != token.lock_path
         or resolved_lock_path != token.runs_root / "campaign.lock"
     ):
-        raise RuntimeError(
+        raise CampaignLockOwnershipError(
             "campaign provenance log write requires the registered runs-root lock"
         )
     fd = -1
@@ -3397,7 +3475,7 @@ def _validated_campaign_lock_ownership(
             content_parts.append(part)
         content = b"".join(content_parts).decode("utf-8")
     except (OSError, UnicodeError) as exc:
-        raise RuntimeError(
+        raise CampaignLockOwnershipError(
             f"campaign provenance log write requires held lock {resolved_lock_path}"
         ) from exc
     finally:
@@ -3409,7 +3487,7 @@ def _validated_campaign_lock_ownership(
         or not content.startswith(f"pid={os.getpid()} ")
         or f" nonce={token.nonce} " not in content
     ):
-        raise RuntimeError(
+        raise CampaignLockOwnershipError(
             "campaign provenance log write requires this process's acquisition "
             f"identity for {resolved_lock_path}"
         )
@@ -3431,7 +3509,7 @@ def _assert_campaign_lock_held(runs_dir: Path) -> CampaignLockToken:
     with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
         token = _CAMPAIGN_LOCK_OWNERSHIP.get(lock_path)
     if token is None:
-        raise RuntimeError(
+        raise CampaignLockOwnershipError(
             "campaign provenance log write requires held lock acquired by this process"
         )
     return _assert_campaign_lock_token(token)
@@ -3471,6 +3549,1746 @@ def release_campaign_lock(
             raise
         if _CAMPAIGN_LOCK_OWNERSHIP.get(resolved_lock_path) is token:
             _CAMPAIGN_LOCK_OWNERSHIP.pop(resolved_lock_path)
+
+
+# --- HAZARD_PACK flag path (core lane RC) -------------------------------------
+# Gate-prune core-prune design, section 3.2.  Each relaxation here runs only
+# when the runs root carries the HAZARD lineage locator: ``hazard`` is then a
+# ``joulewise.flags.core.HazardFlagContext``.  ``hazard is None`` is the legacy
+# path, whose behavior is unchanged.  Flags go to
+# ``<custody>/flags/core-run_campaign.jsonl``; the harvest folds them.
+
+
+class CampaignLockOwnershipError(RuntimeError):
+    """A lock acquisition or ownership failure: a two-writer integrity hazard, never a record."""
+
+
+_HAZARD_FAILED = object()  # unique sentinel: "the guarded call raised"
+# The uncaught-exception refusal the record guards replace (main's handler).
+_HAZARD_RECORD_LEGACY_SITE = "scripts/run_campaign.py:9187@e6b6a0ce"
+# Test seam for the stale-lock race test: called inside the reclaim flock,
+# after the existing lock was read and before it is judged.
+_HAZARD_LOCK_RECLAIM_SEAM: Any = None
+# Cooldown "unknown" because no reference baseline exists (versus a reference
+# that exists but whose recovery could not be measured).
+_COOLDOWN_REFERENCE_UNAVAILABLE_REASONS = frozenset({
+    "preceding baseline is ineligible and no eligible frozen clean cooldown anchor "
+    "is available",
+    "previous physical member evaluation unavailable",
+    "previous idle baseline unavailable",
+})
+
+
+def _hazard_flag_context(runs_dir: Path | str | None, *, stage: str = "window") -> Any:
+    """The HAZARD predicate (``None`` on the legacy path).  Never raises."""
+
+    from joulewise.flags import core as flags_core
+
+    return flags_core.hazard_flag_context(runs_dir, writer="core-run_campaign", stage=stage)
+
+
+def _hazard_kwargs(hazard: Any) -> dict[str, Any]:
+    """``{"hazard": hazard}`` on HAZARD, ``{}`` on legacy: legacy calls stay byte-identical."""
+
+    return {"hazard": hazard} if hazard is not None else {}
+
+
+def _hazard_call(
+    hazard: Any,
+    phase: str,
+    run_id: str | None,
+    call: Any,
+    *,
+    kind: str = "member_iteration_error",
+) -> Any:
+    """Legacy: return call().  HAZARD: an Exception other than LaunchLineageError or
+    CampaignLockOwnershipError becomes campaign.runner_record_flagged and returns
+    _HAZARD_FAILED."""
+
+    if hazard is None:
+        return call()
+    try:
+        return call()
+    except (LaunchLineageError, CampaignLockOwnershipError):
+        raise
+    except Exception as exc:  # noqa: BLE001 - a failed record write is a flag here
+        from joulewise.flags import core as flags_core
+
+        # The message goes to the stage log only; the flag carries names.
+        print(
+            f"warning: record step {phase} failed and was flagged: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        flags_core.emit(
+            hazard, "campaign.runner_record_flagged",
+            level="member" if run_id else "window", run_id=run_id,
+            observed={"kind": kind, "phase": phase, "error_type": type(exc).__name__},
+            legacy_site=_HAZARD_RECORD_LEGACY_SITE, legacy_code="uncaught_exception",
+        )
+        return _HAZARD_FAILED
+
+
+def _hazard_metadata_undecodable(bundle_dir: Path) -> bool:
+    """True when ``metadata.json`` exists but its bytes are not UTF-8."""
+
+    try:
+        (bundle_dir / "metadata.json").read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
+def _hazard_member_run_id(info: Any) -> str | None:
+    """Member-scope run id: the bundle directory name of a one-repetition config."""
+
+    if getattr(info, "repetitions", None) == 1 and isinstance(getattr(info, "run_id", None), str):
+        return info.run_id
+    return None
+
+
+def _hazard_cooldown_unknown(
+    hazard: Any, physical_bundle_dirs: Sequence[Path], cooldown_note: Mapping[str, Any]
+) -> bool:
+    """True on HAZARD: an unknown cooldown is flagged per bundle and never blocks."""
+
+    if hazard is None:
+        return False
+    from joulewise.flags import core as flags_core
+
+    reason = cooldown_note.get("reason")
+    reason_class = (
+        "reference_unavailable"
+        if reason in _COOLDOWN_REFERENCE_UNAVAILABLE_REASONS
+        else "unmeasured"
+    )
+    fallback = cooldown_note.get("fallback_from")
+    for bundle_dir in physical_bundle_dirs:
+        flags_core.emit(
+            hazard, "cooldown.result_unknown", level="member", run_id=bundle_dir.name,
+            observed={"reason_class": reason_class,
+                      "reason": str(reason)[:300] if reason is not None else None,
+                      "failure_reason": cooldown_note.get("failure_reason"),
+                      # A fallback reference was selected but its measurement failed.
+                      "fallback": (
+                          {"from": "reference_unavailable",
+                           "reference_selection": cooldown_note.get("reference_selection")}
+                          if isinstance(fallback, Mapping) else None
+                      )},
+            legacy_site="scripts/run_campaign.py:8864@e6b6a0ce",
+            legacy_code="cooldown_v2_failed_closed_before_invoke",
+        )
+    return True
+
+
+def _hazard_preflight_error_record(
+    policy_binding: CampaignPolicyBinding, exc: BaseException
+) -> dict[str, Any]:
+    """A raised stage preflight, shaped like a normal not-admitted preflight.
+
+    Children accept it because it carries the policy hash
+    (``controller.py`` checks ``policy_sha256``).  The record is data: the
+    snapshot is re-read (``collect_environment_snapshot`` never raises; the
+    probe-free empty shape is the fallback), so it always carries
+    ``python_packages``, which ``reduce.py`` reads ``mlx_version`` from.  The
+    evaluation is that snapshot's own evaluation under the stage policy,
+    never ``None`` and never a constructed pass.  ``admitted`` stays False.
+    """
+
+    try:
+        snapshot = collect_environment_snapshot()
+    except Exception as snapshot_exc:  # noqa: BLE001 - keep the probe-free shape
+        snapshot = empty_environment_snapshot()
+        snapshot["errors"] = {"collect_environment_snapshot": (
+            f"{type(snapshot_exc).__name__}: {snapshot_exc}"[:300])}
+    try:
+        evaluation: dict[str, Any] | None = evaluate_environment_policy(
+            snapshot, policy_binding.policy.environment_guard
+        )
+    except Exception:  # noqa: BLE001 - the error field already says the preflight failed
+        evaluation = None
+    return {
+        "schema_version": "joulewise.campaign_environment_preflight.v1",
+        "policy_sha256": policy_binding.sha256,
+        "captured_at": utc_timestamp(),
+        "snapshot": snapshot,
+        "evaluation": evaluation,
+        "override": None,
+        "enforced": False,
+        "admitted": False,
+        "error": f"{type(exc).__name__}: {exc}"[:300],
+    }
+
+
+def _hazard_stage_preflight_not_admitted(
+    hazard: Any, environment_preflight: Mapping[str, Any], config_dir: Path
+) -> None:
+    """Flag a stage preflight that errored or was rejected; collection continues."""
+
+    from joulewise.flags import core as flags_core
+
+    errored = environment_preflight.get("error") is not None
+    evaluation = environment_preflight.get("evaluation")
+    findings = evaluation.get("findings") if isinstance(evaluation, Mapping) else None
+    failed = [
+        {"field": finding.get("field"), "status": finding.get("status")}
+        for finding in (findings if isinstance(findings, list) else [])
+        if isinstance(finding, Mapping) and finding.get("status") != "pass"
+    ]
+    print(
+        "warning: environment preflight not admitted; collecting and flagging: "
+        + (str(environment_preflight.get("error")) if errored else
+           "; ".join(f"{row['field']} ({row['status']})" for row in failed)),
+        file=sys.stderr,
+    )
+    flags_core.emit(
+        hazard, "env.stage_preflight_not_admitted", level="window",
+        observed={"status": "error" if errored else "rejected",
+                  "failed_findings": failed[:32],
+                  "campaign": Path(config_dir).name},
+        legacy_site=("scripts/run_campaign.py:8510@e6b6a0ce" if errored
+                     else "scripts/run_campaign.py:8547@e6b6a0ce"),
+        legacy_code=("environment preflight failed before member 1" if errored
+                     else "environment preflight rejected before member 1"),
+    )
+
+
+# --- HAZARD_PACK gate-prune round 2 (lane P2-RC) -----------------------------
+# night-archive gate-prune/prune2/PLAN2.md: M3 (strict validation deferred to the
+# harvest), S4 (minimal stage verdict), row 8 (member wall-clock cap, teardown
+# proof, drain after consecutive timeouts, SIGTERM handler), yield E (per-member
+# child stderr and ``child_refusal``) and the battery-thermistor diagnostic
+# (timing ruling 2026-10-06).  Everything here runs only when ``hazard`` is a
+# HAZARD context; the legacy path never reaches it.
+
+HAZARD_STRICT_VALIDATION_DEFERRED = "deferred_to_harvest"
+HAZARD_IDLE_ADMISSION_CORE_DEFERRED = MappingProxyType({"status": "deferred_to_desk"})
+# Row 8.  A member child that runs past the cap gets SIGTERM, then SIGKILL after
+# the grace; after this many consecutive timed-out members the window drains
+# (only end references still run; the post-calibration is not a campaign stage).
+HAZARD_MEMBER_CAP_S = 1800.0
+HAZARD_MEMBER_TERM_GRACE_S = 30.0
+HAZARD_MEMBER_TIMEOUT_DRAIN_AFTER = 2
+HAZARD_MEMBER_TIMEOUT_DIRNAME = "member-timeouts"
+HAZARD_MEMBER_TIMEOUT_STATE = "state.json"
+HAZARD_MEMBER_TIMEOUT_DRAIN = "drain.json"
+HAZARD_MEMBER_TIMEOUT_SCHEMA = "joulewise.member_timeout_drain.v1"
+HAZARD_TEARDOWN_PROOF_WAIT_S = 2.0
+HAZARD_INTERRUPTED_RC = 128 + int(signal.SIGTERM)
+# Yield E.
+HAZARD_MEMBER_STDERR_DIRNAME = "member-stderr"
+HAZARD_CHILD_REFUSAL_MAX_CHARS = 300
+# Battery thermistor (timing ruling 2026-10-06): read at each cooldown release,
+# outside every sampler stream, into the campaign manifest.  Hundredths of degC.
+BATTERY_TEMPERATURE_COMMAND: tuple[str, ...] = ("/usr/sbin/ioreg", "-rn", "AppleSmartBattery")
+BATTERY_TEMPERATURE_TIMEOUT_S = 5.0
+BATTERY_TEMPERATURE_SCHEMA = "joulewise.battery_thermistor_reading.v1"
+BATTERY_TEMPERATURE_MANIFEST_KEY = "battery_temperature_readings"
+_BATTERY_TEMPERATURE_PATTERN = re.compile(rb'^\s*"Temperature"\s*=\s*(-?\d+)\s*$', re.MULTILINE)
+# ``lstart`` (five words under LC_ALL=C) is the start time: with the argv it is the
+# process identity, so a reused pid running the same program is never signalled.
+_PROCESS_TABLE_COMMAND = ("/bin/ps", "-A", "-o", "pid=,ppid=,pgid=,uid=,stat=,lstart=,args=")
+
+
+class _HazardInterrupted(BaseException):
+    """SIGTERM reached a HAZARD stage: unwind, record ``interrupted``, release the lock."""
+
+
+# The one HAZARD stage running in this process: its member child (for SIGTERM
+# forwarding) and whether the first SIGTERM was already turned into an unwind.
+# ``defer``: a member child is being spawned or finished; a SIGTERM then only
+# sets ``pending`` and the runner raises it once the child is under the watch
+# (or its cleanup is done).  ``teardown``: the interrupted member's teardown proof.
+_HAZARD_SIGNAL_STATE: dict[str, Any] = {"child": None, "run_id": None, "raised": False,
+                                        "defer": False, "pending": False, "teardown": None}
+
+
+def _hazard_sigterm_handler(signum: int, frame: Any) -> None:  # noqa: ARG001
+    """Unwind once; the unwind forwards TERM to the member child's whole tree.
+
+    The first SIGTERM raises in the main thread, which is blocked in the
+    member child's ``wait()``; ``_HazardMemberWatch.interrupt`` then snapshots
+    the child's tree before signalling it (a TERM sent first could let a
+    grandchild be reparented out of reach).  A later SIGTERM, arriving while
+    that unwind runs, is forwarded to the child directly.
+    """
+
+    if _HAZARD_SIGNAL_STATE.get("defer") and not _HAZARD_SIGNAL_STATE.get("raised"):
+        _HAZARD_SIGNAL_STATE["pending"] = True
+        return
+    if not _HAZARD_SIGNAL_STATE.get("raised"):
+        _HAZARD_SIGNAL_STATE["raised"] = True
+        raise _HazardInterrupted(signum)
+    child = _HAZARD_SIGNAL_STATE.get("child")
+    if child is not None and getattr(child, "returncode", None) is None:
+        try:
+            os.kill(child.pid, signal.SIGTERM)
+        except OSError:
+            pass
+
+
+def _hazard_install_sigterm_handler() -> Any:
+    """Install the HAZARD SIGTERM handler (main thread only); return the previous one."""
+
+    _HAZARD_SIGNAL_STATE.update({"child": None, "run_id": None, "raised": False,
+                                 "defer": False, "pending": False, "teardown": None})
+    if threading.current_thread() is not threading.main_thread():
+        return None
+    try:
+        return signal.signal(signal.SIGTERM, _hazard_sigterm_handler)
+    except (ValueError, OSError):
+        return None
+
+
+def _hazard_restore_sigterm_handler(previous: Any) -> None:
+    if previous is None:
+        return
+    try:
+        signal.signal(signal.SIGTERM, previous)
+    except (ValueError, OSError, TypeError):
+        pass
+
+
+def _hazard_process_table() -> list[dict[str, Any]] | None:
+    """One ``ps`` snapshot: pid, ppid, pgid, uid and argv text.  None when unmeasured."""
+
+    try:
+        completed = subprocess.run(
+            list(_PROCESS_TABLE_COMMAND), capture_output=True, text=True,
+            timeout=10, check=False, env={**os.environ, "LC_ALL": "C"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    rows: list[dict[str, Any]] = []
+    for line in completed.stdout.splitlines():
+        parts = line.split(None, 10)
+        if len(parts) < 10:
+            continue
+        try:
+            pid, ppid, pgid, uid = (int(part) for part in parts[:4])
+        except ValueError:
+            continue
+        rows.append({"pid": pid, "ppid": ppid, "pgid": pgid, "uid": uid, "stat": parts[4],
+                     "started": " ".join(parts[5:10]),
+                     "args": parts[10] if len(parts) > 10 else ""})
+    return rows
+
+
+def _hazard_descendants(root_pid: int, table: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    children: dict[int, list[Mapping[str, Any]]] = {}
+    for row in table:
+        children.setdefault(int(row["ppid"]), []).append(row)
+    found: list[dict[str, Any]] = []
+    seen = {root_pid}
+    stack = [root_pid]
+    while stack:
+        for row in children.get(stack.pop(), []):
+            if row["pid"] not in seen:
+                seen.add(row["pid"])
+                found.append(dict(row))
+                stack.append(row["pid"])
+    return found
+
+
+def _hazard_program(args: str) -> str:
+    first = args.split(None, 1)[0] if args.strip() else ""
+    return os.path.basename(first)
+
+
+def _hazard_same_process(live: Mapping[str, Any] | None, tracked: Mapping[str, Any]) -> bool:
+    """Same pid, argv and start time: the tracked process itself, not a reused pid."""
+
+    return (
+        live is not None
+        and tracked.get("started") is not None
+        and live.get("started") == tracked.get("started")
+        and live.get("args") == tracked.get("args")
+    )
+
+
+def _hazard_is_sampler_wrapper(row: Mapping[str, Any]) -> bool:
+    """``sudo ... powermetrics``: SIGKILL would orphan the root sampler, so it only gets TERM."""
+
+    return _hazard_program(str(row.get("args", ""))) == "sudo" and "powermetrics" in str(row.get("args", ""))
+
+
+class _HazardMemberWatch:
+    """Wall-clock cap for one member child (PLAN2 row 8).
+
+    A timer thread sleeps until the cap (the parent blocks in ``wait()``: no
+    polling wake-ups while the child measures), then sends SIGTERM to the
+    child and every descendant, waits the grace, and sends SIGKILL to the
+    survivors (a ``sudo`` sampler wrapper gets TERM again instead, since
+    SIGKILL would orphan the root sampler).  The child stays in the chain's
+    process group, so the driver's group census still sees it.
+    """
+
+    def __init__(self, process: Any, *, cap_s: float, grace_s: float) -> None:
+        self.process = process
+        self.cap_s = float(cap_s)
+        self.grace_s = float(grace_s)
+        self.done = threading.Event()
+        self.timed_out = False
+        self.interrupted = False
+        self.kill_escalated = False
+        self.tracked: dict[int, dict[str, Any]] = {}
+        self.signals: list[dict[str, Any]] = []
+        self.census_failures = 0
+        # Whether the first snapshot found the child still running.  If it had
+        # already exited, its descendants may have been reparented out of
+        # reach: the census then cannot prove the tree gone.
+        self.ownership_established: bool | None = None
+        self.term_sent_at: float | None = None
+        self.teardown_escalated = False
+        self._lock = threading.Lock()
+        self._thread = threading.Thread(target=self._run, name="joulewise-member-cap", daemon=True)
+
+    def start(self) -> _HazardMemberWatch:
+        self._thread.start()
+        return self
+
+    def _snapshot(self) -> list[dict[str, Any]]:
+        """The child, its current descendants, and every earlier-tracked process still running.
+
+        A tracked process counts only while its pid still runs the same argv
+        with the same start time (a reused pid is never signalled).  Tracked
+        processes matter once the child has exited: its descendants are then
+        reparented and no longer reachable through the child's pid.
+        """
+
+        table = _hazard_process_table()
+        if table is None:
+            self.census_failures += 1
+            rows = [{"pid": int(self.process.pid), "ppid": os.getpid(), "pgid": None,
+                     "uid": os.getuid(), "stat": None, "started": None, "args": ""}]
+        else:
+            own = [dict(row) for row in table if row["pid"] == self.process.pid]
+            if self.ownership_established is None:
+                self.ownership_established = bool(
+                    own and self.process.returncode is None
+                    and not str(own[0].get("stat") or "").startswith("Z")
+                )
+            rows = own + _hazard_descendants(int(self.process.pid), table)
+            live = {row["pid"]: row for row in table}
+            current = {int(row["pid"]) for row in rows}
+            rows += [dict(row) for pid, row in self.tracked.items()
+                     if pid not in current and _hazard_same_process(live.get(pid), row)
+                     and pid != os.getpid()]
+        for row in rows:
+            self.tracked.setdefault(int(row["pid"]), row)
+        return rows
+
+    def _send(self, rows: Sequence[Mapping[str, Any]], signum: int) -> None:
+        for row in rows:
+            pid = int(row["pid"])
+            if pid == int(self.process.pid) and self.process.returncode is not None:
+                continue  # reaped: the pid may already belong to someone else
+            try:
+                os.kill(pid, signum)
+                outcome = "sent"
+            except ProcessLookupError:
+                outcome = "absent"
+            except PermissionError:
+                outcome = "not_permitted"
+            except OSError as exc:
+                outcome = type(exc).__name__
+            self.signals.append({"pid": pid, "program": _hazard_program(str(row.get("args", ""))),
+                                 "signal": signal.Signals(signum).name, "outcome": outcome})
+
+    def _terminate(self, exited: Any) -> None:
+        with self._lock:
+            rows = self._snapshot()
+            if self.term_sent_at is None:
+                self.term_sent_at = time.monotonic()
+            self._send(rows, signal.SIGTERM)
+        if exited(self.grace_s):
+            return
+        with self._lock:
+            self.kill_escalated = True
+            rows = self._snapshot()
+            wrappers = [row for row in rows if _hazard_is_sampler_wrapper(row)]
+            self._send(wrappers, signal.SIGTERM)
+            self._send([row for row in rows if not _hazard_is_sampler_wrapper(row)], signal.SIGKILL)
+
+    def _run(self) -> None:
+        if self.done.wait(self.cap_s):
+            return
+        self.timed_out = True
+        self._terminate(self.done.wait)
+
+    def interrupt(self) -> None:
+        """Main thread, after SIGTERM reached the stage: the same TERM-then-KILL, now."""
+
+        self.interrupted = True
+
+        def exited(timeout: float) -> bool:
+            try:
+                self.process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                return False
+            return True
+
+        self._terminate(exited)
+        try:
+            self.process.wait(timeout=max(1.0, self.grace_s))
+        except subprocess.TimeoutExpired:
+            pass
+
+    def finish(self) -> None:
+        self.done.set()
+        self._thread.join()
+
+    def teardown_proof(self) -> dict[str, Any]:
+        """Prove no tracked process of this member survives; TERM/KILL a survivor once more.
+
+        A tracked pid counts as surviving only while it still runs the same argv
+        with the same start time (pid reuse is not a survivor).  A descendant
+        still running when the child exited keeps the rest of its grace from
+        the first TERM before it is killed.  A root-owned sampler orphan cannot
+        be signalled from here (no privilege); it is reported, never hidden.
+        The census is complete only when every ``ps`` read succeeded and the
+        first snapshot found the child still running.
+        """
+
+        def survivors() -> list[dict[str, Any]] | None:
+            table = _hazard_process_table()
+            if table is None:
+                return None
+            live = {row["pid"]: row for row in table}
+            return [dict(row) for pid, row in self.tracked.items()
+                    if _hazard_same_process(live.get(pid), row)
+                    and pid != os.getpid()]
+
+        remaining = survivors()
+        if remaining and self.term_sent_at is not None:
+            grace_end = self.term_sent_at + self.grace_s
+            while remaining and time.monotonic() < grace_end:
+                time.sleep(min(0.5, max(0.0, grace_end - time.monotonic())))
+                remaining = survivors()
+        if remaining:
+            self._send([row for row in remaining if _hazard_is_sampler_wrapper(row)], signal.SIGTERM)
+            killed = [row for row in remaining if not _hazard_is_sampler_wrapper(row)]
+            self._send(killed, signal.SIGKILL)
+            if killed:
+                self.teardown_escalated = True
+                self.kill_escalated = True
+            deadline = time.monotonic() + HAZARD_TEARDOWN_PROOF_WAIT_S
+            while remaining and time.monotonic() < deadline:
+                time.sleep(0.1)
+                remaining = survivors()
+        return {
+            "census_completed": (
+                remaining is not None and self.census_failures == 0
+                and self.ownership_established is True
+            ),
+            "ownership_established": self.ownership_established,
+            "teardown_escalated": self.teardown_escalated,
+            "tracked": len(self.tracked),
+            "sampler_tracked": sum(1 for row in self.tracked.values()
+                                   if "powermetrics" in str(row.get("args", ""))),
+            "survivors": [
+                {"pid": row["pid"], "uid": row.get("uid"),
+                 "program": _hazard_program(str(row.get("args", ""))),
+                 "sampler": "powermetrics" in str(row.get("args", ""))}
+                for row in (remaining or [])
+            ],
+        }
+
+    def record(self) -> dict[str, Any]:
+        return {
+            "cap_s": self.cap_s,
+            "grace_s": self.grace_s,
+            "timed_out": self.timed_out,
+            "interrupted": self.interrupted,
+            "kill_escalated": self.kill_escalated,
+            "signals": self.signals[:64],
+        }
+
+
+def _hazard_stage_stderr_path() -> Path | None:
+    """The regular file this process's stderr is written to (the stage log), if any."""
+
+    try:
+        if not stat.S_ISREG(os.fstat(2).st_mode):
+            return None
+        import fcntl
+
+        getpath = getattr(fcntl, "F_GETPATH", None)
+        if getpath is not None:
+            raw = fcntl.fcntl(2, getpath, bytes(1024))
+            text = os.fsdecode(raw.split(b"\0", 1)[0])
+            return Path(text) if text else None
+        return Path(os.readlink("/proc/self/fd/2"))
+    except (OSError, ValueError):
+        return None
+
+
+def _hazard_member_stderr_path(hazard: Any, run_id: str) -> Path | None:
+    """Yield E: ``<operator-logs>/member-stderr/<stage-log stem>--<run_id>.stderr``.
+
+    The operator-log directory is the custody's (where the chain sends stage
+    logs); the stage log's stem names the stage.  A subdirectory, so readers of
+    ``operator-logs/*.log`` see each line once, in the stage log copy.
+    """
+
+    stage_log = _hazard_stage_stderr_path()
+    stem = stage_log.stem if stage_log is not None else "stage"
+    name = f"{stem}--{sanitize_id_component(run_id)}.stderr"
+    custody = getattr(hazard, "custody_root", None)
+    if custody is not None:
+        return Path(custody) / "operator-logs" / HAZARD_MEMBER_STDERR_DIRNAME / name
+    if stage_log is not None:
+        return stage_log.parent / HAZARD_MEMBER_STDERR_DIRNAME / name
+    return None
+
+
+def _hazard_child_refusal(raw: bytes) -> str | None:
+    """Yield E: the child's last non-empty stderr line, digits as ``#``.
+
+    A launch-lineage refusal is named by its reason code instead (the code is
+    the cause; the text around it varies).
+    """
+
+    lines = [line.strip() for line in raw.decode("utf-8", "replace").splitlines() if line.strip()]
+    if not lines:
+        return None
+    try:
+        from joulewise.arm_readiness import LAUNCH_LINEAGE_REASON_CODES as codes
+    except Exception:  # noqa: BLE001 - the redacted line still names the refusal
+        codes = frozenset()
+    lineage_lines = [lines[-1]] + [line for line in reversed(lines) if "LaunchLineageError" in line]
+    for line in lineage_lines:
+        for token in re.findall(r"[a-z][a-z0-9_]*", line):
+            if token in codes:
+                return token
+    return re.sub(r"\d", "#", lines[-1])[:HAZARD_CHILD_REFUSAL_MAX_CHARS]
+
+
+def _hazard_copy_member_stderr(
+    path: Path | None, run_id: str
+) -> tuple[bytes, dict[str, str] | None]:
+    """Copy the member's stderr file into this stage's stderr (the stage log).
+
+    Returns the bytes read and, when the copy failed, what failed.  The child's
+    stderr can carry ``JOULEWISE_UNWRITTEN_FLAG`` lines (a flag whose file write
+    failed), which the harvest recovers from the stage log only; a failed copy
+    is therefore flagged by the caller, never dropped.
+    """
+
+    if path is None:
+        return b"", None
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        print(f"warning: member stderr {path} unreadable: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
+        return b"", {"phase": "read", "error_type": type(exc).__name__}
+    if raw:
+        text = raw.decode("utf-8", "replace")
+        try:
+            sys.stderr.write(f"--- child stderr {run_id} ({path.name}) ---\n")
+            sys.stderr.write(text if text.endswith("\n") else text + "\n")
+            sys.stderr.write(f"--- end child stderr {run_id} ---\n")
+            sys.stderr.flush()
+        except (OSError, ValueError) as exc:
+            return raw, {"phase": "write", "error_type": type(exc).__name__}
+    return raw, None
+
+
+def _hazard_flag_member_stderr_uncopied(
+    hazard: Any, bundle_ids: Sequence[str], path: Path | None, failure: Mapping[str, str]
+) -> None:
+    """The member's stderr did not reach the stage log: any unwritten flag in it is unseen."""
+
+    from joulewise.flags import core as flags_core
+
+    for bundle_id in bundle_ids or [None]:
+        flags_core.emit(
+            hazard, "member.stderr_uncopied", level="member", run_id=bundle_id,
+            observed={**dict(failure), "file": path.name if path is not None else None},
+            detail="member stderr not copied into the stage log; "
+                   "an unwritten flag in it would be unseen by the harvest",
+        )
+
+
+def _hazard_flag_interrupted_teardown(
+    hazard: Any, bundle_ids: Sequence[str], teardown: Mapping[str, Any] | None
+) -> None:
+    """SIGTERM path: a member tree not proven gone is flagged, as on the timeout path."""
+
+    from joulewise.flags import core as flags_core
+
+    teardown = teardown or {}
+    survivors = list(teardown.get("survivors") or [])
+    if not survivors and teardown.get("census_completed") is True:
+        return
+    for bundle_id in bundle_ids or [None]:
+        flags_core.emit(
+            hazard, "teardown.survivors", level="member", run_id=bundle_id,
+            observed={"phase": "sigterm",
+                      "census_completed": teardown.get("census_completed"),
+                      "ownership_established": teardown.get("ownership_established"),
+                      "survivors": survivors[:16]},
+        )
+
+
+def _hazard_raise_pending_interrupt() -> None:
+    """End a deferral; a SIGTERM that arrived during it unwinds now."""
+
+    state = _HAZARD_SIGNAL_STATE
+    state["defer"] = False
+    if state.get("pending") and not state.get("raised"):
+        state["pending"] = False
+        state["raised"] = True
+        raise _HazardInterrupted(signal.SIGTERM)
+
+
+@dataclass
+class _HazardMemberRun:
+    """What the HAZARD member runner learned beyond the return code."""
+
+    watch: _HazardMemberWatch | None = None
+    teardown: dict[str, Any] | None = None
+    stderr_path: Path | None = None
+    stderr_raw: bytes = b""
+
+    @property
+    def timed_out(self) -> bool:
+        return self.watch is not None and self.watch.timed_out
+
+    def child_refusal(self) -> str | None:
+        return _hazard_child_refusal(self.stderr_raw)
+
+
+def _hazard_run_authenticated_campaign_child(
+    command: Sequence[str],
+    *,
+    env: Mapping[str, str] | None,
+    outer_authentication: Mapping[str, Any] | None,
+    bundle_paths: Sequence[Path],
+    hazard: Any,
+    absent: list[Path],
+    run_id: str,
+) -> tuple[subprocess.CompletedProcess[Any], _HazardMemberRun]:
+    """``run_authenticated_campaign_child`` on the HAZARD path.
+
+    Adds the member cap (row 8) and the per-member stderr file (yield E): the
+    child's stderr goes to a file (no pipe, no reader thread while the child
+    measures), which is copied into the stage log once the child has exited.
+    The lineage authentication after the child is the same call as legacy.
+    """
+
+    run = _HazardMemberRun(stderr_path=_hazard_member_stderr_path(hazard, run_id))
+    bundle_ids = [Path(path).name for path in bundle_paths]
+    state = _HAZARD_SIGNAL_STATE
+    stderr_handle = None
+    if run.stderr_path is not None:
+        try:
+            run.stderr_path.parent.mkdir(parents=True, exist_ok=True)
+            stderr_handle = open(run.stderr_path, "ab")  # noqa: SIM115 - closed right after spawn
+        except OSError as exc:
+            print(f"warning: member stderr file unavailable ({exc}); child stderr is inherited",
+                  file=sys.stderr)
+            run.stderr_path = None
+    # A SIGTERM between the spawn and the watch only sets ``pending``; it is
+    # raised once the child is under the watch, which then terminates it.
+    state["pending"] = False
+    state["defer"] = True
+    try:
+        try:
+            process = subprocess.Popen(list(command), env=env, stderr=stderr_handle)
+        finally:
+            if stderr_handle is not None:
+                stderr_handle.close()
+        state["child"] = process
+        state["run_id"] = run_id
+        watch = _HazardMemberWatch(
+            process, cap_s=HAZARD_MEMBER_CAP_S, grace_s=HAZARD_MEMBER_TERM_GRACE_S
+        ).start()
+    except BaseException:
+        state["child"] = None
+        _hazard_raise_pending_interrupt()
+        raise
+    run.watch = watch
+    try:
+        try:
+            try:
+                _hazard_raise_pending_interrupt()
+                returncode = process.wait()
+                # The child is done: a SIGTERM now waits until its cleanup is recorded.
+                state["defer"] = True
+            except _HazardInterrupted:
+                watch.interrupt()
+                raise
+            finally:
+                watch.finish()
+                state["child"] = None
+                if watch.timed_out or watch.interrupted:
+                    run.teardown = watch.teardown_proof()
+                if watch.interrupted:
+                    state["teardown"] = run.teardown
+                    _hazard_flag_interrupted_teardown(hazard, bundle_ids, run.teardown)
+        finally:
+            run.stderr_raw, copy_failure = _hazard_copy_member_stderr(run.stderr_path, run_id)
+            if copy_failure is not None:
+                _hazard_flag_member_stderr_uncopied(
+                    hazard, bundle_ids, run.stderr_path, copy_failure
+                )
+    except BaseException:
+        state["defer"] = False
+        raise
+    _hazard_raise_pending_interrupt()
+    state["run_id"] = None
+    authenticate_campaign_child_launch_lineage(
+        outer_authentication,
+        bundle_paths,
+        hazard=hazard,
+        absent=absent,
+    )
+    return subprocess.CompletedProcess(list(command), returncode), run
+
+
+def _hazard_member_timeout_paths(hazard: Any) -> tuple[Path, Path] | None:
+    custody = getattr(hazard, "custody_root", None)
+    if custody is None:
+        return None
+    directory = Path(custody) / HAZARD_MEMBER_TIMEOUT_DIRNAME
+    return directory / HAZARD_MEMBER_TIMEOUT_STATE, directory / HAZARD_MEMBER_TIMEOUT_DRAIN
+
+
+_HAZARD_TIMEOUT_MEMORY: dict[str, int] = {"consecutive": 0}
+
+
+def _hazard_note_member_outcome(
+    hazard: Any, *, timed_out: bool, bundle_ids: Sequence[str]
+) -> tuple[int, bool]:
+    """Count consecutive timed-out members across the window's stages.
+
+    The count lives in ``<custody>/member-timeouts/state.json`` (stages are
+    separate processes).  Reaching ``HAZARD_MEMBER_TIMEOUT_DRAIN_AFTER`` writes
+    the create-once drain marker.  Returns (consecutive, drain marker written
+    now).  A state file that cannot be read or written falls back to this
+    process's own count; it never stops collection.
+    """
+
+    paths = _hazard_member_timeout_paths(hazard)
+    previous = _HAZARD_TIMEOUT_MEMORY["consecutive"]
+    if paths is not None:
+        try:
+            value = json.loads(paths[0].read_bytes()).get("consecutive")
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                previous = value
+        except FileNotFoundError:
+            previous = 0
+        except (OSError, ValueError, AttributeError):
+            pass
+    consecutive = previous + 1 if timed_out else 0
+    _HAZARD_TIMEOUT_MEMORY["consecutive"] = consecutive
+    if paths is not None and consecutive != previous:
+        try:
+            paths[0].parent.mkdir(parents=True, exist_ok=True)
+            payload = {"schema_version": HAZARD_MEMBER_TIMEOUT_SCHEMA, "consecutive": consecutive,
+                       "last_bundle_ids": list(bundle_ids), "recorded_at": utc_timestamp()}
+            tmp = paths[0].with_name(f".{paths[0].name}.{os.getpid()}.tmp")
+            tmp.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+            os.replace(tmp, paths[0])
+        except OSError as exc:
+            print(f"warning: member timeout state unwritten: {exc}", file=sys.stderr)
+    drain_now = False
+    if timed_out and consecutive >= HAZARD_MEMBER_TIMEOUT_DRAIN_AFTER and paths is not None:
+        try:
+            paths[1].parent.mkdir(parents=True, exist_ok=True)
+            descriptor = os.open(paths[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError:
+            descriptor = None
+        except OSError as exc:
+            print(f"warning: member timeout drain marker unwritten: {exc}", file=sys.stderr)
+            descriptor = None
+        if descriptor is not None:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                handle.write(json.dumps({
+                    "schema_version": HAZARD_MEMBER_TIMEOUT_SCHEMA,
+                    "reason": "consecutive_member_timeouts",
+                    "consecutive": consecutive,
+                    "trigger_bundle_ids": list(bundle_ids),
+                    "created_at": utc_timestamp(),
+                }, sort_keys=True) + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            drain_now = True
+    return consecutive, drain_now
+
+
+def _hazard_drain_requested(hazard: Any) -> Path | None:
+    """The drain marker path when this window is draining (or this process drains)."""
+
+    paths = _hazard_member_timeout_paths(hazard)
+    if paths is not None and paths[1].exists():
+        return paths[1]
+    if paths is not None:
+        # A stage that died after persisting the count but before writing the
+        # marker: the persisted count still decides, and the marker is written now.
+        try:
+            persisted = json.loads(paths[0].read_bytes()).get("consecutive")
+        except (OSError, ValueError, AttributeError):
+            persisted = None
+        if (isinstance(persisted, int) and not isinstance(persisted, bool)
+                and persisted >= HAZARD_MEMBER_TIMEOUT_DRAIN_AFTER):
+            try:
+                descriptor = os.open(paths[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            except FileExistsError:
+                descriptor = None
+            except OSError as exc:
+                print(f"warning: member timeout drain marker unwritten: {exc}", file=sys.stderr)
+                descriptor = None
+            if descriptor is not None:
+                with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                    handle.write(json.dumps({
+                        "schema_version": HAZARD_MEMBER_TIMEOUT_SCHEMA,
+                        "reason": "consecutive_member_timeouts",
+                        "consecutive": persisted,
+                        "trigger_bundle_ids": [],
+                        "recovered_from_state": True,
+                        "created_at": utc_timestamp(),
+                    }, sort_keys=True) + "\n")
+                    handle.flush()
+                    os.fsync(handle.fileno())
+            return paths[1]
+    if _HAZARD_TIMEOUT_MEMORY["consecutive"] >= HAZARD_MEMBER_TIMEOUT_DRAIN_AFTER:
+        return paths[1] if paths is not None else Path(HAZARD_MEMBER_TIMEOUT_DRAIN)
+    return None
+
+
+def _hazard_drain_exempt(info: Any) -> bool:
+    """While draining, only the NEG-8 end references still run."""
+
+    return _declared_neg8_reference_position(
+        getattr(info, "role", None), getattr(info, "sentinel_position", None)
+    ) == "end"
+
+
+def _hazard_flag_member_timeout(
+    hazard: Any,
+    bundle_ids: Sequence[str],
+    run: _HazardMemberRun,
+    *,
+    consecutive: int,
+    drain_now: bool,
+) -> None:
+    from joulewise.flags import core as flags_core
+
+    watch = run.watch
+    teardown = run.teardown or {}
+    for bundle_id in bundle_ids:
+        flags_core.emit(
+            hazard, "member.timeout", level="member", run_id=bundle_id,
+            observed={"cap_s": watch.cap_s if watch else None,
+                      "grace_s": watch.grace_s if watch else None,
+                      "kill_escalated": bool(watch and watch.kill_escalated),
+                      "teardown_census_completed": teardown.get("census_completed"),
+                      "survivors": len(teardown.get("survivors") or []),
+                      "consecutive": consecutive,
+                      "drain_requested": drain_now},
+            detail="member child ran past the wall-clock cap; terminated",
+        )
+    survivors = teardown.get("survivors") or []
+    if survivors or teardown.get("census_completed") is False:
+        for bundle_id in bundle_ids:
+            flags_core.emit(
+                hazard, "teardown.survivors", level="member", run_id=bundle_id,
+                observed={"phase": "member_timeout",
+                          "census_completed": teardown.get("census_completed"),
+                          "survivors": survivors[:16]},
+            )
+
+
+def _hazard_read_battery_temperature(
+    *, following_run_id: str, cooldown_result: Any
+) -> dict[str, Any]:
+    """One battery-thermistor reading (``ioreg -rn AppleSmartBattery``, key ``Temperature``).
+
+    Unprivileged and outside every sampler stream: it runs after the cooldown
+    gate released and before the member child starts.  A failed read is a
+    record with ``temperature_centi_c`` null; it never stops collection.
+    """
+
+    reading: dict[str, Any] = {
+        "schema_version": BATTERY_TEMPERATURE_SCHEMA,
+        "following_run_id": following_run_id,
+        "cooldown_result": cooldown_result if isinstance(cooldown_result, str) else None,
+        "read_at": utc_timestamp(),
+        "source": "ioreg -rn AppleSmartBattery: Temperature",
+        "unit": "centi_degC",
+        "temperature_centi_c": None,
+        "temperature_c": None,
+        "error": None,
+    }
+    try:
+        completed = subprocess.run(
+            list(BATTERY_TEMPERATURE_COMMAND), capture_output=True,
+            timeout=BATTERY_TEMPERATURE_TIMEOUT_S, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        reading["error"] = f"{type(exc).__name__}: {exc}"[:200]
+        return reading
+    if completed.returncode != 0:
+        reading["error"] = f"exit {completed.returncode}"
+        return reading
+    matches = _BATTERY_TEMPERATURE_PATTERN.findall(completed.stdout or b"")
+    if not matches:
+        reading["error"] = "Temperature key absent"
+        return reading
+    value = int(matches[0])
+    reading["temperature_centi_c"] = value
+    reading["temperature_c"] = value / 100.0
+    if len(matches) > 1:
+        reading["error"] = f"{len(matches)} Temperature keys; first used"
+    return reading
+
+
+def _hazard_record_battery_temperature(
+    campaign_provenance: dict[str, Any] | None, *, following_run_id: str, cooldown_result: Any
+) -> None:
+    """Append one reading to the manifest in memory; the member's provenance write persists it."""
+
+    if campaign_provenance is None:
+        return
+    try:
+        reading = _hazard_read_battery_temperature(
+            following_run_id=following_run_id, cooldown_result=cooldown_result
+        )
+    except Exception as exc:  # noqa: BLE001 - a diagnostic never stops collection
+        reading = {"schema_version": BATTERY_TEMPERATURE_SCHEMA,
+                   "following_run_id": following_run_id, "temperature_centi_c": None,
+                   "temperature_c": None, "error": f"{type(exc).__name__}: {exc}"[:200]}
+    campaign_provenance.setdefault(BATTERY_TEMPERATURE_MANIFEST_KEY, []).append(reading)
+
+
+def _hazard_minimal_verdict_row(
+    *,
+    collection_verdict: str,
+    collection_reasons: list[str],
+    categories: dict[str, list[str]],
+    counts: Mapping[str, int],
+    analysis_manifest: AnalysisManifestState | None,
+    prospective_analysis_manifest: ProspectiveManifestIdentity | None,
+    campaign_provenance_path: Path | None,
+    warning: str | None,
+) -> dict[str, Any]:
+    """S4: the stage verdict under HAZARD, without the idle-admission core.
+
+    Nothing in block 5 reads the stage verdict; the desk whole-window verdict
+    and the harvest evaluate admission and strict validity from the bundles.
+    The row is labelled provisional.
+    """
+
+    row: dict[str, Any] = {
+        "schema_version": CAMPAIGN_VERDICT_SCHEMA,
+        "timestamp": utc_timestamp(),
+        "record_type": "campaign_verdict",
+        "status": "verdict",
+        "provisional": True,
+        "analysis_manifest": (
+            prospective_analysis_manifest.to_log()
+            if prospective_analysis_manifest is not None
+            else analysis_manifest.to_log()
+            if analysis_manifest is not None
+            else None
+        ),
+        "collection": {
+            "verdict": collection_verdict,
+            "reasons": collection_reasons,
+            "categories": categories,
+        },
+        "counts": {key: int(value) for key, value in sorted(counts.items()) if value},
+        "strict_validation": HAZARD_STRICT_VALIDATION_DEFERRED,
+        "idle_admission_core": dict(HAZARD_IDLE_ADMISSION_CORE_DEFERRED),
+        "campaign_provenance": (
+            {"manifest_path": str(campaign_provenance_path)}
+            if campaign_provenance_path is not None
+            else None
+        ),
+    }
+    if warning is not None:
+        row["block_order_warning"] = warning
+    return row
+
+
+def _hazard_interrupted_row(
+    *, run_id: str | None, campaign_provenance_path: Path | None
+) -> dict[str, Any]:
+    return {
+        "schema_version": CAMPAIGN_STOP_SCHEMA,
+        "record_type": "campaign_stop",
+        "timestamp": utc_timestamp(),
+        "status": "interrupted",
+        "stop_reason": "sigterm",
+        "exit_code": HAZARD_INTERRUPTED_RC,
+        "interrupted_run_id": run_id,
+        "teardown": _HAZARD_SIGNAL_STATE.get("teardown"),
+        "campaign_provenance_manifest": (
+            str(campaign_provenance_path) if campaign_provenance_path is not None else None
+        ),
+    }
+
+
+def _parse_campaign_lock_text(text: str) -> tuple[int, str | None] | None:
+    """``pid=<int> nonce=... created_at=... start_time=<json>`` or None."""
+
+    line = text.strip()
+    if not line.startswith("pid=") or "\n" in line:
+        return None
+    head, separator, start_text = line.rpartition(" start_time=")
+    if not separator:
+        return None
+    pid_text = head.split(" ", 1)[0][len("pid="):]
+    if not (pid_text.isascii() and pid_text.isdigit()) or int(pid_text) <= 0:
+        return None
+    try:
+        start_time = json.loads(start_text)
+    except ValueError:
+        return None
+    if start_time is not None and not isinstance(start_time, str):
+        return None
+    return int(pid_text), start_time
+
+
+def _campaign_lock_exists_message(lock_path: Path, existing: str) -> str:
+    return (
+        f"another campaign appears to be running (lock {lock_path}, created {existing}); "
+        "if no campaign is running, delete the lock file and retry"
+    )
+
+
+# A creator writes its lock line in the same few system calls as its O_EXCL
+# create; an empty or unparseable lock younger than this is left alone.
+TORN_LOCK_MIN_AGE_S = 30.0
+LSOF_ARGV = ("/usr/sbin/lsof", "-t", "--")
+LSOF_TIMEOUT_S = 20.0
+
+
+def _hazard_torn_lock_unheld(lock_path: Path, read_stat: os.stat_result, runs_root: Path) -> dict[str, Any] | None:
+    """Evidence that an empty or unparseable campaign.lock has no live writer, or None.
+
+    Three facts, all required (Opus triple audit F4b; refuter: a registry
+    check alone is unsafe because the entry is published after the create):
+    the lock inode is at least TORN_LOCK_MIN_AGE_S old; no process holds it
+    open (``lsof -t`` exits 1 with no output; the content is written only
+    through the creator's own descriptor, so with no holder nothing can
+    complete it); and no active-campaign registry entry naming this runs root
+    belongs to a process that is LIVE or UNKNOWN. A probe that fails proves
+    nothing, and the lock is kept.
+    """
+
+    from joulewise.measurement_liveness import custody_parent
+
+    age_s = time.time() - read_stat.st_mtime
+    if age_s < TORN_LOCK_MIN_AGE_S:
+        return None
+    try:
+        holders = subprocess.run((*LSOF_ARGV, str(lock_path)), capture_output=True, text=True,
+                                 timeout=LSOF_TIMEOUT_S, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if holders.returncode != 1 or holders.stdout.strip():
+        return None
+    registry = custody_parent() / "active-campaigns"
+    named: list[str] = []
+    try:
+        entries = sorted(registry.iterdir()) if registry.is_dir() else []
+    except OSError:
+        return None
+    for entry in entries:
+        try:
+            record = json.loads(entry.read_text(encoding="utf-8"))
+            pid = record.get("pid")
+            root = Path(record.get("runs_root"))
+        except (OSError, ValueError, TypeError, AttributeError):
+            return None  # an entry we cannot read might name this root
+        if root != runs_root.resolve(strict=False):
+            continue
+        if type(pid) is not int or observe_identity(pid).state != "DEAD":
+            return None
+        named.append(entry.name)
+    return {"age_s": round(age_s, 3), "open_holders": 0, "dead_registry_entries": named}
+
+
+def _hazard_reclaim_stale_campaign_lock(
+    lock_path: Path, runs_root: Path, hazard: Any
+) -> int:
+    """Return an ``O_EXCL`` descriptor for ``lock_path`` after clearing a stale lock.
+
+    Stale means the recorded pid is DEAD, or LIVE with a recorded start time
+    that differs from the observed one (pid reuse), or the lock is empty or
+    unparseable and :func:`_hazard_torn_lock_unheld` proves it has no live
+    writer.  Reclaimers serialize on
+    an exclusive flock of the runs-root directory, whose inode is never
+    replaced; only reclaimers unlink, and only the lock inode they just read.
+    Every other case raises CampaignLockOwnershipError with today's message.
+    """
+
+    import fcntl
+
+    existing = "<unreadable>"
+    directory_fd = os.open(runs_root, os.O_RDONLY)
+    try:
+        fcntl.flock(directory_fd, fcntl.LOCK_EX)
+        try:
+            try:
+                lock_fd = os.open(lock_path, os.O_RDONLY | os.O_NOFOLLOW)
+            except FileNotFoundError:
+                # Released between our create and the flock: the ordinary
+                # acquisition, once.  Nothing was cleared, so nothing is flagged.
+                try:
+                    return os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+                except FileExistsError:
+                    raise CampaignLockOwnershipError(
+                        _campaign_lock_exists_message(lock_path, existing)
+                    ) from None
+            except OSError as exc:
+                raise CampaignLockOwnershipError(
+                    _campaign_lock_exists_message(lock_path, existing)
+                ) from exc
+            try:
+                read_stat = os.fstat(lock_fd)
+                parts: list[bytes] = []
+                while True:
+                    part = os.read(lock_fd, 65536)
+                    if not part:
+                        break
+                    parts.append(part)
+            finally:
+                os.close(lock_fd)
+            try:
+                text = b"".join(parts).decode("utf-8")
+                existing = text.strip()
+            except UnicodeError:
+                text = None
+            parsed = _parse_campaign_lock_text(text) if text is not None else None
+            if _HAZARD_LOCK_RECLAIM_SEAM is not None:
+                _HAZARD_LOCK_RECLAIM_SEAM(lock_path)
+            identity = observe_identity(parsed[0]) if parsed is not None else None
+            # Opus triple audit F4b: an empty or unparseable lock is a creator
+            # killed between its O_EXCL create and its write, unless a process
+            # still holds the inode open (only the creator's descriptor can
+            # write the content). Proven unheld, old and unclaimed by a live
+            # registry entry, it is stale; anything unproven keeps the lock.
+            torn = (_hazard_torn_lock_unheld(lock_path, read_stat, runs_root)
+                    if parsed is None else None)
+            stale = torn is not None or (identity is not None and (
+                identity.state == "DEAD"
+                or (
+                    identity.state == "LIVE"
+                    and isinstance(parsed[1], str)
+                    and identity.start_time != parsed[1]
+                )
+            ))
+            if not stale:
+                raise CampaignLockOwnershipError(
+                    _campaign_lock_exists_message(lock_path, existing)
+                )
+            try:
+                current_stat = os.stat(lock_path, follow_symlinks=False)
+            except OSError as exc:
+                raise CampaignLockOwnershipError(
+                    _campaign_lock_exists_message(lock_path, existing)
+                ) from exc
+            if (current_stat.st_dev, current_stat.st_ino) != (read_stat.st_dev, read_stat.st_ino):
+                raise CampaignLockOwnershipError(
+                    _campaign_lock_exists_message(lock_path, existing)
+                )
+            os.unlink(lock_path)
+            from joulewise.flags import core as flags_core
+
+            print(f"warning: cleared stale campaign lock {lock_path} ({existing})", file=sys.stderr)
+            flags_core.emit(
+                hazard, "campaign.runner_record_flagged", level="window",
+                observed={"kind": "stale_lock_cleared" if torn is None else "torn_lock_cleared",
+                          "lock": existing[:300],
+                          "identity_state": identity.state if identity is not None else None,
+                          "runs_root_name": runs_root.name,
+                          **({"torn_lock": torn} if torn is not None else {})},
+                legacy_site="scripts/run_campaign.py:3317@e6b6a0ce",
+                legacy_code="campaign_lock_exists",
+            )
+            try:
+                return os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            except FileExistsError as exc:
+                raise CampaignLockOwnershipError(
+                    _campaign_lock_exists_message(lock_path, existing)
+                ) from exc
+        finally:
+            fcntl.flock(directory_fd, fcntl.LOCK_UN)
+    finally:
+        os.close(directory_fd)
+
+
+# s2-01 (PLAN2 section 2.3): a cooldown reference is judged by what the member
+# itself observed.  HAZARD members are no longer aborted by an environment
+# guard (core lane CTL, A11), so a member whose own readings saw a display
+# awake, a screensaver engaged, or any failed finding of its own per-run
+# evaluation must not become a reference, whatever its admission decision.
+# An unknown reading is not a violation here: it carries its own DISCLOSE flag.
+
+
+def _hazard_quiet_state_violated(admission: Mapping[str, Any]) -> bool:
+    """True when the member's own readings definitively broke the quiet state."""
+
+    observations = admission.get("guard_observations")
+    for observation in observations if isinstance(observations, list) else []:
+        if isinstance(observation, Mapping) and (
+            observation.get("display_power_state") == "any_awake"
+            or observation.get("screensaver_engaged") is True
+        ):
+            return True
+    evaluation = admission.get("per_run_environment_evaluation")
+    findings = evaluation.get("findings") if isinstance(evaluation, Mapping) else None
+    return any(
+        isinstance(finding, Mapping) and finding.get("status") == "fail"
+        for finding in (findings if isinstance(findings, list) else [])
+    )
+
+
+def _hazard_flagged_admission_is_quiet(admission: Mapping[str, Any]) -> bool:
+    """A ``flagged`` decision whose own idle attempt was admitted, quietly.
+
+    ``flagged`` comes from an earlier member's failed reference admission or
+    from an ``on_fail: flag`` policy.  Only the first is accepted: the
+    member's own final idle attempt must have passed every admission
+    threshold, its own per-run evaluation must be present, and nothing it
+    observed may violate the quiet state.
+    """
+
+    attempts = admission.get("attempts")
+    evaluation = admission.get("per_run_environment_evaluation")
+    return bool(
+        admission.get("decision") == "flagged"
+        and isinstance(attempts, list)
+        and attempts
+        and isinstance(attempts[-1], Mapping)
+        and attempts[-1].get("admitted") is True
+        and isinstance(evaluation, Mapping)
+        and isinstance(evaluation.get("findings"), list)
+        and not _hazard_quiet_state_violated(admission)
+    )
+
+
+# s2-05 (PLAN2 section 2.3): an unknown cooldown because no reference exists is
+# replaced by a MEASURED cooldown against a fallback reference, so the member's
+# cooldown evidence verifies at harvest.  ``member.cooldown_evidence_unverified``
+# stays EXCLUDE_MEMBER for any member whose cooldown was still not measured.
+# Every threshold comes from the stage's campaign policy file (its ``cooldown``
+# block); nothing here is a second copy of the policy.  The one exception is
+# the self-referenced test, which has no idle anchor and so never runs looser
+# than the cooldown-v2 defaults (see _hazard_self_referenced_cooldown_gate).
+
+_HAZARD_COOLDOWN_LAST_ELIGIBLE = "hazard_last_eligible_baseline"
+_HAZARD_COOLDOWN_WINDOW_ANCHOR = "hazard_window_opening_anchor"
+_HAZARD_COOLDOWN_SELF_REFERENCED = "hazard_self_referenced"
+
+
+def _hazard_window_runs_roots(hazard: Any, runs_dir: Path) -> list[Path]:
+    """This stage's runs root, then the window plan's claim and bound roots."""
+
+    roots = [Path(runs_dir)]
+    try:
+        plan = json.loads((Path(hazard.custody_root) / "night_plan.json").read_bytes())
+        recorded = plan["hazard_window"]["runs_roots"]
+        for key in ("claim", "bound"):
+            value = recorded.get(key)
+            if isinstance(value, str) and Path(value).is_absolute():
+                roots.append(Path(value))
+    except Exception:  # noqa: BLE001 - no plan: this root only
+        pass
+    unique: list[Path] = []
+    for root in roots:
+        resolved = root.resolve(strict=False)
+        if resolved not in unique:
+            unique.append(resolved)
+    return unique
+
+
+def _hazard_window_opening_anchor(
+    hazard: Any, runs_dir: Path, policy_sha256: str
+) -> dict[str, Any] | None:
+    """An eligible frozen anchor anywhere in the window, any manifest id.
+
+    The NEG-8 start reference (the window's opening idle reference) wins;
+    otherwise the first eligible anchor in root order.  Anchor eligibility,
+    including the policy digest, is the unchanged ``cooldown_anchor_eligibility``.
+    """
+
+    found: list[dict[str, Any]] = []
+    for root in _hazard_window_runs_roots(hazard, runs_dir):
+        try:
+            if not root.is_dir():
+                continue
+            anchor = prior_campaign_cooldown_anchor(root, None, policy_sha256)
+        except Exception:  # noqa: BLE001 - an unreadable root offers no anchor
+            continue
+        if isinstance(anchor, dict):
+            found.append(anchor)
+    if not found:
+        return None
+    return next(
+        (anchor for anchor in found if anchor.get("source_kind") == "neg8_reference_start"),
+        found[0],
+    )
+
+
+def _hazard_cooldown_telemetry(config: Any) -> tuple[Any, Any, str | None]:
+    """``(telemetry, clock, None)``, or ``(None, None, reason)``.
+
+    The same resolution ``campaign_cooldown_before_member`` uses: mock
+    telemetry has no recovery evidence, and an unresolved adapter is unmeasured.
+    """
+
+    from joulewise import adapters
+    from joulewise.clock import SystemClock
+
+    if config.hardware_target.telemetry_backend == TelemetryBackend.MOCK:
+        return None, None, "mock telemetry has no thermal recovery evidence"
+    clock = SystemClock()
+    telemetry, failure = adapters.resolve_telemetry(config, clock)
+    if telemetry is None:
+        return None, None, (
+            failure.message if failure is not None else "telemetry adapter unavailable"
+        )
+    return telemetry, clock, None
+
+
+def _hazard_window_stats(
+    readings: Sequence[tuple[float, float, float, float]], lower_s: float, upper_s: float
+) -> tuple[float | None, float, float]:
+    """Duration-weighted mean, coverage and span of the evidence in [lower, upper]."""
+
+    weighted_sum = 0.0
+    coverage_s = 0.0
+    retained_start_s: float | None = None
+    for capture_start, evidence_start, evidence_end, value in readings:
+        overlap_s = max(0.0, min(evidence_end, upper_s) - max(evidence_start, lower_s))
+        if overlap_s <= 0.0:
+            continue
+        weighted_sum += overlap_s * value
+        coverage_s += overlap_s
+        start = max(capture_start, lower_s)
+        retained_start_s = start if retained_start_s is None else min(retained_start_s, start)
+    mean = weighted_sum / coverage_s if coverage_s > 0.0 else None
+    span_s = max(0.0, upper_s - retained_start_s) if retained_start_s is not None else 0.0
+    return mean, coverage_s, span_s
+
+
+def _hazard_self_referenced_cooldown_gate(
+    telemetry: Any,
+    config: Any,
+    clock: Any,
+    *,
+    run_id: str,
+    policy: CooldownPolicy,
+) -> dict[str, Any]:
+    """Hold until power is steady, with no outside reference.
+
+    Two adjacent complete windows, each with the policy's minimum coverage.
+    The newest window's duration-weighted mean is the reference; the release
+    criterion is two-sided: the window before it lies within ``stability
+    fraction`` of the reference, so power is neither still falling (a
+    recovery tail) nor rising.  With no idle anchor to bound the level, the
+    test never runs looser than the cooldown-v2 defaults
+    (``CooldownPolicy()``: 30 s windows, 10 %): the window is
+    ``max(policy.sustained_window_s, 30 s)`` and the fraction
+    ``min(policy.tolerance_fraction, 0.10)``.  A slow tail can look flat over
+    5 s but not over 30 s, and a recovery tolerance of 1.0 (the block-5
+    council value, judged against an idle reference) is no stability bound.
+    Thermal pressure must be nominal when the policy requires it; an absolute
+    ceiling caps the newest window; the policy's ``cap_s`` ends the wait as
+    ``cap_hit``.  The trace rows carry the terminal ``release`` and
+    ``release_criteria_met_late`` fields that ``cooldown_disposition_from_raw``
+    re-derives at harvest, exactly as ``controller.cooldown_gate`` writes them.
+    """
+
+    from dataclasses import asdict
+
+    from joulewise.controller import _jsonable
+
+    sub_config = replace(
+        config,
+        run_id=run_id,
+        sampling=replace(config.sampling, idle_seconds=policy.subwindow_s),
+    )
+    floor = CooldownPolicy()
+    window_s = max(policy.sustained_window_s, floor.sustained_window_s)
+    stability_fraction = min(policy.tolerance_fraction, floor.tolerance_fraction)
+    required_coverage_s = policy.coverage_fraction * window_s
+    start_s = clock.now()
+    readings: list[tuple[float, float, float, float]] = []
+    trace: list[dict[str, Any]] = []
+    while True:
+        capture_start_s = clock.now()
+        baseline = telemetry.measure_idle(sub_config)
+        now_s = clock.now()
+        duration_s = baseline.duration_s
+        if (
+            isinstance(duration_s, bool)
+            or not isinstance(duration_s, int | float)
+            or not math.isfinite(duration_s)
+            or duration_s <= 0.0
+        ):
+            duration_s = max(0.0, now_s - capture_start_s)
+        evidence_start_s = max(now_s - float(duration_s), capture_start_s)
+        value = baseline.power_w_mean
+        if isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value):
+            readings.append((capture_start_s, evidence_start_s, now_s, float(value)))
+        readings = [reading for reading in readings if reading[2] > now_s - 2.0 * window_s]
+        current_mean, current_coverage_s, current_span_s = _hazard_window_stats(
+            readings, now_s - window_s, now_s
+        )
+        previous_mean, previous_coverage_s, previous_span_s = _hazard_window_stats(
+            readings, now_s - 2.0 * window_s, now_s - window_s
+        )
+        span_complete = (
+            current_span_s + 1e-6 >= window_s and previous_span_s + 1e-6 >= window_s
+        )
+        coverage_complete = (
+            current_coverage_s + 1e-6 >= required_coverage_s
+            and previous_coverage_s + 1e-6 >= required_coverage_s
+        )
+        window_complete = span_complete and coverage_complete
+        waited_s = now_s - start_s
+        try:
+            thermal_pressure = telemetry.thermal_state(sub_config).thermal_pressure
+        except Exception:  # noqa: BLE001 - unknown thermal fails the conjunctive gate
+            thermal_pressure = None
+        thermal_nominal = isinstance(thermal_pressure, str) and (
+            thermal_pressure.lower() in {"nominal", "normal"}
+        )
+        reference_upper_w = (
+            current_mean * (1.0 + stability_fraction)
+            if current_mean is not None
+            else None
+        )
+        reference_lower_w = (
+            current_mean * (1.0 - stability_fraction)
+            if current_mean is not None
+            else None
+        )
+        ceiling_ok = policy.absolute_ceiling_w is None or (
+            current_mean is not None and current_mean <= policy.absolute_ceiling_w
+        )
+        steady = bool(
+            reference_upper_w is not None
+            and reference_lower_w is not None
+            and previous_mean is not None
+            and reference_lower_w <= previous_mean <= reference_upper_w
+        )
+        release_criteria_met = bool(
+            window_complete
+            and steady
+            and ceiling_ok
+            and (thermal_nominal or not policy.require_thermal_nominal)
+        )
+        cap_hit = waited_s >= policy.cap_s
+        release_criteria_met_late = cap_hit and release_criteria_met
+        trace.append(
+            {
+                "timestamp_s": now_s,
+                "waited_s": waited_s,
+                "reference_mode": "self_referenced",
+                "rolling_mean_power_w": current_mean,
+                "previous_window_mean_power_w": previous_mean,
+                "window_span_s": current_span_s,
+                "window_coverage_s": current_coverage_s,
+                "previous_window_span_s": previous_span_s,
+                "previous_window_coverage_s": previous_coverage_s,
+                "required_coverage_s": required_coverage_s,
+                "span_complete": span_complete,
+                "coverage_complete": coverage_complete,
+                "window_complete": window_complete,
+                "reference_upper_w": reference_upper_w,
+                "reference_lower_w": reference_lower_w,
+                "self_reference_window_s": window_s,
+                "stability_fraction": stability_fraction,
+                "absolute_ceiling_w": policy.absolute_ceiling_w,
+                "steady": steady,
+                "thermal_pressure": thermal_pressure,
+                "thermal_nominal": thermal_nominal,
+                "release": release_criteria_met and not cap_hit,
+                "release_criteria_met_late": release_criteria_met_late,
+                "baseline": _jsonable(asdict(baseline)),
+            }
+        )
+        if cap_hit or release_criteria_met:
+            disposition = cooldown_disposition_from_raw(trace)
+            if disposition not in {"recovered", "cap_hit"}:  # pragma: no cover - by construction
+                raise RuntimeError("self-referenced cooldown trace has no disposition")
+            return {
+                **_cooldown_policy_decision_surface(policy),
+                "result": disposition,
+                "reference_mode": "self_referenced",
+                "waited_s": waited_s,
+                "reference_power_w": current_mean,
+                "tolerance_fraction": policy.tolerance_fraction,
+                "absolute_ceiling_w": policy.absolute_ceiling_w,
+                "reference_upper_w": reference_upper_w,
+                "reference_lower_w": reference_lower_w,
+                "effective_upper_w": reference_upper_w,
+                "self_reference": {
+                    "window_s": window_s,
+                    "stability_fraction": stability_fraction,
+                    "rule": "max(policy.sustained_window_s, 30 s); "
+                            "min(policy.tolerance_fraction, 0.10); two-sided",
+                },
+                "decision_rolling_mean_power_w": previous_mean,
+                "window_span_s": current_span_s,
+                "window_coverage_s": current_coverage_s,
+                "span_complete": span_complete,
+                "coverage_complete": coverage_complete,
+                "window_complete": window_complete,
+                "thermal_pressure": thermal_pressure,
+                "thermal_nominal": thermal_nominal,
+                "release_criterion": {
+                    "power": (
+                        "|previous_window_mean - newest_window_mean| "
+                        "<= stability_fraction * newest_window_mean"
+                    ),
+                    "reference_bound": "newest complete sustained window (self-referenced)",
+                    "absolute_ceiling_role": "additional_upper_cap_on_newest_window",
+                    "window": "two_adjacent_complete_sustained_windows",
+                    "coverage": (
+                        "each window_coverage_s >= coverage_fraction * self_reference.window_s"
+                    ),
+                    "thermal": (
+                        "nominal_required" if policy.require_thermal_nominal else "not_required"
+                    ),
+                },
+                "_trace": trace,
+            }
+
+
+def _hazard_measured_cooldown(
+    hazard: Any,
+    cooldown_note: dict[str, Any],
+    *,
+    following_info: ConfigInfo,
+    runs_dir: Path,
+    log_path: Path,
+    session_evaluations: Sequence[MemberEvaluation],
+    provenance_path: Path,
+    session_id: str,
+    policy_binding: CampaignPolicyBinding,
+) -> dict[str, Any]:
+    """HAZARD: replace a reference-unavailable ``unknown`` by a measured cooldown.
+
+    Reference order (PLAN2 s2-05): the last eligible baseline of this session;
+    else an eligible frozen anchor anywhere in the window, any manifest id,
+    the NEG-8 start reference first; else a self-referenced recovery test.
+    An ``unknown`` whose reference existed but whose measurement failed is
+    returned unchanged (the caller flags it ``unmeasured``).  The result is an
+    ordinary cooldown-v2 note with a hash-addressed raw trace, so the harvest
+    verifies it exactly as it verifies any other cooldown.  Never raises.
+    """
+
+    reason = cooldown_note.get("reason")
+    if hazard is None or reason not in _COOLDOWN_REFERENCE_UNAVAILABLE_REASONS:
+        return cooldown_note
+    policy = policy_binding.policy.cooldown
+    note: dict[str, Any] = {
+        key: value
+        for key, value in cooldown_note.items()
+        if key not in {"result", "reason", "failure_reason", "reference_selection"}
+    }
+    note.update(_cooldown_policy_decision_surface(policy))
+    note["policy_version"] = policy.policy_version
+    note["fallback_from"] = {"result": cooldown_note.get("result"), "reason": reason}
+    baseline = None
+    selection = _HAZARD_COOLDOWN_SELF_REFERENCED
+    source: dict[str, Any] | None = None
+    try:
+        for evaluation in reversed(list(session_evaluations)):
+            eligibility = cooldown_reference_eligibility(evaluation, hazard=hazard)
+            candidate = _idle_baseline_from_summary(evaluation.summary)
+            if eligibility.get("eligible") is True and candidate is not None:
+                baseline, selection = candidate, _HAZARD_COOLDOWN_LAST_ELIGIBLE
+                source = {"bundle_id": evaluation.bundle_id}
+                break
+        if baseline is None:
+            anchor = _hazard_window_opening_anchor(hazard, runs_dir, policy_binding.sha256)
+            anchor_baseline = anchor.get("baseline") if isinstance(anchor, dict) else None
+            candidate = (
+                _idle_baseline_from_summary({"idle_baseline": anchor_baseline})
+                if isinstance(anchor_baseline, dict)
+                else None
+            )
+            if candidate is not None:
+                baseline, selection = candidate, _HAZARD_COOLDOWN_WINDOW_ANCHOR
+                source = {
+                    key: anchor.get(key)
+                    for key in ("source_kind", "bundle_id", "run_id")
+                    if key in anchor
+                }
+                note["anchor_provenance"] = anchor
+        note["reference_selection"] = selection
+        note["fallback_reference_source"] = source
+        from joulewise.interfaces import AdapterFailure
+        from joulewise.schemas import BenchmarkConfig
+
+        config = BenchmarkConfig.from_mapping(
+            json.loads(following_info.path.read_text(encoding="utf-8"))
+        )
+        telemetry, clock, problem = _hazard_cooldown_telemetry(config)
+        if problem is not None:
+            note.update({"result": "unknown", "reason": problem})
+            return note
+        cooldown_run_id = (
+            f"{sanitize_id_component(session_id)}-cooldown-before-"
+            f"{sanitize_id_component(following_info.run_id)}"
+        )
+        note["cooldown_run_id"] = cooldown_run_id
+        try:
+            if baseline is not None:
+                from joulewise.controller import cooldown_gate
+
+                gate = cooldown_gate(
+                    telemetry, baseline, config, clock, run_id=cooldown_run_id, policy=policy
+                )
+            else:
+                gate = _hazard_self_referenced_cooldown_gate(
+                    telemetry, config, clock, run_id=cooldown_run_id, policy=policy
+                )
+        except AdapterFailure as exc:
+            note.update({
+                "result": "unknown",
+                "reason": exc.message,
+                "failure_reason": exc.failure_reason.value,
+            })
+            return note
+        trace = gate.pop("_trace", [])
+        note.update(gate)
+        if trace:
+            note["raw_artifact"] = _write_campaign_cooldown_trace(
+                provenance_path, following_info.run_id, trace
+            )
+        else:
+            note.update({"result": "unknown", "reason": "cooldown trace was empty"})
+    except Exception as exc:  # noqa: BLE001 - evidence failure stays an unknown result
+        note.update({"result": "unknown", "reason": f"{type(exc).__name__}: {exc}"})
+    if note.get("result") in {"recovered", "cap_hit"}:
+        from joulewise.flags import core as flags_core
+
+        flags_core.emit(
+            hazard, "campaign.runner_record_flagged", level="member",
+            run_id=following_info.run_id,
+            observed={"kind": "cooldown_fallback_reference",
+                      "reference_selection": selection,
+                      "result": note["result"],
+                      "fallback_from": "reference_unavailable"},
+            legacy_site="scripts/run_campaign.py:4232@e6b6a0ce",
+            legacy_code="cooldown_v2_failed_closed_before_invoke",
+        )
+    return note
 
 
 def _write_campaign_provenance_tmp(path: Path, payload: bytes) -> Path:
@@ -3599,6 +5417,27 @@ def new_campaign_provenance(
     log_path: Path | None = None,
     prospective_analysis_manifest: ProspectiveManifestIdentity | None = None,
 ) -> tuple[Path, dict[str, Any]]:
+    path, manifest = _construct_campaign_provenance(
+        config_dir,
+        runs_dir,
+        analysis_manifest,
+        policy_binding,
+        prospective_analysis_manifest=prospective_analysis_manifest,
+    )
+    write_campaign_provenance(path, manifest, log_path)
+    return path, manifest
+
+
+def _construct_campaign_provenance(
+    config_dir: Path,
+    runs_dir: Path,
+    analysis_manifest: AnalysisManifestState | None,
+    policy_binding: CampaignPolicyBinding | None = None,
+    *,
+    prospective_analysis_manifest: ProspectiveManifestIdentity | None = None,
+) -> tuple[Path, dict[str, Any]]:
+    """Build a new campaign provenance manifest in memory; write nothing."""
+
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     session_id = f"campaign-{stamp}-p{os.getpid()}"
     path = runs_dir / "campaign_manifests" / f"{session_id}.json"
@@ -3627,7 +5466,6 @@ def new_campaign_provenance(
         manifest["analysis_manifest_sha256"] = (
             prospective_analysis_manifest.file_sha256
         )
-    write_campaign_provenance(path, manifest, log_path)
     return path, manifest
 
 
@@ -4046,8 +5884,19 @@ def _idle_baseline_from_summary(summary: dict[str, Any] | None):
 
 def cooldown_reference_eligibility(
     evaluation: MemberEvaluation,
+    *,
+    hazard: Any = None,
 ) -> dict[str, Any]:
-    """Return fail-closed eligibility for a baseline used by cooldown v2."""
+    """Return fail-closed eligibility for a baseline used by cooldown v2.
+
+    HAZARD only (s2-01): an admission decision of ``flagged`` is accepted when
+    the member's own idle attempt was admitted and its own quiet-state
+    readings passed (``_hazard_flagged_admission_is_quiet``); otherwise a
+    DISCLOSE guard flag on one member would exclude its neighbour.  And since
+    a HAZARD member is no longer aborted by its environment guard, any member
+    whose own readings definitively broke the quiet state is ineligible
+    (``quiet_state_violated``), whatever its decision.
+    """
 
     reasons: list[str] = []
     baseline = _idle_baseline_from_summary(evaluation.summary)
@@ -4063,8 +5912,12 @@ def cooldown_reference_eligibility(
     else:
         if admission.get("critical_environment_passed") is not True:
             reasons.append("critical_environment_not_passed")
-        if admission.get("decision") != "admitted":
+        if admission.get("decision") != "admitted" and not (
+            hazard is not None and _hazard_flagged_admission_is_quiet(admission)
+        ):
             reasons.append("idle_admission_not_passed")
+        if hazard is not None and _hazard_quiet_state_violated(admission):
+            reasons.append("quiet_state_violated")
         if admission.get("reference_provenance_present") is not True:
             reasons.append("reference_provenance_incomplete")
     if (
@@ -4100,8 +5953,9 @@ def _anchor_from_evaluation(
     policy_binding: CampaignPolicyBinding,
     *,
     source_kind: str,
+    hazard: Any = None,
 ) -> dict[str, Any] | None:
-    eligibility = cooldown_reference_eligibility(evaluation)
+    eligibility = cooldown_reference_eligibility(evaluation, **_hazard_kwargs(hazard))
     baseline = _idle_baseline_from_summary(evaluation.summary)
     if not eligibility["eligible"] or baseline is None:
         return None
@@ -4129,6 +5983,7 @@ def _first_eligible_cooldown_anchor(
     policy_binding: CampaignPolicyBinding,
     *,
     source_kind: str,
+    hazard: Any = None,
 ) -> dict[str, Any] | None:
     """Freeze the first eligible physical repetition in execution order."""
 
@@ -4138,6 +5993,7 @@ def _first_eligible_cooldown_anchor(
             info,
             policy_binding,
             source_kind=source_kind,
+            **_hazard_kwargs(hazard),
         )
         if anchor is not None:
             return anchor
@@ -4225,6 +6081,7 @@ def campaign_cooldown_before_member(
     session_id: str,
     policy_binding: CampaignPolicyBinding | None = None,
     frozen_anchor: dict[str, Any] | None = None,
+    hazard: Any = None,
 ) -> dict[str, Any]:
     """Measure D-014 recovery and attach its tri-state result to the next run."""
     note: dict[str, Any] = {
@@ -4236,7 +6093,9 @@ def campaign_cooldown_before_member(
     baseline = _idle_baseline_from_summary(previous_evaluation.summary)
     if policy_binding is not None and policy_binding.policy.idle_admission.enabled:
         note.update(_cooldown_policy_decision_surface(policy_binding.policy.cooldown))
-        reference_eligibility = cooldown_reference_eligibility(previous_evaluation)
+        reference_eligibility = cooldown_reference_eligibility(
+            previous_evaluation, **_hazard_kwargs(hazard)
+        )
         anchor_eligibility = _cooldown_anchor_eligibility(
             frozen_anchor, policy_binding.sha256
         )
@@ -4657,6 +6516,8 @@ def _excluded_member_failure(
 
 def _current_member_environment_refusals(
     evaluation: MemberEvaluation,
+    *,
+    post_run_collector_raised_unmeasured: bool = False,
 ) -> tuple[str, ...]:
     summary = evaluation.summary
     provenance = summary.get("summary_provenance") if isinstance(summary, dict) else None
@@ -4685,6 +6546,7 @@ def _current_member_environment_refusals(
         bundle_path=evaluation.bundle_path,
         measured_window_start_s=measured_window.start_s,
         measured_window_end_s=measured_window.end_s,
+        post_run_collector_raised_unmeasured=post_run_collector_raised_unmeasured,
     )
 
 
@@ -4938,8 +6800,15 @@ def _neg8_reference_scientific_config_sha256(
     return observed
 
 
+def _selected_calibration_paths(args):
+    return {parameter: value for option, parameter in
+            (("calibration_ledger", "ledger_path"), ("head_pin", "head_pin_path"))
+            if (value := getattr(args, option, None)) is not None}
+
+
 def _load_calibration_snapshot_for_evaluation(
     calibration_custody_store: str | Path | None = None,
+    *, ledger_path: str | Path | None = None, head_pin_path: str | Path | None = None,
 ) -> CalibrationLedgerSnapshot:
     """Load the one D-109 snapshot shared by a complete runner evaluation.
 
@@ -4967,6 +6836,12 @@ def _load_calibration_snapshot_for_evaluation(
         loader_arguments["calibration_custody_store"] = Path(
             calibration_custody_store
         )
+    ledger_path = ledger_path if ledger_path is not None else os.environ.get("CALIBRATION_LEDGER")
+    head_pin_path = head_pin_path if head_pin_path is not None else os.environ.get("LEDGER_HEAD_PIN")
+    if ledger_path is not None:
+        loader_arguments["ledger_path"] = Path(ledger_path)
+    if head_pin_path is not None:
+        loader_arguments["head_pin_path"] = Path(head_pin_path)
     snapshot = load_calibration_ledger_snapshot(**loader_arguments)
     if calibration_custody_store is None or not snapshot.valid:
         return snapshot
@@ -5146,6 +7021,7 @@ def _idle_admission_core_evaluation(
     calibration_bracket_binding: Mapping[str, Any] | None = None,
     calibration_bracket_identity: Mapping[str, str] | None = None,
     calibration_bracket_binding_supplied: bool = False,
+    freshness_at_end_reference: bool | None = None,
 ) -> _IdleAdmissionCoreEvaluation:
     """Evaluate the core and prospective per-member diagnostic surface.
 
@@ -5153,6 +7029,16 @@ def _idle_admission_core_evaluation(
     collection verdict and exit code are unchanged by this section.  Live
     (pre-invoke) enforcement belongs to the controller hookup that follows
     this core.
+
+    ``freshness_at_end_reference`` (V1): with no explicit
+    ``evaluation_timestamp_s``, the NEG-8 bound's 24 h freshness is evaluated
+    at the end of the last end-reference member's measured window, the
+    moment the bound is last used, rather than at the desk's wall clock when
+    the verdict happens to be written.  ``None`` (the default) turns it on
+    for a whole-window evaluation of a HAZARD_PACK runs root, whose chain
+    derives the bound before the start reference; other windows keep the
+    wall clock.  If an end reference has no measured window, the wall clock
+    is used as before.
     """
 
     extension = policy_binding.idle_admission_extension
@@ -5192,9 +7078,24 @@ def _idle_admission_core_evaluation(
             ]
         ],
     ] = {"start": [], "midpoint": [], "end": []}
+    # NEG-8 ruling 2026-10-07 (registration 0.12): a reference the runner
+    # recorded with a status other than succeeded is lost; the screen runs on
+    # the survivors.  The loss test reads the runner's status, never an energy.
+    # A reference whose bundle exists but reads no status (no summary after a
+    # SIGKILL at the hung-process cap, an undecodable summary, a summary
+    # without a string status) is lost too, as ``summary_unreadable``: it has
+    # no energy to aggregate (cold pass 2 D1).
+    neg8_lost: list[dict[str, Any]] = []
     for evaluation in evaluations:
+        # Orchestrator ruling on audit-fix batch 1 item 6 (2026-10-07): on
+        # this, the whole-window VERDICT path, a HAZARD post-run guard
+        # observation whose collector raised is unmeasured (disclosed by the
+        # controller as env.member_guard_flagged), not failed environment
+        # evidence.  The reducer's barrier and claim readiness keep it failed.
         current_environment_reasons = set(
-            _current_member_environment_refusals(evaluation)
+            _current_member_environment_refusals(
+                evaluation, post_run_collector_raised_unmeasured=True
+            )
         )
         conditions.update(current_environment_reasons)
         environment_reasons = set(current_environment_reasons)
@@ -5208,7 +7109,10 @@ def _idle_admission_core_evaluation(
             )
             if telemetry_name != "mock" and not current_environment_reasons:
                 post_run_reasons = set(
-                    post_run_environment_refusals(evaluation.metadata)
+                    post_run_environment_refusals(
+                        evaluation.metadata,
+                        post_run_collector_raised_unmeasured=True,
+                    )
                 )
                 conditions.update(post_run_reasons)
                 environment_reasons.update(post_run_reasons)
@@ -5265,6 +7169,34 @@ def _idle_admission_core_evaluation(
         )
         if neg8_position == "invalid":
             conditions.add("neg8_bracket_reference_invalid")
+        elif (
+            neg8_position in neg8_references
+            and evaluation.status != "succeeded"
+        ):
+            readable = isinstance(evaluation.status, str)
+            neg8_lost.append(
+                {
+                    "bundle_id": evaluation.bundle_id,
+                    "position": neg8_position,
+                    "reason": (
+                        "status_not_succeeded" if readable else "summary_unreadable"
+                    ),
+                    "status": evaluation.status if readable else None,
+                }
+            )
+        elif neg8_position in neg8_references and not evaluation.strict_valid:
+            # Delta audit A5: a succeeded reference whose strict validation
+            # failed is lost before aggregation (the replay drops it the same
+            # way), not handed to the evaluator as None, which failed the
+            # whole screen as neg8_bracket_reference_invalid.
+            neg8_lost.append(
+                {
+                    "bundle_id": evaluation.bundle_id,
+                    "position": neg8_position,
+                    "reason": "strict_invalid",
+                    "status": evaluation.status,
+                }
+            )
         elif neg8_position in neg8_references:
             neg8_references[neg8_position].append(
                 (
@@ -5291,15 +7223,47 @@ def _idle_admission_core_evaluation(
         len(neg8_references[position])
         for position in ("start", "midpoint", "end")
     )
-    complete_legacy_pair = counts == (1, 0, 1)
+    complete_legacy_pair = counts == (1, 0, 1) and not neg8_lost
     complete_replicated_trajectory = counts == (3, 1, 3)
+    # Survivors: two or three at each endpoint, the midpoint optional.  With a
+    # loss behind it, any shape within the plan goes to the evaluator, which
+    # names one with fewer than two survivors at an endpoint.
+    survivor_shape = (
+        counts[0] in (2, 3) and counts[1] in (0, 1) and counts[2] in (2, 3)
+    )
+    # A planned roster is also recognised with no loss recorded when a
+    # reference was never run at all (its bundle is absent, so it reaches
+    # neither the list nor ``neg8_lost``): a midpoint, or a full triplet at an
+    # endpoint, is never part of the legacy single pair.  Such a shape goes to
+    # the evaluator, which names it ``references_insufficient`` (cold pass 2
+    # N3), instead of ``neg8_bracket_ambiguous_reference``.  Whole-window mode
+    # only: a per-segment invocation keeps its historical conditions.
+    planned_roster_shape = bool(
+        whole_window and (counts[1] == 1 or 3 in (counts[0], counts[2]))
+    )
+    within_plan_after_losses = bool(
+        (neg8_lost or planned_roster_shape)
+        and counts[0] <= 3
+        and counts[1] <= 1
+        and counts[2] <= 3
+    )
     ambiguous = bool(
         (neg8_references["start"] or neg8_references["end"])
-        and not (complete_legacy_pair or complete_replicated_trajectory)
+        and not (
+            complete_legacy_pair
+            or complete_replicated_trajectory
+            or survivor_shape
+            or within_plan_after_losses
+        )
     )
     if ambiguous:
         conditions.add("neg8_bracket_ambiguous_reference")
-    reference_shape_valid = complete_legacy_pair or complete_replicated_trajectory
+    reference_shape_valid = (
+        complete_legacy_pair
+        or complete_replicated_trajectory
+        or survivor_shape
+        or within_plan_after_losses
+    )
     identities = [
         item[2]
         for position in ("start", "midpoint", "end")
@@ -5325,6 +7289,20 @@ def _idle_admission_core_evaluation(
         if spans and all(span is not None for span in spans)
         else None
     )
+    if freshness_at_end_reference is None:
+        freshness_at_end_reference = bool(
+            whole_window
+            and runs_root is not None
+            and _window_lineage.is_hazard_runs_root(runs_root)
+        )
+    end_spans = [item[3] for item in neg8_references["end"]]
+    end_reference_at_s = (
+        max(span[1] for span in end_spans if span is not None)
+        if freshness_at_end_reference
+        and end_spans
+        and all(span is not None for span in end_spans)
+        else None
+    )
     freshness_observation = build_neg8_freshness_observation(
         [
             item[4]
@@ -5332,9 +7310,11 @@ def _idle_admission_core_evaluation(
             for item in neg8_references[position]
         ],
         evaluated_at_s=(
-            time.time()
-            if evaluation_timestamp_s is None
-            else evaluation_timestamp_s
+            evaluation_timestamp_s
+            if evaluation_timestamp_s is not None
+            else end_reference_at_s
+            if end_reference_at_s is not None
+            else time.time()
         ),
     )
 
@@ -5357,6 +7337,7 @@ def _idle_admission_core_evaluation(
             end_idle_subtracted_j=family_values("end", 1),
             window_duration_s=duration_s,
             bound_freshness_observation=freshness_observation,
+            lost_references=neg8_lost,
         )
     else:
         bracket = neg8_bracket_not_evaluated(
@@ -5452,10 +7433,18 @@ def idle_admission_core_verdict(
 
 
 def _whole_window_member(
-    source: WholeWindowMemberSource, waivers: WaiverMap
+    source: WholeWindowMemberSource,
+    waivers: WaiverMap,
+    *,
+    strict_problems: Sequence[str] | None = None,
 ) -> MemberEvaluation:
     bundle_path = source.path
-    """Strictly validate an existing bundle before whole-window admission."""
+    """Strictly validate an existing bundle before whole-window admission.
+
+    ``strict_problems``: the member's ``validate_bundle(strict=True)`` result
+    when the caller already ran it (the HAZARD_PACK parallel path); otherwise
+    it runs here.
+    """
 
     summary, _summary_problem = _load_json_object(
         bundle_path / "summary_metrics.json", "summary_metrics.json"
@@ -5464,10 +7453,13 @@ def _whole_window_member(
         bundle_path / "metadata.json", "metadata.json"
     )
     status = summary.get("status") if isinstance(summary, dict) else None
-    try:
-        problems = validate_bundle(bundle_path, strict=True)
-    except Exception as exc:  # noqa: BLE001 - validator failure is invalid
-        problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
+    if strict_problems is not None:
+        problems = list(strict_problems)
+    else:
+        try:
+            problems = validate_bundle(bundle_path, strict=True)
+        except Exception as exc:  # noqa: BLE001 - validator failure is invalid
+            problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
     collection_flags = _prompt_realization_collection_flags(problems)
     telemetry_identity = custody_telemetry_identity(
         bundle_path,
@@ -5508,6 +7500,32 @@ def _whole_window_member(
         scientific_config_sha256=source.scientific_config_sha256,
         canonical_neg8_workload=source.canonical_neg8_workload,
     )
+
+
+def _whole_window_member_evaluations(
+    sources: Sequence[WholeWindowMemberSource],
+    waivers: WaiverMap,
+    *,
+    runs_dir: Path,
+) -> list[MemberEvaluation]:
+    """Every member's whole-window evaluation, in membership order.
+
+    A HAZARD_PACK runs root (PLAN2 row 1) validates its members strictly in a
+    process pool (``whole_window.strict_validate_bundles``); the validation
+    itself is unchanged.  Every other root keeps the serial loop.
+    """
+
+    if len(sources) < 2 or not _window_lineage.is_hazard_runs_root(runs_dir):
+        return [_whole_window_member(source, waivers) for source in sources]
+    problems = strict_validate_bundles(
+        [source.path for source in sources],
+        workers=whole_window_strict_workers(len(sources)),
+        validator=validate_bundle,
+    )
+    return [
+        _whole_window_member(source, waivers, strict_problems=member_problems)
+        for source, member_problems in zip(sources, problems)
+    ]
 
 
 def _valid_supersession_entries(
@@ -5731,6 +7749,18 @@ def _whole_window_campaign_membership(
 
     supersession_results = supersession_entry_validation_results(runs_dir, log_path)
     groups: dict[str, dict[str, Any]] = {}
+    # HAZARD_PACK windows: the runs root carries a hazard lineage locator and
+    # is dedicated to one window (publication refuses a shared root), so every
+    # policy-matching manifest in its authenticated catalog is the window,
+    # whatever analysis-manifest identity each stage recorded (block 5 records
+    # null for the reference stages and, on a contrast pack, an identity for
+    # the science stages).  The membership id is derived from exactly those
+    # manifests' bytes, so no separate binding artifact is needed.
+    hazard_window = (
+        consumption_semantics_id != SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+        and _window_lineage.is_hazard_runs_root(runs_dir)
+    )
+    hazard_records: list[Any] = []
     catalog = load_authenticated_campaign_catalog(runs_dir, log_path)
     membership_binding: dict[str, Any] | None = None
     if catalog is not None and membership_binding_path is not None:
@@ -5752,6 +7782,9 @@ def _whole_window_campaign_membership(
                 continue
             identity = manifest.get("analysis_manifest_id")
             key = identity if isinstance(identity, str) and identity else "<none>"
+            if hazard_window:
+                key = HAZARD_WINDOW_MEMBERSHIP_KEY
+                hazard_records.append(record)
             group = groups.setdefault(
                 key,
                 {
@@ -5895,6 +7928,13 @@ def _whole_window_campaign_membership(
                         if prior is not None and prior != provenance:
                             group["selection_invalid"] = True
                         group["bundle_provenance"][bundle_id] = provenance
+    if hazard_window:
+        for group in groups.values():
+            # One group holds the whole window.  An attempt-ledger selection
+            # would replace every ordinary manifest's members (references
+            # included), so a mix is unresolved rather than silently narrowed.
+            if group["selection_manifests"] and group["manifests"]:
+                group["selection_invalid"] = True
     candidates = []
     ambiguous_duplicate = False
     all_resolutions: list[OrdinaryOccurrenceResolution] = []
@@ -6053,6 +8093,8 @@ def _whole_window_campaign_membership(
             membership_id=(
                 membership_binding.get("membership_id")
                 if identity == "<none>" and membership_binding is not None
+                else hazard_window_membership_id(runs_dir, hazard_records)
+                if hazard_window and identity == HAZARD_WINDOW_MEMBERSHIP_KEY
                 else identity
             ),
             membership_binding=membership_binding,
@@ -6308,7 +8350,8 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
         raise ValueError(f"--runs-dir is not a directory: {runs_dir}")
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     _require_external_campaign_log(log_path)
-    lock_token = acquire_campaign_lock(runs_dir)
+    hazard = _hazard_flag_context(runs_dir, stage="harvest")
+    lock_token = acquire_campaign_lock(runs_dir, **_hazard_kwargs(hazard))
     in_flight: BaseException | None = None
     try:
         return _run_whole_window_verdict_locked(
@@ -6353,9 +8396,9 @@ def _run_whole_window_verdict_locked(
     source_manifests = list(membership.source_manifests)
     selection_conditions = list(membership.conditions)
     occurrence_supersessions = list(membership.occurrence_supersessions)
-    evaluations = [
-        _whole_window_member(source, waivers) for source in bundle_sources
-    ]
+    evaluations = _whole_window_member_evaluations(
+        bundle_sources, waivers, runs_dir=runs_dir
+    )
     included = [evaluation for evaluation in evaluations if evaluation.usable]
     waived = [evaluation for evaluation in evaluations if evaluation.waived]
     excluded = [evaluation for evaluation in evaluations if evaluation.failed]
@@ -6365,7 +8408,8 @@ def _run_whole_window_verdict_locked(
         MINTED_CONSUMPTION_SEMANTICS_ID,
     )
     calibration_snapshot = _load_calibration_snapshot_for_evaluation(
-        getattr(args, "calibration_custody_store", None)
+        getattr(args, "calibration_custody_store", None),
+        **_selected_calibration_paths(args),
     )
     bracket_binding, bracket_identity = _validated_bracket_binding_input(
         getattr(args, "bracket_binding", None),
@@ -8054,7 +10098,8 @@ def run_axi_spec_campaign(
                 )
             evaluation_started_at = utc_timestamp()
             calibration_ledger_snapshot = (
-                _load_calibration_snapshot_for_evaluation()
+                _load_calibration_snapshot_for_evaluation(
+                    **_selected_calibration_paths(args))
             )
             core_evaluation = _idle_admission_core_evaluation(
                 selected_evaluations,
@@ -8176,6 +10221,9 @@ def run_campaign(args: argparse.Namespace) -> int:
     assert args.config_dir is not None
     config_dir = Path(args.config_dir)
     runs_dir = Path(args.runs_dir)
+    hazard = _hazard_flag_context(runs_dir)
+    if hazard is not None:
+        _HAZARD_TIMEOUT_MEMORY["consecutive"] = 0
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     _require_external_campaign_log(log_path)
 
@@ -8260,7 +10308,7 @@ def run_campaign(args: argparse.Namespace) -> int:
         readiness = claim_readiness_for(analysis_manifest, "invalid", [])
         if not args.dry_run:
             print_verdict("invalid", collection_reasons, categories, readiness)
-            verdict_lock = acquire_campaign_lock(runs_dir)
+            verdict_lock = acquire_campaign_lock(runs_dir, **_hazard_kwargs(hazard))
             in_flight: BaseException | None = None
             try:
                 append_verdict(
@@ -8308,7 +10356,8 @@ def run_campaign(args: argparse.Namespace) -> int:
         print(f"error: {duplicate_error}", file=sys.stderr)
         return 2
     block_limit = campaign_block_limit(
-        requested_max_blocks, launch_authentication, order_entries, items
+        requested_max_blocks, launch_authentication, order_entries, items,
+        **_hazard_kwargs(hazard),
     )
     block_limit_reached = False
     if block_limit is not None:
@@ -8334,7 +10383,7 @@ def run_campaign(args: argparse.Namespace) -> int:
         collection_reasons = ["analysis manifest validation failed before execution"]
         readiness = claim_readiness_for(analysis_manifest, "invalid", [])
         print_verdict("invalid", collection_reasons, categories, readiness)
-        verdict_lock = acquire_campaign_lock(runs_dir)
+        verdict_lock = acquire_campaign_lock(runs_dir, **_hazard_kwargs(hazard))
         in_flight: BaseException | None = None
         try:
             append_verdict(
@@ -8375,7 +10424,9 @@ def run_campaign(args: argparse.Namespace) -> int:
     )
     frozen_cooldown_anchor = prior_campaign_cooldown_anchor(
         runs_dir,
-        collection_analysis_manifest_id,
+        # HAZARD: claim and bound roots are fresh per attempt, so every anchor
+        # in them is this window's; no manifest-id filter.
+        None if hazard is not None else collection_analysis_manifest_id,
         policy_binding.sha256,
         log_path,
     )
@@ -8396,11 +10447,18 @@ def run_campaign(args: argparse.Namespace) -> int:
         print("Dry run: no commands will be invoked and no campaign log will be written.")
     else:
         try:
-            lock_path = acquire_campaign_lock(runs_dir)
+            lock_path = acquire_campaign_lock(runs_dir, **_hazard_kwargs(hazard))
         except RuntimeError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
 
+    # HAZARD (P2-RC row 8): SIGTERM forwards to the member child, appends an
+    # ``interrupted`` row and releases the lock instead of dying with it held.
+    previous_sigterm = (
+        _hazard_install_sigterm_handler()
+        if hazard is not None and not args.dry_run
+        else None
+    )
     try:
         if not args.dry_run:
             try:
@@ -8410,6 +10468,20 @@ def run_campaign(args: argparse.Namespace) -> int:
             except RuntimeError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 return 2
+            if hazard is not None and b'"start_time": null' in registry_entry.payload:
+                # Opus triple audit F4a: the ps identity probe returned UNKNOWN;
+                # the entry is published without a start time and the stage goes on.
+                from joulewise.flags import core as flags_core
+
+                print("warning: campaign registry entry published without a start time "
+                      "(identity probe unavailable)", file=sys.stderr)
+                flags_core.emit(
+                    hazard, "campaign.runner_record_flagged", level="window",
+                    observed={"kind": "registry_start_time_unavailable",
+                              "runs_root_name": lock_path.runs_root.name},
+                    legacy_site="joulewise/measurement_liveness.py:publish_campaign@a434e363d",
+                    legacy_code="campaign start identity unavailable",
+                )
             config_infos = [
                 item for item in items if isinstance(item, ConfigInfo)
             ]
@@ -8436,27 +10508,59 @@ def run_campaign(args: argparse.Namespace) -> int:
                         ),
                         "unowned_bundle_ids": unowned_bundle_ids,
                     }
+            if identity_error is not None and hazard is not None:
+                from joulewise.flags import core as flags_core
+
+                print(f"warning: campaign log identity flagged: {identity_error}", file=sys.stderr)
+                flags_core.emit(
+                    hazard, "campaign.runner_record_flagged", level="window",
+                    observed={"kind": "campaign_log_unauthenticated",
+                              "detail": str(identity_error)[:300]},
+                    legacy_site="scripts/run_campaign.py:8459@e6b6a0ce",
+                    legacy_code=getattr(identity_error, "reason_code", None),
+                )
+                identity_error = None
             if identity_error is not None:
                 return refuse_campaign_analysis_identity_mismatch(
                     identity_error,
                     analysis_manifest=analysis_manifest,
                 )
-            campaign_provenance_path, campaign_provenance = new_campaign_provenance(
-                config_dir,
-                runs_dir,
-                analysis_manifest,
-                policy_binding,
-                log_path,
-                prospective_analysis_manifest=prospective_analysis_manifest,
-            )
+            if hazard is None:
+                campaign_provenance_path, campaign_provenance = new_campaign_provenance(
+                    config_dir,
+                    runs_dir,
+                    analysis_manifest,
+                    policy_binding,
+                    log_path,
+                    prospective_analysis_manifest=prospective_analysis_manifest,
+                )
+            else:
+                campaign_provenance_path, campaign_provenance = _construct_campaign_provenance(
+                    config_dir,
+                    runs_dir,
+                    analysis_manifest,
+                    policy_binding,
+                    prospective_analysis_manifest=prospective_analysis_manifest,
+                )
+                _hazard_call(
+                    hazard, "new_campaign_provenance", None,
+                    lambda: write_campaign_provenance(
+                        campaign_provenance_path, campaign_provenance, log_path
+                    ),
+                    kind="provenance_unpersisted",
+                )
             campaign_provenance["cooldown_anchor"] = frozen_cooldown_anchor
             campaign_provenance["cooldown_anchor_strategy"] = (
                 "neg8_reference_start_then_first_admission_passing"
                 if neg8_reference_expected
                 else "first_admission_passing"
             )
-            write_campaign_provenance(
-                campaign_provenance_path, campaign_provenance, log_path
+            _hazard_call(
+                hazard, "provenance_cooldown_anchor", None,
+                lambda: write_campaign_provenance(
+                    campaign_provenance_path, campaign_provenance, log_path
+                ),
+                kind="provenance_unpersisted",
             )
             try:
                 environment_preflight = campaign_environment_preflight(
@@ -8466,35 +10570,52 @@ def run_campaign(args: argparse.Namespace) -> int:
                     override_path=args.environment_override,
                 )
             except Exception as exc:  # noqa: BLE001 - preflight errors fail before member 1
-                environment_error = {
-                    "status": "error",
-                    "reason": f"{type(exc).__name__}: {exc}",
-                }
-                campaign_provenance["environment_preflight"] = environment_error
-                write_campaign_provenance(
-                    campaign_provenance_path, campaign_provenance, log_path
-                )
-                append_environment_preflight_verdict(
-                    log_path,
-                    lock_token=lock_path,
-                    analysis_manifest=analysis_manifest,
-                    campaign_provenance_path=campaign_provenance_path,
-                    preflight=preflight,
-                    environment_guard=environment_error,
-                    reason="environment preflight failed before member 1",
-                    prospective_analysis_manifest=prospective_analysis_manifest,
-                )
-                print(
-                    f"error: environment preflight failed: {exc}",
-                    file=sys.stderr,
-                )
-                return 2
+                if hazard is not None:
+                    environment_preflight = _hazard_preflight_error_record(
+                        policy_binding, exc
+                    )
+                    print(
+                        f"warning: environment preflight failed and was flagged: {exc}",
+                        file=sys.stderr,
+                    )
+                else:
+                    environment_error = {
+                        "status": "error",
+                        "reason": f"{type(exc).__name__}: {exc}",
+                    }
+                    campaign_provenance["environment_preflight"] = environment_error
+                    write_campaign_provenance(
+                        campaign_provenance_path, campaign_provenance, log_path
+                    )
+                    append_environment_preflight_verdict(
+                        log_path,
+                        lock_token=lock_path,
+                        analysis_manifest=analysis_manifest,
+                        campaign_provenance_path=campaign_provenance_path,
+                        preflight=preflight,
+                        environment_guard=environment_error,
+                        reason="environment preflight failed before member 1",
+                        prospective_analysis_manifest=prospective_analysis_manifest,
+                    )
+                    print(
+                        f"error: environment preflight failed: {exc}",
+                        file=sys.stderr,
+                    )
+                    return 2
             campaign_provenance["environment_preflight"] = environment_preflight
-            write_campaign_provenance(
-                campaign_provenance_path, campaign_provenance, log_path
+            _hazard_call(
+                hazard, "provenance_environment_preflight", None,
+                lambda: write_campaign_provenance(
+                    campaign_provenance_path, campaign_provenance, log_path
+                ),
+                kind="provenance_unpersisted",
             )
             preflight["environment_guard"] = environment_preflight
-            if not environment_preflight["admitted"]:
+            if hazard is not None and not environment_preflight["admitted"]:
+                _hazard_stage_preflight_not_admitted(
+                    hazard, environment_preflight, config_dir
+                )
+            elif not environment_preflight["admitted"]:
                 evaluation = environment_preflight["evaluation"]
                 failed_findings = [
                     finding
@@ -8545,17 +10666,21 @@ def run_campaign(args: argparse.Namespace) -> int:
                     continue
                 failures += 1
                 print(f"error: {item.message}", file=sys.stderr)
-                append_log(
-                    log_path,
-                    log_row(
-                        config_path=item.path,
-                        run_id=item.run_id,
-                        status="config_error",
-                        exit_code=None,
-                        duration_s=None,
-                        extra={"error": item.message},
+                _hazard_call(
+                    hazard, "log_config_error", _hazard_member_run_id(item),
+                    lambda: append_log(
+                        log_path,
+                        log_row(
+                            config_path=item.path,
+                            run_id=item.run_id,
+                            status="config_error",
+                            exit_code=None,
+                            duration_s=None,
+                            extra={"error": item.message},
+                        ),
+                        lock_token=lock_path,
                     ),
-                    lock_token=lock_path,
+                    kind="member_iteration_error",
                 )
                 counts["config_error"] += 1
                 if failures >= args.max_failures or (block_limit is not None and failures):
@@ -8658,7 +10783,11 @@ def run_campaign(args: argparse.Namespace) -> int:
                             f"bundle={exc.bundle_id} detail={exc.detail}",
                             file=sys.stderr,
                         )
-                    append_log(log_path, gate_record, lock_token=lock_path)
+                    _hazard_call(
+                        hazard, "log_existing_shakedown_gate", _hazard_member_run_id(info),
+                        lambda: append_log(log_path, gate_record, lock_token=lock_path),
+                        kind="member_iteration_error",
+                    )
                 exit_code = None
                 duration_s = None
                 if status != "failed" and state.members_total is None:
@@ -8687,32 +10816,40 @@ def run_campaign(args: argparse.Namespace) -> int:
                 }
                 assert campaign_provenance_path is not None
                 assert campaign_provenance is not None
-                record_campaign_member_provenance(
-                    campaign_provenance_path,
-                    campaign_provenance,
-                    info=info,
-                    bundle_ids=[evaluation.bundle_id for evaluation in evaluations],
-                    evaluations=evaluations,
-                    execution="existing",
-                    cooldown=(
-                        evaluations[0].preceding_campaign_cooldown
-                        if evaluations
-                        else None
+                _hazard_call(
+                    hazard, "provenance_existing_member", _hazard_member_run_id(info),
+                    lambda: record_campaign_member_provenance(
+                        campaign_provenance_path,
+                        campaign_provenance,
+                        info=info,
+                        bundle_ids=[evaluation.bundle_id for evaluation in evaluations],
+                        evaluations=evaluations,
+                        execution="existing",
+                        cooldown=(
+                            evaluations[0].preceding_campaign_cooldown
+                            if evaluations
+                            else None
+                        ),
+                        existing_invalid=status == "failed",
+                        log_path=log_path,
                     ),
-                    existing_invalid=status == "failed",
-                    log_path=log_path,
+                    kind="provenance_unpersisted",
                 )
-                append_log(
-                    log_path,
-                    log_row(
-                        config_path=config_path,
-                        run_id=info.run_id,
-                        status=status,
-                        exit_code=exit_code,
-                        duration_s=duration_s,
-                        extra=extra,
+                _hazard_call(
+                    hazard, "log_existing_member", _hazard_member_run_id(info),
+                    lambda: append_log(
+                        log_path,
+                        log_row(
+                            config_path=config_path,
+                            run_id=info.run_id,
+                            status=status,
+                            exit_code=exit_code,
+                            duration_s=duration_s,
+                            extra=extra,
+                        ),
+                        lock_token=lock_path,
                     ),
-                    lock_token=lock_path,
+                    kind="member_iteration_error",
                 )
                 counts[status] += 1
                 if block_limit is not None:
@@ -8766,30 +10903,38 @@ def run_campaign(args: argparse.Namespace) -> int:
                 }
                 assert campaign_provenance_path is not None
                 assert campaign_provenance is not None
-                record_campaign_member_provenance(
-                    campaign_provenance_path,
-                    campaign_provenance,
-                    info=info,
-                    bundle_ids=[
-                        evaluation.bundle_id for evaluation in existing_evaluations
-                    ],
-                    evaluations=existing_evaluations,
-                    execution="existing",
-                    cooldown=None,
-                    existing_incomplete=True,
-                    log_path=log_path,
-                )
-                append_log(
-                    log_path,
-                    log_row(
-                        config_path=config_path,
-                        run_id=info.run_id,
-                        status=status,
-                        exit_code=exit_code,
-                        duration_s=duration_s,
-                        extra=extra,
+                _hazard_call(
+                    hazard, "provenance_incomplete_member", _hazard_member_run_id(info),
+                    lambda: record_campaign_member_provenance(
+                        campaign_provenance_path,
+                        campaign_provenance,
+                        info=info,
+                        bundle_ids=[
+                            evaluation.bundle_id for evaluation in existing_evaluations
+                        ],
+                        evaluations=existing_evaluations,
+                        execution="existing",
+                        cooldown=None,
+                        existing_incomplete=True,
+                        log_path=log_path,
                     ),
-                    lock_token=lock_path,
+                    kind="provenance_unpersisted",
+                )
+                _hazard_call(
+                    hazard, "log_incomplete_member", _hazard_member_run_id(info),
+                    lambda: append_log(
+                        log_path,
+                        log_row(
+                            config_path=config_path,
+                            run_id=info.run_id,
+                            status=status,
+                            exit_code=exit_code,
+                            duration_s=duration_s,
+                            extra=extra,
+                        ),
+                        lock_token=lock_path,
+                    ),
+                    kind="member_iteration_error",
                 )
                 counts[status] += 1
                 if failures >= args.max_failures or (block_limit is not None and failures):
@@ -8799,6 +10944,39 @@ def run_campaign(args: argparse.Namespace) -> int:
             assert campaign_provenance_path is not None
             assert campaign_provenance is not None
             physical_bundle_dirs = expected_member_dirs(info, runs_dir)
+            drain_marker = (
+                _hazard_drain_requested(hazard) if hazard is not None else None
+            )
+            if drain_marker is not None and not _hazard_drain_exempt(info):
+                # Row 8: after consecutive member timeouts the window drains;
+                # only the end references still run.  No member is invoked.
+                drained_ids = [path.name for path in physical_bundle_dirs]
+                missing_members.extend(drained_ids)
+                counts["drained"] += 1
+                print(f"drained {info.run_id}: window is draining after member timeouts",
+                      file=sys.stderr)
+                _hazard_call(
+                    hazard, "log_drained_member", _hazard_member_run_id(info),
+                    lambda: append_log(
+                        log_path,
+                        log_row(
+                            config_path=config_path,
+                            run_id=info.run_id,
+                            status="drained",
+                            exit_code=None,
+                            duration_s=None,
+                            extra={
+                                **order_extra,
+                                "drained": {"reason": "consecutive_member_timeouts",
+                                            "marker": str(drain_marker)},
+                                "campaign_provenance_manifest": str(campaign_provenance_path),
+                            },
+                        ),
+                        lock_token=lock_path,
+                    ),
+                    kind="member_iteration_error",
+                )
+                continue
             first_physical_bundle_id = physical_bundle_dirs[0].name
             following_physical_info = replace(
                 info,
@@ -8817,8 +10995,12 @@ def run_campaign(args: argparse.Namespace) -> int:
                     "recorded_at": utc_timestamp(),
                 }
                 campaign_provenance["first_physical_run_id"] = first_physical_bundle_id
-                write_campaign_provenance(
-                    campaign_provenance_path, campaign_provenance, log_path
+                _hazard_call(
+                    hazard, "provenance_first_physical_member", _hazard_member_run_id(info),
+                    lambda: write_campaign_provenance(
+                        campaign_provenance_path, campaign_provenance, log_path
+                    ),
+                    kind="provenance_unpersisted",
                 )
             elif previous_physical_info is not None and previous_physical_evaluation is not None:
                 cooldown_note = campaign_cooldown_before_member(
@@ -8829,6 +11011,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     session_id=campaign_provenance["session_id"],
                     policy_binding=policy_binding,
                     frozen_anchor=frozen_cooldown_anchor,
+                    **_hazard_kwargs(hazard),
                 )
             else:
                 cooldown_note = {
@@ -8838,11 +11021,26 @@ def run_campaign(args: argparse.Namespace) -> int:
                     "following_run_id": first_physical_bundle_id,
                     "recorded_at": utc_timestamp(),
                 }
+            if hazard is not None and cooldown_note.get("result") == "unknown":
+                cooldown_note = _hazard_measured_cooldown(
+                    hazard,
+                    cooldown_note,
+                    following_info=following_physical_info,
+                    runs_dir=runs_dir,
+                    log_path=log_path,
+                    session_evaluations=all_evaluations,
+                    provenance_path=campaign_provenance_path,
+                    session_id=campaign_provenance["session_id"],
+                    policy_binding=policy_binding,
+                )
             cooldown_by_bundle[first_physical_bundle_id] = cooldown_note
 
             if (
                 policy_binding.policy.idle_admission.enabled
                 and cooldown_note.get("result") == "unknown"
+                and not _hazard_cooldown_unknown(
+                    hazard, physical_bundle_dirs, cooldown_note
+                )
             ):
                 blocked_bundle_ids = [path.name for path in physical_bundle_dirs]
                 missing_members.extend(blocked_bundle_ids)
@@ -8853,58 +11051,137 @@ def run_campaign(args: argparse.Namespace) -> int:
                     f"{cooldown_note.get('reason', 'unknown reference')}",
                     file=sys.stderr,
                 )
-                record_campaign_member_provenance(
-                    campaign_provenance_path,
-                    campaign_provenance,
-                    info=info,
-                    bundle_ids=blocked_bundle_ids,
-                    evaluations=[],
-                    execution="blocked_before_invoke",
-                    cooldown=cooldown_note,
-                    log_path=log_path,
-                )
-                append_log(
-                    log_path,
-                    log_row(
-                        config_path=config_path,
-                        run_id=info.run_id,
-                        status="failed",
-                        exit_code=None,
-                        duration_s=None,
-                        extra={
-                            **order_extra,
-                            "preceding_campaign_cooldown": cooldown_note,
-                            "blocked_before_invoke": True,
-                            "campaign_provenance_manifest": str(
-                                campaign_provenance_path
-                            ),
-                        },
+                _hazard_call(
+                    hazard, "provenance_blocked_member", _hazard_member_run_id(info),
+                    lambda: record_campaign_member_provenance(
+                        campaign_provenance_path,
+                        campaign_provenance,
+                        info=info,
+                        bundle_ids=blocked_bundle_ids,
+                        evaluations=[],
+                        execution="blocked_before_invoke",
+                        cooldown=cooldown_note,
+                        log_path=log_path,
                     ),
-                    lock_token=lock_path,
+                    kind="provenance_unpersisted",
+                )
+                _hazard_call(
+                    hazard, "log_blocked_member", _hazard_member_run_id(info),
+                    lambda: append_log(
+                        log_path,
+                        log_row(
+                            config_path=config_path,
+                            run_id=info.run_id,
+                            status="failed",
+                            exit_code=None,
+                            duration_s=None,
+                            extra={
+                                **order_extra,
+                                "preceding_campaign_cooldown": cooldown_note,
+                                "blocked_before_invoke": True,
+                                "campaign_provenance_manifest": str(
+                                    campaign_provenance_path
+                                ),
+                            },
+                        ),
+                        lock_token=lock_path,
+                    ),
+                    kind="member_iteration_error",
                 )
                 if failures >= args.max_failures or (block_limit is not None and failures):
                     break
                 continue
 
+            member_run: _HazardMemberRun | None = None
+            if hazard is not None:
+                # Battery thermistor at the cooldown release: after the gate's
+                # bounded captures, before the child's sampler starts.
+                _hazard_record_battery_temperature(
+                    campaign_provenance,
+                    following_run_id=first_physical_bundle_id,
+                    cooldown_result=cooldown_note.get("result"),
+                )
             start = time.monotonic()
-            result = run_authenticated_campaign_child(
-                command,
-                env=child_environment,
-                outer_authentication=launch_authentication,
-                bundle_paths=expected_member_dirs(info, runs_dir),
-            )
+            absent_child_metadata: list[Path] = []
+            if hazard is not None:
+                result, member_run = _hazard_run_authenticated_campaign_child(
+                    command,
+                    env=child_environment,
+                    outer_authentication=launch_authentication,
+                    bundle_paths=expected_member_dirs(info, runs_dir),
+                    hazard=hazard,
+                    absent=absent_child_metadata,
+                    run_id=info.run_id,
+                )
+            else:
+                result = run_authenticated_campaign_child(
+                    command,
+                    env=child_environment,
+                    outer_authentication=launch_authentication,
+                    bundle_paths=expected_member_dirs(info, runs_dir),
+                )
             duration_s = time.monotonic() - start
             exit_code = result.returncode
-            physical_cooldowns = _physical_cooldown_evidence_for_config(
-                info,
-                runs_dir,
-                cooldown_note,
-                campaign_provenance_path,
-                policy_binding.policy.cooldown,
+            member_timed_out = member_run is not None and member_run.timed_out
+            if member_run is not None:
+                noted = _hazard_call(
+                    hazard, "member_timeout_state", _hazard_member_run_id(info),
+                    lambda: _hazard_note_member_outcome(
+                        hazard,
+                        timed_out=member_timed_out,
+                        bundle_ids=[path.name for path in physical_bundle_dirs],
+                    ),
+                )
+                timeout_count, drain_now = (
+                    noted if noted is not _HAZARD_FAILED else (0, False)
+                )
+                if member_timed_out:
+                    print(
+                        f"timeout {info.run_id}: member ran past the "
+                        f"{HAZARD_MEMBER_CAP_S:.0f} s cap and was terminated"
+                        + ("; the window now drains" if drain_now else ""),
+                        file=sys.stderr,
+                    )
+                    _hazard_flag_member_timeout(
+                        hazard,
+                        [path.name for path in physical_bundle_dirs],
+                        member_run,
+                        consecutive=timeout_count,
+                        drain_now=drain_now,
+                    )
+            if absent_child_metadata:
+                from joulewise.flags import core as flags_core
+
+                for absent_bundle in absent_child_metadata:
+                    print(
+                        f"warning: child bundle has no readable metadata.json "
+                        f"(member failed mid-run): {absent_bundle}",
+                        file=sys.stderr,
+                    )
+                    flags_core.emit(
+                        hazard, "campaign.runner_record_flagged", level="member",
+                        run_id=absent_bundle.name,
+                        observed={"kind": "child_metadata_absent",
+                                  "bundle_dir": absent_bundle.name,
+                                  "returncode": exit_code},
+                        legacy_site="scripts/run_campaign.py:1946@e6b6a0ce",
+                        legacy_code="launch_lineage_conflict",
+                    )
+            physical_cooldowns = _hazard_call(
+                hazard, "physical_cooldown_evidence", _hazard_member_run_id(info),
+                lambda: _physical_cooldown_evidence_for_config(
+                    info,
+                    runs_dir,
+                    cooldown_note,
+                    campaign_provenance_path,
+                    policy_binding.policy.cooldown,
+                ),
             )
+            if physical_cooldowns is _HAZARD_FAILED:
+                physical_cooldowns = {}
             cooldown_by_bundle.update(physical_cooldowns)
             evaluations = evaluate_members(
-                info, runs_dir, waivers, cooldown_by_bundle
+                info, runs_dir, waivers, cooldown_by_bundle, **_hazard_kwargs(hazard)
             )
             all_evaluations.extend(evaluations)
             if evaluations:
@@ -8928,12 +11205,17 @@ def run_campaign(args: argparse.Namespace) -> int:
                         info,
                         policy_binding,
                         source_kind=source_kind,
+                        **_hazard_kwargs(hazard),
                     )
                     if candidate_anchor is not None:
                         frozen_cooldown_anchor = candidate_anchor
                         campaign_provenance["cooldown_anchor"] = candidate_anchor
-                        write_campaign_provenance(
-                            campaign_provenance_path, campaign_provenance, log_path
+                        _hazard_call(
+                            hazard, "provenance_cooldown_anchor_frozen", _hazard_member_run_id(info),
+                            lambda: write_campaign_provenance(
+                                campaign_provenance_path, campaign_provenance, log_path
+                            ),
+                            kind="provenance_unpersisted",
                         )
             missing_after_run = [
                 evaluation.bundle_id
@@ -8950,6 +11232,8 @@ def run_campaign(args: argparse.Namespace) -> int:
                 )
             else:
                 status = "failed"
+            if member_timed_out:
+                status = "timeout"  # HAZARD row 8: counted as a failed member
             shakedown_record: dict[str, Any] | None = None
             if status == "ok" and args.shakedown_gate == "production_uncertainty_v1":
                 bundle = evaluations[0].bundle_path
@@ -8967,8 +11251,12 @@ def run_campaign(args: argparse.Namespace) -> int:
                         f"detail={exc.detail}",
                         file=sys.stderr,
                     )
-                append_log(
-                    log_path, shakedown_record, lock_token=lock_path
+                _hazard_call(
+                    hazard, "log_invoked_shakedown_gate", _hazard_member_run_id(info),
+                    lambda: append_log(
+                        log_path, shakedown_record, lock_token=lock_path
+                    ),
+                    kind="member_iteration_error",
                 )
             if status == "failed":
                 failures += 1
@@ -8996,34 +11284,57 @@ def run_campaign(args: argparse.Namespace) -> int:
                             "ordinary occurrence supersession",
                             file=sys.stderr,
                         )
+            if status == "timeout":
+                failures += 1
             extra = {
                 **order_extra,
                 "members": [evaluation.to_log() for evaluation in evaluations],
                 "preceding_campaign_cooldown": cooldown_note,
                 "campaign_provenance_manifest": str(campaign_provenance_path),
             }
-            record_campaign_member_provenance(
-                campaign_provenance_path,
-                campaign_provenance,
-                info=info,
-                bundle_ids=[evaluation.bundle_id for evaluation in evaluations],
-                evaluations=evaluations,
-                execution="invoked",
-                cooldown=cooldown_note,
-                cooldowns_by_bundle=physical_cooldowns,
-                log_path=log_path,
-            )
-            append_log(
-                log_path,
-                log_row(
-                    config_path=config_path,
-                    run_id=info.run_id,
-                    status=status,
-                    exit_code=exit_code,
-                    duration_s=duration_s,
-                    extra=extra,
+            if member_run is not None:
+                # Yield E: where the child's stderr is, and (for a member that
+                # did not succeed) its last line with digits redacted.
+                extra["child_stderr"] = (
+                    str(member_run.stderr_path) if member_run.stderr_path is not None else None
+                )
+                if status in {"failed", "timeout"}:
+                    extra["child_refusal"] = member_run.child_refusal()
+                if member_run.watch is not None and member_timed_out:
+                    extra["member_timeout"] = {
+                        **member_run.watch.record(),
+                        "teardown": member_run.teardown,
+                    }
+            _hazard_call(
+                hazard, "provenance_invoked_member", _hazard_member_run_id(info),
+                lambda: record_campaign_member_provenance(
+                    campaign_provenance_path,
+                    campaign_provenance,
+                    info=info,
+                    bundle_ids=[evaluation.bundle_id for evaluation in evaluations],
+                    evaluations=evaluations,
+                    execution="invoked",
+                    cooldown=cooldown_note,
+                    cooldowns_by_bundle=physical_cooldowns,
+                    log_path=log_path,
                 ),
-                lock_token=lock_path,
+                kind="provenance_unpersisted",
+            )
+            _hazard_call(
+                hazard, "log_invoked_member", _hazard_member_run_id(info),
+                lambda: append_log(
+                    log_path,
+                    log_row(
+                        config_path=config_path,
+                        run_id=info.run_id,
+                        status=status,
+                        exit_code=exit_code,
+                        duration_s=duration_s,
+                        extra=extra,
+                    ),
+                    lock_token=lock_path,
+                ),
+                kind="member_iteration_error",
             )
             counts[status] += 1
             print(f"{status} {info.run_id}: exit={exit_code} duration_s={duration_s:.3f}")
@@ -9033,7 +11344,11 @@ def run_campaign(args: argparse.Namespace) -> int:
                 and args.backup is not None
                 and args.shakedown_gate is None
             ):
-                backup_runs(runs_dir, backup_script_path(args.backup))
+                _hazard_call(
+                    hazard, "backup_runs", _hazard_member_run_id(info),
+                    lambda: backup_runs(runs_dir, backup_script_path(args.backup)),
+                    kind="member_iteration_error",
+                )
 
             if block_limit is not None:
                 if status != "ok":
@@ -9051,13 +11366,62 @@ def run_campaign(args: argparse.Namespace) -> int:
             return 0
         categories = classify_campaign_members(all_evaluations, missing_members)
         collection_verdict, collection_reasons = collection_verdict_for(categories)
+        if hazard is not None:
+            # S4 (closes A20): no sampling audit, idle-admission core, claim
+            # readiness or claim barrier in the window; one provisional row.
+            print("COLLECTION VERDICT (provisional):")
+            print(f"  verdict: {collection_verdict}")
+            for reason in collection_reasons:
+                print(f"  reason: {reason}")
+            for key in ("usable", "waived", "failed", "missing"):
+                print(f"  {key}: {len(categories[key])}")
+            print("IDLE-ADMISSION CORE: deferred_to_desk")
+            assert lock_path is not None
+            appended = _hazard_call(
+                hazard, "append_minimal_verdict", None,
+                lambda: append_log(
+                    log_path,
+                    _hazard_minimal_verdict_row(
+                        collection_verdict=collection_verdict,
+                        collection_reasons=collection_reasons,
+                        categories=categories,
+                        counts=counts,
+                        analysis_manifest=analysis_manifest,
+                        prospective_analysis_manifest=prospective_analysis_manifest,
+                        campaign_provenance_path=campaign_provenance_path,
+                        warning=order_warning,
+                    ),
+                    lock_token=lock_path,
+                ),
+                kind="stage_verdict_degraded",
+            )
+            campaign_failed = bool(
+                failures
+                or counts["drained"]
+                or collection_verdict in {"blocked", "invalid"}
+                or appended is _HAZARD_FAILED
+            )
+            return 1 if campaign_failed else 0
         sampling_audit = sampling_audit_for(analysis_manifest)
-        idle_admission_core = idle_admission_core_verdict(
-            all_evaluations,
-            policy_binding,
-            runs_root=runs_dir,
-            neg8_drift_bound=neg8_drift_bound,
+        stage_verdict_degraded = False
+        idle_admission_core = _hazard_call(
+            hazard, "idle_admission_core_verdict", None,
+            lambda: idle_admission_core_verdict(
+                all_evaluations,
+                policy_binding,
+                runs_root=runs_dir,
+                neg8_drift_bound=neg8_drift_bound,
+            ),
+            kind="stage_verdict_degraded",
         )
+        if idle_admission_core is _HAZARD_FAILED:
+            stage_verdict_degraded = True
+            idle_admission_core = {
+                "schema_version": IDLE_ADMISSION_CORE_SCHEMA,
+                "policy_sha256": policy_binding.sha256,
+                "members": [],
+                "conditions": ["idle_admission_core_evaluation_error"],
+            }
         extension = policy_binding.idle_admission_extension
         claim_bearing = bool(
             analysis_manifest is not None
@@ -9084,22 +11448,49 @@ def run_campaign(args: argparse.Namespace) -> int:
         else:
             print("  conditions: <none>")
         assert lock_path is not None
-        append_verdict(
-            log_path,
-            lock_token=lock_path,
-            collection_verdict=collection_verdict,
-            collection_reasons=collection_reasons,
-            categories=categories,
-            claim_readiness=claim_readiness,
-            analysis_manifest=analysis_manifest,
-            sampling_audit=sampling_audit,
-            members=all_evaluations,
-            campaign_provenance_path=campaign_provenance_path,
-            warning=order_warning,
-            preflight=preflight,
-            idle_admission_core=idle_admission_core,
-            prospective_analysis_manifest=prospective_analysis_manifest,
+        appended = _hazard_call(
+            hazard, "append_verdict", None,
+            lambda: append_verdict(
+                log_path,
+                lock_token=lock_path,
+                collection_verdict=collection_verdict,
+                collection_reasons=collection_reasons,
+                categories=categories,
+                claim_readiness=claim_readiness,
+                analysis_manifest=analysis_manifest,
+                sampling_audit=sampling_audit,
+                members=all_evaluations,
+                campaign_provenance_path=campaign_provenance_path,
+                warning=order_warning,
+                preflight=preflight,
+                idle_admission_core=idle_admission_core,
+                prospective_analysis_manifest=prospective_analysis_manifest,
+            ),
+            kind="stage_verdict_degraded",
         )
+        if appended is _HAZARD_FAILED:
+            # One minimal retry; if it also fails the flag is the only record.
+            stage_verdict_degraded = True
+            _hazard_call(
+                hazard, "append_verdict_minimal", None,
+                lambda: append_verdict(
+                    log_path,
+                    lock_token=lock_path,
+                    collection_verdict=collection_verdict,
+                    collection_reasons=collection_reasons,
+                    categories=categories,
+                    claim_readiness=claim_readiness,
+                    analysis_manifest=analysis_manifest,
+                    sampling_audit=sampling_audit,
+                    members=[],
+                    campaign_provenance_path=campaign_provenance_path,
+                    warning=order_warning,
+                    preflight=preflight,
+                    idle_admission_core=None,
+                    prospective_analysis_manifest=prospective_analysis_manifest,
+                ),
+                kind="stage_verdict_degraded",
+            )
         core_blocks_claim = bool(
             claim_bearing
             and _idle_admission_claim_barrier_reasons(idle_admission_core)
@@ -9108,6 +11499,7 @@ def run_campaign(args: argparse.Namespace) -> int:
             failures
             or collection_verdict in {"blocked", "invalid"}
             or core_blocks_claim
+            or stage_verdict_degraded
         )
         if block_limit_reached and not campaign_failed:
             assert block_limit is not None and block_limit.last_block is not None
@@ -9126,15 +11518,37 @@ def run_campaign(args: argparse.Namespace) -> int:
             }, lock_token=lock_path)
             return MAX_BLOCKS_REACHED_RC
         return 1 if campaign_failed else 0
+    except _HazardInterrupted:
+        # HAZARD row 8: the member child already got TERM (then KILL after the
+        # grace); record the interruption, then the finally releases the lock.
+        print("interrupted: SIGTERM; member child terminated, campaign lock released",
+              file=sys.stderr)
+        if lock_path is not None:
+            _hazard_call(
+                hazard, "append_interrupted", _HAZARD_SIGNAL_STATE.get("run_id"),
+                lambda: append_log(
+                    log_path,
+                    _hazard_interrupted_row(
+                        run_id=_HAZARD_SIGNAL_STATE.get("run_id"),
+                        campaign_provenance_path=campaign_provenance_path,
+                    ),
+                    lock_token=lock_path,
+                ),
+                kind="member_iteration_error",
+            )
+        return HAZARD_INTERRUPTED_RC
     except BaseException as exc:
         in_flight = exc
         raise
     finally:
         try:
-            remove_campaign(registry_entry)
+            try:
+                remove_campaign(registry_entry)
+            finally:
+                if lock_path is not None:
+                    release_campaign_lock(lock_path, in_flight=in_flight)
         finally:
-            if lock_path is not None:
-                release_campaign_lock(lock_path, in_flight=in_flight)
+            _hazard_restore_sigterm_handler(previous_sigterm)
 
 
 def run_prompt_hash_check(args: argparse.Namespace) -> int:

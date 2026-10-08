@@ -28,6 +28,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
 
 from joulewise import clock_reference as _clock_reference
+from joulewise import kernel_clock as _kernel_clock
 from joulewise import network_time_off as _network_time_off
 from joulewise.identity_pins import (
     IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA,
@@ -5883,6 +5884,17 @@ def resolve_frozen_plan(
     return resolved, relative, plan_id, raw
 
 
+def requires_t0_frequency_gate(pack_root: Path) -> bool:
+    """Current authoring obligations follow the authenticated plan profile.
+
+    This is used only for new captures/authoring. Historical receipt replay
+    continues to interpret each recorded anchor_check_version.
+    """
+    registry, _raw, reference = _registry_reference(pack_root)
+    return any("CLOCK_ATTESTATION" in row.get("required_evidence_kinds", [])
+               for row in _profile_rows(registry, reference["plan_profile"], phase="arm"))
+
+
 def _profile_rows(
     registry: Mapping[str, Any], profile: str, *, phase: str
 ) -> list[Mapping[str, Any]]:
@@ -6404,6 +6416,21 @@ def _authenticate_generic_evidence_item(
                 "evidence fact source is not an object",
             )
         source_payloads[fact["source_path"]] = (source_raw, source_value)
+        if receipt["kind"] == "CLOCK_ATTESTATION" and fact.get("source_kind") == "PROBE":
+            binding = fact.get("value", {}).get("clock_sizing_binding")
+            if (binding is not None or "anchor_check_version" in fact.get("value", {})
+                    and fact["value"].get("t_stream_max_s") is not None):
+                try:
+                    from joulewise.v5_qualification import authenticated_clock_budget, authenticated_reference
+                    binding_path = authenticated_reference(binding)
+                    if binding_path != custody_pack_root / _T0_INPUT_DIRECTORY / "kernel-frequency-binding.json":
+                        raise ValueError("clock sizing binding is outside the selected pack custody")
+                    maximum, refs = authenticated_clock_budget(binding_path.parent, pack_root)
+                    if (fact["value"].get("t_stream_max_s") != maximum
+                            or any(ref not in source_value.get("input_artifacts", []) for ref in refs)):
+                        raise ValueError("clock sizing differs from ARM source attestation")
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    raise ArmReadinessError("readiness_evidence_digest_mismatch", str(exc)) from exc
     if receipt["schema_version"] != EVIDENCE_RECEIPT_SCHEMA:
         if lifecycle_registry is None:
             raise ArmReadinessError(
@@ -6763,6 +6790,10 @@ _CLOCK_PROBE_VALUE_KEYS = frozenset(
         "r1_batch_finished_monotonic_ns",
     }
 )
+_CLOCK_PROBE_RESIDUAL_VALUE_KEYS = _CLOCK_PROBE_VALUE_KEYS | {
+    "anchor_check_version", "r0_kernel_frequency", "kernel_frequency",
+    "anchor_residual_ns", "t_stream_max_s",
+}
 _LIVE_ANCHOR_KEYS = frozenset(
     {"boot_session_id", "realtime_ns", "monotonic_raw_ns", "read_skew_ns"}
 )
@@ -6795,12 +6826,19 @@ def _sample_live_clock_anchor() -> Mapping[str, Any] | None:
         boot_session_id = _current_boot_session_id()
     except Exception:
         return None
-    return {
+    result = {
         "boot_session_id": boot_session_id,
         "realtime_ns": anchor.realtime_ns,
         "monotonic_raw_ns": anchor.monotonic_raw_ns,
         "read_skew_ns": anchor.read_skew_ns,
     }
+    try:
+        result["kernel_frequency"] = _kernel_clock.validate_probe(_kernel_clock.read_kernel_frequency())
+    except Exception:
+        # Historical fixed-bound receipts do not require this new probe. The
+        # versioned predicate still refuses a live anchor missing frequency.
+        pass
+    return result
 
 
 def _clock_probe_predicate_passes(
@@ -6810,7 +6848,13 @@ def _clock_probe_predicate_passes(
 ) -> bool:
     """Recompute every ruled PROBE gate from the published numeric inputs."""
 
-    if set(value) != _CLOCK_PROBE_VALUE_KEYS:
+    residual_version = "anchor_check_version" in value
+    if residual_version:
+        if (value.get("anchor_check_version") != _kernel_clock.ANCHOR_CHECK_VERSION
+                or set(value) not in (_CLOCK_PROBE_RESIDUAL_VALUE_KEYS,
+                                     _CLOCK_PROBE_RESIDUAL_VALUE_KEYS | {"clock_sizing_binding"})):
+            return False
+    elif set(value) != _CLOCK_PROBE_VALUE_KEYS:
         return False
     if any(
         value.get(name) is not True
@@ -6853,6 +6897,31 @@ def _clock_probe_predicate_passes(
             - value["r0_anchor_monotonic_raw_ns"]
         )
     )
+    if residual_version:
+        try:
+            r0_frequency = _kernel_clock.validate_probe(value["r0_kernel_frequency"])
+            frequency = _kernel_clock.validate_probe(value["kernel_frequency"])
+            delta = ((value["anchor_realtime_ns"] - value["anchor_monotonic_raw_ns"])
+                     - (value["r0_anchor_realtime_ns"] - value["r0_anchor_monotonic_raw_ns"]))
+            residual = _kernel_clock.anchor_residual_ns(delta, t0_span, r0_frequency)
+            if (frequency["raw_word"] != r0_frequency["raw_word"]
+                    or type(value["anchor_residual_ns"]) is not float
+                    or value["anchor_residual_ns"] != float(residual)
+                    or residual > 5_000_000):
+                return False
+            stream_max = value["t_stream_max_s"]
+            if "clock_sizing_binding" in value:
+                from joulewise.v5_qualification import authenticated_clock_budget, authenticated_reference, read
+                binding_path = authenticated_reference(value["clock_sizing_binding"])
+                maximum, _refs = authenticated_clock_budget(binding_path.parent, Path(read(binding_path)["pack_root"]))
+                if stream_max != maximum:
+                    return False
+            if stream_max is not None and not _kernel_clock.frequency_gate(r0_frequency, stream_max)["passes"]:
+                return False
+        except (OSError, KeyError, ValueError, TypeError, OverflowError, ZeroDivisionError):
+            return False
+    elif anchor_delta > 5_000_000:
+        return False
     r1_duration = (
         value["r1_batch_finished_monotonic_raw_ns"]
         - value["r1_batch_started_monotonic_raw_ns"]
@@ -6861,7 +6930,7 @@ def _clock_probe_predicate_passes(
         600_000_000_000 <= value["t0_span_ns"] <= 3_600_000_000_000
         and value["t0_span_ns"] == t0_span
         and value["anchor_delta_ns"] == anchor_delta
-        and 0 <= value["anchor_delta_ns"] <= 5_000_000
+        and 0 <= value["anchor_delta_ns"]
         and 0 <= value["r0_anchor_read_skew_ns"] <= 1_000_000
         and 0 <= value["anchor_read_skew_ns"] <= 1_000_000
         and 0 <= value["r1_batch_duration_ns"] <= 30_000_000_000
@@ -6882,7 +6951,9 @@ def _clock_probe_predicate_passes(
         # Missing/None is a programming error for a live PROBE evaluation and
         # deliberately fails closed instead of sampling implicitly here.
         return False
-    if set(live_clock_anchor) != _LIVE_ANCHOR_KEYS or any(
+    live_keys = _LIVE_ANCHOR_KEYS | {"kernel_frequency"} if residual_version else _LIVE_ANCHOR_KEYS
+    if (set(live_clock_anchor) != live_keys and not (
+            not residual_version and set(live_clock_anchor) == _LIVE_ANCHOR_KEYS | {"kernel_frequency"})) or any(
         not _is_real_int(live_clock_anchor.get(name))
         for name in ("realtime_ns", "monotonic_raw_ns", "read_skew_ns")
     ):
@@ -6899,6 +6970,17 @@ def _clock_probe_predicate_passes(
         )
         - (value["anchor_realtime_ns"] - value["anchor_monotonic_raw_ns"])
     )
+    if residual_version:
+        try:
+            live_frequency = _kernel_clock.validate_probe(live_clock_anchor["kernel_frequency"])
+            live_span = live_clock_anchor["monotonic_raw_ns"] - value["anchor_monotonic_raw_ns"]
+            movement = ((live_clock_anchor["realtime_ns"] - live_clock_anchor["monotonic_raw_ns"])
+                        - (value["anchor_realtime_ns"] - value["anchor_monotonic_raw_ns"]))
+            return (live_span >= 0
+                    and live_frequency["raw_word"] == r0_frequency["raw_word"]
+                    and _kernel_clock.anchor_residual_ns(movement, live_span, r0_frequency) <= 5_000_000)
+        except (ValueError, TypeError):
+            return False
     return live_delta <= 5_000_000
 
 
@@ -9491,12 +9573,34 @@ def _read_launch_binding_artifact(
     return raw
 
 
+def authenticated_stage_list(window_root: Path, chain_raw: bytes) -> dict[str, str] | None:
+    """Preflight the dispatch list against its digest in the permitted chain."""
+    text = chain_raw.decode("utf-8")
+    if "before_midpoint_stages.txt" not in text:
+        return None
+    hashes = re.findall(r'(?m)^test .*shasum -a 256 .*before_midpoint_stages\.txt.* = "([0-9a-f]{64})"$', text)
+    if len(hashes) != 1:
+        raise ValueError("dispatch stage list has no unique authenticated digest")
+    path = window_root / "before_midpoint_stages.txt"
+    if any(p.is_symlink() for p in (path, *path.parents)) or not path.is_file():
+        raise ValueError("dispatch stage list is missing or not regular")
+    raw = path.read_bytes()
+    stages = raw.decode("utf-8").splitlines()
+    if (sha256_bytes(raw) != hashes[0] or not stages or len(stages) != len(set(stages))
+            or raw != ("\n".join(stages) + "\n").encode()
+            or any(not stage or Path(stage).is_absolute() or ".." in Path(stage).parts
+                   or not stage.startswith("configs/") for stage in stages)):
+        raise ValueError("dispatch stage list differs from its authenticated chain")
+    return {"path": str(path), "sha256": sha256_bytes(raw)}
+
+
 def _attested_launch_artifact_references(
     pack_root: Path,
     custody_pack_root: Path,
     arm_receipt: Mapping[str, Any],
     *,
     launch_binding_cache: dict[Path, bytes],
+    now_monotonic_ns: int | None = None,
 ) -> dict[str, dict[str, str]]:
     """Resolve the digest-bound T-0 LAUNCH_RECIPE input identities."""
 
@@ -9515,6 +9619,7 @@ def _attested_launch_artifact_references(
                 expected_pack_sha256=arm_receipt["pack"]["pack_sha256"],
                 expected_head_commit=arm_receipt["reviewed_main"]["head_commit"],
                 expected_boot_session_id=arm_receipt["boot_session_id"],
+                now_monotonic_ns=now_monotonic_ns,
                 launch_binding_cache=launch_binding_cache,
             )
             if _predicate_passes(
@@ -9595,6 +9700,21 @@ def _attested_launch_artifact_references(
                 if Path(item["path"]).name == "window-chain.zsh"
             ],
         }
+        chain_reference = selections["window_chain"]
+        if len(chain_reference) == 1:
+            # The chain bytes come from the reconciliation cache, so the stage
+            # list is authenticated against the same bytes whose digest is
+            # reconciled, and the chain is read once (frozen byte limit).
+            chain_path = Path(chain_reference[0]["path"])
+            chain_raw = _read_launch_binding_artifact(
+                chain_path.resolve(strict=True),
+                max_bytes=_LAUNCH_BINDING_CHAIN_MAX_BYTES,
+                label="window chain",
+                cache=launch_binding_cache,
+            )
+            stage = authenticated_stage_list(chain_path.parent, chain_raw)
+            if stage is not None:
+                selections["stage_list"] = [item for item in artifacts if item == stage]
         if any(len(items) != 1 for items in selections.values()):
             raise ValueError("launch-recipe artifact identities are ambiguous")
         return {name: dict(items[0]) for name, items in selections.items()}
@@ -9631,6 +9751,7 @@ def _reconcile_launch_binding(
     window_chain_sha256: str,
     exec_argv: Sequence[str],
     launch_binding_cache: dict[Path, bytes],
+    now_monotonic_ns: int | None = None,
 ) -> None:
     """Bind supplied launch inputs to the arm-attested T-0 identities."""
 
@@ -9639,7 +9760,23 @@ def _reconcile_launch_binding(
         custody_pack_root,
         arm_receipt,
         launch_binding_cache=launch_binding_cache,
+        now_monotonic_ns=now_monotonic_ns,
     )
+    # This executes inside capability reconciliation, before the atomic claim.
+    # The author also attests these bytes, so a deleted/changed list cannot
+    # spend launch authority merely by deferring refusal to the shell chain.
+    try:
+        chain_raw = _read_launch_binding_artifact(
+            Path(str(window_chain_reference["path"])).resolve(strict=True),
+            max_bytes=_LAUNCH_BINDING_CHAIN_MAX_BYTES,
+            label="window chain",
+            cache=launch_binding_cache,
+        )
+        stage = authenticated_stage_list(window_plan_root, chain_raw)
+        if stage is not None and attested.get("stage_list") != stage:
+            raise ValueError("dispatch stage list differs from launch attestation")
+    except (OSError, ValueError) as exc:
+        raise LaunchLineageError("launch_binding_mismatch", str(exc)) from exc
     try:
         canonical_manifest = (
             custody_pack_root / _T0_INPUT_DIRECTORY / "launch-manifest.json"
@@ -9914,8 +10051,18 @@ def _authenticate_go_t0_evidence(go, arm, custody_pack_root: Path, night_root: P
             raise _go_invalid("t0_evidence receipt binding/expiry")
     previous = -1
     for step, path in zip(author._CAPTURE_FILES, capture_paths, strict=True):
-        value = _require_exact_keys(parse_json_bytes(path.read_bytes()), author._CAPTURE_KEYS,
-                                    "t0_evidence.capture")
+        raw_value = parse_json_bytes(path.read_bytes())
+        keys = author._CAPTURE_KEYS
+        if step == "clock-reference" and isinstance(raw_value, Mapping) and "kernel_frequency" in raw_value:
+            keys = keys | {"kernel_frequency", "t_stream_max_s"}
+            try:
+                _kernel_clock.validate_probe(raw_value["kernel_frequency"])
+                stream_max = raw_value.get("t_stream_max_s")
+                if stream_max is not None and not _kernel_clock.frequency_gate(raw_value["kernel_frequency"], stream_max)["passes"]:
+                    raise ValueError("R0 kernel frequency exceeds the stream clock budget")
+            except (TypeError, ValueError) as exc:
+                raise _go_invalid("t0_evidence kernel frequency") from exc
+        value = _require_exact_keys(raw_value, keys, "t0_evidence.capture")
         start, end = value["started_monotonic_ns"], value["finished_monotonic_ns"]
         if (value["schema_version"] != author._COMMAND_SCHEMA or value["step_id"] != step
                 or value["boot_session_id"] != arm["boot_session_id"]
@@ -9927,20 +10074,20 @@ def _authenticate_go_t0_evidence(go, arm, custody_pack_root: Path, night_root: P
         previous = end
 
 
-def _authenticate_launcher_identity(measurement_root) -> Path:
+def _authenticate_launcher_identity(measurement_root, *, live: bool = True) -> Path:
     path = Path(measurement_root)
     if not path.is_absolute() or any(p.is_symlink() for p in (path, *path.parents)):
         raise _go_invalid("measurement_root")
     try:
-        path = path.resolve(strict=True)
+        path = path.resolve(strict=live)
     except (OSError, RuntimeError) as exc:
         raise _go_invalid("measurement_root: resolution_error") from exc
-    if path != Path(__file__).resolve().parents[1]:
+    if live and path != Path(__file__).resolve().parents[1]:
         raise _go_invalid("measurement_root: launcher is not the planned clone")
     return path
 
 
-def _authenticate_go_purpose(go, arm, plan) -> None:
+def _authenticate_go_purpose(go, arm, plan, *, live: bool = True) -> None:
     from joulewise.t0_rehearsal import REHEARSAL_WINDOW_PREFIX
 
     prefixed = arm["pack"]["window_id"].startswith(REHEARSAL_WINDOW_PREFIX)
@@ -9949,7 +10096,7 @@ def _authenticate_go_purpose(go, arm, plan) -> None:
         raise _go_invalid("rehearsal_purpose_on_production_id")
     if prefixed and not rehearsal:
         raise _go_invalid("purpose")
-    measurement = _authenticate_launcher_identity(plan["measurement_root"])
+    measurement = _authenticate_launcher_identity(plan["measurement_root"], live=live)
     if rehearsal:
         from joulewise.t0_rehearsal import _contains
 
@@ -9967,7 +10114,7 @@ def _authenticate_go_purpose(go, arm, plan) -> None:
             if not path.is_absolute() or any(p.is_symlink() for p in (path, *path.parents)):
                 raise _go_invalid(field)
             try:
-                path = path.resolve(strict=True)
+                path = path.resolve(strict=live)
             except (OSError, RuntimeError) as exc:
                 raise _go_invalid(field + ": resolution_error") from exc
             for root in production:
@@ -10035,6 +10182,7 @@ def _authenticate_pack_launch_go(
     arm, arm_sha256, custody_pack_root, manifest_ref, env_ref, chain_ref,
     step6_confirmation_table, expected_confirmation_digest,
     require_current_boot: bool, at_monotonic_ns: int,
+    require_unexpired: bool = True,
     expected_plan_sha256: str | None = None,
     launch_binding_cache: dict[Path, bytes] | None = None,
 ) -> tuple[dict[str, Any], tuple[int, int]]:
@@ -10079,7 +10227,7 @@ def _authenticate_pack_launch_go(
         if not custody_pack_root.resolve().is_relative_to(night_root):
             raise _go_invalid("night_plan.custody_root")
         expected = {
-            "plan_id": arm["pack"]["plan_id"], "pack_id": arm["pack"]["pack_id"],
+            "plan_id": plan["plan_id"] if "previous_attempt" in plan else arm["pack"]["plan_id"], "pack_id": arm["pack"]["pack_id"],
             "pack_sha256": arm["pack"]["pack_sha256"],
             "repo_head": arm["reviewed_main"]["head_commit"],
             "boot_session_id": arm["boot_session_id"],
@@ -10123,8 +10271,19 @@ def _authenticate_pack_launch_go(
             if any(go[go_key][key] != reference[key] for key in ("path", "sha256")):
                 raise _go_invalid(go_key)
         authorization = _go_record(go["authorization"], "authorization", night_root)
-        _require_exact_keys(authorization, {"purpose", "attempt_id", "claim_eligible", "pack_sha256",
-            "permitted_chain_sha256", "permitted_blocks", "authority"}, "authorization")
+        authorization_keys = {"purpose", "attempt_id", "claim_eligible", "pack_sha256",
+            "permitted_chain_sha256", "permitted_blocks", "authority"}
+        if "previous_attempt" in plan:
+            from joulewise.night_gate import validate_attempt_bindings
+            validate_attempt_bindings(plan["previous_attempt"], plan.get("block_archive_root"),
+                                      plan.get("null_reservation_restore"))
+            history_keys = {"previous_attempt", "block_archive_root"}
+            if "null_reservation_restore" in plan:
+                history_keys.add("null_reservation_restore")
+            authorization_keys |= history_keys
+            if any(authorization.get(key) != plan[key] for key in history_keys):
+                raise _go_invalid("authorization.attempt_history")
+        _require_exact_keys(authorization, authorization_keys, "authorization")
         for key in ("purpose", "attempt_id", "claim_eligible"):
             if type(authorization[key]) is not type(go["authorization"][key]) or authorization[key] != go["authorization"][key]:
                 raise _go_invalid(f"authorization.{key}")
@@ -10189,7 +10348,7 @@ def _authenticate_pack_launch_go(
                         record.get("refusal") is None for record in records)
         if not census_matched:
             raise _go_invalid("census.timestamp_lineage")
-        _authenticate_go_purpose(go, arm, plan)
+        _authenticate_go_purpose(go, arm, plan, live=require_current_boot and require_unexpired)
         return {
             "go_receipt": {"receipt_id": go["receipt_id"], "path": str(go_path), "sha256": digest,
                 "purpose": go["purpose"], "receipt_class": go["receipt_class"],
@@ -10231,6 +10390,7 @@ def _replay_consumed_go(consumption, arm, path, *, require_current_boot, require
         expected_plan_sha256=consumption["night_plan"]["sha256"],
         launch_binding_cache=launch_binding_cache,
         require_current_boot=require_current_boot,
+        require_unexpired=require_unexpired,
         at_monotonic_ns=time.monotonic_ns() if require_current_boot and require_unexpired
                         else consumption["consumed_at_monotonic_ns"],
     )
@@ -10348,6 +10508,9 @@ def verify_consumed_launch(
         window_chain_sha256=consumption["window_chain"]["sha256"],
         exec_argv=consumption["exec_argv"],
         launch_binding_cache=launch_binding_cache,
+        # Historical evidence must have been valid at consumption. Live
+        # verification retains the current-clock expiry check.
+        now_monotonic_ns=None if require_current_boot else consumption["consumed_at_monotonic_ns"],
     )
     if expected_exec_argv is not None and list(expected_exec_argv) != manifest_argv:
         raise LaunchLineageError(
@@ -10949,6 +11112,22 @@ def authenticate_launch_lineage(
 ) -> dict[str, Any]:
     """Authenticate one immutable consumption→start→settle→completion chain."""
 
+    from joulewise import window_lineage as _window_lineage  # noqa: PLC0415
+
+    if _window_lineage.is_hazard_lineage(value):
+        # HAZARD_PACK schema dispatch: no ARM receipt exists, so the chain
+        # below (and its _replay_consumed_arm) is never entered.
+        try:
+            return _window_lineage.authenticate_lineage(
+                value,
+                require_completion=require_completion,
+                expected_pack_root=expected_pack_root,
+                require_current_boot=require_current_boot,
+                require_completion_absent=require_completion_absent,
+            )
+        except _window_lineage.HazardLineageError as exc:
+            raise LaunchLineageError(exc.reason_code, str(exc)) from exc
+
     launch_binding_cache: dict[Path, bytes] = {}
     if require_completion and require_completion_absent:
         raise ValueError(
@@ -11245,6 +11424,16 @@ def _read_launch_lineage_locator(
     expected_root: Path,
     expected_role: str | None = None,
 ) -> tuple[Mapping[str, Any], str]:
+    from joulewise import window_lineage as _window_lineage  # noqa: PLC0415
+
+    if _window_lineage.is_hazard_locator(path):
+        # HAZARD_PACK schema dispatch; ARM locators fall through unchanged.
+        try:
+            return _window_lineage.read_locator(
+                path, expected_root=expected_root, expected_role=expected_role
+            )
+        except _window_lineage.HazardLineageError as exc:
+            raise LaunchLineageError(exc.reason_code, str(exc)) from exc
     if path.name != LAUNCH_LINEAGE_LOCATOR_BASENAME:
         raise LaunchLineageError(
             "launch_binding_mismatch",
@@ -11359,6 +11548,17 @@ def authenticate_campaign_launch_lineage(
     config_paths: Sequence[Path | str] = (),
 ) -> dict[str, Any]:
     """Derive and authenticate the campaign writer's fixed root-local locator."""
+
+    from joulewise import window_lineage as _window_lineage  # noqa: PLC0415
+
+    if _window_lineage.is_hazard_runs_root(runs_root):
+        # HAZARD_PACK schema dispatch: same return shape, config-bytes check kept.
+        try:
+            return _window_lineage.authenticate_campaign(
+                runs_root, config_paths=config_paths
+            )
+        except _window_lineage.HazardLineageError as exc:
+            raise LaunchLineageError(exc.reason_code, str(exc)) from exc
 
     try:
         selected_root = Path(runs_root).resolve(strict=True)
@@ -11496,6 +11696,19 @@ def authenticate_bundle_launch_lineage(
             "launch_consumption_missing",
             "bundle launch-lineage stamp is absent",
         )
+    from joulewise import window_lineage as _window_lineage  # noqa: PLC0415
+
+    if _window_lineage.is_hazard_lineage(lineage):
+        # HAZARD_PACK schema dispatch on the bundle's own stamp.
+        try:
+            return _window_lineage.authenticate_bundle(
+                path,
+                lineage=lineage,
+                locator_sha256=extra.get("launch_lineage_locator_sha256"),
+                require_completion=require_completion,
+            )
+        except _window_lineage.HazardLineageError as exc:
+            raise LaunchLineageError(exc.reason_code, str(exc)) from exc
     locator_digest = (
         extra.get("launch_lineage_locator_sha256")
         if isinstance(extra, Mapping)
