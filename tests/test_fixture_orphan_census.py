@@ -167,16 +167,37 @@ class FixtureOrphanCensusTests(unittest.TestCase):
     def test_block5_driver_fakes_are_fixture_signatures(self) -> None:
         # Test hygiene (2026-10-07): the fake KM003C meter and the fake hazard
         # monitor leaked from the driver suites (21:27 cleanup, 2026-10-06).
-        # ps renders their -c sources' newlines as \012 (observed on macOS 26).
+        # Both are `python -c <source>` and the source has newlines. ps prints
+        # the whole command on one line, so each ps writes a newline its own way:
+        #   macOS ps: the four characters \012 (observed on macOS 26, in the C
+        #     and the UTF-8 locale);
+        #   Linux procps ps: one space (procps v4.0.4 library/readproc.c,
+        #     read_unvectored, turns '\n' and the NUL between arguments into the
+        #     separator, a space, before any escaping).
+        # A signature that knows only one of the two is blind on the other
+        # system: the first Linux run of the live test below found nothing.
         from tests.test_b5_driver import FAKE_MONITOR
         from tests.test_b5_driver_p3 import FAKE_METER
         python = "/opt/homebrew/Cellar/python@3.13/3.13.1/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python"
-        meter = f"{python} -c {FAKE_METER.replace(chr(10), chr(92) + '012')} streaming --out /private/tmp/x/hazards/meter/stream-001.jsonl"
-        monitor = f"{python} -c {FAKE_MONITOR.replace(chr(10), chr(92) + '012')} /private/tmp/x/custody 600.0 0"
-        for command, expected in ((meter, "b5-fake-km003c-meter"), (monitor, "b5-fake-hazard-monitor")):
-            with self.subTest(expected=expected):
-                self.assertEqual([item["signature"] for item in sentinel.census(row(command), self.signatures)],
-                                 [expected])
+        for system, newline in (("macOS", chr(92) + "012"), ("Linux", " ")):
+            meter = f"{python} -c {FAKE_METER.replace(chr(10), newline)} streaming --out /private/tmp/x/hazards/meter/stream-001.jsonl"
+            monitor = f"{python} -c {FAKE_MONITOR.replace(chr(10), newline)} /private/tmp/x/custody 600.0 0"
+            for command, expected in ((meter, "b5-fake-km003c-meter"), (monitor, "b5-fake-hazard-monitor")):
+                with self.subTest(system=system, expected=expected):
+                    self.assertEqual([item["signature"] for item in sentinel.census(row(command), self.signatures)],
+                                     [expected])
+        # The two renderings are named, not wildcarded: the same two source
+        # lines joined any other way are a different program, not the fixture.
+        # The first two rows are the control: this short command does match
+        # when the join is one of the two renderings.
+        for joined, is_fixture in ((chr(92) + "012", True), (" ", True),
+                                   ("; ", False), ("", False), ("X", False), ("\t", False), ("  ", False)):
+            meter = f"{python} -c import json, pathlib, signal, sys, time{joined}mode, out = sys.argv[1] streaming"
+            monitor = f"{python} -c import json, os, pathlib, sys, time{joined}custody, life, code = sys.argv[1:4]"
+            for command, expected in ((meter, "b5-fake-km003c-meter"), (monitor, "b5-fake-hazard-monitor")):
+                with self.subTest(joined=joined, expected=expected):
+                    self.assertEqual([item["signature"] for item in sentinel.census(row(command), self.signatures)],
+                                     [expected] if is_fixture else [])
         for command in (f"{python} /Users/edr/code/JouleWise/scripts/km003c_monitor.py --out /x/stream-001.jsonl",
                         f"{python} -m joulewise.hazards.monitor --config /x/hazards/monitor.json"):
             with self.subTest(production=command):
@@ -207,7 +228,11 @@ class FixtureOrphanCensusTests(unittest.TestCase):
             if rows:
                 break
             time.sleep(0.1)
-        self.assertEqual([item["signature"] for item in rows], ["b5-fake-km003c-meter"])
+        # On failure, say what ps printed for the orphan: its parent (the census
+        # reports only children of PID 1) and how its command line was written.
+        seen = [line for line in sentinel.process_inventory().splitlines() if line.split()[:1] == [str(pid)]]
+        self.assertEqual([item["signature"] for item in rows], ["b5-fake-km003c-meter"],
+                         f"ps row for the orphan (pid, parent, start, rss, command): {seen!r}")
         self.assertEqual(process_reaper.reap(str(directory)), [pid])
         with self.assertRaises(ProcessLookupError):
             os.kill(pid, 0)

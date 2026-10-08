@@ -124,6 +124,7 @@ sys.modules[_spec.name] = g10
 _spec.loader.exec_module(g10)
 
 _REAL_SUBPROCESS_RUN = subprocess.run
+_REAL_SLEEP = time.sleep
 NS = 1_000_000_000
 WORD_TODAY = -207_749      # -3.17 ppm in the kernel's 2**-16 ppm units
 WORD_FAILS_GATE = 239_862  # 3.66 ppm: above the 3.63 ppm the next arm's gate allows at 335 s
@@ -265,6 +266,31 @@ def no_real_machine_calls(monkeypatch):
     yield
     after = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGHUP)}
     assert after == before, "signal handlers were not restored"
+
+
+def real_child(argv, **kwargs):
+    """Run a real child process from inside ``no_real_machine_calls``.
+
+    The standard library waits for a child with a timeout in a loop
+    (``subprocess.Popen._wait``): it asks the kernel whether the child has
+    exited and, when the answer is "not yet", calls ``time.sleep`` and asks
+    again. ``subprocess.run(capture_output=True, timeout=...)`` enters that
+    loop as soon as the child's output pipes reach end-of-file. A child closes
+    its pipes a moment before the kernel reports it as exited, so the first
+    answer can be "not yet". On Linux that is the usual order; on macOS it is
+    rare, which is why the guard's ``time.sleep`` refusal only fired on Linux.
+
+    That sleep belongs to the standard library in this process. The code under
+    test runs in the child, where this process's guard has no effect either
+    way. So the real ``time.sleep`` is put back for the duration of this one
+    call, and whatever was installed before (the guard) is restored after it.
+    """
+    installed = time.sleep
+    time.sleep = _REAL_SLEEP
+    try:
+        return _REAL_SUBPROCESS_RUN(argv, **kwargs)
+    finally:
+        time.sleep = installed
 
 
 def run(mac, tmp_path, **params):
@@ -783,10 +809,32 @@ def test_network_time_argv_matches_the_sudoers_slice():
     assert env.run is g10.real_run and env.read_frequency is g10.real_read_frequency
 
 
+def test_real_child_waits_with_the_real_sleep_and_puts_the_guard_back():
+    # The child closes both output pipes and only then lingers, so the parent
+    # reaches end-of-file while the child is still running and the standard
+    # library's wait loop must sleep. This forces, on every platform, the order
+    # that Linux produces by itself for an ordinary child.
+    lingering = "import os, time; os.close(1); os.close(2); time.sleep(0.2)"
+    guard = time.sleep
+    assert guard is not _REAL_SLEEP, "this test must run inside no_real_machine_calls"
+    with raises(AssertionError):
+        _REAL_SUBPROCESS_RUN([sys.executable, "-B", "-c", lingering],
+                             capture_output=True, text=True, timeout=60)
+    result = real_child([sys.executable, "-B", "-c", lingering],
+                        capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0
+    assert time.sleep is guard
+    with raises(AssertionError):
+        time.sleep(0)
+    with raises(FileNotFoundError):
+        real_child([str(REPO_ROOT / "no-such-program")], capture_output=True, timeout=60)
+    assert time.sleep is guard
+
+
 def test_script_help_and_import_stay_off_the_retired_path():
-    help_result = _REAL_SUBPROCESS_RUN([sys.executable, "-B", str(SCRIPT), "--help"],
-                                       capture_output=True, text=True, timeout=60,
-                                       cwd=str(REPO_ROOT))
+    help_result = real_child([sys.executable, "-B", str(SCRIPT), "--help"],
+                             capture_output=True, text=True, timeout=60,
+                             cwd=str(REPO_ROOT))
     assert help_result.returncode == 0 and "--night-dir" in help_result.stdout
     probe_code = (
         "import importlib.util, sys\n"
@@ -797,8 +845,8 @@ def test_script_help_and_import_stay_off_the_retired_path():
         " 'joulewise.t0_rehearsal', 'joulewise.v5_qualification', 'joulewise.flags',"
         " 'scripts.capture_t0_step', 'scripts.launch_window'))]\n"
         "print(bad)\n")
-    result = _REAL_SUBPROCESS_RUN([sys.executable, "-B", "-c", probe_code], capture_output=True,
-                                  text=True, timeout=60, cwd=str(REPO_ROOT))
+    result = real_child([sys.executable, "-B", "-c", probe_code], capture_output=True,
+                        text=True, timeout=60, cwd=str(REPO_ROOT))
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "[]"
 
