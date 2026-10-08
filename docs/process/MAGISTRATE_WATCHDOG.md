@@ -51,6 +51,37 @@ derivation-night runbook lists the CLI's exit-2 refusals.
 
 ## Fence and deadlines
 
+**Updated 2026-10-07 for measurement block 5.** The watchdog's code changed
+after the text of this section was written, and the older text is kept below
+as it was. Four statements in this section and in "LEAD-MARGIN-01 timing
+derivation" are no longer what `scripts/magistrate_watchdog.py` does; its
+constants and functions are the authority.
+
+1. The leads are shorter. The plan span and the stand-down request both begin
+   at `t0 - 180 s` (`PLAN_LEAD_S`, `REQUEST_LEAD_S`); TERM is sent at
+   `t0 - 90 s` (`TERM_LEAD_S`) and KILL at `t0 - 60 s` (`KILL_LEAD_S`). Read
+   these three values wherever the text below says `t0 - 8 minutes`,
+   `t0 - 6 min` and `t0 - 5 min`. The request file carries the two signal
+   instants as `term_epoch_s` and `kill_epoch_s`, and its courtesy field
+   `exit_within_s` is 90. The load arithmetic of the timing derivation
+   describes the older ladder and is kept as history.
+2. A finished window of plan class `HAZARD_PACK` (the class of every block-5
+   window) is released before its span would otherwise end: once its result
+   record `night/result.json` and its delivery record `night/courier.sent`
+   exist, its chain is not open, and a tick finds no agent process, no driver
+   process and no process whose command line names the plan's custody root
+   (`arm_retry.terminal_window_release`, `_terminal_release_observed`).
+   Without `night/courier.sent` rule 3 of the list below still holds, so a
+   window whose courier could not send stays fenced through
+   `deadman_epoch(plan) + COURIER_LOCK_FRESH_S`.
+3. A `HAZARD_PACK` plan whose `night/` directory holds no record
+   `LAUNCH_LIVENESS_S` (900 s) after `t0` is treated as a launch that never
+   happened, and its span is released (`_launch_liveness_candidate`).
+4. The driver's yield alerts, the files `night/yield_alert-*.json` that say a
+   stage collected fewer members than it needs, are queued once each as pending
+   notices for the next session (`queue_yield_alerts`). Reading one changes no
+   fence, release or launch.
+
 **Updated 2026-09-15 — INSTALL-WINDOWS-MULTI-01.** All watchdog plan
 arithmetic uses epoch seconds (seconds since 1970-01-01 00:00 UTC);
 recurring install spans and launchd calendar fields resolve local time. `scripts/run_night.py` owns
