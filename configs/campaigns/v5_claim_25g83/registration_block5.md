@@ -2968,12 +2968,12 @@ REPRESENTATION as a restatement). It costs one unit and should never fire.
 ### 6.8 Disclosed only
 
 All REPRESENTATION flags: lineage formalities other than the configuration bytes (`lineage.*` except the
-plan-tree digest), the pin ledger, missing or malformed
-monitor journals, missing arm or terminal records, collector failures; the OFF action's output
-(`network_time.off_output`). (Earlier revisions also listed here receipts, attempt history, provenance digests,
-naming and notices, the time-server offset, and monitor probes falling inside phases. Their codes are DISCLOSE in
-the catalog, but no program writes them: with `battery.accumulator_diagnostic` they are eight of the nine reserved
-codes of §6.2 and cannot fire.) Also disclosed only: a missing #421 per-capture pair
+plan-tree digest), the pin ledger, missing or malformed monitor journals, missing arm or terminal records,
+collector failures; the OFF action's output (`network_time.off_output`). (Earlier revisions also listed here
+receipts, attempt history, provenance digests, naming and notices, the time-server offset, and monitor probes
+falling inside phases. Their codes are DISCLOSE in the catalog, but no program writes them: with
+`battery.accumulator_diagnostic` they are eight of the nine reserved codes of §6.2 and cannot fire.) Also
+disclosed only: a missing #421 per-capture pair
 (`battery.capture_pair_missing_covered` when the continuous journal covers the span; `battery.capture_pair_missing`
 otherwise, beside the `battery.unmeasured` that then removes the member); `battery.accumulator_unavailable` (the
 accumulator rule could not run on an interval; the publication rule still applies); clock steps and frequency
@@ -3075,24 +3075,24 @@ claim status is `member.cooldown_evidence_unverified` (EXCLUDE_MEMBER) unless th
 **The cooldown fallback reference** (PLAN2 s2-05). *Forcing problem:* a cooldown is judged against the previous
 member's idle baseline (§0.6). When none is eligible (the stage's first measured member after a refused one, or a
 reference that failed its own quiet checks), revision 4's runner either blocked the next member or ran it with an
-unknown cooldown, which the harvest then removes. *Mechanism:* the runner measures the cooldown anyway, against the
-first reference available in this order: the last eligible idle baseline of this session; else an eligible **frozen
-anchor** anywhere in the window, the NEG-8 start reference's first (a frozen anchor is an idle baseline that an
-earlier stage of the window stored once in its campaign manifest, the record the campaign runner writes for a stage
-under `campaign_manifests/`, as a cooldown reference, `cooldown_anchor`, marked
-`immutable_after_freeze` and never updated; it is eligible when it carries that mark, was stored under the same
-campaign policy, by SHA-256, as this stage runs under, comes from a member whose own reference checks passed with
-their provenance recorded, and its idle window was not suspect: `joulewise/cooldown_anchor.py`
-`cooldown_anchor_eligibility`); else a **self-referenced** test that needs no outside
-reference: two adjacent windows of max(the policy's window, 30 s), each with the policy's coverage, the newest
-window's mean power the reference, and the window before it within min(the policy's tolerance, 10%) of it, with
-thermal state nominal and the policy's 300 s cap. The self-referenced test never runs looser than the cooldown-v2
-defaults (30 s, 10%), because without an idle level a 5 s window cannot tell a slow decay from a plateau. The result
-is an ordinary cooldown record with its raw trace, verified at harvest like any other, and
-`campaign.runner_record_flagged` (`kind: cooldown_fallback_reference`, DISCLOSE) names the reference used.
-*Worked example (synthetic):* no eligible baseline exists; the newest 30 s window averages 0.040 W and the one before
-it 0.043 W, 7.5% apart, at most 10%: the next member starts. Had the earlier window averaged 0.050 W (25% apart),
-power would still be falling and the test would keep waiting, up to 300 s.
+unknown cooldown, which the harvest then removes. *Mechanism:* the runner measures the cooldown anyway, against a
+fallback reference. One kind of fallback is a **frozen anchor**: an idle baseline that an earlier stage of the
+window stored once as a cooldown reference (under `cooldown_anchor` in its campaign manifest, the record the
+campaign runner writes for a stage under `campaign_manifests/`), marked `immutable_after_freeze` and never
+updated. A frozen anchor is eligible when it carries that mark, was stored under the same campaign policy, by
+SHA-256, as this stage runs under, comes from a member whose own reference checks passed with their provenance
+recorded, and its idle window was not suspect (`joulewise/cooldown_anchor.py` `cooldown_anchor_eligibility`). The
+runner takes the first reference available in this order: the last eligible idle baseline of this session; else
+an eligible frozen anchor anywhere in the window, the NEG-8 start reference's first; else a **self-referenced**
+test that needs no outside reference: two adjacent windows of max(the policy's window, 30 s), each with the
+policy's coverage, the newest window's mean power the reference, and the window before it within min(the policy's
+tolerance, 10%) of it, with thermal state nominal and the policy's 300 s cap. The self-referenced test never runs
+looser than the cooldown-v2 defaults (30 s, 10%), because without an idle level a 5 s window cannot tell a slow
+decay from a plateau. The result is an ordinary cooldown record with its raw trace, verified at harvest like any
+other, and `campaign.runner_record_flagged` (`kind: cooldown_fallback_reference`, DISCLOSE) names the reference
+used. *Worked example (synthetic):* no eligible baseline exists; the newest 30 s window averages 0.040 W and the
+one before it 0.043 W, 7.5% apart, at most 10%: the next member starts. Had the earlier window averaged 0.050 W
+(25% apart), power would still be falling and the test would keep waiting, up to 300 s.
 
 **The calibration writer and the bracket reservation** (`scripts/validate_powermetrics_fiducial.py`,
 `scripts/reserve_calibration_window_bracket.py`, `joulewise/calibration_ledger.py`). Every row is
@@ -3152,10 +3152,12 @@ this pass removed the window for a changed file in any earlier capture, includin
 number of this window uses, so the removal protected no number of the window it removed. *Mechanism:* the
 harvest reads the window's acceptance (§0.11) and takes the attempt ids of the captures it was derived from (its
 `derivation_corpus` members, which set the pre screen and the bracket screen) and of the captures it judged before
-issuance (its `prior_observation_set`). On the real acceptance these are all 110 captures the ledger records up to
-its entry number 376, the acceptance's cutoff (§0.11; an entry's number is its sequence, and the entries also
-record bracket sessions, so 376 entries hold 110 captures; the code calls a capture row whose files the ledger
-records by SHA-256 a governed row), as the integrator's triage reports (`FROZEN_HEAD.md`). Then:
+issuance (its `prior_observation_set`). On the real acceptance these are 110 captures: the 110 of its prior
+observation set, among which are the 24 of its derivation corpus (counted by this author from the acceptance
+file). The integrator's triage reports that they are every capture the ledger holds up to its entry number 376,
+the acceptance's cutoff (`FROZEN_HEAD.md`: "all 110 governed rows up to sequence 376"; an entry's number is its
+sequence, §6.5, and the triage's governed rows are the ledger's capture entries, each of which records the
+SHA-256 of its capture's files). Then:
 
 - **changed, and relied on:** `calibration.historical_custody_mismatch` (EXCLUDE_WINDOW, `observed.scope`
   `acceptance_relied`). The acceptance's screens are numbers computed from those captures; changed bytes mean the
@@ -3234,13 +3236,14 @@ relabelled from BASELINE to NUMBER_INTEGRITY), and every EXCLUDE_MEMBER code und
 NUMBER_INTEGRITY, 16 PHYSICS, 4 BASELINE). The 34 window entries and the 36 PHYSICS and NUMBER_INTEGRITY member
 entries each carry a `protects` text that names the quantity or number protected. The four BASELINE member entries
 do not: `member.admission_aborted`, `member.cooldown_evidence_unverified`, `member.strict_validation_failed` and
-`member.target_phase_precheck_failed` carry only a `note` (two say "not reviewed by the census"; two defer to a
-later lane, `LANE_BARRIER`), and the test admits them by name (below). All four are live member exclusions
+`member.target_phase_precheck_failed` carry only a `note`. Two notes say "not reviewed by the census"; the other
+two defer the review to `LANE_BARRIER`, the lane the core-prune design names for reviewing the reducer's
+environment barrier (§6.3). The test admits these four by name (below). All four are live member exclusions
 (§6.3), so they are a standing exception to the rule above: four exclusions whose reason has not been reviewed
-into one of the two classes. The 34 are 33 codes and the
-one pack-scoped reason, `neg8.midpoint_lost_primary` (NUMBER_INTEGRITY, pack GAMMA: "GAMMA's primary contrasts carry a
-drift allowance with no interior-excursion evidence when the arm-boundary midpoint reference is lost"). The 33 codes
-include `g3.recompute_failed`, which the test fixture still marks EXCLUDE_WINDOW (§6.5, §13).
+into one of the two classes. (Revision 10 said every listed exclusion names what it protects.) The 34 are 33
+codes and the one pack-scoped reason, `neg8.midpoint_lost_primary` (NUMBER_INTEGRITY, pack GAMMA: "GAMMA's primary
+contrasts carry a drift allowance with no interior-excursion evidence when the arm-boundary midpoint reference is
+lost"). The 33 codes include `g3.recompute_failed`, which the test fixture still marks EXCLUDE_WINDOW (§6.5, §13).
 
 The test `tests/hazards/test_refusal_allowlist.py` scans those modules' syntax trees on every run and fails when:
 a refusal site appears that the file does not list, or a listed site changes its count or its guarding conditions;
