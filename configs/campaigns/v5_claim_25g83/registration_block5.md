@@ -107,7 +107,8 @@ citations for tracing a rule to the record that motivated it; no rule here depen
    repeating through back-to-back windows.
 5. **Checks that now record instead of refusing** (§5.3, §6.10): the NEG-8 corpus drop rule (one closed list shared
    by the mint and the harvest), physical timestamps for the NEG-8 bound's age, the power-supply and OS-build
-   strings disclosed, the cooldown fallback reference, and the controller, fiducial-writer and reservation records.
+   strings disclosed, the cooldown fallback reference, and the records of the controller (the program that runs
+   one member, §0.3), of the fiducial writer and of the reservation.
    Historical calibration custody is re-verified at the harvest, and a mismatch removes the window. The arm's one
    identity refusal, an OS build and machine model that no acceptance judged, is registered (§4.7).
 6. **GAMMA's interior references** (§0.7, §0.12, §2, §4.6, §5.1, §5.5): lane L10's erratum is applied.
@@ -218,8 +219,9 @@ No registered threshold, sizing value or pinned digest changed.
    (`summary_unreadable`, cold pass 2 D1), and a reference whose model identity is not the sealed one or cannot be
    derived (ruling N8), is lost, not a reason to fail the window. A planned reference that never ran is named
    (`bundle_absent`, N2), and never-run references count toward `references_insufficient` (N3). When the verdict's
-   sources do not authenticate, the harvest still maps losses from the stage manifests in the window's claim runs
-   root (the directory under which its science and reference members are written, §0.17) and fails the screen
+   sources do not authenticate, the harvest still maps losses from the manifests in the window's claim runs root
+   (the directory under which its science and reference members and the runner's own records of each stage are
+   written, §0.17) and fails the screen
    instead of leaving a stored screen standing (N1).
 3. **Smaller changes:** the census also recognises an agent run by its npm package path (§4.5, N5; replaced in
    revision 10 by the rule that reads every argument of a JavaScript runtime); the unusable-pack
@@ -337,10 +339,11 @@ The machine is one Apple M3 Max laptop (model identifier Mac15,9) running macOS 
 adapter. Everything below happens on that one machine.
 
 - **Sampler.** macOS `powermetrics`, asked for one **power record** every 100 ms. It never samples faster than
-  asked; in block 3 the mean length of a record over a member's whole sampler stream was 127.0–131.7 ms across the
-  37 members (median 128.9 ms; recomputed by this author from the records' `elapsed_ns`), and about 130.5 ms over
-  an idle baseline alone (§0.3). Each record states the average power
-  over its own time span (its **support**) of the processor rails, CPU, GPU and ANE combined (`combined_power_w`,
+  asked. In block 3 a record was about 129 ms long: taking the whole sampler output of each of the 37 measured
+  runs, the mean record length was 127.0–131.7 ms (median 128.9 ms; recomputed by this author from the records'
+  `elapsed_ns`), and over the idle stretch that opens each run it was about 130.5 ms (§0.3 builds the run, its
+  sampler stream and its idle baseline). Each record states the average power over its own time span (its
+  **support**) of the processor rails, CPU, GPU and ANE combined (`combined_power_w`,
   `joulewise/adapters/powermetrics.py`).
 
 ### 0.3 A member, step by step
@@ -362,11 +365,13 @@ A **member** is one run of one inference request in its own process. Its steps, 
   this author from the records' `elapsed_ns`: 75.010–76.082 s). 575 records would have fallen short of 75 s on
   11 of the 37. The packs set 75 s until the timing ruling of 2026-10-06 (§0.6); that gave 750 records spanning
   97.7–99.1 s (97.667–99.055 s). **Idle admission** then tests whether the machine was quiet during that baseline
-  (the tests are in §0.13; they did not change). Replayed on the first 75 s of block 3's 37 captures, the unchanged tests changed one
-  verdict, from pass to refuse: the 8B p4096 probe, a workload outside this registration (its CPU-busy 95th
-  percentile rose from 0.469 to 0.576).
+  (the tests are in §0.13; they did not change). Replayed on the first 75 s of block 3's 37 captures, the unchanged
+  tests changed one verdict, from pass to refuse: the 8B p4096 probe, a workload outside this registration (its
+  CPU-busy 95th percentile rose from 0.469 to 0.576).
 - **Warm-up.** One untimed generation of the same request, so the measured request does not pay first-call costs.
 - **Measured request.** The request whose energy is reported: 11.1–23.6 s long in block 3.
+- **Controller.** `joulewise/controller.py`, the program that carries one member through these steps: it starts
+  and stops the sampler, sends the requests, stamps each step on the machine's clocks and writes the bundle.
 - **Reducer.** `joulewise/reduce.py`, which turns the raw power records and the event timestamps into the member's
   summary (`summary_metrics.json`).
 - **Sampler stream.** One continuous `powermetrics` process from the start of the idle baseline to the end of the
@@ -471,8 +476,9 @@ The values in this section follow the cold-judge ruling on block-5 per-member ti
 - **Battery-temperature diagnostic** (recorded, never a refusal or an exclusion). Just before every member starts,
   the first member of a stage included, the runner reads the battery thermistor (`ioreg -rn AppleSmartBattery`, key
   `Temperature`, in hundredths of a degree Celsius; no privileges; after the cooldown's readings, when there is a
-  cooldown, and before the member's sampler stream starts) and writes the reading into the stage's campaign
-  manifest. A stage of N members therefore has N readings, the first taken before its first member, and a
+  cooldown, and before the member's sampler stream starts) and writes the reading into the stage's **campaign
+  manifest**, the file in which the runner records one stage as it runs it (its members, their cooldowns and
+  these readings). A stage of N members therefore has N readings, the first taken before its first member, and a
   one-member stage has one. At harvest (the desk program run after the window, §0.17), for each stage with at least
   two readable readings: the **rise** is the last readable reading minus the first readable one, and the stage has
   a **plateau** when it has at least three readable readings and the last three lie within 0.5 K of each other
@@ -723,9 +729,10 @@ the code and says so.
   before the next stage, counts the stage's members by their summary status alone and writes that count once to
   `neg8-spares-<stage id>.json` in the chain's transcript directory (a 300 s wall budget, §5.1). It then runs the
   spare set of size k = planned − succeeded (at most the stage's spares) once, into the stage's own **runs root**
-  (the directory under which a stage's member bundles, its stage manifests and the campaign log are written; a
-  window has two, §0.17), after
-  the ordinary 60 s settle and under the ordinary cooldown and admission procedure, provided the collection deadline
+  (the directory under which the runner writes a stage's member bundles, its campaign manifest and the **campaign
+  log**, `campaign_log.jsonl`, which has one row for each member launched; a window has two runs roots, §0.17),
+  after the ordinary 60 s settle and under the ordinary cooldown and admission procedure, provided the collection
+  deadline
   allows 60 + 180 + 620 × k s (§5.1). The run is the stage's own command line with two changes: its config directory
   is the spare set's, and it passes `--max-failures k` (the runner's limit on failed members before it ends a stage,
   §5.2), so one failed spare does not stop the spares after it (`chain.spare_argv`). The failed attempt's bundle is
@@ -865,13 +872,13 @@ that member's unit (§6.3).
   padding. A member is **`bounded`** only when all six of the following hold (the default method,
   `derive_powermetrics_anchor_v3`):
   - (a) *Enough stream to fix a rate.* The durations of the records after the first, that is, the time from the
-    first record's end point to the last record's end point, sum to at least 60 s, and the controller's own
+    first record's endpoint to the last record's endpoint, sum to at least 60 s, and the controller's own
     monotonic clock, read just before it started the sampler and again after it parsed the sampler's output, spans
     at least that sum. The first record does not count: a stream whose records sum to between 60 s and 60 s plus
     the length of its first record is not `bounded`.
   - (b) The whole-second label changes from one record to the next at least twice in the stream.
   - (c) Every rate in the fit lies within 50 parts per million of 1.
-  - (d) The **first parse lag**, the time from the first record's end point to the moment the controller first
+  - (d) The **first parse lag**, the time from the first record's endpoint to the moment the controller first
     parsed the sampler's output, taken at the largest value the fit allows, is between 0 and 0.25 s.
   - (e) The effective bound is at most 5 ms.
   - (f) The inputs are sound: the controller's five clock stamps are present and in order; every record has a
@@ -960,9 +967,9 @@ that member's unit (§6.3).
 - **t0** is the planned start instant. The **launchd job**, the macOS scheduler entry installed for the window,
   starts the **driver** `scripts/run_night.py` at t0.
 - **Window plan.** The per-attempt file written at the desk by `scripts/write_b5_window_plan.py` (receipt class
-  `HAZARD_PACK`): plan id and attempt, the pack, the bracket session id, two freshly created **runs roots** (a runs
-  root is the directory under which a stage's member bundles, its stage manifests and the campaign log are written:
-  the **claim** root takes the science members and every reference member of the window, that is, the start
+  `HAZARD_PACK`): plan id and attempt, the pack, the bracket session id, two freshly created runs roots (a runs
+  root is the directory under which the runner writes member bundles, campaign manifests and the campaign log,
+  §0.12: the **claim** root takes the science members and every reference member of the window, that is, the start
   triplet, the interior references, the end triplet and any spares; the **bound** root takes the 12 NEG-8 corpus
   members and the bound derived from them), the thresholds of §4.3, the window's sizing (§5.5), and whether G10
   runs at the tail (§3).
@@ -1045,7 +1052,7 @@ subtitle D-165 licenses only when every required ratio is at least 2.
 | ALPHA, its first claim-usable attempt | Reported phase energy of Qwen3-1.7B for decode and prefill-p2048, each with its interval, J/token, kept units and the attribution floor beside it; the 1.7B floor cells | L1 | One stack, one boundary, no comparison |
 | BETA, the same | The same for Qwen3-8B | L1 | Same |
 | ALPHA beside BETA | Side-by-side L1 cells only, labelled as collected in separate windows in a fixed order | L1 | Forced order stays below L2; the two models were never interleaved |
-| GAMMA with the ALPHA and BETA floors | Two primary contrasts (8B minus 1.7B phase energy, decode and prefill-p2048), Holm family of two, plus the registered ratio and per-token difference (analysis plan §7.3) | L2 if and only if the **claim gate** returns `claim_ready_for_l2_l3` true. The claim gate is the analysis program's decision function for one contrast (`joulewise/analysis_engine/claims.py` `evaluate_claim`); it returns that value true only when every condition of analysis plan §7.2 holds, chiefly: the contrast's direction is supported (the estimate is above the detection floor, its intervals exclude 0 and the Holm correction rejects), the contrast is registered as primary and confirmatory, dropping any one quad leaves the verdict unchanged, and the direction is the registered one | No held-out cells, no second machine |
+| GAMMA with the ALPHA and BETA floors | Two primary contrasts (8B minus 1.7B phase energy, decode and prefill-p2048), Holm family of two, plus the registered ratio and per-token difference (analysis plan §7.3) | L2 if and only if the **claim gate** returns `claim_ready_for_l2_l3` true. The claim gate is the analysis program's decision function for one contrast (`joulewise/analysis_engine/claims.py` `evaluate_claim`); it returns that value true only when every condition of analysis plan §7.2 holds, chiefly: the contrast's direction is supported (the estimate is above the detection floor, its intervals exclude 0 and the Holm correction rejects), the contrast is one that GAMMA's analysis manifest registered in advance as primary and confirmatory, dropping any one quad leaves the verdict unchanged, and the direction is the registered one | No held-out cells, no second machine |
 | Floors and GAMMA | Dominance ratios; the dominance sentence and the contingent subtitle only if every required ratio is at least 2 | Disclosure | D-165 addendum |
 
 Every phase-energy sentence carries the D-177 limitation (phase attribution was not characterized by a measured
@@ -1156,8 +1163,9 @@ Each is evidenced by a path and SHA-256 before the point named.
    record**, a best-effort copy of the window's record files in `night/`, without the chain's logs, pushed to a
    results branch `night-results/<plan id>` of the repository; and the **courier**, one headless session that
    emails Ed the window's structural report and writes `night/courier.sent` once the email is accepted, §5.4), and
-   the five chain tools of the fake measurement checkout: the bracket reserver, the powermetrics fiducial capture, the campaign
-   runner, the ledger session-status reader and the window verdict writer. Because the runner is a stand-in, the
+   the five chain tools of the fake measurement checkout: the bracket reserver, the powermetrics fiducial capture,
+   the campaign runner, the ledger session-status reader and the window verdict writer. Because the runner is a
+   stand-in, the
    controller, the runtime adapter, telemetry, the bundle writer, the cooldown and idle admission do not run in the
    render. Reductions: 0 s settles, a fixture sizing with a 3,600 s programmed span, placeholder heads, and fixture
    thresholds instead of the sealed block of §4.3. Render summaries, SHA-256: ALPHA
@@ -1325,8 +1333,9 @@ build to corral weaker models working on this".
   (§5.4). Whether an attempt runs G10 is the boolean `g10` of its window plan. The plan writer copies that value
   from the plan input (the desk file a window plan is written from) and checks only that it is a boolean
   (`joulewise/b5/plan.py`); no code decides it. The rule is the lead's, applied when it prepares the plan input:
-  `g10` is true until a G10 record exists in this measurement block, and false after it. In practice this is ALPHA-1; if ALPHA-1 never
-  starts its chain, or its chain is stopped by the agent census, the next attempt carries it.
+  `g10` is true until a G10 record exists in this measurement block, and false after it. In practice this is
+  ALPHA-1; if ALPHA-1 never starts its chain, or its chain is stopped by the agent census, the next attempt carries
+  it.
 - *Steps.* (1) Read f₀ and the anchor; check read-only that no capture process is alive (if one is, ON is skipped and
   the result is UNMEASURED). (2) `sudo -n systemsetup -setusingnetworktime on`; its output is recorded only.
   (3) Poll the anchor at 1 Hz for up to 300 s until the residual moves more than 5 ms. (4) Evaluate the clock
@@ -1363,11 +1372,10 @@ session to exit at t0 − 180 s, sends SIGTERM to any that remain at t0 − 90 s
 t0 − 8, −6 and −5 min, about 450 s of agent-free idle before t0; now about 150 s). *Why these numbers:* real
 sessions took 20–31 s to exit after the request. That figure is the code's: the comment above `PLAN_LEAD_S` in
 `scripts/magistrate_watchdog.py` gives it and cites the session exits recorded at the stand-downs before three
-earlier windows, which it labels c1, c2 and d117. This author did not re-derive it. So a
-request
-at t0 − 180 s leaves 149–160 s, about 150 s, before t0 (by the same subtraction revision 4's 480 s left about
-450 s), and the watchdog's 10 s poll gives 9 polls between request and SIGTERM and 3 between SIGTERM and SIGKILL. A
-session that survives all three is refused by the t0 census, which stays the backstop.
+earlier windows, which it labels c1, c2 and d117. This author did not re-derive it. So a request at t0 − 180 s
+leaves 149–160 s, about 150 s, before t0 (by the same subtraction revision 4's 480 s left about 450 s), and the
+watchdog's 10 s poll gives 9 polls between request and SIGTERM and 3 between SIGTERM and SIGKILL. A session that
+survives all three is refused by the t0 census, which stays the backstop.
 
 **s1 (the one-quad qualification window) becomes ALPHA-1.** ALPHA-1 contains everything s1 had: pre calibration, the
 NEG-8 corpus and bound, references, null quads and post calibration. s1's structural checks run at every block-5
@@ -1380,12 +1388,13 @@ harvest, ALPHA-1's first, as disclosed diagnostics. The harvest writes four `dia
   that cell's phase (§0.4) passed with no reason recorded and the number whose did not. This one flag is
   RESTRICTED, because a precheck can turn on an energy test;
 - `stream_sizes`: the shortest and the longest sampler stream, in bytes, each with its run id;
-- `time_outside_members`: the gaps between consecutive member spans: how many, their total and the longest.
+- `time_outside_members`: the gaps between consecutive member spans (a member's span is the time it occupies,
+  from the start of its idle baseline to the end of its last reading): how many, their total and the longest.
 
-Revisions up to 10 listed a fifth check here, "a deliberately incomplete finalization": the block-4 harvest asks the desk
-provenance checker (G3, `scripts/check_window_provenance.py --expect-finalize-refusal`) to finalize an analysis
-whose member list does not cover the window, and expects it to refuse. The block-5 harvest does not run that step
-and records no finalization of any kind. The step exists only in the block-4 harvest script
+Revisions up to 10 listed a fifth check here, "a deliberately incomplete finalization": the block-4 harvest asks
+the desk provenance checker (G3, `scripts/check_window_provenance.py --expect-finalize-refusal`) to finalize an
+analysis whose member list does not cover the window, and expects it to refuse. The block-5 harvest does not run
+that step and records no finalization of any kind. The step exists only in the block-4 harvest script
 (`scripts/harvest_v5_g2b_window.py`), which no block-5 window runs.
 
 ## 4. The arm: physical hazards, measured directly
@@ -1402,8 +1411,8 @@ Everything below runs inside the launchd job after t0, so no person or agent ses
 4. **Record-only collectors:** one command, `scripts/collect_window_flags.py --stage arm`, which is killed as a
    whole after 120 s. It runs five collectors, each in its own subprocess with its own time budget: pack identity
    (the pack's files against the digests its plan tree pins; 15 s), checkout identity (the measurement checkout's
-   commit is H_claim, or H_claim plus pin-only commits, with no edited tracked file and no untracked file under the
-   executed directories; 10 s), the executed-file inventory (§0.18; 15 s), the model-identity
+   commit is H_claim, or H_claim plus pin-only commits, with no edited tracked file and no untracked file under
+   `joulewise/`, `scripts/` or the pack; 10 s), the executed-file inventory (§0.18; 15 s), the model-identity
    check (§4.6 item 3; 55 s) and calibration-ledger readiness (the read-only check of §4.6 item 6; 15 s; it runs
    when the pack holds a `calibration_plan.json`, which all three packs do). Their findings are flags (§6); they
    never change the arm decision.
@@ -1440,26 +1449,28 @@ the longest streams exceed the 5 ms bound (§0.14).
   this holds for |f| ≤ 3.6306 ppm. *Worked example:* at
   f = −3.17 ppm the bound is 3.7 + 3.42 × 0.335 = 4.846 ms, PASS; at |f| = 3.7 ppm it is 3.7 + 3.95 × 0.335 =
   5.023 ms, REFUSE. (ii) *Linearity:* over the dwell, sampled at 1 Hz, the residual stays within ±1 ms of its start
-  value. (iii) An anchor's three reads (RAW, REALTIME, RAW; built under "In window" below) are taken within 1 ms.
+  value. (iii) Each anchor's read skew, the time between the two RAW reads that enclose its REALTIME read (built
+  under "In window" below), is at most 1 ms.
   (iv) f is identical at every sample from the dwell's start to GO; any change means something adjusted the clock.
   (v) The **boot session** identifier (`kern.bootsessionuuid`, a value the kernel sets anew at every boot) is the
   same at the dwell's start and at GO: after a reboot the anchors of before and after cannot be compared.
   - *At the instant read* (§4.1 step 2) the arm reads the boot session identifier, one anchor and f, and judges
-    (i) and (iii). The anchor is read up to five times; the first read taken within 1 ms is kept. If all five took
-    longer, the last is kept and judged, and it refuses. This is the only place where (iii) can refuse.
+    (i) and (iii). The anchor is read up to five times; the first read whose skew is at most 1 ms is kept. If all
+    five exceed it, the last is kept and judged, and it refuses. This is the only place where (iii) can refuse.
   - *Over the dwell and at GO* the arm judges one series: a sample at the dwell's start, one each second through
     the dwell, one at its end and one at GO, about 180 to 2,700 samples in all. Each sample is an anchor (read up
     to five times against the same 1 ms) and f. The boot session identifier is read at the dwell's start and
     again at GO. On the series the arm judges (ii), (iv) and (v), and (i) again on the first sample's f.
-  - *A series with a hole is not judged.* If one sample of the series has no anchor (all five of its reads took
-    longer than 1 ms), or any read in it failed, or the boot session identifier could not be read at either end,
+  - *A series with a hole is not judged.* If one sample of the series has no anchor (the skew of all five of its
+    reads exceeded 1 ms), or any read in it failed, or the boot session identifier could not be read at either end,
     the series is UNMEASURED as a whole. The arm then records `clock.arm_unmeasured` (DISCLOSE, §0.15) and goes
     on, and (ii), (iv), (v) and the repeat of (i) are not judged at this arm. So a slow anchor read in the dwell
     never refuses; it removes the dwell's clock verdict. *Why this is accepted for block 5* (orchestrator ruling
-    of 2026-10-07 on the fidelity sweep's item C5): no number rests on the dwell's verdict. Each member carries
-    its own anchor bound (§0.14), and the monitor's 1 Hz journal is judged against every member span at the
-    harvest (`clock.step_overlap`, §6.4). The dwell only guards against starting a window on a clock that is
-    already disturbed. Judging the series on the samples that did read is a code change listed for after block 5.
+    of 2026-10-07, on item C5 of that day's comparison of this text with the code): no number rests on the dwell's
+    verdict. Each member carries its own anchor bound (§0.14), and the monitor's 1 Hz journal is judged against
+    every member span at the harvest (`clock.step_overlap`, §6.4). The dwell only guards against starting a
+    window on a clock that is already disturbed. Judging the series on the samples that did read is a code change
+    listed for after block 5.
 - *In window:* the monitor journals the anchor at 1 Hz and f every 5 s. A residual move of more than 1 ms between
   consecutive samples is a `clock.step`; a change of f is `clock.frequency_changed`. Each anchor sample is three reads
   in a row, RAW, REALTIME, RAW (CLOCK_MONOTONIC_RAW, then CLOCK_REALTIME, then CLOCK_MONOTONIC_RAW again). The anchor
@@ -1521,8 +1532,8 @@ outcome.
     −865 mA lasting 0.9 s while Qwen3-8B was being loaded, 19 s before its first request and outside every
     request, and currents down to −216 mA during the three 8B decodes; all 182 registry reads of that probe gave 0
     (this author joined the probe's `smc.jsonl` to its `mlx.jsonl`; §9.2 item 3 says the same of the burst). So
-    the registry now supplies only the state, and the SMC the current (`joulewise/hazards/battery.py`, and the harvest's own copy
-    of the member rule, `harvest.battery_join`, at `a434e363d`).
+    the registry now supplies only the state, and the SMC the current (`joulewise/hazards/battery.py`, and the
+    harvest's own copy of the member rule, `harvest.battery_join`, at `a434e363d`).
   - *Validation of B0AC* (`/Users/edr/night-archive/wallmeter-probe/verify/b0ac_validation.md`, 2026-10-06 22:12Z).
     25 s idle, then 170 s of load (a 16-process CPU burner plus four Qwen3-8B generations; DC input peaked at
     135.7 W on the 140 W adapter, so the battery had to help), then 200 s of recovery. *Sign:* B0AC was negative
@@ -1780,7 +1791,7 @@ row 7, is removed, and that code has no emitter). Seats exit before t0, and from
 the finished window the watchdog launches no agent session (this hold on launches is the window's **fence**, §3 and
 §5.4), so a stop should not fire.
 
-Three things revision 2 judged at the arm are no longer judged. The load average is recorded for each member: the
+Three things that revision 2 judged are no longer judged. The load average is recorded for each member: the
 1, 5 and 15 minute values that `uptime` prints, in the member's environment record
 (`per_run_environment_evaluation`, field `load_average_evidence`, marked as not an admission test). Process names
 are recorded in every `ps` snapshot the contention hazard takes, at the dwell and in the window (§4.2). The
@@ -1802,22 +1813,23 @@ earlier night kinds (`joulewise/night_gate.py`, `joulewise/evidence_night.py`).
      `adapters/powermetrics.py`), differs from the value the acceptance records;
    - `identity_field_change`: the bracket's captures were taken under an identity that is no judged epoch (§4.7
      names the six fields);
-   - `corpus_doubles_from_24_to_48`: the ledger holds 48 or more valid captures of one judged epoch, not counting
-     captures set aside by a decision the acceptance names;
+   - `corpus_doubles_from_24_to_48`: the ledger holds 48 or more captures of one judged epoch that it classes as
+     valid, not counting captures set aside by a decision the acceptance names;
    - `new_valid_same_identity_capture_expands_observed_range`: a valid capture of a judged epoch that the
      acceptance does not list among its prior observations (so, one recorded after its cutoff) has a fiducial
      bound outside the range of the 24, that is, below 0.02193176218569716 s or above 0.03646286164497997 s. A
      window's own pre and post captures are captures of this kind;
    - `new_systematic_failure_challenges_preflight_screen`: a capture of a judged epoch recorded after the cutoff
-     carries the ledger disposition `systematic-invalid`, or the bracket's pre bound is above the pre screen.
+     carries the ledger class `systematic-invalid` (its own evidence is valid, but its fiducial bound is above the
+     screen the ledger recorded it against), or the bracket's pre bound is above the pre screen.
 
    *Who observes them.* The bracket evaluation (`joulewise/calibration_bracketing.py`), which the harvest runs at
-   the desk on each window's bracket. It reads the ledger, lists the triggers it saw under
-   `acceptance.prospective_rederivation.observed_triggers` (the identity change under `freshness.stale_fields`),
-   marks the acceptance stale and fails the bracket with the reason `calibration_acceptance_bound_stale`. (One
-   case has another reason: a pre bound above the pre screen fails the bracket as
-   `instrument_calibration_mismatch`.) The harvest then records `calibration.bracket_acceptance_failed`, which
-   removes the window (§6.5). The capture that fired the trigger stays in the ledger, so every later window's
+   the desk on each window's bracket. It reads the ledger and lists the triggers it sees under
+   `acceptance.prospective_rederivation.observed_triggers` (the identity change under `freshness.stale_fields`).
+   When it has seen one, it marks the acceptance stale and fails the bracket with the reason
+   `calibration_acceptance_bound_stale`. (One case has another reason: a pre bound above the pre screen fails the
+   bracket as `instrument_calibration_mismatch`.) The harvest then records `calibration.bracket_acceptance_failed`,
+   which removes the window (§6.5). The capture that fired the trigger stays in the ledger, so every later window's
    bracket fails the same way until a new acceptance is issued.
    *Who stops the next arm.* No program: nothing at the arm, in the plan writer or in the watchdog reads the
    triggers. It is a rule the lead applies. The lead reads the reasons in the harvest's flag (structure, no
@@ -1895,9 +1907,10 @@ earlier night kinds (`joulewise/night_gate.py`, `joulewise/evidence_night.py`).
    window's own post calibration finalizes its bracket session and moves the ledger past the pin the window armed at.
    The desk verdict writer and the next window's **bracket reservation** (the first stage of its chain, which
    opens that window's bracket session in the ledger, §0.11 and §5.1) both read the ledger through the committed
-   pin, so both refuse until the pin names this session's terminal entry (§2, "Before ALPHA-1's harvest"; the plan writer
-   refuses the next plan at the desk for the same reason). The advance reads the session's terminal entry from the
-   ledger, advances the pin through the guarded `advance-head-pin` path of `scripts/recover_calibration_ledger.py`,
+   pin, so both refuse until the pin names this session's terminal entry (§2, "Before ALPHA-1's harvest"; the plan
+   writer refuses the next plan at the desk for the same reason). The advance reads the session's terminal entry
+   from the ledger, advances the pin through the guarded `advance-head-pin` path of
+   `scripts/recover_calibration_ledger.py`,
    and makes a pin-only commit that it checks changes that one path alone. A window stopped before its post
    calibration leaves its session open: the desk aborts the session first, and the abort is then the terminal entry.
    The harvest still reads the live ledger and records how the committed pin relates to the window's terminal entry
@@ -1927,9 +1940,9 @@ calibration acceptance.
 The arm loads the judged epochs without the calibration ledger (`acceptance_judged_epochs(artifact, None)`). A
 continuation is then authenticated by its registry pin (the SHA-256 of its file) and by the checks of the file
 itself; the check of its derivation session against the ledger is skipped. The arm compares only the two fields it
-reads, the OS build and the machine model. A pair that matches no judged epoch refuses the window (`refused_at:
-"identity"`), before network time is touched. A read that fails is recorded and never refuses; if the judged epochs
-cannot be loaded, the check is skipped.
+reads, the OS build and the machine model. A pair that matches no judged epoch refuses the window
+(`refused_at: "identity"`), before network time is touched. A read that fails is recorded and never refuses; if
+the judged epochs cannot be loaded, the check is skipped.
 
 *Why a refusal that is not a physical hazard.* Every timing bound in a window rests on the calibration acceptance
 (§0.11), which was derived on one OS build. After an OS update the sampler, the scheduler and the timing estimator's
