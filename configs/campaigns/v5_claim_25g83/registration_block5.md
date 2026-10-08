@@ -3846,7 +3846,7 @@ the **seal commit**, the child of H_claim that carries the filled sealed invento
 and of the analysis plan (§11). It changes those three files and nothing else, so it changes no file that the sealed
 inventory lists, and the measurement checkout is checked out at it before ALPHA-1 arms. Where this section and §14
 Q13 say that the measurement checkout stays at H_claim, the commits it holds are therefore H_claim, the seal commit,
-and after each window one pin-only commit.
+and the pin-only commits made after it.
 
 - A cure confined to collection code that no completed window executed (for example GAMMA-only stages) does not
   supersede completed windows. The cure carries a **changed-path map**: the list of files that differ between
@@ -3855,8 +3855,9 @@ and after each window one pin-only commit.
   (§9.1), so a window armed after the cure would differ from the sealed inventory and be removed
   (`code.executed_differs_from_sealed`). The cure therefore re-issues the seal: its commit becomes the new H_claim,
   and a new seal commit carries a sealed inventory generated from it (§11). A re-harvest of a window completed
-  before the cure is given the inventory that was in force when that window was armed (the harvest command's
-  `--sealed-inventory-path`), or it would be compared with the new one.
+  before the cure is given the inventory that was in force when that window was armed, or it would be compared
+  with the new one. The harvest command takes it as `--sealed-inventory-path`, and the window's first harvest kept
+  a copy in its archive, `sources/inputs/sealed_inventory.json`.
 - A cure touching collection code that a completed window executed **supersedes the whole block**: completed windows
   are retained and disclosed structurally, their energies are never analysed, a new registration or a cold erratum is
   written, and the block restarts at ALPHA.
@@ -4111,22 +4112,23 @@ texts are removed. The four pinned estimator files are byte-identical to the fro
 
 Where each finding went (orchestrator's ruling of 2026-10-07 on the lane and its review,
 `/Users/edr/night-archive/gate-prune/wave-1007b/seal-land/ORCHESTRATOR_RULING.md`). No finding changes a window
-input before H_claim: each check lives in the harvest, which runs after a window from a desk checkout, so each goes
-to the harvest lane that lands after the seal and before ALPHA-1's harvest (§11 item 4; the lane's work list,
+input before H_claim: each check lives in the harvest, which runs after a window, from a desk checkout (a checkout
+of the repository other than the measurement checkout, §7.5). So each goes to the harvest lane, the set of changes
+to the harvest that lands after the seal and before ALPHA-1's harvest (§11 item 4; the lane's work list,
 `/Users/edr/night-archive/gate-prune/wave-1007b/harvest-lane/WORKLIST.md`, numbers these items H-8 to H-12).
 
 | Finding | What it was | Where it went |
 |---|---|---|
-| Cold pass 5, C6 (defect) | a commit that changes only another pack's directory is a window input, so it removes a window that never read that pack | harvest lane, H-12: recorded, not a difference. It cannot arise in the registered sequence (the measurement checkout receives only pin-only commits, and the pin-advance program refuses a commit that changes anything else), and when it fires it removes a window, never prints a wrong number |
+| Cold pass 5, C6 (defect) | a commit that changes only another pack's directory is a window input, so it removes a window that never read that pack | harvest lane, H-12: recorded, not a difference. It cannot arise in the registered sequence (the measurement checkout receives only pin-only commits, and the program that makes them, `scripts/advance_b5_ledger_pin.py`, refuses a commit that changes anything else), and when it fires it removes a window, never prints a wrong number |
 | Review F1 (MAJOR) | when the launchd job is installed from a checkout other than the measurement checkout, the driver, the hazard modules, the monitor and the collectors are that other checkout's files; if they differ from the sealed inventory the harvest records the differing files and raises no flag | harvest lane, H-8: a differing code file in the driver's checkout becomes `code.executed_differs_from_sealed`; identical bytes stay a record. It cannot arise when the launchd job is installed from the measurement checkout, as §11 requires |
-| Review F2 (MINOR) | the paths that raise no flag are "every path not listed", so a tracked file outside `joulewise/`, `scripts/` and `configs/` (the environment lock, `pyproject.toml`) can change with no flag | harvest lane, H-9: the harvest's head comparison names the paths that raise no flag (`docs/` except the runbook, `tests/`, directories whose name starts with a dot, and Markdown files at the top of the repository); every other path is a window input |
+| Review F2 (MINOR) | the paths that raise no flag are "every path not listed", so a tracked file outside `joulewise/`, `scripts/` and `configs/` can change with no flag: for example `env/mac-measurement-lock.txt`, the list of package versions the measurement environment is built from, or `pyproject.toml` | harvest lane, H-9: the harvest's head comparison names the paths that raise no flag (`docs/` except the runbook, `tests/`, directories whose name starts with a dot, and Markdown files at the top of the repository); every other path is a window input |
 | Review F3 (MINOR) | a sealed inventory that lists files but names no commit is compared with nothing | harvest lane, H-10: `code.identity_unmeasured`. The committed inventory is covered already: `tests.test_b5_seal_landing` refuses one whose `head` is not a commit |
 | Review F4 (note) | a later commit to this file or to the analysis plan is silent in code | by procedure: the seal record's SHA-256s bind both files (§12) |
 | Review F5 (note) | a re-harvest after a re-issued seal needs the inventory that was in force when its window was armed | runbook and magistrate brief (§11) |
 | Review F6 (note) | a changed path whose name is not UTF-8 faults the harvest | harvest lane, H-11 |
 | Review F7 (note) | the catalog, `identity_pins.json` and `sizing_b5.json` carry draft labels in their sealed bytes | the two generated files keep the labels their generators write, and the seal record's digest of each file is what seals it (§12); the catalog's status note is rewritten before H_claim to a sentence that is true before and after the seal |
 | Review F8 (note) | the commit after the seal commit must carry any test data file that the sealed text forces to change | accepted: that commit carries it, and the whole suite and CI are required green there (§11) |
-| Review F9 (note); cold pass 5 notes | the harvest records nothing about its own program; a stale clause in a harvest comment; the stale catalog note of `code.executed_differs_from_sealed` | the harvest records the commit of the checkout it ran from (seal gate K-7, harvest lane); the comment goes to the same lane; the catalog note is corrected before H_claim, because the catalog is a window input and cannot change in the seal's own commit |
+| Review F9 (note); cold pass 5 notes | the harvest records nothing about its own program; a stale clause in a harvest comment; the stale catalog note of `code.executed_differs_from_sealed` | the harvest records the commit of the checkout it ran from (the change the seal gate's ruling numbers K-7, in the harvest lane); the comment goes to the same lane; the catalog note is corrected before H_claim, because the catalog is a window input and cannot change in the seal's own commit |
 
 A change to collection code that lands after `9395cecfb` and before H_claim needs a diff-scoped pass of its own
 before the seal, by the rule at the head of this section. The changes the seal gate's stage 1 ordered in that range
@@ -4233,8 +4235,9 @@ naming, schema formality) is dispositioned "flag, not refuse" and never sent to 
      as `calibration.writer_record_flagged` with kind `display_sleep_action_failed` (§6.10).
    - The program that writes the chain script refuses a pack whose calibration stage already carries either
      argument (`joulewise/b5/chain.py` `calibration_runbook_flags`, `stage_argv`).
-7. Analysis: the number printed beside a reported cell as its attribution floor. D-179 ruling 4 and the contract
-   `docs/contracts/paper_reported_energy.md` name "the approximately 1-J D-078 attribution floor" as that number.
+7. Analysis: the number printed beside a reported cell as its attribution floor. D-179 ruling 4 names "the D-078
+   approximately 1-J attribution limit" as that number, and the contract `docs/contracts/paper_reported_energy.md`
+   "the approximately 1-J D-078 attribution floor".
    Block 5 prints the cell's own value, computed by the formula of §0.10 from the window's own members (§14 Q5).
    What does not change: the floor is labelled beside the cell and never added into its interval, and the
    reported-energy code keeps its label for that rule, `labelled_beside_never_composed`
@@ -4306,7 +4309,7 @@ sensitivity line of analysis plan §8.
 | Audit, seats | `416-AUDIT-RECORD`, `416-SEATS`: filled in revision 8 (§9.1); `416-DELTA-RECORD` (the diff-scoped passes over `a434e363d..fe28e5a0c`, §9.1): filled in revision 9; its second part (the code merged after `fe28e5a0c`: Fable's delta cold pass 5 at `9395cecfb` and the independent review of the seal-landing lane, §9.1): filled in revision 12; `B5-SEAL-SEATS` | Seal seats at seal |
 | Sizing | `B5-SIZING-OUTPUTS`: draft values at `fe28e5a0c` (§5.5), unchanged since `d3c107f2f`, spares included; pinned at H_claim | Seal |
 | Cooldown smoke | `B5-COOLDOWN-SMOKE-RECORD` (§2 item 7): filled in revision 6 | Seal |
-| Plans | `B5-PLANS-REGENERATED`: every window plan and plan-input file written from the sealed §4.3 block (contention `clean_s` 180). The plans can be written only after the seal, so the record of it is a section appended to the seal record, not a value in this file, whose bytes are fixed at the seal (§8 item 3) | Before ALPHA-1 arms |
+| Plans | `B5-PLANS-REGENERATED`: every window plan and plan-input file written from the sealed §4.3 block (contention `clean_s` 180). The plans can be written only after the seal, so the record of their regeneration is a section appended to the seal record, not a value in this file, whose bytes are fixed at the seal (§8 item 3) | Before ALPHA-1 arms |
 | P3 sync | `P3-SYNC-RECORD` (§2 item 8), with `P3-BATTERY-CODES` (§6.4, and the table below) and `P3-CLOCK-SKEW-BOUND` (§4.2): filled in revision 6 against `a434e363d`; the revision 7, 8, 9 and 10 sync records below cover what was merged since, against `d3c107f2f`, `43ac12d0c`, `fe28e5a0c` and `9b0c680ed`, and the revision 12 record covers the seal landing, against `9395cecfb` | Seal |
 | Final hashes | `B5-FINAL-HASHES`: filled in revision 8 at `43ac12d0c`; recomputed in revision 9 at `fe28e5a0c` (`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_4.md`), where only the identity pins changed (§0.7 plan trees, §4.6 item 3 identity pins, §5.5 sizing output). Open again for one value: the final head itself, which carries the census interpreter rule (§2 item 1, §4.5); each digest so marked is checked again there. Revision 10 found each of them unchanged at the int5 head `9b0c680ed` (`B5-REV10-SYNC` below); the marks stay until the final head is fixed, and revision 12 leaves them in place | Seal |
 | Refusal allowlist | `roster.run_id_mismatch` listed under the member exclusions of `configs/gates/hazard_refusals.json` (§6.11): done at `d3c107f2f` (audit-fix item 7); `neg8.midpoint_lost_primary` listed under the window exclusions: done at `43ac12d0c` (ruling Q11); the file is unchanged at `fe28e5a0c`, at `9b0c680ed` and at `9395cecfb`. The seal gate's stage 1 then reworded two entries (what `cell.below_minimum` and `neg8.midpoint_lost_primary` protect: its changes K-1 and K-3) and ordered `g3.recompute_failed` removed from the window exclusions, where it disagrees with the catalog's DISCLOSE (K-2); the record of revision 12 below says where each stands | Seal |
