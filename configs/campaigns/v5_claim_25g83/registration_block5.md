@@ -666,10 +666,127 @@ printed. GAMMA's two contrasts are its target cells, each over 10 quads.
   absolute repeats (the **absolute** form) or null quads (the **comparative** form); hence the smallest real
   difference it can resolve. A contrast whose estimate does not exceed its floor is reported as `not_resolvable`
   (formulas: analysis plan §5). A **mint** is the authenticated issuance of the aggregate floor artifact.
-- **Attribution floor.** A different quantity: D-078's estimate, about 1 J, of how much phase energy can be
-  misattributed because phase edges are timed only to within the sampler's timing error. It is printed beside each
-  reported cell and never added into its interval. Its value and applicability to 25G83 are
-  `FILL[ATTRIBUTION-FLOOR-BINDING]` (§14 Q5).
+- **Attribution floor.** A different quantity from the detection floor: a bound, in joules, on how far the energy
+  assigned to one phase can move because the phase's two edges are placed against the power records only to
+  within timing bounds. It belongs to one reported cell of one analysed attempt and is computed from that window's
+  own members. This file registers its formula and binds no number (orchestrator's ruling of 2026-10-07 on §14 Q5,
+  `/Users/edr/night-archive/gate-prune/wave-1007b/q5-attribution-floor/RULING.md`; `REPORT.md` and
+  `REFUTATION.json` beside it are the investigation and the refuter that recomputed its figures from raw bytes).
+  The formula is what fills the binding `ATTRIBUTION-FLOOR-BINDING` of §13.
+
+  *Forcing problem.* Phase energy is assigned by overlap (§0.4). If a phase edge truly lies a time δ away from
+  where it was placed, the record that straddles the edge has δ times its power counted on the wrong side of the
+  edge. Three timing bounds limit δ. Each is derived in a later section; in plain words:
+  - **b**, the **fiducial bound**: how far the sampler's reported power edges can sit from the true ones, as a
+    calibration capture measures it (§0.11). A window has two captures, one before it (pre) and one after it
+    (post). The analysis uses the window's **operative fiducial bound**,
+    b_op = max(pre, post) + max(|post − pre|, 0.014531 s): the larger of the two captures' bounds, plus an
+    allowance for drift between them that is never less than 0.014531 s, the acceptance's bracket screen (§0.11;
+    `joulewise/calibration_bracketing.py`, allowance rule `max(observed_drift_s,bracket_screen_s)`). One b_op
+    serves every member of the window.
+  - **s_i**, member i's **wall-minus-monotonic span**: how much (wall clock − monotonic clock) changed while the
+    member's sampler stream ran (§0.14).
+  - **m_i**, member i's **clock bound**: how far its whole sequence of records can be misplaced on the wall clock
+    (the effective bound of §0.14; a kept member's is at most 5 ms).
+
+  *The per-member bound a_i.* Write E(x, y) for the energy the overlap rule assigns to the interval from x to y,
+  and (t_on, t_off) for the phase's recorded edges. Each edge may be displaced on its own by up to the **edge
+  bound** g_i = b_op + s_i, and the whole trace (the member's sequence of power records) may be shifted against
+  both edges together by up to m_i. Then
+
+      a_i = max | E(t_on + e_on + d, t_off + e_off + d) − E(t_on, t_off) |
+            over e_on ∈ {−g_i, +g_i}, e_off ∈ {−g_i, +g_i} and every d with |d| ≤ m_i.
+
+  The four combinations of e_on and e_off are the **corners**. They suffice because power is never negative, so
+  the assigned energy can only grow when the start edge moves earlier or the end edge moves later. Within a corner
+  E is piecewise linear in d, so its largest and smallest values lie at d = ±m_i or where a displaced edge meets a
+  record boundary, and the code evaluates every such point (`joulewise/reduce.py`
+  `_corner_composed_anchor_shift_envelope`; `reduce.py` is one of the four estimator files that no block-5 lane may
+  change, §2 item 1). The reducer stores
+  the result as the phase's **anchor-shift envelope** (`energy_anchor_shift_envelopes["/phase_energy_j/<phase>"]`,
+  method `common_trace_shift_plus_independent_edge_corners_v3`): the point energy, the lowest and the highest
+  energy over all corners and shifts, and `max_abs_delta_j`, which is a_i. (It stores an envelope of the same kind
+  for the whole request's gross energy, under `/gross_energy_j`; §0.12 reads that one.) The analysis calls a_i
+  `E_clock_anchor_shift_bound_j`.
+
+  *Which b enters.* A member's stored summary was reduced under the pre capture's bound alone, because the post
+  capture did not exist yet. The a_i used here is taken from the member's summary reduced again, in memory, under
+  b_op. A **consumption session** does that (`whole_window.AuthenticatedConsumptionSession`): it is the object
+  through which analysis code reads a window's members. It authenticates the window's two captures against the
+  calibration ledger (the append-only record of every capture, §0.11), computes b_op, and re-reduces each member
+  under it without writing any file.
+
+  *Worked example (synthetic; computed by this author with the reducer's
+  `_corner_composed_anchor_shift_envelope` at the int5 head `9395cecfb`).* Records are 130 ms long. The window's
+  b_op is 45.7 ms; the member's span is 0.3 ms and its clock bound 2 ms, so g = 46 ms and m = 2 ms. The phase is
+  recorded from t_on = 10.015 s to t_off = 11.055 s, so each edge lies 65 ms inside its record:
+
+      [    2 W     ][    30 W    ]  ...  [    30 W    ][    20 W    ][    4 W     ]
+      9.95          10.08         10.21  10.86         10.99         11.12         11.25 s
+             ^                                                ^
+         t_on = 10.015                                  t_off = 11.055
+         <-g-|-g->                                        <-g-|-g->
+      <-------- d: the whole trace moved against both edges together, |d| ≤ m --------->
+
+  Each bracket is one power record: its width stands for the record's support, the number inside is its average
+  power, and the numbers beneath are the times at which one record ends and the next begins. The `...` stands for
+  five more records of 30 W. Each `^` marks a recorded edge of the phase. `<-g-|-g->` is the range over which that
+  edge is moved on its own, g to either side. The bottom arrow is the common shift d, at most m either way. The
+  point energy is 0.065 × 2 + 0.91 × 30 + 0.065 × 20 = 28.730 J. The largest change is at the corner "start edge
+  46 ms early, end edge 46 ms late", with the common shift putting both edges a further 2 ms late: the start edge
+  then lies 44 ms early, still in the 2 W record (+0.088 J), and the end edge 48 ms late, still in the 20 W record
+  (+0.960 J). So a_1 = 1.048 J. A second member has the same records, but its end edge is at t_off = 11.000 s,
+  only 10 ms inside the 20 W record. Its largest change is at the opposite corner, start edge 46 ms late and end
+  edge 46 ms early, with both edges a further 2 ms early: the start edge lies 44 ms late (−0.088 J), and the end
+  edge 48 ms early, of which 10 ms are in the 20 W record (−0.200 J) and 38 ms in the 30 W record before it
+  (−1.140 J). So a_2 = 1.428 J.
+
+  *An approximation, and where it fails.* While every displaced edge stays inside the record that straddles its
+  recorded edge, a_i = g_i × (P_on + P_off) + m_i × |P_off − P_on|, where P_on and P_off are the average powers of
+  the two records that straddle the recorded edges. For the first member that is 0.046 × (2 + 20) + 0.002 × (20 −
+  2) = 1.012 + 0.036 = 1.048 J, the bound. For the second it is again 1.048 J, where the bound is 1.428 J, because
+  that member's end edge crosses into the neighbouring record. On 194 recomputed phases of earlier windows the
+  approximation ran from 63% below the bound to 20% above it (`REFUTATION.json`). The registered quantity is the
+  exact maximum, the code's `max_abs_delta_j`. The approximation is given only to show what the bound is made of:
+  a timing bound times the power at the phase's edges, whatever the phase's length.
+
+  *The floor of a cell: the registered formula.* For one reported cell of one analysed attempt, the attribution
+  floor is the largest a_i over the cell's kept members, that is, the members of the units that remain after the
+  exclusions of §6. In the example, were those two the cell's only kept members, the floor would be 1.428 J. The
+  analysis computes it when it issues the cell, from the window's own members and its two captures (analysis
+  plan §3 step 10 and §4 step 7; field `binding.attribution_floor_j`), and records with it the member that attains
+  it, the smallest a_i, and the stratified average of the a_i (next paragraph). It is computed from the energies of
+  a block-5 window, so it is restricted until the release event (§0.1, §8).
+
+  *What is already inside the interval, and what is printed beside it.* A reported cell's interval is its mean ±
+  (h + B) (analysis plan §4 steps 3 to 5). h is the statistical half-width. **B** is the sum of the stratified
+  averages of three timing bounds that every member records, of which a_i is the first; a **stratified average**
+  is 0.2 × (the mean over the kept repeats) + 0.8 × (the mean over the members of the kept quads). So the average
+  of the a_i is already inside every cell's interval. The attribution floor is their maximum, which is at least as
+  large. It is printed beside the interval and is not added to it (the cell's record carries
+  `attribution_floor_composed: false`, `joulewise/paper_reported_energy.py`).
+
+  *Why it is printed.* Repeating the measurement does not shrink it. Every member of a window is reduced under
+  the same b_op: if the sampler's edges sit 20 ms late, they sit 20 ms late in every member, and every member's
+  phase energy moves the same way. The scatter between members averages down over a cell's units; this does not.
+
+  *What it does not bound* (the addendum of 2026-09-04 to decision D-078, `docs/decision_log.md`). a_i bounds how
+  far the overlap assignment moves over the registered timing bounds, with the power taken as constant within
+  each record. It does not bound the physical energy of the phase under an arbitrary distribution of power inside
+  a record. Every sentence printed beside a cell carries that condition.
+
+  *Lineage, and why no number is bound.* Decision D-078 (clause 11, 2026-07-25) called this limit "about 1 J".
+  That figure was the a_i of one member of window a10, a window of 2026-07-25 on an earlier OS build (25F84), with
+  the model Qwen2.5-1.5B and a fiducial bound of 24.879 ms taken from the pre capture alone: g = 25.000 ms,
+  m = 6.074 ms and edge records of 1.0959 W and 32.0292 W give 0.024999593 × (1.0959 + 32.0292) + 0.006074236 ×
+  (32.0292 − 1.0959) = 0.8281 + 0.1879 = 1.0160 J; in D-078's round figures, a timing bound of 31 ms
+  (0.031073829 s, the sum b + s + m) at about 33 W. Over that window's 30 members the bound ran from 0.571 to
+  1.468 J. It is not a constant of the instrument, and every input to it has changed for block 5. On block 3
+  (build 25G83, the two Qwen3 models; not a claim window), under that window's operative bound of 45.669 ms, the
+  same bound was 1.38 to 2.86 J per member, and it changes with each window's own two captures. A bound value of 1 J
+  would print beside block 5's cells a floor the instrument does not have. (Every figure of this paragraph was
+  recomputed from the retained bundles by the investigation cited above and reproduced from the raw power traces
+  by its refuter; this author did not open those bundles.)
 
 ### 0.11 Pulse calibration, acceptance, ledger and bracket
 
@@ -981,9 +1098,11 @@ that member's unit (§6.3).
 
 - **The problem.** Each power record carries the sampler's own whole-second wall-clock label and an elapsed
   duration; phase edges are stamped on the machine's clocks. Placing records against phase edges needs the offset
-  between the two time bases. An error of 5 ms in that placement moves at most 0.2 J per phase edge at 40 W, below
-  the roughly 1 J attribution floor (§0.10); a larger error would move phase energy by more than the instrument can
-  attribute.
+  between the two time bases. An error of 5 ms in that placement moves 0.2 J across one phase edge whose record
+  holds 40 W (5 ms × 40 W; block 3's edge records held up to 41.2 W). That is small beside the rest of the same
+  member's timing bound (§0.10): the edge part of that bound rests on the fiducial bound, about 46 ms on block 3's
+  bracketed window, about nine times 5 ms, and those members' whole bounds were 1.38 to 2.86 J. Condition (e) below
+  holds the clock's part to this size, by removing any member whose clock bound exceeds 5 ms.
 - **Per-member anchor bound** (`joulewise/uncertainty_evidence.py`, unchanged). The method assumes wall time is
   affine in monotonic time over one sampler stream (one rate, no jump). Each record's endpoint, found by adding up
   the elapsed durations, must fall inside its whole-second label, widened by 250 µs; the set of (offset, rate) pairs
