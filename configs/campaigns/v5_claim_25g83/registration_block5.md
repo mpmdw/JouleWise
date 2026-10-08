@@ -4499,17 +4499,29 @@ that attempt still carries an unclassified code; it is tested, and no block-5 pr
 ### 7.3 Anti-spiral routing
 
 Each attempt that is not claim-usable has a **cause key**: the hazard modules that refused (NULL), or the families of
-its window-removing codes, or, for `cell.below_minimum`, the families of the member exclusions that removed the
-units. When two consecutive attempts of the same pack share a cause key family, the next spend goes to a consult, not
+its window-removing codes. The key is built only from records that are released during the block (§8). The arm
+record (`hazards/arm.json`, §4.1) names the hazard modules that refused. `harvest.json` lists the window-removing
+codes that fired (`exclude_window_reasons`, §7.1), and the catalog gives each code's family. An attempt removed by
+`cell.below_minimum` is keyed by that code. Which member exclusions removed the cell's units is written only in
+the three `derived/` files that §8 item 2 restricts (`derived/exclusions.json` names each excluded member's
+codes), and that item, as the seal gate's stage 1 wrote it, allows one read of those files during the block, the
+read of `claim_usable`. So two consecutive attempts of a pack that both fall below the cell minimum share a cause
+key, whatever removed their units. (Revisions up to 11 keyed such an attempt by the families of the member
+exclusions that removed the units, which would need a second read of those restricted files.) When two
+consecutive attempts of the same pack share a cause key family, the next spend goes to a consult, not
 a third arm; the consult may authorize another unchanged attempt, a prospective change (cold erratum), or END STATE.
 A consult that cannot settle goes to a cold gate; a cold-gate refusal goes to Ed. None of these is a cap on attempts.
 
 **Process rule for empty and short windows** (PLAN2 §2.2 H; not code). The orchestrator does not arm window N + 1 on
-unchanged code when window N's yield status (§5.7) is EMPTY, or LOW with one shared pre-bundle cause
-(`stage.members_refused_pre_bundle_identical`, or every lost member of the short stages sharing one cause in the
-harvest's `collection.failure_histogram`). It fixes the cause first, by the R3 route. *Why:* a deterministic refusal
-repeats identically in every window; under back-to-back cadence each repeat costs a whole arm and chain and teaches
-nothing new.
+unchanged code when window N's yield status (§5.7) is EMPTY, or LOW with one shared pre-bundle cause. The sign of a
+shared cause is the driver's flag `stage.members_refused_pre_bundle_identical` (three consecutive members that
+ended without a bundle for one cause, §5.7). The driver lists the codes of the flags it emitted in its terminal
+record (`night/hazard_result.json`, field `flags_emitted`), which is a released record. The orchestrator fixes the
+cause first, by the R3 route. *Why:* a deterministic refusal repeats identically in every window; under
+back-to-back cadence each repeat costs a whole arm and chain and teaches nothing new. (Revisions up to 11 named a
+second sign: every lost member of the short stages sharing one cause in the harvest's
+`collection.failure_histogram`. The content of that flag is written only to `derived/flags.jsonl`, one of those
+three restricted files, so this rule does not read it during the block.)
 
 *One LOW that does not hold the next arm* (orchestrator ruling of 2026-10-07, on a case found when revision 11 checked
 this file against the code). On GAMMA, each of the two diagnostic interior references (§0.12) is a stage of one
@@ -4588,9 +4600,11 @@ and the pin-only commits made after it.
 ### 7.6 What re-arming can and cannot select on
 
 The decision to re-arm is a rule the lead applies (§7.2), not code. The rules of §7.2 to §7.4 read each attempt's
-verdict, `claim_usable`, reasons and yield counts (all in `harvest.json`, §7.1), the codes and families of its flags
-and member exclusions (§7.3), and anchor status words (§7.4). None of these is an energy. So an energy can bear on
-re-arming only through what `claim_usable` itself reads.
+verdict, `claim_usable`, reasons and yield counts (all in `harvest.json`, §7.1), the families of its
+window-removing codes (those reasons, with the catalog; §7.3), the hazard modules that refused an arm and the
+codes of the flags the driver emitted (the arm record and the driver's terminal record, §7.3), and anchor status
+words (§7.4). None of these is an energy. So an energy can bear on re-arming only through what `claim_usable`
+itself reads.
 `claim_usable` reads no science member's energy except the single pass/fail precheck ratio of §6.3, which is
 RESTRICTED. It does read reference-workload energies (the NEG-8 screen), power (idle admission, the bracket), timing,
 and the physical hazards. So re-arming cannot select on the science outcome, but every reported number is
@@ -4669,7 +4683,11 @@ verdict; and the attempt history of §7. A file the map does not name is release
 restricts; in doubt it is treated as restricted.
 
 *Who may read a restricted path.* Until the release event, automation only (§0.1): the harvest, the blind dry run of
-analysis plan §3.2 and, for the three `derived/` files, the scheduler's read of `claim_usable` (item 2). None of
+analysis plan §3.2 and, for the three `derived/` files, the scheduler's read of `claim_usable` (item 2). The rules
+by which the lead re-arms read nothing else from those three files: the cause key and the short-window rule of
+§7.3 are built from released records. One of those rules does take a value from other restricted paths, by
+automation: the END STATE count of §7.4, which takes anchor status words, and nothing else, from
+`withheld/member-assessments.json` and from the calibration captures' evidence files. None of
 them prints, emails or commits a restricted value. After the release event: the lead, and the results cold gate
 that re-derives every printed number (analysis plan §3.1 step 12). A seat that will write or review a repair after
 the release reads no restricted path even then, because analysis plan §3.2 allows such a repair only from seats that
