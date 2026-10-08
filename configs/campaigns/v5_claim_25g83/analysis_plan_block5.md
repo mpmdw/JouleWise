@@ -306,7 +306,7 @@ non-extractable (§2.2).
 **Corner widening.** Each value may lie anywhere within ± its admissible half-width w_i (its timing uncertainty in
 joules). The corner-widened floor is the largest point floor over every corner of that box (2ⁿ corners, exact
 enumeration, capped at n = 16), and at least the largest linear deviation the box admits. The **operative** unguarded
-floor, operative meaning the value that every later step uses, is max(point floor, corner-widened floor). Absolute form: w_i comes from the member's **anchor-shift energy envelope**. That is the record, in the member's `summary_metrics.json` (field `energy_anchor_shift_envelopes`, one entry per phase metric, written by the pinned reducer, `joulewise/reduce.py`), of the range its phase energy can take when its power trace is shifted in time within the member's recorded timing bounds: the energy with no shift (`point_j`), the smallest and largest energy over those shifts (`lower_j`, `upper_j`) and the largest absolute change (`max_abs_delta_j`). w_i is the largest of point − lower, upper − point and `max_abs_delta_j`, plus the member's `E_interpolation_joint_edge_bound_j` (§4 step 4).
+floor, operative meaning the value that every later step uses, is max(point floor, corner-widened floor). Absolute form: w_i comes from the member's **anchor-shift energy envelope**. That is the record, in the member's `summary_metrics.json` (field `energy_anchor_shift_envelopes`, written by the pinned reducer, `joulewise/reduce.py`, with one entry for each energy of the member; the entry for the cell's phase energy is the one used), of the range that phase energy can take when the power trace is moved in time against the phase's two edges within the member's three timing bounds: its effective clock bound and the change in wall minus monotonic time over its stream (both registration §0.14), and the fiducial bound of the calibration it was reduced under (registration §0.11); the reducer version the member was reduced with fixes how the three are combined. The record holds the energy with no movement (`point_j`), the smallest and largest energy over those movements (`lower_j`, `upper_j`) and the largest absolute change, the larger of point − lower and upper − point (`max_abs_delta_j`). w_i is the largest of point − lower, upper − point and `max_abs_delta_j`, plus the member's `E_interpolation_joint_edge_bound_j` (§4 step 4).
 Comparative form (D-124, `d124_two_shared_edge_common_mode.v1`, parameter digest
 `dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38`): within one quad, the phase onset and the phase
 offset are each treated as one shared edge that may move by a common amount within the calibration bracket's operative fiducial
@@ -436,10 +436,16 @@ runs it only on complete contrasts; L9 makes it run on the kept quads.)
 - the outcome is `direction_supported`;
 - `claim_role` is primary or secondary (the code accepts either; both block-5 contrasts are primary, so no outcome
   differs);
-- `confirmatory_status` is `confirmatory`. The engine sets that value unless it finds a top-up among the manifest's
-  entries, meaning a bundle beyond the registered ones that matches a registered entry, or more than one successful
-  replacement of one entry (a replacement is a bundle collected in place of a registered one that failed); it then sets `demoted_exploratory`, with the reason `outcome_dependent_top_up`. Block 5
-  registers no top-up and no replacement (§10);
+- `confirmatory_status` is `confirmatory`. The engine sets that value unless a top-up touches any registered entry
+  of the manifest (the manifest's entries are its registered members, one bundle expected for each; for a manifest
+  of GAMMA's kind the engine does not narrow this to the contrast's own entries, so one top-up demotes both
+  contrasts). A replacement is a bundle collected in place of a registered one that failed, tagged with the entry
+  it replaces and with a reason the manifest allows. A top-up is either a bundle in the runs root beyond the
+  registered ones whose scientific configuration (its configuration with the run id and any replacement tags left
+  out) equals a registered entry's and which is not a valid replacement, or a second successful replacement of
+  one entry. On a top-up the engine sets `demoted_exploratory`, with the reason `outcome_dependent_top_up`.
+  Block 5 registers no top-up and no replacement (§10), and GAMMA's manifest allows no replacement reason
+  (`allowed_replacement_reasons` is empty);
 - the evidence class is not legacy: the gate's `evidence_class` is `current`. It is `legacy_l1` only when the claim
   gate is run with its `--legacy-l1-mechanics` option, which step 9 of §3.1 does not use;
 - there is no `loo_verdict_influential`;
