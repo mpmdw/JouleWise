@@ -46,7 +46,7 @@ by the pre-mortem's magistrate lens and by its synthesizer; `PREMORTEM.md` findi
   `configs/campaigns/v5_claim_25g83/`. The **sealed inventory** lists the SHA-256 of every file under
   `joulewise/`, `scripts/` and the three packs as H_claim holds them, and names H_claim in its `head` field. A
   file cannot name the commit that contains it, so the filled inventory lands one commit later: the **seal
-  commit** is the only child of H_claim and changes only the three seal documents. The **record commit** is
+  commit** is the only child of H_claim on the integration branch and changes only the three seal documents. The **record commit** is
   the child of the seal commit; it changes no window input and adds the **seal record**, the document that
   lists the SHA-256 of every sealed file.
 - The **measurement clone** is the one git checkout every window of the block runs from. The **desk clone**
