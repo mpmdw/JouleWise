@@ -1,8 +1,8 @@
 # Analysis plan V5-CLAIM-25G83-B5: what is computed from the claim windows, and how
 
-Status: **DRAFT, NOT SEALED. Revision 11, 2026-10-07** (revision 3 is commit `71c91d74`, revision 4 ends at commit
+Status: **Revision 12, 2026-10-07.** This file has its sealed bytes in the seal commit: the commit that follows the final head of the code (H_claim, registration §0.18) and carries the final text of this file and of the registration together with the filled `sealed_inventory.json` (registration §11). It is sealed when the seal record of registration §12, the document that lists the SHA-256 of every sealed file, exists and pins this file's SHA-256. (Revision 3 is commit `71c91d74`, revision 4 ends at commit
 `7261a585`, revision 5 at `9d63b4df`, revision 6 at `c6843537`, revision 7 at `dc046d4d`, revision 8 at `30d92227`,
-revision 9 at `bc8ad4ae`, revision 10 at `1d97f0a60`; the changes of revisions 4 to 11 are listed in §14). Companion to
+revision 9 at `bc8ad4ae`, revision 10 at `1d97f0a60`, revision 11 at `7c19c9c79`; the changes of revisions 4 to 12 are listed in §14.) Companion to
 `registration_block5.md` (the **registration**) and `flag_catalog.json` (the **flag catalog**) in the same directory;
 they are sealed together and none binds alone. Terms are those built in registration §0; terms that first appear here
 are built where they first appear. Every rule is fixed before any claim byte exists. Most estimators below are already
@@ -16,8 +16,8 @@ they are not measurements.
 window had every member valid, so no member was ever excluded after collection. Under Ed's 2026-10-05 ruling a
 member that fails a check costs only its own unit. This revision therefore registers: the analysed window is each
 pack's first claim-usable attempt (§1, §2.1); the exclusion function's output is the only source of exclusions
-(§2.2); the reported-cell estimator, the floors and the contrasts are computed over the kept units, with at least 8
-of 10 per stratum (§4, §5, §7); and the exclusions are disclosed beside every number (§8). This amends D-179 ruling 1
+(§2.2); the reported-cell estimator, the floors and the contrasts are computed over the kept units, with at least 5
+of 10 per stratum (§4, §5, §7; 8 in revisions 3 to 9, set to 5 by the seal gate); and the exclusions are disclosed beside every number (§8). This amends D-179 ruling 1
 and D-078's no-reduced-mean text (registration §10 item 4). Revision 2's disposition of three blind critiques is in
 commit `bfd1ee8c`, §14 of this file there.
 
@@ -76,11 +76,11 @@ disclosed structurally; their energies are never analysed, in this plan or as a 
 
 The analysed attempt's `derived/exclusions.json` (schema `joulewise.exclusions.v1`, written by the harvest from the
 sealed catalog) is the only source of exclusions. Its SHA-256 is pinned by finalization (§3 step 8) and by the
-reported-energy projection (§3 step 10).
+reported-energy projection (§3 step 10); its `catalog_sha256` must equal the sealed catalog's digest in the seal
+record, and its recorded harvest commit must be the one the §11 item 4 addendum pins, or the step goes to R3. (That §11 is the registration's. Its item 4 requires an addendum to the seal record, written before ALPHA-1's harvest, that names the harvest program's files, their SHA-256s and the commit of the desk checkout, which is the checkout, other than the measurement checkout, that the harvest runs from. The harvest writes that commit into `exclusions.json` once the change to the harvest program that the same item describes, the harvest lane, has landed.)
 
-- A member it removes is removed from every cell it feeds. A removed repeat member removes that repeat; a removed
-  quad member removes its whole quad, so the quad's drift cancellation is kept.
-- Every target cell has at least 8 kept units in each stratum: this is part of `claim_usable`, so it holds on every
+- A member it removes is removed from every cell it feeds. A removed repeat member removes that repeat; a removed quad member removes its whole quad, so the quad's drift cancellation is kept.
+- Every target cell has at least 5 kept units in each stratum: this is part of `claim_usable`, so it holds on every
   analysed attempt. If an analysis program finds fewer, the program and the exclusion function disagree: the
   analysis stops and the step goes to R3.
 - Nothing else excludes a member after collection. The floor extractor's same-slot exclusion of a cooldown-cap member
@@ -108,9 +108,9 @@ windows, they are not analysed. The END STATE design record cannot choose otherw
 and the **spread**: the largest minus the smallest of the start-triplet mean, the midpoint reference's energy and the
 end-triplet mean. Each member carries half of it as `E_whole_window_drift_allowance_j`, which enters a reported cell's
 recorded timing bounds B (§4 step 4) and a contrast's deterministic bound total D (§7.1 step 5). The midpoint is the
-only NEG-8 reference inside the window, the only one between the start and end triplets that the spread reads (GAMMA also runs two diagnostic interior references, one in the middle of its decode stages and one in the middle of its prefill stages; their role is not a NEG-8 role and the spread does not read them, registration §0.12). If the midpoint is lost (registration §0.12: failed and not restored by its spare, or
-contaminated), the spread falls back to |end mean − start mean|, so an excursion that rises in the middle of the
-window and reverts by its end is no longer measured, and the allowance can only shrink. The midpoint sits at the
+only NEG-8 reference inside the window (GAMMA's two diagnostic interior references enter neither the screen nor the
+allowance, registration §0.12). Of the references that run between the start and end triplets it is the only one the spread reads: GAMMA's two diagnostic interior references run one in the middle of its decode stages and one in the middle of its prefill stages, and their role is not a NEG-8 role. If the midpoint is lost (registration §0.12: failed and not restored by its spare, or
+contaminated), the spread falls back to |end mean − start mean|, so an excursion that rises in the middle of the window and reverts by its end is no longer measured, and the allowance can only shrink. The midpoint sits at the
 boundary between the decode and prefill arms (the window's decode stages and its prefill stages), after fifty decode members (forty in GAMMA), the one place where such
 an excursion is physically expected, and no block has yet measured how large these excursions are.
 
@@ -126,14 +126,16 @@ which the seal gate confirms; registration §7.2, §14 Q11). The flag catalog ke
 - **On ALPHA and BETA** the window keeps its screen result, its allowance and its numbers, and stays claim-usable;
   the flag is disclosed beside its reported cells and floors (§8.1).
 
-*Scope.* Only GAMMA is affected, because only its quads enter the contrasts' estimate and its allowance enters their
-D. The floor packs' reported cells are L1 instrument results, not contrasts. (A floor's value does not use the drift
-allowance, §5; the floor extraction only records each window's allowance beside the floor, and refuses a cell when it
-is absent, §3.1 step 4.)
+*Scope.* The rule removes only GAMMA attempts. A lost midpoint on ALPHA or BETA can understate that window's
+allowance, and so the bound B of its four reported cells, by an amount nothing measured; it is nevertheless only
+disclosed (the fixed sentence of §8.1), because no decision rests on B: the reported cells are L1 instrument results
+whose interval is printed, not tested. On GAMMA the allowance enters D, on which the decision
+`deterministic_bound_obscures_direction` rests, so an understated D could let a direction claim through. (A floor's
+value does not use the drift allowance, §5; the floor extraction only records each window's allowance beside the floor,
+and refuses a cell when it is absent, §3.1 step 4.)
 
 *Check in the claim gate.* By the rule above, GAMMA's analysed attempt never carries `neg8.midpoint_lost`. If the
-claim gate finds the flag on it, the exclusion function and the code disagree: the analysis stops and the step goes
-to R3, as in §2.2.
+claim gate finds the flag on it, the exclusion function and the code disagree: the analysis stops and the step goes to R3, as in §2.2.
 
 *Worked example (synthetic).* GAMMA-1's arm-boundary midpoint reference fails idle admission, and its spare
 overlaps a competing process, which the harvest finds, so the window carries `neg8.midpoint_lost`. Its
@@ -142,10 +144,8 @@ keeps its midpoint and is claim-usable, so GAMMA-2 is the analysed attempt and i
 §7.2's example) can reach L2. GAMMA-1's contrasts are never computed. Had ALPHA-1 carried the flag, it would have
 stayed claim-usable, and its reported cells would print as L1 with the flag disclosed.
 
-*What would change it.* Once the block's midpoint record (each window's spread with and without the midpoint,
-computed from reference energies and so read only after the release event) shows that the midpoint never moved the
-spread beyond the bound, a cold erratum may downgrade the flag to disclose-only on GAMMA too (registration §0.12,
-§10).
+*What would change it.* Nothing within block 5. A block's midpoint record (each window's spread with and without the midpoint, computed from reference energies and so read only after that block's release event) may show that the midpoint never moved the spread beyond the bound; a cold erratum may then downgrade the flag to disclose-only on GAMMA for a later block.
+It cannot reinstate a block-5 attempt that was re-armed: when the record is read GAMMA's attempts are over, and reinstating one would choose the analysed window after its energies were seen (registration §0.12, §10; seal gate, stage 1).
 
 ## 3. Order of operations
 
@@ -203,15 +203,15 @@ The issuer, pinset, input manifest, adapters, the exclusions consumer and the di
 **What it is.** For each model and each of decode, prefill-p42 and prefill-p2048, one gross phase energy averaged
 over the cell's kept units, with an interval that respects the units. Normative home:
 `docs/contracts/paper_reported_energy.md`. **Registration digests** (`REPORTED-ENERGY-REGISTRATION-DIGESTS`, filled
-from committed bytes at `f8164893`, re-tied at seal, that is, recomputed from the bytes at the final head of the code (registration §2 item 1) and written here again; `FILL[B5-FINAL-HASHES]` is the registration's mark on a digest that still waits for that): each floor pack's `extraction_spec.json` names the reported-energy
+from committed bytes at `f8164893`, re-tied at seal, that is, recomputed from the bytes at the final head of the code (registration §2 item 1) and written here again; where a digest still waits for that, a FILL mark named `B5-FINAL-HASHES` stands in its place, §13): each floor pack's `extraction_spec.json` names the reported-energy
 registration it implements in `reported_energy_registration.registration_sha256`:
 
 - ALPHA: `5560857668f053c99d0369161d4735015f4678a160b7a8423c7a7f357a50f5ea`, in
-  `configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json` (file SHA-256
-  `8b7969851c576032a89ebd00c5d3a4396e1eba264d4d1e6a4603420fecd15c5c`, `FILL[B5-FINAL-HASHES]`: this is the file's digest at `f8164893`; commit `f4cf90472` regenerated the file, so the value is stale until the final pass recomputes it);
+  `configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json` (file SHA-256 at the final head of the code:
+  `FILL[B5-FINAL-HASHES]`; revisions 4 to 11 printed `8b7969851c576032a89ebd00c5d3a4396e1eba264d4d1e6a4603420fecd15c5c`, the file's digest at `f8164893`, which went stale when commit `f4cf90472` regenerated the file);
 - BETA: `04657a74de839a48ebf6bf55fe66f299fdd2e6401353c76d87d4d6ae843dae79`, in
-  `configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json` (file SHA-256
-  `53e71b38ab9c9851744ee84e792263e081c78156f941e9ab782f924a132809c7`, `FILL[B5-FINAL-HASHES]`: the file's digest at `f8164893`, stale for the same reason).
+  `configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json` (file SHA-256 at the final head of the code:
+  `FILL[B5-FINAL-HASHES]`; revisions 4 to 11 printed `53e71b38ab9c9851744ee84e792263e081c78156f941e9ab782f924a132809c7`, the file's digest at `f8164893`, stale for the same reason).
 
 Both specs are `procedure_only` and carry no post-collection numeric value. At `9b0c680ed` each spec still names the registration digest written above; only the two file digests have moved.
 
@@ -225,14 +225,14 @@ prefill-p42 read the decode stages' 50 bundles; prefill-p2048 reads the p2048 st
    unit was removed: `m = 0.2 × fmean(r) + 0.8 × fmean(b)`. The two agree in exact arithmetic at full n, because 10 of
    the 50 members are repeats and 40 are quad members. The weights 0.2 and 0.8 are fixed by design, not by what was
    kept: a plain mean over the kept members would shift weight between the strata whenever n_r ≠ n_b.
-2. **Variance** of m from the two strata: `V = 0.04 × s_r² / n_r + 0.64 × s_b² / n_b`, with s_r and s_b the sample
-   standard deviations (`statistics.stdev`, divisor n − 1) of the kept repeats and of the kept quad means.
+2. **Variance** of m from the two strata: `V = 0.04 × s_r² / n_r + 0.64 × s_b² / n_b`, with s_r and s_b the sample standard deviations (`statistics.stdev`, divisor n − 1) of the kept repeats and of the kept quad means.
 3. **Half-width:** `h = t(0.975, min(n_r, n_b) − 1) × √V`, with exact quantiles t(0.975, 9) = 2.262157162798205,
-   t(0.975, 8) = 2.306004135204166, t(0.975, 7) = 2.364624251592785. Using the smaller stratum's degrees of freedom is
+   t(0.975, 8) = 2.306004135204166, t(0.975, 7) = 2.364624251592785, t(0.975, 6) = 2.446911851, t(0.975, 5) =
+   2.570581836, t(0.975, 4) = 2.776445105 (the last three to nine places; L9 pins them exactly). Using the smaller stratum's degrees of freedom is
    the conservative choice; a Welch–Satterthwaite combination would give more.
 4. **Recorded timing bounds.** Every member records three non-negative energy bounds: `E_clock_anchor_shift_bound_j`
-   (the largest change in the member's phase energy when the whole power trace shifts by any common amount within ±
-   its effective clock bound), `E_interpolation_joint_edge_bound_j` (identically 0 for interval-support traces, as all
+   (the largest change in the energy assigned to the member's phase when each of the phase's two edges is displaced, on its own, by up to the **edge bound** g, while the whole power trace is shifted by up to ± the member's effective clock bound m, registration §0.14; g = b + s, where b is the window's **operative fiducial bound**, that is, the calibration bracket's recorded `b_fiducial_s`, the larger of its pre and post captures' fiducial bounds plus the bracket's own allowance, in seconds, for drift between those two captures, registration §0.11, and s is the change in wall minus monotonic time over the member's sampler stream, registration §0.14;
+   the exact rule and a worked example close this step), `E_interpolation_joint_edge_bound_j` (identically 0 for interval-support traces, as all
    48 block-3 phase windows recorded), and `E_whole_window_drift_allowance_j` (half the window's gross-family NEG-8
    allowance, registration §0.12; the NEG-8 check is run on two families of reference energies, the gross energies and the idle-subtracted energies, each with its own allowance, and this is the gross one). The allowance is the one the harvest's `derived/neg8-allowance.json` names: the
    verdict row's own **NEG-8 bracket** (a second meaning of the word: not the pre and post calibration pair of registration §0.11, but the NEG-8 screen's record inside the whole-window verdict, `idle_admission_core.neg8_bracket`, which holds the screen's result and each family's allowance) when the harvest found no new loss (`stored_verdict`), or, when the harvest re-ran the
@@ -243,7 +243,7 @@ prefill-p42 read the decode stages' 50 bundles; prefill-p2048 reads the p2048 st
    allowance; with no record, or one that does not authenticate, there is no allowance and the cell refuses
    (`whole_window_drift_allowance_unrecorded`). The same holds for D in §7.1. For each kind, its stratified average is 0.2 × (mean over the kept repeats) + 0.8 ×
    (mean over the members of the kept quads); at full n this equals the 50-member average. The three averages are
-   summed with `math.fsum` into B. A missing kind refuses the cell; it is never zero by default.
+   summed with `math.fsum` into B. A missing kind refuses the cell; it is never zero by default. *The first kind, exactly* (orchestrator's ruling of 2026-10-07 on registration §14 Q5). The reducer assigns to a phase each power record's power times the length of that record's overlap with the phase (the overlap rule, registration §0.4). Where the records lie against the phase's two edges is known only within the timing bounds named at the head of this step: b, s and m, with g = b + s. Write E(x, y) for the energy the overlap rule assigns to the stretch from x to y, and t_on, t_off for the phase's recorded edges. The member's bound is the largest |E(t_on + e_on + d, t_off + e_off + d) − E(t_on, t_off)| over every e_on and every e_off between −g and +g, each chosen on its own, and every d between −m and +m, the one shift applied to both edges. Power is never negative, so the assigned energy cannot rise as the start edge moves later and cannot fall as the end edge moves later; the extremes over e_on and e_off therefore lie at the four corners e_on = ±g, e_off = ±g, and the reducer evaluates those four, each over every d. The result is the field `max_abs_delta_j` of the member's **anchor-shift energy envelope** for the phase: the record, in the member's `summary_metrics.json`, of the smallest and the largest energy over these movements (§5 describes the record; method `common_trace_shift_plus_independent_edge_corners_v3`, `joulewise/reduce.py` `_corner_composed_anchor_shift_envelope`). The summary stored in the bundle was reduced under the pre capture's fiducial bound alone, so the bound is not read from it: it is read from the member's summary as reduced again, in memory, under b, which is the summary the floor extraction (§5) and the claim gate (§7) read. *Worked example (synthetic).* b = 45.6 ms and s = 0.4 ms, so g = 46 ms; m = 2 ms; the record that holds the start edge averages 40 W, the record that holds the end edge averages 10 W, and every displaced edge stays inside its record. The largest change has the start edge 46 ms early and the end edge 46 ms late, which adds 0.046 × (40 + 10) = 2.30 J, and then both edges a further 2 ms early, which adds 0.002 × (40 − 10) = 0.06 J: the bound is 2.36 J. In that case, and only in it, the bound equals g × (P_on + P_off) + m × |P_off − P_on|, with P_on and P_off the average powers of the two records. When a displaced edge crosses into a neighbouring record that expression is only an approximation (on recomputed members of earlier windows it missed the exact bound by between −63% and +20%); the registered quantity is the exact maximum.
 5. **Endpoints:** `lower = m − h − B`, `upper = m + h + B`, in that order, not clamped at zero.
 6. **Per-token value:** 0.2 × (ΣE ÷ ΣT over the kept repeats) + 0.8 × (ΣE ÷ ΣT over the members of the kept quads), a
    ratio of totals within each stratum. For decode, T is the runtime-observed output token count (512 per member, of
@@ -252,9 +252,9 @@ prefill-p42 read the decode stages' 50 bundles; prefill-p2048 reads the p2048 st
    count (2048), and the four prompt-count surfaces must agree. Every kept member's realized counts equal the
    registered counts (a mismatch removes the member), so this value equals m ÷ T; at full n it equals D-179's ΣE ÷ ΣT
    over the 50 members. A bad denominator refuses the per-token value only, not the mean.
-7. **Attribution floor** (`binding.attribution_floor_j`, `FILL[ATTRIBUTION-FLOOR-BINDING]`), printed beside the cell
-   and never added into its interval: "phase-edge timing alone could move this cell's energy by up to about that many
-   joules, which the interval does not include."
+7. **Attribution floor** (`binding.attribution_floor_j`; a formula is registered and no number is bound, by the orchestrator's ruling of 2026-10-07 on registration §14 Q5). *Forcing problem:* the first kind of step 4 says how far phase-edge timing alone could move the energy assigned to one member's phase, and its stratified average is inside the interval, as part of B. But every member of a window is reduced under that window's one operative fiducial bound: if the sampler's edges sit late, they sit late in every member, so this part of the bound does not shrink when members are averaged. A reader therefore needs the largest single-member value beside the cell. Earlier rulings named a constant for it, D-078's "about 1 J", which was one member's bound in a window of 2026-07-25 under another macOS build, model and calibration (registration §0.10); block 5 computes each cell's own value instead.
+   *Rule:* the attribution floor of a cell is the largest first-kind bound (`E_clock_anchor_shift_bound_j`, step 4) over the cell's kept members. The issuer computes it at step 10 of §3.1 from the window's own members and bracket, and records with it the member that attains it and the smallest value over the kept members; the stratified average of the same bound is already recorded, as the first entry of the output field `interval.kind_averages_j` (Outputs per cell, below). The attribution floor is printed beside the cell and is not added to its interval (the output field `attribution_floor_composed` stays false). It is an energy of a claim window, so it is restricted until the release event. *Worked example (synthetic).* The kept members' bounds run from 1.95 J to 2.36 J (the member of step 4's example) and their stratified average is 2.12 J: 2.12 J is inside B, and the cell prints an attribution floor of 2.36 J. (The two cell examples below keep the small synthetic kind averages of earlier revisions, 0.010 J for this kind; they show the arithmetic, not the size.)
+   *Fixed sentence*, with X the attribution floor: "Phase-edge timing alone could move the energy assigned to this phase of a single request by up to X J. The average of that bound over the kept members is already inside the interval, as part of B; X itself is not added. The bound says how far the assigned energy moves when power is taken as constant within each sampler record; it is not a bound on the physical energy of the phase."
 
 **Worked example, all units kept (synthetic).** Repeats r = 10.0, 10.2, 9.9, 10.1, 10.0, 10.3, 9.8, 10.1, 10.0, 9.6 J
 (mean 10.0, s_r = 0.2); quad means b = 10.4, 10.1, 10.3, 10.2, 10.5, 10.0, 10.2, 10.3, 10.1, 9.9 J (mean 10.2,
@@ -288,7 +288,7 @@ can resolve.
 
 **Binding.** Each floor pack's `extraction_spec.json` defines six floor cells per model (decode, prefill-p42 and
 prefill-p2048, each in an **absolute** form over the kept repeats and a **comparative** form over the kept null-quad
-differences), re-tied at seal (the two file digests of §4, `FILL[B5-FINAL-HASHES]`). The code is `joulewise/detection_floor.py` (`absolute_false_effect_floor`,
+differences), re-tied at seal (the two file digests of §4). The code is `joulewise/detection_floor.py` (`absolute_false_effect_floor`,
 `comparative_false_effect_floor`) driven by `joulewise/floor_extraction.py`. The p42 cells are expected to be
 non-extractable (§2.2).
 
@@ -297,11 +297,11 @@ non-extractable (§2.2).
 - absolute form: v are the kept repeat energies; deviations r_i = v_i − mean(v); prediction = t × s × √(1 + 1/n);
 - comparative form: v are the kept null-quad differences d_k = (B1 + B2 − A1 − A2)/2; deviations are the d_k
   themselves (not re-centred); prediction = |mean(d)| + t × s × √(1 + 1/n);
-- s is the sample standard deviation of the deviations; t = `student_t_critical_95(n − 1)` from the code's table
-  (2.262 for 9 degrees of freedom, 2.306 for 8, 2.365 for 7);
+- s is the sample standard deviation of the deviations; t = `student_t_critical_95(n − 1)` from the code's table (2.262 for 9 degrees of freedom, 2.306 for 8, 2.365 for 7, 2.447 for 6, 2.571 for 5, 2.776 for 4);
 - point floor = max(max |deviation|, prediction);
 - **guard**: g(n) = 1 for n ≥ 10 and √(9/(n − 1)) for 5 ≤ n < 10 (`small_sample_guard_factor`): g(9) = 1.0607,
-  g(8) = 1.1339. Guarded floor = g × unguarded floor.
+  g(8) = 1.1339, g(7) = 1.2247, g(6) = 1.3416, g(5) = 1.5; the function is undefined below 5, which is why the
+  cell minimum is 5 (registration §6.6). Guarded floor = g × unguarded floor.
 
 **Corner widening.** Each value may lie anywhere within ± its admissible half-width w_i (its timing uncertainty in
 joules). The corner-widened floor is the largest point floor over every corner of that box (2ⁿ corners, exact
@@ -363,8 +363,9 @@ first and third §5 examples: absolute R = 0.5730 / 0.4745 = 1.21 (fails); compa
 
 ### 7.1 Frozen inputs and arithmetic
 
-Frozen in GAMMA's `analysis_manifest_v3.json` (re-tied at seal: `FILL[B5-FINAL-HASHES]`, the final pass prints this
-file's SHA-256 here; this revision writes no digest of it). Lane L10 changed GAMMA's interior references
+Frozen in GAMMA's `analysis_manifest_v3.json`
+(`configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/analysis_manifest_v3.json`; re-tied at seal: file SHA-256 at
+the final head of the code `FILL[B5-FINAL-HASHES]`). Lane L10 changed GAMMA's interior references
 (registration §2), not this manifest.
 
 | Contrast id | Metric | Sides (A, B) | Planned quads |
@@ -378,7 +379,7 @@ quad order is fixed and **not randomized**: A1 = 1.7B, B1 = 8B, B2 = 8B, A2 = 1.
 on the model that the quad differences are independent draws once linear drift has cancelled.
 
 **Amendment.** The manifest's fixed n = 10 is the planned n. The analysed n of a contrast is its kept quads, at least
-8 (registration §6.6); a quad with any removed member is dropped. The claim gate does not raise
+5 (registration §6.6); a quad with any removed member is dropped. The claim gate does not raise
 `fixed_n_plan_incomplete` or `paired_block_incomplete` for a quad the exclusion function removed (§2.2), and
 finalization records GAMMA's exclusions digest so the manifest's frozen semantics stay unchanged and the analysed n is
 traceable. `FILL[GAMMA-MANIFEST-EXCLUSIONS-BINDING]` names how L9 binds them.
@@ -387,12 +388,20 @@ traceable. `FILL[GAMMA-MANIFEST-EXCLUSIONS-BINDING]` names how L9 binds them.
 
 1. Per kept quad k: `d_k = (B1 + B2)/2 − (A1 + A2)/2`.
 2. `dbar = mean(d_k)`; `s_d` = sample standard deviation; `se_rep = s_d / √n`.
-3. Metrology term: each member records governed random-error variances. For each such term, the quad's variance is
-   `(var_A1 + var_A2)/4 + (var_B1 + var_B2)/4`; summed over kept quads and divided by n² it is that term's squared
-   standard error; `se_met` is the root of their sum; `se_total = √(se_rep² + se_met²)`. Disclosed conservatism: each
-   member's random error is already part of s_d, so adding se_met counts it twice; the interval's coverage is above
-   95%.
-4. `t* = round(t(0.975, n − 1), 3)` (the engine rounds to three places: 2.262, 2.306, 2.365). The **metrology
+3. Metrology term: the engine reads governed random-error variances only for the metric `energy_request_j`; for
+   the two phase metrics of block 5 none is recorded, so `se_met = 0` and `se_total = se_rep`. Each member's
+   run-to-run error is already inside s_d (the d_k are observed with it), so a term added in quadrature would count it
+   twice: in simulation the plain t interval covers 95.0% and the doubled one 99.8% (seal gate, stage 1). Errors that
+   are not random from run to run (a calibration timing bias common to all members) are carried by D (step 5) and by
+   the attribution floor (§4 step 7), never by this interval.
+   (Terms of this step. The *metrology term* `se_met` is a standard error that the engine adds in quadrature to
+   `se_rep` when a metric has one: `se_total = √(se_rep² + se_met²)`. It is built from *random-error variances*:
+   variances, in J², that a member's summary records for a named source of run-to-run error. *Governed* means that
+   the engine reads such a variance only when the summary's reducer version and idle-estimation method are a pair
+   the code lists. The one such variance is `E_idle_mean_j2`, the variance of the member's idle-baseline mean taken as an
+   energy; the engine reads it for `energy_request_j` and for no other metric.)
+4. `t* = round(t(0.975, n − 1), 3)` (the engine rounds to three places: 2.262, 2.306 and 2.365 for n = 10, 9 and 8;
+   2.447, 2.571 and 2.776 for n = 7, 6 and 5). The **metrology
    interval** (the engine's name, `metrology_aware_ci95`, for the 95% interval of dbar from its standard error alone,
    before the deterministic bounds of step 5 are added) is `dbar ± t* × se_total`.
 5. Deterministic bound total D: for each recorded deterministic kind, a quad's bound is the A-side mean of its two
@@ -460,12 +469,11 @@ register none (`equivalence: null`); and two reason codes of the randomization c
 registration's §1 table cites this definition.
 
 **Worked example (synthetic).** d_k = 3.1, 2.9, 3.3, 3.0, 2.8, 3.2, 3.1, 2.9, 3.0, 2.7 J, with quad 4 removed: n = 9,
-dbar = 3.0 J, s_d = 0.19365, se_rep = 0.064550. With a quad variance of 0.0100 J² in every quad,
-se_met = √(9 × 0.0100 / 81) = 0.033333 and se_total = √(0.0041667 + 0.0011111) = 0.072648. t* = 2.306; the metrology
-interval is 3.0 ± 2.306 × 0.072648 = [2.8325, 3.1675] J; with D = 0.05 J the decision interval is [2.7825, 3.2175] J.
-t = 41.3, so p is far below 0.025. With a floor of 1.2 J, |dbar| exceeds the floor, neither interval contains 0, Holm
-rejects, dbar > 0 matches the registered direction, and leaving out any one kept quad moves dbar by at most 0.0375 J
-(< 0.25 × 1.2): outcome `direction_supported`, ceiling L2.
+dbar = 3.0 J, s_d = 0.19365, se_rep = 0.064550; se_met = 0 for the phase metrics, so se_total = 0.064550. t* = 2.306;
+the metrology interval is 3.0 ± 2.306 × 0.064550 = [2.8511, 3.1489] J; with D = 0.05 J the decision interval is
+[2.8011, 3.1989] J. t = 46.5, so p is far below 0.025. With a floor of 1.2 J, |dbar| exceeds the floor, neither
+interval contains 0, Holm rejects, dbar > 0 matches the registered direction, and leaving out any one kept quad moves
+dbar by at most 0.0375 J (< 0.25 × 1.2): outcome `direction_supported`, ceiling L2.
 
 ### 7.3 Registered magnitude estimates (descriptive, from the same kept quads)
 
@@ -490,12 +498,13 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
 - **Kept units:** beside every reported cell, floor and contrast: n_r and n_b (or the kept quads), the removed units
   with the catalog families of the codes that removed them, and their positions in the window (stage and ordinal),
   so a reader can see whether removals clustered. A unit removed by a RESTRICTED code is shown as "removed (restricted
-  code)" until the release event.
+  code)" until the release event; the disclosure producer performs that redaction when it reads `derived/exclusions.json`,
+  `derived/flags.jsonl` and `derived/window_flags.json`, which stay in restricted custody until then (registration §8).
 - **Attempt history and conditionality:** every attempt of every pack with its verdict, cause key, flag counts by
   family and yield status with "collected X of Y planned members" (registration §5.7), printed as "attempts of this
   pack: N (causes …)". Fixed sentence: "These numbers are conditional on a window
-  that passed the registered physical-hazard checks at arm and kept at least 8 of 10 units per stratum after the
-  registered exclusions."
+  that passed the registered physical-hazard checks at arm and kept at least 5 of 10 units per stratum after the
+  registered exclusions; the kept units of each cell are printed beside it."
   *A hazard not read at the arm.* *Forcing problem:* since audit finding A3 (registration §9.1; the rule is in
   registration §0.15 and §4.1) the arm refuses on an unread probe only for the instrument. When the arm's probe of
   the clock, battery, thermal, contention or disk hazard returns no reading (UNMEASURED), the arm records the flag
@@ -509,14 +518,21 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
   its 2,700 s cap and recorded `contention.arm_unmeasured` (registration §4.1), and the window was claim-usable.
   BETA's cells print the fixed sentence followed by "At this window's arm the contention check returned no reading
   and did not refuse; the monitor measured it during the window."
-- **Sensitivity line (PROPOSED; the seal gate adopts or strikes it, registration §14 Q6).** *Forcing problem:*
-  thermal pressure and contention plausibly correlate with load, most of all on 8B prefill-p2048 members, so removing
-  the members they touched could bias a cell's mean downward. (Battery assist, the case that first raised this, is no
-  longer an exclusion; it has its own registered line below.) *Rule:* when any unit of a cell or contrast was
-  removed by a PHYSICS_IN_SPAN code, the same estimator is recomputed over the units that would be kept if
-  PHYSICS_IN_SPAN codes were ignored (units removed by any other family stay removed), and printed beside the primary
-  value as "sensitivity: physics-in-span exclusions not applied (n_r = …, n_b = …)". It never replaces the primary
-  value, never gates anything and licenses no claim.
+- **Sensitivity line (ADOPTED AS AMENDED by the seal gate, stage 1, 2026-10-07; registration §14 Q6).** *Forcing
+  problem:* thermal pressure and contention plausibly correlate with load, most of all on 8B prefill-p2048 members, so
+  removing the members they touched could bias a cell's mean downward. (Battery assist, the case that first raised
+  this, is no longer an exclusion; it has its own registered line below.) *Rule:* when any unit of a cell or contrast
+  was removed by one of the three load-correlated codes `thermal.os_level_nonzero`,
+  `thermal.powermetrics_pressure_elevated` and `contention.request_overlap`, the same estimator is recomputed over
+  the units that would be kept if those three codes were ignored (a unit removed by any other code, including the
+  other eight PHYSICS_IN_SPAN codes, stays removed: those describe an energy that is wrong or unmeasured, not a hazard
+  that follows load), and printed beside the primary value as "sensitivity: load-correlated physics exclusions
+  (thermal pressure, contention) not applied (n_r = …, n_b = …)" (for a contrast, "(n = …)"). The test is on the
+  codes of each removed unit in `exclusions.json`. It never replaces the primary value, never gates anything and
+  licenses no claim. *Worked example (synthetic, the §4 data):* repeat 6 removed by `thermal.os_level_nonzero`, quads
+  5 and 9 by `member.admission_aborted`: primary 10.13333 J (n_r = 9, n_b = 8); the line restores repeat 6 only:
+  0.2 × 10.0 + 0.8 × 10.175 = 10.14 J (n_r = 10, n_b = 8), half-width 0.11557 J. Had repeat 6 been removed by
+  `clock.step_overlap`, no line is printed for that cell.
 - **Battery-assist sensitivity line (REGISTERED; ruling of 2026-10-06, registration §9.2).** *Forcing problem:*
   battery assist (the battery helping the adapter, registration §6.4) is disclosed, not excluded, because excluding
   it would select members by load. A reader still needs to see whether the members it touched move the number.
@@ -529,19 +545,19 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
   and over the kept units with every unit that contains an assist member removed (a quad with one assist member is
   removed whole, as in §2.2). Both are printed, side by side, as "with assisted members" and "without assisted
   members (n_r = …, n_b = …)", with the count of assist members per stratum. Neither value is chosen after the fact;
-  the first is the reported cell. If removing assisted units leaves fewer than 8 units in a stratum, the second value
-  is still printed, with its n and the words "below the registered minimum of 8 units", and it decides nothing.
+  the first is the reported cell. If removing assisted units leaves fewer than 5 units in a stratum, the second value
+  is still printed, with its n and the words "below the registered minimum of 5 units", and it decides nothing.
   *Worked example (synthetic, the §4 data).* If repeat 3 (9.9 J) and quad 7 (mean 10.2 J) contain assist members, the
   second value uses n_r = 9, n_b = 9: fmean(r) = 10.01111 J, fmean(b) = 10.2 J, m = 0.2 × 10.01111 + 0.8 × 10.2 =
   10.16222 J, printed beside the primary 10.16 J.
   *GAMMA's contrasts* (adopted, registration §14 Q9): each contrast is also computed without every kept quad that
   holds an assist member, by §7.1 steps 1–4 (dbar and its metrology interval), and printed beside the primary
   estimate as "without quads holding assisted members (n = …)", with the count of such quads. It has no Holm test, no
-  floor decision and no outcome; it decides nothing, and below 8 quads it carries the words "below the registered
-  minimum of 8 quads". *Worked example (synthetic, the §7.1 data).* If quad 3 (d = 3.3 J) holds an 8B assist member,
-  the line uses the other 8 kept quads: dbar = 2.9625 J, s_d = 0.16850, se_rep = 0.059574; with the same quad
-  variance of 0.0100 J², se_met = 0.035355 and se_total = 0.069276; t* = 2.365, so the interval is
-  [2.7987, 3.1263] J, printed beside the primary 3.0 J and [2.8325, 3.1675] J.
+  floor decision and no outcome; it decides nothing, and below 5 quads it carries the words "below the registered
+  minimum of 5 quads". *Worked example (synthetic, the §7.1 data).* If quad 3 (d = 3.3 J) holds an 8B assist member,
+  the line uses the other 8 kept quads: dbar = 2.9625 J, s_d = 0.16850, se_rep = 0.059574 = se_total (no metrology
+  term for the phase metrics, §7.1 step 3); t* = 2.365, so the interval is 2.9625 ± 0.1409 = [2.8216, 3.1034] J,
+  printed beside the primary 3.0 J and [2.8511, 3.1489] J. (The data are the d_k of the worked example in §7.2.)
 - **Monitor cost:** the hazard monitor's own CPU time per window and the number of its probes that fell inside target
   phases (registration §0.17), and the meter reader's CPU time (registration §5.8), with the fixed sentence "The
   hazard monitor ran on efficiency cores at background priority during collection, and the whole-machine meter's
@@ -563,7 +579,8 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
   quarter of the floor; the direction, the floor status and the multiplicity decision are unchanged."
 - **Order:** "Every quad ran 1.7B, 8B, 8B, 1.7B in that fixed order; the order was not randomized, and the p-value
   assumes the quad differences are independent."
-- **Conservative contrast interval:** the se_met double count of §7.1 step 3, and the rounded t*.
+- **Contrast interval:** the rounded t* (2.306 for 2.306004); no metrology term is added for the phase metrics
+  (§7.1 step 3), and errors common to all members are carried by D and the attribution floor.
 - **Battery, thermal, contention, clock:** per window, the hazard measurements at arm (each hazard whose probe
   there returned no reading is named, `<module>.arm_unmeasured`, as above), the counts of each
   physics-in-span code, the count of members with anchor status `bounded` and the largest effective bound, and the
@@ -688,12 +705,12 @@ Every printed number is `MEASURED` or `DERIVE`; none is recalculated from prose.
 | Selection scope | decode, Qwen3 1.7B vs 8B, prompt 0, forced 512 | prefill at 2048 tokens, same pair | one model, one phase, its kept units |
 | Multiplicity | Holm, m = 2, α = 0.05 | same | none |
 | Metric, window class | gross `phase_energy_j.decode`, phase window | gross `phase_energy_j.prefill`, phase window | gross phase energy, phase window |
-| Unit, dependence | quad side-mean difference, kept quads (≥ 8 of 10), modelled independent | same | kept repeats + kept quads (≥ 8 of 10 each), modelled independent |
+| Unit, dependence | quad side-mean difference, kept quads (≥ 5 of 10), modelled independent | same | kept repeats + kept quads (≥ 5 of 10 each), modelled independent |
 | Estimator | §7.1 | §7.1 | §4 |
 | Inclusion, exclusions | the analysed attempt's `exclusions.json` under the sealed catalog | same | same |
 | Order, blocking, covariates | fixed unrandomized A/B/B/A interleaving cancels linear drift; no covariates | same | fixed member order |
 | Floor gate | `floor_gate_j`, side-wise max (§5) | same | attribution floor printed beside, not a gate |
-| n sizing, top-up | planned 10; analysed = kept quads, at least 8; no replacement, no top-up | same | planned 10 + 10; analysed = kept, at least 8 per stratum |
+| n sizing, top-up | planned 10; analysed = kept quads, at least 5; no replacement, no top-up | same | planned 10 + 10; analysed = kept, at least 5 per stratum |
 | Denominator | none for the contrast; 512 output tokens for the §7.3 per-token difference | none; 2048 prompt tokens | runtime-observed tokens |
 | Holdout | not applicable | not applicable | not applicable |
 | Ceiling; forbidden upgrade | L2 per §7.2; no claim about other prompts, lengths, models or machines | L2; same | L1; no model comparison from these cells |
@@ -704,8 +721,8 @@ Every printed number is `MEASURED` or `DERIVE`; none is recalculated from prose.
 
 | Need | State at this writing | FILL |
 |---|---|---|
-| Consume `exclusions.json` (`joulewise/analysis_engine/inputs.py`): kept units per cell, removed units excluded everywhere | Absent | `EXCLUSIONS-CONSUMER` |
-| D-179 issuer implementing §4 (stratified mean, variance, df, B, per-token over kept units; n_r, n_b in the record), projecting each cell independently and preserving the whole-window allowance allocation, reading the re-screened allowance when the harvest re-screened (§4 step 4) | Absent ("No production dispatch exists", `joulewise/paper_reported_energy.py`) | `REPORTED-ENERGY-ISSUER` |
+| Consume `exclusions.json` (`joulewise/analysis_engine/inputs.py`): kept units per cell, removed units excluded everywhere; the two checks of §2.2 (its `catalog_sha256` against the sealed catalog's digest in the seal record, its recorded harvest commit against the harvest addendum) | Absent | `EXCLUSIONS-CONSUMER` |
+| D-179 issuer implementing §4 (stratified mean, variance, df, B, per-token over kept units; n_r, n_b in the record), projecting each cell independently and preserving the whole-window allowance allocation, reading the re-screened allowance when the harvest re-screened (§4 step 4), reading each member's first-kind bound from its summary as re-derived under the window's operative fiducial bound (§4 step 4), computing the attribution floor from its own per-member rows (§4 step 7) and refusing a binding whose `attribution_floor_j` differs from that maximum (the existing refusal `paper_reported_energy_binding_mismatch`), with a synthetic test on a cell that has one removed member | Absent ("No production dispatch exists", `joulewise/paper_reported_energy.py`). The projection function that exists, `_project_cell`, takes exactly 50 member rows and the quantile for 9 degrees of freedom, and checks only that `attribution_floor_j` is a finite number that is not negative; the kept-units arithmetic of §4 and the check of the floor against the computed maximum belong to the issuer | `REPORTED-ENERGY-ISSUER` |
 | Floor extraction over kept units with g(n) (`joulewise/floor_extraction.py`) | The extractor assumes full n | `FLOOR-EXTRACTION-KEPT-UNITS` |
 | Claim gate over kept quads: no `fixed_n_plan_incomplete` for removed quads; leave-one-quad-out over kept quads; finalization binds the exclusions digest | Absent | `GAMMA-MANIFEST-EXCLUSIONS-BINDING` |
 | **Lane L9-NEG8: one NEG-8 survivor logic for every claim consumer** (registration §0.12, §9.1, §14 Q13). It runs after the seal and before any claim, as a gated fix to code that does not run during collection (registration §11 item 1 (ii)), pinned before the release event (§11 item 4), with one design round by Sol and Fable before code. It must: (a) use one strict-invalid predicate in the verdict writer, the replay and the harvest, moving the replay and the harvest to the writer's predicate (structural check, custody triangle, config binding) plus full strict validation, so all three drop exactly the same references, and leaving the writer's bytes unchanged (Fable cold pass 4 N-3); (b) pass the harvest archive through floor extraction (`floor_extraction.extract_cells`), the mint (`scripts/mint_floor_artifact.py`, `mint_floor_artifact_generalized.py`) and `scripts/extract_detection_floors.py`, so a block-5 floor cell gets the allowance the harvest's screen left standing (Sol re-verification R2; cold pass 4 D1); (c) make claim validation authenticate the harvest's survivor screen before the stored-failure veto, so a window whose stored screen failed and whose survivor re-screen passed gets the re-screened allowance, while the membership, provenance and physics checks stay independent (Sol R3); (d) have every claim consumer read the allowance from `derived/neg8-allowance.json` (registration §0.12), never from the stored bracket. Each with a test on a synthetic HAZARD root (the code's name for a runs root of a block-5 window, that is, a directory under which the window's member bundles are written, recognised by the launch-lineage locator file the driver publishes into it) with and without its archive. | At the int5 head `fe28e5a0c`, and unchanged at `9b0c680ed`: the record, its consumer and `analyze-claims --neg8-harvest-archive` exist; (b), (c) and the shared predicate (a) do not. Until the lane lands, every block-5 floor cell refuses (`whole_window_drift_allowance_unrecorded`) and a contrast resting on a recorded survivor re-screen refuses (`whole_window_neg8_verdict_failed`): a floor or contrast computed from HAZARD roots whose window has a recorded re-screen has no allowance and is not claimable. Both refuse; neither prints a wrong number. | `L9-NEG8` |
@@ -715,18 +732,18 @@ Every printed number is `MEASURED` or `DERIVE`; none is recalculated from prose.
 | Bracket replay in finalization with the ledger-cutoff baseline (memo 3.3). Finalization evaluates the calibration bracket again from the ledger (the replay). That evaluation refuses (`calibration_ledger_baseline_missing`) unless the ledger snapshot it is given carries, as its baseline, the acceptance's cutoff: the ledger sequence and head digest up to which the acceptance was derived (registration §0.11) | Present at `9b0c680ed`: `joulewise/analysis_manifest_v3.py` loads the snapshot with the cutoff's sequence and head digest as its baseline (commit `f8ad16514`). Revision 10 still wrote "Defect known" here | none |
 | Claim gate re-runs `analyze_claims` and requires byte equality; the `evidence_class` read is fixed (memo 3.7) | Defect known | (part of L9) |
 | Claim verdicts to results-fill input | Absent | `CLAIM-VERDICT-TO-FILL-ADAPTER` |
-| Disclosure producer for §7.3 and §8, including the battery-assist line (§8.1), the physics-in-span sensitivity line if adopted, the whole-machine cross-check (§8.2, reading `withheld/meter.json`), the reference-drift line's survivor counts, lost references, spares and lost midpoint (§8.1), the second sentence for a hazard not read at the arm (§8.1), and the step-4 p42 exit rule | Absent | `DISCLOSURE-PRODUCER` |
+| Disclosure producer for §7.3 and §8, including the battery-assist line (§8.1), the load-correlated physics sensitivity line (§8.1), the whole-machine cross-check (§8.2, reading `withheld/meter.json`), the reference-drift line's survivor counts, lost references, spares and lost midpoint (§8.1), the second sentence for a hazard not read at the arm (§8.1), the redaction of a unit removed by a RESTRICTED code (§8.1), the attribution-floor sentence beside each reported cell (§4 step 7; no program prints the attribution floor today), and the step-4 p42 exit rule | Absent | `DISCLOSURE-PRODUCER` |
 
 Each is written and merged before the release event by seats that have read no claim-window energy, against this
 plan's text, tested on synthetic fixtures (including: one removed repeat gives n_r = 9, the stratified mean and t with
-8 degrees of freedom; one removed quad member drops its quad; three of ten quads removed gives `cell.below_minimum`;
-floors at n = 8 use g = 1.134; an 8B-tagged bundle under a 1.7B cell is refused), pinned by an addendum to the seal
+8 degrees of freedom; one removed quad member drops its quad; six of ten quads removed gives `cell.below_minimum` and five removed does not;
+floors at n = 8 use g = 1.134 and floors at n = 5 use g = 1.5; an 8B-tagged bundle under a 1.7B cell is refused), pinned by an addendum to the seal
 record, and exercised by the blind dry run (§3.2) before the release.
 
 ## 12. What the analysis never does
 
 - Use a member or unit the exclusion function removed; exclude, replace, reweight or re-collect anything else after
-  collection; compute a cell over fewer than 8 kept units in a stratum; pool members across attempts or windows; top
+  collection; compute a cell over fewer than 5 kept units in a stratum; pool members across attempts or windows; top
   up a cell from another attempt; analyse a superseded window's energies or any attempt other than a pack's first
   claim-usable one.
 - Weight a reduced cell by its kept member counts instead of the fixed 0.2 / 0.8 strata (§4 step 1).
@@ -740,17 +757,28 @@ record, and exercised by the blind dry run (§3.2) before the release.
 
 ## 13. FILLs specific to this plan
 
-Still open: `B5-ANALYSIS-CUSTODY-ROOT`, `B5-BLIND-DRY-RUN-RECORD`, `EXCLUSIONS-CONSUMER`, `L9-NEG8`, `REPORTED-ENERGY-ISSUER`,
-`FLOOR-EXTRACTION-KEPT-UNITS`, `GAMMA-MANIFEST-EXCLUSIONS-BINDING`, `V5-FINAL-PINSET`, `V5-V2-INPUT-MANIFEST`,
-`MINT-TO-CLOSEOUT-ADAPTER`, `CLAIM-VERDICT-TO-FILL-ADAPTER`, `DISCLOSURE-PRODUCER`, `DISCLOSURE-SITES`, and, shared
-with the registration, `ATTRIBUTION-FLOOR-BINDING`. Each names code, a record or a ruling that does not exist yet.
-Also shared with the registration is `B5-FINAL-HASHES`, a mark on digests and not a missing value: here it stands on
-the two `extraction_spec.json` file digests of §4, which are stale, on the "re-tied at seal" of §5, and on GAMMA's
-manifest digest of §7.1, which is not yet written. The final pass fills all of them at the final head of the code.
-`REPORTED-ENERGY-REGISTRATION-DIGESTS` was filled in revision 4 (§4). Revision 2's `ED-PREDICATE`
-(replaced by the contention member rule) and `P42-S1-STRUCTURAL-CHECK` (now the s1-structural diagnostic at ALPHA-1's
-harvest) are withdrawn. The open questions are registration §14; Q4 (placement), Q5 (attribution floor) and Q6 (the
-sensitivity line) bear directly on this plan.
+Still open after the seal: `B5-ANALYSIS-CUSTODY-ROOT`, `B5-BLIND-DRY-RUN-RECORD`, `EXCLUSIONS-CONSUMER`, `L9-NEG8`,
+`REPORTED-ENERGY-ISSUER`, `FLOOR-EXTRACTION-KEPT-UNITS`, `GAMMA-MANIFEST-EXCLUSIONS-BINDING`, `V5-FINAL-PINSET`,
+`V5-V2-INPUT-MANIFEST`, `MINT-TO-CLOSEOUT-ADAPTER`, `CLAIM-VERDICT-TO-FILL-ADAPTER`, `DISCLOSURE-PRODUCER`,
+`DISCLOSURE-SITES`. Each names code, a record or a ruling that does not exist yet. Where each is filled: the seal
+commit fixes this file's bytes and the seal record pins their SHA-256, so a value that becomes known after the seal
+goes into an addendum to the seal record (registration §12), not into this file. If this file is nevertheless
+changed to carry one, the same addendum restates this file's SHA-256: no program reads this file, so nothing else
+would bind the changed bytes.
+
+`ATTRIBUTION-FLOOR-BINDING`, shared with the registration, is closed: revision 12 filled it with a formula and bound
+no number (§4 step 7; registration §14 Q5).
+
+`B5-FINAL-HASHES`, also shared with the registration, marks a digest and not a missing rule. Where the mark stands,
+the SHA-256 of the named file's bytes at the final head of the code is written in its place before the seal commit
+is made. In this plan it stands in three places: the two `extraction_spec.json` file digests of §4 and the digest of
+GAMMA's manifest in §7.1. `REPORTED-ENERGY-REGISTRATION-DIGESTS` was filled in revision 4 (§4). Revision 2's
+`ED-PREDICATE` (replaced by the contention member rule) and `P42-S1-STRUCTURAL-CHECK` (now the s1-structural
+diagnostic at ALPHA-1's harvest) are withdrawn.
+
+The open questions are registration §14. Of the three that bore directly on this plan, Q4 (placement) is still
+open; Q5 (the attribution floor) was closed by the orchestrator's ruling of 2026-10-07, and Q6 (the sensitivity
+line) by the seal gate at stage 1 (§8.1).
 
 ## 14. Changes from earlier revisions
 
@@ -889,7 +917,7 @@ threshold or exclusion used by §4–§7 changed, and no code changed.
   triplets that the spread reads; GAMMA's two diagnostic references are inside the window too and are not read.
 - §3.1: the close-out (step 6) runs after finalization (step 8); the step numbers are kept and the order is stated.
 - §4, §5, §7.1: the two `extraction_spec.json` digests and the three phrases "re-tied at seal" are marked
-  `FILL[B5-FINAL-HASHES]`. The two digests are stale and are not recomputed here; the final pass recomputes them at
+  with the FILL mark `B5-FINAL-HASHES`. The two digests are stale and are not recomputed here; the final pass recomputes them at
   the final head.
 - §7.2: of the three reason codes that can block L2 after the sensitivity lines, `loo_verdict_influential` can
   arise in block 5, because the leave-one-quad-out line runs; the two randomization codes cannot. For GAMMA's
@@ -909,3 +937,62 @@ threshold or exclusion used by §4–§7 changed, and no code changed.
   (question SG-12).
 - Every line above §6's sentence on R_cm keeps its line number, as in revision 10. Corrections above it were made
   inside existing lines, so 23 of those lines are longer than the file's usual width.
+
+**Revision 12 (2026-10-07, the text of the seal).** Three sources changed this plan. First, stage 1 of the seal
+gate (the gate ran in two stages, registration §12): the gate's judge read the registration, this plan and the flag catalog as they stood at revision 9 and ordered
+48 changes of text, numbered T-1 to T-48, and one change to the catalog, C-1 (ruling file
+`/Users/edr/night-archive/gate-prune/seal-gate/RULING_STAGE1.md`; its rulings are cited below by their names in that
+file, SG-1 to SG-13). The 22 changes that fall in this plan are applied word for word. One of them, T-24 in §2.4,
+met a passage that revision 11 had already corrected; the judge's words are written there, followed by the facts
+revision 11 had added. Second, the orchestrator's ruling of 2026-10-07 on registration §14 Q5, the attribution floor
+(`/Users/edr/night-archive/gate-prune/wave-1007b/q5-attribution-floor/RULING.md`). Third, the procedure by which the
+seal is committed (registration §11, §12). Rules that bear on numbers changed in three places: the minimum of kept
+units and the metrology term of the contrasts, both by the judge's rulings, and the attribution floor, with the
+summaries from which the first kind of B is read, by the orchestrator's ruling.
+
+- **The minimum of kept units per stratum is 5, not 8** (SG-1; T-7 to T-18; in the catalog,
+  `rules.cell_unit_minimum`, C-1). It is changed in the opening summary, §2.2, §7.1, §8.1 (the fixed sentence, which
+  now also says that the kept units are printed beside each cell, and the two battery-assist lines), §10, §11 and
+  §12. The judge's ground: with 5 to 9 kept units the registered estimators still give a correct number with a wider
+  interval, and a wider interval is not a reason to discard a window; below 5 the floor guard g(n) of §5 is
+  undefined, so a floor cell has no floor. §4 step 3 now prints the quantiles for 6, 5 and 4 degrees of freedom, and
+  §5 the guard for n = 7, 6 and 5.
+- **No metrology term for the two phase metrics** (SG-13; T-45 to T-48): §7.1 step 3, the §7.2 worked example, the
+  worked example of GAMMA's battery-assist line in §8.1 and the "Contrast interval" disclosure of §8.1. The engine
+  reads a random-error variance only for the metric `energy_request_j`, so for both contrasts se_total = se_rep.
+  The two worked intervals narrow, from [2.8325, 3.1675] J to [2.8511, 3.1489] J and from [2.7987, 3.1263] J to
+  [2.8216, 3.1034] J; no worked outcome changes. Revision 11 had left these passages for this ruling.
+- **§8.1, the sensitivity line is adopted as amended** (SG-4; T-35, T-38): it ignores three load-correlated codes,
+  not the whole PHYSICS_IN_SPAN family, and it has a worked example.
+- **§8.1, a unit removed by a RESTRICTED code** (SG-12; T-33): the disclosure producer performs the redaction, and
+  the three `derived/` files that name such a code stay in restricted custody until the release event.
+- **§2.4, a lost midpoint** (SG-5; T-24, T-25): the midpoint is the only NEG-8 reference inside the window, and the
+  scope paragraph now says why a lost midpoint is only disclosed on ALPHA and BETA although it can understate their
+  bound B. The paragraph "What would change it" is rewritten to agree with registration §0.12 as the judge amended
+  it (T-22, an item of the registration): an erratum can relax the rule only for a later block.
+- **§2.2** (SG-11; T-44): the analysis checks the catalog digest and the harvest commit that `exclusions.json`
+  records.
+- **§4 steps 4 and 7, the attribution floor** (the orchestrator's ruling on Q5): a formula is registered and no
+  number is bound. Step 4 now states the first kind of recorded timing bound as the code computes it: revisions up
+  to 11 named only the shift of the whole trace, and the bound also displaces each phase edge by the edge bound,
+  which is the larger part. Step 7 defines the attribution floor of a cell as the largest of that bound over the
+  cell's kept members. Its earlier sentence, that the interval "does not include" the bound, was false: the average
+  of the same bound is inside the interval, as part of B. Step 4 also says which summaries the bound is read from,
+  those re-derived under the window's operative fiducial bound, which earlier revisions left unsaid; that choice
+  sets the size of the first kind of B. §11's issuer row and §13 follow.
+- **The status line, §13 and the digests.** The status line says how this file is sealed. §13 says where a FILL
+  that is still open is filled after the seal. The FILL mark `B5-FINAL-HASHES` now stands in its bracketed form only
+  where a digest is written in its place (§4 twice, §7.1 once), so that filling it is the substitution of one value;
+  where the mark is only spoken of (§4's introduction, §13, and revision 11's entry above) it is named without the
+  brackets. The two `extraction_spec.json` digests that revisions 4 to 11 printed are kept, labelled as the digests
+  at `f8164893`.
+- **Sentences this revision's writer added beside the judge's words.** Each follows from a ruling above and changes
+  no rule: the sentences after T-44 that say which §11 is meant and what its addendum names (§2.2); the terms of
+  §7.1 step 3, built after the judge's text; the code's tabulated and rounded t values for 6, 5 and 4 degrees of
+  freedom (§5; §7.1 step 4); the sentence after T-47 that says where its data come from (§8.1); the guard at n = 5
+  among §11's fixtures; and additions to three rows of §11's table (the two checks of §2.2, the attribution floor in
+  the issuer, the redaction and the attribution-floor sentence in the disclosure producer).
+- Every line above §6's sentence on R_cm keeps its line number, as in revisions 10 and 11. The judge's text adds
+  seven lines above it (T-44 one, T-24 one, T-25 three, T-8 one, T-9 one); each is made up by joining two
+  neighbouring lines of older text into one (in §2.2, §2.4 at two places, §4 step 2 and §5), and the paragraph
+  "What would change it" of §2.4 is two lines shorter. The judge's lines keep the line breaks of the ruling file.
