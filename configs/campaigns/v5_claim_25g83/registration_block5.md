@@ -4171,7 +4171,7 @@ block in which no pack is re-armed and no attempt is abandoned.
 
    *What the comparison of item 2 does with a commit of each class*, if the measurement checkout holds it when a
    window arms:
-   - (i) raises nothing. The path is listed in the window's record.
+   - (i) raises nothing. The path is listed in the window's record (`derived/code-identity.json`, item 2).
    - (ii) would be a difference if it ever reached the measurement checkout: the window would be
      `code.executed_differs_from_sealed`. Such a fix changes files under `joulewise/` or `scripts/`, the driver
      inventories every tracked file there whether a window executes it or not, and no program can tell "does not
@@ -4265,14 +4265,14 @@ block in which no pack is re-armed and no attempt is abandoned.
    comparison (a) does not reach them (the catalog is listed in the sealed inventory, but (a) covers the executed
    roots only), and no plan tree pins them.
 
-   The harvest writes what it found to `derived/code-identity.json` (schema `joulewise.b5_code_identity.v1`):
-   `h_claim`; `h_claim_source` (`sealed_inventory` when the inventory named the head); `plan_measurement_head`;
-   `executed_head`; `sealed_inventory_sha256`; `comparison` (`identical`, `compared`, `git_diff_unavailable` or
-   `not_compared`); `changed_paths` by class; and `driver_checkout` (below). When git cannot make the comparison,
-   the window is `code.identity_unmeasured` (§6.5), a harvest problem first (§7.2). That happens when H_claim is
-   missing from the clone, which is why the measurement checkout is a full clone, one that holds every commit
-   (§12 step 6). A sealed inventory that names no `head` is `code.identity_unmeasured` as well: there is then no
-   sealed commit to compare with.
+   The harvest writes what it found to `derived/code-identity.json` (schema `joulewise.b5_code_identity.v1`): `h_claim`;
+   `h_claim_source` (`sealed_inventory` when the inventory named the head); `plan_measurement_head`; `executed_head`;
+   `sealed_inventory_sha256`; `comparison` (`compared` when git listed the changed paths, `identical` when the two heads
+   are one commit, `git_diff_unavailable` when git could not make the list, `not_compared` when one of the two heads is
+   not known); `changed_paths` by class; and `driver_checkout` (below). When git cannot make the comparison, the window
+   is `code.identity_unmeasured` (§6.5), a harvest problem first (§7.2). That happens when H_claim is missing from the
+   clone, which is why the measurement checkout is a full clone, one that holds every commit (§12 step 6). A sealed
+   inventory that names no `head` is `code.identity_unmeasured` as well: there is then no sealed commit to compare with.
 
    *The checkout the driver runs from.* The launchd job (§0.17) starts `scripts/run_night.py` in the checkout whose
    `scripts/install_night_agent.sh` installed the job. The driver, the hazard modules of the arm, the monitor, the
@@ -4328,8 +4328,8 @@ block in which no pack is re-armed and no attempt is abandoned.
    changed `sizing_b5.json` committed in the measurement checkout: that commit would exclude the next window. The
    plan writer accepts as the source of an allowance any file inside the measurement checkout whose bytes hash to
    the digest the plan-input file gives (`joulewise/b5/plan.py` `read_allowance`). The new file is therefore a new,
-   untracked file there, outside `joulewise/`, `scripts/` and the pack (under the ignored `runs/` directory, for
-   example), and the seal record's addendum pins its SHA-256 (§10).
+   untracked file there, outside `joulewise/`, `scripts/` and the pack (under the `runs/` directory, which git
+   ignores, for example), and the seal record's addendum pins its SHA-256 (§10).
 3. **Retired, not deleted.** The `TRANSACTION_PACK` route (ARM, GO, consumption and lifecycle in
    `joulewise/arm_readiness.py`, except the lineage helpers the hazard lineage dispatches through;
    `arm_readiness_evidence.py`, `arm_readiness_evidence_t0.py`; `scripts/capture_t0_step.py`,
@@ -4366,12 +4366,13 @@ block in which no pack is re-armed and no attempt is abandoned.
    desk checkout and reads the sealed documents and runs the verdict writer from the measurement checkout
    (`measurement_root`). ALPHA-1's harvest does not run until this addendum exists; `harvest.json` records the desk
    checkout's commit.
-   The same lane carries five further changes to the harvest's code-identity step, which item 2 states and which
-   the lane's worklist (`/Users/edr/night-archive/gate-prune/wave-1007b/harvest-lane/WORKLIST.md`) numbers H-8 to
-   H-12: a driver checkout whose code files differ from the sealed inventory is a difference (H-8); record-only
-   is a list of named places (H-9); a sealed inventory with no `head` is `code.identity_unmeasured` (H-10); a
-   changed path that is not valid UTF-8 text no longer makes the harvest fail (H-11); and a change confined to
-   another claim pack's directory is listed and is no difference (H-12).
+   The same lane carries five further changes to the harvest's comparison of a window's code with the seal,
+   which item 2 states and which the lane's worklist
+   (`/Users/edr/night-archive/gate-prune/wave-1007b/harvest-lane/WORKLIST.md`) numbers H-8 to H-12: a driver
+   checkout whose code files differ from the sealed inventory is a difference (H-8); record-only is a list of
+   named places (H-9); a sealed inventory with no `head` is `code.identity_unmeasured` (H-10); a changed path
+   that is not valid UTF-8 text no longer makes the harvest fail (H-11); and a change confined to another claim
+   pack's directory is listed and is no difference (H-12).
 
    *What pins the program that harvests.* The sealed inventory lists the harvest program's files as they are at
    H_claim. The lane changes those files in the desk checkout, so the inventory does not describe the program that
@@ -4409,19 +4410,19 @@ sensitivity line of analysis plan §8 (adopted as amended at stage 1 of the gate
   code. A ruling that requires a code change costs little while that commit is open; once it is fixed, a code
   change costs a new run of the whole test suite and a new cold pass. So the rulings were taken first, and the
   judgment of the final text second.
-- **Stage 1** (2026-10-07) judged revision 9 of this file, the analysis plan and the catalog as commit
-  `9b0c680ed` holds them (the inventory was then the stub), with the code of that commit. The judge was a Fable
-  5.1 session. An Opus 5.5 refuter attacked the same documents and code and reported five breaks. The judge ruled
-  on each: four were accepted with a cure, and for the fifth, the lost-midpoint rule of §0.12, the rule was
-  confirmed and its stated premise corrected. The ruling is
-  `/Users/edr/night-archive/gate-prune/seal-gate/RULING_STAGE1.md` (first line `STAGE 1: RULINGS COMPLETE`), and
-  the refuter's record is `REFUTER_STAGE1.md` beside it. The ruling requires 48 changes to the text of this file
-  and the analysis plan, one change to the catalog (the cell minimum of §6.6, from 8 to 5), and seven changes to
-  code or to records in the code tree. Revision 12 applies the text changes as the judge wrote them. The catalog
-  change is made before H_claim, because the catalog is a window input and its bytes are fixed there. Of the
-  seven, three change entries of the refusal allowlist (§6.11) and one test fixture (a data file that a test
-  compares against), files that no program running inside a window loads, and four are the harvest lane of §11
-  item 4, which lands after the seal and before ALPHA-1's harvest.
+- **Stage 1** (2026-10-07) judged revision 9 of this file, the analysis plan and the catalog as commit `9b0c680ed` holds
+  them (the inventory was then the stub), with the code of that commit. The judge was a Fable 5.1 session. An Opus 5.5
+  refuter attacked the same documents and code and reported five breaks, places where it showed a rule or the code to
+  give a wrong outcome. The judge ruled on each: four were accepted with a cure, and for the fifth, the lost-midpoint
+  rule of §0.12, the rule was confirmed and its stated premise corrected. The ruling is
+  `/Users/edr/night-archive/gate-prune/seal-gate/RULING_STAGE1.md` (first line `STAGE 1: RULINGS COMPLETE`), and the
+  refuter's record is `REFUTER_STAGE1.md` beside it. The ruling requires 48 changes to the text of this file and the
+  analysis plan, one change to the catalog (the cell minimum of §6.6, from 8 to 5), and seven changes to code or to
+  records in the code tree. Revision 12 applies the text changes as the judge wrote them. The catalog change is made
+  before H_claim, because the catalog is a window input and its bytes are fixed there. Of the seven, three change
+  entries of the refusal allowlist (§6.11) and one test fixture (a data file that a test compares against), files that
+  no program running inside a window loads, and four are the harvest lane of §11 item 4, which lands after the seal and
+  before ALPHA-1's harvest.
 - **Stage 2** is a separate session, held on the final text. It judges that text and the inventory made from
   H_claim: that the text differs from what stage 1 ruled on only by changes that each trace to a ruling or to a
   correction of fact, that every digest the seal pins can be computed again from the bytes it names, and that the
@@ -4491,7 +4492,10 @@ record by its path.
 the two generators (`scripts/write_b5_identity_pins.py`, `scripts/size_b5_window.py`) wrote before the seal. No
 program reads them, and the seal does not update them: a changed byte would change the file's sealed digest, make
 the generator's `--check` fail, and, being a change to a window input after H_claim, exclude every later window
-(§11 item 2). What seals each of the two files is its SHA-256 in the seal record.
+(§11 item 2). Two sentences inside the files are left as written for the same reason: the identity pins' note
+says "The seal replaces status", which the seal does not do, and the sizing output's note still carries an
+unfilled marker for its own digest (`B5-SIZING-OUTPUTS`, §13). What seals each of the two files is its SHA-256 in
+the seal record.
 
 **After the seal commit this file's bytes do not change.** Each plan records this file's SHA-256 (step 7), and
 the harvest fails (HARVEST_FAULT, §7.1) when the file it reads differs from the digest its plan recorded. A value
