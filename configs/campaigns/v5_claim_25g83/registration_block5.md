@@ -2229,14 +2229,16 @@ power or a duration, so it is releasable structure under §8 item 2. It never st
     (`…_start`, `…_end`) is a triplet. Every other stage is treated as a science stage. The diagnostic role,
     `window_interior_reference_diagnostic`, fits none of the first three, so these two stages get the science
     rule, ⌈1 × 8 / 10⌉ = 1. One lost diagnostic member therefore gives its stage the status ZERO (no bundle
-    present) or LOW (fewer succeeded than min_valid), both defined in the next item, and gives the window the yield
-    status LOW ("Terminal record", below). At the same loss rate that happens by chance
-    in 1 − (36/37)² = 5.3% of GAMMA windows, so for these two stages a trip does **not** mean a systematic cause.
-    The diagnostic members enter no claim, and a yield status stops nothing and removes nothing: the only effect is
-    the notice. A LOW that comes from one lost diagnostic member alone is one lost member, not a cause repeated
-    across members, and the process rule of §7.3 does not hold the next arm for it. (Revision 10 did not list this
-    case. Giving the diagnostic role its own minimum, 0 of 1 like the midpoint's, is a code change deferred until
-    after block 5.)
+    present) or LOW (fewer succeeded than min_valid), both defined in the next item, and gives the window the
+    yield status LOW ("Terminal record", below). At the same loss rate of 1 member in 37 that happens by chance in
+    1 − (36/37)² = 5.3% of GAMMA windows, so for these two stages a trip does **not** indicate a systematic cause.
+    The diagnostic members enter no claim. A yield status stops nothing and removes nothing; it sends a notice. A
+    LOW that comes from one lost diagnostic member alone is one lost member, not a cause repeated across members,
+    and it does not hold the next arm (§7.3). The magistrate's brief carries that sentence (the magistrate is the
+    headless lead session the watchdog launches, and its brief is the instructions it runs under). (Revision 10
+    did not list this case. By the orchestrator's ruling of 2026-10-07 the code stays as it is for block 5; giving
+    the diagnostic role its own minimum, 0 of 1 like the midpoint's, is a code change deferred until after
+    block 5.)
 
   It is written once to `night/yield_plan.json`, outside the plan's `hazard_window` block.
 - **Counting a stage.** To count a stage the driver checks each planned bundle directory: present, and summary
@@ -2253,14 +2255,16 @@ power or a duration, so it is releasable structure under §8 item 2. It never st
   line was already older than 30 s or has no numeric end time. Such a stage's yield line, flag and alert file are
   written only then, so the watchdog can pick that alert up only after the chain has ended.
 - **Repeated refusals.** The **campaign log** is `<runs root>/campaign_log.jsonl`, to which the campaign runner
-  appends one row for each member it launched. The driver reads the rows added since its last read, but only at a
-  stage boundary (in the settle in which it counts the stage) and once more in the terminal pass, never during a
-  stage. Three consecutive members that ended without a bundle for one shared cause record
+  appends one row for each member it handled, with the member's run id and status, whether it ran the member or
+  blocked it before invoking it. The driver reads the rows added since its last read, but only at a stage boundary
+  (in the settle in which it counts the stage) and once more in the terminal pass, never during a stage. Three
+  consecutive members that ended without a bundle for one shared cause record
   `stage.members_refused_pre_bundle_identical`, once per cause; because of when the log is read, the flag is written
   when the stage holding the three members ends, not right after the third. The cause is the log row's
   `child_refusal`: the member's last non-empty error line with its digits replaced by `#`, cut to a fixed length,
   or, when the member was refused by the launch-lineage check, that check's reason code. A row without one is keyed
   by its exit code together with whether the member was blocked before it was invoked (`blocked_before_invoke`).
+  (Revision 10 said the driver reads the log "as it grows" and gave the exit code alone as the second key.)
 - **Stall.** No new bundle directory and no new stage journal line for 3,600 s records `yield.stage_stalled`, once.
 - **No process is started for any of this in the window.** A network call would sit inside a settle, the idle
   stretch the next member's cooldown and baseline read. (Revision 6 also cited the agent census, which then matched
@@ -2285,16 +2289,17 @@ power or a duration, so it is releasable structure under §8 item 2. It never st
   least 1 MiB and no missing files) and succeeded, overall and per stage; a spare counts as planned only when the
   retry ran it (its bundle exists), and an unrun spare is never `member.bytes_missing`. The command prints members =
   raw-valid / planned and the window-removing reasons. When members were planned and no bundle is present, the
-  harvest records `collection.zero_yield` whatever its verdict, and the command exits 6 when that verdict is
+  harvest's yield step records `collection.zero_yield`, and the command exits 6 when the harvest's verdict is
   COLLECTED or NO_COLLECTION (§7.1); a chain stopped at exit 10, 11 or 12 therefore records the flag and exits 6.
-  `collection.failure_histogram` reads the **operator logs** (`<custody>/operator-logs/*.log`, one log for each
-  stage's output), takes every line that begins `error:`, and groups those lines by their text with the digits
-  replaced by `#` (full texts to `withheld/failure-texts.json`). A disagreement with the window's own
-  `stage_yield.jsonl` records `yield.harvest_disagrees_with_window`. A window whose stage journal exists and holds
-  no collection stage row is harvested as **NO_COLLECTION**, with `chain.stopped_before_collection`, every collector
-  still run (§7.1). A chain that started and was killed before it wrote any journal line has no stage journal; it
-  is harvested as COLLECTED, without that flag, and `collection.zero_yield` and `calibration.no_bracket` record
-  that nothing was collected.
+  (Revision 10 tied both to a COLLECTED window only.) `collection.failure_histogram` reads the **operator logs**
+  (`<custody>/operator-logs/*.log`, one log for each stage's output), takes every line that begins `error:`, and
+  groups those lines by their text with the digits replaced by `#` (full texts to
+  `withheld/failure-texts.json`). A disagreement with the window's own `stage_yield.jsonl` records
+  `yield.harvest_disagrees_with_window`. A window whose stage journal (§5.1) exists and holds no line of a
+  collection stage is harvested as **NO_COLLECTION**, with `chain.stopped_before_collection`, every collector
+  still run (§7.1). A chain that started and was killed before its first stage ended has written no stage journal
+  at all. That window is harvested as COLLECTED, without that flag; `collection.zero_yield` then records that no
+  bundle is present, and `calibration.no_bracket` removes the window.
 
 Every yield code is DISCLOSE (§6.8): `cell.below_minimum` and `neg8.bound_not_derived` already remove a window where
 it matters; the yield exists to say so early and to stop a repeat (§7.3). *Worked example (synthetic).* An ALPHA
@@ -2414,6 +2419,9 @@ How each kind of file in the table is written (an **fsync** is the call that for
 - the monitor's journals under `hazards/monitor/` are append-only and written a line at a time, but synced to disk
   at most once every 5 s and when the journal is closed (`hazards/monitor.py` `FSYNC_INTERVAL_S` = 5.0), so a
   power loss or kernel panic can lose about the last 5 s of readings;
+- the meter's stream files `hazards/meter/stream-*.jsonl` (§5.8, a diagnostic) are each created once by one run of
+  the meter reader, written through a memory buffer that is handed to the operating system about once a second,
+  and synced to disk once, when that run stops (`scripts/km003c_monitor.py`);
 - `derived/flags.jsonl` is not appended to: the harvest creates it once, in a single pass, with an fsync after every
   line;
 - the JSON documents in the table (`arm.json`, `window_flags.json`, `exclusions.json`, the yield alert files) are
@@ -2467,10 +2475,11 @@ and one torn flag line left its attempt blocked for ever. Now:
 | DIAGNOSTIC | network-time output, clock steps and frequency changes outside any span, G10, s1-structural checks, the battery-temperature rise across a stage (§0.6), battery assist (§6.4), the whole-machine meter (§5.8), the yield counts (§5.7), an unread hazard probe at the arm (§4.1), monitor restarts and orphans left unsignalled (§5.4, §6.8); and three reserved codes that no program writes (listed below) | DISCLOSE |
 
 **Nine reserved codes.** Nine codes are in the catalog although no program writes them at the code this revision
-read (`9b0c680ed`; searched in `joulewise/` and `scripts/` for each code's literal and for code built from parts).
-A code with no emitter cannot fire, so in block 5 these nine remove nothing and disclose nothing. They stay in the
-catalog as **reserved** codes, each with its registered effect (orchestrator ruling of 2026-10-07 on the fidelity
-sweep), and the catalog's note on each says "Reserved: no emitter at H_claim." They are:
+read (`9b0c680ed`; searched in `joulewise/` and `scripts/` for each code's literal and for flag codes assembled
+from parts). An **emitter** is a place in a program that writes a flag with a given code. A code with no emitter
+cannot fire, so in block 5 these nine remove nothing and disclose nothing. They stay in the catalog as
+**reserved** codes, each with its registered effect (orchestrator ruling of 2026-10-07 on the fidelity sweep), and
+the catalog's note on each says "Reserved: no emitter at H_claim." They are:
 
 - `instrument.precal_screen_failed` (INSTRUMENT, EXCLUDE_WINDOW). Its condition, a pre fiducial bound above the pre
   screen, stops the chain at exit 12, and the window is removed by `calibration.no_bracket` (§5.1, §6.5);
@@ -2481,7 +2490,8 @@ sweep), and the catalog's note on each says "Reserved: no emitter at H_claim." T
 - `clock.sntp_offset` (the offset from a time server), `monitor.probe_in_phase` (a monitor probe inside a target
   phase) and `battery.accumulator_diagnostic` (accumulator intervals with no registered unit scale) (all DIAGNOSTIC,
   DISCLOSE). For the last, the condition can no longer be reached as a flag: without a registered scale the
-  accumulator rule raises an error, which the harvest records as a fault.
+  accumulator rule raises an error, which the harvest records as a fault of its own, so that harvest ends as
+  HARVEST_FAULT (§7.1).
 
 `contention.kernel_task_share` is a different case: it has an emitter whose condition cannot occur today (§6.8).
 
@@ -2501,13 +2511,14 @@ A member is removed from every cell it feeds when any of these is flagged:
 - its target phase (`phase.decode` for decode members, `phase.prefill` for p2048 members) fails its precheck
   (`member.target_phase_precheck_failed`), including the one precheck test that reads a science energy,
   `anchor_energy_envelope_exceeds_quarter_metric` (`member.anchor_energy_envelope_exceeded`, blinding RESTRICTED). The
-  p42 phase is not a target phase. The catalog's blinding value is each code's default: 191 codes are STRUCTURE and
-  this one is RESTRICTED. The harvest also marks single flags RESTRICTED in two places, whatever their code's
-  default (§8 governs every RESTRICTED flag): a `member.target_phase_precheck_failed` flag one of whose remaining
-  precheck reasons has a name that contains "energy" or "effect" or ends in "_metric"
-  (`harvest.restricted_reason`; in practice the one reason `anchor_energy_envelope_unrecorded`); and the
-  `diagnostic.s1_structural` flag that carries the per-cell precheck counts, always, because whether a precheck is
-  eligible can turn on the energy envelope;
+  p42 phase is not a target phase. The catalog's blinding class (§0.16) is each code's default: 191 codes are
+  STRUCTURE and this one is RESTRICTED. The harvest also marks single flags RESTRICTED in two places, whatever
+  their code's default (§8 governs every RESTRICTED flag). One is a `member.target_phase_precheck_failed` flag
+  among whose listed reasons (the precheck's reasons that have no code of their own) one has a name that contains
+  "energy" or "effect" or ends in "_metric" (`harvest.restricted_reason`; in practice the one reason
+  `anchor_energy_envelope_unrecorded`). The other is the `diagnostic.s1_structural` flag that carries the per-cell
+  precheck counts, always, because whether a precheck is eligible can turn on the energy envelope (revision 10
+  named only the one RESTRICTED code);
 - the GPU was not idle during its idle baseline (`member.idle_window_suspect`); its cooldown hit the cap
   (`member.cooldown_cap_hit`); or its campaign cooldown evidence does not verify (`member.cooldown_evidence_unverified`);
 - its configuration bytes are not in the pack's committed inventory (`member.config_not_in_inventory`; the lineage
@@ -2552,11 +2563,10 @@ A member is removed from every cell it feeds when any of these is flagged:
   by `member.target_phase_precheck_failed`, through the reducer's **environment barrier**. That is the step of the
   reducer (`joulewise/reduce.py` `_apply_environment_claim_barrier`; the reducer is one of the four pinned estimator
   files of §2 item 1, whose bytes are unchanged since `a434e363d`) that reads the member's recorded environment
-  evidence, its admission record
-  and its post-run observation, and, when that evidence is missing or failed, writes the reason
-  (`environment_admission_missing` or `environment_admission_failed`) on every precheck of the member, the phase
-  prechecks included, so that none of them is eligible. The ruling left the barrier unchanged: it marks such a
-  record `environment_admission_failed` on the member's target prechecks, because an unmeasured post-run
+  evidence, its admission record and its post-run observation, and, when that evidence is missing or failed, writes
+  the reason (`environment_admission_missing` or `environment_admission_failed`) on every precheck of the member,
+  the phase prechecks included, so that none of them is eligible. The ruling left the barrier unchanged: it marks
+  such a record `environment_admission_failed` on the member's target prechecks, because an unmeasured post-run
   environment cannot show the member clean.
 
 Codes added since revision 4 that remove a member (catalog effect EXCLUDE_MEMBER; their writers are in §6.10):
@@ -2622,15 +2632,15 @@ Rules:
   the charge accumulator implies a mean charging power above 200 mA × the publication's voltage (units below); or,
   without SMC coverage, the discharge accumulator's mean is **positive** and beyond that limit. The discharge
   accumulator sums discharging ticks only, so a positive mean is inconsistent evidence, not discharge, and without
-  SMC coverage it keeps the exclusion. The flag marks it on the interval's own row:
+  SMC coverage it keeps the exclusion. The flag marks the case on the interval's own row:
   `observed.intervals[i].sign_inconsistent` is true (`observed` itself holds `rule`, `intervals` with the first 8
-  rows, `count` and `watts_per_unit`). With SMC coverage the same reading is
-  `battery.accumulator_unavailable` (DISCLOSE; cold pass N4), whose row carries the whole interval entry under the
-  same per-row key: the 1 s SMC reads measure the current directly and
-  remove the member for any charging read (`battery.member_span`), so a 60 s registry record that disagrees with
-  itself adds no evidence of a hazard. The harvest and the hazard module's copy of the rule (`hazards/battery.py`,
-  where the same case was `battery.member_span`) changed together, and a parity test holds them equal. A negative
-  discharge mean beyond the limit is assist evidence, below.
+  rows, `count` and `watts_per_unit`; revision 10 wrote the marker as `observed.sign_inconsistent`). With SMC
+  coverage the same reading is `battery.accumulator_unavailable` (DISCLOSE; cold pass N4), whose row carries the
+  whole interval entry under the same per-row key: the 1 s SMC reads measure the current directly and remove the
+  member for any charging read (`battery.member_span`), so a 60 s registry record that disagrees with itself adds
+  no evidence of a hazard. The harvest and the hazard module's copy of the rule (`hazards/battery.py`, where the
+  same case was `battery.member_span`) changed together, and a parity test holds them equal. A negative discharge
+  mean beyond the limit is assist evidence, below.
 - `battery.unmeasured` (EXCLUDE_MEMBER), the missing-evidence predicate: the charging and AC state over the span is
   unknown, so the member cannot be kept. Only the registry reads that state; the SMC current says nothing about it.
   - *With SMC coverage:* no registry publication in force at or before the span's start; an in-force publication
@@ -2651,26 +2661,25 @@ Rules:
   ExternalConnected No (rule 2 of `battery.member_span`). A charging-current read above +200 mA (rule 1) removes the
   member but does not skip the computation: the span's negative reads still give the assist flag, and their
   discharged energy is still written to the withheld record below. (Revision 10 said no assist was computed in
-  either case.) The member's span is split into **phases**: with a request span inside it,
-  `pre_request` (from the span's start to the request: the idle baseline and the warm-up), `request`, and
-  `post_request` (from the request's end: the idle drift sentinel); without one, the whole span is one phase,
-  `span`. For each phase the flag records: the SMC reads that belong to it (`smc_reads_in_force`), how many are
-  negative (`smc_reads_negative`) and how many are below −200 mA (`smc_reads_below`), the minimum B0AC, the held
-  time below −200 mA (`smc_duration_below_s`), and, without SMC coverage only, the in-force publications taken before
-  the phase ends whose InstantAmperage or Amperage is negative (`registry_publications_negative`); also the
+  either case.) The member's span is split into **phases**: with a request span inside it, `pre_request` (from the
+  span's start to the request: the idle baseline and the warm-up), `request`, and `post_request` (from the
+  request's end: the idle drift sentinel); without one, the whole span is one phase, `span`. For each phase the
+  flag records: the SMC reads that belong to it (`smc_reads_in_force`), how many are negative
+  (`smc_reads_negative`) and how many are below −200 mA (`smc_reads_below`), the minimum B0AC, the held time below
+  −200 mA (`smc_duration_below_s`), and, without SMC coverage only, the in-force publications taken before the
+  phase ends whose InstantAmperage or Amperage is negative (`registry_publications_negative`); also the
   discharge-accumulator intervals beyond the limit that overlap the phase (`accumulator_intervals_over_limit`). A
   phase is **assisted** when at least one of three of these counts is nonzero: `smc_reads_negative`,
   `registry_publications_negative` or `accumulator_intervals_over_limit`. (`smc_reads_in_force` is nonzero for every
-  phase the SMC reads cover, and decides nothing.) The member carries `battery.assist` when the deciding phase
-  (`request`, or `span`) has a negative SMC read,
-  or, without SMC coverage only, any of the other evidence; it carries `battery.assist_outside_request` when only
-  other phases were assisted, which decides nothing (ruling item 5). `battery.assist` is the marker of the
-  **battery-assist sensitivity line** (analysis plan §8.1): every reported cell is printed as a pair of values, one
-  over all kept units and one over the kept units less every unit that holds a member carrying this flag. With SMC
-  coverage the 1 s reads locate the
-  discharge, so an accumulator interval (about 60 s long) that overlaps the request without a negative read in it
-  is reported in that phase and does not decide. The discharged energy of each phase, the sum over its negative
-  reads of held time (clipped to the phase) × (−B0AC × B0AV), goes to restricted custody
+  phase the SMC reads cover, and decides nothing; revision 10 listed it among the deciding counts.) The member
+  carries `battery.assist` when the deciding phase (`request`, or `span`) has a negative SMC read, or, without SMC
+  coverage only, any of the other evidence; it carries `battery.assist_outside_request` when only other phases
+  were assisted, which decides nothing (ruling item 5). `battery.assist` is the marker of the **battery-assist
+  sensitivity line** (analysis plan §8.1): every reported cell is printed as a pair of values, one over all kept
+  units and one over the kept units less every unit that holds a member carrying this flag. With SMC coverage the
+  1 s reads locate the discharge, so an accumulator interval (about 60 s long) that overlaps the request without a
+  negative read in it is reported in that phase and does not decide. The discharged energy of each phase, the sum
+  over its negative reads of held time (clipped to the phase) × (−B0AC × B0AV), goes to restricted custody
   (`withheld/battery-assist.json`) with the other machine energies (§8); the counts, minimum and durations are
   structure. Battery energy is never added to or subtracted from a rail energy. A member that is also
   `battery.unmeasured` because a publication in force did not read the state keeps its disclosure, marked
@@ -2680,10 +2689,9 @@ Rules:
   while InstantAmperage read 0.
 - `battery.accumulator_unavailable` (DISCLOSE): the accumulator rule could not run on an interval, for one of four
   reasons: a field not read at both publications; a tick counter that went backward; an accumulated value that
-  changed while its tick counter did not; or no voltage at either publication. Also, with SMC coverage, a gap of
-  more than
-  120 s between registry publications, over which only the accumulator test goes unevaluated, and a sign-inconsistent
-  discharge accumulator (above).
+  changed while its tick counter did not (revision 10 left this one out); or no voltage at either publication.
+  Also, with SMC coverage, a gap of more than 120 s between registry publications, over which only the accumulator
+  test goes unevaluated, and a sign-inconsistent discharge accumulator (above).
 
 *Accumulator units* (lane L1, 2026-10-05, on 66 archived publications and a live read): each `Accumulated*` field
 adds its instantaneous value in mW once per tick (about 1.01 s), each `*AccumulatorCount` counts ticks, and battery
@@ -2707,11 +2715,10 @@ assist would still be computed, because a current read does not skip it: the fla
 the discharged energy of the three remaining negative reads, (0.865 + 1.200 + 0.400) A × 12.18 V × 1 s = 30.02 J,
 is still written to `withheld/`. Had one registry poll in the span read IsCharging Yes, the member would be removed
 by `battery.member_span` (rule 2) and no assist would be computed. If between two in-force publications the charge
-accumulator
-gained 40 ticks totalling +216,000 mW·ticks, its mean is +5,400 mW, above 200 mA × 12.18 V = 2,436 mW, and the member
-is removed by `battery.accumulator_excursion`. The same numbers with a negative sign on the discharge accumulator
-remove nothing: with SMC coverage the interval is reported in each phase it overlaps, and only a negative 1 s read in
-the request decides the marker.
+accumulator gained 40 ticks totalling +216,000 mW·ticks, its mean is +5,400 mW, above 200 mA × 12.18 V = 2,436 mW,
+and the member is removed by `battery.accumulator_excursion`. The same numbers with a negative sign on the
+discharge accumulator remove nothing: with SMC coverage the interval is reported in each phase it overlaps, and
+only a negative 1 s read in the request decides the marker.
 
 **Thermal.** `thermal.os_level_nonzero`: any in-force 5 s sample of the OS level is nonzero (in force as for the
 battery). `thermal.powermetrics_pressure_elevated`: the member's own records show thermal pressure
@@ -2726,11 +2733,11 @@ span when its `sampling_started` or `sampling_stopped` stamp is missing, and als
 later than the stop (`harvest.member_spans`; the join passes `request or member_span`). Both codes remove the
 member, so for such a member a process above the limit, or a gap in the 10 s intervals, anywhere between the start
 of its idle baseline and the end of its idle drift sentinel removes it, where the request-only rule would have
-looked at the request alone. *Worked example (synthetic):* a member's stream ran from 100 s to 205 s and its
-request from 180 s to 200 s, but its `sampling_stopped` stamp was not recorded. A process at 0.09 CPU-s/s in the
-interval 120–130 s, during the idle baseline, would not touch a member judged on 180–200 s; this member is judged
-on its whole span and gets `contention.request_overlap`. (Revision 10 gave only the request-span rule.) This
-replaces revision 2's environmental-diagnostic trigger with a member rule.
+looked at the request alone. *Worked example (synthetic):* a member's span is 100–205 s and its request ran from
+180 s to 200 s, but its `sampling_stopped` stamp was not recorded, so it has no request span. A process at
+0.09 CPU-s/s in the 10 s interval 120–130 s, before the request, would not touch a member judged on 180–200 s;
+this member is judged on its whole span and gets `contention.request_overlap`. (Revision 10 gave only the
+request-span rule.) This replaces revision 2's environmental-diagnostic trigger with a member rule.
 
 **Clock.** `clock.step_overlap`: a `clock.step` falls inside the span. A gap in the 1 Hz journal (`clock.unmeasured`)
 is disclosed only, because the member's own anchor bound stays authoritative and is computed from its own records.
@@ -2743,10 +2750,10 @@ member's own records are too few or too slow for its target phase.
 The window is not claim-usable when any of these fired:
 
 - `pack.identity_mismatch`: the pack's plan tree, any configuration, the prompt pin, the extraction spec (a floor
-  pack's `extraction_spec.json`, the file that names the pack's cells, each with its metric and the members or
-  quads that feed it; GAMMA has no such file), or a NEG-8
-  or reference manifest differs from its digest in the sealed inventory or the plan tree's own pins, recomputed at
-  harvest from preserved bytes; also `lineage.plan_tree_digest_differs`.
+  pack's `extraction_spec.json`, the file that names the pack's cells, each with its metric and the members that
+  feed it; GAMMA has no such file), or a NEG-8 or reference manifest differs from its digest in the sealed
+  inventory or the plan tree's own pins, recomputed at harvest from preserved bytes; also
+  `lineage.plan_tree_digest_differs`.
 - `code.executed_differs_from_sealed`: the executed-file inventory differs from the sealed inventory; or the chain
   script's bytes differ from the SHA-256 recorded in its **sidecar** (the small file written beside the chain
   script that holds its digest); or the measurement checkout's HEAD is neither H_claim nor H_claim plus pin-only
@@ -2765,17 +2772,18 @@ The window is not claim-usable when any of these fired:
   (evaluated with the acceptance's ledger-cutoff baseline), `calibration.acceptance_mismatch` (the acceptance bytes
   differ from the plan tree's pin), `calibration.session_not_bound` (the bracket session names another plan, window or
   runs root), `calibration.binding_failed`, and `calibration.no_bracket`. The last fires when the window's bracket
-  session is absent or was never finished with both captures recorded. That covers every chain that did not reach
-  the end of its post calibration: the chain's own three stops, at exit 10 (the reservation failed), exit 11 (the
-  pre capture failed) and exit 12 (the pre fiducial bound was above the pre screen), §5.1; and a chain the driver
-  stopped before its post calibration, on `disk.low`, on the census, on a monitor outage or at the deadline.
+  session cannot be found in the ledger or was never finalized (both captures recorded against it, §5.1). That
+  covers every chain that did not reach the end of its post calibration: the chain's own three stops, at exit 10
+  (the reservation failed), exit 11 (the pre capture failed) and exit 12 (the pre fiducial bound was above the pre
+  screen), §5.1; and a chain the driver stopped before its post calibration, on `disk.low`, on the census, on a
+  monitor outage or at the deadline. (Revision 10 named only the driver's stops here.)
 - `calibration.ledger_snapshot_refused`: the calibration ledger, read up to this window's terminal entry, fails its
   own integrity checks. That means a missing or malformed ledger, a broken digest chain, or the acceptance's cutoff
   entry (the ledger's entry number 376, with its recorded head digest; an entry's number is its **sequence**, its
-  position in the append-only ledger) not found in the chain. The bracket's captures and the
-  acceptance's screens are authenticated through this ledger. The bracket evaluation reads the same snapshot and
-  refuses with the same reasons, so `calibration.bracket_acceptance_failed` fires as well. Classing this code as
-  window-removing therefore costs no extra window, and it keeps the window removed even if that propagation changed.
+  position in the append-only ledger) not found in the chain. The bracket's captures and the acceptance's screens
+  are authenticated through this ledger. The bracket evaluation reads the same snapshot and refuses with the same
+  reasons, so `calibration.bracket_acceptance_failed` fires as well. Classing this code as window-removing
+  therefore costs no extra window, and it keeps the window removed even if that propagation changed.
 - `calibration.capture_battery_span` and `calibration.capture_battery_unmeasured`: the battery rule of §6.4 applied
   to each calibration capture's span, as to a member's (`harvest._capture_battery_joins`, at `a434e363d`). A capture
   has no request inside it, so its whole span is one deciding phase. `battery.member_span` or
@@ -2787,12 +2795,13 @@ The window is not claim-usable when any of these fired:
   `withheld/battery-assist.json`. A capture pair that failed on its endpoint current alone, with every failed endpoint
   reading a negative InstantAmperage from its raw bytes, an SMC-covered span and none of the three excluding battery
   codes, is `calibration.capture_battery_pair_assist` (DISCLOSE) in place of `calibration.capture_battery_pair_failed`
-  (the member rule of §6.3, applied to a capture). *Forcing problem for the 1 s reads* (mock rehearsal round 3,
-  finding R3-5): when this join read the registry, the monitor stopped right after the chain exited, before the
-  registry's next publication, so the post capture's last in-force publication never existed and every window got
-  `calibration.capture_battery_unmeasured`. *Mechanism at `a434e363d`:* the join judges the current on the 1 s SMC
-  reads, the state-hole rule of §6.4 measures the trailing stretch only to the span's end, and the driver stops the
-  monitor no sooner than 5 s after the chain exits (§0.17).
+  (the member rule of §6.3, applied to a capture). *Forcing problem for the 1 s reads* (finding 5 of the third
+  round of the mock rehearsal, written R3-5 in the code and the records; that "R3" numbers the round and is not
+  the fix route R3 of §0.1): when this join read the registry, the monitor stopped right after the chain exited,
+  before the registry's next publication, so the post capture's last in-force publication never existed and every
+  window got `calibration.capture_battery_unmeasured`. *Mechanism at `a434e363d`:* the join judges the current on
+  the 1 s SMC reads, the state-hole rule of §6.4 measures the trailing stretch only to the span's end, and the
+  driver stops the monitor no sooner than 5 s after the chain exits (§0.17).
 - `calibration.historical_custody_mismatch`: a file of an earlier calibration capture that this window's acceptance
   relies on, re-hashed by the harvest, differs from the SHA-256 its ledger entry recorded (§6.10). A changed capture
   the acceptance does not rely on is `calibration.historical_custody_mismatch_unused` (DISCLOSE).
@@ -2826,16 +2835,21 @@ The window is not claim-usable when any of these fired:
   window already.
 - A failed pre-calibration screen removes the window through `calibration.no_bracket`, above. The catalog's code
   for it, `instrument.precal_screen_failed`, is reserved and never written (§6.2).
-- `clock.systematic`: the harvest takes the recorded anchor status (§0.14) of every member of the window and of each
-  finished calibration capture of its bracket (the pre and the post capture, so at most two). The flag fires when at
-  least 5 of those members and captures together have a recorded status and more than half of the recorded ones
-  are not `bounded` (`harvest.clock_systematic`, threshold `clock_systematic_min_recorded` = 5, §6.9). A capture
-  whose evidence file cannot be read, or carries no anchor status, is not recorded and is left out of both counts; a
-  capture whose status is a string the harvest does not recognise counts as recorded and not bounded. *Worked
-  example (synthetic):* a window that ended early has 3 members with a recorded status, all `bounded`, and both
-  captures recorded, neither `bounded`: 5 are recorded, 2 are not bounded, 2 is not more than half of 5, no flag.
-  With one of the three members also not `bounded`, 3 of 5 are not bounded and the window is removed. (Revision 10
-  counted members only; a calibration capture is not a member, §0.3.)
+- `clock.systematic`. A member's metadata records the outcome of its anchor bound (§0.14) as one status word, its
+  **anchor status**: `bounded`, or another word when the bound failed or could not be computed. A calibration
+  capture has a sampler stream of its own and records the same word in its evidence file,
+  `instrument_evidence.json`. A status is **recorded** when that field holds a value. The harvest takes the anchor
+  status of every member of the window and, when the window's bracket session was finalized (§5.1), of each of
+  its calibration captures: the pre and the post, so at most two. (A window whose session was not finalized is
+  already removed by `calibration.no_bracket`, and only its members are counted.) The flag fires when at least 5
+  of those members and captures together have a recorded status and more than half of the recorded ones are not
+  `bounded` (`harvest.clock_systematic`, threshold `clock_systematic_min_recorded` = 5, §6.9). A member or
+  capture with no status, and a capture whose evidence file cannot be read, is not recorded and is left out of
+  both counts; a status word the harvest does not recognise counts as recorded and not bounded. *Worked example
+  (synthetic):* a window that lost most of its members has 3 members with a recorded status, all `bounded`, and
+  both captures recorded, neither `bounded`: 5 are recorded, 2 are not bounded, 2 is not more than half of 5, no
+  flag. With one of the three members also not `bounded`, 3 of 5 are not bounded and the window is removed.
+  (Revision 10 counted members only; a calibration capture is not a member, §0.3.)
 - `cell.below_minimum` (§6.6) and `roster.no_science_bundles`.
 - `roster.duplicate_run_id`: the pack's plan tree launches, or lists, one run id more than once (window level;
   `harvest.roster_dispatch`). *Why it removes the window:* a runs root holds one bundle directory for each run id,
@@ -2858,20 +2872,23 @@ environment guard. Making them window-removing would restore "one aborted member
   a decision other than passed, or any NEG-8 condition (`neg8_bracket_abs_delta_exceeded`, the screen failed on the
   gross energies; `neg8_bracket_idle_sub_abs_delta_exceeded`, it failed on the idle-subtracted energies;
   `neg8_bracket_missing`; `neg8_bracket_reference_invalid`; `neg8_drift_bound_stale`; the bound-underived
-  conditions). The exceptions are the harvest's re-screens of §5.3
-  (the collected-subset bound, a reference lost at harvest, a corpus member dropped for physics), whose result
-  decides alone. (Revision 10 printed the first two conditions as `neg8_gross_point_drift_exceeded` and
-  `neg8_idle_sub_point_drift_exceeded`. Those are the names of the code's constants in lower case; the strings a
-  verdict carries are the two above.) `neg8_bracket_reference_invalid` has four causes, each of which removes the
-  window through `neg8.screen_failed`. Two are found by the evaluator (`whole_window.evaluate_neg8_point_drift`):
-  (a) the surviving references fit no accepted shape, which means fewer than two at an endpoint, more than three at
-  an endpoint, or more than one at the midpoint (the one accepted shape with fewer than two is the legacy single
+  conditions). The exceptions are the harvest's re-screens of §5.3 (the collected-subset bound, a reference lost at
+  harvest, a corpus member dropped for physics), whose result decides alone. (Revision 10 printed the first two
+  conditions as `neg8_gross_point_drift_exceeded` and `neg8_idle_sub_point_drift_exceeded`. Those are the names of
+  the code's constants in lower case; the strings a verdict carries are the two above.)
+  `neg8_bracket_reference_invalid` has four causes, each of which removes the window through
+  `neg8.screen_failed`. Two are found by the evaluator (`whole_window.evaluate_neg8_point_drift`): (a) the
+  surviving references fit no accepted shape, which means fewer than two at an endpoint, more than three at an
+  endpoint, or more than one at the midpoint (the one accepted shape with fewer than two is the legacy single
   pair, one start and one end reference with no midpoint, and only when no reference was recorded as lost; §0.12);
   (b) a reference the shape requires (start, end, or a midpoint that is present) has a gross energy that is not a
   finite positive point lying between its lower and upper values, or an idle-subtracted energy that is not finite.
-  Two are found by the verdict writer (`scripts/run_campaign.py`): (c) a reference whose declared NEG-8 role and
-  position disagree or name no valid position; (d) surviving references whose scientific-configuration digests
-  (test vi of §5.3) are missing or not all the same. (Revision 10 gave cause (a) only.)
+  Two are found by the verdict writer (`scripts/run_campaign.py`): (c) a member declared as a NEG-8 reference
+  whose declared role and declared position disagree, or whose position is none of start, midpoint and end; (d)
+  surviving references whose scientific-configuration digests (the SHA-256 of a member's configuration without its
+  run id, test vi of §5.3) are not all present and equal; a reference has no digest when it is not the canonical
+  condition or its `config.json` does not reproduce the digest recorded for it. (Revision 10 gave cause (a)
+  only.)
 - *The calibration bracket* (window level): `calibration.bracket_acceptance_failed`, which the harvest evaluates
   itself.
 - *Each member's own failures* (member level): `member.whole_window_member_failure` (§6.3), which removes only the
