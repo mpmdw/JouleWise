@@ -520,7 +520,8 @@ changed.
 11. **Records** (§2, §9.1, §13, §14). §2 item 1 states H_claim as a marker and lists the Fable delta cold pass 5
     (on `fe28e5a0c..9395cecfb`, PASS WITH NOTES) and the independent executing review of the seal-landing lane;
     together they are the second part of the #416 delta record. §14 closes Q5 and Q6 and records the gate's
-    confirmation of Q9, Q11, Q12 and Q13.
+    confirmation of Q9, Q11, Q12 and Q13. Q14, which the first stage was not asked, stays open for the second
+    stage.
 12. **Status and markers.** The status line says what seals this file. The six markers that remain are listed
     at the head of this file, each with the one value that replaces it.
 13. **Catalog and analysis plan.** `flag_catalog.json`: `rules.cell_unit_minimum` is 5; ten notes and the status
