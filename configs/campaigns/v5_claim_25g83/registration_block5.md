@@ -1495,10 +1495,11 @@ commit holds the same bytes wherever a window can read them. The terms below nam
   H_claim holds.
 - **Seal documents.** Three files of this directory: `sealed_inventory.json`, this file and the analysis plan.
   Their final bytes cannot exist at H_claim, because they name it. At H_claim they are the inventory stub
-  (`status` `STUB_NOT_SEALED`, `head` null, `files` null) and the two texts as the seal gate judged them, with the
-  two markers that wait for H_claim still open (`H-CLAIM` and `B5-FINAL-HASHES`, header). The gate's second stage
-  reads the texts in that state, before H_claim exists, and checks the filled digests and the seal's commits in a
-  second part, once the seal commit exists (§12). Every other sealed file (the flag catalog, the identity pins,
+  (`status` `STUB_NOT_SEALED`, `head` null, `files` null) and revision 9 of the two texts, the revision the gate's
+  first stage judged. The final texts are written on a branch that holds only the documents' drafts (the design
+  branch) and enter the code tree in the seal commit. The gate's second stage reads the final texts there, before
+  H_claim exists, with the two markers that waited for H_claim still open (`H-CLAIM` and `B5-FINAL-HASHES`,
+  header), and checks the filled digests and the seal's commits in a second part, once the seal commit exists (§12). Every other sealed file (the flag catalog, the identity pins,
   the sizing output, the three packs, the runbook) is a window input and has its sealed bytes at H_claim.
 - **Seal commit.** The one commit whose only parent is H_claim and which changes the seal documents and nothing
   else. It carries the filled inventory (`status` `SEALED`; `head`, the name of H_claim; `files`, the SHA-256 at
