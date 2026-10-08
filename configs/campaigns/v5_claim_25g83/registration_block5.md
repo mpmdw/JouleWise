@@ -4383,18 +4383,19 @@ that attempt still carries an unclassified code; it is tested, and no block-5 pr
 - A pack is re-armed, with a new attempt number, plan, fresh roots and bracket session, until it has a claim-usable
   attempt; then the next pack in the fixed order ALPHA, BETA, GAMMA arms. A pack is never armed again after a
   claim-usable attempt. The scheduler reads only `claim_usable`, never an energy.
-- **A GAMMA attempt that lost its midpoint is re-armed** (orchestrator ruling Q11, 2026-10-07; the seal gate
-  confirms). *Forcing problem:* GAMMA's window exists for its two primary contrasts, and a lost midpoint leaves their
-  drift allowance with no evidence about an excursion inside the window (§0.12). Had the attempt counted as
-  claim-usable, the scheduler would have stopped arming GAMMA and the block would have had no claim-bearing contrast.
-  *Rule:* on GAMMA, `neg8.midpoint_lost` adds the window reason `neg8.midpoint_lost_primary` (§0.16), so the attempt
-  is not claim-usable, both for scheduling and for choosing the analysed window, and GAMMA is re-armed. The rule reads
-  only the roster's pack id and the flag's code, never an energy, so re-arming cannot select on an outcome. On ALPHA
-  and BETA the flag stays disclosed only. *How often:* the midpoint is lost when it and its one spare both fail at run time,
-  which at the recorded loss rate of 1 member in 37 is about (1/37)² ≈ 0.07% of windows, or when a physics flag found
-  at harvest contaminates it (no spare runs then), for which the block has no rate yet.
+- **A GAMMA attempt that lost its midpoint is re-armed** (orchestrator ruling Q11, 2026-10-07; confirmed at the seal
+  gate, stage 1, ruling SG-5). *Forcing problem:* GAMMA's window exists for its two primary contrasts, and a lost
+  midpoint leaves their drift allowance with no evidence about an excursion inside the window (§0.12). Had the
+  attempt counted as claim-usable, the scheduler would have stopped arming GAMMA and the block would have had no
+  claim-bearing contrast. *Rule:* on GAMMA, `neg8.midpoint_lost` adds the window reason `neg8.midpoint_lost_primary`
+  (§0.16), so the attempt is not claim-usable, both for scheduling and for choosing the analysed window, and GAMMA
+  is re-armed. The rule reads only the roster's pack id and the flag's code, never an energy, so re-arming cannot
+  select on an outcome. On ALPHA and BETA the flag stays disclosed only. *How often:* the midpoint is lost when it
+  and its one spare both fail at run time, which at the recorded loss rate of 1 member in 37 is about (1/37)² ≈
+  0.07% of windows, or when a physics flag found at harvest contaminates it (no spare runs then), for which the
+  block has no rate yet.
 - **Harvest problems first.** When an attempt's only window-removing codes are `*.identity_unmeasured`,
-  `whole_window.verdict_absent` or `records.source_changed_during_harvest` (checks that did not run, or ran on moving
+  `model.identity_unpinned`, `whole_window.verdict_absent` or `records.source_changed_during_harvest` (checks that did not run, had no pin to compare against, or ran on moving
   bytes), the cause is the harvest, not the window: R3 and re-harvest on identical bytes before deciding whether to
   re-arm. *Supersession* (PLAN2 row 12): when an arm collector recorded `pack.identity_unmeasured` or
   `code.identity_unmeasured` because it errored or timed out, and the harvest itself re-derived every check that
@@ -4448,6 +4449,13 @@ that attempt still carries an unclassified code; it is tested, and no block-5 pr
   classified window-removing code counts as claim-usable. The code is classified blind (from its definition and
   emitter, reading no energy) by a cold erratum to the catalog before the release event. If that makes the attempt
   not claim-usable, its pack is re-armed after the packs already scheduled, and the changed order is disclosed.
+- **A re-harvest that changes `claim_usable`.** An R3 re-harvest on identical bytes with a repaired program (§7.1,
+  §11 item 4) may change a completed attempt's `claim_usable`. The same rule applies as for a late classification: a
+  pack whose analysed attempt becomes not claim-usable is re-armed after the packs already scheduled, and the changed
+  order is disclosed; an attempt that becomes claim-usable is the analysed attempt only if it is the pack's first
+  claim-usable attempt in arm order (`first_claim_usable`), and any later attempt of that pack is listed in the
+  attempt history as not analysed. Each attempt's `exclusions.json` records the catalog digest and the harvest
+  program's commit, so which program decided is always on record.
 - **NULL:** re-arm after the named hazard is gone (a contention dwell timeout: identify the process; charging: wait
   until the arm's battery rule of §4.2 would pass, which is the adapter connected, IsCharging No and a battery
   current of at most 200 mA in either direction, the state this file calls battery float; the frequency gate: the
@@ -4508,15 +4516,32 @@ the harvest's `withheld/member-assessments.json` (restricted custody, so read by
 
 ### 7.5 A defect found in the middle of the block
 
-**Collection code** is any file in the sealed inventory that executes during a window or changes how a window's bytes
-are produced. GAMMA's contrasts are judged against floors from ALPHA and BETA, so all three windows must share one
+**Collection code** is any file in the sealed inventory as the measurement checkout executes it during a window, or
+any change to how a window's bytes are produced. The measurement checkout's HEAD stays H_claim plus pin-only commits
+for the whole block (§11), so a desk program's repair (harvest, replay, extraction, mint, analysis) that lands in a
+desk checkout changes no collection code even when the file it changes is also imported inside a window from the
+measurement checkout; §11 item 4 names what the harvest lane may change. GAMMA's contrasts are judged against floors
+from ALPHA and BETA, so all three windows must share one
 acceptance, one macOS build and the same collection code: no collection-code file that a completed window executed
 may differ, byte for byte, in the commit a later window runs.
+
+*How to read "H_claim plus pin-only commits".* One more commit lies between H_claim and the first pin-only commit:
+the **seal commit**, the child of H_claim that carries the filled sealed inventory and the sealed text of this file
+and of the analysis plan (§11). It changes those three files and nothing else, so it changes no file that the sealed
+inventory lists, and the measurement checkout is checked out at it before ALPHA-1 arms. Where this section and §14
+Q13 say that the measurement checkout stays at H_claim, the commits it holds are therefore H_claim, the seal commit,
+and the pin-only commits made after it.
 
 - A cure confined to collection code that no completed window executed (for example GAMMA-only stages) does not
   supersede completed windows. The cure carries a **changed-path map**: the list of files that differ between
   H_claim and the cure's commit, as `git diff --name-only` prints it. The map must show that no file executed by a
-  completed window changed, and a diff-scoped #416 re-audit covers the change.
+  completed window changed, and a diff-scoped #416 re-audit covers the change. Every cured file is a window input
+  (§9.1), so a window armed after the cure would differ from the sealed inventory and be removed
+  (`code.executed_differs_from_sealed`). The cure therefore re-issues the seal: its commit becomes the new H_claim,
+  and a new seal commit carries a sealed inventory generated from it (§11). A re-harvest of a window completed
+  before the cure is given the inventory that was in force when that window was armed, or it would be compared
+  with the new one. The harvest command takes it as `--sealed-inventory-path`, and the window's first harvest kept
+  a copy in its archive, `sources/inputs/sealed_inventory.json`.
 - A cure touching collection code that a completed window executed **supersedes the whole block**: completed windows
   are retained and disclosed structurally, their energies are never analysed, a new registration or a cold erratum is
   written, and the block restarts at ALPHA.
@@ -4540,19 +4565,104 @@ beside every reported cell and contrast, the number of attempts of its pack and 
 
 ## 8. Blinding
 
-1. **Before seal.** No claim-eligible `_v5` byte exists. This draft's author read none (§16).
+1. **Before seal.** No claim-eligible `_v5` byte exists. The authors of this file read none (§16).
 2. **During the block.** From ALPHA-1's arm until the block closes (every pack claim-usable, or END STATE), every
    harvest, courier record, email and public summary releases **structure** only: verdicts, `claim_usable`, flag
    counts by code and family, kept-unit counts, paths, hashes, hazard measurements, and timing that is not a phase
    duration (member cycles and cooldown waits are releasable). **Restricted:** energies, powers, phase durations,
    floor values, reported means, dominance ratios, calibration numeric diagnostics, any pass/fail derived from a
-   science energy, and every flag whose `blinding` is RESTRICTED. A member removed by a RESTRICTED code is released as
-   "removed (restricted code)", without the code. The driver's courier for `HAZARD_PACK` sends structure only: no
-   chain or campaign logs, no runs-root files. `FILL[B5-BLIND-CUSTODY-MAP]` lists the restricted paths.
+   science energy, and every flag whose `blinding` is RESTRICTED. The harvest writes every flag with its code, the
+   RESTRICTED ones included, into `derived/flags.jsonl`, names each excluded member's codes in
+   `derived/exclusions.json` and counts flags by code in `derived/window_flags.json`; those three files are restricted
+   until the release event and are listed in the custody map, and their only in-block reader is the scheduler's read
+   of `claim_usable`. Everything released before the release event (courier records, emails, summaries) shows a member
+   removed by a RESTRICTED code as "removed (restricted code)", without the code, and omits the per-code count of any
+   RESTRICTED code; that redaction is a step of the release, done by lane L9's disclosure producer (analysis plan §8.1),
+   not by the harvest. The driver's courier for `HAZARD_PACK` sends structure only: no
+   chain or campaign logs, no runs-root files. The custody map at the end of this section (`B5-BLIND-CUSTODY-MAP`)
+   lists the restricted paths, these three files among them.
 3. **Unblinding.** After the block closes and the blind dry run of analysis plan §3.2 has completed, the lead records
    a **release event** tying the sealed SHA-256s of this file, the analysis plan and the catalog to the final harvest
-   records (`FILL[B5-RELEASE-EVENT]`); the analysis then runs exactly as registered. Analyses not registered are
-   labelled exploratory.
+   records; the analysis then runs exactly as registered. Analyses not registered are labelled exploratory. The
+   release event is not written into this file, whose bytes cannot change after the seal: each window
+   plan records this file's SHA-256, the plan writer refuses a file that does not hash to the digest it is given,
+   and the harvest faults when the file differs from the digest its plan recorded. It is written as a section
+   appended to the seal record (§12), the section named `FILL[B5-RELEASE-EVENT]`.
+
+**The custody map** (`B5-BLIND-CUSTODY-MAP`, filled in revision 12).
+
+*Forcing problem.* Item 2 says what kind of value is restricted. It does not say which files hold such values, and
+restricted custody is kept by rule, not by the file system: the harvest creates every file with ordinary
+permissions, so nothing stops a seat from opening one. A seat that has read an energy can no longer write or repair
+analysis code blind, that is, without the outcome in view (analysis plan §3.2). The list of paths a seat must not
+open therefore has to be complete, and it has to exist before the first window does.
+
+*How to read it.* No window exists at the seal, so the map cannot name files. It gives **path patterns** under four
+directories that every attempt has, and it is applied to an attempt by putting that attempt's four directories in
+place of the names in angle brackets:
+
+- the **claim runs root** and the **bound runs root** (§0.17), which the window plan names as `runs_roots.claim` and
+  `runs_roots.bound`;
+- the **custody root**, the directory into which the driver, the arm, the monitor, the meter and the chain write
+  their own records of the window, which the window plan names as `custody_root`;
+- the **archive root**, the directory one harvest writes. It holds a copy of the window's bytes under `sources/`
+  (`sources/claim-runs/` and `sources/bound-runs/` for the two runs roots, `sources/night-custody/` for the custody
+  root, `sources/ledger/`, `sources/inputs/` for the sealed documents the harvest read, `sources/repo/` for the pack,
+  and the list of digests `sources/SHA256SUMS`), the harvest's outputs under `derived/` and `withheld/`, and
+  `harvest.json`. A re-harvest writes a new archive root, and the map applies to each.
+
+In a pattern, `**` stands for every file below the directory named.
+
+| Restricted until the release event | What it holds |
+|---|---|
+| `<claim runs root>/**` | every member bundle (energies, powers and phase durations) and the calibration captures |
+| `<bound runs root>/**` | the NEG-8 corpus bundles and the drift bound derived from them |
+| `<custody root>/hazards/monitor/battery.jsonl` and `<custody root>/hazards/monitor/raw/battery/**` | the battery's current and voltage through the window, read every second; their product is a power |
+| `<custody root>/hazards/meter/**` | the whole-machine meter's power samples (§5.8) |
+| `<custody root>/night/chain.stdout.log`, `night/chain.stderr.log` and `night/transcript/**`; `<custody root>/night.log`; `<custody root>/operator-logs/**` | the logs of the driver, of the chain, of its tools and of the members, which can quote energies and durations |
+| `<archive root>/sources/**`, except `sources/SHA256SUMS` and `sources/inputs/**` | the harvest's copy of everything above |
+| `<archive root>/withheld/**` | the numbers: the re-reduced member summaries, the member spans, the bracket evaluation, the re-derived NEG-8 bracket and bound, the battery-assist energies, the meter record, and the full texts of errors |
+| `<archive root>/derived/flags.jsonl`, `derived/exclusions.json` and `derived/window_flags.json` | the flags and the exclusions by code, the RESTRICTED codes included (item 2) |
+| every backup and offload copy of a path above (§5.6) | the same bytes |
+| what the harvest command prints when its verdict is HARVEST_FAULT | an error message, which can quote a data value |
+
+*Releasable during the block,* listed so that nobody has to guess: `harvest.json`; every file under `derived/` other
+than the three above; the record files the driver pushes to the results branch `night-results/<plan id>`
+(`scripts/run_night.py` `HAZARD_ARTIFACTS`: the arm decision, the per-stage yield counts, the supervision journals
+and the G10 record among them); the courier's email; the monitor's clock, thermal, contention and disk journals and
+the arm record `hazards/arm.json`, which are hazard measurements; what the harvest command prints on any other
+verdict; and the attempt history of §7. A file the map does not name is released only if it holds nothing that item 2
+restricts; in doubt it is treated as restricted.
+
+*Who may read a restricted path.* Until the release event, automation only (§0.1): the harvest, the blind dry run of
+analysis plan §3.2 and, for the three `derived/` files, the scheduler's read of `claim_usable` (item 2). None of
+them prints, emails or commits a restricted value. After the release event: the lead, and the results cold gate
+that re-derives every printed number (analysis plan §3.1 step 12). A seat that will write or review a repair after
+the release reads no restricted path even then, because analysis plan §3.2 allows such a repair only from seats that
+have read no released number.
+
+*Two channels a list of paths misses.* The body of a pull request that carries a harvest or a fix to one can quote
+what replaying real bytes gave, so a blind seat does not open it. And three analysis programs print a science result
+to the terminal on an ordinary successful run (analysis plan §3.1 steps 6, 9 and 11: the dominance close-out
+`scripts/build_d165_dominance_closeout.py` when it is given no `--output`, the claim gate
+`python -m joulewise analyze-claims`, and the fill renderer `scripts/render_results_fills.py`). Before the release
+event they run only inside the blind dry run, which keeps every output in restricted custody and writes out
+structure only (analysis plan §3.2).
+
+*Worked example (a GAMMA attempt; the four directory names are invented).* Its window plan names the claim runs root
+`/runs/gamma-1/claim`, the bound runs root `/runs/gamma-1/bound` and the custody root `/custody/gamma-1`, and its
+harvest wrote the archive root `/archive/gamma-1-h1`. GAMMA plans 101 members (§4.2): 80 science members, the 7
+NEG-8 references and the 2 diagnostic interior references, which go to the claim runs root, and the 12 NEG-8 corpus
+members, which go to the bound runs root; up to 7 spares can join the claim runs root (§0.12). Restricted: every
+file under the two runs roots (one bundle directory for each member that ran, and in the bound root the bound
+derived from the corpus); `/custody/gamma-1/hazards/monitor/battery.jsonl`; the logs under
+`/custody/gamma-1/operator-logs/`; everything under `/archive/gamma-1-h1/withheld/`; and
+`/archive/gamma-1-h1/derived/exclusions.json`. Releasable: `/archive/gamma-1-h1/harvest.json`,
+`/archive/gamma-1-h1/derived/roster.json` and `/custody/gamma-1/night/stage_yield.jsonl`. An email that reads
+"GAMMA-1: COLLECTED, claim-usable; two members removed, one by `member.admission_aborted` and one removed
+(restricted code)" is structure. An email that names the one RESTRICTED code of the catalog,
+`member.anchor_energy_envelope_exceeded`, or gives its count, is not: the code says that the timing envelope of a
+member's phase energy exceeded a quarter of that energy (§6.3), which is a statement about a science energy.
 
 ## 9. Directive gates
 
@@ -4623,7 +4733,7 @@ finding went:
 | A3 (BLOCKER) | absent or unreadable manifests erased a known reference loss, and the stored passing screen stood | fixed (`3cf9d6b2f`): the sealed roster names the references; re-verified FIXED |
 | A4 (should fix) | the census read a `node` option's value as the script, so a live agent read as clean | fixed, lane `census-ancestors` (`ca25d9299`), by parsing options; re-verified FIXED; the parsing was then withdrawn (Sol R1 below) |
 | A5 (should fix) | a strict-invalid reference failed the whole screen instead of being lost | fixed (`294f6e573`): reason `strict_invalid` in writer, replay and harvest; re-verified FIXED |
-| Sol R1 (should fix) | a second `node` option (`--trace-require-module all`) was read as the script: the same class as A4, a second time | fixed, lane `census-interp` (`2524637ae`, merged into int5 by `84661ddb3`): the option parsing is withdrawn and every argument of a JavaScript runtime is read (§4.5). The merge came after the four passes above, so no pass has reviewed it yet; its review is part of fixing H_claim (§2 item 1), at the final head `FILL[B5-FINAL-HASHES]` |
+| Sol R1 (should fix) | a second `node` option (`--trace-require-module all`) was read as the script: the same class as A4, a second time | fixed, lane `census-interp` (`2524637ae`, merged into int5 by `84661ddb3`): the option parsing is withdrawn and every argument of a JavaScript runtime is read (§4.5). The merge came after the four passes above. Fable's delta cold pass 5 reviewed it at `9395cecfb` and found it sound (the second part of this record, below) |
 | Sol R2 (BLOCKER) | floor extraction cannot pass the harvest archive, so every block-5 floor cell has no allowance (the same defect as cold pass 4 D1) | lane L9-NEG8 (analysis plan §11): claim-time code, safe direction (refuses) |
 | Sol R3 (BLOCKER) | the claim validator rejects a row whose stored screen failed before reading the harvest's passing survivor re-screen | lane L9-NEG8: claim-time code, safe direction (refuses) |
 
@@ -4646,7 +4756,70 @@ with one design round by Sol and Fable before code. None of it is collection cod
 changes a window's bytes, so it does not block the arm. Cold pass 3's notes (N-A, N-B) and cold pass 4's notes (N-1,
 N-2) are catalog questions that this directory's catalog already answers: `model.identity_mismatch` and
 `model.identity_inconsistent_in_window` are EXCLUDE_WINDOW (§6.5), `model.identity_underivable` is EXCLUDE_MEMBER, and
-`whole_window.verdict_unauthenticated` is DISCLOSE; the seal rules on them.
+`whole_window.verdict_unauthenticated` is DISCLOSE. The seal gate's stage 1 confirmed all four effects (rulings SG-6
+and SG-7, 2026-10-07).
+
+**`416-DELTA-RECORD`, second part** (filled in revision 12): the code merged after `fe28e5a0c`. Two changes to code
+came after the four passes above. The first is the census interpreter rule (Sol R1 in the table above; §4.5). The
+second is the **seal landing**, the lane `lane/2026-10-07-seal-landing`, which changed how a window is compared
+with the seal. *Why it was needed:* a file cannot name the commit that contains it, so the sealed
+inventory, which names H_claim, is committed one commit after H_claim, and every window runs from that later commit
+or a later one (§11). The harvest lists every path that differs between H_claim and the commit a window ran from
+(`git diff --name-only`); this is the **head comparison**. Before the lane, every such path except the ledger pin
+was `code.executed_differs_from_sealed`, so every block-5 window would have been removed because the seal itself
+had landed. *What the lane changed:* only a changed **window input** is now a difference, that is, a tracked file
+a window can read while it is planned, armed or run: any file under `joulewise/`, `scripts/` or `configs/` other
+than the ledger pin and the three files the seal itself rewrites (the sealed inventory, this file and the analysis
+plan), and `docs/phase_2/window_runbook.md`. Every other changed path is recorded in `derived/code-identity.json`
+and raises no flag. The lane was merged into the integration branch at
+`9395cecfbc40fb93e87a7657ec0ba5da0ca9ef3a`. Cold pass 5 covers the whole range `fe28e5a0c..9395cecfb`, and an
+independent review covers the lane. Each is the work of one seat that took no part in writing the code, read-only
+in the repository, with its own executed probes:
+
+| Pass | Seat | What it read | Verdict | Record (SHA-256 computed by this author with `shasum -a 256`) |
+|---|---|---|---|---|
+| Cold pass 5 | Fable 5.1 (Anthropic), a cold session | the diff `fe28e5a0c..9395cecfb` (seven files under `joulewise/`, `scripts/` and `configs/`; five test files) | PASS WITH NOTES; one defect, disposed "flag, not refuse" (C6 below) | `/Users/edr/night-archive/gate-prune/cold-pass-5/REPORT.md`, `46446fa429bdceaac91da1bb3916714c3c59fd846c6bf4503bad4462e218e8ad` |
+| Seal-landing review | Opus 5.5 (Anthropic), a review seat that did not write the lane | the lane at its head `2737ef88c` (base `9b0c680ed`), by executing it | DEFECTS: one MAJOR (F1), older than the lane and raised by the lane itself as an open question; everything the lane was asked to change behaves as it says; F2 and F3 are MINOR, F4 to F9 notes | `/Users/edr/night-archive/gate-prune/wave-1007b/seal-land/REVIEW.md`, `fec2dc44938731c8528777b66c336df07ca553ff6f43f2bcd146cab641012f0a` |
+
+What the two passes established, each by execution on a real git history. A changed file under `joulewise/`,
+`scripts/`, the window's pack, any other path of `configs/` (the catalog, the identity pins and the sizing output
+among them) or the runbook, committed after H_claim, still gives `code.executed_differs_from_sealed` at the
+harvest (cold pass 5, cases C4 to C10; the review, sixteen cases). The arm's collector gives the same answer when
+it is handed H_claim to compare with; in a window it is handed the commit the window runs from, so there the
+harvest's comparison is the one that ties the window to the seal. A pin-only commit, the seal's own commit and a
+commit confined to documents, tests or `RUN_STATE.md` give no flag (C1 to C3). The census rule classes every
+launch shape found on this machine as §4.5 states (36 of 36 rows of the pass's table; a live `node` launch is a
+hit; a census line that cannot be decided stays a hit). The commit that reworded the explanatory text of one
+harvest function (`455e59b86`) changes no executable code: the syntax trees before and after are equal once such
+texts are removed. The four pinned estimator files are byte-identical to the frozen head `a434e363d`, and
+`scripts/prewindow_check.sh` is unchanged.
+
+Where each finding went (orchestrator's ruling of 2026-10-07 on the lane and its review,
+`/Users/edr/night-archive/gate-prune/wave-1007b/seal-land/ORCHESTRATOR_RULING.md`). No finding changes a window
+input before H_claim: each check lives in the harvest, which runs after a window, from a desk checkout (a checkout
+of the repository other than the measurement checkout, §7.5). So each goes to the harvest lane, the set of changes
+to the harvest that lands after the seal and before ALPHA-1's harvest (§11 item 4; the lane's work list,
+`/Users/edr/night-archive/gate-prune/wave-1007b/harvest-lane/WORKLIST.md`, numbers these items H-8 to H-12).
+
+| Finding | What it was | Where it went |
+|---|---|---|
+| Cold pass 5, C6 (defect) | a commit that changes only another pack's directory is a window input, so it removes a window that never read that pack | harvest lane, H-12: recorded, not a difference. It cannot arise in the registered sequence (the measurement checkout receives only pin-only commits, and the program that makes them, `scripts/advance_b5_ledger_pin.py`, refuses a commit that changes anything else), and when it fires it removes a window, never prints a wrong number |
+| Review F1 (MAJOR) | when the launchd job is installed from a checkout other than the measurement checkout, the driver, the hazard modules, the monitor and the collectors are that other checkout's files; if they differ from the sealed inventory the harvest records the differing files and raises no flag | harvest lane, H-8: a differing code file in the driver's checkout becomes `code.executed_differs_from_sealed`; identical bytes stay a record. It cannot arise when the launchd job is installed from the measurement checkout, as §11 requires |
+| Review F2 (MINOR) | the paths that raise no flag are "every path not listed", so a tracked file outside `joulewise/`, `scripts/` and `configs/` can change with no flag: for example `env/mac-measurement-lock.txt`, the list of package versions the measurement environment is built from, or `pyproject.toml` | harvest lane, H-9: the harvest's head comparison names the paths that raise no flag (`docs/` except the runbook, `tests/`, directories whose name starts with a dot, and Markdown files at the top of the repository); every other path is a window input |
+| Review F3 (MINOR) | a sealed inventory that lists files but names no commit is compared with nothing | harvest lane, H-10: `code.identity_unmeasured`. The committed inventory is covered already: `tests.test_b5_seal_landing` refuses one whose `head` is not a commit |
+| Review F4 (note) | a later commit to this file or to the analysis plan is silent in code | by procedure: the seal record's SHA-256s bind both files (§12) |
+| Review F5 (note) | a re-harvest after a re-issued seal needs the inventory that was in force when its window was armed | runbook and magistrate brief (§11, §12) |
+| Review F6 (note) | a changed path whose name is not UTF-8 faults the harvest | harvest lane, H-11 |
+| Review F7 (note) | the catalog, `identity_pins.json` and `sizing_b5.json` carry draft labels in their sealed bytes | the two generated files keep the labels their generators write, and the seal record's digest of each file is what seals it (§12); the catalog's status note is rewritten before H_claim to a sentence that is true before and after the seal |
+| Review F8 (note) | the commit after the seal commit must carry any test data file that the sealed text forces to change | accepted: that commit carries it, and the whole suite and CI are required green there (§11, §12) |
+| Review F9 (note); cold pass 5 notes | the harvest records nothing about its own program; a stale clause in a harvest comment; the stale catalog note of `code.executed_differs_from_sealed` | the harvest records the commit of the checkout it ran from (the change the seal gate's ruling numbers K-7, in the harvest lane); the comment goes to the same lane; the catalog note is corrected before H_claim, because the catalog is a window input and cannot change in the seal's own commit |
+
+A change to collection code that lands after `9395cecfb` and before H_claim needs a diff-scoped pass of its own
+before the seal, by the rule at the head of this section. The changes the seal gate's stage 1 ordered in that range
+are not collection code. They are one value and some notes of the flag catalog (the value is the cell minimum of
+§6.6, which only the exclusion function reads, at the harvest); three entries of the refusal allowlist, two
+reworded and one removed, in a file no program loads during a window (§6.11); and the tests and test data that
+follow them (§13, the record of revision 12).
 
 ### 9.2 #421: battery float, and the battery-assist ruling of 2026-10-06
 
@@ -4713,9 +4886,14 @@ sizing output (`sizing_b5.json`, `member_allowance_s`), and no program derives a
 cycle: the sizer (`scripts/size_b5_window.py`) takes no such input, and its `--check` mode passes only when it
 reproduces the sealed file byte for byte. A larger allowance is therefore a cold erratum with a new sizing file. The
 new file is pinned by an addendum to the seal record (§12: the record that pins each sealed file by its SHA-256; an
-addendum adds a pin to it), and the question goes to a consult first. A review finding that concerns only how
-something is recorded (receipts, naming, schema formality) is dispositioned "flag, not refuse" and never sent to a
-fix round.
+addendum adds a pin to it), and the question goes to a consult first. The new file is a separate file, never an
+edit of `sizing_b5.json` committed in the measurement checkout: `sizing_b5.json` is a window input (§9.1), so such
+a commit would remove the next window (`code.executed_differs_from_sealed`). The plan writer does not need the
+sealed file: it takes an allowance's source as any file inside the measurement checkout, named by its path and its
+SHA-256 (`joulewise/b5/plan.py` `read_allowance`), so the new file is placed there untracked, outside `joulewise/`,
+`scripts/` and the pack, for example under the ignored `runs/` directory (an untracked file under those three
+would itself be a difference, §6.5). A review finding that concerns only how something is recorded (receipts,
+naming, schema formality) is dispositioned "flag, not refuse" and never sent to a fix round.
 
 **Registered deviations from committed bytes, made prospectively here:**
 
@@ -4724,7 +4902,7 @@ fix round.
 3. The NEG-8 bound may be derived from 10 or 11 corpus members (§5.3).
 4. Analysis: D-179 ruling 1 ("no member is excluded after collection"; no reduced mean) and D-078's no-reduced-mean
    text are amended by §6.6 and analysis plan §2.2 and §4, as Ed's 2026-10-05 ruling requires; GAMMA's prospective
-   manifest's fixed n = 10 quads becomes "at least 8 kept quads" (analysis plan §7).
+   manifest's fixed n = 10 quads becomes "at least 5 kept quads" (analysis plan §7).
 5. The chain passes `--arm-countdown-s 0` on every collection stage, in place of the literal 20 that each of a
    pack's ten collection stages carries (§5.1).
 6. The chain adds two arguments to both calibration capture stages (the pre and the post slot), which carry neither
@@ -4741,6 +4919,13 @@ fix round.
      as `calibration.writer_record_flagged` with kind `display_sleep_action_failed` (§6.10).
    - The program that writes the chain script refuses a pack whose calibration stage already carries either
      argument (`joulewise/b5/chain.py` `calibration_runbook_flags`, `stage_argv`).
+7. Analysis: the number printed beside a reported cell as its attribution floor. D-179 ruling 4 names "the D-078
+   approximately 1-J attribution limit" as that number, and the contract `docs/contracts/paper_reported_energy.md`
+   "the approximately 1-J D-078 attribution floor".
+   Block 5 prints the cell's own value, computed by the formula of §0.10 from the window's own members (§14 Q5).
+   What does not change: the floor is labelled beside the cell and never added into its interval, and the
+   reported-energy code keeps its label for that rule, `labelled_beside_never_composed`
+   (`joulewise/paper_reported_energy.py`).
 
 The chain's other changes of round 2 (the 60 s settles, the window calibration verdict, the wall budgets, the
 collection deadline, the corpus retry) and the spare-slot retry of revision 7 are not deviations from pack bytes: they
@@ -4803,35 +4988,41 @@ sensitivity line of analysis plan §8.
 | Binding | FILL | Due |
 |---|---|---|
 | Commit | `H-CLAIM` | Seal |
-| Sealed inventory | `sealed_inventory.json` filled at H_claim | Seal |
+| Sealed inventory | `sealed_inventory.json`: generated from the files of H_claim and committed in the seal commit, the commit that follows H_claim. The file names H_claim as its `head`, and a file cannot name the commit that contains it (§9.1, §11) | Seal |
 | Dry render, dry arm | `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`: filled in revision 9 (§2 item 6), at `fe28e5a0c`; the render is an L2 harness render. The census matcher changed after `fe28e5a0c`; §2 item 6 says why the dry arm's refusal holds under the merged rule, and §14 Q15 asks whether it is repeated at the final head | Before ALPHA-1 arms |
-| Audit, seats | `416-AUDIT-RECORD`, `416-SEATS`: filled in revision 8 (§9.1); `416-DELTA-RECORD` (the diff-scoped passes over `a434e363d..fe28e5a0c`, §9.1): filled in revision 9; `B5-SEAL-SEATS` | Seal seats at seal |
+| Audit, seats | `416-AUDIT-RECORD`, `416-SEATS`: filled in revision 8 (§9.1); `416-DELTA-RECORD` (the diff-scoped passes over `a434e363d..fe28e5a0c`, §9.1): filled in revision 9; its second part (the code merged after `fe28e5a0c`: Fable's delta cold pass 5 at `9395cecfb` and the independent review of the seal-landing lane, §9.1): filled in revision 12; `B5-SEAL-SEATS` | Seal seats at seal |
 | Sizing | `B5-SIZING-OUTPUTS`: draft values at `fe28e5a0c` (§5.5), unchanged since `d3c107f2f`, spares included; pinned at H_claim | Seal |
 | Cooldown smoke | `B5-COOLDOWN-SMOKE-RECORD` (§2 item 7): filled in revision 6 | Seal |
-| Plans | `B5-PLANS-REGENERATED`: every window plan and plan-input file written from the sealed §4.3 block (contention `clean_s` 180) | Before ALPHA-1 arms |
-| P3 sync | `P3-SYNC-RECORD` (§2 item 8), with `P3-BATTERY-CODES` (§6.4, and the table below) and `P3-CLOCK-SKEW-BOUND` (§4.2): filled in revision 6 against `a434e363d`; the revision 7, 8, 9 and 10 sync records below cover what was merged since, against `d3c107f2f`, `43ac12d0c`, `fe28e5a0c` and `9b0c680ed` | Seal |
-| Final hashes | `B5-FINAL-HASHES`: filled in revision 8 at `43ac12d0c`; recomputed in revision 9 at `fe28e5a0c` (`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_4.md`), where only the identity pins changed (§0.7 plan trees, §4.6 item 3 identity pins, §5.5 sizing output). Open again for one value: the final head itself, which carries the census interpreter rule (§2 item 1, §4.5); each digest so marked is checked again there. Revision 10 found each of them unchanged at the int5 head `9b0c680ed` (`B5-REV10-SYNC` below); the marks stay until the final head is fixed | Seal |
-| Refusal allowlist | `roster.run_id_mismatch` listed under the member exclusions of `configs/gates/hazard_refusals.json` (§6.11): done at `d3c107f2f` (audit-fix item 7); `neg8.midpoint_lost_primary` listed under the window exclusions: done at `43ac12d0c` (ruling Q11); the file is unchanged at `fe28e5a0c` and at `9b0c680ed` | Seal |
+| Plans | `B5-PLANS-REGENERATED`: every window plan and plan-input file written from the sealed §4.3 block (contention `clean_s` 180). The plans can be written only after the seal, so the record of their regeneration is a section appended to the seal record, not a value in this file, whose bytes are fixed at the seal (§8 item 3) | Before ALPHA-1 arms |
+| P3 sync | `P3-SYNC-RECORD` (§2 item 8), with `P3-BATTERY-CODES` (§6.4, and the table below) and `P3-CLOCK-SKEW-BOUND` (§4.2): filled in revision 6 against `a434e363d`; the revision 7, 8, 9 and 10 sync records below cover what was merged since, against `d3c107f2f`, `43ac12d0c`, `fe28e5a0c` and `9b0c680ed`, and the revision 12 record covers the seal landing, against `9395cecfb` | Seal |
+| Final hashes | `B5-FINAL-HASHES`: filled in revision 8 at `43ac12d0c`; recomputed in revision 9 at `fe28e5a0c` (`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_4.md`), where only the identity pins changed (§0.7 plan trees, §4.6 item 3 identity pins, §5.5 sizing output). Open again for one value: the final head itself, which carries the census interpreter rule (§2 item 1, §4.5); each digest so marked is checked again there. Revision 10 found each of them unchanged at the int5 head `9b0c680ed` (`B5-REV10-SYNC` below); the marks stay until the final head is fixed, and revision 12 leaves them in place | Seal |
+| Refusal allowlist | `roster.run_id_mismatch` listed under the member exclusions of `configs/gates/hazard_refusals.json` (§6.11): done at `d3c107f2f` (audit-fix item 7); `neg8.midpoint_lost_primary` listed under the window exclusions: done at `43ac12d0c` (ruling Q11); the file is unchanged at `fe28e5a0c`, at `9b0c680ed` and at `9395cecfb`. The seal gate's stage 1 then reworded two entries (what `cell.below_minimum` and `neg8.midpoint_lost_primary` protect: its changes K-1 and K-3) and ordered `g3.recompute_failed` removed from the window exclusions, where it disagrees with the catalog's DISCLOSE (K-2); the record of revision 12 below says where each stands | Seal |
 | Disk | `BACKUP-DESTINATIONS`: filled in revision 4 (§5.6) | Seal |
 | Identity pins | `identity_pins.json` (§4.6 item 3): draft at `fe28e5a0c`, with the sealed `neg8_reference` unit (`754c8c093`) and the spares; pinned at H_claim | Seal |
-| Blinding | `B5-BLIND-CUSTODY-MAP`, `B5-RELEASE-EVENT` | Map at seal; release after the block closes |
+| Blinding | `B5-BLIND-CUSTODY-MAP`: filled in revision 12 (§8). `B5-RELEASE-EVENT`: a section appended to the seal record once the block has closed, not a value in this file (§8 item 3) | Map at seal; release event after the block closes |
 | Boundary | `BOUNDARY-LABEL`: filled in revision 4 (§1) | Seal |
-| Attribution floor | `ATTRIBUTION-FLOOR-BINDING` | Seal |
-| Seal | `B5-SEAL-RECORD` | Seal |
+| Attribution floor | `ATTRIBUTION-FLOOR-BINDING`: filled in revision 12 by a formula, on the orchestrator's ruling of 2026-10-07; no number and no artifact is bound (§0.10, §14 Q5). The value is computed for each reported cell at the analysis | Formula at seal; value at the analysis |
+| Harvest and analysis programs | Two addenda to the seal record (§11 item 4). The first pins the harvest program after the harvest lane that the seal gate required: the changed files, their SHA-256s and the commit of the desk checkout the harvest runs from. The second pins the analysis code (lane L9) | The first before ALPHA-1's harvest; the second before the release event |
+| Seal | `B5-SEAL-RECORD`: the path of the seal record, a file committed after the seal commit (§12) | Seal |
 
-Still open after revision 10: `H-CLAIM` (the candidate is the final head of int5, which carries `fe28e5a0c`, the
-census interpreter rule merged at `84661ddb3`, and the seal preparation's commits; that
-head is `FILL[B5-FINAL-HASHES]`, §2 item 1; it waits for the review of the merge and the merge gates),
-`B5-SEAL-SEATS`, `B5-SEAL-RECORD`, `B5-BLIND-CUSTODY-MAP`, `B5-RELEASE-EVENT`, `ATTRIBUTION-FLOOR-BINDING`,
-`B5-PLANS-REGENERATED`, and the sealed inventory itself. None can be filled from committed bytes: each names a commit,
-a record, a ruling or a regeneration that does not exist yet. `B5-SIZING-OUTPUTS` and the identity pins hold draft
-values, which the seal pins. Filled in revision 6: `B5-COOLDOWN-SMOKE-RECORD`, `P3-SYNC-RECORD`, `P3-BATTERY-CODES`,
+Six names are filled last, by a step that runs once H_claim exists and puts each value in place of its marker
+without changing another word. `H-CLAIM` is the commit `FILL[H-CLAIM]`: the last commit of the integration branch
+that changes a window input (§9.1, §11). It carries `fe28e5a0c`, the census interpreter rule merged at `84661ddb3`,
+the seal landing merged at `9395cecfb`, and the catalog change the seal gate's stage 1 ordered (§6.6).
+`B5-FINAL-HASHES` marks each digest that is recomputed at that commit. `B5-SEAL-SEATS` and `B5-SEAL-RECORD` are the
+seats of the seal gate and the path of the seal record (§12). `B5-PLANS-REGENERATED` and `B5-RELEASE-EVENT` name
+records that can exist only after the seal; each is a section appended to the seal record, and its marker is filled
+with that section's name (§8 item 3). The sealed inventory is not filled into this file at all: it is generated from
+H_claim and committed in the seal commit (§11). `B5-SIZING-OUTPUTS` and the identity pins hold the values the seal
+record pins. Filled in revision 6: `B5-COOLDOWN-SMOKE-RECORD`, `P3-SYNC-RECORD`, `P3-BATTERY-CODES`,
 `P3-CLOCK-SKEW-BOUND`. Closed in revision 7: the refusal-allowlist item. Filled in revision 8: `B5-FINAL-HASHES` (open
 again in revision 9 for the final head only), `416-AUDIT-RECORD`, `416-SEATS`; Q11 closed (§14). Filled in revision 9:
 `416-DELTA-RECORD`, `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`; Q12 closed (§14). Revision 10 filled nothing: it
 restated the census interpreter rule from the merged code, added the sync record `B5-REV10-SYNC`, and opened Q14 and
-Q15 (§14). The analysis plan's own FILLs
-(analysis plan §13), including the L9 adapters and lane L9-NEG8, are listed there.
+Q15 (§14). Revision 11 filled nothing: it corrected statements of fact against the code at `9b0c680ed`. Filled in
+revision 12: `B5-BLIND-CUSTODY-MAP` (§8), `ATTRIBUTION-FLOOR-BINDING` (a formula; Q5 closed, §14) and the second part
+of `416-DELTA-RECORD` (§9.1); Q6 closed, and Q9, Q11 and Q12 confirmed, by the seal gate's stage 1 (§14). The
+analysis plan's own FILLs (analysis plan §13), including the L9 adapters and lane L9-NEG8, are listed there.
 
 **P3 sync record** (`P3-SYNC-RECORD`, revision 6). Revision 5 described the behaviour below from the rulings, before
 the code had it. Each row was read in the frozen head `a434e363d` (`/Users/edr/code/JouleWise-wt-int4`); the last
@@ -5010,6 +5201,23 @@ a flag code: they are function names, field paths, file names, journal stage nam
 record, and the pack-scoped window reason `neg8.midpoint_lost_primary` (§0.16). The draft vocabulary still lacks the
 three codes named in revision 9's comparison.
 
+**Revision 12 record** (`B5-REV12-SYNC`). Revision 12 applies rulings and records; it follows no new list of code
+changes. This record covers §§7–10 and §§13–16, whose writer read each row below at the integration head
+`9395cecfbc40fb93e87a7657ec0ba5da0ca9ef3a` (the integration worktree, read only) or, for the last row, on the branch
+named there.
+
+| Sync point | Code at `9395cecfb` | Text |
+|---|---|---|
+| the head comparison | `harvest.head_change_class` and `flags.collect.head_change_class` put each path that differs between H_claim and the commit a window ran from in one of four classes: `pin_only` (the ledger pin), `seal_document` (the sealed inventory, this file, the analysis plan), `window_input` (any other path under `joulewise/`, `scripts/` or `configs/`, and `docs/phase_2/window_runbook.md`, matched without regard to letter case) and `record_only` (every other path). Only `window_input` gives `code.executed_differs_from_sealed`; the harvest writes all four lists to `derived/code-identity.json` (schema `joulewise.b5_code_identity.v1`) | changed: §9.1 (second part of the delta record), §7.5, the register above. §2, §11 and §12 state the same facts and belong to other writers of this revision |
+| this file's bytes after the seal | `plan._locator` refuses a file whose SHA-256 is not the digest the plan input gives ("sha256 does not match the file"); `harvest.resolve_thresholds` records `registration_digest_differs_from_plan`, and every such problem is a harvest fault | changed: §8 item 3 (the release event is a section of the seal record), the register above |
+| the harvest archive and what it withholds | the harvest copies its sources under `sources/` (`night-custody`, `claim-runs`, `bound-runs`, `ledger/`, `inputs/`, `repo/`) with `sources/SHA256SUMS`, and writes `derived/`, `withheld/` and `harvest.json`; `harvest.write_once` creates each file without setting a mode. The directory names were also read in the archive of a desk rehearsal (`/Users/edr/night-archive/gate-prune/rehearsal-real/gamma-2/archive/`, file names only; a rehearsal, not a window) | changed: §8 (the custody map) |
+| RESTRICTED flags | three writers, all in the harvest: the catalog default of `member.anchor_energy_envelope_exceeded`; `member.target_phase_precheck_failed` when `harvest.restricted_reason` matches one of its reasons; `diagnostic.s1_structural`. No program that writes flags before the harvest sets RESTRICTED | matched: §6.3; used in §8 |
+| what the driver releases | `run_night.HAZARD_ARTIFACTS` (12 record files of `night/`); the courier's instruction for a `HAZARD_PACK` window ("Report structure only ... never state an energy, a power or a duration of a member or a phase") | matched: §8 item 2; used in the custody map |
+| GAMMA's planned members | the plan tree's stage graph: 12 corpus members, reference stages of 3, 1 and 3, two diagnostic stages of 1, and four science stages of 20, 101 in all | used in §8 (worked example) |
+| three analysis programs print results | `scripts/build_d165_dominance_closeout.py` writes the close-out to standard output when it is given no `--output`; `python -m joulewise analyze-claims` prints each contrast's outcome; `scripts/render_results_fills.py` prints the rendered fills | used in §8 |
+| a resized member allowance | `plan.read_allowance` takes the allowance's source as a path relative to the measurement checkout, requires the file to hash to the SHA-256 given and a JSON pointer in it to resolve to exactly the seconds given | changed: §10 |
+| the changes the seal gate's stage 1 ordered before the head | not in the integration branch when this was written; on the branch `lane/2026-10-07-seal-rulings` (four commits on `9395cecfb`, read with `git log` and `git diff`): `059fafc55` sets the catalog's `rules.cell_unit_minimum` to 5; `9980d6296` rewords what `cell.below_minimum` and `neg8.midpoint_lost_primary` protect in the refusal allowlist (the gate's K-1 and K-3); `7b88e835a` removes `g3.recompute_failed` from the allowlist's window exclusions, which leaves 33, and sets it to DISCLOSE in the test catalog `tests/fixtures/b5_harvest/flag_catalog.json` (K-2); `a0920cb8c` makes the tests and the test catalog follow the minimum of 5. The four commits change no file under `joulewise/` or `scripts/`. `Catalog.cell_unit_minimum` is read only by `exclusions.compute`, which only the harvest imports | changed: §10 deviation 4, §9.1. With K-2 the "one documented disagreement" that the catalog comparisons above report for `g3.recompute_failed` ends: each comparison states what held at its own commit |
+
 Removed from revision 2 because the mechanism they bound is retired or now measured: `V5-PACK-REGEN-RECORD` and
 `V5-IDLE-SECONDS` (done, PR #481), `B4-*`, `L10-A-RATIFICATION-RECORD`, `Q110-CLOSURE`, `A6-AT-H-CLAIM`,
 `V5-TRANSACTION-GO-01-DISCHARGE`, `AUTH-<label>`, `CAMPAIGN-PERMITTED-BLOCKS`, `STEP6-RECORD`, `CENSUS-ARGV` (§4.5),
@@ -5036,12 +5244,33 @@ battery evidence map (§9.2).
   consult (§7.3).
 - **Q4. Paper placement (cold gate, ideally before seal).** D-174's fallback places no `_v5` result; printing needs an
   adoption ruling.
-- **Q5. Attribution floor (lead, before seal).** Bind the ~1 J value and artifact, and rule whether D-078's derivation
-  applies on 25G83.
-- **Q6. The sensitivity line (seal gate).** Analysis plan §8.1 proposes a labelled line over all members removed
-  only by physics-in-span codes, to expose the bias that such exclusions can introduce (thermal pressure and
-  contention plausibly correlate with load, most of all on 8B prefill-p2048 members). Adopt or strike. Battery assist
-  no longer belongs here: it is disclosed, and its own two-way line is registered (§9.2, analysis plan §8.1).
+- **Q5. Attribution floor. Closed in revision 12 by orchestrator ruling (2026-10-07): the formula is registered and
+  no number is bound.** The question was whether to bind D-078's figure of about 1 J, with an artifact, and whether
+  D-078's derivation applies on macOS build 25G83. The ruling
+  (`/Users/edr/night-archive/gate-prune/wave-1007b/q5-attribution-floor/RULING.md`): the derivation applies as a
+  method and not as a number. The attribution floor of a reported cell is the largest, over the cell's kept members,
+  of a bound the reducer already computes for each member and stores in the member's summary
+  (`energy_anchor_shift_envelopes`, the entry for the phase, field `max_abs_delta_j`). That bound is the largest
+  change in the energy assigned to the phase when each of the phase's two edges is moved, earlier or later and
+  independently of the other, by the edge bound, while the whole power trace is shifted by any amount within the
+  member's clock bound (§0.14). The edge bound is the window's fiducial bound (§0.11) plus the change, over the
+  member's sampler stream, of the wall clock minus the monotonic clock. Each member's bound is read from its summary
+  as re-derived under the fiducial bound that the window's own calibration bracket fixes (§0.10 builds the quantity
+  in full). It is computed at the analysis from the window's own members and bracket, so `ATTRIBUTION-FLOOR-BINDING`
+  is filled by this formula (§13), and no value and no artifact is sealed. *Why no number.* The quantity is not a
+  constant of the instrument. D-078's figure was one member's bound on one window of an earlier OS build (window
+  a10, macOS 25F84, Qwen2.5-1.5B: a timing bound of 0.031073829 s × 32.697 W = 1.016 J). On released 25G83 data
+  (block 3, not a claim window) the same bound was 1.38 to 2.86 J per member, and it changes with each window's
+  bracket. Nothing in block 5 is decided by the number: it is printed beside the four reported cells. Binding the
+  old value would print a floor the instrument does not have. The ruling followed an investigation (Opus 5.5) and a
+  refutation pass (Fable 5.1), which reproduced every number of the investigation's report from raw bytes and
+  returned five corrections; the ruling carries them.
+- **Q6. The sensitivity line. Closed at the seal gate (stage 1, 2026-10-07): adopted as amended.** Analysis plan
+  §8.1 prints a labelled line over the units removed only by the three load-correlated codes
+  (`thermal.os_level_nonzero`, `thermal.powermetrics_pressure_elevated`, `contention.request_overlap`), to expose the
+  bias such exclusions can introduce; the other eight PHYSICS_IN_SPAN codes describe an energy that is wrong or
+  unmeasured and are never ignored. Battery assist does not belong here: it is disclosed, and its own two-way line is
+  registered (§9.2, analysis plan §8.1).
 - **Q7. Ed's hardware setting (optional).** A fixed 80% charge limit with Optimized Battery Charging off avoids arms
   refused because the OS chose to charge.
 - **Q8. The watchdog held each window open until its deadline. Closed in revision 5.** The watchdog now releases a
@@ -5051,37 +5280,53 @@ battery evidence map (§9.2).
   reported cells (§0.9), and 8B members, one side of every quad, are the ones that assist most. The orchestrator
   ruled on revision 5's open points (2026-10-06, `/Users/edr/night-archive/gate-prune/INTEGRATION_TODO.md`): GAMMA's
   contrasts get the line too, because 8B is where assist occurs. Analysis plan §8.1 now prints each contrast's
-  estimate also without the quads that hold an assist member. The line is descriptive and gates nothing; the seal
-  gate may still strike it.
+  estimate also without the quads that hold an assist member. The line is descriptive and gates nothing. The seal
+  gate kept it (stage 1, 2026-10-07, ruling SG-9): it shows the reader where assist concentrates, the 8B side of
+  every quad.
 - **Q10. Whole-machine meter, central band (none; recorded).** The band for ρ is set by the first clean window
   (analysis plan §8.2). If no window of the block is clean, no band is set, and the cross-check reports only the hard
   plausibility band and the spreads. Nothing waits on this.
-- **Q11. A GAMMA attempt whose midpoint was lost. Closed in revision 8 by orchestrator ruling; the seal gate
-  confirms.** The question: the NEG-8 ruling makes `neg8.midpoint_lost` DISCLOSE in the catalog and claim-excluding
-  for the primary contrasts, but the scheduler reads only `claim_usable`, so a claim-usable GAMMA attempt that lost its
-  midpoint would have ended GAMMA's arms with no claim-bearing contrast. The ruling (2026-10-07): such an attempt is
-  not claim-usable (window reason `neg8.midpoint_lost_primary`) and GAMMA is re-armed; ALPHA and BETA keep the flag
-  disclosed only. Reasons: GAMMA exists for its primary contrasts; the selection reads a pre-registered flag and the
-  pack id, never an energy, so it is blind; and the expected cost is small (about 0.07% of windows, plus
-  contamination found at harvest). Code: `joulewise/flags/exclusions.py` `PACK_SCOPED_WINDOW_REASONS` (commit
-  `b15ea0b4d`), with its allowlist entry (§6.11). Text: §0.12, §0.16, §7.2; analysis plan §2.4. Revision 9 strikes
-  revision 8's sentence placing this reason in the NEG8 family for §7.3's anti-spiral rule: that rule is applied by
-  the orchestrator, no code computes it, and a registration does not need to pre-assign it.
-- **Q12. A NEG-8 reference or spare that ran another model. Closed in revision 9 by orchestrator call (ii); the seal
-  gate confirms.** The question (Fable cold pass 3 N-A, cold pass 4 N-1): ruling N8 said such a reference is dropped
-  and the survivors decide, but `model.identity_mismatch` and `model.identity_inconsistent_in_window` are
-  EXCLUDE_WINDOW in this catalog, and the exclusion function applies that effect at any scope, so the window is
-  removed whatever the survivors screen says. The call (2026-10-07): the catalog is right and the window is excluded.
-  The pack that executed differs from the sealed one, which is a failure of number integrity, not a lost measurement.
-  A reference whose identity cannot be derived (`model.identity_underivable`, member-level) is still lost, and the
-  survivors decide. Text: §0.12, §6.5; catalog notes.
+- **Q11. A GAMMA attempt whose midpoint was lost. Closed in revision 8 by orchestrator ruling; confirmed at the seal
+  gate (stage 1, 2026-10-07, ruling SG-5).** The question: the NEG-8 ruling makes `neg8.midpoint_lost` DISCLOSE in
+  the catalog and claim-excluding for the primary contrasts, but the scheduler reads only `claim_usable`, so a
+  claim-usable GAMMA attempt that lost its midpoint would have ended GAMMA's arms with no claim-bearing contrast.
+  The ruling (2026-10-07): such an attempt is not claim-usable (window reason `neg8.midpoint_lost_primary`) and
+  GAMMA is re-armed; ALPHA and BETA keep the flag disclosed only. Reasons: GAMMA exists for its primary contrasts;
+  the selection reads a pre-registered flag and the pack id, never an energy, so it is blind; and the expected cost
+  is small (about 0.07% of windows, plus contamination found at harvest). Code: `joulewise/flags/exclusions.py`
+  `PACK_SCOPED_WINDOW_REASONS` (commit `b15ea0b4d`), with its allowlist entry (§6.11). Text: §0.12, §0.16, §7.2;
+  analysis plan §2.4. Revision 9 strikes revision 8's sentence placing this reason in the NEG8 family for §7.3's
+  anti-spiral rule: that rule is applied by the orchestrator, no code computes it, and a registration does not need
+  to pre-assign it. The seal gate confirmed the rule and corrected two statements around it. First, the midpoint is
+  the only NEG-8 reference inside the window, not the only reference: GAMMA also runs two diagnostic interior
+  references, which by rule enter neither the screen nor the allowance (§0.12). Second, a lost midpoint on ALPHA or
+  BETA can also understate that window's allowance; it stays disclosed there because no decision rests on a reported
+  cell's interval, while on GAMMA a contrast's decision rests on the bound that carries the allowance (analysis plan
+  §2.4).
+- **Q12. A NEG-8 reference or spare that ran another model. Closed in revision 9 by orchestrator call (ii);
+  confirmed at the seal gate (stage 1, 2026-10-07, ruling SG-6).** The question (Fable cold pass 3 N-A, cold pass 4
+  N-1): ruling N8 said such a reference is dropped and the survivors decide, but `model.identity_mismatch` and
+  `model.identity_inconsistent_in_window` are EXCLUDE_WINDOW in this catalog, and the exclusion function applies
+  that effect at any scope, so the window is removed whatever the survivors screen says. The call (2026-10-07): the
+  catalog is right and the window is excluded. The pack that executed differs from the sealed one, which is a
+  failure of number integrity, not a lost measurement. A reference whose identity cannot be derived
+  (`model.identity_underivable`, member-level) is still lost, and the survivors decide. Text: §0.12, §6.5; catalog
+  notes. The seal gate's reason for confirming: a reference's configuration is committed and pinned, so it can
+  record another model only if the model files on disk or the installed runtime packages changed. That is a change
+  to the machine's software, before or during the window, and a science member's own identity check shows it only if
+  it touched that member's own files. A record that merely lacks the hash is different: it is a defect of one
+  record, with no evidence that anything changed.
 - **Q13. One NEG-8 survivor logic instead of three (lane L9-NEG8, after the seal, before any claim).** The survivor
   logic lives in the verdict writer, the replay and the harvest; three reviews in a row found defects in it, and the
   last two (the Sol re-verification's findings Sol R2 and Sol R3, §9.1; cold pass 4 D1) are in claim-time code. A
   consult (§9.1) chose to seal on this code and fix them in one lane, with one design round by Sol and Fable before
   code. Analysis plan §11 lists what the lane must do.
   Until it lands, no block-5 floor and no contrast resting on a recorded survivor re-screen is claimable (§0.12).
-  Nothing here changes collection; a change to the writer would be collection code and is not planned.
+  Nothing here changes collection: the lane lands in the desk checkout only (§7.5, §11 items 1 (ii) and 4), the
+  measurement checkout stays at H_claim, and the verdict writer's bytes in `scripts/run_campaign.py` do not change.
+  The seal gate (stage 1) added to the same lane the harvest-side reference losses of §0.12 (`energy_unreadable`,
+  the unmeasured and measured physics codes) and the narrowed malformed-flag candidate list of §6.2.
+  The gate confirmed sealing on the present code (ruling SG-8).
 - **Q14. What the census's rule for JavaScript runtimes can miss. Set by orchestrator ruling of 2026-10-07; the seal
   gate confirms or asks for the tightening below.** §4.5 lists four ways the merged rule can read a live agent as
   none. Three are older than the rule (a name inside a longer piece, an interpreter that is not a JavaScript runtime,
@@ -5311,3 +5556,30 @@ and ten `yield.harvest_disagrees_with_window` each; only those counts and the li
 from them. The count rule of §13's "28" came from comparing the catalog at `c6843537` with the test fixture at
 `d3c107f2f` (14 codes in the fixture and not in the catalog; one code, `g3.recompute_failed`, with another effect).
 No energy or power value of any window was read.
+
+Revision 12 applies the seal gate's stage-1 rulings, which were made on revision 9, and the orchestrator's rulings
+that followed revision 11; five writers each wrote one part. This paragraph records the reading of the writer of
+§§7–10 and §§13–16. It read, in full unless a part is named:
+- the seal gate's stage-1 ruling (`/Users/edr/night-archive/gate-prune/seal-gate/RULING_STAGE1.md`). The judge's
+  replacement texts in these sections were copied from that file by a script, not retyped. The stage-1 refuter's
+  file was not read: its five challenges are known to this writer through the judge's dispositions only;
+- the seal landing's procedure and its list of facts (`/Users/edr/night-archive/gate-prune/wave-1007b/seal-land/`:
+  `SEAL_LANDING.md`, `REGISTRATION_FACTS.md`), the independent review of that lane (`REVIEW.md`: its verdict, the
+  table of findings and findings F1 to F3 in full) and the orchestrator's ruling on it (`ORCHESTRATOR_RULING.md`);
+- Fable's delta cold pass 5 (`/Users/edr/night-archive/gate-prune/cold-pass-5/REPORT.md`);
+- the orchestrator's rulings on the comparison that preceded revision 11 (`reg-fidelity/ORCHESTRATOR_RULINGS.md`)
+  and on the attribution floor (`q5-attribution-floor/RULING.md`, with sections 1 and 6 of the report it rules on);
+- the map of blinding made for the design of the analysis code (`l9/map/x-blinding.md`), from which the custody map
+  of §8 is taken, and the work list of the harvest lane (`harvest-lane/WORKLIST.md`).
+
+At the integration head `9395cecfb` (the integration worktree, read only) it read what the revision 12 record of §13
+lists row by row: the two functions that class a changed path, the plan writer's and the harvest's check of this
+file's digest, the harvest's archive layout and file creation, the three writers of RESTRICTED flags, the list of
+record files the driver publishes and the courier's instruction, GAMMA's stage graph, the three analysis programs
+that print results, the plan writer's reading of a sizing allowance, and the option by which the harvest command is
+given a sealed inventory. On the branch `lane/2026-10-07-seal-rulings` it read the four commits and the files they
+change. It computed four things itself: the two SHA-256s of §9.1, with `shasum -a 256`; the 33 window exclusions of
+the allowlist on that branch, by loading the file; GAMMA's 101 planned members, by adding the stage graph's counts;
+and 0.031073829 s × 32.697 W = 1.016 J in §14 Q5. The other numbers of §14 Q5 are the ruling's; they come from
+window a10 and from block 3, neither of which belongs to this block. Of the rehearsal archive named in §13 only
+directory and file names were read. No energy or power value of any block-5 window exists, and none was read.
