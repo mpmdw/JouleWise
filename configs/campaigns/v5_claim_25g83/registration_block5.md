@@ -1716,12 +1716,12 @@ spare-slot retry decision, which runs spares only when the stage lost members (�
   `--arm-countdown-s 20`; the two calibration capture stages carry no countdown argument, and the capture tool's own
   default is 0 s. *The window runbook* (`docs/phase_2/window_runbook.md`, the written shell procedure for running a
   window, whose `calibrate_slot` function every live window since block 3 used for its captures): each calibration
-  capture is run with `--arm-countdown-s 20 --sleep-display-before-capture`. A window runs headless, and every collection stage and the pre calibration
-  already follow a 60 s settle, so there the pause waits for nothing. The chain therefore does two things. It
-  replaces 20 with 0 on the ten collection stages. And it adds the runbook's two arguments to each calibration
-  capture, with a countdown of 0 s at the pre slot and 20 s at the post slot; the chain writer refuses to render a
-  calibration stage whose pack template already carries either argument. The second argument,
-  `--sleep-display-before-capture`, makes the capture tool run `pmset displaysleepnow` after the countdown and wait
+  capture is run with `--arm-countdown-s 20 --sleep-display-before-capture`. A window runs headless, and every
+  collection stage and the pre calibration already follow a 60 s settle, so there the pause waits for nothing. The
+  chain therefore does two things. It replaces 20 with 0 on the ten collection stages. And it adds the runbook's
+  two arguments to each calibration capture, with a countdown of 0 s at the pre slot and 20 s at the post slot;
+  `chain.py`, which writes the chain script, refuses to render a calibration stage whose pack template already
+  carries either argument. The second argument, `--sleep-display-before-capture`, makes the capture tool run `pmset displaysleepnow` after the countdown and wait
   5 s before it captures (if the command fails the capture goes on, §6.10, `display_sleep_action_failed`); §10
   registers that addition as a deviation of its own. The post calibration keeps 20 s because no settle precedes it:
   it follows the last end-triplet member directly. *The saving depends on the baseline.* Against the runbook
@@ -1831,7 +1831,8 @@ still knows only the full corpus. Three programs touch the bound, in this order:
    members that succeeded. It records that copy's path and SHA-256 in the driver's terminal record
    (`night/hazard_result.json`, `neg8_corpus.collected_manifest`).
 2. **The production verdict writer**, which the harvest runs, reads the bound through the core's reader
-   (`whole_window.load_neg8_drift_bound_artifact`, in that core module). That reader authenticates a bound only against the
+   (`whole_window.load_neg8_drift_bound_artifact`, in that core module). That reader authenticates a bound only
+   against the
    committed 12-member manifest. It therefore treats a 10- or 11-member bound as absent, and the stored NEG-8 screen
    fails with exactly two conditions, `neg8_drift_bound_underived` and its idle-subtracted twin.
 3. **The harvest** decides both questions itself:
@@ -1846,13 +1847,14 @@ still knows only the full corpus. Three programs touch the bound, in this order:
 
      *The member check* (`harvest.neg8_bound_member_problems`; `derived/neg8-bound.json` records its outcome as
      `members_rederived`). *Forcing problem:* both routes check the bound's arithmetic and which manifest it names.
-     Neither ties the numbers inside the bound to the bundles that lie in this window's bound root, and a block-5
-     bound carries no launch-lineage stamp of its own that could. *Mechanism:* the check runs whenever the bound
-     root carries the hazard lineage locator (§0.12), which the driver publishes in every block-5 runs root (§0.17),
-     so it runs on every block-5 window. For each corpus member the bound names, all of these must hold: (i) exactly
-     one ordinary bundle directory, not a symbolic link, exists for it in the bound root; (ii) the SHA-256 over that
-     bundle's complete file inventory equals the `bundle_evidence_sha256` the bound recorded for the member; (iii)
-     the bundle's launch lineage authenticates; (iv) its **calibration identity** equals the bound's (a bundle's
+     Neither reads a bundle, so neither ties the numbers inside the bound to the bundles that lie in this window's
+     bound root: a bound file with consistent arithmetic whose numbers came from other bundles would pass both.
+     *Mechanism:* the check runs whenever the bound root carries the hazard lineage locator (§0.12), which the
+     driver publishes in every block-5 runs root (§0.17), so it runs on every block-5 window. For each corpus member
+     the bound names, all of these must hold: (i) exactly one ordinary bundle directory, not a symbolic link, exists
+     for it in the bound root; (ii) the SHA-256 over that bundle's complete file inventory equals the
+     `bundle_evidence_sha256` the bound recorded for the member; (iii) the bundle's launch lineage does not fail
+     authentication; (iv) its **calibration identity** equals the bound's (a bundle's
      calibration identity is the SHA-256 of the evidence file, `instrument_evidence.json`, of the pre calibration
      it was measured under, recorded in its metadata as `instrument_calibration.artifact_sha256`; the bound records
      the one its corpus shared as `calibration_identity_sha256`); (v) its custody triangle agrees (§0.12) and its
@@ -1862,8 +1864,10 @@ still knows only the full corpus. Three programs touch the bound, in this order:
      metadata records), and the SHA-256 of its configuration without the run id equals the one the bound records
      for its corpus; (vii) its gross and its idle-subtracted energy, re-derived from the bundle by the core's own
      function (`whole_window._reference_energy_evidence`), equal the values the bound recorded for it, to a relative
-     and an absolute tolerance of 10⁻⁹. The members that carry a lineage stamp must also all carry the same one,
-     and the bound's own when the bound names one.
+     and an absolute tolerance of 10⁻⁹. One condition is across members: the bundles that carry a lineage stamp
+     (the copy of the window's launch lineage, §0.17, that a bundle records in its metadata as
+     `extra.launch_lineage`) must all carry the same one, and it must equal the bound's own when the bound records
+     one.
 
      The bound counts as derived only when a route accepted it and the member check found no problem. In every
      other case, including a bound that names no member and a member check that itself raises an exception,
@@ -1881,7 +1885,8 @@ still knows only the full corpus. Three programs touch the bound, in this order:
      bundle's measured window is its measured request; it ends at the bundle's `sampling_stopped` stamp), when every
      one of those ends can be read. When only some can be read, it uses the later of the completion time and the
      latest readable end, so the bound never looks younger than a physical end shows. When none can be read, the
-     completion time stands. (Revision 10 said here only "judged at the verdict's completion time".) Re-derived first without the harvest's losses, the bracket must have the stored
+     completion time stands. (Revision 10 said here only "judged at the verdict's completion time".) Re-derived
+     first without the harvest's losses, the bracket must have the stored
      bracket's endpoints and estimand; if it does not, these are not the bundles the verdict was written from, and
      nothing is evaluated. The decision is then the re-derivation that drops the lost references before aggregation.
      The re-screen alone decides: `neg8.screen_failed` is emitted unless the re-screen ran, passed and listed no
@@ -2215,8 +2220,9 @@ power or a duration, so it is releasable structure under §8 item 2. It never st
     `neg8_daily_reference_midpoint` is the midpoint. A stage whose members' roles all begin `neg8_daily_reference`
     (`…_start`, `…_end`) is a triplet. Every other stage is treated as a science stage. The diagnostic role,
     `window_interior_reference_diagnostic`, fits none of the first three, so these two stages get the science
-    rule, ⌈1 × 8 / 10⌉ = 1. One lost diagnostic member therefore makes its stage ZERO (no bundle) or LOW (a bundle
-    that did not succeed) and the window's yield status LOW (below). At the same loss rate that happens by chance
+    rule, ⌈1 × 8 / 10⌉ = 1. One lost diagnostic member therefore gives its stage the status ZERO (no bundle
+    present) or LOW (fewer succeeded than min_valid), both defined in the next item, and gives the window the yield
+    status LOW ("Terminal record", below). At the same loss rate that happens by chance
     in 1 − (36/37)² = 5.3% of GAMMA windows, so for these two stages a trip does **not** mean a systematic cause.
     The diagnostic members enter no claim, and a yield status stops nothing and removes nothing: the only effect is
     the notice. A LOW that comes from one lost diagnostic member alone is one lost member, not a cause repeated
@@ -2666,7 +2672,8 @@ Rules:
   while InstantAmperage read 0.
 - `battery.accumulator_unavailable` (DISCLOSE): the accumulator rule could not run on an interval, for one of four
   reasons: a field not read at both publications; a tick counter that went backward; an accumulated value that
-  changed while its tick counter did not; or no voltage at either publication. Also, with SMC coverage, a gap of more than
+  changed while its tick counter did not; or no voltage at either publication. Also, with SMC coverage, a gap of
+  more than
   120 s between registry publications, over which only the accumulator test goes unevaluated, and a sign-inconsistent
   discharge accumulator (above).
 
@@ -2691,7 +2698,8 @@ at 3 s been +450 mA instead of −150 mA, the member would be removed by `batter
 assist would still be computed, because a current read does not skip it: the flag is still `battery.assist`, and
 the discharged energy of the three remaining negative reads, (0.865 + 1.200 + 0.400) A × 12.18 V × 1 s = 30.02 J,
 is still written to `withheld/`. Had one registry poll in the span read IsCharging Yes, the member would be removed
-by `battery.member_span` (rule 2) and no assist would be computed. If between two in-force publications the charge accumulator
+by `battery.member_span` (rule 2) and no assist would be computed. If between two in-force publications the charge
+accumulator
 gained 40 ticks totalling +216,000 mW·ticks, its mean is +5,400 mW, above 200 mA × 12.18 V = 2,436 mW, and the member
 is removed by `battery.accumulator_excursion`. The same numbers with a negative sign on the discharge accumulator
 remove nothing: with SMC coverage the interval is reported in each phase it overlaps, and only a negative 1 s read in
@@ -2906,9 +2914,10 @@ A bundle that meets none of the four is admissible. A roster member left without
 as `member.bytes_missing`, and one with two admissible bundles as `member.bytes_ambiguous` (§6.3). The ignored
 bundles, with their labels, are listed in `derived/exclusions.json` (`bundles_ignored`).
 
-*What the four codes do, against their catalog effect.* The catalog gives all four the effect EXCLUDE_MEMBER. By
-the label path above, none of them removes a member under its own name: the member is removed as
-`member.bytes_missing`. Only two of them are also written as flags (`harvest.roster_checks`):
+*What the four codes do, against their catalog effect.* The catalog gives all four the effect EXCLUDE_MEMBER. The
+label path above never removes a member under one of these four names: the member is removed as
+`member.bytes_missing`. A code can remove a member under its own name only when it is also written as a flag, and
+only two of the four are (`harvest.roster_checks`):
 
 - `roster.before_chain_started` is emitted on a roster member whose run started before `chain.started` (by wall
   time), and that member is removed under this code. It is the only one of the four that ever removes a member
@@ -3044,7 +3053,8 @@ reference that failed its own quiet checks), revision 4's runner either blocked 
 unknown cooldown, which the harvest then removes. *Mechanism:* the runner measures the cooldown anyway, against the
 first reference available in this order: the last eligible idle baseline of this session; else an eligible **frozen
 anchor** anywhere in the window, the NEG-8 start reference's first (a frozen anchor is an idle baseline that an
-earlier stage of the window stored once in its campaign manifest as a cooldown reference, `cooldown_anchor`, marked
+earlier stage of the window stored once in its campaign manifest, the record the campaign runner writes for a stage
+under `campaign_manifests/`, as a cooldown reference, `cooldown_anchor`, marked
 `immutable_after_freeze` and never updated; it is eligible when it carries that mark, was stored under the same
 campaign policy, by SHA-256, as this stage runs under, comes from a member whose own reference checks passed with
 their provenance recorded, and its idle window was not suspect: `joulewise/cooldown_anchor.py`
