@@ -3559,23 +3559,110 @@ class IdentityReplayTests(WindowTestCase):
         self.assertNotIn("code.executed_differs_from_sealed", window.codes())
         self.assertEqual(self.code_identity_record(window)["comparison"], "git_diff_unavailable")
 
-    def test_a_separate_driver_checkout_is_recorded_and_raises_no_flag(self):
-        """The driver ran from another checkout whose copy of one code file differs from the sealed bytes."""
-        window = self.window()
+    # -- a driver that ran from another checkout (seal-landing review F1, H-8) ----
+    # The launch agent runs the driver, the hazard modules, the monitor and the
+    # collectors from the checkout that installed it.  When that is not the
+    # measurement checkout, the driver inventories it as ``driver_checkout``.
+
+    def driver_window(self, name, *, files=None, porcelain="", head="c" * 40, drop_files=False, **extra):
+        """A window whose executed inventory carries a separate driver checkout.
+
+        The driver checkout's file map is the sealed code (every path under
+        joulewise/ and scripts/), with ``files`` laid over it.
+        """
+        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
         path = window.custody / "night" / "executed_inventory.json"
         value = json.loads(path.read_bytes())
         code = {relative: digest for relative, digest in value["measurement_checkout"]["files"].items()
                 if relative.startswith(("joulewise/", "scripts/"))}
-        value["driver_checkout"] = {"root": "/elsewhere/driver", "head": "c" * 40, "status_porcelain": "",
-                                    "status_clean": True, "errors": [],
-                                    "files": {**code, "joulewise/b5t_stub.py": "f" * 64}}
+        checkout = {"root": "/elsewhere/driver", "head": head, "status_porcelain": porcelain,
+                    "status_clean": not porcelain, "errors": [], "files": {**code, **(files or {})}, **extra}
+        for relative, digest in (files or {}).items():
+            if digest is None:
+                del checkout["files"][relative]
+        if drop_files:
+            del checkout["files"]
+        value["driver_checkout"] = checkout
         put(path, value)
         window.harvest()
+        return window, len(checkout.get("files", {}))
+
+    def code_differences(self, window):
+        return [row for flag in window.flags() if flag["code"] == "code.executed_differs_from_sealed"
+                for row in flag["observed"]["differences"]]
+
+    def test_a_driver_checkout_with_the_sealed_bytes_is_recorded_and_raises_no_flag(self):
+        """Identical bytes stay a record: another root, another commit, and dirt that cannot be executed."""
+        window, count = self.driver_window(
+            "driver-same", porcelain=" M docs/notes.md\n?? scratch/notes.txt\n M tests/test_x.py\n")
         self.assertNotIn("code.executed_differs_from_sealed", window.codes())
         self.assertNotIn("code.identity_unmeasured", window.codes())
         self.assertEqual(self.code_identity_record(window)["driver_checkout"], {
-            "root": "/elsewhere/driver", "head": "c" * 40, "status_clean": True, "file_count": len(code),
-            "files_differing_from_sealed": ["joulewise/b5t_stub.py"], "files_differing_from_sealed_count": 1})
+            "root": "/elsewhere/driver", "head": "c" * 40, "status_clean": False, "file_count": count,
+            "files_differing_from_sealed": [], "files_differing_from_sealed_count": 0,
+            "tracked_edits_to_window_inputs": [], "untracked_in_code_roots": [], "status_paths_recorded_only": 3})
+        # The same window with no second checkout is excluded for the same reasons, no more.
+        baseline = Window(self.tmp / "driver-baseline", catalog_overrides=self.ISOLATE)
+        baseline.harvest()
+        self.assertEqual(window.exclusions()["reasons"], baseline.exclusions()["reasons"])
+
+    def test_a_driver_checkout_whose_code_differs_from_the_sealed_code_is_a_difference(self):
+        """Review F1.  Before H-8 the record listed the differing file and no flag was raised.
+
+        The counterfactual inputs, each alone: one code file with other
+        bytes; a code file the sealed inventory has and the driver checkout
+        lacks; a code file only the driver checkout has.  The call site is
+        ``_Harvest._driver_checkout_differences``.
+        """
+        cases = {
+            "changed": ({"joulewise/b5t_stub.py": "f" * 64}, ["joulewise/b5t_stub.py"]),
+            "missing": ({"scripts/b5t_stub.py": None}, ["scripts/b5t_stub.py"]),
+            "added": ({"joulewise/hazards/zz_added.py": "e" * 64}, ["joulewise/hazards/zz_added.py"]),
+        }
+        for label, (files, differing) in cases.items():
+            with self.subTest(label):
+                window, count = self.driver_window(f"driver-{label}", files=files)
+                self.assertEqual(self.code_differences(window), [
+                    {"check": "driver_checkout", "root": "/elsewhere/driver", "head": "c" * 40,
+                     "files": differing, "file_count": 1}])
+                self.assertIn("code.executed_differs_from_sealed", window.exclusions()["reasons"])
+                self.assertNotIn("code.identity_unmeasured", window.codes())
+                record = self.code_identity_record(window)["driver_checkout"]
+                self.assertEqual((record["files_differing_from_sealed"], record["files_differing_from_sealed_count"],
+                                  record["file_count"]), (differing, 1, count))
+
+    def test_a_driver_checkouts_own_status_is_replayed_in_the_scope_it_executes(self):
+        """H-8: an uncommitted change to a window input, or an untracked importable file, is a difference.
+
+        The file map lists tracked files at their committed or working
+        bytes; an untracked module under joulewise/ or scripts/ is in no
+        inventory, and only the checkout's ``git status`` output shows it.
+        The 2026-10-06 rehearsal's driver checkout had exactly that line.
+        """
+        window, _count = self.driver_window(
+            "driver-status", porcelain=("?? scripts/rehearse_b5_real.py\n M joulewise/b5/driver.py\n"
+                                        "R  docs/old.md -> scripts/new_tool.py\n?? notes.txt\n M docs/x.md\n"))
+        self.assertEqual(self.code_differences(window), [
+            {"check": "driver_checkout_tracked_edits", "observed": ["joulewise/b5/driver.py", "scripts/new_tool.py"]},
+            {"check": "driver_checkout_untracked_in_code_roots", "observed": ["scripts/rehearse_b5_real.py"]}])
+        self.assertIn("code.executed_differs_from_sealed", window.exclusions()["reasons"])
+        record = self.code_identity_record(window)["driver_checkout"]
+        self.assertEqual((record["tracked_edits_to_window_inputs"], record["untracked_in_code_roots"],
+                          record["status_paths_recorded_only"], record["files_differing_from_sealed"]),
+                         (["joulewise/b5/driver.py", "scripts/new_tool.py"], ["scripts/rehearse_b5_real.py"], 2, []))
+
+    def test_a_driver_checkout_that_cannot_be_compared_is_identity_unmeasured(self):
+        """Which code ran could not be established: no file map, or no ``git status`` output."""
+        window, _count = self.driver_window("driver-no-files", drop_files=True)
+        flag = next(flag for flag in window.flags() if flag["code"] == "code.identity_unmeasured")
+        self.assertEqual(flag["observed"]["unmeasured"],
+                         [{"check": "driver_checkout", "missing_input": "driver_checkout_files"}])
+        self.assertNotIn("code.executed_differs_from_sealed", window.codes())
+        window, _count = self.driver_window("driver-no-status", porcelain=None)
+        flag = next(flag for flag in window.flags() if flag["code"] == "code.identity_unmeasured")
+        self.assertEqual(flag["observed"]["unmeasured"],
+                         [{"check": "driver_checkout", "missing_input": "driver_checkout_status_porcelain"}])
+        self.assertIn("code.identity_unmeasured", window.exclusions()["reasons"])
 
     def test_the_real_git_history_of_a_seal_landing(self):
         """The whole landing against real git: H_claim, the seal commit, a records commit; then a counterfactual.

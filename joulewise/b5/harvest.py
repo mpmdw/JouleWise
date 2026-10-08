@@ -5931,6 +5931,19 @@ class _Harvest:
                 differences.append({"check": "untracked_in_executed_roots", "observed": sorted(untracked)[:16]})
         elif executed is not None:
             unmeasured.append({"check": "tracked_edits", "missing_input": "status_porcelain"})
+        # The driver, the hazard modules, the monitor, the collectors and the
+        # G10 and meter programs run from the checkout that installed the
+        # launch agent.  When that is not the measurement checkout the driver
+        # inventories it separately (L2, ``driver_checkout``).  Its code is
+        # code a window executed, so it is compared like the measurement
+        # checkout's (seal-landing review F1, H-8): a file under joulewise/ or
+        # scripts/ whose bytes are not the sealed bytes is a difference, and
+        # the checkout's own ``git status`` output is replayed in the scope
+        # that checkout executes (a tracked edit to a window input, an
+        # untracked file under joulewise/ or scripts/).  A second checkout
+        # that holds the sealed bytes, whatever its commit and whatever else
+        # is dirty in it, stays a record.
+        driver_record = self._driver_checkout_differences(driver_checkout, sealed, differences, unmeasured)
         missing = {item["check"] for item in unmeasured}
         self.identity_checks["checkout_identity"] = {
             "head": "head" not in missing and h_claim is not None and executed_head is not None,
@@ -5944,25 +5957,84 @@ class _Harvest:
         if unmeasured:
             self.emit("code.identity_unmeasured", level="window", collector="code_identity",
                       observed={"unmeasured": unmeasured})
-        # The driver, the hazard modules, the monitor and the collectors run from
-        # the checkout that installed the launch agent.  When that is not the
-        # measurement checkout the driver inventories it separately (L2,
-        # ``driver_checkout``).  It is recorded here with the number of its code
-        # files that differ from the sealed inventory; it raises no flag
-        # (registration: the agents are installed from the measurement checkout).
-        head_record["driver_checkout"] = None
-        if isinstance(driver_checkout, Mapping):
-            driver_files = driver_checkout.get("files") if isinstance(driver_checkout.get("files"), Mapping) else {}
-            differing = None if sealed is None else sorted(
-                relative for relative in set(sealed) | set(driver_files)
-                if relative.startswith(CODE_PREFIXES) and sealed.get(relative) != driver_files.get(relative))
-            head_record["driver_checkout"] = {
-                "root": driver_checkout.get("root"), "head": driver_checkout.get("head"),
-                "status_clean": driver_checkout.get("status_clean"), "file_count": len(driver_files),
-                "files_differing_from_sealed": None if differing is None else differing[:64],
-                "files_differing_from_sealed_count": None if differing is None else len(differing)}
+        head_record["driver_checkout"] = driver_record
         # Written last: the flags above stand even if this record cannot be written.
         self.outputs["derived/code-identity.json"] = write_json_once(self.derived / "code-identity.json", head_record)
+
+    def _driver_checkout_differences(self, driver_checkout: Any, sealed: Mapping[str, str] | None,
+                                     differences: list[dict[str, Any]],
+                                     unmeasured: list[dict[str, Any]]) -> dict[str, Any] | None:
+        """Compare a separate driver checkout with the sealed code; return its record (None when there is none).
+
+        ``driver_checkout`` is the driver's own inventory of the checkout it
+        ran from (``joulewise.b5.driver.executed_inventory``: root, head,
+        ``status_porcelain``, ``files`` {path: sha256} of that checkout's
+        tracked files).  Appends to ``differences``
+        (``code.executed_differs_from_sealed``):
+
+        * ``driver_checkout``: at least one path under joulewise/ or scripts/
+          whose digest in that checkout is not the sealed digest (a file that
+          only one of the two lists differs too);
+        * ``driver_checkout_tracked_edits``: its ``git status`` lists an
+          uncommitted change to a tracked path that is a window input
+          (``head_change_class``);
+        * ``driver_checkout_untracked_in_code_roots``: its ``git status``
+          lists an untracked file under joulewise/ or scripts/, which an
+          import can load and no inventory lists.
+
+        Every other path its ``git status`` lists (a document, a test, a
+        scratch file elsewhere) cannot change an executed byte: it is counted
+        in the record and raises nothing.  Appends to ``unmeasured``
+        (``code.identity_unmeasured``) when the comparison could not be made:
+        the driver recorded no file map, or no ``git status`` output.  With no
+        sealed inventory the file comparison is not made here; the missing
+        inventory is already unmeasured.
+        """
+        if not isinstance(driver_checkout, Mapping):
+            return None
+        files = driver_checkout.get("files")
+        driver_files = {str(key): value for key, value in files.items()} if isinstance(files, Mapping) else {}
+        differing: list[str] | None = None
+        if not driver_files:
+            unmeasured.append({"check": "driver_checkout", "missing_input": "driver_checkout_files"})
+        elif sealed is not None:
+            differing = sorted(relative for relative in set(sealed) | set(driver_files)
+                               if relative.startswith(CODE_PREFIXES) and sealed.get(relative) != driver_files.get(relative))
+            if differing:
+                differences.append({"check": "driver_checkout", "root": driver_checkout.get("root"),
+                                    "head": driver_checkout.get("head"), "files": differing[:16],
+                                    "file_count": len(differing)})
+        porcelain = driver_checkout.get("status_porcelain")
+        tracked: list[str] = []
+        untracked: list[str] = []
+        recorded_only = 0
+        if isinstance(porcelain, str):
+            for line in porcelain.splitlines():
+                if not line.strip():
+                    continue
+                # "XY path", or "XY old -> new" for a rename: every path named counts.
+                paths = [_porcelain_path(part) for part in line[3:].split(" -> ")]
+                if line.startswith("?? "):
+                    hits = [path for path in paths if path.casefold().startswith(CODE_PREFIXES)]
+                    untracked.extend(hits)
+                else:
+                    hits = [path for path in paths if head_change_class(path) == "window_input"]
+                    tracked.extend(hits)
+                recorded_only += not hits
+            if tracked:
+                differences.append({"check": "driver_checkout_tracked_edits", "observed": sorted(tracked)[:16]})
+            if untracked:
+                differences.append({"check": "driver_checkout_untracked_in_code_roots",
+                                    "observed": sorted(untracked)[:16]})
+        else:
+            unmeasured.append({"check": "driver_checkout", "missing_input": "driver_checkout_status_porcelain"})
+        return {"root": driver_checkout.get("root"), "head": driver_checkout.get("head"),
+                "status_clean": driver_checkout.get("status_clean"), "file_count": len(driver_files),
+                "files_differing_from_sealed": None if differing is None else differing[:64],
+                "files_differing_from_sealed_count": None if differing is None else len(differing),
+                "tracked_edits_to_window_inputs": sorted(tracked)[:64] if isinstance(porcelain, str) else None,
+                "untracked_in_code_roots": sorted(untracked)[:64] if isinstance(porcelain, str) else None,
+                "status_paths_recorded_only": recorded_only if isinstance(porcelain, str) else None}
 
     def _changed_paths(self, base: str, head: str) -> list[str] | None:
         """Every path whose committed bytes differ between two commits, or None when git cannot say.
