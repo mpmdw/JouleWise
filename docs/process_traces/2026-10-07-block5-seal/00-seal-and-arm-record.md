@@ -242,7 +242,9 @@ file, only its probe outputs, so it is not copied); two delta audits by a Sol se
 ### 4.13 Gates still open when this record was written
 
 - The whole test suite at the seal commit (run 9): PENDING[SUITE]. Its record will be `gates/20-whole-suite.md`.
-- CI at the record commit, which is the head of pull request #489: PENDING[CI-AT-RECORD].
+- CI at the record commit, which is the head of pull request #489. It had not run when this record was
+  written. A commit cannot hold the result of the checks that run on it, so that result is recorded in the pull
+  request's ledger, whose row 3 names the head at which CI passed.
 
 ## 5. The orchestrator's rulings, each with its reason
 
@@ -369,7 +371,7 @@ the digest of every module the harvest imports). Neither asked for a change befo
 ## 9. What was still open when this record was written
 
 - PENDING[SUITE]: the result of the whole suite at the seal commit.
-- PENDING[CI-AT-RECORD]: CI at the record commit.
+- CI at the record commit, which the pull request's ledger records (section 4.13).
 - PENDING[RUNSTATE-LANDING]: part B's first condition lets the record commit change only paths under `docs/` and
   `tests/`; `RUN_STATE.md` is at the repository's root, so the commit that carries its new block is the
   orchestrator's to rule on.

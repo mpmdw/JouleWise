@@ -267,8 +267,9 @@ is the registration's own (its section 12).
 1. **The record commit.** It is a child of the seal commit on the integration branch. The paths that differ
    between the seal commit and it lie under `docs/` and `tests/` only; none is a window input. It adds this record
    and the gate's records, and its copies of the two stage-1 files hash to the values of section 5. The whole test
-   suite and CI (the checks GitHub runs on a pushed commit) pass at it: the whole suite, PENDING[SUITE]; CI,
-   PENDING[CI-AT-RECORD]. The pull request is merged with a merge commit, never squashed or rebased, so that
+   suite and CI (the checks GitHub runs on a pushed commit) pass at it. The whole suite: PENDING[SUITE]. CI: a
+   commit cannot hold the result of the checks that run on it, so that result is not written here; it is
+   recorded in the pull request's ledger, whose row 3 names the head at which CI passed. The pull request is merged with a merge commit, never squashed or rebased, so that
    H_claim and the seal commit stay in the main branch's history, and the merge commit holds exactly the record
    commit's files. `RUN_STATE.md`, the file that carries the hand-off block read by the magistrate (the unattended
    session that arms and harvests the windows), is a document at the repository's root; under this condition it is not part of the record commit:
