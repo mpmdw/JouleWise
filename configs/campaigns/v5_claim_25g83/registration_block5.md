@@ -480,10 +480,14 @@ changed.
 4. **Two sentences about catalog effects** (§6.5, §7.2; ruling SG-2). §6.5 names the two codes that remove the
    window when the verdict file is absent or unreadable. `model.identity_unpinned` joins the codes of §7.2 whose
    cause is treated as a harvest problem first.
-5. **Blinding** (§8; ruling SG-12). A flag computed from a science energy has the blinding class RESTRICTED
-   (§0.16). Three harvest outputs write such a flag's code by name; they are restricted until the release event
-   (the recorded moment, after the block closes, from which energies may be read, §0.1). The custody map of §8,
-   the list of the restricted paths, is filled.
+5. **Blinding** (§7.3, §7.6, §8; ruling SG-12). A flag computed from a science energy has the blinding class
+   RESTRICTED (§0.16). Three harvest outputs write such a flag's code by name; they are restricted until the
+   release event (the recorded moment, after the block closes, from which energies may be read, §0.1), and during
+   the block nothing is read from them but whether the window is claim-usable. The custody map of §8, the list of
+   the restricted paths, is filled. The rules by which the lead decides to arm a pack again are brought into line:
+   the cause key of §7.3 (the label by which two failed attempts of a pack are judged to have failed for the same
+   reason), that section's rule for windows that collected little, and the list of §7.6 now read only records
+   that are released during the block. Before, two of their inputs lay in those three files.
 6. **The sensitivity line is adopted, narrowed** (§6.3, §12, §14 Q6; analysis plan §8.1; ruling SG-4). The line
    is a second value printed beside a number, computed as if certain exclusions had not been applied, so that a
    reader can see whether those exclusions pull the number. It sets aside three codes that describe a hazard
