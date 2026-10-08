@@ -4035,7 +4035,7 @@ finding went:
 | A3 (BLOCKER) | absent or unreadable manifests erased a known reference loss, and the stored passing screen stood | fixed (`3cf9d6b2f`): the sealed roster names the references; re-verified FIXED |
 | A4 (should fix) | the census read a `node` option's value as the script, so a live agent read as clean | fixed, lane `census-ancestors` (`ca25d9299`), by parsing options; re-verified FIXED; the parsing was then withdrawn (Sol R1 below) |
 | A5 (should fix) | a strict-invalid reference failed the whole screen instead of being lost | fixed (`294f6e573`): reason `strict_invalid` in writer, replay and harvest; re-verified FIXED |
-| Sol R1 (should fix) | a second `node` option (`--trace-require-module all`) was read as the script: the same class as A4, a second time | fixed, lane `census-interp` (`2524637ae`, merged into int5 by `84661ddb3`): the option parsing is withdrawn and every argument of a JavaScript runtime is read (§4.5). The merge came after the four passes above, so no pass has reviewed it yet; its review is part of fixing H_claim (§2 item 1), at the final head `FILL[B5-FINAL-HASHES]` |
+| Sol R1 (should fix) | a second `node` option (`--trace-require-module all`) was read as the script: the same class as A4, a second time | fixed, lane `census-interp` (`2524637ae`, merged into int5 by `84661ddb3`): the option parsing is withdrawn and every argument of a JavaScript runtime is read (§4.5). The merge came after the four passes above. Fable's delta cold pass 5 reviewed it at `9395cecfb` and found it sound (the second part of this record, below) |
 | Sol R2 (BLOCKER) | floor extraction cannot pass the harvest archive, so every block-5 floor cell has no allowance (the same defect as cold pass 4 D1) | lane L9-NEG8 (analysis plan §11): claim-time code, safe direction (refuses) |
 | Sol R3 (BLOCKER) | the claim validator rejects a row whose stored screen failed before reading the harvest's passing survivor re-screen | lane L9-NEG8: claim-time code, safe direction (refuses) |
 
@@ -4058,7 +4058,68 @@ with one design round by Sol and Fable before code. None of it is collection cod
 changes a window's bytes, so it does not block the arm. Cold pass 3's notes (N-A, N-B) and cold pass 4's notes (N-1,
 N-2) are catalog questions that this directory's catalog already answers: `model.identity_mismatch` and
 `model.identity_inconsistent_in_window` are EXCLUDE_WINDOW (§6.5), `model.identity_underivable` is EXCLUDE_MEMBER, and
-`whole_window.verdict_unauthenticated` is DISCLOSE; the seal rules on them.
+`whole_window.verdict_unauthenticated` is DISCLOSE. The seal gate's stage 1 confirmed all four effects (rulings SG-6
+and SG-7, 2026-10-07).
+
+**`416-DELTA-RECORD`, second part** (filled in revision 12): the code merged after `fe28e5a0c`. Two changes to code
+came after the four passes above. The first is the census interpreter rule (Sol R1 in the table above; §4.5). The
+second is the **seal landing**, the lane `lane/2026-10-07-seal-landing`, which changed how a window is compared
+with the seal. *Why it was needed:* a file cannot name the commit that contains it, so the sealed
+inventory, which names H_claim, is committed one commit after H_claim, and every window runs from that later commit
+or a later one (§11). The harvest lists every path that differs between H_claim and the commit a window ran from
+(`git diff --name-only`); this is the **head comparison**. Before the lane, every such path except the ledger pin
+was `code.executed_differs_from_sealed`, so every block-5 window would have been removed because the seal itself
+had landed. *What the lane changed:* only a changed **window input** is now a difference, that is, a tracked file
+a window can read while it is planned, armed or run: any file under `joulewise/`, `scripts/` or `configs/` other
+than the ledger pin and the three files the seal itself rewrites (the sealed inventory, this file and the analysis
+plan), and `docs/phase_2/window_runbook.md`. Every other changed path is recorded in `derived/code-identity.json`
+and raises no flag. The lane was merged into the integration branch at
+`9395cecfbc40fb93e87a7657ec0ba5da0ca9ef3a`. Cold pass 5 covers the whole range `fe28e5a0c..9395cecfb`, and an
+independent review covers the lane. Each is the work of one seat that took no part in writing the code, read-only
+in the repository, with its own executed probes:
+
+| Pass | Seat | What it read | Verdict | Record (SHA-256 computed by this author with `shasum -a 256`) |
+|---|---|---|---|---|
+| Cold pass 5 | Fable 5.1 (Anthropic), a cold session | the diff `fe28e5a0c..9395cecfb` (seven files under `joulewise/`, `scripts/` and `configs/`; five test files) | PASS WITH NOTES; one defect, disposed "flag, not refuse" (C6 below) | `/Users/edr/night-archive/gate-prune/cold-pass-5/REPORT.md`, `46446fa429bdceaac91da1bb3916714c3c59fd846c6bf4503bad4462e218e8ad` |
+| Seal-landing review | Opus 5.5 (Anthropic), a review seat that did not write the lane | the lane at its head `2737ef88c` (base `9b0c680ed`), by executing it | DEFECTS: one MAJOR (F1), older than the lane and raised by the lane itself as an open question; everything the lane was asked to change behaves as it says; F2 and F3 are MINOR, F4 to F9 notes | `/Users/edr/night-archive/gate-prune/wave-1007b/seal-land/REVIEW.md`, `fec2dc44938731c8528777b66c336df07ca553ff6f43f2bcd146cab641012f0a` |
+
+What the two passes established, each by execution on a real git history. A changed file under `joulewise/`,
+`scripts/`, the window's pack, any other path of `configs/` (the catalog, the identity pins and the sizing output
+among them) or the runbook, committed after H_claim, still gives `code.executed_differs_from_sealed` at the
+harvest (cold pass 5, cases C4 to C10; the review, sixteen cases). The arm's collector gives the same answer when
+it is handed H_claim to compare with; in a window it is handed the commit the window runs from, so there the
+harvest's comparison is the one that ties the window to the seal. A pin-only commit, the seal's own commit and a
+commit confined to documents, tests or `RUN_STATE.md` give no flag (C1 to C3). The census rule classes every
+launch shape found on this machine as §4.5 states (36 of 36 rows of the pass's table; a live `node` launch is a
+hit; a census line that cannot be decided stays a hit). The commit that reworded the explanatory text of one
+harvest function (`455e59b86`) changes no executable code: the syntax trees before and after are equal once such
+texts are removed. The four pinned estimator files are byte-identical to the frozen head `a434e363d`, and
+`scripts/prewindow_check.sh` is unchanged.
+
+Where each finding went (orchestrator's ruling of 2026-10-07 on the lane and its review,
+`/Users/edr/night-archive/gate-prune/wave-1007b/seal-land/ORCHESTRATOR_RULING.md`). No finding changes a window
+input before H_claim: each check lives in the harvest, which runs after a window from a desk checkout, so each goes
+to the harvest lane that lands after the seal and before ALPHA-1's harvest (§11 item 4; the lane's work list,
+`/Users/edr/night-archive/gate-prune/wave-1007b/harvest-lane/WORKLIST.md`, numbers these items H-8 to H-12).
+
+| Finding | What it was | Where it went |
+|---|---|---|
+| Cold pass 5, C6 (defect) | a commit that changes only another pack's directory is a window input, so it removes a window that never read that pack | harvest lane, H-12: recorded, not a difference. It cannot arise in the registered sequence (the measurement checkout receives only pin-only commits, and the pin-advance program refuses a commit that changes anything else), and when it fires it removes a window, never prints a wrong number |
+| Review F1 (MAJOR) | when the launchd job is installed from a checkout other than the measurement checkout, the driver, the hazard modules, the monitor and the collectors are that other checkout's files; if they differ from the sealed inventory the harvest records the differing files and raises no flag | harvest lane, H-8: a differing code file in the driver's checkout becomes `code.executed_differs_from_sealed`; identical bytes stay a record. It cannot arise when the launchd job is installed from the measurement checkout, as §11 requires |
+| Review F2 (MINOR) | the paths that raise no flag are "every path not listed", so a tracked file outside `joulewise/`, `scripts/` and `configs/` (the environment lock, `pyproject.toml`) can change with no flag | harvest lane, H-9: the harvest's head comparison names the paths that raise no flag (`docs/` except the runbook, `tests/`, directories whose name starts with a dot, and Markdown files at the top of the repository); every other path is a window input |
+| Review F3 (MINOR) | a sealed inventory that lists files but names no commit is compared with nothing | harvest lane, H-10: `code.identity_unmeasured`. The committed inventory is covered already: `tests.test_b5_seal_landing` refuses one whose `head` is not a commit |
+| Review F4 (note) | a later commit to this file or to the analysis plan is silent in code | by procedure: the seal record's SHA-256s bind both files (§12) |
+| Review F5 (note) | a re-harvest after a re-issued seal needs the inventory that was in force when its window was armed | runbook and magistrate brief (§11) |
+| Review F6 (note) | a changed path whose name is not UTF-8 faults the harvest | harvest lane, H-11 |
+| Review F7 (note) | the catalog, `identity_pins.json` and `sizing_b5.json` carry draft labels in their sealed bytes | the two generated files keep the labels their generators write, and the seal record's digest of each file is what seals it (§12); the catalog's status note is rewritten before H_claim to a sentence that is true before and after the seal |
+| Review F8 (note) | the commit after the seal commit must carry any test data file that the sealed text forces to change | accepted: that commit carries it, and the whole suite and CI are required green there (§11) |
+| Review F9 (note); cold pass 5 notes | the harvest records nothing about its own program; a stale clause in a harvest comment; the stale catalog note of `code.executed_differs_from_sealed` | the harvest records the commit of the checkout it ran from (seal gate K-7, harvest lane); the comment goes to the same lane; the catalog note is corrected before H_claim, because the catalog is a window input and cannot change in the seal's own commit |
+
+A change to collection code that lands after `9395cecfb` and before H_claim needs a diff-scoped pass of its own
+before the seal, by the rule at the head of this section. The changes the seal gate's stage 1 ordered in that range
+are not collection code. They are one value and some notes of the flag catalog (the value is the cell minimum of
+§6.6, which only the exclusion function reads, at the harvest) and the wording of entries in the refusal
+allowlist, a file no program loads during a window (§6.11).
 
 ### 9.2 #421: battery float, and the battery-assist ruling of 2026-10-06
 
