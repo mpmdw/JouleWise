@@ -142,9 +142,6 @@ jobs:
       # ordinary and exclusive jobs.
       SHARD_COUNT: "12"
     strategy:
-      # TEMPORARY, lane/2026-10-07-ci-linux-fixes only: let every shard finish
-      # so one run shows every Linux failure. Reverted in this lane's last commit.
-      fail-fast: false
       matrix:
         # 3.13: production nights (the measurement venv).
         # PRs and main pushes use production 3.13 only. 3.14 is
