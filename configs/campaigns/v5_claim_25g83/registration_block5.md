@@ -3699,8 +3699,8 @@ that attempt still carries an unclassified code; it is tested, and no block-5 pr
 - A pack is re-armed, with a new attempt number, plan, fresh roots and bracket session, until it has a claim-usable
   attempt; then the next pack in the fixed order ALPHA, BETA, GAMMA arms. A pack is never armed again after a
   claim-usable attempt. The scheduler reads only `claim_usable`, never an energy.
-- **A GAMMA attempt that lost its midpoint is re-armed** (orchestrator ruling Q11, 2026-10-07; the seal gate
-  confirms). *Forcing problem:* GAMMA's window exists for its two primary contrasts, and a lost midpoint leaves their
+- **A GAMMA attempt that lost its midpoint is re-armed** (orchestrator ruling Q11, 2026-10-07; confirmed at the seal
+  gate, stage 1, ruling SG-5). *Forcing problem:* GAMMA's window exists for its two primary contrasts, and a lost midpoint leaves their
   drift allowance with no evidence about an excursion inside the window (§0.12). Had the attempt counted as
   claim-usable, the scheduler would have stopped arming GAMMA and the block would have had no claim-bearing contrast.
   *Rule:* on GAMMA, `neg8.midpoint_lost` adds the window reason `neg8.midpoint_lost_primary` (§0.16), so the attempt
@@ -4448,8 +4448,27 @@ battery evidence map (§9.2).
   consult (§7.3).
 - **Q4. Paper placement (cold gate, ideally before seal).** D-174's fallback places no `_v5` result; printing needs an
   adoption ruling.
-- **Q5. Attribution floor (lead, before seal).** Bind the ~1 J value and artifact, and rule whether D-078's derivation
-  applies on 25G83.
+- **Q5. Attribution floor. Closed in revision 12 by orchestrator ruling (2026-10-07): the formula is registered and
+  no number is bound.** The question was whether to bind D-078's figure of about 1 J, with an artifact, and whether
+  D-078's derivation applies on macOS build 25G83. The ruling
+  (`/Users/edr/night-archive/gate-prune/wave-1007b/q5-attribution-floor/RULING.md`): the derivation applies as a
+  method and not as a number. The attribution floor of a reported cell is the largest, over the cell's kept members,
+  of a bound the reducer already computes for each member and stores in the member's summary
+  (`energy_anchor_shift_envelopes`, the entry for the phase, field `max_abs_delta_j`). That bound is the largest
+  change in the energy assigned to the phase when each of the phase's two edges is moved, earlier or later and
+  independently of the other, by the edge bound, while the whole power trace is shifted by any amount within the
+  member's clock bound (§0.14). The edge bound is the window's fiducial bound (§0.11) plus the change, over the
+  member's sampler stream, of the wall clock minus the monotonic clock. Each member's bound is read from its summary
+  as re-derived under the fiducial bound that the window's own calibration bracket fixes (§0.10 builds the quantity
+  in full). It is computed at the analysis from the window's own members and bracket, so `ATTRIBUTION-FLOOR-BINDING`
+  is filled by this formula (§13), and no value and no artifact is sealed. *Why no number.* The quantity is not a
+  constant of the instrument. D-078's figure was one member's bound on one window of an earlier OS build (window
+  a10, macOS 25F84, Qwen2.5-1.5B: a timing bound of 0.031073829 s × 32.697 W = 1.016 J). On released 25G83 data
+  (block 3, not a claim window) the same bound was 1.38 to 2.86 J per member, and it changes with each window's
+  bracket. Nothing in block 5 is decided by the number: it is printed beside the four reported cells. Binding the
+  old value would print a floor the instrument does not have. The ruling followed an investigation (Opus 5.5) and a
+  refutation pass (Fable 5.1), which reproduced every number of the investigation's report from raw bytes and
+  returned five corrections; the ruling carries them.
 - **Q6. The sensitivity line. Closed at the seal gate (stage 1, 2026-10-07): adopted as amended.** Analysis plan
   §8.1 prints a labelled line over the units removed only by the three load-correlated codes
   (`thermal.os_level_nonzero`, `thermal.powermetrics_pressure_elevated`, `contention.request_overlap`), to expose the
@@ -4465,13 +4484,14 @@ battery evidence map (§9.2).
   reported cells (§0.9), and 8B members, one side of every quad, are the ones that assist most. The orchestrator
   ruled on revision 5's open points (2026-10-06, `/Users/edr/night-archive/gate-prune/INTEGRATION_TODO.md`): GAMMA's
   contrasts get the line too, because 8B is where assist occurs. Analysis plan §8.1 now prints each contrast's
-  estimate also without the quads that hold an assist member. The line is descriptive and gates nothing; the seal
-  gate may still strike it.
+  estimate also without the quads that hold an assist member. The line is descriptive and gates nothing. The seal
+  gate kept it (stage 1, 2026-10-07, ruling SG-9): it shows the reader where assist concentrates, the 8B side of
+  every quad.
 - **Q10. Whole-machine meter, central band (none; recorded).** The band for ρ is set by the first clean window
   (analysis plan §8.2). If no window of the block is clean, no band is set, and the cross-check reports only the hard
   plausibility band and the spreads. Nothing waits on this.
-- **Q11. A GAMMA attempt whose midpoint was lost. Closed in revision 8 by orchestrator ruling; the seal gate
-  confirms.** The question: the NEG-8 ruling makes `neg8.midpoint_lost` DISCLOSE in the catalog and claim-excluding
+- **Q11. A GAMMA attempt whose midpoint was lost. Closed in revision 8 by orchestrator ruling; confirmed at the seal
+  gate (stage 1, 2026-10-07, ruling SG-5).** The question: the NEG-8 ruling makes `neg8.midpoint_lost` DISCLOSE in the catalog and claim-excluding
   for the primary contrasts, but the scheduler reads only `claim_usable`, so a claim-usable GAMMA attempt that lost its
   midpoint would have ended GAMMA's arms with no claim-bearing contrast. The ruling (2026-10-07): such an attempt is
   not claim-usable (window reason `neg8.midpoint_lost_primary`) and GAMMA is re-armed; ALPHA and BETA keep the flag
@@ -4480,15 +4500,24 @@ battery evidence map (§9.2).
   contamination found at harvest). Code: `joulewise/flags/exclusions.py` `PACK_SCOPED_WINDOW_REASONS` (commit
   `b15ea0b4d`), with its allowlist entry (§6.11). Text: §0.12, §0.16, §7.2; analysis plan §2.4. Revision 9 strikes
   revision 8's sentence placing this reason in the NEG8 family for §7.3's anti-spiral rule: that rule is applied by
-  the orchestrator, no code computes it, and a registration does not need to pre-assign it.
-- **Q12. A NEG-8 reference or spare that ran another model. Closed in revision 9 by orchestrator call (ii); the seal
-  gate confirms.** The question (Fable cold pass 3 N-A, cold pass 4 N-1): ruling N8 said such a reference is dropped
+  the orchestrator, no code computes it, and a registration does not need to pre-assign it. The seal gate confirmed
+  the rule and corrected two statements around it. First, the midpoint is the only NEG-8 reference inside the window,
+  not the only reference: GAMMA also runs two diagnostic interior references, which by rule enter neither the screen
+  nor the allowance (§0.12). Second, a lost midpoint on ALPHA or BETA can also understate that window's allowance;
+  it stays disclosed there because no decision rests on a reported cell's interval, while on GAMMA a contrast's
+  decision rests on the bound that carries the allowance (analysis plan §2.4).
+- **Q12. A NEG-8 reference or spare that ran another model. Closed in revision 9 by orchestrator call (ii);
+  confirmed at the seal gate (stage 1, 2026-10-07, ruling SG-6).** The question (Fable cold pass 3 N-A, cold pass 4 N-1): ruling N8 said such a reference is dropped
   and the survivors decide, but `model.identity_mismatch` and `model.identity_inconsistent_in_window` are
   EXCLUDE_WINDOW in this catalog, and the exclusion function applies that effect at any scope, so the window is
   removed whatever the survivors screen says. The call (2026-10-07): the catalog is right and the window is excluded.
   The pack that executed differs from the sealed one, which is a failure of number integrity, not a lost measurement.
   A reference whose identity cannot be derived (`model.identity_underivable`, member-level) is still lost, and the
-  survivors decide. Text: §0.12, §6.5; catalog notes.
+  survivors decide. Text: §0.12, §6.5; catalog notes. The seal gate's reason for confirming: a reference's
+  configuration is committed and pinned, so it can record another model only if the model files on disk or the
+  installed runtime packages changed. That is a change to the machine's software, before or during the window, and a
+  science member's own identity check shows it only if it touched that member's own files. A record that merely
+  lacks the hash is different: it is a defect of one record, with no evidence that anything changed.
 - **Q13. One NEG-8 survivor logic instead of three (lane L9-NEG8, after the seal, before any claim).** The survivor
   logic lives in the verdict writer, the replay and the harvest; three reviews in a row found defects in it, and the
   last two (the Sol re-verification's findings Sol R2 and Sol R3, §9.1; cold pass 4 D1) are in claim-time code. A
@@ -4499,6 +4528,7 @@ battery evidence map (§9.2).
   measurement checkout stays at H_claim, and the verdict writer's bytes in `scripts/run_campaign.py` do not change.
   The seal gate (stage 1) added to the same lane the harvest-side reference losses of §0.12 (`energy_unreadable`,
   the unmeasured and measured physics codes) and the narrowed malformed-flag candidate list of §6.2.
+  The gate confirmed sealing on the present code (ruling SG-8).
 - **Q14. What the census's rule for JavaScript runtimes can miss. Set by orchestrator ruling of 2026-10-07; the seal
   gate confirms or asks for the tightening below.** §4.5 lists four ways the merged rule can read a live agent as
   none. Three are older than the rule (a name inside a longer piece, an interpreter that is not a JavaScript runtime,
