@@ -2932,18 +2932,19 @@ writes one verdict:
 
 - **COLLECTED:** `night/chain.started` exists, and the stage journal does not show the NO_COLLECTION case below. The
   numbers (into restricted custody) and the flags are emitted whatever the flags say, and the exclusion function
-  computes `claim_usable`. If the exclusion function cannot be run (it is absent, it raises, or its inputs could not
-  be built), the numbers and the flags still stand, `records.collector_failed` (DISCLOSE) is recorded, and
-  `claim_usable` is false with the single reason `exclusions.function_unavailable` in the record's `reasons` list
-  (§0.16).
+  computes `claim_usable`. If the exclusion function is absent or raises an error, the numbers and the flags still
+  stand, `records.collector_failed` (DISCLOSE) is recorded, and `claim_usable` is false with the single reason
+  `exclusions.function_unavailable` in the exclusion record's `reasons` list (§0.16). (When the function could not
+  be called because the harvest failed to build its inputs, the same reason is written, and that failure is itself
+  a harvest fault, so the verdict is HARVEST_FAULT.)
 - **NULL:** no chain start: the arm refused, or the driver failed before the chain. `claim_usable` is false, with the
   single reason `window.null`.
 - **NO_COLLECTION:** the chain started and its record of stages shows that no collection stage ran to its end. That
   record is the **stage journal**, `night/chain-stages.jsonl`: the chain appends one line to it each time one of its
   stages ends, giving the stage's id, its kind and its return code. (It also writes a line of another kind when it
   stops itself, and one for each stage it skips at the collection deadline, §5.1.) The verdict is NO_COLLECTION when
-  the file exists and holds no line of kind `campaign_collection`, the kind of a collection stage that ended. That is
-  every chain that stopped itself at exit 10, 11 or 12, because all three stops come before the first collection
+  the file exists and holds no line of kind `campaign_collection`, the kind of a collection stage that ended. That
+  covers every chain that stopped itself at exit 10, 11 or 12, because all three stops come before the first collection
   stage (§5.1), and also a chain that the driver stopped from outside (§5.1) after the first stage had ended and
   before the first collection stage had. Every collector still runs, `chain.stopped_before_collection` is recorded
   (DISCLOSE), and `claim_usable` is false whatever the flags say, because only a COLLECTED window can be
@@ -2970,8 +2971,8 @@ applied to those records by the lead: in an unattended run, by the magistrate, t
 watchdog launches (§5.7). They are rules a session follows, not code, like the process rule of §7.3, and the written
 brief the magistrate is launched with carries them. Wherever this file says "the scheduler", it means the lead
 applying these rules. The code holds a function for the first rule below, `first_claim_usable` in
-`joulewise/flags/exclusions.py`, which returns a pack's first claim-usable attempt; it is tested, and no block-5
-program calls it.
+`joulewise/flags/exclusions.py`, which returns the number of a pack's first claim-usable attempt, or nothing while
+that attempt still carries an unclassified code; it is tested, and no block-5 program calls it.
 
 - **The analysed window of each pack is its first claim-usable attempt** in arm order. All of a model's cells come
   from that one window, so attempts are never mixed: no member, quad or cell is pooled, topped up or replaced across
@@ -3003,15 +3004,33 @@ program calls it.
   is used twice, and the harvest can stand in for those two checks only through two of its other steps. (i) The
   harvest ran the checkout's tracked-edits check and its untracked-files check. It can run them only when the
   listing of the working tree taken at the arm is present: the output of `git status --porcelain`, which the driver
-  saves in the executed-file inventory. (ii) The harvest resolved the member dispatch of every collection stage,
-  that is, the list of run ids the stage launches, read from the stage's order manifest (the file that lists the
-  stage's members in launch order). The run ids of a stage it could not resolve that way
-  (`roster.dispatch_unresolved`) enter no duplicate check (`roster.duplicate_run_id`, which removes the window).
-  If (i) or (ii) fails, the arm's `pack.identity_unmeasured` stays and removes the window. Condition (ii) is the one
-  that changes an outcome: `roster.dispatch_unresolved` alone is only disclosed, so the window would otherwise have
-  been kept. When the listing of (i) is missing, the harvest's own `code.identity_unmeasured` normally removes the
-  window anyway. The checkout and executed-code collectors carry no further condition
-  (`harvest.supersede_identity_unmeasured`).
+  saves in the executed-file inventory. (ii) The harvest resolved the **member dispatch** of every collection stage,
+  that is, the list of run ids the stage launches. A stage whose list the harvest cannot read is named in
+  `roster.dispatch_unresolved` (DISCLOSE), and the check for a run id that two stages launch
+  (`roster.duplicate_run_id`, which removes the window) then lacks that stage's run ids. If (i) or (ii) fails, the
+  arm's `pack.identity_unmeasured` stays and removes the window. Condition (ii) is the one that changes an outcome:
+  `roster.dispatch_unresolved` alone is only disclosed, so the window would otherwise have been kept. When the
+  listing of (i) is missing, the harvest's own `code.identity_unmeasured` normally removes the window anyway. The
+  checkout and executed-code collectors carry no further condition (`harvest.supersede_identity_unmeasured`).
+  *Where the harvest reads a stage's dispatch, and what follows for each pack* (found when revision 11 checked this
+  passage against the code at `9b0c680ed`). The chain launches a collection stage from the stage's **order
+  manifest**: the file `order_manifest.json` in the stage's config directory, which lists the stage's members in
+  launch order. The plan writer and the driver read the dispatch from that same file
+  (`plan.resolve_stage_dispatches`, `driver._local_stage_dispatch`). The harvest does not. It asks the plan module
+  for a per-stage reader named `resolve_stage_dispatch`; the plan module has no function of that name, so the
+  harvest falls back to the plan tree's own entry for the stage, `input_ref`, which names either a list of member
+  rows held in the plan tree or a manifest file of the pack (`harvest.stage_dispatches`). GAMMA's plan tree carries
+  an `input_ref` on each of its ten collection stages, and the 101 run ids read through them are the ones its order
+  manifests list, so GAMMA's dispatch resolves. ALPHA's and BETA's plan trees carry none: `input_ref` is null on all
+  ten collection stages of each. So on every ALPHA and BETA harvest all ten stages are unresolved,
+  `roster.dispatch_unresolved` is recorded once, condition (ii) fails, and an arm's `pack.identity_unmeasured` is
+  never superseded. Such a window is removed. When that flag is its only window-removing code, the rule at the head
+  of this item applies: the cause is the harvest, so R3 and a re-harvest of the same bytes come before any decision
+  to re-arm. Two more effects on every ALPHA and BETA harvest touch no number and remove nothing. The harvest's own
+  count of members per collection stage is empty, so each stage the driver counted (§5.7) is recorded as
+  `yield.harvest_disagrees_with_window` (DISCLOSE). And the check for a run id that two stages launch has no run id
+  to compare; the plan writer's own check, which reads the order manifests, refuses a plan in which two stages
+  launch one run id into one runs root, before any arm.
   *Model identity* is superseded the same way since Opus audit F5 (commit `a28e8611e`): the arm's model-identity
   collector has a 55 s budget, and a slow one left `model.identity_unmeasured`, which removed the window. Every
   member's metadata carries the content hash of the model tree its own process loaded and its runtime stack, and the
@@ -3104,9 +3123,10 @@ may differ, byte for byte, in the commit a later window runs.
 
 ### 7.6 What re-arming can and cannot select on
 
-The decision to re-arm is a rule the lead applies (§7.2), not code. It reads only `claim_usable`, the verdict, the
-window's reasons and the yield counts (all in `harvest.json`, §7.1), never an energy. So a measured value can
-influence re-arming only through what `claim_usable` itself reads.
+The decision to re-arm is a rule the lead applies (§7.2), not code. The rules of §7.2 to §7.4 read each attempt's
+verdict, `claim_usable`, reasons and yield counts (all in `harvest.json`, §7.1), the codes and families of its flags
+and member exclusions (§7.3), and anchor status words (§7.4). None of these is an energy. So an energy can bear on
+re-arming only through what `claim_usable` itself reads.
 `claim_usable` reads no science member's energy except the single pass/fail precheck ratio of §6.3, which is
 RESTRICTED. It does read reference-workload energies (the NEG-8 screen), power (idle admission, the bracket), timing,
 and the physical hazards. So re-arming cannot select on the science outcome, but every reported number is
@@ -3212,9 +3232,10 @@ re-derivation); the count-adjusted bound, which is bound(n_s, n_e) of §0.12
 (`whole_window.neg8_count_adjusted_bound`); and the re-derivation, the function that rebuilds a verdict from the
 reference bundles instead of trusting the stored row (`whole_window._derived_neg8_decision`, which the replay and the
 harvest both call). Second, every disagreement between the three places ends in an exclusion, never in a passing
-screen or a read of a dropped energy. What still differs between the places is their test of whether a reference is
-strict-invalid (§0.12, "The strict check of a reference"; cold pass 4 note N-3). The decision: seal on this code, and
-fix Sol R2, Sol R3, cold pass 4 D1 and that difference (by one test shared by all three places, the shared predicate
+screen or a read of a dropped energy. What differs between the places is which losses each one can observe (the
+harvest alone sees the physics flags of §6.4, for example) and their test of whether a reference is strict-invalid
+(§0.12, "The strict check of a reference"; cold pass 4 note N-3). The decision: seal on this code, and fix Sol R2,
+Sol R3, cold pass 4 D1 and the differing strict test (by one test shared by all three places, the shared predicate
 of §0.12) in one named lane, L9-NEG8, which runs after the seal and before any claim (§11 item 1 (ii) and item 4),
 with one design round by Sol and Fable before code. None of it is collection code: none of it runs during a window or
 changes a window's bytes, so it does not block the arm. Cold pass 3's notes (N-A, N-B) and cold pass 4's notes (N-1,
@@ -3526,7 +3547,7 @@ not touched), from the diff `43ac12d0c..fe28e5a0c` (14 commits; 19 files under `
 | census lists its ancestors | `night_gate.AGENT_CENSUS_ARGV` and `hazards.arm.AGENT_CENSUS_ARGV` = `/usr/bin/pgrep -a -lf '[c]odex\|[c]laude'` (`c0f37974a`); `agent_identity.filter_census` follows the caller's tree downward only; `arm_census` discovery keeps no `-a` (a diagnostic that reads its own ancestors from the kernel) | changed: §4.5 |
 | T3 removed from the census | `agent_identity.AGENT_PREFIXES` = (`claude`, `codex`); the T3 rules removed from `arm_census`, `t0_rehearsal`, `prewindow.py` and the generators (`63d2b9bad`); `scripts/prewindow_check.sh` keeps its sealed bytes, `t3` included (`fe28e5a0c`; SHA-256 prefix `d8458eea588a746f`, recomputed by this author) | changed: §4.5 |
 | interpreter rule | at `fe28e5a0c` the matcher still parsed options (`agent_identity._VALUE_OPTIONS`, `ca25d9299`); the rule of §4.5 was then a pending commit of `lane/2026-10-07-census-interp`, and this row listed what to confirm when it landed: any command-line element of `node`, `bun` or `deno` that names `@anthropic-ai/claude*`, `@openai/codex*`, `claude-code` or the `claude` or `codex` install directories makes it an agent, with no option parsing; `node /opt/homebrew/bin/codex exec` (an agent in the dry arm) is still an agent; the window's own Python and shell processes are not. Revision 10 confirmed all three at `9b0c680ed` (`B5-REV10-SYNC` below) | changed in revision 9: §4.5 (to the pending rule); restated from the code in revision 10 |
-| A1: which bracket carries the allowance | `harvest.neg8_allowance` writes `derived/neg8-allowance.json` (`joulewise.b5_neg8_allowance.v1`); `whole_window.harvest_neg8_allowance_bracket`; `whole_window_drift_allowances(..., neg8_harvest_archive=)`; `analyze-claims --neg8-harvest-archive`; the archive bytes are read through `authentication_io.read_authentication_input`, the read function for files that claim code treats as evidence: inside a session that records what a claim consumed, it parses the file strictly as JSON and registers its SHA-256 at the first read; outside such a session it is a plain file read (`bbdae1e86`) | changed: §0.12; analysis plan §3.1, §4, §7.1, §11 |
+| A1: which bracket carries the allowance | `harvest.neg8_allowance` writes `derived/neg8-allowance.json` (`joulewise.b5_neg8_allowance.v1`); `whole_window.harvest_neg8_allowance_bracket`; `whole_window_drift_allowances(..., neg8_harvest_archive=)`; `analyze-claims --neg8-harvest-archive`; the archive bytes are read through `authentication_io.read_authentication_input`, the read function for files that claim code treats as evidence: inside a session that records what a claim consumed, it parses the file strictly as JSON, registers its SHA-256 at the first read and refuses a later read of the same file whose bytes differ; outside such a session it is a plain file read (`bbdae1e86`) | changed: §0.12; analysis plan §3.1, §4, §7.1, §11 |
 | A2: the reference identity unit | `harvest.NEG8_REFERENCE_IDENTITY_UNIT` = `neg8_reference`, `_reference_model_identity` (sealed pin, else strict majority); pin written by `scripts/write_b5_identity_pins.py` (`754c8c093`) | changed: §0.12, §4.6 item 3, §6.3, §6.5 |
 | N8 with call (ii): a reference of another model | `model.identity_mismatch` (member level) and `model.identity_inconsistent_in_window` (window level) both emitted; both EXCLUDE_WINDOW in this catalog; `exclusions.compute` applies EXCLUDE_WINDOW at any scope | changed: §0.12, §6.5 ("window excluded", not "survivors decide"); catalog notes |
 | A3: references named from the sealed roster | `harvest._neg8_reference_losses` adds every member with `neg8_slot` or `spare_slot`; the stored loss list is trusted only when `neg8_reference_source` is `verdict_sources` | changed: §0.12, §6.5 |
