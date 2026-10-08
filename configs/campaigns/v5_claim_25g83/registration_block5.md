@@ -2245,8 +2245,9 @@ still knows only the full corpus. Three programs touch the bound, in this order:
      `neg8.bound_not_derived` removes the window.
    - *Did the screen pass?* The harvest re-screens the window (`_neg8_rescreen`) in three cases: (a) the stored
      screen's only NEG-8 conditions are the two bound-underived ones and the bound was derived from the collected
-     subset; (b) a reference the verdict names carries a loss flag that the stored bracket did not drop (§0.12, "Lost
-     references"); (c) a corpus member was dropped for physics and the bound re-derived (below). It re-derives the
+     subset; (b) a reference the verdict names is lost at harvest and the stored bracket did not drop it (§0.12,
+     "Lost references": it carries a loss flag, or its energy cannot be read, `energy_unreadable`, §6.5); (c) a
+     corpus member was dropped for physics and the bound re-derived (below). It re-derives the
      NEG-8 bracket with the core's own evaluator (`whole_window._derived_neg8_decision`), over the reference bundles
      the verdict names, with the window's own validated bound (the physics-clean bound if there is one, else the
      collected-subset bound, else, in case (b) only, the stored bracket's). The time at which the bound's age is
@@ -2258,7 +2259,11 @@ still knows only the full corpus. Three programs touch the bound, in this order:
      latest readable end, so the bound never looks younger than a physical end shows. When none can be read, the
      completion time stands. (Revision 10 said here only "judged at the verdict's completion time".) Re-derived
      first without the harvest's losses, the bracket must have the stored bracket's endpoints and estimand; if it
-     does not, these are not the bundles the verdict was written from, and nothing is evaluated. The decision is
+     does not, these are not the bundles the verdict was written from, and nothing is evaluated. (For a reference
+     whose energy cannot be read, this first re-derivation writes what the verdict writer wrote for it, an endpoint
+     entry with no energy, so that the comparison can confirm the stored bracket before the reference is dropped.
+     That handling is the seal gate's ruling of stage 1, item RF-1, and belongs to the harvest program pinned
+     before ALPHA-1's harvest, §11 item 4; §6.5 gives the rule and its example.) The decision is
      then the re-derivation that drops the lost references before aggregation.
      The re-screen alone decides: `neg8.screen_failed` is emitted unless the re-screen ran, passed and listed no
      condition. In case (a), any other NEG-8 condition leaves the screen failed; in every case, a re-screen that
@@ -2320,9 +2325,17 @@ points with the core's own builder, and validates its arithmetic and corpus iden
 collected-subset path of item 3 does. A clean bound that validates goes to restricted custody
 (`withheld/neg8-clean-bound.json`), the screen is re-run against it, and the record of the drop is
 `derived/neg8-corpus-physics.json`. The minimum stays 10 kept members; fewer, or a clean bound that does not
-validate, gives `neg8.bound_not_derived` (`observed.source` `corpus_physics`). The reference members and the corpus
-therefore share one eligibility rule: the §6.4 physics codes drop a reference from the screen (§0.12) and a corpus
-member from the bound. *Worked example (synthetic):* of 12 succeeded corpus members, member 3's request overlapped a
+validate, gives `neg8.bound_not_derived` (`observed.source` `corpus_physics`). For those six measured physics codes
+the reference members and the corpus therefore share one rule: each of the six drops a reference from the screen
+(§0.12) and a corpus member from the bound. The two differ on evidence that was never taken. Since the seal gate's
+stage 1 (2026-10-07, its item RF-5), a reference whose contention or battery evidence is unmeasured
+(`contention.unmeasured`, `battery.unmeasured`) is lost, and so is a reference with a measured quiet-state violation
+or a failed battery pair (`env.member_quiet_state_violated`, `battery.capture_pair_failed`; §0.12). A corpus member
+whose physics is unmeasured is still kept, as above. The gate left the corpus's rule as registered and recorded the
+difference for the design round of lane L9-NEG8, to be considered before GAMMA-1 arms: an unseen contender in a
+corpus member widens the corpus's standard deviation and envelope, and so the bound, which makes the screen easier
+to pass. (Revision 11 said the references and the corpus "share one eligibility rule" without this limit.)
+*Worked example (synthetic):* of 12 succeeded corpus members, member 3's request overlapped a
 process at 0.09 CPU-s/s (`contention.request_overlap`): the bound is re-derived from the other 11 with t(0.975, 10),
 and the screen is re-run against it. Had a second member also been flagged, the bound would rest on 10; had a third,
 on 9, and the window would carry `neg8.bound_not_derived`.
@@ -2438,13 +2451,20 @@ NULL window, and named two of the three process conditions.)
     verdict** (§5.1) is charged 60 s for one refit of about 15 s.
 - **`WINDOW_MAX_S`**, the window's deadline measured from t0, = 60 × ceil((span + 3,300 s) / 60). The 3,300 s is the
   arm's allowance: the dwell cap of 2,700 s plus the census, reads, network-time OFF, collectors and cadence probe.
-- **`B5-SIZING-OUTPUTS`** (draft values at the int5 head `fe28e5a0c`; sealed at H_claim):
-  `configs/campaigns/v5_claim_25g83/sizing_b5.json`, schema `joulewise.b5_sizing.v1`, SHA-256
-  `89e7ea70be34d855285c7d2c87df42b646d179a632a1e05ed57a4682a961b3aa` at `fe28e5a0c`, unchanged from `d3c107f2f`
-  (`FILL[B5-FINAL-HASHES]`: checked again at the final head; status `UNSEALED_DRAFT`; computed by this author with
-  `shasum -a 256`, and `scripts/size_b5_window.py --check` reproduced it byte for byte at `fe28e5a0c`, exit 0). Earlier drafts:
-  `f114f9b9…` at the frozen head `a434e363d`, before the spares; `a5c6ec05…` at `b9d02700a`; `7c53ebc8…` on lane L10's branch with the older sizer; `b31a27b5…` after the timing lane
-  `f4cf9047`; `9d16edfe…` at `f8164893`. The value in force is the one sealed at H_claim. `scripts/size_b5_window.py` writes it from block 4's committed sizing source
+- **`B5-SIZING-OUTPUTS`**: `configs/campaigns/v5_claim_25g83/sizing_b5.json`, schema `joulewise.b5_sizing.v1`. Its
+  sealed bytes are the bytes it has at H_claim, and the seal record pins their SHA-256 (§12). SHA-256 at H_claim:
+  `FILL[B5-FINAL-HASHES]`. At the int5 heads `fe28e5a0c` and `9395cecfb` it was
+  `89e7ea70be34d855285c7d2c87df42b646d179a632a1e05ed57a4682a961b3aa`, unchanged from `d3c107f2f` (computed by this
+  author with `shasum -a 256` at both heads; `scripts/size_b5_window.py --check` reproduced the file byte for byte
+  at both, exit 0). *The file's own labels.* The file carries `"status": "UNSEALED_DRAFT"` and `"sealed": false`,
+  and its `note` begins "UNSEALED DRAFT". Its generator writes those labels and no program reads them. They are not
+  rewritten at the seal, because a rewrite would change the sealed bytes and the generator's `--check` would then
+  fail on a label; the seal record's SHA-256 of the file is what seals it (orchestrator ruling of 2026-10-07 on the
+  seal preparation, its item F6; §12). Earlier drafts:
+  `f114f9b9…` at the frozen head `a434e363d`, before the spares; `a5c6ec05…` at `b9d02700a`; `7c53ebc8…` on lane
+  L10's branch with the older sizer; `b31a27b5…` after the timing lane `f4cf9047`; `9d16edfe…` at `f8164893`. The
+  value in force is the one the seal record pins. `scripts/size_b5_window.py` writes the file from block 4's
+  committed sizing source
   (`configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json`, SHA-256
   `f414301cd0328236f9309962b60ff4635026dac973ca3b0ce564b677c47baa81`) and from the packs' stage graphs, order
   manifests and configs. `--check` reproduces the file byte for byte. The program also refuses unless its arithmetic
@@ -2465,9 +2485,10 @@ NULL window, and named two of the three process conditions.)
   | BETA | 19 / 100 | 101,226 s (28.1 h) | 104,580 s (29.05 h) | 32,634 s (9.1 h) | 20,510 s (5.7 h) |
   | GAMMA | 61 / 40 | 87,690 s (24.4 h) | 91,020 s (25.3 h) | 27,747 s (7.7 h) | 17,426 s (4.8 h) |
 
-  The programmed spans and `WINDOW_MAX_S` are read from the sizing output at `fe28e5a0c` (`FILL[B5-FINAL-HASHES]`:
-  checked again at the final head);
-  each span is revision 6's plus the 5,424 s of spare retries (93,402, 95,802 and 82,266 s at `a434e363d`). The
+  The programmed spans and `WINDOW_MAX_S` are read from the sizing output with the SHA-256 printed above for
+  `fe28e5a0c` and `9395cecfb`; they are the sealed file's values when its SHA-256 at H_claim, also above, is that
+  same digest. Each span is revision 6's plus the 5,424 s of spare retries (93,402, 95,802 and 82,266 s at
+  `a434e363d`). The
   members column counts the planned roster, without spares; the expected-chain columns assume no spare runs.
 
 - **Why the deadline is about three times the expected chain.** The rule charges every member, at once, both worst
@@ -2483,7 +2504,11 @@ NULL window, and named two of the three process conditions.)
 - **Is that right? As a deadline, yes.** A chain stopped at its deadline loses its post calibration, and so the
   whole window. The deadline must therefore never cut a slow window that could still be claim-usable. A chain
   anywhere near this bound would have most members at the cooldown cap, and `member.cooldown_cap_hit` removes such
-  members, so that window would fail the 8-of-10 minimum anyway. The deadline now exceeds the 24 h calibration
+  members, so that window would fail the cell minimum anyway (5 of 10 units in each stratum since the seal gate,
+  8 before; §6.6). A quad is dropped when any one of its four members is removed, so if only half the members were
+  removed, independently, a quad would be kept with probability (1/2)⁴ = 1/16, and a cell would keep at least 5 of
+  its 10 quads with probability about 1.8 × 10⁻⁴ (the binomial tail for 10 quads at 1/16, computed by this author).
+  The deadline now exceeds the 24 h calibration
   horizon; the collection deadline (§5.1) keeps the post calibration inside the horizon, so a slow chain is truncated
   to a usable tail rather than killed. Since the watchdog releases a finished window at once (§5.4), the generous
   size costs only the time to notice a hung chain or a dead driver.
@@ -2525,7 +2550,17 @@ NULL window, and named two of the three process conditions.)
   is therefore a change to a sealed output. The question goes to a consult first (§0.1). If the consult finds that
   an allowance must grow, the change is a cold erratum (§10) with a new sizing file, and the new file is pinned,
   before the next arm, by an addendum to the seal record (§12: the record that pins each sealed file by its
-  SHA-256; an addendum adds a pin to it). *Why the case is remote:* the deadline is built from the programmed
+  SHA-256; an addendum adds a pin to it). *Where the new file may lie.* It is never a changed `sizing_b5.json`
+  committed in the measurement checkout. That file is a window input (a tracked file under `joulewise/`, `scripts/`
+  or `configs/`, whose bytes a window can read; §6.5 builds the term), so a commit that changes it there would give
+  every later window the flag `code.executed_differs_from_sealed`, which removes the window (§6.5). The plan writer
+  takes an allowance from any
+  file inside the measurement checkout: it is given the file's path, its SHA-256 and a pointer to the value, and
+  refuses unless the file's bytes hash to that SHA-256 and the pointer resolves to the stated number of seconds
+  (`joulewise/b5/plan.py` `read_allowance`). So the new sizing file is written as a new, untracked file outside
+  `joulewise/`, `scripts/` and the pack's directory (an untracked file under those roots is itself a difference,
+  §6.5), for example under the git-ignored `runs/` directory, and the next plan cites it there with the SHA-256
+  the addendum pins. *Why the case is remote:* the deadline is built from the programmed
   span, the chain's length if every member takes its longest allowed path: 24.4, 27.5 and 28.1 h for GAMMA, ALPHA
   and BETA (the table above), about 27 h, to which `WINDOW_MAX_S` adds the arm's 3,300 s. The projected chain is
   4.8 to 5.7 h, about 5 to 6 h, and the block-3 basis 7.7 to 9.1 h. A chain reaches its deadline only by running
@@ -2586,9 +2621,15 @@ power or a duration, so it is releasable structure under §8 item 2. It never st
   - start and end triplets: 2 of 3; midpoint: 0 of 1 (the screen's minimum, §0.12; `driver.REFERENCE_ENDPOINT_MIN_VALID`,
     `REFERENCE_MIDPOINT_MIN_VALID`). The driver does not count spares: its yield plan lists only the planned
     members, so a stage whose loss a spare restored still shows that loss in the driver's counts;
-  - science stages: ⌈planned × 8 / 10⌉, the stage's share of the 8-of-10 cell minimum (§6.6): 16 of a 20-member quad
-    stage, 8 of a 10-member absolute stage. If each member is lost independently with probability 1/37, these trip
-    by chance with probability 1.6 × 10⁻⁴ and 2.1 × 10⁻³, so a trip means a systematic cause;
+  - science stages: ⌈planned × 8 / 10⌉ (`driver.SCIENCE_MIN_NUMERATOR` and `SCIENCE_MIN_DENOMINATOR`, 4 and 5): 16
+    of a 20-member quad stage (five quads), 8 of a 10-member absolute stage (a workload's ten absolute repeats,
+    §0.8). If each member is lost independently with probability 1/37, these trip by chance with probability
+    1.6 × 10⁻⁴ and 2.1 × 10⁻³, so a trip means a systematic cause. This fraction was the stage's share of the cell
+    minimum while that minimum was 8 of 10 units (revisions 3 to 9). The seal gate then set the cell minimum to 5
+    (§6.6). The driver's fraction is a constant of its own, not read from the catalog, and it stays at 8 of 10: a
+    yield status removes nothing, and the two probabilities above still hold for it. So for a science stage LOW
+    is now an earlier warning than the cell rule, and a stage can be LOW, or even ZERO, in a window whose cells
+    all still meet the minimum (the worked example at the end of this section);
   - GAMMA's two diagnostic interior-reference stages (`gamma-reference-decode-midpoint` and
     `gamma-reference-prefill-midpoint`, one member each, §0.12): 1 of 1. The driver sorts a stage by its runs root
     and its members' roles (`driver._stage_role`). A stage that writes to the bound root, or holds a member with the
@@ -2670,11 +2711,20 @@ power or a duration, so it is releasable structure under §8 item 2. It never st
   bundle is present, and `calibration.no_bracket` removes the window.
 
 Every yield code is DISCLOSE (§6.8): `cell.below_minimum` and `neg8.bound_not_derived` already remove a window where
-it matters; the yield exists to say so early and to stop a repeat (§7.3). *Worked example (synthetic).* An ALPHA
-window ends with stage rows corpus 12/12, start triplet 3/3, the first decode quad stage 0/20 (ZERO), the rest full.
-The terminal status is LOW (a stage below its min_valid of 16); Ed gets a fault email that leads "collected 99 of 119
-planned members"; the harvest later removes the window by `cell.below_minimum`, and the orchestrator does not arm the
-next window on the same code until the cause is fixed (§7.3).
+it matters; the yield exists to say early that members were lost and to stop a repeat (§7.3). *Worked example
+(synthetic).* An ALPHA window ends with stage rows corpus 12/12, start triplet 3/3, the first decode quad stage 0/20
+(ZERO), the rest full. The terminal status is LOW (a stage below its min_valid of 16), and Ed gets a fault email
+that leads "collected 99 of 119 planned members". At the harvest the 20 members without a bundle are removed
+(`member.bytes_missing`, §6.7). They are five of the decode cell's ten quads, so the cell keeps 5 quads and all 10
+repeats. That meets the minimum of 5 units in each stratum (§6.6): `cell.below_minimum` does not fire, and the
+window is claim-usable if nothing else removed it, with the decode cell's 5 kept quads printed beside it. Under the
+minimum of 8 that revisions 3 to 9 registered, the same window was removed. One more lost member in the second
+decode quad stage would leave 4 quads, and `cell.below_minimum` would then remove the window. (Both outcomes were
+computed by this author with the exclusion function, `joulewise.flags.exclusions.compute`, on ALPHA's roster as the
+harvest builds it at the int5 head `9395cecfb`, with the catalog whose `rules.cell_unit_minimum` is 5, int5 lane
+commit `059fafc55`: 5 kept quads give `claim_usable` true, 4 give false with the reason `cell.below_minimum`.)
+Whatever the harvest decides, when the 20 members were refused for one shared cause the orchestrator does not arm
+the next window on the same code until that cause is fixed (§7.3).
 
 ### 5.8 The whole-machine meter (a recorded diagnostic)
 
@@ -2832,6 +2882,13 @@ and one torn flag line left its attempt blocked for ever. Now:
   window is removed. A line that still shows a member's run id and is torn inside `"code": "member.tok` could only
   have been `member.token_count_mismatch` (EXCLUDE_MEMBER), so that member is removed (candidate lists computed from
   the catalog and the writers' code tables).
+  *Where the narrowed list lives.* Limiting the candidates to the codes of programs that write before the harvest is
+  the seal gate's ruling of stage 1 (2026-10-07, its item RF-3; revision 11 listed every catalog code as a
+  candidate, so a torn copy of a disclosed flag could remove a window). The constant `harvest.PRE_HARVEST_CODES` and
+  the test that holds it equal to those writers' code tables are part of the harvest program that an addendum to
+  the seal record pins before ALPHA-1's harvest (§11 item 4). The harvest at H_claim still draws its candidates from
+  every code the catalog or its own code table lists (`harvest._candidate_codes`); that can only remove more, never
+  less, and no block-5 window is harvested with it.
 - `collector.unmeasured` (a collector the flag package does not know how to class) is still absent from the catalog,
   so it blocks the release event until a cold erratum classifies it, which the loader now accepts.
 
@@ -2917,11 +2974,17 @@ A member is removed from every cell it feeds when any of these is flagged:
 
   The verdict's other two per-member reasons already have their own codes. In-window thermal pressure is
   `thermal.powermetrics_pressure_elevated` (§6.4), and an invalid bundle is `member.strict_validation_failed` and its
-  kin. Leaving those two out keeps each exclusion in one family. The physics-in-span **sensitivity line** of
-  analysis plan §8.1 relies on that: when a unit of a cell was removed by a PHYSICS_IN_SPAN code, the same estimator
-  is printed a second time, beside the primary value, with the PHYSICS_IN_SPAN exclusions not applied and every
-  other family's still applied (the line is proposed; the seal gate adopts or strikes it, §14 Q6). An exclusion
-  that sat in two families would make "not applied" ambiguous.
+  kin. Leaving those two out keeps each exclusion in one family, and the sensitivity line of analysis plan §8.1 names
+  `thermal.powermetrics_pressure_elevated` among the three codes it ignores. (The **sensitivity line** is a second
+  value printed beside a cell's or a contrast's primary value. Thermal pressure and contention plausibly rise with
+  the workload's own load, so removing the members they touched could pull a mean toward its cooler members. When a
+  unit was removed by one of the three codes for those hazards, `thermal.os_level_nonzero`,
+  `thermal.powermetrics_pressure_elevated` and `contention.request_overlap`, the same estimator is therefore
+  computed again over the units that would be kept if those three codes were ignored. A unit that carries any other
+  code stays removed. The seal gate adopted the line in this narrowed form at its stage 1, 2026-10-07; revision 11
+  described the proposal it judged, which ignored the whole PHYSICS_IN_SPAN family; §14 Q6. Had in-window thermal
+  pressure also been listed under `member.whole_window_member_failure`, every member with thermal pressure would
+  carry that second code as well, and the line could never restore it.)
 
   *Why this rule is needed.* Its environment evidence includes the post-run observation that the displays stayed
   asleep and the screensaver stayed off through the request. That observation is how decision D-078 (item 4) closed
@@ -3130,15 +3193,44 @@ The window is not claim-usable when any of these fired:
   `lineage.plan_tree_digest_differs`.
 - `code.executed_differs_from_sealed`: the executed-file inventory differs from the sealed inventory; or the chain
   script's bytes differ from the SHA-256 recorded in its **sidecar** (the small file written beside the chain
-  script that holds its digest); or the measurement checkout's HEAD is neither H_claim nor H_claim plus pin-only
-  commits; or it has tracked edits, or untracked files under the executed roots (Python could import them).
+  script that holds its digest); or a window input differs between H_claim and the executed head; or the
+  measurement checkout has tracked edits, or untracked files under the executed roots (Python could import them).
+  *The head comparison.* The **executed head** is the commit the measurement checkout was at when the window armed;
+  the driver records it with the executed-file inventory. A **window input** is a tracked file whose bytes a window
+  can read while it is planned, armed or run: every file under `joulewise/`, `scripts/` and `configs/`, and one
+  document, `docs/phase_2/window_runbook.md`, whose pre-calibration screen the plan writer copies into the chain. The
+  harvest lists the paths that differ between the two commits (`git diff --name-only` from H_claim to the executed
+  head, run in the measurement checkout) and gives each path one class (`harvest.head_change_class`). A changed
+  window input raises the flag. Three classes are only recorded, in `derived/code-identity.json`: the calibration
+  ledger pin (a pin-only commit, §0.18); the three **seal documents**, which are the sealed inventory, this file and
+  the analysis plan; and a path no window reads, such as a test or another document. *Why the rule has this form:*
+  the sealed inventory names H_claim as its `head`, and a file cannot name the commit that contains it, so the
+  filled inventory and the sealed text of this file and of the analysis plan are committed one commit after
+  H_claim, in the **seal commit**. Every window therefore runs from the seal commit or from a pin-only commit after
+  it, never from H_claim itself (§11, §12). (Revision 11 gave this condition as "the measurement checkout's HEAD is
+  neither H_claim nor H_claim plus pin-only commits", which would have removed every window of the block. The
+  comparison was changed before H_claim, by the int5 merge `9395cecfb`.) When `git diff` cannot run, the window is
+  `code.identity_unmeasured` instead (below). The arm's own collector applies the same classes and also raises the
+  flag when the checkout's HEAD does not descend from the commit it is given to compare with. In a window that
+  commit is the plan's own `measurement_head`, which the installer requires to equal the checkout's HEAD, so the
+  arm compares a commit with itself; the comparison that ties a window to H_claim is the harvest's (§11).
+  *One more difference, decided at the harvest.* The driver, the hazard modules, the monitor and the arm's
+  collectors run from the checkout whose installer set up the window's launchd job (§0.17), and the registered
+  procedure installs that job from the measurement checkout (§11, §12), so there is one checkout and its files are
+  the executed-file inventory. If the job was installed from another checkout, the driver records that checkout's files
+  as well (`driver_checkout`), and a code file among them that differs from the sealed inventory is a difference
+  under this code. The harvest at H_claim only writes the list of such files into `derived/code-identity.json`; the
+  flag is raised by the harvest program that an addendum to the seal record pins before ALPHA-1's harvest (§11
+  item 4), and identical bytes in a second checkout stay a record.
 - `model.identity_mismatch` (the model, tokenizer or runtime realized at the arm or recorded in any bundle differs
   from the pins of `identity_pins.json`, §4.6 item 3), `model.identity_inconsistent_in_window` (two identities within
   one identity unit), and `model.identity_unpinned` (no pin to compare against, which happens when the measurement
-  checkout lacks `identity_pins.json`). The first two remove the window even when the flag is member-level, and that
-  includes a NEG-8 reference or spare that ran another model than the sealed `neg8_reference` pin: the window is
-  excluded, not handed to the survivors screen, because the pack that executed differs from the sealed one
-  (orchestrator call (ii), 2026-10-07; §0.12).
+  checkout lacks `identity_pins.json`; the members' recorded hashes still exist, and a harvest that is given the
+  pins compares them, so since the seal gate's stage 1 this code is a harvest problem first, like the
+  `*.identity_unmeasured` codes below: §7.2). The first two remove the window even when the flag is member-level,
+  and that includes a NEG-8 reference or spare that ran another model than the sealed `neg8_reference` pin: the
+  window is excluded, not handed to the survivors screen, because the pack that executed differs from the sealed
+  one (orchestrator call (ii), 2026-10-07, confirmed by the seal gate at its stage 1; §0.12).
 - `*.identity_unmeasured` for pack, code or model: a number-protecting identity check could not run. This is a
   harvest problem first (§7.2).
 - `calibration.capture_invalid`, `calibration.capture_battery_pair_failed` (a calibration capture's #421 pair failed,
@@ -3243,6 +3335,9 @@ did not pass) and `g3.recompute_failed` (check F5-2 of G3, the desk provenance c
 verdict passes only if every member passed, so both codes fire when a single member failed admission or its
 environment guard. Making them window-removing would restore "one aborted member voids the window", which Ed's
 2026-10-05 ruling removed. The verdict's checks are not lost: each part acts at its own level through its own code.
+(The seal gate confirmed both effects at its stage 1, 2026-10-07, after walking every condition that makes the
+verdict other than passed: each has a code of its own in the list below, or is disclosed for the physical reason
+the list gives.)
 
 - *The NEG-8 screen* (window level): `neg8.screen_failed`. The harvest emits it from the verdict's NEG-8 bracket:
   a decision other than passed, or any NEG-8 condition (`neg8_bracket_abs_delta_exceeded`, the screen failed on the
@@ -3252,8 +3347,10 @@ environment guard. Making them window-removing would restore "one aborted member
   harvest, a corpus member dropped for physics), whose result decides alone. (Revision 10 printed the first two
   conditions as `neg8_gross_point_drift_exceeded` and `neg8_idle_sub_point_drift_exceeded`. Those are the names of
   the code's constants in lower case; the strings a verdict carries are the two above.)
-  `neg8_bracket_reference_invalid` has four causes, each of which removes the window through
-  `neg8.screen_failed`. Two are found by the evaluator (`whole_window.evaluate_neg8_point_drift`): (a) the
+  `neg8_bracket_reference_invalid` has four causes. Three of them, (a), (c) and (d) below, remove the window
+  through `neg8.screen_failed`. The fourth, (b), is a reference whose energy cannot be read, and since the seal
+  gate's stage 1 that is a lost reference, not a failed screen (the paragraph after the list of causes).
+  Two are found by the evaluator (`whole_window.evaluate_neg8_point_drift`): (a) the
   surviving references fit no accepted shape, which means fewer than two at an endpoint, more than three at an
   endpoint, or more than one at the midpoint (the one accepted shape with fewer than two is the legacy single
   pair, one start and one end reference with no midpoint, and only when no reference was recorded as lost; §0.12);
@@ -3265,6 +3362,24 @@ environment guard. Making them window-removing would restore "one aborted member
   run id, test vi of §5.3) are not all present and equal; a reference has no digest when it is not the canonical
   condition or its `config.json` does not reproduce the digest recorded for it. (Revision 10 gave cause (a)
   only.)
+  *What happens in case (b)* (seal gate, stage 1, 2026-10-07, its item RF-1). *Forcing problem:* the verdict writer
+  hands the evaluator every reference that succeeded and passed the strict check, including one whose summary holds
+  no usable request energy, as when the reducer gave the energy no envelope because the reference's clock anchor
+  is not `bounded` (§0.14). The evaluator then fails the whole screen for that one reference, so a window would be
+  removed for an event that costs one unit when it happens to a science member (`member.anchor_not_bounded`, §6.3).
+  *Rule:* the harvest names such a reference lost, with the reason `energy_unreadable` (§0.12, "Lost references"),
+  by the verdict writer's own test of the summary: a finite gross energy with a finite envelope around it, and a
+  finite idle-subtracted energy. That test asks whether a usable energy record exists; it decides nothing by the
+  energy's value. The re-screen of §5.3 then runs on the surviving references and decides alone, and the stored
+  row's `neg8_bracket_reference_invalid` for that reference decides nothing. The window is removed only when the
+  survivors fail the screen or fewer than two survive at an endpoint. *Worked example (synthetic):* all three start
+  references and the midpoint are sound, and of the three end references one has an anchor that is not `bounded`.
+  The stored row reads failed, with `neg8_bracket_reference_invalid`. The harvest names that end reference lost
+  (`neg8.reference_lost`, DISCLOSE) and re-screens with three start and two end references against bound(3, 2)
+  (§0.12); if that passes, the window is kept. *Code state:* this handling is part of the harvest program that an
+  addendum to the seal record pins before ALPHA-1's harvest (§11 item 4). The harvest at H_claim does not name the
+  loss; it lets the stored failure stand and removes the window, which errs toward removing, and no block-5 window
+  is harvested with it. (Revision 11 said that each of the four causes removes the window.)
 - *The calibration bracket* (window level): `calibration.bracket_acceptance_failed`, which the harvest evaluates
   itself.
 - *Each member's own failures* (member level): `member.whole_window_member_failure` (§6.3), which removes only the
@@ -3612,21 +3727,45 @@ reviewed into PHYSICS (the arm's dwell refusal, its instrument refusal and the d
 two entries were removed (the in-window census stop on unreadable censuses, PHYSICS, §4.5, and the raise on an
 unknown registry start identity, BASELINE, §6.10); and three were added: the refusal of an unusable pack inventory,
 `night_refused_pack_inventory_unusable`, NUMBER_INTEGRITY (§0.17), the 1,500 s cap on G10's supervised wait, PHYSICS
-(a hung process, §5.4), and the spare-retry helper's exit on an unknown mode, INTERNAL.) The file
+(a hung process, §5.4), and the spare-retry helper's exit on an unknown mode, INTERNAL. The four rows of the table
+are the same at the int5 head `9395cecfb` and at `a0920cb8c`, the head of the lane named below, recomputed by this
+author the same way.) The file
 also lists every flag code the catalogs mark EXCLUDE_WINDOW, and every pack-scoped window reason (§0.16), under
-`window_exclusions` (34 entries: 30 NUMBER_INTEGRITY, 4 PHYSICS, none BASELINE; `whole_window.verdict_absent` was
+`window_exclusions` (33 entries: 29 NUMBER_INTEGRITY, 4 PHYSICS, none BASELINE; `whole_window.verdict_absent` was
 relabelled from BASELINE to NUMBER_INTEGRITY), and every EXCLUDE_MEMBER code under `member_exclusions` (40: 20
-NUMBER_INTEGRITY, 16 PHYSICS, 4 BASELINE). The 34 window entries and the 36 PHYSICS and NUMBER_INTEGRITY member
+NUMBER_INTEGRITY, 16 PHYSICS, 4 BASELINE). The 33 window entries and the 36 PHYSICS and NUMBER_INTEGRITY member
 entries each carry a `protects` text that names the quantity or number protected. The four BASELINE member entries
 do not: `member.admission_aborted`, `member.cooldown_evidence_unverified`, `member.strict_validation_failed` and
 `member.target_phase_precheck_failed` carry only a `note`. Two notes say "not reviewed by the census"; the other
 two defer the review to `LANE_BARRIER`, the lane the core-prune design names for reviewing the reducer's
 environment barrier (§6.3). The test admits these four by name (below). All four are live member exclusions
 (§6.3), so they are a standing exception to the rule above: four exclusions whose reason has not been reviewed
-into one of the two classes. (Revision 10 said every listed exclusion names what it protects.) The 34 are 33
-codes and the one pack-scoped reason, `neg8.midpoint_lost_primary` (NUMBER_INTEGRITY, pack GAMMA: "GAMMA's primary
-contrasts carry a drift allowance with no interior-excursion evidence when the arm-boundary midpoint reference is
-lost"). The 33 codes include `g3.recompute_failed`, which the test fixture still marks EXCLUDE_WINDOW (§6.5, §13).
+into one of the two classes. (Revision 10 said every listed exclusion names what it protects.) The 33 are the
+catalog's 32 window-removing codes and the one pack-scoped reason, `neg8.midpoint_lost_primary` (NUMBER_INTEGRITY,
+pack GAMMA).
+
+*What the seal gate changed in this list* (stage 1, 2026-10-07). Three entries of `window_exclusions` changed and
+no refusal site did. The changes are commits `9980d6296` and `7b88e835a` of the int5 lane
+`lane/2026-10-07-seal-rulings`, which lands in the integration before H_claim together with the catalog's new
+minimum; the counts above are this author's, from the file at that lane's head `a0920cb8c`.
+
+- `cell.below_minimum` used to give "statistical power of the reported number" as what it protects. Precision is
+  neither of the two reasons of the rule above, which is why the gate moved the minimum to the point where a number
+  stops existing (§6.6). The entry now reads: "fewer than 5 kept units in a stratum of a target cell: the
+  registered floor estimator's guard (small_sample_guard_factor) is undefined below 5, so the cell's floor and
+  every contrast judged against it have no number".
+- `neg8.midpoint_lost_primary` used to say that GAMMA's contrasts then carry a drift allowance "with no
+  interior-excursion evidence". That overstated the case: GAMMA records two diagnostic interior references, which
+  by rule the allowance does not read (§0.12). The entry now reads: "GAMMA's primary contrasts' deterministic bound
+  D carries a drift allowance whose interior spread was not measured when the arm-boundary midpoint reference is
+  lost (the two diagnostic interior references enter neither the screen nor the allowance by rule); a decision
+  rests on D". D is the total of a contrast's recorded deterministic bounds, by which its interval is widened
+  before the contrast's direction is decided (analysis plan §7.1 step 5).
+- `g3.recompute_failed` left the list. The list had held it, as a 34th entry, only because the test fixture
+  catalog (`tests/fixtures/b5_harvest/flag_catalog.json`) still marked that code EXCLUDE_WINDOW while this catalog
+  makes it DISCLOSE (§6.5). The gate confirmed DISCLOSE, the fixture now says DISCLOSE as well, and a test holds the
+  fixture equal to this catalog, in family, class, effect and blinding, for every code both files list. (Revision
+  11 gave 34 entries, 30 of them NUMBER_INTEGRITY, and named this one disagreement.)
 
 The test `tests/hazards/test_refusal_allowlist.py` scans those modules' syntax trees on every run and fails when:
 a refusal site appears that the file does not list, or a listed site changes its count or its guarding conditions;
