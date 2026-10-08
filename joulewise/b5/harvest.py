@@ -5922,6 +5922,15 @@ class _Harvest:
             "plan_measurement_head": inputs.h_claim, "executed_head": executed_head,
             "sealed_inventory_sha256": sha256_file(sealed_path) if sealed_path.is_file() else None,
             "comparison": "not_compared", "changed_paths": {name: [] for name in HEAD_CHANGE_CLASSES}}
+        if isinstance(sealed_value, Mapping) and sealed_head is None:
+            # Seal-landing review F3 (H-10).  The sealed inventory was read and
+            # names no head.  The comparison below then runs against the plan's
+            # copy, which the installer sets to the checkout's own HEAD, so it
+            # compares the executed head with itself and says "identical"
+            # whatever was committed after the seal.  That is no comparison
+            # with the seal: the head check is unmeasured.  The record still
+            # shows what the plan's copy gave (``h_claim_source`` "plan").
+            unmeasured.append({"check": "head", "missing_input": "sealed_inventory_head"})
         if h_claim is None:
             unmeasured.append({"check": "head", "missing_input": "h_claim"})
         elif executed_head is None:

@@ -3556,6 +3556,51 @@ class IdentityReplayTests(WindowTestCase):
                 self.assertIn("code.executed_differs_from_sealed", window.exclusions()["reasons"])
                 self.assertEqual(self.code_identity_record(window)["changed_paths"]["window_input"], [relative])
 
+    def test_a_sealed_inventory_with_files_and_no_head_is_identity_unmeasured(self):
+        """Seal-landing review F3 (H-10): an inventory that names no head compares the window with nothing.
+
+        The counterfactual input: the sealed inventory keeps its file map and
+        loses its ``head``; the plan's ``measurement_head`` is the executed
+        head, as the installer makes it.  Before H-10 the record said
+        ``comparison: identical`` (the plan's copy against itself), no flag
+        was raised, and the harvest superseded an arm collector's
+        ``code.identity_unmeasured`` on the strength of that comparison.
+        """
+        arm_flag = l4_flag_line("code.identity_unmeasured", family="CODE_IDENTITY", klass="NUMBER", level="window",
+                                stage="arm", collector="joulewise.flags.collect.checkout_identity",
+                                observed={"check": "head", "missing_input": "git"})
+
+        def harvested(name, head):
+            window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+            sealed = window.measurement / SEALED_DIR / "sealed_inventory.json"
+            value = json.loads(sealed.read_bytes())
+            self.assertTrue(value["files"])
+            value["head"] = head
+            put(sealed, value)
+            (window.custody / "flags").mkdir(parents=True, exist_ok=True)
+            (window.custody / "flags" / "arm.jsonl").write_text(json.dumps(arm_flag, sort_keys=True) + "\n")
+            window.harvest()
+            return window
+
+        # Control: with its head the inventory gives a real comparison, and the arm's flag is superseded.
+        control = harvested("with-head", H_CLAIM)
+        self.assertNotIn("code.identity_unmeasured", control.codes())
+        self.assertIn("records.identity_unmeasured_superseded", control.codes())
+        self.assertEqual(self.code_identity_record(control)["h_claim_source"], "sealed_inventory")
+
+        window = harvested("no-head", None)
+        unmeasured = [flag["observed"].get("unmeasured") for flag in window.flags()
+                      if flag["code"] == "code.identity_unmeasured" and flag["source"]["collector"] == "code_identity"]
+        self.assertEqual(unmeasured, [[{"check": "head", "missing_input": "sealed_inventory_head"}]])
+        self.assertIn("code.identity_unmeasured", window.exclusions()["reasons"])
+        self.assertNotIn("code.executed_differs_from_sealed", window.codes())  # the file map still compares clean
+        identity = self.code_identity_record(window)
+        self.assertEqual((identity["h_claim_source"], identity["h_claim"], identity["comparison"]),
+                         ("plan", H_CLAIM, "identical"))
+        # The arm collector's own unmeasured flag stands: the harvest did not make the head check.
+        self.assertNotIn("records.identity_unmeasured_superseded", window.codes())
+        self.assertEqual(len([flag for flag in window.flags() if flag["code"] == "code.identity_unmeasured"]), 2)
+
     def test_a_head_comparison_git_cannot_make_stays_unmeasured(self):
         window = self.window(executed_overrides={"head": self.EXECUTED_HEAD})
         window.harvest(seams=self.diff_seams([], returncode=128))
