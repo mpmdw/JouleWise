@@ -203,15 +203,15 @@ The issuer, pinset, input manifest, adapters, the exclusions consumer and the di
 **What it is.** For each model and each of decode, prefill-p42 and prefill-p2048, one gross phase energy averaged
 over the cell's kept units, with an interval that respects the units. Normative home:
 `docs/contracts/paper_reported_energy.md`. **Registration digests** (`REPORTED-ENERGY-REGISTRATION-DIGESTS`, filled
-from committed bytes at `f8164893`, re-tied at seal, that is, recomputed from the bytes at the final head of the code (registration §2 item 1) and written here again; where a digest still waits for that, a FILL mark named `B5-FINAL-HASHES` stands in its place, §13): each floor pack's `extraction_spec.json` names the reported-energy
+from committed bytes at `f8164893`, re-tied at seal, that is, recomputed from the bytes at the final head of the code (registration §2 item 1) and written here again; where a digest still waited for that, a FILL mark named `B5-FINAL-HASHES` stood in its place until it was filled on 2026-10-08, §13): each floor pack's `extraction_spec.json` names the reported-energy
 registration it implements in `reported_energy_registration.registration_sha256`:
 
 - ALPHA: `5560857668f053c99d0369161d4735015f4678a160b7a8423c7a7f357a50f5ea`, in
   `configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json` (file SHA-256 at the final head of the code:
-  `FILL[B5-FINAL-HASHES]`; revisions 4 to 11 printed `8b7969851c576032a89ebd00c5d3a4396e1eba264d4d1e6a4603420fecd15c5c`, the file's digest at `f8164893`, which went stale when commit `f4cf90472` regenerated the file);
+  `a6498f56469448fd422e6ca2e0787b362a4fd6957bffab7d477ac7f30db38df6`; revisions 4 to 11 printed `8b7969851c576032a89ebd00c5d3a4396e1eba264d4d1e6a4603420fecd15c5c`, the file's digest at `f8164893`, which went stale when commit `f4cf90472` regenerated the file);
 - BETA: `04657a74de839a48ebf6bf55fe66f299fdd2e6401353c76d87d4d6ae843dae79`, in
   `configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json` (file SHA-256 at the final head of the code:
-  `FILL[B5-FINAL-HASHES]`; revisions 4 to 11 printed `53e71b38ab9c9851744ee84e792263e081c78156f941e9ab782f924a132809c7`, the file's digest at `f8164893`, stale for the same reason).
+  `2c0ee7189f9aa7e8f534be3cca3bf6f4125c23b5e7bf7ee1e600c7edf9d81ddc`; revisions 4 to 11 printed `53e71b38ab9c9851744ee84e792263e081c78156f941e9ab782f924a132809c7`, the file's digest at `f8164893`, stale for the same reason).
 
 Both specs are `procedure_only` and carry no post-collection numeric value. At `9b0c680ed` each spec still names the registration digest written above; only the two file digests have moved.
 
@@ -365,7 +365,7 @@ first and third §5 examples: absolute R = 0.5730 / 0.4745 = 1.21 (fails); compa
 
 Frozen in GAMMA's `analysis_manifest_v3.json`
 (`configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/analysis_manifest_v3.json`; re-tied at seal: file SHA-256 at
-the final head of the code `FILL[B5-FINAL-HASHES]`). Lane L10 changed GAMMA's interior references
+the final head of the code `4342ea609ec7f57fbb21860440995ac8f2038d93ed508f8d7bb72a540c86050d`). Lane L10 changed GAMMA's interior references
 (registration §2), not this manifest.
 
 | Contrast id | Metric | Sides (A, B) | Planned quads |
@@ -770,9 +770,9 @@ would bind the changed bytes.
 `ATTRIBUTION-FLOOR-BINDING`, shared with the registration, is closed: revision 12 filled it with a formula and bound
 no number (§4 step 7; registration §14 Q5).
 
-`B5-FINAL-HASHES`, also shared with the registration, marks a digest and not a missing rule. Where the mark stands,
-the SHA-256 of the named file's bytes at the final head of the code is written in its place before the seal commit
-is made. In this plan it stands in three places: the two `extraction_spec.json` file digests of §4 and the digest of
+`B5-FINAL-HASHES`, also shared with the registration, marks a digest and not a missing rule. Where the mark stood,
+the SHA-256 of the named file's bytes at the final head of the code was written in its place on 2026-10-08, before the seal commit
+was made. In this plan it stood in three places: the two `extraction_spec.json` file digests of §4 and the digest of
 GAMMA's manifest in §7.1. `REPORTED-ENERGY-REGISTRATION-DIGESTS` was filled in revision 4 (§4). Revision 2's
 `ED-PREDICATE` (replaced by the contention member rule) and `P42-S1-STRUCTURAL-CHECK` (now the s1-structural
 diagnostic at ALPHA-1's harvest) are withdrawn.
@@ -982,8 +982,8 @@ summaries from which the first kind of B is read, by the orchestrator's ruling.
   those re-derived under the window's operative fiducial bound, which earlier revisions left unsaid; that choice
   sets the size of the first kind of B. §11's issuer row and §13 follow.
 - **The status line, §13 and the digests.** The status line says how this file is sealed. §13 says where a FILL
-  that is still open is filled after the seal. The FILL mark `B5-FINAL-HASHES` now stands in its bracketed form only
-  where a digest is written in its place (§4 twice, §7.1 once), so that filling it is the substitution of one value;
+  that is still open is filled after the seal. The FILL mark `B5-FINAL-HASHES` stood in its bracketed form only
+  where a digest is written in its place (§4 twice, §7.1 once), so that filling it, done on 2026-10-08, was the substitution of one value;
   where the mark is only spoken of (§4's introduction, §13, and revision 11's entry above) it is named without the
   brackets. The two `extraction_spec.json` digests that revisions 4 to 11 printed are kept, labelled as the digests
   at `f8164893`.
