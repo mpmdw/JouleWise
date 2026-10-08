@@ -1,8 +1,9 @@
 # Registration V5-CLAIM-25G83-B5: the first claim-bearing `_v5` windows (measurement block 5)
 
-Status: **Revision 12, 2026-10-07: the text of the seal commit.** This file is sealed when the seal record of §12
-(`FILL[B5-SEAL-RECORD]`) exists and pins this file's SHA-256; until that record exists it binds nothing. Written by
-Opus 5.5, as lane L6 of the gate-prune workflow
+Status: **Revision 12, 2026-10-07.** This is the text that is committed at the seal, in the seal commit (built
+with the companions below). It is sealed when the **seal record** of §12, the file that lists the SHA-256 of every
+sealed file (`FILL[B5-SEAL-RECORD]`), exists and pins this file's SHA-256; until that record exists it binds
+nothing. Written by Opus 5.5, as lane L6 of the gate-prune workflow
 (revision 3, commit `71c91d74`), then as the registration-sync side lane (revision 4, last commit `7261a585`), then
 as the REG lane of gate-prune round 3 (revision 5, last commit `9d63b4df`), then as the REG sync to the frozen head
 (revision 6, last commit `c6843537`), then as the REG sync to the audit fixes and the NEG-8 ruling (revision 7, last
@@ -30,23 +31,24 @@ begins; §0.15), no launch and no analysis. It binds only when the seal gate (on
   together with the final bytes of this file and of the analysis plan. At H_claim itself the inventory is an empty
   stub (§0.18).
 
-A **FILL**, written `FILL[NAME]`, is a value that must be tied to authenticated bytes before the point named in §13.
-It is never a default. Revision 12 leaves six kinds of marker, because each names a value that exists only once
-H_claim is fixed. Each marker stands exactly where its one value goes, so filling it replaces the marker and
-changes no other word:
+A **FILL** is a value that must be tied to authenticated bytes before the point named in §13. It is never a
+default. Until the value is written, a marker stands in its place: the word FILL followed by the value's name in
+square brackets. Revision 12 leaves markers of six names, because each names a value that exists only once H_claim
+is fixed. Each marker stands exactly where its one value goes, so filling it replaces the marker and changes no
+other word. The six names (written here without the marker form, so that this list is not itself filled):
 
-- `FILL[H-CLAIM]`: the 40-character name of the commit H_claim (§2 item 1).
-- `FILL[B5-FINAL-HASHES]`: the SHA-256, computed at H_claim, of the one file that the marker's sentence names. In
+- `H-CLAIM`: the 40-character name of the commit H_claim (§2 item 1).
+- `B5-FINAL-HASHES`: the SHA-256, computed at H_claim, of the one file that the marker's sentence names. In
   earlier revisions this marker followed a digest computed at an earlier integration head, as a note to compute it
   again at the last one: revision 8 recomputed every such digest at `43ac12d0c`, revision 9 at `fe28e5a0c` (only the
   identity pins had changed, §4.6 item 3), and revision 10 found each unchanged at the int5 head `9b0c680ed` (§13).
   Those digests stay in the text, each with the head it was computed at, beside the marker for H_claim's value.
-- `FILL[B5-SEAL-SEATS]` and `FILL[B5-SEAL-RECORD]`: the seats of the seal gate, and the repository path of the seal
-  record (§12).
-- `FILL[B5-PLANS-REGENERATED]` and `FILL[B5-RELEASE-EVENT]`: these two values come into being only after the seal
-  commit (the window plans are written from the sealed text; the release event closes the block), and this file's
-  bytes may not change after the seal commit (§0.18). So neither is ever written here: each is a named section
-  appended to the seal record (§12), and the marker stands where the name of that section goes.
+- `B5-SEAL-SEATS` and `B5-SEAL-RECORD`: the seats of the seal gate, and the repository path of the seal record
+  (§12).
+- `B5-PLANS-REGENERATED` and `B5-RELEASE-EVENT`: these two values come into being only after the seal commit (the
+  window plans are written from the sealed text; the release event is recorded after the block has closed), and
+  this file's bytes may not change after the seal commit (§0.18). So neither is ever written here: each is a named
+  section appended to the seal record (§12), and the marker stands where the name of that section goes.
 
 No claim-eligible `_v5` energy exists at this writing, and none was read (§16).
 
@@ -162,7 +164,7 @@ is listed here and in the sync record of §13. No registered threshold changed.
    the program that writes the whole-window verdict at the desk reads the ledger through that committed record.
 3. **Clock** (§4.2): a clock sample whose three reads took more than 250 µs is read again, up to five reads in all
    (the first and at most four more); when all five took more than 250 µs the sample is unmeasured, never a step
-   (`FILL[P3-CLOCK-SKEW-BOUND]` filled).
+   (the FILL `P3-CLOCK-SKEW-BOUND` filled).
 4. **Driver** (§0.17, §2, §5.4): the monitor and meter stop at least 5 s after the chain exits, after G10; the
    pre-launch lineage check records a mismatch (`records.lineage_prelaunch_mismatch`) and refuses only when the
    machine rebooted since the lineage was published.
@@ -219,7 +221,7 @@ audit or cold-pass record a rule came from; no rule depends on them for its mean
    unverified orphans are written (§6.8); model identity can be superseded at harvest (§7.2).
 6. **Re-derived artifacts** (§0.7, §4.2, §4.3, §4.6, §5.5). The spares change the plan trees, the identity pins (which
    record the plan-tree digests), the sizing output and each window's planned disk bytes. Each digest is given at
-   `d3c107f2f` and marked `FILL[B5-FINAL-HASHES]` (filled in revision 8).
+   `d3c107f2f` and marked with the FILL `B5-FINAL-HASHES` (filled in revision 8).
 7. **Catalog** (`flag_catalog.json`): the fourteen codes above are added with the code's effects (§13).
 
 **What changed in revision 8.** The integration stopped changing at `43ac12d0ce554813278619b8e8e2331c9eb35be2`
@@ -439,15 +441,15 @@ changed.
 
 1. **The cell minimum is 5, not 8** (the revision-3 list above; §0.16, §5.5, §5.7, §6.2, §6.6, §10; ruling SG-1,
    on the refuter's fourth break). A window was removed when one of its reported numbers rested on fewer than 8
-   of its 10 repeats, or on fewer than 8 of its 10 groups of four (item 3 of the revision-3 list). The judge ruled
-   that an exclusion needs one of two grounds, a physical hazard measured directly or a number that would be
-   wrong or could not be attributed, and that 7 kept repeats or groups are neither: they give a correct mean and
-   a correct, wider interval. Below 5, the registered estimator of the detection floor (the smallest difference
-   the instrument can resolve, §0.10) is undefined, so the number does not exist; the minimum is set there.
+   of its ten repeats, or of its ten groups of four (item 3 of the revision-3 list). The judge ruled that an
+   exclusion needs one of two grounds, a physical hazard measured directly or a number that would be wrong or
+   could not be attributed, and that 7 kept repeats or groups are neither: they give a correct mean and a
+   correct, wider interval. Below 5, the registered estimator of the detection floor (the smallest difference the
+   instrument can resolve, §0.10) is undefined, so the number does not exist; the minimum is set there.
    (Revisions 3 to 11 said 8.) §6.6 prints the price and the gain: the interval's half-width grows by a factor of
    1.169 at 8 kept and 1.736 at 5, and at the one measured loss rate, one member in 37, a window of ALPHA or BETA
-   keeps all the numbers it must report with probability 0.849 under a minimum of 8 and 1.000 under a minimum
-   of 5.
+   keeps both of the numbers it must report (decode, and prefill at 2048 tokens) at or above the minimum with
+   probability 0.849 under a minimum of 8 and 1.000 under a minimum of 5.
 2. **NEG-8 references** (§0.12, §0.17, §5.3, §6.5; rulings RF-1 and RF-5 on the refuter's first and fifth breaks,
    SG-5 on its second, and SG-7).
    - A reference that succeeded but whose energy cannot be read is lost (reason `energy_unreadable`), and the
@@ -486,9 +488,9 @@ changed.
    the final text of this file and of the analysis plan, are committed one commit later, in the seal commit; the
    seal record follows; the measurement checkout is a full clone checked out at the seal commit. A window is
    compared with the seal file by file and head against head, and between the two heads only a changed **window
-   input** counts, that is, a changed file that a window can read (§0.18). Revisions up to 11 said the measurement checkout is "fast-forwarded to H_claim" and that windows run
-   H_claim's commit; both are corrected. §11 and §12 are rewritten, and the correction that revision 11 held
-   over for them (item 6 of its list) is applied in §11.
+   input** counts, that is, a changed file that a window can read (§0.18). Revisions up to 11 said the measurement
+   checkout is "fast-forwarded to H_claim" and that windows run H_claim's commit; both are corrected. §11 and §12
+   are rewritten, and the correction that revision 11 held over for them (item 6 of its list) is applied in §11.
 9. **What the gate changed outside these two texts.** Before H_claim, because the files are window inputs or
    tests: the catalog's `rules.cell_unit_minimum` (item 1) and note texts, three entries of the refusal allowlist
    `configs/gates/hazard_refusals.json` (§6.11), and one test fixture. After the seal, in a desk checkout, and
@@ -782,9 +784,9 @@ printed. GAMMA's two contrasts are its target cells, each over 10 quads.
   *Forcing problem.* Phase energy is assigned by overlap (§0.4). If a phase edge truly lies a time δ away from
   where it was placed, the record that straddles the edge has δ times its power counted on the wrong side of the
   edge. Three timing bounds limit δ. Each is derived in a later section; in plain words:
-  - **b**, the **fiducial bound**: how far the sampler's reported power edges can sit from the true ones, as a
-    calibration capture measures it (§0.11). A window has two captures, one before it (pre) and one after it
-    (post). The analysis uses the window's **operative fiducial bound**,
+  - **b**, the **fiducial bound**: how far an edge in the sampler's power records can sit from the moment the
+    power truly changed, as a calibration capture measures it against commanded pulses (§0.11). A window has two
+    captures, one before it (pre) and one after it (post). The analysis uses the window's **operative fiducial bound**,
     b_op = max(pre, post) + max(|post − pre|, 0.014531 s): the larger of the two captures' bounds, plus an
     allowance for drift between them that is never less than 0.014531 s, the acceptance's bracket screen (§0.11;
     `joulewise/calibration_bracketing.py`, allowance rule `max(observed_drift_s,bracket_screen_s)`). One b_op
@@ -806,11 +808,11 @@ printed. GAMMA's two contrasts are its target cells, each over 10 quads.
   the assigned energy can only grow when the start edge moves earlier or the end edge moves later. Within a corner
   E is piecewise linear in d, so its largest and smallest values lie at d = ±m_i or where a displaced edge meets a
   record boundary, and the code evaluates every such point (`joulewise/reduce.py`
-  `_corner_composed_anchor_shift_envelope`; `reduce.py` is one of the four estimator files that no block-5 lane may
-  change, §2 item 1). The reducer stores
-  the result as the phase's **anchor-shift envelope** (`energy_anchor_shift_envelopes["/phase_energy_j/<phase>"]`,
-  method `common_trace_shift_plus_independent_edge_corners_v3`): the point energy, the lowest and the highest
-  energy over all corners and shifts, and `max_abs_delta_j`, which is a_i. (It stores an envelope of the same kind
+  `_corner_composed_anchor_shift_envelope`; `reduce.py` is one of the four estimator files that no block-5 lane
+  may change, §2 item 1). The reducer stores the result as the phase's **anchor-shift envelope**
+  (`energy_anchor_shift_envelopes["/phase_energy_j/<phase>"]`, method
+  `common_trace_shift_plus_independent_edge_corners_v3`): the point energy, the lowest and the highest energy
+  over all corners and shifts, and `max_abs_delta_j`, which is a_i. (It stores an envelope of the same kind
   for the whole request's gross energy, under `/gross_energy_j`; §0.12 reads that one.) The analysis calls a_i
   `E_clock_anchor_shift_bound_j`.
 
@@ -834,8 +836,8 @@ printed. GAMMA's two contrasts are its target cells, each over 10 quads.
       <-------- d: the whole trace moved against both edges together, |d| ≤ m --------->
 
   Each bracket is one power record: its width stands for the record's support, the number inside is its average
-  power, and the numbers beneath are the times at which one record ends and the next begins. The `...` stands for
-  five more records of 30 W. Each `^` marks a recorded edge of the phase. `<-g-|-g->` is the range over which that
+  power, and the numbers beneath are the times, in seconds, of the boundaries between records. The `...` stands
+  for five more records of 30 W. Each `^` marks a recorded edge of the phase. `<-g-|-g->` is the range over which that
   edge is moved on its own, g to either side. The bottom arrow is the common shift d, at most m either way. The
   point energy is 0.065 × 2 + 0.91 × 30 + 0.065 × 20 = 28.730 J. The largest change is at the corner "start edge
   46 ms early, end edge 46 ms late", with the common shift putting both edges a further 2 ms late: the start edge
@@ -848,12 +850,13 @@ printed. GAMMA's two contrasts are its target cells, each over 10 quads.
 
   *An approximation, and where it fails.* While every displaced edge stays inside the record that straddles its
   recorded edge, a_i = g_i × (P_on + P_off) + m_i × |P_off − P_on|, where P_on and P_off are the average powers of
-  the two records that straddle the recorded edges. For the first member that is 0.046 × (2 + 20) + 0.002 × (20 −
-  2) = 1.012 + 0.036 = 1.048 J, the bound. For the second it is again 1.048 J, where the bound is 1.428 J, because
-  that member's end edge crosses into the neighbouring record. On 194 recomputed phases of earlier windows the
-  approximation ran from 63% below the bound to 20% above it (`REFUTATION.json`). The registered quantity is the
-  exact maximum, the code's `max_abs_delta_j`. The approximation is given only to show what the bound is made of:
-  a timing bound times the power at the phase's edges, whatever the phase's length.
+  the two records that straddle the recorded edges. For the first member that is
+  0.046 × (2 + 20) + 0.002 × (20 − 2) = 1.012 + 0.036 = 1.048 J, the bound. For the second it is again 1.048 J,
+  where the bound is 1.428 J, because that member's end edge crosses into the neighbouring record. On 194
+  recomputed phases of earlier windows the approximation ran from 63% below the bound to 20% above it
+  (`REFUTATION.json`). The registered quantity is the exact maximum, the code's `max_abs_delta_j`. The
+  approximation is given only to show what the bound is made of: a timing bound times the power at the phase's
+  edges, whatever the phase's length.
 
   *The floor of a cell: the registered formula.* For one reported cell of one analysed attempt, the attribution
   floor is the largest a_i over the cell's kept members, that is, the members of the units that remain after the
@@ -888,10 +891,10 @@ printed. GAMMA's two contrasts are its target cells, each over 10 quads.
   (0.031073829 s, the sum b + s + m) at about 33 W. Over that window's 30 members the bound ran from 0.571 to
   1.468 J. It is not a constant of the instrument, and every input to it has changed for block 5. On block 3
   (build 25G83, the two Qwen3 models; not a claim window), under that window's operative bound of 45.669 ms, the
-  same bound was 1.38 to 2.86 J per member, and it changes with each window's own two captures. A bound value of 1 J
-  would print beside block 5's cells a floor the instrument does not have. (Every figure of this paragraph was
-  recomputed from the retained bundles by the investigation cited above and reproduced from the raw power traces
-  by its refuter; this author did not open those bundles.)
+  same bound was 1.38 to 2.86 J per member, and it changes with each window's own two captures. A registered
+  value of 1 J would print beside block 5's cells a floor the instrument does not have. (Every figure of this
+  paragraph was recomputed from the retained bundles by the investigation cited above and reproduced from the raw
+  power traces by its refuter; this author did not open those bundles.)
 
 ### 0.11 Pulse calibration, acceptance, ledger and bracket
 
@@ -929,12 +932,14 @@ the code and says so.
 Two rules of this section were set later, by the first stage of the seal gate (2026-10-07, §12): the loss
 `energy_unreadable` under "Lost references", and the four losses for evidence that is unmeasured or violated under
 "Who applies the loss test". The harvest at the int5 head `9395cecfb` does not apply them yet. There its loss list
-(`harvest.NEG8_REFERENCE_LOSS_CODES`) holds the six physics codes of "Lost references", `member.timeout`,
+(`harvest.NEG8_REFERENCE_LOSS_CODES`) holds the six physics codes that "Lost references" names, `member.timeout`,
 `member.admission_aborted`, `member.strict_validation_failed` and the two identity codes, and a reference whose
-energy cannot be read fails the whole screen. Both rules are added by the harvest lane, which changes desk
-programs only and lands in a desk checkout (§0.18 builds that term; §11 item 4 says what the lane may change).
-ALPHA-1's harvest does not run until that lane is pinned (§11 item 4), so every block-5 window is judged by a
-harvest that applies the rules as this section states them.
+energy cannot be read fails the whole screen. Both rules are added by the harvest lane, a set of changes to
+programs that run only after a window. The lane is committed in a desk checkout, that is, a checkout of the
+repository other than the one the windows run from (§0.18), and §11 item 4 says what it may change. ALPHA-1's
+harvest does not run until the lane is pinned, that is, until an addendum to the seal record names its files and
+its commit (§11 item 4). So every block-5 window is judged by a harvest that applies the rules as this section
+states them.
 
 - **Reference member.** A member of one fixed reference workload (Qwen2.5-1.5B, 1024-token prompt, 256 output
   tokens). Each window runs 12 at its start, the **NEG-8 corpus** (NEG-8 is an inherited label from the project's
@@ -990,14 +995,14 @@ harvest that applies the rules as this section states them.
   lost reference widens the uncertainty instead of hiding it.
 - **Lost references.** Four terms come first, because the list uses them. The **strict check** is the full check
   of a reference's files, built in "The strict check of a reference" below. The **verdict row** is the one row of
-  the whole-window verdict (§0.17), which the harvest's verdict writer produces after the window and stores in
-  the window's claim runs root. A reference's **envelope** is the anchor-shift envelope of §0.10 that the reducer
+  the whole-window verdict (§0.17); the harvest has it written after the window, and it is stored in the window's
+  claim runs root. A reference's **envelope** is the anchor-shift envelope of §0.10 that the reducer
   stores for its whole request's energy (the lowest and the highest energy the request can be assigned within the
   member's timing bounds); it has nothing to do with the corpus envelope of the NEG-8 bound above. And a member's
   **calibration attachment** is the copy of the pre calibration capture's evidence that the controller places in
   the member's bundle (`instrument_calibration/instrument_evidence.json`), which the reducer verifies against its
-  recorded SHA-256 before it takes the fiducial bound from it; when that fails, or when the clock anchor is not
-  `bounded`, the reducer has no timing bound to build an envelope from and writes none.
+  recorded SHA-256 before it takes the fiducial bound from it; when that fails, or when the member's clock anchor
+  is not `bounded` (§0.14), the reducer has no timing bound to build an envelope from and writes none.
   A reference is **lost** when its bundle is absent; its summary status is not `succeeded`
   (which includes `member.admission_aborted` and `member.timeout`); its summary cannot be read (reason
   `summary_unreadable`: no summary file, as after a member is killed at the 1,800 s cap of §5.2, a file that does
@@ -1130,7 +1135,8 @@ harvest that applies the rules as this section states them.
   depends on the pack. On **GAMMA**, whose window exists for the two primary contrasts, the attempt is not
   claim-usable: the exclusion function adds the window reason `neg8.midpoint_lost_primary`, so GAMMA is re-armed and
   the attempt is never analysed (orchestrator ruling Q11 of 2026-10-07, which the first stage of the seal gate
-  confirmed, with the premise corrected as the sentence above now reads; §7.2, §14 Q11; analysis plan §2.4). On **ALPHA and BETA** the flag is disclosed only, and the window's reported cells and floors
+  confirmed, with the premise corrected as the sentence above now reads; §7.2, §14 Q11; analysis plan §2.4). On
+  **ALPHA and BETA** the flag is disclosed only, and the window's reported cells and floors
   stand; the fixed sentence of analysis plan §8.1 discloses that the interior drift was not measured, and that
   window's bound B may be understated by an amount nothing measured. Once a block's midpoint record (read only after
   its release event) shows the midpoint never moved the spread beyond the bound, an erratum may downgrade the flag to
@@ -1603,9 +1609,9 @@ Each is evidenced by a path and SHA-256 before the point named.
    `fe28e5a0cc6125842ecf4b53f24385c73e4d6dd7` (`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_4.md`); the census
    interpreter rule (lane `lane/2026-10-07-census-interp`, last commit `455e59b86f19dcdf4c25ca464dbed17be4e51ec3`,
    merged into int5 by commit `84661ddb36865c6c478fc7b862d1bc274f1921cd`; §4.5); the placement of these documents
-   in the code tree (commit `763b678a7`, and the test fixture that follows it, `9b0c680ed`); the seal-landing lane (lane `lane/2026-10-07-seal-landing`, last
-   commit `2737ef88c92754fe20c8417f66dc62edc7d0ae8c`, merged into int5 by commit
-   `9395cecfbc40fb93e87a7657ec0ba5da0ca9ef3a`); and what was merged after that commit, which the last paragraph of
+   in the code tree (commit `763b678a7`, and the test fixture that follows it, `9b0c680ed`); the seal-landing lane
+   (lane `lane/2026-10-07-seal-landing`, last commit `2737ef88c92754fe20c8417f66dc62edc7d0ae8c`, merged into int5
+   by commit `9395cecfbc40fb93e87a7657ec0ba5da0ca9ef3a`); and what was merged after that commit, which the last paragraph of
    this item bounds. The delta
    cold passes:
    - pass 2, on `a434e363d..821b58f8b` (`/Users/edr/night-archive/gate-prune/cold-pass-2/REPORT.md`), refused on one
@@ -1621,8 +1627,8 @@ Each is evidenced by a path and SHA-256 before the point named.
      PASS WITH NOTES. It covers the census interpreter rule (36 command lines, each given the verdict the pass's
      brief expected of the code at `9b0c680ed`; the live launch of Sol R1 is a hit), the placement of these
      documents in the code tree, and the seal-landing lane's change to the head comparison (14 cases, C1 to C14,
-     each run through the harvest and through the arm's collector on a real git repository). One defect, of the kind that removes too much and never prints
-     a wrong number: a commit after H_claim that changes only the directory of another claim pack is classed as a
+     each run through the harvest and through the arm's collector on a real git repository). One defect, of the
+     kind that removes too much and never prints a wrong number: a commit after H_claim that changes only the directory of another claim pack is classed as a
      window input and removes a window that never read that directory. It cannot arise under the registered
      procedure, in which only the pin advance commits in the measurement checkout (§0.18), and the pass itself
      disposed of it as "flag, not refuse": it is assigned to the harvest lane (§11 item 4; §0.18 lists it).
@@ -1634,8 +1640,8 @@ Each is evidenced by a path and SHA-256 before the point named.
    identity pins, to the sizing output, to the catalog and to the runbook; a new file, a deleted one, a moved one,
    a changed file mode), and found the window removed every time by the harvest, and by the arm's collector when
    that is given H_claim by hand; it found no permitted kind of commit that removed a window; and it carried the
-   procedure out as written. It reported one major gap, which the lane had itself raised and which is older than the lane: a
-   launchd job installed from a checkout other than the measurement checkout runs that checkout's driver, hazard
+   procedure out as written. It reported one major gap, which the lane had itself raised and which is older than
+   the lane: a launchd job installed from a checkout other than the measurement checkout runs that checkout's driver, hazard
    modules, monitor and collectors, and when those files differ from the sealed inventory the code at `9395cecfb`
    only records the fact. The orchestrator's ruling
    (`seal-land/ORCHESTRATOR_RULING.md` beside the review, 2026-10-07, SHA-256
@@ -2213,8 +2219,9 @@ the per-process limit decides.
 judges the value the window plan copied from this block (`joulewise/b5/driver.py` `_arm_thresholds`), and the plan
 writer records any copied value that differs from a module default. So the change takes effect only in plans written
 from this block after the seal: any window plan written earlier, and any plan-input file (the input from which the
-plan writer copies this block) prepared earlier, carries 600 and must be regenerated (`FILL[B5-PLANS-REGENERATED]`,
-§13).
+plan writer copies this block) prepared earlier, carries 600 and is not used. Every plan is written after the seal
+commit (§2 item 4), and the record that the plans were written so is the seal record's section
+`FILL[B5-PLANS-REGENERATED]` (§13).
 
 ### 4.4 Network time
 
@@ -2454,7 +2461,8 @@ earlier night kinds (`joulewise/night_gate.py`, `joulewise/evidence_night.py`).
    `a0865895dc7eeb4ecea28c611b65fab9eee69d5e16f5f8126dbe08ac5255bda9` (computed by this author with
    `shasum -a 256`; `scripts/write_b5_identity_pins.py --check` reproduced the file there, exit 0), and this author
    computed the same value again at the int5 head `9395cecfb`. (The file's own `status` and `sealed` fields are
-   labels its generator wrote before the seal; §12 says what seals the file.) It was `f78a27f8c8c921e9b3de3403d6b56ea9da4cee92c23520e8ca24c666ecd95257`
+   labels its generator wrote before the seal; §12 says what seals the file.) It was
+   `f78a27f8c8c921e9b3de3403d6b56ea9da4cee92c23520e8ca24c666ecd95257`
    at `43ac12d0c` and at `d3c107f2f`; the only changes since are the added reference unit and the file's `note`,
    which now names it (`git diff 43ac12d0c fe28e5a0c`).
    The NEG-8 lane changed only the three packs' plan-tree digests in it (`git diff a434e363d d3c107f2f`). Earlier
@@ -2481,7 +2489,8 @@ earlier night kinds (`joulewise/night_gate.py`, `joulewise/evidence_night.py`).
    ledger readiness check; a session left open by an abandoned attempt is closed with the existing abort plus a pin
    advance. For each later attempt the seed is the previous attempt's terminal ledger, whose tip the pin advance
    names. A pin advance is a pin-only commit made in the measurement checkout (which is at the seal commit plus
-   pin-only commits, §0.18, §11), not a merged pull request: the merge path took 15–60 min per window for a one-file data change (PLAN2 X4).
+   pin-only commits, §0.18, §11), not a merged pull request: the merge path took 15–60 min per window for a
+   one-file data change (PLAN2 X4).
    **The desk order is chain exit, pin advance, harvest, next arm** (`scripts/advance_b5_ledger_pin.py` at
    `a434e363d`; revision 5 had the advance after the harvest, which the code no longer allows). *Why this order:* the
    window's own post calibration finalizes its bracket session and moves the ledger past the pin the window armed at.
