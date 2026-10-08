@@ -1045,7 +1045,7 @@ subtitle D-165 licenses only when every required ratio is at least 2.
 | ALPHA, its first claim-usable attempt | Reported phase energy of Qwen3-1.7B for decode and prefill-p2048, each with its interval, J/token, kept units and the attribution floor beside it; the 1.7B floor cells | L1 | One stack, one boundary, no comparison |
 | BETA, the same | The same for Qwen3-8B | L1 | Same |
 | ALPHA beside BETA | Side-by-side L1 cells only, labelled as collected in separate windows in a fixed order | L1 | Forced order stays below L2; the two models were never interleaved |
-| GAMMA with the ALPHA and BETA floors | Two primary contrasts (8B minus 1.7B phase energy, decode and prefill-p2048), Holm family of two, plus the registered ratio and per-token difference (analysis plan §7.3) | L2 if and only if the claim gate's `claim_ready_for_l2_l3` is true (analysis plan §7.2) | No held-out cells, no second machine |
+| GAMMA with the ALPHA and BETA floors | Two primary contrasts (8B minus 1.7B phase energy, decode and prefill-p2048), Holm family of two, plus the registered ratio and per-token difference (analysis plan §7.3) | L2 if and only if the **claim gate** returns `claim_ready_for_l2_l3` true. The claim gate is the analysis program's decision function for one contrast (`joulewise/analysis_engine/claims.py` `evaluate_claim`); it returns that value true only when every condition of analysis plan §7.2 holds, chiefly: the contrast's direction is supported (the estimate is above the detection floor, its intervals exclude 0 and the Holm correction rejects), the contrast is registered as primary and confirmatory, dropping any one quad leaves the verdict unchanged, and the direction is the registered one | No held-out cells, no second machine |
 | Floors and GAMMA | Dominance ratios; the dominance sentence and the contingent subtitle only if every required ratio is at least 2 | Disclosure | D-165 addendum |
 
 Every phase-energy sentence carries the D-177 limitation (phase attribution was not characterized by a measured
@@ -1117,11 +1117,13 @@ Each is evidenced by a path and SHA-256 before the point named.
    (`FILL[B5-PLANS-REGENERATED]`).
 5. The measurement checkout (the dedicated clone a window runs from) is fast-forwarded to H_claim with its Python
    environment relocked, and the ledger seed (§4.6 item 6) is installed at its default ledger path.
-6. An L2 harness render of all three packs' chains through the `HAZARD_PACK` driver has passed (every expected
+6. A harness render of all three packs' chains through the `HAZARD_PACK` driver has passed (every expected
    bundle present, driver return code 0), and a desk dry arm with agents alive has refused at the census before any
    action. The render is a test of the driver and the generated chain, not of the real tools the chain calls: the
    harness (`tests/test_b5_driver.py` `Harness`) replaces those tools with stand-ins that write only the files the real
-   tools leave, and it uses fixture thresholds and a fixture sizing. The real campaign runner, cooldown and idle
+   tools leave, and it uses fixture thresholds and a fixture sizing. (The records call it the "L2 harness" after
+   lane L2 of the gate-prune plan, the lane that wrote the driver and this test rig; that L2 is a lane number and
+   has nothing to do with rung L2 of the claims ladder, §0.19.) The real campaign runner, cooldown and idle
    admission were exercised by the cooldown smoke run-4 (item 7) and by the real-model rehearsal of 2026-10-06
    (`/Users/edr/night-archive/gate-prune/rehearsal-real/`, whose reference bundles the sealed reference pin was
    derived from, §4.6 item 3). Both records were written at the int5 head `fe28e5a0c` by a Sonnet 5.5 investigation
@@ -1132,8 +1134,9 @@ Each is evidenced by a path and SHA-256 before the point named.
    `/opt/homebrew/bin/python3.13` (not the project environment), each pack rendered twice: once clean and once with
    every reference stage failing on purpose, so that the spare-slot retry runs (`rig/dry_render.py <pack> <out>
    [--fail-references]`). All six renders: driver GO, chain exit 0, no missing or extra bundle, NEG-8 corpus 12 listed
-   and 12 kept, the monitor proven stopped, G10 discharged. Counts (claim bundles expected / present / directories /
-   succeeded; spares run):
+   and 12 kept, the monitor proven stopped, G10 discharged. Counts: for claim bundles (the bundles in the claim runs
+   root, §0.17), expected / present / directories / succeeded; for bound bundles (the 12 NEG-8 corpus members in
+   the bound runs root), expected / present / succeeded; and the spares run:
 
    | Render | Claim bundles | Bound bundles | Spares run | Stage rows (rc 0) | Flags emitted |
    |---|---|---|---|---|---|
@@ -1149,8 +1152,11 @@ Each is evidenced by a path and SHA-256 before the point named.
    planned (start 1–3, midpoint 1, end 1–3). The counts equal those of the earlier render at `43ac12d0c`
    (`dry-records/DRY_RECORDS.md`) number for number. *Stand-ins:* the agent census (a clean fake), the hazard arm (all
    six modules PASS), the network-time setter (a state file), the lineage publisher and verifier, the hazard monitor,
-   the record-only collectors, the G10 program, the free-disk reading, the courier and durable record, and the five
-   chain tools of the fake measurement checkout: the bracket reserver, the powermetrics fiducial capture, the campaign
+   the record-only collectors, the G10 program, the free-disk reading, the driver's two last steps (the **durable
+   record**, a best-effort copy of the window's record files in `night/`, without the chain's logs, pushed to a
+   results branch `night-results/<plan id>` of the repository; and the **courier**, one headless session that
+   emails Ed the window's structural report and writes `night/courier.sent` once the email is accepted, §5.4), and
+   the five chain tools of the fake measurement checkout: the bracket reserver, the powermetrics fiducial capture, the campaign
    runner, the ledger session-status reader and the window verdict writer. Because the runner is a stand-in, the
    controller, the runtime adapter, telemetry, the bundle writer, the cooldown and idle admission do not run in the
    render. Reductions: 0 s settles, a fixture sizing with a 3,600 s programmed span, placeholder heads, and fixture
@@ -1162,7 +1168,9 @@ Each is evidenced by a path and SHA-256 before the point named.
    `912b9ba2a011d892e3c5655f381f40d9ff0f7cf38a675bf3d935fee095074d23`, GAMMA
    `03a8248b8c809ffeced32df9131d33a5fa757d2babbc30cdb5f5630d2ab1c9a1`. The harness's own whole-run tests
    (`tests.test_b5_driver.MockRuntimeDryRenderTests`, `DryArmTests`) passed, 5 tests.
-   **`B5-DRY-ARM-RECORD`** (filled in revision 9). 2026-10-07 20:16:51 UTC, the production command, unmodified:
+   **`B5-DRY-ARM-RECORD`** (filled in revision 9). 2026-10-07 20:16:52 UTC (`dry-arm.json` records its start as
+   `started.wall_s` 1791404212.513914, which is 20:16:52.51; the prose summary `DRY_RECORDS.md` prints 20:16:51,
+   one second early), the production command, unmodified:
    `scripts/run_night.py run --plan <custody>/night_plan.json --dry-arm`, on an ALPHA `HAZARD_PACK` plan
    (`DRYARM-b5-alpha-desk`) written by the production plan writer over the fake measurement checkout (plan SHA-256
    `d3fda4ab0246f81f47e1ca4b8f1c637e7a62f6f0d3a1a1d696ee1bacb84f56b4`). Nothing was stubbed: the real `pgrep` census
@@ -1204,8 +1212,9 @@ Each is evidenced by a path and SHA-256 before the point named.
    first BETA window measures 8B-after-8B carryover through its reference members (§0.12) and the
    battery-temperature diagnostic (§0.6).
    **`B5-COOLDOWN-SMOKE-RECORD`** (filled in revision 6; the record as written by the smoke's lead, with the four
-   SHA-256s re-computed by this author from the files under `/Users/edr/night-archive/gate-prune/cooldown-smoke/
-   run-4/`, where `night/` is `custody/night/` and `harvest.json` is `archive/harvest.json`): "Cooldown smoke run-4,
+   SHA-256s re-computed by this author from the files under
+   `/Users/edr/night-archive/gate-prune/cooldown-smoke/run-4/`, where `night/` is `custody/night/` and
+   `harvest.json` is `archive/harvest.json`): "Cooldown smoke run-4,
    2026-10-06 23:27–23:48 PDT, at head 3a9327e51c9d51ce5181f6db44983b6cf83a91df (integrate/2026-10-06-gate-prune-4;
    H_claim clone 3e2f67fb6). Plan REH-cdsmoke-alpha-20261007T0627Z, ALPHA pack, one stage of three small members
    (01_phase_decode_absolute r01–r03) under quiet_mac_p2_b5.json; other stages zero members. Rehearsal overrides:
@@ -1279,8 +1288,12 @@ diagnostic interior references under `configs/campaigns/gamma_interior_reference
 pins those two manifests and configs by SHA-256 as external inputs, as it pins the window references, and its
 generator refuses if their bytes differ from the shared midpoint's in anything other than `run_id`. No science
 config, calibration plan, analysis manifest or root order manifest changed; GAMMA still runs 80 science and 21
-auxiliary members. Besides GAMMA's pack and the two new reference directories, the change touches only the retired
-block-4 writer (`scripts/write_v5_qualification_plan.py`, which no block-5 window runs) and tests. L10 is merged in
+auxiliary members. Besides GAMMA's pack and the two new reference directories, the change touches the shared
+contrast-pack generator (`configs/campaigns/d117_contrast_v5/generate_configs.py`, 173 changed lines, the same
+change as in the pack's own copy), the pin registry (`configs/pins/registry.json`, the list of every digest
+written into the tests and configs: four new entries for the four new reference files, and the renumbering that
+follows), the retired block-4 writer (`scripts/write_v5_qualification_plan.py`, which no block-5 window runs) and
+tests (`git show --stat` of the two commits, read by this author). L10 is merged in
 the frozen head `a434e363d` (commit `7bfd7c2cf` is its ancestor), with the sizing output and identity pins re-derived
 there (§4.6 item 3, §5.5), so its bytes are sealed directly with H_claim and no erratum is needed. Under §7.5 it
 supersedes no completed ALPHA or BETA window, because neither executes GAMMA's files.
@@ -1308,8 +1321,11 @@ build to corral weaker models working on this".
 - *What it shows.* That the clock hazard's arm check can see a clock step at all. Without it, a clock module that
   always passed would look the same as a quiet clock.
 - *When.* The driver runs `scripts/g10_clock_step_control.py` after the chain's process group is proven gone and
-  before its terminal record, so no capture can be touched; the monitor and the meter stay supervised meanwhile (§5.4). The window plan of each attempt sets `g10: true` until a
-  G10 record exists in this measurement block, and `false` after it. In practice this is ALPHA-1; if ALPHA-1 never
+  before its terminal record, so no capture can be touched; the monitor and the meter stay supervised meanwhile
+  (§5.4). Whether an attempt runs G10 is the boolean `g10` of its window plan. The plan writer copies that value
+  from the plan input (the desk file a window plan is written from) and checks only that it is a boolean
+  (`joulewise/b5/plan.py`); no code decides it. The rule is the lead's, applied when it prepares the plan input:
+  `g10` is true until a G10 record exists in this measurement block, and false after it. In practice this is ALPHA-1; if ALPHA-1 never
   starts its chain, or its chain is stopped by the agent census, the next attempt carries it.
 - *Steps.* (1) Read f₀ and the anchor; check read-only that no capture process is alive (if one is, ON is skipped and
   the result is UNMEASURED). (2) `sudo -n systemsetup -setusingnetworktime on`; its output is recorded only.
@@ -1344,15 +1360,33 @@ nothing, and the arm's own dwell measures contention after t0 anyway. The superv
 `scripts/magistrate_watchdog.py` at `a434e363d`, P2-WD, that starts and stops the agent sessions on this machine
 around each window) therefore stops launching sessions and asks every agent
 session to exit at t0 − 180 s, sends SIGTERM to any that remain at t0 − 90 s, and SIGKILL at t0 − 60 s (revision 4:
-t0 − 8, −6 and −5 min, about 450 s of idle; now about 125 s). *Why these numbers:* real sessions took 20–31 s to
-exit after the request (c1, c2 and the d117 magistrate events), so a request at t0 − 180 s leaves about 150 s of
-margin, and the watchdog's 10 s poll gives 9 polls between request and SIGTERM and 3 between SIGTERM and SIGKILL. A
+t0 − 8, −6 and −5 min, about 450 s of agent-free idle before t0; now about 150 s). *Why these numbers:* real
+sessions took 20–31 s to exit after the request. That figure is the code's: the comment above `PLAN_LEAD_S` in
+`scripts/magistrate_watchdog.py` gives it and cites the session exits recorded at the stand-downs before three
+earlier windows, which it labels c1, c2 and d117. This author did not re-derive it. So a
+request
+at t0 − 180 s leaves 149–160 s, about 150 s, before t0 (by the same subtraction revision 4's 480 s left about
+450 s), and the watchdog's 10 s poll gives 9 polls between request and SIGTERM and 3 between SIGTERM and SIGKILL. A
 session that survives all three is refused by the t0 census, which stays the backstop.
 
 **s1 (the one-quad qualification window) becomes ALPHA-1.** ALPHA-1 contains everything s1 had: pre calibration, the
-NEG-8 corpus and bound, references, null quads and post calibration. s1's structural checks run at ALPHA-1's harvest
-as disclosed diagnostics (`diagnostic.s1_structural`): strict validation, re-reduction and a deliberately incomplete
-finalization; the p42 precheck counts; the longest and shortest stream sizes; stage timing outside members.
+NEG-8 corpus and bound, references, null quads and post calibration. s1's structural checks run at every block-5
+harvest, ALPHA-1's first, as disclosed diagnostics. The harvest writes four `diagnostic.s1_structural` flags
+(`harvest.diagnostics`), one for each check:
+
+- `l10a_prefix`: the number of bundles, how many of them passed strict validation (§0.12) and how many re-reduced
+  to a summary identical to the stored one;
+- `precheck_counts`: for each cell of the pack, the p42 cells included, the number of members whose precheck for
+  that cell's phase (§0.4) passed with no reason recorded and the number whose did not. This one flag is
+  RESTRICTED, because a precheck can turn on an energy test;
+- `stream_sizes`: the shortest and the longest sampler stream, in bytes, each with its run id;
+- `time_outside_members`: the gaps between consecutive member spans: how many, their total and the longest.
+
+Revisions up to 10 listed a fifth check here, "a deliberately incomplete finalization": the block-4 harvest asks the desk
+provenance checker (G3, `scripts/check_window_provenance.py --expect-finalize-refusal`) to finalize an analysis
+whose member list does not cover the window, and expects it to refuse. The block-5 harvest does not run that step
+and records no finalization of any kind. The step exists only in the block-4 harvest script
+(`scripts/harvest_v5_g2b_window.py`), which no block-5 window runs.
 
 ## 4. The arm: physical hazards, measured directly
 
@@ -1361,20 +1395,34 @@ finalization; the p42 precheck counts; the longest and shortest stream sizes; st
 Everything below runs inside the launchd job after t0, so no person or agent session is present.
 
 1. **Agent census** (§4.5).
-2. **Instant reads:** battery, thermal, disk, and the clock's frequency gate; then the OS build and machine model
-   against the acceptance's judged epochs (§4.7).
+2. **Instant reads:** battery, thermal, disk, and the clock's frequency gate and first anchor read; then the OS
+   build and machine model against the acceptance's **judged epochs**, the identities of machine and software
+   under which the calibration acceptance may judge a window (§4.7).
 3. **Network time OFF, as an action** (§4.4).
-4. **Record-only collectors:** the executed-file inventory, the model-identity check, and the checkout identity,
-   each in a subprocess with a timeout. Their findings are flags (§6); they never change the arm decision.
+4. **Record-only collectors:** one command, `scripts/collect_window_flags.py --stage arm`, which is killed as a
+   whole after 120 s. It runs five collectors, each in its own subprocess with its own time budget: pack identity
+   (the pack's files against the digests its plan tree pins; 15 s), checkout identity (the measurement checkout's
+   commit is H_claim, or H_claim plus pin-only commits, with no edited tracked file and no untracked file under the
+   executed directories; 10 s), the executed-file inventory (§0.18; 15 s), the model-identity
+   check (§4.6 item 3; 55 s) and calibration-ledger readiness (the read-only check of §4.6 item 6; 15 s; it runs
+   when the pack holds a `calibration_plan.json`, which all three packs do). Their findings are flags (§6); they
+   never change the arm decision.
 5. **Instrument cadence probe:** about 40 s.
-6. **Dwell:** 180 to 2700 s, during which contention and clock linearity are measured.
+6. **Dwell:** a wait of 180 to 2,700 s on the idle machine. It ends at the first moment 180 s in a row have passed
+   with no competing process, and refuses at 2,700 s (§4.2, Contention). Through it the clock is sampled once a
+   second, to check its **linearity**: that the residual of §0.14 (the anchor's movement minus f × elapsed time)
+   stays within 1 ms of its value at the dwell's start, as it does when the clock runs at one steady rate with no
+   step (§4.2, Clock, condition ii, with conditions iv and v on the same samples).
 7. **Final reads** of battery, thermal and the frequency word, and the agent census again; then GO; then the monitor
    starts; then the chain launches.
 
-The chain therefore starts about 4–47 min after t0: about 41 s of reads, collectors and cadence probe, then a dwell
-of 180 s at the least and 2,700 s at the most (revision 4: 11–47 min, with a 600 s minimum dwell). A refusal at any
+The chain therefore starts about 4–46 min after t0: about 41 s of reads, collectors and cadence probe, then a dwell
+of 180 s at the least and 2,700 s at the most, so 221 s to 2,741 s (revision 4 gave 11–47 min, with a 600 s
+minimum dwell; revisions 5 to 10 kept its 47, which this sum does not reach, and a comment in
+`joulewise/hazards/arm.py` still says about 47 min). A refusal at any
 step ends the attempt as NULL (§7.1) with nothing launched. A refusal is a measured REFUSE, an UNMEASURED instrument,
-an agent census that lists an agent process or cannot be read, or an OS build no acceptance judged. An UNMEASURED
+an agent census that lists an agent process or cannot be read, or an OS build and machine model that no acceptance
+judged. An UNMEASURED
 clock, battery, thermal, contention or disk verdict is not a refusal: it is recorded under `unmeasured` in
 `arm.json`, with its phase and reasons, and as `<module>.arm_unmeasured` (DISCLOSE), and the arm continues (§0.15).
 A contention dwell in which every snapshot failed therefore runs to its 2,700 s cap and ends with
@@ -1385,17 +1433,38 @@ A contention dwell in which every snapshot failed therefore runs to its 2,700 s 
 
 **Clock.** *Forcing problem:* a clock step inside a member's stream breaks the anchor fit, and a large |f| makes
 the longest streams exceed the 5 ms bound (§0.14).
-- *Arm, all four must hold:* (i) the **frequency gate** 3.7 ms + (|f| + 0.25 ppm) × 335 s ≤ 5 ms, where 3.7 ms is
+- *Arm: five conditions, judged in two places* (`joulewise/hazards/clock.py`, `joulewise/hazards/arm.py`).
+  (i) The **frequency gate** 3.7 ms + (|f| + 0.25 ppm) × 335 s ≤ 5 ms, where 3.7 ms is
   block 3's largest half-width 3.6 ms plus a 0.1 ms placement margin and 0.25 ppm allows for the rate over a stream
   differing from the stored word (ruling 76 B.2, `docs/process_traces/2026-10-04-desk-day-v5/76-r1-fold-ruling.md`);
   this holds for |f| ≤ 3.6306 ppm. *Worked example:* at
   f = −3.17 ppm the bound is 3.7 + 3.42 × 0.335 = 4.846 ms, PASS; at |f| = 3.7 ppm it is 3.7 + 3.95 × 0.335 =
-  5.023 ms, REFUSE. (ii) Over the dwell, sampled at 1 Hz, the residual stays within ±1 ms of its start value.
-  (iii) Each anchor read pair is taken within 1 ms. (iv) f is identical at dwell start, dwell end and GO; any change
-  means something adjusted the clock.
+  5.023 ms, REFUSE. (ii) *Linearity:* over the dwell, sampled at 1 Hz, the residual stays within ±1 ms of its start
+  value. (iii) An anchor's three reads (RAW, REALTIME, RAW; built under "In window" below) are taken within 1 ms.
+  (iv) f is identical at every sample from the dwell's start to GO; any change means something adjusted the clock.
+  (v) The **boot session** identifier (`kern.bootsessionuuid`, a value the kernel sets anew at every boot) is the
+  same at the dwell's start and at GO: after a reboot the anchors of before and after cannot be compared.
+  - *At the instant read* (§4.1 step 2) the arm reads the boot session identifier, one anchor and f, and judges
+    (i) and (iii). The anchor is read up to five times; the first read taken within 1 ms is kept. If all five took
+    longer, the last is kept and judged, and it refuses. This is the only place where (iii) can refuse.
+  - *Over the dwell and at GO* the arm judges one series: a sample at the dwell's start, one each second through
+    the dwell, one at its end and one at GO, about 180 to 2,700 samples in all. Each sample is an anchor (read up
+    to five times against the same 1 ms) and f. The boot session identifier is read at the dwell's start and
+    again at GO. On the series the arm judges (ii), (iv) and (v), and (i) again on the first sample's f.
+  - *A series with a hole is not judged.* If one sample of the series has no anchor (all five of its reads took
+    longer than 1 ms), or any read in it failed, or the boot session identifier could not be read at either end,
+    the series is UNMEASURED as a whole. The arm then records `clock.arm_unmeasured` (DISCLOSE, §0.15) and goes
+    on, and (ii), (iv), (v) and the repeat of (i) are not judged at this arm. So a slow anchor read in the dwell
+    never refuses; it removes the dwell's clock verdict. *Why this is accepted for block 5* (orchestrator ruling
+    of 2026-10-07 on the fidelity sweep's item C5): no number rests on the dwell's verdict. Each member carries
+    its own anchor bound (§0.14), and the monitor's 1 Hz journal is judged against every member span at the
+    harvest (`clock.step_overlap`, §6.4). The dwell only guards against starting a window on a clock that is
+    already disturbed. Judging the series on the samples that did read is a code change listed for after block 5.
 - *In window:* the monitor journals the anchor at 1 Hz and f every 5 s. A residual move of more than 1 ms between
   consecutive samples is a `clock.step`; a change of f is `clock.frequency_changed`. Each anchor sample is three reads
-  in a row, RAW, REALTIME, RAW; its **read skew** is the time between the two RAW reads. *Forcing problem:* in mock
+  in a row, RAW, REALTIME, RAW (CLOCK_MONOTONIC_RAW, then CLOCK_REALTIME, then CLOCK_MONOTONIC_RAW again). The anchor
+  is the REALTIME read minus the midpoint of the two RAW reads (`joulewise/clock_reference.py` `sample_anchor`), and
+  the sample's **read skew** is the time between the two RAW reads. *Forcing problem:* in mock
   rehearsal round 3 a `ps` probe pre-empted the monitor between those reads, giving skews of 3.9–8.3 ms, and the
   residual computed from such a sample moved by more than 1 ms with no clock step, so the harvest recorded false
   `clock.step` and `clock.step_overlap` (finding R3-1, that round's first finding; not the fix route R3 of §0.1).
@@ -1411,10 +1480,12 @@ the longest streams exceed the 5 ms bound (§0.14).
   `observed.rule` `read_skew`). The harvest applies the same 250 µs bound to every journaled sample
   (`harvest._clock_point`): a sample above it is skipped, and the next good sample is compared with the last good one,
   so a step is never computed from a skewed sample. A real step moves every later sample, so a skipped sample cannot
-  hide one. *Why a quarter:* the REALTIME read lies somewhere between the two RAW reads, so a skew of s can misplace
-  one sample's residual by at most s; two consecutive samples misplaced in opposite directions by 250 µs each differ
-  by 500 µs, still half the 1 ms that defines a step. (The arm's dwell samples are re-read the same way against the
-  arm's own bound, `skew_max_ns` = 1 ms, rule iii above.)
+  hide one. *Why a quarter:* the REALTIME read lies somewhere between the two RAW reads and the anchor uses their
+  midpoint, so a sample with read skew s places the anchor within s/2 of its true value. At the 250 µs bound each
+  sample is off by at most 125 µs, so two consecutive samples off in opposite directions differ by at most 250 µs,
+  a quarter of the 1 ms that defines a step, and a residual move of more than 1 ms holds at least 750 µs of real
+  clock movement. (The arm re-reads its own anchors the same way, up to five times, against its own bound
+  `skew_max_ns` = 1 ms; what follows when all five exceed it is in the arm item above.)
 - *Replaces:* the 8 ppm sizing convention of revision 2 and the network-time OFF receipt's wording check. There is
   no resync at the arm: the wall clock's absolute offset enters no energy, because the anchor fit and every phase
   edge use relative times.
@@ -1429,8 +1500,12 @@ outcome.
 - *Two sources.*
   - **State, from the registry.** `ioreg -r -c AppleSmartBattery` prints the OS's record of the battery; raw bytes
     are kept. It gives ExternalConnected (an adapter is supplying power), IsCharging, InstantAmperage (signed),
-    Amperage, UpdateTime, Voltage and the `PowerTelemetryData` accumulators. The registry **publishes** a new set of
-    values about once every 60 s (and on some events); between publications every value is frozen.
+    Amperage, UpdateTime, Voltage and the `PowerTelemetryData` **accumulators**: running sums the registry keeps of
+    the battery's charging power and of its discharging power, each with a count of the samples summed, so that
+    the change of a sum between two publications divided by the change of its count is the mean power of that
+    sign over the interval (`joulewise/hazards/battery.py` `accumulator_interval`; used in §6.4). The registry
+    **publishes** a new set of values about once every 60 s (and on some events); between publications every
+    value is frozen.
   - **Current, from the SMC.** The SMC (System Management Controller) is the chip that manages the Mac's power and
     exposes its sensor readings as four-letter **keys**, read in process without privileges
     (`joulewise/hazards/smc.py`). **B0AC** is the battery current in mA, signed, negative when the battery
@@ -1442,8 +1517,11 @@ outcome.
     the publication (at one, −793 mA against a B0AC read of −727 mA taken 0.7 s earlier, within one SMC refresh), not
     the mean over the preceding interval. Between publications the registry misses discharge entirely: over the interval ending at
     UpdateTime 1791324894, B0AC read as low as −3,580 mA (mean −351 mA), and the registry published 0. A probe
-    earlier that day saw −865 mA bursts during Qwen3-8B decode while every registry value read 0. So the registry
-    now supplies only the state, and the SMC the current (`joulewise/hazards/battery.py`, and the harvest's own copy
+    earlier that day (`/Users/edr/night-archive/wallmeter-probe/xc1/`, not a claim window) saw one burst of
+    −865 mA lasting 0.9 s while Qwen3-8B was being loaded, 19 s before its first request and outside every
+    request, and currents down to −216 mA during the three 8B decodes; all 182 registry reads of that probe gave 0
+    (this author joined the probe's `smc.jsonl` to its `mlx.jsonl`; §9.2 item 3 says the same of the burst). So
+    the registry now supplies only the state, and the SMC the current (`joulewise/hazards/battery.py`, and the harvest's own copy
     of the member rule, `harvest.battery_join`, at `a434e363d`).
   - *Validation of B0AC* (`/Users/edr/night-archive/wallmeter-probe/verify/b0ac_validation.md`, 2026-10-06 22:12Z).
     25 s idle, then 170 s of load (a 16-process CPU burner plus four Qwen3-8B generations; DC input peaked at
@@ -1457,9 +1535,10 @@ outcome.
     convention: the archived charging capture shows InstantAmperage +1,716 mA with IsCharging Yes, and the registry
     current is B0AC's snapshot.
 - *Arm:* ExternalConnected Yes; IsCharging No; |B0AC| ≤ 200 mA (|InstantAmperage| ≤ 200 mA when B0AC cannot be read,
-  recorded as `battery.smc_unavailable`); the registry reading no older than 180 s. The arm runs on an idle machine,
-  so battery current in either direction means the adapter is not supplying the machine, a real hazard; this refusal
-  is unchanged by the ruling (§9.2).
+  recorded as `battery.smc_unavailable`); the registry reading no older than 180 s. The first three together are
+  the measured form of battery float (§0.1). The arm runs on an idle machine, so a battery current above 200 mA in
+  either direction means the adapter is not supplying the machine, a real hazard; this refusal is unchanged by the
+  ruling (§9.2).
 - *In window:* the registry polled every 5 s, its raw bytes stored at every publication; the SMC read every 1 s.
   The member rule is §6.4: charging, loss of AC power and missing evidence remove the member; discharge with the
   adapter connected (**assist**) is disclosed.
@@ -1484,7 +1563,8 @@ to the model; idle admission screens only the idle baseline before the request. 
   600 s* (PLAN2 finding t2-08; `joulewise/hazards/contention.py` `HAZARD_ARM_CLEAN_S` at `a434e363d`): no number
   depends on the dwell. Each member's idle admission screens its own baseline, the monitor checks contention every
   10 s through the window, and a persistent contender still fails the 0.05 limit in every interval and is refused at
-  the cap. The dwell also carries the clock's linearity check, and 180 s still sees a step or a timed slew: a slew of
+  the cap. The dwell also carries the clock's linearity check (condition ii above), and 180 s still sees a step or
+  a **slew**, which is the clock being run fast or slow at a set rate for a set time in place of a step: a slew of
   500 ppm over 180 s moves the clock 90 ms, ninety times the 1 ms limit. Under revision 4 the dwell took 633–1,477 s;
   the change saves at least 420 s per window. (The legacy prewindow dwell, `prewindow.MIN_CLEAN_DWELL_S`, keeps its
   600 s; only the hazard arm changed.)
@@ -1696,16 +1776,52 @@ agent process or cannot be read refuses. In the window, a census that lists an a
 window then has no post calibration, so it is not claim-usable (`calibration.no_bracket`). An in-window census that
 cannot be read is `census.unmeasured` (DISCLOSE, with the count of consecutive unreadable censuses) and never stops
 the chain (audit A3; the earlier stop after four consecutive unreadable censuses, `night_stopped_census_unmeasured`, PLAN2
-row 7, is removed, and that code has no emitter). Seats exit before t0, and the watchdog fences the plan's span, so a stop
-should not fire. Load average, process-name lists and the `corecaptured` spawn count, which revision 2 judged, are
-recorded only.
+row 7, is removed, and that code has no emitter). Seats exit before t0, and from 180 s before t0 until it releases
+the finished window the watchdog launches no agent session (this hold on launches is the window's **fence**, §3 and
+§5.4), so a stop should not fire.
+
+Three things revision 2 judged at the arm are no longer judged. The load average is recorded for each member: the
+1, 5 and 15 minute values that `uptime` prints, in the member's environment record
+(`per_run_environment_evaluation`, field `load_average_evidence`, marked as not an admission test). Process names
+are recorded in every `ps` snapshot the contention hazard takes, at the dwell and in the window (§4.2). The
+`corecaptured` spawn count (how often `launchd` started the macOS process `corecaptured` in the last 10 min; the
+earlier night kinds refused above two) is not read at all in a block-5 window: its only readers serve those
+earlier night kinds (`joulewise/night_gate.py`, `joulewise/evidence_night.py`).
 
 ### 4.6 Fixed inputs
 
 1. **Machine:** §0.2; AC power, power mode `ac_high_power`, sampler interval 100 ms; driver standard input is
    `/dev/null`.
-2. **Acceptance:** §0.11, ledger cutoff 376, one acceptance for all three windows. If a prospective re-derivation
-   trigger of the acceptance fires during the block, no further window arms; the question goes to a cold gate.
+2. **Acceptance:** §0.11, ledger cutoff 376, one acceptance for all three windows.
+   *When the acceptance stops being usable.* The acceptance file names five **prospective re-derivation triggers**
+   (its key `prospective_rederivation.triggers`): events after which a new acceptance must be derived before any
+   further bracket is judged. Its rule for them is `judge_under_prior_artifact_never_self_fit`: a capture is judged
+   by the acceptance that existed before it, never by one fitted to it. It has no calendar expiry. The five:
+   - `protocol_or_estimator_byte_change`: the calibration protocol's digest, or the SHA-256 of one of the four
+     estimator files (`joulewise/reduce.py`, `uncertainty_evidence.py`, `powermetrics_fiducial.py`,
+     `adapters/powermetrics.py`), differs from the value the acceptance records;
+   - `identity_field_change`: the bracket's captures were taken under an identity that is no judged epoch (§4.7
+     names the six fields);
+   - `corpus_doubles_from_24_to_48`: the ledger holds 48 or more valid captures of one judged epoch, not counting
+     captures set aside by a decision the acceptance names;
+   - `new_valid_same_identity_capture_expands_observed_range`: a valid capture of a judged epoch that the
+     acceptance does not list among its prior observations (so, one recorded after its cutoff) has a fiducial
+     bound outside the range of the 24, that is, below 0.02193176218569716 s or above 0.03646286164497997 s. A
+     window's own pre and post captures are captures of this kind;
+   - `new_systematic_failure_challenges_preflight_screen`: a capture of a judged epoch recorded after the cutoff
+     carries the ledger disposition `systematic-invalid`, or the bracket's pre bound is above the pre screen.
+
+   *Who observes them.* The bracket evaluation (`joulewise/calibration_bracketing.py`), which the harvest runs at
+   the desk on each window's bracket. It reads the ledger, lists the triggers it saw under
+   `acceptance.prospective_rederivation.observed_triggers` (the identity change under `freshness.stale_fields`),
+   marks the acceptance stale and fails the bracket with the reason `calibration_acceptance_bound_stale`. (One
+   case has another reason: a pre bound above the pre screen fails the bracket as
+   `instrument_calibration_mismatch`.) The harvest then records `calibration.bracket_acceptance_failed`, which
+   removes the window (§6.5). The capture that fired the trigger stays in the ledger, so every later window's
+   bracket fails the same way until a new acceptance is issued.
+   *Who stops the next arm.* No program: nothing at the arm, in the plan writer or in the watchdog reads the
+   triggers. It is a rule the lead applies. The lead reads the reasons in the harvest's flag (structure, no
+   energy), arms no further window, and takes the question of a new acceptance to a cold gate.
 3. **Models:** `mlx-community/Qwen3-1.7B-4bit` at revision `3b1b1768f8f8cf8351c712464f906e86c2b8269e` and
    `mlx-community/Qwen3-8B-4bit` at revision `545dc4251c05440727734bcd94334791f6ab0192`, with the tokenizer bytes the
    pack configs pin (panel `configs/model_panels/qwen3_4bit.json` at H_claim).
@@ -1751,9 +1867,13 @@ recorded only.
    which now names it (`git diff 43ac12d0c fe28e5a0c`).
    The NEG-8 lane changed only the three packs' plan-tree digests in it (`git diff a434e363d d3c107f2f`). Earlier
    drafts: `ccce59f9…` at the frozen head `a434e363d`, after lane L10 (`c6309e1a`); `9c2ecd89…` after the timing
-   lane `f4cf9047` and at the integration head `b9d02700a`; `039d3e3c…` at `f8164893`. Each change moved only the
-   packs' plan-tree and config-inventory digests (L10's only GAMMA's plan-tree digest), never the model or runtime
-   pins. The seal binds the bytes at H_claim.
+   lane `f4cf9047` and at the integration head `b9d02700a`; `039d3e3c…` at `f8164893`. The timing lane's change
+   (`039d3e3c…` to `9c2ecd89…`) moved the three packs' plan-tree digests and, for each of the eight science units,
+   two digests of its member configs: the configuration-set digest defined above (`config_set_sha256`) and the
+   **config-inventory digest** (`config_inventory_sha256`: a digest of the list of the unit's member config files,
+   each with its path and the SHA-256 of its bytes, which the file records beside the three pinned digests). L10's
+   change moved only GAMMA's plan-tree digest. Neither moved a model or runtime pin (`git diff` of the file across
+   those commits, read by this author). The seal binds the bytes at H_claim.
    Two programs compare against these pins. At the arm, the driver passes the file to the model-identity collector
    (`--identity-pins`) when the measurement checkout holds it. At harvest, the harvest reads its archived copy. If
    either finds no pin to compare against, it records `model.identity_unpinned`, which removes the window (§6.5).
@@ -1773,8 +1893,9 @@ recorded only.
    **The desk order is chain exit, pin advance, harvest, next arm** (`scripts/advance_b5_ledger_pin.py` at
    `a434e363d`; revision 5 had the advance after the harvest, which the code no longer allows). *Why this order:* the
    window's own post calibration finalizes its bracket session and moves the ledger past the pin the window armed at.
-   The desk verdict writer and the next window's bracket reservation both read the ledger through the committed pin,
-   so both refuse until the pin names this session's terminal entry (§2, "Before ALPHA-1's harvest"; the plan writer
+   The desk verdict writer and the next window's **bracket reservation** (the first stage of its chain, which
+   opens that window's bracket session in the ledger, §0.11 and §5.1) both read the ledger through the committed
+   pin, so both refuse until the pin names this session's terminal entry (§2, "Before ALPHA-1's harvest"; the plan writer
    refuses the next plan at the desk for the same reason). The advance reads the session's terminal entry from the
    ledger, advances the pin through the guarded `advance-head-pin` path of `scripts/recover_calibration_ledger.py`,
    and makes a pin-only commit that it checks changes that one path alone. A window stopped before its post
@@ -1784,21 +1905,42 @@ recorded only.
 
 A change to any item after the seal needs a prospective cold erratum before the next arm (§10).
 
-### 4.7 The one identity refusal at the arm: an OS build no acceptance judged
+### 4.7 The one identity refusal at the arm: an OS build and machine model no acceptance judged
 
 *What it checks* (core-prune row ARM-OS; `joulewise/hazards/arm.py` `identity_read`, `joulewise/b5/driver.py`
 `_production_arm`, at `a434e363d`). Right after the instant reads, the arm reads `kern.osversion` (the OS build, for
 example 25G83) and `hw.model` (Mac15,9) with `sysctl`, and compares the pair with the **judged epochs** of the
-calibration acceptance: the (OS build, machine model) pairs the acceptance's captures were taken on, with any
-continuation the ledger authenticates. A pair the acceptance never judged refuses the window (`refused_at:
+calibration acceptance.
+
+- An **epoch** is the identity under which calibration captures are taken. It has six fields: the OS build, the
+  machine model, the power policy, the sampler interval, the estimator revision and the pulse protocol
+  (`joulewise/calibration_ledger.py` `IDENTITY_EPOCH_FIELDS`). The acceptance was derived on one epoch: 25G83,
+  Mac15,9, `ac_high_power`, 100 ms, `joint_loss_sublevel_interval_branch_v2`, `powermetrics_pulse_fiducial_v3`.
+- A **continuation** is a registered record that extends the acceptance to one further epoch, on the evidence of
+  a derivation session (a ledger session whose captures are taken to derive or extend an acceptance, not to
+  bracket a window; `joulewise/calibration_epoch_continuation.py`). The registry of continuations
+  (`calibration_bracketing.EPOCH_CONTINUATION_REGISTRY`) is empty at `9b0c680ed`, so at that head the acceptance's
+  own epoch is the only judged epoch.
+- The **judged epochs** are the acceptance's own epoch and the epoch of every registered continuation that
+  authenticates.
+
+The arm loads the judged epochs without the calibration ledger (`acceptance_judged_epochs(artifact, None)`). A
+continuation is then authenticated by its registry pin (the SHA-256 of its file) and by the checks of the file
+itself; the check of its derivation session against the ledger is skipped. The arm compares only the two fields it
+reads, the OS build and the machine model. A pair that matches no judged epoch refuses the window (`refused_at:
 "identity"`), before network time is touched. A read that fails is recorded and never refuses; if the judged epochs
 cannot be loaded, the check is skipped.
 
 *Why a refusal that is not a physical hazard.* Every timing bound in a window rests on the calibration acceptance
 (§0.11), which was derived on one OS build. After an OS update the sampler, the scheduler and the timing estimator's
 inputs may all differ, and the acceptance says nothing about them. The pre-calibration writer already refuses such a
-window at the pre slot (its kept epoch check, `scripts/validate_powermetrics_fiducial.py`), after the whole dwell. This
-check adds no new refusal outcome: it moves that same refusal before the dwell, reading the same judged epochs.
+window at the pre slot (its kept epoch check, `scripts/validate_powermetrics_fiducial.py`), after the whole dwell.
+The arm's check adds no new refusal outcome: it moves that refusal before the dwell. The two do not read the same
+set of epochs. The writer loads the judged epochs with its ledger snapshot, so it also checks each continuation's
+session against the ledger, and it compares all six fields. The arm's set therefore equals the writer's or
+contains it, and the arm tests fewer fields, so the arm never refuses a window the writer would accept. Two cases
+pass the arm and are still refused by the writer at the pre slot, after the dwell: a pair covered only by a
+continuation the ledger rejects, and a difference in one of the four fields the arm does not read.
 *Dissent recorded:* the Sol consult seat (core-prune DESIGN §7, R7) would record the identity at the arm and leave
 the refusal to the writer, because doctrine lets only physics refuse. The orchestrator kept it: it changes when a
 refusal happens, not whether. *Worked example (synthetic):* macOS updates overnight to build 25H12; the next arm reads
