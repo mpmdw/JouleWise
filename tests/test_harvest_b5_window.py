@@ -2485,6 +2485,122 @@ class CliTests(WindowTestCase):
         self.assertIn("verdict=NOT_READY", output)
         self.assertFalse(window.archive.exists())
 
+    def test_cli_prints_the_checkout_it_ran_from(self):
+        window = self.window()
+        code, output = self.run_cli(window, False, "--workers", "1")
+        self.assertEqual(code, 0, output)
+        head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
+                              check=True).stdout.strip()
+        (line,) = [line for line in output.splitlines() if line.startswith("harvest_checkout=")]
+        self.assertTrue(line.startswith(f"harvest_checkout={head} clean="), line)
+        self.assertTrue(line.endswith(f"root={ROOT}"), line)
+
+
+class HarvestCheckoutTests(WindowTestCase):
+    """Seal gate K-7: ``harvest.json`` and ``exclusions.json`` record the checkout the harvest ran from.
+
+    The harvest runs from a desk checkout, not from the checkout that
+    collected the window, and it decides ``claim_usable``.  Registration 11
+    item 4 pins the harvest program by an addendum that names its files'
+    SHA-256s and the desk checkout's commit; before K-7 no output of the
+    harvest said which program had run, so the addendum could not be checked
+    from the archive.
+    """
+
+    @staticmethod
+    def git(*arguments):
+        return subprocess.run(["git", "-C", str(ROOT), *arguments], capture_output=True, text=True,
+                              check=True).stdout
+
+    def test_both_records_name_the_commit_the_program_files_and_whether_the_checkout_was_clean(self):
+        window = self.window()
+        record = window.harvest()
+        checkout = record["harvest_checkout"]
+        # This test runs the harvest from this very checkout.
+        self.assertEqual((checkout["schema"], checkout["root"], checkout["errors"]),
+                         ("joulewise.b5_harvest_checkout.v1", str(ROOT), []))
+        self.assertEqual(checkout["head"], self.git("rev-parse", "HEAD").strip())
+        dirty = [line for line in self.git("status", "--porcelain=v1", "--untracked-files=all").splitlines()
+                 if line.strip()]
+        self.assertEqual((checkout["status_clean"], checkout["status_lines"]), (not dirty, len(dirty)))
+        self.assertEqual(checkout["files"], {relative: sha(ROOT / relative) for relative in (
+            "joulewise/b5/harvest.py", "joulewise/whole_window.py", "scripts/harvest_b5_window.py")})
+        self.assertEqual(json.loads((window.archive / "harvest.json").read_bytes())["harvest_checkout"], checkout)
+        exclusions = window.exclusions()
+        self.assertEqual(exclusions["harvest_checkout"], checkout)
+        # Beside the catalog's digest, which the exclusion function writes (analysis plan 2.2 checks both).
+        if L4_AVAILABLE:
+            self.assertEqual(exclusions["catalog_sha256"],
+                             sha(window.archive / "sources" / "inputs" / "flag_catalog.json"))
+
+    def test_a_null_window_and_a_window_without_the_exclusion_function_record_it_too(self):
+        window = self.window()
+        (window.custody / "night" / "chain.started").unlink()
+        record = window.harvest()
+        self.assertEqual(record["verdict"], "NULL")
+        self.assertEqual(window.exclusions()["harvest_checkout"], record["harvest_checkout"])
+        self.assertTrue(record["harvest_checkout"]["head"])
+        other = Window(self.tmp / "no-function", catalog_overrides=self.ISOLATE)
+
+        def unavailable(*_args):
+            raise ModuleNotFoundError("joulewise.flags.exclusions")
+
+        record = other.harvest(seams=h.Seams(group_alive=lambda pgid: False, exclusions_compute=unavailable,
+                                             boot_session_uuid=lambda: "B5-TEST-BOOT"))
+        self.assertEqual(other.exclusions()["status"], "UNAVAILABLE")
+        self.assertEqual(other.exclusions()["harvest_checkout"], record["harvest_checkout"])
+
+    def test_clean_dirty_and_unreadable_checkouts(self):
+        """The reader on each git answer: a clean checkout, a dirty one, and answers git cannot give."""
+        head = "c" * 40
+
+        def runner(status, *, head_text=head + "\n", head_code=0, status_code=0, raises=None):
+            def run(argv, **kwargs):
+                self.assertEqual(argv[:3], ["git", "-C", str(ROOT)])
+                if raises is not None:
+                    raise raises
+                if "rev-parse" in argv:
+                    return subprocess.CompletedProcess(argv, head_code, head_text, "")
+                self.assertEqual(argv[3:], ["status", "--porcelain=v1", "--untracked-files=all"])
+                return subprocess.CompletedProcess(argv, status_code, status, "")
+            return run
+
+        clean = h.harvest_checkout(runner(""))
+        self.assertEqual((clean["head"], clean["status_clean"], clean["status_lines"], clean["errors"]),
+                         (head, True, 0, []))
+        dirty = h.harvest_checkout(runner(" M joulewise/b5/harvest.py\n?? scratch.py\n"))
+        self.assertEqual((dirty["head"], dirty["status_clean"], dirty["status_lines"], dirty["errors"]),
+                         (head, False, 2, []))
+        self.assertEqual(dirty["files"], clean["files"])  # the digests are of the files on disk either way
+        failed = h.harvest_checkout(runner("", head_code=128, status_code=128))
+        self.assertEqual((failed["head"], failed["status_clean"], failed["errors"]),
+                         (None, None, ["head:git_exit_128", "status:git_exit_128"]))
+        odd = h.harvest_checkout(runner("", head_text="not a commit\n"))
+        self.assertEqual((odd["head"], odd["status_clean"], odd["errors"]), (None, True, ["head:not_a_commit_name"]))
+        absent = h.harvest_checkout(runner("", raises=FileNotFoundError("git")))
+        self.assertEqual((absent["head"], absent["status_clean"], absent["errors"]),
+                         (None, None, ["head:FileNotFoundError", "status:FileNotFoundError"]))
+        self.assertEqual(set(absent["files"]), set(h.HARVEST_PROGRAM_FILES))
+
+    def test_the_record_never_changes_a_flag_or_an_exclusion(self):
+        """A record, never a flag: a checkout that cannot be read at all leaves the harvest's result as it was."""
+        baseline = self.window()
+        expected = baseline.harvest()
+
+        def broken():
+            raise RuntimeError("no git here")
+
+        window = Window(self.tmp / "unreadable", catalog_overrides=self.ISOLATE)
+        record = window.harvest(seams=h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
+                                              boot_session_uuid=lambda: "B5-TEST-BOOT", harvest_checkout=broken))
+        self.assertEqual(record["harvest_checkout"]["errors"], ["record:RuntimeError"])
+        self.assertIsNone(record["harvest_checkout"]["head"])
+        self.assertEqual((record["verdict"], record["faults"], record["flags"], record["claim_usable"]),
+                         (expected["verdict"], expected["faults"], expected["flags"], expected["claim_usable"]))
+        self.assertEqual(sorted(flag["code"] for flag in window.flags()),
+                         sorted(flag["code"] for flag in baseline.flags()))
+        self.assertEqual(window.exclusions()["reasons"], baseline.exclusions()["reasons"])
+
 
 # ---------------------------------------------------------------------------
 # Pure joins and parsers, on lines in L1's journal format.

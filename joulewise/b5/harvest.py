@@ -29,7 +29,10 @@ Layout under the archive root (created once; a re-harvest uses a new root):
 * ``withheld/``: the numbers (re-reduced summaries), member spans, bracket
   evaluation, the re-evaluated NEG-8 bracket, member assessments and
   transcripts.  Restricted custody.
-* ``harvest.json``: the verdict and the digests of every output.
+* ``harvest.json``: the verdict, the digests of every output, and the
+  checkout this program ran from (``harvest_checkout``: its commit, whether
+  it was clean, the SHA-256 of each harvest program file), which
+  ``derived/exclusions.json`` records too.
 
 Other-lane seams.  The harvest reads files written by lanes that land in the
 same integration change: the hazard monitor journals and the arm record (L1),
@@ -3721,6 +3724,61 @@ def _l4_exclusions(flags: list[dict[str, Any]], roster: Mapping[str, Any], spans
     return exclusions.compute(flags, roster, spans, load_catalog(Path(catalog.path)))
 
 
+HARVEST_CHECKOUT_SCHEMA = "joulewise.b5_harvest_checkout.v1"
+# The harvest program's own files.  Registration section 11 item 4: an
+# addendum to the seal record pins the harvest program before the first
+# window's harvest, by these files' SHA-256s and the commit of the checkout
+# the harvest runs from (a desk checkout, never the measurement checkout).
+HARVEST_PROGRAM_FILES = ("joulewise/b5/harvest.py", "joulewise/whole_window.py", "scripts/harvest_b5_window.py")
+
+
+def harvest_checkout(runner: Callable[..., Any] = subprocess.run) -> dict[str, Any]:
+    """The checkout this harvest program runs from (seal gate K-7): a record, never a flag.
+
+    The harvest decides which members and windows are claim-usable, and it
+    runs from a checkout other than the one that collected the window.  So
+    which program decided must be on record: ``head`` is that checkout's
+    commit (``git rev-parse HEAD`` in the directory that holds this file's
+    package), ``status_clean`` whether ``git status --porcelain`` printed
+    nothing there (no tracked edit and no untracked file), ``status_lines``
+    how many paths it printed, and ``files`` the SHA-256 of each harvest
+    program file as it is on disk.  With a clean checkout the commit fixes
+    every byte of the program; with a dirty one the three digests still say
+    whether the pinned files are the pinned bytes.  A value git or the disk
+    cannot give is None and named in ``errors``; nothing here stops or
+    excludes anything.
+    """
+    root = Path(__file__).resolve().parents[2]
+    record: dict[str, Any] = {"schema": HARVEST_CHECKOUT_SCHEMA, "root": str(root), "head": None,
+                              "status_clean": None, "status_lines": None, "files": {}, "errors": []}
+    for name, arguments in (("head", ["rev-parse", "HEAD"]),
+                            ("status", ["status", "--porcelain=v1", "--untracked-files=all"])):
+        try:
+            result = runner(["git", "-C", str(root), *arguments], capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", check=False, timeout=60)
+        except (OSError, subprocess.SubprocessError) as exc:
+            record["errors"].append(f"{name}:{type(exc).__name__}")
+            continue
+        if result.returncode != 0:
+            record["errors"].append(f"{name}:git_exit_{result.returncode}")
+        elif name == "head":
+            head = result.stdout.strip()
+            if re.fullmatch(r"[0-9a-f]{40}([0-9a-f]{24})?", head):
+                record["head"] = head
+            else:
+                record["errors"].append("head:not_a_commit_name")
+        else:
+            lines = [line for line in result.stdout.splitlines() if line.strip()]
+            record["status_clean"], record["status_lines"] = not lines, len(lines)
+    for relative in HARVEST_PROGRAM_FILES:
+        try:
+            record["files"][relative] = sha256_file(root / relative)
+        except OSError as exc:
+            record["files"][relative] = None
+            record["errors"].append(f"file:{relative}:{type(exc).__name__}")
+    return record
+
+
 @dataclasses.dataclass
 class Seams:
     """Process and other-lane seams.  Tests replace these; production does not."""
@@ -3742,6 +3800,8 @@ class Seams:
     desk_gone_wait_s: float = DESK_GONE_WAIT_S
     killpg: Callable[[int, int], None] = os.killpg
     observe_identity: Callable[[int], Any] = _observe_identity
+    # The checkout the harvest program runs from (K-7), read once at the start.
+    harvest_checkout: Callable[[], Mapping[str, Any]] = harvest_checkout
 
 
 def readiness(inputs: WindowInputs, seams: Seams, *, allow_missing_terminal: bool = False) -> dict[str, Any]:
@@ -3769,6 +3829,13 @@ class _Harvest:
         self.inputs, self.archive, self.seams = inputs, archive_root, seams
         self.prepare_desk, self.run_g3 = prepare_desk, run_g3
         self.derived, self.withheld = archive_root / "derived", archive_root / "withheld"
+        # K-7: which program decides, read before it reads anything else.  A record only.
+        try:
+            self.harvest_checkout: dict[str, Any] = dict(seams.harvest_checkout())
+        except Exception as exc:
+            self.harvest_checkout = {"schema": HARVEST_CHECKOUT_SCHEMA, "root": None, "head": None,
+                                     "status_clean": None, "status_lines": None, "files": {},
+                                     "errors": [f"record:{type(exc).__name__}"]}
         self.catalog = Catalog.load(inputs.catalog_path)
         self.flags = FlagLedger(plan_id=inputs.plan_id, attempt=inputs.attempt, catalog=self.catalog,
                                 boot_session_uuid=seams.boot_session_uuid(), now=seams.now,
@@ -7588,6 +7655,10 @@ class _Harvest:
                 flags = ordered()
         self.outputs["derived/flags.jsonl"] = write_jsonl_once(self.derived / "flags.jsonl", flags)
         exclusions = dict(exclusions) if isinstance(exclusions, Mapping) else {"value": exclusions}
+        # K-7: the program that applied the catalog, beside the catalog's own
+        # digest (``catalog_sha256``, written by the exclusion function).  The
+        # analysis checks both against the seal record (analysis plan 2.2).
+        exclusions["harvest_checkout"] = dict(self.harvest_checkout)
         self.outputs["derived/exclusions.json"] = write_json_once(self.derived / "exclusions.json", exclusions)
         write_json_once(self.withheld / "collector-errors.json",
                         {"schema": "joulewise.b5_collector_errors.v1", "errors": self.error_details})
@@ -7627,6 +7698,7 @@ class _Harvest:
                   "yield": getattr(self, "yield_block", None),
                   "exclude_window_reasons": sorted(map(str, summary["exclusions"]["reasons"])),
                   "runs_root_overrides": list(getattr(self, "runs_root_overrides", [])),
+                  "harvest_checkout": dict(self.harvest_checkout),
                   "outputs": dict(sorted(self.outputs.items()))}
         write_json_once(self.archive / "harvest.json", record)
         return record
