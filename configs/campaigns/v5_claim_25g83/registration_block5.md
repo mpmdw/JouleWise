@@ -2560,10 +2560,10 @@ NULL window, and named two of the three process conditions.)
   every later window the flag `code.executed_differs_from_sealed`, which removes the window (§6.5). The plan writer
   takes an allowance from any file inside the measurement checkout: it is given the file's path, its SHA-256 and a
   pointer to the value, and refuses unless the file's bytes hash to that SHA-256 and the pointer resolves to the
-  stated number of seconds (`joulewise/b5/plan.py` `read_allowance`). So the new sizing file is written as a new, untracked file outside
-  `joulewise/`, `scripts/` and the pack's directory (an untracked file under those roots is itself a difference,
-  §6.5), for example under the git-ignored `runs/` directory, and the next plan cites it there with the SHA-256
-  the addendum pins. *Why the case is remote:* the deadline is built from the programmed
+  stated number of seconds (`joulewise/b5/plan.py` `read_allowance`). So the new sizing file is written as a new,
+  untracked file outside `joulewise/`, `scripts/` and the pack's directory (an untracked file under those roots is
+  itself a difference, §6.5), for example under the git-ignored `runs/` directory, and the next plan cites it
+  there with the SHA-256 the addendum pins. *Why the case is remote:* the deadline is built from the programmed
   span, the chain's length if every member takes its longest allowed path: 24.4, 27.5 and 28.1 h for GAMMA, ALPHA
   and BETA (the table above), about 27 h, to which `WINDOW_MAX_S` adds the arm's 3,300 s. The projected chain is
   4.8 to 5.7 h, about 5 to 6 h, and the block-3 basis 7.7 to 9.1 h. A chain reaches its deadline only by running
@@ -2984,10 +2984,11 @@ A member is removed from every cell it feeds when any of these is flagged:
   they touched could pull a mean toward its cooler members. When a unit was removed by one of the three codes for
   those hazards, `thermal.os_level_nonzero`, `thermal.powermetrics_pressure_elevated` and
   `contention.request_overlap`, the same estimator is therefore computed again over the units that would be kept
-  if those three codes were ignored. A unit that carries any other code stays removed. The seal gate adopted the line in this narrowed form at its stage 1 (2026-10-07; §14 Q6).
-  Revision 11 described here the proposal the gate then judged, which ignored the whole PHYSICS_IN_SPAN family. Had
-  in-window thermal pressure also been listed under `member.whole_window_member_failure`, every member with thermal
-  pressure would carry that second code as well, and the line could never restore it.)
+  if those three codes were ignored. A unit that carries any other code stays removed. The seal gate adopted the
+  line in this narrowed form at its stage 1 (2026-10-07; §14 Q6). Revision 11 described here the proposal the gate
+  then judged, which ignored the whole PHYSICS_IN_SPAN family. Had in-window thermal pressure also been listed
+  under `member.whole_window_member_failure`, every member with thermal pressure would carry that second code as
+  well, and the line could never restore it.)
 
   *Why this rule is needed.* Its environment evidence includes the post-run observation that the displays stayed
   asleep and the screensaver stayed off through the request. That observation is how decision D-078 (item 4) closed
