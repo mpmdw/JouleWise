@@ -1696,11 +1696,12 @@ spare-slot retry decision, which runs spares only when the stage lost members (�
   failed pre calibration capture (exit 11), and a pre fiducial bound above the pre screen 0.036462861644980 s
   (exit 12). The chain keeps a **stage journal**, `night/chain-stages.jsonl`: one line for each finished stage, with
   its id, its kind, its return code and its start and end times. A stop adds one line with the stage id `chain.stop`,
-  the exit code, and the reason as its kind: `reservation_failed`, `pre_calibration_capture_failed` or
-  `pre_calibration_screen_failed`. A stop writes no flag of its own. It leaves the window without a finished
-  bracket session (none was opened, or the one opened never received both captures), so the harvest removes the
-  window by `calibration.no_bracket` (§6.5) and records `chain.stopped_before_collection` (DISCLOSE). (Revision 10
-  named a flag
+  the reason as its kind (`reservation_failed`, `pre_calibration_capture_failed` or
+  `pre_calibration_screen_failed`) and the exit code as its return code. A stop writes no flag of its own. It
+  leaves the window's bracket session never **finalized**: a session is finalized when both of its captures, the
+  pre and the post, have been recorded against it (§0.11), and after a stop either no session was opened or the
+  one opened holds at most its pre capture. The harvest therefore removes the window by `calibration.no_bracket`
+  (§6.5), and it records `chain.stopped_before_collection` (DISCLOSE). (Revision 10 named a flag
   `instrument.precal_screen_failed` for the exit-12 stop. No program writes that flag; it stays in the catalog as a
   reserved code, §6.2.) The driver records such a window as CHAIN_STOPPED, not GO (§5.7).
   Outside the chain, the driver stops it on `disk.low`, on a census that lists an agent process (§4.5; an unreadable
@@ -1709,27 +1710,31 @@ spare-slot retry decision, which runs spares only when the stage lost members (�
   (§5.5).
 - Every other stage records its return code and the chain continues. A chain that reaches its end exits 0 whatever
   its stages returned; the flags, not the return code, decide claim use.
-- **Operator countdowns: 0 s, except 20 s at the post calibration** (registered deviation 5, §10; P2-CHAIN,
+- **Operator countdowns: 0 s, except 20 s at the post calibration** (registered deviations 5 and 6, §10; P2-CHAIN,
   `joulewise/b5/chain.py` `COLLECTION_ARM_COUNTDOWN_S`, `CALIBRATION_ARM_COUNTDOWN_S`). An operator countdown is a
   pause, set by the argument `--arm-countdown-s`, written for an operator to step away from the machine before a
   stage captures anything. It has two sources. *The pack:* each of a pack's ten collection stages carries the literal
-  `--arm-countdown-s 20`; the two calibration capture stages carry no countdown argument, and the capture tool's own
-  default is 0 s. *The window runbook* (`docs/phase_2/window_runbook.md`, the written shell procedure for running a
-  window, whose `calibrate_slot` function every live window since block 3 used for its captures): each calibration
-  capture is run with `--arm-countdown-s 20 --sleep-display-before-capture`. A window runs headless, and every
-  collection stage and the pre calibration already follow a 60 s settle, so there the pause waits for nothing. The
-  chain therefore does two things. It replaces 20 with 0 on the ten collection stages. And it adds the runbook's
-  two arguments to each calibration capture, with a countdown of 0 s at the pre slot and 20 s at the post slot;
+  `--arm-countdown-s 20`. The two calibration capture stages carry no countdown argument, and the default of the
+  capture tool (the calibration writer, `scripts/validate_powermetrics_fiducial.py`, the program that runs one
+  calibration capture) is 0 s. *The window runbook* (`docs/phase_2/window_runbook.md`, the written shell procedure
+  for running a window, whose `calibrate_slot` function every live window since block 3 used for its captures):
+  each calibration capture is run with `--arm-countdown-s 20 --sleep-display-before-capture`. A window runs
+  headless, and every collection stage and the pre calibration already follow a 60 s settle, so there the pause
+  waits for nothing. The chain therefore does two things. *Deviation 5:* it replaces 20 with 0 on the ten
+  collection stages, the only stages whose pack bytes carry a countdown. *Deviation 6:* it adds the runbook's two
+  arguments to each calibration capture, with a countdown of 0 s at the pre slot and 20 s at the post slot;
   `chain.py`, which writes the chain script, refuses to render a calibration stage whose pack template already
-  carries either argument. The second argument, `--sleep-display-before-capture`, makes the capture tool run `pmset displaysleepnow` after the countdown and wait
-  5 s before it captures (if the command fails the capture goes on, §6.10, `display_sleep_action_failed`); §10
-  registers that addition as a deviation of its own. The post calibration keeps 20 s because no settle precedes it:
-  it follows the last end-triplet member directly. *The saving depends on the baseline.* Against the runbook
-  protocol, which pauses 20 s at twelve places (ten collection stages and two calibration captures), the chain
-  pauses once, at the post slot: 11 × 20 = 220 s saved per window. Against the pack's own bytes, the ten collection
-  stages save 10 × 20 = 200 s, the pre slot is unchanged at 0 s and the post slot is 20 s longer. (Revision 10 said
-  that each pack stage passes the literal 20 and that the chain passes 0 on the pre slot; the pre and post
-  countdowns are the chain's additions, and the 220 s is counted against the runbook.)
+  carries either argument. The second argument, `--sleep-display-before-capture`, makes the capture tool run
+  `pmset displaysleepnow` (the macOS command that turns the display off at once) after the countdown and wait 5 s
+  before it captures; if the command fails, the capture goes on and the failure is recorded
+  (`display_sleep_action_failed`, §6.10). The post calibration keeps 20 s because no settle precedes it: it follows
+  the last end-triplet member directly. *The saving depends on the baseline.* Against the runbook protocol, which
+  pauses 20 s at twelve places (ten collection stages and two calibration captures), the chain pauses once, at the
+  post slot: 11 × 20 = 220 s saved per window. Against the pack's own bytes, the ten collection stages save
+  10 × 20 = 200 s, the pre slot is unchanged at 0 s and the post slot is 20 s longer. (Revision 10 said that each
+  pack stage carries the literal 20 and treated the pre slot's 0 s as replacing a pack literal. Only the ten
+  collection stages carry it; both calibration countdowns are arguments the chain adds, and the 220 s is counted
+  against the runbook.)
 - **The window calibration verdict, computed once** (P2-CHAIN and P2-CTL, interface J1). *Forcing problem:* the
   timing estimator's fit of the pre calibration (the **refit**: re-running the pulse fit on the stored 90 MB raw
   capture) is a constant of the window, because its inputs are the same bytes for every member. Yet each member
@@ -1832,9 +1837,8 @@ still knows only the full corpus. Three programs touch the bound, in this order:
    (`night/hazard_result.json`, `neg8_corpus.collected_manifest`).
 2. **The production verdict writer**, which the harvest runs, reads the bound through the core's reader
    (`whole_window.load_neg8_drift_bound_artifact`, in that core module). That reader authenticates a bound only
-   against the
-   committed 12-member manifest. It therefore treats a 10- or 11-member bound as absent, and the stored NEG-8 screen
-   fails with exactly two conditions, `neg8_drift_bound_underived` and its idle-subtracted twin.
+   against the committed 12-member manifest. It therefore treats a 10- or 11-member bound as absent, and the stored
+   NEG-8 screen fails with exactly two conditions, `neg8_drift_bound_underived` and its idle-subtracted twin.
 3. **The harvest** decides both questions itself:
    - *Was the bound derived?* (`neg8_bound`) The bound must be accepted by one of two routes and must then pass a
      member check. *Route 1:* the core reader accepts the bound. *Route 2:* otherwise the harvest reads the
@@ -1854,20 +1858,20 @@ still knows only the full corpus. Three programs touch the bound, in this order:
      the bound names, all of these must hold: (i) exactly one ordinary bundle directory, not a symbolic link, exists
      for it in the bound root; (ii) the SHA-256 over that bundle's complete file inventory equals the
      `bundle_evidence_sha256` the bound recorded for the member; (iii) the bundle's launch lineage does not fail
-     authentication; (iv) its **calibration identity** equals the bound's (a bundle's
-     calibration identity is the SHA-256 of the evidence file, `instrument_evidence.json`, of the pre calibration
-     it was measured under, recorded in its metadata as `instrument_calibration.artifact_sha256`; the bound records
-     the one its corpus shared as `calibration_identity_sha256`); (v) its custody triangle agrees (§0.12) and its
-     summary was produced by the current reducer from real, non-mock sampler records; (vi) it is the **canonical
-     condition**, which is the reference workload of §0.12 as the code tests it (workload profile `df_rq_mid`, 1,024
-     prompt tokens, 256 output tokens, no dataset or suite reference, and a `config.json` whose SHA-256 the bundle's
-     metadata records), and the SHA-256 of its configuration without the run id equals the one the bound records
-     for its corpus; (vii) its gross and its idle-subtracted energy, re-derived from the bundle by the core's own
-     function (`whole_window._reference_energy_evidence`), equal the values the bound recorded for it, to a relative
-     and an absolute tolerance of 10⁻⁹. One condition is across members: the bundles that carry a lineage stamp
-     (the copy of the window's launch lineage, §0.17, that a bundle records in its metadata as
-     `extra.launch_lineage`) must all carry the same one, and it must equal the bound's own when the bound records
-     one.
+     authentication (a bundle that carries no lineage stamp passes this test); (iv) its **calibration identity**
+     equals the bound's (a bundle's calibration identity is the SHA-256 of the evidence file,
+     `instrument_evidence.json`, of the pre calibration it was measured under, recorded in its metadata as
+     `instrument_calibration.artifact_sha256`; the bound records the one its corpus shared as
+     `calibration_identity_sha256`); (v) its custody triangle agrees (§0.12) and its summary was produced by the
+     current reducer from real, non-mock sampler records; (vi) it is the **canonical condition**, which is the
+     reference workload of §0.12 as the code tests it (workload profile `df_rq_mid`, 1,024 prompt tokens, 256
+     output tokens, no dataset or suite reference, and a `config.json` whose SHA-256 the bundle's metadata
+     records), and the SHA-256 of its configuration without the run id equals the one the bound records for its
+     corpus; (vii) its gross and its idle-subtracted energy, re-derived from the bundle by the core's own function
+     (`whole_window._reference_energy_evidence`), equal the values the bound recorded for it, to a relative and an
+     absolute tolerance of 10⁻⁹. One condition is across members: the bundles that carry a lineage stamp (the copy
+     of the window's launch lineage, §0.17, that a bundle records in its metadata as `extra.launch_lineage`) must
+     all carry the same one, and it must equal the bound's own when the bound records one.
 
      The bound counts as derived only when a route accepted it and the member check found no problem. In every
      other case, including a bound that names no member and a member check that itself raises an exception,
@@ -1886,9 +1890,9 @@ still knows only the full corpus. Three programs touch the bound, in this order:
      one of those ends can be read. When only some can be read, it uses the later of the completion time and the
      latest readable end, so the bound never looks younger than a physical end shows. When none can be read, the
      completion time stands. (Revision 10 said here only "judged at the verdict's completion time".) Re-derived
-     first without the harvest's losses, the bracket must have the stored
-     bracket's endpoints and estimand; if it does not, these are not the bundles the verdict was written from, and
-     nothing is evaluated. The decision is then the re-derivation that drops the lost references before aggregation.
+     first without the harvest's losses, the bracket must have the stored bracket's endpoints and estimand; if it
+     does not, these are not the bundles the verdict was written from, and nothing is evaluated. The decision is
+     then the re-derivation that drops the lost references before aggregation.
      The re-screen alone decides: `neg8.screen_failed` is emitted unless the re-screen ran, passed and listed no
      condition. In case (a), any other NEG-8 condition leaves the screen failed; in every case, a re-screen that
      cannot run leaves it failed. The screen runs after the monitor joins (harvest steps `neg8_corpus_physics`, then
@@ -1921,12 +1925,12 @@ The mint refuses outright (no bound; `neg8.bound_not_derived`) on anything that 
 number: an unauthenticated launch lineage, a member that is not the canonical condition (item 3, test vi), an
 unrecorded calibration identity (item 3, test iv), a bundle inventory that cannot be sealed (the digest of test ii
 cannot be computed: a file cannot be read, or the bundle holds a symbolic link or no file), kept members of more
-than one condition (no majority vote), of
-more than one calibration identity or of two window lineages, or fewer than 10 kept members. The chain's corpus prune
-asks the mint itself which members it drops (`whole_window.neg8_corpus_mint_drops`), so the chain's collected manifest
-and the mint's input are the same bytes. The harvest accepts a left-out succeeded member only for one of the five
-reasons, and records it `neg8.corpus_member_dropped` (DISCLOSE); any other left-out succeeded member makes a selected
-corpus and `neg8.bound_not_derived`. The harvest's accepted reasons are the mint's own set, imported, not copied
+than one condition (no majority vote), of more than one calibration identity or of two window lineages, or fewer
+than 10 kept members. The chain's corpus prune asks the mint itself which members it drops
+(`whole_window.neg8_corpus_mint_drops`), so the chain's collected manifest and the mint's input are the same
+bytes. The harvest accepts a left-out succeeded member only for one of the five reasons, and records it
+`neg8.corpus_member_dropped` (DISCLOSE); any other left-out succeeded member makes a selected corpus and
+`neg8.bound_not_derived`. The harvest's accepted reasons are the mint's own set, imported, not copied
 (`harvest.py`: `from joulewise.whole_window import NEG8_MINT_DROP_REASONS as NEG8_ACCEPTED_DROP_REASONS`, at
 `a434e363d`), so the two cannot drift. *Worked example:* member 7 succeeded, but its fresh re-reduction differs from
 its stored summary (`reduction_mismatch`): it is omitted, the bound uses the other 11, and the harvest records
@@ -1977,23 +1981,24 @@ judged against that identity.
 
 ### 5.4 The window's tail
 
-After the post calibration, in this order (`joulewise/b5/driver.py` `run_hazard_night`, at `fe28e5a0c`, unchanged since `43ac12d0c`): the chain's
-own process exits; inside the same supervision call (`scripts/run_night.py` `_run_chain_once`) the driver takes a
-census of the chain's process group without sending a signal and, if anything survives, terminates the survivors
-and proves them gone; only when that call returns does the driver take its time stamp, which is therefore no
-earlier than the chain's exit and comes after the proof; next it counts the window's yield (§5.7); G10 runs if the
-plan asks and the chain exited by itself (§3), with the monitor and the meter still journaling; then the driver
-waits until at least 5 s have passed since that stamp, and so at least 5 s since the chain exited (polling both
-supervisors meanwhile; after G10 that time has long passed) and stops the monitor and the meter (§0.17); last, it
-writes its terminal record with the window's yield. If
-the chain's exit could not be proven, the monitor and the meter are left running for the dead-man (the watchdog's
-fallback stop). During G10 the driver keeps supervising (cold pass N7, `_run_g10`, `_wait_supervised`): it waits on
-G10's process 5 s at a time (`G10_POLL_S`) under the same 1,500 s cap, and between waits runs the chain's supervision
-pass, which restarts a monitor or meter that died, records `monitor.outage` and checks free disk, as during the
-chain. A supervision pass that raises is recorded (`supervision_errors`); one that asks for a stop has already written
-its flag, is recorded (`supervision_stop`) and ends supervision, while G10, a diagnostic, runs to its end. (Revision 6
-said nothing restarted a dead monitor during G10: the driver then blocked for up to 1,500 s in one wait.) The
-harvest may open as soon as the terminal record exists (§7.1), because the driver holds nothing after it.
+After the post calibration, in this order (`joulewise/b5/driver.py` `run_hazard_night`, at `fe28e5a0c`, unchanged
+since `43ac12d0c`): the chain's own process exits; inside the same supervision call (`scripts/run_night.py`
+`_run_chain_once`) the driver takes a census of the chain's process group without sending a signal and, if anything
+survives, terminates the survivors and proves them gone; only when that call returns does the driver take its time
+stamp, which is therefore no earlier than the chain's exit and comes after the proof; next it counts the window's
+yield (§5.7); G10 runs if the plan asks and the chain exited by itself (§3), with the monitor and the meter still
+journaling; then the driver waits until at least 5 s have passed since that stamp, and so at least 5 s since the
+chain exited (polling both supervisors meanwhile; after G10 that time has long passed) and stops the monitor and
+the meter (§0.17); last, it writes its terminal record with the window's yield. (Revision 10 put the stamp at the
+chain's exit, before the proof.) If the chain's exit could not be proven, the monitor and the meter are left
+running for the dead-man (the watchdog's fallback stop). During G10 the driver keeps supervising (cold pass N7,
+`_run_g10`, `_wait_supervised`): it waits on G10's process 5 s at a time (`G10_POLL_S`) under the same 1,500 s cap,
+and between waits runs the chain's supervision pass, which restarts a monitor or meter that died, records
+`monitor.outage` and checks free disk, as during the chain. A supervision pass that raises is recorded
+(`supervision_errors`); one that asks for a stop has already written its flag, is recorded (`supervision_stop`) and
+ends supervision, while G10, a diagnostic, runs to its end. (Revision 6 said nothing restarted a dead monitor
+during G10: the driver then blocked for up to 1,500 s in one wait.) The harvest may open as soon as the terminal
+record exists (§7.1), because the driver holds nothing after it.
 
 **The dead-man never signals an unidentified process group** (audit-fix item 9; `driver.reap_orphan_monitor`). When
 the watchdog's fallback stop finds a recorded monitor or meter process group, it signals it only if it can identify
@@ -2012,10 +2017,11 @@ both a finished custody directory and a quiet process table. The release exists 
 class `HAZARD_PACK`, §0.17).
 
 - *The custody half* (`joulewise/arm_retry.py` `terminal_window_release`). Two files in the window's `night/`
-  directory are always required. One is `courier.sent`: the **courier** is the driver's last step, one headless
-  session that emails Ed the window's structural report (§5.7) and writes `night/courier.sent` once the email is
-  accepted. The other is the driver's terminal `result.json`, carrying this plan's id, the receipt class
-  `HAZARD_PACK` and a finite end time no later than now. Beyond those, the directory must have one of two shapes:
+  directory are always required. One is `courier.sent`. The **courier** is the driver's last step: it launches a
+  headless session, retried up to three times, that emails Ed the window's structural report (§5.7), and that
+  session writes `night/courier.sent` once its email has been accepted for delivery. The other is the driver's
+  terminal `result.json`, carrying this plan's id, the receipt class `HAZARD_PACK` and a finite end time no later
+  than now. Beyond those, the directory must have one of two shapes:
   - *a collected or a CHAIN_STOPPED window:* `chain.started` and `chain.exited` are both present, and the driver's
     verdict in `result.json` is one of GO, REFUSED, ABORTED (a chain the driver itself stopped, §5.1) or
     CHAIN_STOPPED. The driver writes `chain.exited` only once the chain's process group is proven gone (above);
@@ -2117,9 +2123,9 @@ NULL window, and named two of the three process conditions.)
 - **Expected chain time** (planning only; it gates nothing). Two figures:
   - *Block-3 basis* (measured, an upper planning figure). The median of the 16 cooled member cycles of block 3's
     window `g2a-b3w1-20261004T1305Z` (above), at 750 idle records, 236.5 s, plus 10.5 s for an 8B member; per
-    collection stage 60 s settle + 39 s head + 62 s tail (block-3
-    maxima); fixed 60 s pre-calibration settle + 770 s calibration pair + 320 s bound derivation + 320 s corpus prune
-    + 60 s window calibration verdict + 300 s terminal = 1,830 s (scratch `sizing_v2.json`, SHA-256
+    collection stage 60 s settle + 39 s head + 62 s tail (block-3 maxima); fixed 60 s pre-calibration settle +
+    770 s calibration pair + 320 s bound derivation + 320 s corpus prune + 60 s window calibration verdict + 300 s
+    terminal = 1,830 s (scratch `sizing_v2.json`, SHA-256
     `6a82745f47b40c8aa1ea6aefe2c45c2d4cce2b7a7e65d114165057e64fae00de`). Each pack has 10 collection stages.
     - ALPHA: 1,830 + 10 × 161 + 119 × 236.5 = 31,584 s ≈ 8.8 h.
     - BETA: 1,830 + 1,610 + 19 × 236.5 + 100 × 247.0 = 32,634 s ≈ 9.1 h.
@@ -2131,13 +2137,12 @@ NULL window, and named two of the three process conditions.)
     block-3 basis, so 236.5 s and 257.1 s are not the median and the mean of one sample. For scale, the 26 cooled
     member cycles of the two windows together have a mean of 262.7 s and a maximum of 406.6 s (recomputed by this
     author from `/Users/edr/night-archive/gate-prune/timing/member_timing.csv`, timing fields only). Per member,
-    subtract 22.9 s for the
-    576-record idle baseline (2,725 s over 119 members, timing ruling), 41.0 s for the 2× cooldown rule (mean wait
-    53.9 → 9.1 s over 109 cooldowns, 4,883 s over 119 members, timing ruling) and 56.9 s for the refit done once and
-    strict validation moved to the harvest (1,654 + 1,642 + 3,475 s over 119 members, PLAN2 M1–M3): 136.3 s for a
-    1.7B member, 146.8 s for an 8B member. Per collection stage subtract the 20 s countdown (assuming, as PLAN2's
-    budget does, that it ran inside the 39 s head): 141 s. The stage-end verdict saving (PLAN2 S4, about 655 s per
-    window) is not subtracted, because the 62 s tail is not decomposed.
+    subtract 22.9 s for the 576-record idle baseline (2,725 s over 119 members, timing ruling), 41.0 s for the 2×
+    cooldown rule (mean wait 53.9 → 9.1 s over 109 cooldowns, 4,883 s over 119 members, timing ruling) and 56.9 s
+    for the refit done once and strict validation moved to the harvest (1,654 + 1,642 + 3,475 s over 119 members,
+    PLAN2 M1–M3): 136.3 s for a 1.7B member, 146.8 s for an 8B member. Per collection stage subtract the 20 s
+    countdown (assuming, as PLAN2's budget does, that it ran inside the 39 s head): 141 s. The stage-end verdict
+    saving (PLAN2 S4, about 655 s per window) is not subtracted, because the 62 s tail is not decomposed.
     - ALPHA: 1,830 + 10 × 141 + 119 × 136.3 = 19,460 s ≈ 5.4 h.
     - BETA: 1,830 + 1,410 + 19 × 136.3 + 100 × 146.8 = 20,510 s ≈ 5.7 h.
     - GAMMA: 1,830 + 1,410 + 61 × 136.3 + 40 × 146.8 = 17,426 s ≈ 4.8 h.
@@ -2146,20 +2151,23 @@ NULL window, and named two of the three process conditions.)
   to the next idle capture, recovery is untested (archived gaps 119–740 s); ALPHA-1 records idle medians and cooldown
   waits against block 3's 30.6 mW reference as a diagnostic (PLAN2 §1.4 item 4).
 - **Deadline stop.** A chain still running at t0 + `WINDOW_MAX_S` is stopped by the driver; the window then has no
-  post calibration, so it is not claim-usable (`calibration.no_bracket`). Nothing is resized automatically after
-  such a stop. The member allowances and `WINDOW_MAX_S` are outputs of the sealed sizing file: the sizing program
-  takes no observed cycle as an input, and its `--check` reproduces `sizing_b5.json` byte for byte. A larger member
-  allowance is therefore a change to a sealed output. The question first goes to a consult (§0.1); if the consult
-  finds that an allowance must grow, the change is made by a cold erratum (§10) with a new sizing file, which an
-  addendum to the seal record pins by its SHA-256, before the next arm. *Why the case is remote:* the deadline is
-  the programmed span, the chain's length if every member takes its longest allowed path (24.4 to 28.1 h in the
-  table above), plus the arm's 3,300 s; the projected chain is 4.8 to 5.7 h and the block-3 basis 7.7 to 9.1 h. A
-  chain reaches the deadline only by running about three times its slowest expected length, and the collection
-  deadline of §5.1 sends a chain that slow to its post calibration inside the 24 h calibration horizon instead, as
-  the bullet "Is that right?" above says. (Revision 10 registered a rule
-  that resized the next attempt's allowance, without an erratum, to the stopped attempt's largest observed member
-  cycle "plus the sizing margin". No such margin is defined anywhere and no program re-derives an allowance from
-  an observed cycle, so that rule is withdrawn.)
+  post calibration, so it is not claim-usable (`calibration.no_bracket`). Nothing is resized after such a stop.
+  Each member's time allowance and `WINDOW_MAX_S` are values of the sealed sizing output (`sizing_b5.json`:
+  `member_allowance_s` and each pack's `window_max_s`). The sizing program takes no observed member cycle as an
+  input, and its `--check` passes only when it reproduces the sealed file byte for byte. A larger member allowance
+  is therefore a change to a sealed output. The question goes to a consult first (§0.1). If the consult finds that
+  an allowance must grow, the change is a cold erratum (§10) with a new sizing file, and the new file is pinned,
+  before the next arm, by an addendum to the seal record (§12: the record that pins each sealed file by its
+  SHA-256; an addendum adds a pin to it). *Why the case is remote:* the deadline is built from the programmed
+  span, the chain's length if every member takes its longest allowed path: 24.4, 27.5 and 28.1 h for GAMMA, ALPHA
+  and BETA (the table above), about 27 h, to which `WINDOW_MAX_S` adds the arm's 3,300 s. The projected chain is
+  4.8 to 5.7 h, about 5 to 6 h, and the block-3 basis 7.7 to 9.1 h. A chain reaches its deadline only by running
+  about five times its projected length, or about three times the block-3 basis. A chain that slow is sent to its
+  post calibration first by the collection deadline of §5.1, inside the 24 h calibration horizon, as the bullet
+  "Is that right?" above says. (Revision 10 registered a rule that set the next attempt's allowance, without an
+  erratum, to the larger of the sizing output's and the stopped attempt's largest observed member cycle, "plus the
+  sizing margin". No such margin is defined in the three sealed documents, the sizing file or the sizing program,
+  and no program derives an allowance from an observed cycle, so that rule is withdrawn.)
 - **Block duration.** Assume every window is claim-usable on its first attempt. With the watchdog releasing each
   window at its terminal record (§5.4), one window to the next is the window plus about 0.6–1.6 h: the driver's tail
   and courier about 0.1 h, a watchdog tick of up to 5 min, the pin advance and the next plan a few minutes, the
