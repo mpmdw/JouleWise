@@ -402,6 +402,129 @@ class VerdictWriterSurvivorTests(unittest.TestCase):
         self.assertAlmostEqual(bracket["claim_families"][ww.NEG8_CLAIM_FAMILY_GROSS]["drift_allowance_j"], 0.5)
 
 
+class WriterEnergyPredicateParityTests(unittest.TestCase):
+    """Seal gate RF-1 (K-4): the harvest's "energy unreadable" test is the verdict writer's own.
+
+    ``whole_window._neg8_writer_reference_energy`` mirrors
+    ``run_campaign._gross_energy_for`` and ``_idle_subtracted_energy_for``
+    (the writer's bytes do not change, and the harvest does not import the
+    writer).  These tests drive the writer's real functions.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from tests import test_run_campaign as trc
+
+        cls.trc = trc
+        cls.run_campaign = trc.run_campaign_module
+        helpers = trc.IdleAdmissionCoreVerdictTests
+        for name in ("_write_extended_sidecar", "_binding", "_drift_bound", "_member"):
+            setattr(cls, name, getattr(helpers, name))
+
+    def setUp(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+
+    def member(self, bundle_id, gross, position):
+        return self._member(bundle_id, records=self.trc._clean_idle_records(), gross_energy_j=gross,
+                            idle_subtracted_energy_j=gross - 0.2, neg8_position=position)
+
+    def test_the_mirror_returns_what_the_writers_two_functions_return(self) -> None:
+        from dataclasses import replace
+
+        member = self.member("neg8-start-r1", 8.0, "start")
+        good = dict(member.summary)
+        self.assertIsNotNone(self.run_campaign._gross_energy_for(member))  # the fixture's own summary reads
+        envelope = dict(good["energy_anchor_shift_envelopes"]["/gross_energy_j"])
+
+        def with_envelope(**fields):
+            return {**good, "energy_anchor_shift_envelopes": {"/gross_energy_j": {**envelope, **fields}}}
+
+        summaries = {
+            "readable": good,
+            "no_envelopes": {key: value for key, value in good.items() if key != "energy_anchor_shift_envelopes"},
+            "envelopes_not_a_mapping": {**good, "energy_anchor_shift_envelopes": []},
+            "no_gross_envelope": {**good, "energy_anchor_shift_envelopes": {"/energy_request_j": envelope}},
+            "gross_absent": {key: value for key, value in good.items() if key != "gross_energy_j"},
+            "gross_a_boolean": {**good, "gross_energy_j": True},
+            "gross_not_finite": {**good, "gross_energy_j": float("nan")},
+            "envelope_field_absent": with_envelope(lower_j=None),
+            "envelope_field_infinite": with_envelope(upper_j=float("inf")),
+            "point_is_not_the_gross_energy": with_envelope(point_j=envelope["point_j"] + 1e-3),
+            "lower_edge_not_positive": with_envelope(lower_j=0.0),
+            "point_above_its_upper_edge": with_envelope(upper_j=envelope["point_j"] - 1e-3),
+            "idle_absent": {key: value for key, value in good.items() if key != "idle_subtracted_energy_j"},
+            "idle_a_string": {**good, "idle_subtracted_energy_j": "7.8"},
+            "idle_not_finite": {**good, "idle_subtracted_energy_j": float("inf")},
+            "idle_negative": {**good, "idle_subtracted_energy_j": -0.03},  # a finite number: readable
+            "summary_not_a_mapping": None,
+        }
+        unreadable = set()
+        for label, summary in summaries.items():
+            with self.subTest(label):
+                evaluation = replace(member, summary=summary)
+                writer = (self.run_campaign._gross_energy_for(evaluation),
+                          self.run_campaign._idle_subtracted_energy_for(evaluation))
+                self.assertEqual(ww._neg8_writer_reference_energy(summary), writer)
+                if None in writer:
+                    unreadable.add(label)
+        self.assertEqual(unreadable, set(summaries) - {"readable", "idle_negative"})
+
+    def test_the_writer_hands_an_unreadable_reference_to_the_screen_with_no_energy(self) -> None:
+        """What the stored row holds for RF-1, from the real writer, and what the harvest compares in it."""
+        from dataclasses import replace
+
+        from joulewise.b5 import harvest as h
+
+        start, midpoint, end = (8.00, 8.02, 7.98), (8.01,), (8.01, 8.03, 7.99)
+        members = [self.member(f"neg8-{position}-r{index}", gross, position)
+                   for position, values in (("start", start), ("midpoint", midpoint), ("end", end))
+                   for index, gross in enumerate(values, 1)]
+        clean = self.run_campaign.idle_admission_core_verdict(
+            members, self._binding(), whole_window=True, neg8_drift_bound=self._drift_bound())["neg8_bracket"]
+        self.assertEqual(clean["decision"], "passed", clean["conditions"])
+        self.assertIsNone(h._neg8_bracket_references(clean))  # a bracket with family records is compared by them
+        lost = "neg8-end-r3"
+        members = [replace(member, summary={key: value for key, value in member.summary.items()
+                                            if key != "energy_anchor_shift_envelopes"})
+                   if member.bundle_id == lost else member for member in members]
+        self.assertTrue(all(member.usable for member in members))  # succeeded and strict-valid: the writer keeps it
+        bracket = self.run_campaign.idle_admission_core_verdict(
+            members, self._binding(), whole_window=True, neg8_drift_bound=self._drift_bound())["neg8_bracket"]
+        self.assertEqual((bracket["decision"], bracket["claim_families"], bracket["endpoint_protocol"]),
+                         ("failed", {}, "replicated_endpoints_with_midpoint"))
+        self.assertIn("neg8_bracket_reference_invalid", bracket["conditions"])
+        self.assertNotIn("reference_losses", bracket)  # the writer records no loss for it
+        references = h._neg8_bracket_references(bracket)
+        self.assertIsNone(references["end_gross_j"])
+        self.assertIsNone(references["end_admissible_set_j"])
+        self.assertAlmostEqual(references["start_gross_j"], sum(start) / 3, places=12)
+        # The idle-subtracted energy still reads, so that family's end mean holds all three references.
+        self.assertAlmostEqual(references["idle_subtracted_end_point_j"], sum(end) / 3 - 0.2, places=12)
+        # The same bracket from the mirror's entries through the writer's evaluator call.
+        entries = {member.bundle_id: ww._neg8_writer_reference_energy(member.summary) for member in members}
+        self.assertEqual(entries[lost][0], None)
+
+        def column(position, index):
+            return [entries[member.bundle_id][index] for member in members
+                    if member.bundle_id.startswith(f"neg8-{position}-")]
+
+        mirrored = ww.evaluate_neg8_point_drift(
+            column("start", 0), column("end", 0), Neg8BracketPolicy(*(bracket["policy"][key] for key in ("require_bracket", "max_abs_delta_j", "max_rel_delta"))),
+            self._drift_bound(), start_idle_subtracted_j=column("start", 1), end_idle_subtracted_j=column("end", 1),
+            midpoint_gross_j=column("midpoint", 0), midpoint_idle_subtracted_j=column("midpoint", 1),
+            lost_references=[])
+        self.assertEqual(h._neg8_bracket_references(mirrored), references)
+        self.assertTrue(h._neg8_reproduces(mirrored, bracket, energy_unreadable=True))
+        self.assertFalse(h._neg8_reproduces(mirrored, bracket, energy_unreadable=False))
+        other = {**mirrored, "start_gross_j": mirrored["start_gross_j"] + 0.5}
+        self.assertFalse(h._neg8_reproduces(other, bracket, energy_unreadable=True))
+
+
 def write_unreadable_reference(hb, bundle, kind: str) -> None:
     """A reference bundle with no readable summary, custody-bound as a real runner bundle is.
 
@@ -620,8 +743,9 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
     ISOLATE = {**_hb().Neg8ScreenTests.ISOLATE}
 
     def run_window(self, name, points, *, stored_points=None, reference_flags=(), corpus_flags=(), failed=(),
-                   references=None, unreadable=(), strict_invalid=()):
+                   references=None, unreadable=(), strict_invalid=(), summaries=None, energy_reads=None):
         import json
+        from pathlib import Path
         from unittest import mock
 
         hb = _hb()
@@ -630,7 +754,7 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         self.assertIsNone(hb.neg8_corpus(window, list(failed)))
         bound = json.loads((window.bound / "neg8-drift-bound.json").read_bytes())
         self.write_verdict(window, stored_points or points, bound, references=references, unreadable=unreadable,
-                           strict_invalid=strict_invalid)
+                           strict_invalid=strict_invalid, summaries=summaries)
         injected = [(run_id, code) for run_id, code in (*reference_flags, *corpus_flags)]
 
         def meter(run):
@@ -639,16 +763,58 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
 
         with hb.neg8_reference_gates(points), real_strict_check_for({*unreadable, *strict_invalid}), \
                 mock.patch.object(h._Harvest, "meter_joins", meter):
-            window.harvest()
+            if energy_reads is not None:
+                # Record every bundle whose energy the harvest's re-derivations ask for.
+                gated = ww._reference_energy_evidence
+
+                def recording(path, *args, **kwargs):
+                    energy_reads.append(Path(path).name)
+                    return gated(path, *args, **kwargs)
+
+                with mock.patch.object(ww, "_reference_energy_evidence", recording):
+                    window.harvest()
+            else:
+                window.harvest()
         return window
 
     @staticmethod
-    def write_verdict(window, points, bound, *, references=None, unreadable=(), strict_invalid=()):
+    def writer_bracket(references, summaries, bound, evaluated_at_s):
+        """The NEG-8 bracket the verdict writer stores over ``summaries`` ({bundle id: stored summary}).
+
+        The writer's own evaluator call (``run_campaign._idle_admission_core_evaluation``:
+        ``evaluate_neg8_point_drift`` over each kept reference's
+        ``_gross_energy_for`` and ``_idle_subtracted_energy_for``), written out
+        here without the replay evaluator, so the stored verdict of a window
+        that holds an energy-unreadable reference does not come from the code
+        under test.  ``WriterEnergyPredicateParityTests`` holds the two
+        per-reference readers below equal to the writer's.
+        """
+        hb = _hb()
+        policy = Neg8BracketPolicy.from_mapping(ww._registered_bracket_policy(hb.sha(hb.ROOT / hb.POLICY)))
+        by_position = {"start": [], "midpoint": [], "end": []}
+        for bundle_id, role in references:
+            by_position[role.rsplit("_", 1)[1]].append(ww._neg8_writer_reference_energy(summaries[bundle_id]))
+        return ww.evaluate_neg8_point_drift(
+            [pair[0] for pair in by_position["start"]], [pair[0] for pair in by_position["end"]], policy, bound,
+            start_idle_subtracted_j=[pair[1] for pair in by_position["start"]],
+            end_idle_subtracted_j=[pair[1] for pair in by_position["end"]],
+            midpoint_gross_j=[pair[0] for pair in by_position["midpoint"]],
+            midpoint_idle_subtracted_j=[pair[1] for pair in by_position["midpoint"]],
+            bound_freshness_observation=ww.build_neg8_freshness_observation(
+                [{"run_id": bundle_id} for bundle_id, _role in references], evaluated_at_s=evaluated_at_s),
+            lost_references=[])
+
+    @staticmethod
+    def write_verdict(window, points, bound, *, references=None, unreadable=(), strict_invalid=(), summaries=None):
         """As ``write_neg8_reference_verdict``, but the writer was given the window's bound.
 
         ``references`` replaces the window's (bundle id, role) list (a spare is
         one more member with its slot's role); a bundle in ``unreadable`` has
-        no summary (``write_unreadable_reference``).
+        no summary (``write_unreadable_reference``).  ``summaries`` gives a
+        reference another stored summary ({bundle id: summary}); the stored
+        bracket is then the verdict writer's own (``writer_bracket``), which
+        hands a reference whose energy it cannot read to the screen with no
+        energy.
         """
         import hashlib
         import json
@@ -656,6 +822,7 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
 
         hb = _hb()
         references = tuple(references or hb.NEG8_REFERENCES)
+        summaries = dict(summaries or {})
         members = []
         for bundle_id, role in references:
             bundle = window.claim / bundle_id
@@ -666,7 +833,8 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
                 continue
             hb.put(bundle / "config.json", {"run_id": bundle_id})
             hb.put(bundle / "metadata.json", {"run_id": bundle_id})
-            hb.put(bundle / "summary_metrics.json", {"status": "succeeded"})
+            hb.put(bundle / "summary_metrics.json",
+                   summaries[bundle_id] if bundle_id in summaries else hb.neg8_reference_summary(points[bundle_id]))
             members.append({"execution": "invoked", "run_id": bundle_id, "bundle_ids": [bundle_id], "role": role,
                             "canonical_neg8_workload": True, "scientific_config_sha256": "d" * 64})
         policy_sha = hb.sha(hb.ROOT / hb.POLICY)
@@ -675,10 +843,16 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
             "members": members})
         completed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         with hb.neg8_reference_gates(points), real_strict_check_for({*unreadable, *strict_invalid}):
-            bracket, problem = ww._derived_neg8_decision(
-                [json.loads(raw)], window.claim, ww._registered_bracket_policy(policy_sha), current=True,
-                point_drift=True, drift_bound_artifact=bound, return_bracket=True,
-                freshness_evaluated_at_s=hb.h._epoch_s(completed_at))
+            if summaries:
+                stored = {bundle_id: summaries.get(bundle_id) or hb.neg8_reference_summary(points[bundle_id])
+                          for bundle_id, _role in references}
+                bracket, problem = HarvestSurvivorTests.writer_bracket(
+                    references, stored, bound, hb.h._epoch_s(completed_at)), None
+            else:
+                bracket, problem = ww._derived_neg8_decision(
+                    [json.loads(raw)], window.claim, ww._registered_bracket_policy(policy_sha), current=True,
+                    point_drift=True, drift_bound_artifact=bound, return_bracket=True,
+                    freshness_evaluated_at_s=hb.h._epoch_s(completed_at))
         assert problem is None, problem
         hb.put(window.claim / "whole-window-verdict.json", {
             "record_type": "idle_admission_whole_window_verdict",
@@ -865,7 +1039,7 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         points = hb.neg8_trajectory(0.0)
         manifest = {"members": []}
         for run_id, role in hb.NEG8_REFERENCES:
-            hb.put(root / run_id / "summary_metrics.json", {"status": "succeeded"})
+            hb.put(root / run_id / "summary_metrics.json", hb.neg8_reference_summary(points[run_id]))
             hb.put(root / run_id / "metadata.json", {"run_id": run_id})
             manifest["members"].append({"execution": "invoked", "run_id": run_id, "bundle_ids": [run_id],
                                         "role": role, "canonical_neg8_workload": True,
@@ -1018,6 +1192,132 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
                          {("b5t-neg8-start-1", "start", "bundle_absent"),
                           ("b5t-neg8-start-3", "start", "bundle_absent")})
         self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+
+    # -- seal gate stage 1, RF-1 (K-4): a reference whose energy cannot be read ----
+
+    @staticmethod
+    def no_envelope(gross_j: float) -> dict:
+        """A succeeded reference's stored summary with no gross-energy envelope.
+
+        What the reducer writes when the member's clock anchor is not
+        ``bounded``: the gross and idle-subtracted points are there, the
+        anchor-shift envelope is not.  ``run_campaign._gross_energy_for``
+        returns None for it.
+        """
+        return {"status": "succeeded", "gross_energy_j": gross_j, "idle_subtracted_energy_j": gross_j - 20.0}
+
+    def test_a_succeeded_reference_with_no_energy_envelope_is_lost_and_the_survivors_decide(self) -> None:
+        """RF-1: the writer hands such a reference to the screen with no energy and the stored screen fails.
+
+        Before K-4 the harvest named no loss for it, ran no re-screen and
+        emitted ``neg8.screen_failed`` (EXCLUDE_WINDOW): a clean window was
+        removed for an event that costs a science member one unit.  The
+        counterfactual input is the end reference ``b5t-neg8-end-3``: it
+        succeeded, passes the strict check and carries no flag; its stored
+        summary holds a gross energy far outside the bound and no envelope.
+        The call sites are ``_Harvest._neg8_reference_losses`` (names it) and
+        ``whole_window._derived_neg8_decision`` (enters it with no energy in
+        the authenticity pass, drops it in the exclusion pass).
+        """
+        import json
+
+        lost_id = "b5t-neg8-end-3"
+        probe = _hb().Window(self.tmp / "probe", catalog_overrides=self.ISOLATE)
+        _hb().neg8_corpus(probe)
+        bound = self.bound_j(probe)
+        poison = 30.34 + 50 * bound          # never read: with it the end mean would sit 16 bounds above the start
+        for label, drift, kept in (("survivors-pass", 0.0, True), ("survivors-fail", 3 * bound, False)):
+            with self.subTest(label):
+                reads: list[str] = []
+                points = self.points(drift, **{lost_id: poison})
+                window = self.run_window(f"energy-unreadable-{label}", points, energy_reads=reads,
+                                         summaries={lost_id: self.no_envelope(poison)})
+                # The stored row: the writer's screen failed because of that one reference.
+                stored = self.verdict_row(window)["idle_admission_core"]["neg8_bracket"]
+                self.assertEqual((stored["decision"], stored["claim_families"], stored["end_gross_j"],
+                                  stored["endpoint_protocol"]),
+                                 ("failed", {}, None, "replicated_endpoints_with_midpoint"))
+                self.assertIn("neg8_bracket_reference_invalid", stored["conditions"])
+                record = self.screen_record(window)
+                self.assertEqual(record["harvest_reference_losses"], {lost_id: "energy_unreadable"})
+                self.assertEqual(record["rescreen"]["problems"], [])
+                self.assertTrue(record["rescreen"]["evaluated"])
+                self.assertEqual(record["rescreen"]["survivors"]["reference_counts"],
+                                 {"start": 3, "midpoint": 1, "end": 2})
+                self.assertEqual([(row["bundle_id"], row["reason"])
+                                  for row in record["rescreen"]["survivors"]["reference_losses"]],
+                                 [(lost_id, "energy_unreadable")])
+                # The lost reference's energy was asked for by neither pass; every survivor's was.
+                self.assertNotIn(lost_id, reads)
+                self.assertEqual(set(reads), {bundle_id for bundle_id, _role in _hb().NEG8_REFERENCES} - {lost_id})
+                (lost,) = [flag for flag in window.flags() if flag["code"] == "neg8.reference_lost"]
+                self.assertEqual([(row["run_id"], row["slot"], row["reason"]) for row in lost["observed"]["lost"]],
+                                 [(lost_id, "end", "energy_unreadable")])
+                withheld = json.loads((window.archive / "withheld" / "neg8-rescreen-bracket.json").read_bytes())
+                gross = withheld["bracket"]["claim_families"][ww.NEG8_CLAIM_FAMILY_GROSS]
+                self.assertEqual(gross["end"]["n"], 2)
+                self.assertLess(gross["end"]["mean_j"], poison - 1.0)
+                if kept:
+                    self.assertEqual(record["rescreen"]["decision"], "passed")
+                    self.assertNotIn("neg8.screen_failed", window.codes())
+                    self.assertNotIn("neg8.screen_failed", window.exclusions()["reasons"])
+                    self.assertEqual(self.allowance_record(window)["source"], "survivor_rescreen")
+                else:
+                    self.assertEqual(record["rescreen"]["decision"], "failed")
+                    self.assertIn(ww.CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED, record["rescreen"]["conditions"])
+                    (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+                    self.assertEqual(flag["observed"]["survivor_rescreen"]["new_losses"],
+                                     {lost_id: "energy_unreadable"})
+                    self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+                    self.assertEqual(self.allowance_record(window)["source"], "none")
+
+    def test_an_unreadable_idle_subtracted_energy_or_midpoint_is_lost_the_same_way(self) -> None:
+        """RF-1: the writer's test has two halves, and the midpoint is a reference like any other."""
+        cases = {
+            # The envelope is there; the idle-subtracted energy is not a finite number.
+            "idle": ("b5t-neg8-start-2", lambda value: {**_hb().neg8_reference_summary(value),
+                                                         "idle_subtracted_energy_j": None},
+                     {"start": 2, "midpoint": 1, "end": 3}),
+            "midpoint": ("b5t-neg8-midpoint", self.no_envelope, {"start": 3, "midpoint": 0, "end": 3}),
+        }
+        for label, (lost_id, summary, counts) in cases.items():
+            with self.subTest(label):
+                points = self.points(0.0)
+                window = self.run_window(f"energy-unreadable-{label}", points,
+                                         summaries={lost_id: summary(points[lost_id])})
+                self.assertNotIn("neg8.screen_failed", window.codes())
+                record = self.screen_record(window)
+                self.assertEqual(record["harvest_reference_losses"], {lost_id: "energy_unreadable"})
+                self.assertEqual(record["rescreen"]["survivors"]["reference_counts"], counts)
+                if label == "midpoint":
+                    self.assertIn("neg8.midpoint_lost", window.codes())
+
+    def test_a_reference_carrying_a_member_validity_code_is_lost_not_the_window(self) -> None:
+        """RF-1 (K-4): the six member codes that cost a science member one unit lose a reference.
+
+        Before K-4 none of them was a reference-loss code: the reference
+        stayed in the screen (or failed it) while ``exclusions.json`` called
+        it an excluded member.  Here the stored (3, 1, 3) screen passes with
+        the reference inside it, and the harvest drops it and re-screens.
+        """
+        h = _hb().h
+        self.assertEqual(h.NEG8_MEMBER_VALIDITY_LOSS_CODES, (
+            "member.anchor_not_bounded", "member.anchor_recompute_mismatch", "member.reduction_mismatch",
+            "member.unreadable", "member.bytes_missing", "member.bytes_ambiguous"))
+        self.assertTrue(set(h.NEG8_MEMBER_VALIDITY_LOSS_CODES) <= set(h.NEG8_REFERENCE_LOSS_CODES))
+        fixture = __import__("json").loads((_hb().FIXTURES / "flag_catalog.json").read_bytes())["codes"]
+        for code in h.NEG8_MEMBER_VALIDITY_LOSS_CODES:
+            self.assertEqual(fixture[code]["effect"], "EXCLUDE_MEMBER", code)
+        for code in ("member.anchor_not_bounded", "member.reduction_mismatch"):
+            with self.subTest(code):
+                window = self.run_window(f"validity-{code.split('.')[1]}", self.points(0.0),
+                                         reference_flags=[("b5t-neg8-end-3", code)])
+                self.assertNotIn("neg8.screen_failed", window.codes())
+                (lost,) = [flag for flag in window.flags() if flag["code"] == "neg8.reference_lost"]
+                self.assertEqual([(row["run_id"], row["reason"]) for row in lost["observed"]["lost"]],
+                                 [("b5t-neg8-end-3", code)])
+                self.assertEqual(self.screen_record(window)["rescreen"]["survivors"]["reference_counts"],
+                                 {"start": 3, "midpoint": 1, "end": 2})
 
     def test_an_unmeasured_reference_is_kept(self) -> None:
         window = self.run_window("unmeasured", self.points(0.0),

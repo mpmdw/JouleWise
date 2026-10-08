@@ -96,9 +96,18 @@ NEG8_PHYSICS_LOSS_CODES = ("contention.request_overlap", "battery.member_span", 
 # derived from its own record (model.identity_underivable), measures a
 # different workload, so it is lost and the survivors rule decides.  These
 # are identity findings of the reference's own bytes, not unmeasured hazards.
+# Seal gate stage 1, RF-1 (2026-10-07, registration 0.12 "Lost references"):
+# the six member codes under which this harvest finds that a member's bytes
+# or energy cannot bear a number (its bundle is missing, ambiguous or
+# unreadable; a fresh reduction differs from its stored summary; its clock
+# anchor is not bounded or does not recompute).  On a science member each
+# costs one unit; on a reference each loses the reference, never the window.
+NEG8_MEMBER_VALIDITY_LOSS_CODES = ("member.anchor_not_bounded", "member.anchor_recompute_mismatch",
+                          "member.reduction_mismatch", "member.unreadable", "member.bytes_missing",
+                          "member.bytes_ambiguous")
 NEG8_REFERENCE_LOSS_CODES = (*NEG8_PHYSICS_LOSS_CODES, "member.timeout", "member.admission_aborted",
-                             "member.strict_validation_failed", "model.identity_mismatch",
-                             "model.identity_underivable")
+                             "member.strict_validation_failed", *NEG8_MEMBER_VALIDITY_LOSS_CODES,
+                             "model.identity_mismatch", "model.identity_underivable")
 # How a reference the verdict writer dropped for its status (or an unreadable
 # summary) is named, when the harvest has the member's own flag.  The timeout
 # comes first: a member SIGKILLed at the hung-process cap has no summary, and
@@ -889,6 +898,51 @@ def _neg8_endpoints(bracket: Any) -> dict[str, Any] | None:
             return None
         endpoints[family] = {key: value for key, value in record.items() if key not in _NEG8_BOUND_DEPENDENT_FIELDS}
     return endpoints
+
+
+# Fields of a NEG-8 bracket itself that the reference bundles alone fix: the
+# endpoint means of the gross family with their admissible sets.  The
+# idle-subtracted endpoint means sit in ``idle_subtracted_companion``.
+_NEG8_BRACKET_REFERENCE_FIELDS = ("endpoint_protocol", "reference_counts", "start_gross_j", "end_gross_j",
+                                  "start_admissible_set_j", "end_admissible_set_j")
+
+
+def _neg8_bracket_references(bracket: Any) -> dict[str, Any] | None:
+    """What a NEG-8 bracket with no claim-family record still says of its references (else None).
+
+    The evaluator writes no claim-family record when an endpoint holds a
+    reference with no energy (seal gate RF-1: the writer hands over a
+    reference whose energy it cannot read).  The bracket then still carries,
+    for each endpoint whose references all read, the endpoint mean of each
+    family and the gross family's admissible set; an endpoint that holds the
+    unreadable reference carries None.  These are compared in place of the
+    family records.
+    """
+    if not isinstance(bracket, Mapping) or bracket.get("claim_families") != {}:
+        return None
+    companion = bracket.get("idle_subtracted_companion")
+    companion = companion if isinstance(companion, Mapping) else {}
+    return {**{key: bracket.get(key) for key in _NEG8_BRACKET_REFERENCE_FIELDS},
+            "idle_subtracted_start_point_j": companion.get("start_point_j"),
+            "idle_subtracted_end_point_j": companion.get("end_point_j")}
+
+
+def _neg8_reproduces(rederived: Mapping[str, Any], stored: Any, *, energy_unreadable: bool) -> bool:
+    """Whether a bracket re-derived from the reference bundles is the stored bracket's, bound aside.
+
+    With claim-family records: each family's bound-independent fields are
+    equal (``_neg8_endpoints``).  With none, and only when the window holds a
+    reference whose energy the writer could not read (``energy_unreadable``):
+    the bracket-level reference fields are equal
+    (``_neg8_bracket_references``).  The estimand is equal in both cases.
+    """
+    if rederived.get("estimand") != (stored.get("estimand") if isinstance(stored, Mapping) else None):
+        return False
+    endpoints = _neg8_endpoints(rederived)
+    if endpoints is not None:
+        return endpoints == _neg8_endpoints(stored)
+    references = _neg8_bracket_references(rederived)
+    return energy_unreadable and references is not None and references == _neg8_bracket_references(stored)
 
 
 def _epoch_s(text: Any) -> float | None:
@@ -4625,9 +4679,14 @@ class _Harvest:
         * a reference the verdict names carries a reference-loss flag the
           stored bracket did not drop (``NEG8_REFERENCE_LOSS_CODES``: a 6.4
           physics exclusion, a timeout, an admission abort, failed strict
-          validation, a model identity that is not the sealed one or cannot
-          be derived (ruling N8)): the screen runs on the survivors (NEG-8 ruling
-          2026-10-07, registration 0.12);
+          validation, bytes or an energy that cannot bear a number
+          (``NEG8_MEMBER_VALIDITY_LOSS_CODES``), a model identity that is not the
+          sealed one or cannot be derived (ruling N8)), or succeeded with an
+          energy the verdict writer cannot read (reason ``energy_unreadable``,
+          seal gate RF-1): the screen runs on the survivors (NEG-8 ruling
+          2026-10-07, registration 0.12).  The stored row records the screen
+          as failed for such a reference (the writer hands it over with no
+          energy); that failure decides nothing by itself;
         * a corpus member carries a 6.4 physics exclusion, so the bound was
           re-derived from the clean members (``neg8_corpus_physics``, 5.3).
 
@@ -4750,12 +4809,21 @@ class _Harvest:
             self.archive / ww.NEG8_HARVEST_ALLOWANCE_RECORD, record)
 
     def _neg8_reference_losses(self, row: Mapping[str, Any]) -> dict[str, str]:
-        """{run_id: code} for each NEG-8 reference the verdict names that a reference-loss flag hits.
+        """{run_id: reason} for each NEG-8 reference the verdict names that the harvest finds lost.
 
         The references are the invoked start, midpoint and end members of the
         verdict's own source manifests (``verdict_neg8_sources``); the codes
         are ``NEG8_REFERENCE_LOSS_CODES`` at member level, the first in that
-        order naming the loss.  No energy is read.
+        order naming the loss.
+
+        Seal gate RF-1: a reference no code names, whose stored summary
+        records ``succeeded`` and whose energy the verdict writer cannot read
+        (``whole_window._neg8_writer_reference_energy``, the writer's own
+        test on the stored summary), is lost with the reason
+        ``energy_unreadable``.  ``self.neg8_energy_unreadable`` lists every
+        succeeded reference that fails that test, whatever names its loss.
+        The test reads whether an energy is present and well formed.  No
+        reference is lost for the size of its energy.
 
         When the verdict's sources do not authenticate, the references are
         read from the claim root's campaign manifests as written
@@ -4809,6 +4877,40 @@ class _Harvest:
             if scope.get("level") == "member" and run_id in references and code in order \
                     and (run_id not in losses or order[code] < order[losses[run_id]]):
                 losses[run_id] = code
+        # A planned reference with no bundle directory at all never reached
+        # the verdict writer: no stored screen holds its energy, the stored
+        # counts already lack it and ``_neg8_lost_rows`` names it
+        # ``bundle_absent`` from the roster (cold pass 2 N2).  Its
+        # member.bytes_missing therefore names no loss the stored bracket did
+        # not already have.  A bundle that is present with a file missing
+        # carries the same code and is a loss.
+        for run_id in [run_id for run_id, code in losses.items() if code == "member.bytes_missing"]:
+            try:
+                present = self._bundle_on_disk(run_id)
+            except Exception:
+                present = (Path(runs) / run_id).is_dir()
+            if not present:
+                del losses[run_id]
+        # Seal gate RF-1.  The bundle of a reference is where the replay will
+        # look for it: the manifests' own resolution when the sources
+        # authenticate, else the claim root's directory of that name.
+        paths: Mapping[str, Path] = {}
+        if not isinstance(sources, str):
+            try:
+                paths = ww._manifest_bundle_paths(list(manifests), Path(runs)) or {}
+            except Exception:
+                paths = {}
+        unreadable: list[str] = []
+        for run_id in sorted(references):
+            try:
+                summary = ww._read_json_object(Path(paths.get(run_id) or Path(runs) / run_id) / "summary_metrics.json")
+            except Exception:
+                summary = None
+            if isinstance(summary, Mapping) and summary.get("status") == "succeeded" \
+                    and None in ww._neg8_writer_reference_energy(summary):
+                unreadable.append(run_id)
+                losses.setdefault(run_id, ww.NEG8_LOSS_ENERGY_UNREADABLE)
+        self.neg8_energy_unreadable = unreadable
         return losses
 
     def _neg8_spares(self) -> dict[str, list[str]]:
@@ -4914,9 +5016,15 @@ class _Harvest:
         bundles the verdict was written from and nothing is evaluated (that
         pass replays the stored selection: references the stored bracket
         lists as ``strict_invalid`` are dropped once verified, an unlisted
-        strict-invalid one is read as the writer read it).  With
-        ``exclude`` ({run_id: code}, possibly empty) the decision is then the
-        re-derivation that drops those references before aggregation.  The
+        strict-invalid one is read as the writer read it, and a reference
+        whose energy the writer could not read is entered as the writer
+        entered it, with no energy).  A stored bracket written over such a
+        reference has no family record; its endpoint means and admissible
+        sets are then compared instead (``_neg8_reproduces``, seal gate
+        RF-1).  With ``exclude`` ({run_id: reason}, possibly empty) the
+        decision is then the re-derivation that drops those references, and
+        any other reference whose energy cannot be read, before aggregation;
+        a dropped reference's energy is never read.  The
         collected-bound case alone (no exclusions, no clean bound) still runs
         only when the stored NEG-8 conditions were the two ``*_UNDERIVED``
         ones.
@@ -4980,8 +5088,9 @@ class _Harvest:
                         return (members.get(bundle_id) or {}).get("strict_valid") is False
 
                     def rederive(excluded: Mapping[str, str] | None) -> tuple[Any, str | None]:
-                        replay = {"stored_strict_losses": stored_strict, "unlisted_strict_invalid": "read"} \
-                            if excluded is None else {}
+                        replay = {"stored_strict_losses": stored_strict, "unlisted_strict_invalid": "read",
+                                  "unreadable_energy": "writer_entry"} \
+                            if excluded is None else {"unreadable_energy": "lost"}
                         return ww._derived_neg8_decision(
                             manifests, runs, policy, current=current, point_drift=True,
                             drift_bound_artifact=bound, return_bracket=True,
@@ -4993,8 +5102,8 @@ class _Harvest:
                         problems.append(f"rederivation_failed:{problem}")
                     elif not isinstance(stored, Mapping):
                         problems.append("rederivation_invalid")
-                    elif _neg8_endpoints(stored) is None or _neg8_endpoints(stored) != _neg8_endpoints(bracket) \
-                            or stored.get("estimand") != (bracket or {}).get("estimand"):
+                    elif not _neg8_reproduces(stored, bracket, energy_unreadable=bool(
+                            getattr(self, "neg8_energy_unreadable", None))):
                         problems.append("rederivation_differs_from_stored_bracket")
                     derived = stored
                     if not problems and exclude is not None:

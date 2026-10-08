@@ -1816,6 +1816,21 @@ NEG8_REFERENCES = (
 NEG8_REFERENCE_MANIFEST = "campaign_manifests/b5t-neg8-references.json"
 
 
+def neg8_reference_summary(gross_j: float) -> dict:
+    """A synthetic reference's stored summary: the fields the verdict writer reads for the NEG-8 screen.
+
+    A real summary carries the gross energy with its anchor-shift envelope
+    and the idle-subtracted energy; the verdict writer reads exactly these
+    (``run_campaign._gross_energy_for`` and ``_idle_subtracted_energy_for``),
+    and a summary without them is one whose energy the writer cannot read
+    (seal gate RF-1).  The values are the ones ``neg8_reference_gates``
+    returns for the same point (idle-subtracted = gross - 20 J).
+    """
+    return {"status": "succeeded", "gross_energy_j": gross_j, "idle_subtracted_energy_j": gross_j - 20.0,
+            "energy_anchor_shift_envelopes": {"/gross_energy_j": {
+                "point_j": gross_j, "lower_j": gross_j - 0.01, "upper_j": gross_j + 0.01}}}
+
+
 def neg8_trajectory(drift_j: float) -> dict[str, float]:
     """Gross points of the window's references: the end endpoint sits ``drift_j`` above the start."""
     start = (30.30, 30.32, 30.34)
@@ -1885,7 +1900,7 @@ def write_neg8_reference_verdict(window: "Window", points: dict[str, float], *, 
         bundle = window.claim / bundle_id
         put(bundle / "config.json", {"run_id": bundle_id})
         put(bundle / "metadata.json", {"run_id": bundle_id})
-        put(bundle / "summary_metrics.json", {"status": "succeeded"})
+        put(bundle / "summary_metrics.json", neg8_reference_summary(points[bundle_id]))
         members.append({"execution": "invoked", "run_id": bundle_id, "bundle_ids": [bundle_id], "role": role,
                         "canonical_neg8_workload": True, "scientific_config_sha256": "d" * 64})
     policy_sha = sha(ROOT / POLICY)

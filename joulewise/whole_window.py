@@ -4017,6 +4017,47 @@ def _gross_fields(summary: Any) -> dict[str, float] | None:
     return {"point_j": point, "lower_j": lower, "upper_j": upper}
 
 
+# Why a NEG-8 reference is lost when it succeeded and passed the strict check
+# but its energy cannot be read (seal gate stage 1, RF-1; registration 0.12
+# "Lost references").
+NEG8_LOSS_ENERGY_UNREADABLE = "energy_unreadable"
+
+
+def _neg8_writer_reference_energy(
+    stored_summary: Any,
+) -> tuple[dict[str, float] | None, float | None]:
+    """The two energies the verdict writer hands the NEG-8 screen for one kept reference.
+
+    The verdict writer (``scripts/run_campaign.py``) reads a reference it
+    kept (status ``succeeded``, strict validation clean) from the stored
+    ``summary_metrics.json`` with two functions.  ``_gross_energy_for``
+    gives the gross point with its anchor-shift envelope, or ``None`` when
+    the summary has no finite ``gross_energy_j``, no envelope under
+    ``energy_anchor_shift_envelopes["/gross_energy_j"]``, a non-finite
+    envelope field, a point that is not the gross energy, a lower edge that
+    is not positive, or a point outside its own edges.
+    ``_idle_subtracted_energy_for`` gives the finite
+    ``idle_subtracted_energy_j`` or ``None``.  This function returns the same
+    pair from the same summary: ``_gross_fields`` and ``_finite_number`` hold
+    the same arithmetic and tolerances, and
+    ``tests.test_neg8_survivors.WriterEnergyPredicateParityTests`` drives the
+    writer's two functions against it.  A reference is **energy-unreadable**
+    when either value is ``None``.  The reducer leaves a summary in that
+    state when the member's clock anchor is not ``bounded`` or its
+    calibration attachment does not verify: it then computes no envelope.
+    The test reads whether an energy is present and well formed, never how
+    large it is.
+    """
+
+    gross = _gross_fields(stored_summary)
+    idle = (
+        _finite_number(stored_summary.get("idle_subtracted_energy_j"))
+        if isinstance(stored_summary, Mapping)
+        else None
+    )
+    return gross, idle
+
+
 def _reference_energy_evidence(
     bundle_path: Path,
     *,
@@ -4836,6 +4877,7 @@ def _derived_neg8_decision(
     strict_invalid: Any = None,
     stored_strict_losses: Any = None,
     unlisted_strict_invalid: Literal["refuse", "read"] = "refuse",
+    unreadable_energy: Literal["refuse", "writer_entry", "lost"] = "refuse",
 ) -> tuple[Any, str | None]:
     """Re-derive a verdict from source-member summaries, never the stored row.
 
@@ -4867,6 +4909,26 @@ def _derived_neg8_decision(
     ``bundle_strict_invalid`` (``unlisted_strict_invalid="refuse"``, the row
     validator) or read as the writer read it (``"read"``, the harvest's
     authenticity pass, whose exclusion pass then drops it).
+
+    A reference that succeeded and is not strict-invalid can still have an
+    energy the verdict writer cannot read (``_neg8_writer_reference_energy``:
+    the stored summary has no gross-energy envelope, or no finite
+    idle-subtracted energy).  The writer hands such a reference to the
+    screen with no energy, which fails the whole screen as
+    ``neg8_bracket_reference_invalid`` (seal gate stage 1, RF-1).
+    ``unreadable_energy`` says what this re-derivation does with it, on the
+    current point-drift path only:
+
+    * ``"refuse"`` (the default, the row validator): as before this keyword
+      existed, the reference goes to ``_reference_energy_evidence``, whose
+      problem ends the re-derivation;
+    * ``"writer_entry"`` (the harvest's authenticity pass): the reference is
+      entered exactly as the writer entered it, the pair
+      ``_neg8_writer_reference_energy`` returns, so the re-derived bracket
+      can be compared with the stored one; no fresh reduction is asked of it;
+    * ``"lost"`` (the harvest's exclusion pass): the reference is lost with
+      reason ``energy_unreadable`` before aggregation and its energy is never
+      read; the survivors decide.
     """
 
     try:
@@ -4993,6 +5055,12 @@ def _derived_neg8_decision(
                             and unlisted_strict_invalid != "read"
                         ):
                             return None, "bundle_strict_invalid"
+                    if reason is None and unreadable_energy == "lost":
+                        # Seal gate RF-1: named after every other loss, so it
+                        # is the reason only for a reference that succeeded,
+                        # is not strict-invalid and carries no caller's code.
+                        if None in _neg8_writer_reference_energy(stored_summary):
+                            reason = NEG8_LOSS_ENERGY_UNREADABLE
                     if reason is not None:
                         lost.append(
                             {
@@ -5018,7 +5086,17 @@ def _derived_neg8_decision(
                         or member.get("scientific_config_sha256") != scientific_sha
                     ):
                         return None, "provenance"
-                if point_drift:
+                writer_entry = (
+                    _neg8_writer_reference_energy(stored_summary)
+                    if survivors and unreadable_energy == "writer_entry"
+                    else None
+                )
+                if writer_entry is not None and None in writer_entry:
+                    # Seal gate RF-1, the authenticity pass: the writer's own
+                    # entry for a reference whose energy it could not read.
+                    gross, idle_subtracted = writer_entry
+                    problem = None
+                elif point_drift:
                     gross, idle_subtracted, problem = (
                         _reference_energy_evidence(
                             bundle_path,
