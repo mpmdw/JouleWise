@@ -51,8 +51,11 @@ records PR; it is not repeated here.
 - The **orchestrator** is the designated lead, working in an interactive
   session with Ed. It decomposes work, rules on design questions,
   dispositions review findings, reads the exact merge candidate, and holds
-  merge authority. The headless relaunch loop ("magistrate") is held by its
-  STOP file; when it runs, it follows the same rules as the orchestrator.
+  merge authority. The headless relaunch loop ("magistrate") runs only while
+  no stop is set: a local `STOP` file or a remote branch named `ops/stop*`
+  holds it, and removing the stop releases it. When it runs, it follows the
+  same rules as the orchestrator, from the step list that the top block of
+  `RUN_STATE.md` names.
 - The **default execution seat** implements, audits, and serves as a
   consult peer. Another model family is used only after a recorded,
   noticeable weakness of the default seat.
