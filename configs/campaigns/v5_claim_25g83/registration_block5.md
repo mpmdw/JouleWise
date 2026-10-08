@@ -1903,11 +1903,11 @@ Structure (decisions, conditions, member counts, digests) goes to `derived/neg8-
 (`withheld/neg8-rescreen-bracket.json`). The stored verdict of such a window still reads "failed", which is
 `whole_window.not_passed`, disclosed only (§6.5).
 
-**Which corpus members the mint may leave out: one closed list.** *Forcing problem:* the bound may rest on 10 or 11
-members, so something must decide which succeeded members are left out, and a loose rule would let a corpus be
-*selected* (an inconvenient but valid member dropped). The **NEG-8 mint** is the core function that builds the bound
-from the corpus bundles (`whole_window._mint_hazard_neg8_drift_bound`, at `a434e363d`; "the mint" here and in §0). It
-gives each corpus member one of three verdicts:
+**Which corpus members may be left out of the bound: one closed list.** *Forcing problem:* the bound may rest on
+10 or 11 members, so something must decide which succeeded members are left out, and a loose rule would let a
+corpus be *selected* (an inconvenient but valid member dropped). The **NEG-8 mint** is the core function that
+builds the bound from the corpus bundles (`whole_window._mint_hazard_neg8_drift_bound`, at `a434e363d`; "the mint"
+here and in §0). It gives each corpus member one of three verdicts:
 
 - **keep:** it passes every per-member test the mint applies;
 - **omit:** it fails a registered member-validity test that would also remove a science member. The reasons are a
@@ -2166,8 +2166,9 @@ NULL window, and named two of the three process conditions.)
   post calibration first by the collection deadline of §5.1, inside the 24 h calibration horizon, as the bullet
   "Is that right?" above says. (Revision 10 registered a rule that set the next attempt's allowance, without an
   erratum, to the larger of the sizing output's and the stopped attempt's largest observed member cycle, "plus the
-  sizing margin". No such margin is defined in the three sealed documents, the sizing file or the sizing program,
-  and no program derives an allowance from an observed cycle, so that rule is withdrawn.)
+  sizing margin". No such margin is defined in this registration, the analysis plan, the flag catalog, the sizing
+  file or the sizing program, and no program derives an allowance from an observed cycle, so that rule is
+  withdrawn.)
 - **Block duration.** Assume every window is claim-usable on its first attempt. With the watchdog releasing each
   window at its terminal record (§5.4), one window to the next is the window plus about 0.6–1.6 h: the driver's tail
   and courier about 0.1 h, a watchdog tick of up to 5 min, the pin advance and the next plan a few minutes, the
@@ -3256,12 +3257,12 @@ carries another category, or is BASELINE outside six named codes (`calibration.l
 `member.target_phase_precheck_failed`). So a new refusal site cannot enter the hazard path without one of four
 classes: PHYSICS or NUMBER_INTEGRITY, saying what it protects; INTERNAL, which by definition stops nothing; or
 **DEFERRED_REPRESENTATION**. That fourth class is for a refusal known to protect neither a physical quantity nor a
-number, which a named lane is already converting into a flag: the test admits it only when the entry names that
-lane in an `owner` field and still gives a `protects` text of at least 30 characters. The same holds for a new
-excluding code, which may be PHYSICS, NUMBER_INTEGRITY or DEFERRED_REPRESENTATION with an owner, and never
-BASELINE. The file holds no DEFERRED_REPRESENTATION entry at `9b0c680ed` (the table's last row), so today every
-non-BASELINE refusal and exclusion is PHYSICS, NUMBER_INTEGRITY or INTERNAL. (Revision 10 named three classes; the
-test admits the fourth.)
+number, which a named lane (a line of work with its own branch and review) is already converting into a flag: the
+test admits it only when the entry names that lane in an `owner` field and still gives a `protects` text of at
+least 30 characters. The same holds for a new excluding code, which may be PHYSICS, NUMBER_INTEGRITY or
+DEFERRED_REPRESENTATION with an owner, and never BASELINE. The file holds no DEFERRED_REPRESENTATION entry at
+`9b0c680ed` (the table's last row), so today every non-BASELINE refusal and exclusion is PHYSICS, NUMBER_INTEGRITY
+or INTERNAL. (Revision 10 named three classes; the test admits the fourth.)
 
 *What the scan does not see* (its own docstring): a bare `return False` from an admission predicate, a `continue`
 that skips a member, and a new call to an existing raising function. Those are checked by hand in review
