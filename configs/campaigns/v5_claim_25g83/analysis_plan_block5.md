@@ -388,18 +388,19 @@ traceable. `FILL[GAMMA-MANIFEST-EXCLUSIONS-BINDING]` names how L9 binds them.
 
 1. Per kept quad k: `d_k = (B1 + B2)/2 − (A1 + A2)/2`.
 2. `dbar = mean(d_k)`; `s_d` = sample standard deviation; `se_rep = s_d / √n`.
+   (Terms of step 3, built here because step 3 stands in the seal gate's own words. The *metrology term* `se_met`
+   is a standard error that the engine adds in quadrature to `se_rep` when a metric has one:
+   `se_total = √(se_rep² + se_met²)`. It is built from *random-error variances*:
+   variances, in J², that a member's summary records for a named source of run-to-run error. *Governed* means that
+   the engine reads such a variance only when the summary's reducer version and idle-estimation method are a pair
+   the code lists. The one such variance is `E_idle_mean_j2`, the variance of the member's idle-baseline mean taken as an
+   energy; the engine reads it for `energy_request_j` and for no other metric.)
 3. Metrology term: the engine reads governed random-error variances only for the metric `energy_request_j`; for
    the two phase metrics of block 5 none is recorded, so `se_met = 0` and `se_total = se_rep`. Each member's
    run-to-run error is already inside s_d (the d_k are observed with it), so a term added in quadrature would count it
    twice: in simulation the plain t interval covers 95.0% and the doubled one 99.8% (seal gate, stage 1). Errors that
    are not random from run to run (a calibration timing bias common to all members) are carried by D (step 5) and by
    the attribution floor (§4 step 7), never by this interval.
-   (Terms of this step. The *metrology term* `se_met` is a standard error that the engine adds in quadrature to
-   `se_rep` when a metric has one: `se_total = √(se_rep² + se_met²)`. It is built from *random-error variances*:
-   variances, in J², that a member's summary records for a named source of run-to-run error. *Governed* means that
-   the engine reads such a variance only when the summary's reducer version and idle-estimation method are a pair
-   the code lists. The one such variance is `E_idle_mean_j2`, the variance of the member's idle-baseline mean taken as an
-   energy; the engine reads it for `energy_request_j` and for no other metric.)
 4. `t* = round(t(0.975, n − 1), 3)` (the engine rounds to three places: 2.262, 2.306 and 2.365 for n = 10, 9 and 8;
    2.447, 2.571 and 2.776 for n = 7, 6 and 5). The **metrology
    interval** (the engine's name, `metrology_aware_ci95`, for the 95% interval of dbar from its standard error alone,
