@@ -64,7 +64,8 @@ after a chain of receipts verified, and discarded a whole window when one member
    decides which flags remove a member or a window from the claims (§6);
 3. has the harvest (the desk program run after each window) always emit the numbers plus the flags. A window is
    **claim-usable** when no window-removing flag fired and each reported number still rests on at least 5 of its 10
-   planned independent repeats and 5 of its 10 planned groups of four interleaved members (§0.8, §6.6). Each pack's
+   planned independent repeats and 5 of its 10 planned groups of four interleaved members (§0.8, §6.6). (Revisions
+   3 to 11 set this minimum at 8; the seal gate set 5, revision 12 list, item 1.) Each pack's
    analysed window is its first claim-usable attempt (§7.2);
 4. folds block 4, the separate qualification window, into block 5: G10, a deliberate clock step that shows the
    clock check can see one, runs as a recorded diagnostic at the tail of the first ALPHA window (§3).
@@ -1828,7 +1829,11 @@ Each is evidenced by a path and SHA-256 before the point named.
    the `strict_invalid` loss of §0.12), so it carries over to `fe28e5a0c`. From `fe28e5a0c` to the int5 head
    `9b0c680ed` (searched by this author for revision 10) the runner and the controller did not change, the harvest
    changed in one explanatory comment that does not mention the cooldown, and `configs/campaign_policies/` did not
-   change, so it carries over to `9b0c680ed`; the search is repeated at the final head if that differs.
+   change, so it carries over to `9b0c680ed`. From `9b0c680ed` to the int5 head `9395cecfb` (searched by this
+   author for revision 12) the runner and the controller did not change, the harvest changed only in its
+   comparison of a window's code with the seal (§0.18), with no added or removed line that mentions the cooldown,
+   and `configs/campaign_policies/` did not change, so it carries over to `9395cecfb`. The search is repeated at
+   H_claim if H_claim changes one of those three files or that directory after `9395cecfb`.
 8. The P3 sync points of §13 are each confirmed against the merged code, and this text is corrected where the code
    chose differently (a draft edit, before the seal). **`P3-SYNC-RECORD`** (filled in revision 6): confirmed against
    the frozen head `a434e363d`; the result of each sync point is the table in §13, and the catalog comparison there.
