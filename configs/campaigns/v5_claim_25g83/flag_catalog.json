@@ -12,21 +12,21 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
-      "note": "Accumulator intervals recorded without a registered unit scale (should not occur: the scale is registered)."
+      "note": "Accumulator intervals recorded without a registered unit scale (should not occur: the scale is registered). Reserved: no emitter at H_claim. The condition it names can no longer reach a flag: with no registered positive unit scale (battery_accumulator_watts_per_unit) the harvest's accumulator rule raises an error, which the harvest records as a fault."
     },
     "battery.accumulator_excursion": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS",
-      "note": "An accumulator interval between in-force publications implies a mean battery power beyond 200 mA x V (0.001 W per unit, lane L1 units check): the charge accumulator above it (charging), or, without SMC coverage, a positive discharge-accumulator mean beyond it, which a discharge-only sum cannot produce (sign-inconsistent; observed.sign_inconsistent). With SMC coverage the sign-inconsistent case is battery.accumulator_unavailable (DISCLOSE; cold pass N4, 2026-10-07), in the harvest and the hazard copy alike, because the 1 s SMC reads measure the current directly and catch any charging. A negative discharge-accumulator mean beyond the limit is battery assist (battery.assist, DISCLOSE) and never this code (ruling of 2026-10-06)."
+      "note": "An accumulator interval between in-force publications implies a mean battery power beyond 200 mA x V (0.001 W per unit, lane L1 units check): the charge accumulator above it (charging), or, without SMC coverage, a positive discharge-accumulator mean beyond it, which a discharge-only sum cannot produce (sign-inconsistent; the marker is on the interval's own row, observed.intervals[i].sign_inconsistent true; observed itself holds only rule, intervals (the first 8 rows), count and watts_per_unit). With SMC coverage the sign-inconsistent case is battery.accumulator_unavailable (DISCLOSE; cold pass N4, 2026-10-07; its row carries the whole interval entry under the same key sign_inconsistent), in the harvest and the hazard copy alike, because the 1 s SMC reads measure the current directly and catch any charging. A negative discharge-accumulator mean beyond the limit is battery assist (battery.assist, DISCLOSE) and never this code (ruling of 2026-10-06)."
     },
     "battery.accumulator_unavailable": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
-      "note": "The accumulator rule could not be evaluated on an interval (a field not read at both publications, a counter that went backward, no voltage); the publication rule still applies. Also, with SMC coverage: a gap of more than 120 s between registry publications (only the accumulator test goes unevaluated), and a sign-inconsistent discharge accumulator (a positive discharge mean beyond the limit, a registry record disagreeing with itself; cold pass N4, 2026-10-07)."
+      "note": "The accumulator rule could not be evaluated on an interval (a field not read at both publications, a tick counter that went backward, an accumulated value that changed while its tick counter did not, or no voltage); the publication rule still applies. Also, with SMC coverage: a gap of more than 120 s between registry publications (only the accumulator test goes unevaluated), and a sign-inconsistent discharge accumulator (a positive discharge mean beyond the limit, a registry record disagreeing with itself; cold pass N4, 2026-10-07)."
     },
     "battery.arm_unmeasured": {
       "blinding": "STRUCTURE",
@@ -40,7 +40,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
-      "note": "Battery assist (ruling of 2026-10-06): a negative battery current, SMC B0AC below 0 mA, with ExternalConnected Yes and IsCharging No. Any negative read counts; -200 mA is the reporting threshold (smc_reads_below and the sampled duration below -200 mA are reported beside smc_reads_negative). Without SMC coverage (battery.smc_unavailable), a negative registry InstantAmperage or Amperage at a publication in force taken before the phase ends (registry_publications_negative), or a discharge-accumulator mean beyond 200 mA x V, stands in; with SMC coverage the 1 s reads decide. Recorded per phase (pre_request: prepare's tail, idle baseline and warm-up; request; post_request), each with smc_reads_negative, smc_reads_below, the minimum B0AC, the duration below -200 mA, registry_publications_negative and accumulator_intervals_over_limit; this code marks a member whose measured request was assisted, battery.assist_outside_request one assisted only in the other phases. observed.state_unread is true when a publication in force did not read IsCharging or ExternalConnected: that member is also battery.unmeasured (excluded) and its discharge is still disclosed. A span that read charging or AC loss is battery.member_span and carries no assist. The discharged energy goes to withheld/ only. Never removes a member or a window (calibration captures included); the analysis prints every reported cell with and without members that carry it (analysis plan 8.1)."
+      "note": "Battery assist (ruling of 2026-10-06): a negative battery current, SMC B0AC below 0 mA, with ExternalConnected Yes and IsCharging No. Any negative read counts; -200 mA is the reporting threshold (smc_reads_below and the sampled duration below -200 mA are reported beside smc_reads_negative). Without SMC coverage (battery.smc_unavailable), a negative registry InstantAmperage or Amperage at a publication in force taken before the phase ends (registry_publications_negative), or a discharge-accumulator mean beyond 200 mA x V, stands in; with SMC coverage the 1 s reads decide. Recorded per phase (pre_request: prepare's tail, idle baseline and warm-up; request; post_request), each with smc_reads_negative, smc_reads_below, the minimum B0AC, the duration below -200 mA, registry_publications_negative and accumulator_intervals_over_limit; this code marks a member whose measured request was assisted, battery.assist_outside_request one assisted only in the other phases. observed.state_unread is true when a publication in force did not read IsCharging or ExternalConnected: that member is also battery.unmeasured (excluded) and its discharge is still disclosed. A span with a registry read of IsCharging Yes or ExternalConnected No is battery.member_span and carries no assist flag and no discharged energy. A span removed by battery.member_span only for a current above +200 mA still gets its assist flag when one of its phases was assisted, and its discharged energy is still computed and written to withheld/battery-assist.json. The discharged energy goes to withheld/ only. Never removes a member or a window (calibration captures included); the analysis prints every reported cell with and without members that carry it (analysis plan 8.1)."
     },
     "battery.assist_outside_request": {
       "blinding": "STRUCTURE",
@@ -187,7 +187,7 @@
       "effect": "DISCLOSE",
       "family": "CALIBRATION",
       "klass": "NUMBER",
-      "note": "historical_custody_report status unmeasured: a historical calibration file is missing (evicted from local iCloud storage, archived or deleted; observed.evicted counts these), present but unreadable, or its capture directory is missing or did not answer the bounded probe; or the ledger could not be read, or no observation was checked. Bytes that cannot be read are not shown to be wrong, so this is disclosed and the window is kept (refusal census, 2026-10-06); the hash chain and the pin are still checked. Class NUMBER, as the emitter gives it: the check protects the acceptance's numbers, and only its effect is DISCLOSE (revision 6 aligned the class with the code, which it had restated as REPRESENTATION). Present bytes that differ are calibration.historical_custody_mismatch (or _mismatch_unused for a capture the acceptance does not rely on)."
+      "note": "historical_custody_report status unmeasured: a historical calibration file is missing (evicted from local iCloud storage, archived or deleted), present but unreadable, or its capture directory is missing or did not answer the bounded probe; or the ledger could not be read, or no observation was checked. observed.evicted counts captures, not files: one for each ledger capture with at least one file missing while every file present is readable and matches, so a capture with several missing files counts once, and a capture that also has an unreadable file, or whose directory is missing, is not counted. The state of each file is in the entry's artifacts map in derived/historical-custody.json. Bytes that cannot be read are not shown to be wrong, so this is disclosed and the window is kept (refusal census, 2026-10-06); the hash chain and the pin are still checked. Class NUMBER, as the emitter gives it: the check protects the acceptance's numbers, and only its effect is DISCLOSE (revision 6 aligned the class with the code, which it had restated as REPRESENTATION). Present bytes that differ are calibration.historical_custody_mismatch (or _mismatch_unused for a capture the acceptance does not rely on)."
     },
     "calibration.ledger_not_ready": {
       "blinding": "STRUCTURE",
@@ -215,7 +215,7 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "NUMBER",
-      "note": "No finalized bracket session: includes a chain stopped before post-calibration by disk.low, the agent census or the deadline."
+      "note": "No finalized bracket session (also written when no session id or ledger is found, or the session's terminal ledger pin cannot be derived). Its causes include every chain that ended before the post calibration finalized the session: a chain stopped by disk.low, the agent census or the deadline, and a chain that stopped itself before the first member at exit 10 (the bracket reservation failed), exit 11 (the pre calibration capture failed) or exit 12 (the pre fiducial bound exceeded the pre screen; no instrument.precal_screen_failed flag is written)."
     },
     "calibration.power_policy_unverified": {
       "blinding": "STRUCTURE",
@@ -257,7 +257,7 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "ROSTER",
       "klass": "NUMBER",
-      "note": "A target cell kept fewer than rules.cell_unit_minimum units in a stratum (derived by the exclusion function)."
+      "note": "A target cell kept fewer than rules.cell_unit_minimum units in a stratum (derived by the exclusion function). The minimum is 5 since stage 1 of the seal gate (2026-10-07; it was 8). Below 5 kept units in a stratum the registered floor guard (small_sample_guard_factor) is undefined, so the cell's floor and every contrast judged against it have no number. From 5 to 9 kept units the registered estimators give a correct number with a wider interval, and a wider interval removes nothing (registration 6.6)."
     },
     "census.journal_write_failed": {
       "blinding": "STRUCTURE",
@@ -278,7 +278,7 @@
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION",
-      "note": "The chain journal holds no collection stage: the window is harvested as NO_COLLECTION with every collector run (PLAN2 2.2 F)."
+      "note": "The chain's stage journal (night/chain-stages.jsonl) exists and holds no collection stage, which covers the chain stops at exits 10, 11 and 12: the window is harvested as NO_COLLECTION with every collector run (PLAN2 2.2 F). A chain that started and wrote no stage journal at all (killed before its first stage ended) does not get this flag and is harvested as COLLECTED."
     },
     "clock.arm_unmeasured": {
       "blinding": "STRUCTURE",
@@ -299,7 +299,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "REPRESENTATION",
-      "note": "Offset from a time server; enters no energy."
+      "note": "Offset from a time server; enters no energy. Reserved: no emitter at H_claim."
     },
     "clock.step": {
       "blinding": "STRUCTURE",
@@ -327,7 +327,7 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "CLOCK_SYSTEMATIC",
       "klass": "NUMBER",
-      "note": "At least 5 members with a recorded anchor status and more than half not bounded. Counted across attempts it is END STATE (registration 7.4)."
+      "note": "The window's members and its finalized calibration captures (the pre and post slots, at most two) are counted together: at least 5 of them have a recorded clock anchor status and more than half of the recorded ones are not bounded. A capture whose evidence file is unreadable or carries no status is not recorded and is left out of both counts; one with an unrecognised status counts as recorded and not bounded. Counted across the attempts of the block it is END STATE (registration 7.4); that count is a rule applied from the harvest verdicts, and no block-5 program computes it."
     },
     "clock.unmeasured": {
       "blinding": "STRUCTURE",
@@ -341,7 +341,7 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "CODE_IDENTITY",
       "klass": "NUMBER",
-      "note": "Executed-file inventory differs from the sealed inventory; or chain bytes differ from their sidecar; or the checkout HEAD is not H_claim plus pin-only commits; or tracked edits or untracked files under the executed roots."
+      "note": "Executed-file inventory differs from the sealed inventory; or chain bytes differ from their sidecar; or a window input differs between H_claim, the head the sealed inventory names, and the head the window ran from; or tracked edits or untracked files under the executed roots. For the head comparison a window input is any path that git lists as changed between those two heads under joulewise/, scripts/ or configs/, or the file docs/phase_2/window_runbook.md, matched without regard to letter case, other than the calibration ledger pin (configs/calibration/calibration_ledger_head.json) and the three seal documents (sealed_inventory.json, registration_block5.md and analysis_plan_block5.md in this directory, whose sealed bytes are committed one commit after H_claim). Every other changed path is listed in derived/code-identity.json and removes nothing. The registered procedure installs the launch agent from the measurement checkout; when another checkout installed it, the harvest program as it stands at H_claim records that driver checkout, with its code files that differ from the sealed inventory, in the same file and raises no flag. The harvest lane that lands in the desk checkout before ALPHA-1's harvest (registration 11; orchestrator's ruling of 2026-10-07 on the seal-landing review, and Fable delta cold pass 5) changes three cases: a differing code file of a separate driver checkout becomes a difference under this code; the paths that are only recorded become a fixed list (docs/ other than the runbook, tests/, dot-directories and Markdown files at the repository root), every other path counting as a window input; and a change confined to another claim pack's directory is recorded and is not a difference."
     },
     "code.identity_unmeasured": {
       "blinding": "STRUCTURE",
@@ -362,7 +362,7 @@
       "effect": "DISCLOSE",
       "family": "ROSTER",
       "klass": "REPRESENTATION",
-      "note": "The harvest found no bundle present for a COLLECTED window (PLAN2 2.2 F). cell.below_minimum and neg8.bound_not_derived exclude where it matters."
+      "note": "Members were planned and the harvest found no bundle present, whatever the verdict (PLAN2 2.2 F). A COLLECTED window and a NO_COLLECTION one carry it alike, so a chain stopped at exit 10, 11 or 12 does, and for either verdict the harvest command exits 6. cell.below_minimum and neg8.bound_not_derived exclude where it matters."
     },
     "contention.arm_unmeasured": {
       "blinding": "STRUCTURE",
@@ -383,14 +383,14 @@
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS",
-      "note": "An outside process (not kernel_task) exceeds 0.05 CPU-s/s in an interval overlapping the member's request."
+      "note": "An outside process (not kernel_task) exceeds 0.05 CPU-s/s in a monitor interval that overlaps the member's request span (sampling_started to sampling_stopped). When the member has no request span (the sampling_started or sampling_stopped stamp is missing, or the start is later than the stop), the rule is judged over the whole member span instead: the hull of the sampler stream and the controller's span from the start of the idle baseline to the end of the idle drift sentinel."
     },
     "contention.unmeasured": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS",
-      "note": "Part of the member's request is covered by no ps interval."
+      "note": "Part of the member's request span (sampling_started to sampling_stopped) is covered by no ps interval. When the member has no request span (the sampling_started or sampling_stopped stamp is missing, or the start is later than the stop), the rule is judged over the whole member span instead: the hull of the sampler stream and the controller's span from the start of the idle baseline to the end of the idle drift sentinel."
     },
     "cooldown.result_unknown": {
       "blinding": "STRUCTURE",
@@ -404,7 +404,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "REPRESENTATION",
-      "note": "s1's structural checks run on ALPHA-1's bytes (registration 3)."
+      "note": "The structural checks of s1, the retired one-quad qualification window (registration 3). The harvest writes them at every window's harvest, ALPHA-1's first, as up to four flags of this code; observed.check names each: stream_sizes (the shortest and longest sampler stream), time_outside_members (the gaps between member spans), precheck_counts (for each cell, how many members' prechecks were eligible and how many were not) and l10a_prefix (the bundle count, how many passed strict validation and how many re-reduced to an identical summary). No finalization step is run or recorded. Blinding is set per flag: precheck_counts is always written RESTRICTED, overriding the default recorded here, because whether a precheck is eligible can turn on an energy envelope; the other three are STRUCTURE."
     },
     "disk.arm_unmeasured": {
       "blinding": "STRUCTURE",
@@ -530,7 +530,7 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "INSTRUMENT",
       "klass": "NUMBER",
-      "note": "The pre-calibration fiducial bound exceeded the pre screen; the chain stops before member 1."
+      "note": "Reserved: no emitter at H_claim. The condition it names is not written as a flag. A pre-calibration fiducial bound above the pre screen stops the chain before the first member (journal stop reason pre_calibration_screen_failed, chain exit 12), and the window is removed by calibration.no_bracket (family CALIBRATION), because its bracket session is never finalized."
     },
     "lineage.arm_decision_digest_differs": {
       "blinding": "STRUCTURE",
@@ -663,14 +663,14 @@
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER",
-      "note": "Target-phase precheck anchor_energy_envelope_exceeds_quarter_metric; computed from a science energy."
+      "note": "Target-phase precheck anchor_energy_envelope_exceeds_quarter_metric; computed from a science energy. It is the one code whose blinding in this catalog is RESTRICTED. The harvest writes it by name into derived/flags.jsonl, derived/exclusions.json and derived/window_flags.json; those three files stay in restricted custody until the release event, and anything released before it shows the member as removed (restricted code) without the code and omits the code's count (seal gate, stage 1, 2026-10-07; registration 8)."
     },
     "member.anchor_not_bounded": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER",
-      "note": "Per-member clock anchor status is not bounded (5 ms effective bound, 60 s fit span)."
+      "note": "A succeeded member whose recorded clock anchor status is not bounded. Bounded needs every condition of registration 0.14 to hold, among them: an effective bound of at most 5 ms; at least 60 s of sampler record time, counted from the end of the first record and also covered by the controller's own monotonic span around the sampler; at least two rollovers of the sampler's whole-second labels; a fitted clock rate within 50 parts per million of 1; and a first parse lag between 0 and 0.25 s."
     },
     "member.anchor_recompute_mismatch": {
       "blinding": "STRUCTURE",
@@ -775,7 +775,7 @@
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "NUMBER",
-      "note": "The member's target phase (decode or prefill) fails its precheck."
+      "note": "The member's target phase (decode or prefill) fails its precheck for a reason that has no code of its own; observed.reasons lists the reasons. (The two instrument reasons, cooldown_cap_hit and the energy-envelope reason anchor_energy_envelope_exceeds_quarter_metric are written under their own codes.) Blinding is set per flag: the harvest writes this flag RESTRICTED, overriding the default recorded here, when a listed reason is computed from a science energy, which it decides from the reason's name (the name contains energy or effect, or ends in _metric); in practice that is the one reason anchor_energy_envelope_unrecorded."
     },
     "member.timeout": {
       "blinding": "STRUCTURE",
@@ -894,7 +894,7 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "MODEL_IDENTITY",
       "klass": "NUMBER",
-      "note": "No pin to compare against. The pins are configs/campaigns/v5_claim_25g83/identity_pins.json (schema joulewise.b5_identity_pins.v1), sealed with this catalog; the plan trees' identity_pin_projection is unprojected and carries none. Fires when the measurement checkout lacks the file (arm collector) or its archived copy has no unit pin (harvest) (registration 4.6 item 3)."
+      "note": "No pin to compare against. The pins are configs/campaigns/v5_claim_25g83/identity_pins.json (schema joulewise.b5_identity_pins.v1), sealed with this catalog; the plan trees' identity_pin_projection is unprojected and carries none. Fires when the measurement checkout lacks the file (arm collector) or its archived copy has no unit pin (harvest) (registration 4.6 item 3). A harvest problem first (registration 7.2; added by the seal gate at stage 1, 2026-10-07): the members' recorded identities exist, and a harvest that is given the pins compares them."
     },
     "monitor.crash_loop": {
       "blinding": "STRUCTURE",
@@ -922,7 +922,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
-      "note": "A monitor probe fell inside a target phase."
+      "note": "A monitor probe fell inside a target phase. Reserved: no emitter at H_claim."
     },
     "monitor.restarted": {
       "blinding": "STRUCTURE",
@@ -936,7 +936,7 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "NEG8",
       "klass": "NUMBER",
-      "note": "The NEG-8 bound was not derived: neither the core reader (all 12 corpus members) nor the harvest's collected-subset validation (at least 10 of 12, committed order, only unsucceeded members left out, bound arithmetic and corpus identity checked against the custodied manifest) accepts it (registration 5.3); or the harvest's physics drop of corpus members (NEG-8 ruling 2026-10-07) left fewer than 10 clean members, or its clean bound did not validate (observed.source corpus_physics)."
+      "note": "The NEG-8 bound was not derived: neither the core reader (all 12 corpus members) nor the harvest's collected-subset validation (at least 10 of 12, committed order, only unsucceeded members left out, bound arithmetic and corpus identity checked against the custodied manifest) accepts it (registration 5.3); or a bound that one of those two routes accepted failed the member re-check, which runs whenever the bound's runs root carries the hazard launch-lineage locator (every block-5 window): each corpus member the bound names must be exactly one ordinary bundle in the bound root, not a symbolic link, whose file inventory hashes to the member's recorded bundle_evidence_sha256, whose launch lineage authenticates, whose calibration identity equals the bound's, which passes the custody-strict and current strict-summary checks, whose canonical scientific configuration equals the corpus's, and whose gross and idle-subtracted energy points re-derive to the recorded values; members that carry a lineage must share one, the bound's when it names one; an empty member list or an exception in the check also fails it (derived/neg8-bound.json records members_rederived); or the harvest's physics drop of corpus members (NEG-8 ruling 2026-10-07) left fewer than 10 clean members, or its clean bound did not validate (observed.source corpus_physics)."
     },
     "neg8.corpus_member_dropped": {
       "blinding": "STRUCTURE",
@@ -950,21 +950,21 @@
       "effect": "DISCLOSE",
       "family": "NEG8",
       "klass": "NUMBER",
-      "note": "NEG-8 ruling 2026-10-07 (registration 0.12): the midpoint reference was lost and its spare did not restore it, so the screen ran without it (the screen never needed it) and the drift allowance used the two-value spread |end mean - start mean|. Window level; observed names the lost midpoint. DISCLOSE here: the window keeps its screen result and its numbers. On GAMMA only (orchestrator ruling Q11, 2026-10-07; the seal gate confirms), joulewise.flags.exclusions.PACK_SCOPED_WINDOW_REASONS adds the window reason neg8.midpoint_lost_primary, so the attempt is not claim-usable and GAMMA is re-armed (registration 0.16, 7.2; analysis_plan_block5.md section 2.4); on ALPHA and BETA it is disclosed only. Once the block's midpoint record shows the midpoint never moved the spread beyond the bound, an erratum may downgrade it on GAMMA too."
+      "note": "NEG-8 ruling 2026-10-07 (registration 0.12): the midpoint reference was lost and its spare did not restore it, so the screen ran without it (the screen never needed it) and the drift allowance used the two-value spread |end mean - start mean|. Window level; observed names the lost midpoint. DISCLOSE here: the window keeps its screen result and its numbers. On GAMMA only (orchestrator ruling Q11, 2026-10-07, confirmed by the seal gate at stage 1), joulewise.flags.exclusions.PACK_SCOPED_WINDOW_REASONS adds the window reason neg8.midpoint_lost_primary, so the attempt is not claim-usable and GAMMA is re-armed (registration 0.16, 7.2; analysis_plan_block5.md section 2.4); on ALPHA and BETA it is disclosed only: a lost midpoint can understate those windows' allowance by an amount nothing measured, but no decision rests on their reported cells, whereas on GAMMA the allowance enters the deterministic bound D of the contrasts, on which a decision rests (analysis_plan_block5.md section 2.4). Once a block's midpoint record, which is read only after that block's release event, shows the midpoint never moved the spread beyond the bound, an erratum may downgrade it on GAMMA for a later block; it cannot reinstate a block-5 attempt that was re-armed."
     },
     "neg8.reference_lost": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "NEG8",
       "klass": "NUMBER",
-      "note": "NEG-8 ruling 2026-10-07 (registration 0.12): the NEG-8 screen ran on fewer than the planned 3 start, 1 midpoint and 3 end references. A reference is lost when its bundle is absent, its summary status is not succeeded (including member.admission_aborted and member.timeout), its summary cannot be read (summary_unreadable: no summary after a kill at the member cap, undecodable, or no string status; cold pass 2 D1), it fails strict validation (member.strict_validation_failed at harvest; reason strict_invalid in the verdict writer and its replay, delta audit A5), a member-level physics exclusion of section 6.4 fires on it, or its model identity cannot be derived (model.identity_underivable) or is not the sealed neg8_reference pin (model.identity_mismatch, which also removes the window, registration 6.5; orchestrator ruling N8 and call (ii), 2026-10-07); its energy enters neither the screen nor the allowance. Window level. observed names each lost reference (run id, slot, reason, status, the spares measured and succeeded at its stage; a planned reference that never ran is named from the sealed plan tree with reason bundle_absent, cold pass 2 N2), the realised and planned counts, the survivor-screen state, the bound formula, and the record that holds the bound and its two terms (the whole-window verdict, or withheld/neg8-rescreen-bracket.json); the bound is an energy and stays restricted. A loss the spare-slot retry restored is disclosed by member.retried and the lost member's own flag, not by this code. Fewer than two survivors at an endpoint is neg8.screen_failed (observed.reason references_insufficient)."
+      "note": "NEG-8 ruling 2026-10-07 (registration 0.12): the NEG-8 screen ran on fewer than the planned 3 start, 1 midpoint and 3 end references. A reference is lost when its bundle is absent, its summary status is not succeeded (including member.admission_aborted and member.timeout), its summary cannot be read (summary_unreadable: no summary after a kill at the member cap, undecodable, or no string status; cold pass 2 D1), it fails strict validation (member.strict_validation_failed at harvest; reason strict_invalid in the verdict writer and its replay, delta audit A5), a member-level physics exclusion of section 6.4 fires on it, or its model identity cannot be derived (model.identity_underivable) or is not the sealed neg8_reference pin (model.identity_mismatch, which also removes the window, registration 6.5; orchestrator ruling N8 and call (ii), 2026-10-07); its energy enters neither the screen nor the allowance. Stage 1 of the seal gate (2026-10-07; registration 0.12) added three kinds of loss, which the harvest lane lands in the desk checkout before ALPHA-1's harvest (registration 11): a reference that succeeded and passed strict validation but whose energy cannot be read (reason energy_unreadable: its summary has no finite, consistent gross-energy envelope or no finite idle-subtracted energy; also member.anchor_not_bounded, member.anchor_recompute_mismatch, member.reduction_mismatch, member.unreadable, member.bytes_missing or member.bytes_ambiguous on the reference); a reference whose contention or battery evidence is unmeasured (contention.unmeasured, battery.unmeasured); and a reference with a measured quiet-state violation or a failed battery pair (env.member_quiet_state_violated, battery.capture_pair_failed). clock.unmeasured and thermal.unmeasured do not lose a reference. Window level. observed names each lost reference (run id, slot, reason, status, the spares measured and succeeded at its stage; a planned reference that never ran is named from the sealed plan tree with reason bundle_absent, cold pass 2 N2), the realised and planned counts, the survivor-screen state, the bound formula, and the record that holds the bound and its two terms (the whole-window verdict, or withheld/neg8-rescreen-bracket.json); the bound is an energy and stays restricted. A loss the spare-slot retry restored is disclosed by member.retried and the lost member's own flag, not by this code. Fewer than two survivors at an endpoint is neg8.screen_failed (observed.reason references_insufficient)."
     },
     "neg8.screen_failed": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_WINDOW",
       "family": "NEG8",
       "klass": "NUMBER",
-      "note": "The NEG-8 screen failed: the verdict's NEG-8 bracket is absent or not passed, or lists a NEG-8 condition (neg8_gross_point_drift_exceeded, neg8_idle_sub_point_drift_exceeded, neg8_bracket_missing, neg8_bracket_reference_invalid, neg8_drift_bound_stale, the bound-underived conditions). The harvest's re-screen decides alone in three cases: the bound was derived from the collected 10 or 11 corpus members and the only conditions are the bound-underived ones; a reference the verdict names carries a loss flag the stored bracket did not drop (a section 6.4 physics exclusion, member.timeout, member.admission_aborted, member.strict_validation_failed, model.identity_mismatch, model.identity_underivable), so the screen re-runs on the survivors; or a corpus member was dropped for physics and the bound re-derived (registration 0.12, 5.3; NEG-8 ruling 2026-10-07). Fewer than two survivors at an endpoint, including references that never ran (cold pass 2 N3), fails with observed.reason references_insufficient and observed.lost naming each lost reference; more references than planned is neg8_bracket_reference_invalid. A re-screen that cannot run leaves the screen failed. The harvest always names the sealed roster's planned references and spares (delta audit A3), and trusts the stored bracket's own loss list only when the verdict's source manifests authenticate. When they do not, it also names references from the claim root's campaign manifests as written (unauthenticated; names only, never an energy or a passing screen), every known loss goes to the re-screen, which cannot run on unauthenticated sources, so a reference carrying a loss flag fails the screen, and observed.reference_source records the source (cold pass 2 N1). Which bracket carries the window's drift allowance (the stored one, the survivor re-screen's, or none) is recorded in derived/neg8-allowance.json (delta audit A1; registration 0.12)."
+      "note": "The NEG-8 screen failed: the verdict's NEG-8 bracket is absent or not passed, or lists a NEG-8 condition (neg8_bracket_abs_delta_exceeded for the gross energies, neg8_bracket_idle_sub_abs_delta_exceeded for the idle-subtracted energies, neg8_bracket_missing, neg8_bracket_reference_invalid, neg8_drift_bound_stale, the bound-underived conditions). The harvest's re-screen decides alone in three cases: the bound was derived from the collected 10 or 11 corpus members and the only conditions are the bound-underived ones; a reference the verdict names carries a loss flag the stored bracket did not drop (a section 6.4 physics exclusion, member.timeout, member.admission_aborted, member.strict_validation_failed, model.identity_mismatch, model.identity_underivable), so the screen re-runs on the survivors; or a corpus member was dropped for physics and the bound re-derived (registration 0.12, 5.3; NEG-8 ruling 2026-10-07). Stage 1 of the seal gate (2026-10-07; registration 0.12, 6.5) widened the loss flags of the second case by the losses listed under neg8.reference_lost (an energy that cannot be read, unmeasured contention or battery evidence, a quiet-state violation, a failed battery pair); the harvest lane lands them before ALPHA-1's harvest (registration 11). A stored bracket that failed with neg8_bracket_reference_invalid because a succeeded reference's energy could not be read then decides nothing by itself: that reference is lost and the harvest's screen on the survivors decides. Fewer than two survivors at an endpoint, including references that never ran (cold pass 2 N3), fails with observed.reason references_insufficient and observed.lost naming each lost reference; more references than planned is neg8_bracket_reference_invalid. A re-screen that cannot run leaves the screen failed. The harvest always names the sealed roster's planned references and spares (delta audit A3), and trusts the stored bracket's own loss list only when the verdict's source manifests authenticate. When they do not, it also names references from the claim root's campaign manifests as written (unauthenticated; names only, never an energy or a passing screen), every known loss goes to the re-screen, which cannot run on unauthenticated sources, so a reference carrying a loss flag fails the screen, and observed.reference_source records the source (cold pass 2 N1). Which bracket carries the window's drift allowance (the stored one, the survivor re-screen's, or none) is recorded in derived/neg8-allowance.json (delta audit A1; registration 0.12)."
     },
     "network_time.off_output": {
       "blinding": "STRUCTURE",
@@ -999,7 +999,7 @@
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION",
-      "note": "Attempt history formality."
+      "note": "Attempt history formality. Reserved: no emitter at H_claim."
     },
     "records.auxiliary_match_raised": {
       "blinding": "STRUCTURE",
@@ -1034,7 +1034,7 @@
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION",
-      "note": "An arm collector's *.identity_unmeasured flag was superseded because the harvest re-derived every check that collector performs (PLAN2 row 12): pack, checkout and executed code; and, since Opus audit F5 (2026-10-07), model identity, when the harvest read the pins and compared the identity of every succeeded science member (at least one) with a pin. The original flag is kept in the record."
+      "note": "An arm collector's *.identity_unmeasured flag was superseded because the harvest re-derived every check that collector performs (PLAN2 row 12): pack, checkout and executed code (for the pack collector the harvest must also have run the checkout's tracked-edits and untracked-files checks, and every collection stage's member dispatch must have resolved; otherwise the arm's pack.identity_unmeasured stays and removes the window); and, since Opus audit F5 (2026-10-07), model identity, when the harvest read the pins and compared the identity of every succeeded science member (at least one) with a pin. The original flag is kept in the record."
     },
     "records.lineage_formality": {
       "blinding": "STRUCTURE",
@@ -1062,14 +1062,14 @@
       "effect": "EXCLUDE_WINDOW",
       "family": "RECORDS",
       "klass": "NUMBER",
-      "note": "Audit-fix 2: a malformed flag line's code, whole or as the prefix it was torn inside, could be an EXCLUDE_WINDOW code of the catalog in force, so a window exclusion may have been lost; the window is removed. An empty prefix (a line torn just after the opening quote of its code) names no code and adds nothing (cold pass 2 N7). observed lists the candidate codes and the line's SHA-256."
+      "note": "Audit-fix 2: a malformed flag line's code, whole or as the prefix it was torn inside, could be an EXCLUDE_WINDOW code of the catalog in force, so a window exclusion may have been lost; the window is removed. Stage 1 of the seal gate (2026-10-07; registration 6.2) narrowed the candidates to the codes that a program writing flag files before the harvest can emit (harvest.PRE_HARVEST_CODES, which the harvest lane lands before ALPHA-1's harvest, registration 11): a code that only the harvest emits is derived again from the preserved bytes, so a damaged line cannot have lost it. An empty prefix (a line torn just after the opening quote of its code) names no code and adds nothing (cold pass 2 N7). observed lists the candidate codes and the line's SHA-256."
     },
     "records.malformed_flag_member_exclusion_possible": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "RECORDS",
       "klass": "NUMBER",
-      "note": "Audit-fix 2: a malformed flag line's code could not be a window exclusion but could be an EXCLUDE_MEMBER code, and the line still shows a run id; that member is removed. A possible member code with no readable run id is disclosed only (records.malformed_flag): the rule excludes only on what the line still shows."
+      "note": "Audit-fix 2: a malformed flag line's code could not be a window exclusion but could be an EXCLUDE_MEMBER code, and the line still shows a run id; that member is removed. A possible member code with no readable run id is disclosed only (records.malformed_flag): the rule excludes only on what the line still shows. The candidates are those of records.malformed_flag_exclusion_possible: the codes a program writing flag files before the harvest can emit (seal gate, stage 1, 2026-10-07; registration 6.2)."
     },
     "records.monitor_journal_absent": {
       "blinding": "STRUCTURE",
@@ -1090,14 +1090,14 @@
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION",
-      "note": "A naming formality."
+      "note": "A naming formality. Reserved: no emitter at H_claim."
     },
     "records.notice": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION",
-      "note": "A notice formality."
+      "note": "A notice formality. Reserved: no emitter at H_claim."
     },
     "records.operator_log_unreadable": {
       "blinding": "STRUCTURE",
@@ -1118,14 +1118,14 @@
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION",
-      "note": "A provenance digest formality."
+      "note": "A provenance digest formality. Reserved: no emitter at H_claim."
     },
     "records.receipt": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
       "family": "RECORDS",
       "klass": "REPRESENTATION",
-      "note": "A receipt formality."
+      "note": "A receipt formality. Reserved: no emitter at H_claim."
     },
     "records.runs_root_override": {
       "blinding": "STRUCTURE",
@@ -1160,14 +1160,14 @@
       "effect": "EXCLUDE_MEMBER",
       "family": "ROSTER",
       "klass": "NUMBER",
-      "note": "A bundle created before chain.started; it is ignored, not used."
+      "note": "The only one of the four ignored-bundle codes that removes a member under its own name. As a flag: the harvest writes it on a roster member whose run started (its run_started wall time) before chain.started's wall time, and the exclusion function removes that member under this code. As a label: the exclusion function gives it to a bundle whose creation stamp is earlier than chain.started's monotonic stamp; the bundle is ignored, not used, and listed in the exclusion record's bundles_ignored, and a roster member left with no admissible bundle is removed as member.bytes_missing (registration 6.7)."
     },
     "roster.creation_unplaced": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "ROSTER",
       "klass": "NUMBER",
-      "note": "A bundle with no stamp that places it after chain.started (no sampler, controller or run_started stamp); it is ignored, not used, like an early one. Derived by the exclusion function. Added after the end-to-end rehearsal, round 1 (B7)."
+      "note": "A label only; no program writes it as a flag, so no member is removed under this code. When chain.started carries a monotonic stamp and a bundle has no stamp that places it against that moment (no member-span, controller or run_started stamp), the exclusion function ignores the bundle, like an early one, and lists it in the exclusion record's bundles_ignored; a roster member left with no admissible bundle is removed as member.bytes_missing. The four tests run in this order: not in the roster, another attempt, cannot be placed, created early. Added after the end-to-end rehearsal, round 1 (B7)."
     },
     "roster.dispatch_unresolved": {
       "blinding": "STRUCTURE",
@@ -1188,7 +1188,7 @@
       "effect": "EXCLUDE_MEMBER",
       "family": "ROSTER",
       "klass": "NUMBER",
-      "note": "A bundle bound to another attempt; it is ignored, not used."
+      "note": "A label only; no program writes it as a flag, so no member is removed under this code. The exclusion function gives it to a bundle bound to another attempt than the plan's; the bundle is ignored, not used, and listed in the exclusion record's bundles_ignored, and a roster member left with no admissible bundle is removed as member.bytes_missing. It cannot occur in a harvest at H_claim: the harvest gives every bundle either the plan's own attempt or none, and a bundle with no attempt is not foreign."
     },
     "roster.horizon_truncated": {
       "blinding": "STRUCTURE",
@@ -1209,7 +1209,7 @@
       "effect": "EXCLUDE_MEMBER",
       "family": "ROSTER",
       "klass": "NUMBER",
-      "note": "A bundle not in the plan roster; it is ignored, not used."
+      "note": "Removes no member, whatever the effect recorded here. As a flag: the harvest writes it for a bundle directory in a runs root whose name is not a roster run id; the flag names that directory, matches no roster member, is counted in flag_counts.unmatched_member and removes nothing. As a label: the exclusion function gives it to a bundle whose run id is not in the roster; the bundle is ignored, not used, and listed in the exclusion record's bundles_ignored."
     },
     "roster.run_id_mismatch": {
       "blinding": "STRUCTURE",
@@ -1223,7 +1223,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "REPRESENTATION",
-      "note": "Three consecutive members ended without a bundle and with the same child refusal line (digits masked): a shared, likely deterministic cause (PLAN2 2.2 B, E). Changes no number."
+      "note": "Three consecutive planned members ended without a bundle for one shared cause: the campaign log row's child_refusal (the member's last non-empty error line with digits masked, cut at 300 characters; for a launch-lineage refusal, the lineage reason code), or, when the row has none, its exit code together with its blocked_before_invoke bit. A shared, likely deterministic cause (PLAN2 2.2 B, E). The driver reads the campaign log only when it counts a stage at the stage's end and once after the chain has ended, never during a stage, so the flag is recorded no earlier than the end of the stage that holds the three members. Changes no number."
     },
     "supervision.pass_failed": {
       "blinding": "STRUCTURE",
@@ -1251,7 +1251,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
-      "note": "A cooldown release in the stage has no readable battery-thermistor reading, so the stage's rise was not fully measured; the reference members and the NEG-8 screen still carry the drift check (registration 0.6)."
+      "note": "The campaign runner reads the battery thermistor once before every member of a stage, the first included (after the member's cooldown wait is released; the first member has no wait, cooldown result first_run_exempt), so a stage of N members has N readings. This code: a stage's campaign manifest is unreadable or malformed, or it records no list of readings, an empty list, or a reading that failed, so the stage's rise was not fully measured. The rise is still judged on the readable readings when at least two remain. The reference members and the NEG-8 screen still carry the drift check (registration 0.6)."
     },
     "thermal.os_level_nonzero": {
       "blinding": "STRUCTURE",
@@ -1272,7 +1272,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
-      "note": "Battery thermistor read at each cooldown release: the stage's last reading minus its first exceeds 3 K and its last three readings do not lie within 0.5 K of each other (no plateau). Reported beside the window's NEG-8 result; never excludes (registration 0.6, timing ruling 2026-10-06). Emitter lands with the run_campaign.py logging lane."
+      "note": "The battery thermistor is read once before every member of a stage, the first included (see thermal.battery_temperature_unmeasured). This code: the stage's last readable reading minus its first readable one exceeds 3 K and its last three readable readings do not lie within 0.5 K of each other (no plateau; a stage with fewer than three readable readings has none). A stage with fewer than two readable readings gets no rise judgment. Reported beside the window's NEG-8 result; never excludes (registration 0.6, timing ruling 2026-10-06). Written by the harvest from the readings the campaign runner logs in each stage's campaign manifest."
     },
     "thermal.unmeasured": {
       "blinding": "STRUCTURE",
@@ -1314,7 +1314,7 @@
       "effect": "DISCLOSE",
       "family": "NEG8",
       "klass": "REPRESENTATION",
-      "note": "The whole-window verdict row does not authenticate against the campaign log."
+      "note": "The whole-window verdict row does not authenticate against the campaign log. The harvest writes the row itself, at the desk, by running the production verdict writer, and validates it without a consumption session, which the validator requires; so no row authenticates and this code is recorded on every harvested window. It carries no information about the window (seal gate, stage 1, 2026-10-07; registration 0.17)."
     },
     "yield.harvest_disagrees_with_window": {
       "blinding": "STRUCTURE",
@@ -1328,7 +1328,7 @@
       "effect": "DISCLOSE",
       "family": "DIAGNOSTIC",
       "klass": "REPRESENTATION",
-      "note": "In-window yield tripwire: a collection stage ended with fewer succeeded members than its min_valid (PLAN2 2.2 A-B). Counts only; changes no number."
+      "note": "In-window yield tripwire: a collection stage ended with fewer succeeded members than its min_valid (PLAN2 2.2 A-B; registration 5.7 gives min_valid for each kind of stage). GAMMA's two one-member diagnostic interior-reference stages are counted as science stages, so their min_valid is 1 of 1: one lost diagnostic member raises this flag, or yield.stage_zero when it left no bundle, and for those two stages the flag does not indicate a systematic cause. A stage the driver could not count in the window (the last collection stage, or one whose journal line was stale) is counted once after the chain has ended, and its flag is written then. Counts only; changes no number."
     },
     "yield.stage_stalled": {
       "blinding": "STRUCTURE",
@@ -1349,7 +1349,7 @@
     "aggregate_disclosures": "whole_window.not_passed and g3.recompute_failed are DISCLOSE because they fail on any single member's failure. Their window-level parts are neg8.screen_failed (emitted by the harvest, with its re-screens: the collected-subset bound, the survivors, the physics-clean corpus) and calibration.bracket_acceptance_failed; their member-level part is member.whole_window_member_failure.",
     "authority": "registration_block5.md section 6 states these rules in words; this file is normative for each code's effect.",
     "restated_classes": "No restatement remains: roster.run_id_mismatch, the one code this catalog restated (NUMBER, EXCLUDE_MEMBER), now has that class in the emitter and the test fixture as well (audit-fix item 7, 2026-10-07). calibration.ledger_snapshot_refused keeps its emitter's class, NUMBER.",
-    "status": "DRAFT, NOT SEALED. Revision 9, 2026-10-07; revision 4 was 2026-10-06 (registration-sync side lane; revision 3 is commit 71c91d74). Sealed with registration_block5.md, analysis_plan_block5.md and sealed_inventory.json by one cold gate (registration 12). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced. Timing-ruling additions, 2026-10-06 (timing lane): thermal.stage_battery_rise and thermal.battery_temperature_unmeasured, both DISCLOSE. Core-prune integration additions, 2026-10-06 (integration lane): the fourteen codes the core-prune lanes emit (DESIGN.md section 5), with the effects given there. Gate-prune round-2 integration additions, 2026-10-06 (integration int3): the 30 codes the round-2 lanes (P2-CHAIN, P2-CTL, P2-RC, P2-DRV, P2-HARV), PLAN2 2.2 G and the SMC battery and wall-meter lane emit; member.timeout and member.stderr_uncopied EXCLUDE_MEMBER, every other one DISCLOSE. battery.member_span is unchanged (a council is ruling on it). Revision 5, 2026-10-06 (REG lane, gate-prune round 3): battery.assist (DISCLOSE) added and the battery notes rewritten to the battery-assist ruling (charging, AC loss and missing evidence exclude; discharge is disclosed); calibration.historical_custody_mismatch (EXCLUDE_WINDOW) and calibration.historical_custody_unmeasured (DISCLOSE) added for the harvest's historical custody pass; contention.kernel_task_share noted as unable to fire. Checked against integration head b9d02700a: every code the harvest CODES table, DRAFT_CODES and CORE_FLAG_CODES name is classified; member.whole_window_member_failure and monitor.restarted are classified but not in the harvest table. Integration int4 sync, 2026-10-06 (gate-prune round 3 plus L10): added the five remaining P3-HARV codes (battery.assist_outside_request, battery.capture_pair_assist, calibration.capture_battery_assist, calibration.capture_battery_pair_assist, records.window_not_launched) and P3-DRV's meter.supervision_fault, all DISCLOSE; battery.assist is any negative B0AC (-200 mA is the reporting threshold) with observed.state_unread; battery.unmeasured gains the 120 s registry state-hole rule under SMC coverage; the other battery notes describe the int4 code (a sign-inconsistent discharge accumulator stays battery.accumulator_excursion; discharge-only pair failures the journal confirms are the *_pair_assist codes); member.whole_window_member_failure is emitted. Checked against int4: every code the harvest CODES table, DRAFT_CODES and CORE_FLAG_CODES name is classified; monitor.restarted is classified but not in the harvest table. calibration.historical_custody_unmeasured is REPRESENTATION here and NUMBER in the code's draft (DISCLOSE either way). Integrator int4 frozen-head sync, 2026-10-07: member.stderr_uncopied becomes DISCLOSE (RECORDS, REPRESENTATION; a record not written); the two historical custody notes are rewritten to the refusal census's split (present bytes that differ: mismatch; missing, evicted or unreadable: unmeasured, disclosed). registration_block5.md section 6 still lists member.stderr_uncopied among the codes that remove a member; REG must move it. Integrator frozen-head triage (d), 2026-10-07: calibration.historical_custody_mismatch is scoped to the captures this window's acceptance relies on (derivation corpus and prior observation set); calibration.historical_custody_mismatch_unused (DISCLOSE) added for the others. P4, 2026-10-07: whole_window.member_failures_unreadable (EXCLUDE_WINDOW) added. Revision 6, 2026-10-07 (REG sync to the frozen head a434e363d): calibration.historical_custody_unmeasured takes the emitter's class NUMBER (effect DISCLOSE unchanged); notes rewritten for monitor.restarted (named by the monitor module, written by no production path), env.member_guard_flagged (collector_raised), records.pin_ledger (pack_root_layout), records.lineage_formality (failed lineage publication) and clock.unmeasured (the read-skew rule). Checked against a434e363d: every code named by harvest.CODES, DRAFT_CODES, CORE_FLAG_CODES, km003c_parse.CODES and window_lineage.FINDING_CODES is classified with DRAFT_CODES' family, class, effect and blinding; the only restatement is roster.run_id_mismatch. Revision 7, 2026-10-07 (REG sync to integrate/2026-10-07-int5, head d3c107f2f at this writing): fourteen codes added. Audit-fix batch 1: clock, battery, thermal, contention and disk .arm_unmeasured and monitor.orphan_unverified (DISCLOSE). Audit-fix batch 2: records.malformed_flag (DISCLOSE; no longer deliberately unclassified), records.malformed_flag_exclusion_possible (EXCLUDE_WINDOW), records.malformed_flag_member_exclusion_possible (EXCLUDE_MEMBER), records.flag_unbuilt, records.operator_log_unreadable and instrument.binary_identity_rederived (DISCLOSE). NEG-8 survivors ruling: neg8.reference_lost and neg8.midpoint_lost (DISCLOSE; the analysis plan makes neg8.midpoint_lost claim-excluding for GAMMA's primary contrasts). Batch 1's interim A1 window exclusion is superseded by that ruling and is not listed. Notes rewritten for the battery accumulator pair (sign-inconsistent case under SMC coverage), census.unmeasured (never stops), instrument.binary_identity_unmeasured (supersession), monitor.restarted (now written), the NEG-8 codes, member.retried (spare-slot retry), the runner and writer record kinds, the lineage records, source changes during the harvest, identity supersession, the post-run guard record and roster.run_id_mismatch. Checked by script against d3c107f2f: every code named by harvest.CODES, DRAFT_CODES, CORE_FLAG_CODES, km003c_parse.CODES, window_lineage.FINDING_CODES and the monitor's literal codes is classified here with the draft's family, class, effect and blinding, except collector.unmeasured (deliberately absent); no restatement remains. Revision 8, 2026-10-07 (REG final pass to the candidate H_claim 43ac12d0c): no code added or removed and no effect changed. Notes rewritten for neg8.reference_lost (summary_unreadable, model identity losses, bundle_absent), neg8.midpoint_lost (on GAMMA the pack-scoped window reason neg8.midpoint_lost_primary, ruling Q11), neg8.screen_failed (model identity losses, never-run references, unauthenticated sources) and records.malformed_flag_exclusion_possible (an empty prefix names no code). Checked by script against 43ac12d0c with the same comparison as revision 7. Revision 9, 2026-10-07 (REG sync to the int5 head fe28e5a0c: the census-ancestors and NEG-8 delta-fix lanes, the sealed neg8_reference identity pin and the T3 prune): no code added or removed and no effect changed. Notes rewritten for model.identity_mismatch and model.identity_inconsistent_in_window (a NEG-8 reference or spare of another model removes the window, orchestrator call (ii)), model.identity_underivable (the neg8_reference unit and its sealed pin; a reference with no derivable identity is lost and the survivors decide), neg8.reference_lost (reason strict_invalid) and neg8.screen_failed (references named from the sealed roster; the allowance record). Checked by script against fe28e5a0c with the same comparison as revision 7.",
+    "status": "Revision 12, 2026-10-07. This file is frozen at the code head of block 5 (H_claim, the last commit that changes any file a window can read) and is sealed when the seal record of registration section 12 exists and pins its SHA-256. The same record pins registration_block5.md, analysis_plan_block5.md and sealed_inventory.json, whose sealed bytes are committed one commit after H_claim, in the seal commit (registration 11). The history of this file's revisions follows, oldest first; each entry describes the file as it stood at that revision, and only the last entry, revision 12, describes it as it is. Revision 3 is commit 71c91d74; revision 4 was 2026-10-06 (registration-sync side lane). Rehearsal round-1 additions, 2026-10-06 (gate-prune fix lane): roster.duplicate_run_id and roster.creation_unplaced. Timing-ruling additions, 2026-10-06 (timing lane): thermal.stage_battery_rise and thermal.battery_temperature_unmeasured, both DISCLOSE. Core-prune integration additions, 2026-10-06 (integration lane): the fourteen codes the core-prune lanes emit (DESIGN.md section 5), with the effects given there. Gate-prune round-2 integration additions, 2026-10-06 (integration int3): the 30 codes the round-2 lanes (P2-CHAIN, P2-CTL, P2-RC, P2-DRV, P2-HARV), PLAN2 2.2 G and the SMC battery and wall-meter lane emit; member.timeout and member.stderr_uncopied EXCLUDE_MEMBER, every other one DISCLOSE. battery.member_span is unchanged (a council is ruling on it). Revision 5, 2026-10-06 (REG lane, gate-prune round 3): battery.assist (DISCLOSE) added and the battery notes rewritten to the battery-assist ruling (charging, AC loss and missing evidence exclude; discharge is disclosed); calibration.historical_custody_mismatch (EXCLUDE_WINDOW) and calibration.historical_custody_unmeasured (DISCLOSE) added for the harvest's historical custody pass; contention.kernel_task_share noted as unable to fire. Checked against integration head b9d02700a: every code the harvest CODES table, DRAFT_CODES and CORE_FLAG_CODES name is classified; member.whole_window_member_failure and monitor.restarted are classified but not in the harvest table. Integration int4 sync, 2026-10-06 (gate-prune round 3 plus L10): added the five remaining P3-HARV codes (battery.assist_outside_request, battery.capture_pair_assist, calibration.capture_battery_assist, calibration.capture_battery_pair_assist, records.window_not_launched) and P3-DRV's meter.supervision_fault, all DISCLOSE; battery.assist is any negative B0AC (-200 mA is the reporting threshold) with observed.state_unread; battery.unmeasured gains the 120 s registry state-hole rule under SMC coverage; the other battery notes describe the int4 code (a sign-inconsistent discharge accumulator stays battery.accumulator_excursion; discharge-only pair failures the journal confirms are the *_pair_assist codes); member.whole_window_member_failure is emitted. Checked against int4: every code the harvest CODES table, DRAFT_CODES and CORE_FLAG_CODES name is classified; monitor.restarted is classified but not in the harvest table. calibration.historical_custody_unmeasured is REPRESENTATION here and NUMBER in the code's draft (DISCLOSE either way). Integrator int4 frozen-head sync, 2026-10-07: member.stderr_uncopied becomes DISCLOSE (RECORDS, REPRESENTATION; a record not written); the two historical custody notes are rewritten to the refusal census's split (present bytes that differ: mismatch; missing, evicted or unreadable: unmeasured, disclosed). registration_block5.md section 6 still lists member.stderr_uncopied among the codes that remove a member; REG must move it. Integrator frozen-head triage (d), 2026-10-07: calibration.historical_custody_mismatch is scoped to the captures this window's acceptance relies on (derivation corpus and prior observation set); calibration.historical_custody_mismatch_unused (DISCLOSE) added for the others. P4, 2026-10-07: whole_window.member_failures_unreadable (EXCLUDE_WINDOW) added. Revision 6, 2026-10-07 (REG sync to the frozen head a434e363d): calibration.historical_custody_unmeasured takes the emitter's class NUMBER (effect DISCLOSE unchanged); notes rewritten for monitor.restarted (named by the monitor module, written by no production path), env.member_guard_flagged (collector_raised), records.pin_ledger (pack_root_layout), records.lineage_formality (failed lineage publication) and clock.unmeasured (the read-skew rule). Checked against a434e363d: every code named by harvest.CODES, DRAFT_CODES, CORE_FLAG_CODES, km003c_parse.CODES and window_lineage.FINDING_CODES is classified with DRAFT_CODES' family, class, effect and blinding; the only restatement is roster.run_id_mismatch. Revision 7, 2026-10-07 (REG sync to integrate/2026-10-07-int5, head d3c107f2f at this writing): fourteen codes added. Audit-fix batch 1: clock, battery, thermal, contention and disk .arm_unmeasured and monitor.orphan_unverified (DISCLOSE). Audit-fix batch 2: records.malformed_flag (DISCLOSE; no longer deliberately unclassified), records.malformed_flag_exclusion_possible (EXCLUDE_WINDOW), records.malformed_flag_member_exclusion_possible (EXCLUDE_MEMBER), records.flag_unbuilt, records.operator_log_unreadable and instrument.binary_identity_rederived (DISCLOSE). NEG-8 survivors ruling: neg8.reference_lost and neg8.midpoint_lost (DISCLOSE; the analysis plan makes neg8.midpoint_lost claim-excluding for GAMMA's primary contrasts). Batch 1's interim A1 window exclusion is superseded by that ruling and is not listed. Notes rewritten for the battery accumulator pair (sign-inconsistent case under SMC coverage), census.unmeasured (never stops), instrument.binary_identity_unmeasured (supersession), monitor.restarted (now written), the NEG-8 codes, member.retried (spare-slot retry), the runner and writer record kinds, the lineage records, source changes during the harvest, identity supersession, the post-run guard record and roster.run_id_mismatch. Checked by script against d3c107f2f: every code named by harvest.CODES, DRAFT_CODES, CORE_FLAG_CODES, km003c_parse.CODES, window_lineage.FINDING_CODES and the monitor's literal codes is classified here with the draft's family, class, effect and blinding, except collector.unmeasured (deliberately absent); no restatement remains. Revision 8, 2026-10-07 (REG final pass to the candidate H_claim 43ac12d0c): no code added or removed and no effect changed. Notes rewritten for neg8.reference_lost (summary_unreadable, model identity losses, bundle_absent), neg8.midpoint_lost (on GAMMA the pack-scoped window reason neg8.midpoint_lost_primary, ruling Q11), neg8.screen_failed (model identity losses, never-run references, unauthenticated sources) and records.malformed_flag_exclusion_possible (an empty prefix names no code). Checked by script against 43ac12d0c with the same comparison as revision 7. Revision 9, 2026-10-07 (REG sync to the int5 head fe28e5a0c: the census-ancestors and NEG-8 delta-fix lanes, the sealed neg8_reference identity pin and the T3 prune): no code added or removed and no effect changed. Notes rewritten for model.identity_mismatch and model.identity_inconsistent_in_window (a NEG-8 reference or spare of another model removes the window, orchestrator call (ii)), model.identity_underivable (the neg8_reference unit and its sealed pin; a reference with no derivable identity is lost and the survivors decide), neg8.reference_lost (reason strict_invalid) and neg8.screen_failed (references named from the sealed roster; the allowance record). Checked by script against fe28e5a0c with the same comparison as revision 7. Revision 10, 2026-10-07 (REG preparation pass at the int5 head 9b0c680ed, after the merge of the census rule for JavaScript runtimes): no code added or removed, no effect changed and no note rewritten. Checked by script against 9b0c680ed with the same comparison as revision 7 (192 codes, none missing, none extra); a second script found no flag code written out in the source that this catalog lacks. Revision 11, 2026-10-07 (corrections of fact from the fidelity sweep of 2026-10-07 against the int5 head 9b0c680ed): no code added or removed, and no effect, family, class or blinding changed. Nine codes are marked reserved (their notes say \"Reserved: no emitter at H_claim\"; no program emits them at 9b0c680ed, the head this revision was checked against): instrument.precal_screen_failed, records.receipt, records.attempt_history, records.provenance_digest, records.naming, records.notice, clock.sntp_offset, monitor.probe_in_phase and battery.accumulator_diagnostic. Notes rewritten to what the code does for battery.accumulator_diagnostic, battery.accumulator_excursion, battery.accumulator_unavailable, battery.assist, calibration.historical_custody_unmeasured, calibration.no_bracket, chain.stopped_before_collection, clock.sntp_offset, clock.systematic, collection.zero_yield, contention.request_overlap, contention.unmeasured, diagnostic.s1_structural, instrument.precal_screen_failed, member.anchor_not_bounded, member.target_phase_precheck_failed, monitor.probe_in_phase, neg8.bound_not_derived, neg8.screen_failed, records.attempt_history, records.identity_unmeasured_superseded, records.naming, records.notice, records.provenance_digest, records.receipt, roster.before_chain_started, roster.creation_unplaced, roster.foreign_attempt, roster.not_in_plan, stage.members_refused_pre_bundle_identical, thermal.battery_temperature_unmeasured, thermal.stage_battery_rise, yield.stage_low. Revision 12, 2026-10-07 (stage 1 of the seal gate, the orchestrator's ruling on the seal-landing review, and Fable delta cold pass 5): rules.cell_unit_minimum changed from 8 to 5 (the judge's change C-1, ruling SG-1). No code added or removed, and no effect, family, class or blinding changed. Notes rewritten for cell.below_minimum (the ground of the minimum), code.executed_differs_from_sealed (the head comparison by window input, in place of the clause on the checkout HEAD that cold pass 5 found stale, and the three cases the harvest lane changes), neg8.midpoint_lost (why ALPHA and BETA are only disclosed; the relaxation applies to a later block only), neg8.reference_lost and neg8.screen_failed (the reference losses stage 1 added), records.malformed_flag_exclusion_possible and records.malformed_flag_member_exclusion_possible (candidates narrowed to the codes written before the harvest), whole_window.verdict_unauthenticated (recorded on every harvested window), model.identity_unpinned (a harvest problem first) and member.anchor_energy_envelope_exceeded (the three restricted files under derived/). The opening sentences of this note replace the status label of earlier revisions.",
     "unclassified": "A code not listed here is UNCLASSIFIED: it blocks only the release event until classified blind by a cold erratum (registration 7.2), which the loader accepts. No code is kept permanently unclassified any more (audit-fix 2, 2026-10-07): records.malformed_flag is DISCLOSE with two conservative exclusions beside it. collector.unmeasured (a collector the flag package does not know) is still deliberately absent, so it blocks release until a cold erratum classifies it."
   },
   "rules": {
