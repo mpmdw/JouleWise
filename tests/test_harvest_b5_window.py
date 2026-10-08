@@ -3601,6 +3601,87 @@ class IdentityReplayTests(WindowTestCase):
         self.assertNotIn("records.identity_unmeasured_superseded", window.codes())
         self.assertEqual(len([flag for flag in window.flags() if flag["code"] == "code.identity_unmeasured"]), 2)
 
+    # -- a commit confined to another claim pack (cold pass 5, case C6; H-12) ----
+    ALPHA_PACK = "configs/campaigns/d117_floor_qwen3-1p7b_v5"
+    BETA_PACK = "configs/campaigns/d117_floor_qwen3-8b_v5"
+    GAMMA_PACK = "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+
+    def test_the_claim_packs_are_the_sizing_files_three(self):
+        sizing = json.loads((ROOT / SEALED_DIR / "sizing_b5.json").read_bytes())
+        self.assertEqual(h.CLAIM_PACK_DIRECTORIES,
+                         {f"configs/campaigns/{pack['pack_id']}" for pack in sizing["packs"].values()})
+        self.assertEqual(h.CLAIM_PACK_DIRECTORIES, {self.ALPHA_PACK, self.BETA_PACK, self.GAMMA_PACK})
+        for directory in h.CLAIM_PACK_DIRECTORIES:
+            self.assertTrue((ROOT / directory / "plan_tree.json").is_file(), directory)
+
+    def test_another_claim_packs_directory_is_record_only_for_a_window_of_a_different_pack(self):
+        """Each row: the changed path, the window's own pack, the class.  Before H-12 every row was window_input."""
+        rows = (
+            (f"{self.BETA_PACK}/plan_tree.json", self.ALPHA_PACK, "record_only"),
+            (f"{self.GAMMA_PACK}/01_quads/x.json", self.ALPHA_PACK, "record_only"),
+            (f"{self.ALPHA_PACK}/plan_tree.json", self.GAMMA_PACK, "record_only"),
+            # The window's own pack stays a window input, in any letter case.
+            (f"{self.ALPHA_PACK}/plan_tree.json", self.ALPHA_PACK, "window_input"),
+            (f"{self.ALPHA_PACK.upper()}/plan_tree.json", self.ALPHA_PACK, "window_input"),
+            (f"{self.BETA_PACK}/plan_tree.json", self.BETA_PACK + "/", "window_input"),
+            # A case variant of another pack's directory lands in that directory: still the other pack.
+            (f"configs/campaigns/D117_Floor_Qwen3-8B_v5/plan_tree.json", self.ALPHA_PACK, "record_only"),
+            # Every other path under configs/ stays a window input: what a window reads from other
+            # campaign directories, the sealed directory, the policies, the calibration files.
+            ("configs/campaigns/window_references_v5/00_start/r1.json", self.ALPHA_PACK, "window_input"),
+            ("configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json", self.ALPHA_PACK,
+             "window_input"),
+            (f"{SEALED_DIR}/flag_catalog.json", self.ALPHA_PACK, "window_input"),
+            (f"{SEALED_DIR}/identity_pins.json", self.GAMMA_PACK, "window_input"),
+            ("configs/campaign_policies/quiet_mac_p2_production.json", self.ALPHA_PACK, "window_input"),
+            # A directory whose name only begins with a claim pack's name is not that pack.
+            (f"{self.BETA_PACK}_draft/plan_tree.json", self.ALPHA_PACK, "window_input"),
+            (f"{self.BETA_PACK}", self.ALPHA_PACK, "window_input"),
+            # A pack the block does not claim on is no claim pack.
+            ("configs/campaigns/d117_floor_qwen25_7b_v3/plan_tree.json", self.ALPHA_PACK, "window_input"),
+            # With no pack known, nothing is narrowed.
+            (f"{self.BETA_PACK}/plan_tree.json", None, "window_input"),
+            # The pin and the seal documents keep their classes whatever the pack.
+            (self.PIN, self.ALPHA_PACK, "pin_only"),
+            (self.SEAL_DOCUMENTS[0], self.ALPHA_PACK, "seal_document"),
+        )
+        for relative, own_pack, klass in rows:
+            with self.subTest(relative=relative, own_pack=own_pack):
+                self.assertEqual(h.head_change_class(relative, own_pack), klass)
+                self.assertEqual(h.in_another_claim_pack(relative, own_pack),
+                                 klass == "record_only" and relative.casefold().startswith("configs/campaigns/d117_"))
+
+    def test_a_commit_confined_to_another_claim_pack_is_recorded_not_a_difference(self):
+        """Cold pass 5, C6, through the harvest.  The fixture's pack stands in for one claim pack of three.
+
+        The window's own pack directory and two others are the claim packs.
+        A commit after the seal changes one file in each of the other two:
+        both are listed and no flag is raised (before H-12:
+        ``code.executed_differs_from_sealed``, head check, for a window that
+        never read them).  The counterfactual: the same commit also changes a
+        file in the window's own pack, and that one is a difference.
+        """
+        own = f"configs/campaigns/{PACK_ID}"
+        others = [f"{self.BETA_PACK}/plan_tree.json", f"{self.GAMMA_PACK}/00_start/config.json"]
+        packs = frozenset({own, self.BETA_PACK, self.GAMMA_PACK})
+        with mock.patch.object(h, "CLAIM_PACK_DIRECTORIES", packs):
+            window = self.window(executed_overrides={"head": self.EXECUTED_HEAD})
+            window.harvest(seams=self.diff_seams(self.SEAL_DOCUMENTS + others))
+            self.assertNotIn("code.executed_differs_from_sealed", window.codes())
+            self.assertNotIn("code.identity_unmeasured", window.codes())
+            identity = self.code_identity_record(window)
+            self.assertEqual((identity["own_pack"], identity["changed_paths_in_other_claim_packs"],
+                              identity["changed_paths"]["record_only"], identity["changed_paths"]["window_input"]),
+                             (own, sorted(others), sorted(others), []))
+            changed = Window(self.tmp / "own-pack", catalog_overrides=self.ISOLATE,
+                             executed_overrides={"head": self.EXECUTED_HEAD})
+            changed.harvest(seams=self.diff_seams(self.SEAL_DOCUMENTS + others + [f"{own}/extraction_spec.json"]))
+            flag = next(flag for flag in changed.flags() if flag["code"] == "code.executed_differs_from_sealed")
+            self.assertEqual(flag["observed"]["differences"],
+                             [{"check": "head", "observed": self.EXECUTED_HEAD, "expected": H_CLAIM,
+                               "changed_paths": [f"{own}/extraction_spec.json"]}])
+            self.assertEqual(self.code_identity_record(changed)["changed_paths_in_other_claim_packs"], sorted(others))
+
     def test_a_changed_path_that_is_not_utf8_is_listed_and_classed_not_a_fault(self):
         """Seal-landing review F6 (H-11): ``git diff -z`` prints a path's raw bytes.
 

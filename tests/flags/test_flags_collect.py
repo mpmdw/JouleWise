@@ -497,6 +497,13 @@ class CheckoutIdentityTests(FixtureCase):
             with self.subTest(relative):
                 self.assertEqual(collect.head_change_class(relative), "record_only")
                 self.assertEqual(harvest.head_change_class(relative), "window_input")
+        # The other direction (cold pass 5, C6; H-12): told the window's own pack, the harvest records a
+        # path in another claim pack's directory.  The collector is not told the pack and calls it an input.
+        alpha, beta = "configs/campaigns/d117_floor_qwen3-1p7b_v5", "configs/campaigns/d117_floor_qwen3-8b_v5"
+        self.assertEqual(collect.head_change_class(f"{beta}/plan_tree.json"), "window_input")
+        self.assertEqual(harvest.head_change_class(f"{beta}/plan_tree.json"), "window_input")
+        self.assertEqual(harvest.head_change_class(f"{beta}/plan_tree.json", alpha), "record_only")
+        self.assertEqual(harvest.head_change_class(f"{alpha}/plan_tree.json", alpha), "window_input")
 
     def test_on_every_tracked_path_the_harvests_window_inputs_contain_the_collectors(self) -> None:
         """Over this repository's own paths: the harvest never calls record-only what the collector calls an input."""

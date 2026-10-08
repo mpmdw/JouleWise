@@ -221,11 +221,40 @@ RECORD_ONLY_ROOT_SUFFIX = ".md"
 # one by one with the sealed inventory; for the rest this comparison is the
 # only one.
 WINDOW_INPUT_FILES = frozenset({"docs/phase_2/window_runbook.md"})
+# The block's three claim packs: the two floor packs and the contrast pack
+# (the pack ids of configs/campaigns/v5_claim_25g83/sizing_b5.json; a test
+# holds the two equal).  A window executes one of them.  What it reads from
+# any other campaign directory (references, spares, the NEG-8 corpus) is
+# pinned by its own plan tree and compared by ``pack_identity``.  So a commit
+# after the seal that is confined to another claim pack's directory cannot
+# change this window's bytes: for a window of a different pack such a path
+# is recorded, not a difference (cold pass 5, case C6; H-12).  The window's
+# own pack, and every other path under configs/, stay window inputs.
+CLAIM_PACK_DIRECTORIES = frozenset(f"configs/campaigns/{name}" for name in (
+    "d117_floor_qwen3-1p7b_v5", "d117_floor_qwen3-8b_v5", "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"))
 HEAD_CHANGE_CLASSES = ("pin_only", "seal_document", "window_input", "record_only")
 CODE_IDENTITY_SCHEMA = "joulewise.b5_code_identity.v1"
 
 
-def head_change_class(relative: str) -> str:
+def in_another_claim_pack(relative: str, own_pack: str | None) -> bool:
+    """Whether ``relative`` lies in the directory of a claim pack other than the window's own.
+
+    ``own_pack`` is the window's pack directory relative to the measurement
+    checkout (``configs/campaigns/<pack id>``); None (unknown) answers False,
+    so every pack then stays a window input.  Letter case is ignored, as in
+    ``head_change_class``: a case variant of the window's own pack directory
+    is the window's own pack.
+    """
+    if not own_pack:
+        return False
+    folded, own = relative.casefold(), own_pack.casefold().rstrip("/")
+    if folded.startswith(own + "/"):
+        return False
+    return any(folded.startswith(directory.casefold() + "/") for directory in CLAIM_PACK_DIRECTORIES
+               if directory.casefold() != own)
+
+
+def head_change_class(relative: str, own_pack: str | None = None) -> str:
     """The class of one path that differs between H_claim and the executed head.
 
     The pin and the three seal documents are matched by their exact names.
@@ -233,7 +262,9 @@ def head_change_class(relative: str) -> str:
     not distinguish case, so a tracked ``Docs/Phase_2/Window_Runbook.md``
     lands on the runbook and a tracked ``Joulewise/x.py`` in ``joulewise/``.
     A case variant of the pin or of a seal document is therefore not that
-    file's class; it falls through to ``window_input``.
+    file's class; it falls through to ``window_input``.  ``own_pack``: the
+    window's own pack directory; a path in another claim pack's directory is
+    then ``record_only`` (``in_another_claim_pack``).
     """
     if relative in PIN_ONLY_PATHS:
         return "pin_only"
@@ -242,6 +273,8 @@ def head_change_class(relative: str) -> str:
     folded = relative.casefold()
     if folded in WINDOW_INPUT_FILES:
         return "window_input"
+    if in_another_claim_pack(relative, own_pack):
+        return "record_only"
     first, separator, _rest = folded.partition("/")
     if folded.startswith(RECORD_ONLY_PREFIXES) \
             or (separator and first.startswith(".")) \
@@ -5921,7 +5954,9 @@ class _Harvest:
             "h_claim_source": "sealed_inventory" if sealed_head else ("plan" if h_claim else None),
             "plan_measurement_head": inputs.h_claim, "executed_head": executed_head,
             "sealed_inventory_sha256": sha256_file(sealed_path) if sealed_path.is_file() else None,
-            "comparison": "not_compared", "changed_paths": {name: [] for name in HEAD_CHANGE_CLASSES}}
+            "comparison": "not_compared", "changed_paths": {name: [] for name in HEAD_CHANGE_CLASSES},
+            "own_pack": _relative_to(inputs.pack_root, inputs.measurement_root),
+            "changed_paths_in_other_claim_packs": []}
         if isinstance(sealed_value, Mapping) and sealed_head is None:
             # Seal-landing review F3 (H-10).  The sealed inventory was read and
             # names no head.  The comparison below then runs against the plan's
@@ -5947,9 +5982,14 @@ class _Harvest:
             else:
                 # Each changed path has one class (head_change_class).  Only a
                 # changed window input is a difference; the rest is recorded.
+                # A path in another claim pack's directory is record-only for
+                # this window (H-12) and is also listed under its own key.
                 head_record["comparison"] = "compared"
+                own_pack = _relative_to(inputs.pack_root, inputs.measurement_root)
                 for relative in sorted(set(changed)):
-                    head_record["changed_paths"][head_change_class(relative)].append(relative)
+                    head_record["changed_paths"][head_change_class(relative, own_pack)].append(relative)
+                    if in_another_claim_pack(relative, own_pack):
+                        head_record["changed_paths_in_other_claim_packs"].append(relative)
                 window_inputs = head_record["changed_paths"]["window_input"]
                 if window_inputs:
                     differences.append({"check": "head", "observed": executed_head, "expected": h_claim,
