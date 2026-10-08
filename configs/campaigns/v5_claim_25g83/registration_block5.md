@@ -3014,23 +3014,24 @@ that attempt still carries an unclassified code; it is tested, and no block-5 pr
   checkout and executed-code collectors carry no further condition (`harvest.supersede_identity_unmeasured`).
   *Where the harvest reads a stage's dispatch, and what follows for each pack* (found when revision 11 checked this
   passage against the code at `9b0c680ed`). The chain launches a collection stage from the stage's **order
-  manifest**: the file `order_manifest.json` in the stage's config directory, which lists the stage's members in
-  launch order. The plan writer and the driver read the dispatch from that same file
+  manifest**: the file `order_manifest.json` in the directory of the stage's member configurations, which lists the
+  stage's members in launch order. The plan writer and the driver read the dispatch from that same file
   (`plan.resolve_stage_dispatches`, `driver._local_stage_dispatch`). The harvest does not. It asks the plan module
-  for a per-stage reader named `resolve_stage_dispatch`; the plan module has no function of that name, so the
-  harvest falls back to the plan tree's own entry for the stage, `input_ref`, which names either a list of member
-  rows held in the plan tree or a manifest file of the pack (`harvest.stage_dispatches`). GAMMA's plan tree carries
-  an `input_ref` on each of its ten collection stages, and the 101 run ids read through them are the ones its order
-  manifests list, so GAMMA's dispatch resolves. ALPHA's and BETA's plan trees carry none: `input_ref` is null on all
-  ten collection stages of each. So on every ALPHA and BETA harvest all ten stages are unresolved,
-  `roster.dispatch_unresolved` is recorded once, condition (ii) fails, and an arm's `pack.identity_unmeasured` is
-  never superseded. Such a window is removed. When that flag is its only window-removing code, the rule at the head
-  of this item applies: the cause is the harvest, so R3 and a re-harvest of the same bytes come before any decision
-  to re-arm. Two more effects on every ALPHA and BETA harvest touch no number and remove nothing. The harvest's own
-  count of members per collection stage is empty, so each stage the driver counted (§5.7) is recorded as
-  `yield.harvest_disagrees_with_window` (DISCLOSE). And the check for a run id that two stages launch has no run id
-  to compare; the plan writer's own check, which reads the order manifests, refuses a plan in which two stages
-  launch one run id into one runs root, before any arm.
+  (`joulewise/b5/plan.py`) for a per-stage reader named `resolve_stage_dispatch`; the module has no function of that
+  name, so the harvest falls back to the plan tree's own entry for the stage, `input_ref`, which names either a list
+  of member rows held in the plan tree or a manifest file of the pack (`harvest.stage_dispatches`). GAMMA's plan
+  tree carries an `input_ref` on each of its ten collection stages, and the 101 run ids read through them are the
+  ones its order manifests list, so GAMMA's dispatch resolves. ALPHA's and BETA's plan trees carry none: `input_ref`
+  is null on all ten collection stages of each. So on every ALPHA and BETA harvest all ten stages are unresolved,
+  `roster.dispatch_unresolved` is recorded once in each harvest, condition (ii) fails, and an arm's
+  `pack.identity_unmeasured` is never superseded. An ALPHA or BETA window whose arm left that flag is therefore
+  removed. When the flag is its only window-removing code, the rule at the head of this item applies: the cause is
+  the harvest, so R3 and a re-harvest of the same bytes come before any decision to re-arm. Two more effects on
+  every ALPHA and BETA harvest touch no number and remove nothing. The harvest's own count of members per collection
+  stage is empty, so each stage the driver counted (§5.7) is recorded as `yield.harvest_disagrees_with_window`
+  (DISCLOSE). And the check for a run id that two stages launch has no run id to compare; the plan writer's own
+  check, which reads the order manifests, refuses a plan in which two stages launch one run id into one runs root,
+  before any arm.
   *Model identity* is superseded the same way since Opus audit F5 (commit `a28e8611e`): the arm's model-identity
   collector has a 55 s budget, and a slow one left `model.identity_unmeasured`, which removed the window. Every
   member's metadata carries the content hash of the model tree its own process loaded and its runtime stack, and the
@@ -3081,7 +3082,8 @@ brief carries this rule. Giving the diagnostic role its own minimum in the drive
 word, its **anchor status**: `bounded`, or another word when the bound failed or could not be computed. A
 calibration capture has a sampler stream of its own and records the same status in its evidence file,
 `instrument_evidence.json`. A status is **recorded** when that field holds a value; a member or capture with no
-value is left out of the count. Captures are counted only for a window whose bracket session was finalized: its pre
+value, or a capture whose evidence file cannot be read, is left out of the count, and any word other than `bounded`
+counts as not bounded. Captures are counted only for a window whose bracket session was finalized: its pre
 and post slots, at most two per window. A calibration capture is not a member (§0.3), but the code counts members
 and captures together.
 
@@ -3866,16 +3868,21 @@ Revision 11 follows a comparison of every checkable statement of this file, the 
 the code at the int5 head `9b0c680ed`; four writers then each corrected one part. This paragraph records the reading
 of the writer of §§7–10 and §§13–16. It read the list of mismatches the comparison confirmed and the orchestrator's
 rulings on them (`/Users/edr/night-archive/gate-prune/wave-1007b/reg-fidelity/REG_FIDELITY.md` and
-`ORCHESTRATOR_RULINGS.md`, with the notes of the two readers who had checked these sections). At `9b0c680ed` (the
-integration worktree, read only) it read:
+`ORCHESTRATOR_RULINGS.md`, with the notes of the two readers who had checked these sections). The writing was done
+in two sittings; the second re-read every changed sentence against the code and corrected eight passages, the
+dispatch passage of §7.2 among them. At `9b0c680ed` (the files of that commit, read through `git show` and a read-only
+worktree at it, because the integration worktree had by then moved on) it read:
 - in `joulewise/b5/harvest.py`: how the verdict is chosen and what `finish` writes, the stage-journal reader, the
   call of the exclusion function, the `clock.systematic` rule and the capture assessment that feeds it, the
-  identity supersession with its table of checks, the code-identity and roster-dispatch steps, and the emit sites of
-  `calibration.no_bracket` and `collection.zero_yield`;
+  identity supersession with its table of checks, the code-identity and roster-dispatch steps, the function that
+  reads each stage's dispatch and its lookup of a reader in the plan module, the roster's duplicate listings, the
+  yield summary, and the emit sites of `calibration.no_bracket` and `collection.zero_yield`;
+- in `joulewise/b5/plan.py`: the dispatch reader and the plan writer's refusal on it;
 - in `joulewise/b5/chain.py`: the stage journal, the chain's stops, the calibration arguments, the `DEVIATIONS`
   list and the function that builds each stage's command; and, in the three plan trees, which stages carry a
   countdown;
-- in `joulewise/b5/driver.py`: the stage roles, the minimums and the yield status;
+- in `joulewise/b5/driver.py`: the stage roles, the minimums, the yield status and the driver's own reading of a
+  stage's order manifest;
 - the arm's battery rule (`joulewise/hazards/battery.py`, `joulewise/battery_float.py`) and the arm's pack collector
   (`joulewise/flags/collect.py`);
 - `first_claim_usable` and every place that names it;
@@ -3884,10 +3891,20 @@ integration worktree, read only) it read:
 - the sizer's arguments (`scripts/size_b5_window.py`) and the member allowances of `sizing_b5.json`;
 - `joulewise/authentication_io.py`, and the call sites of the NEG-8 evaluator, bound and re-derivation in
   `joulewise/whole_window.py`, `scripts/run_campaign.py` and the harvest;
+- `scripts/harvest_b5_window.py` (what the harvest command prints);
 - commit `a28e8611e`, and the section of Fable's cold pass 4 report that §9.1 quotes.
 
-It computed three things itself. The role and the minimum of a GAMMA diagnostic stage came from the driver's own
+It computed five things itself. The role and the minimum of a GAMMA diagnostic stage came from the driver's own
 `_stage_role` and `_min_valid` (`science`, 1). The 5.3% of §7.3 is 1 − (36/37)². The publication counts and the
 63 s of §9.2 came from the B0AC validation run's SMC reads and phase marks
-(`/Users/edr/night-archive/wallmeter-probe/verify/run-20261006T221233Z/`), which is a probe run and not a window.
+(`/Users/edr/night-archive/wallmeter-probe/verify/run-20261006T221233Z/`), which is a probe run and not a window:
+536 publications (37 idle, 270 load, 229 recovery), 126 of them nonzero, all in the load, covering 63.0 s. The
+dispatch facts of §7.2 came from running the harvest's `stage_dispatches` and the plan module's
+`resolve_stage_dispatches` on the three plan trees at `9b0c680ed`: ALPHA and BETA, ten of ten collection stages
+unresolved by the harvest and 119 run ids each through the order manifests; GAMMA, none unresolved and the same 101
+run ids either way. The counts of flags by code in the harvest summaries of the cooldown smoke's runs 3 and 4 (§2
+item 7; an ALPHA pack, not a window of this block) show the same on a real harvest: one `roster.dispatch_unresolved`
+and ten `yield.harvest_disagrees_with_window` each; only those counts and the list of unresolved stages were read
+from them. The count rule of §13's "28" came from comparing the catalog at `c6843537` with the test fixture at
+`d3c107f2f` (14 codes in the fixture and not in the catalog; one code, `g3.recompute_failed`, with another effect).
 No energy or power value of any window was read.
