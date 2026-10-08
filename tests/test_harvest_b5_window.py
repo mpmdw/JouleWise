@@ -2295,6 +2295,25 @@ class EmittedCodeTests(unittest.TestCase):
         self.assertEqual((literals | built) - not_codes - set(h.CODES), set())
 
 
+class DocstringFactTests(unittest.TestCase):
+    """H-13: a docstring that states a catalog effect states the catalog's."""
+
+    def test_the_reference_identity_docstring_states_the_catalogs_effect_of_underivable(self):
+        """Before H-13 it said the code was "not in the flag catalog, so its effect is UNCLASSIFIED".
+
+        The sealed catalog classes ``model.identity_underivable`` EXCLUDE_MEMBER
+        (cold pass 5, note 9).  The counterfactual is the docstring itself.
+        """
+        sealed = json.loads((ROOT / SEALED_DIR / "flag_catalog.json").read_bytes())["codes"]
+        effect = sealed["model.identity_underivable"]["effect"]
+        self.assertEqual(effect, "EXCLUDE_MEMBER")
+        text = " ".join(h._Harvest._reference_model_identity.__doc__.split())
+        self.assertIn(f"``model.identity_underivable`` ({effect} in the flag catalog", text)
+        self.assertNotIn("UNCLASSIFIED", text)
+        self.assertNotIn("not in the flag catalog", text)
+        self.assertIn("model.identity_underivable", h.NEG8_REFERENCE_LOSS_CODES)
+
+
 class PreHarvestCodeTests(unittest.TestCase):
     """Seal gate RF-3 (K-5): ``PRE_HARVEST_CODES`` is the code tables of the programs that write flag lines.
 

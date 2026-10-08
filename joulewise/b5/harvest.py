@@ -6228,8 +6228,10 @@ class _Harvest:
         says (the flag is also in ``NEG8_REFERENCE_LOSS_CODES``, so the screen
         drops that reference too).  With no sealed pin and no strict majority
         no member's identity can be told right, and each is
-        ``model.identity_underivable`` (not in the flag catalog, so its effect
-        is UNCLASSIFIED; it is a NEG-8 reference loss code).  No energy is read.
+        ``model.identity_underivable`` (EXCLUDE_MEMBER in the flag catalog, so
+        it removes that member; it is also a NEG-8 reference-loss code, so
+        each such reference is lost and the survivors rule decides the
+        screen).  No energy is read.
         """
         if not references:
             return
