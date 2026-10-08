@@ -360,14 +360,14 @@ written for the rehearsals of 2026-10-06 are in the rehearsal archives under
 
 ## Addendum 1: the harvest program (written 2026-10-08, by a seat that has read no claim-window energy)
 
-B5-HARVEST-PIN: PENDING[DESK-HEAD]
+B5-HARVEST-PIN: 7e6158d669cbb6fb35761aee18abf363f07c5d36
 
 Desk clone: /Users/edr/night-custody/desk/b5-harvest. Files at that commit, with their SHA-256:
-joulewise/b5/harvest.py PENDING[HARVEST-FILE-DIGESTS]; joulewise/whole_window.py PENDING[HARVEST-FILE-DIGESTS]; scripts/harvest_b5_window.py PENDING[HARVEST-FILE-DIGESTS].
+joulewise/b5/harvest.py f68e53d4e84292c182772a20edf2e3649c7470a7113ff87ebdec6f91208c9bc2; joulewise/whole_window.py ee107b1e5f7eab306192c78d43171de828c290158bd3dc6fb5e63c229a1c25a5; scripts/harvest_b5_window.py 88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45.
 The lane: lane/2026-10-07-harvest-lane, items K-4 to K-7 and H-8 to H-13. Its independent executing review:
 docs/process_traces/2026-10-07-block5-seal/gates/13-harvest-lane-executing-review.md. Its cold Fable pass:
 docs/process_traces/2026-10-07-block5-seal/gates/14-harvest-lane-cold-pass.md. git diff --name-only
-a64000884ef5bb4b76415835f02f39803f6eb620 PENDING[DESK-HEAD] lists only those three
+a64000884ef5bb4b76415835f02f39803f6eb620 7e6158d669cbb6fb35761aee18abf363f07c5d36 lists only those three
 files and paths under tests/.
 
 ## Release event

@@ -15,6 +15,10 @@ What it reads out of SEAL_RECORD.md, and how it recomputes each value:
 - section 2's statements about the seal commit: one parent, which is H_claim; a three-file difference; the
   sealed inventory's `status`, `head` and number of entries.
 
+- each harvest addendum: the three harvest program files at the pinned commit, `git show <commit>:<path>` hashed
+  with SHA-256, and the list of paths that differ between H_claim and that commit. A clone that does not hold
+  the pinned commit prints that it cannot make this check, and does not fail.
+
 It does not recompute the six plan digests of the section "Plans written after the seal": those are digests
 of scratch files outside the repository, and the section says so.
 
@@ -111,10 +115,34 @@ def main() -> int:
     for name, digest in helper_rows:
         compare(f"the helper bench/{name}", digest, hashlib.sha256((RECORD.parent / "bench" / name).read_bytes()).hexdigest())
 
-    pins = re.findall(r"^B5-HARVEST-PIN: (.*)$", text, re.M)
-    print(f"B5-HARVEST-PIN lines: {len(pins)}" + (f" ({pins[0]})" if len(pins) == 1 else ""))
-    if len(pins) != 1:
-        problems.append("the record must hold exactly one line that starts with 'B5-HARVEST-PIN: '")
+    # The harvest addenda: each pins one commit and the SHA-256 of the three harvest program files at it.
+    for heading in re.findall(r"^## (Addendum \d+: the harvest program[^\n]*)$", text, re.M):
+        _, body = section(text, "## " + heading)
+        pins = re.findall(r"^B5-HARVEST-PIN: (.*)$", body, re.M)
+        if len(pins) != 1:
+            problems.append(f"{heading[:11]}: expected one line that starts with 'B5-HARVEST-PIN: ', found {len(pins)}")
+            continue
+        pin = pins[0]
+        if not re.fullmatch(HEX40, pin):
+            print(f"{heading[:11]}: the pin is not filled yet ({pin})")
+            continue
+        try:
+            git(root, "cat-file", "-e", pin + "^{commit}")
+        except subprocess.CalledProcessError:
+            print(f"{heading[:11]}: commit {pin} is not in this clone, so its files cannot be recomputed here")
+            continue
+        for path, digest in re.findall(r"((?:joulewise|scripts)/[A-Za-z0-9_/.]+\.py) (%s)[;.]" % HEX64, body):
+            compare(f"{path} at the pinned harvest commit {pin[:9]}", digest,
+                    hashlib.sha256(git(root, "show", f"{pin}:{path}")).hexdigest())
+        changed = git(root, "diff", "--name-only", "--no-renames", h_claim, pin).decode().split()
+        allowed = {"joulewise/b5/harvest.py", "joulewise/whole_window.py", "scripts/harvest_b5_window.py"}
+        outside = [path for path in changed if path not in allowed and not path.startswith("tests/")]
+        compare(f"paths changed between H_claim and {pin[:9]} outside the three harvest files and tests/", "", " ".join(outside))
+        try:
+            git(root, "merge-base", "--is-ancestor", h_claim, pin)
+            print("equal    ", f"H_claim is an ancestor of {pin[:9]}")
+        except subprocess.CalledProcessError:
+            problems.append(f"H_claim is not an ancestor of the pinned harvest commit {pin}")
     pending = sorted(set(re.findall(r"PENDING\[[A-Z0-9-]+\]", text)))
     if pending:
         print("markers still to fill:", ", ".join(pending))
