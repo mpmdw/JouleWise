@@ -2459,12 +2459,12 @@ NULL window, and named two of the three process conditions.)
   `9395cecfb` it was `89e7ea70be34d855285c7d2c87df42b646d179a632a1e05ed57a4682a961b3aa`, unchanged from `d3c107f2f`
   (`shasum -a 256`, and `scripts/size_b5_window.py --check` reproducing the file byte for byte with exit 0: both run
   by revision 9's author at `fe28e5a0c` and by this revision's author at `9395cecfb`). *The file's own labels.* The
-  file carries `"status": "UNSEALED_DRAFT"` and `"sealed": false`,
-  and its `note` begins "UNSEALED DRAFT". The program that generates the file (`scripts/size_b5_window.py`, below)
-  writes those labels, and no program reads them. They are not rewritten at the seal, because a rewrite would
-  change the sealed bytes and that program's `--check`, which regenerates the file and compares, would then fail
-  on a label; the seal record's SHA-256 of the file is what seals it (orchestrator ruling of 2026-10-07 on the
-  seal preparation, its item F6; §12). Earlier drafts:
+  file carries `"status": "UNSEALED_DRAFT"` and `"sealed": false`, and its `note` begins "UNSEALED DRAFT". The
+  program that generates the file (`scripts/size_b5_window.py`, below) writes those labels, and no program reads
+  them. They are not rewritten at the seal, because a rewrite would change the sealed bytes and that program's
+  `--check`, which regenerates the file and compares, would then fail on a label; the seal record's SHA-256 of the
+  file is what seals it (orchestrator ruling of 2026-10-07 on the seal preparation, its item F6; §12). Earlier
+  drafts:
   `f114f9b9…` at the frozen head `a434e363d`, before the spares; `a5c6ec05…` at `b9d02700a`; `7c53ebc8…` on lane
   L10's branch with the older sizer; `b31a27b5…` after the timing lane `f4cf9047`; `9d16edfe…` at `f8164893`. The
   value in force is the one the seal record pins. `scripts/size_b5_window.py` writes the file from block 4's
@@ -2558,10 +2558,9 @@ NULL window, and named two of the three process conditions.)
   committed in the measurement checkout. That file is a window input (a tracked file under `joulewise/`, `scripts/`
   or `configs/`, whose bytes a window can read; §6.5 builds the term), so a commit that changes it there would give
   every later window the flag `code.executed_differs_from_sealed`, which removes the window (§6.5). The plan writer
-  takes an allowance from any
-  file inside the measurement checkout: it is given the file's path, its SHA-256 and a pointer to the value, and
-  refuses unless the file's bytes hash to that SHA-256 and the pointer resolves to the stated number of seconds
-  (`joulewise/b5/plan.py` `read_allowance`). So the new sizing file is written as a new, untracked file outside
+  takes an allowance from any file inside the measurement checkout: it is given the file's path, its SHA-256 and a
+  pointer to the value, and refuses unless the file's bytes hash to that SHA-256 and the pointer resolves to the
+  stated number of seconds (`joulewise/b5/plan.py` `read_allowance`). So the new sizing file is written as a new, untracked file outside
   `joulewise/`, `scripts/` and the pack's directory (an untracked file under those roots is itself a difference,
   §6.5), for example under the git-ignored `runs/` directory, and the next plan cites it there with the SHA-256
   the addendum pins. *Why the case is remote:* the deadline is built from the programmed
