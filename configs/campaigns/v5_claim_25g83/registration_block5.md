@@ -4,8 +4,8 @@ Status: **Revision 12, 2026-10-07.** This is the text that is committed at the s
 one commit made directly after the last commit that changes anything a window reads, carrying this file's final
 bytes (the list of companions below says why the seal needs a commit of its own). It is sealed when the
 **seal record** of §12, the file that lists the SHA-256 of every
-sealed file (`FILL[B5-SEAL-RECORD]`), exists and pins this file's SHA-256; until that record exists it binds
-nothing. Written by Opus 5.5, as lane L6 of the gate-prune workflow
+sealed file (`docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md`), exists and pins this file's SHA-256;
+until that record exists it binds nothing. Written by Opus 5.5, as lane L6 of the gate-prune workflow
 (revision 3, commit `71c91d74`), then as the registration-sync side lane (revision 4, last commit `7261a585`), then
 as the REG lane of gate-prune round 3 (revision 5, last commit `9d63b4df`), then as the REG sync to the frozen head
 (revision 6, last commit `c6843537`), then as the REG sync to the audit fixes and the NEG-8 ruling (revision 7, last
@@ -37,9 +37,12 @@ begins; §0.15), no launch and no analysis. It binds only when the seal gate (on
 
 A **FILL** is a value that must be tied to authenticated bytes before the point named in §13. It is never a
 default. Until the value is written, a marker stands in its place: the word FILL followed by the value's name in
-square brackets. Revision 12 leaves markers of six names, because each names a value that exists only once H_claim
-is fixed. Each marker stands exactly where its one value goes, so filling it replaces the marker and changes no
-other word. The six names (written here without the marker form, so that this list is not itself filled):
+square brackets. Revision 12 was written with markers of six names. Each marker stands exactly where its one value
+goes, so filling it replaces the marker and changes no other word. Four of the six have a name for their value (a
+path, the sessions that judged, and the titles of two sections), and they were filled on 2026-10-07, before the
+second stage of the seal gate read this text. The other two, `H-CLAIM` and `B5-FINAL-HASHES`, have a value that
+exists only once H_claim is fixed, and a script fills them when that commit exists. The six names (written here
+without the marker form, so that this list is not itself filled):
 
 - `H-CLAIM`: the 40-character name of the commit H_claim (§2 item 1).
 - `B5-FINAL-HASHES`: the SHA-256, computed at H_claim, of the one file that the marker's sentence names. In
@@ -48,11 +51,12 @@ other word. The six names (written here without the marker form, so that this li
   identity pins had changed, §4.6 item 3), and revision 10 found each unchanged at the int5 head `9b0c680ed` (§13).
   Those digests stay in the text, each with the head it was computed at, beside the marker for H_claim's value.
 - `B5-SEAL-SEATS` and `B5-SEAL-RECORD`: the seats of the seal gate (a **seat** is one model session working to a
-  written brief, §0.1), and the repository path of the seal record (§12).
+  written brief, §0.1), and the repository path of the seal record (§12). Both are filled.
 - `B5-PLANS-REGENERATED` and `B5-RELEASE-EVENT`: these two values come into being only after the seal commit (the
   window plans are written from the sealed text; the release event is recorded after the block has closed), and
   this file's bytes may not change after the seal commit (§0.18). So neither is ever written here: each is a named
-  section appended to the seal record (§12), and the marker stands where the name of that section goes.
+  section appended to the seal record (§12), and what stands where the marker stood is the title of that section
+  ("Plans written after the seal" and "Release event").
 
 No claim-eligible `_v5` energy exists at this writing, and none was read (§16).
 
@@ -524,16 +528,26 @@ changed.
 11. **Records** (§2, §9.1, §13, §14). §2 item 1 states H_claim as a marker and lists the Fable delta cold pass 5
     (on `fe28e5a0c..9395cecfb`, PASS WITH NOTES) and the independent executing review of the seal-landing lane;
     together they are the second part of the #416 delta record. §14 closes Q5 and Q6 and records the gate's
-    confirmation of Q9, Q11, Q12 and Q13. Q14, which the first stage was not asked, stays open for the second
-    stage.
-12. **Status and markers.** The status line says what seals this file. The six markers that remain are listed
-    at the head of this file, each with the one value that replaces it.
+    confirmation of Q9, Q11, Q12 and Q13. Q14 (what the census's rule for JavaScript runtimes can miss, §4.5),
+    which the first stage was not asked, is closed by the orchestrator's ruling of 2026-10-07: the rule stands as
+    merged and its limits stay disclosed, on the evidence of cold pass 5.
+12. **Status and markers.** The status line says what seals this file. The six marker names of this revision are
+    listed at the head of this file, each with the one value that replaces it. Four are filled; the two that wait
+    for H_claim remain.
 13. **Catalog and analysis plan.** `flag_catalog.json`: `rules.cell_unit_minimum` is 5; ten notes and the status
     note are rewritten; 192 codes, with no effect, family, class or blinding value changed. The analysis plan's
     changes are listed in its §14; besides the items above they remove the metrology term (a second variance term
     that the plan added to an interval the measured scatter already covers) from the two GAMMA contrasts (ruling
     SG-13), and they have the analysis check each attempt's catalog digest and harvest commit against the seal
     record (ruling SG-11).
+14. **The last pass before the second stage read this text** (orchestrator's rulings of 2026-10-07; §16 records
+    what the pass read). The four markers whose values are names were filled (item 12). §14 Q14 was closed (item
+    11), and §4.5 now points to that ruling. §11 and §12 say how the second stage is held: in two parts, a reading
+    of this text before H_claim exists and a check of the digests and of the seal's commits once those exist; the
+    sentence that the seal commit follows the gate's last line is corrected to match. §5.7's worked example and
+    §6.11's counts were computed again at commit `cc0b3446d` of the integration branch (int5, §2 item 1), which
+    merges the changes the first stage required before H_claim (item 9); both stand, and each now names that
+    commit.
 
 ## 0. Terms, built in the order they are used
 
@@ -1482,8 +1496,10 @@ commit holds the same bytes wherever a window can read them. The terms below nam
 - **Seal documents.** Three files of this directory: `sealed_inventory.json`, this file and the analysis plan.
   Their final bytes cannot exist at H_claim, because they name it. At H_claim they are the inventory stub
   (`status` `STUB_NOT_SEALED`, `head` null, `files` null) and the two texts as the seal gate judged them, with the
-  markers of the header still open. Every other sealed file (the flag catalog, the identity pins, the sizing
-  output, the three packs, the runbook) is a window input and has its sealed bytes at H_claim.
+  two markers that wait for H_claim still open (`H-CLAIM` and `B5-FINAL-HASHES`, header). The gate's second stage
+  reads the texts in that state, before H_claim exists, and checks the filled digests and the seal's commits in a
+  second part, once the seal commit exists (§12). Every other sealed file (the flag catalog, the identity pins,
+  the sizing output, the three packs, the runbook) is a window input and has its sealed bytes at H_claim.
 - **Seal commit.** The one commit whose only parent is H_claim and which changes the seal documents and nothing
   else. It carries the filled inventory (`status` `SEALED`; `head`, the name of H_claim; `files`, the SHA-256 at
   H_claim of every tracked file under `joulewise/`, `scripts/` and the three pack directories and of the flag
@@ -1714,7 +1730,7 @@ Each is evidenced by a path and SHA-256 before the point named.
    exists, its only parent is H_claim, and it changes only the three seal documents (§0.18;
    `tests.test_b5_seal_landing` checks all three statements, and that the inventory lists exactly H_claim's files,
    from git objects); and the seal record exists and pins the four files. The seal record is
-   `FILL[B5-SEAL-RECORD]`.
+   `docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md`.
 4. The three packs as the timing lane regenerated them, with GAMMA as lane L10 changed it and every reference stage
    carrying its spares (§0.7, §0.12), are at H_claim, and their files are in the sealed inventory. The spare configs
    and spare-set manifests, like the window references, sit outside the pack directories and are pinned by SHA-256 in
@@ -1723,7 +1739,7 @@ Each is evidenced by a path and SHA-256 before the point named.
    written earlier cannot be used: a plan's `measurement_head` must equal the measurement checkout's HEAD when its
    launchd job is installed, which is the seal commit or a later pin-only commit, and a plan is given this file's
    SHA-256, which exists only from the seal commit on (§0.18). The record that the plans were written this way is
-   made after the seal, so it is not in this file: it is the seal record's section `FILL[B5-PLANS-REGENERATED]`.
+   made after the seal, so it is not in this file: it is the seal record's section "Plans written after the seal".
 5. The measurement checkout (§0.18) is a full clone of the repository, made without `--depth` so that H_claim is
    in its history, and checked out at the seal commit, with its Python environment relocked and the ledger seed
    (§4.6 item 6) installed at its default ledger path. `git diff --name-only --no-renames H_claim HEAD` in it
@@ -2266,7 +2282,7 @@ writer records any copied value that differs from a module default. So the chang
 from this block after the seal: any window plan written earlier, and any plan-input file (the input from which the
 plan writer copies this block) prepared earlier, carries 600 and is not used. Every plan is written after the seal
 commit (§2 item 4), and the record that the plans were written so is the seal record's section
-`FILL[B5-PLANS-REGENERATED]` (§13).
+"Plans written after the seal" (§13).
 
 ### 4.4 Network time
 
@@ -2386,7 +2402,8 @@ t0 evidence author (`joulewise/arm_readiness_evidence_t0.py`, §11 item 3). The 
   would do to a number. That physical hazard, a process using the CPU while a member runs, is measured directly and
   by no name: the contention hazard judges every process outside the measurement tree against 5% of one core, at
   the arm's dwell and every 10 s in the window (§4.2), and a member whose request such a process overlapped is
-  removed (`contention.request_overlap`, §6.4). §14 Q14 puts these limits to the seal gate.
+  removed (`contention.request_overlap`, §6.4). The rule stands with these limits, which are disclosed here
+  (orchestrator's ruling of 2026-10-07; §14 Q14 gives the ruling and the evidence it rests on).
 
   H_claim carries this rule (§2 item 1); §13 (`B5-REV10-SYNC`) records what was confirmed at the int5 head
   `9b0c680ed`, and the Fable delta cold pass 5 re-ran the matcher on 36 launch shapes at `9395cecfb` (§2 item 1).
@@ -3270,12 +3287,15 @@ it matters; the yield exists to say early that members were lost and to stop a r
 that leads "collected 99 of 119 planned members". At the harvest the 20 members without a bundle are removed
 (`member.bytes_missing`, §6.7). They are five of the decode cell's ten quads, so the cell keeps 5 quads and all 10
 repeats. That meets the minimum of 5 units in each stratum (§6.6): `cell.below_minimum` does not fire, and the
-window is claim-usable if nothing else removed it, with the decode cell's 5 kept quads printed beside it. Under the
+window is claim-usable if nothing else removed it, with the decode cell's 5 kept quads printed beside it and a
+wider interval for that cell than ten quads would give (§6.6 gives the factors at 5 kept units). Under the
 minimum of 8 that revisions 3 to 9 registered, the same window was removed. One more lost member in the second
 decode quad stage would leave 4 quads, and `cell.below_minimum` would then remove the window. (Both outcomes were
 computed by this author with the exclusion function, `joulewise.flags.exclusions.compute`, on ALPHA's roster as the
 harvest builds it at the int5 head `9395cecfb`, with the catalog whose `rules.cell_unit_minimum` is 5, int5 lane
-commit `059fafc55`: 5 kept quads give `claim_usable` true, 4 give false with the reason `cell.below_minimum`.)
+commit `059fafc55`: 5 kept quads give `claim_usable` true, 4 give false with the reason `cell.below_minimum`. The
+last pass of revision 12 computed both again at the int5 commit `cc0b3446d`, where that lane is merged, once with
+that commit's own catalog and once with this directory's: the same two results each time.)
 Whatever the harvest decides, when the 20 members were refused for one shared cause the orchestrator does not arm
 the next window on the same code until that cause is fixed (§7.3).
 
@@ -4317,7 +4337,10 @@ pack GAMMA).
 *What the seal gate changed in this list* (stage 1, 2026-10-07). Three entries of `window_exclusions` changed and
 no refusal site did. The changes are commits `9980d6296` and `7b88e835a` of the int5 lane
 `lane/2026-10-07-seal-rulings`, which lands in the integration before H_claim together with the catalog's new
-minimum; the counts above are this author's, from the file at that lane's head `a0920cb8c`.
+minimum; the counts above are this author's, from the file at that lane's head `a0920cb8c`. Commit `cc0b3446d`
+has since merged the lane into int5. The file there is byte-identical to the lane head's (`git diff`, empty), and
+the last pass of revision 12 counted it again: the table's rows, the 33 and 40 entries with their categories, and
+the two quoted texts are as stated here.
 
 - `cell.below_minimum` used to give "statistical power of the reported number" as what it protects. Precision is
   neither of the two reasons of the rule above, which is why the gate moved the minimum to the point where a number
@@ -4641,7 +4664,7 @@ beside every reported cell and contrast, the number of attempts of its pack and 
    release event is not written into this file, whose bytes cannot change after the seal: each window
    plan records this file's SHA-256, the plan writer refuses a file that does not hash to the digest it is given,
    and the harvest faults when the file differs from the digest its plan recorded. It is written as a section
-   appended to the seal record (§12), the section named `FILL[B5-RELEASE-EVENT]`.
+   appended to the seal record (§12), the section named "Release event".
 
 **The custody map** (`B5-BLIND-CUSTODY-MAP`, filled in revision 12).
 
@@ -5018,8 +5041,8 @@ is the parent's **child**.
 - **Window input.** A tracked file whose bytes a window can read while it is planned, armed or run. Item 2 states
   the class by path.
 - **Seal documents.** Three files of this directory: `sealed_inventory.json`, this file and
-  `analysis_plan_block5.md`. Their final bytes cannot exist at H_claim: the inventory names H_claim, and the two
-  texts print H_claim, the seats of the seal gate and the path of the seal record.
+  `analysis_plan_block5.md`. Their final bytes cannot exist at H_claim: the inventory names H_claim, this file
+  prints H_claim, and both texts print SHA-256s computed at H_claim.
 - **Seal commit.** The one commit whose only parent is H_claim and which changes only seal documents. It carries
   the inventory in its sealed form (item 2) and the sealed text of this file and of the analysis plan.
 - **Seal record** (§12): the file that lists H_claim, the seal commit and the SHA-256 of every sealed file. An
@@ -5031,7 +5054,8 @@ is the parent's **child**.
   class by path.
 - **Executed head.** The measurement checkout's HEAD as the driver records it at a window's arm (§0.18).
 - **The two stages of the seal gate** (§12). Stage 1 ruled on revision 9 of these documents on 2026-10-07 and
-  required changes to them and to the harvest program. Stage 2 judges the final text.
+  required changes to them and to the harvest program. Stage 2 judges the final text, in two parts: part A reads
+  the text before H_claim exists, and part B checks the digests and the seal's commits once the seal commit exists.
 
 *The picture.* Commits run from left to right. A run of dashes joins a parent to its child, `...` stands for
 earlier commits, and a vertical line ending in `+--` attaches a label to the commit above it. The case drawn is a
@@ -5372,12 +5396,26 @@ sensitivity line of analysis plan §8 (adopted as amended at stage 1 of the gate
   changes a test fixture (a data file that a test compares against); no program running inside a window loads
   either file. The other four (K-4 to K-7) are the harvest lane of §11 item 4, which lands after the seal and
   before ALPHA-1's harvest.
-- **Stage 2** is a separate session, held on the final text. It judges that text and the inventory made from
-  H_claim: that the text differs from what stage 1 ruled on only by changes that each trace to a ruling or to a
-  correction of fact, that every digest the seal pins can be computed again from the bytes it names, and that the
-  seal's commits can be made as the steps below describe. It ends with one line, `SEAL: ADMIT` or `SEAL: REFUSE`.
-  The seal commit is made only after `SEAL: ADMIT`.
-- **Seats.** The seats of both stages, with their records: `FILL[B5-SEAL-SEATS]`.
+- **Stage 2** is held on the final text, in sessions separate from stage 1's. It judges that text and the
+  inventory made from H_claim: that the text differs from what stage 1 ruled on only by changes that each trace to
+  a ruling or to a correction of fact, that every digest the seal pins can be computed again from the bytes it
+  names, and that the seal's commits can be made, and are made, as the steps below describe. It is held in two
+  parts, because the text can be judged before any of the seal's commits exists, and the digests and the commits
+  only once they exist. **Part A** reads the final text before H_claim exists, with the two markers that wait for
+  H_claim still open (header). It makes the first of those judgments, and it judges from the text and the code
+  whether the steps below can be carried out as written. A change it requires is made before the seal commit, and
+  before H_claim when it touches a window input. **Part B** is a later session, held once H_claim, the inventory
+  and the seal commit exist. It computes the digests again, checks the seal's commits as made against the steps
+  below, and ends the gate with one line, `SEAL: ADMIT` or `SEAL: REFUSE`. The seal commit is therefore made
+  before that line is written, so that part B can check it, and it seals nothing by itself: the record commit,
+  which adds the seal record to the repository (step 4 below), is made only after `SEAL: ADMIT`, and until the
+  seal record exists this file binds nothing (header). Both parts are written to one record (next item).
+- **Seats.** The seats of both stages, with their records. Stage 1 (rulings, on revision 9 at `9b0c680ed`): judge
+  Fable 5.1, record `docs/process_traces/2026-10-07-block5-seal/RULING_STAGE1.md`; refuter Opus 5.5, record
+  `REFUTER_STAGE1.md` in the same directory. Stage 2 (the final text and the landing, that is, the making of the
+  seal's commits by the steps below): judge Fable 5.1, record `RULING_STAGE2.md` in the same directory. That
+  directory is the seal record's, and its two stage-1 files are the repository's copies of the two files named
+  under stage 1 above.
 
 **The order of the seal's commits.** The picture is in §11. Each step names the paths it may change and the check
 that proves it.
@@ -5423,8 +5461,8 @@ that proves it.
 8. **Between windows** the desk order is chain exit, pin advance, harvest (§4.6 item 6). Nothing else is ever
    committed, merged, pulled or checked out in the measurement checkout.
 
-**The seal record** is the file `FILL[B5-SEAL-RECORD]`. It lists H_claim, the seal commit, the rulings of both
-stages and the refuter's record, the seats, and these SHA-256s:
+**The seal record** is the file `docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md`. It lists H_claim, the
+seal commit, the rulings of both stages and the refuter's record, the seats, and these SHA-256s:
 
 - at the seal commit: `sealed_inventory.json`, this file and `analysis_plan_block5.md`;
 - at H_claim: `flag_catalog.json` (the seal commit does not change it); the three packs' plan trees; the model
@@ -5477,40 +5515,43 @@ new digest.
 | Commit | `H-CLAIM` | Seal |
 | Sealed inventory | `sealed_inventory.json`: generated from the files of H_claim and committed in the seal commit, the commit that follows H_claim. The file names H_claim as its `head`, and a file cannot name the commit that contains it (§9.1, §11) | Seal |
 | Dry render, dry arm | `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`: filled in revision 9 (§2 item 6), at `fe28e5a0c`; the render is an L2 harness render. The census matcher changed after `fe28e5a0c`; §2 item 6 says why the dry arm's refusal holds under the merged rule, and §14 Q15 asks whether it is repeated at the final head | Before ALPHA-1 arms |
-| Audit, seats | `416-AUDIT-RECORD`, `416-SEATS`: filled in revision 8 (§9.1); `416-DELTA-RECORD` (the diff-scoped passes over `a434e363d..fe28e5a0c`, §9.1): filled in revision 9; its second part (the code merged after `fe28e5a0c`: Fable's delta cold pass 5 at `9395cecfb` and the independent review of the seal-landing lane, §9.1): filled in revision 12; `B5-SEAL-SEATS` | Seal seats at seal |
+| Audit, seats | `416-AUDIT-RECORD`, `416-SEATS`: filled in revision 8 (§9.1); `416-DELTA-RECORD` (the diff-scoped passes over `a434e363d..fe28e5a0c`, §9.1): filled in revision 9; its second part (the code merged after `fe28e5a0c`: Fable's delta cold pass 5 at `9395cecfb` and the independent review of the seal-landing lane, §9.1): filled in revision 12; `B5-SEAL-SEATS`: filled in revision 12 (§12) | Seal seats at seal |
 | Sizing | `B5-SIZING-OUTPUTS`: draft values at `fe28e5a0c` (§5.5), unchanged since `d3c107f2f`, spares included; pinned at H_claim | Seal |
 | Cooldown smoke | `B5-COOLDOWN-SMOKE-RECORD` (§2 item 7): filled in revision 6 | Seal |
-| Plans | `B5-PLANS-REGENERATED`: every window plan and plan-input file written from the sealed §4.3 block (contention `clean_s` 180). The plans can be written only after the seal, so the record of their regeneration is a section appended to the seal record, not a value in this file, whose bytes are fixed at the seal (§8 item 3) | Before ALPHA-1 arms |
+| Plans | `B5-PLANS-REGENERATED`: every window plan and plan-input file written from the sealed §4.3 block (contention `clean_s` 180). The plans can be written only after the seal, so the record of their regeneration is a section appended to the seal record, not a value in this file, whose bytes are fixed at the seal (§8 item 3). The section's title, "Plans written after the seal", was filled in revision 12 (§2 item 4, §4.3) | Before ALPHA-1 arms |
 | P3 sync | `P3-SYNC-RECORD` (§2 item 8), with `P3-BATTERY-CODES` (§6.4, and the table below) and `P3-CLOCK-SKEW-BOUND` (§4.2): filled in revision 6 against `a434e363d`; the revision 7, 8, 9 and 10 sync records below cover what was merged since, against `d3c107f2f`, `43ac12d0c`, `fe28e5a0c` and `9b0c680ed`, and the revision 12 record covers the seal landing, against `9395cecfb` | Seal |
 | Final hashes | `B5-FINAL-HASHES`: filled in revision 8 at `43ac12d0c`; recomputed in revision 9 at `fe28e5a0c` (`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_4.md`), where only the identity pins changed (§0.7 plan trees, §4.6 item 3 identity pins, §5.5 sizing output). Open again because the head moved after `fe28e5a0c` (the census interpreter rule, §4.5, and what §2 item 1 lists after it): each digest so marked is computed again at one commit, H_claim. The marker stands for those digests only; the commit itself is the marker `H-CLAIM`. Revision 10 found each of them unchanged at the int5 head `9b0c680ed` (`B5-REV10-SYNC` below); the marks stay until H_claim is fixed, and revision 12 leaves them in place | Seal |
 | Refusal allowlist | `roster.run_id_mismatch` listed under the member exclusions of `configs/gates/hazard_refusals.json` (§6.11): done at `d3c107f2f` (audit-fix item 7); `neg8.midpoint_lost_primary` listed under the window exclusions: done at `43ac12d0c` (ruling Q11); the file is unchanged at `fe28e5a0c`, at `9b0c680ed` and at `9395cecfb`. The seal gate's stage 1 then reworded two entries (what `cell.below_minimum` and `neg8.midpoint_lost_primary` protect: its changes K-1 and K-3) and ordered `g3.recompute_failed` removed from the window exclusions, where it disagrees with the catalog's DISCLOSE (K-2); the record of revision 12 below says where each stands | Seal |
 | Disk | `BACKUP-DESTINATIONS`: filled in revision 4 (§5.6) | Seal |
 | Identity pins | `identity_pins.json` (§4.6 item 3): draft at `fe28e5a0c`, with the sealed `neg8_reference` unit (`754c8c093`) and the spares; pinned at H_claim | Seal |
-| Blinding | `B5-BLIND-CUSTODY-MAP`: filled in revision 12 (§8). `B5-RELEASE-EVENT`: a section appended to the seal record once the block has closed, not a value in this file (§8 item 3) | Map at seal; release event after the block closes |
+| Blinding | `B5-BLIND-CUSTODY-MAP`: filled in revision 12 (§8). `B5-RELEASE-EVENT`: a section appended to the seal record once the block has closed, not a value in this file; its title, "Release event", was filled in revision 12 (§8 item 3) | Map at seal; release event after the block closes |
 | Boundary | `BOUNDARY-LABEL`: filled in revision 4 (§1) | Seal |
 | Attribution floor | `ATTRIBUTION-FLOOR-BINDING`: filled in revision 12 by a formula, on the orchestrator's ruling of 2026-10-07; no number and no artifact is bound (§0.10, §14 Q5). The value is computed for each reported cell at the analysis | Formula at seal; value at the analysis |
 | Harvest and analysis programs | Two addenda to the seal record (§11 item 4). The first pins the harvest program after the harvest lane that the seal gate required: the changed files, their SHA-256s and the commit of the desk checkout the harvest runs from. The second pins the analysis code (lane L9) | The first before ALPHA-1's harvest; the second before the release event |
-| Seal | `B5-SEAL-RECORD`: the path of the seal record, a file committed after the seal commit (§12) | Seal |
+| Seal | `B5-SEAL-RECORD`: the path of the seal record, a file committed after the seal commit (§12). Filled in revision 12: `docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md` | Seal |
 
-Six names are filled last, by a step that runs once H_claim exists and puts each value in place of its marker
+Two names are filled last, by a step that runs once H_claim exists and puts each value in place of its marker
 without changing another word. `H-CLAIM` is the commit `FILL[H-CLAIM]`: the last commit of the integration branch
 that changes a window input (§9.1, §11). It carries `fe28e5a0c`, the census interpreter rule merged at `84661ddb3`,
 the seal landing merged at `9395cecfb`, and the catalog change the seal gate's stage 1 ordered (§6.6).
-`B5-FINAL-HASHES` marks each digest that is recomputed at that commit. `B5-SEAL-SEATS` and `B5-SEAL-RECORD` are the
-seats of the seal gate and the path of the seal record (§12). `B5-PLANS-REGENERATED` and `B5-RELEASE-EVENT` name
-records that can exist only after the seal; each is a section appended to the seal record, and its marker is filled
-with that section's name (§8 item 3). The sealed inventory is not filled into this file at all: it is generated from
-H_claim and committed in the seal commit (§11). `B5-SIZING-OUTPUTS` and the identity pins hold the values the seal
-record pins. Filled in revision 6: `B5-COOLDOWN-SMOKE-RECORD`, `P3-SYNC-RECORD`, `P3-BATTERY-CODES`,
+`B5-FINAL-HASHES` marks each digest that is recomputed at that commit. Four other names have a name for their
+value, and their markers were filled in revision 12, before the second stage of the seal gate read the text.
+`B5-SEAL-SEATS` and `B5-SEAL-RECORD` are the seats of the seal gate and the path of the seal record (§12).
+`B5-PLANS-REGENERATED` and `B5-RELEASE-EVENT` name records that can exist only after the seal; each is a section
+appended to the seal record, and its marker was filled with that section's title (§2 item 4, §8 item 3). The
+sealed inventory is not filled into this file at all: it is generated from H_claim and committed in the seal
+commit (§11). `B5-SIZING-OUTPUTS` and the identity pins hold the values the seal record pins. Filled in
+revision 6: `B5-COOLDOWN-SMOKE-RECORD`, `P3-SYNC-RECORD`, `P3-BATTERY-CODES`,
 `P3-CLOCK-SKEW-BOUND`. Closed in revision 7: the refusal-allowlist item. Filled in revision 8: `B5-FINAL-HASHES` (open
 again in revision 9, for the digests at the final head only), `416-AUDIT-RECORD`, `416-SEATS`; Q11 closed (§14).
 Filled in revision 9: `416-DELTA-RECORD`, `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`; Q12 closed (§14).
 Revision 10 filled nothing: it
 restated the census interpreter rule from the merged code, added the sync record `B5-REV10-SYNC`, and opened Q14 and
 Q15 (§14). Revision 11 filled nothing: it corrected statements of fact against the code at `9b0c680ed`. Filled in
-revision 12: `B5-BLIND-CUSTODY-MAP` (§8), `ATTRIBUTION-FLOOR-BINDING` (a formula; Q5 closed, §14) and the second part
-of `416-DELTA-RECORD` (§9.1); Q6 closed, and Q9, Q11 and Q12 confirmed, by the seal gate's stage 1 (§14). The
-analysis plan's own FILLs (analysis plan §13), including the L9 adapters and lane L9-NEG8, are listed there.
+revision 12: `B5-BLIND-CUSTODY-MAP` (§8), `ATTRIBUTION-FLOOR-BINDING` (a formula; Q5 closed, §14), the second part
+of `416-DELTA-RECORD` (§9.1) and the four names above; Q6 closed, and Q9, Q11 and Q12 confirmed, by the seal gate's
+stage 1 (§14); Q14 closed by the orchestrator's ruling of 2026-10-07 (§14). The analysis plan's own FILLs
+(analysis plan §13), including the L9 adapters and lane L9-NEG8, are listed there.
 
 **P3 sync record** (`P3-SYNC-RECORD`, revision 6). Revision 5 described the behaviour below from the rulings, before
 the code had it. Each row was read in the frozen head `a434e363d` (`/Users/edr/code/JouleWise-wt-int4`); the last
@@ -5704,7 +5745,7 @@ named there.
 | GAMMA's planned members | the plan tree's stage graph: 12 corpus members, reference stages of 3, 1 and 3, two diagnostic stages of 1, and four science stages of 20, 101 in all | used in §8 (worked example) |
 | three analysis programs print results | `scripts/build_d165_dominance_closeout.py` writes the close-out to standard output when it is given no `--output`; `python -m joulewise analyze-claims` prints each contrast's outcome; `scripts/render_results_fills.py` prints the rendered fills | used in §8 |
 | a resized member allowance | `plan.read_allowance` takes the allowance's source as a path relative to the measurement checkout, requires the file to hash to the SHA-256 given and a JSON pointer in it to resolve to exactly the seconds given | changed: §10 |
-| the changes the seal gate's stage 1 ordered before the head | not in the integration branch when this was written; on the branch `lane/2026-10-07-seal-rulings` (four commits on `9395cecfb`, read with `git log` and `git diff`): `059fafc55` sets the catalog's `rules.cell_unit_minimum` to 5; `9980d6296` rewords what `cell.below_minimum` and `neg8.midpoint_lost_primary` protect in the refusal allowlist (the gate's K-1 and K-3); `7b88e835a` removes `g3.recompute_failed` from the allowlist's window exclusions, which leaves 33, and sets it to DISCLOSE in the test catalog `tests/fixtures/b5_harvest/flag_catalog.json` (K-2); `a0920cb8c` makes the tests and the test catalog follow the minimum of 5. The four commits change no file under `joulewise/` or `scripts/`. `Catalog.cell_unit_minimum` is read only by `exclusions.compute`, which only the harvest imports | changed: §10 deviation 4, §9.1. With K-2 the "one documented disagreement" that the catalog comparisons above report for `g3.recompute_failed` ends: each comparison states what held at its own commit |
+| the changes the seal gate's stage 1 ordered before the head | not in the integration branch when this was written; on the branch `lane/2026-10-07-seal-rulings` (four commits on `9395cecfb`, read with `git log` and `git diff`): `059fafc55` sets the catalog's `rules.cell_unit_minimum` to 5; `9980d6296` rewords what `cell.below_minimum` and `neg8.midpoint_lost_primary` protect in the refusal allowlist (the gate's K-1 and K-3); `7b88e835a` removes `g3.recompute_failed` from the allowlist's window exclusions, which leaves 33, and sets it to DISCLOSE in the test catalog `tests/fixtures/b5_harvest/flag_catalog.json` (K-2); `a0920cb8c` makes the tests and the test catalog follow the minimum of 5. The four commits change no file under `joulewise/` or `scripts/`. Commit `cc0b3446d` has since merged the branch into int5 (`git diff --stat 9395cecfb cc0b3446d`, run by the last pass of revision 12, lists the catalog, the allowlist and five paths under `tests/`, and nothing else). `Catalog.cell_unit_minimum` is read only by `exclusions.compute`, which only the harvest imports | changed: §10 deviation 4, §9.1. With K-2 the "one documented disagreement" that the catalog comparisons above report for `g3.recompute_failed` ends: each comparison states what held at its own commit |
 
 Removed from revision 2 because the mechanism they bound is retired or now measured: `V5-PACK-REGEN-RECORD` and
 `V5-IDLE-SECONDS` (done, PR #481), `B4-*`, `L10-A-RATIFICATION-RECORD`, `Q110-CLOSURE`, `A6-AT-H-CLAIM`,
@@ -5817,23 +5858,51 @@ battery evidence map (§9.2).
   The seal gate (stage 1) added to the same lane the harvest-side reference losses of §0.12 (`energy_unreadable`,
   the unmeasured and measured physics codes) and the narrowed malformed-flag candidate list of §6.2.
   The gate confirmed sealing on the present code (ruling SG-8).
-- **Q14. What the census's rule for JavaScript runtimes can miss. Set by orchestrator ruling of 2026-10-07. The
-  first stage of the seal gate was not asked about it: it judged revision 9, and this question was opened in
-  revision 10. The second stage confirms the rule as it stands; or it asks for the tightening below, in which case
-  the seal waits for a new H_claim.** §4.5 lists four ways the merged rule can read a live agent as
-  none. Three are older than the rule (a name inside a longer piece, an interpreter that is not a JavaScript runtime,
-  a command line the probe never lists). One belongs to the rule: a runtime that names no agent and reads its program
-  from standard input without the `-` argument is decided not an agent, and the rule cannot see it without parsing
-  the runtime's options, which two audits showed to be the wrong mechanism. One tightening needs no parsing: count
-  *every* listed JavaScript runtime that names no agent as undecided, and so as a hit, whatever its other arguments.
-  Its cost: a window launched by `launchd` runs no JavaScript runtime, so it could refuse or stop a window only while
-  some unrelated runtime with `claude` or `codex` somewhere in its command line is alive on the machine; and it
-  reverses one of the lane's own test cases, a launch that must not count today
-  (`node somescript.js --path …/.claude/…`). It would be a change to collection code (§7.5), and so to a window
-  input, which the H_claim that the second stage judges cannot receive. Asked for at the second stage, it
-  therefore moves H_claim: the change is made and reviewed, the tests and a delta cold pass over it are run (§2
-  item 1), a new inventory is made, and the seal follows. Whichever is chosen, the hazard itself, a process using
-  the CPU during a member, stays measured by the contention hazard (§4.2, §6.4).
+- **Q14. What the census's rule for JavaScript runtimes can miss. Closed in revision 12 by orchestrator ruling
+  (2026-10-07): the rule stands as merged, with its limits disclosed.** The rule itself was set by an orchestrator
+  ruling of the same day (§4.5). The first stage of the seal gate was not asked about it: it judged revision 9, and
+  this question was opened in revision 10. *The limits.* §4.5 lists four ways the merged rule can read a live agent
+  as none. Three are older than the rule (a name inside a longer piece, an interpreter that is not a JavaScript
+  runtime, a command line the probe never lists). One belongs to the rule: a runtime that names no agent and reads
+  its program from standard input without the `-` argument is decided not an agent, and the rule cannot see it
+  without parsing the runtime's options, which two audits showed to be the wrong mechanism. The ruling changes none
+  of the four: they are what the rule cannot see, and §4.5 discloses them. *The evidence.* The limits were examined
+  by the Fable delta cold pass 5, on the code at `9395cecfbc40fb93e87a7657ec0ba5da0ca9ef3a`
+  (`/Users/edr/night-archive/gate-prune/cold-pass-5/REPORT.md`, item 1; §2 item 1 gives the report's SHA-256). The
+  ruling rests on three of its results.
+  - The pass ran the matcher on a table of 36 rows of command lines: real launches of both agents, the two
+    launches that the audits of §4.5 had found misread, and lines built to mislead the rule in one direction or the
+    other. Every row got the verdict expected of it; there was no mismatch. Seven of the rows have shapes that the
+    rule misses, of the three older kinds (a `.claude` or `.codex` directory as the only agent word; the word
+    after a hyphen or an underscore, or inside a longer name; a script named by a relative path, which the probe
+    does not list; a Python program), and the matcher read each as not an agent, as §4.5 says it does.
+  - The pass listed how the two agents are installed on this machine, and it found each way of starting them
+    matched by a named rule of §4.5. Claude Code's native binary (`~/.local/share/claude/versions/<version>`, also
+    reached through `~/.local/bin/claude`) is matched by executable identity: through its install directory, and
+    through its process name when that is `claude`. Codex's launcher runs as `node /opt/homebrew/bin/codex` or as
+    `node …/@openai/codex/bin/codex.js` and is matched by rule 1 for runtimes. The native `codex` binary that the
+    launcher starts is matched by its name, and so is the Claude desktop app. None of these has a shape that the
+    rule misses.
+  - A census line that cannot be decided stays a hit. The pass gave the census four such lines (a process whose
+    arguments could not be read, one whose live arguments no longer equalled the listed text, one that had exited,
+    and a line with no process id), and each stayed among the hits.
+
+  *What a wrong hit costs.* The rule can also count a process that is no agent (§4.5; three rows of the table are
+  such hits by design). The pass bounded that cost for the hazard arm's own census, which runs at the arm's start
+  and again at GO and not afterwards: a refused arm, which is retried. The driver's census is a second site
+  (§4.5). Besides its runs before the arm and before the launch, it runs every 30 s while the chain runs, and a
+  hit there stops the chain (`joulewise/b5/driver.py` `HazardCensus` and `scripts/run_night.py`
+  `CENSUS_INTERVAL_S`, read by the last pass of revision 12 at the int5 commit `cc0b3446d`). So the whole cost is
+  the one §4.5 states: a refused arm, or a stopped chain whose window is not claim-usable and is armed again.
+  Neither prints a wrong number, and no process of the window itself can be such a hit (§4.5). *The tightening
+  that was not made.* One tightening needs no parsing: count *every* listed JavaScript runtime that names no agent
+  as undecided, and so as a hit, whatever its other arguments. It would close the one miss that belongs to the
+  rule. It would also refuse an arm or stop a chain whenever some unrelated runtime with `claude` or `codex`
+  somewhere in its command line is alive on the machine; it reverses one of the census lane's own test cases, a
+  launch that must not count today (`node somescript.js --path …/.claude/…`); and it is a change to collection
+  code (§7.5), and so to a window input. The ruling does not make it. By the pass's second result, no way of
+  starting either agent on this machine falls under that miss. The hazard itself, a process using the CPU during
+  a member, stays measured by the contention hazard whatever the census reads (§4.2, §6.4).
 - **Q15. The desk dry arm after the matcher change (orchestrator, before ALPHA-1 arms).** `B5-DRY-ARM-RECORD` was
   produced at `fe28e5a0c`, with the matcher that parsed options. §2 item 6 gives the reason its refusal holds under
   the merged rule, and the lane's tests include a live `node` launch decided through the production census
@@ -6077,3 +6146,20 @@ the allowlist on that branch, by loading the file; GAMMA's 101 planned members, 
 and 0.031073829 s × 32.697 W = 1.016 J in §14 Q5. The other numbers of §14 Q5 are the ruling's; they come from
 window a10 and from block 3, neither of which belongs to this block. Of the rehearsal archive named in §13 only
 directory and file names were read. No energy or power value of any block-5 window exists, and none was read.
+
+Revision 12 had one more pass after its review round, by one writer, which applied the orchestrator's rulings of
+2026-10-07 that item 14 of the revision-12 list names. That writer read: item 1 of Fable's delta cold pass 5, and
+the table of command lines which that item ran, in the pass's brief
+(`/Users/edr/night-archive/gate-prune/wave-1007b/seal-gate/COLD_PASS_5_BRIEF.filled.md`); the charge for part A of
+the seal gate's second stage (`STAGE2A_DISPATCH.md`, beside the brief); the procedure of the seal landing
+(`seal-land/SEAL_LANDING.md`, steps 0 to 5); and the list of late corrections it was given
+(`reg-final-b/LATE_ITEMS.md`). At the int5 commit `cc0b3446d` (the integration worktree, read only) it read the
+driver's census in the window (`joulewise/b5/driver.py` `HazardCensus`, the driver's census calls before the arm
+and before the launch, and the loop of `scripts/run_night.py` that runs the census every 30 s and stops the chain on
+a hit), the arm's two census calls (`joulewise/hazards/arm.py`), and the list of record files the driver
+publishes. It computed three things itself, with scripts kept in
+`/Users/edr/night-archive/gate-prune/wave-1007b/reg-final-b/late/`: the counts of §6.11, by loading the allowlist;
+the two outcomes of §5.7's worked example, with the exclusion function on ALPHA's roster; and a comparison of this
+directory's catalog with that commit's, code by code (192 codes in both, with the same effect, family, class and
+blinding for every code, and the cell minimum 5 in both). No energy or power value of any block-5 window exists,
+and none was read.
