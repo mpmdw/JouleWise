@@ -95,6 +95,11 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(missing_codes(catalog, EMITTED_BY_THIS_LANE), [])
         self.assertEqual(missing_codes(catalog, EMITTED_BY_THE_SPAN_JOINS), [])
         self.assertEqual(catalog.effect("cell.below_minimum"), EXCLUDE_WINDOW)
+        # The sealed rule is its own "rules" key, 5 units per stratum (seal gate
+        # ruling SG-1, 2026-10-07).  DEFAULT_CELL_UNIT_MINIMUM (8) is only what
+        # a catalog without that key, and the draft the tests build, fall back to.
+        self.assertEqual(catalog.rules, {"cell_unit_minimum": 5})
+        self.assertEqual(catalog.cell_unit_minimum, 5)
 
     def test_draft_classifies_every_code_this_lane_emits(self) -> None:
         self.assertEqual(missing_codes(draft_catalog(), EMITTED_BY_THIS_LANE), [])

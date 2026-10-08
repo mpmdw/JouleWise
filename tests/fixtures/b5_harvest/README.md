@@ -42,8 +42,13 @@ line blocks the release event (L4's `NEVER_CLASSIFIED_CODES`).
 
   L4 (draft) and L6 (sealed catalog) classify these; until then the sealed
   catalog leaves them `UNCLASSIFIED`, which blocks release, never collection.
-- `rules.cell_unit_minimum` is the registered 8. The synthetic six-member test
-  window lowers it to 1 in its own copy so the unit rule stays observable.
+- `rules.cell_unit_minimum` is the registered 5: a target cell must keep at
+  least 5 of its 10 planned units in each stratum, or `cell.below_minimum`
+  removes the window. It was 8 until the seal gate's ruling SG-1 (2026-10-07)
+  set it where the registered floor estimator stops producing a number
+  (`joulewise.detection_floor.small_sample_guard_factor` is undefined below 5
+  units). The synthetic six-member test window lowers it to 1 in its own copy
+  so the unit rule stays observable.
 
 The sealed catalog is lane L6's
 `configs/campaigns/v5_claim_25g83/flag_catalog.json`; the harvest only looks
