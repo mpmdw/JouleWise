@@ -109,7 +109,7 @@ and the **spread**: the largest minus the smallest of the start-triplet mean, th
 end-triplet mean. Each member carries half of it as `E_whole_window_drift_allowance_j`, which enters a reported cell's
 recorded timing bounds B (§4 step 4) and a contrast's deterministic bound total D (§7.1 step 5). The midpoint is the
 only NEG-8 reference inside the window (GAMMA's two diagnostic interior references enter neither the screen nor the
-allowance, registration §0.12). Of the references that run between the start and end triplets it is the only one the spread reads: GAMMA's two diagnostic interior references run one in the middle of its decode stages and one in the middle of its prefill stages, and their role is not a NEG-8 role. If the midpoint is lost (registration §0.12: failed and not restored by its spare, or
+allowance, registration §0.12). Of the references that run between the start and end triplets it is the only one the spread reads: those two run one in the middle of GAMMA's decode stages and one in the middle of its prefill stages, and their role is not a NEG-8 role. If the midpoint is lost (registration §0.12: failed and not restored by its spare, or
 contaminated), the spread falls back to |end mean − start mean|, so an excursion that rises in the middle of the window and reverts by its end is no longer measured, and the allowance can only shrink. The midpoint sits at the
 boundary between the decode and prefill arms (the window's decode stages and its prefill stages), after fifty decode members (forty in GAMMA), the one place where such
 an excursion is physically expected, and no block has yet measured how large these excursions are.
