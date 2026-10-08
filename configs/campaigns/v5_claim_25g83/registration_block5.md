@@ -1,36 +1,54 @@
 # Registration V5-CLAIM-25G83-B5: the first claim-bearing `_v5` windows (measurement block 5)
 
-Status: **DRAFT, NOT SEALED. Revision 11, 2026-10-07.** Written by Opus 5.5, as lane L6 of the gate-prune workflow
+Status: **Revision 12, 2026-10-07: the text of the seal commit.** This file is sealed when the seal record of §12
+(`FILL[B5-SEAL-RECORD]`) exists and pins this file's SHA-256; until that record exists it binds nothing. Written by
+Opus 5.5, as lane L6 of the gate-prune workflow
 (revision 3, commit `71c91d74`), then as the registration-sync side lane (revision 4, last commit `7261a585`), then
 as the REG lane of gate-prune round 3 (revision 5, last commit `9d63b4df`), then as the REG sync to the frozen head
 (revision 6, last commit `c6843537`), then as the REG sync to the audit fixes and the NEG-8 ruling (revision 7, last
 commit `dc046d4d`), then as the REG final pass to `43ac12d0c`, at that time the candidate for H_claim (H_claim is
-the commit whose code every block-5 window runs, §0.18 and §11; revision 8, last commit
+the last commit that changes a file a window can read, so every block-5 window runs the bytes it holds; §0.18 and
+§11; revision 8, last commit
 `30d92227`), then as the REG sync to the int5 head `fe28e5a0c` (revision 9, last commit `bc8ad4ae`), then as the REG
 preparation pass that read the merged census interpreter rule at the int5 head `9b0c680ed` (revision 10, last
 commit `1d97f0a60`), then as the correction pass that followed a comparison of these documents with the code at
-that same head (revision 11; "What changed in revision 11" below describes the comparison), on
-branch `design/2026-10-05-v5-claim-block-draft` (revision 2 is commit `bfd1ee8c`). This file authorizes no arm (the
-**arm** is the sequence of checks, run at a window's scheduled start, that decides whether its collection begins;
-§0.15), no launch and no analysis. It binds only when one cold gate (§0.1, §12) seals it together with three
-companions in the same directory:
+that same head (revision 11, last commit `7c19c9c79`; "What changed in revision 11" below describes the
+comparison), then as the pass that wrote in the rulings of the seal gate's first stage and the procedure by which
+the seal is committed (revision 12; "What changed in revision 12" below), on
+branch `design/2026-10-05-v5-claim-block-draft` (revision 2 is commit `bfd1ee8c`). Unsealed, this file authorizes no
+arm (the **arm** is the sequence of checks, run at a window's scheduled start, that decides whether its collection
+begins; §0.15), no launch and no analysis. It binds only when the seal gate (one cold gate, §0.1, run in two stages,
+§12) seals it together with three companions in the same directory:
 
 - `analysis_plan_block5.md`, the **analysis plan**: what is computed from the collected bytes, and how;
 - `flag_catalog.json`, the **flag catalog**: for every flag code, whether it removes a member from the claims,
   removes a whole window, or is only disclosed (§6);
-- `sealed_inventory.json`, the **sealed inventory**: the SHA-256 of every file a window executes, at the commit the
-  windows run (§11). At this writing it is a stub; it is filled at seal.
+- `sealed_inventory.json`, the **sealed inventory**: the SHA-256 of every tracked file of the code (`joulewise/`,
+  `scripts/`) and of the three packs, and of the flag catalog, as one named commit holds them. That commit is
+  H_claim, and every window runs those bytes (§0.18, §11). The inventory names H_claim, and a file cannot name the
+  commit that contains it, so the filled inventory is committed one commit after H_claim, in the **seal commit**,
+  together with the final bytes of this file and of the analysis plan. At H_claim itself the inventory is an empty
+  stub (§0.18).
 
 A **FILL**, written `FILL[NAME]`, is a value that must be tied to authenticated bytes before the point named in §13.
-It is never a default. One FILL is a marker on values already written: `FILL[B5-FINAL-HASHES]` follows each digest
-computed at an integration head, to be recomputed at the integration's final head. Revision 8 recomputed every one
-at `43ac12d0c`. Revision 9 recomputed every one at `fe28e5a0c`: only the identity pins changed (§4.6 item 3). The
-census interpreter rule of §4.5 was merged after `fe28e5a0c` (by int5 commit `84661ddb3`), and the seal preparation
-(the integration's last steps before the seal: these documents placed in the code tree, the whole test suite, the
-sealed inventory) is still adding commits after that merge. So the final head, the new candidate H_claim, is itself
-`FILL[B5-FINAL-HASHES]` (§2 item 1): its integrator reports it, and each digest so marked is checked again there.
-Revision 10 found every such digest unchanged at the int5 head `9b0c680ed` (§13) and filled none of them. No
-claim-eligible `_v5` energy exists at this writing, and none was read (§16).
+It is never a default. Revision 12 leaves six kinds of marker, because each names a value that exists only once
+H_claim is fixed. Each marker stands exactly where its one value goes, so filling it replaces the marker and
+changes no other word:
+
+- `FILL[H-CLAIM]`: the 40-character name of the commit H_claim (§2 item 1).
+- `FILL[B5-FINAL-HASHES]`: the SHA-256, computed at H_claim, of the one file that the marker's sentence names. In
+  earlier revisions this marker followed a digest computed at an earlier integration head, as a note to compute it
+  again at the last one: revision 8 recomputed every such digest at `43ac12d0c`, revision 9 at `fe28e5a0c` (only the
+  identity pins had changed, §4.6 item 3), and revision 10 found each unchanged at the int5 head `9b0c680ed` (§13).
+  Those digests stay in the text, each with the head it was computed at, beside the marker for H_claim's value.
+- `FILL[B5-SEAL-SEATS]` and `FILL[B5-SEAL-RECORD]`: the seats of the seal gate, and the repository path of the seal
+  record (§12).
+- `FILL[B5-PLANS-REGENERATED]` and `FILL[B5-RELEASE-EVENT]`: these two values come into being only after the seal
+  commit (the window plans are written from the sealed text; the release event closes the block), and this file's
+  bytes may not change after the seal commit (§0.18). So neither is ever written here: each is a named section
+  appended to the seal record (§12), and the marker stands where the name of that section goes.
+
+No claim-eligible `_v5` energy exists at this writing, and none was read (§16).
 
 **What changed from revision 2.** On 2026-10-05 Ed ruled that arming refuses only on a physical hazard, measured
 directly, and that every other check becomes a recorded flag (Ed: "this again feels like in ability to prune silly
@@ -593,10 +611,12 @@ The values in this section follow the cold-judge ruling on block-5 per-member ti
   stage's spare members, §0.12) are ALPHA
   `1d87a30955fa978d3a3a22dc0048720691e0128e4a3fe83477fc375d13dd031a`, BETA
   `0cdb33836f4632827bc74be194e388450c53b3314db1c72d9e9904e625868670` and GAMMA
-  `8b1d1d7176f5ee2286038e91df6427e47476c3a4bdee45a1c24687d49d80e3bf` (`FILL[B5-FINAL-HASHES]`: checked again at the
-  final head), computed by this author with `shasum -a 256` at `fe28e5a0c`, equal to each pack's committed
+  `8b1d1d7176f5ee2286038e91df6427e47476c3a4bdee45a1c24687d49d80e3bf`, computed by this author with `shasum -a 256`
+  at `fe28e5a0c`, equal to each pack's committed
   `plan_tree.sha256` there, with each pack's `generate_configs.py --check` exiting 0, and recorded in the sizing
-  output (§5.5). Earlier
+  output (§5.5); this author computed the same three values again at the int5 head `9395cecfb`. At H_claim the three
+  files hash to ALPHA `FILL[B5-FINAL-HASHES]`, BETA `FILL[B5-FINAL-HASHES]` and GAMMA `FILL[B5-FINAL-HASHES]`.
+  Earlier
   values: at the frozen head `a434e363d`, ALPHA `5218c270…` and BETA `5bab773a…` (as the timing lane `f4cf9047` left
   them) and GAMMA `fb51b4aa…` (after lane L10 gave its interior references distinct run ids, branch
   `lane/2026-10-06-l10-gamma-refs`, commit `c6309e1a`; §2, "Before GAMMA-1 arms"); GAMMA `523864e2…` at the
@@ -1517,9 +1537,11 @@ Everything below runs inside the launchd job after t0, so no person or agent ses
 3. **Network time OFF, as an action** (§4.4).
 4. **Record-only collectors:** one command, `scripts/collect_window_flags.py --stage arm`, which is killed as a
    whole after 120 s. It runs five collectors, each in its own subprocess with its own time budget: pack identity
-   (the pack's files against the digests its plan tree pins; 15 s), checkout identity (the measurement checkout's
-   commit is H_claim, or H_claim plus pin-only commits, with no edited tracked file and no untracked file under
-   `joulewise/`, `scripts/` or the pack; 10 s), the executed-file inventory (§0.18; 15 s), the model-identity
+   (the pack's files against the digests its plan tree pins; 15 s), checkout identity (the measurement checkout
+   has no edited tracked file and no untracked file under `joulewise/`, `scripts/` or the pack, and no window input
+   differs between the commit the window plan names as its `measurement_head` and the checkout's HEAD; at a real
+   arm those two are the same commit, so this last comparison lists nothing there, and the comparison with H_claim
+   is the harvest's, §0.18; 10 s), the executed-file inventory (§0.18; 15 s), the model-identity
    check (§4.6 item 3; 55 s) and calibration-ledger readiness (the read-only check of §4.6 item 6; 15 s; it runs
    when the pack holds a `calibration_plan.json`, which all three packs do). Their findings are flags (§6); they
    never change the arm decision.
@@ -1864,8 +1886,8 @@ t0 evidence author (`joulewise/arm_readiness_evidence_t0.py`, §11 item 3). The 
   the arm's dwell and every 10 s in the window (§4.2), and a member whose request such a process overlapped is
   removed (`contention.request_overlap`, §6.4). §14 Q14 puts these limits to the seal gate.
 
-  The final head that carries this rule is `FILL[B5-FINAL-HASHES]` (§2 item 1); §13 (`B5-REV10-SYNC`) records what
-  was confirmed at the int5 head `9b0c680ed`.
+  H_claim carries this rule (§2 item 1); §13 (`B5-REV10-SYNC`) records what was confirmed at the int5 head
+  `9b0c680ed`, and the Fable delta cold pass 5 re-ran the matcher on 36 launch shapes at `9395cecfb` (§2 item 1).
 - **The caller's own tree.** A process in the caller's own process tree (the driver or the arm and their descendants,
   or a process group led by one of them) is the window itself and is ignored, whatever it runs. The tree runs downward
   only: the caller's ancestors (the shell or agent session that launched it, `launchd`) are not in it and are decided
@@ -1978,10 +2000,11 @@ earlier night kinds (`joulewise/night_gate.py`, `joulewise/evidence_night.py`).
    `e769305d149c49ec2ec5b1ecca1be2c3a5152838a49d25d2b7d22b26d157891a`, configuration set
    `c8d759abd76ec820aba792db92bc4d539d262254c3ac58564a436cc8d0b0607c` (read by this author from the file). The
    science units are unchanged by it.
-   The file's draft SHA-256 at the int5 head `fe28e5a0c` is
-   `a0865895dc7eeb4ecea28c611b65fab9eee69d5e16f5f8126dbe08ac5255bda9` (`FILL[B5-FINAL-HASHES]`: checked again at the
-   final head; computed by this author with `shasum -a 256`, and `scripts/write_b5_identity_pins.py --check`
-   reproduced the file at `fe28e5a0c`, exit 0). It was `f78a27f8c8c921e9b3de3403d6b56ea9da4cee92c23520e8ca24c666ecd95257`
+   The file's SHA-256 at H_claim is `FILL[B5-FINAL-HASHES]`. At the int5 head `fe28e5a0c` it was
+   `a0865895dc7eeb4ecea28c611b65fab9eee69d5e16f5f8126dbe08ac5255bda9` (computed by this author with
+   `shasum -a 256`; `scripts/write_b5_identity_pins.py --check` reproduced the file there, exit 0), and this author
+   computed the same value again at the int5 head `9395cecfb`. (The file's own `status` and `sealed` fields are
+   labels its generator wrote before the seal; §12 says what seals the file.) It was `f78a27f8c8c921e9b3de3403d6b56ea9da4cee92c23520e8ca24c666ecd95257`
    at `43ac12d0c` and at `d3c107f2f`; the only changes since are the added reference unit and the file's `note`,
    which now names it (`git diff 43ac12d0c fe28e5a0c`).
    The NEG-8 lane changed only the three packs' plan-tree digests in it (`git diff a434e363d d3c107f2f`). Earlier
@@ -2007,8 +2030,8 @@ earlier night kinds (`joulewise/night_gate.py`, `joulewise/evidence_night.py`).
    path; the plan writer refuses at the desk if the plan names another. Before each arm the desk runs the read-only
    ledger readiness check; a session left open by an abandoned attempt is closed with the existing abort plus a pin
    advance. For each later attempt the seed is the previous attempt's terminal ledger, whose tip the pin advance
-   names. A pin advance is a pin-only commit made in the measurement checkout (H_claim plus pin-only commits, §0.18,
-   §11), not a merged pull request: the merge path took 15–60 min per window for a one-file data change (PLAN2 X4).
+   names. A pin advance is a pin-only commit made in the measurement checkout (which is at the seal commit plus
+   pin-only commits, §0.18, §11), not a merged pull request: the merge path took 15–60 min per window for a one-file data change (PLAN2 X4).
    **The desk order is chain exit, pin advance, harvest, next arm** (`scripts/advance_b5_ledger_pin.py` at
    `a434e363d`; revision 5 had the advance after the harvest, which the code no longer allows). *Why this order:* the
    window's own post calibration finalizes its bracket session and moves the ledger past the pin the window armed at.
