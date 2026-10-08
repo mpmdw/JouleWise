@@ -226,6 +226,23 @@ def tearDownModule():  # noqa: N802 (unittest hook)
         shutil.rmtree(_TEMPLATE, ignore_errors=True)
 
 
+# ``cp -c`` asks macOS for a clone of each file (clonefile(2) on APFS: the
+# copy shares the source's data blocks, so no bytes are written). Every
+# fixture window copies its members from the template, and cloning keeps a
+# few hundred of them fast. ``-c`` exists only in the macOS ``cp``; GNU ``cp``
+# on Linux stops with "invalid option -- 'c'". Elsewhere the members are
+# copied byte for byte, links kept as links: the same files, only slower.
+CLONE_WITH_CP = sys.platform == "darwin"
+
+
+def copy_member(source: Path, target: Path) -> None:
+    """Copy one member directory to ``target``, which must not exist yet."""
+    if CLONE_WITH_CP:
+        subprocess.run(["/bin/cp", "-c", "-R", str(source), str(target)], check=True)
+    else:
+        shutil.copytree(source, target, symlinks=True)
+
+
 # ---------------------------------------------------------------------------
 # Hazard-monitor journals in L1's format (joulewise.hazards.monitor).
 # ---------------------------------------------------------------------------
@@ -617,7 +634,7 @@ class Window:
         self.claim.mkdir(parents=True)
         self.bound.mkdir(parents=True)
         for run_id, *_rest in MEMBERS:
-            subprocess.run(["/bin/cp", "-c", "-R", str(template() / run_id), str(self.claim / run_id)], check=True)
+            copy_member(template() / run_id, self.claim / run_id)
 
     def _build_ledger(self, prefix_ledger):
         from joulewise.calibration_bracketing import load_calibration_acceptance_bound
@@ -1111,8 +1128,7 @@ class CollectedWindowTests(WindowTestCase):
 
     def test_bundle_outside_roster_is_ignored_and_recorded(self):
         window = self.window()
-        subprocess.run(["/bin/cp", "-c", "-R", str(window.claim / "b5t-abs-r01"), str(window.claim / "stray-r99")],
-                       check=True)
+        copy_member(window.claim / "b5t-abs-r01", window.claim / "stray-r99")
         window.harvest()
         self.assertIn("roster.not_in_plan", window.codes("stray-r99"))
         self.assertNotIn("stray-r99", json.loads((window.archive / "withheld" / "spans.json").read_bytes())["spans"])
@@ -4837,6 +4853,7 @@ class Neg8ReferencePhysicsTests(WindowTestCase):
             self.assertEqual("DISCLOSE", DRAFT_CODES[code]["effect"])
 
 
+@unittest.skipUnless((B3W1 / "harvest.json").is_file(), "block-3 b3w1 archive is local to the measurement Mac")
 class RealB3w1BytesTests(unittest.TestCase):
     """On real b3w1 bytes: re-reduction is byte-identical and anchors recompute.
 
