@@ -2262,8 +2262,10 @@ still knows only the full corpus. Three programs touch the bound, in this order:
      does not, these are not the bundles the verdict was written from, and nothing is evaluated. (For a reference
      whose energy cannot be read, this first re-derivation writes what the verdict writer wrote for it, an endpoint
      entry with no energy, so that the comparison can confirm the stored bracket before the reference is dropped.
-     That handling is the seal gate's ruling of stage 1, item RF-1, and belongs to the harvest program pinned
-     before ALPHA-1's harvest, §11 item 4; §6.5 gives the rule and its example.) The decision is
+     That handling was ruled by the **seal gate**, the cold gate that seals this file (§12). The gate ran in two
+     stages; **stage 1**, on 2026-10-07, judged revision 9 and required changes, which sections 5 and 6 cite by
+     the ruling's own item names (here RF-1). The handling belongs to the harvest program pinned before ALPHA-1's
+     harvest, §11 item 4; §6.5 gives the rule and its example.) The decision is
      then the re-derivation that drops the lost references before aggregation.
      The re-screen alone decides: `neg8.screen_failed` is emitted unless the re-screen ran, passed and listed no
      condition. In case (a), any other NEG-8 condition leaves the screen failed; in every case, a re-screen that
@@ -2452,14 +2454,16 @@ NULL window, and named two of the three process conditions.)
 - **`WINDOW_MAX_S`**, the window's deadline measured from t0, = 60 × ceil((span + 3,300 s) / 60). The 3,300 s is the
   arm's allowance: the dwell cap of 2,700 s plus the census, reads, network-time OFF, collectors and cadence probe.
 - **`B5-SIZING-OUTPUTS`**: `configs/campaigns/v5_claim_25g83/sizing_b5.json`, schema `joulewise.b5_sizing.v1`. Its
-  sealed bytes are the bytes it has at H_claim, and the seal record pins their SHA-256 (§12). SHA-256 at H_claim:
-  `FILL[B5-FINAL-HASHES]`. At the int5 heads `fe28e5a0c` and `9395cecfb` it was
-  `89e7ea70be34d855285c7d2c87df42b646d179a632a1e05ed57a4682a961b3aa`, unchanged from `d3c107f2f` (computed by this
-  author with `shasum -a 256` at both heads; `scripts/size_b5_window.py --check` reproduced the file byte for byte
-  at both, exit 0). *The file's own labels.* The file carries `"status": "UNSEALED_DRAFT"` and `"sealed": false`,
-  and its `note` begins "UNSEALED DRAFT". Its generator writes those labels and no program reads them. They are not
-  rewritten at the seal, because a rewrite would change the sealed bytes and the generator's `--check` would then
-  fail on a label; the seal record's SHA-256 of the file is what seals it (orchestrator ruling of 2026-10-07 on the
+  sealed bytes are the bytes it has at H_claim, and the seal record (the record of §12 that pins each sealed file
+  by its SHA-256) pins theirs. SHA-256 at H_claim: `FILL[B5-FINAL-HASHES]`. At the int5 heads `fe28e5a0c` and
+  `9395cecfb` it was `89e7ea70be34d855285c7d2c87df42b646d179a632a1e05ed57a4682a961b3aa`, unchanged from `d3c107f2f`
+  (`shasum -a 256`, and `scripts/size_b5_window.py --check` reproducing the file byte for byte with exit 0: both run
+  by revision 9's author at `fe28e5a0c` and by this revision's author at `9395cecfb`). *The file's own labels.* The
+  file carries `"status": "UNSEALED_DRAFT"` and `"sealed": false`,
+  and its `note` begins "UNSEALED DRAFT". The program that generates the file (`scripts/size_b5_window.py`, below)
+  writes those labels, and no program reads them. They are not rewritten at the seal, because a rewrite would
+  change the sealed bytes and that program's `--check`, which regenerates the file and compares, would then fail
+  on a label; the seal record's SHA-256 of the file is what seals it (orchestrator ruling of 2026-10-07 on the
   seal preparation, its item F6; §12). Earlier drafts:
   `f114f9b9…` at the frozen head `a434e363d`, before the spares; `a5c6ec05…` at `b9d02700a`; `7c53ebc8…` on lane
   L10's branch with the older sizer; `b31a27b5…` after the timing lane `f4cf9047`; `9d16edfe…` at `f8164893`. The
@@ -2976,15 +2980,15 @@ A member is removed from every cell it feeds when any of these is flagged:
   `thermal.powermetrics_pressure_elevated` (§6.4), and an invalid bundle is `member.strict_validation_failed` and its
   kin. Leaving those two out keeps each exclusion in one family, and the sensitivity line of analysis plan §8.1 names
   `thermal.powermetrics_pressure_elevated` among the three codes it ignores. (The **sensitivity line** is a second
-  value printed beside a cell's or a contrast's primary value. Thermal pressure and contention plausibly rise with
-  the workload's own load, so removing the members they touched could pull a mean toward its cooler members. When a
-  unit was removed by one of the three codes for those hazards, `thermal.os_level_nonzero`,
-  `thermal.powermetrics_pressure_elevated` and `contention.request_overlap`, the same estimator is therefore
-  computed again over the units that would be kept if those three codes were ignored. A unit that carries any other
-  code stays removed. The seal gate adopted the line in this narrowed form at its stage 1, 2026-10-07; revision 11
-  described the proposal it judged, which ignored the whole PHYSICS_IN_SPAN family; §14 Q6. Had in-window thermal
-  pressure also been listed under `member.whole_window_member_failure`, every member with thermal pressure would
-  carry that second code as well, and the line could never restore it.)
+  value printed beside a cell's or a contrast's primary value, the one computed with every registered exclusion
+  applied. Thermal pressure and contention plausibly rise with the workload's own load, so removing the members
+  they touched could pull a mean toward its cooler members. When a unit was removed by one of the three codes for
+  those hazards, `thermal.os_level_nonzero`, `thermal.powermetrics_pressure_elevated` and
+  `contention.request_overlap`, the same estimator is therefore computed again over the units that would be kept
+  if those three codes were ignored. A unit that carries any other code stays removed. The seal gate adopted the line in this narrowed form at its stage 1 (2026-10-07; §14 Q6).
+  Revision 11 described here the proposal the gate then judged, which ignored the whole PHYSICS_IN_SPAN family. Had
+  in-window thermal pressure also been listed under `member.whole_window_member_failure`, every member with thermal
+  pressure would carry that second code as well, and the line could never restore it.)
 
   *Why this rule is needed.* Its environment evidence includes the post-run observation that the displays stayed
   asleep and the screensaver stayed off through the request. That observation is how decision D-078 (item 4) closed
@@ -3203,7 +3207,12 @@ The window is not claim-usable when any of these fired:
   head, run in the measurement checkout) and gives each path one class (`harvest.head_change_class`). A changed
   window input raises the flag. Three classes are only recorded, in `derived/code-identity.json`: the calibration
   ledger pin (a pin-only commit, §0.18); the three **seal documents**, which are the sealed inventory, this file and
-  the analysis plan; and a path no window reads, such as a test or another document. *Why the rule has this form:*
+  the analysis plan; and a path no window reads, such as a test or another document. (The harvest program that is
+  pinned before ALPHA-1's harvest, §11 item 4, changes two details of these classes. The recorded paths become a
+  named list, so that a path on no list counts as a window input. And a change confined to the directory of
+  another of the three packs, which this window never reads, becomes a record; at H_claim it still raises the
+  flag.)
+  *Why the rule has this form:*
   the sealed inventory names H_claim as its `head`, and a file cannot name the commit that contains it, so the
   filled inventory and the sealed text of this file and of the analysis plan are committed one commit after
   H_claim, in the **seal commit**. Every window therefore runs from the seal commit or from a pin-only commit after
@@ -3212,22 +3221,27 @@ The window is not claim-usable when any of these fired:
   comparison was changed before H_claim, by the int5 merge `9395cecfb`.) When `git diff` cannot run, the window is
   `code.identity_unmeasured` instead (below). The arm's own collector applies the same classes and also raises the
   flag when the checkout's HEAD does not descend from the commit it is given to compare with. In a window that
-  commit is the plan's own `measurement_head`, which the installer requires to equal the checkout's HEAD, so the
-  arm compares a commit with itself; the comparison that ties a window to H_claim is the harvest's (§11).
+  commit is the plan's own `measurement_head` (the field in which a window plan records the measurement checkout's
+  HEAD at the time the plan was written), and the install program that sets up the window's launchd job
+  (`scripts/install_night_agent.sh`, which runs `joulewise/night_agent_install.py`; the job is built in §0.17)
+  refuses unless that field equals the measurement checkout's HEAD. So the arm compares a commit with itself, and
+  the comparison that ties a window to H_claim is the harvest's (§11).
   *One more difference, decided at the harvest.* The driver, the hazard modules, the monitor and the arm's
-  collectors run from the checkout whose installer set up the window's launchd job (§0.17), and the registered
-  procedure installs that job from the measurement checkout (§11, §12), so there is one checkout and its files are
-  the executed-file inventory. If the job was installed from another checkout, the driver records that checkout's files
-  as well (`driver_checkout`), and a code file among them that differs from the sealed inventory is a difference
-  under this code. The harvest at H_claim only writes the list of such files into `derived/code-identity.json`; the
-  flag is raised by the harvest program that an addendum to the seal record pins before ALPHA-1's harvest (§11
-  item 4), and identical bytes in a second checkout stay a record.
+  collectors run from the checkout whose copy of that install program set up the job. The registered procedure
+  installs the job from the measurement checkout (§11, §12), so there is one checkout and its files are the
+  executed-file inventory. If the job was installed from another checkout, the driver also records that
+  checkout's files (`driver_checkout`), and a code file among them that differs from the sealed inventory is a
+  difference under this code. The harvest at H_claim only writes the list of such files into
+  `derived/code-identity.json`; the flag is raised by the harvest program that an addendum to the seal record
+  pins before ALPHA-1's harvest (§11 item 4), and identical bytes in a second checkout stay a record.
 - `model.identity_mismatch` (the model, tokenizer or runtime realized at the arm or recorded in any bundle differs
   from the pins of `identity_pins.json`, §4.6 item 3), `model.identity_inconsistent_in_window` (two identities within
   one identity unit), and `model.identity_unpinned` (no pin to compare against, which happens when the measurement
   checkout lacks `identity_pins.json`; the members' recorded hashes still exist, and a harvest that is given the
   pins compares them, so since the seal gate's stage 1 this code is a harvest problem first, like the
-  `*.identity_unmeasured` codes below: §7.2). The first two remove the window even when the flag is member-level,
+  `*.identity_unmeasured` codes below: when it is an attempt's only window-removing code, the attempt is
+  re-harvested on the same bytes before any decision to re-arm, §7.2). The first two remove the window even when
+  the flag is member-level,
   and that includes a NEG-8 reference or spare that ran another model than the sealed `neg8_reference` pin: the
   window is excluded, not handed to the survivors screen, because the pack that executed differs from the sealed
   one (orchestrator call (ii), 2026-10-07, confirmed by the seal gate at its stage 1; §0.12).
@@ -3364,19 +3378,24 @@ the list gives.)
   only.)
   *What happens in case (b)* (seal gate, stage 1, 2026-10-07, its item RF-1). *Forcing problem:* the verdict writer
   hands the evaluator every reference that succeeded and passed the strict check, including one whose summary holds
-  no usable request energy, as when the reducer gave the energy no envelope because the reference's clock anchor
-  is not `bounded` (§0.14). The evaluator then fails the whole screen for that one reference, so a window would be
-  removed for an event that costs one unit when it happens to a science member (`member.anchor_not_bounded`, §6.3).
+  no usable request energy. The reducer records a member's request energy with an **envelope**: a lower and an
+  upper value, between which that energy stays when the member's power records are shifted in time by as much as
+  its timing bounds allow, the anchor bound of §0.14 among them. A reference whose anchor is not `bounded` is one
+  case in which the reducer records no envelope. The evaluator then fails the whole screen for that one reference,
+  so a window would be removed for an event that costs one unit when it happens to a science member
+  (`member.anchor_not_bounded`, §6.3).
   *Rule:* the harvest names such a reference lost, with the reason `energy_unreadable` (§0.12, "Lost references"),
-  by the verdict writer's own test of the summary: a finite gross energy with a finite envelope around it, and a
-  finite idle-subtracted energy. That test asks whether a usable energy record exists; it decides nothing by the
-  energy's value. The re-screen of §5.3 then runs on the surviving references and decides alone, and the stored
-  row's `neg8_bracket_reference_invalid` for that reference decides nothing. The window is removed only when the
-  survivors fail the screen or fewer than two survive at an endpoint. *Worked example (synthetic):* all three start
-  references and the midpoint are sound, and of the three end references one has an anchor that is not `bounded`.
-  The stored row reads failed, with `neg8_bracket_reference_invalid`. The harvest names that end reference lost
-  (`neg8.reference_lost`, DISCLOSE) and re-screens with three start and two end references against bound(3, 2)
-  (§0.12); if that passes, the window is kept. *Code state:* this handling is part of the harvest program that an
+  by the verdict writer's own test of the summary. The test passes a summary that holds a finite gross energy, a
+  finite envelope consistent with it, and a finite idle-subtracted energy. It asks whether a usable energy record
+  exists; it decides nothing by the energy's value. The re-screen of §5.3 then runs on the surviving references and
+  decides alone, and the stored row's `neg8_bracket_reference_invalid` for that reference decides nothing. The
+  window is removed only when that re-screen fails or cannot run, which includes fewer than two survivors at an
+  endpoint.
+  *Worked example (synthetic):* all three start references and the midpoint are sound, and of the three end
+  references one has an anchor that is not `bounded`. The stored row reads failed, with
+  `neg8_bracket_reference_invalid`. The harvest names that end reference lost (`neg8.reference_lost`, DISCLOSE)
+  and re-screens with three start and two end references against bound(3, 2) (§0.12); if that passes, the window
+  is kept. *Code state:* this handling is part of the harvest program that an
   addendum to the seal record pins before ALPHA-1's harvest (§11 item 4). The harvest at H_claim does not name the
   loss; it lets the stored failure stand and removes the window, which errs toward removing, and no block-5 window
   is harvested with it. (Revision 11 said that each of the four causes removes the window.)
