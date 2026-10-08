@@ -3880,7 +3880,7 @@ beside every reported cell and contrast, the number of attempts of its pack and 
 
 ## 8. Blinding
 
-1. **Before seal.** No claim-eligible `_v5` byte exists. This draft's author read none (§16).
+1. **Before seal.** No claim-eligible `_v5` byte exists. The authors of this file read none (§16).
 2. **During the block.** From ALPHA-1's arm until the block closes (every pack claim-usable, or END STATE), every
    harvest, courier record, email and public summary releases **structure** only: verdicts, `claim_usable`, flag
    counts by code and family, kept-unit counts, paths, hashes, hazard measurements, and timing that is not a phase
@@ -4869,3 +4869,30 @@ and ten `yield.harvest_disagrees_with_window` each; only those counts and the li
 from them. The count rule of §13's "28" came from comparing the catalog at `c6843537` with the test fixture at
 `d3c107f2f` (14 codes in the fixture and not in the catalog; one code, `g3.recompute_failed`, with another effect).
 No energy or power value of any window was read.
+
+Revision 12 applies the seal gate's stage-1 rulings, which were made on revision 9, and the orchestrator's rulings
+that followed revision 11; five writers each wrote one part. This paragraph records the reading of the writer of
+§§7–10 and §§13–16. It read, in full unless a part is named:
+- the seal gate's stage-1 ruling (`/Users/edr/night-archive/gate-prune/seal-gate/RULING_STAGE1.md`). The judge's
+  replacement texts in these sections were copied from that file by a script, not retyped. The stage-1 refuter's
+  file was not read: its five challenges are known to this writer through the judge's dispositions only;
+- the seal landing's procedure and its list of facts (`/Users/edr/night-archive/gate-prune/wave-1007b/seal-land/`:
+  `SEAL_LANDING.md`, `REGISTRATION_FACTS.md`), the independent review of that lane (`REVIEW.md`: its verdict, the
+  table of findings and findings F1 to F3 in full) and the orchestrator's ruling on it (`ORCHESTRATOR_RULING.md`);
+- Fable's delta cold pass 5 (`/Users/edr/night-archive/gate-prune/cold-pass-5/REPORT.md`);
+- the orchestrator's rulings on the comparison that preceded revision 11 (`reg-fidelity/ORCHESTRATOR_RULINGS.md`)
+  and on the attribution floor (`q5-attribution-floor/RULING.md`, with sections 1 and 6 of the report it rules on);
+- the map of blinding made for the design of the analysis code (`l9/map/x-blinding.md`), from which the custody map
+  of §8 is taken, and the work list of the harvest lane (`harvest-lane/WORKLIST.md`).
+
+At the integration head `9395cecfb` (the integration worktree, read only) it read what the revision 12 record of §13
+lists row by row: the two functions that class a changed path, the plan writer's and the harvest's check of this
+file's digest, the harvest's archive layout and file creation, the three writers of RESTRICTED flags, the list of
+record files the driver publishes and the courier's instruction, GAMMA's stage graph, the three analysis programs
+that print results, the plan writer's reading of a sizing allowance, and the option by which the harvest command is
+given a sealed inventory. On the branch `lane/2026-10-07-seal-rulings` it read the four commits and the files they
+change. It computed four things itself: the two SHA-256s of §9.1, with `shasum -a 256`; the 33 window exclusions of
+the allowlist on that branch, by loading the file; GAMMA's 101 planned members, by adding the stage graph's counts;
+and 0.031073829 s × 32.697 W = 1.016 J in §14 Q5. The other numbers of §14 Q5 are the ruling's; they come from
+window a10 and from block 3, neither of which belongs to this block. Of the rehearsal archive named in §13 only
+directory and file names were read. No energy or power value of any block-5 window exists, and none was read.
