@@ -1,13 +1,15 @@
 # Registration V5-CLAIM-25G83-B5: the first claim-bearing `_v5` windows (measurement block 5)
 
-Status: **DRAFT, NOT SEALED. Revision 10, 2026-10-07.** Written by Opus 5.5, as lane L6 of the gate-prune workflow
+Status: **DRAFT, NOT SEALED. Revision 11, 2026-10-07.** Written by Opus 5.5, as lane L6 of the gate-prune workflow
 (revision 3, commit `71c91d74`), then as the registration-sync side lane (revision 4, last commit `7261a585`), then
 as the REG lane of gate-prune round 3 (revision 5, last commit `9d63b4df`), then as the REG sync to the frozen head
 (revision 6, last commit `c6843537`), then as the REG sync to the audit fixes and the NEG-8 ruling (revision 7, last
 commit `dc046d4d`), then as the REG final pass to `43ac12d0c`, at that time the candidate for H_claim (H_claim is
 the commit whose code every block-5 window runs, §0.18 and §11; revision 8, last commit
 `30d92227`), then as the REG sync to the int5 head `fe28e5a0c` (revision 9, last commit `bc8ad4ae`), then as the REG
-preparation pass that read the merged census interpreter rule at the int5 head `9b0c680ed` (revision 10), on
+preparation pass that read the merged census interpreter rule at the int5 head `9b0c680ed` (revision 10, last
+commit `1d97f0a60`), then as the correction pass that followed a comparison of these documents with the code at
+that same head (revision 11; "What changed in revision 11" below describes the comparison), on
 branch `design/2026-10-05-v5-claim-block-draft` (revision 2 is commit `bfd1ee8c`). This file authorizes no arm (the
 **arm** is the sequence of checks, run at a window's scheduled start, that decides whether its collection begins;
 §0.15), no launch and no analysis. It binds only when one cold gate (§0.1, §12) seals it together with three
@@ -304,6 +306,92 @@ changed. No FILL that waits for the final head or for the seal is filled: `H-CLA
    preparation copies it into the integration.
 4. **Catalog** (`flag_catalog.json`): no code, effect or note changed; its 192 codes agree with the code at
    `9b0c680ed` (§13).
+
+**What changed in revision 11.** Before the seal, every statement of this file, the analysis plan and the flag
+catalog that can be checked against the code was compared with the code at the int5 head
+`9b0c680ed79d5c7b72b4b39ed04b9fe51dd116d4`. Fifteen readers (each a seat: one model session working to a written
+brief, §0.1) checked 2,011 such statements and reported 143 places where the text and the code differ. Of those, 73 said that the text states a fact wrongly, and each of
+the 73 was reproduced from the code by a second seat that had not seen the first one's reasoning; none was refuted.
+After twins were merged (one fact reported by two readers) they are 69 distinct facts. The other 70 reports were 7
+sentences that are hard to read correctly and 63 terms used without being built. The list is
+`/Users/edr/night-archive/gate-prune/wave-1007b/reg-fidelity/REG_FIDELITY.md`, and the orchestrator's ruling on each
+item is `ORCHESTRATOR_RULINGS.md` beside it (2026-10-07). This revision corrects the text to what the code does.
+Four writers each took one part (§§0–4; §§5–6; §§7–10 and §§13–16; the analysis plan and the catalog), and each
+checked a fact in the code before writing the sentence about it. No code changed. No registered threshold, sizing
+value, plan tree, pin or catalog effect changed. One registered rule is withdrawn (item 2), because no program and
+no registered number could carry it out. In §§5–6 a corrected sentence is followed by a note of what revision 10
+said, in the form "(Revision 10 said …)".
+
+1. **Corrections that bear on a number, an exclusion or whether collection runs.** In each of these the code is
+   unchanged and the earlier text would have led a reader to predict a different outcome for some window or member.
+   - §0.14: a member's clock anchor is `bounded` only when six conditions hold, not two.
+   - §0.15, §9.2: the arm refuses a battery current above 200 mA in either direction, not any current.
+   - §4.2: the arm's clock rule has five conditions, the fifth being an unchanged boot session; one dwell sample
+     that could not be read leaves the whole dwell's clock rules unjudged, which is disclosed and does not refuse.
+   - §4.6 item 2: the five events after which the calibration acceptance must be derived again (its re-derivation
+     triggers) are named, with what observes them and what follows for the window.
+   - §4.7: the arm and the pre calibration writer do not read the same set of judged epochs; the arm's is the same
+     or larger.
+   - §5.1, §10: the countdown of 20 s is a literal of the ten collection stages only, and the chain adds two
+     arguments to both calibration captures. The second of them is a new registered deviation, number 6.
+   - §5.3: a derived NEG-8 bound must also pass a re-check of each corpus member it names; the time at which the
+     bound's age is judged is stated.
+   - §5.4: the conditions under which the watchdog releases a finished window, including the window that was
+     refused before its chain began.
+   - §6.4: the span over which contention is judged when a member has no request span.
+   - §6.5: `clock.systematic` counts members and calibration captures together; `roster.duplicate_run_id` is added
+     to the codes that remove a window; the four causes of `neg8_bracket_reference_invalid` are listed.
+   - §6.7: a bundle is ignored under four conditions, not three.
+   - §6.10: an exception in the auxiliary-config comparison still refuses the member; only the record is new.
+   - §7.2: the two further conditions under which an arm's `pack.identity_unmeasured` is superseded.
+2. **One rule withdrawn** (§5.5, §10). Revision 10 said that after a chain stopped at its deadline the next
+   attempt's per-member time allowance would grow by "the sizing margin", with no erratum. No such margin is
+   defined anywhere, and no program derives an allowance from an observed member. A larger allowance is now a cold
+   erratum with a new sizing file, after a consult. §5.5 gives the reason the case is remote: the deadline is about
+   27 h, against a projected chain of 4.8 to 5.7 h.
+3. **Places where the code does something other than the earlier registered design.** The orchestrator ruled that
+   none of them puts a wrong number into a claim, removes clean data or breaks blinding, so the code stays for
+   block 5 and the text now states it.
+   - §5.7, §7.3: one lost member of GAMMA's two one-member diagnostic stages gives the window the yield status LOW.
+     That happens by chance in about 5.3% of GAMMA windows, and it does not hold the next arm.
+   - §5.1, §6.2, §6.5: no program writes `instrument.precal_screen_failed`. A failed pre-calibration screen stops
+     the chain at exit 12, and the window is removed by `calibration.no_bracket`.
+   - §6.2: nine catalog codes have no program that writes them. They stay as reserved codes and are named.
+   - §3: the "deliberately incomplete finalization" check is struck; it exists only in the block-4 harvest script.
+   - §7.1: a chain that left no stage journal is harvested as COLLECTED, not NO_COLLECTION.
+   - §7.2, §7.4, §7.6: the rules for re-arming, for END STATE across attempts and for the order of the packs are
+     applied by the lead from the harvest verdicts. No program computes them.
+   - §6.2, §6.7: of the five roster codes the catalog marks as removing a member, two do so under their own name.
+   - §6.4: after a charging current above 200 mA the member is removed, and its assist energy is still computed
+     and written to the withheld record.
+   - §6.11: the refusal allowlist admits a fourth class, `DEFERRED_REPRESENTATION`, which must name an owner.
+4. **Found by the writers while checking, beyond the list.**
+   - §7.2: the harvest cannot read which members each collection stage of ALPHA or BETA launches, because it asks
+     the plan module for a reader that does not exist and those two plan trees carry no fallback entry. It records
+     `roster.dispatch_unresolved` on every ALPHA and BETA harvest, and an arm's `pack.identity_unmeasured` can then
+     never be superseded on those packs. No number is touched. Whether the code is repaired before the seal is the
+     orchestrator's open ruling; the catalog's note on `roster.dispatch_unresolved` still describes the fallback
+     as if it always read the members, and waits for that ruling.
+   - §4.6 item 2: no program reads the triggers before an arm, but an observed trigger makes the harvest's
+     evaluation of the bracket fail, which removes that window and every later one.
+   - §0.17: the bound runs root holds only the 12 NEG-8 corpus members and the bound; reference members are
+     written to the claim runs root.
+   - §0.2: the statistic behind the sampler's record length is stated (the mean per member over its whole
+     stream). §3: whether an attempt runs G10 (the clock-anchor positive control of §3) is a value the plan
+     writer only type-checks, so which attempt runs it is the lead's rule. §0.12: "the only reference inside the window" is narrowed to the one the screen and the allowance read.
+5. **Record-only corrections, readability and terms.** The record-only corrections of the list (B1 to B40, except
+   B37, which names two files that disagree about a class label and waits for the orchestrator to say which one
+   moves), the five readability corrections R1 to R5 and the terms U1 to U50 are applied in their sections: each
+   term is built before its first use, glossed at it, or deleted. §0.5 now prints the canonical hash of each
+   pack's decode prompt manifest and the byte SHA-256 of ALPHA's and BETA's, which adds five 64-character digests
+   to this file (53, against 48 in revision 10).
+6. **Not touched, and why.** §8 item 2 waits for the seal gate's judge (question SG-12: how a member removed by a
+   RESTRICTED code is released). §11, §12 and the sentence of §14 Q13 about collection code wait for the ruling on
+   how the sealed documents land in the code tree; one correction of the list, B41, and the second use of one
+   term, U47, sit in §11 and wait with it. No FILL that waits for the final head or for the seal is filled.
+7. **Catalog and analysis plan.** `flag_catalog.json`: no code added or removed, and no effect, family, class or
+   blinding value changed (compared by script with revision 10: 192 codes, same order); 33 notes rewritten, nine
+   of them to say "Reserved: no emitter at H_claim." The analysis plan's changes are listed in its §14.
 
 ## 0. Terms, built in the order they are used
 

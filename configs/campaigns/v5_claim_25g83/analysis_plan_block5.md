@@ -1,8 +1,8 @@
 # Analysis plan V5-CLAIM-25G83-B5: what is computed from the claim windows, and how
 
-Status: **DRAFT, NOT SEALED. Revision 10, 2026-10-07** (revision 3 is commit `71c91d74`, revision 4 ends at commit
+Status: **DRAFT, NOT SEALED. Revision 11, 2026-10-07** (revision 3 is commit `71c91d74`, revision 4 ends at commit
 `7261a585`, revision 5 at `9d63b4df`, revision 6 at `c6843537`, revision 7 at `dc046d4d`, revision 8 at `30d92227`,
-revision 9 at `bc8ad4ae`; the changes of revisions 4 to 10 are listed in §14). Companion to
+revision 9 at `bc8ad4ae`, revision 10 at `1d97f0a60`; the changes of revisions 4 to 11 are listed in §14). Companion to
 `registration_block5.md` (the **registration**) and `flag_catalog.json` (the **flag catalog**) in the same directory;
 they are sealed together and none binds alone. Terms are those built in registration §0; terms that first appear here
 are built where they first appear. Every rule is fixed before any claim byte exists. Most estimators below are already
@@ -873,3 +873,39 @@ exclusion used by §4–§7 changed.
   (registration §4.5). The census decides whether a window starts or stops; it enters no computation here.
 - Every line above §6's sentence on R_cm keeps its line number, because a test in the integration tree names that
   sentence by its line (registration §13, revision 10 sync record).
+
+**Revision 11 (2026-10-07, corrections of fact after the comparison of the documents with the code).** Every statement
+of the registration, this plan and the flag catalog that can be checked against the code was compared with the code
+at the int5 head `9b0c680ed`: 2,011 statements checked, 73 mismatches of fact confirmed by a second reader, and 70
+further reports of sentences that are hard to read correctly or terms used without being built (registration,
+"What changed in revision 11"). This revision corrects this plan's text to what the code does. No estimator,
+threshold or exclusion used by §4–§7 changed, and no code changed.
+
+- §1 item 2: the rule that a pack is never armed again after a claim-usable attempt is applied by the lead session
+  that arms the next window, from the harvest verdicts; no program enforces it (registration §7.2). At `9b0c680ed`
+  only tests call the function that picks a pack's first claim-usable attempt, so the analysis code of §11 must
+  apply it.
+- §2.4: "the only reference inside the window" is narrowed to the only NEG-8 reference between the start and end
+  triplets that the spread reads; GAMMA's two diagnostic references are inside the window too and are not read.
+- §3.1: the close-out (step 6) runs after finalization (step 8); the step numbers are kept and the order is stated.
+- §4, §5, §7.1: the two `extraction_spec.json` digests and the three phrases "re-tied at seal" are marked
+  `FILL[B5-FINAL-HASHES]`. The two digests are stale and are not recomputed here; the final pass recomputes them at
+  the final head.
+- §7.2: of the three reason codes that can block L2 after the sensitivity lines, `loo_verdict_influential` can
+  arise in block 5, because the leave-one-quad-out line runs; the two randomization codes cannot. For GAMMA's
+  kind of manifest a top-up on any entry demotes both contrasts, not only the one it touches.
+- §8.2: seven meter codes are written for the window, not six (`meter.supervision_fault`, written by the driver, is
+  the seventh).
+- §11: three rows are brought to the code at `9b0c680ed`. The bracket replay with the ledger-cutoff baseline is
+  present. The two-producer floor binding and the wiring of the dominance sidecar are present; the issued pinset,
+  the input manifest and the mint-to-close-out adapter are still listed as absent.
+- §14: "the §7.1 data" is corrected to the §7.2 worked example; the same phrase in §8.1 stands inside a passage
+  that is not touched (below).
+- Terms: each of the terms the readers reported (U51 to U60 of the comparison's list) is built before its first
+  use or glossed at it, except two terms that occur only in §7.1 step 3.
+- Not touched, waiting for the seal gate's judge: §7.1 step 3, the §7.2 worked example and the two §8.1 passages on
+  the metrology term (question SG-13: the code adds no metrology term for the two phase metrics, so se_met is 0
+  there and the registered interval would narrow); and the §8.1 sentence on a unit removed by a RESTRICTED code
+  (question SG-12).
+- Every line above §6's sentence on R_cm keeps its line number, as in revision 10. Corrections above it were made
+  inside existing lines, so 23 of those lines are longer than the file's usual width.
