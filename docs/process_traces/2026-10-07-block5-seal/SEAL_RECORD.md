@@ -9,14 +9,16 @@ brief; the **orchestrator** is the session that leads the work.
 
 Measurement block 5 is three unattended measurement runs on one Mac, called **windows**, whose numbers are meant
 to carry claims in a paper. Each window runs one **pack**, a fixed, committed set of experiment inputs; the three
-packs are called ALPHA, BETA and GAMMA. Before any window runs, the rules are fixed in files: what is measured, how the
-numbers are computed, which recorded conditions remove data, and the exact code and configuration a window may
-read. A **seal** is a list of SHA-256 digests, each of a named file at a named commit, written after an
+packs are called ALPHA, BETA and GAMMA. Before any window runs, the rules are fixed in files. Three documents
+state them: the **registration** fixes what is measured and which recorded conditions remove data; the **analysis
+plan** fixes how the numbers are computed; and the **flag catalog** lists every recorded condition (a **flag**)
+by its code and says what each does: nothing, a disclosure, the removal of one measurement, or the removal of a
+whole window. The fourth thing fixed is the exact code and configuration a window may read. A **seal** is a list of SHA-256 digests, each of a named file at a named commit, written after an
 independent gate has judged those files; a file is **sealed** when its digest is in the list, because any later
 change to it shows as a different digest. (A SHA-256 digest is a 64-character fingerprint of a file's bytes. A
 commit is one stored state of the repository, named by 40 hexadecimal characters.) This record is that list. With
 it, anyone who holds the repository can compute each digest again from the commit named beside it, and so check
-that the rules and the code were fixed before the data existed; the registration says of itself that it binds
+that the rules and the code were fixed before the data existed. The registration says of itself that it binds
 nothing until this record exists.
 
 ## 2. The commits
@@ -82,12 +84,10 @@ inventory's `head` says. The naming touches no byte a window reads.
 
 One **cold gate** sealed the registration, the analysis plan, the flag catalog and the sealed inventory together.
 A cold gate is a judgment by a model session that took no part in writing or reviewing what it judges and that
-starts with no knowledge of the work. The **registration** fixes what is measured and which recorded conditions
-remove data; the **analysis plan** fixes how the numbers are computed; the **flag catalog** lists every recorded
-condition (a **flag**) by its code and says what each does: nothing, a disclosure, the removal of one measurement,
-or the removal of a whole window.
+starts with no knowledge of the work.
 
-Two more terms recur in the rulings. A **reference** is one run of a small fixed workload placed at the start,
+Three terms recur in the rulings. Each quantity the block reports is measured in 10 planned **units**, and a unit
+is **kept** when no flag removes it. A **reference** is one run of a small fixed workload placed at the start,
 the middle and the end of a window; the **drift screen** compares the references' energies to decide whether the
 instrument drifted during the window, and a reference that cannot be used is **lost**. The **harvest** is the
 program that runs at the desk after a window has ended: it checks the window's bytes, applies the drift screen
@@ -112,12 +112,13 @@ each between two marker lines that carry its SHA-256.
 put to the gate except the table of pinned digests, which was left to stage 2, and on each of the refuter's five
 breaks. It required 48 changes to the text of the registration and the plan, written out word for word (the
 ruling numbers them T-1 to T-48); one change to the catalog (C-1: the smallest number of kept units a reported
-quantity may have, of its 10 planned, goes from 8 to 5, the point below which the registered estimator can no
-longer compute its result); and seven changes to code or to records in the code tree (K-1 to K-7). The rest it
+quantity may have goes from 8 to 5, the point below which the registered estimator can no longer compute its
+result); and seven changes to code or to records in the code tree (K-1 to K-7). The rest it
 confirmed, or corrected to what the code does: the catalog's effects as a whole; the two codes that only
-summarise conditions other codes already act on (both stay disclosures); the rule for a reference that ran another model than the sealed one; a proposed sensitivity line in
-the plan, adopted for three codes only; and the interval of GAMMA's two contrasts (GAMMA compares two models, and
-the plan had registered a term the code does not compute). It ruled that three files the harvest writes
+summarise conditions other codes already act on (both stay disclosures); the rule for a reference that ran another model than the sealed one; a
+proposed sensitivity line in the plan (a second figure printed beside a result, computed without the exclusions
+for thermal pressure and for a competing process), adopted for three codes only; and the interval of GAMMA's two
+contrasts (GAMMA compares two models, and the plan had registered a term the code does not compute). It ruled that three files the harvest writes
 (`derived/flags.jsonl`, `derived/exclusions.json`, `derived/window_flags.json`) stay closed until the measured
 values are released. It required no change to any code that runs during a window. Where the changes landed: the
 catalog change and K-1 to K-3 (entries of the refusal allowlist, and one test fixture) before H_claim, through the
@@ -131,10 +132,10 @@ is pending. The five breaks it reported, and what the judge did with each:
 | Break | What the refuter showed | The judge's disposition |
 |---|---|---|
 | RF-1 | A reference that ran but whose energy could not be read was not treated as lost: it failed the whole drift screen and removed a clean window. | Accepted. Such a reference is lost and the surviving references decide (text T-27, T-28; harvest change K-4). |
-| RF-2 | When a window loses its midpoint reference, the rule removes a GAMMA window and keeps an ALPHA or BETA window, although GAMMA is the one pack with further references inside the window. | Rule confirmed, its stated reason corrected: GAMMA's results are decisions that rest on the drift allowance, which a lost midpoint can understate (text T-21 to T-25; allowlist K-3; no code change). |
+| RF-2 | When a window loses its midpoint reference, the rule removes a GAMMA window and keeps an ALPHA or BETA window, although GAMMA is the one pack with further references inside the window. | Rule confirmed, its stated reason corrected. GAMMA's results are decisions about which of two models uses more energy, and each decision's interval is widened by a drift allowance computed from the references; without the midpoint that allowance can only come out smaller. On ALPHA and BETA nothing is decided by it, and the loss is disclosed (text T-21 to T-25; allowlist K-3; no code change). |
 | RF-3 | A damaged line in a flag file removed the window when the part still readable matched a code that only the harvest can write, and so cannot have been lost from a file written before the harvest. | Accepted. Candidates are limited to codes a program writing before the harvest can emit (text T-29, T-30; harvest change K-5). |
 | RF-4 | The rule that removed a window when a reported quantity kept fewer than 8 of its 10 units discards clean windows for precision, not for a wrong number. | Accepted. The minimum is 5 (catalog C-1; allowlist K-1; text T-1 to T-18). |
-| RF-5 | A reference during which contention or the battery was not measured stayed in the drift screen, where an unseen background process can hide a real drift. | Accepted. Such a reference is lost, as is one whose quiet state was violated or whose battery readings failed; unmeasured clock or thermal evidence loses nothing (text T-31; harvest change K-6). |
+| RF-5 | A reference during which contention (other processes competing for the machine) or the battery was not measured stayed in the drift screen, where an unseen background process can hide a real drift. | Accepted. Such a reference is lost, as is one whose quiet state was violated or whose battery readings failed; unmeasured clock or thermal evidence loses nothing (text T-31; harvest change K-6). |
 
 **Stage 2, part A** (session of 2026-10-07 23:55 to 2026-10-08 00:05 PDT; first line:
 `STAGE 2A: TEXT ADMITTED WITH REQUIRED CHANGES`). The judge read revision 12 at commit `c7408819c` of the design
@@ -260,8 +261,8 @@ The other gate records are under `gates/`; `00-seal-and-arm-record.md` lists eac
 ## 6. Conditions of the seal
 
 The seal stands on the following. Conditions 1 to 5 are the five that part B attached to `SEAL: ADMIT`
-(`RULING_STAGE2.md`, part B, section 8), restated here; condition 6 is the registration's own (its section 12).
-A condition that cannot be met is not waived: it goes back to a cold gate.
+(`RULING_STAGE2.md`, part B, section 8), restated here: the gate admitted the seal subject to them. Condition 6
+is the registration's own (its section 12).
 
 1. **The record commit.** It is a child of the seal commit on the integration branch. The paths that differ
    between the seal commit and it lie under `docs/` and `tests/` only; none is a window input. It adds this record
@@ -269,8 +270,8 @@ A condition that cannot be met is not waived: it goes back to a cold gate.
    suite and CI (the checks GitHub runs on a pushed commit) pass at it: the whole suite, PENDING[SUITE]; CI,
    PENDING[CI-AT-RECORD]. The pull request is merged with a merge commit, never squashed or rebased, so that
    H_claim and the seal commit stay in the main branch's history, and the merge commit holds exactly the record
-   commit's files. `RUN_STATE.md`, the file that carries the hand-off block the unattended lead session reads, is
-   a document at the repository's root; under this condition it is not part of the record commit:
+   commit's files. `RUN_STATE.md`, the file that carries the hand-off block read by the magistrate (the unattended
+   session that arms and harvests the windows), is a document at the repository's root; under this condition it is not part of the record commit:
    PENDING[RUNSTATE-LANDING].
 2. **The measurement clone**, the one checkout every window of the block runs from, is a full clone checked out at
    the seal commit: `/Users/edr/night-custody/measurement/JouleWise-measurement-20261008T0817Z-b5`. In it
@@ -283,10 +284,11 @@ A condition that cannot be met is not waived: it goes back to a cold gate.
 3. **The harvest lane stays at the desk.** The changes the gate required of the harvest (K-4 to K-7, and five changes to
    its comparison of a window's code with the seal) are on the branch `lane/2026-10-07-harvest-lane`. That branch
    reaches only the checkout the harvest runs from, never the measurement clone, and not the integration branch or
-   the main branch before Addendum 1 below is filled. Its difference from H_claim lists only
+   the main branch before Addendum 1 below pins it. Its difference from H_claim lists only
    `joulewise/b5/harvest.py`, `joulewise/whole_window.py`, `scripts/harvest_b5_window.py` and paths under
    `tests/`. Part B also required that the lane's tests hold a synthetic window for each of the three breaks
-   the harvest cures, and that its test of path classes assert the lane's own table. When this record was
+   the harvest cures (RF-1, RF-3 and RF-5 of section 3), and that its test of path classes assert the lane's own
+   table. When this record was
    written, `git grep` at the commit Addendum 1 pins found these five tests by name:
    `test_a_succeeded_reference_with_no_energy_envelope_is_lost_and_the_survivors_decide` (RF-1),
    `test_a_flag_file_line_torn_inside_calibration_capt_is_disclosed_and_removes_nothing` (RF-3),
@@ -299,14 +301,15 @@ A condition that cannot be met is not waived: it goes back to a cold gate.
    addendum to this record that states the plan's new SHA-256. The registration's bytes never change.
 5. **The naming of H_claim** is stated in this record: section 2.
 6. **What no program checks.** No program compares a later commit to the registration or the plan with this
-   record, and no program reads this record. The rule that covers it (registration section 12): an attempt is
-   analysed only when the digests the harvest recorded for the registration, the catalog and the inventory equal
+   record, and no program reads this record. The rule that covers it (registration section 12): an attempt (one
+   window of a pack) is analysed only when the digests the harvest recorded for the registration, the catalog and the inventory equal
    the ones in section 4; otherwise the attempt is harvested again on the same bytes with the sealed files.
 
 ## 7. Sections appended after the seal commit
 
-The registration's bytes cannot change after the seal commit: every window plan records the registration's
-SHA-256, and the harvest fails when the file differs from it. A value that comes into being only after the seal
+The registration's bytes cannot change after the seal commit: every window's plan (the file that fixes one
+window's start time, directories and thresholds) records the registration's SHA-256, and the harvest fails when
+the file differs from it. A value that comes into being only after the seal
 commit is therefore never written into the registration. It is written here, as a named section. The registration
 names these in advance: the plans, the pins of the harvest program and of the analysis program, the release event,
 the commit each window ran from, a new sizing file, and a re-issued seal. Three of them follow. The others are
@@ -316,13 +319,13 @@ appended when their values exist, each with the date and the seat that wrote it.
 
 A **plan** is the file `night_plan.json` that fixes one window: its start time, its directories and its
 thresholds. The registration requires that every plan, and every plan-input file a plan is written from, be
-written after the seal commit from the sealed threshold block of its section 4.3, in which a window's wait for a
-quiet machine before it starts (`contention.clean_s`) is 180 seconds. A plan written before the seal cannot be
+written after the seal commit from the sealed threshold block of its section 4.3, in which the time the machine
+must stay free of competing processes before a window may start (`contention.clean_s`) is 180 seconds. A plan written before the seal cannot be
 used: it would carry the earlier value of 600 seconds, it would name an earlier commit than the one the
 measurement clone is at, and it could not hold the sealed registration's digest.
 
-The windows' own plans do not exist yet. Each is written at its arm by the unattended lead session (the
-**magistrate**), from the measurement clone, and its plan id and the digests of its plan and plan-input file go
+The windows' own plans do not exist yet. To **arm** a window is to write its plan and schedule it. Each plan is
+written at its window's arm by the magistrate, from the measurement clone, and its plan id and the digests of its plan and plan-input file go
 into that window's arm record on the branch `records/2026-10-block5`. What this section records is the proof,
 made after the seal commit and before the first arm, that a plan for each pack can be written from the sealed
 files, and that no earlier plan exists.
@@ -343,14 +346,15 @@ by the script that wrote this record from the files themselves:
 
 `Members` is the number of measured model runs the plan holds; `window_max_s` is the window's deadline in seconds
 after its start, with every member on its longest allowed path. Both were read from each plan record by the same
-script. For each pack the chain passed the repository's static check, the launchd job rendered without being
-installed, and the desk seal check (the four identity checks a window makes at its start, run with H_claim as the
+script. For each pack the chain passed the repository's static check, the scheduler job that would start the window
+(a macOS launchd job) was rendered without being installed, and the desk seal check (the four identity checks a window makes at its start, run with H_claim as the
 reference) printed that it raised no flag. These scratch plans prove the path and are never armed: a real plan has
 its own id, its own start time and its own directories, so its digests differ.
 
 **The helpers.** Four small programs write a plan's inputs and make the checks before an arm. They are kept
 outside the repository's `scripts/` directory, because a new file there would be a file the sealed inventory does
-not list; byte copies are in `bench/` beside this record. Their SHA-256, computed from those copies:
+not list; byte copies are in `bench/` beside this record. Their SHA-256, and that of the program that generated
+the sealed inventory, computed from those copies:
 
 | Helper | SHA-256 |
 |---|---|
