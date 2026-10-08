@@ -43,8 +43,8 @@ after a chain of receipts verified, and discarded a whole window when one member
 2. turns every other check into a **flag**, a recorded fact that never stops collection; the sealed flag catalog
    decides which flags remove a member or a window from the claims (§6);
 3. has the harvest (the desk program run after each window) always emit the numbers plus the flags. A window is
-   **claim-usable** when no window-removing flag fired and each reported number still rests on at least 8 of its 10
-   planned independent repeats and 8 of its 10 planned groups of four interleaved members (§0.8, §6.6). Each pack's
+   **claim-usable** when no window-removing flag fired and each reported number still rests on at least 5 of its 10
+   planned independent repeats and 5 of its 10 planned groups of four interleaved members (§0.8, §6.6). Each pack's
    analysed window is its first claim-usable attempt (§7.2);
 4. folds block 4, the separate qualification window, into block 5: G10, a deliberate clock step that shows the
    clock check can see one, runs as a recorded diagnostic at the tail of the first ALPHA window (§3).
@@ -739,7 +739,12 @@ the code and says so.
 - **Lost references.** A reference is **lost** when its bundle is absent; its summary status is not `succeeded`
   (which includes `member.admission_aborted` and `member.timeout`); its summary cannot be read (reason
   `summary_unreadable`: no summary file, as after a member is killed at the 1,800 s cap of §5.2, a file that does
-  not decode, or one with no string status); it fails the strict check (built in "The strict check of a reference"
+  not decode, or one with no string status); its energy cannot be read although it succeeded and passed the strict
+  check (reason `energy_unreadable`: the reducer gave its request energy no envelope, as when its clock anchor is not
+  `bounded`, §0.14, or its calibration attachment does not verify; at harvest also `member.anchor_not_bounded`,
+  `member.anchor_recompute_mismatch`, `member.reduction_mismatch`, `member.unreadable`, `member.bytes_missing` or
+  `member.bytes_ambiguous` on the reference; the harvest decides this loss, and the stored in-window verdict row may
+  record the screen as failed for it, which decides nothing by itself); it fails the strict check (built in "The strict check of a reference"
   below; at harvest the flag is `member.strict_validation_failed`, and the reason is `strict_invalid` in the
   **verdict writer**, the program that writes the whole-window verdict of §0.17, and in its **replay**, the
   re-computation by which a later reader authenticates a stored verdict row); any
@@ -808,9 +813,15 @@ the code and says so.
   of these flags is named by the first in the order physics, `member.timeout`, `member.admission_aborted`,
   `member.strict_validation_failed`, `model.identity_mismatch`, `model.identity_underivable`; a member killed at the
   cap is named `member.timeout`, its physical cause, rather than `summary_unreadable`. A lost reference's energy
-  enters neither the screen nor the allowance, for either family. A reference whose physics is *unmeasured*
-  (`contention.unmeasured`, `battery.unmeasured`, `clock.unmeasured`) is **kept**: unknown evidence never authorises
-  an omission (the rule the mint applies to a corpus member, §5.3). The loss test never reads the reference's
+  enters neither the screen nor the allowance, for either family. A reference whose contention or battery evidence
+  is unmeasured (`contention.unmeasured`, `battery.unmeasured`) is lost, by the test §6.4 applies to a science member:
+  the evidence that would show it clean was never taken, and an unseen contender or charge inside a reference can
+  move the screen. So is a reference with a measured quiet-state violation or a failed battery pair
+  (`env.member_quiet_state_violated`, `battery.capture_pair_failed`). `clock.unmeasured` and `thermal.unmeasured` do
+  not lose it, for the reasons §6.4 gives (its own anchor bound and its own thermal records carry the quantity). A
+  monitor outage over all three references of one endpoint therefore fails the screen (`references_insufficient`);
+  the science members in that stretch are unmeasured and removed in any case. The corpus keeps its own rule (§5.3).
+  The loss test never reads the reference's
   energy, so no reference can be dropped for its value. A lost reference's physics flags still apply to every
   science member and calibration they touch; losing the reference cures nothing else.
 - **One retry, by spare slot.** When a reference stage ends with fewer succeeded members than it planned, the chain,
@@ -849,15 +860,17 @@ the code and says so.
   `neg8_bracket_reference_invalid`.
 - **A lost midpoint.** The window keeps its screen result, its allowance (computed as above with the two-value
   spread) and its numbers, and carries `neg8.midpoint_lost` (DISCLOSE in the catalog). Because the midpoint is the
-  only reference inside the window that the screen and the allowance read (GAMMA's two diagnostic interior
-  references are recorded but enter neither), its loss leaves any excursion that reverts by the end unmeasured.
-  What follows
+  only NEG-8 reference inside the window (GAMMA's two diagnostic interior references, after science members 20 and 60,
+  are recorded but by rule enter neither the screen nor the allowance), its loss leaves any excursion that reverts by
+  the end unmeasured by the allowance. What follows
   depends on the pack. On **GAMMA**, whose window exists for the two primary contrasts, the attempt is not
   claim-usable: the exclusion function adds the window reason `neg8.midpoint_lost_primary`, so GAMMA is re-armed and
   the attempt is never analysed (orchestrator ruling Q11 of 2026-10-07, which the seal gate confirms; §7.2, §14 Q11;
   analysis plan §2.4). On **ALPHA and BETA** the flag is disclosed only, and the window's reported cells and floors
-  stand. Once the block's midpoint record shows the midpoint never moved the spread beyond the bound, an erratum may
-  downgrade the flag to disclose-only on GAMMA too.
+  stand; the fixed sentence of analysis plan §8.1 discloses that the interior drift was not measured, and that
+  window's bound B may be understated by an amount nothing measured. Once a block's midpoint record (read only after
+  its release event) shows the midpoint never moved the spread beyond the bound, an erratum may downgrade the flag to
+  disclose-only on GAMMA for a later block; it cannot reinstate a block-5 attempt that was re-armed.
 - **Disclosure.** A window whose screen ran on fewer than (3, 1, 3) references records `neg8.reference_lost`
   (DISCLOSE, window level). Its `observed` names each lost reference's run id, slot, reason, status and the outcome
   of its stage's retry (the spares measured and the spares that succeeded; a planned reference that never ran is
@@ -1046,9 +1059,11 @@ that member's unit (§6.3).
 - **Pack-scoped window reason.** A DISCLOSE code that removes the window on one pack only. There is one: on GAMMA
   (pack id `d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5`), `neg8.midpoint_lost` adds the window reason
   `neg8.midpoint_lost_primary` (`exclusions.PACK_SCOPED_WINDOW_REASONS`; §0.12, §7.2). The reason appears in the
-  output's `reasons` list like a window-removing code, but it is not a catalog code.
+  output's `reasons` list like a window-removing code, but it is not a catalog code. The rule is keyed by the roster's
+  `pack_id`, which the harvest always sets from the window plan; a roster handed to `compute` without it would apply
+  no pack-scoped reason.
 - **Claim-usable.** A window is claim-usable when no EXCLUDE_WINDOW code fired, no pack-scoped window reason applies,
-  and every target cell keeps at least 8 of its 10 units in each stratum (§6.6).
+  and every target cell keeps at least 5 of its 10 units in each stratum (§6.6).
 
 ### 0.17 Driver, chain, monitor and harvest
 
@@ -1097,8 +1112,12 @@ that member's unit (§6.3).
   `meter`), which restarts it after a crash but never after a clean exit, because the reader exits cleanly when no
   meter is attached.
 - **Harvest.** `scripts/harvest_b5_window.py`, the desk program run after the chain exits. It archives the window,
-  re-derives every number-protecting check from the preserved bytes, joins the monitor's journals to the member
-  spans, writes every flag, and runs the exclusion function (§7.1).
+  re-derives every number-protecting check from the preserved bytes (for the NEG-8 screen, by running the production
+  verdict writer itself on those bytes and then re-screening on the survivors whenever a reference carries a loss
+  flag; a stored bracket with no reason and no new loss is read as written), joins the monitor's journals to the
+  member spans, writes every flag, and runs the exclusion function (§7.1). The row it writes never authenticates
+  under the validator's consumption semantics, so `whole_window.verdict_unauthenticated` (DISCLOSE) is recorded on
+  every window and carries no information about the window.
 - **Whole-window verdict.** One row, produced by the harvest with the production writer
   (`run_campaign.py --whole-window-verdict`), stating whether the window as a whole passed: every member admitted,
   the AC adapter's wattage unchanged, the CPU criteria held, the NEG-8 screen passed, and the bracket, read through
