@@ -41,7 +41,7 @@ square brackets. Revision 12 was written with markers of six names. Each marker 
 goes, so filling it replaces the marker and changes no other word. Four of the six have a name for their value (a
 path, the sessions that judged, and the titles of two sections), and they were filled on 2026-10-07, before the
 second stage of the seal gate read this text. The other two, `H-CLAIM` and `B5-FINAL-HASHES`, have a value that
-exists only once H_claim is fixed, and a script fills them when that commit exists. The six names (written here
+exists only once H_claim is fixed, and a script filled them on 2026-10-08, once that commit existed. The six names (written here
 without the marker form, so that this list is not itself filled):
 
 - `H-CLAIM`: the 40-character name of the commit H_claim (§2 item 1).
@@ -49,7 +49,7 @@ without the marker form, so that this list is not itself filled):
   earlier revisions this marker followed a digest computed at an earlier integration head, as a note to compute it
   again at the last one: revision 8 recomputed every such digest at `43ac12d0c`, revision 9 at `fe28e5a0c` (only the
   identity pins had changed, §4.6 item 3), and revision 10 found each unchanged at the int5 head `9b0c680ed` (§13).
-  Those digests stay in the text, each with the head it was computed at, beside the marker for H_claim's value.
+  Those digests stay in the text, each with the head it was computed at, beside H_claim's value.
 - `B5-SEAL-SEATS` and `B5-SEAL-RECORD`: the seats of the seal gate (a **seat** is one model session working to a
   written brief, §0.1), and the repository path of the seal record (§12). Both are filled.
 - `B5-PLANS-REGENERATED` and `B5-RELEASE-EVENT`: these two values come into being only after the seal commit (the
@@ -525,15 +525,15 @@ changed.
     the same bound was 1.38 to 2.86 J. §0.10 now builds the bound from its three timing inputs and registers the
     floor of a cell as the largest bound over the cell's kept members, computed from the window's own bytes. No
     number is bound. §10 records this as a seventh registered deviation.
-11. **Records** (§2, §9.1, §13, §14). §2 item 1 states H_claim as a marker and lists the Fable delta cold pass 5
+11. **Records** (§2, §9.1, §13, §14). §2 item 1 states H_claim (as a marker until 2026-10-08, when it was filled) and lists the Fable delta cold pass 5
     (on `fe28e5a0c..9395cecfb`, PASS WITH NOTES) and the independent executing review of the seal-landing lane;
     together they are the second part of the #416 delta record. §14 closes Q5 and Q6 and records the gate's
     confirmation of Q9, Q11, Q12 and Q13. Q14 (what the census's rule for JavaScript runtimes can miss, §4.5),
     which the first stage was not asked, is closed by the orchestrator's ruling of 2026-10-07: the rule stands as
     merged and its limits stay disclosed, on the evidence of cold pass 5.
 12. **Status and markers.** The status line says what seals this file. The six marker names of this revision are
-    listed at the head of this file, each with the one value that replaces it. Four are filled; the two that wait
-    for H_claim remain.
+    listed at the head of this file, each with the one value that replaces it. Four are filled; the two that waited
+    for H_claim were filled at H_claim on 2026-10-08.
 13. **Catalog and analysis plan.** `flag_catalog.json`: `rules.cell_unit_minimum` is 5; ten notes and the status
     note are rewritten; 192 codes, with no effect, family, class or blinding value changed. The analysis plan's
     changes are listed in its §14; besides the items above they remove the metrology term (a second variance term
@@ -753,7 +753,7 @@ The values in this section follow the cold-judge ruling on block-5 per-member ti
   at `fe28e5a0c`, equal to each pack's committed
   `plan_tree.sha256` there, with each pack's `generate_configs.py --check` exiting 0, and recorded in the sizing
   output (§5.5); this author computed the same three values again at the int5 head `9395cecfb`. At H_claim the three
-  files hash to ALPHA `FILL[B5-FINAL-HASHES]`, BETA `FILL[B5-FINAL-HASHES]` and GAMMA `FILL[B5-FINAL-HASHES]`.
+  files hash to ALPHA `1d87a30955fa978d3a3a22dc0048720691e0128e4a3fe83477fc375d13dd031a`, BETA `0cdb33836f4632827bc74be194e388450c53b3314db1c72d9e9904e625868670` and GAMMA `8b1d1d7176f5ee2286038e91df6427e47476c3a4bdee45a1c24687d49d80e3bf`.
   Earlier
   values: at the frozen head `a434e363d`, ALPHA `5218c270…` and BETA `5bab773a…` (as the timing lane `f4cf9047` left
   them) and GAMMA `fb51b4aa…` (after lane L10 gave its interior references distinct run ids, branch
@@ -1646,7 +1646,7 @@ Each is evidenced by a path and SHA-256 before the point named.
 
 **Before ALPHA-1 arms:**
 
-1. H_claim is fixed (§0.18: the last commit that changes a window input). **H_claim is `FILL[H-CLAIM]`**, on
+1. H_claim is fixed (§0.18: the last commit that changes a window input). **H_claim is `a64000884ef5bb4b76415835f02f39803f6eb620`**, on
    branch `integrate/2026-10-07-int5`. It carries PR #483 (the `_v5` qualification-code integration), lanes L1–L4,
    L7 and L8 of the gate-prune plan, the timing lane of 2026-10-06 (block-5 policy, idle records and settles; branch
    `lane/2026-10-06-timing-policy`), the core-prune lanes and gate-prune round 2 (integration head `b9d02700a`,
@@ -2519,7 +2519,7 @@ earlier night kinds (`joulewise/night_gate.py`, `joulewise/evidence_night.py`).
    `e769305d149c49ec2ec5b1ecca1be2c3a5152838a49d25d2b7d22b26d157891a`, configuration set
    `c8d759abd76ec820aba792db92bc4d539d262254c3ac58564a436cc8d0b0607c` (read by this author from the file). The
    science units are unchanged by it.
-   The file's SHA-256 at H_claim is `FILL[B5-FINAL-HASHES]`. At the int5 head `fe28e5a0c` it was
+   The file's SHA-256 at H_claim is `a0865895dc7eeb4ecea28c611b65fab9eee69d5e16f5f8126dbe08ac5255bda9`. At the int5 head `fe28e5a0c` it was
    `a0865895dc7eeb4ecea28c611b65fab9eee69d5e16f5f8126dbe08ac5255bda9` (computed by this author with
    `shasum -a 256`; `scripts/write_b5_identity_pins.py --check` reproduced the file there, exit 0), and this author
    computed the same value again at the int5 head `9395cecfb`. (The file's own `status` and `sealed` fields are
@@ -3022,7 +3022,7 @@ NULL window, and named two of the three process conditions.)
   arm's allowance: the dwell cap of 2,700 s plus the census, reads, network-time OFF, collectors and cadence probe.
 - **`B5-SIZING-OUTPUTS`**: `configs/campaigns/v5_claim_25g83/sizing_b5.json`, schema `joulewise.b5_sizing.v1`. Its
   sealed bytes are the bytes it has at H_claim, and the seal record (the record of §12 that pins each sealed file
-  by its SHA-256) pins theirs. SHA-256 at H_claim: `FILL[B5-FINAL-HASHES]`. At the int5 heads `fe28e5a0c` and
+  by its SHA-256) pins theirs. SHA-256 at H_claim: `89e7ea70be34d855285c7d2c87df42b646d179a632a1e05ed57a4682a961b3aa`. At the int5 heads `fe28e5a0c` and
   `9395cecfb` it was `89e7ea70be34d855285c7d2c87df42b646d179a632a1e05ed57a4682a961b3aa`, unchanged from `d3c107f2f`
   (`shasum -a 256`, and `scripts/size_b5_window.py --check` reproducing the file byte for byte with exit 0: both run
   by revision 9's author at `fe28e5a0c` and by this revision's author at `9395cecfb`). *The file's own labels.* The
@@ -5519,7 +5519,7 @@ new digest.
 
 | Binding | FILL | Due |
 |---|---|---|
-| Commit | `H-CLAIM` | Seal |
+| Commit | `H-CLAIM`: filled on 2026-10-08, once H_claim existed (§2 item 1) | Seal |
 | Sealed inventory | `sealed_inventory.json`: generated from the files of H_claim and committed in the seal commit, the commit that follows H_claim. The file names H_claim as its `head`, and a file cannot name the commit that contains it (§9.1, §11) | Seal |
 | Dry render, dry arm | `B5-DRY-RENDER-RECORD`, `B5-DRY-ARM-RECORD`: filled in revision 9 (§2 item 6), at `fe28e5a0c`; the render is an L2 harness render. The census matcher changed after `fe28e5a0c`; §2 item 6 says why the dry arm's refusal holds under the merged rule, and §14 Q15 asks whether it is repeated at the final head | Before ALPHA-1 arms |
 | Audit, seats | `416-AUDIT-RECORD`, `416-SEATS`: filled in revision 8 (§9.1); `416-DELTA-RECORD` (the diff-scoped passes over `a434e363d..fe28e5a0c`, §9.1): filled in revision 9; its second part (the code merged after `fe28e5a0c`: Fable's delta cold pass 5 at `9395cecfb` and the independent review of the seal-landing lane, §9.1): filled in revision 12; `B5-SEAL-SEATS`: filled in revision 12 (§12) | Seal seats at seal |
@@ -5527,7 +5527,7 @@ new digest.
 | Cooldown smoke | `B5-COOLDOWN-SMOKE-RECORD` (§2 item 7): filled in revision 6 | Seal |
 | Plans | `B5-PLANS-REGENERATED`: every window plan and plan-input file written from the sealed §4.3 block (contention `clean_s` 180). The plans can be written only after the seal, so the record of their regeneration is a section appended to the seal record, not a value in this file, whose bytes are fixed at the seal (§8 item 3). The section's title, "Plans written after the seal", was filled in revision 12 (§2 item 4, §4.3) | Before ALPHA-1 arms |
 | P3 sync | `P3-SYNC-RECORD` (§2 item 8), with `P3-BATTERY-CODES` (§6.4, and the table below) and `P3-CLOCK-SKEW-BOUND` (§4.2): filled in revision 6 against `a434e363d`; the revision 7, 8, 9 and 10 sync records below cover what was merged since, against `d3c107f2f`, `43ac12d0c`, `fe28e5a0c` and `9b0c680ed`, and the revision 12 record covers the seal landing, against `9395cecfb` | Seal |
-| Final hashes | `B5-FINAL-HASHES`: filled in revision 8 at `43ac12d0c`; recomputed in revision 9 at `fe28e5a0c` (`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_4.md`), where only the identity pins changed (§0.7 plan trees, §4.6 item 3 identity pins, §5.5 sizing output). Open again because the head moved after `fe28e5a0c` (the census interpreter rule, §4.5, and what §2 item 1 lists after it): each digest so marked is computed again at one commit, H_claim. The marker stands for those digests only; the commit itself is the marker `H-CLAIM`. Revision 10 found each of them unchanged at the int5 head `9b0c680ed` (`B5-REV10-SYNC` below); the marks stay until H_claim is fixed, and revision 12 leaves them in place | Seal |
+| Final hashes | `B5-FINAL-HASHES`: filled in revision 8 at `43ac12d0c`; recomputed in revision 9 at `fe28e5a0c` (`/Users/edr/night-archive/gate-prune/FROZEN_HEAD_4.md`), where only the identity pins changed (§0.7 plan trees, §4.6 item 3 identity pins, §5.5 sizing output). Opened again because the head moved after `fe28e5a0c` (the census interpreter rule, §4.5, and what §2 item 1 lists after it): each digest so marked is computed again at one commit, H_claim. The marker stood for those digests only; the commit itself was the marker `H-CLAIM`. Revision 10 found each of them unchanged at the int5 head `9b0c680ed` (`B5-REV10-SYNC` below); the marks stayed until H_claim was fixed; revision 12 left them in place, and they were filled at H_claim on 2026-10-08 | Seal |
 | Refusal allowlist | `roster.run_id_mismatch` listed under the member exclusions of `configs/gates/hazard_refusals.json` (§6.11): done at `d3c107f2f` (audit-fix item 7); `neg8.midpoint_lost_primary` listed under the window exclusions: done at `43ac12d0c` (ruling Q11); the file is unchanged at `fe28e5a0c`, at `9b0c680ed` and at `9395cecfb`. The seal gate's stage 1 then reworded two entries (what `cell.below_minimum` and `neg8.midpoint_lost_primary` protect: its changes K-1 and K-3) and ordered `g3.recompute_failed` removed from the window exclusions, where it disagrees with the catalog's DISCLOSE (K-2); the record of revision 12 below says where each stands | Seal |
 | Disk | `BACKUP-DESTINATIONS`: filled in revision 4 (§5.6) | Seal |
 | Identity pins | `identity_pins.json` (§4.6 item 3): draft at `fe28e5a0c`, with the sealed `neg8_reference` unit (`754c8c093`) and the spares; pinned at H_claim | Seal |
@@ -5537,11 +5537,11 @@ new digest.
 | Harvest and analysis programs | Two addenda to the seal record (§11 item 4). The first pins the harvest program after the harvest lane that the seal gate required: the changed files, their SHA-256s and the commit of the desk checkout the harvest runs from. The second pins the analysis code (lane L9) | The first before ALPHA-1's harvest; the second before the release event |
 | Seal | `B5-SEAL-RECORD`: the path of the seal record, a file committed after the seal commit (§12). Filled in revision 12: `docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md` | Seal |
 
-Two names are filled last, by a step that runs once H_claim exists and puts each value in place of its marker
-without changing another word. `H-CLAIM` is the commit `FILL[H-CLAIM]`: the last commit of the integration branch
+Two names were filled last, on 2026-10-08, by a step that ran once H_claim existed and put each value in place of its marker
+without changing another word, except in the sentences that said the two were still open. `H-CLAIM` is the commit `a64000884ef5bb4b76415835f02f39803f6eb620`: the last commit of the integration branch
 that changes a window input (§9.1, §11). It carries `fe28e5a0c`, the census interpreter rule merged at `84661ddb3`,
 the seal landing merged at `9395cecfb`, and the catalog change the seal gate's stage 1 ordered (§6.6).
-`B5-FINAL-HASHES` marks each digest that is recomputed at that commit. Four other names have a name for their
+`B5-FINAL-HASHES` marked each digest that is recomputed at that commit. Four other names have a name for their
 value, and their markers were filled in revision 12, before the second stage of the seal gate read the text.
 `B5-SEAL-SEATS` and `B5-SEAL-RECORD` are the seats of the seal gate and the path of the seal record (§12).
 `B5-PLANS-REGENERATED` and `B5-RELEASE-EVENT` name records that can exist only after the seal; each is a section
