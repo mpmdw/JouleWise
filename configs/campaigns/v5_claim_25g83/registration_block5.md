@@ -2934,9 +2934,9 @@ writes one verdict:
   numbers (into restricted custody) and the flags are emitted whatever the flags say, and the exclusion function
   computes `claim_usable`. If the exclusion function is absent or raises an error, the numbers and the flags still
   stand, `records.collector_failed` (DISCLOSE) is recorded, and `claim_usable` is false with the single reason
-  `exclusions.function_unavailable` in the exclusion record's `reasons` list (§0.16). (When the function could not
-  be called because the harvest failed to build its inputs, the same reason is written, and that failure is itself
-  a harvest fault, so the verdict is HARVEST_FAULT.)
+  `exclusions.function_unavailable` in the `reasons` list of the function's output (§0.16). (When the function
+  could not be called because the harvest itself failed to build its inputs, the same reason is written, and the
+  verdict is not COLLECTED but HARVEST_FAULT, below.)
 - **NULL:** no chain start: the arm refused, or the driver failed before the chain. `claim_usable` is false, with the
   single reason `window.null`.
 - **NO_COLLECTION:** the chain started and its record of stages shows that no collection stage ran to its end. That
