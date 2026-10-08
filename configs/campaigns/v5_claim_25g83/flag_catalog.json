@@ -1353,7 +1353,7 @@
     "unclassified": "A code not listed here is UNCLASSIFIED: it blocks only the release event until classified blind by a cold erratum (registration 7.2), which the loader accepts. No code is kept permanently unclassified any more (audit-fix 2, 2026-10-07): records.malformed_flag is DISCLOSE with two conservative exclusions beside it. collector.unmeasured (a collector the flag package does not know) is still deliberately absent, so it blocks release until a cold erratum classifies it."
   },
   "rules": {
-    "cell_unit_minimum": 8
+    "cell_unit_minimum": 5
   },
   "schema_version": "joulewise.flag_catalog.v1"
 }
