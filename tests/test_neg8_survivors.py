@@ -805,7 +805,8 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
             lost_references=[])
 
     @staticmethod
-    def write_verdict(window, points, bound, *, references=None, unreadable=(), strict_invalid=(), summaries=None):
+    def write_verdict(window, points, bound, *, references=None, unreadable=(), strict_invalid=(), summaries=None,
+                      bundles_exist=False):
         """As ``write_neg8_reference_verdict``, but the writer was given the window's bound.
 
         ``references`` replaces the window's (bundle id, role) list (a spare is
@@ -814,7 +815,8 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         reference another stored summary ({bundle id: summary}); the stored
         bracket is then the verdict writer's own (``writer_bracket``), which
         hands a reference whose energy it cannot read to the screen with no
-        energy.
+        energy.  ``bundles_exist``: the reference bundles are already in the
+        claim root (real bundles) and are not written here.
         """
         import hashlib
         import json
@@ -831,10 +833,11 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
                 members.append({"execution": "invoked", "run_id": bundle_id, "bundle_ids": [bundle_id],
                                 "role": role, "canonical_neg8_workload": True, "scientific_config_sha256": "d" * 64})
                 continue
-            hb.put(bundle / "config.json", {"run_id": bundle_id})
-            hb.put(bundle / "metadata.json", {"run_id": bundle_id})
-            hb.put(bundle / "summary_metrics.json",
-                   summaries[bundle_id] if bundle_id in summaries else hb.neg8_reference_summary(points[bundle_id]))
+            if not bundles_exist:
+                hb.put(bundle / "config.json", {"run_id": bundle_id})
+                hb.put(bundle / "metadata.json", {"run_id": bundle_id})
+                hb.put(bundle / "summary_metrics.json", summaries[bundle_id] if bundle_id in summaries
+                       else hb.neg8_reference_summary(points[bundle_id]))
             members.append({"execution": "invoked", "run_id": bundle_id, "bundle_ids": [bundle_id], "role": role,
                             "canonical_neg8_workload": True, "scientific_config_sha256": "d" * 64})
         policy_sha = hb.sha(hb.ROOT / hb.POLICY)
@@ -1319,11 +1322,182 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
                 self.assertEqual(self.screen_record(window)["rescreen"]["survivors"]["reference_counts"],
                                  {"start": 3, "midpoint": 1, "end": 2})
 
-    def test_an_unmeasured_reference_is_kept(self) -> None:
-        window = self.run_window("unmeasured", self.points(0.0),
-                                 reference_flags=[("b5t-neg8-end-1", "contention.unmeasured")])
+    # -- seal gate stage 1, RF-5 (K-6): unmeasured and measured physics on a reference ----
+
+    def test_a_reference_with_unmeasured_clock_or_thermal_evidence_is_kept(self) -> None:
+        """RF-5: ``clock.unmeasured`` and ``thermal.unmeasured`` lose no reference.
+
+        The reference's own anchor bound and its own thermal records carry
+        those quantities (registration 6.4), and both codes are DISCLOSE.
+        """
+        h = _hb().h
+        for code in ("clock.unmeasured", "thermal.unmeasured"):
+            self.assertNotIn(code, h.NEG8_REFERENCE_LOSS_CODES)
+        window = self.run_window("unmeasured-kept", self.points(0.0), reference_flags=[
+            ("b5t-neg8-end-1", "clock.unmeasured"), ("b5t-neg8-start-2", "thermal.unmeasured")])
         self.assertFalse({"neg8.reference_lost", "neg8.screen_failed"} & window.codes())
         self.assertFalse((window.archive / "derived" / "neg8-screen.json").exists())
+        self.assertEqual(self.allowance_record(window)["source"], "stored_verdict")
+
+    def test_each_of_the_four_physics_codes_loses_a_reference_and_the_survivors_decide(self) -> None:
+        """RF-5 (K-6): contention or battery evidence never taken, a quiet-state violation, a failed battery pair.
+
+        Before K-6 a reference carrying one of them stayed in the screen (the
+        test this one replaces asserted that for ``contention.unmeasured``):
+        the stored (3, 1, 3) bracket, with the reference's energy inside it,
+        carried the window's allowance.  The counterfactual input is the end
+        reference ``b5t-neg8-end-1`` with the one flag; the call site is
+        ``_Harvest._neg8_reference_losses``.  The corpus rule is unchanged:
+        none of the four is in ``NEG8_PHYSICS_LOSS_CODES``, which drives the
+        corpus drop (registration 5.3).
+        """
+        h = _hb().h
+        four = ("contention.unmeasured", "battery.unmeasured", "env.member_quiet_state_violated",
+                "battery.capture_pair_failed")
+        self.assertEqual(h.NEG8_REFERENCE_PHYSICS_LOSS_CODES, four)
+        self.assertFalse(set(four) & set(h.NEG8_PHYSICS_LOSS_CODES))
+        # In the physics position of the naming order: after the six, before the runner's and the validity codes.
+        order = h.NEG8_REFERENCE_LOSS_CODES
+        self.assertEqual(order[:len(h.NEG8_PHYSICS_LOSS_CODES) + 4], (*h.NEG8_PHYSICS_LOSS_CODES, *four))
+        fixture = __import__("json").loads((_hb().FIXTURES / "flag_catalog.json").read_bytes())["codes"]
+        for code in four:
+            with self.subTest(code):
+                self.assertEqual(fixture[code]["effect"], "EXCLUDE_MEMBER")
+                window = self.run_window(f"physics-{four.index(code)}", self.points(0.0),
+                                         reference_flags=[("b5t-neg8-end-1", code)])
+                self.assertNotIn("neg8.screen_failed", window.codes())
+                (lost,) = [flag for flag in window.flags() if flag["code"] == "neg8.reference_lost"]
+                self.assertEqual([(row["run_id"], row["slot"], row["reason"]) for row in lost["observed"]["lost"]],
+                                 [("b5t-neg8-end-1", "end", code)])
+                record = self.screen_record(window)
+                self.assertEqual(record["harvest_reference_losses"], {"b5t-neg8-end-1": code})
+                self.assertEqual(record["rescreen"]["survivors"]["reference_counts"],
+                                 {"start": 3, "midpoint": 1, "end": 2})
+                self.assertEqual(self.allowance_record(window)["source"], "survivor_rescreen")
+
+    # The seven references as real bundles (clones of the strict seed bundle) at their own spans, between
+    # the science members' spans and inside the monitor journals.
+    REAL_REFERENCE_SHIFT_S = {"b5t-neg8-start-1": 1300.0, "b5t-neg8-start-2": 1400.0, "b5t-neg8-start-3": 1500.0,
+                              "b5t-neg8-midpoint": 3500.0, "b5t-neg8-end-1": 5300.0, "b5t-neg8-end-2": 5400.0,
+                              "b5t-neg8-end-3": 5500.0}
+
+    def reference_request_ns(self, run_id: str) -> tuple[int, int]:
+        hb = _hb()
+        shift = self.REAL_REFERENCE_SHIFT_S[run_id]
+        return (int((hb.SEED_REQUEST_S[0] + shift) * 1e9), int((hb.SEED_REQUEST_S[1] + shift) * 1e9) + 1)
+
+    def run_window_with_real_references(self, name, points, *, journals):
+        """A window whose seven references are real bundles on the roster, so the monitor joins run on them.
+
+        Each reference is a strict-valid clone of the seed bundle with its own
+        run id and span.  The plan tree lists them as the members of three
+        external inputs, as a real pack lists its reference stages, so the
+        harvest assesses them and joins the monitor journals to their spans
+        like any member's.  Their NEG-8 energies are the gates' ``points``.
+        """
+        import json
+
+        hb = _hb()
+        window = hb.Window(self.tmp / name, catalog_overrides=self.ISOLATE, journals=journals)
+        self.assertIsNone(hb.neg8_corpus(window))
+        by_slot: dict[str, list[dict]] = {}
+        for run_id, role in hb.NEG8_REFERENCES:
+            target = window.claim / run_id
+            hb.make_member(target, run_id, self.REAL_REFERENCE_SHIFT_S[run_id])
+            by_slot.setdefault(role.rsplit("_", 1)[1], []).append({
+                "run_id": run_id, "path": f"configs/campaigns/{hb.PACK_ID}/refs/{run_id}.json",
+                "sha256": hb.sha(target / "config.json")})
+        tree_path = window.pack / "plan_tree.json"
+        tree = json.loads(tree_path.read_bytes())
+        tree["external_inputs"]["manifests"] = [{"input_id": f"{slot}_reference", "members": members}
+                                                for slot, members in by_slot.items()]
+        hb.put(tree_path, tree)
+        (window.pack / "plan_tree.sha256").write_text(f"{hb.sha(tree_path)}  plan_tree.json\n")
+        # The sealed and executed inventories name the plan tree as written.
+        changed = {path.relative_to(window.measurement).as_posix(): hb.sha(path)
+                   for path in (tree_path, window.pack / "plan_tree.sha256")}
+        for path, key in ((window.measurement / "configs/campaigns/v5_claim_25g83/sealed_inventory.json", None),
+                          (window.custody / "night" / "executed_inventory.json", "measurement_checkout")):
+            value = json.loads(path.read_bytes())
+            (value if key is None else value[key])["files"].update(changed)
+            hb.put(path, value)
+        bound = json.loads((window.bound / "neg8-drift-bound.json").read_bytes())
+        self.write_verdict(window, points, bound, bundles_exist=True)
+        with hb.neg8_reference_gates(points):
+            window.harvest()
+        return window
+
+    def test_a_journal_gap_over_one_reference_loses_it_and_the_survivors_decide(self) -> None:
+        """RF-5, the finding's own input: the contention journal has a gap over one reference's request.
+
+        Nothing is injected: the harvest's monitor join finds
+        ``contention.unmeasured`` on the reference from the journals.  Two
+        windows.  ``clean``: nothing drifted; the reference is lost and the
+        survivors pass, so the window is kept.  ``hidden-drift``: the window
+        drifted by 1.2 bounds and a contender inside the first start
+        reference, unseen in the gap, raised it by 3.6 bounds, so the stored
+        screen passes.  Before K-6 that stored screen stood and the window
+        was claim-usable on it; now the reference is lost, the survivors fail
+        and the window is removed.  In both, every reference also carries
+        ``clock.unmeasured`` (the clock journal is sparse outside the science
+        members' spans) and none is lost for it.
+        """
+        probe = _hb().Window(self.tmp / "probe", catalog_overrides=self.ISOLATE)
+        _hb().neg8_corpus(probe)
+        drift = 1.2 * self.bound_j(probe)
+        cases = {"clean": ("b5t-neg8-end-3", self.points(0.0), {"start": 3, "midpoint": 1, "end": 2}, True),
+                 "hidden-drift": ("b5t-neg8-start-1", self.points(drift, **{"b5t-neg8-start-1": 30.30 + 3 * drift}),
+                                  {"start": 2, "midpoint": 1, "end": 3}, False)}
+        for label, (gapped, points, counts, kept) in cases.items():
+            with self.subTest(label):
+                request = self.reference_request_ns(gapped)
+                window = self.run_window_with_real_references(
+                    f"journal-gap-{label}", points,
+                    journals={"contention_gap": (request[0] - 10**9, request[1] + 10**9)})
+                self.assertEqual(self.verdict_row(window)["idle_admission_core"]["neg8_bracket"]["decision"],
+                                 "passed")
+                references = [run_id for run_id, _role in _hb().NEG8_REFERENCES]
+                self.assertEqual([run_id for run_id in references
+                                  if "contention.unmeasured" in window.codes(run_id)], [gapped])
+                self.assertEqual([run_id for run_id in references if "clock.unmeasured" in window.codes(run_id)],
+                                 references)
+                record = self.screen_record(window)
+                self.assertEqual(record["harvest_reference_losses"], {gapped: "contention.unmeasured"})
+                self.assertEqual(record["rescreen"]["problems"], [])
+                self.assertEqual(record["rescreen"]["survivors"]["reference_counts"], counts)
+                (lost,) = [flag for flag in window.flags() if flag["code"] == "neg8.reference_lost"]
+                self.assertEqual([(row["run_id"], row["reason"]) for row in lost["observed"]["lost"]],
+                                 [(gapped, "contention.unmeasured")])
+                if kept:
+                    self.assertNotIn("neg8.screen_failed", window.codes())
+                    self.assertNotIn("neg8.screen_failed", window.exclusions()["reasons"])
+                else:
+                    (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+                    self.assertEqual(flag["observed"]["reasons"], ["survivor_rescreen"])
+                    self.assertIn(ww.CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED,
+                                  flag["observed"]["collected_bound_rescreen"]["conditions"])
+                    self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+
+    def test_a_monitor_outage_over_all_three_references_of_one_endpoint_removes_the_window(self) -> None:
+        """RF-5, the cost the judge accepted: no survivor is left at the end, ``references_insufficient``.
+
+        The contention journal has one gap from before the first end
+        reference to after the last.  Before K-6 the stored screen stood and
+        the window was kept, on three end references none of which can be
+        shown clean.
+        """
+        first, last = self.reference_request_ns("b5t-neg8-end-1"), self.reference_request_ns("b5t-neg8-end-3")
+        window = self.run_window_with_real_references(
+            "journal-outage", self.points(0.0), journals={"contention_gap": (first[0] - 10**9, last[1] + 10**9)})
+        ends = ["b5t-neg8-end-1", "b5t-neg8-end-2", "b5t-neg8-end-3"]
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+        self.assertEqual(flag["observed"]["reason"], "references_insufficient")
+        self.assertEqual(sorted((row["run_id"], row["reason"]) for row in flag["observed"]["lost"]),
+                         [(run_id, "contention.unmeasured") for run_id in ends])
+        self.assertEqual(self.screen_record(window)["rescreen"]["survivors"]["reference_counts"],
+                         {"start": 3, "midpoint": 1, "end": 0})
+        self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+        self.assertEqual(self.allowance_record(window)["source"], "none")
 
     def test_corpus_members_with_physics_exclusions_are_dropped_from_the_bound(self) -> None:
         """Registration 5.3 amendment: the clean bound is narrower, and the screen fails against it."""

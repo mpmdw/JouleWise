@@ -88,9 +88,22 @@ NEG8_CORPUS_PHYSICS_SCHEMA = "joulewise.b5_neg8_corpus_physics.v1"
 NEG8_PHYSICS_LOSS_CODES = ("contention.request_overlap", "battery.member_span", "battery.accumulator_excursion",
                            "thermal.os_level_nonzero", "thermal.powermetrics_pressure_elevated",
                            "clock.step_overlap")
+# Seal gate stage 1, RF-5 (2026-10-07; registration 0.12): four more physics
+# codes lose a reference, though not a corpus member (the corpus keeps its own
+# rule, registration 5.3, so they are not in the tuple above).  A reference
+# whose contention or battery evidence was never taken (contention.unmeasured,
+# battery.unmeasured: a monitor journal gap over it) cannot be shown clean,
+# and an unseen contender or charge inside a reference can move the screen by
+# more than its bound; a science member in that state is removed for the same
+# reason (registration 6.4).  A reference with a measured quiet-state
+# violation (display awake, screensaver, Low Power Mode) or a failed battery
+# capture pair has a contaminated or unattributable energy.
+# clock.unmeasured and thermal.unmeasured are not here: the reference's own
+# anchor bound and its own thermal records carry those quantities.
+NEG8_REFERENCE_PHYSICS_LOSS_CODES = ("contention.unmeasured", "battery.unmeasured",
+                                     "env.member_quiet_state_violated", "battery.capture_pair_failed")
 # A reference is also lost when the runner stopped it (timeout, admission
-# abort) or it fails strict validation.  The "unmeasured" codes are not here:
-# unknown evidence never authorises an omission.
+# abort) or it fails strict validation.
 # Orchestrator ruling N8 (2026-10-07, cold pass 2): a reference whose model
 # identity is not the sealed one (model.identity_mismatch), or could not be
 # derived from its own record (model.identity_underivable), measures a
@@ -103,9 +116,10 @@ NEG8_PHYSICS_LOSS_CODES = ("contention.request_overlap", "battery.member_span", 
 # anchor is not bounded or does not recompute).  On a science member each
 # costs one unit; on a reference each loses the reference, never the window.
 NEG8_MEMBER_VALIDITY_LOSS_CODES = ("member.anchor_not_bounded", "member.anchor_recompute_mismatch",
-                          "member.reduction_mismatch", "member.unreadable", "member.bytes_missing",
-                          "member.bytes_ambiguous")
-NEG8_REFERENCE_LOSS_CODES = (*NEG8_PHYSICS_LOSS_CODES, "member.timeout", "member.admission_aborted",
+                                   "member.reduction_mismatch", "member.unreadable", "member.bytes_missing",
+                                   "member.bytes_ambiguous")
+NEG8_REFERENCE_LOSS_CODES = (*NEG8_PHYSICS_LOSS_CODES, *NEG8_REFERENCE_PHYSICS_LOSS_CODES,
+                             "member.timeout", "member.admission_aborted",
                              "member.strict_validation_failed", *NEG8_MEMBER_VALIDITY_LOSS_CODES,
                              "model.identity_mismatch", "model.identity_underivable")
 # How a reference the verdict writer dropped for its status (or an unreadable
@@ -4717,7 +4731,9 @@ class _Harvest:
           (``observed.collected_bound_rescreen``);
         * a reference the verdict names carries a reference-loss flag the
           stored bracket did not drop (``NEG8_REFERENCE_LOSS_CODES``: a 6.4
-          physics exclusion, a timeout, an admission abort, failed strict
+          physics exclusion, contention or battery evidence that was never
+          taken, a quiet-state violation or a failed battery pair (seal gate
+          RF-5), a timeout, an admission abort, failed strict
           validation, bytes or an energy that cannot bear a number
           (``NEG8_MEMBER_VALIDITY_LOSS_CODES``), a model identity that is not the
           sealed one or cannot be derived (ruling N8)), or succeeded with an
