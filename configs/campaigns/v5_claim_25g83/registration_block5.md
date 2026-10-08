@@ -4076,8 +4076,8 @@ H_claim itself. A comparison that read every difference between those two commit
 remove every window from the claims, merely because the seal had been committed. This section fixes which commits
 may follow H_claim, which differences count, and which program checks each. §12 gives the order in which the
 seal's own commits are made. The procedure was written and rehearsed by the seal-landing lane
-(`/Users/edr/night-archive/gate-prune/wave-1007b/seal-land/SEAL_LANDING.md`), and that lane's code is part of
-H_claim.
+(`/Users/edr/night-archive/gate-prune/wave-1007b/seal-land/SEAL_LANDING.md`; a path written `seal-land/…` below
+is a file of that directory), and that lane's code is part of H_claim.
 
 *Terms.* Three git words first. A file is **tracked** when git records it in commits. A checkout's **HEAD** is the
 commit it currently has checked out. A commit's **parent** is the commit it was made on top of, and the later one
@@ -4191,15 +4191,21 @@ block in which no pack is re-armed and no attempt is abandoned.
      inventory's SHA-256, beside the changed-path map and the re-audit that §7.5 requires of the cure. For a window
      armed after the re-issue, "H_claim" in item 2 is the `head` of the re-issued inventory.
 
-   *A re-harvest after a re-issue.* The **inventory in force at a window's arm** is the `sealed_inventory.json`
-   that the measurement checkout held when that window armed. Every harvest reads the inventory from the
-   measurement checkout unless it is told otherwise, and keeps a copy of what it read in its archive, at
-   `sources/inputs/sealed_inventory.json`. After a re-issue the measurement checkout holds the new inventory, and
-   a window that armed before the re-issue differs from it by the cure itself. So an R3 re-harvest of such a
-   window is given the inventory in force at its arm, with
-   `--sealed-inventory-path <that window's first harvest archive>/sources/inputs/sealed_inventory.json`. Without
-   it the harvest would exclude a completed window for a cure that the window never ran. This is a rule the lead
-   applies, and the magistrate's brief (§7.2) carries it.
+   *A re-harvest after a re-issue.* The **inventory in force at a window's arm** is the `sealed_inventory.json` that the
+   measurement checkout held when that window armed. Every harvest reads the inventory from the measurement checkout
+   unless it is told otherwise, and keeps a copy of what it read in its archive, at
+   `sources/inputs/sealed_inventory.json`. After a re-issue the measurement checkout holds the new inventory, and a
+   window that armed before the re-issue differs from it by the cure itself. So an R3 re-harvest of such a window is
+   given the inventory in force at its arm, with `--sealed-inventory-path <that window's first harvest
+   archive>/sources/inputs/sealed_inventory.json`. Without it the harvest would exclude a completed window for a cure
+   that the window never ran. This is a rule the lead applies, and the magistrate's brief (§7.2) carries it. *Worked
+   example (a probe of the independent review of the seal-landing lane, `seal-land/REVIEW.md`, finding F5; a synthetic
+   window, harvested by the program at H_claim):* ALPHA-1 ran from the first pin-only commit; then a cure to one file of
+   GAMMA's pack and its new seal commit followed. Harvested again with the inventory then in the measurement checkout,
+   ALPHA-1 was excluded: comparison (b) listed the GAMMA file as a changed window input. Harvested again with the
+   inventory in force at its arm, it raised no flag. Under the rule of item 2 a change in another pack's directory no
+   longer excludes, but a cure to a file under `joulewise/` or `scripts/` that only GAMMA executes still would, because
+   every window inventories those two directories whole.
 2. **The sealed inventory** (`sealed_inventory.json`) lists, at H_claim, the SHA-256 of every tracked file under
    `joulewise/`, `scripts/` and the three pack directories (§0.7), and of this directory's `flag_catalog.json`,
    and it names H_claim as its `head`. Because it names H_claim it is committed in the seal commit, the child of
@@ -4276,17 +4282,21 @@ block in which no pack is re-armed and no attempt is abandoned.
 
    *The checkout the driver runs from.* The launchd job (§0.17) starts `scripts/run_night.py` in the checkout whose
    `scripts/install_night_agent.sh` installed the job. The driver, the hazard modules of the arm, the monitor, the
-   collectors, the G10 program and the meter program are that checkout's files; the programs the chain runs are
-   the measurement checkout's. **The launchd job is installed from the measurement checkout**, by that checkout's own
-   installer, so the two are one checkout and the executed-file inventory describes all the code a window ran.
-   If the job was installed from another checkout, the driver records that checkout in the executed-file
-   inventory under `driver_checkout`: its path, its HEAD, its `git status`, and the SHA-256 of each tracked file
-   under its `joulewise/` and `scripts/`. The harvest then judges it as it judges the measurement checkout. A code
-   file there that differs from the sealed inventory is a difference (`code.executed_differs_from_sealed`), and so
-   is a tracked edit, or an untracked file under its `joulewise/` or `scripts/`. A separate checkout whose bytes
-   equal the sealed ones is recorded and is no difference. This is decided at the harvest, from bytes. It is not
-   decided at install from where a checkout lives: that would be a refusal for a reason that is neither physics
-   nor number integrity (§6.11).
+   collectors, the G10 program and the meter program are that checkout's files; the programs the chain runs are the
+   measurement checkout's. **The launchd job is installed from the measurement checkout**, by that checkout's own
+   installer, so the two are one checkout and the executed-file inventory describes all the code a window ran. If the
+   job was installed from another checkout, the driver records that checkout in the executed-file inventory under
+   `driver_checkout`: its path, its HEAD, its `git status`, and the SHA-256 of each tracked file under its `joulewise/`
+   and `scripts/`. The harvest then judges it as it judges the measurement checkout. A code file there that differs from
+   the sealed inventory is a difference (`code.executed_differs_from_sealed`), and so is a tracked edit, or an untracked
+   file under its `joulewise/` or `scripts/`. A separate checkout whose bytes equal the sealed ones is recorded and is
+   no difference. This is decided at the harvest, from bytes. It is not decided at install from where a checkout lives:
+   that would be a refusal for a reason that is neither physics nor number integrity (§6.11). *Worked example.* The
+   real-model rehearsal of 2026-10-06 (not a claim window) ran with a separate driver checkout: its record lists 304
+   code files there, none differing from the inventory (`seal-land/ab-lane-code-identity.json`). In a probe of the same
+   review (finding F1) a driver checkout with one line appended to each of `joulewise/b5/driver.py`,
+   `joulewise/hazards/clock.py` and `scripts/hazard_monitor.py` was recorded with those three files listed. Under the
+   rule above that window is `code.executed_differs_from_sealed`.
 
    *What the harvest program at H_claim does instead.* The table and the paragraphs above state the rule every
    block-5 harvest applies. Five parts of it are installed by the harvest lane of item 4, after the seal. The
@@ -4316,13 +4326,13 @@ block in which no pack is re-armed and no attempt is abandoned.
    flag was raised. Each of four further changes, one commit on top, was a difference: an edit to
    `joulewise/b5/harvest.py` by both comparisons (class (ii) reaching the measurement checkout); an edit to the runbook
    and an edit to `identity_pins.json` by comparison (b) alone; and an edit to GAMMA's plan tree by both comparisons for
-   a GAMMA window and by (b) alone for an ALPHA window, which is the last case of the list above. An independent review
-   then repeated the whole sequence (`seal-land/REVIEW.md` in the same directory). It made sixteen changes to window
-   inputs (an edited byte, a new file, a deleted file, a moved file and a changed file mode among them), each of which
-   excluded the window, and commits of the permitted kinds (pin-only, the seal documents, documents and tests), none of
-   which did. The Fable delta cold pass 5 (`/Users/edr/night-archive/gate-prune/cold-pass-5/REPORT.md`, PASS WITH NOTES)
-   found that same last case, in which the program at H_claim excludes a window that read nothing changed, and assigned
-   it to the harvest lane.
+   a GAMMA window and by (b) alone for an ALPHA window, which is the last case of the list above. The review of item 1
+   then repeated the whole sequence (`seal-land/REVIEW.md`). It made sixteen changes to window inputs (an edited byte, a
+   new file, a deleted file, a moved file and a changed file mode among them), each of which excluded the window, and
+   commits of the permitted kinds (pin-only, the seal documents, documents and tests), none of which did. The Fable
+   delta cold pass 5 (`/Users/edr/night-archive/gate-prune/cold-pass-5/REPORT.md`, PASS WITH NOTES) found that same last
+   case, in which the program at H_claim excludes a window that read nothing changed, and assigned it to the harvest
+   lane.
 
    *A new sizing file.* `sizing_b5.json` is a window input, so the new sizing file of a §5.5 erratum is never a
    changed `sizing_b5.json` committed in the measurement checkout: that commit would exclude the next window. The
