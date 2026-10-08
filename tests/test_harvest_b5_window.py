@@ -605,7 +605,7 @@ class Window:
 
     def _build_catalog(self, overrides):
         catalog = json.loads((FIXTURES / "flag_catalog.json").read_bytes())
-        # Six members cannot fill the registered 8-of-10 minimum; one unit per
+        # Six members cannot fill the registered 5-of-10 minimum; one unit per
         # stratum keeps the unit rule observable in a window this small.
         catalog["rules"]["cell_unit_minimum"] = 1
         for code, effect in overrides.items():
@@ -1398,8 +1398,14 @@ class DeskAndG3Tests(WindowTestCase):
         """Review F3: F5-2 is the one independent recompute of the whole-window verdict.
 
         Unless the report exists and holds F5-2 PASS, g3.recompute_failed
-        (EXCLUDE_WINDOW) fires: a crashed checker, a timeout, an exit outside
-        {0, 1}, an F5-2 SKIP behind a failed S11-A2, or a skipped G3.
+        fires: a crashed checker, a timeout, an exit outside {0, 1}, an F5-2
+        SKIP behind a failed S11-A2, or a skipped G3.
+
+        The flag is always written and never removes the window (DISCLOSE in
+        the block-5 catalog and, since seal gate ruling SG-3 of 2026-10-07, in
+        this fixture): the recompute reports the aggregate verdict, which
+        fails on one member's failure, and each part of that verdict acts
+        through its own code (registration 6.5).
         """
         def report(rows, returncode=0):
             def runner(argv, **kwargs):
@@ -1427,7 +1433,7 @@ class DeskAndG3Tests(WindowTestCase):
                 window = self.g3_window(name, runner, **harvest)
                 (flag,) = [flag for flag in window.flags() if flag["code"] == "g3.recompute_failed"]
                 self.assertEqual(flag["observed"], observed)
-                self.assertIn("g3.recompute_failed", window.exclusions()["reasons"])
+                self.assertNotIn("g3.recompute_failed", window.exclusions()["reasons"])
         passed = self.g3_window("passed", report([{"id": "S11-A2", "status": "PASS"}, {"id": "F5-2", "status": "PASS"},
                                                   {"id": "S11-A5", "status": "FAIL"}], 1))
         self.assertNotIn("g3.recompute_failed", passed.codes())
@@ -2985,7 +2991,7 @@ class RecordTests(unittest.TestCase):
         catalog = json.loads((FIXTURES / "flag_catalog.json").read_bytes())
         self.assertEqual(catalog["schema_version"], "joulewise.flag_catalog.v1")
         self.assertEqual(set(catalog) - {"schema_version", "codes", "rules", "notes"}, set())
-        self.assertEqual(catalog["rules"], {"cell_unit_minimum": 8})
+        self.assertEqual(catalog["rules"], {"cell_unit_minimum": 5})  # the registered minimum (seal gate SG-1)
         # Every emitted code but the never-classified one, which must block release.
         self.assertEqual(set(catalog["codes"]), set(h.CODES) - h.NEVER_CLASSIFIED_CODES)
         for code, entry in catalog["codes"].items():
@@ -2999,7 +3005,7 @@ class RecordTests(unittest.TestCase):
     def test_catalog_and_codes_agree_with_l4(self):
         from joulewise.flags import catalog as l4
         loaded = l4.load_catalog(FIXTURES / "flag_catalog.json")
-        self.assertEqual(loaded.cell_unit_minimum, 8)
+        self.assertEqual(loaded.cell_unit_minimum, 5)
         draft = l4.draft_catalog()
         self.assertEqual(set(h.CODES) - set(draft.codes), set(h.L5_ONLY_CODES))
         self.assertEqual(h.NEVER_CLASSIFIED_CODES, set(l4.NEVER_CLASSIFIED_CODES) & set(h.CODES))
@@ -3167,7 +3173,18 @@ class ExclusionSeamTests(unittest.TestCase):
         three = [ledger.emit("battery.member_span", level="member", run_id=run_id, collector="test")
                  for run_id in quads[0:12:4]]  # one member of each of three quads
         result = exclusions.compute(three, document, spans, catalog)
-        self.assertEqual(result["reasons"], ["cell.below_minimum"])
+        decode = next(cell for cell in result["cells"] if cell["cell_id"] == "df-ph-decode-qwen3-1p7b")
+        # Seven of ten quads kept.  At the registered minimum of 5 the window is
+        # usable; until seal gate ruling SG-1 (2026-10-07) the minimum was 8 and
+        # these three flags removed it.
+        self.assertEqual((decode["n_quads"], decode["resolvable"], result["claim_usable"], result["reasons"]),
+                         (7, True, True, []))
+        six = [ledger.emit("battery.member_span", level="member", run_id=run_id, collector="test")
+               for run_id in quads[0:24:4]]  # one member of each of six quads: four kept
+        result = exclusions.compute(six, document, spans, catalog)
+        decode = next(cell for cell in result["cells"] if cell["cell_id"] == "df-ph-decode-qwen3-1p7b")
+        self.assertEqual((decode["n_quads"], decode["resolvable"], result["reasons"]),
+                         (4, False, ["cell.below_minimum"]))
         foreign = h.FlagLedger(plan_id="another-plan", attempt=1, catalog=h.Catalog.load(None),
                                boot_session_uuid=None).emit("pack.identity_mismatch", level="window", collector="test")
         result = exclusions.compute([foreign], document, spans, catalog)
@@ -3177,6 +3194,66 @@ class ExclusionSeamTests(unittest.TestCase):
         result = exclusions.compute([], {**document, "bundles": early}, spans, catalog)
         self.assertEqual([(row["bundle_id"], row["code"]) for row in result["bundles_ignored"]],
                          [(f"claim/{quads[0]}", "roster.before_chain_started")])
+
+    @unittest.skipUnless(L4_AVAILABLE, "lane L4's joulewise.flags is not in this tree")
+    def test_the_block5_catalogs_cell_minimum_decides_on_the_real_alpha_roster(self):
+        """Seal gate ruling SG-1 (2026-10-07, change C-1): the cell unit minimum is 5.
+
+        A unit is one independent repeat, or one quad (four interleaved
+        members; a quad with any removed member is dropped whole).  A target
+        cell plans 10 units in each of its two strata, and the window is
+        removed from a claim (``cell.below_minimum``) when any stratum of any
+        target cell keeps fewer than the catalog's ``rules.cell_unit_minimum``.
+
+        The inputs are the real ALPHA roster (100 science members), the
+        block-5 catalog of this tree, and the harvest's own call into the
+        exclusion function (``_l4_exclusions``, which re-reads the catalog
+        from its path).  Before the change the catalog said 8, so the
+        three-quad case below (97 of 100 science members clean, one member
+        lost in each of three quads of one cell) removed the window.  The
+        boundary is 5 because the registered floor estimator's guard is
+        defined for 5 units and undefined for 4
+        (``small_sample_guard_factor``).
+        """
+        from joulewise.detection_floor import small_sample_guard_factor
+        block5 = ROOT / SEALED_DIR / "flag_catalog.json"
+        if not block5.is_file():
+            self.skipTest("the block-5 catalog is not in this tree")
+        catalog = h.Catalog.load(block5)
+        self.assertEqual(json.loads(block5.read_bytes())["rules"], {"cell_unit_minimum": 5})
+        self.assertEqual(small_sample_guard_factor(5), 1.5)
+        with self.assertRaises(ValueError):
+            small_sample_guard_factor(4)
+        roster, document, spans = self.inputs(self.ALPHA)
+        self.assertEqual(sum(member["kind"] == "science" for member in roster["members"]), 100)
+        decode, prefill = "df-ph-decode-qwen3-1p7b", "df-ph-prefill-p2048-qwen3-1p7b"
+        units: dict[tuple, dict] = {}  # (cell, stratum) -> unit id -> the run ids of its members
+        for member in document["members"]:
+            for unit in member["units"]:
+                units.setdefault((unit["cell_id"], unit["stratum"]), {}).setdefault(unit["unit_id"], []).append(
+                    member["run_id"])
+        ledger = h.FlagLedger(plan_id="plan", attempt=1, catalog=catalog, boot_session_uuid=None)
+
+        def judge(cell_id, stratum, lost):
+            """Remove one member from each of ``lost`` units of one stratum of one cell."""
+            chosen = sorted(units[(cell_id, stratum)])[:lost]
+            flags = [ledger.emit("battery.member_span", level="member", run_id=units[(cell_id, stratum)][unit][0],
+                                 collector="test") for unit in chosen]
+            result = h._l4_exclusions(flags, document, spans, catalog)
+            cell = next(row for row in result["cells"] if row["cell_id"] == cell_id)
+            self.assertEqual(len(result["members_excluded"]), lost)
+            self.assertEqual(cell["minimum"], {"quad": 5, "repeat": 5})
+            return cell["n_kept"][stratum], result["claim_usable"], result["reasons"]
+
+        self.assertEqual(judge(decode, "quad", 0), (10, True, []))
+        # Three quads of one cell each lose one member (the case analysis plan
+        # section 11 named as cell.below_minimum under the minimum of 8).
+        self.assertEqual(judge(decode, "quad", 3), (7, True, []))
+        for cell_id in (decode, prefill):
+            for stratum in ("quad", "repeat"):
+                with self.subTest(cell=cell_id, stratum=stratum):
+                    self.assertEqual(judge(cell_id, stratum, 5), (5, True, []))
+                    self.assertEqual(judge(cell_id, stratum, 6), (4, False, ["cell.below_minimum"]))
 
 
 class IdentityReplayTests(WindowTestCase):
@@ -3914,6 +3991,29 @@ class FixtureCatalogTests(WindowTestCase):
         fixture = json.loads((FIXTURES / "flag_catalog.json").read_bytes())["codes"]
         self.assertEqual(fixture["whole_window.not_passed"]["effect"], DRAFT_CODES["whole_window.not_passed"]["effect"])
         self.assertEqual(fixture["whole_window.not_passed"]["effect"], "DISCLOSE")
+
+    def test_the_fixture_agrees_with_the_block5_catalog_on_every_code_both_list(self):
+        """Seal gate ruling SG-3 (2026-10-07, change K-2): g3.recompute_failed was the one disagreement.
+
+        Before: the fixture made it EXCLUDE_WINDOW and the block-5 catalog
+        DISCLOSE, so the harvest tests exercised an effect no window is judged
+        under.  The catalog lists codes the harvest never emits (17 at this
+        writing); only the codes both files list are compared.
+        """
+        block5 = ROOT / SEALED_DIR / "flag_catalog.json"
+        if not block5.is_file():
+            self.skipTest("the block-5 catalog is not in this tree")
+        catalog = json.loads(block5.read_bytes())
+        fixture = json.loads((FIXTURES / "flag_catalog.json").read_bytes())
+        self.assertEqual(set(fixture["codes"]) - set(catalog["codes"]), set())
+        keys = ("family", "klass", "effect", "blinding")
+        self.assertEqual({code: (tuple(entry.get(key) for key in keys),
+                                 tuple(catalog["codes"][code].get(key) for key in keys))
+                          for code, entry in fixture["codes"].items()
+                          if any(entry.get(key) != catalog["codes"][code].get(key) for key in keys)}, {})
+        self.assertEqual(fixture["codes"]["g3.recompute_failed"]["effect"], "DISCLOSE")
+        # The cell unit minimum, the one rule either file carries (seal gate SG-1: 5).
+        self.assertEqual(fixture["rules"], catalog["rules"])
 
     def test_a_failed_aggregate_verdict_does_not_remove_the_window_by_itself(self):
         window = self.window()  # the fixture catalog as committed (no override of this code)
