@@ -3710,7 +3710,7 @@ that attempt still carries an unclassified code; it is tested, and no block-5 pr
   which at the recorded loss rate of 1 member in 37 is about (1/37)² ≈ 0.07% of windows, or when a physics flag found
   at harvest contaminates it (no spare runs then), for which the block has no rate yet.
 - **Harvest problems first.** When an attempt's only window-removing codes are `*.identity_unmeasured`,
-  `whole_window.verdict_absent` or `records.source_changed_during_harvest` (checks that did not run, or ran on moving
+  `model.identity_unpinned`, `whole_window.verdict_absent` or `records.source_changed_during_harvest` (checks that did not run, had no pin to compare against, or ran on moving
   bytes), the cause is the harvest, not the window: R3 and re-harvest on identical bytes before deciding whether to
   re-arm. *Supersession* (PLAN2 row 12): when an arm collector recorded `pack.identity_unmeasured` or
   `code.identity_unmeasured` because it errored or timed out, and the harvest itself re-derived every check that
@@ -3764,6 +3764,13 @@ that attempt still carries an unclassified code; it is tested, and no block-5 pr
   classified window-removing code counts as claim-usable. The code is classified blind (from its definition and
   emitter, reading no energy) by a cold erratum to the catalog before the release event. If that makes the attempt
   not claim-usable, its pack is re-armed after the packs already scheduled, and the changed order is disclosed.
+- **A re-harvest that changes `claim_usable`.** An R3 re-harvest on identical bytes with a repaired program (§7.1,
+  §11 item 4) may change a completed attempt's `claim_usable`. The same rule applies as for a late classification: a
+  pack whose analysed attempt becomes not claim-usable is re-armed after the packs already scheduled, and the changed
+  order is disclosed; an attempt that becomes claim-usable is the analysed attempt only if it is the pack's first
+  claim-usable attempt in arm order (`first_claim_usable`), and any later attempt of that pack is listed in the
+  attempt history as not analysed. Each attempt's `exclusions.json` records the catalog digest and the harvest
+  program's commit, so which program decided is always on record.
 - **NULL:** re-arm after the named hazard is gone (a contention dwell timeout: identify the process; charging: wait
   until the arm's battery rule of §4.2 would pass, which is the adapter connected, IsCharging No and a battery
   current of at most 200 mA in either direction, the state this file calls battery float; the frequency gate: the
@@ -3824,8 +3831,12 @@ the harvest's `withheld/member-assessments.json` (restricted custody, so read by
 
 ### 7.5 A defect found in the middle of the block
 
-**Collection code** is any file in the sealed inventory that executes during a window or changes how a window's bytes
-are produced. GAMMA's contrasts are judged against floors from ALPHA and BETA, so all three windows must share one
+**Collection code** is any file in the sealed inventory as the measurement checkout executes it during a window, or
+any change to how a window's bytes are produced. The measurement checkout's HEAD stays H_claim plus pin-only commits
+for the whole block (§11), so a desk program's repair (harvest, replay, extraction, mint, analysis) that lands in a
+desk checkout changes no collection code even when the file it changes is also imported inside a window from the
+measurement checkout; §11 item 4 names what the harvest lane may change. GAMMA's contrasts are judged against floors
+from ALPHA and BETA, so all three windows must share one
 acceptance, one macOS build and the same collection code: no collection-code file that a completed window executed
 may differ, byte for byte, in the commit a later window runs.
 
@@ -3862,9 +3873,16 @@ beside every reported cell and contrast, the number of attempts of its pack and 
    counts by code and family, kept-unit counts, paths, hashes, hazard measurements, and timing that is not a phase
    duration (member cycles and cooldown waits are releasable). **Restricted:** energies, powers, phase durations,
    floor values, reported means, dominance ratios, calibration numeric diagnostics, any pass/fail derived from a
-   science energy, and every flag whose `blinding` is RESTRICTED. A member removed by a RESTRICTED code is released as
-   "removed (restricted code)", without the code. The driver's courier for `HAZARD_PACK` sends structure only: no
-   chain or campaign logs, no runs-root files. `FILL[B5-BLIND-CUSTODY-MAP]` lists the restricted paths.
+   science energy, and every flag whose `blinding` is RESTRICTED. The harvest writes every flag with its code, the
+   RESTRICTED ones included, into `derived/flags.jsonl`, names each excluded member's codes in
+   `derived/exclusions.json` and counts flags by code in `derived/window_flags.json`; those three files are restricted
+   until the release event and are listed in the custody map, and their only in-block reader is the scheduler's read
+   of `claim_usable`. Everything released before the release event (courier records, emails, summaries) shows a member
+   removed by a RESTRICTED code as "removed (restricted code)", without the code, and omits the per-code count of any
+   RESTRICTED code; that redaction is a step of the release, done by lane L9's disclosure producer (analysis plan §8.1),
+   not by the harvest. The driver's courier for `HAZARD_PACK` sends structure only: no
+   chain or campaign logs, no runs-root files. `FILL[B5-BLIND-CUSTODY-MAP]` lists the restricted paths, these three
+   files among them.
 3. **Unblinding.** After the block closes and the blind dry run of analysis plan §3.2 has completed, the lead records
    a **release event** tying the sealed SHA-256s of this file, the analysis plan and the catalog to the final harvest
    records (`FILL[B5-RELEASE-EVENT]`); the analysis then runs exactly as registered. Analyses not registered are
@@ -4040,7 +4058,7 @@ fix round.
 3. The NEG-8 bound may be derived from 10 or 11 corpus members (§5.3).
 4. Analysis: D-179 ruling 1 ("no member is excluded after collection"; no reduced mean) and D-078's no-reduced-mean
    text are amended by §6.6 and analysis plan §2.2 and §4, as Ed's 2026-10-05 ruling requires; GAMMA's prospective
-   manifest's fixed n = 10 quads becomes "at least 8 kept quads" (analysis plan §7).
+   manifest's fixed n = 10 quads becomes "at least 5 kept quads" (analysis plan §7).
 5. The chain passes `--arm-countdown-s 0` on every collection stage, in place of the literal 20 that each of a
    pack's ten collection stages carries (§5.1).
 6. The chain adds two arguments to both calibration capture stages (the pre and the post slot), which carry neither
@@ -4354,10 +4372,12 @@ battery evidence map (§9.2).
   adoption ruling.
 - **Q5. Attribution floor (lead, before seal).** Bind the ~1 J value and artifact, and rule whether D-078's derivation
   applies on 25G83.
-- **Q6. The sensitivity line (seal gate).** Analysis plan §8.1 proposes a labelled line over all members removed
-  only by physics-in-span codes, to expose the bias that such exclusions can introduce (thermal pressure and
-  contention plausibly correlate with load, most of all on 8B prefill-p2048 members). Adopt or strike. Battery assist
-  no longer belongs here: it is disclosed, and its own two-way line is registered (§9.2, analysis plan §8.1).
+- **Q6. The sensitivity line. Closed at the seal gate (stage 1, 2026-10-07): adopted as amended.** Analysis plan
+  §8.1 prints a labelled line over the units removed only by the three load-correlated codes
+  (`thermal.os_level_nonzero`, `thermal.powermetrics_pressure_elevated`, `contention.request_overlap`), to expose the
+  bias such exclusions can introduce; the other eight PHYSICS_IN_SPAN codes describe an energy that is wrong or
+  unmeasured and are never ignored. Battery assist does not belong here: it is disclosed, and its own two-way line is
+  registered (§9.2, analysis plan §8.1).
 - **Q7. Ed's hardware setting (optional).** A fixed 80% charge limit with Optimized Battery Charging off avoids arms
   refused because the OS chose to charge.
 - **Q8. The watchdog held each window open until its deadline. Closed in revision 5.** The watchdog now releases a
@@ -4397,7 +4417,10 @@ battery evidence map (§9.2).
   consult (§9.1) chose to seal on this code and fix them in one lane, with one design round by Sol and Fable before
   code. Analysis plan §11 lists what the lane must do.
   Until it lands, no block-5 floor and no contrast resting on a recorded survivor re-screen is claimable (§0.12).
-  Nothing here changes collection; a change to the writer would be collection code and is not planned.
+  Nothing here changes collection: the lane lands in the desk checkout only (§7.5, §11 items 1 (ii) and 4), the
+  measurement checkout stays at H_claim, and the verdict writer's bytes in `scripts/run_campaign.py` do not change.
+  The seal gate (stage 1) added to the same lane the harvest-side reference losses of §0.12 (`energy_unreadable`,
+  the unmeasured and measured physics codes) and the narrowed malformed-flag candidate list of §6.2.
 - **Q14. What the census's rule for JavaScript runtimes can miss. Set by orchestrator ruling of 2026-10-07; the seal
   gate confirms or asks for the tightening below.** §4.5 lists four ways the merged rule can read a live agent as
   none. Three are older than the rule (a name inside a longer piece, an interpreter that is not a JavaScript runtime,
