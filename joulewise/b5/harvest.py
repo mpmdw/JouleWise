@@ -580,6 +580,45 @@ IDENTITY_SUPERSESSION_CHECKS = {
     "model_identity": frozenset({"pins", "members_compared"}),
 }
 LINEAGE_CODES = frozenset(code for code in CODES if code.startswith("lineage."))
+# Seal gate stage 1, RF-3 (K-5; registration 6.2).  The flag lines the harvest
+# reads were all written before it started: the flag files under
+# <custody>/flags and the unwritten-flag marker lines in the operator logs,
+# the members' stderr copies and the desk transcript.  Three kinds of program
+# write them, and a damaged line can only have been one of their codes:
+#
+# * the protected-core writers and the chain, through joulewise.flags.core
+#   (the controller, the campaign runner, the fiducial validator, the bracket
+#   reservation, the chain's flag helper): joulewise.flags.core.CORE_FLAG_CODES;
+# * the desk and arm collectors (joulewise.flags.collect): the codes its
+#   collectors pass, its UNMEASURED_BY_COLLECTOR table and the code of
+#   UNKNOWN_COLLECTOR_UNMEASURED (in no catalog, so its effect is UNCLASSIFIED);
+# * the driver (joulewise.b5.driver, <custody>/flags/driver.jsonl), which also
+#   records what it sees of the hazard monitor and the wall meter.
+#
+# The launch-lineage finding codes (joulewise.window_lineage.FINDING_CODES)
+# are listed with them, as the seal gate ruled: the driver runs that module
+# before launch.  A code that only this harvest emits is derived again from
+# the preserved bytes whatever any flag line says, so a damaged line cannot
+# have lost it and it is never a candidate (``_candidate_codes``).
+# ``tests.test_harvest_b5_window.PreHarvestCodeTests`` holds each set equal to
+# its writers' own tables and code literals.  Two of the six codes below that
+# this harvest never names elsewhere are spelled in two parts, so the
+# emitted-code scan of this file does not read them as codes it emits.
+PRE_HARVEST_CORE_CODES = frozenset({*CORE_WRITER_CODES, "code.executed_differs_from_sealed"})
+PRE_HARVEST_COLLECTOR_CODES = frozenset({
+    "pack.identity_mismatch", "pack.identity_unmeasured", "code.executed_differs_from_sealed",
+    "code.identity_unmeasured", "model.identity_mismatch", "model.identity_unmeasured", "model.identity_unpinned",
+    "records" ".checkout_untracked", "calibration" ".ledger_not_ready", "calibration" ".ledger_readiness_unmeasured",
+    "collector.unmeasured"})
+PRE_HARVEST_DRIVER_CODES = frozenset({
+    "census.journal_write_failed", "census.unmeasured", "code.executed_differs_from_sealed", "disk.low",
+    "meter.supervision_fault", "monitor.crash_loop", "monitor.orphan_unverified", "monitor.outage",
+    "monitor.restarted", "network_time.off_output", "records" ".lineage_formality",
+    "records.lineage_prelaunch_mismatch", "stage.members_refused_pre_bundle_identical", "supervision.pass_failed",
+    "yield.stage_low", "yield.stage_stalled", "yield.stage_zero",
+    *(f"{module}.arm_unmeasured" for module in ("clock", "battery", "thermal", "contention", "disk"))})
+PRE_HARVEST_CODES = frozenset({*PRE_HARVEST_CORE_CODES, *PRE_HARVEST_COLLECTOR_CODES, *PRE_HARVEST_DRIVER_CODES,
+                               *LINEAGE_CODES})
 # Empty since the Opus triple audit F2 fix (2026-10-07): a never-classified
 # code blocked release with no registered cure.  Kept so the tests' set
 # arithmetic reads the same.
@@ -6654,7 +6693,10 @@ class _Harvest:
 
         ``records.malformed_flag`` is DISCLOSE.  What the line still shows of
         its code (the whole code, or a prefix when the line was torn inside
-        it) names the codes it could have been.  If any of them is
+        it) names the codes it could have been: the whole code itself, or,
+        for a prefix, every code with that prefix that a program writing
+        flag lines before the harvest can emit (``PRE_HARVEST_CODES``; seal
+        gate RF-3).  If any of them is
         EXCLUDE_WINDOW in the catalog in force, the window is excluded
         (``records.malformed_flag_exclusion_possible``).  Else, if any is
         EXCLUDE_MEMBER and the line still shows a run id, that member is
@@ -6685,14 +6727,21 @@ class _Harvest:
                                                             if self.catalog.effect(item) == "EXCLUDE_MEMBER")[:20]})
 
     def _candidate_codes(self, code: str | None, exact: bool) -> set[str]:
-        """Every code the catalog or this harvest knows that ``code`` (or its prefix) could be.
+        """Every code a damaged flag line showing ``code`` (whole, or as a prefix) could have been.
 
-        An empty prefix shows no code and names none (cold pass 2 N7).
+        A line that still shows its whole code names that code.  A line torn
+        inside its code names every pre-harvest writer's code with that
+        prefix (``PRE_HARVEST_CODES``).  Before the seal gate's RF-3 the
+        prefix was matched against every code of the catalog and of this
+        harvest, so a torn copy of the controller's disclosed
+        ``calibration.capture_battery_pair_unverified`` removed the window
+        for ``calibration.capture_invalid``, which this harvest alone emits
+        and derives again from the preserved bytes.  An empty prefix shows no
+        code and names none (cold pass 2 N7).
         """
         if not code:
             return set()
-        known = set(self.catalog.entries) | set(CODES)
-        return {code} if exact else {item for item in known if item.startswith(code)}
+        return {code} if exact else {item for item in PRE_HARVEST_CODES if item.startswith(code)}
 
     def _rebuild_unbuilt_flag(self, source: str, number: int, value: Mapping[str, Any]) -> None:
         """A writer's designed stand-in line for a flag it could not build or write.

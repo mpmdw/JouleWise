@@ -2294,6 +2294,127 @@ class EmittedCodeTests(unittest.TestCase):
                      "yield.json"}  # a file name
         self.assertEqual((literals | built) - not_codes - set(h.CODES), set())
 
+
+class PreHarvestCodeTests(unittest.TestCase):
+    """Seal gate RF-3 (K-5): ``PRE_HARVEST_CODES`` is the code tables of the programs that write flag lines.
+
+    A damaged flag line is matched against these codes only.  A writer that
+    gains a code changes its own table or its own source; each test below
+    then fails until the harvest's constant names the code, so a new
+    pre-harvest exclusion can never be missing from the candidates.
+    """
+
+    # Every program that writes a flag line before the harvest reads them.
+    CORE_WRITERS = ("joulewise/controller.py", "scripts/run_campaign.py", "scripts/validate_powermetrics_fiducial.py",
+                    "scripts/reserve_calibration_window_bracket.py")
+    CHAIN = "joulewise/b5/chain.py"
+    COLLECTORS = "joulewise/flags/collect.py"
+    DRIVER = "joulewise/b5/driver.py"
+
+    @classmethod
+    def setUpClass(cls):
+        from joulewise.flags.catalog import DRAFT_CODES
+        from joulewise.flags.collect import UNKNOWN_COLLECTOR_UNMEASURED
+        from joulewise.flags.core import CORE_FLAG_CODES
+        sealed = json.loads((ROOT / SEALED_DIR / "flag_catalog.json").read_bytes())["codes"]
+        # Every flag code any table of the repository names.
+        cls.known = set(sealed) | set(DRAFT_CODES) | set(h.CODES) | set(CORE_FLAG_CODES) \
+            | {UNKNOWN_COLLECTOR_UNMEASURED[0]}
+        cls.sealed = sealed
+
+    def literals(self, relative: str) -> set[str]:
+        """Every quoted flag code in one source file."""
+        return set(re.findall(r"""["']([a-z0-9_]+\.[a-z0-9_]+)["']""", (ROOT / relative).read_text())) & self.known
+
+    def test_the_flag_writers_are_the_ones_listed_here(self):
+        """Every file under joulewise/ and scripts/ that can write a flag line is one the tests below read.
+
+        A flag is built by ``joulewise.flags.schema.make_flag`` (or the
+        driver's ``build_flag``) and written through
+        ``joulewise.flags.core.emit`` or a ``FlagSink``.  The harvest has its
+        own ledger and writes ``derived/flags.jsonl``, which no harvest reads.
+        """
+        writers = set()
+        for directory in ("joulewise", "scripts"):
+            for path in sorted((ROOT / directory).rglob("*.py")):
+                text = path.read_text(errors="replace")
+                if re.search(r"flags_core\.emit\(|FlagSink\(|make_flag\(|build_flag\(", text):
+                    writers.add(path.relative_to(ROOT).as_posix())
+        plumbing = {"joulewise/flags/core.py", "joulewise/flags/schema.py", "joulewise/flags/sink.py",
+                    "scripts/collect_window_flags.py"}
+        self.assertEqual(writers - plumbing, {*self.CORE_WRITERS, self.CHAIN, self.COLLECTORS, self.DRIVER})
+        # The collectors' script builds no flag of its own: it hands the collectors' flags to the sink.
+        self.assertEqual(self.literals("scripts/collect_window_flags.py"), set())
+
+    def test_the_core_set_is_the_core_writers_table(self):
+        from joulewise.flags.core import CORE_FLAG_CODES
+        self.assertEqual(h.PRE_HARVEST_CORE_CODES, set(CORE_FLAG_CODES))
+        # Every code a core writer or the chain passes is in that table.
+        for relative in self.CORE_WRITERS:
+            with self.subTest(relative):
+                source = (ROOT / relative).read_text()
+                passed = set(re.findall(r"flags_core\.emit\(\s*[^,]+,\s*([^,\s)]+)", source))
+                self.assertTrue(passed)
+                # A code passed by name is one of the file's own quoted codes (the controller's two env codes).
+                self.assertEqual({item for item in passed if not item.startswith('"')} - {"code"}, set())
+                self.assertEqual({item.strip('"') for item in passed if item.startswith('"')} - set(CORE_FLAG_CODES),
+                                 set())
+                self.assertEqual(self.literals(relative) - set(CORE_FLAG_CODES), set())
+        chain = set(re.findall(r"\bflag ([a-z0-9_]+\.[a-z0-9_]+) ", (ROOT / self.CHAIN).read_text()))
+        self.assertEqual(chain, {"roster.horizon_truncated", "member.retried"})
+        self.assertEqual(chain - set(CORE_FLAG_CODES), set())
+
+    def test_the_collector_set_is_the_collectors_codes(self):
+        from joulewise.flags import collect
+        source = (ROOT / self.COLLECTORS).read_text()
+        passed = set(re.findall(r"\bcode=([^,\s)]+)", source))
+        self.assertEqual({item for item in passed if not item.startswith('"')}, {"code"})  # the tables below
+        tables = {row[0] for row in collect.UNMEASURED_BY_COLLECTOR.values()} | {collect.UNKNOWN_COLLECTOR_UNMEASURED[0]}
+        expected = {item.strip('"') for item in passed if item.startswith('"')} | tables
+        self.assertEqual(self.literals(self.COLLECTORS), expected)
+        self.assertEqual(h.PRE_HARVEST_COLLECTOR_CODES, expected)
+
+    def test_the_driver_set_is_the_drivers_codes(self):
+        from joulewise.b5 import driver
+        source = (ROOT / self.DRIVER).read_text()
+        passed = set(re.findall(r"\.flag\(\s*([^,\s]+)", source))
+        by_name = {item for item in passed if not item.startswith('"')}
+        # The three codes the driver passes by name: a yield code chosen from two literals, the arm's
+        # unmeasured code of one hazard module, and one constant.
+        self.assertEqual(by_name, {"code", "arm_unmeasured_code(module)", "LINEAGE_PRELAUNCH_MISMATCH"})
+        arm = {driver.arm_unmeasured_code(module) for module in driver.HAZARD_MODULES} & self.known
+        self.assertEqual(arm, {f"{module}.arm_unmeasured" for module in ("clock", "battery", "thermal", "contention",
+                                                                         "disk")})
+        expected = self.literals(self.DRIVER) | arm
+        self.assertTrue({item.strip('"') for item in passed if item.startswith('"')} <= expected)
+        self.assertTrue({driver.LINEAGE_PRELAUNCH_MISMATCH, driver.ORPHAN_UNVERIFIED, "yield.stage_zero",
+                         "yield.stage_low"} <= expected)
+        self.assertEqual(h.PRE_HARVEST_DRIVER_CODES, expected)
+
+    def test_the_whole_set_is_the_union_and_holds_every_pre_harvest_exclusion(self):
+        from joulewise import window_lineage
+        self.assertEqual(h.PRE_HARVEST_CODES, h.PRE_HARVEST_CORE_CODES | h.PRE_HARVEST_COLLECTOR_CODES
+                         | h.PRE_HARVEST_DRIVER_CODES | set(window_lineage.FINDING_CODES))
+        # Every code in it is classified by the sealed catalog, but the collectors' deliberate unknown.
+        self.assertEqual(h.PRE_HARVEST_CODES - set(self.sealed), {"collector.unmeasured"})
+        excluding = {code for code in h.PRE_HARVEST_CODES
+                     if self.sealed.get(code, {}).get("effect") == "EXCLUDE_WINDOW"}
+        self.assertEqual(excluding, {
+            "code.executed_differs_from_sealed", "code.identity_unmeasured", "lineage.plan_tree_digest_differs",
+            "model.identity_mismatch", "model.identity_unmeasured", "model.identity_unpinned",
+            "pack.identity_mismatch", "pack.identity_unmeasured"})
+        # The registration's worked examples (section 6.2), from the sealed catalog.
+        def candidates(prefix):
+            return {code: self.sealed[code]["effect"] for code in h.PRE_HARVEST_CODES if code.startswith(prefix)}
+        self.assertEqual(candidates("calibration.capt"), {"calibration.capture_battery_pair_unverified": "DISCLOSE"})
+        self.assertEqual(candidates("model.identity_m"), {"model.identity_mismatch": "EXCLUDE_WINDOW"})
+        self.assertEqual(candidates("member.tok"), {})
+        # The seven catalog codes behind the first prefix, four of them window-removing: all harvest-only.
+        seven = {code: entry["effect"] for code, entry in self.sealed.items() if code.startswith("calibration.capt")}
+        self.assertEqual((len(seven), sorted(code for code, effect in seven.items() if effect == "EXCLUDE_WINDOW")),
+                         (7, ["calibration.capture_battery_pair_failed", "calibration.capture_battery_span",
+                              "calibration.capture_battery_unmeasured", "calibration.capture_invalid"]))
+
     def test_every_lineage_finding_code_is_listed_with_l3s_family(self):
         from joulewise import window_lineage
         self.assertEqual(set(window_lineage.FINDING_CODES), set(h.LINEAGE_CODES))
@@ -4110,12 +4231,22 @@ class UnwrittenCoreFlagTests(WindowTestCase):
     def test_a_torn_flag_line_is_disclosed_or_excluded_by_what_it_still_shows(self):
         """Opus audit F2 (c): a torn line never blocks release; a recoverable exclusion code still excludes."""
         run_id = MEMBERS[1][0]
-        full_window = self.unwritten_line("calibration.capture_invalid", level="window", observed={"slot": "post"})
+        full_window = self.unwritten_line("calibration.capture_battery_pair_unverified", level="window",
+                                          observed={"pair": "not_passed"})
+        full_identity = self.unwritten_line("model.identity_mismatch", level="window", observed={"unit": "alpha"})
         full_member = self.unwritten_line("battery.member_span", level="member", run_id=run_id,
                                           observed={"smc_ma_max": 412})
         cases = {
-            # torn inside the code: the prefix "calibration.capt" could be calibration.capture_invalid
-            "window_prefix": (full_window[:full_window.index('"calibration.capt') + len('"calibration.capt')],
+            # Seal gate RF-3 (K-5).  Torn inside the code "calibration.capt": the only pre-harvest writer's
+            # code with that prefix is the controller's disclosed calibration.capture_battery_pair_unverified
+            # (the line it was torn from), so the line is disclosed and removes nothing.  Before K-5 the
+            # prefix also named calibration.capture_invalid, which this harvest alone emits, and the window
+            # was removed (records.malformed_flag_exclusion_possible).
+            "window_prefix_harvest_only": (
+                full_window[:full_window.index('"calibration.capt') + len('"calibration.capt')], None, None, None),
+            # Torn inside "model.identity_m": the arm collector's model.identity_mismatch (EXCLUDE_WINDOW)
+            # could have been lost with the line, so the window is still removed.
+            "window_prefix": (full_identity[:full_identity.index('"model.identity_m') + len('"model.identity_m')],
                               "records.malformed_flag_exclusion_possible", "window", None),
             # torn after the run id: battery.member_span is EXCLUDE_MEMBER and names its member
             "member_whole": (full_member[:full_member.index(run_id, full_member.index('"run_id"')) + len(run_id) + 1],
@@ -4128,6 +4259,7 @@ class UnwrittenCoreFlagTests(WindowTestCase):
             # a member code but torn before the run id: disclosed only
             "member_unplaced": (full_member[:full_member.index('"battery.member_span"') + 22], None, None, None),
         }
+        run = h._Harvest.__new__(h._Harvest)  # for the candidate list alone: it reads no state
         for label, (torn, extra, level, scoped) in cases.items():
             with self.subTest(label):
                 window = Window(self.tmp / f"torn-{label}", catalog_overrides=self.ISOLATE)
@@ -4142,15 +4274,84 @@ class UnwrittenCoreFlagTests(WindowTestCase):
                 if extra is None:
                     self.assertFalse({"records.malformed_flag_exclusion_possible",
                                       "records.malformed_flag_member_exclusion_possible"} & set(window.codes()))
+                    if label == "window_prefix_harvest_only":
+                        (malformed,) = [flag for flag in window.flags() if flag["code"] == "records.malformed_flag"]
+                        self.assertEqual(malformed["observed"]["salvaged_code_prefix"], "calibration.capt")
+                        self.assertNotIn("records.malformed_flag_exclusion_possible", exclusions["reasons"])
+                        self.assertEqual(run._candidate_codes("calibration.capt", False),
+                                         {"calibration.capture_battery_pair_unverified"})
                     continue
                 (flag,) = [flag for flag in window.flags() if flag["code"] == extra]
                 self.assertEqual((level, scoped), (flag["scope"]["level"], flag["scope"]["run_id"]))
                 if level == "window":
                     self.assertIn(extra, exclusions["reasons"])
-                    self.assertIn("calibration.capture_invalid", flag["observed"]["excluding"])
+                    self.assertEqual((flag["observed"]["salvaged_code_prefix"], flag["observed"]["candidate_codes"],
+                                      flag["observed"]["excluding"]),
+                                     ("model.identity_m", ["model.identity_mismatch"], ["model.identity_mismatch"]))
                 else:
                     excluded = {row["run_id"]: row["codes"] for row in exclusions["members_excluded"]}
                     self.assertIn(extra, excluded[run_id])
+
+    def test_a_flag_file_line_torn_inside_calibration_capt_is_disclosed_and_removes_nothing(self):
+        """Seal gate RF-3 (K-5), the registration's worked example (6.2), under the sealed catalog's effects.
+
+        The controller's flag file holds its DISCLOSE flag
+        ``calibration.capture_battery_pair_unverified``.  Whole, it is
+        absorbed.  Cut after ``"code":"calibration.capt`` it is disclosed
+        (``records.malformed_flag``) and the window's exclusion reasons are
+        those of the same window without the line.  Before K-5 the cut line
+        added ``records.malformed_flag_exclusion_possible`` (EXCLUDE_WINDOW)
+        with seven candidates, four of them codes this harvest alone emits.
+        The counterfactual: the arm collector's ``model.identity_mismatch``
+        cut after ``"code":"model.identity_m`` still removes the window.
+        """
+        from joulewise.flags.schema import canonical_json_bytes
+        sealed = json.loads((ROOT / SEALED_DIR / "flag_catalog.json").read_bytes())
+        self.assertEqual(sealed["codes"]["calibration.capture_battery_pair_unverified"]["effect"], "DISCLOSE")
+        self.assertEqual(sealed["codes"]["model.identity_mismatch"]["effect"], "EXCLUDE_WINDOW")
+
+        def harvested(name, file=None, payload=None):
+            window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+            catalog = copy.deepcopy(sealed)  # the sealed effects, with the fixture's two documented deviations
+            catalog["rules"]["cell_unit_minimum"] = 1
+            catalog["codes"]["member.cooldown_evidence_unverified"]["effect"] = "DISCLOSE"
+            put(window.measurement / SEALED_DIR / "flag_catalog.json", catalog)
+            if file is not None:
+                (window.custody / "flags").mkdir(parents=True, exist_ok=True)
+                (window.custody / "flags" / file).write_bytes(payload)
+            window.harvest()
+            return window
+
+        def cut(line, prefix):
+            return line[:line.index(b'"code":"') + len(b'"code":"') + len(prefix)]
+
+        controller = canonical_json_bytes(l4_flag_line(
+            "calibration.capture_battery_pair_unverified", family="CALIBRATION", klass="PHYSICS", level="member",
+            run_id=MEMBERS[0][0], stage="window", collector="core.controller", observed={"pair": "not_passed"})) + b"\n"
+        collector = canonical_json_bytes(l4_flag_line(
+            "model.identity_mismatch", family="MODEL_IDENTITY", klass="NUMBER", level="window", stage="arm",
+            collector="joulewise.flags.collect.model_identity", observed={"unit": "alpha"})) + b"\n"
+        baseline = harvested("baseline").exclusions()["reasons"]
+        whole = harvested("whole", "core-controller.jsonl", controller)
+        self.assertEqual(whole.exclusions()["reasons"], baseline)
+        self.assertNotIn("records.malformed_flag", whole.codes())
+        self.assertIn("calibration.capture_battery_pair_unverified", whole.codes())
+
+        torn = harvested("torn", "core-controller.jsonl", cut(controller, "calibration.capt"))
+        (malformed,) = [flag for flag in torn.flags() if flag["code"] == "records.malformed_flag"]
+        self.assertEqual((malformed["observed"]["file"], malformed["observed"]["salvaged_code_prefix"]),
+                         ("core-controller.jsonl", "calibration.capt"))
+        self.assertEqual(torn.exclusions()["reasons"], baseline)
+        self.assertFalse({"records.malformed_flag_exclusion_possible",
+                          "records.malformed_flag_member_exclusion_possible"} & torn.codes())
+        self.assertFalse(torn.exclusions()["release_blocked"])
+
+        identity = harvested("identity", "arm.jsonl", cut(collector, "model.identity_m"))
+        (flag,) = [flag for flag in identity.flags() if flag["code"] == "records.malformed_flag_exclusion_possible"]
+        self.assertEqual((flag["observed"]["candidate_codes"], flag["observed"]["excluding"]),
+                         (["model.identity_mismatch"], ["model.identity_mismatch"]))
+        self.assertEqual(sorted(set(identity.exclusions()["reasons"]) - set(baseline)),
+                         ["records.malformed_flag_exclusion_possible"])
 
     def test_an_unreadable_log_or_log_directory_is_disclosed(self):
         """Review gap: a log that may hold a marker line but cannot be read is never silently skipped.
