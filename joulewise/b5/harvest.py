@@ -6080,12 +6080,17 @@ class _Harvest:
         ``--no-renames`` lists both the old and the new path of a moved file,
         so a window input moved out of its directory is still listed.  ``-z``
         separates paths with NUL and never quotes one, so a path is classed
-        by its real first characters.
+        by its real first characters.  A path whose bytes are not UTF-8 is
+        decoded with the replacement character in place of each bad byte
+        (seal-landing review F6, H-11): it is still listed and classed by its
+        directory, as the arm collector does; decoded strictly it raised and
+        the whole harvest faulted over a path's spelling.
         """
         try:
             result = self.seams.runner(["git", "-C", str(self.inputs.measurement_root), "diff", "--name-only",
                                         "--no-renames", "-z", f"{base}..{head}"],
-                                       capture_output=True, text=True, check=False, timeout=60)
+                                       capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                       check=False, timeout=60)
         except (OSError, subprocess.SubprocessError):
             return None
         if result.returncode != 0:

@@ -3601,6 +3601,46 @@ class IdentityReplayTests(WindowTestCase):
         self.assertNotIn("records.identity_unmeasured_superseded", window.codes())
         self.assertEqual(len([flag for flag in window.flags() if flag["code"] == "code.identity_unmeasured"]), 2)
 
+    def test_a_changed_path_that_is_not_utf8_is_listed_and_classed_not_a_fault(self):
+        """Seal-landing review F6 (H-11): ``git diff -z`` prints a path's raw bytes.
+
+        The seam here runs a real child process that prints what git prints
+        for two changed paths whose names hold the byte 0xFF, and passes the
+        harvest's own decoding arguments to ``subprocess.run``.  Before H-11
+        the output was decoded strictly, ``subprocess.run`` raised
+        ``UnicodeDecodeError`` and the harvest ended HARVEST_FAULT.  Now each
+        bad byte reads as U+FFFD and each path is classed by its directory:
+        the one under docs/ is recorded, the one under joulewise/ is a
+        difference.
+        """
+        printed = b"docs/review-\xff.md\0joulewise/b5t-\xff.py\0"
+
+        def seams(raw):
+            def runner(argv, *args, **kwargs):
+                if list(argv[:1]) == ["git"] and "diff" in argv:
+                    return subprocess.run([sys.executable, "-B", "-c",
+                                           f"import sys; sys.stdout.buffer.write({raw!r})"], *args, **kwargs)
+                return subprocess.run(argv, *args, **kwargs)
+            return h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
+                           boot_session_uuid=lambda: "B5-TEST-BOOT", runner=runner)
+
+        window = self.window(executed_overrides={"head": self.EXECUTED_HEAD})
+        record = window.harvest(seams=seams(printed))
+        self.assertEqual((record["verdict"], record["faults"]), ("COLLECTED", []))
+        identity = self.code_identity_record(window)
+        self.assertEqual((identity["comparison"], identity["changed_paths"]["record_only"],
+                          identity["changed_paths"]["window_input"]),
+                         ("compared", ["docs/review-\ufffd.md"], ["joulewise/b5t-\ufffd.py"]))
+        flag = next(flag for flag in window.flags() if flag["code"] == "code.executed_differs_from_sealed")
+        self.assertEqual(flag["observed"]["differences"][0]["changed_paths"], ["joulewise/b5t-\ufffd.py"])
+        # The document alone: listed, no flag.
+        documents = Window(self.tmp / "documents", catalog_overrides=self.ISOLATE,
+                           executed_overrides={"head": self.EXECUTED_HEAD})
+        record = documents.harvest(seams=seams(b"docs/review-\xff.md\0"))
+        self.assertEqual((record["verdict"], record["faults"]), ("COLLECTED", []))
+        self.assertNotIn("code.executed_differs_from_sealed", documents.codes())
+        self.assertNotIn("code.identity_unmeasured", documents.codes())
+
     def test_a_head_comparison_git_cannot_make_stays_unmeasured(self):
         window = self.window(executed_overrides={"head": self.EXECUTED_HEAD})
         window.harvest(seams=self.diff_seams([], returncode=128))
