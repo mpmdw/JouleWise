@@ -29,6 +29,22 @@ awk '/^<!-- BEGIN-BYTES RULING_STAGE2A.md /{f=1;next} /^<!-- END-BYTES RULING_ST
 
 (and the same with `RULING_STAGE2B.md` in both patterns for part B).
 
+## Executed evidence
+
+This section is the assembling script's, not a judge's: it is the check above, run on this file when it was
+written, with what each command printed and its return code. Each digest equals the one in the part's opening
+marker line, which was computed from the source file. The judges' own executed evidence is inside their rulings:
+part A marks each check EXECUTED or READ, and part B's sections 2 to 7 are executed checks.
+
+```text
+$ awk '/^<!-- BEGIN-BYTES RULING_STAGE2A.md /{f=1;next} /^<!-- END-BYTES RULING_STAGE2A.md -->$/{f=0} f' RULING_STAGE2.md | shasum -a 256
+0f2303a3cc5c836e1d157a72f7bf055b3fd0c35d1c1608a5dd114725ba34d4f9  -
+rc=0
+$ awk '/^<!-- BEGIN-BYTES RULING_STAGE2B.md /{f=1;next} /^<!-- END-BYTES RULING_STAGE2B.md -->$/{f=0} f' RULING_STAGE2.md | shasum -a 256
+b7250e8bf5b3819e2577ec91e171a0b56f8d92b3888022856981a610d9cde33b  -
+rc=0
+```
+
 ## Part A. The final text (judge: Fable 5.1; ruling closed 2026-10-08 00:05 PDT)
 
 <!-- BEGIN-BYTES RULING_STAGE2A.md sha256=0f2303a3cc5c836e1d157a72f7bf055b3fd0c35d1c1608a5dd114725ba34d4f9 bytes=51988 -->
