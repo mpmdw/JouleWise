@@ -26,14 +26,14 @@ commit `bfd1ee8c`, §14 of this file there.
 - **Kept unit.** A unit (a repeat or a quad, registration §0.8) none of whose members the exclusion function removed.
   n_r and n_b are the numbers of kept repeats and kept quads of a cell.
 - **Analysed attempt.** For each pack, its first claim-usable attempt in arm order (registration §7.2).
-- **Prospective manifest.** GAMMA's `analysis_manifest_v3.json`: the contrasts, their estimator, multiplicity family
+- **Prospective manifest.** GAMMA's `analysis_manifest_v3.json`: the contrasts, their estimator, **multiplicity family** (the set of contrasts whose p-values are corrected together, here both contrasts under the Holm correction of §7.1)
   and floor rules, frozen before any collection. Its **frozen-semantics hash** is the SHA-256 of its
   analysis-relevant fields, so any later change to them is detectable.
 - **Finalization.** The step that ties the identities of the collected bundles, the whole-window verdict, the bracket
   binding, the ledger, the aggregate floor, the dominance replay sidecar and the analysed attempt's exclusions to the
   prospective manifest without reading any effect estimate; its output is the **finalized manifest**.
 - **Claim gate.** The program (`python -m joulewise analyze-claims`) that, from the finalized manifest, computes each
-  contrast and decides its outcome and claim ceiling.
+  contrast and decides its outcome and its **claim ceiling**: the highest level of the claims ladder (registration §0.19) that a sentence about the contrast may reach, here L2 or only L1 (§7.2).
 - **Sidecar.** A separately hash-tied file emitted beside the mint: here the dominance replay inputs.
 - **Pinset.** The list of content hashes the mint may consume. **v2 input manifest.** The mint's list of which
   extraction-report cells feed which floor role (decode, prefill).
@@ -53,11 +53,11 @@ commit `bfd1ee8c`, §14 of this file there.
 1. The analysis runs once, after the measurement block closes (every pack has an analysed attempt, or END STATE,
    registration §7), after the blind dry run has completed (§3.2), and after the release event (registration §8), at a
    commit whose analysis programs are pinned by an addendum to the seal record (§11).
-2. It reads exactly one attempt per pack: the pack's **first claim-usable attempt** in arm order, as computed by the
-   sealed exclusion function (`joulewise.flags.exclusions.first_claim_usable`). An attempt that is claim-usable but
+2. It reads exactly one attempt per pack: the pack's **first claim-usable attempt** in arm order, by the rule that
+   `joulewise.flags.exclusions.first_claim_usable`, a function of the sealed exclusion module, states in code (at `9b0c680ed` only tests call that function; the analysis code of §11 must apply it). An attempt that is claim-usable but
    carries an UNCLASSIFIED code is undecided until that code is classified blind (registration §7.2); the analysis
-   does not start while any analysed attempt is undecided. A pack is never armed again after a claim-usable attempt,
-   so there is exactly one analysed attempt per pack.
+   does not start while any analysed attempt is undecided. A pack is never armed again after a claim-usable attempt
+   (a scheduling rule of registration §7.2 that no program enforces: the lead session that arms the next window, the magistrate of registration §5.7, applies it from the harvest verdicts), so there is exactly one analysed attempt per pack.
 3. It reads evidence only through authenticated routes (for paper suppliers, D-173's
    `open_paper_input(role, runs_root)`); no caller-supplied path, digest or value enters a number.
 4. Everything it emits is retained in analysis custody `FILL[B5-ANALYSIS-CUSTODY-ROOT]` and handed to the results
@@ -108,10 +108,10 @@ windows, they are not analysed. The END STATE design record cannot choose otherw
 and the **spread**: the largest minus the smallest of the start-triplet mean, the midpoint reference's energy and the
 end-triplet mean. Each member carries half of it as `E_whole_window_drift_allowance_j`, which enters a reported cell's
 recorded timing bounds B (§4 step 4) and a contrast's deterministic bound total D (§7.1 step 5). The midpoint is the
-only reference inside the window. If it is lost (registration §0.12: failed and not restored by its spare, or
+only NEG-8 reference inside the window, the only one between the start and end triplets that the spread reads (GAMMA also runs two diagnostic interior references, one in the middle of its decode stages and one in the middle of its prefill stages; their role is not a NEG-8 role and the spread does not read them, registration §0.12). If the midpoint is lost (registration §0.12: failed and not restored by its spare, or
 contaminated), the spread falls back to |end mean − start mean|, so an excursion that rises in the middle of the
 window and reverts by its end is no longer measured, and the allowance can only shrink. The midpoint sits at the
-boundary between the decode and prefill arms, after fifty decode members (forty in GAMMA), the one place where such
+boundary between the decode and prefill arms (the window's decode stages and its prefill stages), after fifty decode members (forty in GAMMA), the one place where such
 an excursion is physically expected, and no block has yet measured how large these excursions are.
 
 *Rule* (NEG-8 cold ruling of 2026-10-07, decision 2, made operational by orchestrator ruling Q11 of 2026-10-07,
@@ -151,7 +151,7 @@ spread beyond the bound, a cold erratum may downgrade the flag to disclose-only 
 
 ### 3.1 The steps
 
-Each step runs on the bytes of the step before it; each output is content-addressed (SHA-256) and the next step
+The steps run in the order of their numbers, with one exception: step 6, the close-out, runs after step 8, finalization, because its program takes the finalized manifest as an input and rejects a manifest that is not finalized or that lacks the replay-sidecar attachment finalization writes. Each step runs on bytes that earlier steps wrote; each output is content-addressed (SHA-256) and the step that reads it
 authenticates it. Every step reads the kept units from §2.2 and nothing else. Full command lines are those of
 `docs/process/v5-artifact-flow.md` at the pinned commit (rows "Floor extraction", "Mint", "Finalization", "Claim gate"
 and "Results fills").
@@ -163,7 +163,7 @@ and "Results fills").
 | 3 | Read the exclusions of each analysed attempt and fix each cell's kept units | lane L9 consumer of `exclusions.json` | kept-unit list per cell, hash-tied |
 | 4 | Floor extraction, ALPHA and BETA separately, each with its pack's `extraction_spec.json`, over kept units, given the window's harvest archive so that the drift allowance is the one the harvest's NEG-8 screen left standing (registration §0.12) | `scripts/extract_detection_floors.py … --hash-bundles`, with the archive argument that lane L9-NEG8 adds (§11) | `joulewise.detection_floor_extraction.v1` ×2 |
 | 5 | Production mint of the aggregate floor and its dominance replay sidecar; the v2 input manifest feeds only the decode and prefill-p2048 cells | `scripts/mint_floor_artifact_generalized.py` with `FILL[V5-FINAL-PINSET]` and `FILL[V5-V2-INPUT-MANIFEST]` | `joulewise.detection_floor_artifact.v2`; `joulewise.d165_dominance_replay.v1` |
-| 6 | Dominance close-out | adapter `FILL[MINT-TO-CLOSEOUT-ADAPTER]`, then `scripts/build_d165_dominance_closeout.py` | `joulewise.d165_dominance_closeout.v1` |
+| 6 | Dominance close-out; it runs after step 8, whose finalized manifest it reads (`--finalized-manifest`) together with the aggregate floor and the replay sidecar of step 5 | adapter `FILL[MINT-TO-CLOSEOUT-ADAPTER]`, then `scripts/build_d165_dominance_closeout.py` | `joulewise.d165_dominance_closeout.v1` |
 | 7 | (removed: revision 2's L10-C rehearsal; the blind dry run of §3.2 runs these steps on the real bytes) | | |
 | 8 | Finalization of GAMMA's prospective manifest with its attachments (whole-window verdict, bracket binding, ledger, aggregate floor, dominance replay sidecar, GAMMA's exclusions) | `scripts/finalize_analysis_manifest.py` | finalized manifest |
 | 9 | Claim gate, one `--evidence-root` per floor pack, given the harvest archive of each window whose drift allowance it reads (GAMMA's for the contrasts' D; lane L9-NEG8 makes every claim consumer take it, §11) | `python -m joulewise analyze-claims … --neg8-harvest-archive <archive>` | `joulewise.claim_verdicts.v1` |
@@ -203,17 +203,17 @@ The issuer, pinset, input manifest, adapters, the exclusions consumer and the di
 **What it is.** For each model and each of decode, prefill-p42 and prefill-p2048, one gross phase energy averaged
 over the cell's kept units, with an interval that respects the units. Normative home:
 `docs/contracts/paper_reported_energy.md`. **Registration digests** (`REPORTED-ENERGY-REGISTRATION-DIGESTS`, filled
-from committed bytes at `f8164893`, re-tied at seal): each floor pack's `extraction_spec.json` names the reported-energy
+from committed bytes at `f8164893`, re-tied at seal, that is, recomputed from the bytes at the final head of the code (registration §2 item 1) and written here again; `FILL[B5-FINAL-HASHES]` is the registration's mark on a digest that still waits for that): each floor pack's `extraction_spec.json` names the reported-energy
 registration it implements in `reported_energy_registration.registration_sha256`:
 
 - ALPHA: `5560857668f053c99d0369161d4735015f4678a160b7a8423c7a7f357a50f5ea`, in
   `configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json` (file SHA-256
-  `8b7969851c576032a89ebd00c5d3a4396e1eba264d4d1e6a4603420fecd15c5c`);
+  `8b7969851c576032a89ebd00c5d3a4396e1eba264d4d1e6a4603420fecd15c5c`, `FILL[B5-FINAL-HASHES]`: this is the file's digest at `f8164893`; commit `f4cf90472` regenerated the file, so the value is stale until the final pass recomputes it);
 - BETA: `04657a74de839a48ebf6bf55fe66f299fdd2e6401353c76d87d4d6ae843dae79`, in
   `configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json` (file SHA-256
-  `53e71b38ab9c9851744ee84e792263e081c78156f941e9ab782f924a132809c7`).
+  `53e71b38ab9c9851744ee84e792263e081c78156f941e9ab782f924a132809c7`, `FILL[B5-FINAL-HASHES]`: the file's digest at `f8164893`, stale for the same reason).
 
-Both specs are `procedure_only` and carry no post-collection numeric value.
+Both specs are `procedure_only` and carry no post-collection numeric value. At `9b0c680ed` each spec still names the registration digest written above; only the two file digests have moved.
 
 **Members.** Ordinals 1–10 are the absolute repeats; 11–50 are the ten null quads in A1, B1, B2, A2 order. Decode and
 prefill-p42 read the decode stages' 50 bundles; prefill-p2048 reads the p2048 stages' 50.
@@ -234,8 +234,8 @@ prefill-p42 read the decode stages' 50 bundles; prefill-p2048 reads the p2048 st
    (the largest change in the member's phase energy when the whole power trace shifts by any common amount within ±
    its effective clock bound), `E_interpolation_joint_edge_bound_j` (identically 0 for interval-support traces, as all
    48 block-3 phase windows recorded), and `E_whole_window_drift_allowance_j` (half the window's gross-family NEG-8
-   allowance, registration §0.12). The allowance is the one the harvest's `derived/neg8-allowance.json` names: the
-   verdict row's own bracket when the harvest found no new loss (`stored_verdict`), or, when the harvest re-ran the
+   allowance, registration §0.12; the NEG-8 check is run on two families of reference energies, the gross energies and the idle-subtracted energies, each with its own allowance, and this is the gross one). The allowance is the one the harvest's `derived/neg8-allowance.json` names: the
+   verdict row's own **NEG-8 bracket** (a second meaning of the word: not the pre and post calibration pair of registration §0.11, but the NEG-8 screen's record inside the whole-window verdict, `idle_admission_core.neg8_bracket`, which holds the screen's result and each family's allowance) when the harvest found no new loss (`stored_verdict`), or, when the harvest re-ran the
    screen on the surviving references and it passed, the bracket in `withheld/neg8-rescreen-bracket.json`
    (`survivor_rescreen`), never the verdict row's, which may still include a reference the harvest found
    contaminated (cold pass 2 N4; Sol delta audit A1). It is read through
@@ -288,7 +288,7 @@ can resolve.
 
 **Binding.** Each floor pack's `extraction_spec.json` defines six floor cells per model (decode, prefill-p42 and
 prefill-p2048, each in an **absolute** form over the kept repeats and a **comparative** form over the kept null-quad
-differences), re-tied at seal. The code is `joulewise/detection_floor.py` (`absolute_false_effect_floor`,
+differences), re-tied at seal (the two file digests of §4, `FILL[B5-FINAL-HASHES]`). The code is `joulewise/detection_floor.py` (`absolute_false_effect_floor`,
 `comparative_false_effect_floor`) driven by `joulewise/floor_extraction.py`. The p42 cells are expected to be
 non-extractable (§2.2).
 
@@ -305,15 +305,15 @@ non-extractable (§2.2).
 
 **Corner widening.** Each value may lie anywhere within ± its admissible half-width w_i (its timing uncertainty in
 joules). The corner-widened floor is the largest point floor over every corner of that box (2ⁿ corners, exact
-enumeration, capped at n = 16), and at least the largest linear deviation the box admits. The operative unguarded
-floor is max(point floor, corner-widened floor). Absolute form: w_i is the member's anchor-shift energy envelope
-half-width. Comparative form (D-124, `d124_two_shared_edge_common_mode.v1`, parameter digest
+enumeration, capped at n = 16), and at least the largest linear deviation the box admits. The **operative** unguarded
+floor, operative meaning the value that every later step uses, is max(point floor, corner-widened floor). Absolute form: w_i comes from the member's **anchor-shift energy envelope**. That is the record, in the member's `summary_metrics.json` (field `energy_anchor_shift_envelopes`, written by the pinned reducer, `joulewise/reduce.py`, with one entry for each energy of the member; the entry for the cell's phase energy is the one used), of the range that phase energy can take when the power trace is moved in time against the phase's two edges within the member's three timing bounds: its effective clock bound and the change in wall minus monotonic time over its stream (both registration §0.14), and the fiducial bound of the calibration it was reduced under (registration §0.11); the reducer version the member was reduced with fixes how the three are combined. The record holds the energy with no movement (`point_j`), the smallest and largest energy over those movements (`lower_j`, `upper_j`) and the largest absolute change, the larger of point − lower and upper − point (`max_abs_delta_j`). w_i is the largest of point − lower, upper − point and `max_abs_delta_j`, plus the member's `E_interpolation_joint_edge_bound_j` (§4 step 4).
+Comparative form (D-124, `d124_two_shared_edge_common_mode.v1`, parameter digest
 `dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38`): within one quad, the phase onset and the phase
-offset are each treated as one shared edge that may move by a common amount within the bracket's operative fiducial
-bound b; the quad difference is re-evaluated as the shared onset sweeps [−b, b] and as the shared offset sweeps
+offset are each treated as one shared edge that may move by a common amount within the calibration bracket's operative fiducial
+bound b (the bracket's recorded `b_fiducial_s`, in seconds: the larger of its pre and post captures' fiducial bounds plus the bracket's drift allowance, registration §0.11; `registered_common_mode_operative_bound` refuses unless the bracket passed and b equals that sum); the quad difference is re-evaluated as the shared onset sweeps [−b, b] and as the shared offset sweeps
 [−b, b]; with z the difference at zero shift, the shared width is max(|min onset − z + min offset − z|,
 |max onset − z + max offset − z|) + |z − d_k|; the local width is half the sum of the four members' own residual
-half-widths; w_k = shared + local. The same treatment is applied once and identically on the floor cells and on the
+half-widths (a member's residual half-width is the `max_abs_delta_j` that the reducer's envelope function, `_corner_composed_anchor_shift_envelope`, returns for that member's trace and phase window when it is given the member's effective clock bound, the change in wall minus monotonic time over its stream (both in registration §0.14) and a fiducial bound of zero; the fiducial part is carried once, by the shared edges); w_k = shared + local. The same treatment is applied once and identically on the floor cells and on the
 consuming contrast.
 
 **Worked examples (synthetic, computed with the repository functions at `a0a4f5a7`).**
@@ -363,7 +363,8 @@ first and third §5 examples: absolute R = 0.5730 / 0.4745 = 1.21 (fails); compa
 
 ### 7.1 Frozen inputs and arithmetic
 
-Frozen in GAMMA's `analysis_manifest_v3.json` (re-tied at seal). Lane L10 changed GAMMA's interior references
+Frozen in GAMMA's `analysis_manifest_v3.json` (re-tied at seal: `FILL[B5-FINAL-HASHES]`, the final pass prints this
+file's SHA-256 here; this revision writes no digest of it). Lane L10 changed GAMMA's interior references
 (registration §2), not this manifest.
 
 | Contrast id | Metric | Sides (A, B) | Planned quads |
@@ -391,8 +392,9 @@ traceable. `FILL[GAMMA-MANIFEST-EXCLUSIONS-BINDING]` names how L9 binds them.
    standard error; `se_met` is the root of their sum; `se_total = √(se_rep² + se_met²)`. Disclosed conservatism: each
    member's random error is already part of s_d, so adding se_met counts it twice; the interval's coverage is above
    95%.
-4. `t* = round(t(0.975, n − 1), 3)` (the engine rounds to three places: 2.262, 2.306, 2.365); metrology interval
-   `dbar ± t* × se_total`.
+4. `t* = round(t(0.975, n − 1), 3)` (the engine rounds to three places: 2.262, 2.306, 2.365). The **metrology
+   interval** (the engine's name, `metrology_aware_ci95`, for the 95% interval of dbar from its standard error alone,
+   before the deterministic bounds of step 5 are added) is `dbar ± t* × se_total`.
 5. Deterministic bound total D: for each recorded deterministic kind, a quad's bound is the A-side mean of its two
    members' bounds plus the B-side mean of its two; D is the sum over kinds of the mean over kept quads. The
    **decision interval** is the metrology interval widened by D on both sides.
@@ -429,10 +431,32 @@ runs it only on complete contrasts; L9 makes it run on the kept quads.)
 **Randomization check.** Not run: the manifest's `deterministic_rotation` / `exchangeability: none` returns
 `not_required`. The unrandomized order is disclosed (§8).
 
-**L2 ceiling.** `claim_ready_for_l2_l3` is true, and the ceiling is `L2`, only when all hold: outcome
-`direction_supported`; `claim_role` primary; `confirmatory_status` confirmatory; the evidence class is not legacy; no
-`loo_verdict_influential`; and the direction equals the registered direction (positive). Otherwise the ceiling is L1
-wording. (A GAMMA attempt carrying `neg8.midpoint_lost` is not claim-usable and is never analysed, §2.4.) The
+**L2 ceiling.** `claim_ready_for_l2_l3` is true, and the ceiling is `L2`, only when all hold:
+
+- the outcome is `direction_supported`;
+- `claim_role` is primary or secondary (the code accepts either; both block-5 contrasts are primary, so no outcome
+  differs);
+- `confirmatory_status` is `confirmatory`. The engine sets that value unless a top-up touches any registered entry
+  of the manifest (the manifest's entries are its registered members, one bundle expected for each; for a manifest
+  of GAMMA's kind the engine does not narrow this to the contrast's own entries, so one top-up demotes both
+  contrasts). A replacement is a bundle collected in place of a registered one that failed, tagged with the entry
+  it replaces and with a reason the manifest allows. A top-up is either a bundle in the runs root beyond the
+  registered ones whose scientific configuration (its configuration with the run id and any replacement tags left
+  out) equals a registered entry's and which is not a valid replacement, or a second successful replacement of
+  one entry. On a top-up the engine sets `demoted_exploratory`, with the reason `outcome_dependent_top_up`.
+  Block 5 registers no top-up and no replacement (§10), and GAMMA's manifest allows no replacement reason
+  (`allowed_replacement_reasons` is empty);
+- the evidence class is not legacy: the gate's `evidence_class` is `current`. It is `legacy_l1` only when the claim
+  gate is run with its `--legacy-l1-mechanics` option, which step 9 of §3.1 does not use;
+- there is no `loo_verdict_influential`;
+- the direction equals the registered direction (positive).
+
+Otherwise the ceiling is L1 wording. Two further parts of the code's condition cannot arise in block 5 and are
+written here so that the condition can be rebuilt whole: the outcome `equivalent` also passes, but it needs a
+registered equivalence margin (a half-width inside which the two sides would be declared equal) and both contrasts
+register none (`equivalence: null`); and two reason codes of the randomization check block the ceiling
+(`randomization_sensitivity_disagrees`, `randomization_check_insufficient_blocks`), but that check is not run
+(above). (A GAMMA attempt carrying `neg8.midpoint_lost` is not claim-usable and is never analysed, §2.4.) The
 registration's §1 table cites this definition.
 
 **Worked example (synthetic).** d_k = 3.1, 2.9, 3.3, 3.0, 2.8, 3.2, 3.1, 2.9, 3.0, 2.7 J, with quad 4 removed: n = 9,
@@ -564,9 +588,14 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
   `harvest_physics`). The bound's two terms (envelope and repeatability) at the realised counts are energies and are
   printed with the other energies after the release event.
 - **Battery temperature across each stage** (registration §0.6; timing ruling of 2026-10-06): beside the NEG-8
-  result, for each stage, the battery-thermistor readings taken at its cooldown releases, its rise (last reading
-  minus first, in K) and whether its last three readings plateau (within 0.5 K), with every stage flagged
-  `thermal.stage_battery_rise` (rise above 3 K, no plateau) or `thermal.battery_temperature_unmeasured` named.
+  result, for each stage, its battery-thermistor readings, its rise (last reading minus first, in K) and whether
+  its last three readings plateau (within 0.5 K), with every stage flagged `thermal.stage_battery_rise` (rise above
+  3 K, no plateau) or `thermal.battery_temperature_unmeasured` named. The campaign runner
+  (`scripts/run_campaign.py`) takes one reading before every member of a stage, the first included: after the
+  member's cooldown wait is released (the first member of a stage has no wait) and before the member's sampler
+  starts. A stage of N members therefore has N readings, and a one-member stage has one. The rise and the plateau
+  are judged on the readings that could be read: the rise needs at least two of them, and a plateau needs three, so
+  a stage with two readable readings, the second more than 3 K above the first, is flagged.
   Fixed sentence for a flagged stage: "Stage S warmed by X K without levelling off; the window's NEG-8 screen
   [passed/failed], and the reported numbers rest on that screen, not on this reading." It changes no number and
   removes nothing. A stage with no reading (the logging code is at `a434e363d`; a failed read is
@@ -604,20 +633,26 @@ battery term was available. The member's and the window's `meter.*` flags are re
    linear interpolation between order statistics, as `km003c_parse.percentile`);
 3. **hard plausibility band:** a member window is plausible when 0 < ρ ≤ 1 and ΔE_machine − ΔE_rail ≥ 0 (the rails
    are part of the machine, so their extra energy can be neither negative nor larger than the machine's). Every member
-   window outside it is listed individually with its `meter.*` flags; it is reported, never removed;
+   window outside it is listed individually with the meter flags that apply to it (its own
+   `meter.battery_activity`, if it carries one, and the `meter.*` flags of its window); it is reported, never
+   removed;
 4. **within-model spread:** (max ρ − min ρ) ÷ median ρ over the model's plausible member windows, reported; a spread
    of at most 0.2 is described as "consistent". It is reported only and excludes nothing;
-5. **central band:** set from the first clean window, meaning the first analysed window of the block in which no
-   member carries any `meter.*` flag, as that window's per-model minimum-to-maximum range of ρ over its plausible
-   member windows. It is disclosed with that window's identifier before any later window is described against it.
+5. **central band:** set from the first clean window. A window is clean when it carries no window-level meter flag
+   and none of its members carries `meter.battery_activity`. Every `meter.*` code but that one is written for the
+   window as a whole (`meter.absent`, `meter.drops_excess`, `meter.duplicates`, `meter.clock_fit_residual`,
+   `meter.pdtr_gain_out_of_band`, `meter.vbus_out_of_contract`, `meter.supervision_fault`); `meter.battery_activity`
+   is the one written per member, when a B0AC read inside the member's measured request is not zero. The band is
+   the first clean analysed window's per-model minimum-to-maximum range of ρ over its plausible member windows. It
+   is disclosed with that window's identifier before any later window is described against it.
    Later windows are described against it ("k of n member windows inside the first clean window's band"), never
    filtered by it. If no window is clean, no central band is set and the line says so.
 
 *Worked example (synthetic).* A model's ten repeats give ρ = 0.78, 0.80, 0.81, 0.79, 0.82, 0.80, 0.77, 0.81, 0.80,
 0.83. Median 0.80; range 0.77–0.83; interquartile range 0.7925–0.81; all inside the hard band; spread
 (0.83 − 0.77) ÷ 0.80 = 0.075, at most 0.2, so "consistent". A member window with ΔE_machine = 600 J and
-ΔE_rail = 640 J has ρ = 1.07: outside the hard band, listed with its flags (for example `meter.clock_fit_residual`),
-and kept in every claim it feeds.
+ΔE_rail = 640 J has ρ = 1.07: outside the hard band, listed with the meter flags that apply to it (for example its
+own `meter.battery_activity`), and kept in every claim it feeds.
 
 *What it never does.* It never refuses a window, never excludes a member, never enters a claim-bearing number, never
 replaces the rail estimate, and is never pooled into a cell. Its energies are restricted until the release event,
@@ -673,11 +708,11 @@ Every printed number is `MEASURED` or `DERIVE`; none is recalculated from prose.
 | D-179 issuer implementing §4 (stratified mean, variance, df, B, per-token over kept units; n_r, n_b in the record), projecting each cell independently and preserving the whole-window allowance allocation, reading the re-screened allowance when the harvest re-screened (§4 step 4) | Absent ("No production dispatch exists", `joulewise/paper_reported_energy.py`) | `REPORTED-ENERGY-ISSUER` |
 | Floor extraction over kept units with g(n) (`joulewise/floor_extraction.py`) | The extractor assumes full n | `FLOOR-EXTRACTION-KEPT-UNITS` |
 | Claim gate over kept quads: no `fixed_n_plan_incomplete` for removed quads; leave-one-quad-out over kept quads; finalization binds the exclusions digest | Absent | `GAMMA-MANIFEST-EXCLUSIONS-BINDING` |
-| **Lane L9-NEG8: one NEG-8 survivor logic for every claim consumer** (registration §0.12, §9.1, §14 Q13). It runs after the seal and before any claim, as a gated fix to code that does not run during collection (registration §11 item 1 (ii)), pinned before the release event (§11 item 4), with one design round by Sol and Fable before code. It must: (a) use one strict-invalid predicate in the verdict writer, the replay and the harvest, moving the replay and the harvest to the writer's predicate (structural check, custody triangle, config binding) plus full strict validation, so all three drop exactly the same references, and leaving the writer's bytes unchanged (Fable cold pass 4 N-3); (b) pass the harvest archive through floor extraction (`floor_extraction.extract_cells`), the mint (`scripts/mint_floor_artifact.py`, `mint_floor_artifact_generalized.py`) and `scripts/extract_detection_floors.py`, so a block-5 floor cell gets the allowance the harvest's screen left standing (Sol re-verification R2; cold pass 4 D1); (c) make claim validation authenticate the harvest's survivor screen before the stored-failure veto, so a window whose stored screen failed and whose survivor re-screen passed gets the re-screened allowance, while the membership, provenance and physics checks stay independent (Sol R3); (d) have every claim consumer read the allowance from `derived/neg8-allowance.json` (registration §0.12), never from the stored bracket. Each with a test on a synthetic HAZARD root with and without its archive. | At the int5 head `fe28e5a0c`, and unchanged at `9b0c680ed`: the record, its consumer and `analyze-claims --neg8-harvest-archive` exist; (b), (c) and the shared predicate (a) do not. Until the lane lands, every block-5 floor cell refuses (`whole_window_drift_allowance_unrecorded`) and a contrast resting on a recorded survivor re-screen refuses (`whole_window_neg8_verdict_failed`): a HAZARD floor or contrast with a recorded re-screen has no allowance and is not claimable. Both refuse; neither prints a wrong number. | `L9-NEG8` |
+| **Lane L9-NEG8: one NEG-8 survivor logic for every claim consumer** (registration §0.12, §9.1, §14 Q13). It runs after the seal and before any claim, as a gated fix to code that does not run during collection (registration §11 item 1 (ii)), pinned before the release event (§11 item 4), with one design round by Sol and Fable before code. It must: (a) use one strict-invalid predicate in the verdict writer, the replay and the harvest, moving the replay and the harvest to the writer's predicate (structural check, custody triangle, config binding) plus full strict validation, so all three drop exactly the same references, and leaving the writer's bytes unchanged (Fable cold pass 4 N-3); (b) pass the harvest archive through floor extraction (`floor_extraction.extract_cells`), the mint (`scripts/mint_floor_artifact.py`, `mint_floor_artifact_generalized.py`) and `scripts/extract_detection_floors.py`, so a block-5 floor cell gets the allowance the harvest's screen left standing (Sol re-verification R2; cold pass 4 D1); (c) make claim validation authenticate the harvest's survivor screen before the stored-failure veto, so a window whose stored screen failed and whose survivor re-screen passed gets the re-screened allowance, while the membership, provenance and physics checks stay independent (Sol R3); (d) have every claim consumer read the allowance from `derived/neg8-allowance.json` (registration §0.12), never from the stored bracket. Each with a test on a synthetic HAZARD root (the code's name for a runs root of a block-5 window, that is, a directory under which the window's member bundles are written, recognised by the launch-lineage locator file the driver publishes into it) with and without its archive. | At the int5 head `fe28e5a0c`, and unchanged at `9b0c680ed`: the record, its consumer and `analyze-claims --neg8-harvest-archive` exist; (b), (c) and the shared predicate (a) do not. Until the lane lands, every block-5 floor cell refuses (`whole_window_drift_allowance_unrecorded`) and a contrast resting on a recorded survivor re-screen refuses (`whole_window_neg8_verdict_failed`): a floor or contrast computed from HAZARD roots whose window has a recorded re-screen has no allowance and is not claimable. Both refuse; neither prints a wrong number. | `L9-NEG8` |
 | Claim gate reads GAMMA's flags: `neg8.midpoint_lost` on the analysed attempt stops the analysis (the exclusion function should have made the attempt not claim-usable, §2.4) | Absent | (part of L9) |
-| `_v5` final pinset and v2 input manifest for the mint; two-producer aggregate floor binding in the claim gate (memo 4.1) | Absent | `V5-FINAL-PINSET`, `V5-V2-INPUT-MANIFEST` |
-| Mint-to-close-out adapter; dominance sidecar wiring (memo 4.3) | Absent | `MINT-TO-CLOSEOUT-ADAPTER` |
-| Bracket replay with the acceptance's ledger-cutoff baseline in finalization (memo 3.3) | Defect known | (part of L9) |
+| `_v5` final pinset and v2 input manifest for the mint; two-producer aggregate floor binding in the claim gate (memo 4.1; in this row and the three below, "memo" is the lane memo of 2026-10-05 that holds the block-4 pre-mortem and the analysis-path dry run, `/Users/edr/night-archive/ia-0a40/MEMO.md`, registration §16, cited by its section number). The aggregate floor has two producers, the ALPHA and BETA floor packs, and each pack carries its own `calibration_plan.json` | The issued pinset and input manifest: absent. They are written from each floor window's runs root, extraction report (the output of step 4 of §3.1) and bracket binding and from the calibration ledger, so they cannot exist before collection; the program that writes them is present at `9b0c680ed` (`scripts/emit_floor_mint_pinset.py`, commit `8c6dd2c2b`). The two-producer binding: present at `9b0c680ed` (commit `2d3329e0d`: the claim gate's input loader, `joulewise/analysis_engine/inputs.py`, binds each cell of the aggregate floor to the `calibration_plan.json` of the pack that produced it; before that commit it could bind one such file only, so a floor made from two packs could not be bound). Revision 10 wrote "Absent" for the whole row | `V5-FINAL-PINSET`, `V5-V2-INPUT-MANIFEST` |
+| Mint-to-close-out adapter; dominance sidecar wiring (memo 4.3) | The adapter: absent. The sidecar wiring: present at `9b0c680ed` (commit `8c6dd2c2b`): the mint writes the sidecar (`--d165-replay-out`), and finalization takes it (`--dominance-replay-sidecar`) and copies it unchanged into its custody root. Revision 10 wrote "Absent" for the whole row | `MINT-TO-CLOSEOUT-ADAPTER` |
+| Bracket replay in finalization with the ledger-cutoff baseline (memo 3.3). Finalization evaluates the calibration bracket again from the ledger (the replay). That evaluation refuses (`calibration_ledger_baseline_missing`) unless the ledger snapshot it is given carries, as its baseline, the acceptance's cutoff: the ledger sequence and head digest up to which the acceptance was derived (registration §0.11) | Present at `9b0c680ed`: `joulewise/analysis_manifest_v3.py` loads the snapshot with the cutoff's sequence and head digest as its baseline (commit `f8ad16514`). Revision 10 still wrote "Defect known" here | none |
 | Claim gate re-runs `analyze_claims` and requires byte equality; the `evidence_class` read is fixed (memo 3.7) | Defect known | (part of L9) |
 | Claim verdicts to results-fill input | Absent | `CLAIM-VERDICT-TO-FILL-ADAPTER` |
 | Disclosure producer for §7.3 and §8, including the battery-assist line (§8.1), the physics-in-span sensitivity line if adopted, the whole-machine cross-check (§8.2, reading `withheld/meter.json`), the reference-drift line's survivor counts, lost references, spares and lost midpoint (§8.1), the second sentence for a hazard not read at the arm (§8.1), and the step-4 p42 exit rule | Absent | `DISCLOSURE-PRODUCER` |
@@ -709,6 +744,9 @@ Still open: `B5-ANALYSIS-CUSTODY-ROOT`, `B5-BLIND-DRY-RUN-RECORD`, `EXCLUSIONS-C
 `FLOOR-EXTRACTION-KEPT-UNITS`, `GAMMA-MANIFEST-EXCLUSIONS-BINDING`, `V5-FINAL-PINSET`, `V5-V2-INPUT-MANIFEST`,
 `MINT-TO-CLOSEOUT-ADAPTER`, `CLAIM-VERDICT-TO-FILL-ADAPTER`, `DISCLOSURE-PRODUCER`, `DISCLOSURE-SITES`, and, shared
 with the registration, `ATTRIBUTION-FLOOR-BINDING`. Each names code, a record or a ruling that does not exist yet.
+Also shared with the registration is `B5-FINAL-HASHES`, a mark on digests and not a missing value: here it stands on
+the two `extraction_spec.json` file digests of §4, which are stale, on the "re-tied at seal" of §5, and on GAMMA's
+manifest digest of §7.1, which is not yet written. The final pass fills all of them at the final head of the code.
 `REPORTED-ENERGY-REGISTRATION-DIGESTS` was filled in revision 4 (§4). Revision 2's `ED-PREDICATE`
 (replaced by the contention member rule) and `P42-S1-STRUCTURAL-CHECK` (now the s1-structural diagnostic at ALPHA-1's
 harvest) are withdrawn. The open questions are registration §14; Q4 (placement), Q5 (attribution floor) and Q6 (the
@@ -773,7 +811,7 @@ changed.
   battery disclosure uses the code's phases (before the request, the request, after it) and adds the counts of
   `battery.assist_outside_request`, capture assist and the discharge-only #421 pairs.
 - §8.1: the battery-assist line also covers GAMMA's contrasts (registration §14 Q9, adopted by the orchestrator's
-  ruling of 2026-10-06), with a worked example on the §7.1 data.
+  ruling of 2026-10-06), with a worked example on the §7.2 data.
 - §8.2 and §11: the harvest's meter record is one file per window, `withheld/meter.json`, over each member's measured
   request only; the per-phase figures revision 5 named are not produced.
 - §7.1: GAMMA's analysis manifest is unchanged by lane L10, which is in the frozen head.
