@@ -854,19 +854,16 @@ class StaleLockTests(_Stage):
 
     def test_a9_keeper_a_lock_replaced_after_it_was_read_is_never_unlinked(self) -> None:
         # The reclaimer read a stale lock, but the path now names another
-        # inode (another writer's lock): it refuses and leaves that lock alone.
+        # writer's lock: it refuses and leaves that lock alone.
         #
-        # KNOWN LIMIT, found by the first Linux run of this test (2026-10-07).
-        # The reclaimer closes the lock after reading it and later compares the
-        # path's device and inode number with the ones it read. An inode number
-        # is a slot number, free for reuse once its file is unlinked and
-        # closed. APFS, the measurement Mac's file system, never hands a number
-        # out twice, so there "same number" does mean "same file". ext4 and
-        # tmpfs on Linux give the freed number to the next file created, so the
-        # other writer's lock gets the number of the lock that was read, the
-        # comparison passes, and the reclaimer unlinks a lock that is not
-        # stale. On such a file system this test cannot hold and is skipped
-        # with that reason; the remedy is in scripts/run_campaign.py, not here.
+        # On ext4 and tmpfs (Linux) the other writer's lock usually receives
+        # the inode number of the lock just unlinked: a number is free for
+        # reuse once its file is unlinked and closed, and those file systems
+        # give it to the next file created. APFS never hands a number out
+        # twice. The first Linux run of this test (2026-10-07) showed the
+        # reclaimer then unlinking the other writer's lock, because it compared
+        # device and inode number only. It now also compares last-write time
+        # and bytes, so this test holds on both kinds of file system.
         runs = self.hazard_root()
         self._lock(runs, self._reaped_pid(), "Mon Oct 5 00:00:00 2026")
         context = run_campaign._hazard_flag_context(runs)
@@ -887,14 +884,90 @@ class StaleLockTests(_Stage):
                 outcome = exc
         if isinstance(outcome, run_campaign.CampaignLockToken):
             self.addCleanup(run_campaign.release_campaign_lock, outcome)
-        if inode_number["read"] == inode_number["replacement"]:
-            self.skipTest(
-                f"this file system gave the replacement lock the inode number of the lock just unlinked "
-                f"({inode_number['read']}); the reclaimer tells the two apart by device and inode number only, "
-                f"so here it cannot (known limit of scripts/run_campaign.py "
-                f"_hazard_reclaim_stale_campaign_lock; APFS on the measurement Mac does not reuse numbers)")
+        self.assertIsInstance(outcome, run_campaign.CampaignLockOwnershipError,
+                              f"inode numbers of the lock read and of its replacement: {inode_number}")
+        self.assertEqual((runs / "campaign.lock").read_text(), replacement)
+        self.assertEqual(self.kinds(), [])
+
+    def _acquire_with_a_reused_inode_number(self, runs: Path, replace) -> object:
+        """Acquire while ``replace(lock_path)`` swaps the lock, on a file system made to reuse inode numbers.
+
+        ``replace`` runs between the reclaimer's read and its last check.
+        Afterwards every stat run_campaign takes of the new file reports the
+        old file's inode number, which is what ext4 and tmpfs do by themselves
+        and APFS never does. Returns the token or the ownership error.
+        """
+
+        renumber: dict[int, int] = {}
+
+        class ReusedNumbers:
+            def __getattr__(self, name):
+                return getattr(os, name)
+
+            @staticmethod
+            def _seen(result):
+                number = renumber.get(result.st_ino)
+                if number is None:
+                    return result
+                kind, (basic, extra) = result.__reduce__()
+                return kind((basic[0], number, *basic[2:]), extra)
+
+            def stat(self, *args, **kwargs):
+                return self._seen(os.stat(*args, **kwargs))
+
+            def fstat(self, descriptor):
+                return self._seen(os.fstat(descriptor))
+
+        def seam(lock_path: Path) -> None:
+            before = lock_path.stat().st_ino
+            replace(lock_path)
+            renumber[lock_path.stat().st_ino] = before
+
+        context = run_campaign._hazard_flag_context(runs)
+        with patch.object(run_campaign, "_HAZARD_LOCK_RECLAIM_SEAM", seam), \
+                patch.object(run_campaign, "os", ReusedNumbers()):
+            try:
+                outcome: object = run_campaign.acquire_campaign_lock(runs, hazard=context)
+            except run_campaign.CampaignLockOwnershipError as exc:
+                outcome = exc
+        if isinstance(outcome, run_campaign.CampaignLockToken):
+            self.addCleanup(run_campaign.release_campaign_lock, outcome)
+        return outcome
+
+    def test_a9_keeper_another_writers_lock_with_the_same_inode_number_and_time_is_never_unlinked(self) -> None:
+        # Same device, same inode number, same last-write time: only the bytes
+        # (the other writer's nonce) tell the two locks apart.
+        runs = self.hazard_root()
+        self._lock(runs, self._reaped_pid(), "Mon Oct 5 00:00:00 2026")
+        replacement = f"pid={os.getpid()} nonce={'cd' * 32} created_at=x start_time={json.dumps(START)}\n"
+
+        def replace(lock_path: Path) -> None:
+            before = lock_path.stat()
+            lock_path.unlink()
+            lock_path.write_text(replacement)
+            os.utime(lock_path, ns=(before.st_atime_ns, before.st_mtime_ns))
+
+        outcome = self._acquire_with_a_reused_inode_number(runs, replace)
         self.assertIsInstance(outcome, run_campaign.CampaignLockOwnershipError)
         self.assertEqual((runs / "campaign.lock").read_text(), replacement)
+        self.assertEqual(self.kinds(), [])
+
+    @unittest.skipUnless(Path(getattr(run_campaign, "LSOF_ARGV", ("/usr/sbin/lsof",))[0]).is_file(), "lsof is not installed")
+    def test_a9_keeper_a_new_empty_lock_with_the_same_inode_number_is_never_unlinked(self) -> None:
+        # An old empty lock is judged torn; meanwhile another writer has just
+        # created its own lock and not yet written it. Same device, same inode
+        # number, same (empty) bytes: only the last-write time tells them apart.
+        runs = self.hazard_root()
+        self._torn(runs)
+
+        def replace(lock_path: Path) -> None:
+            lock_path.unlink()
+            lock_path.write_bytes(b"")
+
+        outcome = self._acquire_with_a_reused_inode_number(runs, replace)
+        self.assertIsInstance(outcome, run_campaign.CampaignLockOwnershipError)
+        self.assertEqual((runs / "campaign.lock").read_bytes(), b"")
+        self.assertLess(time.time() - (runs / "campaign.lock").stat().st_mtime, 60)
         self.assertEqual(self.kinds(), [])
 
     def test_f4a_unknown_identity_publishes_and_flags_and_the_stage_runs(self) -> None:

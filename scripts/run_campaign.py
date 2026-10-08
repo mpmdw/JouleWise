@@ -4717,6 +4717,23 @@ def _hazard_torn_lock_unheld(lock_path: Path, read_stat: os.stat_result, runs_ro
     return {"age_s": round(age_s, 3), "open_holders": 0, "dead_registry_entries": named}
 
 
+def _hazard_campaign_lock_snapshot(lock_path: Path) -> tuple[os.stat_result, bytes]:
+    """The lock file's stat and bytes, both through one descriptor, never through a symlink."""
+
+    lock_fd = os.open(lock_path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        lock_stat = os.fstat(lock_fd)
+        parts: list[bytes] = []
+        while True:
+            part = os.read(lock_fd, 65536)
+            if not part:
+                break
+            parts.append(part)
+    finally:
+        os.close(lock_fd)
+    return lock_stat, b"".join(parts)
+
+
 def _hazard_reclaim_stale_campaign_lock(
     lock_path: Path, runs_root: Path, hazard: Any
 ) -> int:
@@ -4727,7 +4744,9 @@ def _hazard_reclaim_stale_campaign_lock(
     unparseable and :func:`_hazard_torn_lock_unheld` proves it has no live
     writer.  Reclaimers serialize on
     an exclusive flock of the runs-root directory, whose inode is never
-    replaced; only reclaimers unlink, and only the lock inode they just read.
+    replaced; only reclaimers unlink, and only the lock they just read: the
+    file at the path must still have the device, inode number, last-write
+    time and bytes that were judged (an inode number alone can be reused).
     Every other case raises CampaignLockOwnershipError with today's message.
     """
 
@@ -4763,8 +4782,9 @@ def _hazard_reclaim_stale_campaign_lock(
                     parts.append(part)
             finally:
                 os.close(lock_fd)
+            read_bytes = b"".join(parts)
             try:
-                text = b"".join(parts).decode("utf-8")
+                text = read_bytes.decode("utf-8")
                 existing = text.strip()
             except UnicodeError:
                 text = None
@@ -4791,13 +4811,27 @@ def _hazard_reclaim_stale_campaign_lock(
                 raise CampaignLockOwnershipError(
                     _campaign_lock_exists_message(lock_path, existing)
                 )
+            # The file at the path must still be the lock judged above.  Its
+            # device and inode number do not prove that: an inode number is
+            # free for reuse once its file is unlinked and closed.  APFS never
+            # hands one out twice, but ext4 and tmpfs give the freed number to
+            # the next file created, so another writer's new lock can carry
+            # the number read above.  The lock is read again and must also
+            # match in last-write time and in bytes: a well-formed lock holds
+            # its writer's random nonce, and an empty or unparseable one was
+            # at least TORN_LOCK_MIN_AGE_S old when judged, so a newer file
+            # differs in one or the other.
             try:
-                current_stat = os.stat(lock_path, follow_symlinks=False)
+                current_stat, current_bytes = _hazard_campaign_lock_snapshot(lock_path)
             except OSError as exc:
                 raise CampaignLockOwnershipError(
                     _campaign_lock_exists_message(lock_path, existing)
                 ) from exc
-            if (current_stat.st_dev, current_stat.st_ino) != (read_stat.st_dev, read_stat.st_ino):
+            if (
+                (current_stat.st_dev, current_stat.st_ino, current_stat.st_mtime_ns)
+                != (read_stat.st_dev, read_stat.st_ino, read_stat.st_mtime_ns)
+                or current_bytes != read_bytes
+            ):
                 raise CampaignLockOwnershipError(
                     _campaign_lock_exists_message(lock_path, existing)
                 )
