@@ -4935,30 +4935,329 @@ themselves are committed bytes that each pack's plan tree pins (§0.12).
 
 ## 11. Commit rule and the sealed inventory
 
-1. **H_claim** is the commit of §2 item 1. It is extended only by (i) pin-only commits from this block's pin advances
-   (§4.6 item 6),
-   shown by a `git diff --name-only` map against H_claim that names only `configs/calibration/calibration_ledger_head.json`;
-   (ii) gated R3 fixes to code that does not run during collection; (iii) commits touching only `docs/`, `tests/`,
-   `RUN_STATE.md` or `TASK_QUEUE.md`; (iv) a §7.5 cure confined to collection code no completed window executed.
-   Each extension carries its changed-path map, checked before the next arm.
+*The problem this section solves.* Every block-5 number has to come from code and configuration that the seal
+fixed. That takes one named commit, H_claim, whose files the windows read, and a comparison of every window with
+it. Git puts one obstacle in the way. A commit's name is a hash (a fixed-length digest, like the SHA-256s in this
+file) computed over everything the commit contains. So a file cannot hold the name of the commit that contains
+it: writing the name into the file would change the hash. The sealed inventory names H_claim in its `head` field.
+It can therefore only be committed in a later commit than H_claim, and the commit a window runs from is never
+H_claim itself. A comparison that read every difference between those two commits as "the code changed" would
+remove every window from the claims, merely because the seal had been committed. This section fixes which commits
+may follow H_claim, which differences count, and which program checks each. §12 gives the order in which the
+seal's own commits are made. The procedure was written and rehearsed by the seal-landing lane
+(`/Users/edr/night-archive/gate-prune/wave-1007b/seal-land/SEAL_LANDING.md`; a path written `seal-land/…` below
+is a file of that directory), and that lane's code is part of H_claim.
+
+*Terms.* Three git words first. A file is **tracked** when git records it in commits. A checkout's **HEAD** is the
+commit it currently has checked out. A commit's **parent** is the commit it was made on top of, and the later one
+is the parent's **child**.
+
+- **Measurement checkout** (§2 item 5): the dedicated clone the windows run from. **The desk checkout** is another
+  checkout of the same repository on this machine, from which a desk program (the harvest, the analysis) is run
+  after a window. Under the rule of item 2 no part of a window runs from it.
+- **Window input.** A tracked file whose bytes a window can read while it is planned, armed or run. Item 2 states
+  the class by path.
+- **Seal documents.** Three files of this directory: `sealed_inventory.json`, this file and
+  `analysis_plan_block5.md`. Their final bytes cannot exist at H_claim: the inventory names H_claim, and the two
+  texts print H_claim, the seats of the seal gate and the path of the seal record.
+- **Seal commit.** The one commit whose only parent is H_claim and which changes only seal documents. It carries
+  the inventory in its sealed form (item 2) and the sealed text of this file and of the analysis plan.
+- **Seal record** (§12): the file that lists H_claim, the seal commit and the SHA-256 of every sealed file. An
+  **addendum** is a section appended to it later. The **record commit** is the child of the seal commit that adds
+  the seal record to the repository.
+- **Pin-only commit** (§0.18): a commit that changes only the ledger pin,
+  `configs/calibration/calibration_ledger_head.json`, which is data that advances after each window.
+- **Record-only path.** A tracked path that no window reads: a document, a test, a status file. Item 2 states the
+  class by path.
+- **Executed head.** The measurement checkout's HEAD as the driver records it at a window's arm (§0.18).
+- **The two stages of the seal gate** (§12). Stage 1 ruled on revision 9 of these documents on 2026-10-07 and
+  required changes to them and to the harvest program. Stage 2 judges the final text.
+
+*The picture.* Commits run from left to right. A run of dashes joins a parent to its child, `...` stands for
+earlier commits, and a vertical line ending in `+--` attaches a label to the commit above it. The case drawn is a
+block in which no pack is re-armed and no attempt is abandoned.
+
+```
+ main                  ... -- B ---------------------------------------- M
+                               \                                        /
+ integration branch             ... -- C --------- S --------- R ------+
+                                       |           |           |
+                                       |           |           +-- R, the record commit: adds the seal record
+                                       |           +-- S, the seal commit: changes only the three seal documents
+                                       +-- C, H_claim: the last commit that changes a window input
+
+ measurement checkout           ... -- C -- S -- p1 -- p2
+                                            ^    ^     ^
+                                            |    |     +-- HEAD when GAMMA-1's plan is written
+                                            |    +-- HEAD when BETA-1's plan is written
+                                            +-- checked out here; HEAD when ALPHA-1's plan is written
+```
+
+- *main*: the repository's main branch. *B* is the commit at which the integration branch left it; the `\` under B
+  is that parting, and the `/` under M is the integration branch joining main again.
+- *integration branch*: `integrate/2026-10-07-int5` (§2 item 1). *C*, *S* and *R* are three consecutive commits on
+  it: H_claim, the seal commit and the record commit.
+- *M*: the commit that joins R into main when the seal's pull request is merged (§12 step 5). It is a **merge
+  commit**, a commit with two parents, so C and S stay in main's history. While main has not moved since B, M holds
+  exactly R's files.
+- *measurement checkout*: a clone, so it holds the same C and S. It is checked out at S.
+- *p1*, *p2*: the pin-only commits that the pin advance makes in the measurement checkout after ALPHA-1 and after
+  BETA-1 (§4.6 item 6). A re-armed pack or an abandoned attempt adds one more each.
+- *the three carets* (`^`): the measurement checkout's HEAD at the moment each window's plan is written. Each plan
+  records that commit as its `measurement_head`, and the driver records the same commit as the executed head when
+  the window arms. A harvest compares the head its window ran from (S, p1 or p2) with C.
+
+1. **H_claim** is the commit of §2 item 1: the last commit that changes a window input before the block's first
+   window. The seal commit follows it directly and changes no window input, so every window input has the same
+   bytes in the seal commit as in H_claim. The measurement checkout is checked out at the seal commit (§12 step 6).
+   Wherever this file says that the measurement checkout's HEAD is "H_claim plus pin-only commits", it means this
+   chain and no other: H_claim, then the seal commit, then zero or more pin-only commits. After the seal commit,
+   H_claim is extended only by (i) pin-only commits from this block's pin advances (§4.6 item 6), each of which
+   changes only `configs/calibration/calibration_ledger_head.json`;
+   (ii) gated R3 fixes to code that does not run during collection, which land in the desk checkout only: the
+   measurement checkout never receives them during the block, the harvest and the analysis run from the desk checkout
+   and take the measurement checkout as their input (`measurement_root`: the sealed documents and the verdict writer
+   are read and run from there), and the arm's executed inventory is compared with the sealed inventory in the
+   measurement checkout, so such a fix raises no `code.executed_differs_from_sealed`; (iii) commits touching only
+   `docs/`, `tests/`, `RUN_STATE.md` or `TASK_QUEUE.md`; (iv) a §7.5 cure confined to collection code no completed
+   window executed. Each extension carries its changed-path map, checked before the next arm.
+
+   *What the map is, and who checks it.* A **changed-path map** is the list of paths whose committed bytes differ
+   between H_claim and a later commit, as `git diff --name-only --no-renames` prints it. (With `--no-renames` git
+   lists both the old and the new path of a moved file, so a file moved out of its directory is still listed.) For
+   the measurement checkout the map between H_claim and HEAD must name the three seal documents and the ledger pin
+   and no other path. Before an arm that is secured in three ways. First, the pin advance commits the ledger pin
+   alone and then lists the paths its commit changed; if the list is anything but the ledger pin it stops with an
+   error (`joulewise/b5/plan.py` `advance_ledger_pin`). Second, when the measurement checkout is set up, the lead
+   checks the map between H_claim and its HEAD (§12 step 6). Third, commits of classes (ii) and (iii) go to the
+   main branch and never into the measurement checkout, so no window can arm from them. After the window the
+   harvest computes the map between H_claim and the executed head by code and records it (item 2). The harvest's
+   computation is the one every claim rests on. The collector that runs inside the arm is not such a check. It is
+   given the plan's `measurement_head`, and the installer of the launchd job (§0.17) refuses a plan whose
+   `measurement_head` is not the measurement checkout's HEAD (`joulewise/night_agent_install.py`). So a plan's
+   `measurement_head` is the seal commit for the first window and the latest pin-only commit afterwards, never
+   H_claim, and at the arm that collector compares HEAD with itself.
+
+   *What the comparison of item 2 does with a commit of each class*, if the measurement checkout holds it when a
+   window arms:
+   - (i) raises nothing. The path is listed in the window's record (`derived/code-identity.json`, item 2).
+   - (ii) would be a difference if it ever reached the measurement checkout: the window would be
+     `code.executed_differs_from_sealed`. Such a fix changes files under `joulewise/` or `scripts/`, the driver
+     inventories every tracked file there whether a window executes it or not, and no program can tell "does not
+     run during collection" from "runs". That is why these fixes stay out of the measurement checkout. They never
+     need to be in it: `scripts/harvest_b5_window.py` imports the harvest from the checkout that holds the script,
+     and reads the pack, the ledger, the ledger pin, the sealed inventory, the catalog, the identity pins and this
+     file from the `measurement_root` that the window's plan names. One part of the harvest does run the
+     measurement checkout's code: with `--prepare-desk`, the whole-window verdict (§0.17) is written by the
+     measurement checkout's `scripts/run_campaign.py`, run with that checkout's Python environment (its `.venv`),
+     so the verdict writer is always the sealed one.
+   - (iii) raises nothing, and the paths are listed. One file under `docs/` is not of this class:
+     `docs/phase_2/window_runbook.md` is a window input (item 2).
+   - (iv) is a difference for every window armed after the cure, because the cure changes window inputs and the
+     inventory still names the old H_claim. A cure of class (iv) therefore **re-issues the seal**: the cure's commit
+     becomes the new H_claim, and a new seal commit, its child, carries an inventory generated from it whose
+     `head` names it. An addendum to the seal record lists the new H_claim, the new seal commit and the new
+     inventory's SHA-256, beside the changed-path map and the re-audit that §7.5 requires of the cure. For a window
+     armed after the re-issue, "H_claim" in item 2 is the `head` of the re-issued inventory.
+
+   *A re-harvest after a re-issue.* The **inventory in force at a window's arm** is the `sealed_inventory.json` that the
+   measurement checkout held when that window armed. Every harvest reads the inventory from the measurement checkout
+   unless it is told otherwise, and keeps a copy of what it read in its archive, at
+   `sources/inputs/sealed_inventory.json`. After a re-issue the measurement checkout holds the new inventory, and a
+   window that armed before the re-issue differs from it by the cure itself. So an R3 re-harvest of such a window is
+   given the inventory in force at its arm, with `--sealed-inventory-path <that window's first harvest
+   archive>/sources/inputs/sealed_inventory.json`. Without it the harvest would exclude a completed window for a cure
+   that the window never ran. This is a rule the lead applies, and the magistrate's brief (§7.2) carries it. *Worked
+   example (a probe of the independent review of the seal-landing lane, `seal-land/REVIEW.md`, finding F5; a synthetic
+   window, harvested by the program at H_claim):* ALPHA-1 ran from the first pin-only commit; then a cure to one file of
+   GAMMA's pack and its new seal commit followed. Harvested again with the inventory then in the measurement checkout,
+   ALPHA-1 was excluded: comparison (b) listed the GAMMA file as a changed window input. Harvested again with the
+   inventory in force at its arm, it raised no flag. Under the rule of item 2 a change in another pack's directory no
+   longer excludes, but a cure to a file under `joulewise/` or `scripts/` that only GAMMA executes still would, because
+   every window inventories those two directories whole.
 2. **The sealed inventory** (`sealed_inventory.json`) lists, at H_claim, the SHA-256 of every tracked file under
-   `joulewise/`, `scripts/` and the three pack directories, and names H_claim as its `head`. It does not list the
-   ledger pin (data). It covers the hazard path: `joulewise/hazards/*`, `joulewise/b5/{driver,plan,chain}.py`,
-   `joulewise/window_lineage.py`, `joulewise/flags/*`, `scripts/run_night.py`, `scripts/hazard_monitor.py`,
-   `scripts/write_b5_window_plan.py`, `scripts/run_campaign.py` and the measurement core, and this directory's
-   `flag_catalog.json`. This directory's `identity_pins.json` and `sizing_b5.json` are pinned by the seal record
-   (§12). A window's executed-file inventory covers `joulewise/`, `scripts/` and only its own pack, so
-   the comparison is made over the sealed entries under those roots (§14 Q2).
+   `joulewise/`, `scripts/` and the three pack directories (§0.7), and of this directory's `flag_catalog.json`,
+   and it names H_claim as its `head`. Because it names H_claim it is committed in the seal commit, the child of
+   H_claim, and not in H_claim. At H_claim the file is a stub (`status` `STUB_NOT_SEALED`, `head` and `files`
+   null). In the seal commit it has `status` `SEALED`, `head` equal to H_claim, and the `files` map. It does not
+   list the ledger pin (data). It declares no `roots` key: with that key an inventory could narrow the comparison
+   to named directories, and none is needed, because the programs already compare under each window's own roots
+   (comparison (a) below). It covers the hazard path: `joulewise/hazards/*`,
+   `joulewise/b5/{driver,plan,chain}.py`, `joulewise/window_lineage.py`, `joulewise/flags/*`,
+   `scripts/run_night.py`, `scripts/hazard_monitor.py`, `scripts/write_b5_window_plan.py`,
+   `scripts/run_campaign.py` and the measurement core (the modules that run one member and reduce its records).
+   This directory's `identity_pins.json` and `sizing_b5.json` are not in it; the seal record pins them (§12).
+
+   *How it is made and checked.* On a checkout of H_claim with no uncommitted change, take every tracked path,
+   as `git ls-files` prints them, under `joulewise/`, `scripts/` and the three pack directories, add the catalog,
+   and record the SHA-256 of each file. The seal commit is then checked by `tests/test_b5_seal_landing.py`, which
+   reads the repository's stored commits and never the files on disk. It proves three things: the inventory's
+   `head` is a commit, and the last commit that changed the inventory has that commit as its only parent; that
+   last commit changes nothing but seal documents; and the inventory lists exactly the tracked files of `head`
+   under those five directories plus the catalog, each with the SHA-256 of its bytes at `head`. *Worked count:*
+   at commit `9395cecfb`, the integration branch's latest commit when this was written, the five directories hold
+   150, 165, 123, 123 and 120 tracked files (`git ls-files`, counted by this author), so an inventory made there
+   lists 681 + 1 = 682 files. The count at H_claim is the length of the sealed `files` map.
+
+   *Two comparisons tie a window to it.*
+
+   *(a) File by file.* The window's **executed roots** are `joulewise/`, `scripts/` and the window's own pack. At
+   each arm the driver writes the executed-file inventory (§0.18), the SHA-256 of every tracked file under those
+   roots, and the arm's executed-code collector hashes the same files for itself. The collector at the arm, and
+   the harvest afterwards from the driver's inventory, each compare those digests with the sealed inventory. A
+   changed, missing or added file is `code.executed_differs_from_sealed`. The comparison is made under the executed
+   roots only, because a window's executed-file inventory covers only its own pack: the other two packs' sealed
+   files are not read as missing (§14 Q2). For a floor-pack window that is 150 + 165 + 123 = 438 of the 682 files
+   of the worked count, and for GAMMA 435. The other checks behind that flag (the chain's sidecar, tracked edits,
+   untracked files under the executed roots) are in §6.5.
+
+   *(b) Head against head.* The harvest runs `git diff --name-only --no-renames -z <the inventory's head>..<the
+   executed head>` in the measurement checkout (`-z` makes git print each path unquoted, so a path is classed by
+   its real first characters) and puts every path it lists in one class. A **claim pack** is one of the three
+   packs of §0.7.
+
+   | Class | Paths | What the harvest does |
+   |---|---|---|
+   | pin-only | the ledger pin | lists it |
+   | seal document | the three seal documents | lists them |
+   | record-only | a path under `docs/` other than the runbook named below; a path under `tests/`; a path under a top-level directory whose name begins with a dot (`.github/`, for example); a file at the repository's root whose name ends in `.md` | lists it |
+   | another claim pack | for a window of one claim pack, a path in the directory of either of the other two | lists it |
+   | window input | every other path: all of `joulewise/`, `scripts/` and `configs/` outside the rows above; the file `docs/phase_2/window_runbook.md`; and any path that no row above names, such as `pyproject.toml`, the environment lock `env/mac-measurement-lock.txt` (the list of Python packages the measurement environment is built from) or a Python file at the repository's root | `code.executed_differs_from_sealed` (EXCLUDE_WINDOW) |
+
+   Why the rows are drawn this way. The runbook is a window input because the plan writer copies the runbook's
+   pre-calibration screen, a block of shell text, into the chain (§5.1). Record-only is a list of named places, and
+   everything not named is a window input, so that a new kind of file is compared until someone shows that no window
+   reads it: a Python file at the repository's root, for example, could be imported by every script. Another claim
+   pack's directory is only listed because a window executes its own pack alone. The files a window reads from outside
+   its pack (the window references, the spares, the NEG-8 corpus, the policy, the acceptance) are pinned by its own plan
+   tree and compared by the pack-identity check (`pack.identity_mismatch`, §6.5), and the places they live in stay
+   window inputs. A path that differs from a window input's path only in letter case is itself a window input, because
+   the measurement Mac's disk does not distinguish case: a tracked `Joulewise/x.py` lands in `joulewise/`. The ledger
+   pin and the three seal documents match by their exact names only.
+
+   For `identity_pins.json`, `sizing_b5.json`, the flag catalog and the runbook, comparison (b) is the only check
+   that a program makes of their bytes against H_claim. None of them lies under a window's executed roots, so
+   comparison (a) does not reach them (the catalog is listed in the sealed inventory, but (a) covers the executed
+   roots only), and no plan tree pins them.
+
+   The harvest writes what it found to `derived/code-identity.json` (schema `joulewise.b5_code_identity.v1`): `h_claim`;
+   `h_claim_source` (`sealed_inventory` when the inventory named the head); `plan_measurement_head`; `executed_head`;
+   `sealed_inventory_sha256`; `comparison` (`compared` when git listed the changed paths, `identical` when the two heads
+   are one commit, `git_diff_unavailable` when git could not make the list, `not_compared` when one of the two heads is
+   not known); `changed_paths` by class; and `driver_checkout` (below). When git cannot make the comparison, the window
+   is `code.identity_unmeasured` (§6.5), a harvest problem first (§7.2). That happens when H_claim is missing from the
+   clone, which is why the measurement checkout is a full clone, one that holds every commit (§12 step 6). A sealed
+   inventory that names no `head` is `code.identity_unmeasured` as well: there is then no sealed commit to compare with.
+
+   *The checkout the driver runs from.* The launchd job (§0.17) starts `scripts/run_night.py` in the checkout whose
+   `scripts/install_night_agent.sh` installed the job. The driver, the hazard modules of the arm, the monitor, the
+   collectors, the G10 program and the meter program are that checkout's files; the programs the chain runs are the
+   measurement checkout's. **The launchd job is installed from the measurement checkout**, by that checkout's own
+   installer, so the two are one checkout and the executed-file inventory describes all the code a window ran. If the
+   job was installed from another checkout, the driver records that checkout in the executed-file inventory under
+   `driver_checkout`: its path, its HEAD, its `git status`, and the SHA-256 of each tracked file under its `joulewise/`
+   and `scripts/`. The harvest then judges it as it judges the measurement checkout. A code file there that differs from
+   the sealed inventory is a difference (`code.executed_differs_from_sealed`), and so is a tracked edit, or an untracked
+   file under its `joulewise/` or `scripts/`. A separate checkout whose bytes equal the sealed ones is recorded and is
+   no difference. This is decided at the harvest, from bytes. It is not decided at install from where a checkout lives:
+   that would be a refusal for a reason that is neither physics nor number integrity (§6.11). *Worked example.* The
+   real-model rehearsal of 2026-10-06 (not a claim window) ran with a separate driver checkout: its record lists 304
+   code files there, none differing from the inventory (`seal-land/ab-lane-code-identity.json`). In a probe of the same
+   review (finding F1) a driver checkout with one line appended to each of `joulewise/b5/driver.py`,
+   `joulewise/hazards/clock.py` and `scripts/hazard_monitor.py` was recorded with those three files listed. Under the
+   rule above that window is `code.executed_differs_from_sealed`.
+
+   *What the harvest program at H_claim does instead.* The table and the paragraphs above state the rule every
+   block-5 harvest applies. Five parts of it are installed by the harvest lane of item 4, after the seal. The
+   harvest program listed in the sealed inventory, the one at H_claim, does this in their place:
+   - a driver checkout whose code files differ is written to `derived/code-identity.json` with the list of
+     differing files, and raises no flag;
+   - record-only is every path outside `joulewise/`, `scripts/`, `configs/` and the runbook, so a changed
+     `pyproject.toml`, environment lock or root-level Python file raises no flag;
+   - with an inventory that names no `head`, the harvest takes the plan's `measurement_head` in its place, compares
+     the executed head with itself and records `h_claim_source` `plan`, with no flag;
+   - a changed path whose name is not valid UTF-8 text (the encoding the harvest expects of a path) makes the
+     harvest fail (HARVEST_FAULT, §7.1);
+   - a change confined to another claim pack's directory is a difference.
+
+   No block-5 window is harvested by that program: ALPHA-1's harvest waits for the lane (item 4). The arm's
+   collector is collection code and keeps H_claim's classes; as item 1 says, at the arm it compares HEAD with
+   itself. None of the five cases can arise in the registered sequence, in which the launchd job is installed
+   from the measurement checkout and the pin advance is the only program that commits there.
+
+   *Worked example (a rehearsal on a throw-away clone, not a claim window;
+   `/Users/edr/night-archive/gate-prune/wave-1007b/seal-land/proof-landing.log`).* Commit `2737ef88c` stood in for
+   H_claim. The inventory made from it listed 682 files. The seal commit changed exactly the three seal documents, and
+   an inventory made again at the seal commit had the same `files` map. Then came one commit of two record-only paths
+   and one pin-only commit. Given that H_claim, the collectors classed the changed paths as 1 pin-only, 3 seal
+   documents, 2 record-only and 0 window inputs, for each pack, and comparison (a) found 438 executed files against 438
+   sealed files in the window's roots for each floor pack and 435 for GAMMA, with none changed, missing or added. No
+   flag was raised. Each of four further changes, one commit on top, was a difference: an edit to
+   `joulewise/b5/harvest.py` by both comparisons (class (ii) reaching the measurement checkout); an edit to the runbook
+   and an edit to `identity_pins.json` by comparison (b) alone; and an edit to GAMMA's plan tree by both comparisons for
+   a GAMMA window and by (b) alone for an ALPHA window, which is the last case of the list above. The review of item 1
+   then repeated the whole sequence (`seal-land/REVIEW.md`). It made sixteen changes to window inputs (an edited byte, a
+   new file, a deleted file, a moved file and a changed file mode among them), each of which excluded the window, and
+   commits of the permitted kinds (pin-only, the seal documents, documents and tests), none of which did. The Fable
+   delta cold pass 5 (`/Users/edr/night-archive/gate-prune/cold-pass-5/REPORT.md`, PASS WITH NOTES) found that same last
+   case, in which the program at H_claim excludes a window that read nothing changed, and assigned it to the harvest
+   lane.
+
+   *A new sizing file.* `sizing_b5.json` is a window input, so the new sizing file of a §5.5 erratum is never a
+   changed `sizing_b5.json` committed in the measurement checkout: that commit would exclude the next window. The
+   plan writer accepts as the source of an allowance any file inside the measurement checkout whose bytes hash to
+   the digest the plan-input file gives (`joulewise/b5/plan.py` `read_allowance`). The new file is therefore a new,
+   untracked file there, outside `joulewise/`, `scripts/` and the pack (under the `runs/` directory, which git
+   ignores, for example), and the seal record's addendum pins its SHA-256 (§10).
 3. **Retired, not deleted.** The `TRANSACTION_PACK` route (ARM, GO, consumption and lifecycle in
    `joulewise/arm_readiness.py`, except the lineage helpers the hazard lineage dispatches through;
    `arm_readiness_evidence.py`, `arm_readiness_evidence_t0.py`; `scripts/capture_t0_step.py`,
    `author_arm_evidence_t0.py`, `author_arm_readiness_evidence.py`, `generate_arm_readiness.py`,
-   `launch_window.py`; the network-time OFF receipt admission and `joulewise/dwell.py`) and the block-4 machinery stay
-   in the tree with their tests green. Block 5 never runs them, and an import-graph test proves the hazard path cannot
-   reach them. Their deletion is proposed to Ed after GAMMA's harvest under the pruning rule.
+   `launch_window.py`; the network-time OFF receipt admission and `joulewise/dwell.py`) and the block-4 machinery
+   (the plan writer, the harvest scripts and the qualification module of block 4, the separate qualification
+   window that §3 folds into block 5) stay in the tree with their tests green. Block 5 does not use that route: a
+   block-5 plan carries the receipt class `HAZARD_PACK` (§0.17), and the driver takes its hazard branch for that
+   class (`scripts/run_night.py`). What a test proves about this is narrower than revisions 3 to 11 said ("an
+   import-graph test proves the hazard path cannot reach them"). The test, `tests/hazards/test_import_graph.py`,
+   follows every import, direct or through another module, from two starting sets: the `joulewise/hazards`
+   package with `scripts/hazard_monitor.py`, and the `joulewise/flags` package. It proves that neither set reaches
+   a retired module, and it runs a complete arm and monitor in a fresh Python process and finds no retired module
+   loaded. It names one exception: the arm's instrument cadence probe (§4.1) runs the production sampler adapter
+   in a child process, and that adapter imports the measurement core. The test says nothing about the rest of the
+   hazard path of item 2, and that rest does import retired modules: `scripts/run_night.py` imports
+   `arm_readiness`, `arm_readiness_evidence_t0`, `t0_rehearsal` and `network_time_off` when it is loaded;
+   `scripts/run_campaign.py` and `joulewise/bundle.py` import `arm_readiness` when they are loaded; and
+   `joulewise/b5/plan.py` and `joulewise/window_lineage.py` import one function from it, the pack-tree digest,
+   inside a function. So files of the retired route are loaded during a block-5 window, and they are sealed and
+   compared like every other file under `joulewise/` and `scripts/`. Their deletion is proposed to Ed after
+   GAMMA's harvest under his pruning rule (a mechanism that has caught nothing bearing on a number in its last
+   three sessions is proposed for deletion).
 4. **Written blind, pinned before use.** The harvest program (L5) is pinned by an addendum to the seal record before
    ALPHA-1's harvest; the analysis code (L9) before the release event (analysis plan §11). Each addendum names the
-   files and their SHA-256s and is written by a seat that has read no claim-window energy.
+   files and their SHA-256s and the desk checkout's commit, and is written by a seat that has read no claim-window
+   energy. The harvest lane that the seal gate required (stage 1, 2026-10-07: reference losses `energy_unreadable`,
+   `contention.unmeasured`, `battery.unmeasured`, `env.member_quiet_state_violated`, `battery.capture_pair_failed`; the
+   malformed-flag candidate list narrowed to pre-harvest writers' codes) may change `joulewise/b5/harvest.py`,
+   `joulewise/whole_window.py` (the replay's authenticity pass and `_derived_neg8_decision` only),
+   `scripts/harvest_b5_window.py`, their tests and fixtures, and nothing the chain or the members execute. It lands in
+   the desk checkout only: the measurement checkout's HEAD stays H_claim plus pin-only commits for the whole block, so
+   no completed window executed the changed bytes and §7.5 does not supersede the block. The harvest runs from the
+   desk checkout and reads the sealed documents and runs the verdict writer from the measurement checkout
+   (`measurement_root`). ALPHA-1's harvest does not run until this addendum exists; `harvest.json` records the desk
+   checkout's commit.
+   The same lane carries five further changes to the harvest's comparison of a window's code with the seal,
+   which item 2 states and which the lane's worklist
+   (`/Users/edr/night-archive/gate-prune/wave-1007b/harvest-lane/WORKLIST.md`) numbers H-8 to H-12: a driver
+   checkout whose code files differ from the sealed inventory is a difference (H-8); record-only is a list of
+   named places (H-9); a sealed inventory with no `head` is `code.identity_unmeasured` (H-10); a changed path
+   that is not valid UTF-8 text no longer makes the harvest fail (H-11); and a change confined to another claim
+   pack's directory is listed and is no difference (H-12).
+
+   *What pins the program that harvests.* The sealed inventory lists the harvest program's files as they are at
+   H_claim. The lane changes those files in the desk checkout, so the inventory does not describe the program that
+   harvests a block-5 window; the addendum does. No program reads an addendum. The binding is a rule: the analysis
+   admits an attempt only when the harvest commit recorded for it is the commit the addendum pins (analysis plan
+   §2.2), and otherwise the attempt is harvested again on identical bytes by the pinned program (R3).
 5. **Records of their era are not live pins.** Two older documents carry digests of files as they were when the
    documents were written: revision 6 of the calibration preregistration
    (`configs/calibration/preregistration_d079_epoch_25g83_rev1.md`, sealed 2026-09-30 at `46643f1d`) records
@@ -4974,14 +5273,130 @@ themselves are committed bytes that each pack's plan tree pins (§0.12).
 
 ## 12. Seal
 
-One cold gate seals this file, the analysis plan, the flag catalog and the sealed inventory together: a Fable 5.1
-judge and one Opus 5.5 refuter (`FILL[B5-SEAL-SEATS]` records the seats used). The seal record `FILL[B5-SEAL-RECORD]`
-pins, with SHA-256s at H_claim: the four documents; H_claim; the three packs' plan trees; the panel, policy,
-acceptance and pin bundle; the sizing output `sizing_b5.json` (§5.5) and the identity pins `identity_pins.json`
-(§4.6 item 3); and the chain-source document
-`docs/phase_2/window_runbook.md` (the chain embeds its pre-calibration screen). The gate rules in particular on the
-cell rule of §6.6, the catalog's effects (especially the two disclosed aggregate codes of §6.5), and the proposed
-sensitivity line of analysis plan §8.
+*What a seal is.* A seal is a list of SHA-256 digests, each of a named file at a named commit, written after an
+independent gate has judged those files. A file is sealed when its digest is in the list: any later change to it
+shows as a different digest. This section says who judged, which commits carry the sealed bytes, where the list
+lives, and what binds the files that no program compares with the list.
+
+One cold gate (§0.1) seals this file, the analysis plan, the flag catalog and the sealed inventory together. It
+has two stages, described next: stage 1 ruled on an earlier revision and required changes, and stage 2 judges
+this text. The gate rules in particular on the
+cell rule of §6.6, the catalog's effects (especially the two disclosed aggregate codes of §6.5), and the
+sensitivity line of analysis plan §8 (adopted as amended at stage 1 of the gate).
+
+- **Why two stages.** When the gate's questions were ready, the commit that would become H_claim was not yet
+  fixed: one lane was changing the head comparison of §11, and these documents were being corrected against the
+  code. A ruling that requires a code change costs little while that commit is open; once it is fixed, a code
+  change costs a new run of the whole test suite and a new cold pass. So the rulings were taken first, and the
+  judgment of the final text second.
+- **Stage 1** (2026-10-07) judged revision 9 of this file, the analysis plan and the catalog as commit `9b0c680ed` holds
+  them (the inventory was then the stub), with the code of that commit. The judge was a Fable 5.1 session. An Opus 5.5
+  refuter attacked the same documents and code and reported five breaks, places where it showed a rule or the code to
+  give a wrong outcome. The judge ruled on each: four were accepted with a cure, and for the fifth, the lost-midpoint
+  rule of §0.12, the rule was confirmed and its stated premise corrected. The ruling is
+  `/Users/edr/night-archive/gate-prune/seal-gate/RULING_STAGE1.md` (first line `STAGE 1: RULINGS COMPLETE`), and the
+  refuter's record is `REFUTER_STAGE1.md` beside it. The ruling requires 48 changes to the text of this file and the
+  analysis plan, one change to the catalog (the cell minimum of §6.6, from 8 to 5), and seven changes to code or to
+  records in the code tree. Revision 12 applies the text changes as the judge wrote them. The catalog change is made
+  before H_claim, because the catalog is a window input and its bytes are fixed there. Of the seven, three change
+  entries of the refusal allowlist (§6.11) and one test fixture (a data file that a test compares against), files that
+  no program running inside a window loads, and four are the harvest lane of §11 item 4, which lands after the seal and
+  before ALPHA-1's harvest.
+- **Stage 2** is a separate session, held on the final text. It judges that text and the inventory made from
+  H_claim: that the text differs from what stage 1 ruled on only by changes that each trace to a ruling or to a
+  correction of fact, that every digest the seal pins can be computed again from the bytes it names, and that the
+  seal's commits can be made as the steps below describe. It ends with one line, `SEAL: ADMIT` or `SEAL: REFUSE`.
+  The seal commit is made only after `SEAL: ADMIT`.
+- **Seats.** The seats of both stages, with their records: `FILL[B5-SEAL-SEATS]`.
+
+**The order of the seal's commits.** The picture is in §11. Each step names the paths it may change and the check
+that proves it.
+
+1. **H_claim.** Its tree holds the final code, packs, flag catalog, identity pins, sizing output and runbook. This
+   file and the analysis plan are present there in a draft state, and the inventory is the stub (§11 item 2);
+   their sealed bytes exist only from the seal commit on. Checks: the whole test suite; the refusal census of
+   §6.11; the `--check` mode of each generator (a program that writes a committed file from its sources, such as
+   the sizing program of §5.5: `--check` passes only when it reproduces the committed file byte for byte); and
+   CI, the checks GitHub runs on a pushed commit.
+2. **The inventory** is made from a checkout of H_claim (§11 item 2).
+3. **The seal commit.** Its only parent is H_claim. It changes `sealed_inventory.json`, this file and the analysis
+   plan, and no other path. In it this file prints H_claim (§2 item 1), the seats and the path of the seal record,
+   and nothing in this file is left to fill afterwards. Checks: `git diff --name-only --no-renames <H_claim>
+   <seal commit>` lists only those three paths; `tests.test_b5_seal_landing` passes (§11 item 2); and the
+   inventory made again on a checkout of the seal commit has the same `files` map. The last two are independent
+   readings: the test reads stored commits, the generator reads files on disk.
+4. **The record commit.** The child of the seal commit. It adds the seal record under `docs/process_traces/`,
+   which is a record-only path. It also carries any test fixture that the seal commit's text forces to change. A
+   fixture under `tests/` that names a line of a seal document, as `tests/fixtures/d165_rationale_allowlist.json`
+   names lines of the analysis plan, cannot be corrected in the seal commit, which may change only the three seal
+   documents. So the whole test suite and CI are required to pass at the record commit, which is the head of the
+   seal's pull request, and not at the seal commit. Check: `git diff --name-only --no-renames <seal commit>
+   <record commit>` lists no window input.
+5. **The pull request to the main branch** is merged with a merge commit, never by a squash or a rebase. Those
+   two methods replace the branch's commits by new ones: H_claim and the seal commit would then be absent from
+   main's history, and both the test of step 3 and the harvest's `git diff` need H_claim.
+6. **The measurement checkout** is a full clone, made without `--depth`, so that it holds every commit and
+   H_claim among them. It is checked out at the seal commit. Checks: `git diff --name-only --no-renames <H_claim>
+   HEAD` lists exactly the three seal documents; `git status --porcelain` prints nothing; and the desk collectors
+   (§6.1), given H_claim as `--h-claim` and the sealed inventory, raise no flag whose code begins with `code.`.
+7. **Plans and the launchd job.** Each plan's `measurement_head` and `repo_head` are the measurement checkout's
+   HEAD when the plan is written (§11 item 1; `repo_head` is the HEAD of the checkout the installer runs from,
+   which is the measurement checkout). The lead writes into each plan-input file the path and SHA-256 of this
+   file and, as the source of its two sizing allowances (§5.5), the path and SHA-256 of the sizing output. The
+   lead copies those digests from the seal record, not from the files in the checkout. The plan writer refuses
+   when a named file does not hash to the digest it was given (`joulewise/b5/plan.py`), so copying the digests
+   from the seal record makes the plan writer check both files against the seal. Naming this file is the lead's
+   rule: the plan writer also accepts a plan input that names no registration. The launchd job is installed by
+   the measurement checkout's own installer (§11 item 2).
+8. **Between windows** the desk order is chain exit, pin advance, harvest (§4.6 item 6). Nothing else is ever
+   committed, merged, pulled or checked out in the measurement checkout.
+
+**The seal record** is the file `FILL[B5-SEAL-RECORD]`. It lists H_claim, the seal commit, the rulings of both
+stages and the refuter's record, the seats, and these SHA-256s:
+
+- at the seal commit: `sealed_inventory.json`, this file and `analysis_plan_block5.md`;
+- at H_claim: `flag_catalog.json` (the seal commit does not change it); the three packs' plan trees; the model
+  panel `configs/model_panels/qwen3_4bit.json`; the idle policy `configs/campaign_policies/quiet_mac_p2_b5.json`;
+  the acceptance `configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json`; the pin bundle of the
+  packs (§4.6 item 4: the prompt pin, the selection record and the ladder in each pack's `prefill_pin/`
+  directory, nine files with three distinct digests); the sizing output `sizing_b5.json` (§5.5); the identity pins
+  `identity_pins.json` (§4.6 item 3); and the chain-source document `docs/phase_2/window_runbook.md` (the chain
+  embeds its pre-calibration screen).
+
+No file lists the SHA-256 of the seal record, so no file has to contain its own digest. This file names the seal
+record by its path.
+
+**Two files keep the labels their generators wrote.** `identity_pins.json` and `sizing_b5.json` each carry
+`"status": "UNSEALED_DRAFT"`, `"sealed": false` and a `note` that begins "UNSEALED DRAFT". These are labels that
+the two generators (`scripts/write_b5_identity_pins.py`, `scripts/size_b5_window.py`) wrote before the seal. No
+program reads them, and the seal does not update them: a changed byte would change the file's sealed digest, make
+the generator's `--check` fail, and, being a change to a window input after H_claim, exclude every later window
+(§11 item 2). Two sentences inside the files are left as written for the same reason: the identity pins' note
+says "The seal replaces status", which the seal does not do, and the sizing output's note still carries an
+unfilled marker for its own digest (`B5-SIZING-OUTPUTS`, §13). What seals each of the two files is its SHA-256 in
+the seal record.
+
+**After the seal commit this file's bytes do not change.** Each plan records this file's SHA-256 (step 7), and
+the harvest fails (HARVEST_FAULT, §7.1) when the file it reads differs from the digest its plan recorded. A value
+that exists only after the seal commit is therefore never written into this file. It is written as a named
+section appended to the seal record: the regenerated plans (`B5-PLANS-REGENERATED`, §13), the release event
+(`B5-RELEASE-EVENT`, §8), the pins of the harvest and analysis programs (§11 item 4), a new sizing file (§5.5), a
+re-issued seal (§11 item 1), and the head each window ran from. The analysis plan is read by no program. If a
+value is filled into it after the seal commit, its SHA-256 changes, and an addendum to the seal record states the
+new digest.
+
+**What no program checks, and the rule that covers it.**
+
+1. *The seal documents against the seal record.* The head comparison of §11 lists a changed seal document and
+   judges nothing by it, so a second commit to this file or to the analysis plan after the seal commit raises no
+   flag. The harvest records the SHA-256 of what it read: this file's in `derived/harvest-thresholds.json`, the
+   catalog's in `derived/window_flags.json`, the inventory's in `derived/code-identity.json`. Rule: an attempt is
+   analysed only when those three digests equal the seal record's (for the inventory, the one in force at the
+   window's arm, §11 item 1). An attempt for which they differ is harvested again on identical bytes with the
+   sealed files (R3).
+2. *The harvest and analysis programs against their addenda.* §11 item 4 gives the rule.
+3. *The seal record.* No program reads it. It binds because anyone who holds the repository can compute every
+   digest in it again from the commit it names.
 
 ## 13. Binding register
 
