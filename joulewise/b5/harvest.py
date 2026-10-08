@@ -22,7 +22,9 @@ Layout under the archive root (created once; a re-harvest uses a new root):
 * ``derived/``: structure only (flags, window summary, exclusions, roster,
   terminal ledger-head candidate, bracket binding, the registered harvest
   thresholds with their provenance, the NEG-8 bound check, the NEG-8 screen's
-  re-evaluation against a collected-subset bound).  These files may leave
+  re-evaluation against a collected-subset bound, and the head comparison:
+  ``code-identity.json`` names H_claim, the head the window ran from and
+  every path that differs between them, by class).  These files may leave
   custody.
 * ``withheld/``: the numbers (re-reduced summaries), member spans, bracket
   evaluation, the re-evaluated NEG-8 bracket, member assessments and
@@ -151,6 +153,48 @@ STRUCTURE, RESTRICTED = "STRUCTURE", "RESTRICTED"
 PIN_ONLY_PATHS = frozenset({"configs/calibration/calibration_ledger_head.json"})
 CODE_PREFIXES = ("joulewise/", "scripts/")
 SEALED_DIRECTORY = "configs/campaigns/v5_claim_25g83"
+# The head comparison (registration section 11) lists every path that differs
+# between H_claim and the head a window ran from, and puts each in one class.
+# The classes are the same in joulewise.flags.collect (tests compare them).
+#
+# Seal documents.  The sealed inventory names H_claim as its ``head``, and a
+# file cannot name the commit that contains it.  So the filled inventory, and
+# the registration and analysis-plan text that name H_claim, are committed in
+# the seal commit, the child of H_claim.  These three paths therefore differ
+# between H_claim and every head a window runs from.  The seal record pins
+# their SHA-256s; the head comparison lists them and judges nothing by them.
+SEAL_DOCUMENT_PATHS = frozenset(f"{SEALED_DIRECTORY}/{name}" for name in (
+    "sealed_inventory.json", "registration_block5.md", "analysis_plan_block5.md"))
+# Window inputs.  A window reads code under joulewise/ and scripts/,
+# configuration under configs/ (its pack, the files its plan tree pins, the
+# flag catalog, the identity pins, the sizing output) and one document: the
+# runbook whose pre-calibration screen the plan writer copies into the chain
+# (joulewise.b5.chain.RUNBOOK_RELATIVE).  A changed window input is a
+# difference.  Files under the executed roots are also compared one by one
+# with the sealed inventory; for the rest this comparison is the only one.
+WINDOW_INPUT_PREFIXES = CODE_PREFIXES + ("configs/",)
+WINDOW_INPUT_FILES = frozenset({"docs/phase_2/window_runbook.md"})
+# Every other changed path (documents, tests, status files) cannot change a
+# window's bytes.  It is written to derived/code-identity.json and excludes
+# nothing.
+HEAD_CHANGE_CLASSES = ("pin_only", "seal_document", "window_input", "record_only")
+CODE_IDENTITY_SCHEMA = "joulewise.b5_code_identity.v1"
+
+
+def head_change_class(relative: str) -> str:
+    """The class of one path that differs between H_claim and the executed head."""
+    if relative in PIN_ONLY_PATHS:
+        return "pin_only"
+    if relative in SEAL_DOCUMENT_PATHS:
+        return "seal_document"
+    # Letter case is ignored here: the measurement Mac's volume does not
+    # distinguish case, so a tracked "Joulewise/x.py" lands in joulewise/.
+    folded = relative.casefold()
+    if folded.startswith(WINDOW_INPUT_PREFIXES) or folded in WINDOW_INPUT_FILES:
+        return "window_input"
+    return "record_only"
+
+
 # joulewise.flags.collect.read_identity_pins documents this file; its "units"
 # map is read here as the per-unit pin override.
 IDENTITY_PINS_SCHEMA = "joulewise.b5_identity_pins.v1"
@@ -5570,8 +5614,10 @@ class _Harvest:
         sealed, sealed_head = _inventory_map(sealed_value)
         executed_path = inputs.executed_inventory_path
         executed = executed_head = porcelain = None
+        driver_checkout: Any = None
         if executed_path is not None and executed_path.is_file():
             value = read_json(executed_path)
+            driver_checkout = value.get("driver_checkout") if isinstance(value, Mapping) else None
             executed, executed_head = _inventory_map(value)
             porcelain = _inventory_checkout(value).get("status_porcelain")
             if not executed:
@@ -5607,20 +5653,38 @@ class _Harvest:
                                         "expected": sealed.get(relative, "absent"),
                                         "observed": executed.get(relative, "absent")})
         # H_claim is the head sealed with the registration; the plan's copy is a fallback.
+        # The installer requires the plan's measurement_head to equal the checkout's
+        # HEAD, so only the sealed inventory's head compares a window with the seal.
         h_claim = self.h_claim = sealed_head or inputs.h_claim
+        head_record: dict[str, Any] = {
+            "schema": CODE_IDENTITY_SCHEMA, "h_claim": h_claim,
+            "h_claim_source": "sealed_inventory" if sealed_head else ("plan" if h_claim else None),
+            "plan_measurement_head": inputs.h_claim, "executed_head": executed_head,
+            "sealed_inventory_sha256": sha256_file(sealed_path) if sealed_path.is_file() else None,
+            "comparison": "not_compared", "changed_paths": {name: [] for name in HEAD_CHANGE_CLASSES}}
         if h_claim is None:
             unmeasured.append({"check": "head", "missing_input": "h_claim"})
         elif executed_head is None:
             if executed is not None:
                 unmeasured.append({"check": "head", "missing_input": "executed_head"})
-        elif executed_head != h_claim:
+        elif executed_head == h_claim:
+            head_record["comparison"] = "identical"
+        else:
             changed = self._changed_paths(h_claim, executed_head)
             if changed is None:
+                head_record["comparison"] = "git_diff_unavailable"
                 unmeasured.append({"check": "head", "missing_input": "git_diff", "head": executed_head,
                                    "h_claim": h_claim})
-            elif set(changed) - PIN_ONLY_PATHS:
-                differences.append({"check": "head", "observed": executed_head, "expected": h_claim,
-                                    "changed_paths": sorted(set(changed) - PIN_ONLY_PATHS)[:16]})
+            else:
+                # Each changed path has one class (head_change_class).  Only a
+                # changed window input is a difference; the rest is recorded.
+                head_record["comparison"] = "compared"
+                for relative in sorted(set(changed)):
+                    head_record["changed_paths"][head_change_class(relative)].append(relative)
+                window_inputs = head_record["changed_paths"]["window_input"]
+                if window_inputs:
+                    differences.append({"check": "head", "observed": executed_head, "expected": h_claim,
+                                        "changed_paths": window_inputs[:16]})
         if isinstance(porcelain, str):
             tracked = [line for line in porcelain.splitlines() if line.strip() and not line.startswith("??")]
             if tracked:
@@ -5649,16 +5713,43 @@ class _Harvest:
         if unmeasured:
             self.emit("code.identity_unmeasured", level="window", collector="code_identity",
                       observed={"unmeasured": unmeasured})
+        # The driver, the hazard modules, the monitor and the collectors run from
+        # the checkout that installed the launch agent.  When that is not the
+        # measurement checkout the driver inventories it separately (L2,
+        # ``driver_checkout``).  It is recorded here with the number of its code
+        # files that differ from the sealed inventory; it raises no flag
+        # (registration: the agents are installed from the measurement checkout).
+        head_record["driver_checkout"] = None
+        if isinstance(driver_checkout, Mapping):
+            driver_files = driver_checkout.get("files") if isinstance(driver_checkout.get("files"), Mapping) else {}
+            differing = None if sealed is None else sorted(
+                relative for relative in set(sealed) | set(driver_files)
+                if relative.startswith(CODE_PREFIXES) and sealed.get(relative) != driver_files.get(relative))
+            head_record["driver_checkout"] = {
+                "root": driver_checkout.get("root"), "head": driver_checkout.get("head"),
+                "status_clean": driver_checkout.get("status_clean"), "file_count": len(driver_files),
+                "files_differing_from_sealed": None if differing is None else differing[:64],
+                "files_differing_from_sealed_count": None if differing is None else len(differing)}
+        # Written last: the flags above stand even if this record cannot be written.
+        self.outputs["derived/code-identity.json"] = write_json_once(self.derived / "code-identity.json", head_record)
 
     def _changed_paths(self, base: str, head: str) -> list[str] | None:
+        """Every path whose committed bytes differ between two commits, or None when git cannot say.
+
+        ``--no-renames`` lists both the old and the new path of a moved file,
+        so a window input moved out of its directory is still listed.  ``-z``
+        separates paths with NUL and never quotes one, so a path is classed
+        by its real first characters.
+        """
         try:
             result = self.seams.runner(["git", "-C", str(self.inputs.measurement_root), "diff", "--name-only",
-                                        f"{base}..{head}"], capture_output=True, text=True, check=False, timeout=60)
+                                        "--no-renames", "-z", f"{base}..{head}"],
+                                       capture_output=True, text=True, check=False, timeout=60)
         except (OSError, subprocess.SubprocessError):
             return None
         if result.returncode != 0:
             return None
-        return [line for line in result.stdout.splitlines() if line.strip()]
+        return [path for path in result.stdout.split("\0") if path.strip()]
 
     def model_identity(self) -> None:
         tree = read_json(self.pack_copy / "plan_tree.json")

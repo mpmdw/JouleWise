@@ -17,9 +17,12 @@ Collectors (``COLLECTORS``):
     campaign policy, acceptance artifact), run-id uniqueness and the run id
     inside each science config. Any difference is ``pack.identity_mismatch``.
 ``checkout_identity``
-    The measurement checkout's HEAD is H_claim, or H_claim plus commits that
-    change only pin paths; it has no tracked edits, and no untracked files
-    under the executed roots. Otherwise ``code.executed_differs_from_sealed``.
+    The measurement checkout's HEAD is H_claim, or descends from it through
+    commits that change no window input (code, configuration, the chain-source
+    runbook): pin-only commits, the seal commit's three documents, and paths
+    no window reads are listed and raise no flag. It has no tracked edits, and
+    no untracked files under the executed roots. Otherwise
+    ``code.executed_differs_from_sealed``.
     Untracked files elsewhere are disclosed (``records.checkout_untracked``).
 ``executed_code``
     SHA-256 of tracked files under ``joulewise/``, ``scripts/`` and the pack,
@@ -99,6 +102,27 @@ ARM_TIMEOUTS_S = {
 }
 ARM_OUTER_TIMEOUT_S = 120.0
 DEFAULT_PIN_ONLY_PATHS = ("configs/calibration/calibration_ledger_head.json",)
+# The head comparison puts every path that differs between H_claim and HEAD in
+# one class. The harvest uses the same classes (joulewise.b5.harvest
+# head_change_class; tests compare the two).
+#
+# Seal documents: the sealed inventory names H_claim as its head, and a file
+# cannot name the commit that contains it, so the filled inventory and the
+# registration and analysis-plan text that name H_claim are committed in the
+# seal commit, the child of H_claim. These three paths differ between H_claim
+# and every head a window runs from. The seal record pins their SHA-256s.
+SEAL_DOCUMENT_PATHS = tuple(
+    f"configs/campaigns/v5_claim_25g83/{name}"
+    for name in ("sealed_inventory.json", "registration_block5.md", "analysis_plan_block5.md")
+)
+# Window inputs: code, configuration, and the runbook whose pre-calibration
+# screen the plan writer copies into the chain. A changed window input is
+# code.executed_differs_from_sealed. Any other changed path (documents, tests,
+# status files) cannot change a window's bytes; it is listed in the collector's
+# observed record and raises no flag.
+WINDOW_INPUT_PREFIXES = ("joulewise/", "scripts/", "configs/")
+WINDOW_INPUT_FILES = ("docs/phase_2/window_runbook.md",)
+HEAD_CHANGE_CLASSES = ("pin_only", "seal_document", "window_input", "record_only")
 GIT_TIMEOUT_S = 30.0
 _SHA_KEYS = ("sha256", "byte_sha256", "actual_sha256", "artifact_sha256")
 _PIN_FORMS = (
@@ -516,8 +540,29 @@ def _under(path: str, roots: Sequence[str]) -> bool:
     return any(path == root or path.startswith(root.rstrip("/") + "/") for root in roots)
 
 
+def head_change_class(path: str, pin_only: Iterable[str] = DEFAULT_PIN_ONLY_PATHS) -> str:
+    """The class of one path that differs between H_claim and HEAD (see ``SEAL_DOCUMENT_PATHS``)."""
+
+    if path in pin_only:
+        return "pin_only"
+    if path in SEAL_DOCUMENT_PATHS:
+        return "seal_document"
+    # Letter case is ignored here: the measurement Mac's volume does not
+    # distinguish case, so a tracked "Joulewise/x.py" lands in joulewise/.
+    folded = path.casefold()
+    if folded.startswith(WINDOW_INPUT_PREFIXES) or folded in WINDOW_INPUT_FILES:
+        return "window_input"
+    return "record_only"
+
+
 def collect_checkout_identity(params: Mapping[str, Any]) -> dict[str, Any]:
-    """HEAD is H_claim (plus pin-only commits); no tracked edits; no importable strays.
+    """HEAD descends from H_claim and no window input changed; no tracked edits; no importable strays.
+
+    The paths that differ between H_claim and HEAD are classed by
+    :func:`head_change_class`. A changed window input, or a HEAD that does not
+    descend from H_claim, is ``code.executed_differs_from_sealed``. Pin-only
+    paths, the three seal documents and paths no window reads are listed in
+    ``observed`` and raise no flag.
 
     Tracked edits anywhere, and untracked files under the executed roots
     (``joulewise/``, ``scripts/``, the pack: Python can import them), are
@@ -599,22 +644,34 @@ def collect_checkout_identity(params: Mapping[str, Any]) -> dict[str, Any]:
             except CollectorError:
                 ancestor = False
             if ancestor:
+                # --no-renames lists both paths of a moved file, so a window
+                # input moved out of its directory is still listed; -z never
+                # quotes a path, so each is classed by its real first characters.
                 changed = sorted(
-                    line for line in _git(repo, "diff", "--name-only", h_claim, head)
-                    .decode("utf-8", "replace").splitlines() if line
+                    item.decode("utf-8", "replace")
+                    for item in _git(repo, "diff", "--name-only", "--no-renames", "-z", h_claim, head).split(b"\0")
+                    if item
                 )
-        extra = [path for path in changed if path not in pin_only]
+        classes: dict[str, list[str]] = {klass: [] for klass in HEAD_CHANGE_CLASSES}
+        for path in changed:
+            classes[head_change_class(path, pin_only)].append(path)
+        extra = classes["window_input"]
         observed.update({"h_claim": h_claim, "descends_from_h_claim": ancestor,
-                         "changed_paths": changed[:_MAX_LISTED]})
+                         "changed_paths": changed[:_MAX_LISTED],
+                         "changed_path_counts": {klass: len(paths) for klass, paths in classes.items()},
+                         "seal_document_changes": classes["seal_document"],
+                         "record_only_changes": classes["record_only"][:_MAX_LISTED]})
         if not ancestor or extra:
             flags.append(
                 _flag(
                     params, name, code="code.executed_differs_from_sealed", family="CODE_IDENTITY",
                     klass="NUMBER",
                     observed={"check": "head_is_h_claim", "head": head, "descends": ancestor,
-                              "non_pin_changes": extra[:_MAX_LISTED]},
-                    expected={"head": h_claim, "pin_only_paths": list(pin_only)},
-                    detail="measurement checkout HEAD is not H_claim plus pin-only commits",
+                              "window_input_changes": extra[:_MAX_LISTED]},
+                    expected={"head": h_claim, "pin_only_paths": list(pin_only),
+                              "seal_document_paths": list(SEAL_DOCUMENT_PATHS)},
+                    detail="measurement checkout HEAD does not descend from H_claim, or a window input "
+                           "(code, configuration or the chain-source runbook) changed since H_claim",
                     legacy_site="joulewise/night_gate.py:1470", legacy_code="night_plan_stale",
                 )
             )

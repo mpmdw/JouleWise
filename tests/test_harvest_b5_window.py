@@ -3217,6 +3217,185 @@ class IdentityReplayTests(WindowTestCase):
         self.assertIn("code.identity_unmeasured", window.exclusions()["reasons"])
         self.assertNotIn("code.executed_differs_from_sealed", window.codes())
 
+    # -- the seal landing (registration section 11) ---------------------------
+    # The sealed inventory names H_claim, so it is committed after H_claim, in
+    # the seal commit, with the final registration and analysis-plan text.
+    # Every window therefore runs from a head that differs from H_claim.  The
+    # head comparison lists the changed paths; only a changed window input
+    # (code, configuration, the chain-source runbook) is a difference.
+
+    EXECUTED_HEAD = "b" * 40
+    SEAL_DOCUMENTS = [f"{SEALED_DIR}/{name}" for name in (
+        "analysis_plan_block5.md", "registration_block5.md", "sealed_inventory.json")]
+    PIN = "configs/calibration/calibration_ledger_head.json"
+    RECORDS = ["RUN_STATE.md", "TASK_QUEUE.md", "docs/process_traces/seal/52-seal-record.md", "tests/test_new.py"]
+
+    def diff_seams(self, changed, *, returncode=0, calls=None):
+        """Production seams, except that ``git diff`` answers with ``changed`` (NUL-separated, as ``-z`` prints)."""
+        def runner(argv, *args, **kwargs):
+            if list(argv[:1]) == ["git"] and "diff" in argv:
+                if calls is not None:
+                    calls.append(list(argv))
+                return subprocess.CompletedProcess(argv, returncode, "".join(f"{path}\0" for path in changed), "")
+            return subprocess.run(argv, *args, **kwargs)
+        return h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
+                       boot_session_uuid=lambda: "B5-TEST-BOOT", runner=runner)
+
+    def code_identity_record(self, window):
+        return json.loads((window.archive / "derived" / "code-identity.json").read_bytes())
+
+    def test_a_clean_window_at_h_claim_records_an_identical_head(self):
+        window = self.window()
+        record = window.harvest()
+        identity = self.code_identity_record(window)
+        self.assertEqual((identity["schema"], identity["comparison"], identity["h_claim"], identity["executed_head"],
+                          identity["h_claim_source"], identity["plan_measurement_head"]),
+                         ("joulewise.b5_code_identity.v1", "identical", H_CLAIM, H_CLAIM, "sealed_inventory", H_CLAIM))
+        self.assertEqual(identity["sealed_inventory_sha256"],
+                         sha(window.archive / "sources" / "inputs" / "sealed_inventory.json"))
+        # The driver ran from the measurement checkout itself: no second checkout to record.
+        self.assertIsNone(identity["driver_checkout"])
+        self.assertEqual(record["outputs"]["derived/code-identity.json"],
+                         sha(window.archive / "derived" / "code-identity.json"))
+
+    def test_the_seal_commit_records_and_a_pin_advance_keep_the_code_identity(self):
+        calls = []
+        window = self.window(executed_overrides={"head": self.EXECUTED_HEAD})
+        window.harvest(seams=self.diff_seams(self.SEAL_DOCUMENTS + [self.PIN] + self.RECORDS, calls=calls))
+        self.assertNotIn("code.executed_differs_from_sealed", window.codes())
+        self.assertNotIn("code.identity_unmeasured", window.codes())
+        # The same window at H_claim itself is excluded for the same reasons, no more.
+        baseline = Window(self.tmp / "baseline", catalog_overrides=self.ISOLATE)
+        baseline.harvest()
+        self.assertEqual(window.exclusions()["reasons"], baseline.exclusions()["reasons"])
+        self.assertEqual(window.exclusions()["claim_usable"], baseline.exclusions()["claim_usable"])
+        identity = self.code_identity_record(window)
+        self.assertEqual((identity["comparison"], identity["h_claim"], identity["executed_head"]),
+                         ("compared", H_CLAIM, self.EXECUTED_HEAD))
+        self.assertEqual(identity["changed_paths"], {"pin_only": [self.PIN], "seal_document": self.SEAL_DOCUMENTS,
+                                                     "window_input": [], "record_only": self.RECORDS})
+        # One diff, between the sealed head and the executed head, with both
+        # sides of a rename listed and no path quoted.
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][3:], ["diff", "--name-only", "--no-renames", "-z",
+                                        f"{H_CLAIM}..{self.EXECUTED_HEAD}"])
+
+    def test_a_changed_window_input_after_the_seal_is_still_a_difference(self):
+        # One path of each kind: code, configuration no per-file check covers, and the
+        # chain-source runbook.  tests.flags.test_flags_collect classes every other kind.
+        for index, relative in enumerate((
+                "joulewise/b5t_stub.py", f"{SEALED_DIR}/identity_pins.json", "docs/phase_2/window_runbook.md")):
+            with self.subTest(relative):
+                window = Window(self.tmp / f"input-{index}", catalog_overrides=self.ISOLATE,
+                                executed_overrides={"head": self.EXECUTED_HEAD})
+                window.harvest(seams=self.diff_seams(self.SEAL_DOCUMENTS + self.RECORDS + [relative]))
+                flag = next(flag for flag in window.flags() if flag["code"] == "code.executed_differs_from_sealed")
+                self.assertEqual(flag["observed"]["differences"],
+                                 [{"check": "head", "observed": self.EXECUTED_HEAD, "expected": H_CLAIM,
+                                   "changed_paths": [relative]}])
+                self.assertIn("code.executed_differs_from_sealed", window.exclusions()["reasons"])
+                self.assertEqual(self.code_identity_record(window)["changed_paths"]["window_input"], [relative])
+
+    def test_a_head_comparison_git_cannot_make_stays_unmeasured(self):
+        window = self.window(executed_overrides={"head": self.EXECUTED_HEAD})
+        window.harvest(seams=self.diff_seams([], returncode=128))
+        flag = next(flag for flag in window.flags() if flag["code"] == "code.identity_unmeasured")
+        self.assertEqual(flag["observed"]["unmeasured"],
+                         [{"check": "head", "missing_input": "git_diff", "head": self.EXECUTED_HEAD,
+                           "h_claim": H_CLAIM}])
+        self.assertIn("code.identity_unmeasured", window.exclusions()["reasons"])
+        self.assertNotIn("code.executed_differs_from_sealed", window.codes())
+        self.assertEqual(self.code_identity_record(window)["comparison"], "git_diff_unavailable")
+
+    def test_a_separate_driver_checkout_is_recorded_and_raises_no_flag(self):
+        """The driver ran from another checkout whose copy of one code file differs from the sealed bytes."""
+        window = self.window()
+        path = window.custody / "night" / "executed_inventory.json"
+        value = json.loads(path.read_bytes())
+        code = {relative: digest for relative, digest in value["measurement_checkout"]["files"].items()
+                if relative.startswith(("joulewise/", "scripts/"))}
+        value["driver_checkout"] = {"root": "/elsewhere/driver", "head": "c" * 40, "status_porcelain": "",
+                                    "status_clean": True, "errors": [],
+                                    "files": {**code, "joulewise/b5t_stub.py": "f" * 64}}
+        put(path, value)
+        window.harvest()
+        self.assertNotIn("code.executed_differs_from_sealed", window.codes())
+        self.assertNotIn("code.identity_unmeasured", window.codes())
+        self.assertEqual(self.code_identity_record(window)["driver_checkout"], {
+            "root": "/elsewhere/driver", "head": "c" * 40, "status_clean": True, "file_count": len(code),
+            "files_differing_from_sealed": ["joulewise/b5t_stub.py"], "files_differing_from_sealed_count": 1})
+
+    def test_the_real_git_history_of_a_seal_landing(self):
+        """The whole landing against real git: H_claim, the seal commit, a records commit; then a counterfactual.
+
+        The measurement checkout becomes a real repository.  H_claim holds a
+        draft registration and no filled inventory.  The seal commit adds the
+        inventory, which names H_claim, and the registration bytes the plan
+        recorded.  A third commit adds a seal record under docs/.  The window
+        ran from that third commit.  The counterfactual window ran from a
+        fourth commit that adds one configuration file.
+        """
+        from tests.git_fixture import init_git_fixture
+
+        def git(repo, *args):
+            return subprocess.run(("git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                                   *args), check=True, capture_output=True, text=True).stdout.strip()
+
+        def ran_from(window, head):
+            path = window.custody / "night" / "executed_inventory.json"
+            value = json.loads(path.read_bytes())
+            value["measurement_checkout"]["head"] = head
+            put(path, value)
+
+        def land(window):
+            repo = window.measurement
+            inventory = repo / SEALED_DIR / "sealed_inventory.json"
+            registration = repo / REGISTRATION_RELATIVE
+            sealed_text, files = registration.read_bytes(), json.loads(inventory.read_bytes())["files"]
+            init_git_fixture(repo, "-q")
+            inventory.unlink()
+            registration.write_bytes(b"DRAFT, NOT SEALED\n" + sealed_text)
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", "H_claim: the last code commit")
+            h_claim = git(repo, "rev-parse", "HEAD")
+            registration.write_bytes(sealed_text)
+            put(inventory, {"head": h_claim, "files": files})
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", "the seal commit")
+            record = repo / "docs/process_traces/seal/52-seal-record.md"
+            record.parent.mkdir(parents=True)
+            record.write_text(f"H_claim {h_claim}\n")
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", "the seal record")
+            return h_claim, git(repo, "rev-parse", "HEAD")
+
+        window = self.window()
+        h_claim, measurement_head = land(window)
+        ran_from(window, measurement_head)
+        window.harvest()
+        self.assertNotIn("code.executed_differs_from_sealed", window.codes())
+        self.assertNotIn("code.identity_unmeasured", window.codes())
+        identity = self.code_identity_record(window)
+        self.assertEqual((identity["comparison"], identity["h_claim"], identity["h_claim_source"],
+                          identity["executed_head"]), ("compared", h_claim, "sealed_inventory", measurement_head))
+        self.assertEqual(identity["changed_paths"], {
+            "pin_only": [], "window_input": [],
+            "seal_document": [REGISTRATION_RELATIVE, f"{SEALED_DIR}/sealed_inventory.json"],
+            "record_only": ["docs/process_traces/seal/52-seal-record.md"]})
+
+        changed = Window(self.tmp / "changed", catalog_overrides=self.ISOLATE)
+        h_claim, _measurement_head = land(changed)
+        put(changed.measurement / "configs" / "added_after_the_seal.json", {"value": 1})
+        git(changed.measurement, "add", "-A")
+        git(changed.measurement, "commit", "-q", "-m", "a configuration file added after the seal")
+        ran_from(changed, git(changed.measurement, "rev-parse", "HEAD"))
+        changed.harvest()
+        flag = next(flag for flag in changed.flags() if flag["code"] == "code.executed_differs_from_sealed")
+        self.assertEqual([(row["check"], row["expected"], row["changed_paths"])
+                          for row in flag["observed"]["differences"]],
+                         [("head", h_claim, ["configs/added_after_the_seal.json"])])
+        self.assertIn("code.executed_differs_from_sealed", changed.exclusions()["reasons"])
+
     def test_tampered_pinned_config_without_a_sealed_inventory_is_still_a_mismatch(self):
         """Review F6: the plan tree's own pins are compared even when the sealed inventory is absent."""
         window = self.window(sealed_inventory=False)
