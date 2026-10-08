@@ -4134,7 +4134,7 @@ block in which no pack is re-armed and no attempt is abandoned.
 - *measurement checkout*: a clone, so it holds the same C and S. It is checked out at S.
 - *p1*, *p2*: the pin-only commits that the pin advance makes in the measurement checkout after ALPHA-1 and after
   BETA-1 (§4.6 item 6). A re-armed pack or an abandoned attempt adds one more each.
-- *the three carets*: the measurement checkout's HEAD at the moment each window's plan is written. Each plan
+- *the three carets* (`^`): the measurement checkout's HEAD at the moment each window's plan is written. Each plan
   records that commit as its `measurement_head`, and the driver records the same commit as the executed head when
   the window arms. A harvest compares the head its window ran from (S, p1 or p2) with C.
 
