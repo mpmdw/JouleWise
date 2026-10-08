@@ -2475,10 +2475,35 @@ class HazardPackInstallTests(unittest.TestCase):
             self.assertTrue((rendered / (label + ".plist")).is_file())
 
     def test_there_is_no_install_time_launchd_probe_for_this_class(self):
+        # The installer first requires that a launchctl program exists, and
+        # only then reads the plan and refuses the probe for this class. macOS
+        # has /bin/launchctl; Linux has none, so there the first check stopped
+        # the installer ("launchctl executable not found") before the refusal
+        # under test. A stand-in named launchctl, first on the test's PATH,
+        # meets that requirement on every system. It also keeps this test off
+        # the real launchctl: were it ever run, it would leave a marker file.
+        stand_in = self.root / "bin" / "launchctl"
+        marker = self.root / "LAUNCHCTL-EXECUTED"
+        stand_in.write_text("#!/bin/sh\ntouch " + str(marker) + "\nexit 97\n")
+        stand_in.chmod(0o755)
         code, _out, err, calls = self.install("--launchd-probe")
         self.assertEqual(2, code)
         self.assertIn("no install-time launchd probe", err)
         self.assertFalse(any(argv and argv[0].endswith("launchctl") for argv in calls))
+        self.assertFalse(marker.exists(), "the installer ran launchctl")
+        self.assertFalse((self.root / "CHAIN-EXECUTED").exists())
+
+    def test_without_a_launchctl_program_the_probe_request_stops_at_that_check(self):
+        # The counterpart: with no launchctl on PATH at all (every Linux
+        # machine), the installer says so and runs nothing.
+        from unittest import mock
+        empty = self.root / "no-launchctl-here"
+        empty.mkdir()
+        with mock.patch.object(self, "path", str(empty)):
+            code, _out, err, calls = self.install("--launchd-probe")
+        self.assertEqual(2, code)
+        self.assertEqual("launchctl executable not found\n", err)
+        self.assertEqual([], calls)
         self.assertFalse((self.root / "CHAIN-EXECUTED").exists())
 
 

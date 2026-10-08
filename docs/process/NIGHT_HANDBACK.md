@@ -204,51 +204,112 @@ All agents must still close before the plan span: the unchanged night gate recor
 
 ## Purpose of this night
 
-**Written 2026-10-01 for Revision 6 block 1 (windows C1, C2 and C3).** This
-section and the two that follow it ("Where the results are", "Next lane")
-hold for every window of this block. They name no single plan: the plan id,
-t0, pinned head H and digests of each window are in that window's arm
-notice and arm record. The QPE-01 pilot text these sections held until
-2026-10-01 is kept further down, under headings marked history. Ed asked
-for the rewrite after C1's courier reported the old text stale (his
-2026-10-01 reply on the C1 courier thread). A later block, or a different
-kind of night, rewrites these three sections again before its first arm.
+**Written 2026-10-07 for measurement block 5 (three packs: ALPHA, BETA and
+GAMMA).** This section and the two that follow it ("Where the results are",
+"Next lane") hold for every window of this block. They name no single plan:
+the plan id, the start time and the digests of each window are in that
+window's plan file and in its arm notice (the email sent before a window is
+scheduled). They are not rewritten between the windows of this block. The
+courier reads this file from the **measurement clone**, the dedicated git
+checkout that every window of the block runs from, and that clone stays at
+one commit for the whole block, so the text has to be right for all three
+packs. The Revision 6 block 1 text that these sections held from 2026-10-01
+until this rewrite is in this file's git history. A later block, or a
+different kind of night, rewrites these three sections again before its
+first arm.
 
-**Which plans this covers.** Plan ids
-`d079-epoch-25g83-r6-derivation-<label>-<t0>`, where `<label>` is `c1`, `c2`
-or `c3` and `<t0>` is the window's start in UTC as `YYYYMMDDTHHMMZ`. Each
-window's calibration session id is `d079-epoch-25g83-r6-<t0>`. The receipt
-class is `DIAGNOSTIC_NO_PACK`.
+**Which plans this covers.** A plan is the file `night_plan.json` in the
+window's **custody root**, the directory `/Users/edr/night-custody/<plan id>/`
+that keeps the plan and the records of that one window. These sections
+cover every plan whose `receipt_class` is `HAZARD_PACK` and whose `schema`
+is `joulewise.night_plan.v5`. If the plan you were started for has another
+`receipt_class`, these three sections do not describe it: say so in the
+email and report from the result record alone.
 
-**What a window is.** One unattended run of the Mac's power sampler
-(`powermetrics`) while the machine idles, with no agent or other work on it.
-At t0 the night driver sets network time Off and records that receipt
-(`night/network_time_off.json`). It then requires 600 s of clean machine
-state (the clean dwell: no busy daemons, load at most 2.0, AC power, no
-agent process), and the night gate runs its own checks. Only then does the
-chain start. The chain (`scripts/night_chains/calibration_derivation_only.zsh`)
-takes 12 captures, slots `d01` to `d12`, one every 600 s. It validates each
-capture and appends it to the calibration observation ledger. The last slot
-reports a ledger head pin candidate, and no number may be claimed until the
-harvest commits that pin. This is a calibration night, not a quiet-predicate
-evidence night, so no `evidence_*` files are expected.
+**The words these sections use.**
 
-**Why these windows.** The registration is Revision 6 of
-`configs/calibration/preregistration_d079_epoch_25g83_rev1.md` (sealed; its
-sha256 is in each arm notice). It tests two things. The first is the search
-limit of 1,710,000 candidate timing positions per capture, raised from
-165,000 because 8 of the 24 captures in the September windows W1 and W2 hit
-the old limit. The second is whether the 12 or more valid captures the new
-calibration needs can be collected. Revision 6 allows windows back to back,
-up to 3 counting windows plus one replacement. Each window's harvest decides
-from counts only, never from measured values, whether another window
-follows (`next_window.verdict` in `harvest.json`: `NEXT_WINDOW`,
-`CLOSE_AND_DERIVE`, or a stop).
+- A **member** is one measured model run: a language model is loaded, the
+  Mac idles for a baseline, the model answers one fixed prompt, and the
+  Mac's power sampler (`powermetrics`) records the processor's power the
+  whole time.
+- A **pack** is a fixed, committed set of experiment inputs: which model
+  runs, on which prompts, how many members, in what order. Block 5 has
+  three, and the plan names its pack in `hazard_window.pack.pack_id`:
+  - **ALPHA**, `d117_floor_qwen3-1p7b_v5`: 119 planned members, all of the
+    model Qwen3-1.7B.
+  - **BETA**, `d117_floor_qwen3-8b_v5`: 119 planned members, all of the
+    model Qwen3-8B.
+  - **GAMMA**, `d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5`: 101 planned
+    members, the two models interleaved.
+- A **window** is one unattended run of one pack, started by the macOS
+  scheduler (launchd) at the planned start time **t0**. An **attempt** is
+  one window of a pack, numbered from 1 (`hazard_window.attempt` in the
+  plan): "ALPHA-2" is the second window of ALPHA. The packs run in the
+  fixed order ALPHA, BETA, GAMMA. A pack is attempted again, with the next
+  attempt number, until one attempt is **claim-usable** (defined under
+  "What a window can support" below); then the next pack starts.
 
-**What a window authorizes.** Nothing by itself. The courier's report, the
-chain's slot lines and the pin candidate are provisional. They authorize no
-cutoff, no block two and no claim. The verdict comes from the result record,
-and the decision to continue comes from the harvest.
+**What a window does, in order.** At t0 launchd starts the **driver**
+(`scripts/run_night.py` in the measurement clone). The driver first takes
+the **agent census**: it lists every Claude and Codex process on the Mac
+and refuses the window if it finds one, because an agent process uses the
+processor whose power is being measured. It then runs the **arm**: it
+measures six physical hazards directly (the clock, the battery, thermal
+pressure, a competing process, free disk, and whether the power sampler is
+sampling) and refuses if one of them is present. This takes 4 to 47
+minutes. If the arm passes, the driver starts the **chain**, the shell
+program that runs the pack's members between two calibration captures, one
+before the members and one after. The chain is expected to run 5 to 9
+hours. While it runs, the driver repeats the census every 30 seconds and
+stops the chain if an agent process appears. When the chain has ended and
+its processes are proven gone, the driver writes the window's result
+records and starts the courier.
+
+**What each pack is for.** A member's request has two timed parts, called
+**phases**: **prefill** (the model reads the prompt and produces the first
+output token) and **decode** (it produces the remaining output tokens). A
+**phase energy** is the processor energy, in joules, that the power records
+assign to one phase. A **detection floor** is the largest difference the
+instrument shows when nothing differs, and so the smallest real difference
+it can resolve.
+
+- **ALPHA** collects what is needed to report the phase energy of
+  Qwen3-1.7B for decode and for the prefill of a 2048-token prompt, each
+  with its interval, and that model's detection floors.
+- **BETA** collects the same for Qwen3-8B.
+- **GAMMA** collects the two comparisons between the models (Qwen3-8B
+  minus Qwen3-1.7B, for decode and for the 2048-token prefill). They are
+  judged against the detection floors from ALPHA and BETA, and GAMMA runs
+  last.
+
+**What a window can support.** Nothing by itself, and nothing at the time
+the courier runs. Three later steps stand between a window and any number:
+
+1. The **harvest**, a desk program that runs after the window, checks the
+   window's bytes and writes its own verdict and one yes-or-no value,
+   `claim_usable`. A window is **claim-usable** when nothing the harvest
+   found removes the whole window and every reported quantity keeps at
+   least half of its planned repetitions (the exact rule is in sections
+   0.16 and 6.6 of the sealed registration,
+   `configs/campaigns/v5_claim_25g83/registration_block5.md` in the
+   measurement clone). Only a pack's first claim-usable attempt is
+   analysed; attempts are never mixed.
+2. The block closes when all three packs have a claim-usable attempt, or
+   when it is stopped under the registration's END STATE rule (section
+   7.4: the clock instrument is failing and another window cannot cure
+   it).
+3. The **release event** is the recorded step at which the measured
+   values are first opened to the analysis. It comes after the block has
+   closed and after the analysis programs have been run once with every
+   output kept hidden (registration section 8, item 3).
+
+Until the release event the block is **blind**: no person and no agent
+session reads or writes an energy, a power or a phase duration of any
+window of the block. The courier's report therefore carries **structure**
+only: verdict words, counts, reason codes, paths and hashes. The next
+section says exactly which records the courier may open and what it may
+say. The courier's report, the driver's verdict and the yield counts
+authorize no claim, no number and no decision about the next window.
 
 ## Purpose of plan qpe01-pilot-n1-20260923-0700 (history, superseded 2026-10-01)
 
@@ -1199,58 +1260,190 @@ the ordinary arm gates.
 
 ## Where the results are
 
-- Custody root: `/Users/edr/night-custody/<plan_id>`, the exact directory
-  named in the published plan. The chain wrapper `chain.zsh` and its
-  `chain.zsh.sha256`, `calibration_plan.json`, `identity-epoch.json`,
-  `t1-bindings.json` and `start_conditions_manifest.json` sit at its top.
-- Driver records in `<custody_root>/night/`: `result.json`, then
-  `receipt.json` or `refusal.json` as `result.json` directs;
-  `network_time_off.json`, `clean_dwell.json`, `start_conditions.json`,
-  `chain.started`, `chain.exited`, `censuses.jsonl`, `chain.stdout.log` and
-  `chain.stderr.log`. The result record owns the verdict and the chain exit
-  code; report them as recorded. A pre-start refusal has `verdict` REFUSED,
-  a null `chain_exit_code` and no `chain.started`. Nothing was measured, and
-  the same label is armed again after the fix.
-- Capture sessions: `<custody_root>/runs/`. The calibration observation
-  ledger is `runs/calibration_observation_ledger.jsonl` in the measurement
-  clone named by the plan's `measurement_root`, and its committed head pin is
-  `configs/calibration/calibration_ledger_head.json` in that clone.
-- Driver log: `<custody_root>/night.log`. Launchd streams:
-  `night/launchd.night.out` and `night/launchd.night.err`.
-- Courier records under `<custody_root>/night/`: `courier.sent` (the Gmail
-  message id of the result email actually delivered), `courier.json`,
-  `courier.attempts.jsonl` and `courier.heartbeat`.
-- Results branch: `night-results/<plan_id>` on `origin`, if the driver's
-  push succeeded. Verify it; do not presume it.
-- After harvest: the archive `/Users/edr/night-archive/harvest-<plan_id>`,
-  with `harvest.json`, written by `scripts/harvest_window.py`. The ledger pin
-  and battery-float verdict are committed on branch `harvest/<session_id>`.
-  The window's records land on `main` through
-  `scripts/land_window_records.py`.
+Two kinds of record exist for a block-5 window. The **driver's records**
+are written during and at the end of the window, and they are what the
+courier reports from. The **harvest's records** are written later, by
+another program, and normally do not exist yet when the courier runs.
+
+**The driver's records.**
+
+- Custody root: `/Users/edr/night-custody/<plan id>/`, the exact directory
+  named in the plan. At its top: the plan `night_plan.json`, the chain
+  `chain.zsh` with its digest `chain.zsh.sha256`, the chain's settings
+  `window.env`, and the plan writer's record `b5-window-plan-record.json`.
+- Result records, in `<custody root>/night/`:
+  - `result.json`: the driver's verdict, the chain's exit code, the refusal
+    reason and detail when the window was refused, and the list
+    `refusal_documents`. The result record owns the verdict; report it as
+    recorded.
+  - `hazard_result.json`: the block-5 terminal record. It holds the same
+    verdict, the stage the window reached, the arm's verdict for each of
+    the six hazards, the yield (defined below) for the window and for each
+    stage, the reason codes of the flags the driver raised, the result of
+    the clock control G10 when the plan asked for it, the number of
+    monitor restarts, and the fault reasons.
+  - `refusal.json` and any other file `result.json` lists in
+    `refusal_documents`.
+  - There is no `receipt.json`. A block-5 window is not judged by the older
+    night gate, so the sentence at the top of this file that sends the
+    reader to `night/receipt.json` does not apply.
+- The **driver's verdict** is one of four words. `GO`: the arm passed and
+  the chain was started; the word describes the arm, not what was
+  collected. `REFUSED`: no measurement was taken, because the census, the
+  arm or the launch refused, or the chain's end could not be proven.
+  `CHAIN_STOPPED`: the chain started and stopped itself before its first
+  group of members; nothing was collected. `ABORTED`: the driver stopped a
+  running chain (an agent process appeared, the window's deadline passed,
+  or free disk fell under its floor).
+- The **yield** is counts only: how many members were planned, how many
+  left a result directory, and how many of those ended with the status
+  succeeded, for the window and for each stage (a stage is one group of
+  members the chain runs together). Its status is `FULL` (every planned
+  member succeeded), `PARTIAL`, `LOW` (some stage kept fewer members than
+  it needs to do its job), `EMPTY` (no member left a result) or `UNKNOWN`
+  (the count failed). The driver hands the courier one sentence,
+  `yield_line`, of the form "collected X of Y planned members".
+- Results branch: `night-results/<plan id>` on `origin`, holding copies of
+  the driver's structure-only records, if the driver's push succeeded.
+  Verify it; do not presume it.
+- Courier records, in `<custody root>/night/`: `courier.heartbeat`,
+  `courier.json`, `courier.attempts.jsonl`, and `courier.sent` (the Gmail
+  message id of the result email actually delivered).
+
+**What the courier opens.** Only these: this file; the driver's facts that
+arrive in the courier's own instructions; `night/result.json`;
+`night/hazard_result.json`; the refusal documents; and, to read which pack
+and attempt this is, `night_plan.json`.
+
+**What the courier never opens.** Everything else under the custody root
+and everything the window measured: the chain's and the members' logs
+(`night/chain.stdout.log`, `night/chain.stderr.log`, `night/transcript/`,
+`night.log`, `operator-logs/`); anything under `hazards/` or `flags/`; the
+two **runs roots**, the directories the plan names in
+`hazard_window.runs_roots`, where every member's measured data is written;
+the calibration ledger; and any harvest archive (next paragraph). These
+files hold, or can quote, energies, powers and durations. They are
+**restricted**: until the release event only programs read them, never a
+person and never an agent session.
+
+**The harvest's records.** The harvest is run by the magistrate after the
+courier has finished ("Next lane"). It writes a new directory,
+`/Users/edr/night-archive/harvest-<plan id>` (a repeated harvest of the
+same window adds `-r2`, then `-r3`). In it:
+
+- `harvest.json` is open. It holds the harvest's verdict (`COLLECTED`,
+  `NULL`, `NO_COLLECTION` or `HARVEST_FAULT`), the value `claim_usable`,
+  and the **window reasons** (`exclude_window_reasons`): the reason codes
+  that remove the whole window, an empty list when there is none.
+- `derived/flags.jsonl`, `derived/exclusions.json` and
+  `derived/window_flags.json` are restricted until the release event. They
+  name, member by member, a reason code whose mere presence says something
+  about a measured energy. Nothing from these three files is ever quoted,
+  counted or summarized in an email, a record or a pull request before the
+  release event.
+- Everything under `sources/` and `withheld/` is restricted for the same
+  reason as the runs roots.
+
+**What the courier may say.** From the driver's records: the verdict; the
+chain's exit code; a refusal's reason and detail; the yield sentence and
+the yield counts for each stage; the arm's verdict for each hazard; the
+return code of each stage; the reason codes of the flags the driver
+raised; the G10 result; the number of monitor restarts; the fault reasons;
+the results branch name. When the driver marks a fault, the word FAULT and
+the fault reasons go in the subject and the first line, as the driver's
+instructions say. The email also names the pack (ALPHA, BETA or GAMMA) and
+the attempt number.
+
+About the harvest the courier may say one thing: that the harvest has not
+run yet, and that whether this window is claim-usable is decided by it and
+not by anything in this email. If a `harvest.json` for this plan does
+already exist, the courier may report its verdict, `claim_usable` and the
+window reasons, and nothing else from the archive.
+
+**What the courier never says.** An energy, a power, or the duration of a
+member or of a phase, in any unit or as a comparison ("higher", "about
+twice"). The name or run id of a member. The text of an error or of a log
+line. A count of flags by reason code taken from a harvest. Anything from
+the three restricted `derived/` files. A statement that a window is, or is
+not, usable for a claim when no `harvest.json` says so.
 
 ## Next lane
 
-The courier harvests, uninstalls and arms nothing. The headless magistrate
-harvests once `night/courier.sent` exists and the time is past t0 + 9300 s
-(`harvest_window.py` refuses earlier). It works under the top block of
-`RUN_STATE.md` (brief
-`docs/process_traces/2026-09-29-interactive-ff50b201/171-magistrate-block-brief.md`
-plus its refusal route) and runs, unedited:
-- section 6 of
-  `docs/process_traces/2026-09-29-interactive-ff50b201/170-c1-arm-recipe.md`
-  for the harvest: pin advance, battery-float verdict, the pin-and-verdict
-  commit, `harvest_window.py`, then `land_window_records.py` and a
-  light-tier PR merged with `--merge`;
-- section 7 of the same recipe for the next window's inputs.
+**For the courier: nothing follows the email.** The courier harvests
+nothing, uninstalls nothing, arms nothing, and writes no file except its
+own records under `<custody root>/night/` (`courier.heartbeat`, then
+`courier.sent`). The courier's instructions end by saying to continue with
+this lane; for a block-5 window this lane holds no step for the courier.
+Once Gmail has accepted the email, write `night/courier.sent` and exit at
+once. *Why at once:* the courier is itself a Claude process. The
+**watchdog** (the scheduled job that starts the lead session when no
+window is in progress) hands the Mac on only when `night/courier.sent`
+exists and no agent or driver process is still alive, and no further
+window can be scheduled before that.
 
-It decides on `next_window.verdict` alone. `NEXT_WINDOW` arms the next label
-(sections 1, 3, 4 and 5, `LEAD_S=5400`), and the arm notice is the
-activation's one email. A pre-start refusal is fixed and the same label
-re-armed (refusal route R1-R5). `CLOSE_AND_DERIVE` ends the block:
-the magistrate lands the records and launches a fresh headless derivation
-seat (candidate, R9 record, cold science gate), then a second seat for D-138;
-none of it waits for Ed (RUN_STATE amendment of 2026-10-02). Anything else, including a harvest that prints `REFUSED:`, is
-a halt with one email to Ed.
+**One thing to say plainly when the window was refused for an agent.** If
+the verdict is `REFUSED` and the reason is `night_refused_agent_present`,
+a Claude or Codex process was alive on the Mac at t0. Put that in the
+first line of the email, with the process and its pid from the refusal
+detail, and say that it must be closed: while it stays alive every later
+window refuses the same way, and the watchdog starts no session, for up
+to about a day at a time.
+
+**What happens after the courier, and who does it.** The **magistrate** is
+the headless lead session that the watchdog starts. It works from the
+block-5 brief that the top block of `RUN_STATE.md` names, in the canonical
+checkout `/Users/edr/code/JouleWise` (a different checkout from the
+measurement clone this file is read from). For the window that has just
+ended it does the following, in this order:
+
+1. It closes the window's calibration session if the chain stopped before
+   its closing calibration.
+2. It advances the **ledger pin**: one commit in the measurement clone
+   that changes only `configs/calibration/calibration_ledger_head.json`,
+   the file naming the last row of the calibration ledger
+   (`runs/calibration_observation_ledger.jsonl` in the measurement clone).
+   This is the only kind of commit the measurement clone ever receives.
+3. It removes the window's two launchd jobs (`com.joulewise.night` and
+   `com.joulewise.night.deadman`).
+4. It harvests the window. The harvest program,
+   `scripts/harvest_b5_window.py`, is run from the **desk checkout**, a
+   separate clone kept for that purpose (at the hand-off:
+   `/Users/edr/night-custody/desk/b5-harvest`; the brief is the authority
+   for the path). It is never run from the measurement clone, and never by
+   the courier. The harvest takes the measurement clone only as an input:
+   it reads the window's pack, the sealed documents and the ledger from
+   there. A harvest runs only once an addendum to the block's seal record
+   has pinned the harvest program by commit and by file digest; until that
+   addendum is in the canonical checkout the magistrate waits, and it
+   neither harvests nor arms.
+5. It decides from the harvest's `claim_usable` alone, never from a
+   measured value. A claim-usable attempt completes its pack, and the
+   next pack's first attempt is armed (ALPHA, then BETA, then GAMMA). An
+   attempt that is not claim-usable is followed by the same pack's next
+   attempt, once the cause is removed. A window that was refused before it
+   started is armed again once the refusing hazard is gone. When GAMMA has
+   a claim-usable attempt the block is closed and nothing further is
+   armed.
+
+**What Ed hears next.** Before each window the magistrate sends one email,
+the **arm notice**, which names the window, gives its start time and
+reports the previous window's harvest verdict and `claim_usable`. A reply
+of NO to that notice stops that window. The courier may say that this
+notice is the next email to expect. It does not predict which window comes
+next and does not say when.
+
+**The rest of this file is not about block-5 plans.** Four parts of this
+file describe the older plan classes: the sections "Pre-authorized
+recovery before a night runs", "Battery-float verdict line" and "Arm-time
+census for rehearsal plans" above; every section marked history or
+"Executed"; and the subsection that follows this one, "Standing install
+and arm rules (every v2 plan)", with everything after it. A block-5 plan
+is not a v2 plan: its schema is `joulewise.night_plan.v5` and its class is
+`HAZARD_PACK`. One of those rules holds for it unchanged: the
+two launchd jobs are installed from the measurement clone named by the
+plan's `measurement_root`, with that clone at the plan's
+`measurement_head`. A block-5 window has no install-time launchd probe, no
+probe receipt and no night gate receipt.
 
 ### Standing install and arm rules (every v2 plan)
 

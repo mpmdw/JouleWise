@@ -62,6 +62,35 @@ PLAN_ID = "plan-hazard-fixture-v5"
 WINDOW_ID = "plan-hazard-fixture-v5"
 TAG = "launch_lineage_required"
 
+# The boot the machine is in.  Darwin's kernel names each boot with a UUID
+# (``sysctl -n kern.bootsessionuuid``); publication records it, and these
+# tests publish with the machine's real value.  Linux has no such value: the
+# reader returns None there, so every publication carries the extra finding
+# lineage.collection_boot_unrecorded.  That is the code working as designed,
+# but it is not what most of these tests are about, and their expected finding
+# lists assume a readable boot.  Off Darwin the module therefore runs with the
+# reader replaced by one fixed boot id; on Darwin nothing is replaced and the
+# real reader runs, as before.  A test about an unreadable or a different boot
+# patches the reader itself, on every system.  The real reader's own parsing
+# is tested directly in BootReaderTests, also on every system.
+REAL_BOOT_READER = window_lineage.current_boot_session_id
+STAND_IN_BOOT = "11111111-1111-4111-8111-111111111111"
+_stand_in_boot_reader = None
+
+
+def setUpModule() -> None:  # noqa: N802 (unittest hook)
+    global _stand_in_boot_reader
+    if sys.platform != "darwin":
+        _stand_in_boot_reader = patch.object(
+            window_lineage, "current_boot_session_id", return_value=STAND_IN_BOOT)
+        _stand_in_boot_reader.start()
+
+
+def tearDownModule() -> None:  # noqa: N802 (unittest hook)
+    if _stand_in_boot_reader is not None:
+        _stand_in_boot_reader.stop()
+
+
 # The ARM replay chain.  A hazard window must never reach any of these.
 ARM_SENTINELS = (
     "_replay_consumed_arm",
@@ -1102,6 +1131,51 @@ class UnrecordableValuesTests(_SentinelMixin, unittest.TestCase):
                 pack_root=self.w.pack, pack_id=PACK_ID, plan_id=PLAN_ID, window_id=WINDOW_ID,
                 bracket_session_id=SESSION_ID, pre_attempt_id=PRE_ATTEMPT, post_attempt_id=POST_ATTEMPT,
                 claim_runs_root=self.w.claim, bound_runs_root=missing, custody_root=self.w.custody)
+
+
+class BootReaderTests(unittest.TestCase):
+    """``current_boot_session_id`` itself: what it runs and how it reads the answer."""
+
+    def read(self, **outcome):
+        with patch.object(window_lineage.subprocess, "run", **outcome) as run:
+            value = REAL_BOOT_READER()
+        return value, run
+
+    def answer(self, stdout: bytes, returncode: int = 0):
+        return {"return_value": subprocess.CompletedProcess((), returncode, stdout, b"")}
+
+    def test_it_asks_sysctl_for_the_boot_session_without_changing_anything(self) -> None:
+        value, run = self.read(**self.answer(b"AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA\n"))
+        self.assertEqual(value, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[0], ("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"))
+
+    def test_an_answer_that_is_not_a_boot_id_is_unreadable(self) -> None:
+        cases = {
+            "sysctl failed": self.answer(b"", returncode=1),
+            "failed with text": self.answer(b"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\n", returncode=1),
+            "empty": self.answer(b""),
+            "not a uuid": self.answer(b"not-a-uuid\n"),
+            "not ascii": self.answer(b"\xff\xfe\n"),
+            "no sysctl": {"side_effect": FileNotFoundError("/usr/sbin/sysctl")},
+            "timed out": {"side_effect": subprocess.TimeoutExpired("sysctl", 10)},
+        }
+        for name, outcome in cases.items():
+            with self.subTest(name):
+                self.assertIsNone(self.read(**outcome)[0])
+
+    @unittest.skipUnless(sys.platform == "darwin", "kern.bootsessionuuid is a Darwin kernel value")
+    def test_on_darwin_the_real_kernel_value_is_a_boot_id(self) -> None:
+        value = REAL_BOOT_READER()
+        self.assertIsNotNone(value)
+        self.assertEqual(window_lineage._canonical_boot(value), value)
+
+    def test_off_darwin_the_module_runs_with_the_stand_in(self) -> None:
+        current = window_lineage.current_boot_session_id
+        if sys.platform == "darwin":
+            self.assertIs(current, REAL_BOOT_READER)
+        else:
+            self.assertEqual(current(), STAND_IN_BOOT)
 
 
 class CompletionTests(_SentinelMixin, unittest.TestCase):

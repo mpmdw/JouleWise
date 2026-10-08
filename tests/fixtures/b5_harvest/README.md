@@ -14,10 +14,10 @@ line blocks the release event (L4's `NEVER_CLASSIFIED_CODES`).
   here are drafted from gate-prune plan section 3.5:
   - `EXCLUDE_WINDOW`: `calibration.acceptance_mismatch`,
     `calibration.binding_failed`, `calibration.ledger_snapshot_refused`,
-    `calibration.capture_battery_pair_failed`, `whole_window.not_passed`,
+    `calibration.capture_battery_pair_failed`,
     `whole_window.verdict_absent`, `model.identity_inconsistent_in_window`,
     `roster.no_science_bundles`, `records.source_changed_during_harvest`,
-    `g3.recompute_failed`, `roster.duplicate_run_id` (rehearsal round 1, B3);
+    `roster.duplicate_run_id` (rehearsal round 1, B3);
   - `EXCLUDE_MEMBER`: `model.identity_underivable`, `member.unreadable`,
     `member.reduction_mismatch`, `member.anchor_recompute_mismatch`,
     `member.span_unknown`;
@@ -29,15 +29,26 @@ line blocks the release event (L4's `NEVER_CLASSIFIED_CODES`).
     `lineage.plan_tree_digest_differs` (`PACK_IDENTITY`, `NUMBER`,
     `EXCLUDE_WINDOW`).
 
-  Revision 3 of the block-5 draft catalog makes `whole_window.not_passed` and
-  `g3.recompute_failed` `DISCLOSE` (registration 6.5); this fixture keeps the
-  earlier draft effect, and the tests that need the registered one
-  (`Neg8ScreenTests`) override it in their window's copy.
+  The two aggregate codes, `whole_window.not_passed` (in L4's draft) and
+  `g3.recompute_failed` (an L5-only code), are `DISCLOSE` here, as in the
+  block-5 catalog (registration 6.5). The first reports the stored
+  whole-window verdict and the second an independent recompute of it; that
+  verdict fails when any one member fails, and each of its parts removes a
+  window or a member through its own code. `g3.recompute_failed` was
+  `EXCLUDE_WINDOW` in this fixture until the seal gate's ruling SG-3
+  (2026-10-07) aligned it. Since then this fixture and the block-5 catalog
+  give the same family, klass, effect and blinding to every code both list
+  (`FixtureCatalogTests` holds them equal).
 
   L4 (draft) and L6 (sealed catalog) classify these; until then the sealed
   catalog leaves them `UNCLASSIFIED`, which blocks release, never collection.
-- `rules.cell_unit_minimum` is the registered 8. The synthetic six-member test
-  window lowers it to 1 in its own copy so the unit rule stays observable.
+- `rules.cell_unit_minimum` is the registered 5: a target cell must keep at
+  least 5 of its 10 planned units in each stratum, or `cell.below_minimum`
+  removes the window. It was 8 until the seal gate's ruling SG-1 (2026-10-07)
+  set it where the registered floor estimator stops producing a number
+  (`joulewise.detection_floor.small_sample_guard_factor` is undefined below 5
+  units). The synthetic six-member test window lowers it to 1 in its own copy
+  so the unit rule stays observable.
 
 The sealed catalog is lane L6's
 `configs/campaigns/v5_claim_25g83/flag_catalog.json`; the harvest only looks

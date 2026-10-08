@@ -215,6 +215,64 @@ class CellMinimumTests(unittest.TestCase):
         self.assertTrue(result["claim_usable"])
 
 
+class SealedCellMinimumTests(unittest.TestCase):
+    """The cell rule under the block-5 catalog of this tree, whose minimum is 5.
+
+    ``CellMinimumTests`` above runs the same function under the draft catalog,
+    whose rule is the code's fallback ``DEFAULT_CELL_UNIT_MINIMUM`` (8); it
+    proves the mechanism.  This class proves the registered value: seal gate
+    ruling SG-1 (2026-10-07) set ``rules.cell_unit_minimum`` to 5 in
+    ``configs/campaigns/v5_claim_25g83/flag_catalog.json``, the smallest count
+    for which the registered floor estimator's guard
+    (``joulewise.detection_floor.small_sample_guard_factor``) is defined.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from pathlib import Path
+
+        from joulewise.flags.catalog import SEALED_CATALOG_RELATIVE_PATH, load_catalog
+
+        sealed = Path(__file__).resolve().parents[2] / SEALED_CATALOG_RELATIVE_PATH
+        if not sealed.exists():
+            raise unittest.SkipTest("the block-5 catalog is not in this tree")
+        cls.catalog = load_catalog(sealed)
+
+    def lose(self, stratum: str, count: int, roster=None) -> Mapping[str, Any]:
+        """One floor cell with one member removed from each of ``count`` units of ``stratum``."""
+
+        roster = floor_roster() if roster is None else roster
+        run_ids = [f"a-q{index:02d}-B1" if stratum == "quad" else f"a-r{index:02d}" for index in range(1, count + 1)]
+        flags = [member_flag("member.admission_aborted", run_id) for run_id in run_ids]
+        return compute(flags, roster, spans_for(roster), self.catalog)
+
+    def test_five_kept_units_are_usable_and_four_are_not(self) -> None:
+        for stratum, counter in (("quad", "n_quads"), ("repeat", "n_repeats")):
+            with self.subTest(stratum=stratum):
+                five = self.lose(stratum, 5)
+                self.assertEqual(cell(five)["minimum"], {"quad": 5, "repeat": 5})
+                self.assertEqual((cell(five)[counter], cell(five)["resolvable"], five["claim_usable"], five["reasons"]),
+                                 (5, True, True, []))
+                four = self.lose(stratum, 6)
+                self.assertEqual((cell(four)[counter], cell(four)["resolvable"], four["claim_usable"], four["reasons"]),
+                                 (4, False, False, ["cell.below_minimum"]))
+
+    def test_three_lost_quads_no_longer_remove_the_window(self) -> None:
+        # Under the minimum of 8 this was cell.below_minimum
+        # (CellMinimumTests.test_three_lost_quads_put_cell_below_minimum).
+        result = self.lose("quad", 3)
+        self.assertEqual((cell(result)["n_quads"], cell(result)["n_repeats"]), (7, 10))
+        self.assertEqual((result["claim_usable"], result["reasons"]), (True, []))
+        self.assertEqual(len(result["members_excluded"]), 3)
+
+    def test_a_roster_can_still_raise_the_minimum_above_5_and_never_lower_it(self) -> None:
+        roster = floor_roster()
+        roster["cells"] = [{"cell_id": "cell-decode", "minimum": {"quad": 8, "repeat": 1}}]
+        result = self.lose("quad", 3, roster)
+        self.assertEqual(cell(result)["minimum"], {"quad": 8, "repeat": 5})
+        self.assertEqual(result["reasons"], ["cell.below_minimum"])
+
+
 class EffectTests(unittest.TestCase):
     def test_window_excluding_flag_makes_window_not_claim_usable(self) -> None:
         roster = floor_roster()
