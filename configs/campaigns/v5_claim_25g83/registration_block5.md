@@ -3881,12 +3881,90 @@ beside every reported cell and contrast, the number of attempts of its pack and 
    removed by a RESTRICTED code as "removed (restricted code)", without the code, and omits the per-code count of any
    RESTRICTED code; that redaction is a step of the release, done by lane L9's disclosure producer (analysis plan §8.1),
    not by the harvest. The driver's courier for `HAZARD_PACK` sends structure only: no
-   chain or campaign logs, no runs-root files. `FILL[B5-BLIND-CUSTODY-MAP]` lists the restricted paths, these three
-   files among them.
+   chain or campaign logs, no runs-root files. The custody map at the end of this section (`B5-BLIND-CUSTODY-MAP`)
+   lists the restricted paths, these three files among them.
 3. **Unblinding.** After the block closes and the blind dry run of analysis plan §3.2 has completed, the lead records
    a **release event** tying the sealed SHA-256s of this file, the analysis plan and the catalog to the final harvest
-   records (`FILL[B5-RELEASE-EVENT]`); the analysis then runs exactly as registered. Analyses not registered are
-   labelled exploratory.
+   records; the analysis then runs exactly as registered. Analyses not registered are labelled exploratory. The
+   release event is not written into this file, whose bytes cannot change after the seal: each window
+   plan records this file's SHA-256, the plan writer refuses a file that does not hash to the digest it is given,
+   and the harvest faults when the file differs from the digest its plan recorded. It is written as a section
+   appended to the seal record (§12), the section named `FILL[B5-RELEASE-EVENT]`.
+
+**The custody map** (`B5-BLIND-CUSTODY-MAP`, filled in revision 12).
+
+*Forcing problem.* Item 2 says what kind of value is restricted. It does not say which files hold such values, and
+restricted custody is kept by rule, not by the file system: the harvest creates every file with ordinary
+permissions, so nothing stops a seat from opening one. A seat that has read an energy can no longer write or repair
+analysis code blind, that is, without the outcome in view (analysis plan §3.2). The list of paths a seat must not
+open therefore has to be complete, and it has to exist before the first window does.
+
+*How to read it.* No window exists at the seal, so the map cannot name files. It gives **path patterns** under four
+directories that every attempt has, and it is applied to an attempt by putting that attempt's four directories in
+place of the names in angle brackets:
+
+- the **claim runs root** and the **bound runs root** (§0.17), which the window plan names as `runs_roots.claim` and
+  `runs_roots.bound`;
+- the **custody root**, the directory into which the driver, the arm, the monitor, the meter and the chain write
+  their own records of the window, which the window plan names as `custody_root`;
+- the **archive root**, the directory one harvest writes. It holds a copy of the window's bytes under `sources/`
+  (`sources/claim-runs/` and `sources/bound-runs/` for the two runs roots, `sources/night-custody/` for the custody
+  root, `sources/ledger/`, `sources/inputs/` for the sealed documents the harvest read, `sources/repo/` for the pack,
+  and the list of digests `sources/SHA256SUMS`), the harvest's outputs under `derived/` and `withheld/`, and
+  `harvest.json`. A re-harvest writes a new archive root, and the map applies to each.
+
+In a pattern, `**` stands for every file below the directory named.
+
+| Restricted until the release event | What it holds |
+|---|---|
+| `<claim runs root>/**` | every member bundle (energies, powers and phase durations) and the calibration captures |
+| `<bound runs root>/**` | the NEG-8 corpus bundles and the drift bound derived from them |
+| `<custody root>/hazards/monitor/battery.jsonl` and `<custody root>/hazards/monitor/raw/battery/**` | the battery's current and voltage through the window, read every second; their product is a power |
+| `<custody root>/hazards/meter/**` | the whole-machine meter's power samples (§5.8) |
+| `<custody root>/night/chain.stdout.log`, `night/chain.stderr.log` and `night/transcript/**`; `<custody root>/night.log`; `<custody root>/operator-logs/**` | the logs of the driver, of the chain, of its tools and of the members, which can quote energies and durations |
+| `<archive root>/sources/**`, except `sources/SHA256SUMS` and `sources/inputs/**` | the harvest's copy of everything above |
+| `<archive root>/withheld/**` | the numbers: the re-reduced member summaries, the member spans, the bracket evaluation, the re-derived NEG-8 bracket and bound, the battery-assist energies, the meter record, and the full texts of errors |
+| `<archive root>/derived/flags.jsonl`, `derived/exclusions.json` and `derived/window_flags.json` | the flags and the exclusions by code, the RESTRICTED codes included (item 2) |
+| every backup and offload copy of a path above (§5.6) | the same bytes |
+| what the harvest command prints when its verdict is HARVEST_FAULT | an error message, which can quote a data value |
+
+*Releasable during the block,* listed so that nobody has to guess: `harvest.json`; every file under `derived/` other
+than the three above; the record files the driver pushes to the results branch `night-results/<plan id>`
+(`scripts/run_night.py` `HAZARD_ARTIFACTS`: the arm decision, the per-stage yield counts, the supervision journals
+and the G10 record among them); the courier's email; the monitor's clock, thermal, contention and disk journals and
+the arm record `hazards/arm.json`, which are hazard measurements; what the harvest command prints on any other
+verdict; and the attempt history of §7. A file the map does not name is released only if it holds nothing that item 2
+restricts; in doubt it is treated as restricted.
+
+*Who may read a restricted path.* Until the release event, automation only (§0.1): the harvest, the blind dry run of
+analysis plan §3.2 and, for the three `derived/` files, the scheduler's read of `claim_usable` (item 2). None of
+them prints, emails or commits a restricted value. After the release event: the lead, and the results cold gate
+that re-derives every printed number (analysis plan §3.1 step 12). A seat that will write or review a repair after
+the release reads no restricted path even then, because analysis plan §3.2 allows such a repair only from seats that
+have read no released number.
+
+*Two channels a list of paths misses.* The body of a pull request that carries a harvest or a fix to one can quote
+what replaying real bytes gave, so a blind seat does not open it. And three analysis programs print a science result
+to the terminal on an ordinary successful run (analysis plan §3.1 steps 6, 9 and 11: the dominance close-out
+`scripts/build_d165_dominance_closeout.py` when it is given no `--output`, the claim gate
+`python -m joulewise analyze-claims`, and the fill renderer `scripts/render_results_fills.py`). Before the release
+event they run only inside the blind dry run, which keeps every output in restricted custody and writes out
+structure only (analysis plan §3.2).
+
+*Worked example (a GAMMA attempt; the four directory names are invented).* Its window plan names the claim runs root
+`/runs/gamma-1/claim`, the bound runs root `/runs/gamma-1/bound` and the custody root `/custody/gamma-1`, and its
+harvest wrote the archive root `/archive/gamma-1-h1`. GAMMA plans 101 members (§4.2): 80 science members, the 7
+NEG-8 references and the 2 diagnostic interior references, which go to the claim runs root, and the 12 NEG-8 corpus
+members, which go to the bound runs root; up to 7 spares can join the claim runs root (§0.12). Restricted: every
+file under the two runs roots (one bundle directory for each member that ran, and in the bound root the bound
+derived from the corpus); `/custody/gamma-1/hazards/monitor/battery.jsonl`; the logs under
+`/custody/gamma-1/operator-logs/`; everything under `/archive/gamma-1-h1/withheld/`; and
+`/archive/gamma-1-h1/derived/exclusions.json`. Releasable: `/archive/gamma-1-h1/harvest.json`,
+`/archive/gamma-1-h1/derived/roster.json` and `/custody/gamma-1/night/stage_yield.jsonl`. An email that reads
+"GAMMA-1: COLLECTED, claim-usable; two members removed, one by `member.admission_aborted` and one removed
+(restricted code)" is structure. An email that names the one RESTRICTED code of the catalog,
+`member.anchor_energy_envelope_exceeded`, or gives its count, is not: the code says that the timing envelope of a
+member's phase energy exceeded a quarter of that energy (§6.3), which is a statement about a science energy.
 
 ## 9. Directive gates
 
