@@ -285,7 +285,15 @@ A condition that cannot be met is not waived: it goes back to a cold gate.
    reaches only the checkout the harvest runs from, never the measurement clone, and not the integration branch or
    the main branch before Addendum 1 below is filled. Its difference from H_claim lists only
    `joulewise/b5/harvest.py`, `joulewise/whole_window.py`, `scripts/harvest_b5_window.py` and paths under
-   `tests/`. No window is harvested before Addendum 1 names the commit, the files and their digests.
+   `tests/`. Part B also required that the lane's tests hold a synthetic window for each of the three breaks
+   the harvest cures, and that its test of path classes assert the lane's own table. When this record was
+   written, `git grep` at the commit Addendum 1 pins found these five tests by name:
+   `test_a_succeeded_reference_with_no_energy_envelope_is_lost_and_the_survivors_decide` (RF-1),
+   `test_a_flag_file_line_torn_inside_calibration_capt_is_disclosed_and_removes_nothing` (RF-3),
+   `test_a_journal_gap_over_one_reference_loses_it_and_the_survivors_decide` (RF-5), and
+   `test_the_harvest_and_the_collector_class_paths_alike_but_for_the_harvests_positive_list` with
+   `test_on_every_tracked_path_the_harvests_window_inputs_contain_the_collectors` (the table of path classes).
+   No window is harvested before Addendum 1 names the commit, the files and their digests.
 4. **The analysis plan's eleven open markers** belong to the analysis code, which is written after the windows and
    before any measured value is opened. Each is filled only after the seal, and each fill is recorded in an
    addendum to this record that states the plan's new SHA-256. The registration's bytes never change.
