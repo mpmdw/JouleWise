@@ -821,6 +821,16 @@ A2, A3 and A5 with the sealed reference pin (lane `lane/2026-10-07-neg8-delta-fi
 `754c8c093`, both in the int5 head `fe28e5a0c`). Where the code differs from the ruling's wording, the text follows
 the code and says so.
 
+Two rules of this section were set later, by the first stage of the seal gate (2026-10-07, §12): the loss
+`energy_unreadable` under "Lost references", and the four losses for evidence that is unmeasured or violated under
+"Who applies the loss test". The harvest at the int5 head `9395cecfb` does not apply them yet. There its loss list
+(`harvest.NEG8_REFERENCE_LOSS_CODES`) holds the six physics codes of "Lost references", `member.timeout`,
+`member.admission_aborted`, `member.strict_validation_failed` and the two identity codes, and a reference whose
+energy cannot be read fails the whole screen. Both rules are added by the harvest lane, which changes desk
+programs only and lands in a desk checkout (§0.18 builds that term; §11 item 4 says what the lane may change).
+ALPHA-1's harvest does not run until that lane is pinned (§11 item 4), so every block-5 window is judged by a
+harvest that applies the rules as this section states them.
+
 - **Reference member.** A member of one fixed reference workload (Qwen2.5-1.5B, 1024-token prompt, 256 output
   tokens). Each window runs 12 at its start, the **NEG-8 corpus** (NEG-8 is an inherited label from the project's
   negative-control list; it is a name, not an abbreviation), then a **start triplet** (three reference members), one
@@ -873,7 +883,17 @@ the code and says so.
   |end mean − start mean|. Each member carries half of the allowance (`E_whole_window_drift_allowance_j`), so a
   contrast carries it once in total. The allowance always uses the realised-count bound, on passing windows too, so a
   lost reference widens the uncertainty instead of hiding it.
-- **Lost references.** A reference is **lost** when its bundle is absent; its summary status is not `succeeded`
+- **Lost references.** Four terms come first, because the list uses them. The **strict check** is the full check
+  of a reference's files, built in "The strict check of a reference" below. The **verdict row** is the one row of
+  the whole-window verdict (§0.17), which the harvest's verdict writer produces after the window and stores in
+  the window's claim runs root. A reference's **envelope** is the anchor-shift envelope of §0.10 that the reducer
+  stores for its whole request's energy (the lowest and the highest energy the request can be assigned within the
+  member's timing bounds); it has nothing to do with the corpus envelope of the NEG-8 bound above. And a member's
+  **calibration attachment** is the copy of the pre calibration capture's evidence that the controller places in
+  the member's bundle (`instrument_calibration/instrument_evidence.json`), which the reducer verifies against its
+  recorded SHA-256 before it takes the fiducial bound from it; when that fails, or when the clock anchor is not
+  `bounded`, the reducer has no timing bound to build an envelope from and writes none.
+  A reference is **lost** when its bundle is absent; its summary status is not `succeeded`
   (which includes `member.admission_aborted` and `member.timeout`); its summary cannot be read (reason
   `summary_unreadable`: no summary file, as after a member is killed at the 1,800 s cap of §5.2, a file that does
   not decode, or one with no string status); its energy cannot be read although it succeeded and passed the strict
@@ -890,7 +910,9 @@ the code and says so.
   `clock.step_overlap`); or its model identity cannot be derived from its own record (`model.identity_underivable`)
   or is not the reference workload's sealed identity (`model.identity_mismatch`, §6.5; below). The last two are orchestrator
   ruling N8 (2026-10-07): a reference that ran another model, or cannot show which model it ran, measured a different
-  workload, so its energy says nothing about the instrument's drift.
+  workload, so its energy says nothing about the instrument's drift. Four more losses, set by the seal gate, are
+  stated under "Who applies the loss test" below: a reference whose contention evidence or battery evidence is
+  unmeasured, one with a measured quiet-state violation, and one with a failed battery pair.
 - **Which model a reference must have run.** The 7 references and 7 spares are copies of one workload (their
   configs are 7 reference files and 13 spare files, because each spare's file is repeated in every cumulative
   spare-set directory that holds it; the 13 files have 7 distinct SHA-256s), so the
@@ -1002,12 +1024,19 @@ the code and says so.
   the end unmeasured by the allowance. What follows
   depends on the pack. On **GAMMA**, whose window exists for the two primary contrasts, the attempt is not
   claim-usable: the exclusion function adds the window reason `neg8.midpoint_lost_primary`, so GAMMA is re-armed and
-  the attempt is never analysed (orchestrator ruling Q11 of 2026-10-07, which the seal gate confirms; §7.2, §14 Q11;
-  analysis plan §2.4). On **ALPHA and BETA** the flag is disclosed only, and the window's reported cells and floors
+  the attempt is never analysed (orchestrator ruling Q11 of 2026-10-07, which the first stage of the seal gate
+  confirmed, with the premise corrected as the sentence above now reads; §7.2, §14 Q11; analysis plan §2.4). On **ALPHA and BETA** the flag is disclosed only, and the window's reported cells and floors
   stand; the fixed sentence of analysis plan §8.1 discloses that the interior drift was not measured, and that
   window's bound B may be understated by an amount nothing measured. Once a block's midpoint record (read only after
   its release event) shows the midpoint never moved the spread beyond the bound, an erratum may downgrade the flag to
   disclose-only on GAMMA for a later block; it cannot reinstate a block-5 attempt that was re-armed.
+  *What the rule costs on GAMMA* (seal gate, first stage, on the refuter's second break). GAMMA does run
+  references inside the window, the two diagnostic ones, and the rule sets them aside because the registered
+  allowance does not read them. Reading them would change the definition of the allowance in the verdict writer,
+  its replay and the claim consumer, and the judge did not order that during the seal. Lane L9-NEG8's design may
+  propose a prospective erratum, before GAMMA-1 arms, that reads the surviving interior references into GAMMA's
+  spread when the midpoint is lost; the GAMMA reason would then apply only when the midpoint and both interior
+  references are lost.
 - **Disclosure.** A window whose screen ran on fewer than (3, 1, 3) references records `neg8.reference_lost`
   (DISCLOSE, window level). Its `observed` names each lost reference's run id, slot, reason, status and the outcome
   of its stage's retry (the spares measured and the spares that succeeded; a planned reference that never ran is
@@ -1067,6 +1096,18 @@ the code and says so.
   `neg8-window-start-spare-1` measured and succeeded) and the third end member (`contention.request_overlap`; no
   spare, because the loss was found at harvest), counts (3, 1, 2), and `withheld/neg8-rescreen-bracket.json` as the
   record holding bound(3, 2) = 0.6383 J and its terms.
+  *The seal gate's two losses on the same numbers.* Suppose the monitor's journal had a gap over the third end
+  member's request, so that no overlap could be seen: the member carries `contention.unmeasured` instead of
+  `contention.request_overlap`. Kept, as revision 11 had it, its 101.08 J would enter the end mean (100.5100 J) and
+  the screen statistic would be 0.5500 J, 0.04 J inside bound(3, 3) = 0.5933 J, with nothing to say whether a
+  contender or drift had moved it. Under the gate's rule it is lost exactly as in the first example: end
+  survivors [100.26, 100.19], bound(3, 2) = 0.6383 J, statistic 0.2650 J. And suppose the spare
+  `neg8-window-start-spare-1` had succeeded with a clock anchor that is not `bounded`: its summary holds no
+  envelope for its request energy, so it is lost as `energy_unreadable`. The start survivors are then
+  [100.02, 99.91], mean 99.9650 J, the counts are (2, 1, 2), bound(2, 2) = max(U_2 − L_2 = 0.6800,
+  2.201 × 0.2353 × √(1/2 + 1/2) = 0.5179) = 0.6800 J, and |100.2250 − 99.9650| = 0.2600 ≤ 0.6800: the window
+  passes on its survivors. Before the gate's rule that one reference would have failed the whole screen
+  (`neg8_bracket_reference_invalid`) and removed the window.
   *Second example (synthetic, every reference kept).* A bound of 0.40 J; start mean 20.10 J, end mean 20.35 J:
   0.25 ≤ 0.40 passes; with a midpoint reference of 19.90 J the spread is 20.35 − 19.90 = 0.45 J, so the allowance is
   0.45 J and each member carries 0.225 J. In GAMMA, a diagnostic interior reference of 19.70 J would change nothing:
@@ -1257,6 +1298,14 @@ that member's unit (§6.3).
   member spans, writes every flag, and runs the exclusion function (§7.1). The row it writes never authenticates
   under the validator's consumption semantics, so `whole_window.verdict_unauthenticated` (DISCLOSE) is recorded on
   every window and carries no information about the window.
+  Three terms of those two sentences. The **stored bracket** is the verdict row's **NEG-8 bracket**: the row's own
+  record of the NEG-8 screen, with the references it read and, for each family, the bound and the allowance. It
+  is not the calibration bracket of §0.11. The **validator** is `whole_window.validate_whole_window_verdict_row`,
+  the function by which a later reader authenticates a verdict row by replaying it from the bundles the row
+  names. A **consumption semantics** is the registered rule by which such a reader chooses the fiducial bound it
+  re-reduces members under (block 5's is the operative bound of §0.10); under every such rule the validator needs
+  a consumption session (§0.10), and the harvest has none to give it, so at the harvest the validator reports
+  every row as not authentic (`harvest.whole_window`, `harvest._neg8_rescreen`).
 - **Whole-window verdict.** One row, produced by the harvest with the production writer
   (`run_campaign.py --whole-window-verdict`), stating whether the window as a whole passed: every member admitted,
   the AC adapter's wattage unchanged, the CPU criteria held, the NEG-8 screen passed, and the bracket, read through
