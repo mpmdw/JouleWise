@@ -181,7 +181,13 @@ CODE_PREFIXES = ("joulewise/", "scripts/")
 SEALED_DIRECTORY = "configs/campaigns/v5_claim_25g83"
 # The head comparison (registration section 11) lists every path that differs
 # between H_claim and the head a window ran from, and puts each in one class.
-# The classes are the same in joulewise.flags.collect (tests compare them).
+# joulewise.flags.collect holds the arm collector's copy of the classes.  The
+# two differ in one direction since the seal-landing review (F2, H-9): the
+# harvest calls a path record-only only when it is on the list below, where
+# the collector calls record-only everything outside joulewise/, scripts/,
+# configs/ and the runbook.  In production the collector compares a head with
+# itself, so only the harvest's comparison ties a window to the seal
+# (tests.flags.test_flags_collect states the relation between the two).
 #
 # Seal documents.  The sealed inventory names H_claim as its ``head``, and a
 # file cannot name the commit that contains it.  So the filled inventory, and
@@ -191,34 +197,57 @@ SEALED_DIRECTORY = "configs/campaigns/v5_claim_25g83"
 # their SHA-256s; the head comparison lists them and judges nothing by them.
 SEAL_DOCUMENT_PATHS = frozenset(f"{SEALED_DIRECTORY}/{name}" for name in (
     "sealed_inventory.json", "registration_block5.md", "analysis_plan_block5.md"))
-# Window inputs.  A window reads code under joulewise/ and scripts/,
-# configuration under configs/ (its pack, the files its plan tree pins, the
-# flag catalog, the identity pins, the sizing output) and one document: the
-# runbook whose pre-calibration screen the plan writer copies into the chain
-# (joulewise.b5.chain.RUNBOOK_RELATIVE).  A changed window input is a
-# difference.  Files under the executed roots are also compared one by one
-# with the sealed inventory; for the rest this comparison is the only one.
-WINDOW_INPUT_PREFIXES = CODE_PREFIXES + ("configs/",)
+# Record-only paths: a positive list (seal-landing review F2, H-9).  A changed
+# path cannot change a window's bytes when it is a document under docs/ (but
+# the runbook, below), a test under tests/, a file inside a top-level
+# directory whose name begins with a dot (.github/, .claude/, .codex/,
+# .agents/: tooling no window runs), or a Markdown file at the repository
+# root (README.md, RUN_STATE.md, TASK_QUEUE.md).  Such a path is written to
+# derived/code-identity.json and excludes nothing.
+RECORD_ONLY_PREFIXES = ("docs/", "tests/")
+RECORD_ONLY_ROOT_SUFFIX = ".md"
+# Window inputs: every other path.  A window reads code under joulewise/ and
+# scripts/, configuration under configs/ (its pack, the files its plan tree
+# pins, the flag catalog, the identity pins, the sizing output) and one
+# document: the runbook whose pre-calibration screen the plan writer copies
+# into the chain (joulewise.b5.chain.RUNBOOK_RELATIVE).  Before H-9 those
+# were the whole class and any other path was record-only.  That let through
+# a tracked Python module at the repository root (every script puts the root
+# first on its import path, ahead of the standard library), the environment
+# lock and pyproject.toml (which fix the installed runtime), and .gitignore
+# and .gitattributes (which change which files a checkout holds and their
+# bytes).  A path nobody listed is now a window input, and a changed window
+# input is a difference.  Files under the executed roots are also compared
+# one by one with the sealed inventory; for the rest this comparison is the
+# only one.
 WINDOW_INPUT_FILES = frozenset({"docs/phase_2/window_runbook.md"})
-# Every other changed path (documents, tests, status files) cannot change a
-# window's bytes.  It is written to derived/code-identity.json and excludes
-# nothing.
 HEAD_CHANGE_CLASSES = ("pin_only", "seal_document", "window_input", "record_only")
 CODE_IDENTITY_SCHEMA = "joulewise.b5_code_identity.v1"
 
 
 def head_change_class(relative: str) -> str:
-    """The class of one path that differs between H_claim and the executed head."""
+    """The class of one path that differs between H_claim and the executed head.
+
+    The pin and the three seal documents are matched by their exact names.
+    Every other test ignores letter case: the measurement Mac's volume does
+    not distinguish case, so a tracked ``Docs/Phase_2/Window_Runbook.md``
+    lands on the runbook and a tracked ``Joulewise/x.py`` in ``joulewise/``.
+    A case variant of the pin or of a seal document is therefore not that
+    file's class; it falls through to ``window_input``.
+    """
     if relative in PIN_ONLY_PATHS:
         return "pin_only"
     if relative in SEAL_DOCUMENT_PATHS:
         return "seal_document"
-    # Letter case is ignored here: the measurement Mac's volume does not
-    # distinguish case, so a tracked "Joulewise/x.py" lands in joulewise/.
     folded = relative.casefold()
-    if folded.startswith(WINDOW_INPUT_PREFIXES) or folded in WINDOW_INPUT_FILES:
+    if folded in WINDOW_INPUT_FILES:
         return "window_input"
-    return "record_only"
+    first, separator, _rest = folded.partition("/")
+    if folded.startswith(RECORD_ONLY_PREFIXES) \
+            or (separator and first.startswith(".")) \
+            or (not separator and folded.endswith(RECORD_ONLY_ROOT_SUFFIX)):
+        return "record_only"
+    return "window_input"
 
 
 # joulewise.flags.collect.read_identity_pins documents this file; its "units"

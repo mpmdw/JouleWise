@@ -420,18 +420,29 @@ class CheckoutIdentityTests(FixtureCase):
         result = collect_checkout_identity(fixture.params(h_claim=fixture.head))
         self.assertEqual(result["flags"][0]["observed"]["window_input_changes"], ["joulewise/café.py"])
 
-    def test_the_harvest_and_the_collector_class_every_path_alike(self) -> None:
+    def test_the_harvest_and_the_collector_class_paths_alike_but_for_the_harvests_positive_list(self) -> None:
+        """The two classifiers, and the one direction in which they differ (seal-landing review F2, H-9).
+
+        Both name the pin, the three seal documents, the runbook and every
+        path under joulewise/, scripts/ and configs/ alike.  For any other
+        path the collector says ``record_only``; the harvest says
+        ``record_only`` only for a path on its positive list (docs/, tests/,
+        a file in a top-level dot-directory, a Markdown file at the root) and
+        ``window_input`` for the rest.  So the harvest's ``window_input``
+        class contains the collector's.  The collector is not changed: in
+        production it compares a head with itself, and the harvest's
+        comparison is the one that ties a window to the seal.
+        """
         from joulewise.b5 import chain, harvest
         from joulewise.flags import collect
 
         self.assertEqual(set(collect.SEAL_DOCUMENT_PATHS), set(harvest.SEAL_DOCUMENT_PATHS))
         self.assertEqual(set(collect.DEFAULT_PIN_ONLY_PATHS), set(harvest.PIN_ONLY_PATHS))
         self.assertEqual(collect.HEAD_CHANGE_CLASSES, harvest.HEAD_CHANGE_CLASSES)
-        self.assertEqual(set(collect.WINDOW_INPUT_PREFIXES), set(harvest.WINDOW_INPUT_PREFIXES))
         # The one document a window reads: the plan writer copies its screen into the chain.
         self.assertEqual(set(collect.WINDOW_INPUT_FILES), {chain.RUNBOOK_RELATIVE})
         self.assertEqual(set(harvest.WINDOW_INPUT_FILES), {chain.RUNBOOK_RELATIVE})
-        expected = {
+        alike = {
             "configs/calibration/calibration_ledger_head.json": "pin_only",
             "configs/campaigns/v5_claim_25g83/sealed_inventory.json": "seal_document",
             "configs/campaigns/v5_claim_25g83/registration_block5.md": "seal_document",
@@ -447,22 +458,63 @@ class CheckoutIdentityTests(FixtureCase):
             "docs/phase_2/window_runbook.md.bak": "record_only",
             "docs/decision_log.md": "record_only",
             "tests/test_b5_driver.py": "record_only",
+            "tests/fixtures/d165_rationale_allowlist.json": "record_only",
             "RUN_STATE.md": "record_only",
             "TASK_QUEUE.md": "record_only",
             "README.md": "record_only",
             "joulewise.md": "record_only",
             "configs.md": "record_only",
+            ".github/workflows/ci.yml": "record_only",
+            ".claude/skills/codex/SKILL.md": "record_only",
+            ".codex/config.toml": "record_only",
+            ".agents/skills/claude-consult/SKILL.md": "record_only",
             # The measurement Mac's volume does not distinguish letter case.
             "Joulewise/evil.py": "window_input",
             "CONFIGS/campaign_policies/policy.json": "window_input",
             "Docs/Phase_2/Window_Runbook.md": "window_input",
             "configs/calibration/Calibration_Ledger_Head.json": "window_input",
             "configs/campaigns/v5_claim_25g83/Sealed_Inventory.json": "window_input",
+            "Docs/decision_log.md": "record_only",
+            "TESTS/test_x.py": "record_only",
+            "Readme.MD": "record_only",
         }
-        for relative, klass in expected.items():
+        for relative, klass in alike.items():
             with self.subTest(relative):
                 self.assertEqual(collect.head_change_class(relative), klass)
                 self.assertEqual(harvest.head_change_class(relative), klass)
+        # A path on no list: record-only to the collector, a window input to the harvest.
+        unlisted = (
+            "hashlib.py",                       # a module at the root: importable ahead of the standard library
+            "env/mac-measurement-lock.txt",     # the lock the measurement environment is built from
+            "pyproject.toml",
+            ".gitignore", ".gitattributes",     # files at the root, not inside a dot-directory
+            ".mcp.json",
+            "analysis/zz_new.py", "paper/main.tex", "LICENSE", "Makefile",
+            "docs",                             # a file named docs, not a path under docs/
+            "notes/README.md",                  # Markdown, but not at the root
+        )
+        for relative in unlisted:
+            with self.subTest(relative):
+                self.assertEqual(collect.head_change_class(relative), "record_only")
+                self.assertEqual(harvest.head_change_class(relative), "window_input")
+
+    def test_on_every_tracked_path_the_harvests_window_inputs_contain_the_collectors(self) -> None:
+        """Over this repository's own paths: the harvest never calls record-only what the collector calls an input."""
+        from joulewise.b5 import harvest
+        from joulewise.flags import collect
+
+        listed = subprocess.run(["git", "-C", str(REPO), "ls-files", "-z"], capture_output=True, check=True).stdout
+        paths = [path for path in listed.decode("utf-8", "replace").split("\0") if path]
+        self.assertGreater(len(paths), 1000)
+        narrower = [path for path in paths if collect.head_change_class(path) != harvest.head_change_class(path)
+                    and not (collect.head_change_class(path) == "record_only"
+                             and harvest.head_change_class(path) == "window_input")]
+        self.assertEqual(narrower, [])
+        # What the positive list leaves record-only among the tracked paths, by first component.
+        record_only = {path.split("/", 1)[0] if "/" in path else "<root>.md" for path in paths
+                       if harvest.head_change_class(path) == "record_only"}
+        self.assertTrue(record_only <= {"docs", "tests", "<root>.md"} | {name for name in record_only
+                                                                         if name.startswith(".")}, record_only)
 
     def test_dirty_checkout_flags_code_identity(self) -> None:
         fixture = PackFixture(self.root)

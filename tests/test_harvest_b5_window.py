@@ -3480,7 +3480,9 @@ class IdentityReplayTests(WindowTestCase):
     SEAL_DOCUMENTS = [f"{SEALED_DIR}/{name}" for name in (
         "analysis_plan_block5.md", "registration_block5.md", "sealed_inventory.json")]
     PIN = "configs/calibration/calibration_ledger_head.json"
-    RECORDS = ["RUN_STATE.md", "TASK_QUEUE.md", "docs/process_traces/seal/52-seal-record.md", "tests/test_new.py"]
+    # One path of each record-only kind (H-9): a file in a top-level dot-directory, root Markdown, docs/, tests/.
+    RECORDS = [".github/workflows/ci.yml", "RUN_STATE.md", "TASK_QUEUE.md",
+               "docs/process_traces/seal/52-seal-record.md", "tests/test_new.py"]
 
     def diff_seams(self, changed, *, returncode=0, calls=None):
         """Production seams, except that ``git diff`` answers with ``changed`` (NUL-separated, as ``-z`` prints)."""
@@ -3534,9 +3536,15 @@ class IdentityReplayTests(WindowTestCase):
 
     def test_a_changed_window_input_after_the_seal_is_still_a_difference(self):
         # One path of each kind: code, configuration no per-file check covers, and the
-        # chain-source runbook.  tests.flags.test_flags_collect classes every other kind.
+        # chain-source runbook.  Then the kinds the seal-landing review found unlisted (F2, H-9):
+        # before H-9 each of them was record_only and raised no flag.  A module at the repository
+        # root is importable by every script (the root is first on the import path); the lock and
+        # pyproject.toml fix the installed runtime; .gitignore and .gitattributes change which
+        # files a checkout holds and their bytes; analysis/ is a package no list names.
         for index, relative in enumerate((
-                "joulewise/b5t_stub.py", f"{SEALED_DIR}/identity_pins.json", "docs/phase_2/window_runbook.md")):
+                "joulewise/b5t_stub.py", f"{SEALED_DIR}/identity_pins.json", "docs/phase_2/window_runbook.md",
+                "hashlib.py", "env/mac-measurement-lock.txt", "pyproject.toml", ".gitignore", ".gitattributes",
+                "analysis/zz_new.py")):
             with self.subTest(relative):
                 window = Window(self.tmp / f"input-{index}", catalog_overrides=self.ISOLATE,
                                 executed_overrides={"head": self.EXECUTED_HEAD})
