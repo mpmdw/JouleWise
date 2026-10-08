@@ -2806,7 +2806,7 @@ How each kind of file in the table is written (an **fsync** is the call that for
 
 ### 6.2 The catalog
 
-`flag_catalog.json` is normative; this section states its rules in words. Its `rules.cell_unit_minimum` is 8.
+`flag_catalog.json` is normative; this section states its rules in words. Its `rules.cell_unit_minimum` is 5.
 
 *No code stays unclassified for good* (audit-fix 2, Opus audit F2). Revision 6 kept two codes deliberately out of the
 catalog so that they would always block the release event. But the loader also refused any catalog that classified
@@ -2815,17 +2815,23 @@ and one torn flag line left its attempt blocked for ever. Now:
 
 - `records.malformed_flag` (a flag line that failed validation: torn, not JSON, or not a valid flag record) is
   DISCLOSE. Because the line may have carried an exclusion, the harvest reads what the line still shows of its code,
-  whole or as the prefix it was torn inside, and lists every catalog code it could have been. If any of those is an
+  whole or as the prefix it was torn inside, and lists every code it could have been among the codes that a program
+  writing flag files before the harvest can emit (`harvest.PRE_HARVEST_CODES`, held equal to those writers' code tables
+  by a test); a code that only the harvest emits is never a candidate, because the harvest derives it again from the
+  preserved bytes, so a damaged line cannot have lost it. If any candidate is an
   EXCLUDE_WINDOW code, it adds `records.malformed_flag_exclusion_possible` (EXCLUDE_WINDOW). Otherwise, if any is an
   EXCLUDE_MEMBER code and the line still shows a run id, it adds `records.malformed_flag_member_exclusion_possible`
   (EXCLUDE_MEMBER) on that member. A line that shows no code, or a possible member code but no run id, is disclosed
   only: the rule excludes on what the line shows, never on what it might have said (`harvest._malformed_flag_line`).
   A line torn just after the opening quote of its code shows an empty prefix, which names no code (cold pass 2 N7;
   before the fix, the empty prefix matched every code and so removed the window).
-  *Worked example (synthetic):* a line torn after `{"code": "calibration.capt` could have been
-  `calibration.capture_invalid` (EXCLUDE_WINDOW) among seven candidates, so the window is removed; a line that still
-  shows a member's run id and is torn inside `"code": "member.tok` could only have been `member.token_count_mismatch`
-  (EXCLUDE_MEMBER), so that member is removed (both candidate lists computed by this author from the catalog).
+  *Worked example (synthetic):* a line torn after `{"code": "calibration.capt` could only have been the controller's
+  `calibration.capture_battery_pair_unverified` (DISCLOSE): the four window-removing codes with that prefix are
+  emitted by the harvest alone, so the line is disclosed and removes nothing. A line torn after
+  `{"code": "model.identity_m` could have been the arm collector's `model.identity_mismatch` (EXCLUDE_WINDOW), so the
+  window is removed. A line that still shows a member's run id and is torn inside `"code": "member.tok` could only
+  have been `member.token_count_mismatch` (EXCLUDE_MEMBER), so that member is removed (candidate lists computed from
+  the catalog and the writers' code tables).
 - `collector.unmeasured` (a collector the flag package does not know how to class) is still absent from the catalog,
   so it blocks the release event until a cold erratum classifies it, which the loader now accepts.
 
@@ -3176,7 +3182,9 @@ The window is not claim-usable when any of these fired:
 - `clock.step_overlap_calibration`: a clock step inside a calibration capture.
 - `neg8.bound_not_derived` (§5.3) and `neg8.screen_failed`; also `whole_window.verdict_absent`, because the NEG-8
   screen's result is held in the whole-window verdict. The screen runs on the surviving references (§0.12, "The
-  screen on the survivors"): a lost reference never removes the window by itself; fewer than two survivors at an
+  screen on the survivors"): a lost reference never removes the window by itself, and a reference whose energy
+  cannot be read is lost, not handed to the screen (`energy_unreadable`, §0.12; the stored row's own failure for it
+  decides nothing: the harvest's survivor screen decides); fewer than two survivors at an
   endpoint does (`observed.reason` `references_insufficient`, also when the missing references never ran). Lost
   references and a lost midpoint are disclosed (`neg8.reference_lost`, `neg8.midpoint_lost`; on GAMMA a lost
   midpoint also removes the window, §0.12); a corpus member dropped for physics is disclosed
@@ -3199,8 +3207,8 @@ The window is not claim-usable when any of these fired:
   `member.whole_window_member_failure` (§6.3) cannot remove the members the verdict failed, and keeping every member
   would keep numbers the verdict rejected. A verdict that passed, or a well-formed list (an empty one included), does
   not emit it. An absent verdict file is `whole_window.verdict_absent` instead, and an unparseable one is
-  `neg8.screen_failed` (the screen it holds cannot be read) with `whole_window.verdict_unauthenticated`; both remove the
-  window already.
+  `neg8.screen_failed` (the screen it holds cannot be read) beside `whole_window.verdict_unauthenticated` (DISCLOSE);
+  `whole_window.verdict_absent` and `neg8.screen_failed` each remove the window already.
 - A failed pre-calibration screen removes the window through `calibration.no_bracket`, above. The catalog's code
   for it, `instrument.precal_screen_failed`, is reserved and never written (§6.2).
 - `clock.systematic`. A member's metadata records the outcome of its anchor bound (§0.14) as one status word, its
@@ -3272,19 +3280,26 @@ This amends D-179 ruling 1 and D-078's no-reduced-mean text, as Ed's 2026-10-05 
 - **Which units a flag removes.** A removed repeat member removes that repeat. A removed quad member removes its
   whole quad, so the A, B, B, A drift cancellation is kept. In GAMMA a quad with any removed member is dropped from
   its contrast.
-- **Minimum.** Every target cell keeps at least 8 of its 10 units in each stratum: floor cells in both the repeat and
+- **Minimum.** Every target cell keeps at least 5 of its 10 units in each stratum: floor cells in both the repeat and
   the quad stratum, GAMMA's contrasts in the quad stratum. Otherwise `cell.below_minimum` removes the window. The p42
-  cells are not target cells.
+  cells are not target cells. (Revision 9 said 8; the seal gate set 5, below.)
 - **What the reduced cell computes.** The stratified mean, variance and half-width of analysis plan §4, which equal
   D-179's when all 20 units are kept; floors with the small-sample guard of analysis plan §5; contrasts over the kept
   quads (analysis plan §7).
-- **Why 8.** At 8 units per stratum the reported-cell half-width grows by at most (2.365 / 2.262) × √(10/8) − 1 ≈
-  17%, and floors use the existing guard g(8) = 1.134.
-- **Planning figure.** If each member is aborted by idle admission independently with probability 1/37 (blocks 2
-  and 3), a floor window keeps both target cells at or above the minimum with probability about 0.85 (a repeat is
-  lost with probability 0.027 and a quad with 0.104), against (36/37)¹¹⁹ ≈ 0.04 under revision 2's rule that any
-  aborted member aborts the window. Bursts that hit consecutive members make losses cluster within a quad, which this
-  figure ignores.
+- **Why 5.** The seal gate (stage 1, 2026-10-07) set the minimum where the registered estimators stop producing a
+  number, not where their precision falls: `small_sample_guard_factor` (analysis plan §5) is defined for 5 ≤ n < 10
+  and undefined below 5, so with fewer than 5 units in a stratum a floor cell has no floor and every contrast judged
+  against it is not resolvable. Above 5 a short stratum gives a correct, wider interval, which the doctrine of §6.11
+  does not allow to remove a window. The reported-cell half-width grows by the factor t(0.975, n − 1) / t(0.975, 9) ×
+  √(10 / n): 1.169 at 8, 1.293 at 7, 1.467 at 6, 1.736 at 5; the floor guard g(n) is 1.134, 1.225, 1.342 and 1.5. The
+  kept n is printed beside every cell (analysis plan §8).
+- **Planning figure.** If each member is lost independently with probability p, a floor window keeps both target
+  cells at or above the minimum m with probability P(m, p) (a repeat is lost with probability p, a quad with
+  1 − (1 − p)⁴; the four strata multiply): at p = 1/37 (the idle-admission abort rate of blocks 2 and 3, the only
+  measured cause), P = 0.849 at m = 8, 0.971 at 7, 0.996 at 6 and 1.000 at 5; at p = 0.05, 0.508, 0.814, 0.952,
+  0.991; at p = 0.08, 0.169, 0.474, 0.767, 0.929. Under revision 2's rule that any aborted member aborts the window
+  the figure was (36/37)¹¹⁹ ≈ 0.04. Forty codes remove a member and only one cause has a measured rate. Bursts that
+  hit consecutive members make losses cluster within a quad, which this figure ignores.
 - **Disclosed beside every cell:** the kept units of each stratum, n_r kept repeats and n_b kept quads (`n_repeats`
   and `n_quads` in the exclusion function's record of the cell), the exclusions by family and their positions in the
   window, and the attempts of the pack with their causes (analysis plan §8).
