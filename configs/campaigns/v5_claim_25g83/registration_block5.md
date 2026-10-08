@@ -1473,9 +1473,10 @@ commit holds the same bytes wherever a window can read them. The terms below nam
   under `joulewise/` and `scripts/` (the code); every file under `configs/` (the packs and the files their plan
   trees pin, the flag catalog, the identity pins, the sizing output, the policies, the calibration files); and one
   document, `docs/phase_2/window_runbook.md`, because the plan writer copies its pre-calibration screen into the
-  chain. Four files under `configs/` are excepted, although a window reads them. One is the ledger pin (§0.11),
-  `configs/calibration/calibration_ledger_head.json`: it is data that the desk advances after every window, so it
-  must be able to change after H_claim ("Pin-only commit", below). The other three are the seal documents, below.
+  chain. Four files under `configs/` are excepted. One is the ledger pin (§0.11),
+  `configs/calibration/calibration_ledger_head.json`. A window does read it (its chain's first stage reads the
+  ledger through it, §4.6 item 6), but it is data that the desk advances after every window, so it must be able to
+  change after H_claim ("Pin-only commit", below). The other three are the seal documents, below.
 - **H_claim.** The last commit that changes any window input. Every block-5 window runs the window inputs that
   H_claim holds.
 - **Seal documents.** Three files of this directory: `sealed_inventory.json`, this file and the analysis plan.
