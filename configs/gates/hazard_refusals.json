@@ -211,7 +211,6 @@
   "clock.systematic": {"category": "NUMBER_INTEGRITY", "protects": "the clock systematic exceeds the registered budget for the reported energy"},
   "code.executed_differs_from_sealed": {"category": "NUMBER_INTEGRITY", "protects": "the executed measurement code differs from the sealed code"},
   "code.identity_unmeasured": {"category": "NUMBER_INTEGRITY", "protects": "which code produced the numbers could not be established at arm or harvest"},
-  "g3.recompute_failed": {"category": "NUMBER_INTEGRITY", "protects": "the G3 independent recompute of the window's numbers failed"},
   "instrument.precal_screen_failed": {"category": "NUMBER_INTEGRITY", "protects": "the pre-calibration screen (0.03646 s fiducial bound) failed"},
   "lineage.plan_tree_digest_differs": {"category": "NUMBER_INTEGRITY", "protects": "the executed plan tree differs from the sealed pack"},
   "model.identity_inconsistent_in_window": {"category": "NUMBER_INTEGRITY", "protects": "members of one window ran different model weights"},

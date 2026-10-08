@@ -1398,8 +1398,14 @@ class DeskAndG3Tests(WindowTestCase):
         """Review F3: F5-2 is the one independent recompute of the whole-window verdict.
 
         Unless the report exists and holds F5-2 PASS, g3.recompute_failed
-        (EXCLUDE_WINDOW) fires: a crashed checker, a timeout, an exit outside
-        {0, 1}, an F5-2 SKIP behind a failed S11-A2, or a skipped G3.
+        fires: a crashed checker, a timeout, an exit outside {0, 1}, an F5-2
+        SKIP behind a failed S11-A2, or a skipped G3.
+
+        The flag is always written and never removes the window (DISCLOSE in
+        the block-5 catalog and, since seal gate ruling SG-3 of 2026-10-07, in
+        this fixture): the recompute reports the aggregate verdict, which
+        fails on one member's failure, and each part of that verdict acts
+        through its own code (registration 6.5).
         """
         def report(rows, returncode=0):
             def runner(argv, **kwargs):
@@ -1427,7 +1433,7 @@ class DeskAndG3Tests(WindowTestCase):
                 window = self.g3_window(name, runner, **harvest)
                 (flag,) = [flag for flag in window.flags() if flag["code"] == "g3.recompute_failed"]
                 self.assertEqual(flag["observed"], observed)
-                self.assertIn("g3.recompute_failed", window.exclusions()["reasons"])
+                self.assertNotIn("g3.recompute_failed", window.exclusions()["reasons"])
         passed = self.g3_window("passed", report([{"id": "S11-A2", "status": "PASS"}, {"id": "F5-2", "status": "PASS"},
                                                   {"id": "S11-A5", "status": "FAIL"}], 1))
         self.assertNotIn("g3.recompute_failed", passed.codes())
@@ -3914,6 +3920,27 @@ class FixtureCatalogTests(WindowTestCase):
         fixture = json.loads((FIXTURES / "flag_catalog.json").read_bytes())["codes"]
         self.assertEqual(fixture["whole_window.not_passed"]["effect"], DRAFT_CODES["whole_window.not_passed"]["effect"])
         self.assertEqual(fixture["whole_window.not_passed"]["effect"], "DISCLOSE")
+
+    def test_the_fixture_agrees_with_the_block5_catalog_on_every_code_both_list(self):
+        """Seal gate ruling SG-3 (2026-10-07, change K-2): g3.recompute_failed was the one disagreement.
+
+        Before: the fixture made it EXCLUDE_WINDOW and the block-5 catalog
+        DISCLOSE, so the harvest tests exercised an effect no window is judged
+        under.  The catalog lists codes the harvest never emits (17 at this
+        writing); only the codes both files list are compared.
+        """
+        block5 = ROOT / SEALED_DIR / "flag_catalog.json"
+        if not block5.is_file():
+            self.skipTest("the block-5 catalog is not in this tree")
+        catalog = json.loads(block5.read_bytes())
+        fixture = json.loads((FIXTURES / "flag_catalog.json").read_bytes())
+        self.assertEqual(set(fixture["codes"]) - set(catalog["codes"]), set())
+        keys = ("family", "klass", "effect", "blinding")
+        self.assertEqual({code: (tuple(entry.get(key) for key in keys),
+                                 tuple(catalog["codes"][code].get(key) for key in keys))
+                          for code, entry in fixture["codes"].items()
+                          if any(entry.get(key) != catalog["codes"][code].get(key) for key in keys)}, {})
+        self.assertEqual(fixture["codes"]["g3.recompute_failed"]["effect"], "DISCLOSE")
 
     def test_a_failed_aggregate_verdict_does_not_remove_the_window_by_itself(self):
         window = self.window()  # the fixture catalog as committed (no override of this code)

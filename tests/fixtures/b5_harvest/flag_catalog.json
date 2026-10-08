@@ -392,7 +392,7 @@
     },
     "g3.recompute_failed": {
       "blinding": "STRUCTURE",
-      "effect": "EXCLUDE_WINDOW",
+      "effect": "DISCLOSE",
       "family": "NEG8",
       "klass": "NUMBER"
     },
@@ -1051,7 +1051,7 @@
       "klass": "REPRESENTATION"
     }
   },
-  "notes": "TEST catalog for tests/test_harvest_b5_window.py, not the sealed one (lane L6 seals configs/campaigns/v5_claim_25g83/flag_catalog.json). Codes L4's draft names carry L4's draft effect; the codes in harvest.L5_ONLY_CODES carry an effect drafted from gate-prune plan section 3.5. records.malformed_flag is deliberately absent: it must stay UNCLASSIFIED. whole_window.not_passed is DISCLOSE, as in L4's draft and the block-5 draft catalog (revision 3): one member's failure fails the aggregate verdict (core-prune N5). The gate-prune core-prune codes (joulewise.flags.core.CORE_FLAG_CODES and the harvest's N2 and N7 codes) carry L4's draft classification. The gate-prune round-2 codes (lane P2-HARV) carry the classification of joulewise.flags.catalog._PRUNE2_CODES (PLAN2 sections 2.2 G and 3.1). The gate-prune round-3 codes (lane P3-HARV: the battery-assist ruling of 2026-10-06, the SMC battery source, the historical calibration custody pass, the NULL-window record and the KM003C meter) carry the classification of joulewise.flags.catalog.DRAFT_CODES. member.whole_window_member_failure (registration 6.3) carries the classification of joulewise.flags.catalog.DRAFT_CODES.",
+  "notes": "TEST catalog for tests/test_harvest_b5_window.py, not the sealed one (lane L6 seals configs/campaigns/v5_claim_25g83/flag_catalog.json). Codes L4's draft names carry L4's draft effect; the codes in harvest.L5_ONLY_CODES carry an effect drafted from gate-prune plan section 3.5. records.malformed_flag is deliberately absent: it must stay UNCLASSIFIED. whole_window.not_passed is DISCLOSE, as in L4's draft and the block-5 draft catalog (revision 3): one member's failure fails the aggregate verdict (core-prune N5). g3.recompute_failed is DISCLOSE for the same reason, as in the block-5 catalog (registration 6.5; seal gate ruling SG-3, 2026-10-07): it reports an independent recompute of that aggregate verdict, and each part of the verdict removes a window or a member through its own code. The gate-prune core-prune codes (joulewise.flags.core.CORE_FLAG_CODES and the harvest's N2 and N7 codes) carry L4's draft classification. The gate-prune round-2 codes (lane P2-HARV) carry the classification of joulewise.flags.catalog._PRUNE2_CODES (PLAN2 sections 2.2 G and 3.1). The gate-prune round-3 codes (lane P3-HARV: the battery-assist ruling of 2026-10-06, the SMC battery source, the historical calibration custody pass, the NULL-window record and the KM003C meter) carry the classification of joulewise.flags.catalog.DRAFT_CODES. member.whole_window_member_failure (registration 6.3) carries the classification of joulewise.flags.catalog.DRAFT_CODES.",
   "rules": {
     "cell_unit_minimum": 8
   },
