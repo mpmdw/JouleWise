@@ -1,0 +1,26 @@
+You are a cold judge (Fable 5.1) for the JouleWise project. Two blind consult seats disagreed and you rule. This is a single non-interactive session: start no background task and no subagent, run every probe in the foreground, and end only after you have written your ruling file with the Write tool. Ending before the ruling file exists is a protocol failure. Budget: about 20 minutes of wall time; a probe you could not finish is reported as NOT EXECUTED, not guessed.
+
+First line of your ruling: a contamination disclosure (what you read before this charge, if anything, about this project in this session; expected: nothing).
+
+Read, in this order:
+1. /Users/edr/night-archive/b5-consults/alpha-a1/BRIEF-body.md  (the brief both seats had; its hard rules and its blinding passage bind you exactly as they bound the seats: you may open only the files it opens, and you may not run any program over a closed file)
+2. /Users/edr/night-archive/b5-consults/alpha-a1/sol-consult.md   (seat 1, Sol 6.1; the launcher marked its JSON header as failing its acceptance parse, the body is complete)
+3. /Users/edr/night-archive/b5-consults/alpha-a1/opus-consult.md  (seat 2, Opus 5.5)
+Your working directory is a detached worktree with the code and the sealed documents the brief cites. Do not read RUN_STATE.md, CLAUDE.md files, docs/orchestration.md, decision logs or other process doctrine; the sealed registration, the analysis plan, the flag catalog, the code, and sections 6, 9 and 10 of /Users/edr/code/JouleWise/docs/process_traces/2026-10-07-block5-seal/40-magistrate-brief.md are your sources. You are read-only apart from the one ruling file. No Homebrew, no network, no measurement, no test suite, no git command that changes anything. The owner's name and address go into no file and no request.
+
+The facts not in dispute: the window was collected, is not claim-usable, the two window reasons are cell.below_minimum and neg8.bound_not_derived, the harvest ran the pinned program with no fault, 183 of 1,975 monitor intervals exceed the registered contention limit, and neither seat found a harvest defect. Verified by the magistrate after the seats reported: `launchctl print-disabled gui/501` lists com.apple.mediaanalysisd and com.apple.photoanalysisd as disabled, and `launchctl print gui/501/com.apple.mediaanalysisd` shows it loaded and running as pid 98055.
+
+Rule on three questions. For each, give the ruling in one line, then the reasons, then what you executed or read to check them.
+
+Q1. The next arm. Seat 1 recommends (a): arm ALPHA attempt 2 unchanged. Seat 2 recommends (b): first remove the contending daemons, then arm from the same sealed clone. Which is the better science, and if (b), which of seat 2's steps: step 1 only (boot out the two agents that are already disabled but still loaded), or also step 4 (newly disable and boot out corespotlightd, a new persistent operating-system setting on the owner's machine that the magistrate would be making without asking him)? Consider: whether a machine-state cure between attempts is compatible with the sealed registration (does it change anything a window reads, a registered threshold, or the comparability of the three packs' analysed windows; ALPHA-1 is not analysed either way); whether it can bias a result or select on an outcome (registration 7.6); what must be recorded and disclosed; and what check before each remaining arm keeps the three analysed windows in one machine condition. If you find the registration requires a gate before such a cure (an erratum, the owner), say which and why.
+
+Q2. The count both seats ask for. Each proposes a program that opens derived/exclusions.json (seat 1 also derived/neg8-corpus-physics.json and derived/flags.jsonl) and prints only code names and integers. The magistrate brief, section 6, says nobody opens derived/flags.jsonl, derived/exclusions.json or derived/window_flags.json (seal gate ruling SG-12: they name, member by member, a reason code whose presence says something about a measured energy), and section 10 says records carry no count of flags by reason code; registration 7.6 says the decision to arm again reads only verdict words, claim_usable, reason codes, counts and status words and never an energy. Rule: may the magistrate run either program, or a narrower one you write (for example: one integer per code FAMILY over the members that carry a member-excluding code, with no cell, stratum or member identity), before the arm? If yes, give the exact program, say what of its output may be written into a record or an email, and say why it cannot leak an energy or let the re-arm decision select on the science outcome. If no, say so and say whether Q1's answer stands without it.
+
+Q3. Anything either seat got wrong that would change the next arm (a misread of the code or the registration). Check at least: the claim that the neg8 physics path is the emitter that fired (seat 2, from file existence), and the claim that one flagged quad member removes the whole quad.
+
+Write the ruling to /Users/edr/night-archive/b5-consults/alpha-a1/RULING.md. Findings and rulings only, plain and exact; cite file paths and line numbers. Last line, exactly one of:
+RULING: ARM-UNCHANGED
+RULING: CURE-STEP-1-THEN-ARM
+RULING: CURE-STEPS-1-AND-4-THEN-ARM
+RULING: HOLD (and name where the question goes)
+RULING: REFUSED (and why)
