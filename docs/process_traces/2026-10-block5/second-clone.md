@@ -43,3 +43,31 @@ interpreter, the new claim head, the new seal commit and the new registration di
 Not done yet, and required before any arm: the harvest pin for this seal (gate 5), the desk seal check
 with the new claim head and a scratch plan for each pack, the rehearsal (gate 7). The RUN_STATE hold is
 unchanged: `B5-ARM-RELEASED: none`.
+
+## The rehearsal (gate 7), started 11:17 PDT
+
+The rehearsal rig `scripts/rehearse_b5_real.py` runs the real path (plan writer, driver, arm, chain, the
+real model and power sampler, the corpus prune and the bound derivation) on a shortened roster, in a
+private clone with a private copy of an older ledger, and its numbers are discarded. It is built to run
+at the desk while agent sessions are alive: it runs the real agent census and idle-admission checks,
+records what they measured in `overrides.jsonl`, and forces their decisions (its documented overrides R1
+to R6). It is therefore not a quiet-machine measurement and not a claim window, and no rule about agent
+sessions is broken by running it from this session.
+
+- Run from a detached checkout at the seal commit, `/Users/edr/code/JouleWise-wt-seal2-rig` (so the claim
+  clone's working tree is never touched), with `/opt/homebrew/bin/python3.13 -B`.
+- Base: `/Users/edr/night-archive/gate-prune/rehearsal-real/corpus18-20261009T1816Z`. Pack ALPHA. Kept
+  members: all 18 of the corpus, the start triplet, the midpoint, the end triplet, the whole stage
+  `06_phase_prefill_p2048_abba_blocks_06_10` (20), and the rig's defaults for the other stages.
+- `prepare` exited 0: the plan has 125 members and `window_max_s` 110,220.
+- `run` was started detached (pid in `<base>/run.pid`; its exit code is written to `<base>/run.rc`; the
+  rig's own log is `<base>/rig.log`). Arm dwell shortened to 60 s clean within 120 s, as the rig allows.
+
+Next action when `<base>/run.rc` exists: if it reads `rehearsal run rc=0`, advance the private clone's pin
+and harvest the rehearsal with the pinned harvest program of the second seal (the consult's section 5 has
+both commands; the harvest waits for gate 5). Read from the harvest's record, by a program that prints
+structure only: that the re-screen was evaluated, that the clean bound was built by the cap rule
+(`members_kept` 12 with the rest under `beyond_cap` when at least 12 are clean), and the wall times of the
+corpus prune and the bound derivation (above 1,200 s goes to a consult). Read the runner's log line for
+the stage `alpha-science-prefill-p2048-abba-06-10` (ruling A.10: why it returns rc 1 with 20 of 20
+succeeded). If the run failed, the rig's log names the stage; that is a defect to fix before any arm.
