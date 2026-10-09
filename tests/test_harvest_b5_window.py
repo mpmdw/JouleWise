@@ -2033,8 +2033,9 @@ class Neg8RescreenTests(WindowTestCase):
         derived = screen + (window.archive / "derived" / "flags.jsonl").read_text()
         for value in (family["derived_repeatability_bound_j"], family["point_delta_j"], family["start"]["mean_j"],
                       family["end"]["mean_j"]):
-            # Match a complete JSON numeric value, not digits inside an emitted wall timestamp.
-            self.assertNotRegex(derived, r":\s*" + re.escape(repr(value)) + r"(?=\s*[,}\]])")
+            # The value as a whole number token anywhere (object member, array item or inside a
+            # string), but not as digits inside a longer number such as an emitted wall timestamp.
+            self.assertNotRegex(derived, r"(?<![\d.])" + re.escape(repr(value)) + r"(?!\d)")
         self.assertNotIn('_j"', screen)
         self.assertNotIn("_s\"", screen)  # nor the verdict's evaluation time
 
