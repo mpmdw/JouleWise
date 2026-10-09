@@ -339,3 +339,37 @@ Next action, exactly:
    seal record.
 3. Then the desk side's remaining gates, the new clone, the rehearsal and the pre-arm checks, as the
    ruling's section D gates 5 to 8 list them.
+
+## Step 3, status (11:00 PDT): the new claim head exists; the second seal is in its pull request
+
+- Pull request #492 merged at 10:42 PDT with every gate recorded. **New claim head (H_claim):
+  `c27485347c9629b857df81665b5b1b8d10dcd36a`.**
+- **New seal commit: `be6525e5a6511adf882282e404e163e14dbb738b`**, only parent the claim head, three files.
+  Registration sha256 `c7b3fdf7…db3f`, analysis plan `23ef67f5…4859`, sealed inventory `80852d98…c4dc`
+  (682 files). The seal landing test and the pin census test pass there. The text gate passed after 17
+  corrections (`corpus18-erratum/TEXT-GATE.md`). The full digests are in the new section "Erratum 1: the
+  second seal" of `docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md`.
+- Pull request #493 (branch `seal/2026-10-09-corpus18`, worktree
+  `/Users/edr/code/JouleWise-wt-corpus18-sealcommit`): the seal commit, a merge of this records branch,
+  and a record commit. Its ledger is filled; CI is running. **When every check passes:
+  `gh pr merge 493 --repo mpmdw/JouleWise --merge`.** After that merge, new records are committed in this
+  worktree as before; this branch is then merged to main again at the next records step.
+- The clone consult (Sol 6.1 xhigh) has answered: `/Users/edr/night-archive/b5-consults/corpus18-build/
+  sol-clone-consult.md`. Its findings that bind the next steps: the new seal's tree carries pin 402, so
+  the new clone's first commit after checkout is a byte copy of the old clone's committed pin (sequence
+  422, head digest `1ae51d38…f717`) made with `git commit --only`, with the ledger file copied from the
+  old clone (422 rows, file sha256 `0af3448c…aa69`); the plan writer, the installer and the harvest's
+  code-identity comparison accept that shape (proved on a scratch clone); the environment needs the lock
+  file's packages offline (a wheelhouse whose completeness it could not verify); the rehearsal runs from
+  a private clone with its own ledger copy. Its section 2 has the ordered commands; read all of it
+  before gate 6.
+- Desk side: the seal commit is merged into the harvest lane (`d58913476`, not yet pushed with its test
+  fixes). Outside `tests/`, the lane differs from the seal commit in exactly the three harvest program
+  files. A Sol seat (`BRIEF-sol-desk-merge.md`, report `sol-desk-merge.md`) is making the lane's tests true
+  for the 18-member committed corpus; it commits nothing.
+
+Next action after #493 merges and the desk seat reports: commit and push the lane; the whole suite on it;
+a cold Fable pass on `git diff be6525e5a..<lane head>` (the three program files and tests; charge
+`FABLE-desk-pass-charge.md` adapted to the new range); a pull request for the lane with the
+`B5-HARVEST-PIN:` addendum to the seal record (Addendum 2) in it; merge; move the desk root to the lane
+head; then gate 6 from the clone consult's commands.
