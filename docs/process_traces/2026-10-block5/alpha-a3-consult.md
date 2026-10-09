@@ -224,3 +224,21 @@ Next action, in the ruling's order of gates (section D):
 5. Gates 6 to 8: the new clone and fixed-values file; the 18-member rehearsal and its harvest; the
    pre-arm checks; then the RUN_STATE top block is rewritten and ALPHA attempt 1 is armed by brief
    section 5.
+
+## Step 3, status (07:40 PDT)
+
+- Desk side (ruling gate 5), started early because it does not depend on the window side: worktree
+  `/Users/edr/code/JouleWise-wt-harvest-cap`, branch `lane/2026-10-09-harvest-corpus-cap` (pushed), cut
+  from the harvest pin `7e6158d66`. First builder (Sol 6.1 xhigh) done: commit `05897b24c`, one
+  production method changed (`neg8_corpus_physics`, 40 lines added, 12 removed), 13 new tests, six
+  modules green. It disclosed that the always-on clean bound lets a stored NEG-8 condition clear on the
+  re-screen where the sealed text (lines 2838 to 2841) says the screen stays failed. A second Sol seat
+  (`BRIEF-sol-desk-fix1.md`, report `sol-desk-fix1.md`, both in
+  `/Users/edr/night-archive/b5-consults/corpus18-build/`) is correcting that and reviewing the diff. It
+  commits nothing: when its status file no longer reads `RUNNING`, read the report, run the six modules,
+  commit and push.
+- Window side: the first builder is still running (`sol-window-side.status`).
+- The corrected erratum is `corpus18-erratum/ERRATUM.md` (the ruling's 14 corrections applied;
+  `CORRECTIONS-APPLIED.md` maps them and holds the lead's seven decisions).
+- Still to do on the desk side after the fix: merge the new seal commit into this lane, the whole suite,
+  a cold Fable pass, the pin addendum, the desk root moved (ruling section D gate 5).
