@@ -190,3 +190,37 @@ the listed corrections to the erratum text and start the build (step 3) in a new
 branch from main, with a Sol 6.1 seat at effort xhigh as the builder and the corrected erratum plus the
 ruling as its whole specification; on `RETURN`, redraft what the ruling names and convene once more; a
 `REFUSED` goes to Ed by email.
+
+## Step 2 done, step 3 started (07:10 PDT)
+
+- `corpus18-erratum/RULING.md`: `ERRATUM: ADMIT-WITH-CORRECTIONS`. The rule is the refuter's fourth option
+  (the ruling's section B): all 18 members run in every window in committed order and nothing else changes
+  in the window; at the desk the harvest always builds the deciding bound from the first 12 members, in
+  committed order, that succeeded, passed the mint and carry none of the six physics codes (all of them
+  if 10 or 11 remain; `neg8.bound_not_derived` below 10). The bound keeps its sealed width. The earlier
+  ruling's reason for "all kept" (that it tightens the screen) is withdrawn: the bound's larger term
+  grows with the number of members.
+- Ed was sent the correction (Gmail `1a120f77842431d2`, on the thread of `1a120c4169df6206`): the rule
+  above in place of "all that survive", and 3 of 200 in place of 4 of 200.
+- An Opus 5.5 seat is applying the ruling's 14 corrections to `corpus18-erratum/ERRATUM.md` and writes
+  `corpus18-erratum/CORRECTIONS-APPLIED.md`.
+- Build worktree `/Users/edr/code/JouleWise-wt-corpus18`, branch `lane/2026-10-09-corpus18`, cut from main
+  `3f564499e`. A Sol 6.1 seat at effort xhigh is building the window side (the ruling's section D, gates
+  1 and 2): brief, report and status in `/Users/edr/night-archive/b5-consults/corpus18-build/`
+  (`BRIEF-sol-window-side.md`, `sol-window-side.md`, `sol-window-side.status`). It commits nothing.
+
+Next action, in the ruling's order of gates (section D):
+1. When the builder's status file no longer reads `RUNNING`: read its report, verify the per-pack
+   `git diff --stat` and the `--check` exit codes yourself, commit the work on the lane branch and push
+   it. If the worktree is dirty and no `codex` process is alive, the seat died: inspect, keep what
+   passes its checks, and relaunch the same brief for the rest.
+2. Gate 3: an independent executing review (Sol 6.1, a new seat), the whole suite on the merged tree
+   (the shard runner with Homebrew `python3.13`, not the project environment), CI green, a cold Fable
+   pass, findings dispositioned, the Impact statement; merge; the merge commit is the new claim head.
+3. Gate 4: the seal commit (three files; the two documents edited from the corrected erratum's section
+   4.5 by an Opus seat), the seal landing test, the text gate, the seal record's new section.
+4. Gate 5: the harvest lane merges the new seal commit and implements the desk rule with the ruling's
+   tests; whole suite; cold Fable pass; the pin addendum; the desk root moved.
+5. Gates 6 to 8: the new clone and fixed-values file; the 18-member rehearsal and its harvest; the
+   pre-arm checks; then the RUN_STATE top block is rewritten and ALPHA attempt 1 is armed by brief
+   section 5.
