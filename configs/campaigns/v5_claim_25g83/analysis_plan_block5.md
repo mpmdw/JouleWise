@@ -605,7 +605,13 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
   reason, each physics code, the cap). For every block-5 window, also disclose that the bound was validated against
   the collected members and that the harvest's re-screen against the clean bound, not the stored verdict, decided
   the screen (registration §5.3; `derived/neg8-bound.json`, `derived/neg8-screen.json`,
-  `derived/neg8-corpus-physics.json`).
+  `derived/neg8-corpus-physics.json`). The terms are the registration's (§5.3). The **in-window bound** is the bound
+  the chain derives during the window from every succeeded corpus member that its builder (the mint) does not omit
+  for one of its five validity reasons; it decides nothing. The **clean bound**, also called the deciding bound, is
+  the bound the harvest builds after the window and judges the screen and the allowance by. It uses the first 12
+  members of the in-window bound, in the committed order of the corpus's order manifest, on which none of the six
+  member-level physics codes fired (all of them when only 10 or 11 remain); leaving out the members after the
+  twelfth is the **desk cap**.
   Also, from the flags and `derived/neg8-screen.json` (registration §0.12, §5.3): the realised reference counts
   (start, midpoint, end) against the planned (3, 1, 3), the bound's formula at those counts, each lost reference with
   its slot and reason (`neg8.reference_lost`), each spare measured with its slot (`member.retried`) and whether it

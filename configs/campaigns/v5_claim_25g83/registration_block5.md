@@ -88,8 +88,8 @@ after a chain of receipts verified, and discarded a whole window when one member
 1. §5.3: each window starts with 18 reference runs, the NEG-8 corpus, from which a drift bound is derived (§0.12);
    revision 4 wrote 12, and the erratum of 2026-10-09 made it 18 (§14 Q16). A window in which as few as 10 of them
    succeeded no longer loses that bound: the harvest validates the bound against the members actually collected,
-   builds the deciding bound from at most 12 of them (§5.3, "the desk cap") and re-screens the window against it
-   (§14 Q1 closed).
+   builds the deciding bound (the bound by which the screen and the allowance are judged) from at most 12 of them
+   (§5.3, "the desk cap") and re-screens the window against it (§14 Q1 closed).
 2. §4.6 item 3: the pins that fix which model files and runtime versions may be measured live in
    `identity_pins.json` in this directory, not in the packs' plan trees.
 3. §6.3, §6.5: the whole-window verdict (one pass/fail record over the whole window, §0.17) stays disclosed rather
@@ -380,7 +380,8 @@ said, in the form "(Revision 10 said …)".
    attempt's per-member time allowance would grow by "the sizing margin", with no erratum. No such margin is
    defined anywhere, and no program derives an allowance from an observed member. A larger allowance is now a cold
    erratum with a new sizing file, after a consult. §5.5 gives the reason the case is remote: the deadline is about
-   27 h, against a projected chain of 4.8 to 5.7 h.
+   29 h, against a projected chain of 5.1 to 5.9 h (about 27 h and 4.8 to 5.7 h before the erratum of 2026-10-09
+   gave the corpus 18 members, §14 Q16).
 3. **Places where the code does something other than the earlier registered design.** The orchestrator ruled that
    none of them puts a wrong number into a claim, removes clean data or breaks blinding, so the code stays for
    block 5 and the text now states it.
@@ -1658,8 +1659,8 @@ Each is evidenced by a path and SHA-256 before the point named.
 **Before ALPHA-1 arms:**
 
 1. H_claim is fixed (§0.18: the last commit that changes a window input). **H_claim is `<NEW_H_CLAIM>`**: the merge
-   into main of the build that the erratum of 2026-10-09 ordered (§14 Q16; the 18-member corpus files, four generator
-   literals, the three regenerated plan trees, the sizing output, the identity pins and the pin registry). It contains
+   into main of the build that the erratum of 2026-10-09 ordered (§14 Q16; the 18-member corpus files, literals in the
+   four pack generators, the three regenerated plan trees, the sizing output, the identity pins and the pin registry). It contains
    the first seal's H_claim, `a64000884ef5bb4b76415835f02f39803f6eb620`, and changes no file under `joulewise/` or
    `scripts/`. The first seal's H_claim, on
    branch `integrate/2026-10-07-int5`, carries PR #483 (the `_v5` qualification-code integration), lanes L1–L4,
@@ -1801,10 +1802,14 @@ Each is evidenced by a path and SHA-256 before the point named.
    failures), which is why 22 of 25 stage rows return 0, and the driver still returns GO; the seven spares run as
    planned (start 1–3, midpoint 1, end 1–3). The counts equal those of the earlier render at `43ac12d0c`
    (`dry-records/DRY_RECORDS.md`) number for number. After the erratum of 2026-10-09 gave the corpus 18 members (§14
-   Q16), the six renders were repeated on the build branch whose merge is H_claim, with the pack bytes of H_claim:
-   `<DRY_RENDER_RECORD_PATH>`, SHA-256 `<DRY_RENDER_RECORD_SHA256>`. Every count equals the table's except the bound
-   bundles, which are 18/18/18 in all six rows, and the NEG-8 corpus, 18 listed and 18 kept; the corpus stage's
-   rendered command carries `--max-failures 18`. The rendered comments still say 12 (§10, deviation 9).
+   Q16), the chain of each pack was rendered again on the build branch whose merge is H_claim (at its commit
+   `a5ae00c46`, with the pack bytes that H_claim carries): `docs/process_traces/2026-10-block5/corpus18-erratum/DRY-RENDER.md`,
+   SHA-256 `7bb10119c923a36d76e6045926e01d9d4aa49191d0e82e38ab374b54ec98f3c2`. That check is narrower than the six
+   renders above. It renders the three chain scripts with scratch directory names and parses each with `zsh -n` (a
+   syntax check that runs nothing); it runs no stand-in window, so it repeats none of the table's counts. In each
+   pack the corpus stage's `expected_count` is 18, the stage's rendered runner command and its retry's both carry
+   `--max-failures 18`, and the script parses. Each rendered script still has two comment lines that say 12 (§10,
+   deviation 9).
    *Stand-ins:* the agent census (a clean fake), the hazard arm (all
    six modules PASS), the network-time setter (a state file), the lineage publisher and verifier, the hazard monitor,
    the record-only collectors, the G10 program, the free-disk reading, the driver's two last steps (the **durable
@@ -2710,7 +2715,7 @@ spare-slot retry decision, which runs spares only when the stage lost members (�
   chain continues as after any failure of that stage. The post calibration capture has no budget: it must be allowed
   to finish, or the window loses its bracket.
 - **The collection deadline** (PLAN2 row 17; `chain.py` `CALIBRATION_HORIZON_S`, `HORIZON_*`). *Forcing problem:* a
-  bracket is fresh for 24 h from the pre calibration capture, and the window's deadline (§5.5, 28.4 h for ALPHA) is
+  bracket is fresh for 24 h from the pre calibration capture, and the window's deadline (§5.5, 30.6 h for ALPHA) is
   longer. A chain that overran past 24 h would lose its bracket, and with it the whole window, not just a tail. The
   deadline cannot simply be lowered: it is the driver's kill time, and a kill loses the post calibration.
   *Mechanism:* a collection stage, the corpus retry, a spare retry and the bound derivation launch only when now +
@@ -2786,10 +2791,13 @@ runs in every window, in the committed order of the corpus's `order_manifest.jso
 whether a member runs. *In the window,* the chain derives a bound from the corpus members that were collected and
 succeeded, provided there are at least 10 of the 18 (`whole_window.NEG8_DRIFT_MINIMUM_N` = 10). That **in-window
 bound** rests on 10 to 18 members and decides nothing. *At the desk,* the harvest builds the bound that decides the
-screen and the allowance, the **clean bound**, from at most 12 of those members ("the desk cap", below). So the n of
+screen and the allowance, the **clean bound**, from at most 12 of those members: the first 12, in the committed order,
+on which none of the six physics codes fired (the codes are listed under "A fourth source of omission" below), or all
+such members when only 10 or 11 remain ("the desk cap", below). So the n of
 §0.12 is 10, 11 or 12, and t uses n − 1 degrees of freedom. With fewer than 10, in the window or at the desk,
 `neg8.bound_not_derived` removes the window. The eight members that the corpus can lose are members that did not
-succeed, members the mint omits for one of its five reasons, and members dropped for physics. A member that the mint
+succeed, members the mint (the core function that builds the bound from the corpus bundles; "Which corpus members may
+be left out", below) omits for one of its five reasons, and members dropped for physics. A member that the mint
 refuses or cannot classify (below) is not among them: one such member leaves the window with no bound.
 
 *Why it matters.* The rule was first sized, for a corpus of 12, on 1 abort in 37 members (the block 2 and 3 record).
@@ -2815,14 +2823,16 @@ are lost:
 | 0.25 | 0.391 | 0.158 | 0.981 | 0.943 |
 | 0.35 | 0.151 | 0.042 | 0.861 | 0.728 |
 
-The "one fewer lost" columns show the chance that one member is still spare for the harvest's physics drop (below).
+The third and fifth columns allow one loss fewer: they show the chance that one member is still spare for the
+harvest's physics drop (below).
 These figures are a guide, not a guarantee, because losses are not independent: one sustained burst of outside load
 takes consecutive members (a member's two admission attempts span about 170 s, so a five-minute burst takes about
 two). In those terms a 12-member corpus survives one burst and an 18-member corpus about four (§14 Q16).
 
 *Implementation at `f8164893` (fix lane fx-harvest).* That lane changed the harvest only. It left the core module
 `joulewise/whole_window.py`, which builds, reads and screens the bound, as it was, so the core reader of item 2
-still knows only the full corpus. Three programs touch the bound, in this order:
+still knows only the full corpus it was written for (the historical 12-member one, item 2). Three programs touch the
+bound, in this order:
 
 1. **The chain** derives the bound from a window-local copy of the corpus manifest that lists only the collected
    members that succeeded. It records that copy's path and SHA-256 in the driver's terminal record
@@ -2916,10 +2926,13 @@ Structure (decisions, conditions, member counts, digests) goes to `derived/neg8-
 corpus member: its stored verdict reads "failed", it carries `whole_window.not_passed` (disclosed only), and the
 harvest's re-screen against the clean bound decides its screen. Three things follow, and each was the registered
 behaviour for a 10- or 11-member bound before. First, a stored bracket that carries a NEG-8 condition other than the
-two bound-underived ones leaves the screen failed, as item 3 says of case (a). That the harvest now builds the clean
-bound on every window, so that case (c) holds on every window too, does not change this: the harvest program pinned
-for these windows (§11 item 4) is tested on a stored bracket that carries another NEG-8 condition, and the test must
-show the screen failed. Second, the allowance consumer (the core function that reads a window's drift allowance for a
+two bound-underived ones leaves the screen failed, as item 3 says of case (a), unless the window also has a loss: a
+reference newly lost at harvest (case (b)) or a corpus member dropped for physics (case (c) as it was sealed). With
+such a loss the re-screen decides in spite of the other condition, as sealed. That the harvest now builds the clean bound on every window, so
+that case (c) holds on every window too, does not change this, and neither does the desk cap: a clean bound built
+with no physics drop lifts no other NEG-8 condition. The harvest program pinned for these windows (§11 item 4) is
+tested on a stored bracket that carries another NEG-8 condition in a window with no loss, and the test must show the
+screen failed. Second, the allowance consumer (the core function that reads a window's drift allowance for a
 claim) checks a clean bound's arithmetic and digest against the harvest's record, not its corpus identity, which is
 the sealed behaviour now applied to every window. Third, lane L9-NEG8 part (c) (analysis plan §11) is a condition of
 every contrast, as it already was of every floor.
@@ -3025,15 +3038,16 @@ members' recorded points with the core builder, validate it against the clean ma
 less the removed and the capped members), write `derived/neg8-clean-corpus.json`, `withheld/neg8-clean-bound.json` and
 `derived/neg8-corpus-physics.json` as now, with one new key in the last, `beyond_cap`, listing the bundle ids left out
 by step (iv), and `members_kept` the count after (iv). The screen re-runs against the clean bound and the allowance
-comes from it (`corpus_physics_clean`), as the sealed path already does for a physics drop.
+comes from it (`derived/neg8-screen.json` then records `bound_used` as `corpus_physics_clean`), as the sealed path
+already does for a physics drop.
 
 *What the cap is, and what it is not.* The cap at the first 12 clean members in committed order is the one accepted
 omission of the desk step, beside the mint's five reasons and the six physics codes. Members left out by step (iv) are
 not dropped for cause: no `neg8.corpus_member_dropped` flag is emitted for them, no catalog code is added, and their
 energies are used by nothing. They are disclosed after the release event with the window's corpus size (analysis plan
 §8.1). The chain's collected-manifest test (item 3 above) is unchanged, because the chain's manifest still lists every
-succeeded member. n is therefore 10, 11 or 12, as §0.12 says, with t = 2.262, 2.228 and 2.201 (the table in
-`joulewise/aggregate.py`): 12 whenever at most six of the 18 are lost to status, the mint's reasons and physics
+succeeded member. n is therefore 10, 11 or 12, as §0.12 says, with t = 2.262, 2.228 and 2.201 respectively (the
+table in `joulewise/aggregate.py` at 9, 10 and 11 degrees of freedom): 12 whenever at most six of the 18 are lost to status, the mint's reasons and physics
 together, 11 at seven lost, 10 at eight, and no bound at nine or more.
 
 *What decides membership.* Membership is decided by status, by the mint's five validity reasons, one of which
@@ -3203,7 +3217,7 @@ NULL window, and named two of the three process conditions.)
   plan by its SHA-256), so the program reads them at the bytes GAMMA's plan tree now records and lists them under
   `class_map.superseded_block4_configs`; bytes recorded by neither still refuse. Each window plan reads
   `/packs/<label>/programmed_span_s` and `/packs/<label>/T_stream_max_s` from it. Lane L10 changes only GAMMA's
-  plan-tree digest and the two diagnostic stages' order-manifest paths and digests; the members per class (61 / 40),
+  plan-tree digest and the two diagnostic stages' order-manifest paths and digests; the members per class (61 / 40 when the lane landed; 67 / 40 since the erratum of 2026-10-09, §14 Q16),
   the programmed span and `WINDOW_MAX_S` do not change, because the sizing still charges each diagnostic stage as
   one auxiliary member at the reference members' allowance. (That is the sizing's classification only. The yield
   count of §5.7 classes the same two stages as science stages.)
@@ -3291,9 +3305,9 @@ NULL window, and named two of the three process conditions.)
   untracked file outside `joulewise/`, `scripts/` and the pack's directory (an untracked file under those roots is
   itself a difference, §6.5), for example under the git-ignored `runs/` directory, and the next plan cites it
   there with the SHA-256 the addendum pins. *Why the case is remote:* the deadline is built from the programmed
-  span, the chain's length if every member takes its longest allowed path: 24.4, 27.5 and 28.1 h for GAMMA, ALPHA
-  and BETA (the table above), about 27 h, to which `WINDOW_MAX_S` adds the arm's 3,300 s. The projected chain is
-  4.8 to 5.7 h, about 5 to 6 h, and the block-3 basis 7.7 to 9.1 h. A chain reaches its deadline only by running
+  span, the chain's length if every member takes its longest allowed path: 26.6, 29.7 and 30.4 h for GAMMA, ALPHA
+  and BETA (the table above), about 29 h, to which `WINDOW_MAX_S` adds the arm's 3,300 s. The projected chain is
+  5.1 to 5.9 h, about 5 to 6 h, and the block-3 basis 8.1 to 9.5 h. A chain reaches its deadline only by running
   about five times its projected length, or about three times the block-3 basis. A chain that slow is sent to its
   post calibration first by the collection deadline of §5.1, inside the 24 h calibration horizon, as the bullet
   "Is that right?" above says. (Revision 10 registered a rule that set the next attempt's allowance, without an
@@ -3305,7 +3319,7 @@ NULL window, and named two of the three process conditions.)
   window at its terminal record (§5.4), one window to the next is the window plus about 0.6–1.6 h: the driver's tail
   and courier about 0.1 h, a watchdog tick of up to 5 min, the pin advance and the next plan a few minutes, the
   harvest 0.5–1.5 h, and the 180 s stand-down lead (PLAN2 §1.3). Adding three arms of 4–46 min, the three windows
-  take about 18–23 h at the projected chains (15.9 h of chain) and about 28–33 h at the block-3 basis (25.6 h of
+  take about 19–24 h at the projected chains (16.6 h of chain) and about 29–34 h at the block-3 basis (26.7 h of
   chain), before any re-arm or frequency redraw. (Revision 4, with the
   fence held to t0 + `WINDOW_MAX_S` + 300 s, gave about 71 h before desk gaps.)
 
@@ -4095,7 +4109,8 @@ the list gives.)
   gross energies; `neg8_bracket_idle_sub_abs_delta_exceeded`, it failed on the idle-subtracted energies;
   `neg8_bracket_missing`; `neg8_bracket_reference_invalid`; `neg8_drift_bound_stale`; the bound-underived
   conditions). The exceptions are the harvest's re-screens of §5.3 (the collected-subset bound, a reference lost at
-  harvest, a corpus member dropped for physics), whose result decides alone. (Revision 10 printed the first two
+  harvest, the clean bound, which since the erratum of 2026-10-09 the harvest builds on every window), whose result
+  decides alone. (Revision 10 printed the first two
   conditions as `neg8_gross_point_drift_exceeded` and `neg8_idle_sub_point_drift_exceeded`. Those are the names of
   the code's constants in lower case; the strings a verdict carries are the two above.)
   `neg8_bracket_reference_invalid` has four causes. Three of them, (a), (c) and (d) below, remove the window
@@ -5177,9 +5192,10 @@ naming, schema formality) is dispositioned "flag, not refuse" and never sent to 
 8. Each pack's `calibration_plan.json` still reads `planned_bound_bundles` 12; the plan tree's stage graph, which the
    chain reads, says 18 (erratum of 2026-10-09, §14 Q16). No program reads the field. It is left so that the 280
    science configurations and the 12 science order manifests, each of which carries the SHA-256 of its pack's
-   calibration plan, keep the bytes they had in the superseded attempts. The plan tree's `runtime_budget.bound_count`
-   reads 18, because the plan tree was regenerated in any case; the planning estimate printed beside it was computed
-   for 12 members and is stale. No program reads either.
+   calibration plan, keep the bytes they had in the superseded attempts. In ALPHA's and BETA's plan trees
+   `runtime_budget.bound_count` reads 18, because the plan trees were regenerated in any case (GAMMA's plan tree has
+   no such field); the planning estimate printed beside it was computed for 12 members and is stale. No program
+   reads either.
 9. The chain script's comments, the plan's `chain_deviations` and the sizing output's two `source` strings still say
    12, 10 and 11; the stage graph the chain reads says 18, and the desk rule of §5.3 caps the deciding corpus at 12.
 
