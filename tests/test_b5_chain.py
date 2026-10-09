@@ -20,7 +20,7 @@ from joulewise import whole_window, window_lineage
 from joulewise.b5 import chain as b5_chain
 from joulewise.b5 import plan as b5_plan
 from joulewise.night_gate import NightPlan
-from tests.fixtures.b5_plan import fake_window
+from tests.fixtures.b5_plan import corpus18_render, fake_window
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,7 +31,7 @@ def tree(pack: str) -> dict:
 
 class StagePlanTests(unittest.TestCase):
     def test_every_committed_v5_pack_walks_to_one_bracketed_chain(self):
-        for pack, members in (("alpha", 119), ("beta", 119), ("gamma", 101)):
+        for pack, members in (("alpha", 125), ("beta", 125), ("gamma", 107)):
             with self.subTest(pack=pack):
                 stages = b5_chain.stage_plan(tree(pack))
                 chain = [stage for stage in stages if stage.in_chain]
@@ -42,6 +42,19 @@ class StagePlanTests(unittest.TestCase):
                                               if stage.kind == "campaign_collection"))
                 self.assertEqual({"whole_window_verdict", "backup"},
                                  {stage.kind for stage in stages if not stage.in_chain})
+
+    def test_each_pack_renders_eighteen_corpus_members_and_eighteen_max_failures(self):
+        with tempfile.TemporaryDirectory(prefix="corpus18-render-") as directory:
+            for pack in ("alpha", "beta", "gamma"):
+                with self.subTest(pack=pack):
+                    raw, corpus, argv = corpus18_render.render_pack(pack, Path(directory) / pack)
+                    self.assertEqual(18, corpus["expected_count"])
+                    self.assertEqual("18", argv[argv.index("--max-failures") + 1])
+                    collection_lines = [line for line in raw.decode().replace(chr(92) + chr(10), "").splitlines()
+                                        if line.startswith("run_stage ") and " campaign_collection " in line
+                                        and "neg8_reference_corpus_v5" in line]
+                    self.assertEqual(2, len(collection_lines))  # initial collection and the one retry
+                    self.assertTrue(all("--max-failures 18" in line for line in collection_lines))
 
     def test_broken_graphs_refuse_to_render(self):
         cases = {
@@ -106,7 +119,7 @@ class ChainRunTests(RenderedChainFixture):
                 expected.append(stage.stage_id + ".screen")
                 expected.append(stage.stage_id + ".window-calibration-verdict")  # J1 (gate-prune 2)
             if stage.stage_id == "alpha-bound-collection":
-                expected.append(stage.stage_id + ".retry-decision")  # row 13: 12 of 12, no retry
+                expected.append(stage.stage_id + ".retry-decision")  # row 13: 18 of 18, no retry
             if stage.spare_sets:
                 # NEG-8 ruling 2026-10-07: every reference member succeeded, so no spare runs.
                 expected.append(stage.stage_id + ".spares-decision")
@@ -203,7 +216,7 @@ class FailedMemberTests(RenderedChainFixture):
 
 
 class Neg8CorpusTests(RenderedChainFixture):
-    """A corpus with 11 collected members runs the derivation on a pruned copy, which the
+    """A corpus with 17 collected members runs the derivation on a pruned copy, which the
     core's bound consumers do not authenticate (review finding, L2 NEG-8): the chain keeps
     the pruned bytes and a summary with both manifests' SHA-256 for the harvest."""
 
@@ -214,29 +227,29 @@ class Neg8CorpusTests(RenderedChainFixture):
                          "neg8_minimum_n": whole_window.NEG8_DRIFT_MINIMUM_N}
         super().setUp()
 
-    def test_eleven_of_twelve_run_the_derivation_on_a_custodied_pruned_copy(self):
+    def test_seventeen_of_eighteen_run_the_derivation_on_a_custodied_pruned_copy(self):
         self.assertEqual(10, whole_window.NEG8_DRIFT_MINIMUM_N)
         completed = self.run_chain()
         self.assertEqual(0, completed.returncode, completed.stderr)
         collected_path = self.night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST
         collected = json.loads(collected_path.read_text())
-        self.assertEqual(11, len(collected["members"]))
+        self.assertEqual(17, len(collected["members"]))
         self.assertNotIn("neg8-refcorpus-r05", [member["bundle_id"] for member in collected["members"]])
         derive = next(call for call in fake_window.calls(self.measurement) if call["tool"] == "derive")
         self.assertTrue(derive["ok"])
-        self.assertEqual(11, derive["members"])
+        self.assertEqual(17, derive["members"])
         self.assertTrue((Path(self.plan.hazard_window["runs_roots"]["bound"]) / "neg8-drift-bound.json").is_file())
         # The summary names both manifests by path and SHA-256 (create-once).
         summary = json.loads((self.night / "transcript" / b5_chain.NEG8_COLLECTED_SUMMARY).read_text())
         self.assertEqual({"path": str(collected_path), "sha256": fake_window.sha256(collected_path)},
                          summary["collected_manifest"])
         self.assertEqual(fake_window.sha256(self.COMMITTED), summary["committed_manifest"]["sha256"])
-        self.assertEqual((12, 11, False), (summary["members_listed"], summary["members_kept"],
+        self.assertEqual((18, 17, False), (summary["members_listed"], summary["members_kept"],
                                            summary["identical_to_committed"]))
         self.assertEqual([{"bundle_id": "neg8-refcorpus-r05", "status": "failed"}], summary["dropped"])
         record = b5_chain.neg8_corpus_record(self.night)
         self.assertEqual(summary["collected_manifest"], record["collected_manifest"])
-        self.assertEqual((12, 11, True, []), (record["members_listed"], record["members_kept"],
+        self.assertEqual((18, 17, True, []), (record["members_listed"], record["members_kept"],
                                               record["pruned"], record["errors"]))
 
     def test_the_core_authenticates_a_pruned_bound_only_against_the_custodied_bytes(self):
@@ -254,8 +267,10 @@ class Neg8CorpusTests(RenderedChainFixture):
                     "condition_id": manifest["condition_id"],
                     "member_ids": [member["bundle_id"] for member in manifest["members"]]}
         committed_raw = self.COMMITTED.read_bytes()
-        self.assertTrue(whole_window._neg8_corpus_identity_is_authenticated(
+        self.assertFalse(whole_window._neg8_corpus_identity_is_authenticated(
             corpus(committed_raw, json.loads(committed_raw)), None))
+        self.assertTrue(whole_window._neg8_corpus_identity_is_authenticated(
+            corpus(committed_raw, json.loads(committed_raw)), committed_raw))
         self.assertFalse(whole_window._neg8_corpus_identity_is_authenticated(corpus(pruned_raw, pruned), None))
         self.assertFalse(whole_window._neg8_corpus_identity_is_authenticated(corpus(pruned_raw, pruned), committed_raw))
         self.assertTrue(whole_window._neg8_corpus_identity_is_authenticated(corpus(pruned_raw, pruned), pruned_raw))
@@ -273,7 +288,7 @@ class Neg8CorpusTests(RenderedChainFixture):
              "--runs-dir", self.plan.hazard_window["runs_roots"]["bound"]], capture_output=True, check=False)
         self.assertEqual(1, refused.returncode)
 
-    def test_all_twelve_keep_the_committed_manifest_bytes(self):
+    def test_all_eighteen_keep_the_committed_manifest_bytes(self):
         fake_window.set_behavior(self.measurement, {})
         completed = self.run_chain()
         self.assertEqual(0, completed.returncode, completed.stderr)
@@ -281,12 +296,11 @@ class Neg8CorpusTests(RenderedChainFixture):
         self.assertEqual(committed.read_bytes(),
                          (self.night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST).read_bytes())
         record = b5_chain.neg8_corpus_record(self.night)
-        self.assertEqual((12, 12, False), (record["members_listed"], record["members_kept"], record["pruned"]))
+        self.assertEqual((18, 18, False), (record["members_listed"], record["members_kept"], record["pruned"]))
         self.assertEqual(record["committed_manifest"]["sha256"], record["collected_manifest"]["sha256"])
 
     def test_too_few_members_is_recorded_and_the_chain_continues(self):
-        fake_window.set_behavior(self.measurement, {"fail_run_ids": ["neg8-refcorpus-r01", "neg8-refcorpus-r02",
-                                                                     "neg8-refcorpus-r03"]})
+        fake_window.set_behavior(self.measurement, {"fail_run_ids": [f"neg8-refcorpus-r{i:02d}" for i in range(1, 10)]})
         completed = self.run_chain()
         self.assertEqual(0, completed.returncode, completed.stderr)
         rows = {row["stage_id"]: row["rc"] for row in self.stages()}

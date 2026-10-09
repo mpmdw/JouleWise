@@ -1,6 +1,6 @@
 {
   "schema_version": "joulewise.neg8_reference_corpus.v1",
-  "corpus_id": "neg8-reference-corpus-m3max-qwen25-1p5b-v1",
+  "corpus_id": "neg8-reference-corpus-m3max-qwen25-1p5b-v2-n18",
   "freeze_status": "settled_reference",
   "condition_id": "df-rq-mid",
   "members": [
@@ -51,6 +51,30 @@
     {
       "bundle_id": "neg8-refcorpus-r12",
       "bundle_path": "neg8-refcorpus-r12"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r13",
+      "bundle_path": "neg8-refcorpus-r13"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r14",
+      "bundle_path": "neg8-refcorpus-r14"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r15",
+      "bundle_path": "neg8-refcorpus-r15"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r16",
+      "bundle_path": "neg8-refcorpus-r16"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r17",
+      "bundle_path": "neg8-refcorpus-r17"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r18",
+      "bundle_path": "neg8-refcorpus-r18"
     }
   ]
 }

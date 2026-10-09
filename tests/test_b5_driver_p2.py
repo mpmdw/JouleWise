@@ -512,13 +512,13 @@ def stage_yield(harness: Harness) -> list[dict]:
 
 
 class YieldTests(unittest.TestCase):
-    def test_a_full_alpha_window_reports_119_of_119(self):
+    def test_a_full_alpha_window_reports_125_of_125(self):
         harness = Harness(self, "alpha", g10=False)
         self.assertEqual(harness.driver.EXIT_GO, harness.run())
         record = harness.hazard()["yield"]
         # The fake checkout writes bundles but no campaign_log.jsonl, so 0 rows
         # are logged here; SolReviewFixTests covers the logged counts.
-        self.assertEqual(("FULL", 119, 119, 119, 0, 0),
+        self.assertEqual(("FULL", 125, 125, 125, 0, 0),
                          (record["yield_status"], record["planned"], record["bundles_present"],
                           record["succeeded"], record["logged"], record["failed"]))
         rows = stage_yield(harness)
@@ -526,7 +526,7 @@ class YieldTests(unittest.TestCase):
         self.assertTrue(all(row["status"] == "OK" for row in rows))
         plan = json.loads((harness.night / b5_driver.YIELD_PLAN).read_text())
         minimums = {row["stage_id"]: (row["role"], row["planned"], row["min_valid"]) for row in plan["stages"]}
-        self.assertEqual(("corpus", 12, 10), minimums["alpha-bound-collection"])
+        self.assertEqual(("corpus", 18, 10), minimums["alpha-bound-collection"])
         # NEG-8 ruling 2026-10-07: two survivors at each endpoint; the midpoint is not required.
         self.assertEqual(("reference", 3, 2), minimums["alpha-reference-start"])
         self.assertEqual(("reference", 3, 2), minimums["alpha-reference-end"])
@@ -534,7 +534,7 @@ class YieldTests(unittest.TestCase):
         self.assertEqual(("science", 20, 16), minimums["alpha-science-abba-01-05"])
         self.assertEqual(("science", 10, 8), minimums["alpha-science-absolute"])
         report = facts(harness)
-        self.assertTrue(report["yield_line"].startswith("collected 119 of 119 planned members"))
+        self.assertTrue(report["yield_line"].startswith("collected 125 of 125 planned members"))
         self.assertFalse(report["fault"])
         # Counts only: the published records never carry member identities.
         published = (harness.night / b5_driver.HAZARD_RESULT).read_text() + (
@@ -550,7 +550,7 @@ class YieldTests(unittest.TestCase):
         midpoints = [row for row in plan["stages"] if "midpoint" in row["stage_id"] or "arm-boundary" in row["stage_id"]]
         self.assertEqual([1, 1, 1], [row["planned"] for row in midpoints])
         self.assertEqual([1, 1, 1], [row["listed"] for row in midpoints])
-        self.assertEqual((101, 101), (sum(row["listed"] for row in plan["stages"]), plan["planned"]))
+        self.assertEqual((107, 107), (sum(row["listed"] for row in plan["stages"]), plan["planned"]))
         # The driver's own netting of a duplicate still holds: GAMMA's pre-L10
         # shape (all three stages launching neg8-window-midpoint into one root)
         # is synthesized at the dispatch reader, after the desk has planned.
@@ -569,9 +569,9 @@ class YieldTests(unittest.TestCase):
         self.assertEqual([[shared], [], []], [row["run_ids"] for row in midpoints])
         self.assertEqual([1, 0, 0], [row["planned"] for row in midpoints])
         self.assertEqual([1, 1, 1], [row["listed"] for row in midpoints])
-        # 101 listed positions; the two repeated midpoint positions are never
+        # 107 listed positions; the two repeated midpoint positions are never
         # measured (run_campaign skips a complete bundle; PLAN2 row 14).
-        self.assertEqual((101, 99), (sum(row["listed"] for row in plan["stages"]), plan["planned"]))
+        self.assertEqual((107, 105), (sum(row["listed"] for row in plan["stages"]), plan["planned"]))
 
     def test_an_empty_window_is_go_with_exit_5_and_a_fault(self):
         harness = Harness(self, "alpha", g10=False)
@@ -593,7 +593,7 @@ class YieldTests(unittest.TestCase):
         report = facts(harness)
         self.assertTrue(report["fault"])
         self.assertIn("yield_empty", report["fault_reasons"])
-        self.assertTrue(report["yield_line"].startswith("collected 0 of 119 planned members"))
+        self.assertTrue(report["yield_line"].startswith("collected 0 of 125 planned members"))
 
     def test_a_low_science_stage_is_flagged_and_the_window_stays_go(self):
         order = json.loads((REPO_ROOT / "configs/campaigns/d117_floor_qwen3-1p7b_v5/"
@@ -658,7 +658,7 @@ class YieldTests(unittest.TestCase):
     def test_the_courier_leads_with_the_yield_and_cites_the_blinding_rule(self):
         harness = Harness(self, g10=False)
         with tempfile.NamedTemporaryFile() as lock:
-            report = {"facts": {"plan_id": harness.plan.plan_id, "yield_line": "collected 3 of 119 planned members",
+            report = {"facts": {"plan_id": harness.plan.plan_id, "yield_line": "collected 3 of 125 planned members",
                                 "fault": True, "fault_reasons": ["yield_low"]},
                       "diagnostics": [], "result_unavailable": False, "base_exit_code": 0, "prepared": True}
             argv = harness.driver._courier_prelaunch(harness.custody, harness.plan, harness.courier,
@@ -668,7 +668,7 @@ class YieldTests(unittest.TestCase):
         self.assertIn("FAULT", prompt)
         self.assertIn("registration section 8, item 2", prompt)
         self.assertNotIn("section 9.2", prompt)
-        self.assertIn("collected 3 of 119 planned members", prompt)
+        self.assertIn("collected 3 of 125 planned members", prompt)
 
     def test_stage_counts_are_published_and_the_yield_plan_is_not(self):
         driver = Harness(self, g10=False).driver

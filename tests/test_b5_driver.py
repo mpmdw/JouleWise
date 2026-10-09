@@ -800,11 +800,11 @@ class MockRuntimeDryRenderTests(unittest.TestCase):
                 harness, hazard = self.run_pack(pack)
                 self.assertTrue(all(row["rc"] == 0 for row in hazard["chain"]["stages"]))
                 corpus = hazard["neg8_corpus"]
-                self.assertEqual((12, 12, False, []), (corpus["members_listed"], corpus["members_kept"],
+                self.assertEqual((18, 18, False, []), (corpus["members_listed"], corpus["members_kept"],
                                                        corpus["pruned"], corpus["errors"]))
                 self.assertEqual(corpus["committed_manifest"]["sha256"], corpus["collected_manifest"]["sha256"])
 
-    def test_alpha_with_one_failed_science_member_and_eleven_corpus_members(self):
+    def test_alpha_with_one_failed_science_member_and_seventeen_corpus_members(self):
         order = json.loads((REPO_ROOT / "configs/campaigns/d117_floor_qwen3-1p7b_v5/"
                                         "05_phase_prefill_p2048_abba_blocks_01_05/order_manifest.json").read_text())
         victim = order["executed_order"][3]["run_id"]
@@ -814,7 +814,7 @@ class MockRuntimeDryRenderTests(unittest.TestCase):
                      if call["tool"] == "collect" and call["config_dir"].endswith("05_phase_prefill_p2048_abba_blocks_01_05"))
         self.assertEqual((20, 1), (len(stage["attempted"]), stage["failures"]))
         derive = next(call for call in fake_window.calls(harness.measurement) if call["tool"] == "derive")
-        self.assertEqual((11, True), (derive["members"], derive["ok"]))
+        self.assertEqual((17, True), (derive["members"], derive["ok"]))
         hazard = harness.hazard()
         rows = {row["stage_id"]: row["rc"] for row in hazard["chain"]["stages"]}
         self.assertEqual(0, rows["alpha-bound-derivation"])
@@ -828,7 +828,7 @@ class MockRuntimeDryRenderTests(unittest.TestCase):
         self.assertEqual(fake_window.sha256(REPO_ROOT / "configs/campaigns/neg8_reference_corpus_v5/"
                                                         "derivation/settled_corpus.json"),
                          corpus["committed_manifest"]["sha256"])
-        self.assertEqual((12, 11, True), (corpus["members_listed"], corpus["members_kept"], corpus["pruned"]))
+        self.assertEqual((18, 17, True), (corpus["members_listed"], corpus["members_kept"], corpus["pruned"]))
         self.assertEqual(fake_window.sha256(harness.night / "transcript" / b5_chain.NEG8_COLLECTED_SUMMARY),
                          corpus["summary"]["sha256"])
 
