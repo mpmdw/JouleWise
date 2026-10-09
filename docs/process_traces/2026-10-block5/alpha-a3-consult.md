@@ -166,3 +166,27 @@ fast-forwarded, this activation ran `git worktree remove` and `git branch -D` fo
 worktree with `-C /Users/edr/code/JouleWise`. Both touch only shared repository metadata and no plan was
 armed, but the standing rule allows only the fast-forward there; later worktree commands are run from
 the records worktree.
+
+## Step 2, status (06:50 PDT): the erratum is drafted and refuted; the judge is convened
+
+- `corpus18-erratum/ERRATUM.md`: the draft (an Opus 5.5 seat). It verifies that no code a window executes
+  fixes the number 12, finds that the three configuration generators do, and corrects the attempt-3
+  ruling on one point of science: the drift bound is the larger of two terms, the larger one grows with
+  the number of kept members, and the bound is about 20% wider at 18 kept than at 12. It puts ten
+  questions to the judge (J1 to J10).
+- `corpus18-erratum/REFUTATION.md`: an Opus 5.5 refuter. 3 blockers, 7 majors, 9 minors. It confirms the
+  widening by its own simulation and proposes a fourth rule: all 18 run, and the harvest derives the
+  deciding bound from the first 12 members in committed order that succeeded, passed the mint and carry
+  no physics code, which keeps the bound at its sealed width with a change to desk code only.
+- `corpus18-erratum/JUDGE-CHARGE.md`: the charge. A cold Fable 5.1 judge is running on it from the
+  worktree `/Users/edr/code/JouleWise-wt-harvest`; it writes `corpus18-erratum/RULING.md`, whose last
+  line is `ERRATUM: ADMIT`, `ADMIT-WITH-CORRECTIONS`, `RETURN` or `REFUSED`.
+
+Next action for whichever activation finds this: if `corpus18-erratum/RULING.md` is absent and no
+`claude -p --model fable` process is alive, convene the judge again with the same charge (the command is
+`claude -p "$(cat JUDGE-CHARGE.md)" --output-format text --permission-mode auto --model fable --effort high --allowedTools "Read,Glob,Grep,Bash,Write"`
+run from that worktree). If the ruling exists: commit it; on `ADMIT` or `ADMIT-WITH-CORRECTIONS` apply
+the listed corrections to the erratum text and start the build (step 3) in a new linked worktree on a
+branch from main, with a Sol 6.1 seat at effort xhigh as the builder and the corrected erratum plus the
+ruling as its whole specification; on `RETURN`, redraft what the ruling names and convene once more; a
+`REFUSED` goes to Ed by email.
