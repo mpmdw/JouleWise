@@ -1186,14 +1186,14 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         self.assertEqual([(row["run_id"], row["slot"], row["reason"]) for row in lost["observed"]["lost"]],
                          [("b5t-neg8-end-3", "end", "bundle_absent")])
 
-    def test_two_never_run_start_references_fail_when_the_clean_rescreen_cannot_reproduce_them(self) -> None:
-        """The stored insufficient bracket has no families; the always-on rescreen fails closed."""
+    def test_two_never_run_start_references_keep_the_stored_insufficient_screen_failed(self) -> None:
+        """The stored endpoint condition remains guarded without a newly lost reference."""
         window = self.run_window_with_absent_references(
             "absent-two", {"b5t-neg8-start-1": "start", "b5t-neg8-start-3": "start"})
         (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
         rescreen = self.screen_record(window)["rescreen"]
         self.assertEqual((rescreen["evaluated"], rescreen["problems"]),
-                         (False, ["rederivation_differs_from_stored_bracket"]))
+                         (False, ["conditions_beyond_bound_underived"]))
         self.assertEqual(flag["observed"]["collected_bound_rescreen"], rescreen)
         self.assertEqual(self.allowance_record(window)["source"], "none")
         self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
@@ -1411,8 +1411,9 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
                 "sha256": hb.sha(target / "config.json")})
         tree_path = window.pack / "plan_tree.json"
         tree = json.loads(tree_path.read_bytes())
-        tree["external_inputs"]["manifests"] = [{"input_id": f"{slot}_reference", "members": members}
-                                                for slot, members in by_slot.items()]
+        # Keep the fixture's committed corpus-order pin alongside the references.
+        tree["external_inputs"]["manifests"].extend(
+            {"input_id": f"{slot}_reference", "members": members} for slot, members in by_slot.items())
         hb.put(tree_path, tree)
         (window.pack / "plan_tree.sha256").write_text(f"{hb.sha(tree_path)}  plan_tree.json\n")
         # The sealed and executed inventories name the plan tree as written.
@@ -1427,6 +1428,8 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         self.write_verdict(window, points, bound, bundles_exist=True)
         with hb.neg8_reference_gates(points):
             window.harvest()
+        physics = json.loads((window.archive / "derived/neg8-corpus-physics.json").read_bytes())
+        self.assertEqual((physics["clean_bound_validated"], physics["problems"]), (True, []))
         return window
 
     def test_a_journal_gap_over_one_reference_loses_it_and_the_survivors_decide(self) -> None:

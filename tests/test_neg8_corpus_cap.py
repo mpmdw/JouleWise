@@ -163,16 +163,64 @@ class CleanCorpusCapTests(hb.WindowTestCase):
         flag, = [flag for flag in window.flags() if flag["code"] == "neg8.bound_not_derived"]
         self.assertEqual(flag["observed"]["source"], "corpus_physics")
 
-    def test_the_always_on_clean_bound_rederives_stored_nonunderived_conditions(self):
-        for name, drift, decision in (("passes", 0.0, "passed"), ("fails", 2.0, "failed")):
-            with self.subTest(name=name):
-                window = self.window_with_corpus(name)
-                self.finish(window, drift=drift, stored_conditions=["neg8_bracket_reference_invalid"])
+    def test_the_clean_bound_keeps_stored_nonunderived_conditions_without_physics_losses(self):
+        for size, failed in ((12, ()), (18, ()), (18, IDS[10:])):
+            with self.subTest(size=size, failed=failed):
+                window = self.window_with_corpus(f"guard-{size}-{len(failed)}", size=size, failed=failed)
+                physics = self.finish(window, stored_conditions=["neg8_bracket_reference_invalid"])
+                self.assertEqual((physics["dropped"], physics["clean_bound_validated"]), ([], True))
                 screen = self.record(window, "derived/neg8-screen.json")
                 self.assertIn("neg8_bracket_reference_invalid", screen["stored"]["conditions_beyond_bound_underived"])
+                self.assertEqual((screen["harvest_reference_losses"], screen["rescreen"]["evaluated"],
+                                  screen["rescreen"]["problems"]),
+                                 ({}, False, ["conditions_beyond_bound_underived"]))
+                self.assertIn("neg8.screen_failed", window.codes())
+                self.assertEqual(self.record(window, "derived/neg8-allowance.json")["source"], "none")
+
+    def test_physics_losses_still_rederive_stored_nonunderived_conditions(self):
+        for loss in (IDS[0], "b5t-neg8-end-3"):
+            for drift, decision in ((0.0, "passed"), (2.0, "failed")):
+                with self.subTest(loss=loss, drift=drift):
+                    window = self.window_with_corpus(f"loss-{loss}-{drift}")
+                    self.finish(window, physics=[(loss, "contention.request_overlap")], drift=drift,
+                                stored_conditions=["neg8_bracket_reference_invalid"])
+                    screen = self.record(window, "derived/neg8-screen.json")
+                    self.assertIn("neg8_bracket_reference_invalid",
+                                  screen["stored"]["conditions_beyond_bound_underived"])
+                    self.assertEqual((screen["rescreen"]["evaluated"], screen["rescreen"]["decision"],
+                                      screen["rescreen"]["problems"]), (True, decision, []))
+                    self.assertEqual("neg8.screen_failed" in window.codes(), decision == "failed")
+
+    def test_an_unavailable_clean_bound_cannot_use_the_uncapped_collected_bound(self):
+        for stored_underived in (False, True):
+            with self.subTest(stored_underived=stored_underived):
+                window = self.window_with_corpus(f"no-clean-bound-{stored_underived}")
+                path = window.measurement / hb.CORPUS_ORDER_RELATIVE
+                order = json.loads(path.read_bytes())
+                order["executed_order"].reverse()
+                hb.put(path, order)  # the pinned order bytes remain unchanged
+                conditions = [ww.CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
+                              ww.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED] if stored_underived else []
+                physics = self.finish(window, stored_conditions=conditions)
+                self.assertFalse(physics["clean_bound_validated"])
+                self.assertIn("corpus_order_manifest_differs_from_pin", physics["problems"])
+                screen = self.record(window, "derived/neg8-screen.json")
                 self.assertEqual((screen["rescreen"]["evaluated"], screen["rescreen"]["decision"],
-                                  screen["rescreen"]["problems"]), (True, decision, []))
-                self.assertEqual("neg8.screen_failed" in window.codes(), decision == "failed")
+                                  screen["rescreen"]["problems"]), (False, None, ["clean_bound_unavailable"]))
+                self.assertIsNone(screen["bound_used"])
+                self.assertIn("neg8.screen_failed", window.codes())
+                self.assertFalse((window.archive / "withheld/neg8-rescreen-bracket.json").exists())
+                self.assertEqual(self.record(window, "derived/neg8-allowance.json")["source"], "none")
+                row = json.loads((window.claim / "whole-window-verdict.json").read_bytes())
+                self.assertEqual(ww.harvest_neg8_allowance_bracket(window.archive, row),
+                                 (None, "screen_not_passed"))
+
+    def test_a_reversed_12_member_manifest_is_rewritten_in_committed_order(self):
+        window = self.window_with_corpus("reverse12", size=12, reverse=True)
+        original_raw = (window.measurement / hb.CORPUS_RELATIVE).read_bytes()
+        self.finish(window)
+        self.assert_clean(window, IDS[:12])
+        self.assertNotEqual((window.archive / "derived/neg8-clean-corpus.json").read_bytes(), original_raw)
 
     def test_allowance_authenticates_the_capped_bound_and_refuses_a_tampered_clean_manifest(self):
         window = self.window_with_corpus("allowance")
@@ -200,14 +248,18 @@ class CleanCorpusCapTests(hb.WindowTestCase):
                 self.assertEqual(hb.h.canonical_json_bytes(clean), hb.h.canonical_json_bytes(original))
                 row = json.loads((window.claim / "whole-window-verdict.json").read_bytes())
                 stored = row["idle_admission_core"]["neg8_bracket"]
-                rescreen = self.record(window, "withheld/neg8-rescreen-bracket.json")["bracket"]
-                self.assertEqual(rescreen, stored)
-                self.assertEqual(rescreen["drift_allowances"], stored["drift_allowances"])
                 self.assertEqual("neg8.screen_failed" in window.codes(), stored["decision"] == "failed")
                 allowance, problem = ww.harvest_neg8_allowance_bracket(window.archive, row)
                 if stored["decision"] == "passed":
+                    rescreen = self.record(window, "withheld/neg8-rescreen-bracket.json")["bracket"]
+                    self.assertEqual(rescreen, stored)
+                    self.assertEqual(rescreen["drift_allowances"], stored["drift_allowances"])
                     self.assertEqual((allowance, problem), (stored, None))
                 else:
+                    rescreen = self.record(window, "derived/neg8-screen.json")["rescreen"]
+                    self.assertEqual((rescreen["evaluated"], rescreen["problems"]),
+                                     (False, ["conditions_beyond_bound_underived"]))
+                    self.assertFalse((window.archive / "withheld/neg8-rescreen-bracket.json").exists())
                     self.assertEqual((allowance, problem), (None, "screen_not_passed"))
 
 

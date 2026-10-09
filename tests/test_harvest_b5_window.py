@@ -2050,12 +2050,12 @@ class Neg8RescreenTests(WindowTestCase):
                          (False, ["rederivation_differs_from_stored_bracket"]))
         self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
 
-    def test_other_neg8_conditions_are_rederived_against_the_always_on_clean_bound(self):
+    def test_any_other_neg8_condition_is_not_re_evaluated_without_physics_losses(self):
         window, rescreen = self.harvest("other-condition", [CORPUS_IDS[4]],
                                         extra_conditions=["neg8_bracket_reference_invalid"])
-        self.assertEqual((rescreen["evaluated"], rescreen["decision"], rescreen["conditions"], rescreen["problems"]),
-                         (True, "passed", [], []))
-        self.assertNotIn("neg8.screen_failed", window.codes())
+        self.assertEqual((rescreen["evaluated"], rescreen["problems"]),
+                         (False, ["conditions_beyond_bound_underived"]))
+        self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
 
     def test_a_source_manifest_that_changed_after_the_verdict_evaluates_nothing(self):
         window = Window(self.tmp / "manifest-changed", catalog_overrides=self.ISOLATE)

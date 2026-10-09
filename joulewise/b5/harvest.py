@@ -853,7 +853,12 @@ def _corpus_member_status(runs_root: Path | None, member: Any) -> str | None:
 # mint byte for byte; this set only decides what the harvest accepts.  It is
 # the core's own set, imported, so the harvest accepts exactly the mint's
 # drops and the two can never drift apart (one source).
-from joulewise.whole_window import NEG8_MINT_DROP_REASONS as NEG8_ACCEPTED_DROP_REASONS  # noqa: E402
+from joulewise.whole_window import (  # noqa: E402
+    NEG8_DRIFT_MINIMUM_N,
+    NEG8_MINT_DROP_REASONS as NEG8_ACCEPTED_DROP_REASONS,
+)
+# The 2026-10-09 erratum caps the deciding desk bound; the core minimum stays 10.
+NEG8_CLEAN_CORPUS_MAXIMUM_N = 12
 
 
 def neg8_mint_drops(runs_root: Path | None, committed: Mapping[str, Any],
@@ -4715,7 +4720,6 @@ class _Harvest:
         dropped = [member for member in listed if canonical_json_bytes(member) not in kept_rows]
         check["dropped_bundle_ids"] = [member.get("bundle_id") if isinstance(member, Mapping) else None
                                        for member in dropped]
-        from joulewise.whole_window import NEG8_DRIFT_MINIMUM_N
         if len(kept) < NEG8_DRIFT_MINIMUM_N:
             problems.append("collected_members_below_minimum")
             return None
@@ -4912,7 +4916,11 @@ class _Harvest:
                        if isinstance(item, Mapping)} if sources_authentic else set()
         new_losses = {run_id: code for run_id, code in harvest_losses.items() if run_id not in stored_lost}
         clean_bound = getattr(self, "neg8_clean_bound", None)
-        survivors = bool(new_losses) or clean_bound is not None
+        clean_required = getattr(self, "neg8_clean_bound_required", False)
+        survivors = bool(new_losses) or clean_bound is not None or clean_required
+        # Only the pre-cap loss cases may clear other stored NEG-8 conditions.
+        loss_rescreen = bool(new_losses) or (clean_bound is not None and
+                                             getattr(self, "neg8_corpus_physics_dropped", False))
         underived = {ww.CONDITION_NEG8_DRIFT_BOUND_UNDERIVED, ww.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED}
         collected = (self.neg8 or {}).get("derived_from") == "collected_subset" and bool(conditions & underived)
         if not reasons and not survivors:
@@ -4927,7 +4935,7 @@ class _Harvest:
             # The exclusion pass always runs (with no harvest loss too), so a
             # strict-invalid reference is dropped before aggregation (A5).
             rescreen = self._neg8_rescreen(row, bracket, conditions - underived, authentic=authentic,
-                                           exclude=harvest_losses, survivors=survivors)
+                                           exclude=harvest_losses, survivors=loss_rescreen)
             observed["collected_bound_rescreen"] = rescreen
             if survivors:
                 observed["survivor_rescreen"] = {"new_losses": dict(sorted(new_losses.items())),
@@ -5209,9 +5217,10 @@ class _Harvest:
         decision is then the re-derivation that drops those references, and
         any other reference whose energy cannot be read, before aggregation;
         a dropped reference's energy is never read.  The
-        collected-bound case alone (no exclusions, no clean bound) still runs
-        only when the stored NEG-8 conditions were the two ``*_UNDERIVED``
-        ones.
+        case without a newly lost reference or a physics-dropped corpus
+        member still runs only when the stored NEG-8 conditions were the two
+        ``*_UNDERIVED`` ones; the always-on clean bound does not relax this
+        guard.
 
         Row authenticity is recorded (``verdict_authenticated``), not
         required: the harvest validates rows without a consumption session,
@@ -5232,11 +5241,15 @@ class _Harvest:
             problems.append("bracket_absent")
         if other_conditions and not survivors:
             problems.append("conditions_beyond_bound_underived")
-        bound = getattr(self, "neg8_clean_bound", None) or getattr(self, "neg8_collected_bound", None)
-        if bound is None and survivors and bracket is not None:
-            bound = bracket.get("drift_bound_artifact")
-        if bound is None:
-            problems.append("collected_bound_unavailable")
+        bound = getattr(self, "neg8_clean_bound", None)
+        if bound is None and getattr(self, "neg8_clean_bound_required", False):
+            problems.append("clean_bound_unavailable")
+        elif bound is None:
+            bound = getattr(self, "neg8_collected_bound", None)
+            if bound is None and survivors and bracket is not None:
+                bound = bracket.get("drift_bound_artifact")
+            if bound is None:
+                problems.append("collected_bound_unavailable")
         evaluated_at = None
         scope = row.get("evaluation_scope")
         for source, text in (("evaluation_scope.completed_at", scope.get("completed_at")
@@ -5319,7 +5332,8 @@ class _Harvest:
                     "endpoint_protocol", "reference_counts", "planned_reference_counts", "reference_losses",
                     "midpoint_lost", "survivor_screen") if key in derived}
         decision = bracket.get("decision") if bracket is not None else None
-        bound_used = ("corpus_physics_clean" if getattr(self, "neg8_clean_bound", None) is not None
+        bound_used = (None if bound is None else
+                      "corpus_physics_clean" if getattr(self, "neg8_clean_bound", None) is not None
                       else "collected_subset" if getattr(self, "neg8_collected_bound", None) is not None
                       else "stored_bracket" if bound is not None else None)
         clean_bound = getattr(self, "neg8_clean_bound_record", None) if bound_used == "corpus_physics_clean" else None
@@ -5364,6 +5378,9 @@ class _Harvest:
         bound = getattr(self, "neg8_bound_value", None)
         if check.get("derived_from") is None or not isinstance(bound, Mapping):
             return
+        # Once this desk step is required, an in-window bound cannot decide a
+        # screen or allowance if clean-bound construction fails.
+        self.neg8_clean_bound_required = True
         corpus = bound.get("reference_corpus") if isinstance(bound.get("reference_corpus"), Mapping) else {}
         members = [member for member in corpus.get("members") or [] if isinstance(member, Mapping)]
         ids = {member.get("bundle_id") for member in members}
@@ -5408,8 +5425,9 @@ class _Harvest:
                 else:
                     ordered = sorted(members, key=lambda member: positions[member["bundle_id"]])
                     remaining = [member for member in ordered if member["bundle_id"] not in flagged]
-                    record["beyond_cap"] = [member["bundle_id"] for member in remaining[12:]]
-                    kept = [dict(member) for member in remaining[:12]]
+                    record["beyond_cap"] = [member["bundle_id"]
+                                            for member in remaining[NEG8_CLEAN_CORPUS_MAXIMUM_N:]]
+                    kept = [dict(member) for member in remaining[:NEG8_CLEAN_CORPUS_MAXIMUM_N]]
         except (OSError, ValueError, TypeError, KeyError):
             problems.append("corpus_order_manifest_unreadable")
         record["members_kept"] = len(kept)
@@ -5451,6 +5469,7 @@ class _Harvest:
             if valid:
                 record["clean_bound_validated"] = True
                 self.neg8_clean_bound = clean
+                self.neg8_corpus_physics_dropped = bool(flagged)
                 # Hash-bound so an allowance consumer can authenticate the
                 # clean bound the survivor screen used (audit A1).
                 record["clean_bound"] = {"path": "withheld/neg8-clean-bound.json", "sha256": write_json_once(
