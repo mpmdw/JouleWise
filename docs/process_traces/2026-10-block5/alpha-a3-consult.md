@@ -143,3 +143,26 @@ and the fourth loss is a start-reference member. The next email to Ed carries th
 
 An activation that finds this record and no `corpus18-erratum/` directory starts at step 1 or 2,
 whichever is not done (step 1 is done when `/private/tmp` holds fewer than about 100 entries).
+
+## Step 1, outcome (06:20 PDT): not done; the fallback is in force
+
+A survey of `/private/tmp` found 654 directories and 572 files of this user, none open by any process
+other than this session, no registered git worktree among them, and 121 directories holding git
+checkouts (review, mutation and suite scratch of sessions since 2026-09-25). Rather than delete, the
+magistrate tried to move the directories to `/Users/edr/night-archive/tmp-parked-20261009` (a rename on
+the same volume, which loses nothing). The session's permission check refused the command (reason given:
+shared scratch sweep). It was not worked around; the command is logged in
+`/Users/edr/night-plan-staging/b5-bench/permission-blocks.log`.
+
+So the ruling's fallback holds until the tree is small: **no window is armed whose span contains 00:00
+local.** Two things make the tree small without this session: macOS empties `/private/tmp` at every
+boot, so the owner's restart does it; and the midnight job itself deletes files not used for three days.
+The check before every arm is the entry count and size of `/private/tmp` (`ls /private/tmp | wc -l`,
+`du -sg /private/tmp`); below about 100 entries and 1 GiB the fallback is lifted. No separate email was
+sent for this block: the restart already asked of the owner cures it.
+
+Slip to record: after the RUN_STATE hold block was pushed to main (`3f564499e`) and the canonical root
+fast-forwarded, this activation ran `git worktree remove` and `git branch -D` for its own temporary
+worktree with `-C /Users/edr/code/JouleWise`. Both touch only shared repository metadata and no plan was
+armed, but the standing rule allows only the fast-forward there; later worktree commands are run from
+the records worktree.
