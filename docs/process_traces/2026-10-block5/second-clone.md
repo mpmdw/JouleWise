@@ -103,3 +103,39 @@ So the rehearsal is run again when no test suite is running: after the desk seat
 suite on the harvest lane has finished, and while CI (which runs remotely) checks the lane's pull
 request. A new base directory is used (`prepare` refuses an existing one); the refused base
 `corpus18-20261009T1816Z` is kept as it is.
+
+## The rehearsal's second refusal, its real cause, and the third run (12:44 to 12:53 PDT)
+
+The second run (base `corpus18-20261009T1944Z`), started on a quiet machine, was refused in the same way:
+221 of 300 sampler frames, median interval 253.9 ms. The first run had measured 255.0 ms. Two values that
+close, with and without load, mean the cause is not load. The 11:17 explanation above is withdrawn.
+
+What was measured next, with the arm's own sampler command (`sudo -n /usr/bin/powermetrics -n … -b 0 -i
+100 …`) started from this session: the marginal time per frame is 213 ms with the thermal sampler alone
+and 236 ms with the CPU sampler alone, and 618 ms when the interval is set to 500 ms. So every frame
+carries a fixed delay of about 115 ms whatever is sampled. The same command measured 131 ms per frame in
+ALPHA attempt 3's arm last night and 113 ms in the rehearsal of 2026-10-06.
+
+The cause: this session is a child of the magistrate's launchd job, which has no `ProcessType` key, and
+macOS delays the timers of such background jobs (timer coalescing); `taskpolicy` could not lift it (215
+ms with latency and throughput tier 0). The night job that runs a real window is installed with
+`ProcessType` `Interactive`, and the installer refuses any other value
+(`joulewise/night_agent_install.py` lines 585 to 593 and 675), which is why a real window is not
+affected. The rehearsal of 2026-10-06 was started from an interactive session. **The sampler-cadence
+check therefore cannot pass in anything started from a headless magistrate session, and that says
+nothing about the machine.**
+
+The third run (base `/Users/edr/night-archive/gate-prune/rehearsal-real/corpus18-20261009T1949Z`) is
+started the way a window is: by a one-off launchd job with `ProcessType` `Interactive` (label
+`com.joulewise.rehearsal.corpus18`, plist in the base directory, bootstrapped into `gui/501` with
+`launchctl bootstrap`; the label does not begin with `com.joulewise.night`, so the watchdog and the
+brief's checks for night jobs do not see it). Its arm: instrument 300 frames, median 130.8 ms, maximum
+137.0 ms; decision `GO`; the chain started at about 12:51 PDT.
+
+When it ends (`<base>/run.rc`): remove the job with `launchctl bootout
+gui/501/com.joulewise.rehearsal.corpus18` before anything else (it has `RunAtLoad` and would run again
+at the next login). The two refused bases are kept as they are.
+
+For later: any desk run of the rig, and any probe of the sampler, from a headless session has to go
+through a job of that process type. A consult that sees a slow sampler from a headless session should
+check this first.
