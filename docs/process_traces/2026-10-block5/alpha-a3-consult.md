@@ -443,3 +443,18 @@ Next action, exactly:
    program that prints structure only, that the re-screen was evaluated and the clean bound was built by
    the cap rule, and the wall times of the corpus prune and the bound derivation.
 4. Then gate 8 and the arm, as the 11:40 note above lists them.
+
+## Status (13:00 PDT): the harvest program of the second seal is pinned; the rehearsal is running
+
+- Addendum 2 is on main (`7b2b77592`, a fast-forward push of the documents-only branch: pull request #494's
+  merge button stayed blocked because the required checks do not run on a documents-only change, and the
+  brief's route for an addendum is the direct push). The canonical root is fast-forwarded.
+- The desk root `/Users/edr/night-custody/desk/b5-harvest` is checked out at
+  `224a264c5faaae90cdf56118df37e773a932700b`; the three program digests equal the addendum's; the pin test
+  of brief 4.5 prints `HARVEST_PINNED`.
+- The rehearsal's third run is in its chain (`second-clone.md`: the two earlier refusals were the launch
+  context, not the machine). Base
+  `/Users/edr/night-archive/gate-prune/rehearsal-real/corpus18-20261009T1949Z`.
+
+Next action: steps 3 and 4 of the 12:50 note. Before the rehearsal harvest, remove the rehearsal's
+launchd job (`launchctl bootout gui/501/com.joulewise.rehearsal.corpus18`).
