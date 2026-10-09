@@ -4951,7 +4951,9 @@ class _Harvest:
                     # allowance (audit A1).
                     return "survivor_rescreen"
             else:
-                screened = None
+                # No new screen ran: retain the stored screen for naming the
+                # failure only.  Passing still requires the re-screen above.
+                screened = bracket
         else:
             self._neg8_disclose(bracket, harvest_losses, record="whole-window-verdict.json")
         if isinstance(screened, Mapping) and screened.get("survivor_screen") == "references_insufficient":
@@ -5394,7 +5396,8 @@ class _Harvest:
             "schema": NEG8_CORPUS_PHYSICS_SCHEMA, "bound_derived_from": check.get("derived_from"),
             "dropped": [{"bundle_id": bundle_id, "reasons": sorted(codes, key=order.__getitem__)}
                         for bundle_id, codes in sorted(flagged.items())],
-            "members_bound": len(members), "members_kept": None, "beyond_cap": [],
+            "members_bound": len(members), "members_collected": len(members),
+            "members_kept": None, "beyond_cap": [],
             "minimum_n": ww.NEG8_DRIFT_MINIMUM_N,
             "clean_manifest": None, "clean_bound_validated": False, "problems": []}
         problems: list[str] = record["problems"]
@@ -5408,6 +5411,7 @@ class _Harvest:
             base = self._committed_corpus_bytes(manifest_check)
         committed = check.get("committed_manifest") or manifest_check.get("committed_manifest") or {}
         kept = []
+        order_valid = False
         try:
             relative = (Path(committed["path"]).parent.parent / "order_manifest.json").as_posix()
             tree = read_json(self.pack_copy / "plan_tree.json")
@@ -5428,6 +5432,7 @@ class _Harvest:
                     record["beyond_cap"] = [member["bundle_id"]
                                             for member in remaining[NEG8_CLEAN_CORPUS_MAXIMUM_N:]]
                     kept = [dict(member) for member in remaining[:NEG8_CLEAN_CORPUS_MAXIMUM_N]]
+                    order_valid = True
         except (OSError, ValueError, TypeError, KeyError):
             problems.append("corpus_order_manifest_unreadable")
         record["members_kept"] = len(kept)
@@ -5448,7 +5453,7 @@ class _Harvest:
         if clean_raw is not None:
             write_once(self.derived / "neg8-clean-corpus.json", clean_raw)
             record["clean_manifest"] = {"path": "derived/neg8-clean-corpus.json", "sha256": sha256_bytes(clean_raw)}
-        if len(kept) < ww.NEG8_DRIFT_MINIMUM_N:
+        if order_valid and len(kept) < ww.NEG8_DRIFT_MINIMUM_N:
             problems.append("clean_members_below_minimum")
         if not problems:
             freshness = bound.get("freshness") if isinstance(bound.get("freshness"), Mapping) else {}
@@ -5481,7 +5486,8 @@ class _Harvest:
             self.derived / "neg8-corpus-physics.json", record)
         if problems:
             self.emit("neg8.bound_not_derived", level="window", collector="neg8",
-                      observed={"artifact": True, "problems": problems[:8], "members_collected": len(kept),
+                      observed={"artifact": True, "problems": problems[:8], "members_collected": len(members),
+                                "members_kept": len(kept),
                                 "minimum_n": ww.NEG8_DRIFT_MINIMUM_N, "source": "corpus_physics"})
 
     def neg8_deferred_screen(self) -> None:

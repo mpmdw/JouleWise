@@ -137,10 +137,11 @@ class CleanCorpusCapTests(hb.WindowTestCase):
         window = self.window_with_corpus("9-clean", failed=IDS[11:])
         physics = [(bundle_id, "battery.accumulator_excursion") for bundle_id in IDS[:2]]
         record = self.finish(window, physics=physics)
-        self.assertEqual((record["members_kept"], record["beyond_cap"], record["clean_bound_validated"]),
-                         (9, [], False))
+        self.assertEqual((record["members_collected"], record["members_kept"], record["beyond_cap"],
+                          record["clean_bound_validated"]), (11, 9, [], False))
         flag, = [flag for flag in window.flags() if flag["code"] == "neg8.bound_not_derived"]
         self.assertEqual(flag["observed"]["source"], "corpus_physics")
+        self.assertEqual((flag["observed"]["members_collected"], flag["observed"]["members_kept"]), (11, 9))
         self.assertIn("clean_members_below_minimum", flag["observed"]["problems"])
         self.assertFalse((window.archive / "withheld/neg8-clean-bound.json").exists())
 
@@ -159,9 +160,27 @@ class CleanCorpusCapTests(hb.WindowTestCase):
         hb.put(path, order)  # the plan tree still pins the original order bytes
         physics = self.finish(window)
         self.assertFalse(physics["clean_bound_validated"])
-        self.assertIn("corpus_order_manifest_differs_from_pin", physics["problems"])
+        self.assertEqual(physics["problems"], ["corpus_order_manifest_differs_from_pin"])
+        self.assertEqual((physics["members_collected"], physics["members_kept"]), (18, 0))
         flag, = [flag for flag in window.flags() if flag["code"] == "neg8.bound_not_derived"]
         self.assertEqual(flag["observed"]["source"], "corpus_physics")
+        self.assertEqual(flag["observed"]["problems"], physics["problems"])
+        self.assertEqual((flag["observed"]["members_collected"], flag["observed"]["members_kept"]), (18, 0))
+
+    def test_an_unreadable_order_reports_collected_members_and_only_the_order_failure(self):
+        window = self.window_with_corpus("missing-order", failed=IDS[13:])
+        (window.measurement / hb.CORPUS_ORDER_RELATIVE).unlink()
+        physics = self.finish(window)
+        self.assertEqual((physics["members_collected"], physics["members_kept"], physics["problems"]),
+                         (13, 0, ["corpus_order_manifest_unreadable"]))
+        self.assertFalse(physics["clean_bound_validated"])
+        flag, = [flag for flag in window.flags() if flag["code"] == "neg8.bound_not_derived"]
+        self.assertEqual((flag["observed"]["source"], flag["observed"]["members_collected"],
+                          flag["observed"]["members_kept"], flag["observed"]["problems"]),
+                         ("corpus_physics", 13, 0, ["corpus_order_manifest_unreadable"]))
+        self.assertIn("neg8.screen_failed", window.codes())
+        self.assertEqual(self.record(window, "derived/neg8-allowance.json")["source"], "none")
+        self.assertFalse((window.archive / "withheld/neg8-clean-bound.json").exists())
 
     def test_the_clean_bound_keeps_stored_nonunderived_conditions_without_physics_losses(self):
         for size, failed in ((12, ()), (18, ()), (18, IDS[10:])):

@@ -1186,17 +1186,42 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         self.assertEqual([(row["run_id"], row["slot"], row["reason"]) for row in lost["observed"]["lost"]],
                          [("b5t-neg8-end-3", "end", "bundle_absent")])
 
-    def test_two_never_run_start_references_keep_the_stored_insufficient_screen_failed(self) -> None:
-        """The stored endpoint condition remains guarded without a newly lost reference."""
+    def test_two_never_run_start_references_fail_as_references_insufficient_and_are_named(self) -> None:
+        """Cold pass 2 N2 and N3 together: the reason is the ruling's and both absent references are named."""
         window = self.run_window_with_absent_references(
             "absent-two", {"b5t-neg8-start-1": "start", "b5t-neg8-start-3": "start"})
         (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+        self.assertEqual(flag["observed"]["reason"], "references_insufficient")
+        self.assertEqual({(row["run_id"], row["slot"], row["reason"]) for row in flag["observed"]["lost"]},
+                         {("b5t-neg8-start-1", "start", "bundle_absent"),
+                          ("b5t-neg8-start-3", "start", "bundle_absent")})
         rescreen = self.screen_record(window)["rescreen"]
         self.assertEqual((rescreen["evaluated"], rescreen["problems"]),
                          (False, ["conditions_beyond_bound_underived"]))
         self.assertEqual(flag["observed"]["collected_bound_rescreen"], rescreen)
         self.assertEqual(self.allowance_record(window)["source"], "none")
         self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+
+    def test_a_not_evaluated_rescreen_cannot_pass_or_supply_the_stored_allowance(self) -> None:
+        from unittest import mock
+
+        h = _hb().h
+        with mock.patch.object(h, "verdict_neg8_sources", return_value="source_manifest_unauthenticated"):
+            window = self.run_window("stored-pass-no-rescreen", self.points(0.0))
+        row = self.verdict_row(window)
+        self.assertEqual(row["idle_admission_core"]["neg8_bracket"]["decision"], "passed")
+        rescreen = self.screen_record(window)["rescreen"]
+        self.assertEqual((rescreen["evaluated"], rescreen["decision"], rescreen["problems"]),
+                         (False, None, ["source_manifest_unauthenticated"]))
+        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+        self.assertEqual(flag["observed"]["decision"], "passed")
+        self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+        allowance = self.allowance_record(window)
+        self.assertEqual(allowance["source"], "none")
+        self.assertIsNone(allowance["survivor_bracket"])
+        self.assertIsNone(allowance["bound_used"])
+        self.assertFalse((window.archive / "withheld/neg8-rescreen-bracket.json").exists())
+        self.assertEqual(ww.harvest_neg8_allowance_bracket(window.archive, row), (None, "screen_not_passed"))
 
     # -- seal gate stage 1, RF-1 (K-4): a reference whose energy cannot be read ----
 
