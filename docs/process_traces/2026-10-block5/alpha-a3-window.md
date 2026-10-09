@@ -144,6 +144,13 @@ file with the decision record `alpha-a3-consult.md`. If that record is absent, t
 decided: the next activation reads the disk by brief section 3 (case 4, with the arm held by this
 decision), reads whichever seat answers exist in the archive directory, convenes again any seat whose
 answer is missing, and decides. No window is armed before the decision is recorded. The email that
-carries the watchdog's pending yield notice is sent with that decision; until Gmail accepts it,
-`notice.ack` is not written and Ed's message `1a11f894e901dbbd` stays unread only if this record is not
-yet pushed.
+carries the watchdog's pending yield notice is sent with that decision; `notice.ack` is written only after
+Gmail accepts it. Ed's message `1a11f894e901dbbd` was marked read after this record was pushed.
+
+Status at 06:00 PDT: both seats have answered and disagree (Sol: hold the arm for the owner's restart;
+Opus: enlarge the corpus under a new seal, never arm across 00:00 local, do not hold for the restart). A
+cold Fable 5.1 judge is convened on `alpha-a3-consult/JUDGE-CHARGE.md`; its ruling is written to
+`/Users/edr/night-archive/b5-consults/alpha-a3/RULING.md`. If that file exists and `alpha-a3-consult.md`
+does not, the next activation reads the ruling and carries it out; if neither exists, it convenes the
+judge again with the same charge (from the worktree `/Users/edr/code/JouleWise-wt-harvest`, `claude -p`
+with `--model fable`).
