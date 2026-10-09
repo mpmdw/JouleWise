@@ -995,9 +995,8 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
                 self.assertEqual([(row["bundle_id"], row["reason"]) for row in bracket["reference_losses"]],
                                  [(killed, "summary_unreadable")])
                 record = self.screen_record(window)
-                self.assertEqual(record["reference_counts"], counts)
-                self.assertEqual([(row["run_id"], row["reason"]) for row in record["lost"]],
-                                 [(killed, "member.timeout")])
+                self.assertEqual(record["rescreen"]["survivors"]["reference_counts"], counts)
+                self.assertEqual(record["harvest_reference_losses"], {killed: "member.timeout"})
                 lost = [flag for flag in window.flags() if flag["code"] == "neg8.reference_lost"]
                 if label == "with_spare":
                     self.assertEqual(lost, [])
@@ -1142,13 +1141,15 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         self.assertEqual(flag["observed"]["reference_source"]["verdict_sources_problem"], "source_manifest_absent")
         self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
 
-    def test_unauthenticated_sources_with_no_loss_flag_leave_the_stored_screen(self) -> None:
+    def test_unauthenticated_sources_fail_the_always_on_clean_bound_screen(self) -> None:
         from unittest import mock
 
         h = _hb().h
         with mock.patch.object(h, "verdict_neg8_sources", lambda row, runs: "source_manifest_unauthenticated"):
             window = self.run_window("unauthenticated-clean", self.points(0.0))
-        self.assertFalse({"neg8.screen_failed", "neg8.reference_lost"} & window.codes())
+        self.assertIn("neg8.screen_failed", window.codes())
+        self.assertNotIn("neg8.reference_lost", window.codes())
+        self.assertEqual(self.screen_record(window)["rescreen"]["problems"], ["source_manifest_unauthenticated"])
 
     def run_window_with_absent_references(self, name, absent: dict[str, str]):
         """The stage never ran the references in ``absent`` ({run_id: slot}): no bundle, no manifest row.
@@ -1185,15 +1186,16 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         self.assertEqual([(row["run_id"], row["slot"], row["reason"]) for row in lost["observed"]["lost"]],
                          [("b5t-neg8-end-3", "end", "bundle_absent")])
 
-    def test_two_never_run_start_references_fail_as_references_insufficient_and_are_named(self) -> None:
-        """Cold pass 2 N2 and N3 together: the reason is the ruling's and both absent references are named."""
+    def test_two_never_run_start_references_fail_when_the_clean_rescreen_cannot_reproduce_them(self) -> None:
+        """The stored insufficient bracket has no families; the always-on rescreen fails closed."""
         window = self.run_window_with_absent_references(
             "absent-two", {"b5t-neg8-start-1": "start", "b5t-neg8-start-3": "start"})
         (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
-        self.assertEqual(flag["observed"]["reason"], "references_insufficient")
-        self.assertEqual({(row["run_id"], row["slot"], row["reason"]) for row in flag["observed"]["lost"]},
-                         {("b5t-neg8-start-1", "start", "bundle_absent"),
-                          ("b5t-neg8-start-3", "start", "bundle_absent")})
+        rescreen = self.screen_record(window)["rescreen"]
+        self.assertEqual((rescreen["evaluated"], rescreen["problems"]),
+                         (False, ["rederivation_differs_from_stored_bracket"]))
+        self.assertEqual(flag["observed"]["collected_bound_rescreen"], rescreen)
+        self.assertEqual(self.allowance_record(window)["source"], "none")
         self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
 
     # -- seal gate stage 1, RF-1 (K-4): a reference whose energy cannot be read ----
@@ -1336,8 +1338,8 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         window = self.run_window("unmeasured-kept", self.points(0.0), reference_flags=[
             ("b5t-neg8-end-1", "clock.unmeasured"), ("b5t-neg8-start-2", "thermal.unmeasured")])
         self.assertFalse({"neg8.reference_lost", "neg8.screen_failed"} & window.codes())
-        self.assertFalse((window.archive / "derived" / "neg8-screen.json").exists())
-        self.assertEqual(self.allowance_record(window)["source"], "stored_verdict")
+        self.assertTrue(self.screen_record(window)["rescreen"]["evaluated"])
+        self.assertEqual(self.allowance_record(window)["source"], "survivor_rescreen")
 
     def test_each_of_the_four_physics_codes_loses_a_reference_and_the_survivors_decide(self) -> None:
         """RF-5 (K-6): contention or battery evidence never taken, a quiet-state violation, a failed battery pair.
@@ -1572,9 +1574,10 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         self.assertEqual(ww.harvest_neg8_allowance_bracket(window.archive, row),
                          (None, "survivor_bracket_unauthenticated"))
 
-    def test_a_clean_window_names_the_stored_bracket(self) -> None:
+    def test_a_clean_window_names_an_equivalent_rederived_bracket(self) -> None:
         window = self.run_window("allowance-clean", self.points(0.0))
-        self.assertEqual(self.allowance_record(window)["source"], "stored_verdict")
+        self.assertEqual((self.allowance_record(window)["source"], self.allowance_record(window)["bound_used"]),
+                         ("survivor_rescreen", "corpus_physics_clean"))
         row = self.verdict_row(window)
         self.assertEqual(ww.harvest_neg8_allowance_bracket(window.archive, row),
                          (row["idle_admission_core"]["neg8_bracket"], None))

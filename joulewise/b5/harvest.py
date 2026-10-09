@@ -5337,16 +5337,19 @@ class _Harvest:
         return result
 
     def neg8_corpus_physics(self) -> None:
-        """Registration 5.3 (NEG-8 ruling 2026-10-07): a corpus member with a 6.4 physics exclusion is omitted.
+        """Registration 5.3 (NEG-8 erratum 2026-10-09): always build the first-12 clean bound.
 
         Runs after the monitor joins, which alone can see the journals.  A
         corpus member of the validated bound on which a member-level physics
         exclusion fires (``NEG8_PHYSICS_LOSS_CODES``) measured the
         disturbance, not the instrument; kept, it widens the bound and the
         allowance.  Each is ``neg8.corpus_member_dropped`` (reason: the
-        physics code).  The bound is re-derived from the clean members by the
+        physics code).  In committed order_manifest.json order, the first 12
+        remaining members decide the bound; later members are beyond_cap,
+        not dropped for cause, and their points are never used here.
+        The bound is re-derived from the clean members by the
         collected-subset path: the clean manifest is the bound's own manifest
-        bytes less those members (written to ``derived/neg8-clean-corpus.json``),
+        bytes less the dropped and capped members (written to ``derived/neg8-clean-corpus.json``),
         the core builds the bound from the bound's recorded member points,
         freshness and lineage, and validates its arithmetic and its corpus
         identity against those bytes.  Fewer than ``NEG8_DRIFT_MINIMUM_N``
@@ -5370,33 +5373,58 @@ class _Harvest:
             scope = flag.get("scope") if isinstance(flag.get("scope"), Mapping) else {}
             if scope.get("level") == "member" and scope.get("run_id") in ids and flag.get("code") in order:
                 flagged.setdefault(scope["run_id"], set()).add(flag["code"])
-        if not flagged:
-            return
         record: dict[str, Any] = {
             "schema": NEG8_CORPUS_PHYSICS_SCHEMA, "bound_derived_from": check.get("derived_from"),
             "dropped": [{"bundle_id": bundle_id, "reasons": sorted(codes, key=order.__getitem__)}
                         for bundle_id, codes in sorted(flagged.items())],
-            "members_bound": len(members), "members_kept": None, "minimum_n": ww.NEG8_DRIFT_MINIMUM_N,
+            "members_bound": len(members), "members_kept": None, "beyond_cap": [],
+            "minimum_n": ww.NEG8_DRIFT_MINIMUM_N,
             "clean_manifest": None, "clean_bound_validated": False, "problems": []}
         problems: list[str] = record["problems"]
         for row in record["dropped"]:
             self.emit("neg8.corpus_member_dropped", level="member", run_id=row["bundle_id"], collector="neg8",
                       observed={"bundle_id": row["bundle_id"], "reason": row["reasons"][0],
                                 "reasons": row["reasons"], "source": "harvest_physics"})
-        kept = [dict(member) for member in members if member.get("bundle_id") not in flagged]
-        record["members_kept"] = len(kept)
         base = getattr(self, "neg8_corpus_bytes", None)
+        manifest_check = {"problems": problems}
         if base is None:
-            base = self._committed_corpus_bytes({"problems": problems})
+            base = self._committed_corpus_bytes(manifest_check)
+        committed = check.get("committed_manifest") or manifest_check.get("committed_manifest") or {}
+        kept = []
+        try:
+            relative = (Path(committed["path"]).parent.parent / "order_manifest.json").as_posix()
+            tree = read_json(self.pack_copy / "plan_tree.json")
+            pins = {row["sha256"] for row in pinned_files(
+                tree, pack_root=self.pack_copy, repo_root=self.repo_root_copy) if row["path"] == relative}
+            order_raw = (self.repo_root_copy / relative).read_bytes()
+            if pins != {sha256_bytes(order_raw)}:
+                problems.append("corpus_order_manifest_differs_from_pin")
+            else:
+                ordered_ids = [row["run_id"] for row in json.loads(
+                    order_raw, object_pairs_hook=_unique_pairs)["executed_order"]]
+                positions = {bundle_id: index for index, bundle_id in enumerate(ordered_ids)}
+                if len(positions) != len(ordered_ids) or not ids <= positions.keys():
+                    problems.append("corpus_order_manifest_members_differ")
+                else:
+                    ordered = sorted(members, key=lambda member: positions[member["bundle_id"]])
+                    remaining = [member for member in ordered if member["bundle_id"] not in flagged]
+                    record["beyond_cap"] = [member["bundle_id"] for member in remaining[12:]]
+                    kept = [dict(member) for member in remaining[:12]]
+        except (OSError, ValueError, TypeError, KeyError):
+            problems.append("corpus_order_manifest_unreadable")
+        record["members_kept"] = len(kept)
         clean_raw = None
         if base is None:
             problems.append("corpus_manifest_bytes_unavailable")
         else:
             try:
                 manifest = json.loads(base, object_pairs_hook=_unique_pairs)
-                rows = [item for item in manifest["members"]
-                        if not (isinstance(item, Mapping) and item.get("bundle_id") in flagged)]
-                clean_raw = (json.dumps({**manifest, "members": rows}, indent=2, sort_keys=True) + "\n").encode()
+                by_id = {item["bundle_id"]: item for item in manifest["members"]}
+                rows = [by_id[member["bundle_id"]] for member in kept]
+                # No omission or reordering: preserve the in-window bound's
+                # manifest digest and therefore its exact bound payload.
+                clean_raw = base if rows == manifest["members"] else (
+                    json.dumps({**manifest, "members": rows}, indent=2, sort_keys=True) + "\n").encode()
             except (ValueError, TypeError, KeyError):
                 problems.append("corpus_manifest_unreadable")
         if clean_raw is not None:

@@ -120,6 +120,10 @@ DESIGN_BRANCH = "design/2026-10-05-v5-claim-block-draft"
 SEALED_DIR = "configs/campaigns/v5_claim_25g83"
 REGISTRATION_RELATIVE = f"{SEALED_DIR}/registration_block5.md"
 CORPUS_RELATIVE = "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
+CORPUS_ORDER_RELATIVE = "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json"
+# Delegated, blinded desk runs must not inspect local archives or mutate Git,
+# including the temporary Git repositories some unrelated tests construct.
+SYNTHETIC_ONLY = os.environ.get("JW_B5_SYNTHETIC_ONLY") == "1"
 # The registration 4.3 shape L2's plan writer copies into hazard_window.thresholds
 # (nested per hazard module); the harvest must not read it as its own block.
 L2_NESTED_THRESHOLDS = {"battery": {"limit_ma": 200, "max_update_age_s": 180, "max_unobserved_s": 120},
@@ -222,8 +226,10 @@ def template() -> Path:
 
 
 def tearDownModule():  # noqa: N802 (unittest hook)
+    global _TEMPLATE
     if _TEMPLATE is not None:
         shutil.rmtree(_TEMPLATE, ignore_errors=True)
+        _TEMPLATE = None  # other test modules also use this shared fixture
 
 
 # ``cp -c`` asks macOS for a clone of each file (clonefile(2) on APFS: the
@@ -493,12 +499,13 @@ class Window:
     def __init__(self, root: Path, *, prefix_ledger=False, target_precheck=None, catalog_overrides=None,
                  journals=None, executed_overrides=None, frozen_pins=True, register_prompt_tokens=32,
                  acceptance_policy=None, sealed_inventory=True, registration=True, registration_block=None,
-                 p42_precheck=None):
+                 p42_precheck=None, corpus_size=12, reverse_corpus=False):
         self.root = root
         # p42_precheck: also register a second, non-target condition family
         # read from the same members (the floor packs' p42 cells: the decode
         # members' prefill, registration 0.5 and 6.6) with this precheck path.
         self.p42_precheck = p42_precheck
+        self.corpus_size, self.reverse_corpus = corpus_size, reverse_corpus
         self.registration = (root / "measurement" / REGISTRATION_RELATIVE) if registration else None
         self.registration_block = registration_block
         self.measurement = root / "measurement"
@@ -530,6 +537,21 @@ class Window:
         # The committed 12-member NEG-8 settled corpus, exactly as the floor packs pin it.
         (self.measurement / CORPUS_RELATIVE).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / CORPUS_RELATIVE, self.measurement / CORPUS_RELATIVE)
+        shutil.copyfile(ROOT / CORPUS_ORDER_RELATIVE, self.measurement / CORPUS_ORDER_RELATIVE)
+        if self.corpus_size != 12 or self.reverse_corpus:
+            ids = [f"neg8-refcorpus-r{index:02d}" for index in range(1, self.corpus_size + 1)]
+            corpus = json.loads((ROOT / CORPUS_RELATIVE).read_bytes())
+            corpus["corpus_id"] = "synthetic-neg8-corpus"
+            corpus["members"] = [{"bundle_id": bundle_id, "bundle_path": bundle_id}
+                                 for bundle_id in (reversed(ids) if self.reverse_corpus else ids)]
+            put(self.measurement / CORPUS_RELATIVE, corpus)
+            order = json.loads((ROOT / CORPUS_ORDER_RELATIVE).read_bytes())
+            order.update({"manifest_id": "synthetic-neg8-order", "plan_id": corpus["corpus_id"],
+                          "planned_n_bundles": len(ids), "executed_order": [
+                              {**order["executed_order"][0], "index": index, "run_id": bundle_id,
+                               "config": bundle_id + ".json", "rep": index, "block_index": index}
+                              for index, bundle_id in enumerate(ids, 1)]})
+            put(self.measurement / CORPUS_ORDER_RELATIVE, order)
         if self.registration is not None:
             self.registration.parent.mkdir(parents=True, exist_ok=True)
             self.registration.write_text(registration_text(self.registration_block))
@@ -585,7 +607,9 @@ class Window:
             "acceptance_policy": acceptance_policy if acceptance_policy is not None else {
                 "issued_acceptance": {"path": ACCEPTANCE, "artifact_sha256": sha(ROOT / ACCEPTANCE)}},
             "science": science,
-            "external_inputs": {"manifests": [], "artifacts": []},
+            "external_inputs": {"manifests": [{"external_input_id": "neg8_bound", "members": [],
+                "manifest": {"path": CORPUS_ORDER_RELATIVE,
+                             "sha256": sha(self.measurement / CORPUS_ORDER_RELATIVE)}}], "artifacts": []},
             "arm_attachments": {"identity_pin_projection": {"identity_units": [{
                 "identity_unit_id": "b5t-unit", "config_inventory": inventory,
                 "model_runtime_config": {
@@ -598,7 +622,8 @@ class Window:
             # The floor packs' bound-derivation stage, as d117_floor_qwen3-1p7b_v5 writes it.
             "stage_graph": [{
                 "stage_id": "b5t-bound-derivation", "kind": "bound_derivation", "expected_count": 1,
-                "input": {"kind": "external_artifact", "path": CORPUS_RELATIVE, "sha256": sha(ROOT / CORPUS_RELATIVE)},
+                "input": {"kind": "external_artifact", "path": CORPUS_RELATIVE,
+                          "sha256": sha(self.measurement / CORPUS_RELATIVE)},
                 "launch": {"schema_version": "joulewise.stage_launch.v1", "commands": [{
                     "command_id": "b5t-bound-derivation.derive", "command_kind": "bound_derivation",
                     "argv_template": {"tool_id": "campaign_runner", "interface_id": "joulewise.run_campaign.cli.v1",
@@ -1525,7 +1550,9 @@ def neg8_corpus(window: "Window", failed=(), *, manifest_members=None, derive=Tr
     under 10 members, as the chain's derivation stage would); the driver's
     ``b5.chain.neg8_corpus_record`` locator goes into night/hazard_result.json.
     """
-    ids = set(CORPUS_IDS) | {member["bundle_id"] for member in manifest_members or ()}
+    committed = json.loads((window.measurement / CORPUS_RELATIVE).read_bytes())
+    ids = {member["bundle_id"] for member in committed["members"]} | {
+        member["bundle_id"] for member in manifest_members or ()}
     for bundle_id in sorted(ids):
         bundle = window.bound / bundle_id
         bundle.mkdir(parents=True, exist_ok=True)
@@ -1541,7 +1568,7 @@ def neg8_corpus(window: "Window", failed=(), *, manifest_members=None, derive=Tr
     source = window.measurement / CORPUS_RELATIVE
     if manifest_members is not None:
         source = window.root / "selected-corpus.json"
-        source.write_text(json.dumps({**COMMITTED_CORPUS, "members": manifest_members}, indent=2, sort_keys=True)
+        source.write_text(json.dumps({**committed, "members": manifest_members}, indent=2, sort_keys=True)
                           + "\n")
     subprocess.run([sys.executable, "-B", "-c", b5_chain.PRUNE_HELPER, str(source), str(window.bound),
                     str(collected), str(summary)], check=True, capture_output=True)
@@ -1780,13 +1807,16 @@ class Neg8ScreenTests(WindowTestCase):
         self.assertNotIn("whole_window.not_passed", reasons)  # disclosed only
         self.assertNotIn("neg8.bound_not_derived", window.codes())
 
-    def test_passed_verdict_with_a_derived_bound_keeps_the_screen(self):
+    def test_passed_verdict_without_rederivation_inputs_fails_the_clean_bound_screen(self):
         window = self.window()
         neg8_corpus(window)
         write_verdict(window, status="failed", decision="passed", member_conditions=["cpu_admission_failed"])
         window.harvest()
         self.assertIn("whole_window.not_passed", window.codes())
-        self.assertNotIn("neg8.screen_failed", window.codes())
+        self.assertIn("neg8.screen_failed", window.codes())
+        screen = json.loads((window.archive / "derived/neg8-screen.json").read_bytes())
+        self.assertEqual((screen["rescreen"]["evaluated"], screen["rescreen"]["problems"]),
+                         (False, ["evaluation_time_unrecorded"]))
         self.assertNotIn("neg8.bound_not_derived", window.codes())
 
     def test_collected_corpus_bound_with_a_verdict_whose_screen_cannot_be_rederived(self):
@@ -1807,7 +1837,8 @@ class Neg8ScreenTests(WindowTestCase):
         rescreen = flag["observed"]["collected_bound_rescreen"]
         self.assertEqual((rescreen["evaluated"], rescreen["problems"]), (False, ["evaluation_time_unrecorded"]))
         self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
-        # A screen the writer failed against the committed 12-member bound is never re-evaluated.
+        # The always-on clean bound also tries the registered 12-member case,
+        # and the same missing rederivation inputs still leave it failed.
         twelve = Window(self.tmp / "twelve", catalog_overrides=self.ISOLATE)
         neg8_corpus(twelve)
         write_verdict(twelve, status="failed", decision="failed",
@@ -1815,8 +1846,8 @@ class Neg8ScreenTests(WindowTestCase):
                                   whole_window.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED])
         twelve.harvest()
         (flag,) = [flag for flag in twelve.flags() if flag["code"] == "neg8.screen_failed"]
-        self.assertNotIn("collected_bound_rescreen", flag["observed"])
-        self.assertFalse((twelve.archive / "derived" / "neg8-screen.json").exists())
+        self.assertEqual(flag["observed"]["collected_bound_rescreen"]["problems"], ["evaluation_time_unrecorded"])
+        self.assertTrue((twelve.archive / "derived" / "neg8-screen.json").exists())
 
     def test_unreadable_verdict_fails_the_screen(self):
         window = self.window()
@@ -2019,12 +2050,12 @@ class Neg8RescreenTests(WindowTestCase):
                          (False, ["rederivation_differs_from_stored_bracket"]))
         self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
 
-    def test_any_other_neg8_condition_is_not_re_evaluated(self):
+    def test_other_neg8_conditions_are_rederived_against_the_always_on_clean_bound(self):
         window, rescreen = self.harvest("other-condition", [CORPUS_IDS[4]],
                                         extra_conditions=["neg8_bracket_reference_invalid"])
-        self.assertEqual((rescreen["evaluated"], rescreen["problems"]),
-                         (False, ["conditions_beyond_bound_underived"]))
-        self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
+        self.assertEqual((rescreen["evaluated"], rescreen["decision"], rescreen["conditions"], rescreen["problems"]),
+                         (True, "passed", [], []))
+        self.assertNotIn("neg8.screen_failed", window.codes())
 
     def test_a_source_manifest_that_changed_after_the_verdict_evaluates_nothing(self):
         window = Window(self.tmp / "manifest-changed", catalog_overrides=self.ISOLATE)
@@ -3950,6 +3981,7 @@ class IdentityReplayTests(WindowTestCase):
                          [{"check": "driver_checkout", "missing_input": "driver_checkout_status_porcelain"}])
         self.assertIn("code.identity_unmeasured", window.exclusions()["reasons"])
 
+    @unittest.skipIf(SYNTHETIC_ONLY, "blinded desk run forbids Git writes")
     def test_the_real_git_history_of_a_seal_landing(self):
         """The whole landing against real git: H_claim, the seal commit, a records commit; then a counterfactual.
 
@@ -4079,7 +4111,8 @@ class IdentityReplayTests(WindowTestCase):
                 self.assertNotIn("code.identity_unmeasured", window.codes())
 
 
-@unittest.skipUnless((B3W1 / "harvest.json").is_file(), "block-3 b3w1 archive is local to the measurement Mac")
+@unittest.skipUnless(not SYNTHETIC_ONLY and (B3W1 / "harvest.json").is_file(),
+                     "blinded desk run or local block-3 archive unavailable")
 class RehearsalRound1Tests(WindowTestCase):
     """The breaks the block-5 end-to-end rehearsal (round 1, 2026-10-06) found, each through the real harvest."""
 
@@ -4376,6 +4409,8 @@ def desk_seams(desk_runner, **extra):
 
 def commit_checkout(window: "Window") -> None:
     """Make the fixture's measurement checkout a git checkout with its pin committed (as H_claim has it)."""
+    if SYNTHETIC_ONLY:
+        raise unittest.SkipTest("blinded desk run forbids Git writes")
     from tests.git_fixture import init_git_fixture
     git = ["git", "-C", str(window.measurement)]
     if (window.measurement / ".git").exists():
@@ -5565,7 +5600,8 @@ class Neg8ReferencePhysicsTests(WindowTestCase):
             self.assertEqual("DISCLOSE", DRAFT_CODES[code]["effect"])
 
 
-@unittest.skipUnless((B3W1 / "harvest.json").is_file(), "block-3 b3w1 archive is local to the measurement Mac")
+@unittest.skipUnless(not SYNTHETIC_ONLY and (B3W1 / "harvest.json").is_file(),
+                     "blinded desk run or local block-3 archive unavailable")
 class RealB3w1BytesTests(unittest.TestCase):
     """On real b3w1 bytes: re-reduction is byte-identical and anchors recompute.
 
