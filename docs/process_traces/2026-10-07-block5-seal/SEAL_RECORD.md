@@ -443,6 +443,38 @@ docs/process_traces/2026-10-07-block5-seal/gates/14-harvest-lane-cold-pass.md. g
 a64000884ef5bb4b76415835f02f39803f6eb620 7e6158d669cbb6fb35761aee18abf363f07c5d36 lists only those three
 files and paths under tests/.
 
+## Addendum 2: the harvest program of the second seal (written 2026-10-09, by a seat that has read no claim-window energy)
+
+B5-HARVEST-PIN: 224a264c5faaae90cdf56118df37e773a932700b
+
+Desk clone: /Users/edr/night-custody/desk/b5-harvest. Files at that commit, with their SHA-256:
+joulewise/b5/harvest.py 8aaaf96f4e3212e9c6544aa9908006d4a3cde794a61e3dff2106d677bd28dd2a; joulewise/whole_window.py ee107b1e5f7eab306192c78d43171de828c290158bd3dc6fb5e63c229a1c25a5; scripts/harvest_b5_window.py 88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45.
+The lane: lane/2026-10-09-harvest-corpus-cap, cut from the first harvest pin 7e6158d669cbb6fb35761aee18abf363f07c5d36
+and merged with the second seal commit be6525e5a6511adf882282e404e163e14dbb738b, so it descends from the second
+seal's claim head c27485347c9629b857df81665b5b1b8d10dcd36a. git diff --name-only be6525e5a 224a264c5 lists only
+those three files and paths under tests/. The last two files are unchanged from the first pin.
+
+What changed in the harvest program: the method that builds the clean bound (the drift bound that decides the
+screen and the allowance) now runs on every window and keeps the first 12 members, in the committed order of
+order_manifest.json, that are in the validated in-window bound and carry none of the six physics codes; all of
+them if 10 or 11 remain; fewer than 10 gives neg8.bound_not_derived. Members beyond the twelfth are listed in
+the record under beyond_cap and are used by nothing. A stored NEG-8 condition is cleared by a re-screen only
+after a real loss (a newly lost reference, or a bound rebuilt after a corpus member was dropped for physics),
+as the sealed text says; a re-screen that cannot run, or a clean bound that cannot be built or validated,
+leaves the screen failed and supplies no allowance. This is registration section 5.3 as amended by the erratum
+of 2026-10-09 (section 14 Q16).
+
+Its gates: docs/process_traces/2026-10-block5/corpus18-erratum/harvest-pin2-gates.md (the builder, the second
+seat that corrected and reviewed it by executing, two cold Fable passes, the whole suite on the lane's tree).
+
+Like the first harvest lane, this lane is not merged into main: main holds the sealed bytes of
+joulewise/whole_window.py and joulewise/b5/harvest.py, which are the files a window executes, and the desk
+root is a separate checkout at the pinned commit. The branch is kept on the remote.
+
+This pin is for windows of the second seal. Addendum 1 stays the record of the program that harvested the first
+seal's three ALPHA attempts; a re-harvest of one of them by this program passes the first clone's path, its
+sealed inventory and that attempt's archived ledger copies.
+
 ## Release event
 
 Nothing is recorded here yet. This section is written when the withheld energies are opened: after the block has

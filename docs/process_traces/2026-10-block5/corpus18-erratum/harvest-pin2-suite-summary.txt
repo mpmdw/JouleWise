@@ -1,0 +1,29 @@
+Whole suite on lane/2026-10-09-harvest-corpus-cap at 224a264c5faaae90cdf56118df37e773a932700b (the harvest lane merged with the second seal commit be6525e5a).
+Method: the CI unit-test runner body on stdin, 6 shards in parallel, then the two exclusive modules; /opt/homebrew/bin/python3.13 -B; 2026-10-09.
+
+SHARD SUMMARY index=1/6 modules=64 tests=1416 failures=3 errors=0 skipped=16 result=FAIL
+SHARD SUMMARY index=2/6 modules=65 tests=1714 failures=0 errors=0 skipped=11 result=PASS
+SHARD SUMMARY index=3/6 modules=65 tests=1974 failures=0 errors=0 skipped=5 result=PASS
+SHARD SUMMARY index=4/6 modules=64 tests=1840 failures=0 errors=1 skipped=6 result=FAIL
+SHARD SUMMARY index=5/6 modules=64 tests=1571 failures=0 errors=0 skipped=10 result=PASS
+SHARD SUMMARY index=6/6 modules=66 tests=1324 failures=1 errors=0 skipped=13 result=FAIL
+
+Modules that failed inside the parallel run:
+MODULE FAIL tests.test_sample_quiet_predicate_evidence tests=96 failures=3 errors=0 skipped=0 seconds=32.310
+MODULE FAIL tests.test_harvest_b5_window tests=205 failures=0 errors=1 skipped=0 seconds=755.248
+MODULE FAIL tests.test_repin tests=22 failures=1 errors=0 skipped=0 seconds=6.478
+
+The same modules run alone afterwards:
+tests.test_sample_quiet_predicate_evidence: Ran 96 tests in 31.038s  OK 
+tests.test_harvest_b5_window.WorkerPoolTests: Ran 1 test in 6.701s  OK 
+tests.test_repin: Ran 22 tests in 5.335s  FAILED (failures=1) 
+
+tests.test_repin fails on the lane by construction, alone as well: its one failing test
+(test_committed_registry_kind_p_rows_are_current) compares joulewise/whole_window.py with the digest the sealed
+inventory holds for it, and the lane's copy of that file is the harvest lane's, not the sealed one. That is the
+reason the lane is not merged into main. On main the test passes (CI on the second seal's pull request).
+
+tests.test_calibration_exits: Ran 48 tests in 483.268s  OK 
+tests.test_calibration_writer_crash_matrix: Ran 20 tests in 245.460s  OK 
+
+git status --porcelain after the run: 0 lines
