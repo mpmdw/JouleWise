@@ -263,3 +263,43 @@ Next action: when all four window-side gates have reported, disposition every fi
 named lane, or reject with a reason; a recording-only finding is a flag), fill the ledger of #492, and
 merge it with a merge commit: that commit is the new claim head. A gate whose output file is missing and
 whose process is gone is run again with the brief or charge in the same directory.
+
+## Step 3, status (08:55 PDT)
+
+Window side (`lane/2026-10-09-corpus18`, pull request #492):
+- Independent executing review (Sol 6.1 high): `PASS-WITH-FINDINGS`, four findings, all recording-only.
+  Cold Fable pass: `FABLE PASS: PASS-WITH-FINDINGS`, one minor (a narrowed blinding assertion in a test)
+  and seven recording-only. Reports: `sol-window-review.md`, `sol-window-review.full-report.md`,
+  `FABLE-window-pass.md` in `/Users/edr/night-archive/b5-consults/corpus18-build/`.
+- Dispositions so far. Fixed: the narrowed assertion (boundary match restored, local commit `94a60fff4`,
+  not yet pushed); the CI quick tier's one failure, a G2-b dispatch test that counts the corpus (23 to
+  29, pushed as `8c6e95029`); the block-4 replay test that pins the GAMMA pack's bytes (it now allows
+  exactly the erratum's three files; in `94a60fff4`). Flags, no fix round: the stale strings of
+  deviation 9; the pin registry catching up with an unchanged census program; the disk module's default
+  (the plan supplies its own figure: an arm now needs 90.4 GiB for ALPHA and BETA, 80.8 GiB for GAMMA);
+  the more negative recorded deadline margin; the seal landing test still authenticating the old seal
+  until the new one exists. Deferred to the pre-GAMMA desk check the ruling already orders: the review's
+  finding that moving t0 moves the dead-man job by the same amount, so its firing time inside the chain
+  (16,560 s after t0 for GAMMA) is fixed relative to the stages.
+- Whole suite on `985d0722d` (shard method): not green yet. Failures that are consequences of the change
+  and are fixed or being fixed: the two tests above; four tests of `tests.test_neg8_survivors`, whose
+  synthetic windows are built from the committed corpus and so now hold 18 members. A Sol seat
+  (`BRIEF-sol-window-testfix.md`, report `sol-window-testfix.md`) is establishing the cause of each and
+  updating the tests without loosening them; it also reruns alone the wall-clock modules that failed
+  under load (`test_sample_quiet_predicate_evidence`, `test_v5_s1_qualification`, one worker-pool test).
+  It commits nothing.
+
+Desk side (`lane/2026-10-09-harvest-corpus-cap`, head `49265927d`, pushed): the second seat restored the
+re-screen guard (the cap alone never clears a stored NEG-8 condition) and closed a second gap it found
+(an unavailable clean bound fell back to the uncapped one); six modules green, 367 tests. A cold Fable
+pass on the desk diff is running (`FABLE-desk-pass.md`).
+
+Seal text: an Opus seat is applying the corrected erratum's section 4.5 (39 registration edits, 4
+analysis-plan edits) to the two documents in the worktree `/Users/edr/code/JouleWise-wt-corpus18-seal`
+(branch `seal/2026-10-09-corpus18-text`, cut from main; it commits nothing) and writes
+`corpus18-erratum/SEAL-TEXT-EDITS.md`. The edited files are carried onto the merge commit of #492 as the
+seal commit, with the regenerated inventory, after the placeholders are filled.
+
+Next action: when the test-fix seat reports, commit and push the lane, run the whole suite again on the
+new head (`/Users/edr/night-archive/b5-consults/corpus18-build/suite-window-985d0722d/` holds the runner;
+make a new directory for the new head), wait for CI, fill the ledger of #492 and merge it.
