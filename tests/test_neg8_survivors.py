@@ -743,14 +743,15 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
     ISOLATE = {**_hb().Neg8ScreenTests.ISOLATE}
 
     def run_window(self, name, points, *, stored_points=None, reference_flags=(), corpus_flags=(), failed=(),
-                   references=None, unreadable=(), strict_invalid=(), summaries=None, energy_reads=None):
+                   references=None, unreadable=(), strict_invalid=(), summaries=None, energy_reads=None,
+                   corpus_size=None):
         import json
         from pathlib import Path
         from unittest import mock
 
         hb = _hb()
         h = hb.h
-        window = hb.Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+        window = hb.Window(self.tmp / name, catalog_overrides=self.ISOLATE, corpus_size=corpus_size)
         self.assertIsNone(hb.neg8_corpus(window, list(failed)))
         bound = json.loads((window.bound / "neg8-drift-bound.json").read_bytes())
         self.write_verdict(window, stored_points or points, bound, references=references, unreadable=unreadable,
@@ -1531,29 +1532,47 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
 
     def test_corpus_members_with_physics_exclusions_are_dropped_from_the_bound(self) -> None:
         """Registration 5.3 amendment: the clean bound is narrower, and the screen fails against it."""
+        for size in (12, None):
+            with self.subTest(corpus_size=size):
+                hb = _hb()
+                probe = hb.Window(self.tmp / f"probe-{size}", catalog_overrides=self.ISOLATE, corpus_size=size)
+                hb.neg8_corpus(probe)
+                dropped_ids = {hb.CORPUS_IDS[0], hb.CORPUS_IDS[11]}
+                full_bound = ww.neg8_count_adjusted_bound(self.corpus_points(cap=False, size=size), 3, 3)["bound_j"]
+                clean_points = self.corpus_points(exclude=dropped_ids, size=size)
+                clean_bound = ww.neg8_count_adjusted_bound(clean_points, 3, 3)["bound_j"]
+                self.assertLess(clean_bound, full_bound)
+                self.assertAlmostEqual(self.bound_j(probe), full_bound, places=9)
+                # Stored diagnostic passes; the physics-clean, capped bound fails at
+                # the same drift, chosen strictly between the two synthetic bounds.
+                window = self.run_window(f"corpus-{size}", self.points((full_bound + clean_bound) / 2), corpus_flags=[
+                    (hb.CORPUS_IDS[0], "contention.request_overlap"), (hb.CORPUS_IDS[11], "thermal.os_level_nonzero")], corpus_size=size)
+                stored = __import__("json").loads((window.claim / "whole-window-verdict.json").read_bytes())
+                self.assertEqual(stored["idle_admission_core"]["neg8_bracket"]["decision"], "passed")
+                dropped = [flag for flag in window.flags() if flag["code"] == "neg8.corpus_member_dropped"]
+                self.assertEqual({(flag["scope"]["run_id"], flag["observed"]["reason"], flag["observed"]["source"])
+                                  for flag in dropped},
+                                 {(hb.CORPUS_IDS[0], "contention.request_overlap", "harvest_physics"),
+                                  (hb.CORPUS_IDS[11], "thermal.os_level_nonzero", "harvest_physics")})
+                physics = __import__("json").loads((window.archive / "derived" / "neg8-corpus-physics.json").read_bytes())
+                self.assertEqual((physics["members_kept"], physics["clean_bound_validated"], physics["problems"]),
+                                 (10 if size == 12 else 12, True, []))
+                self.assertEqual(physics["beyond_cap"], [bundle_id for bundle_id in hb.CORPUS_IDS[:size]
+                                                       if bundle_id not in dropped_ids][12:])
+                clean = __import__("json").loads((window.archive / "withheld" / "neg8-clean-bound.json").read_bytes())
+                self.assertAlmostEqual(clean["bound"]["claim_family_bounds"][ww.NEG8_CLAIM_FAMILY_GROSS]["estimator"][
+                    "replicated_endpoint_bound_j"], clean_bound, places=9)
+                (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
+                self.assertTrue(flag["observed"]["survivor_rescreen"]["corpus_clean_bound"])
+                self.assertNotIn("neg8.bound_not_derived", window.codes())
+
+    def corpus_points(self, *, exclude=(), cap=True, size=None) -> list[float]:
+        """This fixture's synthetic energies, capped after physics losses in committed order."""
         hb = _hb()
-        probe = hb.Window(self.tmp / "probe", catalog_overrides=self.ISOLATE)
-        hb.neg8_corpus(probe)
-        # Synthetic corpus points are 30.0 + 0.1 * r: dropping r01 and r12 narrows U_3 - L_3 from 0.9 to 0.7 J.
-        self.assertAlmostEqual(self.bound_j(probe), 0.9, places=9)
-        window = self.run_window("corpus", self.points(0.8), corpus_flags=[
-            (hb.CORPUS_IDS[0], "contention.request_overlap"), (hb.CORPUS_IDS[11], "thermal.os_level_nonzero")])
-        stored = __import__("json").loads((window.claim / "whole-window-verdict.json").read_bytes())
-        self.assertEqual(stored["idle_admission_core"]["neg8_bracket"]["decision"], "passed")
-        dropped = [flag for flag in window.flags() if flag["code"] == "neg8.corpus_member_dropped"]
-        self.assertEqual({(flag["scope"]["run_id"], flag["observed"]["reason"], flag["observed"]["source"])
-                          for flag in dropped},
-                         {(hb.CORPUS_IDS[0], "contention.request_overlap", "harvest_physics"),
-                          (hb.CORPUS_IDS[11], "thermal.os_level_nonzero", "harvest_physics")})
-        physics = __import__("json").loads((window.archive / "derived" / "neg8-corpus-physics.json").read_bytes())
-        self.assertEqual((physics["members_kept"], physics["clean_bound_validated"], physics["problems"]),
-                         (10, True, []))
-        clean = __import__("json").loads((window.archive / "withheld" / "neg8-clean-bound.json").read_bytes())
-        self.assertAlmostEqual(clean["bound"]["claim_family_bounds"][ww.NEG8_CLAIM_FAMILY_GROSS]["estimator"][
-            "replicated_endpoint_bound_j"], 0.7, places=9)
-        (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
-        self.assertTrue(flag["observed"]["survivor_rescreen"]["corpus_clean_bound"])
-        self.assertNotIn("neg8.bound_not_derived", window.codes())
+        ids = [bundle_id for bundle_id in hb.CORPUS_IDS[:size] if bundle_id not in exclude]
+        if cap:
+            ids = ids[:12]
+        return [hb.corpus_point(self.tmp / bundle_id)[0]["point_j"] for bundle_id in ids]
 
     def allowance_record(self, window) -> dict:
         import json
@@ -1594,7 +1613,7 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
         gross = ww.NEG8_CLAIM_FAMILY_GROSS
         survivor_allowance = bracket["drift_allowances"][gross]["allowance_j"]
         self.assertNotEqual(survivor_allowance, stored["drift_allowances"][gross]["allowance_j"])
-        corpus = [30.0 + 0.1 * index for index in range(1, 13)]
+        corpus = self.corpus_points()
         self.assertAlmostEqual(survivor_allowance, ww.neg8_count_adjusted_bound(corpus, 3, 2)["bound_j"], places=9)
         # A recorded re-screen whose bracket does not authenticate never falls back to the stored one.
         __import__("os").chmod(withheld, 0o600)
@@ -1603,12 +1622,31 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
                          (None, "survivor_bracket_unauthenticated"))
 
     def test_a_clean_window_names_an_equivalent_rederived_bracket(self) -> None:
-        window = self.run_window("allowance-clean", self.points(0.0))
+        window = self.run_window("allowance-clean", self.points(0.0), corpus_size=12)
         self.assertEqual((self.allowance_record(window)["source"], self.allowance_record(window)["bound_used"]),
                          ("survivor_rescreen", "corpus_physics_clean"))
         row = self.verdict_row(window)
         self.assertEqual(ww.harvest_neg8_allowance_bracket(window.archive, row),
                          (row["idle_admission_core"]["neg8_bracket"], None))
+        other = {**row, "timestamp": "1970-01-01T00:00:00Z"}
+        self.assertEqual(ww.harvest_neg8_allowance_bracket(window.archive, other),
+                         (None, "allowance_record_names_another_row"))
+
+    def test_an_18_member_clean_window_names_its_capped_rederived_bracket(self) -> None:
+        import json
+
+        window = self.run_window("allowance-clean18", self.points(0.0))
+        record = self.allowance_record(window)
+        self.assertEqual((record["source"], record["bound_used"]), ("survivor_rescreen", "corpus_physics_clean"))
+        row = self.verdict_row(window)
+        bracket, problem = ww.harvest_neg8_allowance_bracket(window.archive, row)
+        self.assertIsNone(problem)
+        withheld = json.loads((window.archive / "withheld/neg8-rescreen-bracket.json").read_bytes())["bracket"]
+        self.assertEqual(bracket, withheld)
+        self.assertNotEqual(bracket, row["idle_admission_core"]["neg8_bracket"])
+        self.assertEqual(bracket["drift_bound_artifact"]["reference_corpus"]["member_ids"], _hb().CORPUS_IDS[:12])
+        self.assertAlmostEqual(bracket["drift_allowances"][ww.NEG8_CLAIM_FAMILY_GROSS]["allowance_j"],
+                               ww.neg8_count_adjusted_bound(self.corpus_points(), 3, 3)["bound_j"], places=9)
         other = {**row, "timestamp": "1970-01-01T00:00:00Z"}
         self.assertEqual(ww.harvest_neg8_allowance_bracket(window.archive, other),
                          (None, "allowance_record_names_another_row"))
@@ -1623,33 +1661,43 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
 
     def test_a_clean_corpus_bound_is_authenticated_for_the_allowance(self) -> None:
         """Registration 5.3: the clean bound (two corpus members dropped for physics) carries the allowance."""
-        import hashlib
-        import json
-        hb = _hb()
-        window = self.run_window("allowance-corpus", self.points(0.0), corpus_flags=[
-            (hb.CORPUS_IDS[0], "contention.request_overlap"), (hb.CORPUS_IDS[11], "thermal.os_level_nonzero")])
-        self.assertNotIn("neg8.screen_failed", window.codes())
-        record = self.allowance_record(window)
-        self.assertEqual((record["source"], record["bound_used"]), ("survivor_rescreen", "corpus_physics_clean"))
-        clean_path = window.archive / "withheld" / "neg8-clean-bound.json"
-        self.assertEqual(record["clean_bound"]["sha256"], hashlib.sha256(clean_path.read_bytes()).hexdigest())
-        physics = json.loads((window.archive / "derived" / "neg8-corpus-physics.json").read_bytes())
-        self.assertEqual(physics["clean_bound"], {key: record["clean_bound"][key] for key in ("path", "sha256")})
-        row = self.verdict_row(window)
-        bracket, problem = ww.harvest_neg8_allowance_bracket(window.archive, row)
-        self.assertIsNone(problem)
-        self.assertAlmostEqual(bracket["drift_allowances"][ww.NEG8_CLAIM_FAMILY_GROSS]["allowance_j"], 0.7, places=9)
-        __import__("os").chmod(clean_path, 0o600)
-        clean_path.write_bytes(clean_path.read_bytes() + b" ")
-        self.assertEqual(ww.harvest_neg8_allowance_bracket(window.archive, row),
-                         (None, "clean_bound_unauthenticated"))
+        for size in (12, None):
+            with self.subTest(corpus_size=size):
+                import hashlib
+                import json
+                hb = _hb()
+                window = self.run_window(f"allowance-corpus-{size}", self.points(0.0), corpus_flags=[
+                    (hb.CORPUS_IDS[0], "contention.request_overlap"), (hb.CORPUS_IDS[11], "thermal.os_level_nonzero")], corpus_size=size)
+                self.assertNotIn("neg8.screen_failed", window.codes())
+                record = self.allowance_record(window)
+                self.assertEqual((record["source"], record["bound_used"]), ("survivor_rescreen", "corpus_physics_clean"))
+                clean_path = window.archive / "withheld" / "neg8-clean-bound.json"
+                self.assertEqual(record["clean_bound"]["sha256"], hashlib.sha256(clean_path.read_bytes()).hexdigest())
+                physics = json.loads((window.archive / "derived" / "neg8-corpus-physics.json").read_bytes())
+                self.assertEqual(physics["clean_bound"], {key: record["clean_bound"][key] for key in ("path", "sha256")})
+                row = self.verdict_row(window)
+                bracket, problem = ww.harvest_neg8_allowance_bracket(window.archive, row)
+                self.assertIsNone(problem)
+                clean_points = self.corpus_points(exclude={hb.CORPUS_IDS[0], hb.CORPUS_IDS[11]}, size=size)
+                self.assertAlmostEqual(bracket["drift_allowances"][ww.NEG8_CLAIM_FAMILY_GROSS]["allowance_j"],
+                                       ww.neg8_count_adjusted_bound(clean_points, 3, 3)["bound_j"], places=9)
+                __import__("os").chmod(clean_path, 0o600)
+                clean_path.write_bytes(clean_path.read_bytes() + b" ")
+                self.assertEqual(ww.harvest_neg8_allowance_bracket(window.archive, row),
+                                 (None, "clean_bound_unauthenticated"))
 
     def test_a_corpus_left_below_ten_clean_members_is_not_derived(self) -> None:
         hb = _hb()
-        window = self.run_window("below-ten", self.points(0.0), failed=[hb.CORPUS_IDS[5]], corpus_flags=[
-            (hb.CORPUS_IDS[index], "battery.accumulator_excursion") for index in (0, 1)])
+        failed = [hb.CORPUS_IDS[5]]
+        collected_ids = [bundle_id for bundle_id in hb.CORPUS_IDS if bundle_id not in failed]
+        physics_ids = collected_ids[:len(collected_ids) - (ww.NEG8_DRIFT_MINIMUM_N - 1)]
+        window = self.run_window("below-ten", self.points(0.0), failed=failed, corpus_flags=[
+            (bundle_id, "battery.accumulator_excursion") for bundle_id in physics_ids])
+        physics = __import__("json").loads((window.archive / "derived/neg8-corpus-physics.json").read_bytes())
+        self.assertEqual((physics["members_bound"], physics["members_kept"]), (17, 9))
         (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.bound_not_derived"]
         self.assertEqual(flag["observed"]["source"], "corpus_physics")
+        self.assertEqual((flag["observed"]["members_collected"], flag["observed"]["members_kept"]), (17, 9))
         self.assertIn("clean_members_below_minimum", flag["observed"]["problems"])
         self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
 

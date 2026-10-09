@@ -1,4 +1,4 @@
-"""2026-10-09 desk erratum: synthetic 18-member windows, first 12 clean members."""
+"""2026-10-09 desk erratum: committed corpus and plan pins, synthetic energies."""
 
 import json
 import os
@@ -11,16 +11,43 @@ from tests import test_neg8_survivors as survivors
 
 
 IDS = [f"neg8-refcorpus-r{index:02d}" for index in range(1, 19)]
+PACKS = ("d117_floor_qwen3-1p7b_v5", "d117_floor_qwen3-8b_v5",
+         "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5")
 
 
 class CleanCorpusCapTests(hb.WindowTestCase):
     ISOLATE = hb.Neg8ScreenTests.ISOLATE
 
-    def window_with_corpus(self, name, *, size=18, failed=(), reverse=False):
+    def window_with_corpus(self, name, *, size=None, failed=(), reverse=False, pack=PACKS[0]):
         window = hb.Window(self.tmp / name, catalog_overrides=self.ISOLATE,
-                           corpus_size=size, reverse_corpus=reverse)
+                           corpus_size=size, reverse_corpus=reverse,
+                           corpus_plan=pack if size in (None, 18) and not reverse else None)
         self.assertIsNone(hb.neg8_corpus(window, failed))
         return window
+
+    def test_committed_plan_trees_pin_the_corpus_order_members_and_cap(self):
+        order_raw = (hb.ROOT / hb.CORPUS_ORDER_RELATIVE).read_bytes()
+        corpus_raw = (hb.ROOT / hb.CORPUS_RELATIVE).read_bytes()
+        self.assertEqual([row["run_id"] for row in json.loads(order_raw)["executed_order"]], IDS)
+        self.assertEqual([row["bundle_id"] for row in json.loads(corpus_raw)["members"]], IDS)
+        for pack in PACKS:
+            with self.subTest(pack=pack):
+                source = hb.ROOT / "configs/campaigns" / pack
+                self.assertEqual(hb.sha(source / "plan_tree.json"),
+                                 (source / "plan_tree.sha256").read_text().split()[0])
+                window = self.window_with_corpus(pack, pack=pack)
+                self.assertEqual((window.measurement / hb.CORPUS_RELATIVE).read_bytes(), corpus_raw)
+                self.assertEqual((window.measurement / hb.CORPUS_ORDER_RELATIVE).read_bytes(), order_raw)
+                tree = json.loads((window.pack / "plan_tree.json").read_bytes())
+                pins = {row["path"]: row["sha256"] for row in hb.h.pinned_files(
+                    tree, pack_root=window.pack, repo_root=window.measurement)}
+                self.assertEqual(pins[hb.CORPUS_RELATIVE], hb.sha(hb.ROOT / hb.CORPUS_RELATIVE))
+                self.assertEqual(pins[hb.CORPUS_ORDER_RELATIVE], hb.sha(hb.ROOT / hb.CORPUS_ORDER_RELATIVE))
+                for bundle_id in IDS:
+                    relative = f"configs/campaigns/neg8_reference_corpus_v5/{bundle_id}.json"
+                    self.assertEqual(pins[relative], hb.sha(hb.ROOT / relative))
+                self.finish(window)
+                self.assert_clean(window, IDS[:12], IDS[12:])
 
     def finish(self, window, *, physics=(), drift=0.0, stored_conditions=()):
         bound = json.loads((window.bound / "neg8-drift-bound.json").read_bytes())
@@ -149,6 +176,8 @@ class CleanCorpusCapTests(hb.WindowTestCase):
         window = self.window_with_corpus("reverse", reverse=True)
         original = json.loads((window.bound / "neg8-drift-bound.json").read_bytes())
         self.assertEqual(original["reference_corpus"]["member_ids"], list(reversed(IDS)))
+        self.assertEqual((window.measurement / hb.CORPUS_ORDER_RELATIVE).read_bytes(),
+                         (hb.ROOT / hb.CORPUS_ORDER_RELATIVE).read_bytes())
         self.finish(window)
         self.assert_clean(window, IDS[:12], IDS[12:])
 
@@ -289,3 +318,8 @@ class CleanBoundMultiplierTests(unittest.TestCase):
                 bound = survivors.bound_artifact(survivors.RULING_CORPUS[:n])
                 for family in bound["claim_family_bounds"].values():
                     self.assertEqual(family["estimator"]["student_t_critical_95"], expected)
+
+    def test_the_core_builder_uses_2_228_at_11_as_the_lead_ruled(self):
+        bound = survivors.bound_artifact(survivors.RULING_CORPUS[:11])
+        for family in bound["claim_family_bounds"].values():
+            self.assertEqual(family["estimator"]["student_t_critical_95"], 2.228)

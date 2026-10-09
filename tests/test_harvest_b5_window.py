@@ -499,13 +499,14 @@ class Window:
     def __init__(self, root: Path, *, prefix_ledger=False, target_precheck=None, catalog_overrides=None,
                  journals=None, executed_overrides=None, frozen_pins=True, register_prompt_tokens=32,
                  acceptance_policy=None, sealed_inventory=True, registration=True, registration_block=None,
-                 p42_precheck=None, corpus_size=12, reverse_corpus=False):
+                 p42_precheck=None, corpus_size=None, reverse_corpus=False, corpus_plan=None):
         self.root = root
         # p42_precheck: also register a second, non-target condition family
         # read from the same members (the floor packs' p42 cells: the decode
         # members' prefill, registration 0.5 and 6.6) with this precheck path.
         self.p42_precheck = p42_precheck
         self.corpus_size, self.reverse_corpus = corpus_size, reverse_corpus
+        self.corpus_plan = corpus_plan
         self.registration = (root / "measurement" / REGISTRATION_RELATIVE) if registration else None
         self.registration_block = registration_block
         self.measurement = root / "measurement"
@@ -534,24 +535,32 @@ class Window:
             target = self.measurement / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(f"# {relative}\n")
-        # The committed 12-member NEG-8 settled corpus, exactly as the floor packs pin it.
+        # Default: the committed corpus bytes. An explicit 12 retains the
+        # historical no-cap case even after the committed corpus grows.
         (self.measurement / CORPUS_RELATIVE).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / CORPUS_RELATIVE, self.measurement / CORPUS_RELATIVE)
         shutil.copyfile(ROOT / CORPUS_ORDER_RELATIVE, self.measurement / CORPUS_ORDER_RELATIVE)
-        if self.corpus_size != 12 or self.reverse_corpus:
-            ids = [f"neg8-refcorpus-r{index:02d}" for index in range(1, self.corpus_size + 1)]
+        committed_n = len(json.loads((ROOT / CORPUS_RELATIVE).read_bytes())["members"])
+        if (self.corpus_size is not None and self.corpus_size != committed_n) or self.reverse_corpus:
+            size = committed_n if self.corpus_size is None else self.corpus_size
+            ids = [f"neg8-refcorpus-r{index:02d}" for index in range(1, size + 1)]
             corpus = json.loads((ROOT / CORPUS_RELATIVE).read_bytes())
             corpus["corpus_id"] = "synthetic-neg8-corpus"
             corpus["members"] = [{"bundle_id": bundle_id, "bundle_path": bundle_id}
                                  for bundle_id in (reversed(ids) if self.reverse_corpus else ids)]
             put(self.measurement / CORPUS_RELATIVE, corpus)
-            order = json.loads((ROOT / CORPUS_ORDER_RELATIVE).read_bytes())
-            order.update({"manifest_id": "synthetic-neg8-order", "plan_id": corpus["corpus_id"],
-                          "planned_n_bundles": len(ids), "executed_order": [
-                              {**order["executed_order"][0], "index": index, "run_id": bundle_id,
-                               "config": bundle_id + ".json", "rep": index, "block_index": index}
-                              for index, bundle_id in enumerate(ids, 1)]})
-            put(self.measurement / CORPUS_ORDER_RELATIVE, order)
+            if size == 12 and not self.reverse_corpus:
+                historical = ROOT / "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json"
+                shutil.copyfile(historical, self.measurement / CORPUS_RELATIVE)
+                corpus = json.loads((self.measurement / CORPUS_RELATIVE).read_bytes())
+            if size != committed_n:
+                order = json.loads((ROOT / CORPUS_ORDER_RELATIVE).read_bytes())
+                order.update({"manifest_id": "synthetic-neg8-order", "plan_id": corpus["corpus_id"],
+                              "planned_n_bundles": len(ids), "executed_order": [
+                                  {**order["executed_order"][0], "index": index, "run_id": bundle_id,
+                                   "config": bundle_id + ".json", "rep": index, "block_index": index}
+                                  for index, bundle_id in enumerate(ids, 1)]})
+                put(self.measurement / CORPUS_ORDER_RELATIVE, order)
         if self.registration is not None:
             self.registration.parent.mkdir(parents=True, exist_ok=True)
             self.registration.write_text(registration_text(self.registration_block))
@@ -636,6 +645,24 @@ class Window:
                                           {"kind": "literal", "value": "--runs-dir"},
                                           {"kind": "binding", "value": "bound_runs_root"}]}}]}}],
         }
+        if self.corpus_plan is not None:
+            # Exercise the committed plan's actual corpus pins, not pins
+            # recomputed from synthetic replacements of the corpus files.
+            source_pack = ROOT / "configs/campaigns" / self.corpus_plan
+            external = json.loads((source_pack / "plan_tree.json").read_bytes())["external_inputs"]
+            if isinstance(external, dict):
+                external = {
+                    "manifests": [row for row in external["manifests"]
+                                  if row.get("manifest", {}).get("path") == CORPUS_ORDER_RELATIVE],
+                    "artifacts": [row for row in external["artifacts"] if row.get("path") == CORPUS_RELATIVE]}
+            else:
+                external = [row for row in external if row.get("manifest_path") == CORPUS_ORDER_RELATIVE
+                            or row.get("path") == CORPUS_RELATIVE]
+            tree["external_inputs"] = external
+            for pin in h.pinned_files({"external_inputs": external}, pack_root=source_pack, repo_root=ROOT):
+                target = self.measurement / pin["path"]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ROOT / pin["path"], target)
         put(self.pack / "plan_tree.json", tree)
         (self.pack / "plan_tree.sha256").write_text(f"{sha(self.pack / 'plan_tree.json')}  plan_tree.json\n")
         files = {path.relative_to(self.measurement).as_posix(): sha(path)
@@ -1540,7 +1567,7 @@ def neg8_member_gates():
 def neg8_corpus(window: "Window", failed=(), *, manifest_members=None, derive=True) -> str | None:
     """Run the chain's NEG-8 corpus stage on ``window``; return the mint's refusal, if any.
 
-    The 12 committed corpus members become bundles in the bound runs root
+    The window's explicitly selected corpus members become bundles in the bound runs root
     (``failed`` did not succeed; a ``manifest_members`` id outside the
     committed corpus gets a succeeded bundle too).  Then, as the chain and the
     driver do: the chain's own prune helper (``b5.chain.PRUNE_HELPER``) writes
@@ -1599,23 +1626,33 @@ def write_verdict(window: "Window", *, status: str, decision: str | None, condit
 
 
 class Neg8BoundTests(WindowTestCase):
-    """Registration 5.3: a bound derived from at least 10 of the 12 corpus members is valid."""
+    """Registration 5.3: a bound derived from at least 10 of the 18 corpus members is valid."""
 
-    def harvest_neg8(self, name: str, failed=(), **kwargs):
-        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+    def harvest_neg8(self, name: str, failed=(), *, corpus_size=None, **kwargs):
+        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE, corpus_size=corpus_size)
         refusal = neg8_corpus(window, failed, **kwargs)
         window.harvest()
         return window, json.loads((window.archive / "derived" / "neg8-bound.json").read_bytes()), refusal
 
     def test_twelve_members_derive_against_the_committed_corpus(self):
-        window, check, _refusal = self.harvest_neg8("kept12")
+        """Keep the historical 12-member reader route explicitly."""
+        window, check, _refusal = self.harvest_neg8("kept12", corpus_size=12)
         self.assertNotIn("neg8.bound_not_derived", window.codes())
         self.assertEqual((check["derived_from"], check["problems"]), ("registered_corpus", []))
 
+    def test_eighteen_members_derive_against_the_collected_corpus(self):
+        window, check, refusal = self.harvest_neg8("kept18")
+        self.assertIsNone(refusal)
+        self.assertIsNone(whole_window.load_neg8_drift_bound_artifact(window.bound / "neg8-drift-bound.json"))
+        self.assertNotIn("neg8.bound_not_derived", window.codes())
+        self.assertEqual((check["derived_from"], check["members_committed"], check["members_collected"],
+                          check["problems"]), ("collected_subset", 18, 18, []))
+
     def test_eleven_and_ten_members_are_derived_from_the_custodied_collected_manifest(self):
         """Before the fix both ended neg8.bound_not_derived: the core reader authenticates only the 12."""
-        for failed in ([CORPUS_IDS[4]], [CORPUS_IDS[0], CORPUS_IDS[11]]):
-            kept = 12 - len(failed)
+        for failed in ([CORPUS_IDS[4], *CORPUS_IDS[12:]],
+                       [CORPUS_IDS[0], CORPUS_IDS[11], *CORPUS_IDS[12:]]):
+            kept = 18 - len(failed)
             with self.subTest(kept=kept):
                 window, check, refusal = self.harvest_neg8(f"kept{kept}", failed)
                 self.assertIsNone(refusal)
@@ -1623,22 +1660,22 @@ class Neg8BoundTests(WindowTestCase):
                 self.assertIsNone(whole_window.load_neg8_drift_bound_artifact(window.bound / "neg8-drift-bound.json"))
                 self.assertEqual(check["derived_from"], "collected_subset", check["problems"])
                 self.assertEqual((check["members_committed"], check["members_collected"], check["dropped_bundle_ids"],
-                                  check["problems"]), (12, kept, failed, []))
+                                  check["problems"]), (18, kept, failed, []))
                 self.assertNotIn("neg8.bound_not_derived", window.codes())
                 self.assertNotIn("neg8.bound_not_derived", window.exclusions()["reasons"])
                 self.assertEqual(check["collected_manifest"]["sha256"], sha(
                     window.custody / "night" / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST))
 
     def test_nine_members_are_not_derived(self):
-        window, check, refusal = self.harvest_neg8("kept9", CORPUS_IDS[:3])
+        window, check, refusal = self.harvest_neg8("kept9", CORPUS_IDS[:9])
         self.assertIn("requires n >= 10", refusal)  # the chain's derivation stage writes no bound
         flag = next(flag for flag in window.flags() if flag["code"] == "neg8.bound_not_derived")
         self.assertEqual(flag["observed"]["problems"], ["bound_artifact_absent"])
         self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
         # A bound left from an earlier 10-member derivation does not cover a 9-member collection.
         stale = Window(self.tmp / "stale", catalog_overrides=self.ISOLATE)
-        self.assertIsNone(neg8_corpus(stale, CORPUS_IDS[:2]))
-        neg8_corpus(stale, CORPUS_IDS[:3], derive=False)
+        self.assertIsNone(neg8_corpus(stale, CORPUS_IDS[:8]))
+        neg8_corpus(stale, CORPUS_IDS[:9], derive=False)
         stale.harvest()
         check = json.loads((stale.archive / "derived" / "neg8-bound.json").read_bytes())
         self.assertEqual((check["derived_from"], check["members_collected"]), (None, 9))
@@ -1711,8 +1748,8 @@ class Neg8BoundTests(WindowTestCase):
     def test_bound_minted_from_another_manifest_is_not_derived(self):
         """The bound must bind to the window's own collected manifest, not just to some valid subset.
 
-        The window collected 11 members; the bound beside it was minted from a
-        10-member manifest that also leaves out a member that succeeded (a
+        The window collected 17 members; the bound beside it was minted from a
+        16-member manifest that also leaves out a member that succeeded (a
         selected, tighter corpus).  Its arithmetic validates; only the corpus
         identity check against the custodied collected bytes refuses it.
         """
@@ -1728,7 +1765,7 @@ class Neg8BoundTests(WindowTestCase):
         window.harvest()
         check = json.loads((window.archive / "derived" / "neg8-bound.json").read_bytes())
         self.assertIsNone(check["derived_from"])
-        self.assertEqual(check["members_collected"], 11)
+        self.assertEqual(check["members_collected"], 17)
         self.assertIn("bound_does_not_validate_against_collected_corpus", check["problems"])
         self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
 
@@ -1823,7 +1860,7 @@ class Neg8ScreenTests(WindowTestCase):
         """The writer read no bound; a re-evaluation that cannot run leaves the screen failed.
 
         This stored row names no source manifests and no evaluation time, so
-        the screen cannot be re-derived against the 11-member bound
+        the screen cannot be re-derived against the 17-member bound
         (Neg8RescreenTests covers rows it can).
         """
         window = self.window()
@@ -2015,9 +2052,10 @@ class Neg8RescreenTests(WindowTestCase):
 
     def test_a_screen_that_passes_against_the_collected_bound_keeps_the_window(self):
         """Before the fix both windows were removed by neg8.screen_failed, whatever their drift."""
-        for failed in ([CORPUS_IDS[4]], [CORPUS_IDS[0], CORPUS_IDS[11]]):
-            with self.subTest(kept=12 - len(failed)):
-                window, rescreen = self.harvest(f"pass{12 - len(failed)}", failed, drift=0.5)
+        for failed in ([CORPUS_IDS[4], *CORPUS_IDS[12:]],
+                       [CORPUS_IDS[0], CORPUS_IDS[11], *CORPUS_IDS[12:]]):
+            with self.subTest(kept=18 - len(failed)):
+                window, rescreen = self.harvest(f"pass{18 - len(failed)}", failed, drift=0.5)
                 self.assertEqual((rescreen["evaluated"], rescreen["decision"], rescreen["conditions"],
                                   rescreen["problems"], rescreen["freshness"]["decision"]),
                                  (True, "passed", [], [], "fresh"))
@@ -2077,7 +2115,9 @@ class Neg8RescreenTests(WindowTestCase):
         derived = screen + (window.archive / "derived" / "flags.jsonl").read_text()
         for value in (family["derived_repeatability_bound_j"], family["point_delta_j"], family["start"]["mean_j"],
                       family["end"]["mean_j"]):
-            self.assertNotIn(repr(value), derived)
+            # Match a whole numeric token, including one inside a string,
+            # without mistaking digits inside a longer wall timestamp for energy.
+            self.assertNotRegex(derived, r"(?<![\d.])" + re.escape(repr(value)) + r"(?!\d)")
         self.assertNotIn('_j"', screen)
         self.assertNotIn("_s\"", screen)  # nor the verdict's evaluation time
 
@@ -3395,8 +3435,8 @@ class RecordTests(unittest.TestCase):
         roster = h.build_roster(pack, ROOT)
         members = {row["run_id"]: row for row in roster["members"]}
         self.assertEqual(sum(row["kind"] == "science" for row in roster["members"]), 100)
-        # 19 corpus and reference members plus the 7 reference spares (NEG-8 ruling 2026-10-07).
-        self.assertEqual(sum(row["kind"] == "auxiliary" for row in roster["members"]), 26)
+        # 25 corpus and reference members plus the 7 reference spares (NEG-8 ruling 2026-10-07).
+        self.assertEqual(sum(row["kind"] == "auxiliary" for row in roster["members"]), 32)
         quad_member = members["d117fq31p7-df-cmp-abba-ph-decode-b01-a1"]
         self.assertIn({"unit_kind": "quad", "unit_id": "d117-df-cmp-abba-ph-decode-qwen3-1p7b-b01"},
                       [{key: cell[key] for key in ("unit_kind", "unit_id")} for cell in quad_member["cells"]])
@@ -3455,13 +3495,13 @@ class ExclusionSeamTests(unittest.TestCase):
             per_stratum[(cell_id, stratum)] = per_stratum.get((cell_id, stratum), 0) + 1
         self.assertEqual(per_stratum, {(family, stratum): 10 for family in families for stratum in ("quad", "repeat")})
         self.assertEqual({len(runs) for (_cell, stratum, _unit), runs in units.items() if stratum == "quad"}, {4})
-        # auxiliaries feed no cell: 19 corpus and reference members plus the 7 spares (NEG-8 ruling 2026-10-07)
-        self.assertEqual(sum(not member["units"] for member in document["members"]), 26)
+        # auxiliaries feed no cell: 25 corpus and reference members plus the 7 spares (NEG-8 ruling 2026-10-07)
+        self.assertEqual(sum(not member["units"] for member in document["members"]), 32)
         (first, *_rest) = spans.values()
         self.assertEqual(set(first), {"monotonic_ns", "request_monotonic_ns", "stage_id", "bundle_id"})
         self.assertEqual((document["plan_id"], document["attempt"], document["chain_started_monotonic_ns"]),
                          ("plan", 1, 50 * NS))
-        self.assertEqual(len(document["bundles"]), 126)  # this fixture gives every roster member, spares too, a bundle
+        self.assertEqual(len(document["bundles"]), 132)  # this fixture gives every roster member, spares too, a bundle
 
     def test_contrast_cells_are_quads_only(self):
         _roster, document, _spans = self.inputs(self.GAMMA)
@@ -4242,9 +4282,9 @@ class RehearsalRound1Tests(WindowTestCase):
                          {"gamma-interior-reference-decode-midpoint": "gamma-reference-decode-midpoint",
                           "neg8-window-midpoint": "gamma-reference-arm-boundary",
                           "gamma-interior-reference-prefill-midpoint": "gamma-reference-prefill-midpoint"})
-        self.assertEqual(sum(len(rows) for rows in dispatches.values()), 101)
+        self.assertEqual(sum(len(rows) for rows in dispatches.values()), 107)
         roster = h.build_roster(self.GAMMA, ROOT)
-        self.assertEqual(len(roster["members"]), 108)  # 101 launched by stages + 7 reference spares
+        self.assertEqual(len(roster["members"]), 114)  # 107 launched by stages + 7 reference spares
         self.assertEqual(roster["duplicate_listings"], {})
 
     def test_b6_untagged_auxiliary_bundles_are_not_lineage_findings(self):
@@ -5033,7 +5073,8 @@ def neg8_corpus_in_process(window: "Window", failed=()) -> dict:
     mint.  Returns the helper's summary; the bound and the driver's locator are written as the chain and
     the driver write them.
     """
-    for bundle_id in CORPUS_IDS:
+    committed = json.loads((window.measurement / CORPUS_RELATIVE).read_bytes())
+    for bundle_id in (member["bundle_id"] for member in committed["members"]):
         put_corpus_stub(window.bound / bundle_id, bundle_id, "failed" if bundle_id in failed else "succeeded")
     night = window.custody / "night"
     collected = night / "transcript" / b5_chain.NEG8_COLLECTED_MANIFEST
@@ -5060,19 +5101,20 @@ class Neg8MintDropTests(WindowTestCase):
     FAILED = CORPUS_IDS[0]
     DROP = [{"bundle_id": CORPUS_IDS[6], "reason": "not_current_strict_mint"}]
 
-    def corpus_window(self, name: str, *, hazard: bool = True, omit: bool = True) -> "Window":
-        """A window whose collected manifest left out FAILED and OMITTED, or, with ``omit=False``, all 12.
+    def corpus_window(self, name: str, *, hazard: bool = True, omit: bool = True, corpus_size=None) -> "Window":
+        """A window whose collected manifest left out FAILED and OMITTED, or, with ``omit=False``, all members.
 
         On a HAZARD root the chain's helper drops OMITTED because the (injected) mint drop rule names
         it; on any other root the helper never consults that rule, so the collected manifest is a
         corpus no rule selected (written as the selected input to the helper)."""
-        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE)
+        window = Window(self.tmp / name, catalog_overrides=self.ISOLATE, corpus_size=corpus_size)
         if hazard:
             LineageFindingTests.publish(self, window)
             self.assertTrue((window.bound / LineageFindingTests.LOCATOR).is_file())
             with hazard_member_gates(), mint_drops_patch(self.DROP if omit else []):
                 summary = neg8_corpus_in_process(window, [self.FAILED] if omit else [])
-            self.assertEqual(summary["members_kept"], 10 if omit else 12)
+            n = 12 if corpus_size == 12 else 18
+            self.assertEqual(summary["members_kept"], n - 2 if omit else n)
         elif omit:
             members = [member for member in COMMITTED_CORPUS["members"] if member["bundle_id"] != self.OMITTED]
             self.assertIsNone(neg8_corpus(window, [self.FAILED], manifest_members=members))
@@ -5146,22 +5188,23 @@ class Neg8MintDropTests(WindowTestCase):
             return ({**gross, "point_j": gross["point_j"] + 0.5} if path.name == shifted else gross), idle, problem
 
         energy = mock.patch.object(whole_window, "_reference_energy_evidence", side_effect=energy_differs)
-        for omit, derived in ((True, "collected_subset"), (False, "registered_corpus")):
+        for size, omit, derived in ((None, True, "collected_subset"), (None, False, "collected_subset"),
+                                   (12, False, "registered_corpus")):
             drops = self.DROP if omit else []
             with self.subTest(derived, tamper="energy"):
-                window = self.corpus_window(f"energy-{derived}", omit=omit)
+                window = self.corpus_window(f"energy-{derived}-{omit}", omit=omit, corpus_size=size)
                 check, _asked = self.harvest(window, drops, energy)
                 self.assertEqual((check["derived_from"], check["members_rederived"]), (None, False))
                 self.assertEqual(check["problems"], [f"bound_member_energy_differs:{shifted}"])
                 self.assertIn("neg8.bound_not_derived", window.exclusions()["reasons"])
             with self.subTest(derived, tamper="bytes"):
-                window = self.corpus_window(f"bytes-{derived}", omit=omit)
+                window = self.corpus_window(f"bytes-{derived}-{omit}", omit=omit, corpus_size=size)
                 put(window.bound / shifted / "metadata.json", {"run_id": shifted, "edited": True})
                 check, _asked = self.harvest(window, drops)
                 self.assertEqual(check["problems"], [f"bound_member_bytes_differ:{shifted}"])
                 self.assertIn("neg8.bound_not_derived", window.codes())
             with self.subTest(derived, tamper="calibration"):
-                window = self.corpus_window(f"calibration-{derived}", omit=omit)
+                window = self.corpus_window(f"calibration-{derived}-{omit}", omit=omit, corpus_size=size)
                 other = {**NEG8_FRESHNESS, "calibration_identity_sha256": "0" * 64}
                 fields = lambda metadata: dict(other if metadata.get("run_id") == shifted else NEG8_FRESHNESS)
                 check, _asked = self.harvest(
@@ -5171,7 +5214,7 @@ class Neg8MintDropTests(WindowTestCase):
                 self.assertEqual(check["problems"], [f"bound_member_calibration_differs:{shifted}"])
                 self.assertIsNone(check["derived_from"])
             with self.subTest(derived, tamper="lineage"):
-                window = self.corpus_window(f"lineage-{derived}", omit=omit)
+                window = self.corpus_window(f"lineage-{derived}-{omit}", omit=omit, corpus_size=size)
 
                 def lineage(path, **kwargs):
                     if Path(path).name == shifted:
@@ -5184,14 +5227,14 @@ class Neg8MintDropTests(WindowTestCase):
                 self.assertEqual(check["problems"], [f"bound_member_lineage_unauthenticated:{shifted}"])
                 self.assertIsNone(check["derived_from"])
             with self.subTest(derived, tamper="none"):
-                window = self.corpus_window(f"clean-{derived}", omit=omit)
+                window = self.corpus_window(f"clean-{derived}-{omit}", omit=omit, corpus_size=size)
                 check, _asked = self.harvest(window, drops)
                 self.assertEqual((check["derived_from"], check["members_rederived"], check["problems"]),
                                  (derived, True, []))
         # The check is the HAZARD bound's (it has no lineage stamp); a non-HAZARD root is unchanged.
         window = self.corpus_window("energy-not-hazard", hazard=False, omit=False)
         check, _asked = self.harvest(window, [], energy)
-        self.assertEqual((check["derived_from"], check.get("members_rederived")), ("registered_corpus", None))
+        self.assertEqual((check["derived_from"], check.get("members_rederived")), ("collected_subset", None))
 
 
 @unittest.skipUnless(hasattr(whole_window, "neg8_corpus_mint_drops"),
@@ -5214,7 +5257,7 @@ class Neg8MintIntegrationTests(WindowTestCase):
             summary = neg8_corpus_in_process(window)
         self.assertEqual(summary["dropped"], [{"bundle_id": self.OMITTED, "status": "succeeded",
                                                "mint_drop": "not_current_strict_mint"}])
-        self.assertEqual(summary["members_kept"], 11)
+        self.assertEqual(summary["members_kept"], 17)
         with hazard_member_gates(self.OMITTED):
             window.harvest()
         check = json.loads((window.archive / "derived" / "neg8-bound.json").read_bytes())
