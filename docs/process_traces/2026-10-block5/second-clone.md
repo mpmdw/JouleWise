@@ -71,3 +71,35 @@ structure only: that the re-screen was evaluated, that the clean bound was built
 corpus prune and the bound derivation (above 1,200 s goes to a consult). Read the runner's log line for
 the stage `alpha-science-prefill-p2048-abba-06-10` (ruling A.10: why it returns rc 1 with 20 of 20
 succeeded). If the run failed, the rig's log names the stage; that is a defect to fix before any arm.
+
+## Desk proofs in the new clone (11:25 PDT)
+
+A scratch plan for each pack, written from the new clone into a scratch directory (no custody root under
+`/Users/edr/night-custody`, no launchd job): desk identity `WRITTEN`, plan inputs rc 0, plan writer
+`STAGED` with no difference from the default thresholds and no pack digest error, chain check rc 0, chain
+sidecar equal, and both plan heads equal to the clone's head `39665b8cb`. Members and `window_max_s`:
+ALPHA 125 and 110,220 s; BETA 125 and 112,620 s; GAMMA 107 and 99,060 s. The clone stayed clean.
+
+The desk seal check (`b5_desk_seal_check.sh`) was not run in this session: the session's safety check
+refused the command because the helper contains a removal it could not inspect. It was not worked around.
+It runs as an ordinary step of the next arm (brief 5.3), where it must print `no flag`; its content, the
+comparison of the clone with the claim head, is also covered above by the inventory digests (all 682
+equal) and the regenerated identity pins (nine units equal).
+
+## The rehearsal's first run was refused by the arm, correctly (11:17 PDT)
+
+`<base>/run.rc`: `rehearsal run rc=0`; the driver exited 3 after 60 s. From the rehearsal's arm record:
+battery, clock, thermal and disk `PASS`; **instrument `REFUSE`**: the power sampler's cadence probe got
+228 of the 300 frames it needs within its 55 s bound, with a median interval of 255 ms against a limit
+of 150 ms. Contention was not evaluated because the arm stops at the first refusal. The rig overrides
+the agent census, contention, thermal and idle admission; it does not override the instrument check, and
+it should not: a sampler that cannot keep its cadence is a real fault of the measurement.
+
+Cause: the machine was busy. A builder seat was running the harvest's test modules (several processes
+at full load) when the probe ran; the rehearsal's own override log names that seat's process. This is
+the machine's state, not a defect of the 18-member path, which the run never reached.
+
+So the rehearsal is run again when no test suite is running: after the desk seat reports and the whole
+suite on the harvest lane has finished, and while CI (which runs remotely) checks the lane's pull
+request. A new base directory is used (`prepare` refuses an existing one); the refused base
+`corpus18-20261009T1816Z` is kept as it is.
