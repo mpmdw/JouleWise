@@ -78,19 +78,19 @@
   "packs": {
     "ALPHA": {
       "T_stream_max_s": 335,
-      "auxiliary_members": 19,
+      "auxiliary_members": 25,
       "breakdown": {
         "arm_countdowns_s": 0,
         "bound_derivation_s": 320,
         "corpus_prune_s": 320,
-        "corpus_retry_s": 8304,
-        "members_s": 70805,
+        "corpus_retry_s": 12336,
+        "members_s": 74375,
         "pack_t0_s": 0,
         "pre_post_calibration_s": 770,
-        "programmed_span_s": 98826,
+        "programmed_span_s": 106890,
         "reference_spare_retry_s": 5424,
         "settles_s": 660,
-        "stage_custody_s": 11863,
+        "stage_custody_s": 12325,
         "terminal_shutdown_s": 300,
         "window_calibration_verdict_s": 60
       },
@@ -114,17 +114,17 @@
         "pack_longest_stream_within_limit": true
       },
       "collection_stages": 10,
-      "members": 119,
+      "members": 125,
       "members_by_class": {
-        "small": 119
+        "small": 125
       },
       "pack_id": "d117_floor_qwen3-1p7b_v5",
       "pack_longest_stream_s": 314,
       "plan_tree": {
         "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json",
-        "sha256": "1d87a30955fa978d3a3a22dc0048720691e0128e4a3fe83477fc375d13dd031a"
+        "sha256": "2ec3625a31b796e3fa37e2c39f37508618b649d0d9f61ddbd3fdfe2c5a282809"
       },
-      "programmed_span_s": 98826,
+      "programmed_span_s": 106890,
       "science_members": 100,
       "stages": [
         {
@@ -140,14 +140,14 @@
         {
           "arm_countdown_s": 0,
           "classes": {
-            "small": 12
+            "small": 18
           },
           "kind": "campaign_collection",
-          "members": 12,
+          "members": 18,
           "neg8_corpus": true,
           "order_manifest": {
             "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
-            "sha256": "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f"
+            "sha256": "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f"
           },
           "ordinal": 3,
           "pack_arm_countdown_s": 20,
@@ -352,23 +352,23 @@
           "stage_id": "alpha-post-calibration"
         }
       ],
-      "window_max_s": 102180
+      "window_max_s": 110220
     },
     "BETA": {
       "T_stream_max_s": 335,
-      "auxiliary_members": 19,
+      "auxiliary_members": 25,
       "breakdown": {
         "arm_countdowns_s": 0,
         "bound_derivation_s": 320,
         "corpus_prune_s": 320,
-        "corpus_retry_s": 8304,
-        "members_s": 73205,
+        "corpus_retry_s": 12336,
+        "members_s": 76775,
         "pack_t0_s": 0,
         "pre_post_calibration_s": 770,
-        "programmed_span_s": 101226,
+        "programmed_span_s": 109290,
         "reference_spare_retry_s": 5424,
         "settles_s": 660,
-        "stage_custody_s": 11863,
+        "stage_custody_s": 12325,
         "terminal_shutdown_s": 300,
         "window_calibration_verdict_s": 60
       },
@@ -392,18 +392,18 @@
         "pack_longest_stream_within_limit": true
       },
       "collection_stages": 10,
-      "members": 119,
+      "members": 125,
       "members_by_class": {
         "large": 100,
-        "small": 19
+        "small": 25
       },
       "pack_id": "d117_floor_qwen3-8b_v5",
       "pack_longest_stream_s": 335,
       "plan_tree": {
         "path": "configs/campaigns/d117_floor_qwen3-8b_v5/plan_tree.json",
-        "sha256": "0cdb33836f4632827bc74be194e388450c53b3314db1c72d9e9904e625868670"
+        "sha256": "e77e4f6e74f663190d1acfe95c3e2499ec69c1b27ba9e3564c531affee980707"
       },
-      "programmed_span_s": 101226,
+      "programmed_span_s": 109290,
       "science_members": 100,
       "stages": [
         {
@@ -419,14 +419,14 @@
         {
           "arm_countdown_s": 0,
           "classes": {
-            "small": 12
+            "small": 18
           },
           "kind": "campaign_collection",
-          "members": 12,
+          "members": 18,
           "neg8_corpus": true,
           "order_manifest": {
             "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
-            "sha256": "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f"
+            "sha256": "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f"
           },
           "ordinal": 3,
           "pack_arm_countdown_s": 20,
@@ -631,23 +631,23 @@
           "stage_id": "beta-post-calibration"
         }
       ],
-      "window_max_s": 104580
+      "window_max_s": 112620
     },
     "GAMMA": {
       "T_stream_max_s": 335,
-      "auxiliary_members": 21,
+      "auxiliary_members": 27,
       "breakdown": {
         "arm_countdowns_s": 0,
         "bound_derivation_s": 320,
         "corpus_prune_s": 320,
-        "corpus_retry_s": 8304,
-        "members_s": 61055,
+        "corpus_retry_s": 12336,
+        "members_s": 64625,
         "pack_t0_s": 0,
         "pre_post_calibration_s": 770,
-        "programmed_span_s": 87690,
+        "programmed_span_s": 95754,
         "reference_spare_retry_s": 5424,
         "settles_s": 660,
-        "stage_custody_s": 10477,
+        "stage_custody_s": 10939,
         "terminal_shutdown_s": 300,
         "window_calibration_verdict_s": 60
       },
@@ -671,18 +671,18 @@
         "pack_longest_stream_within_limit": true
       },
       "collection_stages": 10,
-      "members": 101,
+      "members": 107,
       "members_by_class": {
         "large": 40,
-        "small": 61
+        "small": 67
       },
       "pack_id": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
       "pack_longest_stream_s": 335,
       "plan_tree": {
         "path": "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json",
-        "sha256": "8b1d1d7176f5ee2286038e91df6427e47476c3a4bdee45a1c24687d49d80e3bf"
+        "sha256": "da8028977dfe44b3bf1d13e79e7bfea2b1390aa985bef7faa891369c8e3985bc"
       },
-      "programmed_span_s": 87690,
+      "programmed_span_s": 95754,
       "science_members": 80,
       "stages": [
         {
@@ -698,14 +698,14 @@
         {
           "arm_countdown_s": 0,
           "classes": {
-            "small": 12
+            "small": 18
           },
           "kind": "campaign_collection",
-          "members": 12,
+          "members": 18,
           "neg8_corpus": true,
           "order_manifest": {
             "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
-            "sha256": "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f"
+            "sha256": "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f"
           },
           "ordinal": 3,
           "pack_arm_countdown_s": 20,
@@ -914,7 +914,7 @@
           "stage_id": "gamma-calibration-post"
         }
       ],
-      "window_max_s": 91020
+      "window_max_s": 99060
     }
   },
   "schema_version": "joulewise.b5_sizing.v1",

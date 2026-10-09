@@ -60,7 +60,10 @@ class V5PackRegenerationTests(unittest.TestCase):
         for directory in ("neg8_reference_corpus", "window_references"):
             historical = ROOT / "configs/campaigns" / directory
             prospective = historical.with_name(directory + "_v5")
-            self.assertEqual({p.relative_to(historical) for p in historical.rglob("*") if p.is_file()},
+            old_paths = {p.relative_to(historical) for p in historical.rglob("*") if p.is_file()}
+            extra = ({Path(f"neg8-refcorpus-r{i:02d}.json") for i in range(13, 19)}
+                     if directory == "neg8_reference_corpus" else set())
+            self.assertEqual(old_paths | extra,
                              {p.relative_to(prospective) for p in prospective.rglob("*") if p.is_file()})
             for path in historical.rglob("*"):
                 if not path.is_file() or path.name == "README.md":
@@ -71,9 +74,43 @@ class V5PackRegenerationTests(unittest.TestCase):
                     self.assertEqual(copy_raw, raw.replace(b'"idle_seconds": 30.0',
                                                           b'"idle_seconds": 57.6'))
                     count += 1
+                elif directory == "neg8_reference_corpus" and path.name in {"order_manifest.json", "settled_corpus.json"}:
+                    # Membership and labels change prospectively; the next test pins each change.
+                    continue
                 else:
                     self.assertEqual(copy_raw, raw)
         self.assertEqual(count, 19)
+
+    def test_corpus18_preserves_the_first_twelve_and_adds_six_identical_conditions(self):
+        historical = ROOT / "configs/campaigns/neg8_reference_corpus"
+        prospective = ROOT / "configs/campaigns/neg8_reference_corpus_v5"
+        order = json.loads((prospective / "order_manifest.json").read_bytes())
+        old_order = json.loads((historical / "order_manifest.json").read_bytes())
+        corpus = json.loads((prospective / "derivation/settled_corpus.json").read_bytes())
+        old_corpus = json.loads((historical / "derivation/settled_corpus.json").read_bytes())
+        ids = [f"neg8-refcorpus-r{i:02d}" for i in range(1, 19)]
+        corpus_id = "neg8-reference-corpus-m3max-qwen25-1p5b-v2-n18"
+        self.assertEqual((18, "neg8-reference-corpus-order-v2", corpus_id),
+                         (order["planned_n_bundles"], order["manifest_id"], order["plan_id"]))
+        self.assertEqual(order["executed_order"][:12], old_order["executed_order"])
+        self.assertEqual([row["run_id"] for row in order["executed_order"]], ids)
+        self.assertEqual(corpus["corpus_id"], corpus_id)
+        self.assertEqual(corpus["members"][:12], old_corpus["members"])
+        self.assertEqual(corpus["members"], [{"bundle_id": run_id, "bundle_path": run_id} for run_id in ids])
+        self.assertEqual({k: v for k, v in corpus.items() if k not in {"corpus_id", "members"}},
+                         {k: v for k, v in old_corpus.items() if k not in {"corpus_id", "members"}})
+        self.assertEqual({k: v for k, v in order.items() if k not in {"manifest_id", "plan_id", "planned_n_bundles", "executed_order"}},
+                         {k: v for k, v in old_order.items() if k not in {"manifest_id", "plan_id", "planned_n_bundles", "executed_order"}})
+        canonical = (prospective / "neg8-refcorpus-r01.json").read_bytes()
+        for i in range(13, 19):
+            row = order["executed_order"][i - 1]
+            expected = {**old_order["executed_order"][-1], "index": i, "rep": i, "block_index": i,
+                        "run_id": ids[i - 1], "config": f"{ids[i - 1]}.json"}
+            self.assertEqual(row, expected)
+            raw = (prospective / row["config"]).read_bytes()
+            self.assertEqual(len(raw), 1319)
+            self.assertEqual(raw, canonical.replace(b'"run_id": "neg8-refcorpus-r01"',
+                                                    f'"run_id": "{ids[i - 1]}"'.encode()))
 
     def test_v5_packs_pin_only_prospective_external_reference_roots(self):
         count = 0
@@ -126,11 +163,11 @@ class V5PackRegenerationTests(unittest.TestCase):
     def test_gamma_launches_no_run_id_twice_into_one_runs_root(self):
         """GAMMA-INTERIOR-REFERENCES-01 (lane L10): run_campaign skips a run id whose bundle exists."""
         _tree, rows = self.gamma_dispatches()
-        self.assertEqual(len(rows), 101)
+        self.assertEqual(len(rows), 107)
         pairs = [(root, run_id) for _stage, root, run_id, _role, _position in rows]
         self.assertEqual(len(set(pairs)), len(pairs),
                          [pair for pair in set(pairs) if pairs.count(pair) > 1])
-        self.assertEqual(len({run_id for _root, run_id in pairs}), 101)
+        self.assertEqual(len({run_id for _root, run_id in pairs}), 107)
 
     def test_gamma_has_one_neg8_midpoint_and_two_diagnostic_interior_references(self):
         """The whole-window NEG-8 screen accepts exactly 3 start + 1 midpoint + 3 end references."""

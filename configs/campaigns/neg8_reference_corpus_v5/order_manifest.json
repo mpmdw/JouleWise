@@ -1,9 +1,9 @@
 {
   "schema_version": "joulewise.order_manifest.v1",
-  "manifest_id": "neg8-reference-corpus-order-v1",
-  "plan_id": "neg8-reference-corpus-m3max-qwen25-1p5b-v1",
+  "manifest_id": "neg8-reference-corpus-order-v2",
+  "plan_id": "neg8-reference-corpus-m3max-qwen25-1p5b-v2-n18",
   "ordering_note": "Fixed sequential same-condition order; normal campaign admission and cooldown provide settling between independent members.",
-  "planned_n_bundles": 12,
+  "planned_n_bundles": 18,
   "executed_order": [
     {
       "index": 1,
@@ -135,6 +135,72 @@
       "workload": "df-rq-mid",
       "role": "neg8_reference_corpus_member",
       "block_index": 12,
+      "position_in_block": 1
+    },
+    {
+      "index": 13,
+      "config": "neg8-refcorpus-r13.json",
+      "run_id": "neg8-refcorpus-r13",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 13,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 13,
+      "position_in_block": 1
+    },
+    {
+      "index": 14,
+      "config": "neg8-refcorpus-r14.json",
+      "run_id": "neg8-refcorpus-r14",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 14,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 14,
+      "position_in_block": 1
+    },
+    {
+      "index": 15,
+      "config": "neg8-refcorpus-r15.json",
+      "run_id": "neg8-refcorpus-r15",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 15,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 15,
+      "position_in_block": 1
+    },
+    {
+      "index": 16,
+      "config": "neg8-refcorpus-r16.json",
+      "run_id": "neg8-refcorpus-r16",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 16,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 16,
+      "position_in_block": 1
+    },
+    {
+      "index": 17,
+      "config": "neg8-refcorpus-r17.json",
+      "run_id": "neg8-refcorpus-r17",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 17,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 17,
+      "position_in_block": 1
+    },
+    {
+      "index": 18,
+      "config": "neg8-refcorpus-r18.json",
+      "run_id": "neg8-refcorpus-r18",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 18,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 18,
       "position_in_block": 1
     }
   ]
