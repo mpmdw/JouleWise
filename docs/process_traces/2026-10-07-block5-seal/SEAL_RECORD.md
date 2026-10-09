@@ -371,6 +371,66 @@ block-5 plan id, and `/Users/edr/night-plan-staging` held 0 (both counted by the
 written for the rehearsals of 2026-10-06 are in the rehearsal archives under
 `/Users/edr/night-archive/gate-prune/rehearsal-*`; they are not claim windows and are not used.
 
+## Erratum 1: the second seal (written 2026-10-09, by a seat that has read no claim-window energy)
+
+**Why there is a second seal.** A seal fixes the bytes a window may read and the two documents that say what
+will be measured and how it will be analysed. The first seal's reference corpus (the short runs of one fixed
+small workload at the start of every window, from whose spread the drift bound is computed) had 12 members
+and needs 10. Both ALPHA windows that ran a chain lost it: one kept 10 at run time with no margin, the other
+kept 9. A prospective cold erratum, ruled on 2026-10-09 before any further arm, enlarges the committed corpus
+to 18 members. Because that changes files a window reads, registration section 7.5 supersedes the block: the
+three ALPHA attempts of the first seal are kept and disclosed and their energies are never analysed, and the
+block restarts at ALPHA attempt 1 under this seal. Sections 2 to 6 above describe the first seal and stand
+as its record.
+
+**The gate.** Papers in `docs/process_traces/2026-10-block5/`: the consult on ALPHA attempt 3 and its cold
+ruling (`alpha-a3-consult.md`, `alpha-a3-consult/RULING.md`); the erratum, its refutation, the cold ruling
+that admitted it with corrections, the corrections as applied, the seal-text edits and the text gate
+(`corpus18-erratum/ERRATUM.md`, `REFUTATION.md`, `RULING.md`, `CORRECTIONS-APPLIED.md`, `SEAL-TEXT-EDITS.md`,
+`TEXT-GATE.md`); the window-side build's gate record (`corpus18-erratum/pr492-gates.md`). Judge: Fable 5.1,
+cold. Refuter: Opus 5.5. Last line of the ruling: `ERRATUM: ADMIT-WITH-CORRECTIONS`.
+
+**The commits.**
+
+| Name | Commit | What it is |
+|---|---|---|
+| H_claim (second seal) | `c27485347c9629b857df81665b5b1b8d10dcd36a` | the merge of pull request #492; the last commit that changes a window input |
+| seal commit (second seal) | `be6525e5a6511adf882282e404e163e14dbb738b` | its only child; changes only the three seal documents |
+
+Against the first seal's H_claim `a64000884ef5bb4b76415835f02f39803f6eb620`, no file under `joulewise/` or
+`scripts/` differs at the new H_claim (`git diff --stat a64000884 c27485347 -- joulewise scripts` is empty).
+What differs under `configs/`: nine files of `configs/campaigns/neg8_reference_corpus_v5/`, one literal or a
+few in each of four pack generators, the three packs' `plan_tree.json` and `plan_tree.sha256`,
+`sizing_b5.json`, `identity_pins.json` (the three plan-tree digests only) and `configs/pins/registry.json`.
+
+**The sealed digests of the second seal** (each computed with `shasum -a 256` at the seal commit).
+
+| File | SHA-256 |
+|---|---|
+| `configs/campaigns/v5_claim_25g83/registration_block5.md` | `c7b3fdf78dde0a403bbc0b63262d1f8b1a697695bdeb2fb737a90cedde1ddb3f` |
+| `configs/campaigns/v5_claim_25g83/analysis_plan_block5.md` | `23ef67f56cc3cd2346e3ace87ec1d9390ef8b5727bd3bad169ea66d30a374859` |
+| `configs/campaigns/v5_claim_25g83/sealed_inventory.json` (682 files, generated from a clean checkout of H_claim) | `80852d98c13472e502411c2131d420b442fec2852350c3c520b2666a6826c4dc` |
+| `configs/campaigns/v5_claim_25g83/flag_catalog.json` (unchanged) | `5d77c725d4bf482bd667ca4c3a926e2f6471d55d196cd4b4addee435da01ee8d` |
+| `configs/campaigns/v5_claim_25g83/sizing_b5.json` | `a8e8d53036f08b5d6edc648ec77f01f75890ae904a817204600d6daac912cfad` |
+| `configs/campaigns/v5_claim_25g83/identity_pins.json` | `513d7d4a98f464c7236b34c53f51cd523a9f45b4d9f05f2282a4a22424b4841d` |
+| `configs/campaigns/neg8_reference_corpus_v5/order_manifest.json` (18 rows) | `9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f` |
+| `configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json` (18 members) | `c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304` |
+| ALPHA `plan_tree.json` (`d117_floor_qwen3-1p7b_v5`) | `2ec3625a31b796e3fa37e2c39f37508618b649d0d9f61ddbd3fdfe2c5a282809` |
+| BETA `plan_tree.json` (`d117_floor_qwen3-8b_v5`) | `e77e4f6e74f663190d1acfe95c3e2499ec69c1b27ba9e3564c531affee980707` |
+| GAMMA `plan_tree.json` (`d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5`) | `da8028977dfe44b3bf1d13e79e7bfea2b1390aa985bef7faa891369c8e3985bc` |
+| `configs/pins/registry.json` | `64930f7521d9b447269fd24e06531b735655a2163e3ac30f40791f35add6491a` |
+
+`python3.13 -m unittest tests.test_b5_seal_landing tests.test_digest_pin_census` passes at the seal commit
+(28 tests), and the sizer's and the identity-pin writer's check modes exit 0 there.
+
+**What is not yet done when this section is written,** and is recorded in later sections as it is done: the
+harvest program for the second seal (the desk rule that derives the deciding bound from the first 12 clean
+corpus members in committed order; branch `lane/2026-10-09-harvest-corpus-cap`) and its `B5-HARVEST-PIN`
+addendum; the second measurement clone; the 18-member rehearsal. Until a later addendum names a harvest pin
+built on this seal, no window of the second seal is harvested, and none is armed before the rehearsal has
+been harvested by that program (the erratum ruling's section D, gates 5 to 7). Addendum 1 below pins the
+harvest program of the first seal's three attempts and stays in force for them.
+
 ## Addendum 1: the harvest program (written 2026-10-08, by a seat that has read no claim-window energy)
 
 B5-HARVEST-PIN: 7e6158d669cbb6fb35761aee18abf363f07c5d36
