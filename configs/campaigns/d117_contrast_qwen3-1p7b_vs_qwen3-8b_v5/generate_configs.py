@@ -2362,7 +2362,7 @@ def build_stage_graph(stage_manifests: dict[str, dict[str, Any]]) -> list[dict[s
         (
             "gamma-bound-collection",
             "campaign_collection",
-            12,
+            18,
             {"kind": "external_input", "input_id": "neg8_bound_corpus"},
             [campaign_command("gamma-bound-collection", NEG8_MANIFEST_PATH.parent.as_posix(), "bound_runs_root")],
         )

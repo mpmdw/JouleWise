@@ -58,7 +58,7 @@ L1_DEFAULT_THRESHOLDS = {
               "skew_max_ns": 1000000, "step_ns": 1000000, "t_stream_max_s": 335},
     "contention": {"aggregate_cpu_limit_s_per_s": None, "cap_s": 2700, "clean_s": 600,
                    "cpu_limit_s_per_s": 0.05, "interval_s": 30, "window_interval_s": 10},
-    "disk": {"headroom_bytes": 21474836480, "low_bytes": 10737418240, "planned_bytes": 22710059008},
+    "disk": {"headroom_bytes": 21474836480, "low_bytes": 10737418240, "planned_bytes": 25190989824},
     "instrument": {"bound_s": 55.0, "frames": 300, "max_ms_max": 200.0, "median_ms_max": 150.0},
     "thermal": {"max_gap_s": 15, "max_level": 0},
 }

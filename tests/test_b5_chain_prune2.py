@@ -319,7 +319,7 @@ class VerdictWriterTests(unittest.TestCase):
 class DispatchResolverTests(unittest.TestCase):
     def test_floor_packs_resolve_every_stage_from_its_own_argv(self):
         """The floor packs carry input_ref null, so the harvest's old resolver saw no members at all."""
-        for pack, members in (("alpha", 119), ("beta", 119)):
+        for pack, members in (("alpha", 125), ("beta", 125)):
             with self.subTest(pack=pack):
                 self.assertTrue(all(row.get("input_ref") is None for row in tree(pack)["stage_graph"]))
                 dispatches = b5_plan.resolve_stage_dispatches(tree(pack), REPO_ROOT)
@@ -331,7 +331,7 @@ class DispatchResolverTests(unittest.TestCase):
                 self.assertIsNone(b5_plan.dispatch_refusal(dispatches))
                 corpus = dispatches[0]
                 self.assertEqual("configs/campaigns/neg8_reference_corpus_v5", corpus.config_dir)
-                self.assertEqual(tuple(f"neg8-refcorpus-r{index:02d}" for index in range(1, 13)), corpus.run_ids)
+                self.assertEqual(tuple(f"neg8-refcorpus-r{index:02d}" for index in range(1, 19)), corpus.run_ids)
 
     def test_gamma_launches_each_interior_reference_once_after_l10(self):
         # Before L10 the three GAMMA reference stages all launched
@@ -433,7 +433,7 @@ class DeskDispatchTests(unittest.TestCase):
         record = self.write("alpha")
         dispatches = record["stage_dispatches"]
         self.assertEqual(10, len(dispatches))
-        self.assertEqual(119, sum(len(row["run_ids"]) for row in dispatches))
+        self.assertEqual(125, sum(len(row["run_ids"]) for row in dispatches))
         self.assertEqual({"horizon_s": 86400, "post_reserve_s": 1430, "member_allowance_s": 620,
                           "stage_overhead_s": 180, "programmed_span_s": 3600, "margin_s": 86400 - 1430 - 3600,
                           "record": "$NIGHT_DIR/transcript/collection-deadline.json"},
@@ -654,7 +654,7 @@ class HorizonPassedTests(ChainFixture):
         # One flag, at the first skip (the fake checkout has no flags core, so it is in the log).
         flags = self.unwritten_flags()
         self.assertEqual(["roster.horizon_truncated"], [flag["code"] for flag in flags])
-        self.assertEqual(("alpha-bound-collection", 119), (flags[0]["observed"]["first_stage_skipped"],
+        self.assertEqual(("alpha-bound-collection", 125), (flags[0]["observed"]["first_stage_skipped"],
                                                            flags[0]["observed"]["members_not_launched"]))
         deadline = json.loads((self.night / "transcript" / b5_chain.COLLECTION_DEADLINE_RECORD).read_text())
         self.assertEqual(deadline["pre_capture_started_epoch_s"] - b5_chain.HORIZON_POST_RESERVE_S,
@@ -663,10 +663,10 @@ class HorizonPassedTests(ChainFixture):
 
 
 class HorizonMidChainTests(ChainFixture):
-    # Room for the corpus (12 members), the derivation, the start references and the
+    # Room for the corpus (18 members), the derivation, the start references and the
     # 10-member absolute stage, but not for a 20-member stage.
     horizon_s = property(lambda self: b5_chain.HORIZON_POST_RESERVE_S
-                         + 12 * b5_chain.HORIZON_MEMBER_ALLOWANCE_S + 240 + 600)
+                         + 18 * b5_chain.HORIZON_MEMBER_ALLOWANCE_S + 240 + 600)
 
     def test_the_first_stage_that_cannot_finish_ends_collection_even_for_later_small_stages(self):
         completed = self.run_chain()
@@ -795,7 +795,7 @@ class FlagHelperTests(unittest.TestCase):
 # Row 13: one corpus retry (no drain)
 # ---------------------------------------------------------------------------
 
-CORPUS = [f"neg8-refcorpus-r{index:02d}" for index in range(1, 13)]
+CORPUS = [f"neg8-refcorpus-r{index:02d}" for index in range(1, 19)]
 
 
 class CorpusRetrySnapshotTests(unittest.TestCase):
@@ -820,10 +820,10 @@ class CorpusRetrySnapshotTests(unittest.TestCase):
 
 
 class CorpusRetryTests(ChainFixture):
-    behavior = {"refuse_once_run_ids": CORPUS[2:5], "neg8_minimum_n": whole_window.NEG8_DRIFT_MINIMUM_N}
+    behavior = {"refuse_once_run_ids": CORPUS[2:11], "neg8_minimum_n": whole_window.NEG8_DRIFT_MINIMUM_N}
 
-    def test_three_pre_bundle_refusals_are_measured_by_one_retry_and_flagged(self):
-        """Before: 9 of 12 left the bound underived (neg8.bound_not_derived, the whole window excluded)."""
+    def test_nine_pre_bundle_refusals_are_measured_by_one_retry_and_flagged(self):
+        """Before: 9 of 18 left the bound underived (neg8.bound_not_derived, the whole window excluded)."""
         self.assertEqual(whole_window.NEG8_DRIFT_MINIMUM_N, b5_chain.NEG8_RETRY_MINIMUM)
         completed = self.run_chain()
         self.assertEqual(0, completed.returncode, completed.stderr)
@@ -837,22 +837,22 @@ class CorpusRetryTests(ChainFixture):
         corpus_calls = [call for call in fake_window.calls(self.measurement)
                         if call["tool"] == "collect" and call["config_dir"].endswith("neg8_reference_corpus_v5")]
         self.assertEqual(2, len(corpus_calls))
-        self.assertEqual(CORPUS[2:5], corpus_calls[0]["refused_before_bundle"])
-        self.assertEqual(CORPUS[2:5], corpus_calls[1]["attempted"])
+        self.assertEqual(CORPUS[2:11], corpus_calls[0]["refused_before_bundle"])
+        self.assertEqual(CORPUS[2:11], corpus_calls[1]["attempted"])
         # The retry re-ran the same stage argv into the same bound root.
         self.assertEqual(corpus_calls[0]["max_failures"], corpus_calls[1]["max_failures"])
         derive = next(call for call in fake_window.calls(self.measurement) if call["tool"] == "derive")
-        self.assertEqual((12, True), (derive["members"], derive["ok"]))
+        self.assertEqual((18, True), (derive["members"], derive["ok"]))
         snapshot = json.loads((self.night / "transcript" / b5_chain.NEG8_RETRY_SNAPSHOT).read_text())
         self.assertEqual(("retry", 9, 10), (snapshot["decision"], snapshot["succeeded"], snapshot["minimum"]))
         flags = self.unwritten_flags()
-        self.assertEqual([("member.retried", run_id) for run_id in CORPUS[2:5]],
+        self.assertEqual([("member.retried", run_id) for run_id in CORPUS[2:11]],
                          [(flag["code"], flag["run_id"]) for flag in flags])
         log = Path(self.plan.hazard_window["bindings"]["operator_log_root"]) / "03-alpha-bound-collection.retry.log"
         self.assertTrue(log.is_file())
 
     def test_the_retry_decision_counts_only_members_that_succeeded(self):
-        fake_window.set_behavior(self.measurement, {"refuse_once_run_ids": CORPUS[:2]})
+        fake_window.set_behavior(self.measurement, {"refuse_once_run_ids": CORPUS[:8]})
         completed = self.run_chain()
         self.assertEqual(0, completed.returncode, completed.stderr)
         ids = [row["stage_id"] for row in self.journal()]
@@ -863,7 +863,7 @@ class CorpusRetryTests(ChainFixture):
         self.assertEqual(10, derive["members"])
 
     def test_a_failed_bundle_is_never_re_measured_and_nothing_is_flagged(self):
-        fake_window.set_behavior(self.measurement, {"fail_run_ids": CORPUS[:3]})
+        fake_window.set_behavior(self.measurement, {"fail_run_ids": CORPUS[:9]})
         completed = self.run_chain()
         self.assertEqual(0, completed.returncode, completed.stderr)
         corpus_calls = [call for call in fake_window.calls(self.measurement)
@@ -872,7 +872,7 @@ class CorpusRetryTests(ChainFixture):
         self.assertEqual([], corpus_calls[1]["attempted"])
         self.assertEqual([], self.unwritten_flags())
         bound = Path(self.plan.hazard_window["runs_roots"]["bound"])
-        for run_id in CORPUS[:3]:
+        for run_id in CORPUS[:9]:
             self.assertEqual("failed", json.loads((bound / run_id / "summary_metrics.json").read_text())["status"])
         rows = {row["stage_id"]: row["rc"] for row in self.journal()}
         self.assertNotEqual(0, rows["alpha-bound-derivation"])

@@ -238,13 +238,13 @@ END_MANIFEST_REL = Path(
     "configs/campaigns/window_references_v5/end_triplet/order_manifest.json"
 )
 EXTERNAL_MANIFEST_SHAS = {
-    NEG8_MANIFEST_REL: "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f",
+    NEG8_MANIFEST_REL: "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f",
     START_MANIFEST_REL: "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0",
     MIDPOINT_MANIFEST_REL: "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21",
     END_MANIFEST_REL: "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67",
 }
 NEG8_SETTLED_SHA256 = (
-    "74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688"
+    "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
 )
 
 def freeze_aware_status(freeze_reference: object) -> str:
@@ -724,7 +724,7 @@ def projected_runtime_budget() -> dict[str, Any]:
         "margin_percent": 20,
         "margin_authority": "time_headroom_only_never_member_replacement",
         "science_count": 100,
-        "bound_count": 12,
+        "bound_count": 18,
         "reference_count": 7,
         "calibration_observation_count": 2,
     }
@@ -1815,7 +1815,7 @@ def stage_graph(
         {
             "stage_id": "alpha-bound-collection",
             "kind": "campaign_collection",
-            "expected_count": 12,
+            "expected_count": 18,
             "input": external_inputs["neg8_bound"]["manifest"],
             "launch": campaign_launch(
                 "alpha-bound-collection",

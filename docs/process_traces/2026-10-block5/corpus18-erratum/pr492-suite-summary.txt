@@ -1,0 +1,24 @@
+Whole suite on lane/2026-10-09-corpus18 at a5ae00c4623a2770ab1156b4b1bf3cba0aad761f (main 3f564499e is its ancestor, so the head is the merged tree).
+Method: the CI unit-test runner body on stdin, 6 shards in parallel, then the two exclusive modules; /opt/homebrew/bin/python3.13 -B; 2026-10-09.
+
+SHARD SUMMARY index=1/6 modules=65 tests=1415 failures=3 errors=0 skipped=4 result=FAIL
+SHARD SUMMARY index=2/6 modules=65 tests=1476 failures=0 errors=0 skipped=21 result=PASS
+SHARD SUMMARY index=3/6 modules=64 tests=1723 failures=1 errors=0 skipped=6 result=FAIL
+SHARD SUMMARY index=4/6 modules=65 tests=1836 failures=0 errors=1 skipped=11 result=FAIL
+SHARD SUMMARY index=5/6 modules=64 tests=1712 failures=0 errors=0 skipped=12 result=PASS
+SHARD SUMMARY index=6/6 modules=64 tests=1626 failures=0 errors=0 skipped=7 result=PASS
+
+Modules that failed inside the parallel run:
+MODULE FAIL tests.test_sample_quiet_predicate_evidence tests=96 failures=3 errors=0 skipped=0 seconds=36.882
+MODULE FAIL tests.test_v5_s1_qualification tests=23 failures=1 errors=0 skipped=0 seconds=51.563
+MODULE FAIL tests.test_harvest_b5_window tests=184 failures=0 errors=1 skipped=0 seconds=642.686
+
+The same modules run alone afterwards (wall-clock tests under load):
+tests.test_sample_quiet_predicate_evidence: Ran 96 tests in 30.558s  OK 
+tests.test_v5_s1_qualification: Ran 23 tests in 14.949s  OK 
+tests.test_harvest_b5_window.WorkerPoolTests: Ran 1 test in 6.988s  OK 
+
+tests.test_calibration_exits: Ran 48 tests in 483.088s  OK 
+tests.test_calibration_writer_crash_matrix: Ran 20 tests in 246.245s  OK 
+
+git status --porcelain after the run: 0 lines
