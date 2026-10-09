@@ -139,3 +139,54 @@ at the next login). The two refused bases are kept as they are.
 For later: any desk run of the rig, and any probe of the sampler, from a headless session has to go
 through a job of that process type. A consult that sees a slow sampler from a headless session should
 check this first.
+
+## The rehearsal's result (gate 7): passed (12:50 to 15:38 PDT)
+
+Base `/Users/edr/night-archive/gate-prune/rehearsal-real/corpus18-20261009T1949Z`. Structure only; the
+rehearsal is not a claim window and its numbers are discarded.
+
+**The run.** Driver exit 0 after 8,636 s; verdict `GO`; chain to its end, closing calibration done. Kept
+members 53, all 53 succeeded: corpus 18 of 18, start references 3 of 3, midpoint 1, end references 3 of
+3, the whole stage `alpha-science-prefill-p2048-abba-06-10` 20 of 20, and the rig's defaults elsewhere
+(the driver's yield status is `LOW` only because the rig keeps one to four members of the other science
+stages). The corpus stage needed no retry (`retry-decision` rc 0, no retry stage). Wall times: corpus
+collection 2,464 s; **corpus prune 373 s; bound derivation 372 s** (both rc 0; the chain's budget for each
+is 1,800 s and the ruling's consult line is 1,200 s; the sizer charges 320 s each, so a window runs about
+105 s longer than its sizing says, far inside the deadline's margin).
+
+**The harvest, by the pinned program** (`harvest_checkout.head`
+`224a264c5faaae90cdf56118df37e773a932700b`, `status_clean` true; archive `<base>/archive-pinned`; exit 0,
+about 21 minutes): verdict `COLLECTED`. The private clone's pin was advanced first (392 to 402 in its own
+ledger copy). The claim clone and the rig checkout stayed clean and the claim ledger is unchanged at 422
+rows.
+
+- In-window bound: derived from the collected subset (route 2), 18 members.
+- **Clean bound, by the cap rule:** 2 members dropped for physics (`contention.request_overlap`, the
+  first and the third in committed order; agent sessions were alive, which is what that flag measures);
+  of the 16 that remained, **the first 12 in committed order were kept** (`members_kept` 12) and **4 are
+  under `beyond_cap`** (the fifteenth to the eighteenth); `clean_bound_validated` true; no problem listed.
+- **Re-screen: evaluated, decision `passed`, no condition, no problem, freshness `fresh`;** the bound used
+  is `corpus_physics_clean`. (The stored in-window verdict reads `failed`, as the registration says it
+  does for every window of this seal; the re-screen decides.)
+- `claim_usable` false, for two reasons that belong to the rehearsal and not to the path: the shortened
+  roster (`cell.below_minimum`) and the rig's own inventory (`code.identity_unmeasured`).
+
+This is the first time the prune, the mint, route 2, the cap and the re-screen have run on ten or more
+real bundles. The expected count of the gate ("12 used, 6 beyond the cap") became 12 and 4 because two
+members were dropped for physics first; that is the rule working, by the lead's decision 4 in
+`corpus18-erratum/CORRECTIONS-APPLIED.md`.
+
+**The stage that returns rc 1 with every member succeeded (ruling A.10): explained.** In the rehearsal
+it was `alpha-science-abba-01-05` (4 kept, 4 succeeded, rc 1); the stage it happened in during both real
+chains returned rc 0 here. The runner's log for the stage shows the cause, in status words: one member
+exited 0 with summary status `succeeded` and passed strict validation, and carries a collection
+integrity flag for its clock anchor (the anchor fell back to its second method). The runner counts such
+a member as `failed` in its own tally and writes the stage's provisional verdict as `invalid`, which is
+the rc 1; the driver counts summary statuses, which is the "20 of 20". Nothing is lost or altered: the
+bundle is complete, and whether the member enters a claim is decided by the harvest's own member checks.
+So this is a difference of bookkeeping between two programs about a member with a clock-anchor flag, not
+a runner defect, and by the ruling it changes no file: it is recorded here, and the runner is left
+alone.
+
+Gates 4 to 7 of the ruling's section D are done. What remains is gate 8 (the checks before the arm) and
+the arm.
