@@ -1,0 +1,50 @@
+{
+  "arm_deadline_epoch_s": 1791500160.0,
+  "arm_error": null,
+  "arm_record": {
+    "path": "/Users/edr/night-custody/v5-b5-alpha-a1-20261008T2201Z/hazards/arm.json",
+    "sha256": "1afd638501d40e0a505724270b63875b85ab4ef2d3320de91e6faad4a84f63be"
+  },
+  "census": {
+    "argv": [
+      "/usr/bin/pgrep",
+      "-a",
+      "-lf",
+      "[c]odex|[c]laude"
+    ],
+    "clean": true,
+    "exit_code": 1,
+    "monotonic_ns": 1718429250101541,
+    "refusal": null,
+    "stderr": "pgrep exit 0; agent census: 1 listed process(es) ignored by executable identity or own tree: pid 50004 not_agent_executable executable=/opt/homebrew/Cellar/python@3.13/3.13.1/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python",
+    "stdout": ""
+  },
+  "collector_calls": 1,
+  "dry_arm": false,
+  "ended": {
+    "monotonic_ns": 1718653868927041,
+    "monotonic_raw_ns": 1718653868926458,
+    "wall_s": 1791497089.7873302
+  },
+  "go": true,
+  "go_after_t0_stage_cap": false,
+  "network_time_off_calls": 1,
+  "not_pass": [],
+  "plan_id": "v5-b5-alpha-a1-20261008T2201Z",
+  "reasons": [],
+  "schema": "joulewise.b5_arm_decision.v1",
+  "started": {
+    "monotonic_ns": 1718429272624833,
+    "monotonic_raw_ns": 1718429272624500,
+    "wall_s": 1791496865.1917388
+  },
+  "unmeasured": [],
+  "verdicts": {
+    "battery": "PASS",
+    "clock": "PASS",
+    "contention": "PASS",
+    "disk": "PASS",
+    "instrument": "PASS",
+    "thermal": "PASS"
+  }
+}

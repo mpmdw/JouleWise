@@ -1,0 +1,264 @@
+{
+  "anchor_before": {
+    "monotonic_raw_ns": 1738354497529020,
+    "read_skew_ns": 375,
+    "realtime_ns": 1791516790353549000
+  },
+  "argv": [
+    "/Users/edr/night-custody/measurement/JouleWise-measurement-20261008T0817Z-b5/scripts/g10_clock_step_control.py",
+    "--night-dir",
+    "/Users/edr/night-custody/v5-b5-alpha-a1-20261008T2201Z/night",
+    "--t-stream-max-s",
+    "335.0"
+  ],
+  "boot_session_uuid": "cd5b815a-df9b-4fc7-921a-8e97d8aba867",
+  "capture_check": {
+    "argv": [
+      "/bin/ps",
+      "-axww",
+      "-o",
+      "pid=,ppid=,command="
+    ],
+    "error": null,
+    "matches": []
+  },
+  "commands": [
+    {
+      "argv": [
+        "/usr/bin/sudo",
+        "-n",
+        "/usr/sbin/systemsetup",
+        "-setusingnetworktime",
+        "on"
+      ],
+      "error": null,
+      "finished": {
+        "monotonic_ns": 1738354545211416,
+        "monotonic_raw_ns": 1738354545212875,
+        "wall_s": 1791516790.40123
+      },
+      "name": "on",
+      "returncode": 0,
+      "started": {
+        "monotonic_ns": 1738354517742375,
+        "monotonic_raw_ns": 1738354517742708,
+        "wall_s": 1791516790.373761
+      },
+      "stderr": "2026-10-08 20:33:10.399 systemsetup[65359:455510256] ### Error:-99 File:/AppleInternal/Library/BuildRoots/4~CVSrugDU1y1BQluOAwbcrw5V7M6lsMeD-KfSuUA/Library/Caches/com.apple.xbs/TemporaryDirectory.4VW9ci/Sources/Admin/InternetServices.m Line:395\n",
+      "stdout": "setUsingNetworkTime: On\n",
+      "timed_out": false
+    },
+    {
+      "argv": [
+        "/usr/bin/sudo",
+        "-n",
+        "/usr/sbin/systemsetup",
+        "-setusingnetworktime",
+        "off"
+      ],
+      "attempt": 1,
+      "error": null,
+      "finished": {
+        "monotonic_ns": 1738414590961041,
+        "monotonic_raw_ns": 1738414590964833,
+        "wall_s": 1791516852.884387
+      },
+      "name": "off",
+      "returncode": 0,
+      "started": {
+        "monotonic_ns": 1738414521531833,
+        "monotonic_raw_ns": 1738414521534000,
+        "wall_s": 1791516852.814955
+      },
+      "stderr": "2026-10-08 20:34:12.882 systemsetup[65366:455510643] ### Error:-99 File:/AppleInternal/Library/BuildRoots/4~CVSrugDU1y1BQluOAwbcrw5V7M6lsMeD-KfSuUA/Library/Caches/com.apple.xbs/TemporaryDirectory.4VW9ci/Sources/Admin/InternetServices.m Line:395\n",
+      "stdout": "setUsingNetworkTime: Off\n",
+      "timed_out": false
+    }
+  ],
+  "deferred_signals": [],
+  "error": null,
+  "f0": {
+    "call_status": 0,
+    "errno": 0,
+    "modes": 0,
+    "ppm": -3.1675872802734375,
+    "raw_hex": "0000000000000000000000000000000019d5fcffffffffffeed803000000000020a107000000000081200000000000000000000000000000010000000000000020e9ef010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "raw_word": -207591,
+    "schema_version": "joulewise.kernel_frequency_probe.v1",
+    "timex_status": 8321
+  },
+  "f1": {
+    "call_status": 0,
+    "errno": 0,
+    "modes": 0,
+    "ppm": 2.7181396484375,
+    "raw_hex": "0000000000000000832d040000000000d8b7020000000000a8ab00000000000020a107000000000081200000000000000000000000000000010000000000000020e9ef010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "raw_word": 178136,
+    "schema_version": "joulewise.kernel_frequency_probe.v1",
+    "timex_status": 8321
+  },
+  "f_after_step": {
+    "call_status": 0,
+    "errno": 0,
+    "modes": 0,
+    "ppm": 2.7181396484375,
+    "raw_hex": "00000000000000008235bc0000000000d8b70200000000006c3800000000000020a107000000000081200000000000000000000000000000010000000000000020e9ef010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "raw_word": 178136,
+    "schema_version": "joulewise.kernel_frequency_probe.v1",
+    "timex_status": 8321
+  },
+  "finished": {
+    "monotonic_ns": 1738414591190875,
+    "monotonic_raw_ns": 1738414591191250,
+    "wall_s": 1791516852.8846169
+  },
+  "flag_code": "g10.discharged",
+  "interrupted": null,
+  "network_time_argv": {
+    "off": [
+      "/usr/bin/sudo",
+      "-n",
+      "/usr/sbin/systemsetup",
+      "-setusingnetworktime",
+      "off"
+    ],
+    "on": [
+      "/usr/bin/sudo",
+      "-n",
+      "/usr/sbin/systemsetup",
+      "-setusingnetworktime",
+      "on"
+    ]
+  },
+  "next_arm_frequency_gate": {
+    "bound_ms": 4.694326782226563,
+    "margin_ms": 0.3056732177734375,
+    "passes": true,
+    "t_stream_max_s": 335.0
+  },
+  "notes": [],
+  "off_ok": true,
+  "out_path": "/Users/edr/night-custody/v5-b5-alpha-a1-20261008T2201Z/night/g10.json",
+  "parameters": {
+    "anchor_read_attempts": 3,
+    "command_timeout_s": 60.0,
+    "off_attempts": 3,
+    "off_retry_delay_s": 5.0,
+    "poll_interval_s": 1.0,
+    "poll_timeout_s": 300.0,
+    "residual_limit_ns": 1000000,
+    "settle_max_s": 900.0,
+    "settle_min_s": 60.0,
+    "settle_read_interval_s": 60.0,
+    "settle_target_ppm": 3.0,
+    "skew_limit_ns": 1000000,
+    "step_threshold_ns": 5000000,
+    "t_stream_max_s": 335.0
+  },
+  "pid": 65354,
+  "result": "DISCHARGED",
+  "schema_version": "joulewise.g10_clock_step_control.v1",
+  "settling": {
+    "reads": [
+      {
+        "elapsed_since_on_s": 60.003457542,
+        "error": null,
+        "gate_passes": true,
+        "probe": {
+          "call_status": 0,
+          "errno": 0,
+          "modes": 0,
+          "ppm": 2.7181396484375,
+          "raw_hex": "0000000000000000832d040000000000d8b7020000000000a8ab00000000000020a107000000000081200000000000000000000000000000010000000000000020e9ef010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "raw_word": 178136,
+          "schema_version": "joulewise.kernel_frequency_probe.v1",
+          "timex_status": 8321
+        },
+        "within_target": true
+      }
+    ],
+    "stop_reason": "frequency_gate"
+  },
+  "started": {
+    "monotonic_ns": 1738354497417291,
+    "monotonic_raw_ns": 1738354497419791,
+    "wall_s": 1791516790.353436
+  },
+  "step": {
+    "after": {
+      "monotonic_raw_ns": 1738355527973895,
+      "read_skew_ns": 1709,
+      "realtime_ns": 1791516793809181000
+    },
+    "detected": true,
+    "elapsed_since_on_s": 1.010235729,
+    "residual_ns": 2425190389,
+    "threshold_ns": 5000000,
+    "trace_index": 0
+  },
+  "trace": [
+    {
+      "elapsed_since_on_s": 1.010235729,
+      "monotonic_raw_ns": 1738355527973895,
+      "read_skew_ns": 1709,
+      "realtime_ns": 1791516793809181000,
+      "residual_ns": 2425190389
+    }
+  ],
+  "verdict": {
+    "evaluator": "hazards.clock.judge/series",
+    "hazard_verdict": {
+      "module": "clock",
+      "observed": {
+        "anchor_movement_ns": 2425187125,
+        "frequency_gate": {
+          "bound_ms": 4.844891738891602,
+          "frequency_ppm": -3.1675872802734375,
+          "limit_ms": 5.0,
+          "max_abs_frequency_ppm": 3.6305970149253732,
+          "passes": true
+        },
+        "max_abs_residual_ns": 2425190389.024079,
+        "max_read_skew_ns": 1709,
+        "raw_span_ns": 1030444875,
+        "samples": 2
+      },
+      "reasons": [
+        "frequency word changed during the dwell: [-207591, 178136]",
+        "dwell residual +2425.1904 ms exceeds +-1.0 ms of its start value"
+      ],
+      "schema": "joulewise.hazard_verdict.v1",
+      "status": "REFUSE",
+      "thresholds": {
+        "frequency_margin_ppm": 0.25,
+        "h_ms": 3.7,
+        "limit_ms": 5.0,
+        "residual_max_ns": 1000000,
+        "skew_max_ns": 1000000,
+        "step_ns": 1000000,
+        "t_stream_max_s": 335.0
+      }
+    },
+    "reasons": [
+      "frequency word changed during the dwell: [-207591, 178136]",
+      "dwell residual +2425.1904 ms exceeds +-1.0 ms of its start value"
+    ],
+    "residual_limit_ns": 1000000,
+    "residual_ns": 2425190389.024079,
+    "step_seen": true,
+    "verdict": "REFUSE"
+  },
+  "verdict_cross_check": {
+    "evaluator": "g10-residual-pair/v1",
+    "f_after_raw_word": 178136,
+    "f_before_raw_word": -207591,
+    "reasons": [
+      "clock.residual_exceeds_limit",
+      "clock.frequency_changed"
+    ],
+    "residual_limit_ns": 1000000,
+    "residual_ns": 2425190389,
+    "span_ns": 1030444875,
+    "verdict": "REFUSE"
+  }
+}

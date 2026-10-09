@@ -1,0 +1,532 @@
+{
+  "aborted_reason": null,
+  "arm": {
+    "go": true,
+    "reasons": [],
+    "record_path": "/Users/edr/night-custody/v5-b5-alpha-a1-20261008T2201Z/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "PASS",
+      "contention": "PASS",
+      "disk": "PASS",
+      "instrument": "PASS",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "census_supervision": {
+    "consecutive_unmeasured": 0,
+    "journal_failures": 0,
+    "retried_probes": 0,
+    "unmeasured_censuses": 0
+  },
+  "chain": {
+    "exit_code": 0,
+    "matches_sidecar": true,
+    "sha256": "a58d8b336fc76aa79d59cec0983f1922b4b73230e9097b26b850f9352fa4735f",
+    "sidecar_sha256": "a58d8b336fc76aa79d59cec0983f1922b4b73230e9097b26b850f9352fa4735f",
+    "stages": [
+      {
+        "kind": "bracket_reservation",
+        "rc": 0,
+        "stage_id": "alpha-bracket-reservation"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "alpha-pre-calibration"
+      },
+      {
+        "kind": "pre_calibration_screen",
+        "rc": 0,
+        "stage_id": "alpha-pre-calibration.screen"
+      },
+      {
+        "kind": "window_calibration_verdict",
+        "rc": 0,
+        "stage_id": "alpha-pre-calibration.window-calibration-verdict"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 1,
+        "stage_id": "alpha-bound-collection"
+      },
+      {
+        "kind": "neg8_corpus_retry_decision",
+        "rc": 0,
+        "stage_id": "alpha-bound-collection.retry-decision"
+      },
+      {
+        "kind": "neg8_corpus_collected",
+        "rc": 0,
+        "stage_id": "alpha-bound-derivation.corpus"
+      },
+      {
+        "kind": "bound_derivation",
+        "rc": 0,
+        "stage_id": "alpha-bound-derivation"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-reference-start"
+      },
+      {
+        "kind": "neg8_spare_retry_decision",
+        "rc": 0,
+        "stage_id": "alpha-reference-start.spares-decision"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-science-absolute"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 1,
+        "stage_id": "alpha-science-abba-01-05"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-science-abba-06-10"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-reference-midpoint"
+      },
+      {
+        "kind": "neg8_spare_retry_decision",
+        "rc": 0,
+        "stage_id": "alpha-reference-midpoint.spares-decision"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 1,
+        "stage_id": "alpha-science-prefill-p2048-absolute"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 1,
+        "stage_id": "alpha-science-prefill-p2048-abba-01-05"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 1,
+        "stage_id": "alpha-science-prefill-p2048-abba-06-10"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-reference-end"
+      },
+      {
+        "kind": "neg8_spare_retry_decision",
+        "rc": 0,
+        "stage_id": "alpha-reference-end.spares-decision"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "alpha-post-calibration"
+      },
+      {
+        "kind": "session_status_record",
+        "rc": 0,
+        "stage_id": "alpha-post-calibration.session-status"
+      }
+    ],
+    "started": true,
+    "termination_proven": true
+  },
+  "diagnostics": [],
+  "disk_floor": {
+    "errors": [],
+    "low_bytes": 10737418240,
+    "stops": []
+  },
+  "ended": {
+    "monotonic_ns": 1738415398887375,
+    "monotonic_raw_ns": 1738415398886458,
+    "wall_s": 1791516853.69233
+  },
+  "faults": {
+    "bound_derivation_failed": false,
+    "post_bracket_failed": false,
+    "reasons": []
+  },
+  "final_census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "flags_emitted": [
+    "network_time.off_output"
+  ],
+  "g10": {
+    "argv": [
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261008T0817Z-b5/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261008T0817Z-b5/scripts/g10_clock_step_control.py",
+      "--night-dir",
+      "/Users/edr/night-custody/v5-b5-alpha-a1-20261008T2201Z/night",
+      "--t-stream-max-s",
+      "335.0"
+    ],
+    "ended": {
+      "monotonic_ns": 1738414608374250,
+      "monotonic_raw_ns": 1738414608372416,
+      "wall_s": 1791516852.9018009
+    },
+    "g10_record": {
+      "path": "/Users/edr/night-custody/v5-b5-alpha-a1-20261008T2201Z/night/g10.json",
+      "sha256": "028bffce1a3bfd861aee36966fdc290c4c91e251715447ee850cd4d691b62807"
+    },
+    "ran": true,
+    "result": "DISCHARGED",
+    "returncode": 0,
+    "schema": "joulewise.b5_g10_driver.v1",
+    "started": {
+      "monotonic_ns": 1738354431907375,
+      "monotonic_raw_ns": 1738354431906916,
+      "wall_s": 1791516790.2879272
+    },
+    "supervision_passes": 12
+  },
+  "inventory": {
+    "errors": [],
+    "file_count": 438,
+    "head": "ab7b21e576a2d74f0b25d9a26b463d6934588368",
+    "path": "/Users/edr/night-custody/v5-b5-alpha-a1-20261008T2201Z/night/executed_inventory.json",
+    "sha256": "968189fd27b8f1c173f4a237d722ca7098ba19ee463c0cb67be4924e946d0713",
+    "status_clean": true
+  },
+  "lineage": {
+    "boot_changed": [],
+    "error": null,
+    "locators_valid": true,
+    "published": true
+  },
+  "meter": {
+    "argv": [
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261008T0817Z-b5/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261008T0817Z-b5/scripts/km003c_monitor.py",
+      "--out",
+      "/Users/edr/night-custody/v5-b5-alpha-a1-20261008T2201Z/hazards/meter/stream-001.jsonl"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "final_exit": null,
+    "gaps": [],
+    "journal": "meter_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 1738415109313875,
+        "monotonic_raw_ns": 1738415109313666,
+        "wall_s": 1791516853.402751
+      },
+      "returncode": 0,
+      "was_running": true
+    },
+    "streams": [
+      {
+        "path": "hazards/meter/stream-001.jsonl",
+        "sha256": "f7015689e105a2a3a0cd1f2b9a21b6e1e4d6b754b03c5178e48e670fced89cf6",
+        "status": "streaming"
+      }
+    ]
+  },
+  "monitor": {
+    "argv": [
+      "/usr/sbin/taskpolicy",
+      "-b",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261008T0817Z-b5/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261008T0817Z-b5/scripts/hazard_monitor.py",
+      "--config",
+      "/Users/edr/night-custody/v5-b5-alpha-a1-20261008T2201Z/hazards/monitor/config.json"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "gaps": [],
+    "journal": "monitor_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 1738414608846291,
+        "monotonic_raw_ns": 1738414608846250,
+        "wall_s": 1791516852.902273
+      },
+      "returncode": 0,
+      "was_running": true
+    }
+  },
+  "monitor_readiness": {
+    "attempts": [
+      {
+        "at": {
+          "monotonic_ns": 1718654016188375,
+          "monotonic_raw_ns": 1718654016188208,
+          "wall_s": 1791497089.934591
+        },
+        "attempt": 1,
+        "ready": true,
+        "started": true,
+        "status": {
+          "battery": true,
+          "contention": true,
+          "ready": true,
+          "session_start": true
+        },
+        "waited_s": 0.629
+      }
+    ],
+    "ready": true
+  },
+  "monitor_stop": {
+    "chain_returned": {
+      "monotonic_ns": 1738354402191875,
+      "monotonic_raw_ns": 1738354402191541,
+      "wall_s": 1791516790.258212
+    },
+    "hold_s": 5.0,
+    "monitor_stop_requested": {
+      "monotonic_ns": 1738414608846291,
+      "monotonic_raw_ns": 1738414608846250,
+      "wall_s": 1791516852.902273
+    },
+    "released": {
+      "monotonic_ns": 1738414608836458,
+      "monotonic_raw_ns": 1738414608836208,
+      "wall_s": 1791516852.902263
+    },
+    "released_after_chain_s": 60.207
+  },
+  "neg8_corpus": {
+    "collected_manifest": {
+      "path": "/Users/edr/night-custody/v5-b5-alpha-a1-20261008T2201Z/night/transcript/neg8-settled-corpus.collected.json",
+      "sha256": "0a83275da146a1c200e27d4c7ce7943dec7fc5495d4571e66a71257f181ff4df"
+    },
+    "committed_manifest": {
+      "path": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261008T0817Z-b5/configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+      "sha256": "74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688"
+    },
+    "errors": [],
+    "members_kept": 10,
+    "members_listed": 12,
+    "pruned": true,
+    "summary": {
+      "path": "/Users/edr/night-custody/v5-b5-alpha-a1-20261008T2201Z/night/transcript/neg8-settled-corpus.collected.summary.json",
+      "sha256": "ef2b510fa91b64c5efea2a6bb053c3444420a3f1c6695a86e06c7faea6b026c7"
+    }
+  },
+  "pack_id": "d117_floor_qwen3-1p7b_v5",
+  "plan_id": "v5-b5-alpha-a1-20261008T2201Z",
+  "receipt_class": "HAZARD_PACK",
+  "schema": "joulewise.b5_hazard_night.v1",
+  "stage_reached": "chain",
+  "started": {
+    "monotonic_ns": 1718429271773958,
+    "monotonic_raw_ns": 1718429271773458,
+    "wall_s": 1791496865.190888
+  },
+  "supervision_faults": {},
+  "verdict": "GO",
+  "yield": {
+    "bundles_present": 119,
+    "failed": 6,
+    "logged": 119,
+    "ok": 0,
+    "per_stage": [
+      {
+        "failed": 2,
+        "journaled": true,
+        "logged": 12,
+        "min_valid": 10,
+        "ok": 0,
+        "ordinal": 3,
+        "planned": 12,
+        "present": 12,
+        "rc": 1,
+        "role": "corpus",
+        "stage_id": "alpha-bound-collection",
+        "status": "OK",
+        "succeeded": 10
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 3,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 5,
+        "planned": 3,
+        "present": 3,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "alpha-reference-start",
+        "status": "OK",
+        "succeeded": 3
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 10,
+        "min_valid": 8,
+        "ok": 0,
+        "ordinal": 6,
+        "planned": 10,
+        "present": 10,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "alpha-science-absolute",
+        "status": "OK",
+        "succeeded": 10
+      },
+      {
+        "failed": 1,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 7,
+        "planned": 20,
+        "present": 20,
+        "rc": 1,
+        "role": "science",
+        "stage_id": "alpha-science-abba-01-05",
+        "status": "OK",
+        "succeeded": 19
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 8,
+        "planned": 20,
+        "present": 20,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "alpha-science-abba-06-10",
+        "status": "OK",
+        "succeeded": 20
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 0,
+        "ok": 0,
+        "ordinal": 9,
+        "planned": 1,
+        "present": 1,
+        "rc": 0,
+        "role": "reference_midpoint",
+        "stage_id": "alpha-reference-midpoint",
+        "status": "OK",
+        "succeeded": 1
+      },
+      {
+        "failed": 1,
+        "journaled": true,
+        "logged": 10,
+        "min_valid": 8,
+        "ok": 0,
+        "ordinal": 10,
+        "planned": 10,
+        "present": 10,
+        "rc": 1,
+        "role": "science",
+        "stage_id": "alpha-science-prefill-p2048-absolute",
+        "status": "OK",
+        "succeeded": 9
+      },
+      {
+        "failed": 1,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 11,
+        "planned": 20,
+        "present": 20,
+        "rc": 1,
+        "role": "science",
+        "stage_id": "alpha-science-prefill-p2048-abba-01-05",
+        "status": "OK",
+        "succeeded": 19
+      },
+      {
+        "failed": 1,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 12,
+        "planned": 20,
+        "present": 20,
+        "rc": 1,
+        "role": "science",
+        "stage_id": "alpha-science-prefill-p2048-abba-06-10",
+        "status": "OK",
+        "succeeded": 20
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 3,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 13,
+        "planned": 3,
+        "present": 3,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "alpha-reference-end",
+        "status": "OK",
+        "succeeded": 3
+      }
+    ],
+    "planned": 119,
+    "schema": "joulewise.b5_window_yield.v1",
+    "succeeded": 114,
+    "yield_status": "PARTIAL"
+  },
+  "yield_plan": {
+    "planned": 119,
+    "source": [
+      "driver"
+    ],
+    "stages": 10
+  },
+  "yield_tripwire": {
+    "attempted_seen": 119,
+    "counted_in_settle": 9,
+    "errors": [],
+    "pre_bundle_runs_flagged": 0,
+    "stages_counted": 10,
+    "stalled": false
+  }
+}
