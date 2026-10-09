@@ -1,0 +1,53 @@
+{
+  "aborted_reason": "night_refused_hazard",
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "f31463a976ed2023ae3939a318026cfbb7ea292e67f6d3ad6d02b18c0deb8cc4"
+    },
+    {
+      "path": "night/refusal.json",
+      "sha256": "9b929d1f537ec16cd8a372bc355a944ce2503e9fc2e700662bcfeec1df73c152"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "ba77b3ac7e533c7f904bd2ccb99f04206fd46cafcd61e08a381bd8c133f6fac3"
+    },
+    {
+      "path": "night/hazard_result.json",
+      "sha256": "ff7ff5ab6e4412b42deb14cf8c4be64d8f975fe0e206eb7e546d2fdf4215879c"
+    },
+    {
+      "path": "night/arm_decision.json",
+      "sha256": "2abc73dc0bff4e4c5a045fd5d0e43604cf1e2e2ca7629bb490e0f78cec750d73"
+    },
+    {
+      "path": "night/network_time_off.action.json",
+      "sha256": "a0b05007ad59b7e7d36677c1d8d1359870f376d7377b0ff99c4f5973c3b40c33"
+    },
+    {
+      "path": "night/arm_collectors.json",
+      "sha256": "92cb49427dfda4642a247681009ebafd5ddeac9b0d065dfec3da484cb4a1f97a"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 0,
+  "census_hits": [],
+  "chain_exit_code": null,
+  "chain_sha256": null,
+  "ended_epoch_s": 1791525650.519711,
+  "ended_monotonic_ns": 1747212202096541,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "plan_id": "v5-b5-alpha-a2-20261009T0515Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal_documents": [
+    "night/refusal.json"
+  ],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1791522905.531667,
+  "started_monotonic_ns": 1744467221513875,
+  "verdict": "REFUSED"
+}

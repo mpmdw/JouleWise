@@ -1,0 +1,24 @@
+{
+  "plan_id": "v5-b5-alpha-a2-20261009T0515Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal": {
+    "detail": "hazard arm did not return GO; non-PASS: contention=REFUSE; contention REFUSE: no 180 s run of clean 30 s intervals within 2700 s; last dirty interval: fseventsd (pid 11523) at 0.996 CPU-s/s",
+    "evidence": {
+      "arm_decision": "night/arm_decision.json",
+      "reasons": [
+        "contention REFUSE: no 180 s run of clean 30 s intervals within 2700 s; last dirty interval: fseventsd (pid 11523) at 0.996 CPU-s/s"
+      ],
+      "verdicts": {
+        "battery": "PASS",
+        "clock": "PASS",
+        "contention": "REFUSE",
+        "disk": "PASS",
+        "instrument": "PASS",
+        "thermal": "PASS"
+      }
+    },
+    "reason": "night_refused_hazard"
+  },
+  "schema": "joulewise.night_refusal.v1",
+  "verdict": "REFUSED"
+}
