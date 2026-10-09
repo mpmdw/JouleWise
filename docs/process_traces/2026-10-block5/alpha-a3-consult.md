@@ -411,3 +411,35 @@ Next action, exactly:
    project's scratch, so until it is small (under 1,000 entries by `find /private/tmp -mindepth 1 | wc
    -l` and under 1 GiB) no window is armed whose span contains 00:00 local: with a span of about nine
    hours that means an arm between 00:10 and about 14:30 local.
+
+## Status (12:50 PDT): the harvest program has passed its gates; its pin is in a pull request; the rehearsal is running
+
+- Harvest program of the second seal: commit `224a264c5faaae90cdf56118df37e773a932700b` on branch
+  `lane/2026-10-09-harvest-corpus-cap`. Second cold Fable pass at that commit: `PASS-WITH-FINDINGS`, six
+  findings, all recording-only (`FABLE-desk-pass2.md`). Whole suite at that commit: every module passed
+  except two wall-clock tests that pass alone and `tests.test_repin`, which fails on the lane by
+  construction (the lane's `joulewise/whole_window.py` is not the sealed one). **The lane is therefore
+  not merged into main**, as the first harvest lane was not; only the addendum is.
+- Pull request #494 (branch `docs/2026-10-09-harvest-pin2`, worktree
+  `/Users/edr/code/JouleWise-wt-harvest-pin2`, documents only): Addendum 2 of the seal record with
+  `B5-HARVEST-PIN: 224a264c5faaae90cdf56118df37e773a932700b`, the gate record
+  (`corpus18-erratum/harvest-pin2-gates.md`) and the suite summary. Ledger filled; CI running.
+- The rehearsal was started again at 12:44 PDT on the quiet machine and passed its arm. Base:
+  `/Users/edr/night-archive/gate-prune/rehearsal-real/corpus18-20261009T1944Z` (`run.pid`, `run.rc`,
+  `rig.log`). It runs detached and survives the end of this session. Do not start a test suite or a
+  builder seat while it runs: the sampler-cadence check refused the first run under that load.
+
+Next action, exactly:
+1. `gh pr checks 494 --repo mpmdw/JouleWise`; when every check passes, `gh pr merge 494 --repo
+   mpmdw/JouleWise --merge`, then `git -C /Users/edr/code/JouleWise pull --ff-only` (no night job is
+   loaded, no plan is armed).
+2. Move the desk root to the pin and run the pin test:
+   `git -C /Users/edr/night-custody/desk/b5-harvest fetch --no-tags origin
+   lane/2026-10-09-harvest-corpus-cap && git -C /Users/edr/night-custody/desk/b5-harvest checkout -q
+   --detach 224a264c5faaae90cdf56118df37e773a932700b`; the test of brief 4.5 must print `HARVEST_PINNED`.
+3. When `<rehearsal base>/run.rc` reads `rehearsal run rc=0` and `rig.log` shows the driver exited 0:
+   the private pin advance and the rehearsal harvest by the pinned program, as section 5 of
+   `/Users/edr/night-archive/b5-consults/corpus18-build/sol-clone-consult.md` gives them; then read, by a
+   program that prints structure only, that the re-screen was evaluated and the clean bound was built by
+   the cap rule, and the wall times of the corpus prune and the bound derivation.
+4. Then gate 8 and the arm, as the 11:40 note above lists them.
