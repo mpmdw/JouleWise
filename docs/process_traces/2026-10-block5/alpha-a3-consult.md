@@ -303,3 +303,39 @@ seal commit, with the regenerated inventory, after the placeholders are filled.
 Next action: when the test-fix seat reports, commit and push the lane, run the whole suite again on the
 new head (`/Users/edr/night-archive/b5-consults/corpus18-build/suite-window-985d0722d/` holds the runner;
 make a new directory for the new head), wait for CI, fill the ledger of #492 and merge it.
+
+## Step 3, status (10:20 PDT): the window side has passed every gate but CI on its last head
+
+- Pull request #492, head `778e52b0db4822a17efd3d246f34faf56b51fae2`. Its ledger is filled. The gate record
+  and the suite summary are on the lane (`docs/process_traces/2026-10-block5/corpus18-erratum/pr492-gates.md`,
+  `pr492-suite-summary.txt`) with the dry-render record (`DRY-RENDER.md`, sha256 `7bb10119…f3c2`). The whole
+  suite on `a5ae00c46` passed except three wall-clock modules that pass alone. CI was green on
+  `a5ae00c46` apart from the ledger check; the two commits since add records only, and CI is running on
+  the new head.
+- Desk side, head `273fc48db` (pushed): cold Fable pass `PASS-WITH-FINDINGS` (`FABLE-desk-pass.md`); its
+  one major finding (a failure disclosure lost when the re-screen does not run) and its minor one (a
+  wrong count in a record after an order-check failure) are fixed by a Sol seat (`sol-desk-fix2.md`),
+  six modules green, 369 tests. Still owed on the desk side: merge the new seal commit into the lane, the
+  whole suite on that tree, a cold Fable pass on that tree (it covers the delta of the fix), the pin
+  addendum, the desk root moved.
+- Seal text: prepared on branch `seal/2026-10-09-corpus18-text` (`8ce450ad5`, pushed), record
+  `corpus18-erratum/SEAL-TEXT-EDITS.md`. The text gate (an Opus reader, one pass) is running on it and
+  writes `corpus18-erratum/TEXT-GATE.md`; it edits the two files in the worktree
+  `/Users/edr/code/JouleWise-wt-corpus18-seal` and commits nothing.
+
+Next action, exactly:
+1. `gh pr checks 492 --repo mpmdw/JouleWise`: when every check passes, `gh pr merge 492 --repo
+   mpmdw/JouleWise --merge`. The merge commit is the new claim head. (No night job is loaded and no plan
+   is armed.) Do not fast-forward the canonical root yet: the RUN_STATE hold stays as it is until the new
+   clone exists.
+2. The seal commit, as the merge commit's only child, on a branch cut from it: copy the two documents from
+   the seal-text worktree (after `TEXT-GATE.md` ends `TEXT GATE: PASS` and its edits are committed there),
+   fill `<NEW_H_CLAIM>` with the merge commit, `<SEAL_DATE>` with the date, `<REGISTRY_SHA256>` with
+   `shasum -a 256 configs/pins/registry.json` at the merge commit; generate the inventory from a clean
+   checkout of the merge commit (`/opt/homebrew/bin/python3.13 -B
+   docs/process_traces/2026-10-07-block5-seal/bench/make_sealed_inventory.py <checkout> <out.json>`);
+   commit the three files; `python3.13 -m unittest tests.test_b5_seal_landing` must pass; push it to
+   main as a fast-forward of the merge commit (the first seal did the same); add the new digests to the
+   seal record.
+3. Then the desk side's remaining gates, the new clone, the rehearsal and the pre-arm checks, as the
+   ruling's section D gates 5 to 8 list them.
