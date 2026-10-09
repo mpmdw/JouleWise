@@ -1,6 +1,6 @@
 # Analysis plan V5-CLAIM-25G83-B5: what is computed from the claim windows, and how
 
-Status: **Revision 12, 2026-10-07.** This file has its sealed bytes in the seal commit: the commit that follows the final head of the code (H_claim, registration §0.18) and carries the final text of this file and of the registration together with the filled `sealed_inventory.json` (registration §11). It is sealed when the seal record of registration §12, the document that lists the SHA-256 of every sealed file, exists and pins this file's SHA-256. (Revision 3 is commit `71c91d74`, revision 4 ends at commit
+Status: **Revision 12, 2026-10-07, amended on `<SEAL_DATE>` by the prospective cold erratum of 2026-10-09 (registration §14 Q16).** This file has its sealed bytes in the seal commit: the commit that follows the final head of the code (H_claim, registration §0.18) and carries the final text of this file and of the registration together with the filled `sealed_inventory.json` (registration §11). It is sealed when the seal record of registration §12, the document that lists the SHA-256 of every sealed file, exists and pins this file's SHA-256. (Revision 3 is commit `71c91d74`, revision 4 ends at commit
 `7261a585`, revision 5 at `9d63b4df`, revision 6 at `c6843537`, revision 7 at `dc046d4d`, revision 8 at `30d92227`,
 revision 9 at `bc8ad4ae`, revision 10 at `1d97f0a60`, revision 11 at `7c19c9c79`; the changes of revisions 4 to 12 are listed in §14.) Companion to
 `registration_block5.md` (the **registration**) and `flag_catalog.json` (the **flag catalog**) in the same directory;
@@ -506,6 +506,10 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
   pack: N (causes …)". Fixed sentence: "These numbers are conditional on a window
   that passed the registered physical-hazard checks at arm and kept at least 5 of 10 units per stratum after the
   registered exclusions; the kept units of each cell are printed beside it."
+  The windows of a block superseded under registration §7.5 are listed in the same history, separately from the
+  attempts of the block that replaced it, each with its verdict and cause. For block 5 these are the three ALPHA
+  attempts of the first seal, `v5-b5-alpha-a1-20261008T2201Z`, `v5-b5-alpha-a2-20261009T0515Z` and
+  `v5-b5-alpha-a3-20261009T0644Z` (registration §14 Q16). They are inputs to no number (§2.1).
   *A hazard not read at the arm.* *Forcing problem:* since audit finding A3 (registration §9.1; the rule is in
   registration §0.15 and §4.1) the arm refuses on an unread probe only for the instrument. When the arm's probe of
   the clock, battery, thermal, contention or disk hazard returns no reading (UNMEASURED), the arm records the flag
@@ -594,9 +598,14 @@ sensitivity lines (which use the released energies by rules fixed here), and pri
   energies after the release event. Per window, the count of members whose current was judged on the registry
   because the SMC did not cover them (`battery.smc_unavailable`), and of #421 pairs disclosed as discharge
   (`battery.capture_pair_assist`, `calibration.capture_battery_pair_assist`).
-- **Reference drift:** each window's NEG-8 screen result, allowance and corpus size (10, 11 or 12). For a corpus of 10
-  or 11, also disclose that the bound was validated against the collected members and that the harvest's re-screen,
-  not the stored verdict, decided the screen (registration §5.3; `derived/neg8-bound.json`, `derived/neg8-screen.json`).
+- **Reference drift:** each window's NEG-8 screen result, allowance and corpus size (10, 11 or 12: the number of corpus
+  members the deciding bound was built from, registration §5.3), printed beside the window's allowance, with the
+  number of corpus members that ran (18), the number the in-window bound rested on (10 to 18) and the members left
+  out by the desk cap, and, for each window, the number of corpus members left out by each reason (status, each mint
+  reason, each physics code, the cap). For every block-5 window, also disclose that the bound was validated against
+  the collected members and that the harvest's re-screen against the clean bound, not the stored verdict, decided
+  the screen (registration §5.3; `derived/neg8-bound.json`, `derived/neg8-screen.json`,
+  `derived/neg8-corpus-physics.json`).
   Also, from the flags and `derived/neg8-screen.json` (registration §0.12, §5.3): the realised reference counts
   (start, midpoint, end) against the planned (3, 1, 3), the bound's formula at those counts, each lost reference with
   its slot and reason (`neg8.reference_lost`), each spare measured with its slot (`member.retried`) and whether it
@@ -997,3 +1006,13 @@ summaries from which the first kind of B is read, by the orchestrator's ruling.
   seven lines above it (T-44 one, T-24 one, T-25 three, T-8 one, T-9 one); each is made up by joining two
   neighbouring lines of older text into one (in §2.2, §2.4 at two places, §4 step 2 and §5), and the paragraph
   "What would change it" of §2.4 is two lines shorter. The judge's lines keep the line breaks of the ruling file.
+
+**Amendment of `<SEAL_DATE>` (the prospective cold erratum of 2026-10-09; registration §14 Q16).** The NEG-8 corpus has
+18 members and the harvest builds the deciding bound from at most 12 of them (registration §5.3).
+
+- §8.1, reference drift: the corpus size printed is that of the deciding bound; the disclosure now applies to every
+  window, and it adds the members that ran, the members beyond the cap and the count of members left out by each
+  reason.
+- §8.1, attempt history: the three ALPHA attempts of the superseded first seal are listed separately.
+- No line above §6's sentence on R_cm changed its line number: the status line was changed inside the line, and the
+  other edits are below that sentence.
