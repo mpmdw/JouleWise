@@ -343,15 +343,17 @@ class G2bOneBlockChainTests(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             run_ids = result.stdout.splitlines()
-            self.assertEqual(len(run_ids), 23)
-            self.assertEqual(len(set(run_ids)), 23)
+            # 18 corpus members since the 2026-10-09 corpus erratum (12 before it), plus the
+            # 11 reference and science dispatches that erratum does not change.
+            self.assertEqual(len(run_ids), 29)
+            self.assertEqual(len(set(run_ids)), 29)
             self.assertEqual(sum("contrast-b01-" in run_id for run_id in run_ids), 4)
             self.assertEqual(sum("midpoint" in run_id for run_id in run_ids), 1)
             # G2-b's one midpoint dispatch is the shared NEG-8 midpoint reference, which GAMMA
             # runs at its arm boundary (lane L10).
             external = next(row for row in tree["external_inputs"]
                             if row["input_id"] == "midpoint_reference")
-            self.assertEqual(run_ids[19], external["members"][0]["run_id"])
+            self.assertEqual(run_ids[25], external["members"][0]["run_id"])
 
     @unittest.skipUnless(shutil.which("zsh"), "zsh required for generated chain")
     def test_first_stage_only_and_failure_propagation_with_errexit_disabled(self):

@@ -1,6 +1,7 @@
 # Registration V5-CLAIM-25G83-B5: the first claim-bearing `_v5` windows (measurement block 5)
 
-Status: **Revision 12, 2026-10-07.** This is the text that is committed at the seal, in the **seal commit**: the
+Status: **Revision 12, 2026-10-07, amended on `2026-10-09` by the prospective cold erratum of 2026-10-09 (§14 Q16: an
+18-member NEG-8 corpus, superseding the first seal).** This is the text that is committed at the seal, in the **seal commit**: the
 one commit made directly after the last commit that changes anything a window reads, carrying this file's final
 bytes (the list of companions below says why the seal needs a commit of its own). It is sealed when the
 **seal record** of §12, the file that lists the SHA-256 of every
@@ -84,9 +85,11 @@ after a chain of receipts verified, and discarded a whole window when one member
 **What changed in revision 4.** This revision brings the text into line with the integrated code (branch
 `feat/2026-10-05-gate-prune`, commit `f8164893`). No threshold changed except by the timing ruling of item 6.
 
-1. §5.3: each window starts with 12 reference runs, the NEG-8 corpus, from which a drift bound is derived (§0.12). A
-   window in which only 10 or 11 of them succeeded no longer loses that bound: the harvest validates the bound
-   against the members actually collected and re-screens the window against it (§14 Q1 closed).
+1. §5.3: each window starts with 18 reference runs, the NEG-8 corpus, from which a drift bound is derived (§0.12);
+   revision 4 wrote 12, and the erratum of 2026-10-09 made it 18 (§14 Q16). A window in which as few as 10 of them
+   succeeded no longer loses that bound: the harvest validates the bound against the members actually collected,
+   builds the deciding bound (the bound by which the screen and the allowance are judged) from at most 12 of them
+   (§5.3, "the desk cap") and re-screens the window against it (§14 Q1 closed).
 2. §4.6 item 3: the pins that fix which model files and runtime versions may be measured live in
    `identity_pins.json` in this directory, not in the packs' plan trees.
 3. §6.3, §6.5: the whole-window verdict (one pass/fail record over the whole window, §0.17) stays disclosed rather
@@ -377,7 +380,8 @@ said, in the form "(Revision 10 said …)".
    attempt's per-member time allowance would grow by "the sizing margin", with no erratum. No such margin is
    defined anywhere, and no program derives an allowance from an observed member. A larger allowance is now a cold
    erratum with a new sizing file, after a consult. §5.5 gives the reason the case is remote: the deadline is about
-   27 h, against a projected chain of 4.8 to 5.7 h.
+   29 h, against a projected chain of 5.1 to 5.9 h (about 27 h and 4.8 to 5.7 h before the erratum of 2026-10-09
+   gave the corpus 18 members, §14 Q16).
 3. **Places where the code does something other than the earlier registered design.** The orchestrator ruled that
    none of them puts a wrong number into a claim, removes clean data or breaks blinding, so the code stays for
    block 5 and the text now states it.
@@ -403,7 +407,7 @@ said, in the form "(Revision 10 said …)".
      as if it always read the members, and waits for that ruling.
    - §4.6 item 2: no program reads the triggers before an arm, but an observed trigger makes the harvest's
      evaluation of the bracket fail, which removes that window and every later one.
-   - §0.17: the bound runs root holds only the 12 NEG-8 corpus members and the bound; reference members are
+   - §0.17: the bound runs root holds only the 18 NEG-8 corpus members and the bound; reference members are
      written to the claim runs root.
    - §0.2: the statistic behind the sampler's record length is stated (the mean per member over its whole
      stream). §3: whether an attempt runs G10 (the clock-anchor positive control of §3) is a value the plan
@@ -752,8 +756,15 @@ The values in this section follow the cold-judge ruling on block-5 per-member ti
   `8b1d1d7176f5ee2286038e91df6427e47476c3a4bdee45a1c24687d49d80e3bf`, computed by this author with `shasum -a 256`
   at `fe28e5a0c`, equal to each pack's committed
   `plan_tree.sha256` there, with each pack's `generate_configs.py --check` exiting 0, and recorded in the sizing
-  output (§5.5); this author computed the same three values again at the int5 head `9395cecfb`. At H_claim the three
-  files hash to ALPHA `1d87a30955fa978d3a3a22dc0048720691e0128e4a3fe83477fc375d13dd031a`, BETA `0cdb33836f4632827bc74be194e388450c53b3314db1c72d9e9904e625868670` and GAMMA `8b1d1d7176f5ee2286038e91df6427e47476c3a4bdee45a1c24687d49d80e3bf`.
+  output of that head (§5.5); this author computed the same three values again at the int5 head `9395cecfb`, and the
+  three files had the same values at the first seal's H_claim, `a64000884ef5bb4b76415835f02f39803f6eb620`. The erratum
+  of 2026-10-09 gave the NEG-8 corpus 18 members (§14 Q16), which changed each plan tree's corpus stage and its pins
+  of the corpus files. At H_claim (§2, "Before ALPHA-1 arms", item 1) the three files hash to ALPHA
+  `2ec3625a31b796e3fa37e2c39f37508618b649d0d9f61ddbd3fdfe2c5a282809`, BETA
+  `e77e4f6e74f663190d1acfe95c3e2499ec69c1b27ba9e3564c531affee980707` and GAMMA
+  `da8028977dfe44b3bf1d13e79e7bfea2b1390aa985bef7faa891369c8e3985bc`, computed with `shasum -a 256` at H_claim, equal
+  to each pack's committed `plan_tree.sha256` there, with each pack's `generate_configs.py --check` exiting 0, and
+  recorded in the sizing output (§5.5).
   Earlier
   values: at the frozen head `a434e363d`, ALPHA `5218c270…` and BETA `5bab773a…` (as the timing lane `f4cf9047` left
   them) and GAMMA `fb51b4aa…` (after lane L10 gave its interior references distinct run ids, branch
@@ -973,7 +984,7 @@ the code", after "Who applies the loss test" below, says which two they are and 
 nevertheless judged by them.
 
 - **Reference member.** A member of one fixed reference workload (Qwen2.5-1.5B, 1024-token prompt, 256 output
-  tokens). Each window runs 12 at its start, the **NEG-8 corpus** (NEG-8 is an inherited label from the project's
+  tokens). Each window runs 18 at its start, the **NEG-8 corpus** (NEG-8 is an inherited label from the project's
   negative-control list; it is a name, not an abbreviation), then a **start triplet** (three reference members), one
   **midpoint reference**, and an **end triplet**. A **science member** is a member of a reported-cell or contrast
   stage (§0.8, §0.9), as opposed to a member of the reference workload. The midpoint reference runs at the
@@ -1408,7 +1419,7 @@ that member's unit (§6.3).
   `HAZARD_PACK`): plan id and attempt, the pack, the bracket session id, two freshly created runs roots (a runs
   root is the directory under which the runner writes member bundles, campaign manifests and the campaign log,
   §0.12: the **claim** root takes the science members and every reference member of the window, that is, the start
-  triplet, the interior references, the end triplet and any spares; the **bound** root takes the 12 NEG-8 corpus
+  triplet, the interior references, the end triplet and any spares; the **bound** root takes the 18 NEG-8 corpus
   members and the bound derived from them), the thresholds of §4.3, the window's sizing (§5.5), and whether G10
   runs at the tail (§3).
 - **Chain.** The zsh script the driver launches; it runs the pack's stages in order and writes `night/chain.started`
@@ -1647,8 +1658,12 @@ Each is evidenced by a path and SHA-256 before the point named.
 
 **Before ALPHA-1 arms:**
 
-1. H_claim is fixed (§0.18: the last commit that changes a window input). **H_claim is `a64000884ef5bb4b76415835f02f39803f6eb620`**, on
-   branch `integrate/2026-10-07-int5`. It carries PR #483 (the `_v5` qualification-code integration), lanes L1–L4,
+1. H_claim is fixed (§0.18: the last commit that changes a window input). **H_claim is `c27485347c9629b857df81665b5b1b8d10dcd36a`**: the merge
+   into main of the build that the erratum of 2026-10-09 ordered (§14 Q16; the 18-member corpus files, literals in the
+   four pack generators, the three regenerated plan trees, the sizing output, the identity pins and the pin registry). It contains
+   the first seal's H_claim, `a64000884ef5bb4b76415835f02f39803f6eb620`, and changes no file under `joulewise/` or
+   `scripts/`. The first seal's H_claim, on
+   branch `integrate/2026-10-07-int5`, carries PR #483 (the `_v5` qualification-code integration), lanes L1–L4,
    L7 and L8 of the gate-prune plan, the timing lane of 2026-10-06 (block-5 policy, idle records and settles; branch
    `lane/2026-10-06-timing-policy`), the core-prune lanes and gate-prune round 2 (integration head `b9d02700a`,
    branch `integrate/2026-10-06-gate-prune-3`), the P3 round (lanes `lane/2026-10-06-p3-{harv,haz,drv,wd}`) and
@@ -1786,7 +1801,16 @@ Each is evidenced by a path and SHA-256 before the point named.
    In each failed render the three reference stages that fail on purpose return 1 (the stand-in runner's member
    failures), which is why 22 of 25 stage rows return 0, and the driver still returns GO; the seven spares run as
    planned (start 1–3, midpoint 1, end 1–3). The counts equal those of the earlier render at `43ac12d0c`
-   (`dry-records/DRY_RECORDS.md`) number for number. *Stand-ins:* the agent census (a clean fake), the hazard arm (all
+   (`dry-records/DRY_RECORDS.md`) number for number. After the erratum of 2026-10-09 gave the corpus 18 members (§14
+   Q16), the chain of each pack was rendered again on the build branch whose merge is H_claim (at its commit
+   `a5ae00c46`, with the pack bytes that H_claim carries): `docs/process_traces/2026-10-block5/corpus18-erratum/DRY-RENDER.md`,
+   SHA-256 `7bb10119c923a36d76e6045926e01d9d4aa49191d0e82e38ab374b54ec98f3c2`. That check is narrower than the six
+   renders above. It renders the three chain scripts with scratch directory names and parses each with `zsh -n` (a
+   syntax check that runs nothing); it runs no stand-in window, so it repeats none of the table's counts. In each
+   pack the corpus stage's `expected_count` is 18, the stage's rendered runner command and its retry's both carry
+   `--max-failures 18`, and the script parses. Each rendered script still has two comment lines that say 12 (§10,
+   deviation 9).
+   *Stand-ins:* the agent census (a clean fake), the hazard arm (all
    six modules PASS), the network-time setter (a state file), the lineage publisher and verifier, the hazard monitor,
    the record-only collectors, the G10 program, the free-disk reading, the driver's two last steps (the **durable
    record**, a best-effort copy of the window's record files in `night/`, without the chain's logs, pushed to a
@@ -2237,14 +2261,15 @@ to the model; idle admission screens only the idle baseline before the request. 
 - *Measurement:* `statvfs` free bytes on the runs-root volume and each backup destination.
 - *Arm:* on every volume, free ≥ planned bytes × the copies planned on that volume + 20 GiB. Planned bytes are
   182 MiB per member (block 3 measured) × (the window's members + the 7 spares its reference stages can add at most,
-  §0.12; `joulewise/b5/plan.py`): 22.4 GiB for ALPHA and BETA (119 + 7 = 126 members), 19.2 GiB for GAMMA
-  (101 + 7 = 108). The driver plans one copy in the claim runs root and one in each of the two backup destinations
+  §0.12; `joulewise/b5/plan.py`): 23.5 GiB for ALPHA and BETA (125 + 7 = 132 members), 20.3 GiB for GAMMA
+  (107 + 7 = 114). The driver plans one copy in the claim runs root and one in each of the two backup destinations
   (§5.6); the bound runs root and the custody root need only the headroom (`joulewise/b5/driver.py`, disk targets).
   The harvest archive is an APFS clone (a copy that shares storage with its source until either is modified), so it
   adds no copy. Targets on one volume add their copies. The backup destinations are in iCloud Drive, whose local
   folder is on the same volume as the runs roots (one device number, read with `stat` on 2026-10-06). So three copies
-  land on that volume: 3 × 22.39 + 20 = 87.2 GiB required for ALPHA and BETA, and 3 × 19.20 + 20 = 77.6 GiB for
-  GAMMA, against 264 GiB free on 2026-10-05 (revision 6, before the spares: 83.5 and 73.9 GiB).
+  land on that volume: 3 × 23.46 + 20 = 90.4 GiB required for ALPHA and BETA, and 3 × 20.26 + 20 = 80.8 GiB for
+  GAMMA, against 212 GiB free on 2026-10-09 (`df -g`; with the first seal's 12-member corpus: 87.2 and 77.6 GiB;
+  revision 6, before the spares: 83.5 and 73.9 GiB).
 - *In window:* every 60 s; below 10 GiB the monitor journals `disk.low` and the driver stops the chain.
 
 **Instrument.** *Forcing problem:* a sampler running slower than its cadence (as the launchd context did on
@@ -2258,8 +2283,9 @@ to the model; idle admission screens only the idle baseline before the request. 
 
 The window plan copies this block verbatim into `hazard_window.thresholds`; the plan writer refuses a plan that
 lacks a key a hazard module reads. The two **sized** keys (`disk.planned_bytes`, `clock.t_stream_max_s`) are replaced
-by the window's own values (§5.5); the values shown are ALPHA's (`planned_bytes` = 126 × 182 MiB = 24,045,944,832
-bytes, the window's 119 members plus its 7 spares, computed by this author; revision 6 showed 119 × 182 MiB).
+by the window's own values (§5.5); the values shown are ALPHA's (`planned_bytes` = 132 × 182 MiB = 25,190,989,824
+bytes, the window's 125 members plus its 7 spares; the first seal, with a 12-member corpus, showed 126 × 182 MiB, and
+revision 6 showed 119 × 182 MiB).
 
 ```json
 {
@@ -2269,7 +2295,7 @@ bytes, the window's 119 members plus its 7 spares, computed by this author; revi
   "thermal":    {"max_level": 0, "max_gap_s": 15},
   "contention": {"cpu_limit_s_per_s": 0.05, "interval_s": 30, "clean_s": 180, "cap_s": 2700,
                  "window_interval_s": 10, "aggregate_cpu_limit_s_per_s": null},
-  "disk":       {"planned_bytes": 24045944832, "headroom_bytes": 21474836480, "low_bytes": 10737418240},
+  "disk":       {"planned_bytes": 25190989824, "headroom_bytes": 21474836480, "low_bytes": 10737418240},
   "instrument": {"frames": 300, "bound_s": 55.0, "median_ms_max": 150.0, "max_ms_max": 200.0}
 }
 ```
@@ -2520,7 +2546,10 @@ earlier night kinds (`joulewise/night_gate.py`, `joulewise/evidence_night.py`).
    `e769305d149c49ec2ec5b1ecca1be2c3a5152838a49d25d2b7d22b26d157891a`, configuration set
    `c8d759abd76ec820aba792db92bc4d539d262254c3ac58564a436cc8d0b0607c` (read by this author from the file). The
    science units are unchanged by it.
-   The file's SHA-256 at H_claim is `a0865895dc7eeb4ecea28c611b65fab9eee69d5e16f5f8126dbe08ac5255bda9`. At the int5 head `fe28e5a0c` it was
+   The file's SHA-256 at H_claim is `513d7d4a98f464c7236b34c53f51cd523a9f45b4d9f05f2282a4a22424b4841d` (`shasum -a 256`;
+   `scripts/write_b5_identity_pins.py --check` reproduces the file there, exit 0). The file records the three
+   plan-tree digests, which the erratum of 2026-10-09 changed (§14 Q16); no model or runtime pin in it changed. At the
+   first seal's H_claim and at the int5 head `fe28e5a0c` it was
    `a0865895dc7eeb4ecea28c611b65fab9eee69d5e16f5f8126dbe08ac5255bda9` (computed by this author with
    `shasum -a 256`; `scripts/write_b5_identity_pins.py --check` reproduced the file there, exit 0), and this author
    computed the same value again at the int5 head `9395cecfb`. (The file's own `status` and `sealed` fields are
@@ -2686,7 +2715,7 @@ spare-slot retry decision, which runs spares only when the stage lost members (�
   chain continues as after any failure of that stage. The post calibration capture has no budget: it must be allowed
   to finish, or the window loses its bracket.
 - **The collection deadline** (PLAN2 row 17; `chain.py` `CALIBRATION_HORIZON_S`, `HORIZON_*`). *Forcing problem:* a
-  bracket is fresh for 24 h from the pre calibration capture, and the window's deadline (§5.5, 28.4 h for ALPHA) is
+  bracket is fresh for 24 h from the pre calibration capture, and the window's deadline (§5.5, 30.6 h for ALPHA) is
   longer. A chain that overran past 24 h would lose its bracket, and with it the whole window, not just a tail. The
   deadline cannot simply be lowered: it is the driver's kill time, and a kill loses the post calibration.
   *Mechanism:* a collection stage, the corpus retry, a spare retry and the bound derivation launch only when now +
@@ -2702,16 +2731,21 @@ spare-slot retry decision, which runs spares only when the stage lost members (�
   (§5.5), so this fires only on a chain running more than twice its slowest expected length.
 - **One retry of the NEG-8 corpus** (PLAN2 row 13; `chain.py` `NEG8_RETRY_MINIMUM`). *Forcing problem:* a corpus
   with fewer than 10 succeeded members cannot give a bound, so the window is lost about 1 h into the chain while the
-  chain runs about 7 h more. *Mechanism:* when fewer than 10 of the 12 corpus members succeeded, the corpus stage runs
+  chain runs about 7 h more. *Mechanism:* when fewer than 10 of the 18 corpus members succeeded, the corpus stage runs
   once more into the same bound root, inside the collection deadline. The campaign runner skips a member whose bundle
   succeeded, refuses (never re-measures, never replaces) a member whose bundle exists and failed, and measures a
   member that has no bundle. So the retry recovers exactly the members refused before their bundle existed (a
-  blocked cooldown, a lineage read failure), never a member that was measured and failed. Each member it measures is
+  blocked cooldown, a lineage read failure), never a member that was measured and failed. An idle-admission abort
+  leaves a complete failed bundle, so the retry never repairs it. In the two chains that ran under the first seal
+  every corpus loss was of this kind and the retry measured nothing (§14 Q16). The retry is kept for the member
+  refused before its bundle exists. Each member it measures is
   recorded `member.retried` (DISCLOSE). There is no drain (no early jump to the end references): a window whose corpus
   still has fewer than 10 is removed by `neg8.bound_not_derived` and collects the rest as data. *Worked example:*
-  members 4, 5 and 6 are refused before their bundles exist and member 9 is aborted by idle admission (a failed
-  bundle), so 8 of 12 succeeded. The retry measures 4, 5 and 6, each flagged `member.retried`, and leaves 9 alone. If
-  all three succeed, 11 have succeeded and the bound is derived from those 11 (§5.3). The reference stages have
+  members 4 to 9 are refused before their bundles exist and members 11, 12 and 13 are aborted by idle admission
+  (failed bundles), so 9 of 18 succeeded. The retry measures 4 to 9, each flagged `member.retried`, and leaves 11, 12
+  and 13 alone. If all six succeed, 15 have succeeded: the chain derives its bound from those 15, and the harvest
+  builds the deciding bound from the first 12 of them, in committed order, on which no physics code fired (§5.3). The
+  reference stages have
   their own retry instead, one spare-slot retry per reference stage (§0.12): because the runner never re-measures a
   failed bundle, the reference retry runs pre-registered spares under their own run ids, which also recovers a
   reference that was measured and failed.
@@ -2749,30 +2783,72 @@ full strict validation on every bundle, and a failure is `member.strict_validati
 before. The runner's stage-end verdict row is labelled provisional, and its idle-admission summary
 `deferred_to_desk`: nothing in block 5 reads it. Saving: about 3,475 s plus 655 s per ALPHA window.
 
-### 5.3 The NEG-8 corpus may lose up to two members, for validity or for physics
+### 5.3 The NEG-8 corpus may lose up to eight members to status, validity or physics; one refused or indeterminate member still gives `neg8.bound_not_derived`
 
-A corpus member aborted by idle admission no longer aborts the window. **Registered rule:** the bound is derived
-from the corpus members that were collected and succeeded, provided there are at least 10 of the 12
-(`whole_window.NEG8_DRIFT_MINIMUM_N` = 10); t uses n − 1 degrees of freedom. With fewer than 10,
-`neg8.bound_not_derived` removes the window.
+A corpus member aborted by idle admission no longer aborts the window. **Registered rule** (as amended by the erratum
+of 2026-10-09, §14 Q16): the committed corpus has 18 members, `neg8-refcorpus-r01` to `-r18`, and every one of them
+runs in every window, in the committed order of the corpus's `order_manifest.json`; no program decides at run time
+whether a member runs. *In the window,* the chain derives a bound from the corpus members that were collected and
+succeeded, provided there are at least 10 of the 18 (`whole_window.NEG8_DRIFT_MINIMUM_N` = 10). That **in-window
+bound** rests on 10 to 18 members and decides nothing. *At the desk,* the harvest builds the bound that decides the
+screen and the allowance, the **clean bound**, from at most 12 of those members: the first 12, in the committed order,
+on which none of the six physics codes fired (the codes are listed under "A fourth source of omission" below), or all
+such members when only 10 or 11 remain ("the desk cap", below). So the n of
+§0.12 is 10, 11 or 12, and t uses n − 1 degrees of freedom. With fewer than 10, in the window or at the desk,
+`neg8.bound_not_derived` removes the window. The eight members that the corpus can lose are members that did not
+succeed, members the mint (the core function that builds the bound from the corpus bundles; "Which corpus members may
+be left out", below) omits for one of its five reasons, and members dropped for physics. A member that the mint
+refuses or cannot classify (below) is not among them: one such member leaves the window with no bound.
 
-*Why it matters.* At 1 abort in 37 members (the block 2 and 3 record), the chance that all 12 corpus members succeed
-is (36/37)¹² ≈ 0.72. A rule that needed all 12 would lose about 28% of windows to the corpus alone.
+*Why it matters.* The rule was first sized, for a corpus of 12, on 1 abort in 37 members (the block 2 and 3 record).
+At that rate all 12 succeed with chance (36/37)¹² ≈ 0.72, so a rule that needed all 12 would have lost about 28% of
+windows to the corpus alone, and the rule "10 of 12" about 0.4%. The two ALPHA chains that ran under the first seal
+showed a different rate for the corpus, which is the first collection stage of the window and runs in its first hour:
+
+| Stage kind | Attempt 1 | Attempt 3 | Both | Rate |
+|---|---|---|---|---|
+| NEG-8 corpus (12 planned) | 2 not succeeded | 3 not succeeded | 5 of 24 | 0.21 |
+| Science stages (100 planned) | 3 not succeeded | 0 not succeeded | 3 of 200 | 0.015 |
+| Registered planning figure | | | 1 of 37 | 0.027 |
+
+If each member is lost independently with probability p, the chance that at most k of n are lost is the sum over j =
+0..k of C(n, j) × p^j × (1 − p)^(n−j). A corpus of 12 keeps 10 when at most 2 are lost, a corpus of 18 when at most 8
+are lost:
+
+| Loss rate per member | 12 members, at most 2 lost | 12, at most 1 lost | 18 members, at most 8 lost | 18, at most 7 lost |
+|---|---|---|---|---|
+| 1/37 = 0.027 (registered figure) | 0.996 | 0.960 | 1.000 | 1.000 |
+| 0.10 | 0.889 | 0.659 | 1.000 | 1.000 |
+| 5/24 = 0.208 (observed, corpus) | 0.529 | 0.252 | 0.994 | 0.979 |
+| 0.25 | 0.391 | 0.158 | 0.981 | 0.943 |
+| 0.35 | 0.151 | 0.042 | 0.861 | 0.728 |
+
+The third and fifth columns allow one loss fewer: they show the chance that one member is still spare for the
+harvest's physics drop (below).
+These figures are a guide, not a guarantee, because losses are not independent: one sustained burst of outside load
+takes consecutive members (a member's two admission attempts span about 170 s, so a five-minute burst takes about
+two). In those terms a 12-member corpus survives one burst and an 18-member corpus about four (§14 Q16).
 
 *Implementation at `f8164893` (fix lane fx-harvest).* That lane changed the harvest only. It left the core module
 `joulewise/whole_window.py`, which builds, reads and screens the bound, as it was, so the core reader of item 2
-still knows only the full corpus. Three programs touch the bound, in this order:
+still knows only the full corpus it was written for (the historical 12-member one, item 2). Three programs touch the
+bound, in this order:
 
 1. **The chain** derives the bound from a window-local copy of the corpus manifest that lists only the collected
    members that succeeded. It records that copy's path and SHA-256 in the driver's terminal record
    (`night/hazard_result.json`, `neg8_corpus.collected_manifest`).
 2. **The production verdict writer**, which the harvest runs, reads the bound through the core's reader
    (`whole_window.load_neg8_drift_bound_artifact`, in that core module). That reader authenticates a bound only
-   against the committed 12-member manifest. It therefore treats a 10- or 11-member bound as absent, and the stored
+   against the historical 12-member manifest,
+   `configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json`. The block-5 corpus
+   (`configs/campaigns/neg8_reference_corpus_v5/`) has 18 members under its own id since the erratum of 2026-10-09,
+   so its manifest's bytes differ from that file's. The reader therefore treats every block-5 bound as absent,
+   whether the window lost a member or not, and the stored
    NEG-8 screen fails with exactly two conditions, `neg8_drift_bound_underived` and its idle-subtracted twin.
 3. **The harvest** decides both questions itself:
    - *Was the bound derived?* (`neg8_bound`) The bound must be accepted by one of two routes and must then pass a
-     member check. *Route 1:* the core reader accepts the bound. *Route 2:* otherwise the harvest reads the
+     member check. *Route 1:* the core reader accepts the bound. (Route 1 cannot occur in block 5 since the erratum
+     of 2026-10-09: item 2. Route 2 judges every window.) *Route 2:* otherwise the harvest reads the
      custodied collected manifest and requires all of the following: its bytes hash to the recorded SHA-256; its
      header equals the committed manifest's; its members are committed members, each once, in committed order; there
      are at least 10 of them; and every member it leaves out did not succeed (a succeeded member left out would be a
@@ -2810,13 +2886,14 @@ still knows only the full corpus. Three programs touch the bound, in this order:
    - *Did the screen pass?* The harvest re-screens the window (`_neg8_rescreen`) in three cases: (a) the stored
      screen's only NEG-8 conditions are the two bound-underived ones and the bound was derived from the collected
      subset; (b) a reference the verdict names is lost at harvest and the stored bracket did not drop it (§0.12,
-     "Lost references": it carries a loss flag, or its energy cannot be read, `energy_unreadable`, §6.5); (c) a
-     corpus member was dropped for physics and the bound re-derived (below). It re-derives the NEG-8 bracket with
+     "Lost references": it carries a loss flag, or its energy cannot be read, `energy_unreadable`, §6.5); (c) the
+     harvest built the clean bound (below), which since the erratum of 2026-10-09 it does on every window whose bound
+     was derived. It re-derives the NEG-8 bracket with
      the core's own **re-derivation**, the function that rebuilds a verdict's NEG-8 bracket from the reference
      bundles instead of trusting the stored row (`whole_window._derived_neg8_decision`). This is not the function
      that this file calls the evaluator, `whole_window.evaluate_neg8_point_drift` (§6.5, §9.1): the re-derivation
      reads the references and then calls the evaluator to screen them. It runs over the reference bundles the
-     verdict names, with the window's own validated bound (the physics-clean bound if there is one, else the
+     verdict names, with the window's own validated bound (the clean bound if there is one, else the
      collected-subset bound, else, in case (b) only, the stored bracket's). The time at which the bound's age is
      judged is a physical one ("The bound's age", below). The harvest hands the re-derivation the verdict's
      completion time (the verdict row's `evaluation_scope.completed_at`, else the row's time stamp), and on a
@@ -2845,8 +2922,23 @@ Structure (decisions, conditions, member counts, digests) goes to `derived/neg8-
 (`withheld/neg8-rescreen-bracket.json`). The stored verdict of such a window still reads "failed", which is
 `whole_window.not_passed`, disclosed only (§6.5).
 
-**Which corpus members may be left out of the bound: one closed list.** *Forcing problem:* the bound may rest on
-10 or 11 members, so something must decide which succeeded members are left out, and a loose rule would let a
+**Since the erratum of 2026-10-09 every block-5 window is judged this way** (§14 Q16), also a window that lost no
+corpus member: its stored verdict reads "failed", it carries `whole_window.not_passed` (disclosed only), and the
+harvest's re-screen against the clean bound decides its screen. Three things follow, and each was the registered
+behaviour for a 10- or 11-member bound before. First, a stored bracket that carries a NEG-8 condition other than the
+two bound-underived ones leaves the screen failed, as item 3 says of case (a), unless the window also has a loss: a
+reference newly lost at harvest (case (b)) or a corpus member dropped for physics (case (c) as it was sealed). With
+such a loss the re-screen decides in spite of the other condition, as sealed. That the harvest now builds the clean bound on every window, so
+that case (c) holds on every window too, does not change this, and neither does the desk cap: a clean bound built
+with no physics drop lifts no other NEG-8 condition. The harvest program pinned for these windows (§11 item 4) is
+tested on a stored bracket that carries another NEG-8 condition in a window with no loss, and the test must show the
+screen failed. Second, the allowance consumer (the core function that reads a window's drift allowance for a
+claim) checks a clean bound's arithmetic and digest against the harvest's record, not its corpus identity, which is
+the sealed behaviour now applied to every window. Third, lane L9-NEG8 part (c) (analysis plan §11) is a condition of
+every contrast, as it already was of every floor.
+
+**Which corpus members may be left out of the bound: one closed list.** *Forcing problem:* the in-window bound may rest on
+fewer members than ran (10 to 17 of the 18), so something must decide which succeeded members are left out, and a loose rule would let a
 corpus be *selected* (an inconvenient but valid member dropped). The **NEG-8 mint** is the core function that
 builds the bound from the corpus bundles (`whole_window._mint_hazard_neg8_drift_bound`, at `a434e363d`; "the mint"
 here and in §0). It gives each corpus member one of three verdicts:
@@ -2875,7 +2967,7 @@ bytes. The harvest accepts a left-out succeeded member only for one of the five 
 `neg8.bound_not_derived`. The harvest's accepted reasons are the mint's own set, imported, not copied
 (`harvest.py`: `from joulewise.whole_window import NEG8_MINT_DROP_REASONS as NEG8_ACCEPTED_DROP_REASONS`, at
 `a434e363d`), so the two cannot drift. *Worked example:* member 7 succeeded, but its fresh re-reduction differs from
-its stored summary (`reduction_mismatch`): it is omitted, the bound uses the other 11, and the harvest records
+its stored summary (`reduction_mismatch`): it is omitted, the in-window bound uses the other 17, and the harvest records
 `neg8.corpus_member_dropped` for it. Had member 7's reducer raised instead, it would be indeterminate and kept, and
 the mint would refuse.
 
@@ -2884,13 +2976,15 @@ the mint would refuse.
 instrument. Kept, it inflates the corpus's standard deviation and its envelope, which widens the bound and the
 allowance: a bias toward passing. The member-level physics codes of §6.4 are evaluated at harvest from the monitor
 journals, which the chain's mint cannot see when it derives the bound. *Mechanism*
-(`harvest.neg8_corpus_physics`, after the monitor joins): a corpus member of the validated bound on which a
+(`harvest.neg8_corpus_physics`, after the monitor joins; since the erratum of 2026-10-09 the step builds the clean
+bound on every window, whether or not a code fired): a corpus member of the validated bound on which a
 member-level physics exclusion of §6.4 fires (`contention.request_overlap`, `battery.member_span`,
 `battery.accumulator_excursion`, `thermal.os_level_nonzero`, `thermal.powermetrics_pressure_elevated`,
 `clock.step_overlap`) is **omitted** from the bound, because its energy is an observation of the disturbance. A corpus
 member whose physics is unmeasured is kept. The harvest records `neg8.corpus_member_dropped` for it
 (`observed.source` `harvest_physics`, `observed.reason` the first of those codes that fired), writes the bound's own
-manifest less those members to `derived/neg8-clean-corpus.json`, builds the bound from the clean members' recorded
+manifest less those members and less the members beyond the desk cap (next paragraph) to
+`derived/neg8-clean-corpus.json`, builds the bound from the kept members' recorded
 points with the core's own builder, and validates its arithmetic and corpus identity against those bytes, as the
 collected-subset path of item 3 does. A clean bound that validates goes to restricted custody
 (`withheld/neg8-clean-bound.json`), the screen is re-run against it, and the record of the drop is
@@ -2905,10 +2999,79 @@ whose physics is unmeasured is still kept, as above. The gate left the corpus's 
 difference for the design round of lane L9-NEG8, to be considered before GAMMA-1 arms: an unseen contender in a
 corpus member widens the corpus's standard deviation and envelope, and so the bound, which makes the screen easier
 to pass. (Revision 11 said the references and the corpus "share one eligibility rule" without this limit.)
-*Worked example (synthetic):* of 12 succeeded corpus members, member 3's request overlapped a
-process at 0.09 CPU-s/s (`contention.request_overlap`): the bound is re-derived from the other 11 with t(0.975, 10),
-and the screen is re-run against it. Had a second member also been flagged, the bound would rest on 10; had a third,
-on 9, and the window would carry `neg8.bound_not_derived`.
+*Worked example (synthetic):* all 18 corpus members succeeded, and member 3's request overlapped a process at 0.09
+CPU-s/s (`contention.request_overlap`): member 3 is omitted, 17 remain, and the clean bound is built from the first 12
+of them in committed order (members 1, 2 and 4 to 13) with t(0.975, 11); the screen is re-run against it. Had eight
+members been lost in all, to status, the mint's reasons and physics together, the clean bound would rest on the 10
+that remain, with t(0.975, 9); had nine been lost, 9 would remain and the window would carry `neg8.bound_not_derived`.
+
+**A fifth source of omission, and the only one by position: the desk cap** (erratum of 2026-10-09, §14 Q16; cold
+ruling `docs/process_traces/2026-10-block5/corpus18-erratum/RULING.md`, section B). *Forcing problem:* the corpus has
+18 members so that a window can lose eight of them and still have 10. But the bound's first term, the envelope
+(§0.12), is the mean of the three largest corpus energies minus the mean of the three smallest, and the extremes of a
+sample lie further out the larger the sample is. So a bound computed from all 18 would be larger than the bound this
+registration sealed with a 12-member corpus, the screen would be easier to pass, and by how much would depend on how
+many members each window happened to lose. For members drawn independently from one normal distribution with standard
+deviation σ (the cold judge's simulation, 100,000 corpora for each size; a "true shift" is a change of the
+instrument's reading between the start and the end triplet):
+
+| n kept | mean envelope | mean repeatability term | mean bound | a window with no drift fails the screen | a true shift of 2 σ fails | a true shift of 3 σ fails |
+|---|---|---|---|---|---|---|
+| 10 | 2.13 σ | 1.80 σ | 2.13 σ | 2.5% | 45% | 81% |
+| 12 | 2.36 σ | 1.76 σ | 2.36 σ | 1.4% | 36% | 75% |
+| 15 | 2.62 σ | 1.72 σ | 2.62 σ | 0.6% | 26% | 66% |
+| 18 | 2.83 σ | 1.70 σ | 2.83 σ | 0.3% | 20% | 58% |
+
+A drift inside the corpus itself widens the envelope further, and faster for a longer corpus: with a linear drift of
+0.1 σ per member the mean bound is 2.51 σ at 12 and 3.20 σ at 18. The allowance would compensate for validity, not for
+sharpness or comparability: with a bound from all 18 every claim would carry a floor about 20% higher, GAMMA's
+direction decision would be harder to reach, and the screen's level would differ between windows with different
+losses. The six extra members exist to absorb losses, not to change the bound.
+
+*Mechanism.* At the desk the harvest always builds the deciding bound, the **clean bound**, in `neg8_corpus_physics`
+after the monitor join, whether or not a physics code fired: (i) take the members of the validated in-window bound;
+(ii) order them by their position in the committed `order_manifest.json` (not by the artifact's own order); (iii)
+remove every member on which one of the six physics codes fired (`NEG8_PHYSICS_LOSS_CODES`); (iv) of the remainder
+keep the first 12 in that order, or all of them if fewer than 12 remain; (v) if fewer than 10 remain,
+`neg8.bound_not_derived` with `observed.source` `corpus_physics`, as now; (vi) build the clean bound from the kept
+members' recorded points with the core builder, validate it against the clean manifest bytes (the bound's manifest
+less the removed and the capped members), write `derived/neg8-clean-corpus.json`, `withheld/neg8-clean-bound.json` and
+`derived/neg8-corpus-physics.json` as now, with one new key in the last, `beyond_cap`, listing the bundle ids left out
+by step (iv), and `members_kept` the count after (iv). The screen re-runs against the clean bound and the allowance
+comes from it (`derived/neg8-screen.json` then records `bound_used` as `corpus_physics_clean`), as the sealed path
+already does for a physics drop.
+
+*What the cap is, and what it is not.* The cap at the first 12 clean members in committed order is the one accepted
+omission of the desk step, beside the mint's five reasons and the six physics codes. Members left out by step (iv) are
+not dropped for cause: no `neg8.corpus_member_dropped` flag is emitted for them, no catalog code is added, and their
+energies are used by nothing. They are disclosed after the release event with the window's corpus size (analysis plan
+§8.1). The chain's collected-manifest test (item 3 above) is unchanged, because the chain's manifest still lists every
+succeeded member. n is therefore 10, 11 or 12, as §0.12 says, with t = 2.262, 2.228 and 2.201 respectively (the
+table in `joulewise/aggregate.py` at 9, 10 and 11 degrees of freedom): 12 whenever at most six of the 18 are lost to status, the mint's reasons and physics
+together, 11 at seven lost, 10 at eight, and no bound at nine or more.
+
+*What decides membership.* Membership is decided by status, by the mint's five validity reasons, one of which
+(`precheck_ineligible`) can turn on the ratio of a member's timing envelope to its own energy (`reduce.py`
+`anchor_energy_envelope_exceeds_quarter_metric`), and by the six physics codes, and at the desk by committed position
+(the cap). No step reads the size of an energy for any other purpose. The cap is applied after the physics drop, so no
+step chooses which twelve by looking at energies. On a corpus of one workload under one condition the members'
+energies differ by well under one percent of each other, so the ratio that `precheck_ineligible` can turn on moves by
+the same fraction; the number of members each reason left out is disclosed for every window (analysis plan §8.1).
+
+*The in-window bound.* The chain's retry, prune and mint are unchanged but for the count: the retry fires when fewer
+than 10 succeeded, the prune keeps the succeeded members the mint does not drop, and the mint derives the in-window
+bound from all of them (n from 10 to 18). That bound is a diagnostic. No screen or allowance of block 5 is decided by
+it, because the core reader authenticates only the historical 12-member file (item 2) and every window is therefore
+judged by route 2 and the clean bound.
+
+*Worked example (synthetic, the twelve energies of §0.12's worked example for members 1 to 12, and 99.76, 99.85,
+99.95, 100.01, 100.12, 100.27 J for members 13 to 18).* Members 2, 3 and 5 abort at admission and member 9 overlaps a
+contender at harvest. Kept after (iii), in committed order: 1, 4, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18. Step
+(iv) keeps 1, 4, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16 and records 17 and 18 under `beyond_cap`. The clean bound is
+computed from those twelve energies with t = 2.201: s = 0.2217 J, U_3 = 100.3033 J, L_3 = 99.7433 J, so bound(3, 3) =
+max(0.5600, 2.201 × 0.2217 × √(2/3) = 0.3983) = 0.5600 J. (From all 14 clean members it would have been 0.5767 J.) Had
+eight members been lost instead of four, the ten remaining would all be kept and t = 2.262, exactly as the first
+seal's rule treated ten of twelve.
 
 **The bound's age is judged on physical times** (PLAN2 row 2, V1). *Forcing problem:* the bound is valid for 24 h,
 and revision 4 judged its age at the desk clock of whoever wrote the verdict. A headless harvest of BETA would start
@@ -3009,21 +3172,29 @@ NULL window, and named two of the three process conditions.)
   - **stage custody** (the bookkeeping time around members) is 180 s per collection stage, plus 77 s per member
     (45 s reduction, 32 s sampler start and wind-down), plus 2 × 240 s bracket-writer custody, 300 s reservation and
     120 s terminal custody;
-  - **one corpus retry** (§5.1) is charged as one more corpus stage: 60 s settle + 180 s overhead + 12 × (595 + 45 +
-    32) s = 8,304 s;
+  - **one corpus retry** (§5.1) is charged as one more corpus stage: 60 s settle + 180 s overhead + 18 × (595 + 45 +
+    32) s = 12,336 s;
   - **the reference spare retries** (§0.12) are charged at their worst case, every spare run: for each reference
     stage, 60 s settle + 180 s overhead + its spares × 672 s (spares are reference members, charged as 1.7B members,
     595 + 77 s). That is 2,256 s for each triplet (3 spares) and 912 s for the midpoint (1 spare), 5,424 s (1.51 h)
     per window, the same in all three packs (`reference_spare_retry_s` in the sizing output);
-  - the **bound derivation** is now charged 320 s, not block 4's 60 s: a real derivation re-reduces 12 bundles,
-    about 270–320 s (PLAN2 §1.4 item 6; never measured live). The **corpus prune**, which asks the NEG-8 mint which
-    corpus members it would drop (§5.3), reads the same 12 bundles and is charged the same. The **window calibration
+  - the **bound derivation** is now charged 320 s, not block 4's 60 s: a real derivation re-reduces up to 18
+    bundles. The estimate for 12 bundles was about 270–320 s (PLAN2 §1.4 item 6; never measured live), which scales to
+    about 405–480 s for 18. The charge stays 320 s: the difference, at most 160 s, is inside the span's margin over
+    the expected chain, which is more than 66,000 s in every pack (the table below), and the chain's wall budget for
+    the stage is 1,800 s. The **corpus prune**, which asks the NEG-8 mint which
+    corpus members it would drop (§5.3), reads the same 18 bundles and is charged the same, with the same
+    under-charge. A real-model rehearsal before the first arm records both wall times, and a measured time above
+    1,200 s for either goes to a consult before the arm (§14 Q16). The **window calibration
     verdict** (§5.1) is charged 60 s for one refit of about 15 s.
 - **`WINDOW_MAX_S`**, the window's deadline measured from t0, = 60 × ceil((span + 3,300 s) / 60). The 3,300 s is the
   arm's allowance: the dwell cap of 2,700 s plus the census, reads, network-time OFF, collectors and cadence probe.
 - **`B5-SIZING-OUTPUTS`**: `configs/campaigns/v5_claim_25g83/sizing_b5.json`, schema `joulewise.b5_sizing.v1`. Its
   sealed bytes are the bytes it has at H_claim, and the seal record (the record of §12 that pins each sealed file
-  by its SHA-256) pins theirs. SHA-256 at H_claim: `89e7ea70be34d855285c7d2c87df42b646d179a632a1e05ed57a4682a961b3aa`. At the int5 heads `fe28e5a0c` and
+  by its SHA-256) pins theirs. SHA-256 at H_claim: `a8e8d53036f08b5d6edc648ec77f01f75890ae904a817204600d6daac912cfad` (`shasum -a 256`, with
+  `scripts/size_b5_window.py --check` reproducing the file byte for byte, exit 0, at H_claim; the erratum of
+  2026-10-09 changed the file's members, spans and plan-tree digests, §14 Q16). At the first seal's H_claim and at
+  the int5 heads `fe28e5a0c` and
   `9395cecfb` it was `89e7ea70be34d855285c7d2c87df42b646d179a632a1e05ed57a4682a961b3aa`, unchanged from `d3c107f2f`
   (`shasum -a 256`, and `scripts/size_b5_window.py --check` reproducing the file byte for byte with exit 0: both run
   by revision 9's author at `fe28e5a0c` and by this revision's author at `9395cecfb`). *The file's own labels.* The
@@ -3046,30 +3217,32 @@ NULL window, and named two of the three process conditions.)
   plan by its SHA-256), so the program reads them at the bytes GAMMA's plan tree now records and lists them under
   `class_map.superseded_block4_configs`; bytes recorded by neither still refuse. Each window plan reads
   `/packs/<label>/programmed_span_s` and `/packs/<label>/T_stream_max_s` from it. Lane L10 changes only GAMMA's
-  plan-tree digest and the two diagnostic stages' order-manifest paths and digests; the members per class (61 / 40),
+  plan-tree digest and the two diagnostic stages' order-manifest paths and digests; the members per class (61 / 40 when the lane landed; 67 / 40 since the erratum of 2026-10-09, §14 Q16),
   the programmed span and `WINDOW_MAX_S` do not change, because the sizing still charges each diagnostic stage as
   one auxiliary member at the reference members' allowance. (That is the sizing's classification only. The yield
   count of §5.7 classes the same two stages as science stages.)
 
   | Pack | Members, 1.7B-class / 8B | Programmed span | `WINDOW_MAX_S` | Expected chain, block-3 basis | Expected chain, projected |
   |---|---|---|---|---|---|
-  | ALPHA | 119 / 0 | 98,826 s (27.5 h) | 102,180 s (28.4 h) | 31,584 s (8.8 h) | 19,460 s (5.4 h) |
-  | BETA | 19 / 100 | 101,226 s (28.1 h) | 104,580 s (29.05 h) | 32,634 s (9.1 h) | 20,510 s (5.7 h) |
-  | GAMMA | 61 / 40 | 87,690 s (24.4 h) | 91,020 s (25.3 h) | 27,747 s (7.7 h) | 17,426 s (4.8 h) |
+  | ALPHA | 125 / 0 | 106,890 s (29.7 h) | 110,220 s (30.6 h) | 33,003 s (9.2 h) | 20,278 s (5.6 h) |
+  | BETA | 25 / 100 | 109,290 s (30.4 h) | 112,620 s (31.3 h) | 34,053 s (9.5 h) | 21,328 s (5.9 h) |
+  | GAMMA | 67 / 40 | 95,754 s (26.6 h) | 99,060 s (27.5 h) | 29,166 s (8.1 h) | 18,244 s (5.1 h) |
 
   The programmed spans and `WINDOW_MAX_S` are read from the sizing output with the SHA-256 printed above for
-  `fe28e5a0c` and `9395cecfb`; they are the sealed file's values when its SHA-256 at H_claim, also above, is that
-  same digest. Each span is revision 6's plus the 5,424 s of spare retries (93,402, 95,802 and 82,266 s at
+  H_claim. Each span is the first seal's (98,826, 101,226 and 87,690 s, read from the sizing output with the SHA-256
+  printed above for `fe28e5a0c` and `9395cecfb`) plus 8,064 s for the six corpus members that the erratum of
+  2026-10-09 added (§14 Q16): 6 × 672 s in the corpus stage and 6 × 672 s in the one corpus retry. Each of the first
+  seal's spans was revision 6's plus the 5,424 s of spare retries (93,402, 95,802 and 82,266 s at
   `a434e363d`). The
   members column counts the planned roster, without spares; the expected-chain columns assume no spare runs.
 
 - **Why the deadline is about three times the expected chain.** The rule charges every member, at once, both worst
   cases: the cooldown runs to its cap and idle admission needs its second attempt; and it charges a corpus retry and
-  seven spares that most windows never run. *Worked decomposition, ALPHA:* 119 members × 595 s = 70,805 s, of which
-  35,700 s is every member's cooldown at its 300 s cap and 32,725 s is every member's two admission attempts.
-  Per-member custody adds 119 × 77 = 9,163 s; the corpus retry 8,304 s; the spare retries 5,424 s; settles,
+  seven spares that most windows never run. *Worked decomposition, ALPHA:* 125 members × 595 s = 74,375 s, of which
+  37,500 s is every member's cooldown at its 300 s cap and 34,375 s is every member's two admission attempts.
+  Per-member custody adds 125 × 77 = 9,625 s; the corpus retry 12,336 s; the spare retries 5,424 s; settles,
   calibration, derivation, prune, the window calibration verdict, stage custody and shutdown the other 5,130 s; span
-  98,826 s. For comparison, block 3's window `g2a-b3w1-20261004T1305Z` measured 16 **cooled member cycles** (the
+  106,890 s. For comparison, block 3's window `g2a-b3w1-20261004T1305Z` measured 16 **cooled member cycles** (the
   time from one member's start to the next member's start inside a stage, when the next member had a cooldown; the
   cooldown and the custody are inside it), with a median of 236.5 s, a mean of 242.9 s and a maximum of 274.9 s;
   each member here is charged 672 s (595 + 77).
@@ -3091,9 +3264,9 @@ NULL window, and named two of the three process conditions.)
     770 s calibration pair + 320 s bound derivation + 320 s corpus prune + 60 s window calibration verdict + 300 s
     terminal = 1,830 s (scratch `sizing_v2.json`, SHA-256
     `6a82745f47b40c8aa1ea6aefe2c45c2d4cce2b7a7e65d114165057e64fae00de`). Each pack has 10 collection stages.
-    - ALPHA: 1,830 + 10 × 161 + 119 × 236.5 = 31,584 s ≈ 8.8 h.
-    - BETA: 1,830 + 1,610 + 19 × 236.5 + 100 × 247.0 = 32,634 s ≈ 9.1 h.
-    - GAMMA: 1,830 + 1,610 + 61 × 236.5 + 40 × 247.0 = 27,747 s ≈ 7.7 h.
+    - ALPHA: 1,830 + 10 × 161 + 125 × 236.5 = 33,003 s ≈ 9.2 h.
+    - BETA: 1,830 + 1,610 + 25 × 236.5 + 100 × 247.0 = 34,053 s ≈ 9.5 h.
+    - GAMMA: 1,830 + 1,610 + 67 × 236.5 + 40 × 247.0 = 29,166 s ≈ 8.1 h.
   - *Projected* (not measured; built from the measured block-3 mean cycle and the savings of the changes now in the
     code). Its starting figure is 257.1 s, the mean start-to-start cycle PLAN2 §1.1 gives for 36 members of block
     3's two windows (`g2a-w2-20261003T1748Z` and `g2a-b3w1-20261004T1305Z`; PLAN2 gives a median of 234.5 s for the
@@ -3107,9 +3280,9 @@ NULL window, and named two of the three process conditions.)
     PLAN2 M1–M3): 136.3 s for a 1.7B member, 146.8 s for an 8B member. Per collection stage subtract the 20 s
     countdown (assuming, as PLAN2's budget does, that it ran inside the 39 s head): 141 s. The stage-end verdict
     saving (PLAN2 S4, about 655 s per window) is not subtracted, because the 62 s tail is not decomposed.
-    - ALPHA: 1,830 + 10 × 141 + 119 × 136.3 = 19,460 s ≈ 5.4 h.
-    - BETA: 1,830 + 1,410 + 19 × 136.3 + 100 × 146.8 = 20,510 s ≈ 5.7 h.
-    - GAMMA: 1,830 + 1,410 + 61 × 136.3 + 40 × 146.8 = 17,426 s ≈ 4.8 h.
+    - ALPHA: 1,830 + 10 × 141 + 125 × 136.3 = 20,278 s ≈ 5.6 h.
+    - BETA: 1,830 + 1,410 + 25 × 136.3 + 100 × 146.8 = 21,328 s ≈ 5.9 h.
+    - GAMMA: 1,830 + 1,410 + 67 × 136.3 + 40 × 146.8 = 18,244 s ≈ 5.1 h.
   ALPHA-1 measures which figure is right. Each window adds its 4–46 min arm (§4.1: about 41 s of reads, collectors
   and cadence probe, then a dwell of 180 to 2,700 s, so 221 to 2,741 s). Below about 119 s from one decode's end
   to the next idle capture, recovery is untested (archived gaps 119–740 s); ALPHA-1 records idle medians and cooldown
@@ -3132,9 +3305,9 @@ NULL window, and named two of the three process conditions.)
   untracked file outside `joulewise/`, `scripts/` and the pack's directory (an untracked file under those roots is
   itself a difference, §6.5), for example under the git-ignored `runs/` directory, and the next plan cites it
   there with the SHA-256 the addendum pins. *Why the case is remote:* the deadline is built from the programmed
-  span, the chain's length if every member takes its longest allowed path: 24.4, 27.5 and 28.1 h for GAMMA, ALPHA
-  and BETA (the table above), about 27 h, to which `WINDOW_MAX_S` adds the arm's 3,300 s. The projected chain is
-  4.8 to 5.7 h, about 5 to 6 h, and the block-3 basis 7.7 to 9.1 h. A chain reaches its deadline only by running
+  span, the chain's length if every member takes its longest allowed path: 26.6, 29.7 and 30.4 h for GAMMA, ALPHA
+  and BETA (the table above), about 29 h, to which `WINDOW_MAX_S` adds the arm's 3,300 s. The projected chain is
+  5.1 to 5.9 h, about 5 to 6 h, and the block-3 basis 8.1 to 9.5 h. A chain reaches its deadline only by running
   about five times its projected length, or about three times the block-3 basis. A chain that slow is sent to its
   post calibration first by the collection deadline of §5.1, inside the 24 h calibration horizon, as the bullet
   "Is that right?" above says. (Revision 10 registered a rule that set the next attempt's allowance, without an
@@ -3146,7 +3319,7 @@ NULL window, and named two of the three process conditions.)
   window at its terminal record (§5.4), one window to the next is the window plus about 0.6–1.6 h: the driver's tail
   and courier about 0.1 h, a watchdog tick of up to 5 min, the pin advance and the next plan a few minutes, the
   harvest 0.5–1.5 h, and the 180 s stand-down lead (PLAN2 §1.3). Adding three arms of 4–46 min, the three windows
-  take about 18–23 h at the projected chains (15.9 h of chain) and about 28–33 h at the block-3 basis (25.6 h of
+  take about 19–24 h at the projected chains (16.6 h of chain) and about 29–34 h at the block-3 basis (26.7 h of
   chain), before any re-arm or frequency redraw. (Revision 4, with the
   fence held to t0 + `WINDOW_MAX_S` + 300 s, gave about 71 h before desk gaps.)
 
@@ -3187,8 +3360,7 @@ power or a duration, so it is releasable structure under §8 item 2. It never st
 - **Yield plan.** Before the chain starts, the driver lists, for each collection stage: its id and position, its
   runs root, its run ids (less any run id an earlier stage already launched into the same root), the number planned,
   and **min_valid**, the fewest succeeded members that still leave the stage able to do its job:
-  - the NEG-8 corpus stage: 10 (the bound's minimum, §5.3; a minimum of 12 would raise a false alarm in about 28% of
-    windows);
+  - the NEG-8 corpus stage: 10 of the 18 (the bound's minimum, §5.3);
   - start and end triplets: 2 of 3; midpoint: 0 of 1 (the screen's minimum, §0.12; `driver.REFERENCE_ENDPOINT_MIN_VALID`,
     `REFERENCE_MIDPOINT_MIN_VALID`). The driver does not count spares: its yield plan lists only the planned
     members, so a stage whose loss a spare restored still shows that loss in the driver's counts;
@@ -3283,9 +3455,9 @@ power or a duration, so it is releasable structure under §8 item 2. It never st
 
 Every yield code is DISCLOSE (§6.8): `cell.below_minimum` and `neg8.bound_not_derived` already remove a window where
 it matters; the yield exists to say early that members were lost and to stop a repeat (§7.3). *Worked example
-(synthetic).* An ALPHA window ends with stage rows corpus 12/12, start triplet 3/3, the first decode quad stage 0/20
+(synthetic).* An ALPHA window ends with stage rows corpus 18/18, start triplet 3/3, the first decode quad stage 0/20
 (ZERO), the rest full. The terminal status is LOW (a stage below its min_valid of 16), and Ed gets a fault email
-that leads "collected 99 of 119 planned members". At the harvest the 20 members without a bundle are removed
+that leads "collected 105 of 125 planned members". At the harvest the 20 members without a bundle are removed
 (`member.bytes_missing`, §6.7). They are five of the decode cell's ten quads, so the cell keeps 5 quads and all 10
 repeats. That meets the minimum of 5 units in each stratum (§6.6): `cell.below_minimum` does not fire, and the
 window is claim-usable if nothing else removed it, with the decode cell's 5 kept quads printed beside it and a
@@ -3937,7 +4109,8 @@ the list gives.)
   gross energies; `neg8_bracket_idle_sub_abs_delta_exceeded`, it failed on the idle-subtracted energies;
   `neg8_bracket_missing`; `neg8_bracket_reference_invalid`; `neg8_drift_bound_stale`; the bound-underived
   conditions). The exceptions are the harvest's re-screens of §5.3 (the collected-subset bound, a reference lost at
-  harvest, a corpus member dropped for physics), whose result decides alone. (Revision 10 printed the first two
+  harvest, the clean bound, which since the erratum of 2026-10-09 the harvest builds on every window), whose result
+  decides alone. (Revision 10 printed the first two
   conditions as `neg8_gross_point_drift_exceeded` and `neg8_idle_sub_point_drift_exceeded`. Those are the names of
   the code's constants in lower case; the strings a verdict carries are the two above.)
   `neg8_bracket_reference_invalid` has four causes. Three of them, (a), (c) and (d) below, remove the window
@@ -4495,7 +4668,7 @@ that attempt still carries an unclassified code; it is tested, and no block-5 pr
   (`joulewise/b5/plan.py`) for a per-stage reader named `resolve_stage_dispatch`; the module has no function of that
   name, so the harvest falls back to the plan tree's own entry for the stage, `input_ref`, which names either a list
   of member rows held in the plan tree or a manifest file of the pack (`harvest.stage_dispatches`). GAMMA's plan
-  tree carries an `input_ref` on each of its ten collection stages, and the 101 run ids read through them are the
+  tree carries an `input_ref` on each of its ten collection stages, and the 107 run ids read through them are the
   ones its order manifests list, so GAMMA's dispatch resolves. ALPHA's and BETA's plan trees carry none: `input_ref`
   is null on all ten collection stages of each. So on every ALPHA and BETA harvest all ten stages are unresolved,
   `roster.dispatch_unresolved` is recorded once in each harvest, condition (ii) fails, and an arm's
@@ -4740,8 +4913,8 @@ structure only (analysis plan §3.2).
 
 *Worked example (a GAMMA attempt; the four directory names are invented).* Its window plan names the claim runs root
 `/runs/gamma-1/claim`, the bound runs root `/runs/gamma-1/bound` and the custody root `/custody/gamma-1`, and its
-harvest wrote the archive root `/archive/gamma-1-h1`. GAMMA plans 101 members (§4.2): 80 science members, the 7
-NEG-8 references and the 2 diagnostic interior references, which go to the claim runs root, and the 12 NEG-8 corpus
+harvest wrote the archive root `/archive/gamma-1-h1`. GAMMA plans 107 members (§4.2): 80 science members, the 7
+NEG-8 references and the 2 diagnostic interior references, which go to the claim runs root, and the 18 NEG-8 corpus
 members, which go to the bound runs root; up to 7 spares can join the claim runs root (§0.12). Restricted: every
 file under the two runs roots (one bundle directory for each member that ran, and in the bound root the bound
 derived from the corpus); `/custody/gamma-1/hazards/monitor/battery.jsonl`; the logs under
@@ -4988,7 +5161,8 @@ naming, schema formality) is dispositioned "flag, not refuse" and never sent to 
 
 1. The chain passes `--max-failures <expected_count>` in place of the packs' literal `1` (§5.2).
 2. The plan trees' `attempt_policy` is superseded by the flag catalog (§5.2).
-3. The NEG-8 bound may be derived from 10 or 11 corpus members (§5.3).
+3. The NEG-8 bound may be derived from fewer corpus members than the 18 committed: the in-window bound from 10 to 18,
+   the deciding bound from 10, 11 or 12 (§5.3).
 4. Analysis: D-179 ruling 1 ("no member is excluded after collection"; no reduced mean) and D-078's no-reduced-mean
    text are amended by §6.6 and analysis plan §2.2 and §4, as Ed's 2026-10-05 ruling requires; GAMMA's prospective
    manifest's fixed n = 10 quads becomes "at least 5 kept quads" (analysis plan §7).
@@ -5015,6 +5189,15 @@ naming, schema formality) is dispositioned "flag, not refuse" and never sent to 
    What does not change: the floor is labelled beside the cell and never added into its interval, and the
    reported-energy code keeps its label for that rule, `labelled_beside_never_composed`
    (`joulewise/paper_reported_energy.py`).
+8. Each pack's `calibration_plan.json` still reads `planned_bound_bundles` 12; the plan tree's stage graph, which the
+   chain reads, says 18 (erratum of 2026-10-09, §14 Q16). No program reads the field. It is left so that the 280
+   science configurations and the 12 science order manifests, each of which carries the SHA-256 of its pack's
+   calibration plan, keep the bytes they had in the superseded attempts. In ALPHA's and BETA's plan trees
+   `runtime_budget.bound_count` reads 18, because the plan trees were regenerated in any case (GAMMA's plan tree has
+   no such field); the planning estimate printed beside it was computed for 12 members and is stale. No program
+   reads either.
+9. The chain script's comments, the plan's `chain_deviations` and the sizing output's two `source` strings still say
+   12, 10 and 11; the stage graph the chain reads says 18, and the desk rule of §5.3 caps the deciding corpus at 12.
 
 The chain's other changes of round 2 (the 60 s settles, the window calibration verdict, the wall budgets, the
 collection deadline, the corpus retry) and the spare-slot retry of revision 7 are not deviations from pack bytes: they
@@ -5539,8 +5722,10 @@ new digest.
 | Seal | `B5-SEAL-RECORD`: the path of the seal record, a file committed after the seal commit (§12). Filled in revision 12: `docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md` | Seal |
 
 Two names were filled last, on 2026-10-08, by a step that ran once H_claim existed and put each value in place of its marker
-without changing another word, except in the sentences that said the two were still open. `H-CLAIM` is the commit `a64000884ef5bb4b76415835f02f39803f6eb620`: the last commit of the integration branch
-that changes a window input (§9.1, §11). It carries `fe28e5a0c`, the census interpreter rule merged at `84661ddb3`,
+without changing another word, except in the sentences that said the two were still open. `H-CLAIM` is the commit `c27485347c9629b857df81665b5b1b8d10dcd36a`, filled again on `2026-10-09` at the seal of the erratum of 2026-10-09 (§14 Q16): the last commit
+that changes a window input (§9.1, §11). Under the first seal it was `a64000884ef5bb4b76415835f02f39803f6eb620`, the
+last commit of the integration branch that changed a window input. The new H_claim contains that commit and so
+carries `fe28e5a0c`, the census interpreter rule merged at `84661ddb3`,
 the seal landing merged at `9395cecfb`, and the catalog change the seal gate's stage 1 ordered (§6.6).
 `B5-FINAL-HASHES` marked each digest that is recomputed at that commit. Four other names have a name for their
 value, and their markers were filled in revision 12, before the second stage of the seal gate read the text.
@@ -5687,7 +5872,7 @@ not touched), from the diff `43ac12d0c..fe28e5a0c` (14 commits; 19 files under `
 | A5: a strict-invalid reference is lost | `run_campaign._idle_admission_core_evaluation` reason `strict_invalid`; `whole_window._derived_neg8_decision` (`stored_strict_losses`, `unlisted_strict_invalid`); the harvest's exclusion pass always runs | changed: §0.12 |
 | Sol R2, Sol R3 (the Sol re-verification's findings, §9.1; not the fix route R3), cold pass 4 D1: claim-time allowance gaps | not fixed at this head: `floor_extraction.extract_cells` has no archive parameter; the claim validator rejects a stored failed screen (`whole_window_neg8_verdict_failed`) before the harvest record is read | changed: §0.12, §9.1; analysis plan §11 (lane L9-NEG8) |
 | Q11 and the anti-spiral rule | no code computes the cause key of §7.3 | changed: §7.2 (sentence struck) |
-| sizing, pins, plan trees | the three `plan_tree.json` and `sizing_b5.json` unchanged; `identity_pins.json` `a0865895dc7eeb4ecea28c611b65fab9eee69d5e16f5f8126dbe08ac5255bda9` (was `f78a27f8…`); `configs/pins/registry.json` `a4a2be94912c4a3c33b1fb04e0f91e9e691290e2a7b7ee98898783ff307033b2`, unchanged | recomputed: `B5-FINAL-HASHES` |
+| sizing, pins, plan trees | at H_claim, after the erratum of 2026-10-09 (§14 Q16): the three `plan_tree.json` `2ec3625a31b796e3fa37e2c39f37508618b649d0d9f61ddbd3fdfe2c5a282809`, `e77e4f6e74f663190d1acfe95c3e2499ec69c1b27ba9e3564c531affee980707` and `da8028977dfe44b3bf1d13e79e7bfea2b1390aa985bef7faa891369c8e3985bc`; `sizing_b5.json` `a8e8d53036f08b5d6edc648ec77f01f75890ae904a817204600d6daac912cfad`; `identity_pins.json` `513d7d4a98f464c7236b34c53f51cd523a9f45b4d9f05f2282a4a22424b4841d`; `configs/pins/registry.json` `64930f7521d9b447269fd24e06531b735655a2163e3ac30f40791f35add6491a`. At the first seal's H_claim: the three `plan_tree.json` and `sizing_b5.json` unchanged from `fe28e5a0c`; `identity_pins.json` `a0865895dc7eeb4ecea28c611b65fab9eee69d5e16f5f8126dbe08ac5255bda9` (was `f78a27f8…`); `configs/pins/registry.json` `a4a2be94912c4a3c33b1fb04e0f91e9e691290e2a7b7ee98898783ff307033b2`, unchanged | recomputed: `B5-FINAL-HASHES` |
 | refusal allowlist | `configs/gates/hazard_refusals.json` byte-identical to `43ac12d0c`; counts unchanged (§6.11) | matched |
 | dry records | `dry-records-2/` at `fe28e5a0c` | filled: §2 item 6 |
 
@@ -5750,7 +5935,7 @@ named there.
 | the harvest archive and what it withholds | the harvest copies its sources under `sources/` (`night-custody`, `claim-runs`, `bound-runs`, `ledger/`, `inputs/`, `repo/`) with `sources/SHA256SUMS`, and writes `derived/`, `withheld/` and `harvest.json`; `harvest.write_once` creates each file without setting a mode. The directory names were also read in the archive of a desk rehearsal (`/Users/edr/night-archive/gate-prune/rehearsal-real/gamma-2/archive/`, file names only; a rehearsal, not a window) | changed: §8 (the custody map) |
 | RESTRICTED flags | three writers, all in the harvest: the catalog default of `member.anchor_energy_envelope_exceeded`; `member.target_phase_precheck_failed` when `harvest.restricted_reason` matches one of its reasons; `diagnostic.s1_structural`. No program that writes flags before the harvest sets RESTRICTED | matched: §6.3; used in §8 |
 | what the driver releases | `run_night.HAZARD_ARTIFACTS` (12 record files of `night/`); the courier's instruction for a `HAZARD_PACK` window ("Report structure only ... never state an energy, a power or a duration of a member or a phase") | matched: §8 item 2; used in the custody map |
-| GAMMA's planned members | the plan tree's stage graph: 12 corpus members, reference stages of 3, 1 and 3, two diagnostic stages of 1, and four science stages of 20, 101 in all | used in §8 (worked example) |
+| GAMMA's planned members | the plan tree's stage graph: 18 corpus members, reference stages of 3, 1 and 3, two diagnostic stages of 1, and four science stages of 20, 107 in all | used in §8 (worked example) |
 | three analysis programs print results | `scripts/build_d165_dominance_closeout.py` writes the close-out to standard output when it is given no `--output`; `python -m joulewise analyze-claims` prints each contrast's outcome; `scripts/render_results_fills.py` prints the rendered fills | used in §8 |
 | a resized member allowance | `plan.read_allowance` takes the allowance's source as a path relative to the measurement checkout, requires the file to hash to the SHA-256 given and a JSON pointer in it to resolve to exactly the seconds given | changed: §10 |
 | the changes the seal gate's stage 1 ordered before the head | not in the integration branch when this was written; on the branch `lane/2026-10-07-seal-rulings` (four commits on `9395cecfb`, read with `git log` and `git diff`): `059fafc55` sets the catalog's `rules.cell_unit_minimum` to 5; `9980d6296` rewords what `cell.below_minimum` and `neg8.midpoint_lost_primary` protect in the refusal allowlist (the gate's K-1 and K-3); `7b88e835a` removes `g3.recompute_failed` from the allowlist's window exclusions, which leaves 33, and sets it to DISCLOSE in the test catalog `tests/fixtures/b5_harvest/flag_catalog.json` (K-2); `a0920cb8c` makes the tests and the test catalog follow the minimum of 5. The four commits change no file under `joulewise/` or `scripts/`. Commit `cc0b3446d` has since merged the branch into int5 (`git diff --stat 9395cecfb cc0b3446d`, run by the last pass of revision 12, lists the catalog, the allowlist and five paths under `tests/`, and nothing else). `Catalog.cell_unit_minimum` is read only by `exclusions.compute`, which only the harvest imports | changed: §10 deviation 4, §9.1. With K-2 the "one documented disagreement" that the catalog comparisons above report for `g3.recompute_failed` ends: each comparison states what held at its own commit |
@@ -5770,7 +5955,8 @@ battery evidence map (§9.2).
 
 ## 14. Open questions (each names where it goes)
 
-- **Q1. NEG-8 corpus of 10 or 11. Closed in revision 4.** It was settled by the harvest-side derivation from
+- **Q1. A NEG-8 corpus with fewer members than were committed (10 or 11 of 12 when the question was closed; since the
+  erratum of 2026-10-09, 10 to 17 of 18, Q16). Closed in revision 4.** It was settled by the harvest-side derivation from
   custodied bytes, with the core untouched (fix lane fx-harvest, §5.3).
 - **Q2. Sealed-inventory comparison scope. Closed in revision 4.** At `f8164893` the arm's executed-code collector
   (`joulewise/flags/collect.py`, `_window_scope`) and the harvest (`code_identity`) count missing and added files only
@@ -5916,6 +6102,27 @@ battery evidence map (§9.2).
   the merged rule, and the lane's tests include a live `node` launch decided through the production census
   (`tests.test_agent_identity`, the R1 test). The dry arm took 0.177 s and can only refuse. Either it is run again at
   the final head and the record refreshed, or the carry-over reasoning of §2 item 6 is accepted as it stands.
+- **Q16. An 18-member NEG-8 corpus, with the deciding bound capped at 12. Closed by the prospective cold erratum of
+  2026-10-09 (§10: one judge, one refuter, settled in one erratum).** The erratum, its refutation and the cold ruling
+  that admitted it with corrections are `docs/process_traces/2026-10-block5/corpus18-erratum/ERRATUM.md`,
+  `REFUTATION.md` and `RULING.md`. *Forcing problem:* the two ALPHA chains that ran under the first seal lost 2 and 3
+  of their 12 corpus members to idle-admission aborts under outside CPU load in the window's first hour, 5 of 24 where
+  the rule had been sized on 1 in 37; the corpus retry of §5.1 cannot re-measure an aborted member; and "10 of 12"
+  leaves a margin of two members for run-time aborts and harvest drops together. *Ruling:* the corpus has 18 members,
+  all of which always run, and the harvest builds the deciding bound from the first 12 clean members in committed
+  order (§5.3). Every block-5 window is judged by the harvest's route 2 (§5.3). Deviations 8 and 9 are registered
+  (§10). The two 320 s sizing charges stay (§5.5). *Supersession:* the corpus manifest and the plan trees are
+  collection inputs that both chains executed, so §7.5 applies. The first seal (H_claim
+  `a64000884ef5bb4b76415835f02f39803f6eb620`, seal commit `ab7b21e576a2d74f0b25d9a26b463d6934588368`) is superseded by
+  the seal whose H_claim is `c27485347c9629b857df81665b5b1b8d10dcd36a`, and the block restarts at ALPHA attempt 1. The first seal's three ALPHA
+  attempts are retained, disclosed structurally and never analysed (analysis plan §2.1 and §8.1):
+  `v5-b5-alpha-a1-20261008T2201Z` (chain ran; COLLECTED, not claim-usable), `v5-b5-alpha-a2-20261009T0515Z` (refused
+  at the arm; no chain) and `v5-b5-alpha-a3-20261009T0644Z` (chain ran; COLLECTED, not claim-usable). They do not
+  count when the causes of two attempts of a pack are compared for the re-arm rule (§7.3), and all three are printed
+  in the attempt history. *What stays as history in this file:* the dry render record of 2026-10-07 in §2 (bound
+  bundles 12/12/12), the dated earlier digests in §0, §4.6 and §5.5, the row of §13 that records the hashes "as at
+  `fe28e5a0c`", and the counts of 119 and 101 run ids in §16 are records of checks made for the first seal and were
+  not rewritten.
 
 ## 15. Where each gate-prune change lives
 
@@ -6121,7 +6328,9 @@ It computed five things itself. The role and the minimum of a GAMMA diagnostic s
 dispatch facts of §7.2 came from running the harvest's `stage_dispatches` and the plan module's
 `resolve_stage_dispatches` on the three plan trees at `9b0c680ed`: ALPHA and BETA, ten of ten collection stages
 unresolved by the harvest and 119 run ids each through the order manifests; GAMMA, none unresolved and the same 101
-run ids either way. The counts of flags by code in the harvest summaries of the cooldown smoke's runs 3 and 4 (§2
+run ids either way. (These counts, and GAMMA's 101 planned members later in this section, are the record of checks
+made for the first seal, whose corpus had 12 members; under the erratum of 2026-10-09 the plan trees list 125, 125
+and 107 run ids, §14 Q16.) The counts of flags by code in the harvest summaries of the cooldown smoke's runs 3 and 4 (§2
 item 7; an ALPHA pack, not a window of this block) show the same on a real harvest: one `roster.dispatch_unresolved`
 and ten `yield.harvest_disagrees_with_window` each; only those counts and the list of unresolved stages were read
 from them. The count rule of §13's "28" came from comparing the catalog at `c6843537` with the test fixture at

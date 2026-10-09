@@ -58,7 +58,7 @@ def hand_span(source: dict[str, Any], small: int, large: int, stages: int = 10) 
             + stages * 180 + members * 45 + 2 * 240 + 300 + 120   # stage custody (block 4's labelled terms)
             + members * (15 + 17)                                 # native sampler start and wind-down
             + source["fixed"]["terminal_shutdown"]                # 300
-            + 60 + 180 + 12 * (member["small"] + 45 + 15 + 17)    # one corpus retry: 12 small-proxy members
+            + 60 + 180 + 18 * (member["small"] + 45 + 15 + 17)    # one corpus retry: 18 small-proxy members
             # NEG-8 ruling 2026-10-07: one spare-slot retry per reference stage (3 stages), every spare run
             # (3 + 1 + 3 small-proxy members): 3 * (60 + 180) + 7 * 672 = 5424 s.
             + 3 * (60 + 180) + 7 * (member["small"] + 45 + 15 + 17))
@@ -79,7 +79,7 @@ class SizesOfTheCommittedPacks(unittest.TestCase):
         self.assertEqual({"large": 2, "small": 21}, reproduction["members_by_class"])
 
     def test_each_pack_matches_the_hand_formula(self) -> None:
-        expected = {"ALPHA": (119, 0, 100, 19, 314), "BETA": (19, 100, 100, 19, 335), "GAMMA": (61, 40, 80, 21, 335)}
+        expected = {"ALPHA": (125, 0, 100, 25, 314), "BETA": (25, 100, 100, 25, 335), "GAMMA": (67, 40, 80, 27, 335)}
         for label, (small, large, science, auxiliary, longest) in expected.items():
             pack = self.document["packs"][label]
             with self.subTest(label):
@@ -95,9 +95,9 @@ class SizesOfTheCommittedPacks(unittest.TestCase):
         # 320 s, J1 verdict 60 s and one corpus retry 8304 s; before: 84658, 87058, 73522 s.
         # NEG-8 ruling 2026-10-07: one spare-slot retry per reference stage, worst case 5424 s; before:
         # 93402, 95802, 82266 s (window maxima 96720, 99120, 85620 s).
-        self.assertEqual((98826, 101226, 87690), tuple(self.document["packs"][label]["programmed_span_s"]
+        self.assertEqual((106890, 109290, 95754), tuple(self.document["packs"][label]["programmed_span_s"]
                                                        for label in ("ALPHA", "BETA", "GAMMA")))
-        self.assertEqual((102180, 104580, 91020), tuple(self.document["packs"][label]["window_max_s"]
+        self.assertEqual((110220, 112620, 99060), tuple(self.document["packs"][label]["window_max_s"]
                                                         for label in ("ALPHA", "BETA", "GAMMA")))
         self.assertEqual({label: pack["breakdown"]["reference_spare_retry_s"]
                           for label, pack in self.document["packs"].items()},
@@ -106,11 +106,25 @@ class SizesOfTheCommittedPacks(unittest.TestCase):
         for label in ("ALPHA", "BETA", "GAMMA"):
             pack = self.document["packs"][label]
             corpus = [stage for stage in pack["stages"] if stage.get("neg8_corpus")]
-            self.assertEqual([12], [stage["members"] for stage in corpus])
-            self.assertEqual(8304, pack["breakdown"]["corpus_retry_s"])
+            self.assertEqual([18], [stage["members"] for stage in corpus])
+            self.assertEqual(12336, pack["breakdown"]["corpus_retry_s"])
             collections = [stage for stage in pack["stages"] if stage["kind"] == "campaign_collection"]
             self.assertEqual(({0}, {20}), ({stage["arm_countdown_s"] for stage in collections},
                                            {stage["pack_arm_countdown_s"] for stage in collections}))
+
+    def test_corpus18_adds_six_member_cycles_and_six_retry_cycles_per_pack(self) -> None:
+        old = {"ALPHA": (119, 98826, 102180), "BETA": (119, 101226, 104580),
+               "GAMMA": (101, 87690, 91020)}
+        for label, (members, span, _deadline) in old.items():
+            with self.subTest(label=label):
+                pack = self.document["packs"][label]
+                self.assertEqual(members + 6, sum(pack["members_by_class"].values()))
+                self.assertEqual(span + 2 * 6 * (595 + 45 + 15 + 17), pack["programmed_span_s"])
+                # Minute rounding changes GAMMA's deadline increment to 8040 s.
+                self.assertEqual(60 * math.ceil((span + 8064 + 3300) / 60), pack["window_max_s"])
+                self.assertEqual(12336, pack["breakdown"]["corpus_retry_s"])
+                self.assertEqual(320, self.document["terms"]["bound_derivation"]["seconds"])
+                self.assertEqual(320, self.document["terms"]["corpus_prune"]["seconds"])
 
     def test_block4_configs_superseded_by_the_timing_regeneration_are_listed(self) -> None:
         # The 2026-10-06 timing ruling regenerated the _v5 packs (idle_seconds 57.6), so the

@@ -51,7 +51,7 @@ class WindowPlanFixture(unittest.TestCase):
 class WindowPlanTests(WindowPlanFixture):
     def test_each_pack_yields_a_parseable_hazard_plan_with_all_fourteen_bindings(self):
         # GAMMA plans again since lane L10 removed its duplicate midpoint dispatch.
-        for pack, members in (("alpha", 119), ("beta", 119), ("gamma", 101)):
+        for pack, members in (("alpha", 125), ("beta", 125), ("gamma", 107)):
             with self.subTest(pack=pack):
                 root = self.root / pack
                 root.mkdir()

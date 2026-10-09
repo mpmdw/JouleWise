@@ -275,7 +275,15 @@ class CommittedGammaJoinedReplayTests(unittest.TestCase):
             return subprocess.check_output(["git", "-C", str(writer.REPO_ROOT),
                 "ls-tree", "-r", commit, "--", PACK_RELATIVE]).decode().splitlines()
         if not self.frozen:
-            self.assertEqual(tree_at(PACK_SOURCE_COMMIT), tree_at(self.head))
+            # The 2026-10-09 corpus erratum (18 NEG-8 corpus members) changed one literal in
+            # the generator and re-pinned plan_tree; every other committed source byte,
+            # including all science configs and sidecars, is unchanged, and no file was added.
+            erratum = {PACK_RELATIVE + "/plan_tree.json", PACK_RELATIVE + "/plan_tree.sha256",
+                       PACK_RELATIVE + "/generate_configs.py"}
+            source, head = tree_at(PACK_SOURCE_COMMIT), tree_at(self.head)
+            self.assertEqual([line.split("\t")[1] for line in source], [line.split("\t")[1] for line in head])
+            self.assertEqual([line for line in source if line.split("\t")[1] not in erratum],
+                             [line for line in head if line.split("\t")[1] not in erratum])
         else:
             # U11 projection, evidence and freeze-0004 only add receipts and
             # re-pin plan_tree; every other committed source byte is unchanged.
