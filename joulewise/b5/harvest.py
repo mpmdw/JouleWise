@@ -84,6 +84,8 @@ TERMINAL_BOUNDARY_SCHEMA = "joulewise.b5_terminal_boundary.v1"
 NEG8_CHECK_SCHEMA = "joulewise.b5_neg8_bound_check.v1"
 NEG8_SCREEN_SCHEMA = "joulewise.b5_neg8_screen.v1"
 NEG8_CORPUS_PHYSICS_SCHEMA = "joulewise.b5_neg8_corpus_physics.v1"
+ERRATUM_2_ADMITTED_AT = "2026-10-10T16:30:00Z"
+ERRATUM_2_ADMITTED_AT_EPOCH_S = 1791649800
 # NEG-8 ruling 2026-10-07 (registration 0.12 "Lost references", 5.3): the
 # member-level physics exclusions of 6.4 that drop a corpus member from the
 # bound and a reference from the screen.  The order is the order a lost
@@ -1170,7 +1172,7 @@ def verdict_neg8_sources(row: Mapping[str, Any], runs_root: Path) \
     return manifests, current, registered
 
 
-def claim_neg8_sources(row: Mapping[str, Any], runs_root: Path) \
+def claim_neg8_sources(row: Mapping[str, Any], runs_root: Path, *, roster: Mapping[str, Any]) \
         -> tuple[list[Mapping[str, Any]], bool, Mapping[str, Any]] | str:
     """Authenticate the complete runs-root catalog when the verdict recorded no sources.
 
@@ -1179,18 +1181,48 @@ def claim_neg8_sources(row: Mapping[str, Any], runs_root: Path) \
     references without bundles must reach the survivor loss test too.
     """
     from joulewise import whole_window as ww
-    from joulewise.campaign_provenance import load_authenticated_campaign_catalog
+    from joulewise.campaign_provenance import (CAMPAIGN_PROVENANCE_SCHEMA_V2,
+                                              load_authenticated_campaign_catalog, load_campaign_log_rows)
+    from joulewise.window_lineage import is_hazard_runs_root
     root = Path(runs_root)
-    policy = row.get("campaign_policy")
-    policy_sha = policy.get("sha256") if isinstance(policy, Mapping) else None
-    registered = ww._registered_bracket_policy(policy_sha)
-    if registered is None:
-        return "policy_unregistered"
+    # Erratum 2, item 0(b), (c).  The caller checked (a) and the admission
+    # clock first.  Test these conditions before reading the catalog.
+    if not is_hazard_runs_root(root):
+        return "runs_root_not_hazard"
+    core = row.get("idle_admission_core")
+    conditions = core.get("conditions") if isinstance(core, Mapping) else None
+    if not isinstance(conditions, list) or "whole_window_campaign_membership_unresolved" not in conditions \
+            or "whole_window_campaign_membership_ambiguous" in conditions \
+            or any(isinstance(word, str) and word.startswith("campaign_occurrence_") for word in conditions):
+        return "membership_condition_not_unresolved"
     catalog = load_authenticated_campaign_catalog(root, root / "campaign_log.jsonl")
     if catalog is None:
         return "source_manifest_unauthenticated"
     if not catalog:
         return "source_manifests_unrecorded"
+    if any(record.value.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA_V2 for record in catalog):
+        return "source_manifest_schema_v1"
+    # Item 0(d), (e), (f), in that order.  An authenticated catalog is needed
+    # to enumerate the invoked members; it is never replaced by a subset.
+    invoked = [bundle_id for record in catalog for member in record.value["members"]
+               if member.get("execution") == "invoked" for bundle_id in member["bundle_ids"]]
+    present = [ww.ordinary_present_bundle_paths(root, bundle_id) for bundle_id in invoked]
+    if not any(not paths for paths in present):
+        return "no_absent_invoked_member"
+    if any(len(paths) > 1 for paths in present):
+        return "invoked_member_ambiguous"
+    log_rows = load_campaign_log_rows(root / "campaign_log.jsonl")
+    if log_rows is None:
+        return "source_manifest_unauthenticated"
+    if any(ww._is_recognizable_occurrence_supersession(entry) for entry in log_rows):
+        return "occurrence_supersession_present"
+    policy = row.get("campaign_policy")
+    policy_sha = policy.get("sha256") if isinstance(policy, Mapping) else None
+    registered = ww._registered_bracket_policy(policy_sha)
+    if registered is None:
+        return "policy_unregistered"
+    if ww._validated_evaluation_basis(row, root) is None:
+        return "evaluation_basis_invalid"
     manifests: list[Mapping[str, Any]] = []
     referenced: set[str] = set()
     for record in catalog:
@@ -1199,20 +1231,31 @@ def claim_neg8_sources(row: Mapping[str, Any], runs_root: Path) \
         manifest_policy = record.value.get("campaign_policy")
         if not isinstance(manifest_policy, Mapping) or manifest_policy.get("sha256") != policy_sha:
             return "source_manifest_policy_differs"
-        members = ww._manifest_members(record.value, root)
-        if members is None or referenced & members or any(ww._safe_source_path(root, item) is None
-                                                        for item in members):
+        # Item 2 counts occurrences, including those whose bundles are absent;
+        # the recorded-source helper's frozen set collapse cannot detect all
+        # duplicates here.  Non-invoked members must have safe ids as well.
+        ids = [bundle_id for member in record.value["members"] for bundle_id in member["bundle_ids"]]
+        members = set(ids)
+        if ww._manifest_members(record.value, root) is None or len(ids) != len(members) \
+                or referenced & members or any(ww._safe_source_path(root, item) is None for item in ids):
             return "source_manifest_members_invalid"
         referenced.update(members)
         manifests.append(record.value)
-    paths = ww._manifest_bundle_paths(manifests, root)
-    if paths is None:
-        return "source_manifest_members_invalid"
-    current = any(ww._current_strict_summary(ww._read_json_object(path / "summary_metrics.json"), path)
-                  for path in paths.values())
-    if not current:
-        return "not_point_drift"
-    return manifests, current, registered
+    slots = {(member.get("run_id"), member.get(field))
+             for member in roster.get("members", []) if isinstance(member, Mapping)
+             for field in ("neg8_slot", "spare_slot")}
+    for manifest in manifests:
+        for member in manifest["members"]:
+            if member.get("execution") != "invoked":
+                continue
+            position = ww._neg8_position(member.get("role"), member.get("sentinel_position"))
+            if position in ("start", "midpoint", "end") and (
+                    (member.get("run_id"), position) not in slots or any(
+                        (bundle_id, position) not in slots for bundle_id in member["bundle_ids"])):
+                return "reference_not_in_roster"
+    # Item 6 mandates the current point-drift path, even if every reference is
+    # lost.  The evaluator must report the realised insufficient shape.
+    return manifests, True, registered
 
 
 def _fsync_dir(path: Path) -> None:
@@ -4963,7 +5006,8 @@ class _Harvest:
         clean_required = getattr(self, "neg8_clean_bound_required", False)
         catalog_rescreen = isinstance(source, Mapping) and source.get("source") == \
             "claim_campaign_manifests_authenticated"
-        survivors = bool(new_losses) or clean_bound is not None or clean_required or catalog_rescreen
+        recovery = catalog_rescreen or isinstance(source, Mapping) and "campaign_sources_problem" in source
+        survivors = bool(new_losses) or clean_bound is not None or clean_required or recovery
         # Catalog recovery rebuilds the absent source roles; otherwise only
         # the pre-cap loss cases may clear other stored NEG-8 conditions.
         loss_rescreen = catalog_rescreen or bool(new_losses) or (clean_bound is not None and
@@ -5038,6 +5082,11 @@ class _Harvest:
                         "evaluation_basis_sha256": basis_sha if isinstance(basis_sha, str) else None},
             "source": source if source in ("stored_verdict", "survivor_rescreen") else "none",
             "survivor_bracket": None, "bound_used": None, "bound_artifact_sha256": None, "clean_bound": None}
+        reference_source = getattr(self, "neg8_reference_source", None)
+        if isinstance(reference_source, Mapping) and (
+                reference_source.get("source") == "claim_campaign_manifests_authenticated"
+                or "campaign_sources_problem" in reference_source):
+            record["reference_source"] = dict(reference_source)
         binding = getattr(self, "neg8_rescreen_binding", None)
         if record["source"] == "survivor_rescreen" and isinstance(binding, Mapping):
             try:
@@ -5159,14 +5208,25 @@ class _Harvest:
                 losses.setdefault(run_id, ww.NEG8_LOSS_ENERGY_UNREADABLE)
         self.neg8_energy_unreadable = unreadable
         for run_id in sorted(absent):
-            losses.setdefault(run_id, "bundle_absent")
+            # No other reason can be computed for an absent reference.
+            losses[run_id] = "bundle_absent"
         return losses
 
     def _neg8_sources(self, row: Mapping[str, Any], runs: Path) \
             -> tuple[list[Mapping[str, Any]], bool, Mapping[str, Any]] | str:
-        sources = verdict_neg8_sources(row, runs)
-        if sources == "source_manifests_unrecorded":
-            sources = claim_neg8_sources(row, runs)
+        provenance = row.get("row_provenance")
+        descriptors = provenance.get("source_campaign_manifests") if isinstance(provenance, Mapping) else None
+        absent = not isinstance(provenance, Mapping) or "source_campaign_manifests" not in provenance
+        if absent or isinstance(descriptors, list) and not descriptors:
+            # Item 0(a), then section 5's prospective clock, then 0(b).
+            plan = getattr(self.inputs, "plan", None)
+            t0 = plan.get("t0_epoch_s") if isinstance(plan, Mapping) else None
+            if isinstance(t0, bool) or not isinstance(t0, (int, float)) \
+                    or isinstance(t0, float) and not math.isfinite(t0) \
+                    or t0 <= ERRATUM_2_ADMITTED_AT_EPOCH_S:
+                sources = "recovery_predates_erratum"
+            else:
+                sources = claim_neg8_sources(row, runs, roster=getattr(self, "roster", None) or {})
             self.neg8_reference_source = {
                 "source": "claim_campaign_manifests_unauthenticated" if isinstance(sources, str)
                           else "claim_campaign_manifests_authenticated",
@@ -5174,10 +5234,36 @@ class _Harvest:
             if isinstance(sources, str):
                 self.neg8_reference_source["campaign_sources_problem"] = sources
         else:
+            sources = verdict_neg8_sources(row, runs)
             self.neg8_reference_source = {"source": "claim_campaign_manifests_unauthenticated",
                                           "verdict_sources_problem": sources} if isinstance(sources, str) \
                 else {"source": "verdict_sources"}
         return sources
+
+    @staticmethod
+    def _neg8_basis_reference_check(row: Mapping[str, Any], runs: Path) -> Callable[[str, Path], str | None]:
+        """Item 7(b), on survivors only, before either energy is reduced."""
+        from joulewise import whole_window as ww
+        basis = ww._validated_evaluation_basis(row, runs)
+        occurrences = {item["bundle_id"]: item for item in basis["member_occurrences"]} if basis else {}
+
+        def check(bundle_id: str, path: Path) -> str | None:
+            if basis is None:
+                return "evaluation_basis_invalid"
+            occurrence = occurrences.get(bundle_id)
+            if occurrence is None:
+                return "reference_not_in_verdict_basis"
+            for name, field in (("config.json", "config_sha256"), ("metadata.json", "metadata_sha256"),
+                                ("summary_metrics.json", "summary_sha256")):
+                try:
+                    if sha256_bytes((path / name).read_bytes()) == occurrence.get(field):
+                        continue
+                except OSError:
+                    pass
+                return "reference_not_in_verdict_basis"
+            return None
+
+        return check
 
     def _neg8_spares(self) -> dict[str, list[str]]:
         """{slot: spare run ids} from the roster (the spare-slot retry, registration 0.12)."""
@@ -5320,15 +5406,19 @@ class _Harvest:
         problems: list[str] = result["problems"]
         reference_source = getattr(self, "neg8_reference_source", {})
         catalog_rescreen = reference_source.get("source") == "claim_campaign_manifests_authenticated"
-        if catalog_rescreen:
+        recovery = catalog_rescreen or "campaign_sources_problem" in reference_source
+        if recovery:
             result["reference_source"] = dict(reference_source)
-        if bracket is None and not catalog_rescreen:
+            if "campaign_sources_problem" in reference_source:
+                problems.append(reference_source["campaign_sources_problem"])
+        if bracket is None and not recovery:
             problems.append("bracket_absent")
-        if other_conditions and not survivors:
+        if other_conditions and not survivors and not recovery:
             problems.append("conditions_beyond_bound_underived")
         bound = getattr(self, "neg8_clean_bound", None)
-        if bound is None and (catalog_rescreen or getattr(self, "neg8_clean_bound_required", False)):
-            problems.append("clean_bound_unavailable")
+        if bound is None and (recovery or getattr(self, "neg8_clean_bound_required", False)):
+            if not recovery or not problems:
+                problems.append("clean_bound_unavailable")
         elif bound is None:
             bound = getattr(self, "neg8_collected_bound", None)
             if bound is None and survivors and bracket is not None:
@@ -5343,7 +5433,7 @@ class _Harvest:
             if evaluated_at is not None:
                 result["evaluated_at_source"] = source
                 break
-        if evaluated_at is None:
+        if evaluated_at is None and (not recovery or not problems):
             problems.append("evaluation_time_unrecorded")
         derived: Any = None
         if not problems:
@@ -5375,6 +5465,12 @@ class _Harvest:
                             if excluded is None else {"unreadable_energy": "lost"}
                         if catalog_rescreen:
                             replay["require_replicated_endpoints"] = True
+                            replay["surviving_reference_check"] = self._neg8_basis_reference_check(row, runs)
+                            replay["required_reference_ids"] = frozenset(
+                                member["run_id"] for member in (getattr(self, "roster", None) or {}).get("members", [])
+                                if isinstance(member, Mapping) and isinstance(member.get("run_id"), str)
+                                and (member.get("neg8_slot") in ("start", "midpoint", "end")
+                                     or member.get("spare_slot") in ("start", "midpoint", "end")))
                         return ww._derived_neg8_decision(
                             manifests, runs, policy, current=current, point_drift=True,
                             drift_bound_artifact=bound, return_bracket=True,
@@ -5387,7 +5483,9 @@ class _Harvest:
                     # never relax comparison for a verdict with recorded sources.
                     stored, problem = rederive(dict(exclude or {})) if catalog_rescreen else rederive(None)
                     if problem is not None:
-                        problems.append(f"rederivation_failed:{problem}")
+                        problems.append(problem if catalog_rescreen and problem in (
+                                            "reference_not_in_verdict_basis", "evaluation_basis_invalid")
+                                        else f"rederivation_failed:{problem}")
                     elif not isinstance(stored, Mapping):
                         problems.append("rederivation_invalid")
                     elif not catalog_rescreen and not _neg8_reproduces(stored, bracket, energy_unreadable=bool(
@@ -5402,6 +5500,16 @@ class _Harvest:
                             problems.append("rederivation_invalid")
             except Exception as exc:  # the core failing evaluates nothing
                 problems.append(f"rederivation_raised:{type(exc).__name__}")
+        if recovery:
+            # Every cannot-run record carries exactly the same source object
+            # in the screen, allowance and failed-screen flag.
+            self.neg8_reference_source = {
+                "source": "claim_campaign_manifests_unauthenticated" if problems
+                          else "claim_campaign_manifests_authenticated",
+                "verdict_sources_problem": "source_manifests_unrecorded"}
+            if problems:
+                self.neg8_reference_source["campaign_sources_problem"] = problems[0]
+            result["reference_source"] = dict(self.neg8_reference_source)
         survivor_bracket = None
         if isinstance(derived, Mapping):
             # Hash-bound into the derived records, so an allowance consumer

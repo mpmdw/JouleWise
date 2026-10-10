@@ -4879,6 +4879,8 @@ def _derived_neg8_decision(
     unlisted_strict_invalid: Literal["refuse", "read"] = "refuse",
     unreadable_energy: Literal["refuse", "writer_entry", "lost"] = "refuse",
     require_replicated_endpoints: bool = False,
+    surviving_reference_check: Callable[[str, Path], str | None] | None = None,
+    required_reference_ids: frozenset[str] = frozenset(),
 ) -> tuple[Any, str | None]:
     """Re-derive a verdict from source-member summaries, never the stored row.
 
@@ -4934,6 +4936,10 @@ def _derived_neg8_decision(
     ``require_replicated_endpoints`` is for the harvest's authenticated
     catalog recovery only: a block-5 window cannot use the frozen legacy
     single-reference pair when its verdict recorded no sources.
+    ``required_reference_ids`` also identifies roster references whose roles
+    are missing or unrecognized, so they fail the reference-shape check.
+    ``surviving_reference_check`` binds surviving references to the stored
+    evaluation basis after every loss test and before either energy is read.
     """
 
     try:
@@ -4977,6 +4983,13 @@ def _derived_neg8_decision(
                 member.get("role"), member.get("sentinel_position")
             )
             if position is None:
+                if require_replicated_endpoints and (
+                    isinstance(member.get("role"), str) and member["role"].startswith("neg8_daily_reference")
+                    or member.get("sentinel_position") is not None
+                    or member.get("run_id") in required_reference_ids
+                    or any(bundle_id in required_reference_ids for bundle_id in member.get("bundle_ids", []))
+                ):
+                    invalid_role = True
                 continue
             if position == "invalid":
                 invalid_role = True
@@ -5082,6 +5095,10 @@ def _derived_neg8_decision(
                         continue
                 if not survivors and _custody_strict_invalid(bundle_path, stored_summary):
                     return None, "bundle_strict_invalid"
+                if surviving_reference_check is not None:
+                    problem = surviving_reference_check(bundle_id, bundle_path)
+                    if problem is not None:
+                        return None, problem
                 if _current_strict_summary(stored_summary, bundle_path):
                     scientific_sha, canonical = _scientific_config_identity(bundle_path)
                     if (
@@ -5213,7 +5230,7 @@ def _derived_neg8_decision(
                 "planned_reference_counts": {"start": NEG8_REPLICATED_ENDPOINT_N, "midpoint": 1,
                                              "end": NEG8_REPLICATED_ENDPOINT_N},
                 "reference_losses": lost,
-                "midpoint_lost": False,
+                "midpoint_lost": not references["midpoint"],
                 "survivor_screen": "references_insufficient"})
         return (bracket if return_bracket else bracket["decision"], None)
     start = start_gross[0] if legacy_pair and start_gross else None

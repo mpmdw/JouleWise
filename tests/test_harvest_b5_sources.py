@@ -51,6 +51,8 @@ class SourceRecoveryTests(unittest.TestCase):
         self.points = {run_id: 100.0 for ids in self.ids.values() for run_id in ids}
         self.energy_reads = []
         self.triangle_invalid = set()
+        self.extra_roster = []
+        self.plan = {"t0_epoch_s": h.ERRATUM_2_ADMITTED_AT_EPOCH_S + 1}
         for ids in self.ids.values():
             for run_id in ids:
                 self.put(self.runs / run_id / "config.json", {"run_id": run_id})
@@ -61,7 +63,8 @@ class SourceRecoveryTests(unittest.TestCase):
         self.row = {"campaign_policy": {"sha256": self.policy_sha}, "timestamp": STAMP,
                     "evaluation_scope": {"completed_at": STAMP}, "bundle_ids": list(self.points),
                     "source_campaign_manifests": [], "row_provenance": {"source_campaign_manifests": []},
-                    "idle_admission_core": {"conditions": ["neg8_bracket_missing"],
+                    "idle_admission_core": {"conditions": ["neg8_bracket_missing",
+                                                           "whole_window_campaign_membership_unresolved"],
                                             "neg8_bracket": {"decision": "failed", "conditions": [
                                                 "neg8_bracket_missing", "neg8_bracket_reference_invalid"],
                                                              "claim_families": {}}}}
@@ -122,6 +125,8 @@ class SourceRecoveryTests(unittest.TestCase):
         self.stack.enter_context(mock.patch.object(ww, "build_neg8_freshness_observation", return_value={
             "evaluated_at_s": 2000, "binding_status": "resolved", "bindings": BINDINGS}))
         self.stack.enter_context(mock.patch.object(ww, "_is_hazard_runs_root", return_value=False))
+        self.hazard_root = self.stack.enter_context(mock.patch(
+            "joulewise.window_lineage.is_hazard_runs_root", return_value=True))
 
     def put(self, path, value):
         raw = (json.dumps(value, sort_keys=True) + "\n").encode()
@@ -134,14 +139,20 @@ class SourceRecoveryTests(unittest.TestCase):
                 "energy_anchor_shift_envelopes": {"/gross_energy_j": {
                     "point_j": point, "lower_j": point - .01, "upper_j": point + .01}}}
 
-    def manifest(self, slot, ids, name=None, policy_sha=None, execution="invoked"):
+    def manifest(self, slot, ids, name=None, policy_sha=None, execution="invoked", sentinel_position=None):
         name = name or slot
         path = self.runs / "campaign_manifests" / f"{name}.json"
         value = {"schema_version": cp.CAMPAIGN_PROVENANCE_SCHEMA_V2, "session_id": name,
                  "campaign_policy": {"sha256": policy_sha or self.policy_sha}, "members": [
                      {"run_id": run_id, "bundle_ids": [run_id], "execution": execution,
-                      "role": f"neg8_daily_reference_{slot}", "canonical_neg8_workload": True,
+                      "role": "science" if slot == "science" else f"neg8_daily_reference_{slot}",
+                      "canonical_neg8_workload": True,
                       "scientific_config_sha256": "d" * 64} for run_id in ids]}
+        for member in value["members"]:
+            if execution == "existing":
+                member.update({"config": "existing.json", "outcome": "usable"})
+            if sentinel_position is not None:
+                member["sentinel_position"] = sentinel_position
         raw = self.put(path, value)
         attestation = cp.campaign_provenance_attestation(
             manifest_path=path, raw_manifest_bytes=raw, manifest=value, timestamp=STAMP)
@@ -149,11 +160,41 @@ class SourceRecoveryTests(unittest.TestCase):
         self.files[log] = self.files.get(log, b"") + (json.dumps(attestation) + "\n").encode()
         return path
 
-    def harvest(self, module=h, losses=(), invalid=(), clean=True):
+    def basis(self, included=None, paths=None):
+        included = list(self.points) if included is None else included
+        paths = paths or {}
+        self.row["bundle_ids"] = included
+        self.row["evaluation_scope"].update({"runs_root": str(self.runs), "started_at": STAMP})
+        occurrences = []
+        for run_id in included:
+            relative = paths.get(run_id, run_id)
+            occurrence = {"bundle_id": run_id, "bundle_path": relative}
+            for name, field in (("config.json", "config_sha256"), ("metadata.json", "metadata_sha256"),
+                                ("summary_metrics.json", "summary_sha256")):
+                occurrence[field] = hashlib.sha256(self.files[self.runs / relative / name]).hexdigest()
+            occurrences.append(occurrence)
+        self.row["evaluation_basis"] = ww.build_evaluation_basis(
+            policy_sha256=self.policy_sha, member_occurrences=occurrences, calibration_bracket=None)
+
+    def harvest(self, module=h, losses=(), invalid=(), clean=True, ensure_trigger=True, ensure_basis=True):
+        # Most recovery cases exercise an absent science member, which triggers
+        # item 0(d) without adding a reference loss or changing the screen shape.
+        if ensure_trigger and not any(
+                not (self.runs / bundle_id).is_dir()
+                for manifest in h._claim_campaign_manifests_as_written(self.runs)
+                for member in manifest["members"] if member["execution"] == "invoked"
+                for bundle_id in member["bundle_ids"]):
+            self.manifest("science", ["science-absent"], name="absent-science")
+        if ensure_basis and "evaluation_basis" not in self.row:
+            included = [run_id for run_id in self.points
+                        if all(self.runs / run_id / name in self.files
+                               for name in ("config.json", "metadata.json", "summary_metrics.json"))]
+            self.basis(included)
         run = object.__new__(module._Harvest)
-        run.inputs = SimpleNamespace(claim_runs_root=self.runs, bound_runs_root=None)
+        run.inputs = SimpleNamespace(claim_runs_root=self.runs, bound_runs_root=None, plan=self.plan)
         run.roster = {"members": [{"run_id": run_id, "neg8_slot": slot}
-                                  for slot, ids in self.ids.items() for run_id in ids]}
+                                  for slot, ids in self.ids.items() for run_id in ids]
+                                  + [{"run_id": "end-spare", "spare_slot": "end"}] + self.extra_roster}
         run.members = {run_id: {"strict_valid": run_id not in invalid, "present": True, "status": "succeeded"}
                        for run_id in self.points}
         run.flags = SimpleNamespace(records=[{"code": code, "scope": {"level": "member", "run_id": run_id}}
@@ -163,6 +204,7 @@ class SourceRecoveryTests(unittest.TestCase):
         run.neg8_clean_bound = self.bound if clean else None
         run.neg8_clean_bound_required = True
         run.derived, run.withheld = self.root / "derived", self.root / "withheld"
+        run.archive = self.root
         return run
 
     def screen(self, run, row=None):
@@ -292,9 +334,11 @@ class SourceRecoveryTests(unittest.TestCase):
 
     def test_more_references_than_planned_still_fail(self):
         self.points["end-extra"] = 100.0
+        self.put(self.runs / "end-extra" / "config.json", {"run_id": "end-extra"})
         self.put(self.runs / "end-extra" / "summary_metrics.json", self.summary("end-extra"))
         self.put(self.runs / "end-extra" / "metadata.json", {"run_id": "end-extra"})
         self.manifest("end", ["end-extra"], name="extra")
+        self.extra_roster.append({"run_id": "end-extra", "spare_slot": "end"})
         source, record = self.screen(self.harvest())
         self.assertEqual(source, "screen_failed")
         self.assertIn("neg8_bracket_reference_invalid", record["rescreen"]["conditions"])
@@ -359,7 +403,9 @@ class SourceRecoveryTests(unittest.TestCase):
                     del self.files[path]
             with mock.patch.object(module, "write_json_once", self.write):
                 run = self.harvest(module, losses=[("start-2", "contention.request_overlap")])
+                run.inputs.plan = None  # recorded sources bypass the prospective gate
                 source, _ = self.screen(run, row)
+                run.neg8_allowance(row, source)
                 snapshots.append((source, copy.deepcopy(run.flags.records),
                                   {str(path): raw for path, raw in self.files.items()
                                    if run.derived in path.parents or run.withheld in path.parents}))
@@ -397,12 +443,307 @@ class SourceRecoveryTests(unittest.TestCase):
                 del self.files[path]
         for slot in ("start", "end"):
             run_id = self.ids[slot][0]
+            self.put(self.runs / run_id / "config.json", {"run_id": run_id})
             self.put(self.runs / run_id / "summary_metrics.json", self.summary(run_id))
             self.put(self.runs / run_id / "metadata.json", {"run_id": run_id})
             self.manifest(slot, [run_id])
         source, record = self.screen(self.harvest())
         self.assertEqual(source, "screen_failed")
         self.assertEqual(record["rescreen"]["survivors"]["survivor_screen"], "references_insufficient")
+        self.assertTrue(record["rescreen"]["survivors"]["midpoint_lost"])
+
+    def cannot_run(self, run, word):
+        source, record = self.screen(run)
+        self.assertEqual(source, "screen_failed")
+        self.assertFalse(record["rescreen"]["evaluated"])
+        self.assertEqual(record["rescreen"]["problems"], [word])
+        expected = {"source": "claim_campaign_manifests_unauthenticated",
+                    "verdict_sources_problem": "source_manifests_unrecorded", "campaign_sources_problem": word}
+        self.assertEqual(record["rescreen"]["reference_source"], expected)
+        failed = next(flag for flag in run.flags.records if flag["code"] == "neg8.screen_failed")
+        self.assertEqual(failed["observed"]["reference_source"], expected)
+        run.neg8_allowance(self.row, source)
+        allowance = json.loads(self.files[run.archive / ww.NEG8_HARVEST_ALLOWANCE_RECORD])
+        self.assertEqual(allowance["reference_source"], expected)
+
+    def test_program_gate_constants_and_order(self):
+        self.assertEqual(h.ERRATUM_2_ADMITTED_AT, "2026-10-10T16:30:00Z")
+        self.assertEqual(h._epoch_s(h.ERRATUM_2_ADMITTED_AT), h.ERRATUM_2_ADMITTED_AT_EPOCH_S)
+        run = self.harvest()
+        with mock.patch.object(h, "claim_neg8_sources") as catalog:
+            for plan in (None, {}, {"hazard_window": {"t0_epoch_s": h.ERRATUM_2_ADMITTED_AT_EPOCH_S + 1}},
+                         *({"t0_epoch_s": value} for value in (
+                             h.ERRATUM_2_ADMITTED_AT_EPOCH_S - 1, h.ERRATUM_2_ADMITTED_AT_EPOCH_S,
+                             None, True, "1791649801", float("nan"), float("inf")))):
+                with self.subTest(plan=plan):
+                    run.inputs.plan = plan
+                    self.assertEqual(run._neg8_sources(self.row, self.runs), "recovery_predates_erratum")
+            catalog.assert_not_called()
+            run.inputs.plan = self.plan
+            run._neg8_sources(self.row, self.runs)
+            catalog.assert_called_once()
+
+    def test_ungoverned_t0_discloses_cannot_run(self):
+        run = self.harvest(clean=False)
+        run.inputs.plan = {"t0_epoch_s": h.ERRATUM_2_ADMITTED_AT_EPOCH_S}
+        self.hazard_root.return_value = False
+        self.cannot_run(run, "recovery_predates_erratum")
+
+    def test_non_hazard_root_is_first_item_zero_failure(self):
+        run = self.harvest()
+        self.hazard_root.return_value = False
+        self.row["idle_admission_core"]["conditions"] = ["whole_window_campaign_membership_ambiguous"]
+        self.cannot_run(run, "runs_root_not_hazard")
+
+    def test_stored_membership_must_be_unresolved_without_ambiguity_or_refusal(self):
+        run = self.harvest()
+        for conditions in ([], ["whole_window_campaign_membership_ambiguous"],
+                           ["whole_window_campaign_membership_unresolved",
+                            "whole_window_campaign_membership_ambiguous"],
+                           ["whole_window_campaign_membership_unresolved",
+                            ww.REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS]):
+            with self.subTest(conditions=conditions):
+                self.row["idle_admission_core"]["conditions"] = conditions
+                self.assertEqual(run._neg8_sources(self.row, self.runs), "membership_condition_not_unresolved")
+
+    def test_no_absent_invoked_member_precedes_ambiguity_and_supersession(self):
+        run = self.harvest(ensure_trigger=False)
+        for name in ("config.json", "summary_metrics.json"):
+            self.files[self.runs / "second-directory" / name] = self.files[self.runs / "start-0" / name]
+        self.files[self.runs / "campaign_log.jsonl"] += b'{"record_type":"campaign_occurrence_supersession"}\n'
+        self.cannot_run(run, "no_absent_invoked_member")
+
+    def test_ambiguous_second_directory_precedes_supersession(self):
+        run = self.harvest()
+        for name in ("config.json", "summary_metrics.json"):
+            self.files[self.runs / "second-directory" / name] = self.files[self.runs / "start-0" / name]
+        self.files[self.runs / "campaign_log.jsonl"] += b'{"record_type":"campaign_occurrence_supersession"}\n'
+        self.cannot_run(run, "invoked_member_ambiguous")
+
+    def test_occurrence_supersession_row_even_without_id_blocks_recovery(self):
+        run = self.harvest()
+        self.files[self.runs / "campaign_log.jsonl"] += (
+            json.dumps({"schema_version": ww.OCCURRENCE_SUPERSESSION_SCHEMA}) + "\n").encode()
+        self.cannot_run(run, "occurrence_supersession_present")
+
+    def test_v1_manifest_cannot_supply_recovery(self):
+        run = self.harvest()
+        path = self.runs / "campaign_manifests" / "start.json"
+        value = json.loads(self.files[path])
+        value["schema_version"] = cp.CAMPAIGN_PROVENANCE_SCHEMA_V1
+        self.put(path, value)
+        self.cannot_run(run, "source_manifest_schema_v1")
+
+    def test_empty_catalog_is_unrecorded(self):
+        run = self.harvest()
+        for path in list(self.files):
+            if path.parent == self.runs / "campaign_manifests":
+                del self.files[path]
+        self.cannot_run(run, "source_manifests_unrecorded")
+
+    def test_all_v1_catalog_without_log_is_schema_v1(self):
+        run = self.harvest()
+        for path in list(self.files):
+            if path.parent == self.runs / "campaign_manifests":
+                manifest = json.loads(self.files[path])
+                manifest["schema_version"] = cp.CAMPAIGN_PROVENANCE_SCHEMA_V1
+                self.put(path, manifest)
+        del self.files[self.runs / "campaign_log.jsonl"]
+        self.cannot_run(run, "source_manifest_schema_v1")
+
+    def test_reference_outside_roster_or_at_wrong_slot_cannot_run(self):
+        run = self.harvest()
+        run.roster["members"] = [member for member in run.roster["members"] if member["run_id"] != "start-0"]
+        self.assertEqual(run._neg8_sources(self.row, self.runs), "reference_not_in_roster")
+        run.roster["members"].append({"run_id": "start-0", "spare_slot": "end"})
+        self.cannot_run(run, "reference_not_in_roster")
+
+    def test_surviving_reference_outside_basis_cannot_run(self):
+        self.basis([run_id for run_id in self.points if run_id != "start-0"])
+        run = self.harvest()
+        self.assertIsNotNone(ww._validated_evaluation_basis(self.row, self.runs))
+        self.cannot_run(run, "reference_not_in_verdict_basis")
+        self.assertNotIn("start-0", self.energy_reads)
+
+    def test_survivor_hash_mismatch_against_valid_basis_cannot_run(self):
+        for changed in ("config.json", "metadata.json", "summary_metrics.json"):
+            with self.subTest(changed=changed):
+                for name in ("config.json", "metadata.json", "summary_metrics.json"):
+                    value = json.loads(self.files[self.runs / "start-0" / name])
+                    if name == "config.json":
+                        value["run_id"] = "basis-copy"
+                    if name == changed:
+                        value["basis_copy_marker"] = True
+                    self.put(self.runs / "basis-copy" / name, value)
+                self.basis(paths={"start-0": "basis-copy"})
+                run = self.harvest()
+                self.assertIsNotNone(ww._validated_evaluation_basis(self.row, self.runs))
+                self.assertEqual(run._neg8_sources(self.row, self.runs)[1], True)
+                self.assertEqual(run._neg8_basis_reference_check(self.row, self.runs)("start-0", self.runs / "start-0"),
+                                 "reference_not_in_verdict_basis")
+        self.cannot_run(run, "reference_not_in_verdict_basis")
+        self.assertNotIn("start-0", self.energy_reads)
+
+    def test_changed_bytes_at_basis_path_are_evaluation_basis_invalid(self):
+        run = self.harvest()
+        self.files[self.runs / "start-0" / "metadata.json"] += b" "
+        self.cannot_run(run, "evaluation_basis_invalid")
+
+    def test_missing_basis_cannot_run(self):
+        self.cannot_run(self.harvest(ensure_basis=False), "evaluation_basis_invalid")
+
+    def test_lost_reference_need_not_be_in_basis(self):
+        self.basis([run_id for run_id in self.points if run_id != "start-0"])
+        run = self.harvest(losses=[("start-0", "contention.request_overlap")])
+        source, record = self.screen(run)
+        self.assertEqual(source, "survivor_rescreen")
+        self.assertTrue(record["rescreen"]["evaluated"])
+        self.assertNotIn("start-0", self.energy_reads)
+
+    def test_recovery_disclosure_in_allowance_is_exact(self):
+        run = self.harvest()
+        source, record = self.screen(run)
+        expected = {"source": "claim_campaign_manifests_authenticated",
+                    "verdict_sources_problem": "source_manifests_unrecorded"}
+        self.assertEqual(record["rescreen"]["reference_source"], expected)
+        run.neg8_allowance(self.row, source)
+        allowance = json.loads(self.files[run.archive / ww.NEG8_HARVEST_ALLOWANCE_RECORD])
+        self.assertEqual(allowance["reference_source"], expected)
+        self.assertEqual(allowance["source"], "survivor_rescreen")
+        self.assertEqual(allowance["survivor_bracket"], record["survivor_bracket"])
+
+    def test_missing_clean_bound_disclosure_is_exact(self):
+        self.cannot_run(self.harvest(clean=False), "clean_bound_unavailable")
+
+    def test_insufficient_shape_midpoint_lost_matches_survivors(self):
+        self.put(self.runs / "midpoint-0" / "summary_metrics.json", self.summary("midpoint-0", "failed"))
+        run = self.harvest(losses=[("start-1", "contention.request_overlap"),
+                                   ("start-2", "contention.request_overlap")])
+        source, record = self.screen(run)
+        self.assertEqual(source, "screen_failed")
+        survivors = record["rescreen"]["survivors"]
+        self.assertEqual(survivors["reference_counts"], {"start": 1, "midpoint": 0, "end": 3})
+        self.assertTrue(survivors["midpoint_lost"])
+        self.assertEqual(survivors["planned_reference_counts"], {"start": 3, "midpoint": 1, "end": 3})
+        self.assertEqual(survivors["survivor_screen"], "references_insufficient")
+
+    def test_no_surviving_reference_still_runs_current_shape_evaluator(self):
+        run = self.harvest(losses=[(run_id, "contention.request_overlap") for run_id in self.points])
+        source, record = self.screen(run)
+        self.assertEqual(source, "screen_failed")
+        self.assertTrue(record["rescreen"]["evaluated"])
+        self.assertEqual(record["rescreen"]["survivors"]["reference_counts"],
+                         {"start": 0, "midpoint": 0, "end": 0})
+        self.assertTrue(record["rescreen"]["survivors"]["midpoint_lost"])
+        self.assertEqual(self.energy_reads, [])
+
+    def test_noninvoked_references_never_count(self):
+        self.manifest("start", ["existing-reference"], name="existing", execution="existing")
+        self.manifest("midpoint", ["blocked-reference"], name="blocked", execution="blocked_before_invoke")
+        source, record = self.screen(self.harvest())
+        self.assertEqual(source, "survivor_rescreen")
+        self.assertEqual(set(self.energy_reads), set(self.points))
+        self.assertEqual(len(self.energy_reads), 7)
+
+    def test_malformed_present_source_list_never_enters_recovery(self):
+        self.row["row_provenance"]["source_campaign_manifests"] = "malformed"
+        run = self.harvest()
+        with mock.patch.object(h, "claim_neg8_sources") as catalog:
+            self.assertEqual(run._neg8_sources(self.row, self.runs), "source_manifests_unrecorded")
+            catalog.assert_not_called()
+
+    def test_absent_spare_reason_and_retry_counts(self):
+        self.add_bundleless_spare()
+        self.put(self.runs / "end-2" / "summary_metrics.json", self.summary("end-2", "failed"))
+        run = self.harvest(losses=[("end-spare", "member.timeout")])
+        source, _ = self.screen(run)
+        self.assertEqual(source, "survivor_rescreen")
+        disclosed = next(flag for flag in run.flags.records if flag["code"] == "neg8.reference_lost")
+        lost = next(item for item in disclosed["observed"]["lost"] if item["run_id"] == "end-spare")
+        self.assertEqual(lost["reason"], "bundle_absent")
+        self.assertEqual(lost["retry"], {"spares_measured": [], "spares_succeeded": []})
+
+    def test_role_position_disagreement_fails_the_screen(self):
+        self.manifest("start", self.ids["start"], sentinel_position="end")
+        # The new snapshot is authenticated; remove its stale attestation so
+        # only the reference-role error is under test.
+        log = self.runs / "campaign_log.jsonl"
+        rows = [json.loads(line) for line in self.files[log].splitlines()]
+        self.files[log] = b"".join((json.dumps(row) + "\n").encode() for index, row in enumerate(rows)
+                                  if index != 0)
+        source, record = self.screen(self.harvest())
+        self.assertEqual(source, "screen_failed")
+        self.assertTrue(record["rescreen"]["evaluated"])
+        self.assertIn("neg8_bracket_reference_invalid", record["rescreen"]["conditions"])
+
+    def test_policy_unregistered_cannot_run(self):
+        run = self.harvest()
+        self.row["campaign_policy"]["sha256"] = "0" * 64
+        self.cannot_run(run, "policy_unregistered")
+
+    def test_roster_reference_with_unrecognized_role_fails_the_screen(self):
+        path = self.runs / "campaign_manifests/start.json"
+        manifest = json.loads(self.files[path])
+        manifest["members"][0]["role"] = None
+        raw = self.put(path, manifest)
+        attestation = cp.campaign_provenance_attestation(
+            manifest_path=path, raw_manifest_bytes=raw, manifest=manifest, timestamp=STAMP)
+        self.files[self.runs / "campaign_log.jsonl"] += (json.dumps(attestation) + "\n").encode()
+        source, record = self.screen(self.harvest())
+        self.assertEqual(source, "screen_failed")
+        self.assertTrue(record["rescreen"]["evaluated"])
+        self.assertIn("neg8_bracket_reference_invalid", record["rescreen"]["conditions"])
+        self.assertNotIn("start-0", self.energy_reads)
+
+    def test_unsafe_bundle_id_cannot_run(self):
+        self.manifest("science", ["../unsafe"], name="unsafe")
+        self.cannot_run(self.harvest(), "source_manifest_members_invalid")
+
+    def test_duplicate_absent_id_in_one_manifest_cannot_run(self):
+        self.manifest("science", ["absent", "absent"], name="duplicates")
+        self.cannot_run(self.harvest(), "source_manifest_members_invalid")
+
+    def test_authenticated_manifest_path_outside_root_cannot_run(self):
+        run = self.harvest()
+        real = ww._safe_source_path
+        with mock.patch.object(ww, "_safe_source_path", side_effect=lambda root, text:
+                               None if text == "campaign_manifests/end.json" else real(root, text)):
+            self.cannot_run(run, "source_manifest_path_invalid")
+
+    def test_summary_unreadable_is_lost_before_reduction(self):
+        del self.files[self.runs / "start-0/summary_metrics.json"]
+        self.basis([run_id for run_id in self.points if run_id != "start-0"])
+        source, record = self.screen(self.harvest())
+        self.assertEqual(source, "survivor_rescreen")
+        loss = next(item for item in record["rescreen"]["survivors"]["reference_losses"]
+                    if item["bundle_id"] == "start-0")
+        self.assertEqual(loss["reason"], "summary_unreadable")
+        self.assertNotIn("start-0", self.energy_reads)
+
+    def test_stored_neg8_conditions_decide_nothing_on_recovery(self):
+        self.row["idle_admission_core"]["conditions"] += ["neg8_bracket_abs_delta_exceeded"]
+        self.row["idle_admission_core"]["neg8_bracket"]["conditions"] += ["neg8_bracket_idle_sub_abs_delta_exceeded"]
+        source, record = self.screen(self.harvest())
+        self.assertEqual(source, "survivor_rescreen")
+        self.assertEqual(record["rescreen"]["conditions"], [])
+
+    def test_recorded_unauthenticated_sources_and_missing_bound_are_byte_identical(self):
+        old = sealed_harvest()
+        self.row["row_provenance"]["source_campaign_manifests"] = [
+            {"path": "campaign_manifests/start.json", "sha256": "0" * 64}]
+        snapshots = []
+        for module in (old, h):
+            for path in list(self.files):
+                if self.root / "derived" in path.parents or self.root / "withheld" in path.parents:
+                    del self.files[path]
+            with mock.patch.object(module, "write_json_once", self.write):
+                run = self.harvest(module, clean=False)
+                source, _ = self.screen(run)
+                run.neg8_allowance(self.row, source)
+                snapshots.append((source, copy.deepcopy(run.flags.records),
+                                  {str(path): raw for path, raw in self.files.items()
+                                   if run.derived in path.parents or run.withheld in path.parents}))
+        self.assertEqual(snapshots[0], snapshots[1])
 
 
 if __name__ == "__main__":

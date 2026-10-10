@@ -1853,14 +1853,15 @@ class Neg8ScreenTests(WindowTestCase):
         self.assertIn("neg8.screen_failed", window.codes())
         screen = json.loads((window.archive / "derived/neg8-screen.json").read_bytes())
         self.assertEqual((screen["rescreen"]["evaluated"], screen["rescreen"]["problems"]),
-                         (False, ["evaluation_time_unrecorded"]))
+                         (False, ["recovery_predates_erratum"]))
         self.assertNotIn("neg8.bound_not_derived", window.codes())
 
     def test_collected_corpus_bound_with_a_verdict_whose_screen_cannot_be_rederived(self):
         """The writer read no bound; a re-evaluation that cannot run leaves the screen failed.
 
-        This stored row names no source manifests and no evaluation time, so
-        the screen cannot be re-derived against the 17-member bound
+        This stored row names no source manifests and its plan has no governed
+        t0, so the prospective recovery gate fails before evaluation-time checks.
+        The screen cannot be re-derived against the 17-member bound
         (Neg8RescreenTests covers rows it can).
         """
         window = self.window()
@@ -1872,7 +1873,7 @@ class Neg8ScreenTests(WindowTestCase):
         self.assertNotIn("neg8.bound_not_derived", window.codes())
         (flag,) = [flag for flag in window.flags() if flag["code"] == "neg8.screen_failed"]
         rescreen = flag["observed"]["collected_bound_rescreen"]
-        self.assertEqual((rescreen["evaluated"], rescreen["problems"]), (False, ["evaluation_time_unrecorded"]))
+        self.assertEqual((rescreen["evaluated"], rescreen["problems"]), (False, ["recovery_predates_erratum"]))
         self.assertIn("neg8.screen_failed", window.exclusions()["reasons"])
         # The always-on clean bound also tries the registered 12-member case,
         # and the same missing rederivation inputs still leave it failed.
@@ -1883,7 +1884,7 @@ class Neg8ScreenTests(WindowTestCase):
                                   whole_window.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED])
         twelve.harvest()
         (flag,) = [flag for flag in twelve.flags() if flag["code"] == "neg8.screen_failed"]
-        self.assertEqual(flag["observed"]["collected_bound_rescreen"]["problems"], ["evaluation_time_unrecorded"])
+        self.assertEqual(flag["observed"]["collected_bound_rescreen"]["problems"], ["recovery_predates_erratum"])
         self.assertTrue((twelve.archive / "derived" / "neg8-screen.json").exists())
 
     def test_unreadable_verdict_fails_the_screen(self):
@@ -2626,14 +2627,28 @@ class HarvestCheckoutTests(WindowTestCase):
 
     def test_both_records_name_the_commit_the_program_files_and_whether_the_checkout_was_clean(self):
         window = self.window()
-        record = window.harvest()
+        captured_status = []
+
+        def git_at_capture(arguments, **kwargs):
+            result = subprocess.run(arguments, **kwargs)
+            if arguments[3] == "status":
+                captured_status.append([line for line in result.stdout.splitlines() if line.strip()])
+            return result
+
+        seams = h.Seams(group_alive=lambda pgid: False, exclusions_compute=EXCLUSIONS,
+                        boot_session_uuid=lambda: "B5-TEST-BOOT",
+                        harvest_checkout=lambda: h.harvest_checkout(runner=git_at_capture))
+        record = window.harvest(seams=seams)
         checkout = record["harvest_checkout"]
         # This test runs the harvest from this very checkout.
         self.assertEqual((checkout["schema"], checkout["root"], checkout["errors"]),
                          ("joulewise.b5_harvest_checkout.v1", str(ROOT), []))
         self.assertEqual(checkout["head"], self.git("rev-parse", "HEAD").strip())
-        dirty = [line for line in self.git("status", "--porcelain=v1", "--untracked-files=all").splitlines()
-                 if line.strip()]
+        # With authorized TMPDIR inside the worktree, harvesting creates more
+        # untracked scratch files.  Compare the exact Git result the program
+        # captured, rather than a later, different filesystem state.
+        self.assertEqual(len(captured_status), 1)
+        dirty = captured_status[0]
         self.assertEqual((checkout["status_clean"], checkout["status_lines"]), (not dirty, len(dirty)))
         self.assertEqual(checkout["files"], {relative: sha(ROOT / relative) for relative in (
             "joulewise/b5/harvest.py", "joulewise/whole_window.py", "scripts/harvest_b5_window.py")})

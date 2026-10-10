@@ -1069,7 +1069,11 @@ class HarvestSurvivorTests(_hb().WindowTestCase):
 
             with mock.patch.object(ww, "_custody_strict_invalid", strict), \
                     mock.patch.object(h, "verdict_neg8_sources", return_value=([manifest], True, policy)):
-                result = run._neg8_rescreen({"timestamp": "1970-01-01T00:33:20Z"}, stored, set(), authentic=True,
+                # This probe mocks authenticated recorded sources; identify
+                # that route explicitly rather than a source-less recovery.
+                row = {"timestamp": "1970-01-01T00:33:20Z", "row_provenance": {
+                    "source_campaign_manifests": [{"path": "campaign_manifests/probe.json"}]}}
+                result = run._neg8_rescreen(row, stored, set(), authentic=True,
                                             exclude={bad: "member.strict_validation_failed"}, survivors=True)
         self.assertEqual(result["problems"], [])
         self.assertTrue(result["evaluated"])
