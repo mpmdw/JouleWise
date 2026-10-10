@@ -1,0 +1,25 @@
+v5-b5-beta-a2-20261010T1756Z
+   ('failed', 'abort') 4
+   ('failed', 'other') 1
+   ('succeeded', 'admitted') 43
+   lost at 12:35 failed abort
+   lost at 12:52 failed abort
+   lost at 12:55 failed abort
+   lost at 13:00 failed abort
+   lost at 13:27 failed other
+v5-b5-beta-a1-20261010T0742Z
+   ('failed', 'abort') 8
+   ('succeeded', 'admitted') 117
+   lost at 02:40 failed abort
+   lost at 03:53 failed abort
+   lost at 05:41 failed abort
+   lost at 05:44 failed abort
+   lost at 05:49 failed abort
+   lost at 05:57 failed abort
+   lost at 06:00 failed abort
+   lost at 06:34 failed abort
+v5-b5-alpha-a1-20261009T2312Z
+   ('failed', 'abort') 2
+   ('succeeded', 'admitted') 123
+   lost at 18:45 failed abort
+   lost at 19:21 failed abort
