@@ -1,0 +1,25 @@
+You are a cold reviewer (Fable 5.1) giving the final pass on a change to a harvest program on the claim path of a pre-registered measurement block (JouleWise, block 5). This is a single non-interactive session: start no background task and no subagent, run every probe in the foreground, and end only after you have written your findings file with the Write tool. Ending before the file exists is a protocol failure. Budget: about 35 minutes of wall time; a probe you could not finish is reported as NOT EXECUTED, not guessed.
+
+First line of your findings: a contamination disclosure (what you read before this charge about this project in this session).
+
+Hard rules. Your working directory /Users/edr/code/JouleWise-wt-harvest-sources is read-only to you: write no file in it, run no git command that changes anything. You may copy files into /Users/edr/.jwtmp/fable-pass/ (create it) and mutate the copies to probe; delete nothing elsewhere. You may run single test modules with `PYTHONDONTWRITEBYTECODE=1 TMPDIR=/Users/edr/.jwtmp/fable-pass /opt/homebrew/bin/python3.13 -m unittest <module>` from the working directory (for example tests.test_harvest_b5_sources); do not run `unittest discover` or the repository-wide suite. No Homebrew, no network, no measurement, no other agent. The measurement block is blinded: you may NOT open anything under /Users/edr/night-custody/v5-b5-*, /Users/edr/night-b5/, or /Users/edr/night-archive/harvest-v5-b5-*, and run no program over them. Structure only in your findings: no energy, power or duration, no member's name. The owner's name and address go into no file and no request. Do not read RUN_STATE.md, CLAUDE.md files, docs/orchestration.md, decision logs or other process doctrine.
+
+The specification. A cold gate admitted a prospective erratum to the sealed registration; its rule text is frozen and is the specification the program must implement exactly, item by item: /Users/edr/code/JouleWise/docs/process_traces/2026-10-block5/sources-erratum/ERRATUM.md, sections 4 and 5 (items 0 to 9, "Unchanged", the worked example, pin scoping, the program gate). Item 9 (the claim consumer) is a later lane's and is not in this change. Background if you need it: RULING.md and REFUTATION.md beside it.
+
+The change. `git diff 224a264c5faaae90cdf56118df37e773a932700b d435547e2d335ec75a90ad7a6558ada91074a6fb` in the working directory: joulewise/b5/harvest.py, joulewise/whole_window.py and tests. 224a264c5 is the pinned harvest program; the sealed tree (registration, verdict writer scripts/run_campaign.py, joulewise/campaign_provenance.py) is in the same directory. The implementer's reports: /Users/edr/night-archive/b5-consults/beta-a1/fix/sol-fix.md and sol-fix2.md (claims to verify, not facts).
+
+Find, with file and line and an executed probe wherever one is possible:
+1. Any way the changed program lets a window PASS the NEG-8 screen, or supplies a drift allowance, that the admitted text would remove: a missing or mis-ordered check of items 0 to 7, a check that can be bypassed (an exception swallowed into a pass, a None treated as success, an early return), a reference counted that item 3 excludes, a loss of item 4 not applied before energies are reduced, a bound other than the clean bound on the recovery path, the legacy single-pair protocol reachable, the stored bracket deciding anything on the recovery path.
+2. Any change in behaviour for a verdict that records sources (must be byte-identical to 224a264c5) or whose recorded sources do not authenticate (must be exactly as before). Check the implementer's rehearsal comparison test (tests/test_harvest_b5_rehearsal_compare.py): does it compare what it claims, and can it pass vacuously?
+3. The program gate: the constants ERRATUM_2_ADMITTED_AT = "2026-10-10T16:30:00Z" and its epoch 1791649800 (verify the epoch arithmetic), the strict comparison with the plan's t0_epoch_s, fail-closed on an unreadable t0, tested after item 0(a) and before 0(b). Can an ungoverned attempt (t0 at or before the constant) reach the recovery by any path?
+4. Item 8's disclosure objects: exact keys and words, in neg8-screen.json, in observed.reference_source of a failed flag, and in neg8-allowance.json.
+5. Tests that assert too little: for each of items 0(b) to 0(f), 1, 3, 7(b) and the gate, name the test and say whether deleting that check from the program would make it fail (mutate a copy and run the module where practical: at least five mutation probes, each reported with the mutated line and the test result).
+6. Anything outside the admitted text that the change does (a new exclusion, a new refusal, a behaviour the text does not license).
+
+Classify each finding BLOCKER (a number or a claim could be wrong), SHOULD-FIX, or NOTE (recording only; these are dispositioned "flag, not refuse" and get no fix round). For each BLOCKER give the minimal exact fix. Say plainly if you find none.
+
+Write your findings to /Users/edr/night-archive/b5-consults/beta-a1/fix/FABLE-pass.md. Last line, exactly one of:
+PASS
+PASS-WITH-FIXES (list the finding ids that must be fixed before the pin)
+FAIL
+REFUSED (and why)
