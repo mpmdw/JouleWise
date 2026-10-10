@@ -1170,6 +1170,51 @@ def verdict_neg8_sources(row: Mapping[str, Any], runs_root: Path) \
     return manifests, current, registered
 
 
+def claim_neg8_sources(row: Mapping[str, Any], runs_root: Path) \
+        -> tuple[list[Mapping[str, Any]], bool, Mapping[str, Any]] | str:
+    """Authenticate the complete runs-root catalog when the verdict recorded no sources.
+
+    Do not project onto the verdict's directory-fallback evaluation basis:
+    it omitted absent members and lost their reference roles.  Invoked
+    references without bundles must reach the survivor loss test too.
+    """
+    from joulewise import whole_window as ww
+    from joulewise.campaign_provenance import load_authenticated_campaign_catalog
+    root = Path(runs_root)
+    policy = row.get("campaign_policy")
+    policy_sha = policy.get("sha256") if isinstance(policy, Mapping) else None
+    registered = ww._registered_bracket_policy(policy_sha)
+    if registered is None:
+        return "policy_unregistered"
+    catalog = load_authenticated_campaign_catalog(root, root / "campaign_log.jsonl")
+    if catalog is None:
+        return "source_manifest_unauthenticated"
+    if not catalog:
+        return "source_manifests_unrecorded"
+    manifests: list[Mapping[str, Any]] = []
+    referenced: set[str] = set()
+    for record in catalog:
+        if ww._safe_source_path(root, f"campaign_manifests/{record.path.name}") is None:
+            return "source_manifest_path_invalid"
+        manifest_policy = record.value.get("campaign_policy")
+        if not isinstance(manifest_policy, Mapping) or manifest_policy.get("sha256") != policy_sha:
+            return "source_manifest_policy_differs"
+        members = ww._manifest_members(record.value, root)
+        if members is None or referenced & members or any(ww._safe_source_path(root, item) is None
+                                                        for item in members):
+            return "source_manifest_members_invalid"
+        referenced.update(members)
+        manifests.append(record.value)
+    paths = ww._manifest_bundle_paths(manifests, root)
+    if paths is None:
+        return "source_manifest_members_invalid"
+    current = any(ww._current_strict_summary(ww._read_json_object(path / "summary_metrics.json"), path)
+                  for path in paths.values())
+    if not current:
+        return "not_point_drift"
+    return manifests, current, registered
+
+
 def _fsync_dir(path: Path) -> None:
     try:
         descriptor = os.open(path, os.O_RDONLY)
@@ -4906,10 +4951,9 @@ class _Harvest:
         if conditions:
             reasons.append("neg8_conditions")
         harvest_losses = self._neg8_reference_losses(row)
-        # The stored bracket's own loss list is trusted only when its sources
-        # authenticate: otherwise every known loss goes to the re-screen, which
-        # then cannot run, so an unauthenticated source never leaves a passing
-        # screen standing over a loss-flagged reference (delta audit A3).
+        # Only authenticated recorded sources let the stored loss list stand.
+        # Catalog recovery applies every loss afresh; unauthenticated sources
+        # never leave a passing screen standing over a known loss (audit A3).
         source = getattr(self, "neg8_reference_source", None)
         sources_authentic = isinstance(source, Mapping) and source.get("source") == "verdict_sources"
         stored_lost = {item.get("bundle_id") for item in (bracket or {}).get("reference_losses") or []
@@ -4917,9 +4961,12 @@ class _Harvest:
         new_losses = {run_id: code for run_id, code in harvest_losses.items() if run_id not in stored_lost}
         clean_bound = getattr(self, "neg8_clean_bound", None)
         clean_required = getattr(self, "neg8_clean_bound_required", False)
-        survivors = bool(new_losses) or clean_bound is not None or clean_required
-        # Only the pre-cap loss cases may clear other stored NEG-8 conditions.
-        loss_rescreen = bool(new_losses) or (clean_bound is not None and
+        catalog_rescreen = isinstance(source, Mapping) and source.get("source") == \
+            "claim_campaign_manifests_authenticated"
+        survivors = bool(new_losses) or clean_bound is not None or clean_required or catalog_rescreen
+        # Catalog recovery rebuilds the absent source roles; otherwise only
+        # the pre-cap loss cases may clear other stored NEG-8 conditions.
+        loss_rescreen = catalog_rescreen or bool(new_losses) or (clean_bound is not None and
                                              getattr(self, "neg8_corpus_physics_dropped", False))
         underived = {ww.CONDITION_NEG8_DRIFT_BOUND_UNDERIVED, ww.CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED}
         collected = (self.neg8 or {}).get("derived_from") == "collected_subset" and bool(conditions & underived)
@@ -5019,7 +5066,12 @@ class _Harvest:
         The test reads whether an energy is present and well formed.  No
         reference is lost for the size of its energy.
 
-        When the verdict's sources do not authenticate, the references are
+        When the verdict recorded no sources, the authenticated claim-root
+        catalog supplies the references and the re-screen.  Its absent
+        invoked references are losses, including a bundle-less spare.
+        This recovery requires a prospective registration erratum (6.5).
+
+        When recorded verdict sources do not authenticate, the references are
         read from the claim root's campaign manifests as written
         (``campaign_manifests/*.json``, unauthenticated; cold pass 2 N1), so a
         loss-flagged reference is still mapped: the re-screen then cannot run
@@ -5036,16 +5088,15 @@ class _Harvest:
         if runs is None or getattr(self, "flags", None) is None:
             return {}
         try:
-            sources = verdict_neg8_sources(row, runs)
+            sources = self._neg8_sources(row, runs)
         except Exception as exc:
             sources = f"sources_raised:{type(exc).__name__}"
-        if isinstance(sources, str):
-            manifests = _claim_campaign_manifests_as_written(Path(runs))
             self.neg8_reference_source = {"source": "claim_campaign_manifests_unauthenticated",
                                           "verdict_sources_problem": sources}
+        if isinstance(sources, str):
+            manifests = _claim_campaign_manifests_as_written(Path(runs))
         else:
             manifests = sources[0]
-            self.neg8_reference_source = {"source": "verdict_sources"}
         references: set[str] = set()
         for manifest in manifests:
             for member in manifest.get("members") or [] if isinstance(manifest, Mapping) else []:
@@ -5054,6 +5105,8 @@ class _Harvest:
                 if ww._neg8_position(member.get("role"), member.get("sentinel_position")) in ("start", "midpoint",
                                                                                                 "end"):
                     references.update(item for item in member.get("bundle_ids") or [] if isinstance(item, str))
+        absent = {run_id for run_id in references if not (Path(runs) / run_id).is_dir()} \
+            if self.neg8_reference_source.get("source") == "claim_campaign_manifests_authenticated" else set()
         # Delta audit A3: the sealed roster (the plan tree) names every planned
         # reference (``neg8_slot``) and every spare (``spare_slot``) whatever
         # the manifests say, so a known loss always reaches the survivors
@@ -5105,7 +5158,26 @@ class _Harvest:
                 unreadable.append(run_id)
                 losses.setdefault(run_id, ww.NEG8_LOSS_ENERGY_UNREADABLE)
         self.neg8_energy_unreadable = unreadable
+        for run_id in sorted(absent):
+            losses.setdefault(run_id, "bundle_absent")
         return losses
+
+    def _neg8_sources(self, row: Mapping[str, Any], runs: Path) \
+            -> tuple[list[Mapping[str, Any]], bool, Mapping[str, Any]] | str:
+        sources = verdict_neg8_sources(row, runs)
+        if sources == "source_manifests_unrecorded":
+            sources = claim_neg8_sources(row, runs)
+            self.neg8_reference_source = {
+                "source": "claim_campaign_manifests_unauthenticated" if isinstance(sources, str)
+                          else "claim_campaign_manifests_authenticated",
+                "verdict_sources_problem": "source_manifests_unrecorded"}
+            if isinstance(sources, str):
+                self.neg8_reference_source["campaign_sources_problem"] = sources
+        else:
+            self.neg8_reference_source = {"source": "claim_campaign_manifests_unauthenticated",
+                                          "verdict_sources_problem": sources} if isinstance(sources, str) \
+                else {"source": "verdict_sources"}
+        return sources
 
     def _neg8_spares(self) -> dict[str, list[str]]:
         """{slot: spare run ids} from the roster (the spare-slot retry, registration 0.12)."""
@@ -5230,6 +5302,13 @@ class _Harvest:
         no row is authentic here (``whole_window.verdict_unauthenticated`` is
         disclosed), and the screen is re-derived rather than read from the row.
 
+        If the verdict recorded no sources, an authenticated complete catalog
+        replaces its role-less directory fallback.  There is no stored
+        reference bracket to compare in that case: require the clean bound,
+        run the exclusion pass and disclose the catalog source.  Recorded
+        sources retain the comparison above.  This recovery needs a
+        prospective registration erratum (6.5, 10).
+
         The re-derived bracket (energies) goes to
         ``withheld/neg8-rescreen-bracket.json``; its decision, conditions,
         freshness verdict and survivor counts go to ``derived/neg8-screen.json``.
@@ -5239,12 +5318,16 @@ class _Harvest:
                                   "evaluated_at_source": None, "verdict_authenticated": bool(authentic),
                                   "problems": []}
         problems: list[str] = result["problems"]
-        if bracket is None:
+        reference_source = getattr(self, "neg8_reference_source", {})
+        catalog_rescreen = reference_source.get("source") == "claim_campaign_manifests_authenticated"
+        if catalog_rescreen:
+            result["reference_source"] = dict(reference_source)
+        if bracket is None and not catalog_rescreen:
             problems.append("bracket_absent")
         if other_conditions and not survivors:
             problems.append("conditions_beyond_bound_underived")
         bound = getattr(self, "neg8_clean_bound", None)
-        if bound is None and getattr(self, "neg8_clean_bound_required", False):
+        if bound is None and (catalog_rescreen or getattr(self, "neg8_clean_bound_required", False)):
             problems.append("clean_bound_unavailable")
         elif bound is None:
             bound = getattr(self, "neg8_collected_bound", None)
@@ -5266,7 +5349,7 @@ class _Harvest:
         if not problems:
             runs = self.inputs.claim_runs_root
             try:
-                sources = verdict_neg8_sources(row, runs)
+                sources = self._neg8_sources(row, runs)
                 if isinstance(sources, str):
                     problems.append(sources)
                 else:
@@ -5290,22 +5373,28 @@ class _Harvest:
                         replay = {"stored_strict_losses": stored_strict, "unlisted_strict_invalid": "read",
                                   "unreadable_energy": "writer_entry"} \
                             if excluded is None else {"unreadable_energy": "lost"}
+                        if catalog_rescreen:
+                            replay["require_replicated_endpoints"] = True
                         return ww._derived_neg8_decision(
                             manifests, runs, policy, current=current, point_drift=True,
                             drift_bound_artifact=bound, return_bracket=True,
                             freshness_evaluated_at_s=evaluated_at, exclude_bundle_ids=excluded,
                             strict_invalid=harvest_strict_invalid, **replay)
 
-                    stored, problem = rederive(None)
+                    # A directory-fallback verdict lost the source roles and
+                    # has no reference bracket to reproduce.  Authenticate the
+                    # complete catalog instead and run the same exclusion pass;
+                    # never relax comparison for a verdict with recorded sources.
+                    stored, problem = rederive(dict(exclude or {})) if catalog_rescreen else rederive(None)
                     if problem is not None:
                         problems.append(f"rederivation_failed:{problem}")
                     elif not isinstance(stored, Mapping):
                         problems.append("rederivation_invalid")
-                    elif not _neg8_reproduces(stored, bracket, energy_unreadable=bool(
+                    elif not catalog_rescreen and not _neg8_reproduces(stored, bracket, energy_unreadable=bool(
                             getattr(self, "neg8_energy_unreadable", None))):
                         problems.append("rederivation_differs_from_stored_bracket")
                     derived = stored
-                    if not problems and exclude is not None:
+                    if not problems and exclude is not None and not catalog_rescreen:
                         derived, problem = rederive(dict(exclude))
                         if problem is not None:
                             problems.append(f"rederivation_failed:{problem}")

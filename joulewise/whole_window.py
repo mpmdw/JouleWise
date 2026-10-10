@@ -4878,6 +4878,7 @@ def _derived_neg8_decision(
     stored_strict_losses: Any = None,
     unlisted_strict_invalid: Literal["refuse", "read"] = "refuse",
     unreadable_energy: Literal["refuse", "writer_entry", "lost"] = "refuse",
+    require_replicated_endpoints: bool = False,
 ) -> tuple[Any, str | None]:
     """Re-derive a verdict from source-member summaries, never the stored row.
 
@@ -4929,6 +4930,10 @@ def _derived_neg8_decision(
     * ``"lost"`` (the harvest's exclusion pass): the reference is lost with
       reason ``energy_unreadable`` before aggregation and its energy is never
       read; the survivors decide.
+
+    ``require_replicated_endpoints`` is for the harvest's authenticated
+    catalog recovery only: a block-5 window cannot use the frozen legacy
+    single-reference pair when its verdict recorded no sources.
     """
 
     try:
@@ -5198,6 +5203,18 @@ def _derived_neg8_decision(
             ),
             lost_references=lost if survivors else None,
         )
+        if require_replicated_endpoints and survivors and min(len(references["start"]),
+                                                              len(references["end"])) \
+                < min(NEG8_SURVIVOR_ENDPOINT_COUNTS):
+            bracket.update({
+                "decision": "failed",
+                "conditions": sorted(set(bracket["conditions"]) | {"neg8_bracket_reference_invalid"}),
+                "reference_counts": {slot: len(values) for slot, values in references.items()},
+                "planned_reference_counts": {"start": NEG8_REPLICATED_ENDPOINT_N, "midpoint": 1,
+                                             "end": NEG8_REPLICATED_ENDPOINT_N},
+                "reference_losses": lost,
+                "midpoint_lost": False,
+                "survivor_screen": "references_insufficient"})
         return (bracket if return_bracket else bracket["decision"], None)
     start = start_gross[0] if legacy_pair and start_gross else None
     end = end_gross[0] if legacy_pair and end_gross else None
