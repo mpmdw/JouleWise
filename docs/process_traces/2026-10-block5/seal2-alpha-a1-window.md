@@ -110,13 +110,40 @@ the first seal stay kept, disclosed and not analysed. The yield rule holds nothi
 `min_valid`, and the driver's shared-cause code is absent. No G10 record was written by this window.
 
 Next is BETA attempt 1 (`d117_floor_qwen3-8b_v5`), which the `B5-ARM-RELEASED:` line names. The window
-before it has its verdict file. `/private/tmp` is still not small, so the midnight rule of the RUN_STATE
-block applies: BETA's t0 is set at or after 00:10 local on 2026-10-10, which means this activation runs
-brief 5.2 at or after 23:40 PDT. Free disk is 192 GiB against the 91 needed.
+before it has its verdict file. Free disk is 192 GiB against the 91 needed. It is not armed by this
+activation: the next section says why.
+
+## The arm is held by a session on the Mac (22:55 PDT)
+
+The agent check of brief 5.1 (run at 22:55 PDT, after the harvest) lists four foreign processes: an
+interactive `claude` session, pid 25621, on terminal `ttys000`, started 22:35:16 PDT, and its three
+children (pids 25644, 25667, 25668: the project's Codex MCP server). Firefox (pid 25671) was opened four
+seconds later. `own_seats_still_running` is empty. The session is the owner's and is not this
+activation's to signal (E-2b=NO), so no plan was written. This is its first sighting: one line was
+appended to `/Users/edr/night-plan-staging/b5-bench/foreign-agents.log`, and no email was sent.
+
+The other desk checks of 5.1 all passed at 22:55 PDT: the four helpers hash to the brief's digests; clone
+clean, its diff against the claim head lists the three seal documents and the ledger pin; ledger
+`blocking` empty, no open session; clock frequency check `passes: true` (bound 4.69 ms against the 5.0 ms
+limit); 192 GiB free; build 25G83; adapter connected, not charging, battery current 0 mA; reference model
+and interpreter equal to the sealed pins (generator rc=0, nine names).
 
 ## Next action
 
-Read from the disk by brief section 3. If no `v5-b5-beta-a1-*` custody root exists, that is case 4: arm
-BETA attempt 1 by brief section 5 with the RUN_STATE block's differences (t0 between 00:10 and 17:15
-local). If one exists, the first case of section 3 that applies to it; its arm record is
-`seal2-beta-a1-arm.md` beside this file.
+Read from the disk by brief section 3. No `v5-b5-beta-a1-*` custody root exists, so it is case 4: arm
+BETA attempt 1 by brief section 5 with the RUN_STATE block's differences. Three things hold or shape that
+arm:
+
+1. **The agent check must print two empty lists.** While pid 25621 is alive, write no plan and follow
+   brief 5.1's rule for an interactive session: sighting 2 is logged and exits quietly; the third
+   consecutive activation that finds the same pid sends the one `ACTION NEEDED` email. A new pid starts
+   the count again.
+2. **The settle of RUN_STATE item 5.** The owner was at the keyboard from 22:35 PDT. After the session
+   and Firefox are gone, wait 60 minutes with the display asleep (`pmset displaysleepnow`) before the arm.
+   If the boot time has changed (`sysctl -n kern.boottime` later than 2026-09-18), do item 6 first.
+3. **The midnight rule of RUN_STATE item 4.** `/private/tmp` is not small, so t0 is between 00:10 and
+   17:15 local; an arm that cannot meet that waits for 00:10.
+
+If the owner's session leaves an instruction (unread mail from the notice address, a `directive` issue
+dated after the hand-off, or a newer RUN_STATE top block on main), that instruction comes first. When
+BETA is armed, its arm record is `seal2-beta-a1-arm.md` beside this file.
