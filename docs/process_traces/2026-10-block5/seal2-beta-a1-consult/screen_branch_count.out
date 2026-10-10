@@ -1,0 +1,13 @@
+bound_used corpus_physics_clean
+stored.decision failed
+stored.other_conditions ['neg8_bracket_missing', 'neg8_bracket_reference_invalid']
+rescreen.evaluated False
+rescreen.decision null
+rescreen.conditions []
+rescreen.problems ['source_manifests_unrecorded']
+freshness null 0
+survivor_screen null
+endpoint_protocol null
+reference_counts {}
+losses_by_position_reason []
+harvest_losses_by_code [('contention.request_overlap', 1), ('member.admission_aborted', 1)]

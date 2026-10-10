@@ -339,3 +339,122 @@ Next action, exactly:
    seal record.
 3. Then the desk side's remaining gates, the new clone, the rehearsal and the pre-arm checks, as the
    ruling's section D gates 5 to 8 list them.
+
+## Step 3, status (11:00 PDT): the new claim head exists; the second seal is in its pull request
+
+- Pull request #492 merged at 10:42 PDT with every gate recorded. **New claim head (H_claim):
+  `c27485347c9629b857df81665b5b1b8d10dcd36a`.**
+- **New seal commit: `be6525e5a6511adf882282e404e163e14dbb738b`**, only parent the claim head, three files.
+  Registration sha256 `c7b3fdf7…db3f`, analysis plan `23ef67f5…4859`, sealed inventory `80852d98…c4dc`
+  (682 files). The seal landing test and the pin census test pass there. The text gate passed after 17
+  corrections (`corpus18-erratum/TEXT-GATE.md`). The full digests are in the new section "Erratum 1: the
+  second seal" of `docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md`.
+- Pull request #493 (branch `seal/2026-10-09-corpus18`, worktree
+  `/Users/edr/code/JouleWise-wt-corpus18-sealcommit`): the seal commit, a merge of this records branch,
+  and a record commit. Its ledger is filled; CI is running. **When every check passes:
+  `gh pr merge 493 --repo mpmdw/JouleWise --merge`.** After that merge, new records are committed in this
+  worktree as before; this branch is then merged to main again at the next records step.
+- The clone consult (Sol 6.1 xhigh) has answered: `/Users/edr/night-archive/b5-consults/corpus18-build/
+  sol-clone-consult.md`. Its findings that bind the next steps: the new seal's tree carries pin 402, so
+  the new clone's first commit after checkout is a byte copy of the old clone's committed pin (sequence
+  422, head digest `1ae51d38…f717`) made with `git commit --only`, with the ledger file copied from the
+  old clone (422 rows, file sha256 `0af3448c…aa69`); the plan writer, the installer and the harvest's
+  code-identity comparison accept that shape (proved on a scratch clone); the environment needs the lock
+  file's packages offline (a wheelhouse whose completeness it could not verify); the rehearsal runs from
+  a private clone with its own ledger copy. Its section 2 has the ordered commands; read all of it
+  before gate 6.
+- Desk side: the seal commit is merged into the harvest lane (`d58913476`, not yet pushed with its test
+  fixes). Outside `tests/`, the lane differs from the seal commit in exactly the three harvest program
+  files. A Sol seat (`BRIEF-sol-desk-merge.md`, report `sol-desk-merge.md`) is making the lane's tests true
+  for the 18-member committed corpus; it commits nothing.
+
+Next action after #493 merges and the desk seat reports: commit and push the lane; the whole suite on it;
+a cold Fable pass on `git diff be6525e5a..<lane head>` (the three program files and tests; charge
+`FABLE-desk-pass-charge.md` adapted to the new range); a pull request for the lane with the
+`B5-HARVEST-PIN:` addendum to the seal record (Addendum 2) in it; merge; move the desk root to the lane
+head; then gate 6 from the clone consult's commands.
+
+## Status (11:40 PDT): second seal on main, second clone built, the desk side in its last gates
+
+- Pull request #493 merged at 11:14 PDT (`2823f4b88`); the seal commit `be6525e5a` is on main and the
+  canonical root is fast-forwarded. `B5-ARM-RELEASED:` still reads `none`.
+- The second measurement clone is built and verified: `second-clone.md` beside this file. The
+  fixed-values file names it.
+- Desk side, branch `lane/2026-10-09-harvest-corpus-cap`, head `224a264c5` (pushed): the seal commit is
+  merged in; the lane's tests use the committed 18-member corpus (a Sol seat, no production change).
+  Program file digests at that head: `joulewise/b5/harvest.py` `8aaaf96f…dd2a`,
+  `joulewise/whole_window.py` `ee107b1e…25a5`, `scripts/harvest_b5_window.py` `88ac1164…6d45` (the last
+  two are unchanged from the first harvest pin). Running now: the whole suite
+  (`suite-desk-224a264c5/` in `/Users/edr/night-archive/b5-consults/corpus18-build/`, ends `ALLDONE`) and
+  the cold Fable pass (`FABLE-desk-pass2.md`, charge `FABLE-desk-pass2-charge.md`).
+- The rehearsal's first run was refused by the arm's sampler-cadence check because the machine was busy
+  with tests; it is run again when the suite has finished (`second-clone.md`).
+
+Next action, exactly:
+1. When the suite and the cold pass have reported: disposition the findings (a number-integrity finding
+   gets a Sol fix seat and a delta check; a recording-only one is a flag). Then, in the lane's worktree
+   `/Users/edr/code/JouleWise-wt-harvest-cap`: append "Addendum 2" to
+   `docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md` with the line `B5-HARVEST-PIN: <the commit
+   the desk root will be checked out at>` (the lane head that holds the program; the addendum commit
+   itself comes after it and changes documents only), the three digests, and the paths of the review and
+   the cold pass; add a gate record; open the pull request with the ledger; merge when CI is green; then
+   `git -C /Users/edr/code/JouleWise pull --ff-only`.
+2. Move the desk root: `git -C /Users/edr/night-custody/desk/b5-harvest fetch --no-tags
+   /Users/edr/code/JouleWise <pin commit> && git -C /Users/edr/night-custody/desk/b5-harvest checkout -q
+   --detach <pin commit>`; then the pin test of brief 4.5 must print `HARVEST_PINNED`. The test takes the
+   last `B5-HARVEST-PIN:` line that names the desk head; the first seal's line stays in the record.
+3. The rehearsal: a new base under `/Users/edr/night-archive/gate-prune/rehearsal-real/`, `prepare` and
+   `run` as in `second-clone.md`, from `/Users/edr/code/JouleWise-wt-seal2-rig`, with no test suite
+   running; then the private pin advance and the harvest by the pinned program (clone consult section 5).
+4. Pre-arm (ruling gate 8), then rewrite the RUN_STATE top block, set `B5-ARM-RELEASED: alpha beta gamma`,
+   and arm ALPHA attempt 1 by brief section 5 from the new clone. `/private/tmp` still holds this
+   project's scratch, so until it is small (under 1,000 entries by `find /private/tmp -mindepth 1 | wc
+   -l` and under 1 GiB) no window is armed whose span contains 00:00 local: with a span of about nine
+   hours that means an arm between 00:10 and about 14:30 local.
+
+## Status (12:50 PDT): the harvest program has passed its gates; its pin is in a pull request; the rehearsal is running
+
+- Harvest program of the second seal: commit `224a264c5faaae90cdf56118df37e773a932700b` on branch
+  `lane/2026-10-09-harvest-corpus-cap`. Second cold Fable pass at that commit: `PASS-WITH-FINDINGS`, six
+  findings, all recording-only (`FABLE-desk-pass2.md`). Whole suite at that commit: every module passed
+  except two wall-clock tests that pass alone and `tests.test_repin`, which fails on the lane by
+  construction (the lane's `joulewise/whole_window.py` is not the sealed one). **The lane is therefore
+  not merged into main**, as the first harvest lane was not; only the addendum is.
+- Pull request #494 (branch `docs/2026-10-09-harvest-pin2`, worktree
+  `/Users/edr/code/JouleWise-wt-harvest-pin2`, documents only): Addendum 2 of the seal record with
+  `B5-HARVEST-PIN: 224a264c5faaae90cdf56118df37e773a932700b`, the gate record
+  (`corpus18-erratum/harvest-pin2-gates.md`) and the suite summary. Ledger filled; CI running.
+- The rehearsal was started again at 12:44 PDT on the quiet machine and passed its arm. Base:
+  `/Users/edr/night-archive/gate-prune/rehearsal-real/corpus18-20261009T1944Z` (`run.pid`, `run.rc`,
+  `rig.log`). It runs detached and survives the end of this session. Do not start a test suite or a
+  builder seat while it runs: the sampler-cadence check refused the first run under that load.
+
+Next action, exactly:
+1. `gh pr checks 494 --repo mpmdw/JouleWise`; when every check passes, `gh pr merge 494 --repo
+   mpmdw/JouleWise --merge`, then `git -C /Users/edr/code/JouleWise pull --ff-only` (no night job is
+   loaded, no plan is armed).
+2. Move the desk root to the pin and run the pin test:
+   `git -C /Users/edr/night-custody/desk/b5-harvest fetch --no-tags origin
+   lane/2026-10-09-harvest-corpus-cap && git -C /Users/edr/night-custody/desk/b5-harvest checkout -q
+   --detach 224a264c5faaae90cdf56118df37e773a932700b`; the test of brief 4.5 must print `HARVEST_PINNED`.
+3. When `<rehearsal base>/run.rc` reads `rehearsal run rc=0` and `rig.log` shows the driver exited 0:
+   the private pin advance and the rehearsal harvest by the pinned program, as section 5 of
+   `/Users/edr/night-archive/b5-consults/corpus18-build/sol-clone-consult.md` gives them; then read, by a
+   program that prints structure only, that the re-screen was evaluated and the clean bound was built by
+   the cap rule, and the wall times of the corpus prune and the bound derivation.
+4. Then gate 8 and the arm, as the 11:40 note above lists them.
+
+## Status (13:00 PDT): the harvest program of the second seal is pinned; the rehearsal is running
+
+- Addendum 2 is on main (`7b2b77592`, a fast-forward push of the documents-only branch: pull request #494's
+  merge button stayed blocked because the required checks do not run on a documents-only change, and the
+  brief's route for an addendum is the direct push). The canonical root is fast-forwarded.
+- The desk root `/Users/edr/night-custody/desk/b5-harvest` is checked out at
+  `224a264c5faaae90cdf56118df37e773a932700b`; the three program digests equal the addendum's; the pin test
+  of brief 4.5 prints `HARVEST_PINNED`.
+- The rehearsal's third run is in its chain (`second-clone.md`: the two earlier refusals were the launch
+  context, not the machine). Base
+  `/Users/edr/night-archive/gate-prune/rehearsal-real/corpus18-20261009T1949Z`.
+
+Next action: steps 3 and 4 of the 12:50 note. Before the rehearsal harvest, remove the rehearsal's
+launchd job (`launchctl bootout gui/501/com.joulewise.rehearsal.corpus18`).

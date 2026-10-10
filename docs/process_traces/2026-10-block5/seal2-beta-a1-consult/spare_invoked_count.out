@@ -1,0 +1,42 @@
+== v5-b5-beta-a1-20261010T0742Z
+catalog authenticated 10
+reference start invoked 3
+reference start existing 0
+reference start blocked_before_invoke 0
+reference start other 0
+reference midpoint invoked 1
+reference midpoint existing 0
+reference midpoint blocked_before_invoke 0
+reference midpoint other 0
+reference end invoked 4
+reference end existing 0
+reference end blocked_before_invoke 0
+reference end other 0
+invoked_reference_absent 1
+log readable
+absent_reference_log_exit zero 0
+absent_reference_log_exit one 1
+absent_reference_log_exit two 0
+absent_reference_log_exit other 0
+absent_reference_child_refusal_recorded 1
+== v5-b5-alpha-a3-20261009T0644Z
+catalog authenticated 10
+reference start invoked 4
+reference start existing 0
+reference start blocked_before_invoke 0
+reference start other 0
+reference midpoint invoked 1
+reference midpoint existing 0
+reference midpoint blocked_before_invoke 0
+reference midpoint other 0
+reference end invoked 3
+reference end existing 0
+reference end blocked_before_invoke 0
+reference end other 0
+invoked_reference_absent 1
+log readable
+absent_reference_log_exit zero 0
+absent_reference_log_exit one 1
+absent_reference_log_exit two 0
+absent_reference_log_exit other 0
+absent_reference_child_refusal_recorded 1
