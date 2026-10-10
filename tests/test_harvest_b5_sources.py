@@ -379,7 +379,10 @@ class SourceRecoveryTests(unittest.TestCase):
         self.assertNotIn("end-2", self.energy_reads)
 
     def test_recovery_requires_a_clean_bound(self):
-        source, record = self.screen(self.harvest(clean=False))
+        run = self.harvest(clean=False)
+        run.neg8_clean_bound_required = False
+        run.neg8_collected_bound = self.bound
+        source, record = self.screen(run)
         self.assertEqual(source, "screen_failed")
         self.assertEqual(record["rescreen"]["problems"], ["clean_bound_unavailable"])
 
@@ -613,7 +616,10 @@ class SourceRecoveryTests(unittest.TestCase):
         self.assertEqual(allowance["survivor_bracket"], record["survivor_bracket"])
 
     def test_missing_clean_bound_disclosure_is_exact(self):
-        self.cannot_run(self.harvest(clean=False), "clean_bound_unavailable")
+        run = self.harvest(clean=False)
+        run.neg8_clean_bound_required = False
+        run.neg8_collected_bound = self.bound
+        self.cannot_run(run, "clean_bound_unavailable")
 
     def test_insufficient_shape_midpoint_lost_matches_survivors(self):
         self.put(self.runs / "midpoint-0" / "summary_metrics.json", self.summary("midpoint-0", "failed"))
