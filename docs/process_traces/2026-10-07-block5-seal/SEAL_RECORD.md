@@ -475,6 +475,43 @@ This pin is for windows of the second seal. Addendum 1 stays the record of the p
 seal's three ALPHA attempts; a re-harvest of one of them by this program passes the first clone's path, its
 sealed inventory and that attempt's archived ledger copies.
 
+## Addendum 3: Erratum 2 of block 5, and the harvest program for the attempts it governs
+
+### Step 1, written 2026-10-10 before the arm of any attempt Erratum 2 governs (by a seat that has read no claim-window energy)
+
+Erratum 2 (prospective): `docs/process_traces/2026-10-block5/sources-erratum/ERRATUM.md`, SHA-256 of the admitted
+text as committed on main `b85105457cb6da00f26eb92de594311e0e3aa497de8365cb2dc2dc234307188a`. It was admitted with
+corrections by a cold gate under registration section 10: the ruling is `RULING.md` beside it (a Fable 5.1 judge,
+last line `RULING: ADMIT-WITH-CORRECTIONS`), the refutation `REFUTATION.md` (an Opus 5.5 refuter). What it
+changes: when the whole-window verdict stored in a window's claim runs root records no source campaign
+manifests, and only in the diagnosed state its item 0 defines, the harvest takes the list of the window's
+reference runs from the authenticated campaign catalog of that runs root and runs the registered drift screen on
+the references that survive. No threshold, flag code, roster, blinding rule or window input changes. The
+registration's bytes are not edited and the seal is not re-issued.
+
+ERRATUM-2-ADMITTED-AT: 2026-10-10T16:30:00Z
+
+Pin scoping. An attempt is governed by Erratum 2 when its plan's `t0_epoch_s` is later than
+`ERRATUM-2-ADMITTED-AT` (epoch 1791649800). Addendum 2's pin `224a264c5faaae90cdf56118df37e773a932700b` remains
+the pin for every attempt that is not governed, which includes ALPHA attempt 1 and BETA attempt 1 of the second
+seal; the pin of step 2 below governs only governed attempts. No attempt that is not governed is harvested by
+the new program for a deciding record; a run of the new program over such an attempt, if ever made after the
+release event, is exploratory, labelled so, and changes no verdict, `claim_usable`, cause key or attempt
+history. The analysis checks each attempt's recorded harvest commit against the pin that governs that attempt.
+
+BETA attempt 1 of the second seal (`v5-b5-beta-a1-20261010T0742Z`, `harvest.json` SHA-256
+`f0d72323b67d075db29a5c136d087222284a6d4651d130549f9dbd5a82d6ec7d`) stays collected and not claim-usable
+(`neg8.screen_failed`), kept and disclosed, its energies never analysed.
+
+The release event ties Erratum 2's SHA-256 beside those of the registration, the analysis plan and the catalog.
+
+### Step 2, to be written before any governed attempt is harvested
+
+Not written yet. It will carry the `B5-HARVEST-PIN:` line of the program that implements Erratum 2 (branch
+`lane/2026-10-10-harvest-screen-sources`), the SHA-256 of its three program files, and the path of its gate
+record (an independent executing review, the module and the whole suite, a cold Fable 5.1 pass, and the
+before/after comparison on the real rehearsal copy). Until that line exists, no governed attempt is harvested.
+
 ## Release event
 
 Nothing is recorded here yet. This section is written when the withheld energies are opened: after the block has
