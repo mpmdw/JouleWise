@@ -1,0 +1,16 @@
+SESSION_MODE: delegated
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+WRITE_SCOPE: ["tests/**", ".scratch-fix/**"]
+
+For the report envelope: genre implementation; keep the JSON header under 4,000 bytes and put all evidence in the markdown body. End your turn after writing the report. Start no background task. Commit nothing; leave your changes uncommitted in the working tree.
+
+# Round 3 (tests only): two test corrections on the harvest lane
+
+You work in `/Users/edr/code/JouleWise-wt-harvest-sources`, branch `lane/2026-10-10-harvest-screen-sources`, head `d435547e2d335ec75a90ad7a6558ada91074a6fb`. Change files under `tests/` only. No production file changes. Run only the test modules you touch (never `unittest discover` or `shard_tests.py`), with `PYTHONDONTWRITEBYTECODE=1 TMPDIR="$PWD/.scratch-fix" /opt/homebrew/bin/python3.13 -m unittest <module>`; create `.scratch-fix/` for temp files and delete it before you end. No Homebrew, no network, no other agents, no measurement. Do not open anything under `/Users/edr/night-custody/v5-b5-*`, `/Users/edr/night-b5/` or `/Users/edr/night-archive/harvest-v5-b5-*`. The owner's name and address go into no file and no request.
+
+1. **Cold-pass finding F1** (`/Users/edr/night-archive/b5-consults/beta-a1/fix/FABLE-pass.md`, "F1 SHOULD-FIX"). In `tests/test_harvest_b5_sources.py` the fixture always sets `run.neg8_clean_bound_required = True`, so removing the recovery clause at `joulewise/b5/harvest.py:5418` (`if bound is None and (recovery or getattr(self, "neg8_clean_bound_required", False))` becoming `if bound is None and getattr(...)`) leaves `test_recovery_requires_a_clean_bound` and `test_missing_clean_bound_disclosure_is_exact` passing. Make those two tests prove item 5 of the admitted text by themselves: set `run.neg8_clean_bound_required = False` and `run.neg8_collected_bound = self.bound` (or the fixture's equivalent) before the "cannot run" assertion, so that only the recovery clause can produce `clean_bound_unavailable`. Then prove it: copy `joulewise/b5/harvest.py` aside, apply that one-line mutation, run the module and show both tests FAIL, restore the file byte for byte (`git diff --stat -- joulewise` must print nothing), run the module again and show OK.
+
+2. **A call-site fence in `tests/test_analysis_integration.py`**, `SupersessionAwareCooldownJoinTests.test_campaign_provenance_aggregation_call_site_fence` (near line 6217). It counts the production call sites and importers of `load_authenticated_campaign_catalog` and of `load_authenticated_campaign_manifest`. The lane adds the catalog reader to `joulewise/b5/harvest.py` (the recovery of Erratum 2: when the stored verdict records no source list, the harvest takes the reference list from the authenticated catalog; `docs/process_traces/2026-10-block5/sources-erratum/ERRATUM.md` on main, section 4 item 1). Run the test, read the actual counts, and update the expected dictionaries, the total and the importer sets to the actual ones, with a comment beside the new entry that names `joulewise.b5.harvest.claim_neg8_sources` and Erratum 2 item 1 as the reason. Change nothing else in that test: it must still fail if any further call site appears. Report the before and after counts.
+
+Return: what changed per file, the commands and result lines (including the mutation proof of item 1), and `git status --short`.
