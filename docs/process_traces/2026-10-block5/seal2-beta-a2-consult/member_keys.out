@@ -1,0 +1,66 @@
+['members', 'schema']
+{
+ "admission_decision": "str",
+ "anchor_recomputed": "str",
+ "anchor_recorded": "str",
+ "battery_pair": {
+  "reasons": "list[0]",
+  "status": "str"
+ },
+ "bundle_path": "str",
+ "calibration_cache": {
+  "strict_uses_cache": "bool"
+ },
+ "config_sha256": "str",
+ "errors": {},
+ "files_missing": "list[0]",
+ "identity": {
+  "model_artifact_sha256": "str",
+  "runtime_identity_sha256": "str"
+ },
+ "idle_baseline_span": "list[2]",
+ "metadata_run_id": "str",
+ "powermetrics_binary": {
+  "calibrated_sha256": "str",
+  "collection_boot": "str",
+  "executable_path": "str",
+  "runtime_sha256": "str"
+ },
+ "precheck": {
+  "block": "dict",
+  "gross_request": "dict",
+  "idle_subtracted_request": "dict",
+  "item": "dict",
+  "level": "dict",
+  "phase": "dict"
+ },
+ "present": "bool",
+ "quality": {
+  "cooldown_cap_hit": "NoneType",
+  "idle_window_suspect": "bool"
+ },
+ "rereduced": {
+  "admissible": "bool",
+  "identical_to_stored": "bool",
+  "path": "str",
+  "sha256": "str"
+ },
+ "run_id": "str",
+ "run_started_epoch_s": "float",
+ "spans": {
+  "member": "list[2]",
+  "request": "list[2]"
+ },
+ "status": "str",
+ "stored_summary_sha256": "str",
+ "stream_bytes": "int",
+ "strict_problems": "list[0]",
+ "strict_valid": "bool",
+ "thermal_pressure_elevated": "bool",
+ "tokens": {
+  "output_emitted": "int",
+  "output_realized": "int",
+  "output_requested": "int",
+  "prompt_realized": "int"
+ }
+}
