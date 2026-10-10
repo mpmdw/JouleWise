@@ -101,7 +101,7 @@ v5-b5-alpha-a3-20261009T0644Z manifest_files 10 pointwise_ok 10 pointwise_bad 0 
   within about ten seconds in both windows that started one). It restores margin only; its fix would
   change code a window executes and is kept for a later erratum, if one is needed.
 
-## Decision
+## Decision (SUPERSEDED the same morning: see "What replaced the decision" at the end; do not follow this section)
 
 This is the table's "harvest problems first" case in substance (registration 7.2) and both seats'
 conditional answer (d). **BETA attempt 2 is not armed now.** The harvest program is diagnosed and, if the
@@ -123,10 +123,40 @@ For later arms, from the Opus seat and adopted as procedure (it changes nothing 
 t0 whose chain is not running between 05:15 and 06:45 local, until journals show the scan is not daily
 at that hour.
 
-## Next action
+## Next action (SUPERSEDED: see the end)
 
 The fix lane: branch `lane/2026-10-10-harvest-screen-sources` from `224a264c5`, worktree
 `/Users/edr/code/JouleWise-wt-harvest-sources`; papers in
 `/Users/edr/night-archive/b5-consults/beta-a1/fix/`. If that directory has no `sol-fix.md`, launch the
 seat from `fix/BRIEF-sol-fix.md` (write it from this record if absent). Then the gates above, the
 addendum, the desk root move, the re-harvest, and brief section 6.
+
+## What replaced the decision (about 08:25 PDT)
+
+The fix seat (Sol 6.1, effort xhigh; `sources-erratum/sol-fix.md`) proved the mechanism from the code: the
+sealed verdict writer rejects every campaign manifest as its source when one `invoked` member has no bundle
+directory, and writes an empty source list. A further count (`seal2-beta-a1-consult/spare_invoked_count.out`)
+shows exactly that state on this window and on the first seal's ALPHA attempt 3: one invoked reference with
+no bundle, exit code 1, a recorded child refusal (`spare_refusal_reason.out`: not one of the launch-lineage
+reason codes). The seat also read the registration: taking the reference list from anywhere but the verdict
+is not what the sealed text says, so the fix is a change of rule, not a repair. That made it a prospective
+cold erratum under registration section 10, and it made the plan above wrong: a rule changed after a window
+is complete cannot be applied to that window.
+
+The erratum, its refutation (Opus 5.5: admit with corrections, 2 blockers and 6 majors) and the cold ruling
+(Fable 5.1, last line `RULING: ADMIT-WITH-CORRECTIONS`) are in `sources-erratum/`. What the ruling decides:
+
+- **BETA attempt 1 stays collected and not claim-usable** (`neg8.screen_failed`), kept and disclosed, its
+  energies never analysed. It is harvested by no later program for a deciding record. It counts toward
+  BETA's "same cause twice" key (family NEG8).
+- **BETA attempt 2 is armed next**, from the same sealed clone, unchanged.
+- **Erratum 2** governs every attempt whose plan's t0 is later than `2026-10-10T16:30:00Z`: when the stored
+  verdict records no source list, and only in the diagnosed state, the harvest takes the reference list from
+  the authenticated campaign catalog under items 0 to 9 of the admitted text. No threshold, code, roster,
+  blinding rule or window input changes; the seal is not re-issued.
+- **Two harvest pins from now on.** Pin `224a264c5` stays the pin of ALPHA attempt 1 and BETA attempt 1. A
+  governed attempt is harvested only by the program that implements the admitted text, after it has passed
+  its gates and been pinned in Addendum 3 of the seal record.
+- **The spare** stays as it is (window code): a registered deviation with its cost stated.
+
+Next action: the RUN_STATE top block of 2026-10-10 on main is the step list.
