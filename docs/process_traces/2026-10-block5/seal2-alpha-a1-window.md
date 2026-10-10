@@ -147,3 +147,29 @@ arm:
 If the owner's session leaves an instruction (unread mail from the notice address, a `directive` issue
 dated after the hand-off, or a newer RUN_STATE top block on main), that instruction comes first. When
 BETA is armed, its arm record is `seal2-beta-a1-arm.md` beside this file.
+
+## The session is gone; the settle clock runs from 23:11 PDT (activation e33d5695)
+
+Magistrate activation e33d5695 (Opus 5.5, headless), launched 23:11 PDT on 2026-10-09. No stand-down
+request, no pending notice, no unread mail from the owner's notice address, no new `directive` issue, main
+unchanged at `1d4be995c`.
+
+- The agent check of brief 5.1 at 23:12 PDT prints `foreign_agents` empty and `own_seats_still_running`
+  empty: pid 25621 and its three children are gone. Activation 83dd556e still saw them at 23:03:49 PDT, so
+  the session ended between 23:03 and 23:11 PDT. The application line prints nothing.
+- Firefox (pid 25671) is still open. It does not hold an arm (brief 5.1); E-2a=NO, so it is not quit, and
+  the arm notice says a browser is open.
+- The last keyboard or trackpad event was about 22:37:30 PDT (HID idle time 2,070 s read at 23:12 PDT).
+- The Mac has not been restarted (boot time 2026-09-18), so item 6 of the RUN_STATE block does not apply.
+- `/private/tmp` holds 5,222,598 entries, far above 1,000, so the midnight rule applies: t0 at 00:10 PDT or
+  later.
+- Display put to sleep with `pmset displaysleepnow` at 23:15 PDT.
+
+Settle (RUN_STATE item 5): counted from 23:11 PDT, the latest time the owner's session can have been alive,
+which is later than his last keystroke. **No plan is written before 00:11 PDT on 2026-10-10.** With the
+1,800 s lead, t0 is then about 00:42 PDT, inside the midnight rule's range.
+
+Next action: at or after 00:11 PDT, if the agent check still prints two empty lists and no keyboard event
+is newer than 23:11 PDT (HID idle time), arm BETA attempt 1 by brief section 5. A new owner session or a
+new keyboard event restarts the 60 minutes from its end. This activation waits for 00:11 itself; if it is
+gone, the next one arms from this section.
