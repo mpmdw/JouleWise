@@ -505,12 +505,32 @@ BETA attempt 1 of the second seal (`v5-b5-beta-a1-20261010T0742Z`, `harvest.json
 
 The release event ties Erratum 2's SHA-256 beside those of the registration, the analysis plan and the catalog.
 
-### Step 2, to be written before any governed attempt is harvested
+### Step 2, written 2026-10-10 before any governed attempt was armed or harvested (by a seat that has read no claim-window energy)
 
-Not written yet. It will carry the `B5-HARVEST-PIN:` line of the program that implements Erratum 2 (branch
-`lane/2026-10-10-harvest-screen-sources`), the SHA-256 of its three program files, and the path of its gate
-record (an independent executing review, the module and the whole suite, a cold Fable 5.1 pass, and the
-before/after comparison on the real rehearsal copy). Until that line exists, no governed attempt is harvested.
+B5-HARVEST-PIN: 0699abbb0881ce64b39c46ba07de568cc3848260
+
+This pin governs only attempts governed by Erratum 2 (plan `t0_epoch_s` later than 1791649800). Addendum 2's pin
+`224a264c5faaae90cdf56118df37e773a932700b` remains the pin of every other attempt of the second seal.
+
+Desk clone: /Users/edr/night-custody/desk/b5-harvest. Files at that commit, with their SHA-256:
+joulewise/b5/harvest.py 96edd7ec6d57102060bef28c61561597d1c8144c412f6eb99d7d6d4cd0e9d463; joulewise/whole_window.py 2e03abc8b90088401df9fd86b511dcb783e4a67913e49ac441e326caa603b86b; scripts/harvest_b5_window.py 88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45.
+The lane: lane/2026-10-10-harvest-screen-sources, cut from the second pin 224a264c5faaae90cdf56118df37e773a932700b, so
+it descends from the second seal's claim head c27485347c9629b857df81665b5b1b8d10dcd36a. git diff --name-only
+224a264c5 0699abbb0 lists only the first two of those files and paths under tests/; the third file is unchanged
+from both earlier pins.
+
+What changed in the harvest program: items 0 to 8 of Erratum 2 and its admission-time gate. When the stored
+verdict records no source list, the attempt is governed, and the diagnosed state of item 0 holds, the harvest
+takes the window's reference list from the authenticated campaign catalog, applies the loss rules, requires the
+clean bound and every surviving reference's membership in the verdict's evaluation basis and in the sealed
+roster, and lets the registered evaluator decide on the survivors. A verdict that records sources is handled
+byte for byte as under 224a264c5. Item 9 (the claim consumer) is lane L9-NEG8's, before any claim is computed.
+
+Its gates: docs/process_traces/2026-10-block5/sources-erratum/harvest-pin3-gates.md (the builder in two rounds;
+a cold Fable 5.1 pass, last line PASS; an independent executing review, approve with test fixes, all made; the
+whole suite on the lane's tree; the before/after comparison on the real rehearsal copy, executed and passing).
+
+Like the earlier harvest lanes, this lane is not merged into main; the branch is kept on the remote.
 
 ## Release event
 
