@@ -121,8 +121,9 @@ needed after `d435547e2`; rounds 3 and 4 change tests only.
 Lane head `0699abbb0881ce64b39c46ba07de568cc3848260` (pushed). Since the reviewed commit `d435547e2` only three
 test files changed (`tests/test_analysis_integration.py`, `tests/test_harvest_b5_sources.py`,
 `tests/test_harvest_b5_window.py`); the two program files are byte for byte those the cold pass and the
-review read. `git diff --name-only be6525e5a 0699abbb0` lists, outside `tests/`, only
-`joulewise/b5/harvest.py` and `joulewise/whole_window.py`. The head descends from the claim head
+review read. `git diff --name-only be6525e5a 0699abbb0` lists, outside `tests/`, only the three
+harvest program files (`joulewise/b5/harvest.py`, `joulewise/whole_window.py`, `scripts/harvest_b5_window.py`);
+`git diff --name-only 224a264c5 0699abbb0` lists, outside `tests/`, only the first two. The head descends from the claim head
 `c27485347`.
 
 Program file digests at the pin: `joulewise/b5/harvest.py`
