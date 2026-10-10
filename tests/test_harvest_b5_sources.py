@@ -621,6 +621,44 @@ class SourceRecoveryTests(unittest.TestCase):
         run.neg8_collected_bound = self.bound
         self.cannot_run(run, "clean_bound_unavailable")
 
+    def test_recovery_never_uses_collected_or_stored_bound(self):
+        self.row["idle_admission_core"]["neg8_bracket"]["drift_bound_artifact"] = self.bound
+        run = self.harvest(clean=False)
+        run.neg8_clean_bound_required = False
+        run.neg8_collected_bound = self.bound
+        self.cannot_run(run, "clean_bound_unavailable")
+
+    def test_basis_check_compares_each_of_the_three_hashes(self):
+        run = self.harvest()
+        valid = ww._validated_evaluation_basis(self.row, self.runs)
+        self.assertIsNotNone(valid)
+        for field in ("config_sha256", "metadata_sha256", "summary_sha256"):
+            with self.subTest(field=field):
+                basis = copy.deepcopy(valid)
+                next(item for item in basis["member_occurrences"]
+                     if item["bundle_id"] == "start-0")[field] = "0" * 64
+                with mock.patch.object(ww, "_validated_evaluation_basis", return_value=basis):
+                    check = run._neg8_basis_reference_check(self.row, self.runs)
+                self.assertEqual(check("start-0", self.runs / "start-0"),
+                                 "reference_not_in_verdict_basis")
+                self.assertIsNone(check("start-1", self.runs / "start-1"))
+
+        check = run._neg8_basis_reference_check(self.row, self.runs)
+        read = Path.read_bytes
+        for name in ("config.json", "metadata.json", "summary_metrics.json"):
+            with self.subTest(unreadable=name):
+                unreadable = self.runs / "start-0" / name
+
+                def read_with_failure(path):
+                    if path == unreadable:
+                        raise PermissionError(str(path))
+                    return read(path)
+
+                with mock.patch.object(Path, "read_bytes", read_with_failure):
+                    self.assertEqual(check("start-0", self.runs / "start-0"),
+                                     "reference_not_in_verdict_basis")
+                    self.assertIsNone(check("start-1", self.runs / "start-1"))
+
     def test_insufficient_shape_midpoint_lost_matches_survivors(self):
         self.put(self.runs / "midpoint-0" / "summary_metrics.json", self.summary("midpoint-0", "failed"))
         run = self.harvest(losses=[("start-1", "contention.request_overlap"),
@@ -643,6 +681,19 @@ class SourceRecoveryTests(unittest.TestCase):
         self.assertTrue(record["rescreen"]["survivors"]["midpoint_lost"])
         self.assertEqual(self.energy_reads, [])
 
+    def test_insufficient_shape_with_surviving_midpoint_records_midpoint_not_lost(self):
+        self.add_bundleless_spare()
+        run = self.harvest(losses=[("start-2", "contention.request_overlap"),
+                                   ("end-1", "contention.request_overlap"),
+                                   ("end-2", "member.admission_aborted")])
+        source, record = self.screen(run)
+        self.assertEqual(source, "screen_failed")
+        survivors = record["rescreen"]["survivors"]
+        self.assertEqual(survivors["reference_counts"], {"start": 2, "midpoint": 1, "end": 1})
+        self.assertFalse(survivors["midpoint_lost"])
+        self.assertEqual(survivors["survivor_screen"], "references_insufficient")
+        self.assertNotIn("neg8.midpoint_lost", {flag["code"] for flag in run.flags.records})
+
     def test_noninvoked_references_never_count(self):
         self.manifest("start", ["existing-reference"], name="existing", execution="existing")
         self.manifest("midpoint", ["blocked-reference"], name="blocked", execution="blocked_before_invoke")
@@ -650,13 +701,16 @@ class SourceRecoveryTests(unittest.TestCase):
         self.assertEqual(source, "survivor_rescreen")
         self.assertEqual(set(self.energy_reads), set(self.points))
         self.assertEqual(len(self.energy_reads), 7)
+        self.assertEqual(record["harvest_reference_losses"], {})
 
     def test_malformed_present_source_list_never_enters_recovery(self):
-        self.row["row_provenance"]["source_campaign_manifests"] = "malformed"
         run = self.harvest()
-        with mock.patch.object(h, "claim_neg8_sources") as catalog:
-            self.assertEqual(run._neg8_sources(self.row, self.runs), "source_manifests_unrecorded")
-            catalog.assert_not_called()
+        for value in (None, {}, "", 0, "malformed"):
+            with self.subTest(value=value):
+                self.row["row_provenance"]["source_campaign_manifests"] = value
+                with mock.patch.object(h, "claim_neg8_sources") as catalog:
+                    self.assertEqual(run._neg8_sources(self.row, self.runs), "source_manifests_unrecorded")
+                    catalog.assert_not_called()
 
     def test_absent_spare_reason_and_retry_counts(self):
         self.add_bundleless_spare()
@@ -680,6 +734,16 @@ class SourceRecoveryTests(unittest.TestCase):
         source, record = self.screen(self.harvest())
         self.assertEqual(source, "screen_failed")
         self.assertTrue(record["rescreen"]["evaluated"])
+        self.assertIn("neg8_bracket_reference_invalid", record["rescreen"]["conditions"])
+
+    def test_extra_member_with_disagreeing_role_fails_a_full_shape(self):
+        self.points["odd"] = 100.0
+        for name in ("config.json", "metadata.json"):
+            self.put(self.runs / "odd" / name, {"run_id": "odd"})
+        self.put(self.runs / "odd" / "summary_metrics.json", self.summary("odd"))
+        self.manifest("start", ["odd"], name="odd", sentinel_position="end")
+        source, record = self.screen(self.harvest())
+        self.assertEqual(source, "screen_failed")
         self.assertIn("neg8_bracket_reference_invalid", record["rescreen"]["conditions"])
 
     def test_policy_unregistered_cannot_run(self):
