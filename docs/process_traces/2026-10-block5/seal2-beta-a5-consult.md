@@ -201,3 +201,26 @@ Step list from here (replaces steps 2 to 7 above):
   working snippet for the pre-arm run. A successor that finds one of the three outputs absent relaunches
   that one from its charge; then dispositions the findings, writes `trigger-erratum/harvest-pin4-gates.md`
   and goes on at step 6's second half.
+
+## Progress, 10:50 PDT (activation bab1c330): steps 3 to 7 are done
+
+- Step 5: the gates passed; record `trigger-erratum/harvest-pin4-gates.md` (cold Fable 5.1 pass `PASS`;
+  independent executing review `APPROVE WITH FIXES`, the three test fixes made; whole suite; rehearsal
+  comparison byte-identical; the item-12 run over attempt 5's archived ledger copy: the sealed rule fails,
+  the amended rule passes with row 456 recorded).
+- Step 6: Addendum 4 step 2 is on main (`e3e360c68`): `B5-HARVEST-PIN: b039c0257d1b1d407ee9598222db3f78f6ad7beb`.
+  The desk root is checked out there and the pin test prints `HARVEST_PINNED`.
+- Step 7: RUN_STATE on main (`46f51d62c`) has items 25 to 27 and `B5-ARM-RELEASED: beta`. The pre-arm helper
+  is `/Users/edr/night-plan-staging/b5-bench/b5_prearm_bracket.py` (sha256
+  `5c3af0273aa6be7161bd2ef9d97d4590f011c286d100948271258049a37b7f5d`); its first run, 10:44 PDT: exit 0,
+  no snapshot refusal, 14 candidates of 14 valid finalized captures, binding validated, observed and
+  recorded-only trigger `new_systematic_failure_challenges_preflight_screen`, doubling 41 of 48, sequences
+  `[456]`.
+- Step 8 (arm BETA attempt 6) waits for a t0 at or after 13:10 PDT, so that the chain clears the 12:53 daily
+  maintenance batch (RUN_STATE item 17); the arm starts about 12:35 PDT. A t0 at 11:20 was available and
+  would have put the batch inside a science stage; the wait costs two hours and no measurement.
+- In the wait: a Sol 6.1 seat (effort high) works on the gate owed before GAMMA (finding F3: the sealed
+  verdict writer and the real provenance checker over a GAMMA-shaped window in the stale state); brief and
+  report under `/Users/edr/night-archive/b5-consults/beta-a5-stale/f3-gamma/`, worktree
+  `/Users/edr/code/JouleWise-wt-harvest-trigger-cold`. It is stopped before the arm whether or not it has
+  finished; its report's last line says how far it got.
