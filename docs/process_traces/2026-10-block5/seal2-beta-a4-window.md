@@ -130,3 +130,60 @@ overlapped a sleep (`member-overlap.txt`; structure only). No arm before the con
 
 Departure: this activation ran `git fetch origin` in the canonical root at 23:13 (no night job loaded, no
 plan armed, nothing moved).
+
+### The re-harvest (4.5, 4.6), read 23:56 PDT
+
+Archive `/Users/edr/night-archive/harvest-v5-b5-beta-a4-20261010T2237Z-r2`, harvest rc=0, `verdict` `COLLECTED`,
+`claim_usable` `false`, `exclude_window_reasons` `["calibration.bracket_acceptance_failed"]`, `faults` `[]`.
+Yield: planned 125, present 125, raw-valid 125, succeeded 120. `harvest.json` sha256
+`b4aa474b1ebc4eefc0a8b5f4b9d6975544578113583d0da10fa410a9f139d5b6`. `harvest_checkout.head`
+`0699abbb0881ce64b39c46ba07de568cc3848260`, `status_clean` true, equal to the desk root. The verdict writer left
+by the first harvest exited by itself at 23:17:49. Clock-status count (brief section 6 rule 3): attempt 4
+recorded 125, not bounded 4; block total recorded 645, not bounded 6: `continue`.
+
+### Which members met a sleep (structure only; `beta-a4-sleep/member-overlap.txt`, program `member_overlap.py`)
+
+Nine asleep intervals inside the window, 3,507 s together. 26 members started before the first sleep and 99
+after it. Five members' run spans overlapped a sleep; four of those failed (exit 3, asleep during the idle
+baseline) and one succeeded (the 4 s sleep at 17:02:07 fell in its post-run stage). No member's sampling span
+overlapped a sleep. So the sleeps cost four members directly; the larger fact is that 94 of the 120 succeeded
+members ran after 17:02 in dark wake (the Mac awake only for background tasks, display off), a machine state
+no registered check measures.
+
+### The consult (two blind seats) and the decision
+
+Reports: `/Users/edr/night-archive/b5-consults/beta-a4-sleep/seat-opus.md`, `seat-sol.md`.
+
+- Both: the sealed driver holds nothing that keeps the Mac awake (the earlier launch route ran the chain under
+  `caffeinate -is`; the block-5 driver starts it as plain `/bin/zsh -f`); no registered check can see a sleep
+  (the journals join in Python monotonic time, where a sleep has no length; `clock.step` compares two clocks
+  that both run through sleep); no earlier block-5 attempt slept; a keep-awake assertion held by a process
+  outside the window code needs no seal, and the block-5 census (`[c]odex|[c]laude`) and the contention dwell
+  ignore it; `pmset -b sleep 0` is Ed's act; a driver-held assertion or a sleep hazard at the arm is window
+  code and waits for the next block's seal.
+- They differ on one science question: whether attempt 4 should stand as BETA's analysed window had the
+  harvest said claim-usable. Opus: no, set aside by a cold gate, ruled before the verdict was known (dark wake
+  is not shown benign: background maintenance throughout, mean outside CPU about 30 % higher, a thermal
+  emergency sleep 13 minutes after the chain). Sol: yes, the sealed harvest decides and the state is disclosed.
+  The harvest says not claim-usable, so the question does not arise and no judge is convened. Opus's seat
+  predicted this reason code from the sleep before the harvest ended.
+- Opus also found the AC loss was a real loss of source voltage for about 26 s (wall meter, bucket words),
+  with no keyboard or trackpad event; cause open (charger restart or a re-seated connector).
+
+**Decision (orchestrator).** BETA attempt 4 is not claim-usable; kept, disclosed, never analysed. Brief
+section 6 rule 1 (attempt 3 and attempt 4 both carry a calibration-family reason) is met by this consult. BETA
+is armed again as attempt 5, with one change outside the window code: a launchd job
+`local.jwbench.keepawake` (`~/Library/LaunchAgents/local.jwbench.keepawake.plist`, `/usr/bin/caffeinate -i -s`,
+RunAtLoad, KeepAlive) loaded 23:57 PDT, parent pid 1, holding `PreventUserIdleSystemSleep` and
+`PreventSystemSleep`. It stays loaded between windows: the Mac has no reason to sleep. The Mac has been in full
+wake since 23:13:51 (display off since 23:14:21). Before every arm from now on: `pmset -g assertions` shows the
+job's assertion, and the last line of the sleep/wake log is a full wake. After every window: record
+(RAW minus Python monotonic) at `ended` minus the same at `started` from `night/hazard_result.json`; more than
+0.1 s means the Mac slept and goes to a consult before the next arm, whatever the harvest says.
+Dissent recorded: Opus's seat would register that rule as a prospective cold erratum before attempt 5. Not
+done before this arm (the assertion removes the hazard, and the next good t0 is 13 hours off); it is the next
+desk lane, with the two asks to Ed (`sudo pmset -b sleep 0`; who or what touched the charger at 17:02).
+
+Threshold audit's open code check, done by the lead: `neg8_bracket.max_abs_delta_j: 0.05` is read only on the
+legacy start/end pair path (`joulewise/whole_window.py:5124-5126`); the block-5 point-drift path returns before
+it and records the two numbers as non-gating. Not live in block 5.
