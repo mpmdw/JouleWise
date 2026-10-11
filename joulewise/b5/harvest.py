@@ -86,6 +86,7 @@ NEG8_SCREEN_SCHEMA = "joulewise.b5_neg8_screen.v1"
 NEG8_CORPUS_PHYSICS_SCHEMA = "joulewise.b5_neg8_corpus_physics.v1"
 ERRATUM_2_ADMITTED_AT = "2026-10-10T16:30:00Z"
 ERRATUM_2_ADMITTED_AT_EPOCH_S = 1791649800
+ERRATUM_3_ADMITTED_AT_EPOCH_S = 1791738000
 # NEG-8 ruling 2026-10-07 (registration 0.12 "Lost references", 5.3): the
 # member-level physics exclusions of 6.4 that drop a corpus member from the
 # bound and a reference from the screen.  The order is the order a lost
@@ -3884,7 +3885,7 @@ HARVEST_CHECKOUT_SCHEMA = "joulewise.b5_harvest_checkout.v1"
 # addendum to the seal record pins the harvest program before the first
 # window's harvest, by these files' SHA-256s and the commit of the checkout
 # the harvest runs from (a desk checkout, never the measurement checkout).
-HARVEST_PROGRAM_FILES = ("joulewise/b5/harvest.py", "joulewise/whole_window.py", "scripts/harvest_b5_window.py")
+HARVEST_PROGRAM_FILES = ("joulewise/b5/harvest.py", "joulewise/calibration_bracketing.py", "joulewise/whole_window.py", "scripts/harvest_b5_window.py")
 
 
 def harvest_checkout(runner: Callable[..., Any] = subprocess.run) -> dict[str, Any]:
@@ -3898,7 +3899,7 @@ def harvest_checkout(runner: Callable[..., Any] = subprocess.run) -> dict[str, A
     nothing there (no tracked edit and no untracked file), ``status_lines``
     how many paths it printed, and ``files`` the SHA-256 of each harvest
     program file as it is on disk.  With a clean checkout the commit fixes
-    every byte of the program; with a dirty one the three digests still say
+    every byte of the program; with a dirty one the file digests still say
     whether the pinned files are the pinned bytes.  A value git or the disk
     cannot give is None and named in ``errors``; nothing here stops or
     excludes anything.
@@ -4008,6 +4009,22 @@ class _Harvest:
         self.spans: dict[str, dict[str, Any]] = {}
         self.hazards: dict[str, Any] = {}
         self.outputs: dict[str, str] = {}
+        t0 = inputs.plan.get("t0_epoch_s")
+        governed = (not isinstance(t0, bool) and isinstance(t0, (int, float))
+                    and (not isinstance(t0, float) or math.isfinite(t0))
+                    and t0 > ERRATUM_3_ADMITTED_AT_EPOCH_S)
+        self.calibration_bracket: dict[str, Any] = {
+            "erratum_3_governed": governed,
+            "trigger_scope": "window_evidence" if governed else "sealed",
+            "evaluated": False,
+            "status": None,
+            "reasons": [],
+            "freshness": None,
+            "observed_triggers": [],
+            "recorded_only_triggers": [],
+            "corpus_doubling": None,
+            "other_session_systematic_sequences": [],
+        }
         self.repo_copy: Path | None = None
         self.pair_missing: dict[str, Any] = {}  # run_id -> #421 pair status, joined to coverage later
         # run_id -> flag_id of a battery.capture_pair_failed whose pair failed on
@@ -4589,8 +4606,22 @@ class _Harvest:
             inputs.claim_runs_root, valid, policy.calibration_bracketing, mode="issuing",
             ledger_snapshot=snapshot, bracket_binding=binding, bracket_window_id=identity.get("window_id"),
             bracket_plan_id=plan.get("plan_id"), bracket_plan_sha256=plan_sha,
-            bracket_evidence_root_id=identity.get("evidence_root_id"))
-        write_json_once(self.withheld / "bracket-evaluation.json",
+            bracket_evidence_root_id=identity.get("evidence_root_id"),
+            trigger_scope=self.calibration_bracket["trigger_scope"])
+        acceptance = assessment.get("acceptance") or {}
+        prospective = acceptance.get("prospective_rederivation") or {}
+        self.calibration_bracket.update({
+            "evaluated": True,
+            "status": assessment.get("status"),
+            "reasons": sorted(map(str, reasons)),
+            "freshness": (acceptance.get("freshness") or {}).get("status"),
+            "observed_triggers": list(prospective.get("observed_triggers", [])),
+            "recorded_only_triggers": list(prospective.get("recorded_only_triggers", [])),
+            "corpus_doubling": prospective.get("corpus_doubling"),
+            "other_session_systematic_sequences": list(
+                prospective.get("other_session_systematic_sequences", [])),
+        })
+        self.outputs["withheld/bracket-evaluation.json"] = write_json_once(self.withheld / "bracket-evaluation.json",
                         {"assessment": assessment, "reasons": list(reasons), "members": len(valid)})
         if assessment.get("status") != "passed" or reasons:
             self.emit("calibration.bracket_acceptance_failed", level="window", collector="calibration",
@@ -8106,6 +8137,7 @@ class _Harvest:
                   "exclude_window_reasons": sorted(map(str, summary["exclusions"]["reasons"])),
                   "runs_root_overrides": list(getattr(self, "runs_root_overrides", [])),
                   "harvest_checkout": dict(self.harvest_checkout),
+                  "calibration_bracket": dict(self.calibration_bracket),
                   "outputs": dict(sorted(self.outputs.items()))}
         write_json_once(self.archive / "harvest.json", record)
         return record

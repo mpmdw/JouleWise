@@ -2627,17 +2627,27 @@ class HarvestCheckoutTests(WindowTestCase):
 
     def test_both_records_name_the_commit_the_program_files_and_whether_the_checkout_was_clean(self):
         window = self.window()
-        record = window.harvest()
+        dirty_at_checkout = []
+        def checkout_reader():
+            checkout = h.harvest_checkout()
+            dirty_at_checkout.extend(line for line in self.git(
+                "status", "--porcelain=v1", "--untracked-files=all").splitlines() if line.strip())
+            return checkout
+        record = window.harvest(seams=h.Seams(group_alive=lambda pgid: False,
+            exclusions_compute=EXCLUSIONS, boot_session_uuid=lambda: "B5-TEST-BOOT",
+            harvest_checkout=checkout_reader))
         checkout = record["harvest_checkout"]
         # This test runs the harvest from this very checkout.
         self.assertEqual((checkout["schema"], checkout["root"], checkout["errors"]),
                          ("joulewise.b5_harvest_checkout.v1", str(ROOT), []))
         self.assertEqual(checkout["head"], self.git("rev-parse", "HEAD").strip())
-        dirty = [line for line in self.git("status", "--porcelain=v1", "--untracked-files=all").splitlines()
-                 if line.strip()]
+        # TMPDIR is inside the tree: the harvest adds scratch files after the
+        # checkout record, so compare against the status at that record's read.
+        dirty = dirty_at_checkout
         self.assertEqual((checkout["status_clean"], checkout["status_lines"]), (not dirty, len(dirty)))
         self.assertEqual(checkout["files"], {relative: sha(ROOT / relative) for relative in (
-            "joulewise/b5/harvest.py", "joulewise/whole_window.py", "scripts/harvest_b5_window.py")})
+            "joulewise/b5/harvest.py", "joulewise/calibration_bracketing.py",
+            "joulewise/whole_window.py", "scripts/harvest_b5_window.py")})
         self.assertEqual(json.loads((window.archive / "harvest.json").read_bytes())["harvest_checkout"], checkout)
         exclusions = window.exclusions()
         self.assertEqual(exclusions["harvest_checkout"], checkout)
