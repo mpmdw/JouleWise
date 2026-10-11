@@ -1,0 +1,5 @@
+program: /Users/edr/code/JouleWise-wt-harvest-trigger/joulewise/calibration_bracketing.py
+snapshot refusals: [] head sequence: 478
+members passed to the evaluation: 99
+{"scope": "sealed", "status": "failed", "reasons": ["calibration_acceptance_bound_stale"], "freshness": "stale", "observed_triggers": ["new_systematic_failure_challenges_preflight_screen"], "recorded_only_triggers": null, "corpus_doubling": null, "other_session_systematic_sequences": null}
+{"scope": "window_evidence", "status": "passed", "reasons": [], "freshness": "fresh", "observed_triggers": ["new_systematic_failure_challenges_preflight_screen"], "recorded_only_triggers": ["new_systematic_failure_challenges_preflight_screen"], "corpus_doubling": {"count": 41, "threshold": 48}, "other_session_systematic_sequences": [456]}
