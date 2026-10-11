@@ -29,3 +29,30 @@ record, decide by section 6. If the watchdog's `clock_uncertain` drain keeps end
 45-minute harvest, that is a watchdog fault to fix before anything else (it fired five times in this window).
 
 Stand-down email sent, Gmail `1a12991360887373`; it carried all six watchdog notices, and `notice.ack` was written.
+
+## Added 23:1x PDT, before exit: the Mac slept during this window (seat finding, not yet checked by the lead)
+
+The network-time seat's report (`/Users/edr/night-archive/b5-consults/ed-1010-asks/network-time-options.md`)
+finished after the stand-down email. Its side finding corrects that email: the five `clock_uncertain`
+notices were not a watchdog fault and not clock drift. The watchdog compares the wall clock's advance with
+Python's monotonic clock, which stops while a Mac sleeps (tolerance 60 s,
+`scripts/magistrate_watchdog.py:122, 1714-1735`), and the Mac slept during the window:
+
+- `pmset -g log`: "Using Batt (Charge: 79)" at 17:02:01 PDT, idle sleep at 17:02:07 (the battery profile has
+  `sleep 1`), AC back at 17:02:27; then a cycle of dark wake and maintenance sleep to the window's end, with
+  sleeps of about 929 s (17:04), 916 s (18:25), 402 s (19:42), 266 s (20:50) and 945 s (22:06). Why AC
+  dropped is not established (the wake reason names `USB-C_plug`).
+- `night/hazard_result.json`: Python monotonic and `CLOCK_MONOTONIC_RAW` agree within 416 ns at the window's
+  start and are 3,500.003 s apart at its end: about 14 % of the 25,049 s window asleep.
+- The window code holds no sleep-prevention assertion. Which members overlapped a sleep, and whether a member
+  run in dark wake is usable, is open. The stand-down of this activation at 22:49 follows the same pattern
+  (the Mac may still be cycling).
+
+Next activation, before deciding anything from the re-harvest: (1) verify the three facts above from
+`pmset -g log` and `night/hazard_result.json`; (2) check the charger and battery state now and whether the
+Mac is still in the sleep cycle; (3) a structure-only listing of which members overlapped the six sleep
+intervals (a seat; integers and member ids only); (4) tell Ed, correcting the stand-down email's "watchdog
+fault" sentence; (5) a sleep during a chain is a physical hazard no arm check or flag covers: two-seat
+consult on the window's status and on the cure (a sleep assertion held by the driver is window code and
+needs a new seal; `pmset -b sleep 0` is a machine setting) BEFORE any further arm, even if the harvest says
+claim-usable. Do not arm GAMMA or BETA attempt 5 until that consult has ruled.
