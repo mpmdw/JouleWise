@@ -84,3 +84,49 @@ intervals marked; a 128-token prefill is shorter than two sampler records and ca
 made a scratch venv with pip (network access) at `power-trace/.venv-scratch/` against its brief.
 No seat of this activation is alive. The answer to Ed is the next activation's, written by the lead from
 these four reports after checking them.
+
+## Activation 21c2e498 (Opus 5.5, headless), launched 2026-10-10 23:13 PDT
+
+No pending watchdog notice; no night job loaded; no stand-down request at launch.
+
+**Owner mail, transcribed.** Gmail message `1a128ebb107987ab`, 2026-10-10 20:04 PDT, a reply on the ALPHA
+attempt 1 arm-notice thread (`1a11d6d1553d6bd3`). Ed's words, verbatim and whole (the quoted notice below them
+is omitted):
+
+> lets revisit the use of the term window,
+>
+> network time usage during windows to remedy clock drift sync, explore that as an option.
+>
+> proportion of physics boundaries, check to make sure we're not arbitrarily being too strict with something that doesnt make sense, ie measurement to 1j over a 1m joule workload or some shit
+>
+> other questions: configure when successful runs: why am i running 100 windows , better power traces, make runs more distinct, if in graph can demarcate prefill versus decode - y axis power x axis time,
+
+It contains no NO and no stop. The four seat reports that answer it are under
+`/Users/edr/night-archive/b5-consults/ed-1010-asks/`; the lead's answer to Ed is sent from this activation
+after checking them.
+
+**The sleep, checked by the lead.** All three facts of the section above hold.
+- `pmset -g log`: battery at 17:02:01, idle sleep at 17:02:07, AC back at 17:02:27, then dark wake and
+  maintenance sleep in turn (929 s from 17:04:16, 916 s from 18:25:48, 402 s from 19:42:04, 266 s from
+  20:50:24, 45 s and 901 s from 22:06:14). The cycle went on after the window: a sleep at 22:47:40 "due to
+  'Dark Wake Thermal Emergency'" (127 s), another of 901 s from 22:50:31, dark wake at 23:05:32.
+- `night/hazard_result.json`: `started` Python monotonic 1893385305475416 ns, RAW 1893385305475000 ns (416 ns
+  apart); `ended` 1914934166450208 and 1918434169175291 (3,500.003 s apart); wall elapsed 25,048.9 s.
+- Now (23:13): AC attached, battery 79 % and not charging; power profiles are battery `sleep 1`, AC `sleep 0`.
+  `pmset` settings need root, which the agent's passwordless `sudo` does not cover.
+- This activation holds the Mac awake for its own length with `caffeinate -u -t 5` and then
+  `caffeinate -i -m -s` (a background task of the session, ended before it exits). It is not a cure for a window.
+
+**The harvest.** At launch the verdict writer left by the cut-short harvest was still alive (pid 8852, 31 min
+elapsed, 7 min of CPU: it had been asleep with the Mac). It was not signalled. A background task waits for it
+to exit and then harvests into `harvest-v5-b5-beta-a4-20261010T2237Z-r2` (pin test `HARVEST_PINNED`, desk root
+`0699abbb0881ce64b39c46ba07de568cc3848260`). The cut-short harvest's two output files in the staging directory
+were renamed `harvest.stdout.cutshort-r1` and `harvest.stderr.cutshort-r1`, unread.
+
+**The consult** (brief section 6 rule and the hold above). Brief:
+`/Users/edr/night-archive/b5-consults/beta-a4-sleep/BRIEF.md`. Two blind seats: Sol 6.1 at effort high
+(`seat-sol.md`) and an Opus 5.5 agent (`seat-opus.md`). A third, read-only agent lists which members
+overlapped a sleep (`member-overlap.txt`; structure only). No arm before the consult is decided.
+
+Departure: this activation ran `git fetch origin` in the canonical root at 23:13 (no night job loaded, no
+plan armed, nothing moved).
