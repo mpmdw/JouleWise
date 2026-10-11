@@ -585,6 +585,42 @@ not claim-usable (`calibration.bracket_acceptance_failed`), kept and disclosed, 
 The release event ties Erratum 3's SHA-256 beside those of the registration, the analysis plan, the catalog and
 Erratum 2.
 
+### Step 2, written 2026-10-11 before any governed attempt was armed or harvested (by a seat that has read no claim-window energy)
+
+B5-HARVEST-PIN: b039c0257d1b1d407ee9598222db3f78f6ad7beb
+
+This pin governs only attempts governed by Erratum 3 (plan `t0_epoch_s` later than 1791738000). Addendum 3's pin
+`0699abbb0881ce64b39c46ba07de568cc3848260` remains the pin of attempts with t0 after 1791649800 and at or before
+1791738000, and Addendum 2's pin `224a264c5faaae90cdf56118df37e773a932700b` of every earlier attempt of the second
+seal.
+
+Desk clone: /Users/edr/night-custody/desk/b5-harvest. Files at that commit, with their SHA-256:
+joulewise/b5/harvest.py 68d219478edb3d40a1d1a0a4cfd2fb7100421f09b5c8e681ec48c6acab0c73af; joulewise/calibration_bracketing.py 5474902deb5c3b834bffe11da6698f40216ba978248a8457f09db0077eaaf3ff; joulewise/whole_window.py 2e03abc8b90088401df9fd86b511dcb783e4a67913e49ac441e326caa603b86b; scripts/harvest_b5_window.py 88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45.
+The lane: lane/2026-10-11-harvest-trigger-scope, cut from the third pin 0699abbb0881ce64b39c46ba07de568cc3848260, so
+it descends from the second seal's claim head c27485347c9629b857df81665b5b1b8d10dcd36a. git diff --name-only
+0699abbb0 b039c0257 lists only the first two of those files and paths under tests/; the last two files are
+unchanged from the third pin.
+
+What changed in the harvest program: items 0 to 8 of Erratum 3. The bracket evaluation
+(`evaluate_calibration_bracket`, `calibration_bracket_for_bundles`) takes the argument `trigger_scope`; the
+harvest passes `"window_evidence"` when and only when the attempt is governed; under it a systematic capture of
+another session, a valid capture outside the range of the acceptance's 24 and the count of valid captures
+reaching 48 are recorded and do not fail the bracket, and every other check is as sealed. With the argument
+omitted or `"sealed"` both functions return what they return at 0699abbb0. `harvest.json` gains the object
+`calibration_bracket` and the digest of `withheld/bracket-evaluation.json`, and the recorded program file list
+gains `joulewise/calibration_bracketing.py`. Items 10 and 14 (claim consumers; the sensitivity bound) are lane
+L9-BRACKET's, before any claim is computed.
+
+Its gates: docs/process_traces/2026-10-block5/trigger-erratum/harvest-pin4-gates.md (the builder; a cold Fable
+5.1 pass, last line PASS; an independent executing review, approve with test fixes, all made; the whole suite
+on the lane's tree; the before/after comparison on the real rehearsal copy, executed and byte-identical; the
+limited exploratory run of the erratum's item 12 over BETA attempt 5's archived ledger copy). One gate is owed
+before a governed GAMMA attempt is armed and does not hold BETA: the sealed verdict writer and the real
+provenance checker run over a GAMMA-shaped rehearsal window whose ledger holds a systematic capture of another
+session (finding F3 of the cold pass).
+
+Like the earlier harvest lanes, this lane is not merged into main; the branch is kept on the remote.
+
 ## Release event
 
 Nothing is recorded here yet. This section is written when the withheld energies are opened: after the block has
