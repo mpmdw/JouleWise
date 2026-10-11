@@ -136,3 +136,36 @@ from all earlier pins).
 
 The program was not run over any governed attempt's bytes (none exists), and no seat that worked on it read a
 claim-window energy.
+
+## Added 11:10 PDT: the gate owed before GAMMA (finding F3), executed
+
+Sol 6.1 at effort high (`sol-f3-gamma-gate.md`; brief and log under
+`/Users/edr/night-archive/b5-consults/beta-a5-stale/f3-gamma/`), then run again by the magistrate
+(`lead-rerun.log` there: 4 tests, OK). The opt-in module `tests/test_harvest_b5_trigger_scope_gamma_gate.py`
+(`B5_GAMMA_STALE_GATE=1`) is on the lane as commit `b517626d8` after the pin (tests only; `git diff --name-only
+b039c0257 HEAD` lists that one file; the desk root stays at the pin).
+
+What ran for real: the verdict writer's own code path (lock, membership, evaluation, row and basis
+construction, publication), the ledger writers and the snapshot loader, the binding builder and the bracket
+evaluation, the provenance checker as a subprocess through the harvest's own invocation, the whole harvest.
+What stayed synthetic: the members' evaluations and telemetry, the reference identities, the calibration
+captures' contents and their discovery. The writer and checker sources were checked equal to those of the
+rehearsal that ran the current program.
+
+Result, a GAMMA-shaped window with and without a systematic capture of another session in its ledger:
+
+- The sealed writer: control `decision: passed`; stale `condition: calibration_acceptance_bound_stale`, its
+  member-failure list a well-formed empty list in both.
+- The real checker: the same summary in both (5 pass, 1 skip, 4 fail; the failures come from the synthetic
+  inputs and are the same four assertions in both).
+- Window-removing codes: the same two in both, with identical payloads
+  (`calibration.capture_battery_unmeasured`, `neg8.bound_not_derived`, both gaps of the synthetic window).
+  **The stale state adds one code, `whole_window.not_passed`, which is disclosed only.**
+- Every outcome of the checker subprocess (66 injected cases and 3 precondition cases) maps to
+  `g3.recompute_failed`, `g3.assertion_failed`, `records.collector_failed` or `g3.not_applicable`, each
+  disclosed only.
+
+Disposition: F3 is closed as far as it can be without a real GAMMA window in that state. The two real GAMMA
+rehearsals on disk (`gamma-1`, `gamma-2`) hold no stored verdict or binding and ran an older program, so no
+real-model run of this state exists; the first governed GAMMA window is that run, and its record names the
+codes it shows. GAMMA is released for arming on this gate; it still needs the free disk of brief 5.1.
