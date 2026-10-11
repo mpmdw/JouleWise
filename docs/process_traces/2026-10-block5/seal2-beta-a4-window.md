@@ -56,3 +56,18 @@ fault" sentence; (5) a sleep during a chain is a physical hazard no arm check or
 consult on the window's status and on the cure (a sleep assertion held by the driver is window code and
 needs a new seal; `pmset -b sleep 0` is a machine setting) BEFORE any further arm, even if the harvest says
 claim-usable. Do not arm GAMMA or BETA attempt 5 until that consult has ruled.
+
+## Added before exit: the threshold audit finished (seat report, not yet checked by the lead)
+
+`/Users/edr/night-archive/b5-consults/ed-1010-asks/thresholds-audit.md`. Its ranked findings, for the answer
+to Ed and for a two-seat consult (none is acted on yet; each change of a registered threshold is a
+prospective erratum through a cold gate):
+- stricter than the error it guards: the calibration alignment screen (36.46 ms; the sample maximum of 24
+  captures, so it rejects about 4 % of ordinary captures by construction; it stopped BETA attempt 3); the
+  contention limit of 0.05 CPU-seconds per second per process (under twice the ordinary background); the
+  NEG-8 corpus minimum of 10 (already cured by the 18-member corpus);
+- proportionate in size but costly in mechanism: idle admission (aborts after one retry instead of waiting);
+- a cliff: the arm's clock gate read 4.69 ms against 5.0 at the last arm;
+- open ten-minute code check: whether `neg8_bracket.max_abs_delta_j: 0.05` in `quiet_mac_p2_b5.json` is live
+  in a block-5 screen.
+No removal so far traces to a measured energy drift, a clock fault, thermal state or the battery.
