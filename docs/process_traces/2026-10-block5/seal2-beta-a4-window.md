@@ -71,3 +71,16 @@ prospective erratum through a cold gate):
 - open ten-minute code check: whether `neg8_bracket.max_abs_delta_j: 0.05` in `quiet_mac_p2_b5.json` is live
   in a block-5 screen.
 No removal so far traces to a measured energy drift, a clock fault, thermal state or the battery.
+
+## Added before exit: the third seat finished (not yet checked by the lead); all three seats have ended
+
+Under `/Users/edr/night-archive/b5-consults/ed-1010-asks/`: `window-term-census.md` (13 senses of "window";
+proposed prose terms session, run, measured interval, phase interval, sampling interval, attempt; code
+identifiers and schemas stay under the seal), `why-125-runs.md` (Ed's "100 windows" is the 100 science runs
+inside one session: 125 = 18 drift-corpus + 7 references + 20 absolute repeats + 80 runs in 20 quads; the 10
+units per quantity are a feasibility convention, not a power analysis), and `power-trace/` (a plotting script,
+notes and six figures from rehearsal data only: power against time with the idle, prefill and decode
+intervals marked; a 128-token prefill is shorter than two sampler records and cannot be resolved). The seat
+made a scratch venv with pip (network access) at `power-trace/.venv-scratch/` against its brief.
+No seat of this activation is alive. The answer to Ed is the next activation's, written by the lead from
+these four reports after checking them.
