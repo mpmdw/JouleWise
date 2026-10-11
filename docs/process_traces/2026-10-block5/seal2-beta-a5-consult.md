@@ -100,3 +100,80 @@ it. No judge is convened for the consult itself.
    a sleep carry a member exclusion (a physics gap if not), and the status reason codes of attempt 5's six
    failed members of its last stage.
 7. Arm BETA attempt 6 (brief section 5).
+
+## Added 08:35 PDT: the cold gate ruled; the step list as corrected by the ruling
+
+Erratum 3 went through the gate of registration section 10: draft `trigger-erratum/ERRATUM-draft1.md` (Opus
+5.5 drafting seat), refuter `REFUTATION.md` (Opus 5.5 agent: three BLOCKER, six MAJOR findings), judge
+`RULING.md` (Fable 5.1, cold, from the fresh worktree `/Users/edr/code/JouleWise-wt-harvest-trigger`; sha256
+`becbf587bb84a61954060a19dc54f78517c088c8710e514d73bb31af0cdea260`; charge `JUDGE-CHARGE.md`; launcher and
+output under `/Users/edr/night-archive/b5-consults/beta-a5-stale/erratum-judge/`). Last line:
+`RULING: ADMIT-WITH-CORRECTIONS`. Every finding of the refuter was upheld, two with the rule modified.
+
+What the ruling fixes, for whoever continues:
+
+- **Admission time** `2026-10-11T17:00:00Z` (epoch 1791738000, 10:00 PDT). An attempt is governed when its
+  plan's t0 is later. BETA attempts 4 and 5 are not governed and stay as decided above.
+- **Pin before arm.** No governed attempt is armed until the implementing harvest program has passed its
+  gates and Addendum 4 step 2 is on main. (The draft allowed an arm on the admitted text alone; rejected:
+  under the old pin a window with row 456 in its ledger is lost with certainty.)
+- **The rule decides by event, not by trigger name**, and both sites of the bracket evaluation that fail on a
+  stale acceptance are covered (the refuter executed that a change at the first site alone does not cure it).
+- **The harvest lane may also change `joulewise/calibration_bracketing.py`**, desk checkout only, behind a new
+  argument `trigger_scope` whose default returns exactly the sealed behaviour; Addendum 4 step 1 carries the
+  amendment of registration section 11 item 4.
+- **Retention (new pre-arm condition).** The capture directory of every capture recorded after the
+  acceptance's cutoff, those of the removed BETA attempts included, stays at the path the ledger records
+  until the release event. Moving or offloading one removes every later window. The custody roots are already
+  on the never-move list of brief 5.1.
+- **The pre-arm run** (ruling section D item 13): from the pinned desk checkout, the bracket evaluation over
+  the live ledger for a hypothetical window starting now; the arm record gets the snapshot's refusal reasons
+  (must be empty), the candidate count and the count of valid finalized captures (must be equal), the
+  observed triggers, the doubling count and the sequences of other sessions' systematic captures. Two or more
+  such sequences: two-seat consult before any arm; two consecutive: cold gate.
+- **Claim consumers and a sensitivity bound** (items 10 and 14) are admitted as rules now and built in a new
+  analysis lane, L9-BRACKET, blind, before the release event. They gate no arm.
+- **The exploratory run over attempt 5** is limited to the bracket evaluation over its archived ledger copy,
+  printing status words and trigger names only (item 12); never a verdict or `claim_usable`.
+
+The two counts of step 6, both answered from structure-only output:
+
+- Attempt 5's six failed members are six consecutive members of its last science stage, each with
+  `admission_decision` `abort` (the idle baseline before the run was not quiet enough and the member was not
+  run). Consecutive aborts over about 25 minutes near 05:40 to 06:00 PDT match the system malware scan of
+  RUN_STATE item 14, which this t0 was known not to avoid. No `stage.members_refused_pre_bundle_identical`.
+  It does not hold an arm; prefer a t0 that avoids the scan hour.
+- Attempt 4's members and the sleep (`/Users/edr/night-archive/b5-consults/beta-a4-sleep/member-overlap.txt`,
+  made 2026-10-10): five members' run spans overlapped a sleep; four of those failed and one succeeded with a
+  four-second sleep in its post-run stage; no member's sampling span overlapped a sleep. So no succeeded
+  member measured across a sleep. That members run in dark wake carry no code is the open point already
+  recorded as desk lane (a) of RUN_STATE item 22.
+
+Step list from here (replaces steps 2 to 7 above):
+
+2. done (ruling).
+3. `trigger-erratum/ERRATUM.md`: the draft's sections 1 to 3 with the ruling's corrections, the ruling's
+   section D copied as sections 4 to 6 (assembly seat started 08:33 PDT). Commit it to the records branch and
+   merge the records branch into main; its SHA-256 as committed on main goes into Addendum 4 step 1.
+4. Harvest lane `lane/2026-10-11-harvest-trigger-scope` (worktree `/Users/edr/code/JouleWise-wt-harvest-trigger`,
+   cut from `0699abbb0`): Sol 6.1 at effort xhigh implements section D items 0 to 8 (brief
+   `trigger-erratum/BRIEF-sol-impl.md`; report and log under
+   `/Users/edr/night-archive/b5-consults/beta-a5-stale/impl/`, started 08:33 PDT). The seat commits nothing:
+   read its report, run the lane's test modules yourself, commit on the lane branch, push the branch.
+5. Gates, recorded in `trigger-erratum/harvest-pin4-gates.md` (model: `sources-erratum/harvest-pin3-gates.md`):
+   item-by-item check against section D; an independent executing review by a seat that did not write the
+   code; the lane's modules and the whole suite on the lane's tree (non-venv Homebrew python3.13, the shard
+   runner); a cold Fable 5.1 pass; the sealed-scope byte-identity test; the before/after comparison on the
+   rehearsal copy against pin `0699abbb0`; the two stale-state fixtures (Erratum 2 recovery; a GAMMA-shaped
+   window) with the window-removing codes they print; the limited exploratory run over attempt 5's archived
+   ledger copy; the constant checked against Addendum 4; every finding dispositioned. A finding that the
+   admitted text cannot be implemented exactly goes back to the cold gate before any arm.
+6. Seal record Addendum 4 on main: step 1 (erratum path and SHA-256, `ERRATUM-3-ADMITTED-AT:
+   2026-10-11T17:00:00Z`, pin scoping, the section 11 item 4 amendment), step 2 (`B5-HARVEST-PIN:` with the
+   lane head, the file digests now including `joulewise/calibration_bracketing.py`, the gate record's path).
+   Canonical root `pull --ff-only` with no night job loaded; desk root checked out at the pin; the pin test
+   of brief 4.5 prints `HARVEST_PINNED`.
+7. RUN_STATE: item 24 filled in with the pre-arm run's command; the three pins and which attempts each
+   governs; `B5-ARM-RELEASED: beta gamma`.
+8. Arm BETA attempt 6 by brief section 5 with the pre-arm run, t0 after 10:00 PDT on 2026-10-11 and, by
+   preference, with the chain clear of 12:45 to 13:10, 00:00 and 05:15 to 06:45 local.
