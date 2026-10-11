@@ -532,6 +532,59 @@ whole suite on the lane's tree; the before/after comparison on the real rehearsa
 
 Like the earlier harvest lanes, this lane is not merged into main; the branch is kept on the remote.
 
+## Addendum 4: Erratum 3 of block 5, and the harvest program for the attempts it governs
+
+### Step 1, written 2026-10-11 before the arm of any attempt Erratum 3 governs (by a seat that has read no claim-window energy)
+
+Erratum 3 (prospective): `docs/process_traces/2026-10-block5/trigger-erratum/ERRATUM.md`, SHA-256 of the admitted
+text as committed on main `71deca18d8fbae283afe15dca4f5f36850c22f303077a859800e142577b3ac89`. It was admitted with
+corrections by a cold gate under registration section 10: the ruling is `RULING.md` beside it (a Fable 5.1 judge,
+SHA-256 `becbf587bb84a61954060a19dc54f78517c088c8710e514d73bb31af0cdea260`, last line
+`RULING: ADMIT-WITH-CORRECTIONS`), the refutation `REFUTATION.md` (an Opus 5.5 refuter). What it changes, for
+governed attempts only: at the harvest's evaluation of a window's calibration bracket (the comparison of the
+window's opening and closing calibration captures with the calibration acceptance), three events elsewhere in
+the calibration ledger are recorded and no longer fail the bracket: a capture of another session classed
+`systematic-invalid`, a valid capture outside the range of the acceptance's 24 captures (the window's own
+included), and the count of valid captures reaching 48. Every comparison of the window's own two captures with
+the screen and the drift ceiling, and the identity, byte, binding, ledger integrity and custody checks, stay as
+sealed. It also admits, as rules to be built in analysis lane L9-BRACKET before the release event, how claim
+consumers evaluate each window's bracket over that window's archived ledger copy (item 10) and a sensitivity
+bound printed for every analysed window of the block (item 14); a lead's rule for a repeated systematic capture
+and a pre-arm run (item 13); and a retention rule for capture directories. No threshold, flag code, roster,
+blinding rule or window input changes. The acceptance file's bytes, the registration's bytes and the seal are
+not changed.
+
+ERRATUM-3-ADMITTED-AT: 2026-10-11T17:00:00Z
+
+Pin scoping. An attempt is governed by Erratum 3 when its plan's `t0_epoch_s` is later than
+`ERRATUM-3-ADMITTED-AT` (epoch 1791738000). Three pins stand. Addendum 2's pin
+`224a264c5faaae90cdf56118df37e773a932700b` for attempts with t0 at or before `ERRATUM-2-ADMITTED-AT` (epoch
+1791649800). Addendum 3's pin `0699abbb0881ce64b39c46ba07de568cc3848260` for attempts with t0 after that and at
+or before `ERRATUM-3-ADMITTED-AT` (BETA attempts 2 to 5). The pin of step 2 below for governed attempts. No
+attempt that is not governed is harvested by the new program for a deciding record; before the release event
+the only run of the new program over such an attempt is the one item 12 of the erratum allows (the bracket
+evaluation alone, labelled exploratory, printing status words, reason codes and trigger names), and it changes
+no verdict, `claim_usable`, cause key or attempt history. The analysis checks each attempt's recorded harvest
+commit against the pin that governs that attempt.
+
+Pin before arm. No governed attempt is armed until step 2 of this addendum is on main. If the gates on the
+implementing program find that the admitted text cannot be implemented exactly, a corrected erratum is admitted
+under registration section 10 before any governed attempt is armed.
+
+Registration section 11 item 4, amended for this lane only. The harvest lane of Erratum 3 may also change
+`joulewise/calibration_bracketing.py`, in the desk checkout only, and only as section 4 item 1 of the erratum
+describes: one keyword argument `trigger_scope` on `evaluate_calibration_bracket` and
+`calibration_bracket_for_bundles`, whose default value `"sealed"` returns exactly what the pinned program
+`0699abbb0` returns. The change is never committed, merged, pulled or checked out in the measurement clone.
+
+BETA attempts 4 and 5 of the second seal (`v5-b5-beta-a4-20261010T2237Z`, `harvest.json` SHA-256
+`b4aa474b1ebc4eefc0a8b5f4b9d6975544578113583d0da10fa410a9f139d5b6`; `v5-b5-beta-a5-20261011T0739Z`,
+`harvest.json` SHA-256 `8e69f3ef88b932a4b5e0f6a56816e2c1e45d5a64d19595bebf88c02f9a76170d`) stay collected and
+not claim-usable (`calibration.bracket_acceptance_failed`), kept and disclosed, their energies never analysed.
+
+The release event ties Erratum 3's SHA-256 beside those of the registration, the analysis plan, the catalog and
+Erratum 2.
+
 ## Release event
 
 Nothing is recorded here yet. This section is written when the withheld energies are opened: after the block has
