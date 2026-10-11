@@ -177,3 +177,27 @@ Step list from here (replaces steps 2 to 7 above):
    governs; `B5-ARM-RELEASED: beta gamma`.
 8. Arm BETA attempt 6 by brief section 5 with the pre-arm run, t0 after 10:00 PDT on 2026-10-11 and, by
    preference, with the chain clear of 12:45 to 13:10, 00:00 and 05:15 to 06:45 local.
+
+## Progress, 09:30 PDT (activation bab1c330)
+
+- Step 3 done: `trigger-erratum/ERRATUM.md` is on main (merge `89b910230`), SHA-256
+  `71deca18d8fbae283afe15dca4f5f36850c22f303077a859800e142577b3ac89`. Its sections 4 to 6 equal the ruling's
+  section D (checked by a script, 82 lines); three wrong cross-references in the admitted text are left as
+  written and explained in a reading note at the file's end (representation only).
+- Step 6, first half, done: seal record Addendum 4 step 1 is on main (`ac8cc51d6`); the canonical root is
+  fast-forwarded there.
+- Step 4 done: the Sol seat's implementation is committed on the lane as
+  `e4b4145a071871c8a3cca85c976433b89b15befd` and pushed (report
+  `/Users/edr/night-archive/b5-consults/beta-a5-stale/impl/sol-impl.md`: items 0 to 8 each with tests, 497
+  targeted tests OK with 29 skipped). One point it raised: item 6 gives `corpus_doubling` as a count, and
+  when an evaluation is refused before an authenticated count exists the program returns null. Ruled by the
+  orchestrator: null is right (item 8 types the same field `{...}|null`; no decision reads it; a zero would
+  misstate missing evidence); representation only, put to the cold pass and the reviewer to confirm.
+- Step 5 in flight since 09:27 PDT, all three on separate worktrees at `e4b4145a0`:
+  the whole suite (`/Users/edr/night-archive/b5-consults/beta-a5-stale/suite-e4b4145a0/`, worktree
+  `…-wt-harvest-trigger-suite`); the cold Fable 5.1 pass (`…/beta-a5-stale/cold-pass/charge.md`, output
+  `FABLE-pass.md`, worktree `…-wt-harvest-trigger-cold`); the independent executing review by an Opus 5.5
+  agent (`…/beta-a5-stale/review/REVIEW.md`, worktree `…-wt-harvest-trigger-review`), which also writes the
+  working snippet for the pre-arm run. A successor that finds one of the three outputs absent relaunches
+  that one from its charge; then dispositions the findings, writes `trigger-erratum/harvest-pin4-gates.md`
+  and goes on at step 6's second half.
