@@ -27,3 +27,5 @@ must print nothing first; then harvest into `harvest-v5-b5-beta-a4-20261010T2237
 to 4.4 are done). Then transcribe the owner mail, relaunch the three seats if their reports are incomplete,
 record, decide by section 6. If the watchdog's `clock_uncertain` drain keeps ending activations inside a
 45-minute harvest, that is a watchdog fault to fix before anything else (it fired five times in this window).
+
+Stand-down email sent, Gmail `1a12991360887373`; it carried all six watchdog notices, and `notice.ack` was written.
