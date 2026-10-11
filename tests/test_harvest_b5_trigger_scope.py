@@ -225,6 +225,19 @@ class WindowEvidenceTests(unittest.TestCase):
                 self.assertEqual(self.prospective(result)['recorded_only_triggers'], [SYSTEMATIC])
                 self.assertEqual(result['acceptance']['freshness']['status'], 'fresh')
 
+    def test_item6_content_bearing_systematic_sequences_are_sorted(self):
+        snapshot, candidates, binding = self.fixture(systematics=(456, 458))
+        content_ids = {456: 'f' * 64, 458: '0' * 64}
+        snapshot = replace(snapshot, observations=tuple(
+            replace(observation, content_id=content_ids[observation.sequence])
+            if observation.sequence in content_ids and observation.disposition == 'systematic-invalid'
+            else observation for observation in snapshot.observations))
+        result, reasons = self.evaluate((snapshot, candidates, binding), scope='window_evidence')
+        self.assertEqual((result['status'], reasons), ('passed', ()))
+        prospective = self.prospective(result)
+        self.assertEqual(prospective['other_session_systematic_sequences'], [456, 458])
+        self.assertEqual(prospective['recorded_only_triggers'], [SYSTEMATIC])
+
     def test_item2_unbound_uses_sealed_decisions_whatever_scope(self):
         for p, systematics, count in (('0.028', (456,), 43), ('0.021', (), 43), ('0.028', (), 48)):
             snapshot, candidates, _ = self.fixture(p=p, systematics=systematics, count=count)
@@ -485,6 +498,24 @@ class HarvestScopeTests(window_tests.WindowTestCase):
         self.assertEqual(record['harvest_checkout']['files']['joulewise/calibration_bracketing.py'],
                          window_tests.sha(REPO / 'joulewise/calibration_bracketing.py'))
 
+    def test_item7_nonpassed_status_or_reasons_emits_acceptance_failed(self):
+        passing, passing_reasons = self.evaluator.evaluate()
+        self.assertEqual((passing['status'], passing_reasons), ('passed', ()))
+        for status, reasons in (('not_required', ()),
+                                ('passed', ('instrument_calibration_mismatch',))):
+            with self.subTest(status=status, reasons=reasons):
+                assessment = copy.deepcopy(passing)
+                assessment['status'] = status
+                window = self.governed_window(f'flag-{status}')
+                with mock.patch.object(br, 'calibration_bracket_for_bundles',
+                                       return_value=(assessment, reasons)):
+                    record = window.harvest()
+                self.assertIn('calibration.bracket_acceptance_failed', window.codes())
+                summary = h.read_json(window.archive / 'harvest.json')['calibration_bracket']
+                self.assertEqual(summary['status'], status)
+                self.assertEqual(summary['reasons'], list(reasons))
+                self.assertEqual(record['calibration_bracket'], summary)
+
     def test_items1_7_8_ungoverned_stale_window_emits_unchanged_flag(self):
         window = self.governed_window(t0=h.ERRATUM_3_ADMITTED_AT_EPOCH_S)
         record, scopes = self.harvest_with_bracket(window)
@@ -602,6 +633,13 @@ class HarvestScopeTests(window_tests.WindowTestCase):
             runner=fresh_g3, boot_session_uuid=lambda: 'B5-TEST-BOOT'))
         self.assertEqual(control_record['exclude_window_reasons'], record['exclude_window_reasons'])
         self.assertNotIn('g3.recompute_failed', control.codes())
+        def removal_payloads(candidate):
+            triples = [(flag['code'], flag.get('observed'), flag.get('expected'))
+                       for flag in candidate.flags()
+                       if flag['code'] in record['exclude_window_reasons']]
+            normalised = json.loads(json.dumps(triples).replace(str(candidate.root), '<window>'))
+            return sorted(normalised, key=lambda triple: json.dumps(triple, sort_keys=True))
+        self.assertEqual(removal_payloads(window), removal_payloads(control))
 
     def test_item5_pre_systematic_abort_has_no_bracket_and_no_evaluation(self):
         # The harvest gate of the sealed exit-12 path: the synthetic ledger
