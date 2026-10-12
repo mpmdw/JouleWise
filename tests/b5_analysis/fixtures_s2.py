@@ -3,7 +3,8 @@
 S0's capture files are adapter stubs and its bracket assessment describes a
 different in-memory ledger. These variants give the archived chain, endpoint
 stubs and frozen evaluator one consistent identity, binding and bound pair.
-Only the capture-physics decoder is an explicit mock adapter seam.
+Capture physics and strict validation of the marked timing-only member stubs
+are explicit mock adapter seams. Selection, custody and wrapper checks are real.
 """
 from __future__ import annotations
 
@@ -32,7 +33,7 @@ BOUNDS = {"alpha": ("0.027", "0.02950"), "beta": ("0.029", "0.03150"),
           "gamma": ("0.028", "0.03050")}
 
 
-def toy_ledger(T=502, *, changed_at=None):
+def toy_ledger(T=502, *, changed_at=None, bounds=None):
     """A complete valid legacy receipt chain with no capture-file dependency."""
     acceptance = br.load_calibration_acceptance_bound()
     epoch = acceptance["identity_epoch"]
@@ -52,6 +53,7 @@ def toy_ledger(T=502, *, changed_at=None):
         bound = "0.040" if sequence == 456 else "0.9" if sequence in (376, 458, 460, 462, 502) else "0.025"
         if changed_at == sequence:
             bound = "0.041"
+        bound = (bounds or {}).get(sequence, bound)
         row = cl._new_receipt(sequence=sequence, predecessor_digest=head,
             event="finalization" if final else "reservation", attempt_id=f"toy-{number}",
             content_id=cl.content_id_from_artifact_hashes(artifacts) if final else None,
@@ -80,8 +82,8 @@ def toy_archive(directory, raw, sequence, *, pack="gamma"):
             built.entry_data[key] = str(value)
     (built.archive / "sources/ledger").mkdir(parents=True)
     (built.archive / "sources/ledger/calibration_observation_ledger.jsonl").write_bytes(raw)
-    s0.put(built.archive / "sources/inputs/acceptance.json", {"identity_epoch": br.load_calibration_acceptance_bound()["identity_epoch"],
-        "derivation_corpus": {"members": [{"b_fiducial_s": "0.036"}]}, "ledger_cutoff": {"sequence": 376}})
+    (built.archive / "sources/inputs").mkdir(parents=True)
+    (built.archive / "sources/inputs/acceptance.json").write_bytes(br.DEFAULT_ACCEPTANCE_BOUND_PATH.read_bytes())
     s0.put(built.archive / "derived/terminal-pin.json", pin_at(raw, sequence))
     record_path = built.archive / "harvest.json"
     record = json.loads(record_path.read_bytes())
@@ -136,7 +138,18 @@ def _decode_capture(path, *, runs_root, mode="issuing", **_):
 
 @contextlib.contextmanager
 def capture_adapter():
-    with mock.patch.object(br, "load_calibration_candidate", side_effect=_decode_capture):
+    from joulewise import cli
+    real_validate = cli.validate_bundle
+
+    def strict_stub(path, strict=False, **kwargs):
+        marker = (BundleReader(path).raw_metadata() or {}).get("synthetic_s2_member")
+        if marker is None:
+            return real_validate(path, strict=strict, **kwargs)
+        assert marker["synthetic_s2"] is True
+        return [] if marker["strict_valid"] else ["synthetic S2 strict-invalid member"]
+
+    with mock.patch.object(br, "load_calibration_candidate", side_effect=_decode_capture), \
+            mock.patch.object(cli, "validate_bundle", side_effect=strict_stub):
         yield
 
 
@@ -169,11 +182,11 @@ def build_named(name):
     identity = roster["window_identity"]
     old_binding = json.loads((archive / "derived/bracket-binding.json").read_bytes())
 
-    def session(session_id, *, systematic=False):
+    def session(session_id, *, systematic=False, extra_valid=False):
         slots = {}
         pre_bound, post_bound = BOUNDS[built.entry_data["pack"]]
-        for slot, bound, wall in (("pre", "0.044" if systematic else pre_bound, 90.0 if systematic else 99.0),
-                                  ("post", post_bound, 111.0)):
+        for slot, bound, wall in (("pre", "0.044" if systematic else pre_bound, 90.0 if systematic or extra_valid else 99.0),
+                                  ("post", post_bound, 92.0 if extra_valid else 111.0)):
             capture = built.claim / "instrument_validation" / f"{session_id}-{slot}"
             s0.put(capture / "manifest.json", {"synthetic_s2": True, "slot": slot, "id": session_id})
             s0.put(capture / "instrument_evidence.json", {"synthetic_s2": True,
@@ -181,9 +194,9 @@ def build_named(name):
             slots[slot] = {"attempt_id": f"{session_id}-{slot}", "custody_locator": str(capture),
                            "identity_epoch": epoch, "t1_bindings": bindings}
         cl.append_bracket_session_receipt(ledger_path, session_id=session_id,
-            window_id="s2-other" if systematic else identity["window_id"],
-            plan_id="s2-other" if systematic else plan["plan_id"], plan_sha256=old_binding["plan_sha256"],
-            evidence_root_id="s2-other" if systematic else identity["evidence_root_id"],
+            window_id="s2-other" if systematic or extra_valid else identity["window_id"],
+            plan_id="s2-other" if systematic or extra_valid else plan["plan_id"], plan_sha256=old_binding["plan_sha256"],
+            evidence_root_id="s2-other" if systematic or extra_valid else identity["evidence_root_id"],
             runs_root=built.entry.claim_runs_root, slots=slots, head_pin_path=pin_path, require_committed_pin=False)
         for slot in ("pre",) if systematic else ("pre", "post"):
             evidence = json.loads((Path(slots[slot]["custody_locator"]) / "instrument_evidence.json").read_bytes())
@@ -198,6 +211,7 @@ def build_named(name):
 
     if built.entry_data["pack"] == "gamma":
         session("s2-other-session", systematic=True)
+        session("s2-extra-valid", extra_valid=True)
     session(old_binding["session_id"])
     snapshot = cl.load_calibration_ledger_snapshot(ledger_path, pin_path, require_committed_pin=False,
         verify_custody=False, baseline_sequence=376, baseline_digest=acceptance["ledger_cutoff"]["head_digest"])
@@ -222,6 +236,7 @@ def build_named(name):
             continue
         metadata = json.loads((source / "metadata.json").read_bytes())
         metadata.setdefault("instrument_calibration", {})["bindings"] = bindings
+        metadata["synthetic_s2_member"] = {"synthetic_s2": True, "strict_valid": bool(member.get("strict_valid"))}
         s0.put(source / "metadata.json", metadata)
         (source / "events.jsonl").write_text("".join(json.dumps({"event_type": event, "phase": "measured_run",
             "timestamp_s": wall, "message": "synthetic S2 marker", "metadata": {}}) + "\n"

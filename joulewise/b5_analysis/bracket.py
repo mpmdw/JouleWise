@@ -17,7 +17,6 @@ from typing import Any, Mapping, Sequence
 from joulewise import calibration_bracketing as calibration
 from joulewise import calibration_ledger as ledger
 from joulewise.bundle_read import BundleReadError, BundleReader
-from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
 from joulewise.schemas import CampaignPolicy
 
 from .archive import ArchiveHandle, _read
@@ -132,41 +131,65 @@ def _copy(inputs: _Inputs):
     return raw, ledger_prefix(raw, pin), pin
 
 
-def _window_inputs(archive: ArchiveHandle, inputs: _Inputs):
-    """Repeat the harvest's strict/succeeded/bounded selection and bundle reads."""
+def _window_inputs(archive: ArchiveHandle, inputs: _Inputs, directory: Path):
+    """Recompute the harvest's selection from authenticated complete bundles.
+
+    Neither pin always records a digest for member-assessments.json. Its
+    selection is therefore checked against bundle bytes, never trusted as the
+    authority for which members determine the window span.
+    """
+    from joulewise.cli import validate_bundle
+
     assessments = _json(archive.withheld_bytes("withheld/member-assessments.json"),
                         "window_bracket_not_passed")
-    windows, bindings = [], []
     claim = archive.window.claim_runs_root
     source_root = "sources/claim-runs"
     if claim.is_relative_to(archive.window.custody_root):
         source_root = "sources/night-custody/" + claim.relative_to(archive.window.custody_root).as_posix()
     try:
-        members = assessments["members"]
-        with tempfile.TemporaryDirectory(prefix="l9-bracket-members-") as directory:
-            for ordinal, (_, member) in enumerate(sorted(members.items())):
-                path = Path(member["bundle_path"])
-                if not (member.get("strict_valid") and member.get("status") == "succeeded"
-                        and member.get("anchor_recorded") == "bounded" and path.is_relative_to(claim)):
+        recorded = set()
+        for member in assessments["members"].values():
+            path = Path(member["bundle_path"])
+            if (member.get("strict_valid") and member.get("status") == "succeeded"
+                    and member.get("anchor_recorded") == "bounded" and path.is_relative_to(claim)):
+                recorded.add(path.relative_to(claim).as_posix())
+        inventory = {name.removeprefix(source_root.removeprefix("sources/") + "/")
+                     for name in inputs.manifest
+                     if name.startswith(source_root.removeprefix("sources/") + "/")}
+        roster = _json(archive.output_bytes("derived/roster.json"), "window_bracket_not_passed")
+        registered_ids = {row["run_id"] for row in roster["members"]}
+        # The authenticated exclusion roster retains all assessed members,
+        # including present spares. Enumerate their bundles from the inventory,
+        # not the unpinned assessments; ignore unrostered directories exactly
+        # as the harvest's assess() does.
+        bundles = sorted({str(Path(name).parent) for name in inventory
+                          if name.endswith("/metadata.json")
+                          and str(Path(name).parent) in registered_ids})
+        selected, selected_paths, cache = set(), [], {}
+        for relative in bundles:
+            target = directory / relative
+            target.mkdir()
+            for name in sorted(inventory):
+                if not name.startswith(relative + "/"):
                     continue
-                relative = path.relative_to(claim).as_posix()
-                target = Path(directory) / str(ordinal)
-                target.mkdir()
-                for name in ("events.jsonl", "metadata.json"):
-                    (target / name).write_bytes(inputs.source(f"{source_root}/{relative}/{name}"))
-                reader = BundleReader(target)
-                window = reader.measured_window()
-                binding = reader.metadata().get("instrument_calibration", {}).get("bindings")
-                if window is None or not isinstance(binding, Mapping):
-                    raise ValueError()
-                windows.append(window)
-                bindings.append(binding)
-        if not windows or any(any(item.get(key) != bindings[0].get(key) for key in V2_BINDING_FIELDS)
-                              for item in bindings[1:]):
+                output = target / Path(name).relative_to(relative)
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_bytes(inputs.source(f"{source_root}/{name}"))
+            reader = BundleReader(target)
+            metadata, summary = reader.raw_metadata() or {}, reader.raw_summary() or {}
+            uncertainty = metadata.get("uncertainty_evidence")
+            anchor = uncertainty.get("clock_anchor") if isinstance(uncertainty, Mapping) else None
+            if (summary.get("status") == "succeeded" and isinstance(anchor, Mapping) and anchor.get("status") == "bounded"
+                    and not validate_bundle(target, strict=True, physics_cache=cache)):
+                selected.add(relative)
+                selected_paths.append(target)
+        if not selected_paths or selected != recorded:
             raise ValueError()
+    except AnalysisRefusal:
+        raise
     except (KeyError, ValueError, TypeError, AttributeError, BundleReadError):
         raise AnalysisRefusal("window_bracket_not_passed") from None
-    return min(row.start_s for row in windows), max(row.end_s for row in windows), bindings[0]
+    return selected_paths
 
 
 def evaluate_window_bracket(archive: ArchiveHandle, *, repo_root: Path) -> WindowBracket:
@@ -177,7 +200,13 @@ def evaluate_window_bracket(archive: ArchiveHandle, *, repo_root: Path) -> Windo
     acceptance = calibration._acceptance_bound_from_authenticated_bytes(acceptance_raw)
     if acceptance is None:
         raise AnalysisRefusal("window_bracket_not_passed")
-    snapshot = _snapshot(prefix, pin, repo_root=repo_root, cutoff=acceptance["ledger_cutoff"])
+    try:
+        cutoff = acceptance["ledger_cutoff"]
+        if not isinstance(cutoff, Mapping) or type(cutoff["sequence"]) is not int:
+            raise ValueError()
+    except (KeyError, TypeError, ValueError):
+        raise AnalysisRefusal("window_bracket_not_passed") from None
+    snapshot = _snapshot(prefix, pin, repo_root=repo_root, cutoff=cutoff)
     if not snapshot.valid:
         raise AnalysisRefusal("ledger_prefix_not_at_terminal_pin")
     # The persisted roster is the exclusion roster, not the harvest's richer
@@ -195,20 +224,28 @@ def evaluate_window_bracket(archive: ArchiveHandle, *, repo_root: Path) -> Windo
         acceptance_pin = issued.get("artifact_sha256", acceptance_policy.get("issued_artifact_sha256"))
         if hashlib.sha256(acceptance_raw).hexdigest() != acceptance_pin:
             raise ValueError()
+        plan = roster["plan"]
+        identity = roster["window_identity"]
+        plan_sha256 = hashlib.sha256(inputs.source(pack_source + "/" + plan["path"])).hexdigest()
+        window_id, plan_id, evidence_root_id = identity["window_id"], plan["plan_id"], identity["evidence_root_id"]
+    except AnalysisRefusal:
+        raise
     except (KeyError, ValueError, TypeError, AttributeError):
         raise AnalysisRefusal("window_bracket_not_passed") from None
     binding = _json(archive.output_bytes("derived/bracket-binding.json"), "window_bracket_not_passed")
-    plan_sha256 = hashlib.sha256(inputs.source(pack_source + "/" + roster["plan"]["path"])).hexdigest()
-    start, end, bindings = _window_inputs(archive, inputs)
     scope = "window_evidence" if archive.window.governed_e3 else "sealed"
-    candidates = calibration.discover_calibration_candidates(snapshot, mode="issuing")
-    assessment, reasons = calibration.evaluate_calibration_bracket(
-        candidates, window_start_s=start, window_end_s=end, bindings=bindings, policy=policy,
-        acceptance_bound=acceptance, ledger_snapshot=snapshot, bracket_binding=binding,
-        bracket_window_id=roster["window_identity"]["window_id"],
-        bracket_plan_id=roster["plan"]["plan_id"], bracket_plan_sha256=plan_sha256,
-        bracket_evidence_root_id=roster["window_identity"]["evidence_root_id"],
-        bracket_runs_root=archive.window.claim_runs_root, trigger_scope=scope)
+    # The frozen wrapper reads the registered default acceptance internally.
+    # Require that it is exactly the archive's authenticated acceptance before
+    # using the wrapper, including its registered-valid anti-withholding check.
+    if acceptance != calibration.load_calibration_acceptance_bound():
+        raise AnalysisRefusal("window_bracket_not_passed")
+    with tempfile.TemporaryDirectory(prefix="l9-bracket-members-") as directory:
+        paths = _window_inputs(archive, inputs, Path(directory))
+        assessment, reasons = calibration.calibration_bracket_for_bundles(
+            archive.window.claim_runs_root, paths, policy, mode="issuing",
+            ledger_snapshot=snapshot, bracket_binding=binding,
+            bracket_window_id=window_id, bracket_plan_id=plan_id, bracket_plan_sha256=plan_sha256,
+            bracket_evidence_root_id=evidence_root_id, trigger_scope=scope)
     # Scope matters before comparison: a sealed-scope replay of a governed
     # window is a failed bracket, not merely a disagreement with the harvest.
     bound = assessment.get("b_fiducial_s")
@@ -228,12 +265,24 @@ def evaluate_window_bracket(archive: ArchiveHandle, *, repo_root: Path) -> Windo
         compared = "equal"
     elif (assessment.get("acceptance") or {}).get("freshness", {}).get("status") != "fresh":
         raise AnalysisRefusal("window_bracket_not_passed")
+    if archive.shape == "pin4":
+        harvested_scope = archive.record.get("calibration_bracket") or {}
+        if (not isinstance(harvested_scope, Mapping)
+                or harvested_scope.get("trigger_scope") != scope
+                or harvested_scope.get("erratum_3_governed") is not archive.window.governed_e3
+                or harvested_scope.get("evaluated") is not True
+                or harvested_scope.get("status") != assessment.get("status")
+                or not isinstance(harvested_scope.get("reasons"), (tuple, list))
+                or tuple(harvested_scope["reasons"]) != tuple(sorted(map(str, reasons)))):
+            raise AnalysisRefusal("window_bracket_differs_from_harvest")
     return WindowBracket(archive.window, scope, freeze(assessment), float(bound), pin["sequence"],
                          hashlib.sha256(raw).hexdigest(), compared, inputs.manifest_sha256)
 
 
 def require_ledger_copies_are_prefixes(archives: Sequence[ArchiveHandle], live_ledger: Path) -> None:
     """Release-event custody check on the WHOLE copies, including their tails."""
+    if not archives:
+        raise AnalysisRefusal("ledger_copy_not_prefix_of_live")
     try:
         live = Path(live_ledger).read_bytes()
     except OSError:
@@ -258,13 +307,15 @@ def _bound(value: Any) -> Decimal:
 
 def block_b_max(acceptance: Mapping, ledger_prefix_at_T: bytes, *, cutoff_sequence=376) -> BMax:
     """Compute B_max from acceptance members and ledger observations, never files."""
+    if calibration.EPOCH_CONTINUATION_REGISTRY:
+        raise AnalysisRefusal("block_b_max_invalid")
     receipts, reasons = ledger._parse_ledger(ledger_prefix_at_T)
     observations, _, state_reasons = ledger._attempts_and_observations(receipts)
     if reasons or state_reasons or not receipts:
         raise AnalysisRefusal("ledger_prefix_not_at_terminal_pin")
     try:
         members = acceptance["derivation_corpus"]["members"]
-        if not members:
+        if acceptance["artifact_role"] != "issued" or len(members) != 24:
             raise ValueError()
         maximum = max(_bound(row["b_fiducial_s"]) for row in members)
         epoch = dict(acceptance["identity_epoch"])
@@ -290,18 +341,31 @@ def block_b_max(acceptance: Mapping, ledger_prefix_at_T: bytes, *, cutoff_sequen
 
 def block_b_max_for_archives(archives: Sequence[ArchiveHandle]) -> BMax:
     """Choose T from the archives, then require every cut copy to extend to it."""
-    if not archives:
+    if (len(archives) != 3 or {archive.window.pack for archive in archives} != {"alpha", "beta", "gamma"}
+            or len({archive.window.archive_root for archive in archives}) != 3):
         raise AnalysisRefusal("block_b_max_invalid")
     copies = []
+    acceptance_bytes = []
     for archive in archives:
         inputs = _Inputs(archive)
         _, prefix, pin = _copy(inputs)
         copies.append((pin["sequence"], prefix, inputs))
+        acceptance_bytes.append(inputs.source("sources/inputs/acceptance.json", code="block_b_max_invalid"))
     T, longest, inputs_at_T = max(copies, key=lambda item: item[0])
     if any(not longest.startswith(prefix) for _, prefix, _ in copies):
         raise AnalysisRefusal("ledger_copies_disagree_below_T")
-    acceptance = _json(inputs_at_T.source("sources/inputs/acceptance.json"), "block_b_max_invalid")
-    return block_b_max(acceptance, longest, cutoff_sequence=acceptance["ledger_cutoff"]["sequence"])
+    if any(raw != acceptance_bytes[0] for raw in acceptance_bytes[1:]):
+        raise AnalysisRefusal("block_b_max_invalid")
+    acceptance = calibration._acceptance_bound_from_authenticated_bytes(acceptance_bytes[0])
+    try:
+        if acceptance is None or acceptance["artifact_role"] != "issued" or len(acceptance["derivation_corpus"]["members"]) != 24:
+            raise ValueError()
+        cutoff = acceptance["ledger_cutoff"]["sequence"]
+        if type(cutoff) is not int or cutoff != 376:
+            raise ValueError()
+    except (KeyError, TypeError, ValueError):
+        raise AnalysisRefusal("block_b_max_invalid") from None
+    return block_b_max(acceptance, longest, cutoff_sequence=cutoff)
 
 
 def b_sens(window_bracket: WindowBracket | float, b_max: BMax) -> float:
@@ -310,11 +374,12 @@ def b_sens(window_bracket: WindowBracket | float, b_max: BMax) -> float:
     return float(max(_bound(operative), _bound(b_max.value_s)))
 
 
-def require_member_bound_is_window_bracket(provenance: Mapping, window_bracket: WindowBracket | Mapping) -> None:
+def require_member_bound_is_window_bracket(provenance: Mapping, window_bracket: WindowBracket) -> None:
     """B1's single operative-bound check, shared by later claim consumers."""
     value = provenance.get("operative_fiducial_bound_s") if isinstance(provenance, Mapping) else None
-    expected = (window_bracket.b_fiducial_s if isinstance(window_bracket, WindowBracket)
-                else window_bracket.get("b_fiducial_s"))
+    if not isinstance(window_bracket, WindowBracket):
+        raise AnalysisRefusal("operative_bound_not_the_window_bracket")
+    expected = window_bracket.b_fiducial_s
     if (type(value) not in (int, float) or not math.isfinite(value)
             or type(expected) not in (int, float) or not math.isfinite(expected) or expected < 0
             or value != expected):

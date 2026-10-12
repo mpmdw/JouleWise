@@ -2,6 +2,7 @@
 import inspect
 import json
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from unittest import mock
@@ -77,7 +78,9 @@ class BracketTests(unittest.TestCase):
         built = self.cloned()
         target = built.archive / "withheld/bracket-evaluation.json"
         original = json.loads(target.read_bytes())
-        for key in br.COMPARED_FIELDS:
+        # Typed from Erratum 3 item 10(ii), independently of the implementation.
+        for key in ("status", "pre", "post", "endpoint_max_b_fiducial_s", "drift_s",
+                    "calibration_drift_allowance_s", "b_fiducial_s", "bracket_binding"):
             with self.subTest(key=key):
                 row = json.loads(json.dumps(original))
                 row["assessment"][key] = "counterfactual"
@@ -85,7 +88,7 @@ class BracketTests(unittest.TestCase):
                 fx.refresh(built)
                 with self.assertRaisesRegex(AnalysisRefusal, "^window_bracket_differs_from_harvest$"):
                     self.evaluate(built)
-        for key in br.COMPARED_ACCEPTANCE_FIELDS:
+        for key in ("freshness", "preflight", "drift", "allowance", "prospective_rederivation"):
             with self.subTest(key="acceptance." + key):
                 row = json.loads(json.dumps(original))
                 row["assessment"]["acceptance"][key] = "counterfactual"
@@ -254,10 +257,160 @@ class BracketTests(unittest.TestCase):
     def test_member_bound_matches_exactly_and_rejects_nonfinite_and_bool(self):
         window = self.evaluate(self.windows["GAMMA_STD"])
         br.require_member_bound_is_window_bracket({"operative_fiducial_bound_s": window.b_fiducial_s}, window)
-        br.require_member_bound_is_window_bracket({"operative_fiducial_bound_s": window.b_fiducial_s}, window.evaluation)
+        with self.assertRaisesRegex(AnalysisRefusal, "^operative_bound_not_the_window_bracket$"):
+            br.require_member_bound_is_window_bracket({"operative_fiducial_bound_s": window.b_fiducial_s}, window.evaluation)
         for value in (True, "0.045031", float("nan"), float("inf"), window.b_fiducial_s + 1e-15):
             with self.subTest(value=value), self.assertRaisesRegex(AnalysisRefusal, "^operative_bound_not_the_window_bracket$"):
                 br.require_member_bound_is_window_bracket({"operative_fiducial_bound_s": value}, window)
+
+    def test_missing_cutoff_plan_path_or_window_identity_refuses(self):
+        built = self.cloned()
+        plan_path = built.archive / "sources/repo/configs/campaigns" / built.entry_data["pack_id"] / "plan_tree.json"
+        original = json.loads(plan_path.read_bytes())
+        for field in ("plan.path", "window_identity"):
+            with self.subTest(field=field):
+                row = json.loads(json.dumps(original))
+                if field == "plan.path":
+                    del row["plan"]["path"]
+                else:
+                    del row["window_identity"]
+                fx.s0.put(plan_path, row)
+                fx.refresh(built)
+                with self.assertRaisesRegex(AnalysisRefusal, "^window_bracket_not_passed$"):
+                    self.evaluate(built)
+        acceptance = dict(calibration.load_calibration_acceptance_bound())
+        del acceptance["ledger_cutoff"]
+        with mock.patch.object(calibration, "_acceptance_bound_from_authenticated_bytes", return_value=acceptance):
+            with self.assertRaisesRegex(AnalysisRefusal, "^window_bracket_not_passed$"):
+                self.evaluate(self.windows["GAMMA_STD"])
+
+    def test_alpha_stale_assessment_refuses_even_if_status_says_passed(self):
+        # Counterfactual ALPHA assessment: the independent fresh guard must
+        # survive a frozen-evaluator result that reports passed but reads stale.
+        real = calibration.evaluate_calibration_bracket
+        def stale(*args, **kwargs):
+            assessment, reasons = real(*args, **kwargs)
+            assessment["acceptance"]["freshness"]["status"] = "stale"
+            self.assertEqual((assessment["status"], reasons), ("passed", ()))
+            return assessment, reasons
+        with mock.patch.object(calibration, "evaluate_calibration_bracket", side_effect=stale):
+            with self.assertRaisesRegex(AnalysisRefusal, "^window_bracket_not_passed$"):
+                self.evaluate(self.windows["ALPHA_STD"])
+
+    def test_alpha_failed_assessment_without_reasons_refuses(self):
+        real = calibration.evaluate_calibration_bracket
+        def failed(*args, **kwargs):
+            assessment, reasons = real(*args, **kwargs)
+            self.assertEqual(reasons, ())
+            assessment["status"] = "failed"
+            return assessment, reasons
+        with mock.patch.object(calibration, "evaluate_calibration_bracket", side_effect=failed):
+            with self.assertRaisesRegex(AnalysisRefusal, "^window_bracket_not_passed$"):
+                self.evaluate(self.windows["ALPHA_STD"])
+
+    def test_assessment_selection_tamper_refuses_at_both_pins(self):
+        # Review PB: flag all but one originally selected member invalid, then
+        # omit selected assessments outright. Neither may choose the span.
+        for name in ("ALPHA_STD", "GAMMA_STD"):
+            built = fx.fork(self.windows[name], Path(self.tmp.name) / name)
+            target = built.archive / "withheld/member-assessments.json"
+            original = json.loads(target.read_bytes())
+            selected = [key for key, member in original["members"].items()
+                        if member.get("strict_valid") and member.get("status") == "succeeded"
+                        and member.get("anchor_recorded") == "bounded"
+                        and Path(member["bundle_path"]).is_relative_to(built.claim)]
+            self.assertGreater(len(selected), 1)
+            for mode in ("flag_invalid", "omit"):
+                with self.subTest(pin=name, mode=mode):
+                    row = json.loads(json.dumps(original))
+                    for key in selected[1:]:
+                        if mode == "omit":
+                            del row["members"][key]
+                        else:
+                            row["members"][key]["strict_valid"] = False
+                    fx.s0.put(target, row)
+                    fx.refresh(built)
+                    with self.assertRaisesRegex(AnalysisRefusal, "^window_bracket_not_passed$"):
+                        self.evaluate(built)
+
+    def test_selection_recomputes_strict_validation_from_bundle_bytes(self):
+        built = self.cloned("ALPHA_STD")
+        assessments = json.loads((built.archive / "withheld/member-assessments.json").read_bytes())["members"]
+        member = next(row for row in assessments.values() if row.get("strict_valid")
+                      and row.get("status") == "succeeded" and row.get("anchor_recorded") == "bounded"
+                      and Path(row["bundle_path"]).is_relative_to(built.claim))
+        metadata = built.archive / "sources/claim-runs" / Path(member["bundle_path"]).relative_to(built.claim) / "metadata.json"
+        row = json.loads(metadata.read_bytes())
+        row["synthetic_s2_member"]["strict_valid"] = False
+        fx.s0.put(metadata, row)
+        fx.refresh(built)
+        with self.assertRaisesRegex(AnalysisRefusal, "^window_bracket_not_passed$"):
+            self.evaluate(built)
+
+    def test_unrostered_bundle_cannot_enter_recomputed_selection(self):
+        built = self.cloned("ALPHA_STD")
+        assessments = json.loads((built.archive / "withheld/member-assessments.json").read_bytes())["members"]
+        member = next(row for row in assessments.values() if row.get("strict_valid")
+                      and row.get("status") == "succeeded" and row.get("anchor_recorded") == "bounded"
+                      and Path(row["bundle_path"]).is_relative_to(built.claim))
+        source = built.archive / "sources/claim-runs" / Path(member["bundle_path"]).relative_to(built.claim)
+        shutil.copytree(source, built.archive / "sources/claim-runs/unrostered-synthetic-bundle")
+        fx.refresh(built)
+        self.assertEqual(self.evaluate(built).evaluation["status"], "passed")
+
+    def test_registered_valid_capture_withheld_refuses_via_wrapper(self):
+        built = self.windows["GAMMA_STD"]
+        baseline = json.loads((built.archive / "withheld/bracket-evaluation.json").read_bytes())["assessment"]
+        self.assertEqual(baseline["status"], "passed")
+        real = calibration.discover_calibration_candidates
+        seen = []
+        def withheld(*args, **kwargs):
+            candidates = real(*args, **kwargs)
+            remaining = tuple(row for row in candidates if "s2-extra-valid-pre" not in row.relative_path)
+            self.assertEqual(len(candidates) - len(remaining), 1)
+            seen.append(len(remaining))
+            return remaining
+        # The evaluator also checks candidate completeness. Keep that duplicate
+        # check from masking deletion of the wrapper's independent guard: its
+        # result boundary returns this fixture's otherwise passing assessment.
+        with mock.patch.object(calibration, "discover_calibration_candidates", side_effect=withheld), \
+                mock.patch.object(calibration, "evaluate_calibration_bracket", return_value=(baseline, ())):
+            with self.assertRaisesRegex(AnalysisRefusal, "^window_bracket_not_passed$"):
+                self.evaluate(built)
+        self.assertTrue(seen)
+
+    def test_custody_refusals_pass_through_window_input_and_roster_reads(self):
+        for relative in ("sources/repo/configs/campaigns/" + self.windows["GAMMA_STD"].entry_data["pack_id"] + "/campaign_policy.json",
+                         "member_events"):
+            built = fx.fork(self.windows["GAMMA_STD"], Path(self.tmp.name) / str(len(relative)))
+            if relative == "member_events":
+                target = next((built.archive / "sources/claim-runs").glob("*/events.jsonl"))
+            else:
+                roster = json.loads((built.archive / "sources/repo/configs/campaigns" / built.entry_data["pack_id"] / "plan_tree.json").read_bytes())
+                target = built.archive / "sources/repo" / roster["campaign_policy"]["path"]
+            with target.open("ab") as output:
+                output.write(b" ")
+            with self.subTest(relative=relative), self.assertRaisesRegex(AnalysisRefusal, "^archive_source_unauthenticated$"):
+                self.evaluate(built)
+
+    def test_harvest_scope_status_reasons_and_governed_word_must_match(self):
+        built = self.cloned()
+        target = built.archive / "harvest.json"
+        original = json.loads(target.read_bytes())
+        for key, value in (("trigger_scope", "sealed"), ("status", "failed"),
+                           ("reasons", ["counterfactual"]), ("reasons", None),
+                           ("erratum_3_governed", False), ("evaluated", False)):
+            with self.subTest(key=key):
+                row = json.loads(json.dumps(original))
+                row["calibration_bracket"][key] = value
+                fx.s0.put(target, row)
+                fx.refresh(built)
+                with self.assertRaisesRegex(AnalysisRefusal, "^window_bracket_differs_from_harvest$"):
+                    self.evaluate(built)
+
+    def test_mapping_stand_in_for_window_bracket_refuses(self):
+        with self.assertRaisesRegex(AnalysisRefusal, "^operative_bound_not_the_window_bracket$"):
+            br.require_member_bound_is_window_bracket({"operative_fiducial_bound_s": .123}, {"b_fiducial_s": .123})
 
 
 class BlockBoundTests(unittest.TestCase):
@@ -265,7 +418,8 @@ class BlockBoundTests(unittest.TestCase):
     def setUpClass(cls):
         cls.raw = fx.toy_ledger()
         cls.acceptance = {"identity_epoch": calibration.load_calibration_acceptance_bound()["identity_epoch"],
-                          "derivation_corpus": {"members": [{"b_fiducial_s": "0.036"}]}}
+                          "artifact_role": "issued",
+                          "derivation_corpus": {"members": [{"b_fiducial_s": "0.036"}] * 24}}
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="s2-block-")
@@ -279,23 +433,25 @@ class BlockBoundTests(unittest.TestCase):
         self.assertEqual(br.b_sens(.045, maximum), .045)
 
     def test_acceptance_maximum_can_dominate_without_a_ledger_sequence(self):
-        acceptance = dict(self.acceptance, derivation_corpus={"members": [{"b_fiducial_s": ".050"}]})
+        acceptance = dict(self.acceptance, derivation_corpus={"members": [{"b_fiducial_s": ".050"}] * 24})
         maximum = br.block_b_max(acceptance, br.ledger_prefix(self.raw, fx.pin_at(self.raw, 500)))
         self.assertEqual((maximum.value_s, maximum.attained_by_sequence), (.050, None))
 
     def test_acceptance_member_attainer_is_identified_from_ledger_row(self):
         acceptance = dict(self.acceptance, derivation_corpus={"members": [
-            {"member_id": "toy-188", "b_fiducial_s": ".900"}]})
+            {"member_id": "toy-188", "b_fiducial_s": ".900"}] * 24})
         maximum = br.block_b_max(acceptance, br.ledger_prefix(self.raw, fx.pin_at(self.raw, 500)))
         self.assertEqual((maximum.value_s, maximum.attained_by_sequence), (.900, 376))
 
     def test_T_window_is_second_and_its_copy_is_cut_at_500(self):
-        archives = [fx.toy_archive(Path(self.tmp.name) / str(n), self.raw, n) for n in (480, 500, 490)]
+        archives = [fx.toy_archive(Path(self.tmp.name) / str(n), self.raw, n, pack=pack)
+                    for n, pack in zip((480, 500, 490), ("alpha", "beta", "gamma"))]
         maximum = br.block_b_max_for_archives([fx.handle(item) for item in archives])
         self.assertEqual((maximum.value_s, maximum.attained_by_sequence, maximum.T), (.040, 456, 500))
 
     def test_copy_disagrees_below_T_refuses(self):
-        archives = [fx.toy_archive(Path(self.tmp.name) / str(n), self.raw, n) for n in (480, 500, 490)]
+        archives = [fx.toy_archive(Path(self.tmp.name) / str(n), self.raw, n, pack=pack)
+                    for n, pack in zip((480, 500, 490), ("alpha", "beta", "gamma"))]
         (archives[0].archive / br.LEDGER_COPY).write_bytes(fx.toy_ledger(changed_at=456))
         # Both chains are internally valid, independently bound, and at their
         # respective pins. Only the cross-window byte-prefix rule rejects them.
@@ -320,6 +476,84 @@ class BlockBoundTests(unittest.TestCase):
 
     def test_b_max_refuses_bad_numeric_bound(self):
         for value in (True, "NaN", "-0.1", "Infinity", "1e1000", "bad"):
-            acceptance = dict(self.acceptance, derivation_corpus={"members": [{"b_fiducial_s": value}]})
+            acceptance = dict(self.acceptance, derivation_corpus={"members": [{"b_fiducial_s": value}] * 24})
             with self.subTest(value=value), self.assertRaisesRegex(AnalysisRefusal, "^block_b_max_invalid$"):
                 br.block_b_max(acceptance, self.raw)
+
+    def archives(self):
+        return [fx.toy_archive(Path(self.tmp.name) / str(n), self.raw, n, pack=pack)
+                for n, pack in zip((480, 500, 490), ("alpha", "beta", "gamma"))]
+
+    def test_largest_bound_at_row_T_is_included(self):
+        raw = fx.toy_ledger(bounds={500: "0.9"})
+        prefix = br.ledger_prefix(raw, fx.pin_at(raw, 500))
+        maximum = br.block_b_max(self.acceptance, prefix)
+        self.assertEqual((maximum.value_s, maximum.attained_by_sequence, maximum.T), (.9, 500, 500))
+
+    def test_b_max_acceptance_rewritten_members_cut_list_or_unissued_role_refuses(self):
+        archives = self.archives()
+        original = json.loads((archives[0].archive / "sources/inputs/acceptance.json").read_bytes())
+        for mode in ("rewritten", "cut", "unissued", "missing_cutoff"):
+            with self.subTest(mode=mode):
+                row = json.loads(json.dumps(original))
+                if mode == "rewritten":
+                    for member in row["derivation_corpus"]["members"]:
+                        member["b_fiducial_s"] = "0.9"
+                elif mode == "cut":
+                    row["derivation_corpus"]["members"] = row["derivation_corpus"]["members"][:3]
+                elif mode == "unissued":
+                    row["artifact_role"] = "schema_fixture_unissued"
+                else:
+                    del row["ledger_cutoff"]
+                for built in archives:
+                    fx.s0.put(built.archive / "sources/inputs/acceptance.json", row)
+                    fx.refresh(built)
+                with self.assertRaisesRegex(AnalysisRefusal, "^block_b_max_invalid$"):
+                    br.block_b_max_for_archives([fx.handle(built) for built in archives])
+
+    def test_b_max_requires_issued_role_and_exactly_24_members(self):
+        for role, count in (("schema_fixture_unissued", 24), ("issued", 3), ("issued", 1), ("issued", 25)):
+            acceptance = dict(self.acceptance, artifact_role=role,
+                              derivation_corpus={"members": [{"b_fiducial_s": ".036"}] * count})
+            with self.subTest(role=role, count=count), self.assertRaisesRegex(AnalysisRefusal, "^block_b_max_invalid$"):
+                br.block_b_max(acceptance, self.raw)
+
+    def test_b_max_acceptance_bytes_must_match_across_all_archives(self):
+        archives = self.archives()
+        target = archives[0].archive / "sources/inputs/acceptance.json"
+        target.write_bytes(target.read_bytes() + b" ")
+        fx.refresh(archives[0])
+        # Isolate byte equality from registry authentication: a parser returning
+        # the same document does not excuse different acceptance bytes.
+        with mock.patch.object(calibration, "_acceptance_bound_from_authenticated_bytes",
+                               return_value=calibration.load_calibration_acceptance_bound()):
+            with self.assertRaisesRegex(AnalysisRefusal, "^block_b_max_invalid$"):
+                br.block_b_max_for_archives([fx.handle(built) for built in archives])
+
+    def test_b_max_missing_cutoff_is_named_refusal(self):
+        archives = self.archives()
+        acceptance = dict(calibration.load_calibration_acceptance_bound())
+        del acceptance["ledger_cutoff"]
+        for built in archives:
+            fx.s0.put(built.archive / "sources/inputs/acceptance.json", acceptance)
+            fx.refresh(built)
+        with mock.patch.object(calibration, "_acceptance_bound_from_authenticated_bytes", return_value=acceptance):
+            with self.assertRaisesRegex(AnalysisRefusal, "^block_b_max_invalid$"):
+                br.block_b_max_for_archives([fx.handle(built) for built in archives])
+
+    def test_b_max_requires_three_distinct_packs(self):
+        handles = [fx.handle(built) for built in self.archives()]
+        for archives in ([], handles[:1], handles[:2], [handles[1]] * 3, handles + handles[:1]):
+            with self.subTest(count=len(archives)), self.assertRaisesRegex(AnalysisRefusal, "^block_b_max_invalid$"):
+                br.block_b_max_for_archives(archives)
+
+    def test_empty_ledger_prefix_check_refuses_even_with_readable_live_ledger(self):
+        live = Path(self.tmp.name) / "live.jsonl"
+        live.write_bytes(self.raw)
+        with self.assertRaisesRegex(AnalysisRefusal, "^ledger_copy_not_prefix_of_live$"):
+            br.require_ledger_copies_are_prefixes([], live)
+
+    def test_nonempty_epoch_continuation_registry_refuses(self):
+        with mock.patch.object(calibration, "EPOCH_CONTINUATION_REGISTRY", {"future": {}}):
+            with self.assertRaisesRegex(AnalysisRefusal, "^block_b_max_invalid$"):
+                br.block_b_max(self.acceptance, self.raw)
