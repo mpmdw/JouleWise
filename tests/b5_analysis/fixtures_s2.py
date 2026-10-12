@@ -20,7 +20,7 @@ from unittest import mock
 
 from joulewise import calibration_bracketing as br, calibration_ledger as cl
 from joulewise.b5_analysis.archive import open_archive, open_attempt_record
-from joulewise.b5_analysis.windows import AnalysedWindow, SealPins
+from joulewise.b5_analysis.windows import SealPins
 from joulewise.bundle_read import BundleReader
 from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS, PROTOCOL_ID, PROTOCOL_V3_SHA256
 from joulewise.schemas import CampaignPolicy
@@ -94,9 +94,11 @@ def toy_archive(directory, raw, sequence, *, pack="gamma"):
 
 
 def handle(built):
+    """Authenticate the synthetic target and open it through real selection."""
     pins = SealPins.load()
-    record = open_attempt_record(built.entry, seal_pins=pins)
-    return open_archive(AnalysedWindow.from_record(record), seal_pins=pins)
+    record = open_attempt_record(built.entry, seal_pins=pins, pack_table=s0.PACK_TABLE)
+    return open_archive(s0.selected_window(record, seal_pins=pins),
+                        seal_pins=pins, pack_table=s0.PACK_TABLE)
 
 
 def refresh(built):
