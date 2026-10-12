@@ -1,5 +1,4 @@
 """S1 contract checks on synthetic fixtures only; module caches all windows."""
-from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
@@ -7,8 +6,26 @@ import unittest
 from unittest import mock
 
 from joulewise.b5_analysis import kept_units as ku
-from joulewise.b5_analysis.windows import AnalysisRefusal, WindowIndex, select_analysed_attempts
+from joulewise.b5_analysis.archive import open_archive
+from joulewise.b5_analysis.windows import AnalysedWindow, AnalysisRefusal, WindowIndex, select_analysed_attempts
 from tests.b5_analysis import fixtures_s1 as fx
+
+
+def downstream_kept_units_handle(case, selected_handle):
+    """Named S1 double retaining real output digest authentication.
+
+    S0's attempt consistency/catalog guards and first-usable selection refuse
+    these malformed or release-blocked inputs before S1 can see them. Reuse a
+    previously selected coherent window with the updated synthetic output map
+    to exercise S1's independent guards, without patching any reader.
+    """
+    return ku.ArchiveHandle(selected_handle.window, case.harvest, {})
+
+
+def unselected_window_for_archive_usability_guard(case):
+    # first-usable selection rejects a block with no usable attempt. This named
+    # double reaches open_archive's independent claim-usability guard directly.
+    return AnalysedWindow.from_record(case.record(), seal_pins=fx.PINS)
 
 
 class KeptUnitsTests(unittest.TestCase):
@@ -50,8 +67,11 @@ class KeptUnitsTests(unittest.TestCase):
         self.assertEqual(case.exclusions["reasons"], ["cell.below_minimum"])
         self.assertEqual(case.exclusions["cells"][0]["n_kept"]["quad"], 4)
         self.assertFalse(case.record().claim_usable)
-        with self.assertRaisesRegex(AnalysisRefusal, "^attempt_not_claim_usable$"):
+        with self.assertRaisesRegex(AnalysisRefusal, "^block_incomplete$"):
             case.handle()
+        with self.assertRaisesRegex(AnalysisRefusal, "^attempt_not_claim_usable$"):
+            open_archive(unselected_window_for_archive_usability_guard(case),
+                         seal_pins=fx.PINS, pack_table=fx.PACK_TABLE)
 
     def test_five_removed_quads_load_at_minimum(self):
         units = self.load(self.case("FIVE_QUADS_REMOVED"))
@@ -200,6 +220,7 @@ class KeptUnitsTests(unittest.TestCase):
 
     def test_review_p9_unclassified_release_blocked_precedes_schema_refusal(self):
         case = self.case()
+        selected = case.handle()
         flag = {"flag_id": "x1", "code": "totally.unknown.code",
             "scope": {"level": "window", "plan_id": case.roster["plan_id"], "attempt": case.roster["attempt"],
                       "run_id": None, "bundle_id": None, "stage_id": None},
@@ -208,7 +229,9 @@ class KeptUnitsTests(unittest.TestCase):
         self.assertIs(case.exclusions["release_blocked"], True)
         self.assertEqual(case.exclusions["unclassified"], ["totally.unknown.code"])
         case.write()
-        self.refuses(case, "attempt_release_blocked")
+        with self.assertRaisesRegex(AnalysisRefusal, "^analysed_attempt_undecided$"):
+            case.handle()
+        self.refuses(case, "attempt_release_blocked", downstream_kept_units_handle(case, selected))
 
     def test_review_p9_roster_pack_must_match_window(self):
         case = self.case()
@@ -237,16 +260,18 @@ class KeptUnitsTests(unittest.TestCase):
         return select_analysed_attempts(WindowIndex(tuple(r.entry for r in records)), records)
 
     def test_release_blocked_refuses_load_and_selection_does_not_skip(self):
-        early = self.case()
-        early.entry = replace(early.entry, pack="gamma")
-        early.exclusions["release_blocked"] = True
+        early = fx.Case(fx.gamma_snapshot())
+        self.addCleanup(early.close)
+        selected = early.handle()
+        early.exclusions = fx.recompute(early.snapshot, early.roster, ["s0-mock-b01-a1"], code="totally.unknown.code")
         early.write()
-        self.refuses(early, "attempt_release_blocked")
+        with self.assertRaisesRegex(AnalysisRefusal, "^analysed_attempt_undecided$"):
+            early.handle()
+        self.refuses(early, "attempt_release_blocked", downstream_kept_units_handle(early, selected))
         later = fx.Case(fx.gamma_snapshot(attempt=2))
         self.addCleanup(later.close)
-        alpha, beta = self.case(), self.case()
-        beta.entry = replace(beta.entry, pack="beta")
-        beta.write()
+        alpha = self.case()
+        beta = fx.Case(fx.registered_snapshot("beta")[0]); self.addCleanup(beta.close)
         with self.assertRaisesRegex(AnalysisRefusal, "^analysed_attempt_undecided$"):
             self.selection([alpha, beta, early, later])
 
@@ -260,7 +285,7 @@ class KeptUnitsTests(unittest.TestCase):
         case.write()
         with self.assertRaisesRegex(AnalysisRefusal, "^exclusions_catalog_mismatch$"):
             case.handle()
-        self.refuses(case, "exclusions_catalog_mismatch", ku.ArchiveHandle(original.window, case.harvest, {}))
+        self.refuses(case, "exclusions_catalog_mismatch", downstream_kept_units_handle(case, original))
 
     def test_s1_catalog_check_independent_of_attempt_reader(self):
         case = self.case()
@@ -284,8 +309,8 @@ class KeptUnitsTests(unittest.TestCase):
         early, later = fx.Case(fx.gamma_snapshot(midpoint_lost=True)), fx.Case(fx.gamma_snapshot(attempt=2))
         self.addCleanup(early.close); self.addCleanup(later.close)
         self.assertEqual(early.exclusions["reasons"], ["neg8.midpoint_lost_primary"])
-        alpha, beta = self.case(), self.case()
-        beta.entry = replace(beta.entry, pack="beta"); beta.write()
+        alpha = self.case()
+        beta = fx.Case(fx.registered_snapshot("beta")[0]); self.addCleanup(beta.close)
         self.assertEqual(self.selection([alpha, beta, early, later])["gamma"].attempt, 2)
         self.assertEqual(self.load(later).for_contrast("ctr-d117-decode-mock").n_b, 10)
 
@@ -313,7 +338,7 @@ class KeptUnitsTests(unittest.TestCase):
                 case = self.case()
                 handle = case.handle()
                 case.write(exclusions_raw=raw)
-                refreshed = ku.ArchiveHandle(handle.window, case.harvest, {})
+                refreshed = downstream_kept_units_handle(case, handle)
                 self.refuses(case, "exclusions_schema_invalid", refreshed)
 
     def test_schema_usable_reasons_unclassified_and_release_types(self):
@@ -326,7 +351,7 @@ class KeptUnitsTests(unittest.TestCase):
             with self.subTest(field=field, value=value):
                 case = self.case(); handle = case.handle()
                 case.exclusions[field] = value; case.write()
-                self.refuses(case, code, ku.ArchiveHandle(handle.window, case.harvest, {}))
+                self.refuses(case, code, downstream_kept_units_handle(case, handle))
 
     def test_unknown_top_level_fields_are_allowed(self):
         case = self.case()
@@ -449,6 +474,13 @@ class KeptUnitsTests(unittest.TestCase):
         restricted = next(code for code, entry in fx.CATALOG.codes.items() if entry["blinding"] == "RESTRICTED")
         structure = next(code for code, entry in fx.CATALOG.codes.items() if entry["blinding"] == "STRUCTURE")
         case.exclusions["flag_counts"]["by_code"].update({restricted: 7, structure: 3})
+        # Counts remain a coherent authenticated S0 summary while S1's output
+        # projection is tested with both blinding classes present.
+        families = {}
+        for code, count in case.exclusions["flag_counts"]["by_code"].items():
+            family = fx.CATALOG.codes[code]["family"]
+            families[family] = families.get(family, 0) + count
+        case.exclusions["flag_counts"]["by_family"] = families
         case.exclusions["unknown"] = {"float": 1.25, "restricted": restricted, "run_id": "s0-mock-r01"}
         case.write()
         units = self.load(case); record = units.to_structure_record()

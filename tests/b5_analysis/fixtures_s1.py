@@ -11,7 +11,7 @@ from pathlib import Path
 import tempfile
 
 from joulewise.b5_analysis.archive import open_archive, open_attempt_record
-from joulewise.b5_analysis.windows import AnalysedWindow, SealPins
+from joulewise.b5_analysis.windows import SealPins
 from joulewise.flags.catalog import load_catalog
 from joulewise.flags.exclusions import compute, GAMMA_PACK_ID
 from tests.b5_analysis import fixtures as s0
@@ -19,6 +19,13 @@ from tests.b5_analysis import fixtures as s0
 _CACHE = {}
 PINS = SealPins.load()
 CATALOG = load_catalog(s0.ROOT / "configs/campaigns/v5_claim_25g83/flag_catalog.json")
+
+# Independently declared S1 plan prefixes, never inferred from a tested entry.
+REGISTERED_PACKS = {"alpha": "d117_floor_qwen3-1p7b_v5", "beta": "d117_floor_qwen3-8b_v5",
+                    "gamma": GAMMA_PACK_ID}
+S1_PLANS = {pack: f"s1-{pack}-plan" for pack in REGISTERED_PACKS}
+PACK_TABLE = {pack: {**s0.PACK_TABLE[pack], pack_id: S1_PLANS[pack]}
+              for pack, pack_id in REGISTERED_PACKS.items()}
 
 
 @dataclass(frozen=True)
@@ -100,7 +107,7 @@ def gamma_snapshot(*, midpoint_lost=False, attempt=1):
     # exclusions function on a quad-only contrast roster. No energy is read.
     snapshot = cached()
     cid = "ctr-d117-decode-mock"
-    snapshot.roster.update(pack_id=GAMMA_PACK_ID, attempt=attempt)
+    snapshot.roster.update(pack_id=GAMMA_PACK_ID, plan_id=S1_PLANS["gamma"], attempt=attempt)
     snapshot.roster["cells"] = [{"cell_id": cid, "strata": ["quad"], "target": True}]
     for member in snapshot.roster["members"]:
         member["units"] = [{**u, "cell_id": cid} for u in member["units"] if u["stratum"] == "quad"]
@@ -112,7 +119,8 @@ def gamma_snapshot(*, midpoint_lost=False, attempt=1):
                 "interval": {"monotonic_ns": None}}
         doc = compute([flag], snapshot.roster, {}, CATALOG)
         doc["harvest_checkout"] = snapshot.harvest["harvest_checkout"]
-    return replace(snapshot, entry=replace(snapshot.entry, pack="gamma", pack_id=GAMMA_PACK_ID, attempt=attempt),
+    return replace(snapshot, entry=replace(snapshot.entry, pack="gamma", pack_id=GAMMA_PACK_ID,
+                   plan_id=S1_PLANS["gamma"], attempt=attempt),
                    exclusions=doc, planned={cid: {"quad": snapshot.planned["df-b5t-family"]["quad"]}})
 
 
@@ -124,8 +132,7 @@ def registered_snapshot(pack, *, remove_first_decode_quad=False, base=None):
     presented as full writer/harvest integration evidence.
     """
     snapshot = base or cached()
-    pack_id = {"alpha": "d117_floor_qwen3-1p7b_v5", "beta": "d117_floor_qwen3-8b_v5",
-               "gamma": GAMMA_PACK_ID}[pack]
+    pack_id = REGISTERED_PACKS[pack]
     root = s0.ROOT / "configs/campaigns" / pack_id
     members, cells, planned = {}, {}, {}
     def add(cid, stratum, uid, runs):
@@ -152,13 +159,14 @@ def registered_snapshot(pack, *, remove_first_decode_quad=False, base=None):
             for block in contrast["block_ids"]:
                 rows = sorted((m for m in contrast["members"] if m["block_id"] == block), key=lambda m: m["order_index"])
                 add(contrast["contrast_id"], "quad", block, [m["run_id"] for m in rows])
-    roster = {**snapshot.roster, "pack_id": pack_id, "cells": list(cells.values()), "members": list(members.values())}
+    roster = {**snapshot.roster, "pack_id": pack_id, "plan_id": S1_PLANS[pack],
+              "cells": list(cells.values()), "members": list(members.values())}
     removed = ()
     if remove_first_decode_quad:
         cid = next(cid for cid in planned if "decode" in cid.split("-"))
         removed = (next(iter(planned[cid]["quad"].values()))[0],)
     doc = recompute(snapshot, roster, removed)
-    return replace(snapshot, entry=replace(snapshot.entry, pack=pack, pack_id=pack_id),
+    return replace(snapshot, entry=replace(snapshot.entry, pack=pack, pack_id=pack_id, plan_id=S1_PLANS[pack]),
                    roster=roster, exclusions=doc, planned=planned), spec
 
 
@@ -176,7 +184,12 @@ class Case:
         self.write()
 
     def write(self, *, update_digest=True, exclusions_raw=None, roster_raw=None):
+        counts = self.exclusions["flag_counts"]
+        flags = {"total": sum(counts["by_code"].values()), "by_code": copy.deepcopy(counts["by_code"]),
+                 "by_family": copy.deepcopy(counts["by_family"]),
+                 "unclassified": copy.deepcopy(self.exclusions.get("unclassified", []))}
         self.harvest.update(attempt=self.entry.attempt, plan_id=self.entry.plan_id, pack_id=self.entry.pack_id,
+                            flags=flags["total"],
                             claim_usable=self.exclusions.get("claim_usable", False),
                             exclude_window_reasons=self.exclusions.get("reasons", []))
         self.exclusions["harvest_checkout"] = self.harvest["harvest_checkout"]
@@ -184,8 +197,12 @@ class Case:
                                      ("derived/roster.json", self.roster, roster_raw),
                                      ("derived/window_flags.json", {
                                          "schema": "joulewise.window_flags.v1",
-                                         "exclusions": {"claim_usable": self.harvest["claim_usable"]},
-                                         "flags": {"total": 0, "by_family": {}, "by_code": {}}}, None)):
+                                         "window": {key: getattr(self.entry, key) for key in
+                                                    ("attempt", "plan_id", "pack_id", "t0_epoch_s")},
+                                         "catalog": {"sha256": self.exclusions.get("catalog_sha256")},
+                                         "exclusions": {key: copy.deepcopy(self.exclusions.get(key)) for key in
+                                                        ("claim_usable", "release_blocked", "reasons", "unclassified")},
+                                         "flags": flags}, None)):
             path = self.root / relative
             s0.put(path, value)
             if raw is not None:
@@ -199,10 +216,11 @@ class Case:
                              claim_usable=self.harvest["claim_usable"])
 
     def record(self):
-        return open_attempt_record(self.entry, seal_pins=PINS)
+        return open_attempt_record(self.entry, seal_pins=PINS, pack_table=PACK_TABLE)
 
     def handle(self):
-        return open_archive(AnalysedWindow.from_record(self.record()), seal_pins=PINS)
+        return open_archive(s0.selected_window(self.record(), seal_pins=PINS),
+                            seal_pins=PINS, pack_table=PACK_TABLE)
 
     def close(self):
         self.tmp.cleanup()

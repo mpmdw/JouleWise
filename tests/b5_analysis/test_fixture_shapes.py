@@ -6,7 +6,7 @@ import unittest
 
 from joulewise import whole_window
 from joulewise.b5_analysis.archive import open_archive, open_attempt_record
-from joulewise.b5_analysis.windows import AnalysedWindow, SealPins
+from joulewise.b5_analysis.windows import SealPins
 from tests.b5_analysis import fixtures as fx
 
 
@@ -52,7 +52,9 @@ class FixtureShapeTests(unittest.TestCase):
         self.assertNotEqual(alpha["harvest_checkout"]["files"]["joulewise/whole_window.py"],
                             beta["harvest_checkout"]["files"]["joulewise/whole_window.py"])
         for entry in (aentry, self.beta.entry):
-            handle = open_archive(AnalysedWindow.from_record(open_attempt_record(entry, seal_pins=self.pins)), seal_pins=self.pins)
+            record = open_attempt_record(entry, seal_pins=self.pins, pack_table=fx.PACK_TABLE)
+            handle = open_archive(fx.selected_window(record, seal_pins=self.pins),
+                                  seal_pins=self.pins, pack_table=fx.PACK_TABLE)
             handle.withheld_bytes(path)
             check = next(row.check for row in handle.census() if row.path == path)
             self.assertEqual(check, "input_census" if entry == aentry else "harvest_outputs")
@@ -126,8 +128,9 @@ class FixtureShapeTests(unittest.TestCase):
         with fx.build_named("ALPHA_STD") as built:
             self.assertTrue(built.claim.is_dir())
             self.assertTrue(built.entry.claim_usable)
-            record = open_attempt_record(built.entry, seal_pins=self.pins)
-            handle = open_archive(AnalysedWindow.from_record(record), seal_pins=self.pins)
+            record = open_attempt_record(built.entry, seal_pins=self.pins, pack_table=fx.PACK_TABLE)
+            handle = open_archive(fx.selected_window(record, seal_pins=self.pins),
+                                  seal_pins=self.pins, pack_table=fx.PACK_TABLE)
             self.assertEqual(handle.compare_runs_root(), ())
 
     def test_all_exported_pin2_capture_pairs_use_marker(self):
@@ -146,7 +149,7 @@ class FixtureShapeTests(unittest.TestCase):
             self.assertTrue(built.entry.claim_usable)
             self.assertEqual(built.writer_row["member_failures"], [])
         _, entry = self.pin2()
-        self.assertTrue(open_attempt_record(entry, seal_pins=self.pins).claim_usable)
+        self.assertTrue(open_attempt_record(entry, seal_pins=self.pins, pack_table=fx.PACK_TABLE).claim_usable)
 
     def assert_capture_bounds(self, built):
         from joulewise.calibration_ledger import load_calibration_ledger_snapshot
