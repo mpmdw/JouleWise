@@ -217,6 +217,12 @@ def parse_target_key(key: str) -> Target:
 #   scope_pointer / scope_line    which literals are era records: a regex on
 #                                 the JSON pointer, or on the literal's line
 ERA_RECORDS: dict[str, dict[str, str]] = {
+    # The sealed inventory records every measurement file at the claim commit,
+    # including source files later changed by harvest and analysis lanes.
+    "configs/campaigns/v5_claim_25g83/sealed_inventory.json": {
+        "commit_pointer": "/head",
+        "scope_pointer": r"^/files/",
+    },
     # Block 4's sizing source records the production code at sizing time; its
     # top-level "head" is the commit it sized from.
     "configs/campaigns/v5_qualification_25g83/sizing_sources/sizing_source_v2.json": {

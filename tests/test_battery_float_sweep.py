@@ -52,6 +52,11 @@ READERS = {
     "joulewise/powermetrics_fiducial.py": ("writer (pinned)", "computes a capture's own bound"),
     "joulewise/calibration_bracketing.py": (
         "issued acceptance and bracket rows (pinned)", "outside the derivation scope"),
+    "joulewise/b5_analysis/bracket.py": (
+        "issued acceptance, bracket rows and ledger observations", "outside the derivation scope: "
+        "desk analysis of authenticated archive sources and terminal-pin ledger prefixes; "
+        "evaluate_window_bracket uses the frozen harvest evaluator, and block_b_max reads issued "
+        "acceptance members and ledger lexemes without opening historical capture evidence"),
     "joulewise/reduce.py": ("issued acceptance (pinned)", "measurement reduction"),
     "joulewise/whole_window.py": ("issued acceptance and bracket rows", "outside the derivation scope"),
     "joulewise/detection_floor.py": ("bracket rows", "outside the derivation scope"),
