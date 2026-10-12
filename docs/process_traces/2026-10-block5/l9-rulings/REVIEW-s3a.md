@@ -26,3 +26,5 @@ both are fixed, because the validator is the last check before a number.
 | N2, N3 | The validator alone admits a reference that is both a survivor and excluded when the row does not name it; the context's fields are trusted | By design: part B's tripwire and context builder own both (erratum X1 items 8 and 14) |
 | N6 | `ArchiveContext` is unhashable | Kept; the session compares contexts by equality |
 | N7 | The reviewer's control run of the prescribed test overwrote two scratch files in the worktree | No tracked file changed; the scratch moves under `TMPDIR` with S2 |
+
+Fix round (Sol 6.1 at xhigh): every row marked Fix for this round is built and tested on `lane/2026-10-12-l9-s3`; 12 mutation runs, each an assertion failure; the reviewer's mutants m1, m4, m5 and m7 are killed; the 40 and 18 differentials against the pinned base are equal again. The closed NEG-8 list has ten names; the seat's report lists every site of the writer and the evaluators that can emit one. The lead's run of the four modules: 57 tests pass.
