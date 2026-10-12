@@ -1,21 +1,16 @@
-"""S3 synthetic windows, built once by the unchanged HEAD program.
+"""S3 synthetic windows loaded from S0's committed pinned-program archives.
 
-The persistent scratch cache avoids rebuilding multi-minute windows in every
-test. The child runs a git-archive of HEAD, including S0's real writer/harvest
-fixture builder, so its program-hash fence remains active.
+Only in-memory caches are retained; fixture loading needs no git or scratch
+export, and executes no production writer from the current tree.
 """
 import atexit
 import contextlib
 import copy
 from dataclasses import replace
 import hashlib
-import io
 import json
-import os
 from pathlib import Path
 import shutil
-import subprocess
-import tarfile
 import tempfile
 from unittest import mock
 
@@ -23,8 +18,6 @@ from joulewise import whole_window as ww
 from tests.b5_analysis import fixtures as s0
 
 ROOT = s0.ROOT
-SCRATCH = ROOT / ".scratch-s3"
-PYTHON = "/opt/homebrew/bin/python3.13"
 _CACHE = {}
 _WINDOW_CACHE = {}
 _ENVIRONMENT_CACHE = {}
@@ -33,40 +26,8 @@ _ENVIRONMENT_CACHE = {}
 def cached(name="BETA_STD"):
     if name in _CACHE:
         return _CACHE[name]
-    SCRATCH.mkdir(exist_ok=True)
-    cache = SCRATCH / "windows"
-    cache.mkdir(exist_ok=True)
-    index = cache / (name + ".json")
-    blob = cache / (name + ".tar")
-    if not index.exists() or not blob.exists():
-        export = SCRATCH / "base-tree"
-        if not export.exists():
-            export.mkdir()
-            raw = subprocess.check_output(["git", "archive", "HEAD"], cwd=ROOT)
-            with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
-                archive.extractall(export, filter="data")
-        script = '''import json, sys, tarfile
-from pathlib import Path
-from tests.b5_analysis import fixtures as fx
-name, cache = sys.argv[1], Path(sys.argv[2])
-with fx.build_named(name) as window:
-    with tarfile.open(cache / (name + ".tar"), "w") as archive:
-        archive.add(window.root, arcname=window.root.name)
-    (cache / (name + ".json")).write_text(json.dumps(window.entry_data))
-'''
-        env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": "/private/tmp"}
-        subprocess.run([PYTHON, "-c", script, name, str(cache)], cwd=export, env=env, check=True)
-    data = json.loads(index.read_text())
-    root = Path(data["archive_root"]).parent
-    if root.parent != Path("/private/tmp") or not root.name.startswith("b5-s0-") or root.exists():
-        raise ValueError("synthetic original fixture root unavailable")
-    with tarfile.open(blob) as archive:
-        archive.extractall(root.parent, filter="data")
-    atexit.register(shutil.rmtree, root, ignore_errors=True)
-    row = json.loads((Path(data["claim_runs_root"]) / "whole-window-verdict.json").read_text())
-    window = s0.BuiltWindow(root, Path(data["archive_root"]), Path(data["claim_runs_root"]),
-        Path(data["bound_runs_root"]), Path(data["custody_root"]), Path(data["measurement_root"]),
-        data, 1 if row["status"] == "failed" else 0, row, "pin2" if name.startswith("ALPHA") else "pin4", (), ())
+    window = s0.build_named(name)
+    atexit.register(window.close)
     from joulewise.b5_analysis.archive import open_archive, open_attempt_record
     from joulewise.b5_analysis.windows import SealPins
     pins = SealPins.load()

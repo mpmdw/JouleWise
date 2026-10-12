@@ -1,8 +1,12 @@
 """Executable comparison with both pinned programs, on synthetic bytes only."""
+import hashlib
 import json
+import os
+import tarfile
 from decimal import Decimal
 from pathlib import Path
 import unittest
+from unittest import mock
 
 from joulewise import whole_window
 from joulewise.b5_analysis.archive import open_archive, open_attempt_record
@@ -141,6 +145,73 @@ class FixtureShapeTests(unittest.TestCase):
             variants = () if directory.name == "STD" else (directory.name,)
             with self.subTest(case=directory.name), fx.build_window(data["pack"], shape="pin2", variants=variants) as built:
                 self.assert_capture_bounds(built)
+
+    def test_each_committed_pin4_archive_has_exact_producer_identity(self):
+        pin = self.pins.pins["pin4"]
+        directory = fx.FIXTURES / "pin4"
+        self.assertEqual({path.name for path in directory.iterdir() if path.is_dir()}, set(fx.PIN4_CASES))
+        for name, (pack, variants) in fx.PIN4_CASES.items():
+            with self.subTest(case=name):
+                case = directory / name
+                with tarfile.open(case / "archive.tar.xz") as blob:
+                    raw = blob.extractfile("archive/harvest.json").read()
+                record = json.loads(raw)
+                self.assertEqual(record["harvest_checkout"]["head"], pin["head"])
+                self.assertEqual(record["harvest_checkout"]["files"], pin["files"])
+                data = read(case, "INDEX_ENTRY.json")
+                self.assertEqual(data["pack"], pack)
+                self.assertEqual(data["harvest_pin"], pin["head"])
+                self.assertEqual(data["harvest_record_sha256"], hashlib.sha256(raw).hexdigest())
+                self.assertEqual(fx.exported_case(pack, "pin4", variants), name)
+        structure = read(directory, "PROGRAM_STRUCTURE.json")
+        self.assertEqual(structure["harvest_pin"], pin["head"])
+        self.assertEqual(structure["neg8_reference_loss_codes"],
+                         read(fx.FIXTURES / "pin2", "PROGRAM_STRUCTURE.json")["neg8_reference_loss_codes"])
+
+    def test_export_build_still_refuses_wrong_program_hashes(self):
+        with mock.patch.dict(os.environ, {"B5_S0_EXPORT_PIN": self.pins.pins["pin4"]["head"]}), \
+                mock.patch.object(fx, "sha", return_value="0" * 64):
+            with self.assertRaisesRegex(ValueError, "exported program hash differs"):
+                fx.build_window("beta")
+
+    def test_existing_unowned_original_root_is_preserved_and_refused(self):
+        with mock.patch.dict(fx._RESTORED, {}, clear=True):
+            with self.assertRaisesRegex(ValueError, "synthetic original fixture root unavailable"):
+                fx.build_window("beta")
+        self.assertTrue(self.beta.archive.is_dir())
+
+    def test_loaded_base_handles_keep_original_root_until_last_close(self):
+        first = fx.build_window("gamma", variants="MIDPOINT_LOST")
+        second = fx.build_window("gamma", variants="MIDPOINT_LOST")
+        try:
+            self.assertEqual(first.root, second.root)
+            first.close()
+            self.assertTrue(second.archive.is_dir())
+            self.assertTrue(self.beta.archive.is_dir())
+        finally:
+            first.close()
+            second.close()
+        self.assertFalse(first.root.exists())
+
+    def test_pin4_provenance_names_producer_commit(self):
+        provenance = (fx.FIXTURES / "pin4/PROVENANCE.md").read_text()
+        self.assertIn(self.pins.pins["pin4"]["head"], provenance)
+        self.assertIn("git archive " + self.pins.pins["pin4"]["head"], provenance)
+
+    def test_pin4_loading_ignores_tree_program_hashes_and_git(self):
+        import subprocess
+        real_run = subprocess.run
+        def no_git(argv, *args, **kwargs):
+            self.assertNotEqual(Path(argv[0]).name, "git")
+            return real_run(argv, *args, **kwargs)
+        # A separate base avoids the standard windows held by setUpClass.
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(fx, "sha", side_effect=AssertionError("tree hash read")), \
+                mock.patch.object(subprocess, "run", side_effect=no_git), \
+                mock.patch.object(subprocess, "check_output", side_effect=AssertionError("git subprocess")):
+            with fx.build_window("beta", variants="QUAD_MEMBER_REMOVED") as built:
+                self.assertEqual(read(built.archive, "harvest.json")["harvest_checkout"]["head"],
+                                 self.pins.pins["pin4"]["head"])
 
     def test_standard_real_writer_claim_licensing_and_failed_row(self):
         for built in (self.beta, self.gamma):
