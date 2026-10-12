@@ -7,8 +7,12 @@ For the report envelope: genre implementation; keep the JSON header under 4,000 
 
 # Build stage S3, part B, of lane L9 (the block-5 analysis code): the context builder, the survivor set, the tripwires, the sources replay
 
-You work in `/Users/edr/code/JouleWise-wt-l9`, branch `lane/2026-10-07-l9-analysis` (clean tree; stages S0,
-S1, S2 and S3 part A are committed). Part A put `ArchiveContext` and the context-aware row validator into
+You work in `/Users/edr/code/JouleWise-wt-l9-s3`, branch `lane/2026-10-12-l9-s3` (clean tree; stages S0,
+S1, S2 and S3 part A are committed). Part A's report, with the exact fields of `ArchiveContext` and the
+interface it expects from you, is `/Users/edr/night-archive/b5-consults/l9-rulings/s3/sol-s3a-full-report.md`.
+Synthetic windows are opened through `tests/b5_analysis/fixtures.py` (`PACK_TABLE`, `selected_window`) as
+`tests/b5_analysis/fixtures_s3.py` does. An independent reviewer is reading part A at the same time: do not
+edit part A's files. Part A put `ArchiveContext` and the context-aware row validator into
 `joulewise/whole_window.py`; its tests use hand-built contexts. Part B builds the one function that makes a
 real context from an analysed window's archive, and the structural checks that must pass before any number
 is computed. **Two cold rulings are your specification and are frozen: build them item by item; you may not
