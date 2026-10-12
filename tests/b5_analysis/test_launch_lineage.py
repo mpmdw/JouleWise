@@ -38,8 +38,9 @@ class LaunchLineageContextTests(unittest.TestCase):
                 set(case.row["bundle_ids"]), consumption_session=case.session())
         self.assertFalse(result.admitted)
         self.assertTrue(any(reason.startswith(("launch_", "readiness_")) for reason in result.reasons), result.reasons)
-        (fx.SCRATCH / "gamma-launch-refusal.json").write_text(json.dumps({"admitted": result.admitted,
-            "reasons": list(result.reasons), "counterfactual": "one tagged member carries another completed launch"}, indent=2) + "\n")
+        with tempfile.TemporaryDirectory(prefix="s3-launch-evidence-") as temporary:
+            (Path(temporary) / "gamma-launch-refusal.json").write_text(json.dumps({"admitted": result.admitted,
+                "reasons": list(result.reasons), "counterfactual": "one tagged member carries another completed launch"}, indent=2) + "\n")
 
     def test_governed_launch_recomputed_without_stored_lineage(self):
         helper = support.LaunchLineageWholeWindowTests()

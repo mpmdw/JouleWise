@@ -1,5 +1,6 @@
 """S3 ruling conformance over cached synthetic writer/harvest windows."""
 import copy
+import contextlib
 from dataclasses import FrozenInstanceError, replace
 import importlib.util
 import hashlib
@@ -13,6 +14,33 @@ from unittest import mock
 
 from joulewise import whole_window as ww
 from tests.b5_analysis import fixtures_s3 as fx
+
+
+@contextlib.contextmanager
+def pinned_base(test, module_name):
+    """Load pin4's bytes, never the current branch's whole_window module."""
+    head = "b039c0257d1b1d407ee9598222db3f78f6ad7beb"
+    raw = subprocess.check_output(["git", "show", head + ":joulewise/whole_window.py"], cwd=fx.ROOT)
+    pins = json.loads((fx.ROOT / "configs/analysis/b5/seal_pins.json").read_text())
+    test.assertEqual(hashlib.sha256(raw).hexdigest(), pins["pins"]["pin4"]["files"]["joulewise/whole_window.py"])
+    with tempfile.TemporaryDirectory(prefix="s3-neutrality-base-") as temporary:
+        source = Path(temporary) / "whole_window.py"
+        source.write_bytes(raw)
+        spec = importlib.util.spec_from_file_location(module_name, source)
+        base = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = base
+        try:
+            spec.loader.exec_module(base)
+            # The exported module lives under TMPDIR. Its source-relative
+            # registered policy/corpus locators must resolve the same inputs
+            # as the installed module, as in the reviewer's differential.
+            for name in dir(ww):
+                current, previous = getattr(ww, name), getattr(base, name, None)
+                if isinstance(current, Path) and isinstance(previous, Path) and current != previous:
+                    setattr(base, name, current)
+            yield base
+        finally:
+            sys.modules.pop(spec.name, None)
 
 
 class ValidatorContextTests(unittest.TestCase):
@@ -145,6 +173,223 @@ class ValidatorContextTests(unittest.TestCase):
         result = self.validate(case)
         self.assertIn(f"member_condition_unnamed:{code}", result.reasons)
 
+    def test_removed_member_missing_measured_window_refuses_real_bytes(self):
+        # Review probe_window.py "skip": unreadable removed bytes used to
+        # switch off continuity, preparation and calibration comparison.
+        case = self.case()
+        bundle = "s0-mock-r06"
+        case.remove_science_member(bundle)
+        case.row["idle_admission_core"]["adapter_wattage_continuity"]["observation_count"] += 1
+        case.bind_row()
+        self.assertIn("adapter_continuity_record_mismatch", self.validate(case).reasons)
+        events = case.window.claim / bundle / "events.jsonl"
+        original = events.read_bytes()
+        def restore():
+            events.write_bytes(original)
+            fx._WINDOW_CACHE.pop(str(events.parent), None)
+        self.addCleanup(restore)
+        kept = [line for line in original.splitlines() if b'"measured_run"' not in line]
+        self.assertLess(len(kept), len(original.splitlines()))
+        events.write_bytes(b"\n".join(kept) + b"\n")
+        fx._WINDOW_CACHE.pop(str(events.parent), None)
+        self.assertIsNone(ww.BundleReader(events.parent).measured_window())
+        for prepared in (True, False):
+            with self.subTest(prepared=prepared):
+                session = case.session()
+                if not prepared:
+                    session._prepared = False
+                    session._preparation_identity = None
+                result = self.validate(case, session=session)
+                self.assertFalse(result.admitted)
+                self.assertIn(f"member_rederivation_incomplete:{bundle}", result.reasons)
+
+    def test_mixed_removed_and_kept_members_same_reason_refuse(self):
+        # Review "mixed", and the same input at _answered_conditions.
+        case = self.case()
+        removed = "s0-mock-r06"
+        case.admission_failure(removed)
+        case.remove_science_member(removed)
+        kept = next(bundle for bundle in case.row["bundle_ids"]
+            if bundle not in case.context.roster_references and bundle not in case.context.removed_bundle_ids)
+        code = "environment_admission_failed"
+        case.row["member_failures"].append({"member_id": kept, "reason_code": code,
+            "detail": "synthetic reviewer failure"})
+        case.row["member_failures"].sort(key=lambda item: (item["member_id"], item["reason_code"], item["detail"]))
+        case.bind_row()
+        outcome = ww._neg8_screen_outcome(case.row, context=case.context)
+        answered, problems = ww._answered_conditions(case.row, case.row["idle_admission_core"],
+            context=case.context, neg8=outcome, catalog_answered=False)
+        self.assertNotIn(code, answered)
+        self.assertIn(f"member_code_on_kept_unit:{kept}", problems)
+        result = self.validate(case)
+        self.assertFalse(result.admitted)
+        self.assertNotIn(code, result.answered_conditions)
+        self.assertIn(f"member_code_on_kept_unit:{kept}", result.reasons)
+
+    def test_kept_member_failure_absent_from_conditions_refuses(self):
+        # Review probe_answered.py case 22: the stored attribution is enough.
+        case = self.case()
+        kept = next(bundle for bundle in case.row["bundle_ids"] if bundle not in case.context.roster_references)
+        code = "environment_admission_failed"
+        self.assertNotIn(code, case.row["idle_admission_core"]["conditions"])
+        case.row["member_failures"] = [{"member_id": kept, "reason_code": code, "detail": "synthetic reviewer failure"}]
+        case.bind_row()
+        answered, problems = ww._answered_conditions(case.row, case.row["idle_admission_core"],
+            context=case.context, neg8=ww._neg8_screen_outcome(case.row, context=case.context), catalog_answered=False)
+        self.assertIn(f"member_code_on_kept_unit:{kept}", problems)
+        result = self.validate(case)
+        self.assertFalse(result.admitted)
+        self.assertIn(f"member_code_on_kept_unit:{kept}", result.reasons)
+
+    def test_malformed_excluded_bundle_cannot_hide_member(self):
+        # Review cases 8/9 and "excluded_malformed": valid removed neighbour
+        # must never hide a malformed entry that could name a kept member.
+        for malformed in ("kept-science-as-bare-string", {"bundle_id": 5}, {"bundle_id": ""}, {}, None):
+            with self.subTest(malformed=malformed):
+                case = self.case()
+                case.row["excluded_bundles"] = [malformed, {"bundle_id": "omitted-removed", "reason": "strict_invalid"}]
+                case.row["idle_admission_core"]["conditions"].append("whole_window_bundle_invalid")
+                case.context = replace(case.context, removed_bundle_ids=case.context.removed_bundle_ids | {"omitted-removed"})
+                case.bind_row()
+                _, problems = ww._answered_conditions(case.row, case.row["idle_admission_core"],
+                    context=case.context, neg8=ww._neg8_screen_outcome(case.row, context=case.context), catalog_answered=False)
+                self.assertIn("whole_window_verdict_provenance_invalid", problems)
+                result = self.validate(case)
+                self.assertFalse(result.admitted)
+                self.assertIn("whole_window_verdict_provenance_invalid", result.reasons)
+
+    def test_stored_bracket_condition_cannot_expand_neg8_family(self):
+        # Review "launder" and probe_answered.py cases 12, 15-18.
+        for code in ("whole_window_campaign_membership_ambiguous", "campaign_occurrence_ambiguous",
+                     "calibration_ledger_baseline_missing", "other_fault", "neg8_totally_unknown_word",
+                     "whole_window_campaign_membership_unresolved", "calibration_acceptance_bound_stale"):
+            with self.subTest(code=code):
+                case = self.case()
+                core = case.row["idle_admission_core"]
+                core["conditions"] = sorted(set(core["conditions"]) | {code})
+                core["neg8_bracket"]["conditions"] = sorted(set(core["neg8_bracket"]["conditions"]) | {code})
+                if code == "calibration_acceptance_bound_stale":
+                    case.context = replace(case.context, governed_e3=False)
+                case.bind_row()
+                answered, _ = ww._answered_conditions(case.row, core, context=case.context,
+                    neg8=ww._neg8_screen_outcome(case.row, context=case.context), catalog_answered=False)
+                self.assertNotIn(code, answered)
+                result = self.validate(case)
+                self.assertFalse(result.admitted)
+                self.assertNotIn(code, result.answered_conditions)
+                self.assertIn("whole_window_verdict_provenance_invalid", result.reasons)
+
+    def test_survivor_identity_swap_with_same_slot_counts_refuses(self):
+        # Review "survivor_swap": correct count, wrong identity (mutant m4).
+        case = self.case()
+        case.lose_reference("b5t-neg8-start-1")
+        baseline = self.validate(case)
+        self.assertTrue(baseline.admitted, baseline.reasons)
+        case.context = replace(case.context, survivor_bundle_ids=(case.context.survivor_bundle_ids
+            - {"b5t-neg8-start-2"}) | {"b5t-neg8-start-1"})
+        outcome = ww._neg8_screen_outcome(case.row, context=case.context)
+        self.assertFalse(outcome.passed)
+        self.assertEqual(outcome.problem, "survivor_set_count_mismatch")
+        result = self.validate(case)
+        self.assertFalse(result.admitted)
+        self.assertIn("survivor_set_count_mismatch", result.detail)
+
+    def test_ungoverned_stored_calibration_comparison_refuses(self):
+        # Mutant m7 changes the bypass from governed contexts to all contexts.
+        case = self.case()
+        core = case.row["idle_admission_core"]
+        core["conditions"].remove("calibration_acceptance_bound_stale")
+        case.context = replace(case.context, governed_e3=False)
+        core["instrument_calibration_bracket"] = ww._archive_window_assessment(case.context)
+        case.row["evaluation_basis"]["calibration_bracket_set"] = ww._calibration_bracket_basis(
+            core["instrument_calibration_bracket"])
+        case.rehash_basis()
+        case.bind_row()
+        baseline = self.validate(case)
+        self.assertTrue(baseline.admitted, baseline.reasons)
+        core["instrument_calibration_bracket"]["b_fiducial_s"] += 0.001
+        case.bind_row()
+        result = self.validate(case)
+        self.assertFalse(result.admitted)
+        self.assertIn("whole_window_verdict_conflict", result.reasons)
+
+    def test_stored_verdict_full_comparison_refuses_made_up_allowance(self):
+        # Review "stored_verdict": the record returns the row's own bracket.
+        for status in ("failed", "passed"):
+            with self.subTest(status=status):
+                case = self.case()
+                record = case.read(ww.NEG8_HARVEST_ALLOWANCE_RECORD)
+                record["source"] = "stored_verdict"
+                case.write(ww.NEG8_HARVEST_ALLOWANCE_RECORD, record)
+                bracket = case.row["idle_admission_core"]["neg8_bracket"]
+                bracket.update(decision="passed", conditions=[])
+                bracket["bound_freshness"]["decision"] = "fresh"
+                for family in bracket["claim_families"].values():
+                    family["drift_allowance_j"] = 1e-9  # Made up; no measurement.
+                case.row["status"] = status
+                case.bind_row()
+                returned, problem = ww.harvest_neg8_allowance_bracket(case.archive, case.row)
+                self.assertIsNone(problem)
+                self.assertTrue(all(family["drift_allowance_j"] == 1e-9 for family in returned["claim_families"].values()))
+                result = self.validate(case)
+                self.assertFalse(result.admitted)
+                self.assertIn("whole_window_verdict_conflict", result.reasons)
+
+    def test_stored_verdict_full_family_decision_and_freshness_comparison(self):
+        original = {"claim_families": {family: {"drift_allowance_j": 1.0, "screen_passed": True,
+            "derived_repeatability_bound_j": 1.0, "window_duration_s": 2.0, "start": {"mean_j": 8.0}}
+            for family in (ww.NEG8_CLAIM_FAMILY_GROSS, ww.NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED)},
+            "decision": "passed", "bound_freshness": {"decision": "fresh"}}
+        self.assertTrue(ww._neg8_stored_verdict_reproduces(copy.deepcopy(original), original))
+        for field in ("drift_allowance_j", "screen_passed", "derived_repeatability_bound_j", "start",
+                      "decision", "bound_freshness", "missing_family", "nonpositive_allowance"):
+            with self.subTest(field=field):
+                changed = copy.deepcopy(original)
+                family = changed["claim_families"][ww.NEG8_CLAIM_FAMILY_GROSS]
+                if field in ("decision", "bound_freshness"):
+                    changed[field] = "changed"
+                elif field == "missing_family":
+                    changed["claim_families"].pop(ww.NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED)
+                elif field == "nonpositive_allowance":
+                    family["drift_allowance_j"] = 0.0
+                else:
+                    family[field] = "changed"
+                self.assertFalse(ww._neg8_stored_verdict_reproduces(copy.deepcopy(original), changed))
+        duration_only = copy.deepcopy(original)
+        duration_only["claim_families"][ww.NEG8_CLAIM_FAMILY_GROSS]["window_duration_s"] = 3.0
+        self.assertTrue(ww._neg8_stored_verdict_reproduces(duration_only, original))
+
+    def test_endpoint_empty_families_require_recorded_energy_unreadable(self):
+        # Mutant m5 bypasses E when both endpoint family maps are empty. Run
+        # the real replay on an invalid reference-role projection, which the
+        # real evaluator represents with empty families (no derivation stub).
+        from joulewise.b5 import harvest
+        case = self.case()
+        with fx.adapter_projection(case):
+            manifests, current, policy = harvest.verdict_neg8_sources(case.row, case.window.claim)
+            manifests = copy.deepcopy(manifests)
+            ref = next(member for manifest in manifests for member in manifest["members"]
+                if member.get("sentinel_position") == "start")
+            ref.update(role="neg8_daily_reference_start", sentinel_position="end")
+            derived, problem = ww._derived_neg8_decision(manifests, case.window.claim, policy,
+                current=current, point_drift=True, return_bracket=True,
+                strict_invalid=ww._archive_reference_strict_invalid,
+                stored_strict_losses=set(), unlisted_strict_invalid="refuse")
+            self.assertIsNone(problem)
+            self.assertEqual(derived["claim_families"], {})
+            core = copy.deepcopy(case.row["idle_admission_core"])
+            core["neg8_bracket"] = derived
+            outcome = ww._neg8_screen_outcome(case.row, context=case.context)
+            reasons = ww._archive_neg8_replay_reasons(case.row, core, case.row["evaluation_basis"],
+                manifests, case.window.claim, case.row["campaign_policy"]["sha256"], case.context, outcome, False)
+            self.assertIn("whole_window_verdict_conflict", reasons)
+            screen = case.read("derived/neg8-screen.json")
+            screen["harvest_reference_losses"] = {"b5t-neg8-start-1": "energy_unreadable"}
+            case.write("derived/neg8-screen.json", screen)
+            reasons = ww._archive_neg8_replay_reasons(case.row, core, case.row["evaluation_basis"],
+                manifests, case.window.claim, case.row["campaign_policy"]["sha256"], case.context, outcome, False)
+            self.assertNotIn("whole_window_verdict_conflict", reasons)
+
     def test_excluded_bundle_member_condition_removed_only(self):
         case = self.case()
         bundle = "omitted-science"
@@ -240,14 +485,11 @@ class ValidatorContextTests(unittest.TestCase):
         self.assertIn("adapter_continuity_evidence_missing", self.validate(case).reasons)
         self.assertIn("adapter_continuity_evidence_missing", self.validate(case, context=False).reasons)
 
-    def test_adapter_no_context_three_cases_match_head(self):
+    def test_adapter_no_context_three_cases_match_pinned_base(self):
         case = self.case()
-        source = fx.SCRATCH / "base_whole_window.py"
-        source.write_bytes(subprocess.check_output(["git", "show", "HEAD:joulewise/whole_window.py"], cwd=fx.ROOT))
-        spec = importlib.util.spec_from_file_location("s3_adapter_base_whole_window", source)
-        base = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = base
-        spec.loader.exec_module(base)
+        manager = pinned_base(self, "s3_adapter_base_whole_window")
+        base = manager.__enter__()
+        self.addCleanup(manager.__exit__, None, None, None)
         continuity = copy.deepcopy(case.row["idle_admission_core"]["adapter_wattage_continuity"])
         for label in ("reproduced_nonstable", "record_mismatch", "record_absent"):
             with self.subTest(label=label):
@@ -260,10 +502,14 @@ class ValidatorContextTests(unittest.TestCase):
                 case.bind_row()
                 with fx.adapter_projection(case):
                     # Adapter telemetry and memoized real environment checks
-                    # are shared seams; both row/core validators run themselves.
-                    with mock.patch.object(base, "_load_idle_records", ww._load_idle_records), \
-                            mock.patch.object(base, "current_environment_refusals", ww.current_environment_refusals), \
-                            mock.patch.object(base, "_derived_neg8_decision", ww._derived_neg8_decision):
+                    # are shared seams; both row/core/NEG-8 validators run
+                    # their own source, including the pinned evaluator.
+                    with contextlib.ExitStack() as stack:
+                        for name in ("_load_idle_records", "current_environment_refusals",
+                                     "_custody_strict_invalid", "_current_strict_summary",
+                                     "_scientific_config_identity", "_reference_energy_evidence",
+                                     "neg8_freshness_bindings_from_metadata"):
+                            stack.enter_context(mock.patch.object(base, name, getattr(ww, name)))
                         def probe(module):
                             session = case.session()
                             session._archive_context = None
@@ -415,17 +661,13 @@ class ValidatorContextTests(unittest.TestCase):
         self.assertEqual(session.operative_fiducial_bound_s, case.context.window_bracket["b_fiducial_s"])
         self.assertEqual(session.consumption_semantics_id, ww.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID)
 
-    def test_no_context_blocks_1_to_3_byte_identical_to_head(self):
+    def test_no_context_blocks_1_to_3_byte_identical_to_pinned_base(self):
         from dataclasses import asdict
         from joulewise.calibration_ledger import CalibrationLedgerSnapshot, LEDGER_SCHEMA
         from tests import test_neg8_survivors as support
-        scratch = fx.ROOT / ".scratch-s3"
-        source = scratch / "base_whole_window.py"
-        source.write_bytes(subprocess.check_output(["git", "show", "HEAD:joulewise/whole_window.py"], cwd=fx.ROOT))
-        spec = importlib.util.spec_from_file_location("s3_base_whole_window", source)
-        base = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = base
-        spec.loader.exec_module(base)
+        manager = pinned_base(self, "s3_base_whole_window")
+        base = manager.__enter__()
+        self.addCleanup(manager.__exit__, None, None, None)
         support.VerdictWriterSurvivorTests.setUpClass()
         helper = support.VerdictWriterSurvivorTests()
         comparisons = []
@@ -471,7 +713,7 @@ class ValidatorContextTests(unittest.TestCase):
                 self.assertEqual(current, old)
                 self.assertEqual(json.loads(current)["reasons"], [True, []])
                 comparisons.append({"block": block, "base": old, "current": current, "equal": True})
-        (scratch / "neutrality.json").write_text(json.dumps(comparisons, indent=2) + "\n")
+        print("S3_PIN4_NEUTRALITY", len(comparisons), "PASS")
 
 
 class CatalogContextTests(unittest.TestCase):

@@ -1,5 +1,6 @@
 """One reference predicate: strict validation OR custody triangle, no config leg."""
 import copy
+import ast
 from dataclasses import replace
 import hashlib
 import json
@@ -63,10 +64,32 @@ class Neg8PredicateTests(unittest.TestCase):
                 self.assertEqual(neg8_reference_energy_unreadable(summary), None in writer)
 
     def test_stored_condition_selection(self):
-        core = {"conditions": ["neg8_fault", "other", "calibration_acceptance_bound_stale"],
-            "neg8_bracket": {"conditions": ["custom_bracket_condition", "neg8_fault"]}}
-        self.assertEqual(neg8_stored_conditions(core), frozenset({"neg8_fault", "custom_bracket_condition"}))
+        core = {"conditions": ["neg8_drift_bound_underived", "neg8_fault", "other", "calibration_acceptance_bound_stale"],
+            "neg8_bracket": {"conditions": ["custom_bracket_condition", "neg8_bracket_missing", "neg8_fault"]}}
+        self.assertEqual(neg8_stored_conditions(core), frozenset({"neg8_drift_bound_underived", "neg8_bracket_missing"}))
         self.assertEqual(neg8_stored_conditions(None), frozenset())
+
+    def test_closed_vocabulary_covers_writer_source_condition_words(self):
+        # Enumerate string literals, excluding only known wire keys, roles,
+        # CLI fields and exports. A new neg8_ condition anywhere in the writer
+        # or either evaluator must be deliberately added to the vocabulary.
+        root = Path(__file__).resolve().parents[2]
+        nonconditions = {
+            "neg8_bracket", "neg8_daily_reference", "neg8_daily_reference_start",
+            "neg8_daily_reference_midpoint", "neg8_daily_reference_end", "neg8_drift_bound",
+            "neg8_reference_scientific_config_sha256", "neg8_reference_start",
+            "neg8_reference_start_then_first_admission_passing", "neg8_harvest_archive",
+            "neg8_passed", "neg8_reference_corpus", "neg8_claim_family_for_metric",
+            "neg8_freshness_bindings_from_metadata",
+        }
+        for relative in ("scripts/run_campaign.py", "joulewise/whole_window.py", "joulewise/idle_admission.py"):
+            with self.subTest(relative=relative):
+                tree = ast.parse((root / relative).read_text())
+                words = {node.value for node in ast.walk(tree) if isinstance(node, ast.Constant)
+                    and isinstance(node.value, str) and node.value.startswith("neg8_")
+                    and node.value.replace("_", "").isalnum()} - nonconditions
+                self.assertLessEqual(words, ww.NEG8_STORED_CONDITION_CODES,
+                    f"writer NEG-8 conditions missing from closed vocabulary: {sorted(words - ww.NEG8_STORED_CONDITION_CODES)}")
 
 
 if __name__ == "__main__":

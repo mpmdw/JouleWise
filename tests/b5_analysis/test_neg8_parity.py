@@ -129,9 +129,7 @@ class Neg8ParityTests(unittest.TestCase):
                     self.assertEqual(set(writer), set(replay_losses), "reference_drop_parity_failed")
                     self.assertEqual(set(writer), comparable, "reference_drop_parity_failed")
                     rows.append({"case": kind, "W": writer, "R": replay_losses, "H": harvest_losses, "parity": "passed"})
-            scratch = Path(__file__).resolve().parents[2] / ".scratch-s3"
-            scratch.mkdir(exist_ok=True)
-            (scratch / "parity.json").write_text(json.dumps(rows, indent=2, sort_keys=True) + "\n")
+            (Path(temporary) / "parity.json").write_text(json.dumps(rows, indent=2, sort_keys=True) + "\n")
             print("S3_PARITY_ROWS", len(rows), "PASS")
 
     def test_endpoint_mirror_equal_to_frozen_harvest(self):

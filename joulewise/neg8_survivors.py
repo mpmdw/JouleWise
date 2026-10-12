@@ -42,12 +42,14 @@ def neg8_reference_energy_unreadable(stored_summary) -> bool:
 
 
 def neg8_stored_conditions(core) -> frozenset[str]:
-    """NEG-8 names plus every condition on the stored bracket."""
+    """Stored conditions belonging to the closed verdict-writer vocabulary."""
+    from joulewise.whole_window import NEG8_STORED_CONDITION_CODES
     if not isinstance(core, Mapping):
         return frozenset()
     conditions = core.get("conditions")
     bracket = core.get("neg8_bracket")
     bracket_conditions = bracket.get("conditions") if isinstance(bracket, Mapping) else None
     return frozenset(word for word in (conditions if isinstance(conditions, list) else [])
-                     if isinstance(word, str) and word.startswith("neg8_")) | frozenset(
-        word for word in (bracket_conditions if isinstance(bracket_conditions, list) else []) if isinstance(word, str))
+                     if isinstance(word, str) and word in NEG8_STORED_CONDITION_CODES) | frozenset(
+        word for word in (bracket_conditions if isinstance(bracket_conditions, list) else [])
+        if isinstance(word, str) and word in NEG8_STORED_CONDITION_CODES)

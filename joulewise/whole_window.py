@@ -300,11 +300,8 @@ def _answered_conditions(row: Mapping[str, Any], core: Mapping[str, Any], *, con
         return frozenset(), ("whole_window_verdict_provenance_invalid",)
     answered: set[str] = set()
     problems: set[str] = set()
-    bracket = core.get("neg8_bracket")
-    bracket_conditions = bracket.get("conditions", []) if isinstance(bracket, Mapping) else []
-    bracket_conditions = bracket_conditions if isinstance(bracket_conditions, list) else []
     if neg8.passed:
-        answered.update(word for word in conditions if word.startswith("neg8_") or word in bracket_conditions)
+        answered.update(set(conditions) & NEG8_STORED_CONDITION_CODES)
     if context.governed_e3:
         problem = _window_bracket_problem(context)
         if problem is None:
@@ -319,12 +316,23 @@ def _answered_conditions(row: Mapping[str, Any], core: Mapping[str, Any], *, con
         if isinstance(continuity_conditions, list):
             answered.update(word for word in continuity_conditions if isinstance(word, str))
     failures = _validated_member_failures(row) or []
+    # The row's attribution is evidence even when its aggregate conditions
+    # accidentally omit the member's reason (review N4).
+    for item in failures:
+        bundle_id = item["member_id"]
+        if bundle_id not in context.roster_references and not _archive_member_removed(context, bundle_id):
+            problems.add(f"member_code_on_kept_unit:{bundle_id}")
+    excluded = row.get("excluded_bundles", [])
+    if not isinstance(excluded, list) or any(
+        not isinstance(item, Mapping) or not isinstance(item.get("bundle_id"), str)
+        or not item["bundle_id"] for item in excluded
+    ):
+        problems.add("whole_window_verdict_provenance_invalid")
+        excluded = []
     for condition in set(conditions) & set(PROSPECTIVE_MEMBER_FAILURE_REASON_CODES):
         named = {item["member_id"] for item in failures if item["reason_code"] == condition}
         if condition == "whole_window_bundle_invalid":
-            excluded = row.get("excluded_bundles", [])
-            named.update(item.get("bundle_id") for item in (excluded if isinstance(excluded, list) else [])
-                         if isinstance(item, Mapping) and isinstance(item.get("bundle_id"), str))
+            named.update(item["bundle_id"] for item in excluded)
         if not named:
             problems.add(f"member_condition_unnamed:{condition}")
             continue
@@ -419,11 +427,42 @@ def _archive_neg8_replay_reasons(row: Mapping[str, Any], core: Mapping[str, Any]
         reasons.add("whole_window_verdict_provenance_invalid")
     elif point_drift:
         unreadable = isinstance(harvest_losses, Mapping) and any(value == "energy_unreadable" for value in harvest_losses.values())
-        if not isinstance(derived, Mapping) or not _neg8_reproduces(derived, replay_bracket, energy_unreadable=unreadable):
+        reproduces = (
+            _neg8_stored_verdict_reproduces(derived, replay_bracket)
+            if neg8.source == "stored_verdict"
+            else isinstance(derived, Mapping) and _neg8_reproduces(derived, replay_bracket, energy_unreadable=unreadable)
+        )
+        if not reproduces:
             reasons.add("whole_window_verdict_conflict")
     elif bracket.get("decision") != derived:
         reasons.add("whole_window_verdict_conflict")
     return reasons
+
+
+def _neg8_stored_verdict_reproduces(derived: Any, stored: Mapping[str, Any]) -> bool:
+    """The historical full comparison when the stored screen decides.
+
+    Only survivor_rescreen replaces bound-dependent fields. A stored_verdict
+    allowance is the stored row itself, so those fields still need replay.
+    """
+    if not isinstance(derived, Mapping):
+        return False
+    stored_families = stored.get("claim_families")
+    derived_families = derived.get("claim_families")
+    return (
+        isinstance(stored_families, Mapping) and isinstance(derived_families, Mapping)
+        and set(stored_families) == {NEG8_CLAIM_FAMILY_GROSS, NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED}
+        and set(derived_families) == set(stored_families)
+        and all(
+            isinstance(stored_families[family], Mapping) and isinstance(derived_families[family], Mapping)
+            and _finite_number(stored_families[family].get("drift_allowance_j"), positive=True) is not None
+            and {key: value for key, value in stored_families[family].items() if key != "window_duration_s"}
+                == {key: value for key, value in derived_families[family].items() if key != "window_duration_s"}
+            for family in stored_families
+        )
+        and stored.get("decision") == derived.get("decision")
+        and stored.get("bound_freshness") == derived.get("bound_freshness")
+    )
 
 
 def _archive_launch_refusal_reasons(row: Mapping[str, Any], runs_root: Path,
@@ -534,6 +573,13 @@ NEG8_POINT_DRIFT_CONDITION_CODES = frozenset(
         "neg8_bracket_reference_invalid",
     }
 )
+# Closed writer vocabulary, including the legacy and per-segment evaluators
+# imported by run_campaign. Stored bracket lists cannot expand this family.
+NEG8_STORED_CONDITION_CODES = NEG8_POINT_DRIFT_CONDITION_CODES | frozenset({
+    "neg8_bracket_rel_delta_exceeded",
+    "neg8_bracket_not_evaluated",
+    "neg8_bracket_ambiguous_reference",
+})
 NEG8_WHOLE_WINDOW_ALLOWANCE_TERM = "E_whole_window_drift_allowance_j"
 
 # Prospective whole-window row diagnostics have their own code namespace.
@@ -5821,6 +5867,8 @@ def _current_core_rederivation_reasons(
         )
     }
     if not strict_current_ids:
+        if archive_context is not None:
+            reasons.update(f"member_rederivation_incomplete:{bundle_id}" for bundle_id in bundle_ids)
         return reasons
 
     registered = _registered_policy(policy_sha256)
@@ -5910,6 +5958,11 @@ def _current_core_rederivation_reasons(
             ),
         )
         derived_members.append((bundle_id, path, metadata, cpu))
+
+    if archive_context is not None:
+        derived_ids = {bundle_id for bundle_id, _path, _metadata, _cpu in derived_members}
+        reasons.update(f"member_rederivation_incomplete:{bundle_id}"
+                       for bundle_id in bundle_ids if bundle_id not in derived_ids)
 
     stored_members = core.get("members")
     if not isinstance(stored_members, list):
