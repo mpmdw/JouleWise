@@ -106,10 +106,23 @@ Both seats were blind to each other and to the judge. Dispositions:
 Stage S3's brief carries `RULING.md` section J1 as amended by `ERRATUM-RULING.md`, and both files whole.
 The seal-record addendum (stage S11) carries every "(d)" sentence of both rulings.
 
+## 4a. A third cold ruling: where the reference roster is read from
+
+`ROSTER-RULING.md` (sha256 `4188c01d…c4ef`; charge `ROSTER-CHARGE.md`), a cold Fable 5.1 session, last line
+`RULING: RULED`. Stage S3 part B's seat found that the roster the pinned harvest archives is the projection made
+for the exclusion function and carries no reference or spare slot, so the survivor set could not be computed
+from the record the erratum's X1 item 6 names. The lead proposed rebuilding the roster with the governing pin's
+own `build_roster` on the archived pack, checked by equality with the archived projection. The judge adopted
+that and strengthened it: by a synthetic probe, a plan tree with two reference stages' slots swapped gives the
+identical archived projection, so the equality check alone would have accepted wrong slots; the plan tree is
+bound additionally by its SHA-256 to the sealed pack table. No new harvest, no archive change. The first
+ruling's J4 (no re-harvest without a tripwire) and J7 (bind by what the archive records) are the precedents.
+
 ## 5. Gates that ran in this phase, and what each caught that touches a number
 
 | Gate | Caught |
 |---|---|
 | Cold judge on J1 to J8 | The validator would still refuse every window with a removed member whose admission failed (J1 item 9); the leave-one-out threshold can read a manifest field instead of the floor (Z2); three sealed sentences false of the code, one of which (plan 133 to 135) would have changed every floor had the code been changed to match |
 | The one erratum | An empty source list silently skips the consumer's whole admission re-derivation on the catalog path (found by execution) |
+| The roster ruling | The lead's equality check would have accepted a roster with wrong reference slots (shown by probe); the survivor set, and through it the tripwire that guards every drift allowance, rests on those slots |
 | Two-seat consult | A reference the exclusion function removed can set a drift allowance (both seats); the stored-bracket replay refuses every row (Sol); the operative bound has no owner (both) |
