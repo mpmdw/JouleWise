@@ -15,6 +15,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import tempfile
 import tarfile
@@ -620,7 +621,113 @@ def export_fixtures(shape, destination, *, case=None):
 
 
 _EXTRACTED = {}
-_RESTORED = {}
+# None means the platform's tempfile.gettempdir(); tests can supply a base
+# without creating, probing, or requiring the archived /private/tmp location.
+_RESTORE_BASE = None
+
+
+def _relocate_archive(archive, old_root, new_root):
+    """Relocate synthetic locators and their hash dependencies, not science.
+
+    Work from the immutable original bytes on every pass. The dependency graph
+    includes file hashes, canonical JSON hashes, ledger receipts and the source
+    inventory. No writer, harvest, evaluator or producer program is rerun.
+    """
+    from joulewise import calibration_ledger as cl
+
+    old, new = str(old_root), str(new_root)
+    digests = {}
+
+    def bind(before, after):
+        if before != after:
+            digests[before] = after
+
+    def relocate(value):
+        if isinstance(value, str):
+            return digests.get(value, value.replace(old, new))
+        if isinstance(value, list):
+            result = [relocate(item) for item in value]
+        elif isinstance(value, dict):
+            result = {key: relocate(item) for key, item in value.items()}
+            # Recognize actual self-hashes by their original payload, rather
+            # than overwriting arbitrary fields called sha256.
+            for key in ("sha256", "binding_digest"):
+                if key in value:
+                    payload = {k: v for k, v in value.items() if k != key}
+                    if value[key] == cl.canonical_sha256(payload):
+                        result[key] = cl.canonical_sha256({k: v for k, v in result.items() if k != key})
+                        bind(value[key], result[key])
+        else:
+            return value
+        if result != value:
+            bind(cl.canonical_sha256(value), cl.canonical_sha256(result))
+        return result
+
+    ledger = archive / "sources/ledger/calibration_observation_ledger.jsonl"
+    original_ledger = ledger.read_bytes()
+    relocated_lines = []
+    offset = 0
+    for line in original_ledger.splitlines(keepends=True):
+        original = json.loads(line)
+        row = relocate(original)
+        if row != original:
+            if not cl._valid_receipt_shape(original):
+                raise ValueError("synthetic ledger receipt is invalid")
+            if row.get("event") == cl.APPEND_INTENT_EVENT:
+                row["base_head"]["byte_offset"] = offset
+                row["target_core_sha256"] = cl.canonical_sha256(row["target_core"])
+                row["operation_id"] = cl._operation_id(
+                    ledger_id=row["ledger_id"], base_head=row["base_head"],
+                    operation_key=row["operation_key"], target_core_sha256=row["target_core_sha256"])
+                bind(original["operation_id"], row["operation_id"])
+            row["receipt_digest"] = cl._receipt_digest(row)
+            bind(original["receipt_digest"], row["receipt_digest"])
+            line = cl.canonical_json_bytes(row) + b"\n"
+        relocated_lines.append(line)
+        offset += len(line)
+    relocated_ledger = b"".join(relocated_lines)
+    ledger.write_bytes(relocated_ledger)
+    bind(hashlib.sha256(original_ledger).hexdigest(), hashlib.sha256(relocated_ledger).hexdigest())
+
+    # Read text records only. Raw adapter streams and bundle bytes never change.
+    # JSONL records without a locator or a changed digest retain exact bytes.
+    originals = {path: path.read_bytes() for path in archive.rglob("*")
+                 if path.is_file() and path != ledger and path.suffix in (".json", ".jsonl")}
+    sources = archive / "sources"
+    sums_path = sources / "SHA256SUMS"
+    original_sums = sums_path.read_bytes()
+    digest_token = re.compile(rb'"([0-9a-f]{64})"')
+    old_bytes, new_bytes = old.encode(), new.encode()
+    for _ in range(len(originals) + 1):
+        previous = dict(digests)
+        for path, raw in originals.items():
+            candidate = raw.replace(old_bytes, new_bytes)
+            candidate = digest_token.sub(
+                lambda match: b'"' + digests.get(match[1].decode(), match[1].decode()).encode() + b'"', candidate)
+            if candidate == raw:
+                continue
+            if path.suffix == ".json":
+                relocate(json.loads(raw))
+            else:
+                for line in raw.splitlines(keepends=True):
+                    if old_bytes in line or digest_token.sub(
+                            lambda match: b'"' + digests.get(match[1].decode(), match[1].decode()).encode() + b'"', line) != line:
+                        relocate(json.loads(line))
+            # Preserve formatting: the writer emits identical bytes to a JSON
+            # verdict and a one-row JSONL log. One old file digest must always
+            # have one new digest, independent of its filename's suffix.
+            rewritten = digest_token.sub(
+                lambda match: b'"' + digests.get(match[1].decode(), match[1].decode()).encode() + b'"',
+                raw.replace(old_bytes, new_bytes))
+            path.write_bytes(rewritten)
+            bind(hashlib.sha256(raw).hexdigest(), hashlib.sha256(rewritten).hexdigest())
+        sums = b"".join(digests.get(line[:64].decode(), line[:64].decode()).encode() + line[64:]
+                        for line in original_sums.splitlines(keepends=True))
+        sums_path.write_bytes(sums)
+        bind(hashlib.sha256(original_sums).hexdigest(), hashlib.sha256(sums).hexdigest())
+        if digests == previous:
+            return
+    raise ValueError("synthetic relocation digest dependencies did not settle")
 
 
 def archived_entry(shape, name, *, archive_root=None, **overrides):
@@ -642,60 +749,46 @@ def archived_entry(shape, name, *, archive_root=None, **overrides):
 
 
 def load_exported_window(pack, *, shape, variants=()):
-    """Restore the original synthetic roots so recorded absolute paths still bind.
-
-    Only the builder's /private/tmp/b5-s0-* roots are restorable. Existing
-    unowned roots are preserved and refused. Concurrent handles to one base
-    share its original bindings; the last handle removes our restored root.
-    """
+    """Restore each handle in a private, portable temporary directory."""
     variants = (variants,) if isinstance(variants, str) else tuple(variants)
     case = exported_case(pack, shape, variants)
     directory = FIXTURES / shape / case
     data = json.loads((directory / "INDEX_ENTRY.json").read_bytes())
     if shape == "pin4" and data["pack"] != pack:
         raise ValueError("exported fixture pack differs")
-    entry = archived_entry(shape, case)
-    root = Path(data["archive_root"]).parent
-    key = (shape, case)
-    if root.parent != Path("/private/tmp") or not root.name.startswith("b5-s0-"):
-        raise ValueError("synthetic original fixture root unavailable")
-    owned = _RESTORED.get(root)
-    if root.exists() and (owned is None or owned[0] != key):
-        raise ValueError("synthetic original fixture root unavailable")
-    if owned is not None and not root.exists():
-        raise ValueError("synthetic restored fixture root disappeared")
-    if owned is None:
+    old_root = Path(data["archive_root"]).parent
+    if not old_root.is_absolute() or not old_root.name.startswith("b5-s0-"):
+        raise ValueError("exported fixture has no synthetic root")
+    for field in ("archive_root", "claim_runs_root", "bound_runs_root", "custody_root", "measurement_root"):
+        if not Path(data[field]).is_relative_to(old_root) or ".." in Path(data[field]).parts:
+            raise ValueError("exported fixture escapes its synthetic root")
+    tmp = tempfile.TemporaryDirectory(prefix=f"b5-s0-{pack}-{shape}-", dir=_RESTORE_BASE)
+    root = Path(tmp.name).resolve()
+    try:
         from joulewise.b5 import harvest
-        root.mkdir()
-        try:
-            archive = root / "archive"
-            harvest.clone_tree(entry.archive_root, archive)
-            for label, field in (("claim-runs", "claim_runs_root"), ("bound-runs", "bound_runs_root"),
-                                 ("night-custody", "custody_root"), ("repo", "measurement_root")):
-                target = Path(data[field])
-                if not target.is_relative_to(root):
-                    raise ValueError("exported fixture escapes its synthetic root")
-                harvest.clone_tree(archive / "sources" / label, target)
-            for label, target in (("calibration_observation_ledger.jsonl", Path(data["measurement_root"]) / "runs/calibration_observation_ledger.jsonl"),
-                                  ("calibration_ledger_head.json", Path(data["measurement_root"]) / "configs/calibration/calibration_ledger_head.json")):
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(archive / "sources/ledger" / label, target)
-        except BaseException:
-            shutil.rmtree(root)
-            raise
-        _RESTORED[root] = [key, 0]
-        atexit.register(shutil.rmtree, root, ignore_errors=True)
-    data["pack"] = pack
-    row = json.loads((Path(data["claim_runs_root"]) / "whole-window-verdict.json").read_bytes())
-    _RESTORED[root][1] += 1
-    def release():
-        _RESTORED[root][1] -= 1
-        if _RESTORED[root][1] == 0:
-            shutil.rmtree(root)
-            del _RESTORED[root]
+        archive = root / "archive"
+        with tarfile.open(directory / "archive.tar.xz") as blob:
+            blob.extractall(root, filter="data")
+        _relocate_archive(archive, old_root, root)
+        for field in ("archive_root", "claim_runs_root", "bound_runs_root", "custody_root", "measurement_root"):
+            data[field] = str(root / Path(data[field]).relative_to(old_root))
+        for label, field in (("claim-runs", "claim_runs_root"), ("bound-runs", "bound_runs_root"),
+                             ("night-custody", "custody_root"), ("repo", "measurement_root")):
+            harvest.clone_tree(archive / "sources" / label, Path(data[field]))
+        for label, target in (("calibration_observation_ledger.jsonl", Path(data["measurement_root"]) / "runs/calibration_observation_ledger.jsonl"),
+                              ("calibration_ledger_head.json", Path(data["measurement_root"]) / "configs/calibration/calibration_ledger_head.json")):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(archive / "sources/ledger" / label, target)
+        data["pack"] = pack
+        data["harvest_record_sha256"] = hashlib.sha256((archive / "harvest.json").read_bytes()).hexdigest()
+        row = json.loads((Path(data["claim_runs_root"]) / "whole-window-verdict.json").read_bytes())
+    except BaseException:
+        tmp.cleanup()
+        raise
+    atexit.register(tmp.cleanup)
     return BuiltWindow(root, root / "archive", Path(data["claim_runs_root"]), Path(data["bound_runs_root"]),
                        Path(data["custody_root"]), Path(data["measurement_root"]), data,
-                       1 if row["status"] == "failed" else 0, row, shape, variants, (), _release=release)
+                       1 if row["status"] == "failed" else 0, row, shape, variants, (), _release=tmp.cleanup)
 
 
 if __name__ == "__main__":
