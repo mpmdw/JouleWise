@@ -8,7 +8,7 @@ For the report envelope: genre implementation; keep the JSON header under 4,000 
 # Build stage S1 of lane L9 (the block-5 analysis code): kept units
 
 You work in `/Users/edr/code/JouleWise-wt-l9-s1`, a worktree cut from the lane branch after stage S0 was
-committed (clean tree). The design is `/Users/edr/night-archive/gate-prune/wave-1007b/l9/L9_DESIGN.md`
+committed (head `88a3303ac`, clean tree). A second seat is closing S0 in another worktree at the same time: it may change `archive.py`'s handling of an unclean harvest checkout and the fixtures' capture bounds, nothing else; build on S0's functions as they are at your head. **You have 85 minutes of wall time; write the report by minute 75 whatever is unfinished, and list what is unfinished.** Building a synthetic window takes minutes: build each fixture once per test module (module-level cache), never per test. The design is `/Users/edr/night-archive/gate-prune/wave-1007b/l9/L9_DESIGN.md`
 (SHA-256 `3465acf9…2e7d`). Read its section 0 (terms), sections 3.1 to 3.4, 4.0 and 4.1, the head of section 5
 and its part "S1". Read `docs/process_traces/2026-10-block5/l9-rulings/DECISIONS.md` and, in `RULING.md`
 beside it, sections J3 and P9. (Those files are on the records branch; read them at
