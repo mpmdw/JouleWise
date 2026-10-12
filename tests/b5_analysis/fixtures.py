@@ -28,6 +28,11 @@ FIXTURES = ROOT / "tests/fixtures/b5_analysis"
 _TEMPLATES = {}
 _REFERENCE_TEMPLATES = {}
 
+# Explicit test-only identities. Production readers never infer these from an
+# entry, a file-name prefix, or an environment variable.
+PACK_TABLE = {pack: {f"s0_{pack}_mock_v5": f"s0-{pack}-plan", f"s0-fast-{pack}": f"s0-fast-{pack}"}
+              for pack in ("alpha", "beta", "gamma")}
+
 # Exact synthetic seconds. Both the archived ledger and bracket candidates use
 # this pair; the real evaluator adds the registered bracket drift allowance.
 POST_CAPTURE_BOUND_MARKER_S = Decimal("0.001")
@@ -76,7 +81,7 @@ class BuiltWindow:
     @property
     def entry(self):
         from joulewise.b5_analysis.windows import IndexEntry
-        return IndexEntry.from_mapping(self.entry_data)
+        return IndexEntry.from_mapping(self.entry_data, pack_table=PACK_TABLE)
 
     def close(self):
         shutil.rmtree(self.root)
@@ -536,7 +541,7 @@ def archived_entry(shape, name, *, archive_root=None, **overrides):
         archive_root = Path(_EXTRACTED[key].name) / "archive"
     entry["archive_root"] = str(archive_root or directory / "archive")
     entry.update(overrides)
-    return IndexEntry.from_mapping(entry)
+    return IndexEntry.from_mapping(entry, pack_table=PACK_TABLE)
 
 
 def load_exported_window(pack, *, shape, variants=()):
@@ -589,7 +594,7 @@ if __name__ == "__main__":
     export_fixtures(args.shape, args.destination, case=args.case)
 
 
-def structural_archive(root, *, pack="beta", usable=True, release_blocked=False, verdict="COLLECTED"):
+def structural_archive(root, *, pack="beta", usable=True, release_blocked=False, verdict="COLLECTED", attempt=1):
     """Fast pin4 reader input made by the real harvest's finish method.
 
     No bundles, estimation or hardware assertions. Full-window integration is
@@ -604,22 +609,48 @@ def structural_archive(root, *, pack="beta", usable=True, release_blocked=False,
         returncode=0, stdout=pins.pins["pin4"]["head"] + "\n" if "rev-parse" in argv else "", stderr=""))
     document = {"schema_version": "joulewise.exclusions.v1", "claim_usable": usable,
                 "release_blocked": release_blocked, "catalog_sha256": pins.sealed["catalog_sha256"],
-                "members_excluded": [], "cells": [], "reasons": [] if usable else ["cell.below_minimum"]}
-    inputs = SimpleNamespace(plan_id="s0-fast-" + pack, pack_id="s0-fast-" + pack, attempt=1,
+                "members_excluded": [], "cells": [], "reasons": [] if usable else ["cell.below_minimum"],
+                "unclassified": ["s0.unknown"] if release_blocked else []}
+    inputs = SimpleNamespace(plan_id="s0-fast-" + pack, pack_id="s0-fast-" + pack, attempt=attempt,
                              plan={"t0_epoch_s": pins.erratum_3_epoch_s + 1}, h_claim="a" * 40,
                              catalog_path=ROOT / "configs/campaigns/v5_claim_25g83/flag_catalog.json", custody_root=root)
     run = h._Harvest(inputs, root, h.Seams(harvest_checkout=lambda: checkout,
         boot_session_uuid=lambda: "S0-STRUCTURAL", exclusions_compute=lambda *_: document), prepare_desk=False, run_g3=False)
     run.exclusion_roster = {"members": [], "cells": []}
     run.exclusion_spans = {}
+    if release_blocked:
+        run.emit("s0.unknown", level="window", collector="s0-fixture", spec=h.CODES["records.collector_failed"])
     run.finish(verdict)
     (root / "derived/roster.json").write_text('{"synthetic":true}\n')
     record = h.read_json(root / "harvest.json")
     record["outputs"]["derived/roster.json"] = sha(root / "derived/roster.json")
     put(root / "harvest.json", record)
-    return IndexEntry.from_mapping({"pack": pack, "pack_id": inputs.pack_id, "plan_id": inputs.plan_id, "attempt": 1,
+    return IndexEntry.from_mapping({"pack": pack, "pack_id": inputs.pack_id, "plan_id": inputs.plan_id, "attempt": attempt,
         "seal": "second", "entry_kind": "harvested", "t0_epoch_s": inputs.plan["t0_epoch_s"],
         "archive_root": str(root), "harvest_record_sha256": sha(root / "harvest.json"), "harvest_pin": pins.pins["pin4"]["head"],
         "claim_runs_root": str(root / "original"), "bound_runs_root": str(root / "bound"),
         "measurement_root": str(root / "measurement"), "custody_root": str(root / "custody"),
-        "verdict": verdict, "claim_usable": usable and verdict == "COLLECTED", "superseded_archive_roots": []})
+        "verdict": verdict, "claim_usable": usable and verdict == "COLLECTED", "superseded_archive_roots": []},
+        pack_table=PACK_TABLE)
+
+
+def selected_window(record, *, seal_pins=None):
+    """Test-only complete block around a target record, through real selection."""
+    from joulewise.b5_analysis.windows import SealPins, select_analysed_attempts
+    pins = seal_pins or SealPins.load()
+    # Selection uses structure only. Fill unrelated packs with independent mock
+    # identities; open_archive still authenticates the target's unchanged bytes.
+    records = [record]
+    for attempt in range(1, record.entry.attempt):
+        entry = replace(record.entry, attempt=attempt, entry_kind="no_archive", archive_root=None,
+                        harvest_record_sha256=None, verdict="NO_COLLECTION", claim_usable=False,
+                        record_citation="synthetic-selection.md:1")
+        records.append(replace(record, entry=entry, kind="no_archive", verdict="NO_COLLECTION", claim_usable=False,
+                               release_blocked=None))
+    for pack in ("alpha", "beta", "gamma"):
+        if pack != record.entry.pack:
+            entry = replace(record.entry, pack=pack, pack_id=f"s0-fast-{pack}", plan_id=f"s0-fast-{pack}",
+                            attempt=1, seal="second", t0_epoch_s=pins.erratum_3_epoch_s + 1,
+                            harvest_pin=pins.pins["pin4"]["head"], verdict="COLLECTED", claim_usable=True)
+            records.append(replace(record, entry=entry, verdict="COLLECTED", claim_usable=True, release_blocked=False))
+    return select_analysed_attempts([row.entry for row in records], records, seal_pins=pins)[record.entry.pack]

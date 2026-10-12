@@ -8,8 +8,8 @@ from pathlib import Path, PurePosixPath
 import re
 from typing import Any, Mapping
 
-from .windows import (AnalysisRefusal, AnalysedWindow, IndexEntry, SealPins, VERDICTS,
-                      freeze, validate_entry)
+from .windows import (AnalysisRefusal, AnalysedWindow, IndexEntry, PackTable, SealPins, VERDICTS,
+                      _SELECTION_TOKEN, freeze, validate_entry)
 
 BASE_KEYS = frozenset(("schema", "verdict", "plan_id", "pack_id", "attempt", "archive_root", "claim_usable",
                        "flags", "members_assessed", "faults", "yield", "exclude_window_reasons",
@@ -23,18 +23,26 @@ class CensusRow:
     check: str
 
 
-def _read(root: Path, relative: str, expected: str | None, code: str, check: str,
-          census: dict[str, CensusRow]) -> bytes:
-    # A digest never authorizes traversal or a symlink out of the archive.
+def _relative(relative: str) -> None:
+    if not isinstance(relative, str) or not relative or "\x00" in relative:
+        raise AnalysisRefusal("archive_path_invalid")
     path = PurePosixPath(relative)
     if not relative or path.is_absolute() or ".." in path.parts or str(path) != relative or "\\" in relative:
         raise AnalysisRefusal("archive_path_invalid")
+
+
+def _read(root: Path, relative: str, expected: str | None, code: str, check: str,
+          census: dict[str, CensusRow]) -> bytes:
+    # A digest never authorizes traversal or a symlink out of the archive.
+    _relative(relative)
     target = root / relative
-    if not target.resolve().is_relative_to(root.resolve()):
-        raise AnalysisRefusal("archive_path_invalid")
     try:
+        if not target.resolve().is_relative_to(root.resolve()):
+            raise AnalysisRefusal("archive_path_invalid")
         raw = target.read_bytes()
-    except OSError:
+    except AnalysisRefusal:
+        raise
+    except (OSError, ValueError, RuntimeError):
         raise AnalysisRefusal(code) from None
     digest = hashlib.sha256(raw).hexdigest()
     if expected is not None and digest != expected:
@@ -57,6 +65,7 @@ def _json(raw: bytes, code: str) -> dict:
 
 
 def _output(record: Mapping[str, Any], root: Path, relative: str, census: dict[str, CensusRow]) -> bytes:
+    _relative(relative)
     code = ("roster_record_unauthenticated" if relative == "derived/roster.json" else
             "exclusions_record_unauthenticated" if relative == "derived/exclusions.json" else
             "window_flags_record_unauthenticated" if relative == "derived/window_flags.json" else
@@ -86,10 +95,16 @@ class AttemptRecord:
     checkout_flags: tuple[str, ...]
     census: tuple[CensusRow, ...]
     catalog_sha256: str | None = None
+    unclassified: tuple[str, ...] = ()
 
 
-def open_attempt_record(entry: IndexEntry, *, seal_pins: SealPins) -> AttemptRecord:
-    validate_entry(entry, seal_pins=seal_pins)
+def _strings(value: Any) -> bool:
+    return isinstance(value, list) and all(type(item) is str for item in value)
+
+
+def open_attempt_record(entry: IndexEntry, *, seal_pins: SealPins,
+                        pack_table: PackTable | None = None) -> AttemptRecord:
+    validate_entry(entry, seal_pins=seal_pins, pack_table=pack_table)
     if entry.entry_kind == "no_archive":
         return AttemptRecord(entry, "no_archive", None, entry.verdict, False, None, "none", (), 0,
                              freeze({}), freeze({}), None, None, None, (), ())
@@ -109,6 +124,10 @@ def open_attempt_record(entry: IndexEntry, *, seal_pins: SealPins) -> AttemptRec
         raise AnalysisRefusal("harvest_record_shape_mismatch")
     if record["verdict"] != entry.verdict:
         raise AnalysisRefusal("window_index_disagrees_with_archive")
+    if (not _strings(record["exclude_window_reasons"])
+            or (record["yield"] is not None and not isinstance(record["yield"], dict))
+            or (record.get("calibration_bracket") is not None and not isinstance(record["calibration_bracket"], dict))):
+        raise AnalysisRefusal("attempt_record_inconsistent")
     # Check 3: the recorded program head AND each pinned program byte digest.
     checkout = record.get("harvest_checkout")
     pin = seal_pins.pins[shape]
@@ -116,7 +135,8 @@ def open_attempt_record(entry: IndexEntry, *, seal_pins: SealPins) -> AttemptRec
             or checkout.get("files") != dict(pin["files"])):
         raise AnalysisRefusal("harvest_commit_not_the_pinned_one")
     checkout_flags = ("harvest_checkout_status_not_clean",) if (
-        checkout.get("status_clean") is not True or checkout.get("status_lines") != 0
+        checkout.get("status_clean") is not True or type(checkout.get("status_lines")) is not int
+        or checkout.get("status_lines") != 0
         or checkout.get("errors") != []) else ()
     # Check 4: full document or one of the two actual writer stubs.
     exclusions = _json(_output(record, root, "derived/exclusions.json", census),
@@ -145,30 +165,64 @@ def open_attempt_record(entry: IndexEntry, *, seal_pins: SealPins) -> AttemptRec
     if (type(usable) is not bool or type(doc_usable) is not bool
             or ("release_blocked" in exclusions and type(release) is not bool)
             or usable != (doc_usable and record["verdict"] == "COLLECTED")
-            or (form != "document" and doc_usable)):
+            or (form != "document" and doc_usable)
+            or not _strings(exclusions.get("reasons"))
+            or not _strings(exclusions.get("unclassified", []))
+            or (doc_usable and exclusions["reasons"])
+            or (usable and record["exclude_window_reasons"])):
         raise AnalysisRefusal("attempt_record_inconsistent")
     if entry.claim_usable != usable:
         raise AnalysisRefusal("window_index_disagrees_with_archive")
     # Check 6: the structural flags record is independently authenticated.
     flags = _json(_output(record, root, "derived/window_flags.json", census), "window_flags_record_inconsistent")
+    flag_exclusions, counts, window = flags.get("exclusions"), flags.get("flags"), flags.get("window")
     if (flags.get("schema") != "joulewise.window_flags.v1"
-            or flags.get("exclusions", {}).get("claim_usable") is not usable):
+            or not isinstance(flag_exclusions, dict)
+            or flag_exclusions.get("claim_usable") is not usable):
         raise AnalysisRefusal("window_flags_record_inconsistent")
-    counts = flags.get("flags", {})
-    if (type(counts.get("total")) is not int or counts["total"] < 0
+    if (not isinstance(counts, dict) or type(counts.get("total")) is not int or counts["total"] < 0
             or any(not isinstance(counts.get(key), dict) for key in ("by_family", "by_code"))
+            or not _strings(counts.get("unclassified"))
             or any(type(code) is not str or type(n) is not int or n < 0
                    for key in ("by_family", "by_code") for code, n in counts[key].items())):
         raise AnalysisRefusal("window_flags_record_inconsistent")
+    expected_reasons = exclusions["reasons"] + (["harvest.fault"] if record["verdict"] == "HARVEST_FAULT" else [])
+    if (not isinstance(window, dict)
+            or any(type(window.get(key)) is not type(getattr(entry, key)) or window.get(key) != getattr(entry, key)
+                   for key in ("attempt", "plan_id", "pack_id"))
+            or type(window.get("t0_epoch_s")) not in (int, float) or window["t0_epoch_s"] != entry.t0_epoch_s
+            or type(flag_exclusions.get("release_blocked")) is not bool
+            or flag_exclusions["release_blocked"] != exclusions.get("release_blocked", True)
+            or (form == "document" and release is not None and release != bool(counts["unclassified"]))
+            or not _strings(flag_exclusions.get("unclassified", []))
+            or flag_exclusions.get("unclassified", []) != exclusions.get("unclassified", [])
+            or ("unclassified" in exclusions and exclusions["unclassified"] != counts["unclassified"])
+            or not _strings(flag_exclusions.get("reasons"))
+            or flag_exclusions["reasons"] != expected_reasons
+            or record["exclude_window_reasons"] != sorted(expected_reasons)
+            or (form == "document" and (not isinstance(flags.get("catalog"), dict)
+                or flags["catalog"].get("sha256") != catalog))
+            or type(record["flags"]) is not int or record["flags"] != counts["total"]
+            or sum(counts["by_family"].values()) != counts["total"]
+            or sum(counts["by_code"].values()) != counts["total"]):
+        raise AnalysisRefusal("attempt_record_inconsistent")
     source = None
     if shape in ("pin3", "pin4") and "derived/neg8-screen.json" in record["outputs"]:
         screen = _json(_output(record, root, "derived/neg8-screen.json", census), "archive_output_unauthenticated")
-        source = (screen.get("rescreen") or {}).get("reference_source", {}).get("source")
+        rescreen = screen.get("rescreen")
+        if rescreen is not None and not isinstance(rescreen, dict):
+            raise AnalysisRefusal("attempt_record_inconsistent")
+        reference = rescreen.get("reference_source") if rescreen is not None else None
+        if rescreen is not None and "reference_source" in rescreen and not isinstance(reference, dict):
+            raise AnalysisRefusal("attempt_record_inconsistent")
+        source = reference.get("source") if reference is not None else None
+        if source is not None and type(source) is not str:
+            raise AnalysisRefusal("attempt_record_inconsistent")
     return AttemptRecord(entry, "harvested", shape, record["verdict"], usable, release, form,
                          tuple(record["exclude_window_reasons"]), counts["total"], freeze(counts["by_family"]),
                          freeze({code: n for code, n in counts["by_code"].items() if code.startswith("g10.")}),
                          freeze(record["yield"]), freeze(record.get("calibration_bracket")), source, checkout_flags,
-                         tuple(sorted(census.values())), catalog)
+                         tuple(sorted(census.values())), catalog, tuple(counts["unclassified"]))
 
 
 class ArchiveHandle:
@@ -206,6 +260,7 @@ class ArchiveHandle:
         return self._source_manifest
 
     def source_bytes(self, relative: str) -> bytes:
+        _relative(relative)
         if not relative.startswith("sources/") or relative == "sources/SHA256SUMS":
             raise AnalysisRefusal("archive_path_invalid")
         name = relative.removeprefix("sources/")
@@ -216,6 +271,7 @@ class ArchiveHandle:
                      "sources_sha256sums", self._census)
 
     def withheld_bytes(self, relative: str) -> bytes:
+        _relative(relative)
         if not relative.startswith("withheld/"):
             raise AnalysisRefusal("archive_path_invalid")
         if relative in self.record["outputs"]:
@@ -252,14 +308,17 @@ class ArchiveHandle:
         return (freeze({"code": "runs_root_has_unlisted_file", "count": extra}),) if extra else ()
 
 
-def open_archive(window: AnalysedWindow, *, seal_pins: SealPins) -> ArchiveHandle:
+def open_archive(window: AnalysedWindow, *, seal_pins: SealPins,
+                 pack_table: PackTable | None = None) -> ArchiveHandle:
     if window.record.verdict != "COLLECTED" or window.record.claim_usable is not True:
         raise AnalysisRefusal("attempt_not_claim_usable")
+    if window._selection_token != (_SELECTION_TOKEN, window.record.entry):
+        raise AnalysisRefusal("analysed_attempt_not_selected")
     shape = seal_pins.shape(window.harvest_pin)
     if shape not in ("pin2", "pin4"):
         raise AnalysisRefusal("analysed_window_shape_unsupported")
     # Reauthenticate after selection, including the indexed harvest bytes.
-    record = open_attempt_record(window.record.entry, seal_pins=seal_pins)
+    record = open_attempt_record(window.record.entry, seal_pins=seal_pins, pack_table=pack_table)
     if record != window.record or AnalysedWindow.from_record(record, seal_pins=seal_pins) != window:
         raise AnalysisRefusal("window_index_disagrees_with_archive")
     census = {row.path: row for row in record.census}
@@ -269,7 +328,8 @@ def open_archive(window: AnalysedWindow, *, seal_pins: SealPins) -> ArchiveHandl
     # digest cannot establish the bytes of every imported module in a dirty
     # checkout. History-only attempts retain the structural flag above.
     checkout = parsed["harvest_checkout"]
-    if (checkout.get("status_clean") is not True or checkout.get("status_lines") != 0
+    if (checkout.get("status_clean") is not True or type(checkout.get("status_lines")) is not int
+            or checkout.get("status_lines") != 0
             or checkout.get("errors") != []):
         raise AnalysisRefusal("harvest_checkout_not_clean")
     return ArchiveHandle(window, parsed, census)

@@ -6,6 +6,8 @@ from typing import Any, Mapping
 
 
 def classify_step4_exit(exit_status: int, report: Mapping[str, Any], spec: Mapping[str, Any]) -> str:
+    if type(exit_status) is not int or not isinstance(report, Mapping) or not isinstance(spec, Mapping):
+        return "refused"
     if exit_status == 0:
         return "ok"
     if exit_status != 1 or report.get("spec_membership_refusals") != []:
@@ -13,12 +15,17 @@ def classify_step4_exit(exit_status: int, report: Mapping[str, Any], spec: Mappi
     cells, wanted = report.get("cells"), spec.get("cells")
     if not isinstance(cells, list) or not isinstance(wanted, list):
         return "refused"
+    if (any(not isinstance(cell, Mapping) or type(cell.get("cell_id")) is not str or not cell["cell_id"]
+            for cell in cells + wanted)
+            or any(type(cell.get("kind")) is not str or type(cell.get("condition_family_id")) is not str
+                   for cell in wanted)):
+        return "refused"
     # The sealed spec identifies these non-target floor cells by their p42 family.
     p42 = {cell["cell_id"] for cell in wanted if cell.get("kind") in ("absolute", "comparative")
            and "p42" in cell.get("condition_family_id", "").split("-")}
     ids = [cell.get("cell_id") for cell in cells]
     spec_ids = [cell.get("cell_id") for cell in wanted]
-    if len(ids) != len(set(ids)) or set(ids) != set(spec_ids):
+    if len(ids) != len(set(ids)) or len(spec_ids) != len(set(spec_ids)) or set(ids) != set(spec_ids):
         return "refused"
     if any(type(cell.get("extractable")) is not bool for cell in cells):
         return "refused"
