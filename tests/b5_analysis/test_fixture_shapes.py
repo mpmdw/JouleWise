@@ -168,6 +168,35 @@ class FixtureShapeTests(unittest.TestCase):
         self.assertEqual(structure["neg8_reference_loss_codes"],
                          read(fx.FIXTURES / "pin2", "PROGRAM_STRUCTURE.json")["neg8_reference_loss_codes"])
 
+    def test_s3b_archives_preserve_prepared_retry_inputs(self):
+        for name in ("BETA_STD_S3B_ROSTER", "BETA_SOURCES_RECOVERED_S3B_ROSTER"):
+            case = fx.FIXTURES / "pin4" / name
+            data = read(case, "INDEX_ENTRY.json")
+            with self.subTest(case=name), tarfile.open(case / "archive.tar.xz") as blob:
+                def document(relative):
+                    return json.loads(blob.extractfile("archive/" + relative).read())
+                pack = "configs/campaigns/" + data["pack_id"]
+                tree = document("sources/repo/" + pack + "/plan_tree.json")
+                retries = {stage["spare_retry"]["slot"]: stage for stage in tree["stage_graph"]
+                           if stage.get("spare_retry")}
+                self.assertEqual(set(retries), {"start", "midpoint", "end"})
+                prefix = "s0-" if "SOURCES_RECOVERED" in name else "s3b-"
+                self.assertEqual({stage["stage_id"] for stage in retries.values()},
+                                 {prefix + slot for slot in retries})
+                spare = "s3b-end-spare-uninvoked"
+                member = next(item for item in retries["end"]["spare_retry"]["members"]
+                              if item["run_id"] == spare)
+                raw = blob.extractfile("archive/sources/repo/" + member["path"]).read()
+                digest = hashlib.sha256(raw).hexdigest()
+                self.assertEqual(member["sha256"], digest)
+                self.assertEqual(json.loads(raw)["run_id"], spare)
+                inventory = document("sources/inputs/sealed_inventory.json")
+                executed = document("sources/night-custody/night/executed_inventory.json")
+                self.assertEqual(inventory["files"][member["path"]], digest)
+                self.assertEqual(executed["measurement_checkout"]["files"][member["path"]], digest)
+                roster = document("derived/roster.json")
+                self.assertNotIn(spare, {item["run_id"] for item in roster["members"]})
+
     def test_export_build_still_refuses_wrong_program_hashes(self):
         with mock.patch.dict(os.environ, {"B5_S0_EXPORT_PIN": self.pins.pins["pin4"]["head"]}), \
                 mock.patch.object(fx, "sha", return_value="0" * 64):
@@ -209,9 +238,11 @@ class FixtureShapeTests(unittest.TestCase):
                 mock.patch.object(fx, "sha", side_effect=AssertionError("tree hash read")), \
                 mock.patch.object(subprocess, "run", side_effect=no_git), \
                 mock.patch.object(subprocess, "check_output", side_effect=AssertionError("git subprocess")):
-            with fx.build_window("beta", variants="QUAD_MEMBER_REMOVED") as built:
-                self.assertEqual(read(built.archive, "harvest.json")["harvest_checkout"]["head"],
-                                 self.pins.pins["pin4"]["head"])
+            for name in ("BETA_QUAD_MEMBER_REMOVED", "BETA_STD_S3B_ROSTER",
+                         "BETA_SOURCES_RECOVERED_S3B_ROSTER"):
+                with self.subTest(case=name), fx.build_named(name) as built:
+                    self.assertEqual(read(built.archive, "harvest.json")["harvest_checkout"]["head"],
+                                     self.pins.pins["pin4"]["head"])
 
     def test_standard_real_writer_claim_licensing_and_failed_row(self):
         for built in (self.beta, self.gamma):

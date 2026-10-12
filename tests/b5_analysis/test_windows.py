@@ -5,13 +5,11 @@ import tempfile
 import unittest
 from unittest import mock
 
-from joulewise.b5 import harvest
 from joulewise.b5_analysis.archive import open_attempt_record
 from joulewise.b5_analysis.windows import (AnalysisRefusal, IndexEntry, SealPins, WindowIndex, governing_pin,
                                           load_window_index, select_analysed_attempts)
 from joulewise.b5_analysis import windows
 from tests.b5_analysis import fixtures as fx
-from tests.b5_analysis import fixtures_s3b as s3b
 
 
 class WindowsTests(unittest.TestCase):
@@ -22,12 +20,9 @@ class WindowsTests(unittest.TestCase):
         self.pins = SealPins.load()
 
     def record(self, pack, **kwargs):
-        # S0's fast producer must hash the pinned program files, rather than
-        # pin4's head paired with the analysis checkout's changed WW bytes.
-        # The checkout helper reads the restored files itself; no digest is
-        # supplied to, or bypassed in, the archive reader.
-        with mock.patch.object(harvest, "__file__", str(s3b.pinned_program_tree() / "joulewise/b5/harvest.py")):
-            entry = fx.structural_archive(self.root / (pack + str(len(list(self.root.iterdir())))), pack=pack, **kwargs)
+        # The structural builder takes its checkout record from the committed pin4 archive,
+        # so the record names the pinned program's bytes whatever this tree's whole_window.py is.
+        entry = fx.structural_archive(self.root / (pack + str(len(list(self.root.iterdir())))), pack=pack, **kwargs)
         return open_attempt_record(entry, seal_pins=self.pins, pack_table=fx.PACK_TABLE)
 
     def history(self):

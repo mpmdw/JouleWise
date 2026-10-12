@@ -60,6 +60,8 @@ The minimal full-window case set is:
 - `BETA_SOURCES_RECOVERED_REFERENCES_INSUFFICIENT`
 - `GAMMA_STD`
 - `GAMMA_MIDPOINT_LOST`
+- `BETA_STD_S3B_ROSTER`
+- `BETA_SOURCES_RECOVERED_S3B_ROSTER`
 
 S1 structural counterfactuals, S2 ledger/capture variants, and S3 validator
 counterfactuals continue to edit loaded bases in memory or disposable copies.
@@ -74,3 +76,36 @@ computed by the pinned evaluator, never copied from an endpoint.
 Remaining eleven cases builder SHA-256: `aa70ba760e80731873e8bbdcbb554fb7c121a797df3bff8174e82f4b9c895301`.
 
 Between builds, loader lifetime handling, hash-fence placement and exporter case selection were refined; successful window construction and all pinned program bytes were preserved. The later structural-helper change affects reader counterfactuals only.
+
+## S3 part B roster-input variants, 2026-10-12
+
+Both additional archives are written by the same program commit
+`b039c0257d1b1d407ee9598222db3f78f6ad7beb`. The regeneration-only
+`S3B_ROSTER` variant preserves the former `fixtures_s3b.prepare_pack_inputs`
+preparation: standard inputs gain three reference-slot retry stages; both
+standard and recovered-source inputs gain the planned, uninvoked
+`s3b-end-spare-uninvoked` config in the end retry slot and the sealed/executed
+file maps. Recovered-source inputs retain S0's retry stages and its invoked,
+bundleless start spare. These inputs are prepared before the real pinned
+writer and harvest run. No archived output is patched.
+
+Fresh export command, repository-root cwd (directory created first):
+
+```sh
+mkdir -p .scratch-fixtures/pin4-s3b/
+git archive b039c0257d1b1d407ee9598222db3f78f6ad7beb | tar -x -C .scratch-fixtures/pin4-s3b/
+```
+
+Copy the builder, seal pins, and the three support helpers exactly as above.
+No part B helper or production file overlay is needed. Build command, cwd
+`.scratch-fixtures/pin4-s3b/`:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 TMPDIR=/private/tmp JW_B5_SYNTHETIC_ONLY=1 B5_S0_EXPORT_PIN=b039c0257d1b1d407ee9598222db3f78f6ad7beb /opt/homebrew/bin/python3.13 -m tests.b5_analysis.fixtures pin4 /Users/edr/code/JouleWise-wt-l9-s3/tests/fixtures/b5_analysis/pin4 --case BETA_STD_S3B_ROSTER,BETA_SOURCES_RECOVERED_S3B_ROSTER
+```
+
+Part B retains its public base names; `cached()` maps them to these committed
+roster variants through `s0.build_named()`. Normal loading neither invokes
+Git nor creates or reads `.scratch-s3b`.
+
+S3B builder SHA-256: `bc1c63c2aa4d290fc4b7fef79da37bd53ba43d425f0d67babe63780205d8f5ee`.

@@ -64,7 +64,11 @@ PIN4_CASES = {
         ("beta", ("SOURCES_RECOVERED", "REFERENCES_INSUFFICIENT")),
     "GAMMA_STD": ("gamma", ()),
     "GAMMA_MIDPOINT_LOST": ("gamma", ("MIDPOINT_LOST",)),
+    "BETA_STD_S3B_ROSTER": ("beta", ("S3B_ROSTER",)),
+    "BETA_SOURCES_RECOVERED_S3B_ROSTER": ("beta", ("SOURCES_RECOVERED", "S3B_ROSTER")),
 }
+for _name in ("BETA_STD_S3B_ROSTER", "BETA_SOURCES_RECOVERED_S3B_ROSTER"):
+    NAMED_FIXTURES[_name] = (PIN4_CASES[_name][0], "pin4", PIN4_CASES[_name][1])
 
 
 def exported_case(pack, shape, variants):
@@ -151,6 +155,54 @@ def _load_export_support():
     _SUPPORT_LOADED = True
 
 
+@contextlib.contextmanager
+def _prepare_roster_inputs(variants):
+    """Add realistic retry metadata before writer/harvest, never to outputs.
+
+    S0's standard synthetic plan predates the roster-slot fixture need. Its
+    catalog variant already has retry stages; both get one planned, uninvoked
+    spare to witness the pinned harvest's no-bundle exclusion filter.
+    """
+    if "S3B_ROSTER" not in variants:
+        yield
+        return
+    base_put = put
+    extra_configs = {}
+    def write(path, value):
+        path = Path(path)
+        if path.name == "plan_tree.json" and isinstance(value, dict):
+            manifests = (value.get("external_inputs") or {}).get("manifests", [])
+            inputs = {item.get("input_id") for item in manifests}
+            if {slot + "_reference" for slot in ("start", "midpoint", "end")} <= inputs:
+                stages = value["stage_graph"]
+                if "SOURCES_RECOVERED" not in variants and not any(stage.get("spare_retry") for stage in stages):
+                    for slot in ("start", "midpoint", "end"):
+                        stages.append({"stage_id": "s3b-" + slot, "ordinal": 10 + len(stages),
+                            "kind": "campaign_collection", "input_ref": {"kind": "external_input", "input_id": slot + "_reference"},
+                            "spare_retry": {"slot": slot, "members": []}})
+                end = next((stage for stage in stages if stage.get("spare_retry", {}).get("slot") == "end"), None)
+                if end is not None:
+                    spare = "s3b-end-spare-uninvoked"
+                    config = path.parent / "refs" / (spare + ".json")
+                    original = next(item for item in manifests if item.get("input_id") == "end_reference")["members"][0]
+                    source = path.parents[3] / original["path"]
+                    document = json.loads(source.read_bytes())
+                    document["run_id"] = spare
+                    base_put(config, document)
+                    relative = config.relative_to(path.parents[3]).as_posix()
+                    extra_configs[relative] = hashlib.sha256(config.read_bytes()).hexdigest()
+                    retry = end["spare_retry"]
+                    if not any(member["run_id"] == spare for member in retry["members"]):
+                        retry["members"].append({"run_id": spare, "path": relative, "sha256": extra_configs[relative]})
+        if path.name == "sealed_inventory.json" and extra_configs:
+            value["files"].update(extra_configs)
+        if path.name == "executed_inventory.json" and extra_configs:
+            value["measurement_checkout"]["files"].update(extra_configs)
+        base_put(path, value)
+    with mock.patch(__name__ + ".put", write):
+        yield
+
+
 def build_window(pack, *, shape="pin4", variants=()):
     """Load committed producer bytes, or build in the exact pin's export.
 
@@ -170,6 +222,12 @@ def build_window(pack, *, shape="pin4", variants=()):
     for path, expected in pin["files"].items():
         if sha(ROOT / path) != expected:
             raise ValueError(f"exported program hash differs: {path}")
+    with _prepare_roster_inputs(variants):
+        return _build_export_window(pack, shape=shape, variants=variants)
+
+
+def _build_export_window(pack, *, shape, variants):
+    pin = json.loads(PINS_PATH.read_bytes())["pins"][shape]
     from joulewise import whole_window as ww, calibration_bracketing as br
     from joulewise.calibration_ledger import terminal_head_pin_for_session
     from joulewise.b5 import harvest as h
@@ -190,7 +248,7 @@ def build_window(pack, *, shape="pin4", variants=()):
     variants = (variants,) if isinstance(variants, str) else tuple(variants)
     allowed = {"REPEAT6_REMOVED", "QUAD_MEMBER_REMOVED", "SIX_QUADS_REMOVED", "FIVE_QUADS_REMOVED",
                "MIDPOINT_LOST", "SOURCES_RECOVERED", "WRITER_DROPPED_SCIENCE_MEMBER", "WRITER_DROPPED_REFERENCE",
-               "STORED_NEG8_PASSED", "NOT_USABLE", "NULL", "NO_COLLECTION", "UNAVAILABLE", "REFERENCES_INSUFFICIENT"}
+               "STORED_NEG8_PASSED", "NOT_USABLE", "NULL", "NO_COLLECTION", "UNAVAILABLE", "REFERENCES_INSUFFICIENT", "S3B_ROSTER"}
     if set(variants) - allowed:
         raise ValueError("unknown synthetic variant")
     root = Path(tempfile.mkdtemp(prefix=f"b5-s0-{pack}-{shape}-"))
