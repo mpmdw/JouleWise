@@ -81,6 +81,20 @@ def p42_snapshot():
     return snapshot
 
 
+def shared_member_snapshot():
+    """p1's member-sharing counterfactual within one cell, across strata."""
+    snapshot = cached()
+    cid = "df-b5t-family"
+    for member in snapshot.roster["members"]:
+        if member["run_id"] == "s0-mock-b01-a1":
+            member["units"] = []
+        elif member["run_id"] == "s0-mock-r03":
+            member["units"].append({"cell_id": cid, "stratum": "quad", "unit_id": "s0-mock-b01"})
+    snapshot.planned[cid]["quad"]["s0-mock-b01"] = (
+        "s0-mock-r03", "s0-mock-b01-b1", "s0-mock-b01-b2", "s0-mock-b01-a2")
+    return replace(snapshot, exclusions=recompute(snapshot, snapshot.roster, ["s0-mock-r03"]))
+
+
 def gamma_snapshot(*, midpoint_lost=False, attempt=1):
     # Structural GAMMA variant: S0's pinned writer outputs plus the real pure
     # exclusions function on a quad-only contrast roster. No energy is read.

@@ -234,6 +234,7 @@ class KeptUnits:
         """P9(b)(2) allowlist; never copy unknown fields from an input record."""
         return {"pack": self.window.pack, "plan_id": self.window.plan_id, "attempt": self.window.attempt,
                 "verdict": self.window.record.verdict, "claim_usable": self.window.record.claim_usable,
+                "sensitivity_label": self.sensitivity_label,
                 "exclusions_sha256": self.exclusions_sha256, "roster_sha256": self.roster_sha256,
                 "catalog_sha256": self.catalog_sha256, "harvest_record_sha256": self.window.harvest_record_sha256,
                 "flags_by_family": dict(self.flags_by_family), "flags_by_code": dict(self.structure_codes),
@@ -242,6 +243,10 @@ class KeptUnits:
 
 def require_kept_members_in_verdict(kept_units: KeptUnits, bundle_ids: Sequence[str]) -> None:
     """J3 tripwire, pure: the writer may not omit a kept science member."""
+    # A bare string would be read as a set of characters, and None or a generator has no stable membership.
+    if (isinstance(bundle_ids, (str, bytes)) or not isinstance(bundle_ids, (Sequence, Mapping, set, frozenset))
+            or any(not isinstance(item, str) or not item for item in bundle_ids)):
+        raise AnalysisRefusal("verdict_membership_invalid")
     membership = frozenset(bundle_ids)
     for cell in kept_units.cells.values():
         for units in cell.kept.values():
@@ -259,12 +264,12 @@ def load_kept_units(archive: ArchiveHandle, *, sealed_catalog_sha256: str,
     # 2. Parse strictly, but allow the pins' additive top-level keys.
     document = _strict_json(exclusions_raw, "exclusions_schema_invalid")
     roster = _strict_json(roster_raw, "exclusions_roster_mismatch")
+    if document.get("release_blocked") is not False:
+        raise AnalysisRefusal("attempt_release_blocked")
     if (document.get("schema_version") != "joulewise.exclusions.v1"
             or document.get("claim_usable") is not True or document.get("reasons") != []
             or document.get("unclassified") != []):
         raise AnalysisRefusal("exclusions_schema_invalid")
-    if document.get("release_blocked") is not False:
-        raise AnalysisRefusal("attempt_release_blocked")
     # 3. The local catalog is itself authenticated against the supplied seal digest.
     if document.get("catalog_sha256") != sealed_catalog_sha256:
         raise AnalysisRefusal("exclusions_catalog_mismatch")
@@ -319,6 +324,7 @@ def load_kept_units(archive: ArchiveHandle, *, sealed_catalog_sha256: str,
     member_ids = set()
     roster_cells = roster.get("cells")
     if (roster.get("schema") != "joulewise.b5_harvest_roster.v1"
+            or roster.get("pack_id") != archive.window.pack_id
             or not isinstance(roster_cells, list) or not isinstance(roster.get("members"), list)):
         raise AnalysisRefusal("exclusions_roster_mismatch")
     specs = {}
@@ -383,6 +389,19 @@ def load_kept_units(archive: ArchiveHandle, *, sealed_catalog_sha256: str,
                                    len(kept.get("repeat", ())), len(kept.get("quad", ())))
         universe[cid] = {s: {uid: units[s, uid].run_ids for stratum, uid in units if stratum == s}
                          for s in cell["planned"]}
+    # A shared member has one disposition, across strata and across cells.
+    kept_members = {run for cell in result.values() for rows in cell.kept.values()
+                    for unit in rows for run in unit.run_ids}
+    dropped_members = {run for cell in result.values() for unit in cell.dropped for run in unit.run_ids}
+    if kept_members & dropped_members:
+        raise AnalysisRefusal("kept_units_member_split_across_cells")
+    excluded_members = document.get("members_excluded")
+    if (not isinstance(excluded_members, list)
+            or any(not isinstance(member, dict) or type(member.get("run_id")) is not str
+                   or not member["run_id"] for member in excluded_members)):
+        raise AnalysisRefusal("exclusions_schema_invalid")
+    if any(member["run_id"] in kept_members for member in excluded_members):
+        raise AnalysisRefusal("excluded_member_in_kept_unit")
     # 7. Compare every member in every unit, not only the counts or unit ids.
     try:
         planned = {cid: {s: {uid: tuple(ids) for uid, ids in units.items()} for s, units in strata.items()}
@@ -393,7 +412,8 @@ def load_kept_units(archive: ArchiveHandle, *, sealed_catalog_sha256: str,
         raise AnalysisRefusal("exclusions_plan_mismatch")
     # 8. The p42 non-target cell has accounting and roster checks, but no gate.
     for cell in result.values():
-        if cell.target and any(len(cell.kept[s]) < cell.minimum[s] for s in cell.kept):
+        p42_non_target = not cell.target and "p42" in cell.cell_id.split("-")
+        if not p42_non_target and any(len(cell.kept[s]) < cell.minimum[s] for s in cell.kept):
             raise AnalysisRefusal("kept_units_below_minimum")
     counts = document.get("flag_counts")
     families = {entry["family"] for entry in catalog.codes.values()}

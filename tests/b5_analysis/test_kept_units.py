@@ -114,6 +114,124 @@ class KeptUnitsTests(unittest.TestCase):
         with self.assertRaisesRegex(AnalysisRefusal, "^member_code_on_kept_unit$"):
             target.stop_if_member_code_on_kept_unit("df-b5t-family", run, "insufficient_in_window_samples", p42_precheck=True)
 
+    def test_review_p1_member_cannot_be_dropped_in_decode_and_kept_in_p42(self):
+        snapshot, _ = fx.registered_snapshot("alpha", remove_first_decode_quad=True)
+        case = fx.Case(snapshot); self.addCleanup(case.close)
+        self.load(case)  # The honest shared-member dispositions agree.
+        p42 = next(c for c in case.exclusions["cells"] if "p42" in c["cell_id"].split("-"))
+        dropped = p42["dropped_units"].pop(0)
+        p42["kept_units"]["quad"].append(dropped["unit_id"])
+        p42["n_kept"]["quad"] += 1
+        p42["n_quads"] += 1
+        case.write()
+        self.refuses(case, "kept_units_member_split_across_cells")
+
+    def test_review_p1_member_cannot_split_between_strata_in_one_cell(self):
+        for restored_stratum in ("repeat", "quad"):
+            with self.subTest(restored_stratum=restored_stratum):
+                case = fx.Case(fx.shared_member_snapshot()); self.addCleanup(case.close)
+                self.load(case)
+                cell = case.exclusions["cells"][0]
+                dropped = next(u for u in cell["dropped_units"] if u["stratum"] == restored_stratum)
+                cell["dropped_units"].remove(dropped)
+                cell["kept_units"][restored_stratum].append(dropped["unit_id"])
+                cell["n_kept"][restored_stratum] += 1
+                cell[{"repeat": "n_repeats", "quad": "n_quads"}[restored_stratum]] += 1
+                case.write()
+                self.refuses(case, "kept_units_member_split_across_cells")
+
+    def test_review_p2_excluded_member_cannot_stay_in_kept_unit(self):
+        case = self.case()
+        case.exclusions["members_excluded"] = [{"run_id": "s0-mock-r03", "position": 2,
+            "codes": ["thermal.os_level_nonzero"], "families": ["PHYSICS_IN_SPAN"]}]
+        case.write()
+        self.refuses(case, "excluded_member_in_kept_unit")
+
+    def test_review_p2_excluded_auxiliary_member_without_units_is_allowed(self):
+        case = self.case()
+        case.roster["members"].append({"run_id": "s1-aux", "stage_id": "aux", "units": []})
+        case.exclusions["members_excluded"] = [{"run_id": "s1-aux", "position": 50,
+            "codes": ["thermal.os_level_nonzero"], "families": ["PHYSICS_IN_SPAN"]}]
+        case.write()
+        self.assertEqual(self.load(case).cell("df-b5t-family").n_r, 10)
+
+    def test_review_p2_malformed_excluded_members_refuse(self):
+        for excluded in (None, {}, "s0-mock-r03", [None], [{}], [{"run_id": None}], [{"run_id": ""}]):
+            with self.subTest(excluded=excluded):
+                case = self.case()
+                case.exclusions["members_excluded"] = excluded
+                case.write()
+                self.refuses(case, "exclusions_schema_invalid")
+
+    def test_review_p3_non_target_non_p42_below_minimum_refuses(self):
+        case = self.case("SIX_QUADS_REMOVED")
+        case.roster["cells"][0]["target"] = False
+        case.exclusions["cells"][0]["target"] = False
+        case.exclusions.update(claim_usable=True, reasons=[])
+        case.write()
+        self.refuses(case, "kept_units_below_minimum")
+
+    def test_review_p3_target_p42_below_minimum_refuses(self):
+        case = fx.Case(fx.p42_snapshot()); self.addCleanup(case.close)
+        case.roster["cells"][0]["target"] = True
+        case.exclusions["cells"][0]["target"] = True
+        case.write()
+        self.refuses(case, "kept_units_below_minimum")
+
+    def test_review_p4_precheck_non_target_non_p42_refuses(self):
+        # p4's all-kept non-target non-p42 input kills m3_p42_name.
+        case = self.case()
+        case.roster["cells"][0]["target"] = False
+        case.exclusions["cells"][0]["target"] = False
+        case.write()
+        units = self.load(case)
+        with self.assertRaisesRegex(AnalysisRefusal, "^member_code_on_kept_unit$"):
+            units.stop_if_member_code_on_kept_unit("df-b5t-family", "s0-mock-r01", "x", p42_precheck=True)
+
+    def test_review_p4_precheck_target_p42_refuses(self):
+        # p4's target counterfactual retains the p42 name to kill m4_p42_target.
+        snapshot = fx.p42_snapshot()
+        snapshot.roster["cells"][0]["target"] = True
+        snapshot.exclusions.update(fx.recompute(snapshot, snapshot.roster))
+        case = fx.Case(snapshot); self.addCleanup(case.close)
+        units = self.load(case)
+        with self.assertRaisesRegex(AnalysisRefusal, "^member_code_on_kept_unit$"):
+            units.stop_if_member_code_on_kept_unit("df-ph-prefill-p42-mock", "s0-mock-r01", "x", p42_precheck=True)
+
+    def test_review_p9_unclassified_release_blocked_precedes_schema_refusal(self):
+        case = self.case()
+        flag = {"flag_id": "x1", "code": "totally.unknown.code",
+            "scope": {"level": "window", "plan_id": case.roster["plan_id"], "attempt": case.roster["attempt"],
+                      "run_id": None, "bundle_id": None, "stage_id": None},
+            "interval": {"monotonic_ns": None}}
+        case.exclusions = fx.compute([flag], case.roster, {}, fx.CATALOG)
+        self.assertIs(case.exclusions["release_blocked"], True)
+        self.assertEqual(case.exclusions["unclassified"], ["totally.unknown.code"])
+        case.write()
+        self.refuses(case, "attempt_release_blocked")
+
+    def test_review_p9_roster_pack_must_match_window(self):
+        case = self.case()
+        case.roster["pack_id"] = fx.GAMMA_PACK_ID
+        case.write()
+        self.refuses(case, "exclusions_roster_mismatch")
+
+    def test_review_p6_sensitivity_structure_record_carries_label(self):
+        units = self.load(self.case("QUAD_MEMBER_REMOVED")); cid = "df-b5t-family"
+        primary = units.to_structure_record()
+        self.assertIn("sensitivity_label", primary)
+        self.assertIsNone(primary["sensitivity_label"])
+        for view, label, count in (
+                (units.with_units_restored(cid, ["s0-mock-b01"], label="load-correlated"), "load-correlated", 10),
+                (units.without_units(cid, ["s0-mock-b02"], label="leave-one-out"), "leave-one-out", 8)):
+            with self.subTest(label=label):
+                record = view.to_structure_record()
+                self.assertIn("sensitivity_label", record)
+                self.assertEqual(record["sensitivity_label"], label)
+                self.assertEqual(record["cells"][cid]["n_b"], count)
+                self.assertEqual(record["exclusions_sha256"], primary["exclusions_sha256"])
+                self.assertEqual(units.to_structure_record(), primary)
+
     def selection(self, cases):
         records = [case.record() for case in cases]
         return select_analysed_attempts(WindowIndex(tuple(r.entry for r in records)), records)
@@ -302,6 +420,16 @@ class KeptUnitsTests(unittest.TestCase):
         self.assertEqual(units.to_record(), before)
         units.require_verdict_membership(all_ids)
 
+    def test_j3_malformed_membership_refuses_by_name(self):
+        # Review note (S1): None raised TypeError and a bare string was read as characters.
+        units = self.load(self.case()); all_ids = units.kept_run_ids("df-b5t-family")
+        for bad in (None, "s0-mock-r06", b"x", (i for i in all_ids), [*all_ids, ""], [*all_ids, 3]):
+            with self.subTest(bad=type(bad).__name__):
+                with self.assertRaisesRegex(AnalysisRefusal, "^verdict_membership_invalid$"):
+                    ku.require_kept_members_in_verdict(units, bad)
+        ku.require_kept_members_in_verdict(units, dict.fromkeys(all_ids))
+        ku.require_kept_members_in_verdict(units, list(all_ids))
+
     def test_j3_dropped_members_need_not_be_in_verdict(self):
         units = self.load(self.case("QUAD_MEMBER_REMOVED"))
         ku.require_kept_members_in_verdict(units, units.kept_run_ids("df-b5t-family"))
@@ -340,7 +468,8 @@ class KeptUnitsTests(unittest.TestCase):
         self.assertEqual(record["cells"], {"df-b5t-family": {"n_r": 10, "n_b": 9}})
         self.assertEqual(record["verdict"], "COLLECTED"); self.assertIs(record["claim_usable"], True)
         self.assertEqual(set(record), {"pack", "plan_id", "attempt", "verdict", "claim_usable", "exclusions_sha256",
-            "roster_sha256", "catalog_sha256", "harvest_record_sha256", "flags_by_family", "flags_by_code", "cells"})
+            "roster_sha256", "catalog_sha256", "harvest_record_sha256", "flags_by_family", "flags_by_code", "cells",
+            "sensitivity_label"})
 
     def test_records_are_deterministic_digest_bound_and_immutable(self):
         case = self.case("QUAD_MEMBER_REMOVED"); units = self.load(case)
