@@ -5,11 +5,13 @@ import tempfile
 import unittest
 from unittest import mock
 
+from joulewise.b5 import harvest
 from joulewise.b5_analysis.archive import open_attempt_record
 from joulewise.b5_analysis.windows import (AnalysisRefusal, IndexEntry, SealPins, WindowIndex, governing_pin,
                                           load_window_index, select_analysed_attempts)
 from joulewise.b5_analysis import windows
 from tests.b5_analysis import fixtures as fx
+from tests.b5_analysis import fixtures_s3b as s3b
 
 
 class WindowsTests(unittest.TestCase):
@@ -20,7 +22,12 @@ class WindowsTests(unittest.TestCase):
         self.pins = SealPins.load()
 
     def record(self, pack, **kwargs):
-        entry = fx.structural_archive(self.root / (pack + str(len(list(self.root.iterdir())))), pack=pack, **kwargs)
+        # S0's fast producer must hash the pinned program files, rather than
+        # pin4's head paired with the analysis checkout's changed WW bytes.
+        # The checkout helper reads the restored files itself; no digest is
+        # supplied to, or bypassed in, the archive reader.
+        with mock.patch.object(harvest, "__file__", str(s3b.pinned_program_tree() / "joulewise/b5/harvest.py")):
+            entry = fx.structural_archive(self.root / (pack + str(len(list(self.root.iterdir())))), pack=pack, **kwargs)
         return open_attempt_record(entry, seal_pins=self.pins, pack_table=fx.PACK_TABLE)
 
     def history(self):
@@ -174,8 +181,37 @@ class WindowsTests(unittest.TestCase):
                                                          "sha256": fx.sha(tree)}}
             expected[pack] = {tree.parent.name: f"v5-b5-{pack}-a{{attempt}}-"}
         fx.put(self.root / "configs/campaigns/v5_claim_25g83/sizing_b5.json", sizing)
+        pins = replace(self.pins, sealed={**self.pins.sealed,
+            "sizing_sha256": fx.sha(self.root / "configs/campaigns/v5_claim_25g83/sizing_b5.json")})
         with mock.patch.object(windows, "ROOT", self.root):
-            self.assertEqual(windows.sealed_pack_table(), expected)
+            self.assertEqual(windows.sealed_pack_table(seal_pins=pins), expected)
+            for pack in windows.PACKS:
+                pack_id = next(iter(expected[pack]))
+                self.assertEqual(windows.sealed_plan_tree_sha256(pack, pack_id, seal_pins=pins),
+                    sizing["packs"][pack.upper()]["plan_tree"]["sha256"])
+
+    def test_sizing_record_bytes_must_match_sealed_digest(self):
+        # Copy only public, sealed configuration bytes. An otherwise identical
+        # JSON value with different bytes must fail the sizing-record binding.
+        for relative in ("configs/campaigns/v5_claim_25g83/sizing_b5.json",):
+            target = self.root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((windows.ROOT / relative).read_bytes())
+        sizing_path = self.root / "configs/campaigns/v5_claim_25g83/sizing_b5.json"
+        sizing = json.loads(sizing_path.read_bytes())
+        for row in sizing["packs"].values():
+            relative = row["plan_tree"]["path"]
+            target = self.root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((windows.ROOT / relative).read_bytes())
+        with mock.patch.object(windows, "ROOT", self.root):
+            table = windows.sealed_pack_table(seal_pins=self.pins)
+            self.assertTrue(table)
+            sizing_path.write_bytes(sizing_path.read_bytes() + b"\n")
+            with self.assertRaisesRegex(AnalysisRefusal, "^window_index_pack_mismatch$"):
+                windows.sealed_pack_table(seal_pins=self.pins)
+            with self.assertRaisesRegex(AnalysisRefusal, "^window_index_pack_mismatch$"):
+                windows.sealed_plan_tree_sha256("beta", next(iter(table["beta"])), seal_pins=self.pins)
 
     def test_review_s2_gap_at_load_and_selection_both_seals(self):
         # p2a: 1 and 3, omitting 2. First-seal history has the same rule.

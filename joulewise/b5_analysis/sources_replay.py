@@ -15,7 +15,7 @@ from joulewise.b5 import harvest
 from joulewise.campaign_provenance import load_authenticated_campaign_catalog
 from joulewise.neg8_survivors import neg8_reference_strict_invalid, neg8_reference_energy_unreadable
 from .archive import ArchiveHandle, _read
-from .context import authenticated_roster, read_output, roster_references
+from .context import checked_rebuilt_roster, read_output, roster_references
 from .kept_units import _strict_json
 from .windows import AnalysisRefusal, freeze
 
@@ -193,7 +193,7 @@ def _replay_claim_sources(row, runs_root, *, archive, roster):
         return SourcesReplay("sources_replay_not_applicable")
     if not archive.window.governed_e2:
         return SourcesReplay("recovery_predates_erratum")
-    roster = authenticated_roster(archive, roster)
+    roster = checked_rebuilt_roster(archive, row, roster)
     # Items 0–3 are the actual frozen function, not a locally weakened copy.
     sources = harvest.claim_neg8_sources(row, runs_root, roster=roster)
     if isinstance(sources, str):
