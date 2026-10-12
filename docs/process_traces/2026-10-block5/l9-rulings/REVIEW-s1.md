@@ -15,3 +15,5 @@ each is a document that authenticates and is inconsistent with itself or with th
 | note | The tripwire raises `TypeError` on `None`, treats a bare string as characters | Fix: refuse non-collection input with a refusal code |
 | note | A sensitivity view's structure record carries no label | Fix: the label is carried |
 | note | The p42 gate exception accepts any code on a kept p42 unit | Kept: decision O4 (the registered p42 precheck exception); the caller identifies the precheck |
+
+Fix round (Sol 6.1) and the lead: every row marked Fix is built and tested at `lane/2026-10-12-l9-s1`; the tripwire's malformed input refuses `verdict_membership_invalid` (the seat asked for the name; the lead ruled it). The lead's run of the module: 47 tests pass. Merged into the lane.
