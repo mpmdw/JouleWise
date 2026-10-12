@@ -6249,11 +6249,14 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
             catalog_calls,
             {
                 "joulewise/analysis_engine/inputs.py": 2,
+                # joulewise.b5.harvest.claim_neg8_sources: Erratum 2 item 1
+                # requires the authenticated catalog for source-less recovery.
+                "joulewise/b5/harvest.py": 1,
                 "joulewise/whole_window.py": 1,
                 "scripts/run_campaign.py": 4,
             },
         )
-        self.assertEqual(sum(catalog_calls.values()), 7)
+        self.assertEqual(sum(catalog_calls.values()), 8)
         self.assertEqual(catalog_importers, set(catalog_calls))
         # Pointwise dereference of pinned descriptors: the whole-window
         # verdict validator, and the block-5 harvest's NEG-8 re-screen
