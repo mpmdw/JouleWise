@@ -7,8 +7,11 @@ For the report envelope: genre implementation; keep the JSON header under 4,000 
 
 # Build stage S3, part A, of lane L9 (the block-5 analysis code): the row validator with an archive context
 
-You work in `/Users/edr/code/JouleWise-wt-l9`, branch `lane/2026-10-07-l9-analysis` (clean tree; stages S0,
-S1 and S2 are committed). This is the stage on which every number of the block rests: the function that
+You work in `/Users/edr/code/JouleWise-wt-l9-s3`, branch `lane/2026-10-12-l9-s3`, cut from the lane (clean
+tree; stages S0 and S1 are committed; stage S2, the window bracket, is on another branch and is not needed:
+your tests give the context a hand-built `window_bracket` mapping). Synthetic windows are opened through
+`tests/b5_analysis/fixtures.py` (`PACK_TABLE`, `selected_window`); read how `tests/b5_analysis/fixtures_s1.py`
+does it. This is the stage on which every number of the block rests: the function that
 decides whether a claim may rest on a window's stored verdict row. Every block-5 stored row reads failed, and
 today the validator refuses every one. Two cold rulings say exactly which stored conditions may be set aside,
 on what evidence, and what replaces the comparisons that cannot be made. **The rulings are frozen: build them
