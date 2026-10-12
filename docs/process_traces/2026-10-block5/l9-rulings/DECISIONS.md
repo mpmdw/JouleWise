@@ -118,6 +118,21 @@ identical archived projection, so the equality check alone would have accepted w
 bound additionally by its SHA-256 to the sealed pack table. No new harvest, no archive change. The first
 ruling's J4 (no re-harvest without a tripwire) and J7 (bind by what the archive records) are the precedents.
 
+### One point of the roster ruling decided by the lead (representation only)
+
+The roster ruling's item 6(d) requires that a spare which left no bundle appear in none of three records, the
+third being the evaluator's loss list (`rescreen.survivors.reference_losses`). Building it showed that on the
+Erratum 2 catalog path the pinned harvest writes the absent spare's loss, with reason `bundle_absent`, into
+both loss lists. A spare with no bundle has no energy and cannot enter a screen or an allowance, whichever
+list records its absence; the judge's stated purpose for the check is to catch a dropped spare "that
+nonetheless left a trace" of having run. So the lead decides, as a point of representation and not of
+science: the third check admits an entry for such a spare when, and only when, its reason there is
+`bundle_absent` and the same id carries `bundle_absent` in `harvest_reference_losses`; any other reason
+refuses `roster_rebuild_differs_from_archive` as ruled. The checks against the evaluation basis and the
+exclusions document are unchanged. No further cold session was convened for this: three have ruled on this
+lane today, and the doctrine sends a representation-only point to a disposition, not another round. The cold
+Fable 5.1 pass at the lane's merge is asked to confirm it by name.
+
 ## 5. Gates that ran in this phase, and what each caught that touches a number
 
 | Gate | Caught |
