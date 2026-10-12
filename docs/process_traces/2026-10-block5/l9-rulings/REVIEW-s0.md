@@ -19,3 +19,5 @@ digests, eight sealed digests, both epochs), and the frozen-file test against al
 | N7 | The step-4 classifier requires all p42 cells refused, stricter than the plan's "only the p42 floor cells" | Kept, recorded: stricter can only stop more. Stage S10 revisits it with the real extractor's exit |
 | N8 | The one-window pin exception of ruling J4 item 6 needs `plan_id` passed to `governing_pin` and the hard-coded shape names generalised | Deferred to the lane that would need it (only if a tripwire fires) |
 | N4 | `output_bytes` will serve `derived/flags.jsonl` (listed under `outputs`, restricted) | Kept: ruling P9 bounds what a program lets out, not what it reads |
+
+Fix round (Sol 6.1): every row marked Fix is built and tested on the lane (`83c1e0f1c`); the lead's run of the four fast modules: 82 tests pass; the seat's 30 mutants are caught. The tightened readers refuse the older synthetic windows of three test files; their migration is a separate brief (`BRIEF-sol-migrate.md`).
