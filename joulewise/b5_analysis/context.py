@@ -115,7 +115,13 @@ def rebuilt_roster(archive: ArchiveHandle, row: Mapping, roster: Mapping | None 
         projection.pop("chain_started_monotonic_ns", None)
         screen = read_output(archive, "derived/neg8-screen.json")
         occurrences = {item["bundle_id"] for item in basis["member_occurrences"]}
-        evaluator_losses = {item["bundle_id"] for item in screen["rescreen"]["survivors"].get("reference_losses", [])}
+        harvest_losses = screen.get("harvest_reference_losses")
+        # Lead's representation ruling for 6(d): an absent spare may be
+        # recorded as absent by both selectors, but may leave no run trace.
+        evaluator_losses = {item["bundle_id"] for item in screen["rescreen"]["survivors"].get("reference_losses", [])
+            if item["bundle_id"] in absent and (item.get("reason") != "bundle_absent"
+                or not isinstance(harvest_losses, Mapping)
+                or harvest_losses.get(item["bundle_id"]) != "bundle_absent")}
         if (ww.canonical_sha256(projection) != ww.canonical_sha256(actual)
                 or absent & (occurrences | frozenset(_excluded(archive)) | evaluator_losses)):
             raise AnalysisRefusal("roster_rebuild_differs_from_archive")

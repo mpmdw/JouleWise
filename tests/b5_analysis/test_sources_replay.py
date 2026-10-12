@@ -134,24 +134,34 @@ class SourcesReplayTests(unittest.TestCase):
             result = replay.replay_claim_sources(row, case.window.claim, archive=archive, roster=roster)
         self.assertIsNone(result.problem)
         self.assertTrue(absent <= set(roster_references(claim.call_args.kwargs["roster"])))
+        units = fx.load_kept_units(archive, sealed_catalog_sha256=fx.PINS.sealed["catalog_sha256"],
+            planned_units=fx.s0_planned())
         with fx.adapter_projection(case):
-            self.assertTrue(case.build().catalog_manifests)
+            context = ctx.build_context(archive.window, archive, units, case.assessment, row)
+        self.assertTrue(context.catalog_manifests)
+        self.assertEqual(context.neg8_harvest_archive, case.window.archive)
+        self.assertTrue(absent.isdisjoint(context.survivor_bundle_ids))
 
-    def test_frozen_catalog_bundleless_spare_evaluator_trace_refuses_rebuild(self):
-        # ROSTER-RULING 6(d) currently contradicts the requested positive
-        # catalog witness: pin4 records the omitted spare in this loss list.
+    def test_original_catalog_matching_absence_losses_accept_rebuild(self):
+        # Original indexed archive and writer row, with no output rebind.
         case = self.case()
         archive = fx.original_handle(case.window)
         from joulewise.b5_analysis import context as ctx
-        from joulewise.b5_analysis.windows import AnalysisRefusal
         screen = ctx.read_output(archive, "derived/neg8-screen.json")
         archived = ctx.authenticated_roster(archive)
         absent = {run for run, reason in screen["harvest_reference_losses"].items() if reason == "bundle_absent"}
         self.assertTrue(absent)
         self.assertTrue(absent.isdisjoint({member["run_id"] for member in archived["members"]}))
-        self.assertTrue(absent <= {item["bundle_id"] for item in screen["rescreen"]["survivors"]["reference_losses"]})
-        with self.assertRaisesRegex(AnalysisRefusal, "^roster_rebuild_differs_from_archive$"):
-            ctx.rebuilt_roster(archive, case.window.writer_row)
+        evaluator = {item["bundle_id"]: item["reason"]
+            for item in screen["rescreen"]["survivors"]["reference_losses"]}
+        self.assertTrue(absent <= set(evaluator))
+        self.assertTrue(all(evaluator[run] == "bundle_absent" for run in absent))
+        roster = ctx.rebuilt_roster(archive, case.window.writer_row)
+        survivors = ctx.survivor_set(archive, case.window.writer_row, roster)
+        self.assertTrue(absent <= set(roster_references(roster)))
+        self.assertTrue(absent.isdisjoint(survivors.bundle_ids))
+        self.assertTrue(absent.isdisjoint(ctx.excluded_references(archive, roster)))
+        self.assertEqual(fx.s0.sha(case.window.archive / "harvest.json"), case.window.entry.harvest_record_sha256)
 
     def test_replay_problem_stops_builder_and_validator(self):
         case = self.case()
@@ -210,6 +220,11 @@ class SourcesReplayTests(unittest.TestCase):
         case = self.case()
         row = copy.deepcopy(case.row)
         row["campaign_policy"]["sha256"] = "0" * 64
+        # Keep the basis valid so this counterfactual reaches the policy
+        # registration check after the authenticated roster rebuild.
+        basis = row["evaluation_basis"]
+        basis["policy_sha256"] = row["campaign_policy"]["sha256"]
+        basis["sha256"] = ww.canonical_sha256({key: value for key, value in basis.items() if key != "sha256"})
         self.assertEqual(self.run_replay(case, row).problem, "policy_unregistered")
         catalog = load_authenticated_campaign_catalog(case.window.claim, case.window.claim / "campaign_log.jsonl")
         for mode, word in (("policy", "source_manifest_policy_differs"), ("duplicate", "source_manifest_members_invalid"),
@@ -372,7 +387,10 @@ class SourcesReplayTests(unittest.TestCase):
     def test_loss_list_edit_rebound_and_flags_authentication(self):
         case = self.case()
         screen = case.read("derived/neg8-screen.json")
-        screen["harvest_reference_losses"] = {}
+        # Preserve the absent spare's required matching absence records;
+        # change a present reference to exercise the downstream comparison.
+        target = next(run for run in roster_references(case.roster()) if run in case.row["bundle_ids"])
+        screen["harvest_reference_losses"][target] = "member.timeout"
         case.write("derived/neg8-screen.json", screen)
         self.assertEqual(self.run_replay(case).problem, "sources_replay_losses_differ")
         case = self.case()

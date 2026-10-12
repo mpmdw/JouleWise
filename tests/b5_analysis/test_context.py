@@ -142,8 +142,7 @@ class ContextTests(unittest.TestCase):
         self.assertNotIn(spare, case.build().survivor_bundle_ids)
 
     def test_sources_replay_hands_rebuilt_roster_to_frozen_catalog_helper(self):
-        # Wire-only spy on a standard archive with no omitted-spare evaluator
-        # trace. This makes no claim that the blocked catalog archive passes.
+        # Wire-only spy; the original catalog archive is tested separately.
         from joulewise.b5_analysis import sources_replay
         case = self.case()
         archive = case.handle()
@@ -239,6 +238,55 @@ class ContextTests(unittest.TestCase):
                 if mode != "basis":
                     with self.assertRaisesRegex(AnalysisRefusal, "^roster_rebuild_differs_from_archive$"):
                         ctx.rebuilt_roster(case.handle(), case.row)
+
+    def catalog_spare(self):
+        case = self.case(name="BETA_SOURCES_RECOVERED")
+        screen = case.read("derived/neg8-screen.json")
+        archived_ids = {member["run_id"] for member in case.read("derived/roster.json")["members"]}
+        spare = next(run for run, reason in screen["harvest_reference_losses"].items()
+            if reason == "bundle_absent" and run not in archived_ids)
+        loss = next(item for item in screen["rescreen"]["survivors"]["reference_losses"]
+            if item["bundle_id"] == spare)
+        self.assertEqual(loss["reason"], "bundle_absent")
+        self.assertIn(spare, ctx.roster_references(case.roster()))
+        return case, screen, spare, loss
+
+    def refuse_catalog_spare(self, case):
+        with self.assertRaisesRegex(AnalysisRefusal, "^roster_rebuild_differs_from_archive$"):
+            ctx.rebuilt_roster(case.handle(), case.row)
+
+    def test_catalog_absent_spare_evaluator_other_reason_refuses(self):
+        case, screen, _spare, loss = self.catalog_spare()
+        loss["reason"] = "member.timeout"
+        case.write("derived/neg8-screen.json", screen)
+        self.refuse_catalog_spare(case)
+
+    def test_catalog_absent_spare_evaluator_without_harvest_loss_refuses(self):
+        case, screen, spare, _loss = self.catalog_spare()
+        del screen["harvest_reference_losses"][spare]
+        case.write("derived/neg8-screen.json", screen)
+        self.refuse_catalog_spare(case)
+
+    def test_catalog_absent_spare_harvest_other_reason_refuses(self):
+        case, screen, spare, _loss = self.catalog_spare()
+        screen["harvest_reference_losses"][spare] = "member.timeout"
+        case.write("derived/neg8-screen.json", screen)
+        self.refuse_catalog_spare(case)
+
+    def test_catalog_absent_spare_basis_occurrence_refuses(self):
+        case, _screen, spare, _loss = self.catalog_spare()
+        basis = copy.deepcopy(ww._validated_evaluation_basis(case.row, case.window.claim))
+        occurrence = {**basis["member_occurrences"][0], "bundle_id": spare}
+        basis["member_occurrences"].append(occurrence)
+        with mock.patch.object(ww, "_validated_evaluation_basis", return_value=basis):
+            self.refuse_catalog_spare(case)
+
+    def test_catalog_absent_spare_exclusions_entry_refuses(self):
+        case, _screen, spare, _loss = self.catalog_spare()
+        document = case.read("derived/exclusions.json")
+        document["members_excluded"].append({"run_id": spare, "codes": ["member.timeout"]})
+        case.write("derived/exclusions.json", document)
+        self.refuse_catalog_spare(case)
 
     def test_build_roster_and_projection_helpers_are_source_equal_at_governing_pins(self):
         names = ("build_roster", "l4_exclusion_inputs", "_resolve_repo_path", "_condition_tag",
