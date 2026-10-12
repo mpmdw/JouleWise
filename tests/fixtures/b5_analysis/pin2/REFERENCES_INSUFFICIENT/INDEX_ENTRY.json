@@ -1,0 +1,20 @@
+{
+  "archive_root": "/private/tmp/b5-s0-alpha-pin2-ke1nk4kj/archive",
+  "attempt": 1,
+  "bound_runs_root": "/private/tmp/b5-s0-alpha-pin2-ke1nk4kj/bound-runs",
+  "cause_key": null,
+  "claim_runs_root": "/private/tmp/b5-s0-alpha-pin2-ke1nk4kj/claim-runs",
+  "claim_usable": false,
+  "custody_root": "/private/tmp/b5-s0-alpha-pin2-ke1nk4kj/custody",
+  "entry_kind": "harvested",
+  "harvest_pin": "224a264c5faaae90cdf56118df37e773a932700b",
+  "harvest_record_sha256": "079e0f0aa0e0cf30e3bf291cc421cde87b82539a29092d670f187d3886fa6ade",
+  "measurement_root": "/private/tmp/b5-s0-alpha-pin2-ke1nk4kj/measurement",
+  "pack": "alpha",
+  "pack_id": "s0_alpha_mock_v5",
+  "plan_id": "s0-alpha-plan",
+  "seal": "second",
+  "superseded_archive_roots": [],
+  "t0_epoch_s": 1791649800,
+  "verdict": "COLLECTED"
+}

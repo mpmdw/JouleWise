@@ -1,0 +1,102 @@
+{
+  "archive_root": "/private/tmp/b5-s0-beta-pin3-lap5eqj4/archive",
+  "attempt": 2,
+  "claim_usable": false,
+  "exclude_window_reasons": [
+    "calibration.binding_failed",
+    "cell.below_minimum"
+  ],
+  "faults": [],
+  "flags": 36,
+  "harvest_checkout": {
+    "errors": [],
+    "files": {
+      "joulewise/b5/harvest.py": "96edd7ec6d57102060bef28c61561597d1c8144c412f6eb99d7d6d4cd0e9d463",
+      "joulewise/whole_window.py": "2e03abc8b90088401df9fd86b511dcb783e4a67913e49ac441e326caa603b86b",
+      "scripts/harvest_b5_window.py": "88ac1164e729691e4db249b77ebbd17072dbcd3f514499840a56f56576d66d45"
+    },
+    "head": "0699abbb0881ce64b39c46ba07de568cc3848260",
+    "root": "/Users/edr/code/JouleWise-wt-l9/.scratch-s0/pin3",
+    "schema": "joulewise.b5_harvest_checkout.v1",
+    "status_clean": true,
+    "status_lines": 0
+  },
+  "members_assessed": 13,
+  "outputs": {
+    "derived/bracket-binding.json": "fb85f1ba5ce717a34aa3e5240b8662079de0a0fa57e6fca6df999e28832775d5",
+    "derived/code-identity.json": "2d49ab294f305739780dfc0a76dd3b03cdc7f086af2c0fe0382603cf9e55fb79",
+    "derived/exclusions.json": "288141cde4855da69e16d98529fcf187bb469c884d23a9e9cd28500a18ce4acb",
+    "derived/flags.jsonl": "96d0efa1292a5026b1b89056764a5f5e93080c4bdbbd3d2cca331c6d7fd25017",
+    "derived/harvest-thresholds.json": "765044ff263347158b39fb4fb2ca10c40720632b6fe71ee61f4dbaf2a9d46d42",
+    "derived/historical-custody.json": "842be61e7808957f911f7d0eb6dbbc5c2d61ce2a85794db2094e5c2d4c59599d",
+    "derived/neg8-allowance.json": "d9838a07aa13c3a21ac108df2453851eb070c1badd4aafd11dad1ba6467f812d",
+    "derived/neg8-bound.json": "d9dbb4ddf781a71a7146c100037ce3d8fe368071adb24b6a06b956ca8d305120",
+    "derived/neg8-corpus-physics.json": "40a40917e63b1ac0b7dea696a170536f1b29cf2fea7317b514c06c6dc29c7c4b",
+    "derived/neg8-screen.json": "d632cf569975283a8f9c6900b907e20dc3abb375675fa2466aaa0131fd8501ab",
+    "derived/roster.json": "7f38bb61bf3fdd875beab780af9b7fc706146acbd48168c80648a8cbe8d64c35",
+    "derived/terminal-boundary.json": "46d84ea02550838d68f0092684a2b40070f94ef0e36bcf96cf54b9cb50e3520b",
+    "derived/terminal-pin.json": "76899c3331085a1018c20e516ddec422191b8ffd4bb5ac1f31c2dc14d1972eec",
+    "derived/window_flags.json": "17b316ecaa6326251641e48a01e8130641cf0cccc25ecfb21f823278287dd09b",
+    "derived/yield.json": "d02585e036a514494d361d3ca88bc8ee0df7a4e926d216e5491eb8d178df7578"
+  },
+  "pack_id": "s0_beta_mock_v5",
+  "plan_id": "s0-beta-plan",
+  "runs_root_overrides": [],
+  "schema": "joulewise.harvest_b5_window.v1",
+  "verdict": "COLLECTED",
+  "yield": {
+    "j3_failed_stages": [],
+    "per_collection_stage": [],
+    "per_roster_stage": [
+      {
+        "planned": 2,
+        "present": 2,
+        "raw_valid": 2,
+        "stage_id": "01_abs",
+        "strict_deferred": 0,
+        "succeeded": 2
+      },
+      {
+        "planned": 4,
+        "present": 4,
+        "raw_valid": 4,
+        "stage_id": "02_abba",
+        "strict_deferred": 0,
+        "succeeded": 4
+      },
+      {
+        "planned": 3,
+        "present": 3,
+        "raw_valid": 3,
+        "stage_id": "end_reference",
+        "strict_deferred": 0,
+        "succeeded": 3
+      },
+      {
+        "planned": 1,
+        "present": 1,
+        "raw_valid": 1,
+        "stage_id": "midpoint_reference",
+        "strict_deferred": 0,
+        "succeeded": 1
+      },
+      {
+        "planned": 3,
+        "present": 3,
+        "raw_valid": 3,
+        "stage_id": "start_reference",
+        "strict_deferred": 0,
+        "succeeded": 3
+      }
+    ],
+    "planned": 13,
+    "present": 13,
+    "raw_valid": 13,
+    "schema": "joulewise.b5_harvest_yield.v1",
+    "stage_journal": null,
+    "strict_deferred": 0,
+    "succeeded": 13,
+    "unresolved_collection_stages": [],
+    "window_stage_yield": null
+  }
+}
