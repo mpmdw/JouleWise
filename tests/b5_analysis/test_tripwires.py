@@ -24,7 +24,7 @@ class TripwireTests(unittest.TestCase):
         return case
 
     def reference(self, case):
-        return next(run for run, slot in ctx.roster_references(case.read("derived/roster.json")).items() if slot == "start")
+        return next(run for run, slot in ctx.roster_references(case.roster()).items() if slot == "start")
 
     def fire(self, case):
         with self.assertRaises(ctx.TripwireRefusal) as caught:

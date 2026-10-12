@@ -31,7 +31,7 @@ class SourcesReplayTests(unittest.TestCase):
         archive = case.handle()
         with fx.adapter_projection(case):
             return replay.replay_claim_sources(row or case.row, case.window.claim, archive=archive,
-                roster=roster or case.read("derived/roster.json"))
+                roster=roster if roster is not None else case.roster(archive))
 
     def test_recovered_catalog_feeds_core_and_reference_rederivation(self):
         case = self.case()
@@ -63,7 +63,7 @@ class SourcesReplayTests(unittest.TestCase):
             self.assertIs(call.kwargs[key], True)
         self.assertEqual(call.kwargs["unreadable_energy"], "lost")
         self.assertEqual(call.kwargs["exclude_bundle_ids"], dict(result.reference_losses))
-        self.assertEqual(call.kwargs["required_reference_ids"], frozenset(roster_references(case.read("derived/roster.json"))))
+        self.assertEqual(call.kwargs["required_reference_ids"], frozenset(roster_references(case.roster())))
         self.assertEqual(call.kwargs["drift_bound_artifact"], case.read(ww.NEG8_HARVEST_CLEAN_BOUND)["bound"])
         self.assertIsNotNone(call.kwargs["surviving_reference_check"])
         paths = ww._manifest_bundle_paths(ww._archive_thaw(result.projected_manifests), case.window.claim)
@@ -106,20 +106,52 @@ class SourcesReplayTests(unittest.TestCase):
                 self.assertFalse(result.admitted)
                 self.assertIn("whole_window_verdict_provenance_invalid", result.reasons)
 
-    def test_real_catalog_producer_roster_does_not_satisfy_frozen_contract(self):
-        case = fx.Case("BETA_SOURCES_RECOVERED", contract_roster=False)
-        self.addCleanup(case.close)
-        roster = case.read("derived/roster.json")
-        roster_ids = {member["run_id"] for member in roster["members"]}
+    def test_bundleless_spare_is_rebuilt_neither_survivor_nor_excluded_and_loss_admitted(self):
+        case = self.case()
+        archive = fx.original_handle(case.window)
+        from joulewise.b5_analysis import context as ctx
+        row = case.window.writer_row
+        roster = ctx.rebuilt_roster(archive, row)
+        archived = case.read("derived/roster.json")
+        self.assertEqual(archive.output_bytes("derived/roster.json"),
+            (case.window.archive / "derived/roster.json").read_bytes())
+        roster_ids = {member["run_id"] for member in archived["members"]}
         losses = case.read("derived/neg8-screen.json")["harvest_reference_losses"]
         absent = {run for run, reason in losses.items() if reason == "bundle_absent"}
         self.assertTrue(absent)
-        self.assertTrue(absent - roster_ids)
-        self.assertEqual(roster_references(roster), {})
+        self.assertTrue(absent.isdisjoint(roster_ids))
+        refs = roster_references(roster)
+        survivors = ctx.survivor_set(archive, row, roster)
+        excluded = ctx.excluded_references(archive, roster)
+        self.assertTrue(absent <= set(refs))
+        self.assertTrue(all(member.get("spare_slot") in ctx.SLOTS for member in roster["members"]
+            if member["run_id"] in absent))
+        self.assertTrue(absent.isdisjoint(survivors.bundle_ids))
+        self.assertTrue(absent.isdisjoint(excluded))
+        self.assertTrue(absent <= set(survivors.harvest_reference_losses))
+        real = harvest.claim_neg8_sources
+        with fx.adapter_projection(case), mock.patch.object(harvest, "claim_neg8_sources", wraps=real) as claim:
+            result = replay.replay_claim_sources(row, case.window.claim, archive=archive, roster=roster)
+        self.assertIsNone(result.problem)
+        self.assertTrue(absent <= set(roster_references(claim.call_args.kwargs["roster"])))
+        with fx.adapter_projection(case):
+            self.assertTrue(case.build().catalog_manifests)
+
+    def test_frozen_catalog_bundleless_spare_evaluator_trace_refuses_rebuild(self):
+        # ROSTER-RULING 6(d) currently contradicts the requested positive
+        # catalog witness: pin4 records the omitted spare in this loss list.
+        case = self.case()
+        archive = fx.original_handle(case.window)
+        from joulewise.b5_analysis import context as ctx
         from joulewise.b5_analysis.windows import AnalysisRefusal
-        with self.assertRaisesRegex(AnalysisRefusal, "^survivor_set_loss_not_reference$"):
-            case.build()
-        self.assertEqual(self.run_replay(case).problem, "reference_not_in_roster")
+        screen = ctx.read_output(archive, "derived/neg8-screen.json")
+        archived = ctx.authenticated_roster(archive)
+        absent = {run for run, reason in screen["harvest_reference_losses"].items() if reason == "bundle_absent"}
+        self.assertTrue(absent)
+        self.assertTrue(absent.isdisjoint({member["run_id"] for member in archived["members"]}))
+        self.assertTrue(absent <= {item["bundle_id"] for item in screen["rescreen"]["survivors"]["reference_losses"]})
+        with self.assertRaisesRegex(AnalysisRefusal, "^roster_rebuild_differs_from_archive$"):
+            ctx.rebuilt_roster(archive, case.window.writer_row)
 
     def test_replay_problem_stops_builder_and_validator(self):
         case = self.case()
@@ -143,9 +175,9 @@ class SourcesReplayTests(unittest.TestCase):
         archive = case.handle()
         archive.window = replace(archive.window, governed_e2=False)
         self.assertEqual(replay.replay_claim_sources(case.row, case.window.claim, archive=archive,
-            roster=case.read("derived/roster.json")).problem, "recovery_predates_erratum")
+            roster=case.roster()).problem, "recovery_predates_erratum")
         with fx.adapter_projection(case), mock.patch("joulewise.window_lineage.is_hazard_runs_root", return_value=False):
-            result = replay.replay_claim_sources(case.row, case.window.claim, archive=case.handle(), roster=case.read("derived/roster.json"))
+            result = replay.replay_claim_sources(case.row, case.window.claim, archive=case.handle(), roster=case.roster())
         self.assertEqual(result.problem, "runs_root_not_hazard")
         for word in ("missing", "whole_window_campaign_membership_ambiguous", "campaign_occurrence_unresolved"):
             row = copy.deepcopy(case.row)
@@ -194,14 +226,13 @@ class SourcesReplayTests(unittest.TestCase):
             values[0] = replace(values[0], value=value, path=path)
             with mock.patch("joulewise.campaign_provenance.load_authenticated_campaign_catalog", return_value=values):
                 self.assertEqual(self.run_replay(case).problem, word)
-        roster = case.read("derived/roster.json")
+        roster = ww._archive_thaw(case.roster())
         target = next(iter(roster_references(roster)))
         for member in roster["members"]:
             if member["run_id"] == target:
                 member.pop("neg8_slot", None)
                 member.pop("spare_slot", None)
-        case.write("derived/roster.json", roster)
-        self.assertEqual(self.run_replay(case).problem, "reference_not_in_roster")
+        self.assertEqual(self.run_replay(case, roster=roster).problem, "context_roster_differs_from_archive")
 
     def test_reference_role_position_disagreement_is_not_a_passing_screen(self):
         case = self.case()
@@ -224,7 +255,7 @@ class SourcesReplayTests(unittest.TestCase):
 
     def test_recomputed_losses_not_copied_from_screen(self):
         case = self.case()
-        target = next(iter(roster_references(case.read("derived/roster.json"))))
+        target = next(iter(roster_references(case.roster())))
         case.exclude(target, "member.timeout")
         result = self.run_replay(case)
         self.assertEqual(result.problem, "sources_replay_losses_differ")
@@ -241,12 +272,16 @@ class SourcesReplayTests(unittest.TestCase):
 
     def test_harvest_loss_outside_invoked_catalog_is_compared_without_counting_it(self):
         case = self.case()
-        unused = "s3b-uninvoked-spare"
-        roster = case.read("derived/roster.json")
-        roster["members"].append({"run_id": unused, "stage_id": "synthetic-unused-spare",
-            "kind": "auxiliary", "units": [], "spare_slot": "end"})
-        case.write("derived/roster.json", roster)
-        case.exclude(unused, "member.timeout")
+        roster = case.roster()
+        catalog = load_authenticated_campaign_catalog(case.window.claim, case.window.claim / "campaign_log.jsonl")
+        invoked = {run for record in catalog for member in record.value["members"]
+            if member.get("execution") == "invoked" for run in member["bundle_ids"]}
+        unused = next(member["run_id"] for member in roster["members"]
+            if member.get("spare_slot") and member["run_id"] not in invoked)
+        # An absent, uninvoked spare can have a harvest-only loss flag, but
+        # the exclusion function never received it; X(W) must stay empty.
+        flags = case.flags() + [{"code": "member.timeout", "scope": {"level": "member", "run_id": unused}}]
+        case.write("derived/flags.jsonl", flags)
         source, screen, bracket, aggregated = case.pinned_rescreen()
         self.assertEqual(source, "survivor_rescreen")
         self.assertIn(unused, screen["harvest_reference_losses"])
@@ -258,7 +293,7 @@ class SourcesReplayTests(unittest.TestCase):
 
     def test_config_flag_does_not_change_replay_loss_predicate(self):
         case = self.case()
-        target = next(iter(roster_references(case.read("derived/roster.json"))))
+        target = next(iter(roster_references(case.roster())))
         case.exclude(target, "member.config_not_in_inventory")
         result = self.run_replay(case)
         self.assertIsNone(result.problem)
@@ -266,7 +301,7 @@ class SourcesReplayTests(unittest.TestCase):
 
     def test_loss_precedence_and_lost_reference_energy_is_not_read(self):
         case = self.case()
-        target = next(run for run, slot in roster_references(case.read("derived/roster.json")).items() if slot == "end")
+        target = next(run for run, slot in roster_references(case.roster()).items() if slot == "end")
         case.exclude(target, "member.timeout")
         case.exclude(target, "thermal.os_level_nonzero")
         source, screen, bracket, aggregated = case.pinned_rescreen()
@@ -282,13 +317,13 @@ class SourcesReplayTests(unittest.TestCase):
                 return projected_energy(path, **kwargs)
             with mock.patch.object(ww, "_reference_energy_evidence", side_effect=evidence):
                 result = replay.replay_claim_sources(case.row, case.window.claim, archive=case.handle(),
-                    roster=case.read("derived/roster.json"))
+                    roster=case.roster())
         self.assertIsNone(result.problem)
         self.assertEqual(result.reference_losses[target], "thermal.os_level_nonzero")
 
     def test_recompute_summary_status_strict_and_energy_losses(self):
         case = self.case()
-        roster = case.read("derived/roster.json")
+        roster = case.roster()
         with fx.adapter_projection(case):
             sources = harvest.claim_neg8_sources(case.row, case.window.claim, roster=roster)
         self.assertNotIsInstance(sources, str)
@@ -369,7 +404,7 @@ class SourcesReplayTests(unittest.TestCase):
         result = self.run_replay(case)
         self.assertIsNone(result.problem)
         basis = ww._validated_evaluation_basis(case.row, case.window.claim)
-        target = next(iter(roster_references(case.read("derived/roster.json"))))
+        target = next(iter(roster_references(case.roster())))
         check = replay._basis_reference_check(basis)
         self.assertIsNone(check(target, case.window.claim / target))
         self.assertEqual(check("not-in-basis", case.window.claim / target), "reference_not_in_verdict_basis")
@@ -388,7 +423,7 @@ class SourcesReplayTests(unittest.TestCase):
         self.assertIsNone(result.problem)
         archive = case.handle()
         with fx.adapter_projection(case):
-            replay.replay_claim_sources(case.row, case.window.claim, archive=archive, roster=case.read("derived/roster.json"))
+            replay.replay_claim_sources(case.row, case.window.claim, archive=archive, roster=case.roster())
         census = {item.path for item in archive.census()}
         self.assertIn("derived/flags.jsonl", census)
         self.assertIn("sources/SHA256SUMS", census)

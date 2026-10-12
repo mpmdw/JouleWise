@@ -1,16 +1,11 @@
-"""Cached synthetic writer/harvest inputs and explicit S3B contract fixtures.
-
-The pinned producer drops reference slot fields from its persisted exclusion
-roster. ``Case(contract_roster=True)`` deliberately repairs ONLY a copied
-synthetic roster to the frozen ruling's specified input shape. Tests also
-exercise the unmodified producer shape; that integration gap is not hidden.
-"""
+"""Cached unmodified synthetic writer/harvest archives for S3B replay."""
 import atexit
 import contextlib
 import copy
 from dataclasses import replace
 import hashlib
 import io
+import inspect
 import json
 import os
 from pathlib import Path
@@ -40,26 +35,77 @@ PINS = SealPins.load()
 CATALOG = load_catalog(ROOT / "configs/campaigns/v5_claim_25g83/flag_catalog.json")
 
 
+def prepare_pack_inputs(fx, name):
+    """Add realistic retry metadata before writer/harvest, never to outputs.
+
+    S0's standard synthetic plan predates the roster-slot fixture need. Its
+    catalog variant already has retry stages; both get one planned, uninvoked
+    spare to witness the pinned harvest's no-bundle exclusion filter.
+    """
+    put = fx.put
+    extra_configs = {}
+    def write(path, value):
+        path = Path(path)
+        if path.name == "plan_tree.json" and isinstance(value, dict):
+            manifests = (value.get("external_inputs") or {}).get("manifests", [])
+            inputs = {item.get("input_id") for item in manifests}
+            if {slot + "_reference" for slot in ("start", "midpoint", "end")} <= inputs:
+                stages = value["stage_graph"]
+                if name != "BETA_SOURCES_RECOVERED" and not any(stage.get("spare_retry") for stage in stages):
+                    for slot in ("start", "midpoint", "end"):
+                        stages.append({"stage_id": "s3b-" + slot, "ordinal": 10 + len(stages),
+                            "kind": "campaign_collection", "input_ref": {"kind": "external_input", "input_id": slot + "_reference"},
+                            "spare_retry": {"slot": slot, "members": []}})
+                end = next((stage for stage in stages if stage.get("spare_retry", {}).get("slot") == "end"), None)
+                if end is not None:
+                    spare = "s3b-end-spare-uninvoked"
+                    config = path.parent / "refs" / (spare + ".json")
+                    original = next(item for item in manifests if item.get("input_id") == "end_reference")["members"][0]
+                    source = path.parents[3] / original["path"]
+                    document = json.loads(source.read_bytes())
+                    document["run_id"] = spare
+                    put(config, document)
+                    relative = config.relative_to(path.parents[3]).as_posix()
+                    extra_configs[relative] = hashlib.sha256(config.read_bytes()).hexdigest()
+                    retry = end["spare_retry"]
+                    if not any(member["run_id"] == spare for member in retry["members"]):
+                        retry["members"].append({"run_id": spare, "path": relative, "sha256": extra_configs[relative]})
+        if path.name == "sealed_inventory.json" and extra_configs:
+            value["files"].update(extra_configs)
+        if path.name == "executed_inventory.json" and extra_configs:
+            value["measurement_checkout"]["files"].update(extra_configs)
+        put(path, value)
+    fx.put = write
+
+
+def pinned_program_tree():
+    export = SCRATCH / "pinned-tree"
+    pin = PINS.pins["pin4"]
+    if not export.exists():
+        export.mkdir(parents=True)
+        with tarfile.open(fileobj=io.BytesIO(subprocess.check_output(["git", "archive", "HEAD"], cwd=ROOT))) as tree:
+            tree.extractall(export, filter="data")
+        for relative in pin["files"]:
+            (export / relative).write_bytes(subprocess.check_output(["git", "show", pin["head"] + ":" + relative], cwd=ROOT))
+    if any(s0.sha(export / relative) != digest for relative, digest in pin["files"].items()):
+        raise ValueError("synthetic export program hash differs")
+    return export
+
+
 def cached(name="BETA_STD"):
     if name in _CACHE:
         return _CACHE[name]
-    cache = SCRATCH / "windows"
+    cache = SCRATCH / "windows-roster-v2"
     cache.mkdir(parents=True, exist_ok=True)
     index, blob = cache / (name + ".json"), cache / (name + ".tar")
     if not index.exists() or not blob.exists():
-        export = SCRATCH / "pinned-tree"
-        if not export.exists():
-            export.mkdir()
-            with tarfile.open(fileobj=io.BytesIO(subprocess.check_output(["git", "archive", "HEAD"], cwd=ROOT))) as tree:
-                tree.extractall(export, filter="data")
-            # Restore ALL four governing program files; the S0 hash fence runs.
-            pin = PINS.pins["pin4"]
-            for relative in pin["files"]:
-                (export / relative).write_bytes(subprocess.check_output(["git", "show", pin["head"] + ":" + relative], cwd=ROOT))
-        script = '''import json, sys, tarfile
+        export = pinned_program_tree()
+        script = '''import json, sys, tarfile, hashlib
 from pathlib import Path
 from tests.b5_analysis import fixtures as fx
 name, cache = sys.argv[1], Path(sys.argv[2])
+'''+ inspect.getsource(prepare_pack_inputs) + '''
+prepare_pack_inputs(fx, name)
 with fx.build_named(name) as window:
     with tarfile.open(cache / (name + ".tar"), "w") as archive:
         archive.add(window.root, arcname=window.root.name)
@@ -82,8 +128,16 @@ with fx.build_named(name) as window:
     return window
 
 
+def original_handle(window):
+    """Open the indexed pinned-harvest archive without a copied-row rebind."""
+    record = open_attempt_record(window.entry, seal_pins=PINS, pack_table=s0.PACK_TABLE)
+    digest = s0.sha(window.archive / f"sources/repo/configs/campaigns/{window.entry.pack_id}/plan_tree.json")
+    return open_archive(s0.selected_window(record, seal_pins=PINS), seal_pins=PINS,
+        pack_table=s0.PACK_TABLE, synthetic_plan_tree_sha256=digest)
+
+
 class Case(s3.Case):
-    def __init__(self, name="BETA_STD", *, contract_roster=True):
+    def __init__(self, name="BETA_STD"):
         self.window = cached(name)
         self.tmp = tempfile.TemporaryDirectory(prefix="b5-s3b-case-")
         self.archive = Path(self.tmp.name) / "archive"
@@ -99,7 +153,7 @@ class Case(s3.Case):
         shutil.copyfile(inventory, self.archive / "sources/SHA256SUMS")
         for line in inventory.read_text().splitlines():
             relative = line.split("  ", 1)[1]
-            if relative.endswith("campaign_log.jsonl") or "/campaign_manifests/" in relative:
+            if relative.startswith("repo/") or relative.endswith("campaign_log.jsonl") or "/campaign_manifests/" in relative:
                 target = self.archive / "sources" / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(self.window.archive / "sources" / relative, target)
@@ -115,25 +169,24 @@ class Case(s3.Case):
                                      | {"calibration_acceptance_bound_stale"})
         self.rederive_continuity()
         self.bind_row()
-        if contract_roster:
-            roster = self.read("derived/roster.json")
-            slots = {}
-            for path in (self.window.claim / "campaign_manifests").glob("*.json"):
-                manifest = json.loads(path.read_bytes())
-                for member in manifest["members"]:
-                    slot = ww._neg8_position(member.get("role"), member.get("sentinel_position"))
-                    if slot in ("start", "midpoint", "end"):
-                        for run in member["bundle_ids"]:
-                            slots[run] = slot
-            for member in roster["members"]:
-                if member["run_id"] in slots:
-                    member["neg8_slot"] = slots.pop(member["run_id"])
-            # The frozen producer omits the invoked bundle-less spare too.
-            for run, slot in slots.items():
-                roster["members"].append({"run_id": run, "stage_id": "synthetic-contract-spare",
-                    "kind": "auxiliary", "units": [], "spare_slot": slot})
-            self.write("derived/roster.json", roster)
+        self.plan_tree_digest = s0.sha(self.window.archive / self.plan_tree_path())
         self.refresh()
+
+    def plan_tree_path(self):
+        return f"sources/repo/configs/campaigns/{self.entry_data['pack_id']}/plan_tree.json"
+
+    def roster(self, archive=None):
+        return context_module.rebuilt_roster(archive or self.handle(), self.row)
+
+    def write_source(self, relative, raw):
+        """Explicit authenticated-input counterfactual; seal stays independent."""
+        path = self.archive / "sources" / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+        manifest = self.archive / "sources/SHA256SUMS"
+        lines = [line for line in manifest.read_text().splitlines() if line.split("  ", 1)[1] != relative]
+        lines.append(hashlib.sha256(raw).hexdigest() + "  " + relative)
+        manifest.write_text("\n".join(lines) + "\n")
 
     def refresh(self):
         s0.put(self.archive / "harvest.json", self.harvest)
@@ -153,7 +206,8 @@ class Case(s3.Case):
         from joulewise.b5_analysis.windows import IndexEntry
         record = open_attempt_record(IndexEntry.from_mapping(self.entry_data, pack_table=s0.PACK_TABLE),
             seal_pins=PINS, pack_table=s0.PACK_TABLE)
-        return open_archive(s0.selected_window(record, seal_pins=PINS), seal_pins=PINS, pack_table=s0.PACK_TABLE)
+        return open_archive(s0.selected_window(record, seal_pins=PINS), seal_pins=PINS, pack_table=s0.PACK_TABLE,
+            synthetic_plan_tree_sha256=self.plan_tree_digest)
 
     def inputs(self):
         archive = self.handle()
@@ -190,11 +244,11 @@ class Case(s3.Case):
         self.write("derived/window_flags.json", window_flags)
         return flag
 
-    def pinned_rescreen(self):
+    def pinned_rescreen(self, *, row=None):
         """Real frozen loss selector and two-pass screen over these bundles."""
         run = object.__new__(harvest._Harvest)
         run.inputs = SimpleNamespace(claim_runs_root=self.window.claim, plan={"t0_epoch_s": self.entry_data["t0_epoch_s"]})
-        run.roster = self.read("derived/roster.json")
+        run.roster = ww._archive_thaw(self.roster())
         run.flags = SimpleNamespace(records=self.flags())
         run.members = {item["run_id"]: {"strict_valid": True} for item in run.roster["members"]}
         run.neg8_reference_source = {}
@@ -217,7 +271,7 @@ class Case(s3.Case):
                 read_ids.append(Path(path).name)
                 return real_energy(path, **kwargs)
             with mock.patch.object(ww, "_reference_energy_evidence", side_effect=evidence):
-                source = run.neg8_screen(self.row, authentic=True)
+                source = run.neg8_screen(self.row if row is None else row, authentic=True)
         screen = json.loads((run.derived / "neg8-screen.json").read_bytes())
         wrapper = json.loads((run.withheld / "neg8-rescreen-bracket.json").read_bytes())
         # For recorded sources both passes occur; the last count entries are

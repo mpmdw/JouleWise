@@ -9,9 +9,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+from pathlib import Path
+import tempfile
 from typing import Any, Mapping
 
 from joulewise import whole_window as ww
+from joulewise.b5 import harvest
 from joulewise.flags.catalog import catalog_from_bytes
 from .archive import ArchiveHandle
 from .kept_units import CATALOG_PATH, KeptUnits, _strict_json, require_kept_members_in_verdict
@@ -37,7 +40,7 @@ def authenticated_roster(archive: ArchiveHandle, roster: Mapping | None = None) 
 
 def roster_references(roster: Mapping) -> dict[str, str]:
     members = roster.get("members")
-    if not isinstance(members, (list, tuple)):
+    if not isinstance(members, (list, tuple)) or roster.get("duplicate_listings"):
         raise AnalysisRefusal("context_roster_invalid")
     result, seen = {}, set()
     for member in members:
@@ -47,12 +50,96 @@ def roster_references(roster: Mapping) -> dict[str, str]:
         if not run_id or run_id in seen:
             raise AnalysisRefusal("context_roster_invalid")
         seen.add(run_id)
-        slots = {member[key] for key in ("neg8_slot", "spare_slot") if member.get(key) in SLOTS}
+        slots = [member[key] for key in ("neg8_slot", "spare_slot") if member.get(key) is not None]
         if len(slots) > 1:
             raise AnalysisRefusal("context_roster_invalid")
-        if slots:
+        if slots and slots[0] in SLOTS:
             result[run_id] = slots.pop()
     return result
+
+
+@dataclass(frozen=True)
+class RebuiltRoster(Mapping):
+    _document: Mapping
+    _archive: ArchiveHandle
+    _row_sha256: str
+
+    def __getitem__(self, key):
+        return self._document[key]
+
+    def __iter__(self):
+        return iter(self._document)
+
+    def __len__(self):
+        return len(self._document)
+
+
+def rebuilt_roster(archive: ArchiveHandle, row: Mapping, roster: Mapping | None = None) -> RebuiltRoster:
+    """ROSTER-RULING X1.6(a–e): replay sealed, authenticated pack bytes.
+
+    The exclusion projection cannot bind slots. Its equality check therefore
+    follows, and never replaces, the sealed plan-tree digest check.
+    """
+    actual = authenticated_roster(archive)
+    prefix = f"repo/configs/campaigns/{archive.window.pack_id}/"
+    names = archive.source_names()
+    plan_name = prefix + "plan_tree.json"
+    if plan_name not in names:
+        raise AnalysisRefusal("roster_pack_not_archived")
+    plan_bytes = archive.source_bytes("sources/" + plan_name)
+    if hashlib.sha256(plan_bytes).hexdigest() != archive.plan_tree_sha256():
+        raise AnalysisRefusal("roster_plan_tree_not_sealed")
+    with tempfile.TemporaryDirectory(prefix="b5-roster-") as temporary:
+        repo = Path(temporary)
+        for name in names:
+            if name.startswith("repo/"):
+                raw = archive.source_bytes("sources/" + name)
+                target = repo / name.removeprefix("repo/")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(raw)
+        try:
+            rebuilt = harvest.build_roster(repo / prefix.removeprefix("repo/"), repo)
+        except (OSError, ValueError, TypeError, KeyError):
+            raise AnalysisRefusal("roster_rebuild_differs_from_archive") from None
+    roster_references(rebuilt)  # includes duplicate listings collapsed by build_roster
+    basis = ww._validated_evaluation_basis(row, archive.window.claim_runs_root)
+    if basis is None:
+        raise AnalysisRefusal("evaluation_basis_invalid")
+    try:
+        archived_ids = {member["run_id"] for member in actual["members"]}
+        absent = {member["run_id"] for member in rebuilt["members"]
+                  if member.get("spare_slot") is not None and member["run_id"] not in archived_ids}
+        filtered = {**rebuilt, "members": [member for member in rebuilt["members"] if member["run_id"] not in absent]}
+        projection, _spans = harvest.l4_exclusion_inputs(filtered, {}, plan_id=actual["plan_id"], attempt=actual["attempt"])
+        projection.pop("bundles", None)
+        projection.pop("chain_started_monotonic_ns", None)
+        screen = read_output(archive, "derived/neg8-screen.json")
+        occurrences = {item["bundle_id"] for item in basis["member_occurrences"]}
+        evaluator_losses = {item["bundle_id"] for item in screen["rescreen"]["survivors"].get("reference_losses", [])}
+        if (ww.canonical_sha256(projection) != ww.canonical_sha256(actual)
+                or absent & (occurrences | frozenset(_excluded(archive)) | evaluator_losses)):
+            raise AnalysisRefusal("roster_rebuild_differs_from_archive")
+    except (TypeError, KeyError):
+        raise AnalysisRefusal("roster_rebuild_differs_from_archive") from None
+    if roster is not None and ww.canonical_sha256(ww._archive_thaw(roster)) != ww.canonical_sha256(rebuilt):
+        raise AnalysisRefusal("context_roster_differs_from_archive")
+    result = RebuiltRoster(freeze(rebuilt), archive, ww.canonical_sha256(row))
+    # Reusing an issued, immutable mapping is safe; copying its dataclass
+    # fields must not turn a caller's replacement document into an input.
+    bindings = archive.__dict__.setdefault("_rebuilt_roster_bindings", {})
+    bindings[id(result)] = result
+    return result
+
+
+def _bound_roster(archive: ArchiveHandle, roster: Mapping) -> bool:
+    return (isinstance(roster, RebuiltRoster) and roster._archive is archive
+            and archive.__dict__.get("_rebuilt_roster_bindings", {}).get(id(roster)) is roster)
+
+
+def checked_rebuilt_roster(archive: ArchiveHandle, row: Mapping, roster: Mapping) -> RebuiltRoster:
+    if _bound_roster(archive, roster) and roster._row_sha256 == ww.canonical_sha256(row):
+        return roster
+    return rebuilt_roster(archive, row, roster)
 
 
 @dataclass(frozen=True)
@@ -66,7 +153,7 @@ class SurvivorSet:
 
 def survivor_set(archive: ArchiveHandle, row: Mapping, roster: Mapping) -> SurvivorSet:
     """ERRATUM-RULING X1.7: basis references less both loss lists, counted."""
-    references = roster_references(authenticated_roster(archive, roster))
+    references = roster_references(checked_rebuilt_roster(archive, row, roster))
     basis = ww._validated_evaluation_basis(row, archive.window.claim_runs_root)
     if basis is None:
         raise AnalysisRefusal("evaluation_basis_invalid")
@@ -124,7 +211,9 @@ def _excluded(archive: ArchiveHandle) -> dict[str, tuple[str, ...]]:
 
 def excluded_references(archive: ArchiveHandle, roster: Mapping) -> frozenset[str]:
     """X1.6: all excluded roster references/spares, regardless of loss code."""
-    references = roster_references(authenticated_roster(archive, roster))
+    if not _bound_roster(archive, roster):
+        raise AnalysisRefusal("context_roster_differs_from_archive")
+    references = roster_references(roster)
     return frozenset(_excluded(archive)) & frozenset(references)
 
 
@@ -200,11 +289,11 @@ def build_context(window: AnalysedWindow, archive: ArchiveHandle, kept_units: Ke
     """One explicit call per window and bound; never mutate an earlier context."""
     if archive.window != window or kept_units.window != window:
         raise AnalysisRefusal("context_window_mismatch")
-    actual = authenticated_roster(archive, roster)
     if (kept_units.roster_sha256 != hashlib.sha256(archive.output_bytes("derived/roster.json")).hexdigest()
             or kept_units.exclusions_sha256 != hashlib.sha256(archive.output_bytes("derived/exclusions.json")).hexdigest()):
         raise AnalysisRefusal("context_kept_units_mismatch")
     _kept_tripwire(archive, kept_units, row)
+    actual = rebuilt_roster(archive, row, roster)
     survivors = survivor_set(archive, row, actual)
     excluded = excluded_references(archive, actual)
     excluded_reference_in_screen(archive, survivors, excluded)
