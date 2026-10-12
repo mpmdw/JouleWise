@@ -282,6 +282,77 @@ class EraRecordTests(unittest.TestCase):
             census.census(self.tree.root)
 
 
+class SealedInventoryEraRecordTests(unittest.TestCase):
+    """Every sealed file records the claim commit, including non-core code."""
+
+    INVENTORY_PATH = "configs/campaigns/v5_claim_25g83/sealed_inventory.json"
+
+    def setUp(self) -> None:
+        self.tree = MiniatureTree()
+        self.addCleanup(self.tree.close)
+        root = self.tree.root
+        sources = {
+            "joulewise/whole_window.py": b"def whole_window():\n    return 1\n",
+            "joulewise/b5/harvest.py": b"def harvest():\n    return 2\n",
+            "joulewise/calibration_bracketing.py": b"def bracket():\n    return 3\n",
+            "scripts/harvest_b5_window.py": b"print('harvest window')\n",
+            "configs/campaigns/packx/run_01.json": self.tree.path(
+                "configs/campaigns/packx/run_01.json").read_bytes(),
+        }
+        for name, raw in sources.items():
+            path = self.tree.path(name)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(raw)
+        _git(root, "add", ".")
+        _git(root, "commit", "-qm", "claim code")
+        self.era = _git(root, "rev-parse", "HEAD")
+        self.record = {"head": self.era, "files": {name: sha(raw) for name, raw in sources.items()}}
+        self.inventory = self.tree.path(self.INVENTORY_PATH)
+        self.inventory.parent.mkdir(parents=True, exist_ok=True)
+        self.inventory.write_text(json.dumps(self.record, indent=2) + "\n", encoding="utf-8")
+        # Every recorded file changes, even code the registry does not check
+        # against the current tree. No sealed digest follows those changes.
+        for name, raw in sources.items():
+            self.tree.path(name).write_bytes(raw + b"\n")
+        _git(root, "add", ".")
+        _git(root, "commit", "-qm", "analysis code after claim")
+        with redirect_stdout(io.StringIO()):
+            census.main(["--write", "--root", str(root)])
+
+    def test_all_sealed_files_bind_once_and_survive_later_edits(self) -> None:
+        registry = census.load_registry(self.tree.root)
+        self.assertEqual(rows_by_path(registry)[self.INVENTORY_PATH], sorted(
+            ("/files/" + name.replace("/", "~1"),
+             "estimator_code" if name in census.MEASUREMENT_CORE else "pack_config_bytes",
+             f"file@{self.era}:{name}") for name in self.record["files"]))
+        sealed_bytes = self.inventory.read_bytes()
+        self.assertEqual(self.tree.check(), (0, "PASS 1 pin families current\n"))
+        # A later lane edit needs neither a new inventory row nor a repin.
+        for name in self.record["files"]:
+            path = self.tree.path(name)
+            path.write_bytes(path.read_bytes() + b"\n")
+        self.assertEqual(self.tree.check(), (0, "PASS 1 pin families current\n"))
+        self.assertEqual(census.load_registry(self.tree.root), registry)
+        self.assertEqual(self.inventory.read_bytes(), sealed_bytes)
+
+    def test_tampered_sealed_core_digest_fails_and_is_not_rewritten(self) -> None:
+        self.tree.edit(self.INVENTORY_PATH, self.record["files"]["joulewise/whole_window.py"],
+                       sha("different whole-window bytes"))
+        code, output = self.tree.check()
+        self.assertEqual(code, 1)
+        self.assertIn("no longer carries the target's digest at its recorded commit", output)
+        sealed_bytes = self.inventory.read_bytes()
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(repin.write_registry_family("estimator_code", self.tree.root), 1)
+        self.assertEqual(self.inventory.read_bytes(), sealed_bytes)
+
+    def test_moving_the_sealed_claim_commit_fails(self) -> None:
+        self.tree.edit(self.INVENTORY_PATH, self.era, _git(self.tree.root, "rev-parse", "HEAD"))
+        code, output = self.tree.check()
+        self.assertEqual(code, 1)
+        self.assertIn("not the recorded one", output)
+
+
 class RealTreeTests(unittest.TestCase):
     def test_committed_registry_kind_p_rows_are_current(self) -> None:
         stale, warnings = repin.registry_stale(ROOT)
