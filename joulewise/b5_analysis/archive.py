@@ -115,7 +115,9 @@ def open_attempt_record(entry: IndexEntry, *, seal_pins: SealPins) -> AttemptRec
     if (not isinstance(checkout, dict) or checkout.get("head") != pin["head"]
             or checkout.get("files") != dict(pin["files"])):
         raise AnalysisRefusal("harvest_commit_not_the_pinned_one")
-    checkout_flags = ("harvest_checkout_status_not_clean",) if checkout.get("status_clean") is False else ()
+    checkout_flags = ("harvest_checkout_status_not_clean",) if (
+        checkout.get("status_clean") is not True or checkout.get("status_lines") != 0
+        or checkout.get("errors") != []) else ()
     # Check 4: full document or one of the two actual writer stubs.
     exclusions = _json(_output(record, root, "derived/exclusions.json", census),
                        "exclusions_record_shape_mismatch")
@@ -263,4 +265,11 @@ def open_archive(window: AnalysedWindow, *, seal_pins: SealPins) -> ArchiveHandl
     census = {row.path: row for row in record.census}
     parsed = _json(_read(window.archive_root, "harvest.json", window.harvest_record_sha256,
                          "harvest_record_not_the_indexed_one", "window_index", census), "harvest_record_shape_mismatch")
+    # RULING.md Z1 supersedes design T6 for analysed windows. A pinned file
+    # digest cannot establish the bytes of every imported module in a dirty
+    # checkout. History-only attempts retain the structural flag above.
+    checkout = parsed["harvest_checkout"]
+    if (checkout.get("status_clean") is not True or checkout.get("status_lines") != 0
+            or checkout.get("errors") != []):
+        raise AnalysisRefusal("harvest_checkout_not_clean")
     return ArchiveHandle(window, parsed, census)

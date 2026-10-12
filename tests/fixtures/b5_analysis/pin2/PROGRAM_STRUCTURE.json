@@ -1,0 +1,26 @@
+{
+  "harvest_pin": "224a264c5faaae90cdf56118df37e773a932700b",
+  "neg8_reference_loss_codes": [
+    "battery.accumulator_excursion",
+    "battery.capture_pair_failed",
+    "battery.member_span",
+    "battery.unmeasured",
+    "clock.step_overlap",
+    "contention.request_overlap",
+    "contention.unmeasured",
+    "env.member_quiet_state_violated",
+    "member.admission_aborted",
+    "member.anchor_not_bounded",
+    "member.anchor_recompute_mismatch",
+    "member.bytes_ambiguous",
+    "member.bytes_missing",
+    "member.reduction_mismatch",
+    "member.strict_validation_failed",
+    "member.timeout",
+    "member.unreadable",
+    "model.identity_mismatch",
+    "model.identity_underivable",
+    "thermal.os_level_nonzero",
+    "thermal.powermetrics_pressure_elevated"
+  ]
+}

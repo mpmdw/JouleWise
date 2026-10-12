@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 from dataclasses import dataclass, replace
+from decimal import Decimal
 import hashlib
 import io
 import json
@@ -26,6 +27,16 @@ PINS_PATH = ROOT / "configs/analysis/b5/seal_pins.json"
 FIXTURES = ROOT / "tests/fixtures/b5_analysis"
 _TEMPLATES = {}
 _REFERENCE_TEMPLATES = {}
+
+# Exact synthetic seconds. Both the archived ledger and bracket candidates use
+# this pair; the real evaluator adds the registered bracket drift allowance.
+POST_CAPTURE_BOUND_MARKER_S = Decimal("0.001")
+PRE_CAPTURE_BOUNDS_S = {"alpha": Decimal("0.025"), "beta": Decimal("0.026"), "gamma": Decimal("0.027")}
+
+
+def capture_bounds(pack):
+    pre = PRE_CAPTURE_BOUNDS_S[pack]
+    return pre, pre + POST_CAPTURE_BOUND_MARKER_S
 
 NAMED_FIXTURES = {"ALPHA_STD": ("alpha", "pin2", ()), "BETA_STD": ("beta", "pin4", ()),
                   "GAMMA_STD": ("gamma", "pin4", ())}
@@ -145,6 +156,7 @@ def build_window(pack, *, shape="pin4", variants=()):
     if set(variants) - allowed:
         raise ValueError("unknown synthetic variant")
     root = Path(tempfile.mkdtemp(prefix=f"b5-s0-{pack}-{shape}-"))
+    pre_bound, post_bound = capture_bounds(pack)
     atexit.register(shutil.rmtree, root, ignore_errors=True)
     members = tuple((f"s0-mock-r{i:02d}", "absolute_repeat", None, None, None, "01_abs") for i in range(1, 11))
     members += tuple((f"s0-mock-b{i:02d}-{pos.lower()}", "comparative_abba_member", f"s0-mock-b{i:02d}",
@@ -159,7 +171,14 @@ def build_window(pack, *, shape="pin4", variants=()):
             super()._build_runs()
 
         def _build_ledger(self, prefix_ledger):
-            super()._build_ledger(prefix_ledger)
+            # Patch only the harness's synthetic capture call; do not rewrite
+            # an append-only ledger after it has been finalized.
+            finalize = hb.finalize_bracket_session_slot
+            def finalize_capture(*args, **kwargs):
+                kwargs["exact_bound_lexeme_s"] = str(pre_bound if kwargs["slot"] == "pre" else post_bound)
+                return finalize(*args, **kwargs)
+            with mock.patch.object(hb, "finalize_bracket_session_slot", finalize_capture):
+                super()._build_ledger(prefix_ledger)
             if pack != "gamma" or shape != "pin4":
                 return
             from joulewise import calibration_ledger as cl
@@ -196,7 +215,8 @@ def build_window(pack, *, shape="pin4", variants=()):
                 capture = Path(slots[slot]["custody_locator"])
                 cl.finalize_bracket_session_slot(self.ledger, session_id=hb.SESSION_ID, slot=slot, disposition="valid",
                     custody_locator=str(capture), artifact_sha256=cl.artifact_hashes(capture), identity_epoch=epoch,
-                    t1_bindings=bindings, capture_wall_time_s="99.0" if slot == "pre" else "111.0", exact_bound_lexeme_s="0.025")
+                    t1_bindings=bindings, capture_wall_time_s="99.0" if slot == "pre" else "111.0",
+                    exact_bound_lexeme_s=str(pre_bound if slot == "pre" else post_bound))
 
         def _build_catalog(self, _overrides):
             target = self.measurement / "configs/campaigns/v5_claim_25g83/flag_catalog.json"
@@ -396,7 +416,8 @@ def build_window(pack, *, shape="pin4", variants=()):
         # the calibration test's synthetic snapshot/candidates (no hardware reads).
         evaluator = trigger.WindowEvidenceTests()
         evaluator.setUp()
-        fixture = evaluator.fixture(systematics=(456,) if pack == "gamma" and shape == "pin4" else ())
+        fixture = evaluator.fixture(p=str(pre_bound), q=str(post_bound),
+                                    systematics=(456,) if pack == "gamma" and shape == "pin4" else ())
         def evaluate(*args, **kwargs):
             snapshot, candidates, binding = fixture
             call = evaluator.kwargs(snapshot, binding)
@@ -462,7 +483,11 @@ def build_named(name):
 
 def export_fixtures(shape, destination, *, case=None):
     """Run inside the pin export; preserve archive bytes, never transform a shape."""
+    from joulewise.b5 import harvest
     destination = Path(destination)
+    put(destination / "PROGRAM_STRUCTURE.json", {
+        "harvest_pin": os.environ["B5_S0_EXPORT_PIN"],
+        "neg8_reference_loss_codes": sorted(harvest.NEG8_REFERENCE_LOSS_CODES)})
     cases = (("STD", ()), ("REPEAT6_REMOVED", ("REPEAT6_REMOVED",)), ("QUAD_MEMBER_REMOVED", ("QUAD_MEMBER_REMOVED",)),
              ("NOT_USABLE", ("NOT_USABLE",)),
              *((name, (name,)) for name in ("SIX_QUADS_REMOVED", "FIVE_QUADS_REMOVED", "WRITER_DROPPED_SCIENCE_MEMBER",

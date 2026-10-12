@@ -1,5 +1,6 @@
 """Executable comparison with both pinned programs, on synthetic bytes only."""
 import json
+from decimal import Decimal
 from pathlib import Path
 import unittest
 
@@ -101,6 +102,9 @@ class FixtureShapeTests(unittest.TestCase):
         required = {"member.strict_validation_failed", "member.bytes_missing", "contention.unmeasured",
                     "env.member_quiet_state_violated"}
         self.assertTrue(required <= set(harvest.NEG8_REFERENCE_LOSS_CODES))
+        pinned = read(fx.FIXTURES / "pin2", "PROGRAM_STRUCTURE.json")
+        self.assertEqual(pinned["harvest_pin"], self.pins.pins["pin2"]["head"])
+        self.assertEqual(set(pinned["neg8_reference_loss_codes"]), set(harvest.NEG8_REFERENCE_LOSS_CODES))
         # The pin2 source itself is kept with its export and can be checked
         # through the archive's recorded program hashes. The shape test also
         # exercises a real validity-code loss below.
@@ -113,6 +117,7 @@ class FixtureShapeTests(unittest.TestCase):
             self.assertFalse(screen["survivors"]["midpoint_lost"])
             self.assertIn("midpoint", {row["position"] for row in screen["survivors"]["reference_losses"]})
         with fx.build_window("beta", variants=("SOURCES_RECOVERED", "REFERENCES_INSUFFICIENT")) as built:
+            self.assert_capture_bounds(built)
             screen = read(built.archive, "derived/neg8-screen.json")["rescreen"]
             self.assertEqual(screen["survivors"]["survivor_screen"], "references_insufficient")
             self.assertTrue(screen["survivors"]["midpoint_lost"])
@@ -125,6 +130,15 @@ class FixtureShapeTests(unittest.TestCase):
             handle = open_archive(AnalysedWindow.from_record(record), seal_pins=self.pins)
             self.assertEqual(handle.compare_runs_root(), ())
 
+    def test_all_exported_pin2_capture_pairs_use_marker(self):
+        for directory in sorted((fx.FIXTURES / "pin2").iterdir()):
+            if not directory.is_dir():
+                continue
+            data = read(directory, "INDEX_ENTRY.json")
+            variants = () if directory.name == "STD" else (directory.name,)
+            with self.subTest(case=directory.name), fx.build_window(data["pack"], shape="pin2", variants=variants) as built:
+                self.assert_capture_bounds(built)
+
     def test_standard_real_writer_claim_licensing_and_failed_row(self):
         for built in (self.beta, self.gamma):
             self.assertEqual(built.writer_row["status"], "failed")
@@ -134,6 +148,32 @@ class FixtureShapeTests(unittest.TestCase):
         _, entry = self.pin2()
         self.assertTrue(open_attempt_record(entry, seal_pins=self.pins).claim_usable)
 
+    def assert_capture_bounds(self, built):
+        from joulewise.calibration_ledger import load_calibration_ledger_snapshot
+        from tests.test_harvest_b5_window import SESSION_ID
+        snapshot = load_calibration_ledger_snapshot(
+            built.archive / "sources/ledger/calibration_observation_ledger.jsonl",
+            built.archive / "derived/terminal-pin.json", require_committed_pin=False,
+            verify_custody=False, repo_root=built.measurement)
+        self.assertEqual(snapshot.refusal_reasons, ())
+        slots = {row.bracket_slot: Decimal(row.exact_bound_lexeme_s) for row in snapshot.observations
+                 if row.bracket_session_id == SESSION_ID and row.bracket_slot in ("pre", "post")}
+        self.assertEqual(set(slots), {"pre", "post"})
+        self.assertEqual(slots["post"] - slots["pre"], fx.POST_CAPTURE_BOUND_MARKER_S)
+        assessment = read(built.archive, "withheld/bracket-evaluation.json")["assessment"]
+        self.assertEqual(Decimal(assessment["pre"]["b_fiducial_decimal_s"]), slots["pre"])
+        self.assertEqual(Decimal(assessment["post"]["b_fiducial_decimal_s"]), slots["post"])
+        allowance = assessment["acceptance"]["allowance"]
+        operative = Decimal(allowance["operative_b_fiducial_decimal_s"])
+        self.assertEqual(operative, max(slots.values()) + Decimal(allowance["value_s"]))
+        self.assertEqual(float(operative), assessment["b_fiducial_s"])
+        return operative
+
+    def test_distinct_capture_and_window_operative_bounds(self):
+        with fx.build_named("ALPHA_STD") as alpha:
+            bounds = [self.assert_capture_bounds(built) for built in (alpha, self.beta, self.gamma)]
+        self.assertEqual(len(set(bounds)), 3)
+
     def test_named_removals_and_minimum_boundary(self):
         for variant, repeat_n, quad_n, usable in (("REPEAT6_REMOVED", 9, 10, True), ("QUAD_MEMBER_REMOVED", 10, 9, True),
                                                 ("SIX_QUADS_REMOVED", 10, 4, False), ("FIVE_QUADS_REMOVED", 10, 5, True)):
@@ -142,11 +182,13 @@ class FixtureShapeTests(unittest.TestCase):
                 cell = exclusions["cells"][0]
                 self.assertEqual(cell["n_kept"], {"repeat": repeat_n, "quad": quad_n})
                 self.assertEqual(built.entry.claim_usable, usable)
+                self.assert_capture_bounds(built)
 
     def test_writer_dropped_members_have_the_real_condition_mapping(self):
         for variant in ("WRITER_DROPPED_SCIENCE_MEMBER", "WRITER_DROPPED_REFERENCE"):
             with self.subTest(variant=variant), fx.build_window("beta", variants=(variant,)) as built:
                 row = built.writer_row
+                self.assert_capture_bounds(built)
                 self.assertIn("whole_window_bundle_invalid", row["idle_admission_core"]["conditions"])
                 excluded = {item["bundle_id"] for item in row["excluded_bundles"]}
                 failures = {item["member_id"] for item in row["member_failures"] if item["reason_code"] == "whole_window_bundle_invalid"}
@@ -154,13 +196,22 @@ class FixtureShapeTests(unittest.TestCase):
                 self.assertEqual(len(excluded), 1)
                 if variant == "WRITER_DROPPED_REFERENCE":
                     screen = read(built.archive, "derived/neg8-screen.json")
-                    self.assertTrue(screen["harvest_reference_losses"])
+                    # The pinned harvest projects recorded manifests onto the
+                    # writer's included-member basis. The writer-dropped id is
+                    # absent from that projection, so it is not a new harvest
+                    # loss (design 6.3 item 1 already identifies this omission).
+                    dropped = next(iter(excluded))
+                    self.assertNotIn(dropped, row["bundle_ids"])
+                    self.assertNotIn(dropped, screen["harvest_reference_losses"])
+                    self.assertEqual(screen["rescreen"]["survivors"]["reference_counts"],
+                                     {"start": 3, "midpoint": 1, "end": 2})
 
     def test_d5_d6_d7_sources_recovered_and_bundle_absent(self):
         aroot, _ = self.pin2()
         self.assertNotIn("reference_source", read(aroot, "derived/neg8-allowance.json"))
         self.assertNotIn("reference_source", read(aroot, "derived/neg8-screen.json")["rescreen"])
         with fx.build_window("beta", variants=("SOURCES_RECOVERED",)) as built:
+            self.assert_capture_bounds(built)
             self.assertEqual(built.writer_row["source_campaign_manifests"], [])
             screen = read(built.archive, "derived/neg8-screen.json")["rescreen"]
             self.assertEqual(screen["reference_source"]["source"], "claim_campaign_manifests_authenticated")  # D5
@@ -169,12 +220,14 @@ class FixtureShapeTests(unittest.TestCase):
             losses = screen["survivors"]["reference_losses"]
             self.assertIn("bundle_absent", {loss["reason"] for loss in losses})  # D7
         with fx.build_window("gamma", variants=("MIDPOINT_LOST",)) as built:
+            self.assert_capture_bounds(built)
             screen = read(built.archive, "derived/neg8-screen.json")["rescreen"]
             self.assertTrue(screen["survivors"]["midpoint_lost"])
             self.assertEqual(screen["decision"], "passed")
 
     def test_stored_neg8_passed_variant(self):
         with fx.build_window("beta", variants=("STORED_NEG8_PASSED",)) as built:
+            self.assert_capture_bounds(built)
             self.assertEqual(built.writer_row["idle_admission_core"]["neg8_bracket"]["decision"], "passed")
             self.assertEqual(read(built.archive, "derived/neg8-allowance.json")["source"], "survivor_rescreen")
 

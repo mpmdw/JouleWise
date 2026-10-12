@@ -68,6 +68,29 @@ class AttemptRecordTests(unittest.TestCase):
         step = step_record("0", flags=record.checkout_flags)
         self.assertIn("harvest_checkout_status_not_clean", step.as_dict()["flags"])
 
+    def history_checkout(self, **changes):
+        # This attempt belongs only to history: its exclusions are not usable.
+        self.entry = fx.structural_archive(Path(self.tmp.name) / "history", usable=False)
+        self.root = self.entry.archive_root
+        def dirty(row):
+            row["harvest_checkout"].update(changes)
+        self.edit("harvest.json", dirty)
+        self.edit("derived/exclusions.json", dirty)
+        record = self.read()
+        self.assertFalse(record.claim_usable)
+        self.assertEqual(record.checkout_flags, ("harvest_checkout_status_not_clean",))
+        from joulewise.b5_analysis.steps import step_record
+        self.assertIn("harvest_checkout_status_not_clean", step_record("0", flags=record.checkout_flags).as_dict()["flags"])
+
+    def test_unanalysed_dirty_status_is_flagged(self):
+        self.history_checkout(status_clean=False)
+
+    def test_unanalysed_nonzero_status_lines_is_flagged(self):
+        self.history_checkout(status_lines=1)
+
+    def test_unanalysed_checkout_errors_are_flagged(self):
+        self.history_checkout(errors=["status:git_exit_1"])
+
     def test_check4_catalog(self):
         self.edit("derived/exclusions.json", lambda row: row.update(catalog_sha256="0" * 64))
         self.refuses("exclusions_catalog_mismatch")

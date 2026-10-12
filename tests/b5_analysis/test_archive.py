@@ -38,6 +38,39 @@ class ArchiveTests(unittest.TestCase):
         with self.assertRaisesRegex(AnalysisRefusal, "^attempt_not_claim_usable$"):
             open_archive(window, seal_pins=self.pins)
 
+    def dirty_checkout(self, **changes):
+        record = json.loads((self.root / "harvest.json").read_bytes())
+        record["harvest_checkout"].update(changes)
+        exclusions = json.loads((self.root / "derived/exclusions.json").read_bytes())
+        exclusions["harvest_checkout"] = record["harvest_checkout"]
+        fx.put(self.root / "derived/exclusions.json", exclusions)
+        record["outputs"]["derived/exclusions.json"] = fx.sha(self.root / "derived/exclusions.json")
+        fx.put(self.root / "harvest.json", record)
+        entry = replace(self.entry, harvest_record_sha256=fx.sha(self.root / "harvest.json"))
+        return AnalysedWindow.from_record(open_attempt_record(entry, seal_pins=self.pins))
+
+    def test_analysed_dirty_status_refuses(self):
+        window = self.dirty_checkout(status_clean=False)
+        with self.assertRaisesRegex(AnalysisRefusal, "^harvest_checkout_not_clean$"):
+            open_archive(window, seal_pins=self.pins)
+
+    def test_analysed_nonzero_status_lines_refuses(self):
+        window = self.dirty_checkout(status_lines=1)
+        with self.assertRaisesRegex(AnalysisRefusal, "^harvest_checkout_not_clean$"):
+            open_archive(window, seal_pins=self.pins)
+
+    def test_analysed_checkout_errors_refuse(self):
+        window = self.dirty_checkout(errors=["status:git_exit_1"])
+        with self.assertRaisesRegex(AnalysisRefusal, "^harvest_checkout_not_clean$"):
+            open_archive(window, seal_pins=self.pins)
+
+    def test_analysed_status_must_be_exactly_true(self):
+        for value in (None, 1, "true"):
+            with self.subTest(value=value):
+                window = self.dirty_checkout(status_clean=value)
+                with self.assertRaisesRegex(AnalysisRefusal, "^harvest_checkout_not_clean$"):
+                    open_archive(window, seal_pins=self.pins)
+
     def test_analysed_pin3_is_unsupported(self):
         entry = fx.archived_entry("pin3", "NOT_USABLE")
         record = open_attempt_record(entry, seal_pins=self.pins)
