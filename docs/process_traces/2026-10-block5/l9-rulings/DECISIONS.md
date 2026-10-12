@@ -82,11 +82,34 @@ Both seats were blind to each other and to the judge. Dispositions:
 
 ## 4. The erratum's outcome
 
-(Filled when `ERRATUM-RULING.md` exists.)
+`ERRATUM-RULING.md` (sha256 `a0336dd9…3f37`), a second cold Fable 5.1 session, last line `RULING: ALL RULED`.
+
+- **X1**: a reference the exclusion function removed may not be a survivor of the screen. The sealed text is
+  silent on the general case; the ruling fills the silence by the registration's own test. The pinned
+  harvests do not apply it (twenty member-removing codes are outside the loss list at both pins), so the
+  analysis checks it by structure: `excluded_reference_in_screen` fires when a window's survivor set and its
+  excluded references intersect, whatever the code. It subsumes J2's tripwire. The survivor set is computed
+  (basis references less both loss lists) and cross-checked against the recorded counts
+  (`survivor_set_count_mismatch`). If the check fires: that window alone is harvested again at a new pin after
+  a cold gate, J4 items 5 to 9. J1 item 5 is replaced (a stored member condition naming a reference is answered
+  only when that reference is not a survivor) and item 9 amended to match.
+- **X2**: the continuity record that the bundles do not reproduce stays a refusal
+  (`adapter_continuity_record_mismatch`); only the stored decision word is disclosed and not refused.
+- **X3**: on a block-5 root with a context the stored-bracket replay authenticates the endpoint fields that
+  do not depend on the bound and takes the allowance, decision and freshness from the authenticated allowance
+  record and the withheld re-screen bracket. The consumer never re-runs the survivor screen. On the Erratum 2
+  catalog path the authenticated catalog manifests feed the core re-derivation; the judge found by execution
+  that an empty manifest list makes today's re-derivation return no reason at all (a silent skip), so it
+  becomes the stop `core_rederivation_sources_empty`. Main's evaluator lacks four keyword arguments the
+  pinned one has; the lane's base merge already brings the pinned file, so stage S3 starts from it.
+
+Stage S3's brief carries `RULING.md` section J1 as amended by `ERRATUM-RULING.md`, and both files whole.
+The seal-record addendum (stage S11) carries every "(d)" sentence of both rulings.
 
 ## 5. Gates that ran in this phase, and what each caught that touches a number
 
 | Gate | Caught |
 |---|---|
 | Cold judge on J1 to J8 | The validator would still refuse every window with a removed member whose admission failed (J1 item 9); the leave-one-out threshold can read a manifest field instead of the floor (Z2); three sealed sentences false of the code, one of which (plan 133 to 135) would have changed every floor had the code been changed to match |
+| The one erratum | An empty source list silently skips the consumer's whole admission re-derivation on the catalog path (found by execution) |
 | Two-seat consult | A reference the exclusion function removed can set a drift allowance (both seats); the stored-bracket replay refuses every row (Sol); the operative bound has no owner (both) |
