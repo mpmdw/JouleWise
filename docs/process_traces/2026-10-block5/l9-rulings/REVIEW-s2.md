@@ -19,3 +19,5 @@ governed window's.
 | N6 | The authenticated `calibration_bracket` block of `harvest.json` is not compared with the module's scope and result | Fix: compare scope, status, reasons and the governed word (`window_bracket_differs_from_harvest`) |
 | N7 | The epoch filter of B_max ignores continued epochs; the continuation registry is empty in this tree | Fix, small: refuse `block_b_max_invalid` if the registry is not empty, so a later change cannot pass silently |
 | N4, N8 | A row with no bound refuses B_max; capture bytes are read from ledger locators outside the archive handle (hash-verified against the ledger) | Kept as they are: both fail closed |
+
+Fix round (Sol 6.1): every row marked Fix is built and tested at `lane/2026-10-12-l9-s2`. Row S4 took the recomputation route: neither pinned harvest records a digest of the assessments file except on strict-failure flags, so the selection is recomputed from authenticated roster and bundle bytes and compared with the recorded one. Row N1 took the frozen wrapper. The seat's run: 48 tests pass, 21 of 21 mutants killed.
