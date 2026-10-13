@@ -114,9 +114,11 @@ The instrument (`powermetrics`, the macOS power sampler) does not report
 instantaneous power; each record is the average power over the interval
 since the previous record.
 
-*Example.* The instrument is asked for one record every 100 ms, so a 2 s
-decode interval is covered by about 20 records, and a phase boundary that
-falls inside a record splits that record's energy between two phases.
+*Example.* The instrument is asked for one record every 100 ms and in
+practice delivers one about every 130 ms, so a 2 s decode interval is
+covered by about 18 records (the 2026-10-09 rehearsal's count), and a phase
+boundary that falls inside a record splits that record's energy between two
+phases.
 
 *In code:* `sampling_interval_ms` (value 100); the paper skeleton's
 "averaging window".
