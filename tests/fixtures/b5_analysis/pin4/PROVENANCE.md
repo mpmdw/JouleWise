@@ -42,9 +42,11 @@ Complete archives, including synthetic raw streams, are compressed as
 `archive.tar.xz` without rewriting their bytes. `INDEX_ENTRY.json` retains
 original synthetic paths and the record digest. Normal tests load those
 committed bytes without calling git or executing the current tree's writer.
-Only builder-owned `/private/tmp/b5-s0-*` roots are restored; unknown existing
-roots are preserved and refused. Handles to one base share its original
-bindings, with cleanup after the last handle closes.
+Each handle restores a private temporary copy, relocates its synthetic
+locators and rebinds the hashes covering those changes. The committed archive
+and index remain byte-identical. Temporary roots use the platform's default
+temporary directory; loading needs no `/private/tmp` directory or shared
+machine path. Each handle cleans up only its own root.
 
 The minimal full-window case set is:
 
