@@ -491,8 +491,26 @@ This note looked for strictness. The seats were asked to look the other way and 
    an average over about 130 ms. The reducer gives a phase the share of a record's energy equal to the share
    of the record's time inside the phase. For a synthetic 42 W rectangle of 0.62 s with nothing outside it,
    the seat got 23.64 J with an upper bound of 25.13 J against 26.04 J constructed. Whether this reaches a
-   number the paper prints, and whether the printed uncertainty covers it for the real shapes, is under
-   investigation (`threshold-council/F5-investigation.md`); the outcome is recorded in RUN_STATE.
+   number the paper prints was investigated the same night by execution
+   (`/Users/edr/night-archive/b5-consults/threshold-council/F5-investigation.md`, scripts beside it). Outcome:
+   the effect is real and it is already the registered definition, not a defect. The decision log (D-078
+   addendum of 2026-09-04) defines the printed phase energy as the energy assigned by time overlap, and the
+   block-5 registration says the printed bound "does not bound the physical energy of the phase". What was
+   missing is its size on real shapes, now measured on the 22 prefill runs of the 2026-10-09 rehearsal (not a
+   claim session): the assigned prefill energy is lower than a single-step reconstruction by 0.60 J on
+   average (0.03 to 1.05 J; 2.3%), inside each run's own printed bound (1.45 J on average) for 22 of 22;
+   decode by 0.07 J. Per edge the offset is f(1-f) x T x (power inside minus power outside), where T is the
+   record length and f the fraction of the edge record inside the phase: at most T/4 times the power step.
+   The two phases' offsets at their shared edge cancel, and the expected offset cancels between two
+   configurations of the same shape, so a contrast is not biased by it. Two consequences. For the paper: one
+   sentence in the threats section giving this size. For the next block: where the record straddles an edge,
+   reconstructing a single power step instead of sharing by time removed the 0.60 J offset and cut the
+   run-to-run standard deviation of prefill energy from 0.379 J to 0.083 J on the rehearsal (a factor of
+   4.6): most of the scatter between repeats is this allocation effect, not the machine. That is a change
+   of the estimator and needs a registration, and it bears on the run count (R1) more than any other row
+   here. One open check: for the whole request (prefill plus decode) the offset exceeded the stored bound
+   in 10 of 22 rehearsal runs; block 5 is believed to print the two phase energies only, and that is
+   confirmed against the analysis plan's cell list before any whole-request number is printed.
 
 ### 8.3 Quiet-machine measurements (for the headless orchestrator; no agent session alive while they run)
 
