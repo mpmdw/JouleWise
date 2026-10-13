@@ -309,7 +309,7 @@ class ClaimSideBoundTests(unittest.TestCase):
         contrast["estimator"]["estimate"] = 10.5
         contrast["floor"]["active_floor_j"] = 2
         floor_raw = encoded(self.floor)
-        self.verdicts.update(evidence_class="current", inputs={"floor_artifact": {
+        self.verdicts.update(inputs={"evidence_class": "current", "floor_artifact": {
             "embedded_bytes_base64": base64.b64encode(floor_raw).decode()}})
         self.raw = encoded(self.verdicts)
         raws = {custody.InputRole.CLAIM_VERDICTS: self.raw,
@@ -320,7 +320,9 @@ class ClaimSideBoundTests(unittest.TestCase):
                                   base="repository", path=Path("synthetic-manifest.json"))
         ctx = SimpleNamespace(raws=raws, sources=(binding,), repository=Path("."),
                               runs_root=Path("."), subjects=("synthetic",))
-        with (mock.patch("joulewise.analysis_engine.artifact.validate_claim_verdicts", return_value=[]),
+        # Replay is mocked here; tests/b5_analysis/test_claim_replay.py tests it.
+        with (mock.patch.object(custody, "_replay_claim_verdicts", return_value=self.raw),
+              mock.patch("joulewise.analysis_engine.artifact.validate_claim_verdicts", return_value=[]),
               mock.patch("joulewise.analysis_manifest_v3.validate_finalized_analysis_manifest_v3", return_value=[]),
               mock.patch.object(custody, "_validate_floor_acceptance") as acceptance,
               mock.patch("joulewise.analysis_engine.claims.evaluate_claim", wraps=evaluate_claim) as evaluate):

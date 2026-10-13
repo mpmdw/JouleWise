@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import contextvars
 import hashlib
 import inspect
 import json
@@ -22,6 +23,7 @@ from types import ModuleType
 from typing import Callable, Literal, overload
 
 from joulewise.authentication_io import (
+    read_authentication_input_nofollow,
     V2AuthenticationInputError,
     V2AuthenticationReadSession,
     V2_AUTHENTICATION_INPUT_CHANGED,
@@ -29,6 +31,9 @@ from joulewise.authentication_io import (
 )
 from joulewise.identity_pins import IdentityPinProjectionError, _mint_git_anchor
 
+
+_B5_WINDOW_INDEX_PATH = "configs/analysis/b5/analysed_windows.json"
+_CLAIM_REPLAY_SCHEMA = "joulewise.claim_replay_request.v1"
 
 _SUPPLY_MAP_PATH = "configs/paper_supply/supply_map.json"
 _SUPPLY_MAP_SCHEMA = "joulewise.paper_supply_map.v2"
@@ -83,6 +88,7 @@ class InputRole(str, Enum):
     STANDALONE_VERDICT = "standalone_verdict"
     PROSPECTIVE_MANIFEST = "prospective_manifest"
     PLAN = "plan"
+    CLAIM_REPLAY_REQUEST = "claim_replay_request"
     CLAIM_VERDICTS = "claim_verdicts"
     CLAIM_SIDE_BOUND = "claim_side_bound"
     TRANSFER_RESULT = "transfer_result"
@@ -367,7 +373,9 @@ class _FamilySpec:
     fixture_type: type
 
     def roles_for(self, mode: str) -> tuple[InputRole, ...]:
-        if mode == "production" and self.family in {"d165_closeout", "claim_evidence"}:
+        if mode == "production" and self.family == "claim_evidence":
+            return (*self.roles, InputRole.FLOOR_ACCEPTANCE, InputRole.CLAIM_REPLAY_REQUEST)
+        if mode == "production" and self.family == "d165_closeout":
             return (*self.roles, InputRole.FLOOR_ACCEPTANCE)
         return self.roles
 
@@ -459,6 +467,7 @@ class _ResolvedSupply:
     issuance_gate_id: str | None
     subjects: tuple[str, ...]
     source_census: tuple[_BoundFile, ...]
+    binding_census: _BoundFile | None = None
 
 
 @dataclass(frozen=True)
@@ -594,6 +603,88 @@ def _d165_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     return _FamilyReplay(True, True, tuple(grants), ())
 
 
+class _ClaimReplayRefused(Exception):
+    """Replay refusal with no input value or engine message in its wire."""
+
+
+def _tracked_window_index(ctx) -> Path:
+    raw = _git_blob(ctx.repository, ctx.head, _B5_WINDOW_INDEX_PATH)
+    current = read_authentication_input_nofollow(ctx.repository, _B5_WINDOW_INDEX_PATH,
+        grammar="json", label="tracked block-5 window index")
+    if current != raw:
+        raise _ClaimReplayRefused() from None
+    return ctx.repository / _B5_WINDOW_INDEX_PATH
+
+
+def claim_replay_request(*, claim_verdicts_sha256, analysis_manifest_sha256,
+                         floor_artifact_sha256, window_index_sha256, evidence_roots,
+                         legacy_l1_mechanics=False) -> bytes:
+    value = {"schema_version": _CLAIM_REPLAY_SCHEMA,
+        "claim_verdicts_sha256": claim_verdicts_sha256, "analysis_manifest_sha256": analysis_manifest_sha256,
+        "floor_artifact_sha256": floor_artifact_sha256, "window_index_sha256": window_index_sha256,
+        "evidence_roots": dict(evidence_roots), "legacy_l1_mechanics": legacy_l1_mechanics}
+    _check_claim_replay_request(value)
+    return _canonical_json_bytes(value)
+
+
+def _check_claim_replay_request(value):
+    keys = {"schema_version", "claim_verdicts_sha256", "analysis_manifest_sha256", "floor_artifact_sha256",
+            "window_index_sha256", "evidence_roots", "legacy_l1_mechanics"}
+    if (type(value) is not dict or set(value) != keys or value["schema_version"] != _CLAIM_REPLAY_SCHEMA
+        or value["legacy_l1_mechanics"] is not False
+        or any(type(value[k]) is not str or _SHA256_RE.fullmatch(value[k]) is None for k in
+               ("claim_verdicts_sha256", "analysis_manifest_sha256", "floor_artifact_sha256", "window_index_sha256"))
+        or type(value["evidence_roots"]) is not dict
+        or any(type(k) is not str or not k or type(v) is not str or v not in {"alpha", "beta"}
+               for k, v in value["evidence_roots"].items())):
+        raise _ClaimReplayRefused() from None
+
+
+def _replay_claim_verdicts(ctx, request) -> bytes:
+    """Replay the engine in a fresh context, preserving the custody read census."""
+    def replay():
+        from joulewise.analysis_engine import analyze_claims
+        from joulewise.analysis_engine.artifact import render_claim_verdicts
+        from joulewise.analysis_engine.inputs import block5_claim_gate_inputs, authenticate_floor_artifact_bytes
+        from joulewise.b5_analysis.windows import SealPins, load_window_index, select_analysed_attempts
+        from joulewise.b5_analysis.archive import open_attempt_record
+        from joulewise.cli import validate_bundle
+        _check_claim_replay_request(request)
+        for key, role in (("claim_verdicts_sha256", InputRole.CLAIM_VERDICTS),
+                          ("analysis_manifest_sha256", InputRole.FINALIZED_MANIFEST),
+                          ("floor_artifact_sha256", InputRole.FLOOR_ARTIFACT)):
+            if request[key] != _sha256(ctx.raws[role]):
+                raise _ClaimReplayRefused()
+        index_path = _tracked_window_index(ctx)
+        index_raw = _git_blob(ctx.repository, ctx.head, _B5_WINDOW_INDEX_PATH)
+        if request["window_index_sha256"] != _sha256(index_raw):
+            raise _ClaimReplayRefused()
+        pins = SealPins.load()
+        index = load_window_index(index_path, seal_pins=pins)
+        records = tuple(open_attempt_record(entry, seal_pins=pins) for entry in index.entries)
+        windows = select_analysed_attempts(index, records, seal_pins=pins)
+        declared = authenticate_floor_artifact_bytes(ctx.raws[InputRole.FLOOR_ARTIFACT]).root_ids
+        if set(request["evidence_roots"]) != declared:
+            raise _ClaimReplayRefused()
+        roots = {rid: windows[pack].claim_runs_root for rid, pack in request["evidence_roots"].items()}
+        manifest_binding = next(b for b in ctx.sources if b.role is InputRole.FINALIZED_MANIFEST)
+        floor_binding = next(b for b in ctx.sources if b.role is InputRole.FLOOR_ARTIFACT)
+        if manifest_binding.base != "runs_root" or floor_binding.base != "runs_root":
+            raise _ClaimReplayRefused()
+        manifest_path, floor_path = ctx.runs_root / manifest_binding.path, ctx.runs_root / floor_binding.path
+        built = block5_claim_gate_inputs(index_path, manifest_path, windows["gamma"].claim_runs_root, roots)
+        artifact = analyze_claims(manifest_path, windows["gamma"].claim_runs_root, floor_path,
+            strict_validator=validate_bundle, evidence_roots=roots, output_path=None,
+            kept_units=built["kept_units"], archive_contexts=built["archive_contexts"],
+            gamma_archive=built["gamma_archive"], neg8_harvest_archive=built["gamma_archive"].window.archive_root,
+            legacy_l1_mechanics=False)
+        return render_claim_verdicts(artifact)
+    try:
+        return contextvars.Context().run(replay)
+    except Exception:
+        raise _ClaimReplayRefused() from None
+
+
 def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     """Authenticate the v2 copy, then reevaluate claims only from verdicts."""
     from joulewise.analysis_engine.artifact import validate_claim_verdicts
@@ -608,7 +699,9 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     sidecar = ctx.raws[InputRole.CLAIM_SIDE_BOUND]
     codes = list(validate_finalized_analysis_manifest_v3(
         manifest, manifest_path=_binding_root(manifest_binding, ctx.repository, ctx.runs_root) / manifest_binding.path,
-        custody_root=ctx.runs_root))
+        custody_root=ctx.runs_root,
+        **({"window_index": ctx.repository / _B5_WINDOW_INDEX_PATH}
+           if InputRole.CLAIM_REPLAY_REQUEST in ctx.raws else {})))
     codes.extend(validate_claim_verdicts(artifact, frozen_manifest=manifest))
     codes.extend(validate_claim_side_bound(sidecar, claim_verdicts_raw=ctx.raws[InputRole.CLAIM_VERDICTS],
                                            finalized_manifest=manifest, floor_artifact=floor))
@@ -619,6 +712,15 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
         embedded_floor = None
     if embedded_floor != ctx.raws[InputRole.FLOOR_ARTIFACT]:
         codes.append("claim_floor_anchor_mismatch")
+    if not codes:
+        try:
+            request_raw = ctx.raws.get(InputRole.CLAIM_REPLAY_REQUEST)
+            request = _json_object(request_raw) if request_raw is not None else None
+            replayed = _replay_claim_verdicts(ctx, request)
+            if replayed != ctx.raws[InputRole.CLAIM_VERDICTS]:
+                codes.append("claim_verdicts_replay_mismatch")
+        except (ValueError, TypeError, _ClaimReplayRefused):
+            codes.append("claim_verdicts_replay_refused")
     if codes:
         return _FamilyReplay(False, False, (), tuple(codes))
     _validate_floor_acceptance(ctx)
@@ -629,7 +731,7 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     for subject in ctx.subjects:
         contrast = contrasts[subject]
         deterministic = contrast["deterministic_bounds"]
-        if artifact["evidence_class"] != "current" or contrast["sampling"]["confirmatory_status"] != "confirmatory":
+        if artifact["inputs"]["evidence_class"] != "current" or contrast["sampling"]["confirmatory_status"] != "confirmatory":
             continue
         floor_metadata_keys = {"floor_limit_class", "floor_source", "point_floor_diagnostics", "single_count_discipline"}
         floor_values = contrast["floor"]
@@ -640,7 +742,7 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
             adjusted_rejected=contrast["multiplicity"]["rejected"] is True,
             base_reason_codes=contrast["claim_evaluation"]["reason_codes"], equivalence=contrast.get("equivalence"),
             claim_role=contrast["claim_role"], confirmatory_status=contrast["sampling"]["confirmatory_status"],
-            evidence_class=artifact["evidence_class"],
+            evidence_class=artifact["inputs"]["evidence_class"],
             floor_metadata=({key: floor_values[key] for key in floor_metadata_keys}
                             if floor_metadata_keys <= set(floor_values) else None),
             hypothesized_direction=contrast.get("hypothesized_direction"),
@@ -652,16 +754,21 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     return _FamilyReplay(True, admitted, tuple(grants), ())
 
 
-# Register only completed gate implementations. Maps still contain no production
-# roles. Energy joins, F6, and transfer remain absent.
+def _reported_energy_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
+    from joulewise.paper_reported_energy_issuer import reported_energy_issuance_gate
+    return reported_energy_issuance_gate(ctx)
+
+
+# Static registration keeps validator-source identity independent of call order.
 _ISSUANCE_GATES: dict[tuple[str, str], Callable[[_GateContext], _FamilyReplay]] = {
     ("d165_closeout", "d165-closeout.v1"): _d165_issuance_gate,
     ("claim_evidence", "claim-evidence.v1"): _claim_issuance_gate,
+    ("reported_energy_parents", "reported-energy.v1"): _reported_energy_issuance_gate,
 }
 
 
 def _register_reported_energy_gate(gate_id: str, gate, *, repository: Path) -> None:
-    """Prospective registration only; no production energy gate is installed."""
+    """Register an additional prospective gate after verifying ordering."""
     from joulewise.paper_reported_energy import _verify_gate_ordering
     _verify_gate_ordering(repository)
     if not isinstance(gate_id, str) or not gate_id or not callable(gate):
@@ -738,6 +845,7 @@ def _validator_source_census(
             _replay_family, _validate_fixture_documents, _validate_production_documents,
             _run_issuance_gate, _register_reported_energy_gate, _validate_grants, _validate_floor_acceptance,
             _floor_binder_source_sha256, _d165_issuance_gate, _claim_issuance_gate,
+            _replay_claim_verdicts, _reported_energy_issuance_gate,
             _make_custody_capability_mint, _FamilySpec, _load_supply_entry,
             _read_once, _open_paper_input_impl,
         )
@@ -756,7 +864,9 @@ def _validator_source_census(
         from joulewise.analysis_engine.inputs import deterministic_bounds
         from joulewise.whole_window import validate_whole_window_verdict_row
 
+        from joulewise.paper_reported_energy_issuer import reported_energy_issuance_gate
         owners = (
+            ("paper_reported_energy_issuer.reported_energy_issuance_gate", reported_energy_issuance_gate),
             ("paper_reported_energy._validate_registered_spec", _validate_registered_spec),
             ("paper_reported_energy._project_cell", _project_cell),
             ("paper_reported_energy._validate_projection", _validate_projection),
@@ -813,13 +923,18 @@ def _validator_source_census(
             ),
         )
     elif family == "claim_evidence":
-        from joulewise.analysis_engine.artifact import validate_claim_verdicts, _validate_cross_field_claim_semantics
+        from joulewise.analysis_engine import analyze_claims
+        from joulewise.analysis_engine.inputs import block5_claim_gate_inputs
+        from joulewise.analysis_engine.artifact import validate_claim_verdicts, _validate_cross_field_claim_semantics, render_claim_verdicts
         from joulewise.analysis_engine.claims import evaluate_claim
         from joulewise.analysis_engine.claim_side_bound import validate_claim_side_bound, produce_claim_side_bound, _interval
         from joulewise.analysis_engine.ratio import validate_metric_unit_and_ratio, validate_ratio_estimand
         from joulewise.analysis_manifest_v3 import validate_finalized_analysis_manifest_v3
 
         owners = (
+            ("analysis_engine.analyze_claims", analyze_claims),
+            ("analysis_engine.artifact.render_claim_verdicts", render_claim_verdicts),
+            ("analysis_engine.inputs.block5_claim_gate_inputs", block5_claim_gate_inputs),
             ("analysis_engine.claims.evaluate_claim", evaluate_claim),
             ("analysis_engine.artifact._validate_cross_field_claim_semantics", _validate_cross_field_claim_semantics),
             ("analysis_engine.claim_side_bound.validate_claim_side_bound", validate_claim_side_bound),
@@ -996,6 +1111,7 @@ def _load_supply_entry(
     head: str,
     supply_role: str,
     spec: _FamilySpec,
+    *, runs_root: Path | None = None,
 ) -> _ResolvedSupply:
     raw = _git_blob(repository, head, _SUPPLY_MAP_PATH)
     try:
@@ -1031,6 +1147,32 @@ def _load_supply_entry(
     entry = roles.get(supply_role)
     if entry is None:
         raise PaperCustodyRefusal("paper_custody_role_unregistered")
+    census_binding = None
+    if isinstance(entry, dict) and "binding_census" in entry:
+        if (set(entry) != {"family", "validator", "mode", "issuance_gate_id", "subjects", "binding_census"}
+            or entry["mode"] != "production" or runs_root is None
+            or type(entry["binding_census"]) is not dict
+            or set(entry["binding_census"]) != {"base", "path"}
+            or entry["binding_census"]["base"] != "runs_root"):
+            raise PaperCustodyRefusal("paper_custody_supply_map_invalid")
+        census_path = entry["binding_census"]["path"]
+        probe = _map_binding({"base": "runs_root", "path": census_path,
+            "authority": "generated", "expected_sha256": "0" * 64},
+            role=InputRole.AUTHENTICATED_SOURCE, include_authority=True)
+        try:
+            census_raw = session.read_nofollow(runs_root, _relative_path(probe), grammar="json",
+                                               label="paper supply binding census")
+            census = _json_object(census_raw)
+        except (OSError, ValueError, V2AuthenticationInputError):
+            raise PaperCustodyRefusal("paper_custody_supply_map_invalid") from None
+        if (set(census) != {"schema_version", "supply_role", "inputs", "inventory", "receipt", "source_census"}
+            or census["schema_version"] != "joulewise.paper_supply_census.v1"
+            or census["supply_role"] != supply_role):
+            raise PaperCustodyRefusal("paper_custody_supply_map_invalid")
+        census_binding = _BoundFile("runs_root", probe.path, _sha256(census_raw),
+                                    InputRole.AUTHENTICATED_SOURCE, "generated")
+        entry = {**{k: v for k, v in entry.items() if k != "binding_census"},
+                 **{k: census[k] for k in ("inputs", "inventory", "receipt", "source_census")}}
     if not isinstance(entry, dict) or set(entry) != {
         "family",
         "inputs",
@@ -1091,7 +1233,8 @@ def _load_supply_entry(
         raise PaperCustodyRefusal("paper_custody_supply_map_invalid")
     source_census = tuple(_map_binding(row, role=InputRole.AUTHENTICATED_SOURCE,
                                       include_authority=True) for row in census)
-    bindings = (inventory, *sources, *source_census, receipt_file)
+    bindings = (inventory, *sources, *source_census, receipt_file,
+                *((census_binding,) if census_binding is not None else ()))
     identities = [
         (binding.base, _relative_path(binding)) for binding in bindings
     ]
@@ -1106,6 +1249,7 @@ def _load_supply_entry(
         issuance_gate_id=gate_id,
         subjects=tuple(subjects),
         source_census=source_census,
+        binding_census=census_binding,
     )
 
 
@@ -1413,12 +1557,13 @@ def _open_paper_input_impl(
 
     with V2AuthenticationReadSession() as session:
         supply = _load_supply_entry(
-            session, repository, head, ref.role, spec
+            session, repository, head, ref.role, spec, runs_root=runs_root
         )
         sources = supply.sources
         receipt_binding = supply.receipt.file
         consumed = (*sources, *supply.source_census)
-        bindings = (supply.inventory, *consumed, receipt_binding)
+        bindings = (supply.inventory, *consumed, receipt_binding,
+                    *((supply.binding_census,) if supply.binding_census is not None else ()))
         identities = [str((_binding_root(item, repository, runs_root) / item.path).resolve())
                       for item in bindings]
         if len(set(identities)) != len(identities):
@@ -1430,7 +1575,7 @@ def _open_paper_input_impl(
             expected_mode=supply.mode,
         )
         first = {supply.inventory: inventory_raw}
-        for binding in (*consumed, receipt_binding):
+        for binding in bindings[1:]:
             first[binding] = _read_once(session, repository, runs_root, binding,
                                         head=head, bindings=bindings)
         raws = {binding.role: first[binding] for binding in sources}

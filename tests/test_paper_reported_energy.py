@@ -490,12 +490,12 @@ class ReportedEnergyTests(unittest.TestCase):
             self.assertAlmostEqual(result["cells"][2]["per_token"]["j_per_token"], 2125 / 25600)
             self.assertEqual(result["mode"], "test_fixture_non_issuing")
 
-    def test_source_census_covers_owner_and_gate_stays_absent(self):
+    def test_source_census_covers_owner_and_gate_is_registered(self):
         census = dict(custody._validator_source_census("reported_energy_parents"))
         for name in ("module:joulewise.paper_reported_energy", "module:joulewise.bundle_read",
                      "module:joulewise.whole_window", "paper_reported_energy._validate_projection"):
             self.assertIn(name, census)
-        self.assertNotIn(("reported_energy_parents", "reported-energy.v1"), custody._ISSUANCE_GATES)
+        self.assertIs(custody._ISSUANCE_GATES[("reported_energy_parents", "reported-energy.v1")], custody._reported_energy_issuance_gate)
 
     def test_d173_is_only_evidence_entry_and_fixture_cannot_render(self):
         fixture = _FamilyFixture("reported_energy_parents")
