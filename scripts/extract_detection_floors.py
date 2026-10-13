@@ -29,12 +29,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise.floor_extraction import FloorExtractionError, extract_cells  # noqa: E402
+from joulewise.floor_extraction import FloorExtractionError, _block5_runs_root, extract_cells  # noqa: E402
 from joulewise.whole_window import (  # noqa: E402
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
-    _is_hazard_runs_root,
     canonical_sha256,
     NEG8_HARVEST_ALLOWANCE_RECORD,
 )
@@ -177,7 +176,12 @@ def main(argv: list[str] | None = None) -> int:
             print("error: floor_pack_required", file=sys.stderr)
             return 2
     else:
-        if args.runs_root is not None and _is_hazard_runs_root(args.runs_root):
+        try:
+            block5 = args.runs_root is not None and _block5_runs_root(args.runs_root)
+        except FloorExtractionError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        if block5:
             print("error: window_index_required", file=sys.stderr)
             return 2
         if args.runs_root is None or args.spec is None or args.pack is not None:

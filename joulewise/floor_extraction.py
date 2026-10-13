@@ -37,12 +37,14 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Sequence
 
 from joulewise.b5_analysis.kept_units import KeptUnits
 from joulewise.b5_analysis.windows import AnalysisRefusal
+from joulewise.window_lineage import LOCATOR_BASENAME
 
 # A strict validator returns the list of D-030 strict-validation problems for a
 # bundle directory (empty == strict-valid).  Signature matches
@@ -72,7 +74,7 @@ from joulewise.analysis_engine.inputs import (
     governed_idle_variance_pair,
     window_evidence_precheck,
 )
-from joulewise.authentication_io import read_authentication_input
+from joulewise.authentication_io import V2AuthenticationInputError, read_authentication_input
 from joulewise.arm_readiness import (
     LAUNCH_LINEAGE_REASON_CODES,
     LaunchLineageError,
@@ -1604,6 +1606,7 @@ def validate_admitted_report_vocabulary(value: object) -> list[str]:
 
 _KEPT_BINDING_KEYS = {
     "schema_version", "exclusions_sha256", "catalog_sha256", "harvest_pin", "cells",
+    "sensitivity_label",
 }
 _KEPT_BINDING_CELL_KEYS = {
     "exclusions_cell_id", "stratum", "minimum", "n_planned", "n_kept",
@@ -1617,6 +1620,8 @@ def _validate_kept_units_binding(binding: object, cells: list) -> list[str]:
         return errors
     if binding.get("schema_version") != "joulewise.floor_extraction_kept_units.v1":
         errors.append("kept_units_binding: unknown schema_version")
+    if binding.get("sensitivity_label") is not None:
+        errors.append("kept_units_binding.sensitivity_label: a sensitivity view is not mintable")
     for key in ("exclusions_sha256", "catalog_sha256"):
         if not _is_sha256(binding.get(key)):
             errors.append(f"kept_units_binding.{key}: must be a sha256")
@@ -1637,6 +1642,10 @@ def _validate_kept_units_binding(binding: object, cells: list) -> list[str]:
         errors.extend(_d117_closed_keys(row, _KEPT_BINDING_CELL_KEYS, set(), where))
         if not isinstance(row, Mapping):
             continue
+        floor = cell.get("floor")
+        if floor is not None and (not isinstance(floor, Mapping)
+                or not (cell.get("n_admitted") == floor.get("n") == row.get("n_kept"))):
+            errors.append(f"{where}: floor n differs from kept units")
         expected_stratum = {"absolute": "repeat", "comparative": "quad"}.get(cell.get("kind"))
         if row.get("stratum") != expected_stratum:
             errors.append(f"{where}: stratum differs from cell")
@@ -2353,6 +2362,8 @@ def extract_absolute_cell(
 ) -> CellReport:
     """Extract one absolute D-054 cell under the audit gates."""
 
+    if kept_unit_ids is not None and _member_code_stop is None:
+        raise FloorExtractionError("kept_units_stop_required")
     validator = strict_validator or _default_strict_validator
     metric, window_class = governed_cell_metric(metric, window_class)
     _validate_cap_hit_policy(cap_hit_policy)
@@ -2721,6 +2732,8 @@ def extract_comparative_cell(
     small-sample guard.
     """
 
+    if kept_unit_ids is not None and _member_code_stop is None:
+        raise FloorExtractionError("kept_units_stop_required")
     validator = strict_validator or _default_strict_validator
     metric, window_class = governed_cell_metric(metric, window_class)
     _validate_cap_hit_policy(cap_hit_policy)
@@ -2979,6 +2992,25 @@ def extract_comparative_cell(
     return CellReport(**report_fields)
 
 
+def _block5_runs_root(runs_root: Path) -> bool:
+    """Preserve legacy dispatch, but stop on a present unreadable locator."""
+
+    if _is_hazard_runs_root(runs_root):
+        return True
+    locator = Path(runs_root) / LOCATOR_BASENAME
+    if os.path.lexists(locator):
+        try:
+            # Through the authentication reader: this module has no direct
+            # readable I/O (tests.test_authentication_io surface guard).
+            value = json.loads(read_authentication_input(
+                locator, grammar="json", label="floor extraction launch-lineage locator"))
+        except (OSError, ValueError, RecursionError, V2AuthenticationInputError):
+            raise FloorExtractionError("launch_lineage_locator_unreadable") from None
+        if not isinstance(value, dict):
+            raise FloorExtractionError("launch_lineage_locator_unreadable")
+    return False
+
+
 def extract_cells(
     runs_root: Path,
     spec: Mapping[str, Any],
@@ -3023,7 +3055,7 @@ def extract_cells(
         raise FloorExtractionError("evaluation_basis_sha256 must be 64 lowercase hex")
 
     runs_root = Path(runs_root)
-    block5 = _is_hazard_runs_root(runs_root)
+    block5 = _block5_runs_root(runs_root) or archive_context is not None
     bindings: dict[str, dict[str, Any]] = {}
     kept_bundle_ids: set[str] = set()
     if kept_units is not None:
@@ -3162,7 +3194,8 @@ def extract_cells(
                 f"{cell_id}: kind must be 'absolute' or 'comparative', got {kind!r}"
             )
 
-    if block5 and archive_context is not None and consumption_session is not None and consumption_session.ready:
+    if (archive_context is not None and consumption_session is not None
+            and (consumption_session.ready or not whole_window_refusals)):
         expected_bound = (archive_context.window_bracket or {}).get("b_fiducial_s")
         for report in reports:
             for member in report.members:
@@ -3204,7 +3237,8 @@ def extract_cells(
         ]
     elif (
         whole_window_allowance_result is not None
-        and whole_window_allowance_result.status == "absent"
+        and (whole_window_allowance_result.status == "absent"
+             or (block5 and whole_window_allowance_result.status != "allowances"))
     ):
         reports = [
             replace(
@@ -3223,6 +3257,16 @@ def extract_cells(
         ]
     elif whole_window_allowances is not None:
         reports = [
+            replace(
+                report,
+                refusal_reasons=tuple(sorted(set(report.refusal_reasons)
+                    | {"whole_window_drift_allowance_unrecorded"})),
+                floor=None,
+                n_admitted=0,
+                anchor_shift_bound_max_j=None,
+            )
+            if block5 and neg8_claim_family_for_metric(report.metric) not in whole_window_allowances
+            else
             replace(
                 report,
                 whole_window_drift_allowance=whole_window_allowances[
@@ -3356,6 +3400,7 @@ def extract_cells(
     if kept_units is not None:
         result["kept_units_binding"] = {
             "schema_version": "joulewise.floor_extraction_kept_units.v1",
+            "sensitivity_label": kept_units.sensitivity_label,
             "exclusions_sha256": kept_units.exclusions_sha256,
             "catalog_sha256": kept_units.catalog_sha256,
             "harvest_pin": kept_units.window.harvest_pin,

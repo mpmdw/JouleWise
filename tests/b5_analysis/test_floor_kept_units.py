@@ -11,6 +11,7 @@ import hashlib
 import io
 import json
 import math
+import os
 from pathlib import Path
 import shutil
 import tempfile
@@ -18,7 +19,7 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 
-from joulewise import floor_extraction as fe, whole_window as ww
+from joulewise import floor_extraction as fe, whole_window as ww, window_lineage as wl
 from joulewise.b5_analysis.kept_units import CellKeptUnits, DroppedUnit, KeptUnits, Unit
 from joulewise.b5_analysis.windows import AnalysisRefusal, SealPins
 from joulewise.b5_analysis.steps import classify_step4_exit
@@ -272,6 +273,255 @@ class ArithmeticTests(unittest.TestCase):
         self.assert_t2(report["cells"][0]["floor"])
         self.assertNotIn("r06", {call.kwargs["bundle_id"] for call in evaluate.call_args_list})
         self.assertNotIn("r06", {Path(call.args[2]).name for call in fallback.call_args_list})
+
+    def test_f1_kept_quad_cap_hit_stops_and_removed_quad_extracts(self):
+        self.cap_hit("b04-B1")
+        with self.assertRaisesRegex(AnalysisRefusal, "^member_code_on_kept_unit$"):
+            self.extract()
+        with mock.patch.object(fe, "_evaluate_member", wraps=fe._evaluate_member) as evaluate:
+            cell = self.extract(("b04",))["cells"][1]
+        self.assertTrue(cell["extractable"], cell["refusal_reasons"])
+        self.assertEqual((cell["n_admitted"], cell["floor"]["n"]), (9, 9))
+        self.assertFalse({f"b04-{p}" for p in fe._ABBA_POSITIONS}
+                         & {call.kwargs["bundle_id"] for call in evaluate.call_args_list})
+
+    def test_f1_kept_quad_anchor_fallback_stops_and_removed_quad_extracts(self):
+        with mock.patch.object(fe, "anchor_fallback_member_unusable",
+                side_effect=lambda summary, metadata, path: Path(path).name == "b04-B1"):
+            with self.assertRaisesRegex(AnalysisRefusal, "^member_code_on_kept_unit$"):
+                self.extract()
+            cell = self.extract(("b04",))["cells"][1]
+        self.assertTrue(cell["extractable"], cell["refusal_reasons"])
+        self.assertEqual((cell["n_admitted"], cell["floor"]["n"]), (9, 9))
+
+    def test_f2_absolute_document_minimum_seven_refuses_eight_extracts(self):
+        for removed, count in ((("r08", "r09", "r10"), 7), (("r09", "r10"), 8)):
+            with self.subTest(count=count):
+                report = fe.extract_cells(self.root, self.spec,
+                    kept_units=units_for(self.spec, removed=removed, minimum=8))
+                cell = report["cells"][0]
+                if count == 7:
+                    self.assertIn("kept_units_below_minimum", cell["refusal_reasons"])
+                    self.assertIsNone(cell["floor"])
+                    self.assertEqual(cell["n_admitted"], 0)
+                else:
+                    self.assertTrue(cell["extractable"], cell["refusal_reasons"])
+                    self.assertEqual((cell["n_admitted"], cell["floor"]["n"]), (8, 8))
+
+    def context_case(self, *, ready=True, provenance=None):
+        session = SimpleNamespace(ready=ready, refusal_reasons=(),
+            provenance_for=lambda run: provenance, summary_for=lambda run: None,
+            consumption_semantics_id=ww.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+            calibration_bracket=None)
+        context = ww.ArchiveContext(self.root, window_bracket={"b_fiducial_s": 0.04})
+        return session, context
+
+    def test_f3a_unready_context_without_window_refusal_stops_missing_bound(self):
+        (self.root / wl.LOCATOR_BASENAME).write_text(json.dumps({"schema_version": wl.HAZARD_LOCATOR_SCHEMA}))
+        session, context = self.context_case(ready=False)
+        allowance = ww.WholeWindowDriftAllowanceResult("allowances", {
+            ww.NEG8_CLAIM_FAMILY_GROSS: {"allowance_j": 0.8},
+            ww.NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED: {"allowance_j": 0.8}})
+        with mock.patch.object(fe, "AuthenticatedConsumptionSession", return_value=session), \
+             mock.patch.object(fe, "whole_window_drift_allowances", return_value=allowance), \
+             self.assertRaisesRegex(AnalysisRefusal, "^operative_bound_not_the_window_bracket$"):
+            self.extract(archive_context=context)
+
+    @unittest.skipIf(os.geteuid() == 0, "root can read mode-000 files")
+    def test_f3b_unreadable_locator_context_stops_before_bundle_io(self):
+        locator = self.root / wl.LOCATOR_BASENAME
+        locator.write_text(json.dumps({"schema_version": wl.HAZARD_LOCATOR_SCHEMA}))
+        mode = locator.stat().st_mode
+        self.addCleanup(os.chmod, locator, mode)
+        os.chmod(locator, 0)
+        session, context = self.context_case(provenance={"operative_fiducial_bound_s": 0.026})
+        real = fe._evaluate_member
+        def member(**kwargs):
+            return replace(real(**kwargs), consumption_provenance=session.provenance_for(kwargs["bundle_id"]))
+        with mock.patch.object(fe, "AuthenticatedConsumptionSession", return_value=session), \
+             mock.patch.object(fe, "_evaluate_member", side_effect=member) as evaluate, \
+             mock.patch.object(fe, "campaign_cooldown_evidence", wraps=fe.campaign_cooldown_evidence) as cooldown, \
+             self.assertRaisesRegex(fe.FloorExtractionError, "^launch_lineage_locator_unreadable$"):
+            self.extract(archive_context=context)
+        evaluate.assert_not_called()
+        cooldown.assert_not_called()
+
+    def test_f3b_no_locator_context_stops_wrong_bound(self):
+        self.assertFalse(os.path.lexists(self.root / wl.LOCATOR_BASENAME))
+        session, context = self.context_case(provenance={"operative_fiducial_bound_s": 0.026})
+        real = fe._evaluate_member
+        def member(**kwargs):
+            return replace(real(**kwargs), consumption_provenance=session.provenance_for(kwargs["bundle_id"]))
+        with mock.patch.object(fe, "AuthenticatedConsumptionSession", return_value=session), \
+             mock.patch.object(fe, "_evaluate_member", side_effect=member), \
+             self.assertRaisesRegex(AnalysisRefusal, "^operative_bound_not_the_window_bracket$"):
+            self.extract(archive_context=context)
+
+    @unittest.skipIf(os.geteuid() == 0, "root can read mode-000 files")
+    def test_f3c_unreadable_locator_legacy_stops_before_bundle_io(self):
+        locator = self.root / wl.LOCATOR_BASENAME
+        locator.write_text(json.dumps({"schema_version": wl.HAZARD_LOCATOR_SCHEMA}))
+        mode = locator.stat().st_mode
+        self.addCleanup(os.chmod, locator, mode)
+        os.chmod(locator, 0)
+        with mock.patch.object(fe, "_read_summary", wraps=fe._read_summary) as read, \
+             self.assertRaisesRegex(fe.FloorExtractionError, "^launch_lineage_locator_unreadable$"):
+            fe.extract_cells(self.root, self.spec)
+        read.assert_not_called()
+
+    def test_f3c_invalid_json_and_nonobject_locator_stop(self):
+        locator = self.root / wl.LOCATOR_BASENAME
+        for raw in (b"{not json", b"[]", b"null", b'"schema"', b"\xff"):
+            locator.write_bytes(raw)
+            with self.subTest(raw=raw), mock.patch.object(fe, "_read_summary", wraps=fe._read_summary) as read, \
+                 self.assertRaisesRegex(fe.FloorExtractionError, "^launch_lineage_locator_unreadable$"):
+                fe.extract_cells(self.root, self.spec)
+            read.assert_not_called()
+
+    def test_f3c_readable_other_schema_locator_keeps_legacy_bytes(self):
+        before = fe.extract_cells(self.root, self.spec)
+        (self.root / wl.LOCATOR_BASENAME).write_text('{"schema_version": "joulewise.launch_lineage_locator.v1"}')
+        self.assertEqual(canonical(before), canonical(fe.extract_cells(self.root, self.spec)))
+
+    def test_f3d_context_without_locator_requires_kept_units_before_io(self):
+        _, context = self.context_case()
+        with mock.patch.object(fe, "_evaluate_member", wraps=fe._evaluate_member) as evaluate, \
+             mock.patch.object(fe, "AuthenticatedConsumptionSession", wraps=fe.AuthenticatedConsumptionSession) as session:
+            report = fe.extract_cells(self.root, self.spec, archive_context=context)
+        for cell in report["cells"]:
+            self.assertEqual(cell["refusal_reasons"], ["kept_units_required"])
+            self.assertIsNone(cell["floor"])
+            self.assertEqual(cell["n_admitted"], 0)
+        evaluate.assert_not_called()
+        session.assert_not_called()
+
+    @unittest.skipIf(os.geteuid() == 0, "root can read mode-000 files")
+    def test_f3e_cli_unreadable_locator_exit_two_without_output(self):
+        locator = self.root / wl.LOCATOR_BASENAME
+        locator.write_text(json.dumps({"schema_version": wl.HAZARD_LOCATOR_SCHEMA}))
+        mode = locator.stat().st_mode
+        self.addCleanup(os.chmod, locator, mode)
+        os.chmod(locator, 0)
+        spec_path, out = self.root.parent / "spec.json", self.root.parent / "out.json"
+        spec_path.write_bytes(canonical(self.spec))
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), \
+             mock.patch.object(cli, "extract_indexed_pack", wraps=cli.extract_indexed_pack) as extract:
+            code = cli.main(["--runs-root", str(self.root), "--spec", str(spec_path), "--out", str(out)])
+        self.assertEqual((code, stderr.getvalue()), (2, "error: launch_lineage_locator_unreadable\n"))
+        self.assertFalse(out.exists())
+        extract.assert_not_called()
+
+    def context_report(self, status, allowances):
+        provenance = {"operative_fiducial_bound_s": 0.04}
+        session, context = self.context_case(provenance=provenance)
+        def member(**kwargs):
+            return replace(fe._unevaluated_member(slot=kwargs["slot"], bundle_id=kwargs["bundle_id"],
+                block_id=kwargs["block_id"], position=kwargs["position"], excluded=False),
+                value_j=10.0, anchor_shift_bound_j=0.0, consumption_provenance=provenance)
+        with mock.patch.object(fe, "AuthenticatedConsumptionSession", return_value=session), \
+             mock.patch.object(fe, "_evaluate_member", side_effect=member), \
+             mock.patch.object(fe, "whole_window_drift_allowances",
+                return_value=ww.WholeWindowDriftAllowanceResult(status, allowances)):
+            return self.extract(archive_context=context)
+
+    def test_f4_context_legacy_allowance_refuses_both_forms(self):
+        report = self.context_report("legacy", {})
+        for cell in report["cells"]:
+            self.assertEqual(cell["refusal_reasons"], ["whole_window_drift_allowance_unrecorded"])
+            self.assertIsNone(cell["floor"])
+            self.assertEqual(cell["n_admitted"], 0)
+
+    def test_f4_context_missing_claim_family_refuses_both_forms(self):
+        report = self.context_report("allowances", {ww.NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED: {"allowance_j": 0.8}})
+        for cell in report["cells"]:
+            self.assertEqual(cell["refusal_reasons"], ["whole_window_drift_allowance_unrecorded"])
+            self.assertIsNone(cell["floor"])
+            self.assertEqual(cell["n_admitted"], 0)
+
+    def test_f4_context_allowance_is_whole_in_both_forms(self):
+        allowance = {"allowance_j": 0.8, "source": "survivor_rescreen"}
+        report = self.context_report("allowances", {ww.NEG8_CLAIM_FAMILY_GROSS: allowance})
+        for cell in report["cells"]:
+            self.assertTrue(cell["extractable"], cell["refusal_reasons"])
+            floor = cell["floor"]
+            self.assertEqual(floor["whole_window_drift_allowance_j"], 0.8)
+            self.assertEqual(floor["drift_widened_guarded_floor_j"], floor["guarded_floor_j"] + 0.8)
+            self.assertEqual(floor["whole_window_drift_allowance_provenance"], allowance)
+
+    def test_f5_sensitivity_view_is_labelled_and_not_mintable(self):
+        primary = units_for(self.spec, removed=("r06",))
+        view = primary.with_units_restored("df-s4", ["r06"], label="sensitivity-o13")
+        report = fe.extract_cells(self.root, self.spec, kept_units=view)
+        self.assertEqual(report["kept_units_binding"].get("sensitivity_label"), "sensitivity-o13")
+        self.assertEqual(fe.validate_d117_mint_consumption_report(report),
+            ["kept_units_binding.sensitivity_label: a sensitivity view is not mintable"])
+
+    def test_f5_primary_label_null_validates_and_missing_key_refuses(self):
+        report = self.extract()
+        binding = report["kept_units_binding"]
+        self.assertIn("sensitivity_label", binding)
+        self.assertIsNone(binding["sensitivity_label"])
+        self.assertEqual(fe.validate_d117_mint_consumption_report(report), [])
+        del binding["sensitivity_label"]
+        self.assertTrue(fe.validate_d117_mint_consumption_report(report))
+
+    def test_f6_attribution_labelled_floor_keeps_n_in_both_forms(self):
+        for run in fe._spec_referenced_bundle_ids(self.spec["cells"]):
+            old.write_bundle(self.root, run, old.make_summary(10.0, anchor_bound=1.0))
+        report = self.extract(("r06", "b04"))
+        for cell in report["cells"]:
+            self.assertIn("admissible_set_uncertainty_dominates_point_floor", cell["floor_conditions"])
+            self.assertEqual(cell["n_admitted"], 9)
+            self.assertEqual(cell["floor"]["n"], 9)
+            self.assertEqual(report["kept_units_binding"]["cells"][cell["cell_id"]]["n_kept"], 9)
+        self.assertEqual(fe.validate_d117_mint_consumption_report(report), [])
+
+    def test_f6_relabelled_kept_count_cannot_keep_n_ten_floor(self):
+        report = self.extract()
+        binding = report["kept_units_binding"]["cells"]["abs"]
+        binding["kept_unit_ids"].remove("r06")
+        binding.update(removed_unit_ids=["r06"], n_kept=9)
+        cell = report["cells"][0]
+        cell["members"] = [fe._unevaluated_member(slot="r06", bundle_id="r06").as_row()
+                           if m["bundle_id"] == "r06" else m for m in cell["members"]]
+        self.assertEqual((cell["n_admitted"], cell["floor"]["n"], binding["n_kept"]), (10, 10, 9))
+        self.assertIn("kept_units_binding.cells.abs: floor n differs from kept units",
+                      fe.validate_d117_mint_consumption_report(report))
+
+    def test_f6_each_floor_count_field_is_bound_in_both_forms(self):
+        original = self.extract()
+        for index in (0, 1):
+            for field in ("n_admitted", "floor.n"):
+                report = copy.deepcopy(original)
+                cell = report["cells"][index]
+                if field == "n_admitted":
+                    cell["n_admitted"] = 9
+                else:
+                    cell["floor"]["n"] = 9
+                with self.subTest(cell=cell["cell_id"], field=field):
+                    self.assertIn(f"kept_units_binding.cells.{cell['cell_id']}: floor n differs from kept units",
+                                  fe.validate_d117_mint_consumption_report(report))
+
+    def test_f7_absolute_kept_units_require_stop_before_evaluation(self):
+        self.cap_hit("r06")
+        with mock.patch.object(fe, "_evaluate_member", wraps=fe._evaluate_member) as evaluate, \
+             self.assertRaisesRegex(fe.FloorExtractionError, "^kept_units_stop_required$"):
+            fe.extract_absolute_cell(cell_id="abs", metric="gross_energy_j", window_class="request",
+                members=self.spec["cells"][0]["members"], runs_root=self.root,
+                cooldowns=fe.campaign_cooldown_evidence(self.root), strict_validator=lambda p, s: [],
+                kept_unit_ids=frozenset(f"r{i:02d}" for i in range(1, 11)), minimum_kept=5)
+        evaluate.assert_not_called()
+
+    def test_f7_comparative_kept_units_require_stop_before_evaluation(self):
+        self.cap_hit("b04-B1")
+        with mock.patch.object(fe, "_evaluate_member", wraps=fe._evaluate_member) as evaluate, \
+             self.assertRaisesRegex(fe.FloorExtractionError, "^kept_units_stop_required$"):
+            fe.extract_comparative_cell(cell_id="cmp", metric="gross_energy_j", window_class="request",
+                blocks=self.spec["cells"][1]["blocks"], runs_root=self.root,
+                cooldowns=fe.campaign_cooldown_evidence(self.root), strict_validator=lambda p, s: [],
+                kept_unit_ids=frozenset(f"b{i:02d}" for i in range(1, 11)), minimum_kept=5)
+        evaluate.assert_not_called()
 
     def test_r7_minimum_is_document_value_and_p42_has_none(self):
         removed = ("b08", "b09", "b10")
@@ -752,6 +1002,31 @@ class IndexedCliTests(unittest.TestCase):
         finally:
             self.fixture.local_spec.write_bytes(original)
 
+    def test_f8_allowance_verdict_digest_mismatch_stops_script_without_output(self):
+        from joulewise.b5_analysis import kept_units as ku_module
+        self.real_composition = cli.extract_indexed_pack
+        strict_json = ku_module._strict_json
+        for field in ("row_sha256", "evaluation_basis_sha256"):
+            # Inventory authenticates the stored allowance bytes first. Inject
+            # only its parsed read so this reaches the script's own digest gate.
+            def read(raw, code):
+                value = strict_json(raw, code)
+                if code == "neg8_allowance_record_invalid":
+                    value["verdict"][field] = "0" * 64
+                return value
+            out = self.fixture.directory / ("f8-" + field + ".json")
+            stderr = io.StringIO()
+            with self.subTest(digest=field), s2.capture_adapter(), \
+                 mock.patch.object(ku_module, "_strict_json", side_effect=read), \
+                 mock.patch.object(cli, "extract_indexed_pack", side_effect=self.composition), \
+                 mock.patch.object(cli, "extract_cells", wraps=cli.extract_cells) as extract, \
+                 contextlib.redirect_stderr(stderr):
+                code = cli.main(["--window-index", str(self.fixture.index), "--pack", "beta", "--out", str(out)])
+                self.assertEqual((code, stderr.getvalue()),
+                                 (2, "error: whole_window_verdict_provenance_invalid\n"))
+                self.assertFalse(out.exists())
+                extract.assert_not_called()
+
     def test_real_synthetic_extraction_documents_endpoint_limit(self):
         # The mocked telemetry corpus can authenticate structure and context,
         # but cannot serve as a production powermetrics reduction fixture.
@@ -819,6 +1094,14 @@ class ZKeptReportInvariantTests(unittest.TestCase):
             for cell in report["cells"]:
                 with self.subTest(report=index, cell=cell["cell_id"]):
                     self.assertTrue(cell["extractable"] or cell["refusal_reasons"])
+
+    def test_f6_collected_kept_reports_validate_with_bound_counts(self):
+        self.assertTrue(_KEPT_REPORTS)
+        for index, report in enumerate(_KEPT_REPORTS):
+            with self.subTest(report=index):
+                expected = (["kept_units_binding.sensitivity_label: a sensitivity view is not mintable"]
+                            if report["kept_units_binding"]["sensitivity_label"] is not None else [])
+                self.assertEqual(fe.validate_d117_mint_consumption_report(report), expected)
 
 
 if __name__ == "__main__":
