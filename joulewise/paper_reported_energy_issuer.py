@@ -20,7 +20,7 @@ from joulewise.bundle_read import BundleReader, _phase_prompt_counts
 from joulewise.whole_window import (
     ArchiveContext, AuthenticatedConsumptionSession, MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     NEG8_HARVEST_ALLOWANCE_RECORD, canonical_sha256, custody_telemetry_identity,
-    whole_window_drift_allowances,
+    whole_window_drift_allowances, archive_context_operative_bound_s,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -84,7 +84,7 @@ def normalized_rows(cell, kept, *, session, runs_root, context, binding, kept_un
             raise AnalysisRefusal('whole_window_verdict_provenance_invalid')
         provenance = session.provenance_for(bundle_id)
         actual = provenance.get('operative_fiducial_bound_s') if isinstance(provenance, Mapping) else None
-        expected = context.window_bracket.get('b_fiducial_s')
+        expected = archive_context_operative_bound_s(context)
         if not _finite(actual) or not _finite(expected) or actual != expected:
             raise AnalysisRefusal('operative_bound_not_the_window_bracket')
         path = Path(runs_root) / bundle_id

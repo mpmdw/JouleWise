@@ -134,14 +134,39 @@ class ArchiveContext:
     survivor_bundle_ids: frozenset[str] = frozenset()
     sources_replay: Callable[[Mapping[str, Any], Path], str | None] | None = None
     catalog_manifests: tuple[tuple[Mapping[str, Any], Mapping[str, Any]], ...] = ()
+    sensitivity_bound_s: float | None = None
 
     def __post_init__(self) -> None:
+        bound = self.sensitivity_bound_s
+        if bound is not None:
+            try:
+                valid = (not isinstance(bound, bool) and isinstance(bound, (int, float))
+                         and math.isfinite(float(bound)) and bound >= 0)
+            except OverflowError:
+                valid = False
+            if not valid:
+                raise ValueError("sensitivity_bound_s_invalid")
+            object.__setattr__(self, "sensitivity_bound_s", float(bound))
         object.__setattr__(self, "neg8_harvest_archive", Path(self.neg8_harvest_archive))
         for name in ("removed_bundle_ids", "survivor_bundle_ids"):
             object.__setattr__(self, name, frozenset(getattr(self, name)))
         object.__setattr__(self, "roster_references", _archive_freeze(self.roster_references or {}))
         object.__setattr__(self, "window_bracket", _archive_freeze(self.window_bracket))
         object.__setattr__(self, "catalog_manifests", _archive_freeze(self.catalog_manifests))
+
+
+def archive_context_operative_bound_s(context: ArchiveContext) -> float | None:
+    """The reduction bound, without changing the authenticated bracket."""
+    if context.sensitivity_bound_s is not None:
+        return context.sensitivity_bound_s
+    bound = (context.window_bracket or {}).get("b_fiducial_s")
+    try:
+        if (isinstance(bound, bool) or not isinstance(bound, (int, float))
+                or not math.isfinite(float(bound)) or bound < 0):
+            return None
+        return float(bound)
+    except OverflowError:
+        return None
 
 
 def _archive_context_or_none(value: Any) -> ArchiveContext | None:
@@ -924,6 +949,7 @@ class AuthenticatedConsumptionSession:
             raise ValueError("archive context requires maximum-bracket consumption semantics")
         self.mode = mode
         self._archive_context = archive_context
+        self.sensitivity_bound_s = archive_context.sensitivity_bound_s if archive_context is not None else None
         self._archive_context_changed = False
         self._row_archive_disclosures: dict[Any, dict[str, Any]] = {}
         self.runs_root = Path(runs_root)
@@ -1199,6 +1225,11 @@ class AuthenticatedConsumptionSession:
             self._fail_global(reasons)
             return
         operative_bound = float(raw_bound)
+        if self.sensitivity_bound_s is not None:
+            if self.sensitivity_bound_s < operative_bound:
+                self._fail_global(reasons | {"sensitivity_bound_below_operative"})
+                return
+            operative_bound = self.sensitivity_bound_s
         if self.consumption_semantics_id == MINTED_CONSUMPTION_SEMANTICS_ID:
             for bundle_id, path in sorted(bundle_paths.items()):
                 stored_summary = _read_json_object(path / "summary_metrics.json")
@@ -1395,6 +1426,8 @@ class AuthenticatedConsumptionSession:
                 },
                 "operative_envelopes": complete,
             }
+            if self.sensitivity_bound_s is not None:
+                self._provenance[bundle_id]["sensitivity_bound_s"] = self.sensitivity_bound_s
 
         if reasons or any(
             bundle_id not in self._summaries
