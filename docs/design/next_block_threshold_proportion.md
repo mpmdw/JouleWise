@@ -441,3 +441,63 @@ run; `systematic-invalid` is the alignment screen's verdict (T1); `calibration.b
 T2; `member.anchor_not_bounded` is T3; `clock.step_overlap` is T5; `contention.request_overlap` is Q1;
 `neg8.screen_failed` and `neg8.bound_not_derived` are N1/N3 and N2; `cell.below_minimum` is N4. None of these
 identifiers is renamed by this note.
+
+## 8. Council outcome (2026-10-12)
+
+Two seats read this note blind to each other: Fable 5.1 and Sol 6.1 (reports
+`/Users/edr/night-archive/b5-consults/threshold-council/seat-fable.md` and `seat-sol.md`). Each re-derived the
+arithmetic. The orchestrator (Opus 5.5) decides below. Nothing here is adopted until the next block's
+registration passes its cold gate; "measure first" rows go to the quiet-machine list of section 8.2.
+
+**A correction to this note.** Section 3.2 says the operative bound at the proposed 60 ms stop line would be
+74.5 ms. Both seats reject that figure. With an opening capture at 60 ms and an ordinary closing capture of
+28 ms the operative bound is about 60 + 32 = 92 ms, which is a floor of about 4.4 J on a 26.1 J prefill
+(16.7%). The 60 ms line is therefore not a proposal any more; see T1.
+
+### 8.1 Decisions
+
+| Row | Fable 5.1 | Sol 6.1 | Decision |
+|---|---|---|---|
+| T1 flag above 36.46 ms and carry the bound | adopt | adopt the flag | **Adopt the flag.** Crossing the screen changes no number; the capture's value enters the operative bound. |
+| T1 stop line | one stop on the operative bound, not on the capture | cannot be derived from ordinary captures | **Measure first** (test 15, extended: captures on a quiet machine, under one core of load, and under the faulty launch context). One line, on the operative bound, sized from that data. |
+| T2 capture-to-capture movement | adopt as a flag | flag; drop the 74.5 ms ceiling | **Adopt as a flag.** |
+| T3 run clock bound | 15 ms removes, 5 ms flags | 15 ms as the total effective bound, placement kept at 5 ms | **Sol's form.** The reducer charges the clock span at both edges, so 15 ms of span alone can cost 1.58 J on a prefill (6%), not 0.63 J. Total effective bound 15 ms; placement 5 ms. |
+| T4 rate check | 25 ppm | recompute for the longest admitted stream | **Derived after Q2's cap is known**, as (15 ms minus placement) over the longest stream; no free value. |
+| Q1 contention in watts | measure first | measure first | **Measure first** (test 1, plus phase-length bursts at several placements inside the ten-second accounting interval: 1 W averaged over ten seconds allows 10 J inside one phase). |
+| Q2 idle admission waits | adopt, cap interim | mechanism yes, cap and thermal effect unmeasured | **Adopt the mechanism.** The cap comes from the recorded lengths of past disturbances, and a paired test (ordinary wait against long wait) must show the cold-machine effect is under the floor before the seal. |
+| Q3 busy fraction | flag | flag | **Adopt as a flag.** 13 of 53 quiet rehearsal baselines fail it while their power is 0.17 to 0.42 W against a 1.0 W limit. |
+| S1 sleep | flag, plus a reading between runs | exclude a run that slept | **Both.** A run in which the machine slept more than 1 ms is excluded; the cumulative sleep reading is also taken at every run start and recorded, which sees sleep between runs. |
+| N2 reference-corpus minimum | 6 | 6 | **Adopt 6**, the bound computed at the surviving count. |
+| N6 fixed 0.05 J comparison | trace, then remove | retire | **Trace (test 5), then retire.** |
+| R1 runs per session | keep 10 units until decode scatter is measured | measure first | **Keep 10 units per stratum.** Revisit when block 5 is unblinded and gives the scatter per stratum. |
+| C1 time-server reading | flag at 100 ms | threshold unmeasured | **Record it as a diagnostic from the next session on; no threshold until test 11 gives the query scatter.** |
+| L2 free disk | keep 90.4 GiB | measured writes plus 20 GiB | **Measured writes of the largest session plus 20 GiB** (the hazard measured directly; 43 GiB kept per session so far gives 63 GiB). |
+
+### 8.2 What both seats found that this note missed: boundaries that are too loose
+
+This note looked for strictness. The seats were asked to look the other way and found three gaps.
+
+1. **Nothing bounds a run's duration or token rate.** Anything that slows the model adds its own power for
+   the extra time: a decode 10% longer at 26 W adds about 5.2 J, and no watt or processor-time rule sees it.
+   The rehearsal's prefill duration varies by 1.2% (one standard deviation), so a flag at three standard
+   deviations costs almost nothing. Proposed for the next registration as a flag.
+2. **Contention is counted in processor time only.** A process working on the graphics processor or the
+   neural engine adds power to the measured rails with little processor time. A 10 W contender would add
+   6.2 J to a prefill and 19.9 J to a decode. Both seats raised this independently. The photo and media
+   analysis agents are of this kind; they are disabled from the next login (RUN_STATE item 35 (d)). The
+   measurement: read the graphics-processor power rail in the idle baseline and during a run of a
+   processor-only reference workload, and size a limit on it.
+3. **The reducer's handling of a record that straddles a phase edge** (Sol's finding F5). A power record is
+   an average over about 130 ms. The reducer gives a phase the share of a record's energy equal to the share
+   of the record's time inside the phase. For a synthetic 42 W rectangle of 0.62 s with nothing outside it,
+   the seat got 23.64 J with an upper bound of 25.13 J against 26.04 J constructed. Whether this reaches a
+   number the paper prints, and whether the printed uncertainty covers it for the real shapes, is under
+   investigation (`threshold-council/F5-investigation.md`); the outcome is recorded in RUN_STATE.
+
+### 8.3 Quiet-machine measurements (for the headless orchestrator; no agent session alive while they run)
+
+Tests 1, 11 and 15 of section 4, with the extensions named in 8.1; the phase-length burst test for Q1; the
+paired ordinary-wait and long-wait test for Q2; the graphics-processor rail reading of 8.2 item 2; and the
+rails-against-wall-meter check of section 6 (a steady load of 60 s or more, in a battery state where the
+charger carries the load). None of them is a claim session: no registration, no seal, results to
+`/Users/edr/night-archive/threshold-validation/` with a short record on the records branch.
