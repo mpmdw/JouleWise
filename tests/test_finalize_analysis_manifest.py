@@ -254,3 +254,81 @@ class FinalizeSidecarCLITests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Block5FinalizerContinuationTests(unittest.TestCase):
+    def argv(self, fixture, *, sidecar=False, indexed=False):
+        values = [('prospective-manifest', fixture['prospective_path']), ('plan-tree', fixture['plan_tree_path']),
+                  ('custody-root', fixture['root']), ('runs-root', fixture['runs_root']),
+                  ('whole-window-verdict', fixture['verdict_path']), ('bracket-binding', fixture['bracket_path']),
+                  ('calibration-ledger', fixture['ledger_path']), ('aggregate-floor-artifact', fixture['floor_path']),
+                  ('output-dir', fixture['root'])]
+        if sidecar: values.append(('dominance-replay-sidecar', fixture['acceptance_path']))
+        if indexed: values.append(('window-index', fixture['root'] / 'window-index.json'))
+        return [word for name, path in values for word in ('--' + name, str(path))]
+
+    def test_programming_value_error_is_not_printed_as_refusal(self):
+        from unittest import mock
+        from scripts import finalize_analysis_manifest as script
+        from tests.b5_analysis import fixtures_s5 as fx
+        with fx.finalization_case() as f, \
+             mock.patch.object(script, 'finalize_prospective_analysis_manifest_v3', side_effect=ValueError('programming defect')):
+            with self.assertRaisesRegex(ValueError, '^programming defect$'):
+                script.main(self.argv(f))
+
+    def test_named_analysis_refusals_are_printed(self):
+        import contextlib
+        import io
+        from unittest import mock
+        from scripts import finalize_analysis_manifest as script
+        from tests.b5_analysis import fixtures_s5 as fx
+        errors = [script.AnalysisManifestFinalizationError('analysis_finalization_attachment_invalid', 'synthetic'),
+                  script.AnalysisRefusal('window_index_invalid'), script.AnalysisInputError('kept_quads_required')]
+        with fx.finalization_case() as f:
+            for error in errors:
+                with self.subTest(error=type(error).__name__):
+                    output = io.StringIO()
+                    with mock.patch.object(script, 'finalize_prospective_analysis_manifest_v3', side_effect=error), \
+                         contextlib.redirect_stdout(output):
+                        self.assertEqual(script.main(self.argv(f)), 2)
+                    self.assertEqual(json.loads(output.getvalue())['status'], 'REFUSE')
+
+    def test_script_builds_once_for_real_preflight_and_final_handoff(self):
+        import contextlib
+        import io
+        from unittest import mock
+        from scripts import finalize_analysis_manifest as script
+        from tests.b5_analysis import fixtures_s5 as fx
+        with fx.finalization_case() as f:
+            manifest = {'manifest_id': 's5', 'lineage': {'prospective_manifest_id': f['prospective']['manifest_id']}}
+            missing = script.AnalysisManifestFinalizationError('analysis_finalization_attachment_missing',
+                'dominance-enabled prospective manifest requires a dominance replay sidecar')
+            with mock.patch.object(script, 'block5_claim_gate_inputs', return_value=f['block5_inputs']) as builder, \
+                 mock.patch.object(script, '_dominance_floor_identity_enabled', return_value=True), \
+                 mock.patch.object(script, 'stage_dominance_replay_sidecar', return_value=f['acceptance_path']), \
+                 mock.patch.object(script, 'finalize_prospective_analysis_manifest_v3', side_effect=[missing, manifest]) as finalize, \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(script.main(self.argv(f, sidecar=True, indexed=True)), 0)
+            builder.assert_called_once()
+            self.assertEqual(finalize.call_count, 2)
+            for call in finalize.call_args_list:
+                self.assertIs(call.kwargs['_block5_inputs'], f['block5_inputs'])
+
+    def test_library_reuses_authenticated_block5_inputs(self):
+        from unittest import mock
+        from joulewise import analysis_manifest_v3 as mv3
+        from joulewise.analysis_engine import inputs
+        from tests.b5_analysis import fixtures_s5 as fx
+        with fx.finalization_case() as f, \
+             mock.patch.object(inputs, 'block5_claim_gate_inputs') as builder, \
+             mock.patch.object(mv3, '_authenticate_finalization_inputs', return_value={}) as authenticate, \
+             mock.patch.object(mv3, '_build_finalized_manifest', return_value={'manifest_id': 's5'}), \
+             mock.patch.object(mv3, 'validate_finalized_analysis_manifest_v3', return_value=()), \
+             mock.patch.object(mv3, '_write_append_only'):
+            mv3.finalize_prospective_analysis_manifest_v3(f['prospective_path'], plan_tree_path=f['plan_tree_path'],
+                custody_root=f['root'], runs_root=f['runs_root'], whole_window_verdict_path=f['verdict_path'],
+                bracket_binding_path=f['bracket_path'], calibration_ledger_path=f['ledger_path'],
+                aggregate_floor_artifact_path=f['floor_path'], output_dir=f['root'],
+                window_index=f['root'] / 'unopened-index.json', _block5_inputs=f['block5_inputs'])
+            builder.assert_not_called()
+            self.assertIs(authenticate.call_args.kwargs['block5_inputs'], f['block5_inputs'])

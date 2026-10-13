@@ -25,6 +25,7 @@ from joulewise.calibration_ledger import _refuse_custody_override_mint
 from joulewise.calibration_bracketing import load_calibration_acceptance_bound
 
 from joulewise.authentication_io import read_authentication_input
+from joulewise.window_lineage import is_hazard_runs_root
 
 
 SCHEMA_VERSION = "joulewise.analysis_manifest.v3"
@@ -2004,7 +2005,7 @@ def _walk_finalized_input(value: object) -> None:
             f"manifest.finalization_contract.required_attachments[{index}]",
         )
     evidence = _input_mapping(manifest.get("evidence"), "manifest.evidence")
-    for role in _REQUIRED_ATTACHMENT_ROLES:
+    for role in _REQUIRED_ATTACHMENT_ROLES | (_BLOCK5_ROLES & set(evidence)):
         _input_mapping(evidence.get(role), f"manifest.evidence.{role}")
     if _DOMINANCE_REPLAY_SIDECAR_ROLE in evidence:
         _input_mapping(
@@ -3034,12 +3035,22 @@ def _declared_attachment_schemas(
     }
 
 
+_BLOCK5_ROLE_KEYS = {
+    "analysed_attempt_exclusions": {"path", "sha256", "schema_version", "catalog_sha256", "harvest_pin", "harvest_record"},
+    "window_bracket": {"trigger_scope", "terminal_sequence", "ledger_copy_sha256", "sources_sha256sums_sha256",
+                       "compared_with_harvest", "evaluation_sha256"},
+    "calibration_acceptance": {"acceptance_id", "artifact_sha256", "ledger_cutoff"},
+}
+_BLOCK5_ROLES = frozenset(_BLOCK5_ROLE_KEYS)
+
+
 def _verify_basis_members(
     prospective: Mapping[str, Any],
     verdict: Mapping[str, Any],
     *,
     manifest_dir: Path,
     runs_root: Path,
+    kept_run_ids: frozenset[str] | None = None,
 ) -> tuple[Mapping[str, Any], dict[str, Path]]:
     basis = verdict.get("evaluation_basis")
     if (
@@ -3081,6 +3092,8 @@ def _verify_basis_members(
                 "analysis_finalization_evaluation_basis_mismatch",
                 "evaluation-basis bundle identities must be nonempty and unique",
             )
+        if kept_run_ids is not None and bundle_id not in kept_run_ids:
+            continue
         bundle_path = occurrence.get("bundle_path")
         bundle = _safe_relative_file(Path(runs_root), f"{bundle_path}/config.json")
         if bundle is None:
@@ -3153,12 +3166,12 @@ def _verify_basis_members(
             )
         by_id[bundle_id] = occurrence
         bundle_paths[bundle_id] = bundle_dir
-    expected = set(expected_members)
+    expected = set(expected_members) if kept_run_ids is None else set(kept_run_ids)
     verdict_ids = verdict.get("bundle_ids")
     if (
         not isinstance(verdict_ids, list)
         or len(verdict_ids) != len(set(verdict_ids))
-        or set(verdict_ids) != expected
+        or (set(verdict_ids) != expected if kept_run_ids is None else not expected.issubset(verdict_ids))
         or set(by_id) != expected
     ):
         raise AnalysisManifestFinalizationError(
@@ -3175,6 +3188,7 @@ def _derive_arms_and_entries(
     runs_root: Path,
     bundle_paths: Mapping[str, Path],
     floor_arm_bindings: Mapping[str, Mapping[str, Any]] | None = None,
+    removed_run_ids: frozenset[str] = frozenset(),
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     # Local import avoids a module-import cycle: inputs imports this module to
     # validate both v3 siblings.  Realized identity reads config/metadata only,
@@ -3205,6 +3219,8 @@ def _derive_arms_and_entries(
             members = [row for row in contrast["members"] if row["arm"] == arm_label]
             identities: list[Mapping[str, Any]] = []
             for member in members:
+                if member["run_id"] in removed_run_ids:
+                    continue
                 bundle = bundle_paths.get(member["run_id"])
                 if bundle is None:
                     raise AnalysisManifestFinalizationError(
@@ -3279,9 +3295,8 @@ def _derive_arms_and_entries(
                         "config": member["config"],
                         "config_sha256": member["config_sha256"],
                         "run_id": member["run_id"],
-                        "bundle_path": bundle_paths[
-                            member["run_id"]
-                        ].relative_to(runs_root).as_posix(),
+                        "bundle_path": (None if member["run_id"] in removed_run_ids else bundle_paths[
+                            member["run_id"]].relative_to(runs_root).as_posix()),
                         "model_tag": model_tag,
                         "role": "condition",
                         "arm_id": arm_id,
@@ -3337,7 +3352,7 @@ def _floor_consumer_contexts(
             condition_id = str(contrast[condition_key])
             observed: dict[tuple[str, str], Mapping[str, Any]] = {}
             for member in contrast["members"]:
-                if member["arm"] != arm_label:
+                if member["arm"] != arm_label or member["run_id"] not in bundle_paths:
                     continue
                 bundle = bundle_paths[member["run_id"]]
                 raw_config = _strict_json_bytes(
@@ -3537,6 +3552,7 @@ def _authenticate_finalization_inputs(
     aggregate_floor_artifact_path: Path,
     dominance_replay_sidecar_path: Path | None = None,
     acceptance_bound_path: Path | None = None,
+    block5_inputs: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     schemas = _declared_attachment_schemas(prospective)
     custody_input = Path(custody_root).absolute()
@@ -3556,16 +3572,24 @@ def _authenticate_finalization_inputs(
             "analysis_finalization_attachment_invalid",
             "whole-window verdict schema/role mismatch",
         )
-    if verdict.get("status") != "passed" or verdict.get("claim_licensing") is not True:
+    if verdict.get("claim_licensing") is not True or (block5_inputs is None and verdict.get("status") != "passed"):
         raise AnalysisManifestFinalizationError(
             "analysis_finalization_verdict_not_passed",
             "whole-window verdict must be claim-licensing and passed",
         )
+    archive = block5_inputs["gamma_archive"] if block5_inputs is not None else None
+    units = block5_inputs["kept_units"] if block5_inputs is not None else None
+    kept_run_ids = (frozenset(run for contrast in prospective["contrasts"]
+        for unit in units.for_contrast(contrast["contrast_id"]).kept["quad"] for run in unit.run_ids)
+        if units is not None else None)
+    context = (block5_inputs["archive_contexts"][str(resolved_runs.resolve())]
+               if block5_inputs is not None else None)
     basis, bundle_paths = _verify_basis_members(
         prospective,
         verdict,
         manifest_dir=manifest_dir,
         runs_root=resolved_runs,
+        kept_run_ids=kept_run_ids,
     )
 
     bracket_path, bracket_relative = _path_under_root(
@@ -3613,80 +3637,103 @@ def _authenticate_finalization_inputs(
             "analysis_finalization_attachment_invalid",
             "calibration-ledger schema declaration is unsupported",
         )
-    head_pin_path, _head_pin_relative = _path_under_root(
-        ledger_path.with_name("calibration_ledger_head.json"),
-        custody_input,
-        "calibration ledger head pin",
-    )
-    try:
-        from joulewise.calibration_ledger import (
-            canonical_json_bytes as calibration_ledger_canonical_json_bytes,
-            load_calibration_ledger_snapshot,
-            terminal_head_pin_for_session,
+    if block5_inputs is not None:
+        from joulewise.b5_analysis.bracket import LEDGER_COPY, TERMINAL_PIN, ledger_prefix
+        from joulewise.analysis_engine.inputs import archive_snapshot
+        from joulewise.calibration_ledger import canonical_json_bytes as calibration_ledger_canonical_json_bytes
+        pin = _strict_json_bytes(archive.output_bytes(TERMINAL_PIN), "terminal pin")
+        archive_ledger_raw = archive.source_bytes(LEDGER_COPY)
+        prefix = ledger_prefix(archive_ledger_raw, pin)
+        if ledger_raw != prefix:
+            raise AnalysisManifestFinalizationError("analysis_finalization_ledger_head_mismatch",
+                                                   "ledger_not_the_archive_prefix")
+        if bracket_raw != archive.output_bytes("derived/bracket-binding.json"):
+            raise AnalysisManifestFinalizationError("analysis_finalization_bracket_binding_mismatch",
+                                                   "bracket_not_the_archive_binding")
+        terminal_head = bracket.get("terminal_head")
+        acceptance_raw = archive.source_bytes("sources/inputs/acceptance.json")
+        archived_acceptance = _strict_json_bytes(acceptance_raw, "archive acceptance")
+        acceptance = (load_calibration_acceptance_bound(acceptance_bound_path)
+                      if acceptance_bound_path is not None else load_calibration_acceptance_bound())
+        if acceptance is None or archived_acceptance.get("acceptance_id") != acceptance.get("acceptance_id"):
+            raise AnalysisManifestFinalizationError("analysis_finalization_attachment_invalid",
+                                                   "acceptance_differs_from_active")
+        snapshot = archive_snapshot(context)
+    else:
+        head_pin_path, _head_pin_relative = _path_under_root(
+            ledger_path.with_name("calibration_ledger_head.json"),
+            custody_input,
+            "calibration ledger head pin",
         )
+        try:
+            from joulewise.calibration_ledger import (
+                canonical_json_bytes as calibration_ledger_canonical_json_bytes,
+                load_calibration_ledger_snapshot,
+                terminal_head_pin_for_session,
+            )
 
-        terminal_head = terminal_head_pin_for_session(
-            ledger_path, session_id=str(bracket.get("session_id"))
+            terminal_head = terminal_head_pin_for_session(
+                ledger_path, session_id=str(bracket.get("session_id"))
+            )
+        except Exception as exc:
+            raise AnalysisManifestFinalizationError(
+                "analysis_finalization_ledger_head_mismatch",
+                f"calibration ledger has no authenticated terminal session head: {exc}",
+            ) from exc
+        if terminal_head != bracket.get("terminal_head"):
+            raise AnalysisManifestFinalizationError(
+                "analysis_finalization_ledger_head_mismatch",
+                "bracket terminal head is not the actual ledger terminal head",
+            )
+        acceptance = (load_calibration_acceptance_bound(acceptance_bound_path)
+                      if acceptance_bound_path is not None else load_calibration_acceptance_bound())
+        if acceptance is None:
+            raise AnalysisManifestFinalizationError(
+                "analysis_finalization_attachment_invalid",
+                "calibration acceptance artifact is absent or invalid",
+            )
+        cutoff = acceptance["ledger_cutoff"]
+        snapshot = load_calibration_ledger_snapshot(
+            ledger_path,
+            head_pin_path,
+            baseline_sequence=cutoff["sequence"],
+            baseline_digest=cutoff["head_digest"],
+            require_committed_pin=False,
+            verify_custody=True,
+            mode="read_replay",
         )
-    except Exception as exc:
-        raise AnalysisManifestFinalizationError(
-            "analysis_finalization_ledger_head_mismatch",
-            f"calibration ledger has no authenticated terminal session head: {exc}",
-        ) from exc
-    if terminal_head != bracket.get("terminal_head"):
-        raise AnalysisManifestFinalizationError(
-            "analysis_finalization_ledger_head_mismatch",
-            "bracket terminal head is not the actual ledger terminal head",
-        )
-    acceptance = (load_calibration_acceptance_bound(acceptance_bound_path)
-                  if acceptance_bound_path is not None else load_calibration_acceptance_bound())
-    if acceptance is None:
-        raise AnalysisManifestFinalizationError(
-            "analysis_finalization_attachment_invalid",
-            "calibration acceptance artifact is absent or invalid",
-        )
-    cutoff = acceptance["ledger_cutoff"]
-    snapshot = load_calibration_ledger_snapshot(
-        ledger_path,
-        head_pin_path,
-        baseline_sequence=cutoff["sequence"],
-        baseline_digest=cutoff["head_digest"],
-        require_committed_pin=False,
-        verify_custody=True,
-        mode="read_replay",
-    )
-    if snapshot.refusal_reasons:
-        raise AnalysisManifestFinalizationError(
-            "analysis_finalization_ledger_head_mismatch",
-            "calibration ledger snapshot refused: "
-            + ", ".join(snapshot.refusal_reasons),
-        )
-    try:
-        from joulewise.calibration_bracketing import (
-            validate_calibration_bracket_binding,
-        )
+        if snapshot.refusal_reasons:
+            raise AnalysisManifestFinalizationError(
+                "analysis_finalization_ledger_head_mismatch",
+                "calibration ledger snapshot refused: "
+                + ", ".join(snapshot.refusal_reasons),
+            )
+        try:
+            from joulewise.calibration_bracketing import (
+                validate_calibration_bracket_binding,
+            )
 
-        bracket_pair = validate_calibration_bracket_binding(
-            bracket,
-            snapshot,
-            window_id=str(bracket.get("window_id")),
-            plan_id=prospective["plan"]["plan_id"],
-            plan_sha256=prospective["plan"]["sha256"],
-            evidence_root_id=prospective["evidence_root_id"],
-            # The authoritative validator binds the recorded path spelling;
-            # lexical safety/equality was established above without erasing it.
-            runs_root=Path(bracket["runs_root"]),
-        )
-    except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
-        raise AnalysisManifestFinalizationError(
-            "analysis_finalization_bracket_binding_mismatch",
-            f"authoritative bracket validation failed: {exc}",
-        ) from exc
-    if bracket_pair is None:
-        raise AnalysisManifestFinalizationError(
-            "analysis_finalization_bracket_binding_mismatch",
-            "authoritative bracket validator rejected the binding",
-        )
+            bracket_pair = validate_calibration_bracket_binding(
+                bracket,
+                snapshot,
+                window_id=str(bracket.get("window_id")),
+                plan_id=prospective["plan"]["plan_id"],
+                plan_sha256=prospective["plan"]["sha256"],
+                evidence_root_id=prospective["evidence_root_id"],
+                # The authoritative validator binds the recorded path spelling;
+                # lexical safety/equality was established above without erasing it.
+                runs_root=Path(bracket["runs_root"]),
+            )
+        except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+            raise AnalysisManifestFinalizationError(
+                "analysis_finalization_bracket_binding_mismatch",
+                f"authoritative bracket validation failed: {exc}",
+            ) from exc
+        if bracket_pair is None:
+            raise AnalysisManifestFinalizationError(
+                "analysis_finalization_bracket_binding_mismatch",
+                "authoritative bracket validator rejected the binding",
+            )
 
     try:
         from joulewise.schemas import CampaignPolicy
@@ -3694,6 +3741,8 @@ def _authenticate_finalization_inputs(
             AuthenticatedConsumptionSession,
             _registered_policy,
             whole_window_refusal_reasons,
+            validate_whole_window_verdict_row,
+            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
         )
 
         policy_record = verdict.get("campaign_policy")
@@ -3706,15 +3755,24 @@ def _authenticate_finalization_inputs(
         if not isinstance(registered_policy, Mapping):
             raise ValueError("campaign policy is not registered")
         policy = CampaignPolicy.from_mapping(dict(registered_policy))
-        semantics_id = basis.get("consumption_semantics_id")
+        semantics_id = (MAX_BRACKET_CONSUMPTION_SEMANTICS_ID if block5_inputs is not None
+                        else basis.get("consumption_semantics_id"))
         session = AuthenticatedConsumptionSession(
             resolved_runs,
             set(bundle_paths),
             evaluation_basis_sha256=str(basis["sha256"]),
             consumption_semantics_id=str(semantics_id),
             calibration_ledger_snapshot=snapshot,
+            **({"archive_context": context} if context is not None else {}),
         )
-        session._prepare(bundle_paths=bundle_paths, policy=policy)
+        if block5_inputs is None:
+            session._prepare(bundle_paths=bundle_paths, policy=policy)
+        if block5_inputs is not None:
+            validation = validate_whole_window_verdict_row(verdict, resolved_runs, set(bundle_paths),
+                                                          consumption_session=session, archive_context=context)
+            if not validation.admitted:
+                raise AnalysisManifestFinalizationError("analysis_finalization_verdict_not_passed",
+                                                       ", ".join(validation.reasons))
         verdict_reasons = whole_window_refusal_reasons(
             resolved_runs,
             set(bundle_paths),
@@ -3722,6 +3780,8 @@ def _authenticate_finalization_inputs(
             consumption_session=session,
             consumption_semantics_id=str(semantics_id),
         )
+    except AnalysisManifestFinalizationError:
+        raise
     except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
         raise AnalysisManifestFinalizationError(
             "analysis_finalization_attachment_invalid",
@@ -3734,7 +3794,7 @@ def _authenticate_finalization_inputs(
         # authenticated ledger session, so it is the same canonical object.
         evaluated_bracket_binding = bracket
     if (
-        bracket_raw
+        block5_inputs is None and bracket_raw
         != calibration_ledger_canonical_json_bytes(evaluated_bracket_binding)
         + b"\n"
     ):
@@ -3793,7 +3853,14 @@ def _authenticate_finalization_inputs(
     try:
         from joulewise.detection_floor import validate_floor_artifact
 
-        floor_errors = validate_floor_artifact(floor)
+        if block5_inputs is not None:
+            from joulewise.analysis_engine.inputs import sibling_floor_pinset
+            pinset = sibling_floor_pinset(floor_path)
+            pinset_raw = _read_manifest_input(pinset, label="floor producer pinset")
+            floor_errors = validate_floor_artifact(floor, pinset_path=pinset,
+                expected_pinset_sha256=hashlib.sha256(pinset_raw).hexdigest())
+        else:
+            floor_errors = validate_floor_artifact(floor)
     except Exception as exc:
         raise AnalysisManifestFinalizationError(
             "analysis_finalization_floor_dependency_unsatisfied",
@@ -3861,6 +3928,7 @@ def _authenticate_finalization_inputs(
         manifest_dir=manifest_dir,
         runs_root=resolved_runs,
         bundle_paths=bundle_paths,
+        removed_run_ids=units.removed_run_ids() if units is not None else frozenset(),
         floor_arm_bindings=(
             floor_arm_bindings
             if dominance_enabled
@@ -3899,6 +3967,33 @@ def _authenticate_finalization_inputs(
             "artifact_id": floor["artifact_id"],
         },
     }
+    if block5_inputs is not None:
+        window_bracket = block5_inputs["brackets"]["gamma"]
+        source_inventory_raw = _read_manifest_input(archive.window.archive_root / "sources/SHA256SUMS",
+                                                     label="archive source inventory")
+        if (window_bracket.terminal_sequence != pin["sequence"]
+                or window_bracket.ledger_copy_sha256 != hashlib.sha256(archive_ledger_raw).hexdigest()
+                or window_bracket.sources_sha256sums_sha256 != hashlib.sha256(source_inventory_raw).hexdigest()
+                or window_bracket.trigger_scope != ("window_evidence" if archive.window.governed_e3 else "sealed")
+                or window_bracket.compared_with_harvest != ("equal" if archive.window.governed_e3 else "no_harvest_digest")):
+            raise AnalysisManifestFinalizationError("analysis_finalization_attachment_invalid", "window_bracket_metadata_mismatch")
+        exclusions_raw = archive.output_bytes("derived/exclusions.json")
+        exclusions = _strict_json_bytes(exclusions_raw, "analysed exclusions")
+        digest = hashlib.sha256(exclusions_raw).hexdigest()
+        exclusions_path = custody / f"analysed-attempt-exclusions-{digest}.json"
+        attachments["analysed_attempt_exclusions"] = {
+            "path": exclusions_path.relative_to(custody).as_posix(), "sha256": digest,
+            "schema_version": exclusions["schema_version"], "catalog_sha256": units.catalog_sha256,
+            "harvest_pin": units.window.harvest_pin,
+            "harvest_record": {"path": str(units.window.archive_root / "harvest.json"),
+                               "sha256": units.window.harvest_record_sha256}}
+        attachments["window_bracket"] = {key: getattr(window_bracket, key) for key in
+            ("trigger_scope", "terminal_sequence", "ledger_copy_sha256", "sources_sha256sums_sha256", "compared_with_harvest")}
+        from joulewise.whole_window import _archive_thaw
+        attachments["window_bracket"]["evaluation_sha256"] = _canonical_sha(_archive_thaw(window_bracket.evaluation))
+        attachments["calibration_acceptance"] = {"acceptance_id": archived_acceptance["acceptance_id"],
+            "artifact_sha256": hashlib.sha256(acceptance_raw).hexdigest(), "ledger_cutoff": archived_acceptance["ledger_cutoff"]}
+        attachments["_exclusions_bytes"] = exclusions_raw
     if dominance_attachment is not None:
         attachments[_DOMINANCE_REPLAY_SIDECAR_ROLE] = dominance_attachment
     return attachments
@@ -4006,6 +4101,9 @@ def _build_finalized_manifest(
         manifest["evidence"][_DOMINANCE_REPLAY_SIDECAR_ROLE] = json.loads(
             json.dumps(attachments[_DOMINANCE_REPLAY_SIDECAR_ROLE])
         )
+    for role in _BLOCK5_ROLES:
+        if role in attachments:
+            manifest["evidence"][role] = json.loads(json.dumps(attachments[role]))
     finalized_semantics_sha = analysis_semantics_sha256_v1(manifest)
     if finalized_semantics_sha != prospective_semantics_sha:
         raise AnalysisManifestFinalizationError(
@@ -4070,9 +4168,14 @@ def finalize_prospective_analysis_manifest_v3(
     output_dir: Path,
     dominance_replay_sidecar_path: Path | None = None,
     acceptance_bound_path: Path | None = None,
+    window_index: Path | None = None,
+    _block5_inputs: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Derive one immutable finalized artifact without reading an effect value."""
     _refuse_custody_override_mint()
+    if (window_index is not None or _block5_inputs is not None) and not is_hazard_runs_root(Path(runs_root)):
+        raise AnalysisManifestFinalizationError("analysis_finalization_attachment_invalid",
+                                               "window_index_not_a_block5_root")
 
     try:
         custody_input = Path(custody_root).absolute()
@@ -4107,6 +4210,13 @@ def finalize_prospective_analysis_manifest_v3(
             "analysis_finalization_prospective_invalid",
             "; ".join(f"{item.reason_code}: {item.detail}" for item in refusals),
         )
+    block5_inputs = _block5_inputs
+    if window_index is not None and block5_inputs is None:
+        from joulewise.analysis_engine.inputs import block5_claim_gate_inputs
+        try:
+            block5_inputs = block5_claim_gate_inputs(window_index, prospective_path, runs_root)
+        except ValueError as exc:
+            raise AnalysisManifestFinalizationError("analysis_finalization_attachment_invalid", str(exc)) from exc
     attachments = _authenticate_finalization_inputs(
         prospective,
         manifest_dir=prospective_path.parent,
@@ -4118,6 +4228,7 @@ def finalize_prospective_analysis_manifest_v3(
         aggregate_floor_artifact_path=aggregate_floor_artifact_path,
         dominance_replay_sidecar_path=dominance_replay_sidecar_path,
         acceptance_bound_path=acceptance_bound_path,
+        block5_inputs=block5_inputs,
     )
     tree_raw = _read_manifest_input(tree_path, label="finalized plan tree")
     manifest = _build_finalized_manifest(
@@ -4131,9 +4242,12 @@ def finalize_prospective_analysis_manifest_v3(
     filename = f"{prospective['manifest_id']}{FINALIZED_BASENAME_SUFFIX}"
     path = output / filename
     raw = render_manifest(manifest)
+    if "_exclusions_bytes" in attachments:
+        _write_append_only(custody / attachments["analysed_attempt_exclusions"]["path"], attachments["_exclusions_bytes"])
     refusals = validate_finalized_analysis_manifest_v3(
         manifest, manifest_path=path, custody_root=custody_input,
         acceptance_bound_path=acceptance_bound_path,
+        _block5_inputs=block5_inputs,
     )
     if refusals:
         raise AnalysisManifestFinalizationError(
@@ -4150,6 +4264,8 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
     manifest_path: Path,
     custody_root: Path,
     acceptance_bound_path: Path | None = None,
+    window_index: Path | None = None,
+    _block5_inputs: Mapping[str, Any] | None = None,
 ) -> tuple[ManifestRefusal, ...]:
     """Validate a finalized artifact and independently replay its lineage."""
 
@@ -4334,6 +4450,8 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
 
     evidence = value.get("evidence")
     expected_evidence_keys = set(_FINALIZED_EVIDENCE_KEYS)
+    if isinstance(evidence, Mapping) and _BLOCK5_ROLES & set(evidence):
+        expected_evidence_keys.update(_BLOCK5_ROLES)
     if dominance_enabled:
         expected_evidence_keys.add(_DOMINANCE_REPLAY_SIDECAR_ROLE)
     if not _exact_refusal_keys(
@@ -4371,6 +4489,15 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
             unknown_code="analysis_manifest_finalized_invalid",
         ):
             return tuple(refusals)
+    for role in _BLOCK5_ROLES & set(evidence):
+        if not _exact_refusal_keys(evidence[role], _BLOCK5_ROLE_KEYS[role], f"manifest.evidence.{role}", refusals,
+                                  schema_code="analysis_manifest_finalized_invalid", unknown_code="analysis_manifest_finalized_invalid"):
+            return tuple(refusals)
+    if "analysed_attempt_exclusions" in evidence and not _exact_refusal_keys(
+            evidence["analysed_attempt_exclusions"]["harvest_record"], {"path", "sha256"},
+            "manifest.evidence.analysed_attempt_exclusions.harvest_record", refusals,
+            schema_code="analysis_manifest_finalized_invalid", unknown_code="analysis_manifest_finalized_invalid"):
+        return tuple(refusals)
     bracket_ref = evidence["bracket_binding"]
     bracket_path = _safe_relative_file(custody, bracket_ref["path"])
     if bracket_path is None:
@@ -4393,6 +4520,27 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
                 "bracket binding runs_root must be a string",
             )
         runs_root = Path(bracket["runs_root"])
+        if _BLOCK5_ROLES & set(evidence):
+            if not is_hazard_runs_root(runs_root):
+                raise AnalysisManifestFinalizationError("analysis_finalization_attachment_invalid",
+                                                       "window_index_not_a_block5_root")
+            if _block5_inputs is None:
+                if window_index is None:
+                    raise AnalysisManifestFinalizationError("analysis_finalization_attachment_invalid",
+                                                           "window_index_required: finalized block-5 replay")
+                from joulewise.analysis_engine.inputs import AnalysisInputError, block5_claim_gate_inputs
+                from joulewise.b5_analysis.windows import AnalysisRefusal
+                try:
+                    _block5_inputs = block5_claim_gate_inputs(window_index, prospective_path, runs_root)
+                except (AnalysisInputError, AnalysisRefusal) as exc:
+                    raise AnalysisManifestFinalizationError("analysis_finalization_attachment_invalid", str(exc)) from exc
+            role = evidence["analysed_attempt_exclusions"]
+            path = _safe_relative_file(custody, role.get("path"))
+            if path is None or hashlib.sha256(_read_manifest_input(path, label="analysed exclusions")).hexdigest() != role.get("sha256"):
+                raise AnalysisManifestFinalizationError("analysis_finalization_attachment_invalid", "exclusions digest mismatch")
+            harvest_path = Path(role["harvest_record"]["path"])
+            if hashlib.sha256(_read_manifest_input(harvest_path, label="harvest record")).hexdigest() != role["harvest_record"]["sha256"]:
+                raise AnalysisManifestFinalizationError("analysis_finalization_attachment_invalid", "harvest record digest mismatch")
         attachments = _authenticate_finalization_inputs(
             prospective,
             manifest_dir=prospective_path.parent,
@@ -4404,6 +4552,7 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
             aggregate_floor_artifact_path=custody
             / evidence["aggregate_floor_artifact"]["path"],
             acceptance_bound_path=acceptance_bound_path,
+            block5_inputs=_block5_inputs,
             dominance_replay_sidecar_path=(
                 custody / evidence[_DOMINANCE_REPLAY_SIDECAR_ROLE]["path"]
                 if _DOMINANCE_REPLAY_SIDECAR_ROLE in evidence
@@ -4412,11 +4561,14 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
         )
     except AnalysisManifestFinalizationError as exc:
         reason = (
-            "analysis_manifest_floor_attachment_mismatch"
+            "analysis_manifest_finalized_invalid"
+            if exc.detail.startswith("window_index_required")
+            else "analysis_manifest_floor_attachment_mismatch"
             if "floor" in str(exc)
             else "analysis_manifest_lineage_mismatch"
         )
-        _refusal(refusals, reason, f"attachment replay refused: {exc}")
+        detail = exc.detail if exc.detail.startswith("window_index_required") else f"attachment replay refused: {exc}"
+        _refusal(refusals, reason, detail)
         return tuple(refusals)
     expected = _build_finalized_manifest(
         prospective,
@@ -4476,6 +4628,8 @@ def validate_finalized_analysis_manifest_v3(
     manifest_path: Path,
     custody_root: Path,
     acceptance_bound_path: Path | None = None,
+    window_index: Path | None = None,
+    _block5_inputs: Mapping[str, Any] | None = None,
 ) -> tuple[ManifestRefusal, ...]:
     """Total boundary with region-based malformed/defect classification."""
 
@@ -4515,6 +4669,8 @@ def validate_finalized_analysis_manifest_v3(
             manifest_path=manifest_path,
             custody_root=custody_root,
             acceptance_bound_path=acceptance_bound_path,
+            window_index=window_index,
+            _block5_inputs=_block5_inputs,
         )
     except Exception as exc:
         return (
