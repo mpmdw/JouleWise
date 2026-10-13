@@ -22,14 +22,14 @@ from joulewise.b5_analysis.kept_units import KeptUnits, ReportedCellKept, Unit, 
 from joulewise.b5_analysis.windows import AnalysisRefusal
 from joulewise import paper_reported_energy as energy
 from tests.b5_analysis.test_reported_cell import case, R, B
+from functools import lru_cache
+from tests.b5_analysis.test_sensitivity import PassHarness, pass_fixture
 
 
+@lru_cache(maxsize=1)
 def sensitivity():
-    return {"schema_version": "joulewise.b5_bracket_sensitivity.v1", "label": "sensitivity",
-            "b_max": {"value_s": .04, "attained_by_sequence": 456, "T": 500},
-            "windows": {p: {"plan_id": p+"-synthetic-plan", "b_op_s": .038 if p=="alpha" else .045,
-                "b_sens_s": .04 if p=="alpha" else .045, "widened": p=="alpha"} for p in d.PACK_ORDER},
-            "reported_cells": [], "floor_cells": [], "contrasts": []}
+    pass_fixture()
+    return PassHarness().call()
 
 
 class FakeArchive:
@@ -80,12 +80,18 @@ class Harness:
         dropped=tuple(replace(u,codes=("member.admission_aborted",),families=("MEMBER_VALIDITY",)) for u in k.cell.dropped)
         k=replace(k,cell=replace(k.cell,dropped=dropped))
         self.cell=c; self.rows=case()[1]; self.binding=binding; self.base_kept=k
+        # Fabricated full roster, including the existing one-member meter seam.
+        self.archives["alpha"].outputs["derived/roster.json"]=d.canonical_json_bytes({"members":
+            [{"run_id":r["member"]["bundle_id"],"kind":"science"} for r in self.rows]+
+            [{"run_id":"alpha-one","kind":"science"}]})
+        self.archives["beta"].outputs["derived/roster.json"]=d.canonical_json_bytes({"members":
+            [{"run_id":run,"kind":"science"} for run in ("beta-inside","beta-outside")]})
         self.kept["alpha"]=replace(self.kept["alpha"],cells={"synthetic":k.cell})
         self.projections={"alpha":{"cells":[energy._project_cell(c,rows,binding,kept=k,
             exclusions_sha256="1"*64)],"refused_cells":[]},"beta":{"cells":[],"refused_cells":[]}}
         self.extraction={"alpha":{"cells":[]},"beta":{"cells":[]}}
         self.floor={"cells":[]}; self.closeout={}; self.verdicts={"contrasts":[]}
-        self.sens=sensitivity(); self.steps={"no_analysed_window_harvested_twice":True,
+        self.sens=deepcopy(sensitivity()); self.steps={"no_analysed_window_harvested_twice":True,
             "windows":{p:{"stored_verdict":{"status":"failed","conditions":[]},"member_reasons":[],
                 "adapter_continuity":"passed","tripwires":{"excluded_reference_in_screen":"passed",
                 "kept_member_outside_verdict_membership":"passed"},"deciding_references":7,"deciding_spares":0,
@@ -540,10 +546,11 @@ class PartCTests(unittest.TestCase):
             "corpus_doubling":{"count":48},"other_session_systematic_sequences":[410]}
         text=h.text();self.assertIn("sealed rule: the bracket read fresh, so no trigger was observed",text)
         self.assertIn("recorded-only triggers: doubling; corpus doubling count: 48",text)
-        self.assertIn("alpha: operative bound below 36.46 ms (0.035000 s)",text)
-        self.assertNotIn("beta: operative bound below",text)
+        self.assertIn("alpha: operative bound below 36.46 ms: yes (0.035000 s)",text)
+        self.assertIn("beta: operative bound below 36.46 ms: no (0.045000 s)",text)
         h.brackets["alpha"].b_fiducial_s=d.SCREEN_BOUND_S
-        self.assertNotIn("operative bound below",h.text())
+        self.assertIn("alpha: operative bound below 36.46 ms: no",h.text())
+        self.assertFalse(next(r for r in h.produce()["window_lines"]["alpha"] if r["line"]=="below_screen_bound")["below"])
 
     def test_T21_all_fixed_sentences_match_sealed_plan(self):
         plan=Path("configs/campaigns/v5_claim_25g83/analysis_plan_block5.md").read_text()
@@ -588,15 +595,8 @@ class PartDTests(unittest.TestCase):
         self.assertEqual(cm.exception.code,"disclosure_input_missing:windows.alpha.ledger_prefix_test")
 
     def test_D4_sensitivity_full_shape_values_and_equality_words(self):
-        h=Harness();primary={"mean_j":10.,"h_j":.2,"B_j":.3,"lower_j":9.5,"upper_j":10.5,"attribution_floor_j":.3}
-        h.sens["reported_cells"]=[{"pack":"alpha","cell_id":"reported","status":"computed","primary":primary,
-            "sensitivity":{**primary,"B_j":.4},"mean_and_half_width_equal_primary":True,"equals_primary":False},
-            {"pack":"alpha","cell_id":"p42","status":"refused","code":"p42_unresolved"}]
-        floors={"floor_abs_j":.5,"floor_cmp_j":.6,"floor_gate_j":.6,"allowance_j":.1}
-        h.sens["floor_cells"]=[{"pack":"alpha","cell_id":"floor","primary":floors,"sensitivity":floors,"equals_primary":True}]
-        contrasts={"floor_abs_j":.5,"floor_cmp_j":.6,"floor_gate_j":.6,"D_j":.05,"outcome":"direction_supported"}
-        h.sens["contrasts"]=[{"contrast_id":"decode","floor_cell_ids":["floor"],"primary":contrasts,
-            "sensitivity":contrasts,"bound_independent_values_equal_primary":True,"outcome_equals_primary":True}]
+        h=Harness(); harness=PassHarness(); harness.hold_D=True
+        h.sens=harness.call()
         rec=h.produce();text=d.render_disclosures(rec,released=True)
         self.assertIn("B_max 0.040000 s attained at ledger sequence 456; T = 500",text)
         self.assertIn("b_op 0.038000 s; b_sens 0.040000 s; values differ from primary",text)
@@ -899,6 +899,243 @@ class PinnedSourceTests(unittest.TestCase):
         raw=d.canonical_json_bytes(record).decode()
         self.assertNotIn(str(self.archive.window.archive_root),raw)
         self.assertNotIn(str(self.archive.window.claim_runs_root),raw)
+
+
+class FixRegressionTests(unittest.TestCase):
+    """All counterfactual energies, shares, bounds and temperatures are made up."""
+
+    @staticmethod
+    def empty_record():
+        return {name: [] for name in ('cells','floors','contrasts','block_lines','fixed_sentences')} | {
+            'window_lines': {p: [] for p in d.PACK_ORDER}}
+
+    def machine(self, h):
+        record = self.empty_record()
+        with mock.patch.object(d, 'rebuilt_roster', side_effect=lambda a, r: json.loads(a.output_bytes('derived/roster.json'))):
+            d._machine_lines(record,h.windows,h.archives,h.kept,h.projections,
+                {p:d._flags(h.archives[p],d._catalog()) for p in d.PACK_ORDER})
+        return record
+
+    def energy_lines(self, h):
+        record = self.empty_record()
+        with mock.patch.object(d, 'rebuilt_roster', side_effect=lambda a, r: json.loads(a.output_bytes('derived/roster.json'))):
+            d._energy_lines(record,h.windows,h.archives,h.kept,h.projections,h.extraction,
+                h.floor,h.verdicts,h.observe,h.estimate,
+                {p:d._flags(h.archives[p],d._catalog()) for p in d.PACK_ORDER})
+        return record
+
+    def test_F1_floor_meter_models_and_gamma_band(self):
+        h=Harness(); h.add_contrast((3.,3.,3.),removed=())
+        shares=(.78,.80,.81,.79,.82,.80,.77,.81,.80,.83)
+        science=[r['member']['bundle_id'] for r in h.rows[:10]]
+        members={run:{'rho':rho,'rail_delta_J':rho*600.,'machine':{'delta_J':600.}}
+                 for run,rho in zip(science,shares)}
+        aux=[f'synthetic-aux-{i:02d}' for i in range(25)]
+        roster=[{'run_id':run,'kind':'science'} for run in science]
+        for i,run in enumerate(aux):
+            config='configs/synthetic-aux.json' if i%2 else 'synthetic-aux.json'
+            roster.append({'run_id':run,'kind':'auxiliary','config_path':config})
+            path=('sources/repo/'+config if config.startswith('configs/') else
+                  f'sources/repo/configs/campaigns/{h.windows["alpha"].pack_id}/'+config)
+            h.archives['alpha'].sources[path]=d.canonical_json_bytes({'model':{'name':'Qwen2.5-1.5B-Instruct-4bit'}})
+            members[run]={'rho':.40,'rail_delta_J':40.,'machine':{'delta_J':100.}}
+        h.archives['alpha'].outputs['derived/roster.json']=d.canonical_json_bytes({'members':roster})
+        h.archives['alpha'].withheld['withheld/meter.json']=d.canonical_json_bytes({'members':members})
+        units=h.kept['gamma'].cell('decode').kept['quad']
+        h.archives['gamma'].withheld['withheld/meter.json']=d.canonical_json_bytes({'members':{
+            u.run_ids[0]:{'rho':rho,'rail_delta_J':rho*600.,'machine':{'delta_J':600.}}
+            for u,rho in zip(units,(.40,.80,.84))}})
+        record=self.machine(h)
+        summaries={r['model']:r for r in record['window_lines']['alpha'] if r['line']=='machine_summary'}
+        row=summaries['qwen3-1p7b']
+        for key,value in {'median':.80,'minimum':.77,'maximum':.83,'q25':.7925,'q75':.81,'spread':.075}.items():
+            self.assertAlmostEqual(row[key],value,places=13)
+        self.assertIn('; consistent;',row['text'])
+        self.assertEqual((row['central_band']['lower'],row['central_band']['upper']),(.77,.83))
+        aux_rows=[r for r in record['window_lines']['alpha'] if r['line']=='machine_member' and r['run_id'] in aux]
+        self.assertEqual(len(aux_rows),25)
+        self.assertTrue(all(r['model']=='Qwen2.5-1.5B-Instruct-4bit' for r in aux_rows))
+        self.assertEqual(summaries['Qwen2.5-1.5B-Instruct-4bit']['median'],.40)
+        gamma=next(r for r in record['window_lines']['gamma'] if r['line']=='machine_summary')
+        self.assertIn('1 of 3 member windows inside',gamma['text'])
+        self.assertEqual(gamma['central_band'],row['central_band'])
+
+    def test_F1_unplaced_and_unreadable_auxiliary_refuse(self):
+        for member,config in ((None,None),({'run_id':'unplaced','kind':'auxiliary'},None),
+                ({'run_id':'unplaced','kind':'auxiliary','config_path':'missing.json'},None),
+                ({'run_id':'unplaced','kind':'auxiliary','config_path':'bad.json'},{})):
+            h=Harness()
+            h.archives['alpha'].outputs['derived/roster.json']=d.canonical_json_bytes({'members':[] if member is None else [member]})
+            if config is not None:
+                h.archives['alpha'].sources[f'sources/repo/configs/campaigns/{h.windows["alpha"].pack_id}/bad.json']=d.canonical_json_bytes(config)
+            h.archives['alpha'].withheld['withheld/meter.json']=d.canonical_json_bytes({'members':{
+                'unplaced':{'rho':.8,'rail_delta_J':80.,'machine':{'delta_J':100.}}}})
+            with self.subTest(member=member), self.assertRaisesRegex(AnalysisRefusal,'^disclosure_input_missing:meter_member_model$'):
+                self.machine(h)
+
+    def test_F2_pass_wire_and_acceptance_member_bmax(self):
+        for sequence in (456,None):
+            from joulewise.b5_analysis.bracket import BMax
+            h=Harness(); h.sens=PassHarness().call(BMax(.04,sequence,500))
+            record=h.produce(); text=d.render_disclosures(record,released=True)
+            self.assertEqual(record['sensitivity'],h.sens)
+            phrase=('attained at ledger sequence 456' if sequence is not None else
+                    'attained by a member of the acceptance (no ledger sequence)')
+            self.assertIn(phrase,text)
+            for line in ('sensitivity_reported','sensitivity_floor','sensitivity_contrast'):
+                rows=items(record,'block_lines',line)
+                self.assertTrue(rows)
+                for row in rows:
+                    if row['record'].get('status')!='refused':
+                        self.assertTrue(row['text'].endswith('; not below primary: yes'))
+            for name in ('reported_cells','floor_cells','contrasts'):
+                row=next(r for r in h.sens[name] if r.get('status')!='refused')
+                row['not_below_primary']=False
+            record=h.produce()
+            for line in ('sensitivity_reported','sensitivity_floor','sensitivity_contrast'):
+                self.assertTrue(any(r['text'].endswith('; not below primary: no') for r in items(record,'block_lines',line)))
+
+    def test_F2_monotonicity_required_bool_and_sequence_range(self):
+        for name in ('reported_cells','floor_cells','contrasts'):
+            for value in ('absent',0,1,'yes',None):
+                record=deepcopy(sensitivity()); row=next(r for r in record[name] if r.get('status')!='refused')
+                if value=='absent': row.pop('not_below_primary')
+                else: row['not_below_primary']=value
+                with self.subTest(name=name,value=value), self.assertRaisesRegex(AnalysisRefusal,'^sensitivity_record_invalid$'):
+                    d._validate_sensitivity(record)
+        for seq in (0,501,True,'456',-1):
+            record=deepcopy(sensitivity()); record['b_max']['attained_by_sequence']=seq
+            with self.subTest(sequence=seq), self.assertRaisesRegex(AnalysisRefusal,'^sensitivity_record_invalid$'):
+                d._validate_sensitivity(record)
+        for seq in (1,500,None):
+            record=deepcopy(sensitivity()); record['b_max']['attained_by_sequence']=seq
+            d._validate_sensitivity(record)
+        record=deepcopy(sensitivity())
+        next(r for r in record['reported_cells'] if r['status']=='refused')['not_below_primary']=True
+        with self.assertRaisesRegex(AnalysisRefusal,'^sensitivity_record_invalid$'):
+            d._validate_sensitivity(record)
+
+    def test_F3_screen_bound_unreleased_identity(self):
+        records=[]
+        for bound in (.035,.045):
+            h=Harness(); h.brackets['alpha'].b_fiducial_s=bound; record=self.empty_record()
+            with mock.patch.object(d,'rebuilt_roster',side_effect=lambda a,r:json.loads(a.output_bytes('derived/roster.json'))):
+                d._structure_lines(record,h.index,h.records,h.windows,h.archives,h.kept,h.brackets,
+                    h.projections,h.extraction,d._catalog(),{p:[] for p in d.PACK_ORDER})
+            records.append(record)
+        self.assertEqual(*(d.render_disclosures(r,released=False) for r in records))
+        self.assertNotEqual(*(d.render_disclosures(r,released=True) for r in records))
+        for record,bound in zip(records,(.035,.045)):
+            row=next(r for r in record['window_lines']['alpha'] if r['line']=='below_screen_bound')
+            self.assertEqual(row['b_op_s'],bound); self.assertEqual(row['below'],bound<d.SCREEN_BOUND_S)
+            self.assertEqual(sum(r['line']=='below_screen_bound' for rs in record['window_lines'].values() for r in rs),3)
+
+    def test_F3_loo_unreleased_identity_and_sorted_trigger_rows(self):
+        records=[]
+        for count in (0,1,2):
+            h=Harness(); h.add_contrast((3.,3.,3.),removed=())
+            h.verdicts['contrasts'][0]['loo']['rows']=[
+                {'omitted_block_id':f'decode-b{n:02d}','estimate':estimate,
+                 'influence_triggers':['estimate_magnitude'] if i<count else []}
+                for i,(n,estimate) in enumerate(((3,2.),(1,1.5)))]
+            records.append(self.energy_lines(h))
+        self.assertEqual(len({d.render_disclosures(r,released=False) for r in records}),1)
+        self.assertEqual(len({d.render_disclosures(r,released=True) for r in records}),3)
+        for count,record in enumerate(records):
+            rows=items(record,'contrasts','loo_magnitude')
+            self.assertEqual(len(rows),1)
+            expected=sorted([{'block_number':str(n),'movement_j':abs(estimate-3.)}
+                             for n,estimate in ((3,2.),(1,1.5))[:count]],key=lambda r:int(r['block_number']))
+            self.assertEqual(rows[0]['rows'],expected)
+            if not count:self.assertEqual(rows[0]['text'],'decode: no leave-one-out row raised the magnitude trigger')
+            else:
+                self.assertEqual(rows[0]['text'],'decode: '+' '.join(d.LOO_SENTENCE.replace('quad k','quad '+r['block_number']).replace('X',f"{r['movement_j']:.5f}") for r in expected))
+
+    def test_F3_restricted_flag_presence_unreleased_identity(self):
+        records=[]
+        catalog=d._catalog()
+        code=next(code for code,spec in catalog.codes.items() if spec['blinding']=='RESTRICTED')
+        for present in (False,True):
+            h=Harness()
+            if present:h.flag('alpha',code,h.rows[0]['member']['bundle_id'])
+            record=self.empty_record()
+            with mock.patch.object(d,'rebuilt_roster',side_effect=lambda a,r:json.loads(a.output_bytes('derived/roster.json'))):
+                d._structure_lines(record,h.index,h.records,h.windows,h.archives,h.kept,h.brackets,
+                    h.projections,h.extraction,catalog,{p:d._flags(h.archives[p],catalog) for p in d.PACK_ORDER})
+            records.append(record)
+        self.assertEqual(*(d.render_disclosures(r,released=False) for r in records))
+        self.assertNotEqual(*(d.render_disclosures(r,released=True) for r in records))
+        for record,count in zip(records,(0,1)):
+            row=next(r for r in record['window_lines']['alpha'] if r['line']=='flag_count' and r['code']==code)
+            self.assertEqual(row['count'],count); self.assertTrue(row['restricted'])
+
+    def test_M6_prefill_and_decode_token_denominators(self):
+        h=Harness()
+        for cid in ('prefill','decode'):h.add_contrast((2.1,2.3,1.9),cid=cid,removed=())
+        record=self.energy_lines(h)
+        for row in items(record,'contrasts','magnitude_per_token'):
+            cid=row['contrast_id']; denom=2048 if cid=='prefill' else 512
+            verdict=next(v for v in h.verdicts['contrasts'] if v['contrast_id']==cid)
+            self.assertEqual(row['denominator'],denom)
+            self.assertEqual(row['value_j'],verdict['estimator']['estimate']/denom)
+            self.assertEqual(row['metrology'],{k:v/denom for k,v in verdict['estimator']['metrology_aware_CI95'].items()})
+            self.assertEqual(row['decision'],{k:v/denom for k,v in verdict['deterministic_bounds']['decision_interval'].items()})
+            self.assertIn('J per '+('prompt' if cid=='prefill' else 'output')+' token',row['text'])
+
+    def test_M7_negative_decision_near_end(self):
+        h=Harness(); h.add_contrast((-3.,-3.,-3.),removed=())
+        verdict=h.verdicts['contrasts'][0]; verdict['floor']['active_floor_j']=1.2
+        for upper,appended in ((-1.,True),(-1.3,False)):
+            verdict['deterministic_bounds']['decision_interval']={'lower':-4.,'upper':upper}
+            row=items(self.energy_lines(h),'contrasts','decision_floor')[0]
+            self.assertIn(f'near end {-upper:.5f} J',row['text'])
+            self.assertEqual(d.DECISION_SENTENCE in row['text'],appended)
+
+    def test_M19_beta_cross_window_uses_b_side(self):
+        h=Harness(); primary=h.projections['alpha']['cells'][0]
+        beta=deepcopy(primary); beta['cell_id']='synthetic-beta'; beta['mean_j']=13.; beta['interval']['h_j']=.1
+        h.projections['beta']['cells']=[beta]
+        h.kept['beta']=replace(h.kept['beta'],cells=h.kept['alpha'].cells)
+        h.add_contrast((3.,3.,3.),removed=(),sides=((10.,13.),(10.02,13.02),(9.98,12.98)))
+        rows=items(self.energy_lines(h),'cells','cross_window')
+        self.assertEqual({r['pack'] for r in rows},{'alpha','beta'})
+        # Own exact df=2 quantile and arithmetic, independent of the producer.
+        for row in rows:
+            sides=[r['a_mean_j' if row['pack']=='alpha' else 'b_mean_j'] for r in h.observations['decode']]
+            F=primary['mean_j'] if row['pack']=='alpha' else beta['mean_j']
+            hF=primary['interval']['h_j'] if row['pack']=='alpha' else .1
+            G=sum(sides)/len(sides); hG=4.302652729749464*statistics.stdev(sides)/math.sqrt(3)
+            delta=G-F; agree=abs(delta)<=math.sqrt(hG*hG+hF*hF)
+            self.assertEqual(row['G_j'],G); self.assertAlmostEqual(row['h_G_j'],hG,places=13)
+            self.assertEqual(row['delta_j'],delta); self.assertEqual(row['agree'],agree)
+            self.assertEqual(row['text'],(d.AGREE_SENTENCE if agree else d.DIFFER_SENTENCE).replace('Δ',f'{delta:.5f}'))
+        self.assertTrue(next(r for r in rows if r['pack']=='beta')['agree'])
+
+    def test_M27_negative_machine_minus_rail_outside_band(self):
+        h=Harness(); science=[r['member']['bundle_id'] for r in h.rows[:3]]
+        members={run:{'rho':rho,'rail_delta_J':rail,'machine':{'delta_J':600.}}
+                 for run,rho,rail in zip(science,(.78,.82,.90),(468.,492.,700.))}
+        h.flag('alpha','meter.drops_excess',science[2])
+        h.archives['alpha'].withheld['withheld/meter.json']=d.canonical_json_bytes({'members':members})
+        record=self.machine(h)
+        bad=next(r for r in record['window_lines']['alpha'] if r['line']=='machine_member' and r['run_id']==science[2])
+        self.assertFalse(bad['plausible']); self.assertIn('outside the hard band',bad['text'])
+        self.assertIn('meter.drops_excess',bad['meter_flags'])
+        summary=next(r for r in record['window_lines']['alpha'] if r['line']=='machine_summary')
+        self.assertAlmostEqual(summary['spread'],(.82-.78)/.80)
+        self.assertEqual((summary['central_band']['lower'],summary['central_band']['upper']),(.78,.82))
+        self.assertEqual(summary['maximum'],.90)
+
+    def test_M28_temperature_rise_strict_three_kelvin(self):
+        for rise,flagged in ((3.2,True),(3.0,False)):
+            h=Harness(); archive=h.archives['alpha']; record=self.empty_record()
+            archive.sources['sources/claim-runs/campaign_manifests/synthetic.json']=d.canonical_json_bytes({
+                'stage_id':'synthetic','members':[{}],'battery_temperature_readings':[
+                    {'temperature_centi_c':3000},{'temperature_centi_c':3000+round(rise*100)}]})
+            d._temperature_lines(record,'alpha',archive,[],'passed',{'members':[]})
+            row=next(r for r in record['window_lines']['alpha'] if r['line']=='battery_temperature')
+            self.assertEqual(row['producer_flag'],flagged); self.assertFalse(row['harvest_flag']); self.assertFalse(row['plateau'])
+            self.assertEqual(bool([r for r in record['window_lines']['alpha'] if r['line']=='temperature_disagreement']),flagged)
 
 
 if __name__ == "__main__": unittest.main()

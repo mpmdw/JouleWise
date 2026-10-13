@@ -121,10 +121,11 @@ def _validate_sensitivity(value):
                 or value["label"] != "sensitivity"):
             raise ValueError()
         bmax = value["b_max"]
+        sequence = bmax["attained_by_sequence"]
         if (set(bmax) != {"value_s","attained_by_sequence","T"}
                 or not _finite(bmax["value_s"]) or bmax["value_s"] < 0
-                or any(type(bmax[k]) is not int or bmax[k] < 0
-                       for k in ("attained_by_sequence", "T"))):
+                or type(bmax["T"]) is not int or bmax["T"] < 0
+                or sequence is not None and (type(sequence) is not int or not 1 <= sequence <= bmax["T"])):
             raise ValueError()
         if set(value["windows"]) != set(PACK_ORDER):
             raise ValueError()
@@ -139,9 +140,9 @@ def _validate_sensitivity(value):
             "floor_cells": ("floor_abs_j", "floor_cmp_j", "floor_gate_j", "allowance_j"),
             "contrasts": ("floor_abs_j", "floor_cmp_j", "floor_gate_j", "D_j", "outcome"),
         }
-        booleans = {"reported_cells": ("mean_and_half_width_equal_primary", "equals_primary"),
-                    "floor_cells": ("equals_primary",),
-                    "contrasts": ("bound_independent_values_equal_primary", "outcome_equals_primary")}
+        booleans = {"reported_cells": ("mean_and_half_width_equal_primary", "equals_primary", "not_below_primary"),
+                    "floor_cells": ("equals_primary", "not_below_primary"),
+                    "contrasts": ("bound_independent_values_equal_primary", "outcome_equals_primary", "not_below_primary")}
         for name, keys in shapes.items():
             if not isinstance(value[name], list):
                 raise ValueError()
@@ -516,13 +517,18 @@ def _energy_lines(result, windows, archives, kept, projections, extraction_repor
             f"{cid}: leave-one-out rows {len(loo)}; block numbers only this contrast kept: " +
             (", ".join(exclusive) or "none"), contrast_id=cid,
             count=len(loo), exclusive_block_numbers=exclusive))
+        magnitude_rows = []
         for row in loo:
             if "estimate_magnitude" in row["influence_triggers"]:
                 k = _block_number(row["omitted_block_id"])
                 movement = abs(row["estimate"] - est["estimate"])
-                text = LOO_SENTENCE.replace("quad k", "quad " + k).replace("X", f"{movement:.5f}")
-                result["contrasts"].append(_item("loo_magnitude", True, text, contrast_id=cid,
-                    block_number=k, movement_j=movement))
+                magnitude_rows.append({"block_number": k, "movement_j": movement})
+        magnitude_rows.sort(key=lambda r: (not r["block_number"].isdigit(),
+            int(r["block_number"]) if r["block_number"].isdigit() else r["block_number"]))
+        text = f"{cid}: " + (" ".join(LOO_SENTENCE.replace("quad k", "quad " + r["block_number"])
+            .replace("X", f"{r['movement_j']:.5f}") for r in magnitude_rows) if magnitude_rows else
+            "no leave-one-out row raised the magnitude trigger")
+        result["contrasts"].append(_item("loo_magnitude", True, text, contrast_id=cid, rows=magnitude_rows))
     if primary_observations:
         result["fixed_sentences"].append(_item("gross_energy", False, GROSS_SENTENCE))
     _machine_lines(result, windows, archives, kept, projections, flags)
@@ -532,6 +538,18 @@ def _block_number(bid):
     import re
     match = re.search(r"(?:b|block-?)(\d+)$", bid)
     return str(int(match[1])) if match else bid
+
+
+def _meter_member_model(archive, window, member):
+    """Resolve an archived member's config with the harvest's path rule."""
+    config_path = member.get("config_path")
+    if not isinstance(config_path, str):
+        raise AnalysisRefusal("disclosure_input_missing:meter_member_model")
+    relative = ("sources/repo/" + config_path if config_path.startswith("configs/") else
+                f"sources/repo/configs/campaigns/{window.pack_id}/" + config_path)
+    config = _strict_json(archive.source_bytes(relative), "disclosure_input_invalid")
+    identifier = config["model"]["name"]
+    return {"Qwen3-1.7B-4bit": "qwen3-1p7b", "Qwen3-8B-4bit": "qwen3-8b"}.get(identifier, identifier)
 
 
 def _machine_lines(result, windows, archives, kept, projections, flags):
@@ -551,7 +569,23 @@ def _machine_lines(result, windows, archives, kept, projections, flags):
         models = {r["run_id"]: r.get("model") for r in roster["members"] if r.get("model")}
         if pack != "gamma":
             model = "qwen3-1p7b" if pack == "alpha" else "qwen3-8b"
-            models.update({run:model for run in meter["members"]})
+            full_roster = rebuilt_roster(archive, archived_verdict_row(archive))
+            by_run = {member["run_id"]: member for member in full_roster["members"]}
+            models = {}
+            for run in meter["members"]:
+                member = by_run.get(run)
+                if member is None:
+                    raise AnalysisRefusal("disclosure_input_missing:meter_member_model")
+                if member.get("kind") == "science":
+                    models[run] = model
+                else:
+                    try:
+                        identifier = _meter_member_model(archive, windows[pack], member)
+                        if not isinstance(identifier, str) or not identifier:
+                            raise ValueError()
+                    except (AnalysisRefusal, KeyError, TypeError, ValueError):
+                        raise AnalysisRefusal("disclosure_input_missing:meter_member_model") from None
+                    models[run] = identifier
         else:
             for cell in kept[pack].cells.values():
                 for unit in (*cell.kept["quad"], *cell.dropped):
@@ -562,14 +596,7 @@ def _machine_lines(result, windows, archives, kept, projections, flags):
                 full_roster=rebuilt_roster(archive,archived_verdict_row(archive))
                 for member in full_roster["members"]:
                     if member["run_id"] not in missing:continue
-                    config_path=member.get("config_path")
-                    if not isinstance(config_path,str):
-                        raise AnalysisRefusal("disclosure_input_missing:meter_member_model")
-                    relative=("sources/repo/"+config_path if config_path.startswith("configs/") else
-                        f"sources/repo/configs/campaigns/{windows[pack].pack_id}/"+config_path)
-                    config=_strict_json(archive.source_bytes(relative),"disclosure_input_invalid")
-                    identifier=config["model"]["name"]
-                    models[member["run_id"]]={"Qwen3-1.7B-4bit":"qwen3-1p7b","Qwen3-8B-4bit":"qwen3-8b"}.get(identifier,identifier)
+                    models[member["run_id"]] = _meter_member_model(archive, windows[pack], member)
         window_flags = sorted({r["code"] for r in flags[pack] if r["code"].startswith("meter.")
                                and r["scope"]["level"] == "window"})
         grouped = {}
@@ -1011,8 +1038,12 @@ def _structure_lines(result,index,records,windows,archives,kept,brackets,project
     for key,text in FIXED_SENTENCES.items():result["fixed_sentences"].append(_item(key,False,text))
     for pack in PACK_ORDER:
         archive=archives[pack]; record=windows[pack].record
-        for code,count in sorted(Counter(r["code"] for r in flags[pack]).items()):
-            metadata=_code(code,catalog,flags[pack])
+        counts = Counter(r["code"] for r in flags[pack])
+        restricted_codes = {code for code, spec in catalog.codes.items() if spec["blinding"] == "RESTRICTED"}
+        for code in sorted(counts.keys() | restricted_codes):
+            count = counts[code]
+            metadata = (_code(code,catalog,flags[pack]) if count else
+                        {"code":code,"blinding":catalog.codes[code]["blinding"]})
             result["window_lines"][pack].append(_item("flag_count",metadata["blinding"]=="RESTRICTED",
                 f"{pack}: flag {code}: {count}; family {catalog.codes[code]['family']}",
                 count=count,family=catalog.codes[code]["family"],**metadata))
@@ -1028,10 +1059,10 @@ def _structure_lines(result,index,records,windows,archives,kept,brackets,project
         text=(_trigger_text(values) if values is not None else
             "sealed rule: the bracket read fresh, so no trigger was observed; doubling count and sequences not recorded by this harvest's program")
         result["window_lines"][pack].append(_item("erratum3_triggers",False,f"{pack}: "+text,values=values))
-        if brackets[pack].b_fiducial_s < SCREEN_BOUND_S:
-            result["window_lines"][pack].append(_item("below_screen_bound",True,
-                f"{pack}: operative bound below 36.46 ms ({brackets[pack].b_fiducial_s:.6f} s)",
-                b_op_s=brackets[pack].b_fiducial_s))
+        below = brackets[pack].b_fiducial_s < SCREEN_BOUND_S
+        result["window_lines"][pack].append(_item("below_screen_bound",True,
+            f"{pack}: operative bound below 36.46 ms: {'yes' if below else 'no'} ({brackets[pack].b_fiducial_s:.6f} s)",
+            b_op_s=brackets[pack].b_fiducial_s, below=below))
 
 
 def _required(value,key,path=""):
@@ -1161,8 +1192,10 @@ def _ruling_lines(result,windows,brackets,sensitivity,steps,catalog,flags):
         "The writer applied no config binding and the pinned harvest's loss list lacked the code; the analysis "
         "checked by structure that no reference the screen used carried it."))
     bmax=sensitivity["b_max"]
+    attainment = (f"attained at ledger sequence {bmax['attained_by_sequence']}" if bmax["attained_by_sequence"] is not None else
+                  "attained by a member of the acceptance (no ledger sequence)")
     result["block_lines"].append(_item("sensitivity_bmax",True,
-        f"sensitivity: B_max {bmax['value_s']:.6f} s attained at ledger sequence {bmax['attained_by_sequence']}; T = {bmax['T']}",**bmax))
+        f"sensitivity: B_max {bmax['value_s']:.6f} s {attainment}; T = {bmax['T']}",**bmax))
     for pack in PACK_ORDER:
         row=sensitivity["windows"][pack]
         phrase="values differ from primary" if row["widened"] else "sensitivity values equal primary values"
@@ -1181,6 +1214,7 @@ def _ruling_lines(result,windows,brackets,sensitivity,steps,catalog,flags):
                         for key,value in sorted(row[side].items()))
                 if name=="contrasts":
                     text+="; sensitivity outcome equals primary: "+("yes" if row["outcome_equals_primary"] else "no")
+                text+="; not below primary: "+("yes" if row["not_below_primary"] else "no")
             result["block_lines"].append(_item(line,True,text,record=row))
     result["block_lines"].append(_item("sensitivity_boundary",True,
         "Sensitivity values are never composed into a primary number."))

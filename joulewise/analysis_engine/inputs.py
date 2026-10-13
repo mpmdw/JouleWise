@@ -2257,7 +2257,10 @@ def bind_floor_artifact_evidence(
                     provenance = floor_session.provenance_for(bundle_id)
                     floor_context = archive_contexts[str(evidence_root.resolve())]
                     if (not isinstance(provenance, Mapping)
-                            or provenance.get("operative_fiducial_bound_s") != archive_context_operative_bound_s(floor_context)):
+                            or type(provenance.get("operative_fiducial_bound_s")) not in (int, float)
+                            or not math.isfinite(provenance["operative_fiducial_bound_s"])
+                            or (expected_bound := archive_context_operative_bound_s(floor_context)) is None
+                            or provenance["operative_fiducial_bound_s"] != expected_bound):
                         raise AnalysisInputError("operative_bound_not_the_window_bracket")
                 else:
                     summary = reader.raw_summary()
@@ -3781,7 +3784,10 @@ def load_analysis_inputs(
             for evidence in operative_evidence:
                 provenance = consumption_session.provenance_for(evidence.bundle_id) if block5 else None
                 if block5 and (not isinstance(provenance, Mapping)
-                               or provenance.get("operative_fiducial_bound_s") != archive_context_operative_bound_s(context)):
+                               or type(provenance.get("operative_fiducial_bound_s")) not in (int, float)
+                               or not math.isfinite(provenance["operative_fiducial_bound_s"])
+                               or (expected_bound := archive_context_operative_bound_s(context)) is None
+                               or provenance["operative_fiducial_bound_s"] != expected_bound):
                     raise AnalysisInputError("operative_bound_not_the_window_bracket")
                 operative_summary = consumption_session.summary_for(
                     evidence.bundle_id

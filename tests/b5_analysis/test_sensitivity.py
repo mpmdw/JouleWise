@@ -222,6 +222,95 @@ class SeamTests(unittest.TestCase):
         self.assertIs(type(larger), fe.CellReport)
         self.assertIsNotNone(larger.floor)
 
+    def test_F4_gamma_missing_invalid_and_equal_bounds(self):
+        from tests.b5_analysis import fixtures_s5 as s5
+        from joulewise.analysis_engine import inputs as im
+        # All counterfactual bracket/provenance bounds are made up.
+        with s5.loader_case() as case:
+            for bound,provenance in ((None,{}),('absent',{}),('0.04',{}),(-1.,{}),
+                    (.04,{'operative_fiducial_bound_s':math.nan}),
+                    (1.,{'operative_fiducial_bound_s':True}),(.04,None)):
+                bracket=dict(case.context.window_bracket)
+                if bound=='absent':bracket.pop('b_fiducial_s')
+                else:bracket['b_fiducial_s']=bound
+                context=replace(case.context,window_bracket=bracket)
+                case.session.provenance_for=lambda bid:provenance
+                with self.subTest(bound=bound,provenance=provenance), self.assertRaisesRegex(
+                        im.AnalysisInputError,'^operative_bound_not_the_window_bracket$'):
+                    case.call(archive_contexts={str(case.runs.resolve()):context})
+            case.session.provenance_for=lambda bid:{'operative_fiducial_bound_s':.04}
+            self.assertTrue(case.call().effective)
+
+    def test_F4_floor_missing_invalid_and_equal_bounds(self):
+        from joulewise.analysis_engine import inputs as im
+        # Same floor-binder seam as t3; fabricated bounds and artifact only.
+        root=self.pack.root
+        artifact={'cells':[{'cell_id':'synthetic-floor',
+            'key':{'metric':'phase_energy_j.decode','window_class':'phase'},
+            'absolute':{'bundle_observations':[{'bundle_id':'synthetic-member'}]},
+            'provenance':{'absolute':{'evidence_root_id':'alpha'}}}]}
+        authenticated=im.AuthenticatedFloorArtifact(artifact,b'{}','a'*64,frozenset({'alpha'}))
+        class AfterBound(Exception):pass
+        reader=SimpleNamespace(raw_metadata=mock.Mock(side_effect=AfterBound))
+        for bound,provenance in ((None,{}),('absent',{}),('0.04',{}),(-1.,{}),
+                (.04,{'operative_fiducial_bound_s':math.nan}),
+                (1.,{'operative_fiducial_bound_s':True}),(.04,None),
+                (.04,{'operative_fiducial_bound_s':.04})):
+            context=ww.ArchiveContext(root,window_bracket={} if bound=='absent' else {'b_fiducial_s':bound})
+            session=SimpleNamespace(ready=True,summary_for=lambda bid:{},provenance_for=lambda bid:provenance)
+            valid=bound==.04 and isinstance(provenance,dict) and provenance.get('operative_fiducial_bound_s')==.04
+            with self.subTest(bound=bound,provenance=provenance), \
+                 mock.patch.object(im,'archive_snapshot',return_value=None), \
+                 mock.patch.object(im,'AuthenticatedConsumptionSession',return_value=session), \
+                 mock.patch.object(im,'whole_window_refusal_reasons',return_value=()), \
+                 mock.patch.object(im,'_campaign_order_binding_problems',return_value=()), \
+                 mock.patch.object(im,'BundleReader',return_value=reader):
+                with self.assertRaises(AfterBound if valid else im.AnalysisInputError) as caught:
+                    im.bind_floor_artifact_evidence(artifact,root/'absent-floor.json',{'alpha':root},
+                        strict_validator=lambda *a:(),_authenticated_floor=authenticated,
+                        archive_contexts={str(root.resolve()):context})
+                if not valid:self.assertEqual(str(caught.exception),'operative_bound_not_the_window_bracket')
+
+    @staticmethod
+    def synthetic_common_mode_bracket():
+        # Entire bracket is made up; no replay or measured values are used.
+        return {'status':'passed','endpoint_max_b_fiducial_s':.03,
+            'calibration_drift_allowance_s':.01,'b_fiducial_s':.04,
+            'acceptance':{'allowance':{'rule':'max(observed_drift_s,bracket_screen_s)',
+                'value_s':'0.01','embedding_count':1,'embedded_in':'b_fiducial_s'}}}
+
+    def test_M17_comparative_core_below_operative_refuses(self):
+        # All deltas, sweep values, windows and bounds are fabricated.
+        deltas=[.1,.2,.3,.2,.1]
+        with self.assertRaises(fe.CommonModeEstimatorRefusal) as caught:
+            fe._common_mode_floor_core(deltas,onset_sweeps_j=[[v,v+.1] for v in deltas],
+                offset_sweeps_j=[[v,v] for v in deltas],zero_point_contrasts_j=deltas,
+                bundle_residual_half_widths_j=[[0.,0.,0.,0.] for _ in deltas],
+                member_window_bounds_s=[[(0.,1.)]*4 for _ in deltas],
+                member_envelope_integral_sums_j=[10.]*len(deltas),
+                calibration_bracket=self.synthetic_common_mode_bracket(),shared_edge_bound_s=.03,sensitivity=True)
+        self.assertEqual(caught.exception.reason,'common_mode_allowance_application_invalid')
+
+    def test_M33_comparative_extractor_below_operative_refuses(self):
+        # Fabricated ready session reaches the genuine extractor bound guard.
+        bracket=self.synthetic_common_mode_bracket()
+        session=SimpleNamespace(ready=True,refusal_reasons=(),calibration_bracket=bracket,
+            operative_fiducial_bound_s=.03,sensitivity_bound_s=.03)
+        blocks=[{'block_id':f'b{i:02d}','members':{p:f'b{i:02d}-{p.lower()}'
+                 for p in ('A1','B1','B2','A2')}} for i in range(1,6)]
+        def member(**kw):
+            return replace(fe._unevaluated_member(slot=kw['slot'],bundle_id=kw['bundle_id'],
+                block_id=kw['block_id'],position=kw['position'],excluded=False),
+                value_j=11. if kw['position'].startswith('B') else 10.,anchor_shift_bound_j=0.)
+        with mock.patch.object(fe,'_evaluate_member',side_effect=member):
+            report=fe.extract_comparative_cell(cell_id='synthetic',metric='phase_energy_j.decode',
+                window_class='phase',blocks=blocks,runs_root=Path('synthetic'),cooldowns={},
+                consumption_session=session,estimator=fe.COMMON_MODE_ESTIMATOR_ID,
+                estimator_registration=fe.two_shared_edge_common_mode_registration(),
+                calibration_basis={'acceptance_selection':'issued_d116_artifact_only',
+                    'issued_acceptance':{'acceptance_id':'synthetic'},'allowance_embedding_count':1})
+        self.assertIn('common_mode_allowance_application_invalid',report.refusal_reasons)
+
     def test_helper_invalid_brackets(self):
         for bound in (True, -1., math.inf, math.nan, '0.04', None):
             self.assertIsNone(ww.archive_context_operative_bound_s(ww.ArchiveContext(Path('.'),
