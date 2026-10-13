@@ -5,6 +5,8 @@ from dataclasses import replace
 import hashlib
 import io
 import json
+import math
+import statistics
 from pathlib import Path
 import tempfile
 import shutil
@@ -20,6 +22,127 @@ from tests.b5_analysis import fixtures_s8 as f
 class IssuerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.f=f.synthetic_pack()
+
+    def test_S8F2_each_cell_uses_its_own_phase(self):
+        from tests.test_whole_window import TwoScopeRefusalTests
+        summaries = deepcopy(self.f.summaries)
+        for cell in self.f.spec['reported_energy_cells']:
+            for member in cell['members']:
+                summary = summaries[member['bundle_id']]
+                ordinal = member['ordinal']
+                summary['gross_energy_j'] = 70 + ordinal/10
+                summary['energy_anchor_shift_envelopes']['/gross_energy_j'] = (
+                    TwoScopeRefusalTests._envelope(70+ordinal/10, .04, .8+ordinal/300))
+                for phase, value, half in [('decode', 10+ordinal/100, .2+ordinal/1000),
+                                           ('prefill', 31+(ordinal*7 % 13)/10, .5+ordinal/500)]:
+                    summary['phase_energy_j'][phase] = value
+                    summary['energy_anchor_shift_envelopes']['/phase_energy_j/'+phase] = (
+                        TwoScopeRefusalTests._envelope(value, .04, half))
+        session = SimpleNamespace(**{**vars(self.f.session), 'summary_for': summaries.get})
+        fixture = SimpleNamespace(**{**vars(self.f), 'summaries': summaries, 'session': session})
+        with f.pack_seams(fixture):
+            projection = f.project(fixture)
+        means = []
+        for index, phase in [(0, 'decode'), (2, 'prefill')]:
+            cell = self.f.spec['reported_energy_cells'][index]
+            value = next(c for c in projection['cells'] if c['cell_id'] == cell['cell_id'])
+            kept = self.f.kept.for_reported_cell(self.f.spec, index)
+            def energy(ordinal):
+                return summaries[cell['members'][ordinal-1]['bundle_id']]['phase_energy_j'][phase]
+            r = [energy(n) for n in kept.kept_repeat_ordinals]
+            b = [statistics.fmean(energy(n) for n in q) for q in kept.kept_quad_ordinals]
+            mean = .2*statistics.fmean(r) + .8*statistics.fmean(b)
+            variance = .2**2*statistics.variance(r)/len(r) + .8**2*statistics.variance(b)/len(b)
+            self.assertAlmostEqual(value['mean_j'], mean, delta=1e-12)
+            self.assertAlmostEqual(value['interval']['h_j'],
+                                   e.T975[min(len(r), len(b))-1]*math.sqrt(variance), delta=1e-12)
+            means.append(value['mean_j'])
+        self.assertGreater(abs(means[0]-means[1]), 1e-6)
+
+    def test_S8F3_observed_output_differs_from_requested(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)/'pack'
+            shutil.copytree(self.f.root, root)
+            for member in self.f.spec['reported_energy_cells'][0]['members']:
+                path = root/member['bundle_id']/'metadata.json'
+                metadata = json.loads(path.read_bytes())
+                self.assertEqual(metadata['workload_provenance']['output_policy']['requested_tokens'], 512)
+                metadata['workload_observed'] = {'token_count': 2548, 'output_token_count': 500}
+                path.write_text(json.dumps(metadata))
+            fixture = SimpleNamespace(**{**vars(self.f), 'root': root})
+            with f.pack_seams(fixture):
+                value = f.project(fixture)['cells'][0]
+        kept = self.f.kept.for_reported_cell(self.f.spec, 0)
+        count = len(kept.kept_repeat_ordinals) + 4*len(kept.kept_quad_ordinals)
+        self.assertEqual(value['per_token']['observed_token_sum'], count*500)
+        self.assertEqual(value['per_token']['status'], 'computed')
+
+    def ownership_counterfactual(self, change):
+        original = self.f.kept.for_reported_cell(self.f.spec, 0).cell
+        if change == 'repeat_positions':
+            transform = lambda u: replace(u, positions=(11-u.positions[0],)) if u.stratum == 'repeat' else u
+        elif change == 'repeat_count':
+            repeat = original.kept['repeat'][0]
+            transform = lambda u: replace(u, run_ids=()) if u.stratum == 'repeat' and u.unit_id == repeat.unit_id else u
+        elif change == 'quad_positions':
+            kept_quad = original.kept['quad'][0]
+            removed_quad = next(u for u in original.dropped if u.stratum == 'quad')
+            def transform(u):
+                if u.unit_id == kept_quad.unit_id and u.stratum == 'quad':
+                    return replace(u, positions=removed_quad.positions)
+                if u.unit_id == removed_quad.unit_id and u.stratum == 'quad':
+                    return replace(u, positions=kept_quad.positions)
+                return u
+        else:
+            quad = original.kept['quad'][0]
+            def transform(u):
+                if u.stratum != 'quad' or u.unit_id != quad.unit_id:
+                    return u
+                ids = (u.run_ids[1], u.run_ids[0], *u.run_ids[2:])
+                return replace(u, run_ids=ids if change == 'quad_order' else ids[:3])
+        cell = replace(original, kept={s: tuple(transform(u) for u in us) for s, us in original.kept.items()},
+                       dropped=tuple(transform(u) for u in original.dropped))
+        units = replace(self.f.kept, cells={**self.f.kept.cells, cell.cell_id: cell})
+        summary = mock.Mock(side_effect=self.f.session.summary_for)
+        provenance = mock.Mock(side_effect=self.f.session.provenance_for)
+        session = SimpleNamespace(**{**vars(self.f.session), 'summary_for': summary, 'provenance_for': provenance})
+        fixture = SimpleNamespace(**{**vars(self.f), 'kept': units, 'session': session})
+        with f.pack_seams(fixture), mock.patch.object(issuer, 'BundleReader', wraps=issuer.BundleReader) as reader:
+            with self.assertRaises(AnalysisRefusal) as cm:
+                f.project(fixture)
+            self.assertEqual(cm.exception.code, 'exclusions_plan_mismatch')
+            summary.assert_not_called()
+            provenance.assert_not_called()
+            reader.assert_not_called()
+
+    def test_S8F4_repeat_positions_refuse_before_member_io(self):
+        self.ownership_counterfactual('repeat_positions')
+
+    def test_S8F4_quad_positions_refuse_before_member_io(self):
+        self.ownership_counterfactual('quad_positions')
+
+    def test_S8F4_quad_run_order_refuses_before_member_io(self):
+        self.ownership_counterfactual('quad_order')
+
+    def test_S8F4_quad_run_count_refuses_before_member_io(self):
+        self.ownership_counterfactual('quad_count')
+
+    def test_S8F4_repeat_run_count_refuses_before_member_io(self):
+        self.ownership_counterfactual('repeat_count')
+
+    def test_S8F4_session_contains_exactly_kept_run_ids(self):
+        expected = {run for i in range(3)
+                    for units in self.f.kept.for_reported_cell(self.f.spec, i).cell.kept.values()
+                    for unit in units for run in unit.run_ids}
+        removed = self.f.kept.removed_run_ids()
+        self.assertTrue(removed)
+        with f.pack_seams(self.f), mock.patch.object(issuer, 'AuthenticatedConsumptionSession',
+                                                   return_value=self.f.session) as constructor:
+            f.project(self.f)
+        constructor.assert_called_once()
+        ids = constructor.call_args.args[1]
+        self.assertEqual(ids, expected)
+        self.assertTrue(set(ids).isdisjoint(removed))
 
     def rows(self,session=None,strict=None):
         c=self.f.spec['reported_energy_cells'][0];k=self.f.kept.for_reported_cell(self.f.spec,0)
@@ -258,11 +381,62 @@ class IndexedCompositionTests(unittest.TestCase):
         from tests.b5_analysis.test_floor_kept_units import indexed_fixture
         from tests.b5_analysis import fixtures_s2 as s2
         cls.indexed=indexed_fixture()
+        cls.reported=f.indexed_reported_fixture()
         # The S4 archived spec has two families, rather than a registered S8
         # six-cell spec. Projection/spec registration are isolated below; every
         # index, archive, kept-units, bracket and context reader is real.
         pack=cls.indexed.local_spec.parent/'prefill_pin';pack.mkdir(exist_ok=True)
         for name in ('selection.json','prefill_prompt_pin.json'):(pack/name).write_bytes(b'{}\n')
+
+    def test_S8F6_local_spec_must_equal_archive(self):
+        p = self.reported
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)/'repo'
+            shutil.copytree(p.repo, repo)
+            path = repo/'configs/campaigns'/p.window.entry.pack_id/'extraction_spec.json'
+            path.write_bytes(path.read_bytes()+b' ')
+            changed = SimpleNamespace(**{**vars(p), 'repo': repo})
+            with f.indexed_reported_seams(changed), self.assertRaises(AnalysisRefusal) as cm:
+                f.issue_indexed_reported(changed)
+        self.assertEqual(cm.exception.code, 'extraction_spec_differs_from_archive')
+
+    def test_S8F6_local_prefill_parents_must_equal_archive(self):
+        p = self.reported
+        for name in ('selection.json', 'prefill_prompt_pin.json'):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)/'repo'
+                shutil.copytree(p.repo, repo)
+                path = repo/'configs/campaigns'/p.window.entry.pack_id/'prefill_pin'/name
+                path.write_bytes(path.read_bytes()+b' ')
+                changed = SimpleNamespace(**{**vars(p), 'repo': repo})
+                with f.indexed_reported_seams(changed), self.assertRaises(AnalysisRefusal) as cm:
+                    f.issue_indexed_reported(changed)
+                self.assertEqual(cm.exception.code, 'reported_energy_parent_differs_from_archive')
+
+    def test_S8F6_verdict_digests_refuse_before_context(self):
+        from joulewise.b5_analysis.archive import ArchiveHandle
+        original = ArchiveHandle.output_bytes
+        for field in ('row_sha256', 'evaluation_basis_sha256'):
+            def output(handle, path):
+                raw = original(handle, path)
+                if path == issuer.NEG8_HARVEST_ALLOWANCE_RECORD:
+                    allowance = json.loads(raw)
+                    allowance['verdict'][field] = '0'*64
+                    return (json.dumps(allowance)+'\n').encode()
+                return raw
+            with self.subTest(field=field), f.indexed_reported_seams(self.reported), \
+                 mock.patch.object(ArchiveHandle, 'output_bytes', output), \
+                 mock.patch.object(issuer, 'build_context', wraps=issuer.build_context) as context:
+                with self.assertRaises(AnalysisRefusal) as cm:
+                    f.issue_indexed_reported(self.reported)
+                self.assertEqual(cm.exception.code, 'whole_window_verdict_provenance_invalid')
+                context.assert_not_called()
+
+    def test_S8F6_gamma_refuses_before_index_read(self):
+        with mock.patch.object(issuer, 'load_window_index') as index, self.assertRaises(AnalysisRefusal) as cm:
+            issuer.issue_pack(self.reported.index, 'gamma')
+        self.assertEqual(cm.exception.code, 'floor_pack_required')
+        index.assert_not_called()
 
     def compose(self):
         from tests.b5_analysis import fixtures as s0, fixtures_s2 as s2

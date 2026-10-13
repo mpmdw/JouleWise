@@ -46,6 +46,47 @@ def project(c):
 
 
 class ReportedCellTests(unittest.TestCase):
+    def test_S8F1_ten_repeats_eight_quads_remain_stratified(self):
+        c = case((), (5, 9))
+        for row in c[1]:
+            ordinal = row['member']['ordinal']
+            row['bounds_j'] = {kind: (ordinal + 3*j)/100
+                               for j, kind in enumerate(e.BOUND_KINDS)}
+            row['tokens']['output'] = 100 + 7*ordinal
+        c[2]['attribution_floor_j'] = max(row['bounds_j'][e.BOUND_KINDS[0]] for row in c[1])
+        rows = c[1]
+        repeats, quads = rows[:10], rows[10:]
+        r = [row['energy_j'] for row in repeats]
+        b = [statistics.fmean(row['energy_j'] for row in quads[i:i+4])
+             for i in range(0, len(quads), 4)]
+        mean = .2*statistics.fmean(r) + .8*statistics.fmean(b)
+        variance = .2**2*statistics.variance(r)/10 + .8**2*statistics.variance(b)/8
+        kinds = {kind: .2*statistics.fmean(row['bounds_j'][kind] for row in repeats)
+                 + .8*statistics.fmean(row['bounds_j'][kind] for row in quads)
+                 for kind in e.BOUND_KINDS}
+        token_ratio = (.2*math.fsum(r)/sum(row['tokens']['output'] for row in repeats)
+                       + .8*math.fsum(row['energy_j'] for row in quads)
+                       / sum(row['tokens']['output'] for row in quads))
+        for value, pooled in [(mean, statistics.fmean(row['energy_j'] for row in rows)),
+                              (token_ratio, math.fsum(row['energy_j'] for row in rows)
+                               / sum(row['tokens']['output'] for row in rows)),
+                              *((kinds[kind], statistics.fmean(row['bounds_j'][kind] for row in rows))
+                                for kind in e.BOUND_KINDS)]:
+            self.assertGreater(abs(value-pooled), 1e-6)
+        estimate = e.estimate_reported_cell(rows, c[3])
+        value = project(c)
+        self.assertAlmostEqual(estimate.mean_j, mean, delta=1e-12)
+        self.assertAlmostEqual(value['mean_j'], mean, delta=1e-12)
+        self.assertEqual(estimate.df, 7)
+        self.assertEqual(value['interval']['df'], 7)
+        for half in (estimate.h_j, value['interval']['h_j']):
+            self.assertAlmostEqual(half, e.T975[7]*math.sqrt(variance), delta=1e-12)
+        for kind in e.BOUND_KINDS:
+            self.assertAlmostEqual(estimate.kind_averages_j[kind], kinds[kind], delta=1e-12)
+            self.assertAlmostEqual(value['interval']['kind_averages_j'][kind], kinds[kind], delta=1e-12)
+        self.assertAlmostEqual(estimate.per_token['j_per_token'], token_ratio, delta=1e-12)
+        self.assertAlmostEqual(value['per_token']['j_per_token'], token_ratio, delta=1e-12)
+
     def assert_code(self, code, fn):
         with self.assertRaises(e.PaperReportedEnergyRefusal) as cm: fn()
         self.assertEqual(cm.exception.code, 'paper_reported_energy_'+code)

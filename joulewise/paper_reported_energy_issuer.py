@@ -53,6 +53,25 @@ def normalized_rows(cell, kept, *, session, runs_root, context, binding, kept_un
                     strict_validator, allowances, b_override_s=None) -> list[dict]:
     if b_override_s is not None:
         raise AnalysisRefusal('b_override_s_unsupported')
+    all_units = [unit for units in kept.cell.kept.values() for unit in units] + list(kept.cell.dropped)
+    kept_ids = {(u.stratum, u.unit_id) for units in kept.cell.kept.values() for u in units}
+    dropped_ids = {(u.stratum, u.unit_id) for u in kept.cell.dropped}
+    expected_bundles = {}
+    for stratum, size, start in (('repeat', 1, 1), ('quad', 4, 11)):
+        units = sorted((u for u in all_units if u.stratum == stratum), key=lambda u: u.positions)
+        for i, unit in enumerate(units):
+            if len(unit.run_ids) != size:
+                raise AnalysisRefusal('exclusions_plan_mismatch')
+            owner_kept = ((stratum, unit.unit_id) in kept_ids and (stratum, unit.unit_id) not in dropped_ids)
+            for slot, run_id in enumerate(unit.run_ids):
+                expected_bundles[start + size*i + slot] = (owner_kept, run_id)
+    for ordinal in energy._kept_ordinals(kept):
+        try:
+            owner_kept, run_id = expected_bundles[ordinal]
+            if not owner_kept or cell['members'][ordinal - 1]['bundle_id'] != run_id:
+                raise AnalysisRefusal('exclusions_plan_mismatch')
+        except (KeyError, IndexError, TypeError):
+            raise AnalysisRefusal('exclusions_plan_mismatch') from None
     rows = []
     metric = {'name': cell['metric'], 'window_class': 'phase',
               'metric_tag': cell['cell_id'], 'target_precheck_path': cell['target_precheck_path']}
@@ -252,7 +271,7 @@ def reported_energy_issuance_gate(ctx):
         return issue_pack(index,pack,repo_root=ctx.repository)
     try:
         projection = contextvars.Context().run(replay)
-    except (AnalysisRefusal, custody._ClaimReplayRefused):
+    except Exception:
         return custody._FamilyReplay(False,False,(),('reported_energy_replay_refused',))
     try:
         basis = custody._json_object(ctx.raws[role.WHOLE_WINDOW_BASIS])

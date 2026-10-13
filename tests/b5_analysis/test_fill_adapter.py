@@ -3,6 +3,7 @@ from copy import deepcopy
 from dataclasses import replace
 import contextlib
 import io
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -19,6 +20,74 @@ from tests.b5_analysis.fixtures_s5 import arithmetic_inputs
 class FillAdapterTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.f=f.fill_fixture()
+
+    @contextlib.contextmanager
+    def cli_seams(self, units=None, expected=('decode', 'prefill')):
+        windows = {pack: SimpleNamespace(pack_id='synthetic-'+pack, claim_runs_root=self.f.root/'runs',
+                   plan_id='synthetic-'+pack, attempt=1, harvest_record_sha256='3'*64,
+                   record=SimpleNamespace(claim_usable=True)) for pack in ('alpha', 'beta', 'gamma')}
+        with mock.patch.object(cli, 'load_window_index', return_value=SimpleNamespace(entries=())), \
+             mock.patch.object(cli, 'select_analysed_attempts', return_value=windows), \
+             mock.patch.object(cli, '_registered_contrast_ids', return_value=expected), \
+             mock.patch.object(cli, 'block5_claim_gate_inputs', return_value={'kept_units': units or self.f.loaded.kept_units}), \
+             mock.patch('joulewise.b5_analysis.archive.open_archive',
+                        return_value=SimpleNamespace(output_bytes=lambda path: b'{}\n')):
+            yield windows
+
+    def test_S8F7_build_passes_all_checks_from_their_owners(self):
+        units = replace(self.f.loaded.kept_units, exclusions_sha256='0'*64)
+        self.assertNotEqual(units.exclusions_sha256,
+                            self.f.manifest['evidence']['analysed_attempt_exclusions']['sha256'])
+        expected = ('decode', 'prefill')
+        with self.cli_seams(units, expected) as windows, \
+             mock.patch.object(cli, 'adapt_claim_verdicts', wraps=cli.adapt_claim_verdicts) as adapter:
+            with self.assertRaisesRegex(a.ResultsFillAdapterError, '^results_fill_exclusions_mismatch'):
+                cli.build('synthetic-index', self.f.root, self.f.root/'manifest.json', self.f.root/'verdicts.json')
+        adapter.assert_called_once()
+        kw = adapter.call_args.kwargs
+        self.assertEqual(kw['exclusions_sha256'], units.exclusions_sha256)
+        self.assertEqual(set(kw['kept_quads']), set(expected))
+        for cid in expected:
+            self.assertIs(kw['kept_quads'][cid], units.for_contrast(cid))
+        floor_path = self.f.root/self.f.manifest['evidence']['aggregate_floor_artifact']['path']
+        self.assertEqual(kw['floor_artifact_raw'], floor_path.read_bytes())
+        self.assertEqual(kw['expected_contrast_ids'], expected)
+        self.assertEqual(set(kw['campaigns']), {'alpha', 'beta'})
+        for pack in ('alpha', 'beta'):
+            self.assertEqual(kw['campaigns'][pack], {
+                'plan_id': windows[pack].plan_id, 'attempt': windows[pack].attempt,
+                'claim_usable': windows[pack].record.claim_usable,
+                'exclusions_sha256': hashlib.sha256(b'{}\n').hexdigest(),
+                'harvest_record_sha256': windows[pack].harvest_record_sha256})
+
+    def test_S8F7_cli_refuses_each_disabled_check_counterfactual(self):
+        import shutil
+        units = self.f.loaded.kept_units
+        cell = units.for_contrast('decode')
+        quads = cell.kept['quad']
+        changed_cell = replace(cell, kept={'quad': (replace(quads[0], unit_id='other-quad'), *quads[1:])})
+        wrong_quads = replace(units, cells={**units.cells, 'decode': changed_cell})
+        third = 'counterfactual-third'
+        third_units = replace(units, cells={**units.cells, third: replace(cell, cell_id=third)})
+        for change, changed_units, expected, code in [
+                ('quads', wrong_quads, ('decode', 'prefill'), 'results_fill_kept_quads_mismatch'),
+                ('floor', units, ('decode', 'prefill'), 'results_fill_floor_mismatch'),
+                ('contrasts', third_units, ('decode', 'prefill', third), 'results_fill_contrast_census_mismatch'),
+                ('exclusions', replace(units, exclusions_sha256='0'*64), ('decode', 'prefill'),
+                 'results_fill_exclusions_mismatch')]:
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)/'custody'
+                shutil.copytree(self.f.root, root)
+                if change == 'floor':
+                    path = root/self.f.manifest['evidence']['aggregate_floor_artifact']['path']
+                    path.write_bytes(path.read_bytes()+b' ')
+                out = Path(tmp)/'out'
+                args = ['--window-index', 'synthetic-index', '--custody-root', str(root),
+                        '--finalized-manifest', str(root/'manifest.json'), '--claim-verdicts', str(root/'verdicts.json'),
+                        '--out', str(out)]
+                with self.cli_seams(changed_units, expected):
+                    self.assertEqual(self.invoke(args), (2, '', 'error: '+code+'\n'))
+                self.assertFalse(out.exists())
 
     def adapt(self,raw=None,**overrides):
         kw={'campaigns':{'alpha':{},'beta':{}},'finalized_manifest_raw':self.f.manifest_raw,

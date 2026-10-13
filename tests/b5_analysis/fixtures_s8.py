@@ -111,6 +111,10 @@ def production_member():
         session._prepare(bundle_paths={bundle.name:bundle},policy=SimpleNamespace(calibration_bracketing=object()))
     cell,rows,binding,k=case()
     cell=deepcopy(cell);cell['members'][0]['bundle_id']=bundle.name
+    # Keep the production member's synthetic ordinal owner bound to its bundle.
+    unit_cell=replace(k.cell,kept={**k.cell.kept,'repeat':(
+        replace(k.cell.kept['repeat'][0],run_ids=(bundle.name,)),*k.cell.kept['repeat'][1:])})
+    k=replace(k,cell=unit_cell)
     k=replace(k,kept_repeat_ordinals=(1,),removed_repeat_ordinals=tuple(range(2,11)),
               kept_quad_ordinals=(),removed_quad_ordinals=tuple(tuple(range(i,i+4)) for i in range(11,51,4)))
     return SimpleNamespace(root=root,bundle=bundle,stored=stored,independent=independent,pre=pre,operative=operative,

@@ -8,7 +8,8 @@ import re
 import tempfile
 import unittest
 from unittest import mock
-from joulewise import paper_custody as c, paper_reported_energy_issuer as issuer
+from joulewise import paper_custody as c, paper_reported_energy as energy, paper_reported_energy_issuer as issuer
+from joulewise.b5_analysis.windows import AnalysisRefusal
 from joulewise.authentication_io import V2AuthenticationReadSession
 from joulewise.analysis_engine.artifact import finalize_claim_verdicts, render_claim_verdicts, validate_claim_verdicts
 from joulewise.analysis_engine.claim_side_bound import produce_claim_side_bound
@@ -23,6 +24,64 @@ def encoded(value):return (json.dumps(value,sort_keys=True,separators=(',',':'))
 class ClaimReplayTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.f=f.replay_fixture()
+
+    def test_S8F5_manifest_and_floor_request_digests_precede_engine(self):
+        for key in ('analysis_manifest_sha256', 'floor_artifact_sha256'):
+            ctx = self.ctx()
+            request = json.loads(self.f.request)
+            request[key] = '0'*64
+            ctx.raws[c.InputRole.CLAIM_REPLAY_REQUEST] = encoded(request)
+            with self.subTest(key=key), mock.patch('joulewise.analysis_engine.analyze_claims') as engine:
+                self.assertEqual(self.gate(ctx).validator_codes, ('claim_verdicts_replay_refused',))
+                engine.assert_not_called()
+
+    def test_S8F5_evidence_root_census_precedes_engine(self):
+        for change in ('missing', 'extra'):
+            ctx = self.ctx()
+            request = json.loads(self.f.request)
+            if change == 'missing':
+                request['evidence_roots'].pop('a10')
+            else:
+                request['evidence_roots']['extra'] = 'alpha'
+            ctx.raws[c.InputRole.CLAIM_REPLAY_REQUEST] = encoded(request)
+            with self.subTest(change=change), mock.patch('joulewise.analysis_engine.analyze_claims') as engine:
+                self.assertEqual(self.gate(ctx).validator_codes, ('claim_verdicts_replay_refused',))
+                engine.assert_not_called()
+
+    def test_S8F5_worktree_index_must_equal_anchored_blob(self):
+        raw = self.f.index_path.read_bytes()
+        try:
+            self.f.index_path.write_bytes(raw+b' ')
+            with mock.patch('joulewise.analysis_engine.analyze_claims') as engine:
+                self.assertEqual(self.gate(self.ctx()).validator_codes, ('claim_verdicts_replay_refused',))
+                engine.assert_not_called()
+        finally:
+            self.f.index_path.write_bytes(raw)
+
+    def test_S8F5_engine_receives_block5_objects_and_roots(self):
+        from joulewise import analysis_engine
+        from joulewise.b5_analysis import windows
+        selected = {}
+        real_select = windows.select_analysed_attempts
+        def select(*args, **kwargs):
+            value = real_select(*args, **kwargs)
+            selected.update(value)
+            return value
+        with mock.patch.object(analysis_engine, 'analyze_claims', wraps=analysis_engine.analyze_claims) as engine, \
+             mock.patch.object(windows, 'select_analysed_attempts', side_effect=select):
+            result = self.gate(self.ctx())
+        self.assertTrue(result.authentic, result.validator_codes)
+        self.assertTrue(result.admitted)
+        engine.assert_called_once()
+        kw = engine.call_args.kwargs
+        for key in ('kept_units', 'archive_contexts', 'gamma_archive'):
+            self.assertIs(kw[key], self.f.built[key])
+        self.assertIs(kw['neg8_harvest_archive'], self.f.built['gamma_archive'].window.archive_root)
+        self.assertIs(kw['legacy_l1_mechanics'], False)
+        self.assertIsNone(kw['output_path'])
+        expected = {root_id: selected[pack].claim_runs_root
+                    for root_id, pack in json.loads(self.f.request)['evidence_roots'].items()}
+        self.assertEqual(kw['evidence_roots'], expected)
 
     def ctx(self):return replace(self.f.ctx,raws=deepcopy(self.f.ctx.raws))
 
@@ -202,6 +261,64 @@ class SupplyCensusTests(unittest.TestCase):
 
 
 class ReportedGateTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.p = f.indexed_reported_fixture()
+        with f.indexed_reported_seams(cls.p):
+            cls.projection = f.issue_indexed_reported(cls.p)
+
+    def ctx(self):
+        p = self.p
+        raws = {c.InputRole.EXTRACTION_SPEC: p.spec_raw, c.InputRole.EXTRACTION_REPORT: b'{}',
+                c.InputRole.G2A_SELECTION: p.selection_raw, c.InputRole.PROMPT_PIN: p.prompt_raw,
+                c.InputRole.WHOLE_WINDOW_BASIS: encoded(p.row['evaluation_basis'])}
+        return c._GateContext('reported_energy_parents', 'synthetic.energy', 'production', 'reported-energy.v1',
+                              tuple(x['cell_id'] for x in self.projection['cells']), p.repo, p.window.claim,
+                              'synthetic', (), (), raws, None)
+
+    def gate(self, ctx, error=None):
+        def sealed_blob(repository, head, path):
+            return self.p.spec_raw if path == 'configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json' else b'other sealed bytes'
+        with mock.patch('joulewise.floor_extraction.validate_extraction_spec', return_value=[]), \
+             mock.patch('joulewise.floor_extraction.validate_d117_mint_consumption_report', return_value=[]), \
+             mock.patch.object(energy, '_validate_registered_spec'), \
+             mock.patch.object(c, '_git_blob', side_effect=sealed_blob), \
+             mock.patch.object(c, '_tracked_window_index', return_value=self.p.index), \
+             mock.patch.object(issuer, 'issue_pack', return_value=deepcopy(self.projection), side_effect=error):
+            return issuer.reported_energy_issuance_gate(ctx)
+
+    def assert_refused(self, result, code):
+        self.assertEqual(result, c._FamilyReplay(False, False, (), (code,)))
+
+    def test_S8F6_selection_byte_mismatch(self):
+        ctx = self.ctx()
+        ctx.raws[c.InputRole.G2A_SELECTION] += b' '
+        self.assert_refused(self.gate(ctx), 'reported_energy_parent_mismatch')
+
+    def test_S8F6_basis_digest_and_object_mismatch(self):
+        for raw in (encoded({'sha256': '0'*64}), b'[]\n'):
+            ctx = self.ctx()
+            ctx.raws[c.InputRole.WHOLE_WINDOW_BASIS] = raw
+            with self.subTest(raw=raw):
+                self.assert_refused(self.gate(ctx), 'reported_energy_parent_mismatch')
+
+    def test_S8F6_analysis_refusal_becomes_code_only(self):
+        self.assert_refused(self.gate(self.ctx(), AnalysisRefusal('synthetic_refusal')),
+                            'reported_energy_replay_refused')
+
+    def test_S8F8_replay_exceptions_are_code_only(self):
+        for error in (RuntimeError('7331'), KeyError('7331'), OSError('/Users/x/7331'),
+                      energy.PaperReportedEnergyRefusal('paper_reported_energy_spec_invalid')):
+            with self.subTest(error=type(error).__name__):
+                result = self.gate(self.ctx(), error)
+                self.assert_refused(result, 'reported_energy_replay_refused')
+                self.assertNotIn('7331', repr(result))
+
+    def test_S8F8_process_interrupts_propagate(self):
+        for error in (KeyboardInterrupt(), SystemExit(7)):
+            with self.subTest(error=type(error).__name__), self.assertRaises(type(error)):
+                self.gate(self.ctx(), error)
+
     def test_T18_projection_grants_and_parent_or_spec_counterfactuals(self):
         p=f.indexed_reported_fixture()
         with f.indexed_reported_seams(p):projection=f.issue_indexed_reported(p)

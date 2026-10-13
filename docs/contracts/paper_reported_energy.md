@@ -338,6 +338,12 @@ bracket; builds the window's archive context from the archived verdict row; and
 projects the three cells, each in its own refusal scope, so that a refusing
 cell (the p42 cell, by registration) leaves the others issued.
 
+Before any member of a cell is read, the issuer compares the bundle at every
+kept ordinal with the kept unit's run id at that slot, using roster-position
+rank for repeats and A1, B1, B2, A2 order for quads.
+A dropped owner, a mismatching bundle, or a unit with the wrong run-id count
+stops the pack with `exclusions_plan_mismatch`.
+
 Where each quantity of a row comes from:
 
 | Quantity | Source |
@@ -381,6 +387,10 @@ be the JSON object whose `sha256` is the binding's whole-window basis digest;
 and grants `cell` for each selected subject that issued. The two production
 supply roles select the decode and prefill-p2048 cells of their model, never
 p42.
+
+Any `Exception` raised by the reported-energy replay becomes only
+`reported_energy_replay_refused`, without its text; `KeyboardInterrupt` and
+`SystemExit` propagate.
 
 Not exercised until the lane's integration stage: a full production
 `open_paper_input` of these roles on a GAMMA-shaped synthetic custody, and the
