@@ -1989,6 +1989,8 @@ def bind_floor_artifact_evidence(
                                              **({"evaluation_basis_sha256": basis} if basis is not None else {}))
         if reasons:
             raise AnalysisInputError(reasons[0] + ": " + ", ".join(reasons))
+        if not session.ready:
+            raise AnalysisInputError("operative_bound_not_the_window_bracket")
         floor_sessions[str(root.resolve())] = session
     artifact_provenance = artifact.get("provenance", {})
     multi_producer = artifact_provenance.get("producer_calibration_plans") is not None
@@ -2246,12 +2248,18 @@ def bind_floor_artifact_evidence(
                 except Exception as exc:
                     strict = (f"strict validation raised {type(exc).__name__}: {exc}",)
                 reader = BundleReader(path)
-                summary = reader.raw_summary()
                 floor_session = floor_sessions.get(str(evidence_root.resolve()))
-                if floor_session is not None and floor_session.ready:
-                    operative = floor_session.summary_for(bundle_id)
-                    if isinstance(operative, Mapping):
-                        summary = operative
+                if floor_session is not None:
+                    summary = floor_session.summary_for(bundle_id)
+                    if not isinstance(summary, Mapping):
+                        raise AnalysisInputError("operative_bound_not_the_window_bracket")
+                    provenance = floor_session.provenance_for(bundle_id)
+                    floor_context = archive_contexts[str(evidence_root.resolve())]
+                    if (not isinstance(provenance, Mapping)
+                            or provenance.get("operative_fiducial_bound_s") != floor_context.window_bracket["b_fiducial_s"]):
+                        raise AnalysisInputError("operative_bound_not_the_window_bracket")
+                else:
+                    summary = reader.raw_summary()
                 metadata = reader.raw_metadata()
                 raw_config = reader.raw_config()
                 local_problems.extend(strict)
@@ -3499,11 +3507,20 @@ def load_analysis_inputs(
             raise AnalysisInputError("exclusions_plan_mismatch")
         if gamma_archive is None:
             raise AnalysisInputError("archive_context_required: GAMMA archive")
+        if (gamma_archive.window != kept_units.window
+                or Path(context.neg8_harvest_archive) != Path(kept_units.window.archive_root)):
+            raise AnalysisInputError("context_window_mismatch")
+        if (neg8_harvest_archive is not None
+                and Path(neg8_harvest_archive).resolve() != Path(context.neg8_harvest_archive).resolve()):
+            raise AnalysisInputError("neg8_archive_differs_from_window_index")
         require_contrast_attempt_keeps_midpoint(gamma_archive)
     analysis_manifest_path = Path(analysis_manifest_path)
     replay_inputs = None
     if block5:
         candidate, _raw = _load_json_object(analysis_manifest_path, "analysis manifest")
+        registered_run_ids = {entry["run_id"] for entry in candidate["entries"]}
+        if context.removed_bundle_ids & registered_run_ids != kept_units.removed_run_ids():
+            raise AnalysisInputError("context_kept_units_mismatch")
         if candidate.get("schema_version") == ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
             role = candidate.get("evidence", {}).get("analysed_attempt_exclusions")
             if role is None:
@@ -3784,9 +3801,11 @@ def load_analysis_inputs(
             runs_root,
             effective_bundle_ids,
             consumption_session=consumption_session,
-            neg8_harvest_archive=neg8_harvest_archive,
+            neg8_harvest_archive=(context.neg8_harvest_archive if block5 else neg8_harvest_archive),
             **basis_kwargs,
         )
+        if block5 and allowances.status != "allowances":
+            raise AnalysisInputError(f"drift_allowance_not_recorded_on_block5_root: {allowances.status}")
         for evidence in operative_evidence:
             # A ``legacy`` result is never an allowance waiver: every
             # governed non-current reducer pair is already claim-ineligible

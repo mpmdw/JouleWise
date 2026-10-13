@@ -45,7 +45,8 @@ class GammaFlagsTests(unittest.TestCase):
             inputs.require_contrast_attempt_keeps_midpoint(self.handle(counts_only=True))
     def test_r7_loader_calls_guard_before_members(self):
         archive=self.handle()
-        units=SimpleNamespace(window=SimpleNamespace(pack='gamma'))
+        archive.window.pack='gamma'
+        units=SimpleNamespace(window=archive.window)
         context=ww.ArchiveContext(archive.window.archive_root)
         with mock.patch.object(inputs,'is_hazard_runs_root',return_value=True), \
              mock.patch.object(inputs,'load_manifest',side_effect=AssertionError('member/manifest read')), \

@@ -2,6 +2,8 @@
 import copy
 from dataclasses import replace
 import hashlib
+import math
+import statistics
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -204,3 +206,138 @@ class KeptMemberGuardsTests(unittest.TestCase):
         from joulewise.analysis_engine.artifact import calculate_claim_verdicts_id
         artifact['claim_verdicts_id']=calculate_claim_verdicts_id(artifact)
         self.assertTrue(any('exact removed-unit labels' in error for error in validate_claim_verdicts(artifact)))
+
+
+class MissingKeptContrastFixTests(unittest.TestCase):
+    def test_f4_present_kept_map_requires_the_contrast(self):
+        """Structural kept map cannot silently use pre-block-5 sampling."""
+        inputs = fx.arithmetic_inputs(EXAMPLE)
+        inputs = replace(inputs, kept_quads={cid: cell for cid, cell in inputs.kept_quads.items() if cid != 'decode'})
+        with fx.arithmetic_seams(inputs), self.assertRaisesRegex(engine.AnalysisInputError, '^kept_quads_required$'):
+            engine._prepare_contrast_v3(inputs, inputs.manifest['contrasts'][0], None, None, evidence_class='current')
+
+
+class ArtifactValidatorS5FixTests(unittest.TestCase):
+    """T-d: execute cross-checks against the frozen synthetic manifest."""
+    def build(self, values=None, second=None, **kwargs):
+        floor = kwargs.pop('floor', .2)
+        inputs = fx.arithmetic_inputs(values or [1.1,1.7,1.3,1.6,1.2,1.4,1.5,1.8,1.0,1.7],
+            second=second or [.2,.9,-.3,.8,.1,1.2,.4,-.2,.7,.6], second_removed=(7,), **kwargs)
+        with fx.arithmetic_seams(inputs, floor=floor):
+            artifact = engine.analyze_claims(Path('manifest.json'), Path('runs'), Path('floor.json'), strict_validator=lambda *_: [])
+        return inputs, artifact
+
+    def errors_after(self, artifact, manifest, edit):
+        from joulewise.analysis_engine.artifact import calculate_claim_verdicts_id
+        altered = copy.deepcopy(artifact)
+        edit(altered)
+        altered['claim_verdicts_id'] = calculate_claim_verdicts_id(altered)
+        return validate_claim_verdicts(altered, frozen_manifest=manifest)
+
+    def test_td_a01_floor_threshold_crosscheck_with_numeric_mde(self):
+        inputs, artifact = self.build([1.5,1.4,1.6,1.3,3.2]+[0.]*5,
+            removed=(6,7,8,9,10), mde=100., floor=1.)
+        self.assertEqual(validate_claim_verdicts(artifact, frozen_manifest=inputs.manifest), [])
+        errors = self.errors_after(artifact, inputs.manifest,
+            lambda art: art['contrasts'][0]['loo']['rows'][-1].update(influence_triggers=[]))
+        self.assertTrue(any('magnitude trigger disagrees' in error for error in errors), errors)
+
+    def test_td_a02_j8_peer_without_row_uses_full_raw_p(self):
+        inputs, artifact = self.build()
+        self.assertEqual(validate_claim_verdicts(artifact, frozen_manifest=inputs.manifest), [])
+        # Decode's block 7 has no peer row: prefill lost it before analysis.
+        bid = inputs.manifest['contrasts'][0]['block_ids'][6]
+        errors = self.errors_after(artifact, inputs.manifest,
+            lambda art: next(row for row in art['contrasts'][0]['loo']['rows']
+                if row['omitted_block_id'] == bid).update(adjusted_p=.8))
+        self.assertTrue(any('adjusted_p' in error for error in errors), errors)
+
+    def test_td_a03_kept_count_matches_included_rows(self):
+        inputs, artifact = self.build()
+        errors = self.errors_after(artifact, inputs.manifest,
+            lambda art: art['contrasts'][0]['sampling'].update(kept_n=8))
+        self.assertTrue(any('kept quads require exact removed-unit labels and counts' in error for error in errors), errors)
+
+    def test_td_a04_removed_label_cannot_be_a_contrast_reason(self):
+        inputs, artifact = self.build()
+        errors = self.errors_after(artifact, inputs.manifest,
+            lambda art: art['contrasts'][0]['claim_evaluation']['reason_codes'].append(REMOVED_UNIT_LABEL))
+        self.assertTrue(any('removed-unit label is not a contrast reason' in error for error in errors), errors)
+
+    def test_td_a05_removed_label_requires_kept_sampling(self):
+        inputs, artifact = self.build()
+        def strip(art):
+            sampling = art['contrasts'][0]['sampling']
+            sampling.pop('kept_n'); sampling.pop('removed_block_ids')
+        errors = self.errors_after(artifact, inputs.manifest, strip)
+        self.assertTrue(any('removed-unit labels require kept-quad sampling' in error for error in errors), errors)
+
+    def test_td_a06_planned_count_equals_kept_plus_removed(self):
+        inputs, artifact = self.build()
+        errors = self.errors_after(artifact, inputs.manifest,
+            lambda art: art['contrasts'][0]['sampling'].update(planned_n=11))
+        self.assertTrue(any('kept quads require exact removed-unit labels and counts' in error for error in errors), errors)
+
+    def test_td_a07_removed_ids_equal_excluded_rows(self):
+        inputs, artifact = self.build()
+        errors = self.errors_after(artifact, inputs.manifest,
+            lambda art: art['contrasts'][0]['sampling'].update(removed_block_ids=[]))
+        self.assertTrue(any('kept quads require exact removed-unit labels and counts' in error for error in errors), errors)
+
+    def test_td_a08_numeric_mde_remains_unregistered_off_block5(self):
+        inputs, artifact = self.build(removed=(), block5=False)
+        self.assertEqual(validate_claim_verdicts(artifact, frozen_manifest=inputs.manifest), [])
+        errors = self.errors_after(artifact, inputs.manifest, lambda art: art['contrasts'][0].update(mde=100.))
+        self.assertTrue(any('v3 equivalence and MDE must remain unregistered' in error for error in errors), errors)
+
+
+class J8HandHolmS5FixTests(unittest.TestCase):
+    """T-h: nonzero peer variance and independent scalar t/hand Holm arithmetic."""
+    @staticmethod
+    def raw_p(values):
+        n = len(values)
+        t = statistics.mean(values) / (statistics.stdev(values) / math.sqrt(n))
+        df = n - 1
+        coefficient = math.exp(math.lgamma((df + 1) / 2) - math.lgamma(df / 2)) / math.sqrt(df * math.pi)
+        def density(x):
+            return coefficient * (1 + x * x / df) ** (-(df + 1) / 2)
+        steps = 8192
+        h = abs(t) / steps
+        area = h / 3 * (density(0) + density(abs(t)) + sum(
+            (4 if i % 2 else 2) * density(i * h) for i in range(1, steps)))
+        return max(0., 1. - 2 * area)
+
+    @staticmethod
+    def hand_holm(raw):
+        ranked = sorted(raw, key=raw.get)
+        smaller = min(1., 2 * raw[ranked[0]])
+        larger = min(1., max(smaller, raw[ranked[1]]))
+        return {ranked[0]: smaller, ranked[1]: larger}
+
+    def test_th_j8_each_kept_stratum_uses_the_correct_whole_peer(self):
+        decode = [1.1,1.7,1.3,1.6,1.2,1.4,1.5,1.8,1.0,1.7]
+        prefill = [.2,.9,-.3,.8,.1,1.2,.4,-.2,.7,.6]
+        loaded = fx.arithmetic_inputs(decode, second=prefill, removed=(4,), second_removed=(7,))
+        with fx.arithmetic_seams(loaded):
+            prepared, adjusted, evaluated, loo = fx.prepared_pair(loaded)
+        kept = {'decode': {k: v for k, v in enumerate(decode, 1) if k != 4},
+                'prefill': {k: v for k, v in enumerate(prefill, 1) if k != 7}}
+        self.assertGreater(statistics.variance(list(kept['prefill'].values())), 0)
+        row_maps = {cid: {loaded.manifest['contrasts'][index]['block_ids'].index(row['omitted_block_id']) + 1: row
+                         for row in loo[cid]}
+                    for index, cid in enumerate(('decode', 'prefill'))}
+        for cid in kept:
+            self.assertEqual(set(row_maps[cid]), set(kept[cid]))
+        for k in range(1, 11):
+            raw = {cid: self.raw_p([v for j, v in values.items() if j != k]) for cid, values in kept.items()}
+            expected = self.hand_holm(raw)
+            for cid in kept:
+                if k in kept[cid]:
+                    with self.subTest(contrast=cid, block=k):
+                        row = row_maps[cid][k]
+                        self.assertAlmostEqual(row['adjusted_p'], expected[cid], places=10)
+                        self.assertAlmostEqual(row['raw_p'], raw[cid], places=10)
+                        self.assertEqual(row['n_blocks'], len(kept[cid]) - 1)
+        # Each asymmetric row's peer stays at its whole kept n.
+        self.assertEqual(len(kept['prefill']), 9)
+        self.assertEqual(len(kept['decode']), 9)

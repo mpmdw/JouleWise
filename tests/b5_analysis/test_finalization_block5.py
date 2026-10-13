@@ -336,6 +336,8 @@ class ReboundExclusionsTests(unittest.TestCase):
         from joulewise.b5_analysis.kept_units import load_kept_units
         with fx.finalization_case() as f:
             original=f['units'];archive=f['archive']
+            manifest,manifest_path=RoleAttachmentTests().build(f)
+            manifest_path.write_text(json.dumps(manifest))
             path=archive.window.archive_root/'derived/exclusions.json';raw=path.read_bytes()
             self.addCleanup(path.write_bytes,raw)
             doc=json.loads(raw);doc['s5_counterfactual']='changed bytes; unchanged units'
@@ -349,13 +351,14 @@ class ReboundExclusionsTests(unittest.TestCase):
             units=load_kept_units(rebound,sealed_catalog_sha256=original.catalog_sha256,
                 planned_units=inputs.planned_contrast_units(f['prospective']))
             self.assertNotEqual(units.exclusions_sha256,original.exclusions_sha256)
-            with fx.loader_case() as case:
-                manifest=case.loaded.manifest;manifest['schema_version']='joulewise.analysis_manifest.v3.finalized'
-                manifest.setdefault('evidence',{})['analysed_attempt_exclusions']={
-                    'sha256':original.exclusions_sha256,'catalog_sha256':original.catalog_sha256,
-                    'harvest_pin':original.window.harvest_pin,'harvest_record':{'sha256':original.window.harvest_record_sha256}}
-                with self.assertRaisesRegex(inputs.AnalysisInputError,'^exclusions_differ_from_finalized_manifest$'):
-                    case.call(kept_units=units,gamma_archive=rebound)
+            context=ww.ArchiveContext(rebound.window.archive_root,
+                window_bracket=f['block5_inputs']['archive_contexts'][str(f['runs_root'].resolve())].window_bracket,
+                removed_bundle_ids=units.removed_run_ids())
+            with mock.patch.object(inputs,'is_hazard_runs_root',return_value=True), \
+                 mock.patch.object(inputs,'_read_bundle',side_effect=AssertionError('member read')), \
+                 self.assertRaisesRegex(inputs.AnalysisInputError,'^exclusions_differ_from_finalized_manifest$'):
+                inputs.load_analysis_inputs(manifest_path,f['runs_root'],f['floor_path'],strict_validator=lambda *_:[],
+                    kept_units=units,gamma_archive=rebound,archive_contexts={str(f['runs_root'].resolve()):context})
 
 class FinalizedMemberPreflightTests(unittest.TestCase):
     def test_r2_finalized_missing_kept_member_stops_before_manifest_replay(self):
@@ -637,3 +640,180 @@ class RemovedMemberSeamVariants(unittest.TestCase):
             _, entries, _ = mv3._derive_arms_and_entries(f['prospective'], manifest_dir=f['prospective_path'].parent,
                 runs_root=f['runs_root'], bundle_paths=paths, removed_run_ids=removed)
             self.assertTrue(all(entry['bundle_path'] is None for entry in entries if entry['run_id'] in removed))
+
+
+class S5FixArchiveTests(unittest.TestCase):
+    """F1 regressions at the loader and CLI, using structural synthetic windows."""
+    def test_f1a_loader_uses_context_archive_for_equivalent_spelling(self):
+        with fx.loader_case() as case:
+            alias = case.root / 'extra' / '..' / 'archive'
+            (case.root / 'extra').mkdir()
+            result = SimpleNamespace(status='allowances', allowances={'synthetic': {'value': .1}})
+            with mock.patch.object(inputs, 'whole_window_drift_allowances', return_value=result) as allowance:
+                loaded = case.call(neg8_harvest_archive=alias)
+            self.assertEqual(allowance.call_args.kwargs['neg8_harvest_archive'], case.context.neg8_harvest_archive)
+            self.assertTrue(all(row.whole_window_drift_allowances == result.allowances
+                                for row in loaded.effective.values() if row.summary is not None))
+
+    def test_f1a_loader_refuses_different_archive(self):
+        with fx.loader_case() as case, self.assertRaisesRegex(inputs.AnalysisInputError,
+                '^neg8_archive_differs_from_window_index$'):
+            case.call(neg8_harvest_archive=case.root / 'other-archive')
+
+    def test_f1a_command_passes_index_archive(self):
+        with fx.loader_case() as case:
+            alias = case.root / 'extra' / '..' / 'archive'
+            (case.root / 'extra').mkdir()
+            args = ClaimCommandTests().args(neg8_harvest_archive=str(alias))
+            built = {'gamma_archive': case.archive, 'kept_units': case.units, 'archive_contexts': {}}
+            with mock.patch('joulewise.window_lineage.is_hazard_runs_root', return_value=True), \
+                 mock.patch.object(inputs, 'block5_claim_gate_inputs', return_value=built), \
+                 mock.patch('joulewise.analysis_engine.analyze_claims', return_value={
+                     'claim_verdicts_id': 'synthetic', 'contrasts': []}) as analyze, \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(_cmd_analyze_claims(args), 0)
+            self.assertEqual(analyze.call_args.kwargs['neg8_harvest_archive'], case.archive.window.archive_root)
+
+    def test_f1b_block5_requires_recorded_allowances(self):
+        for status in ('absent', 'legacy'):
+            with self.subTest(status=status), fx.loader_case() as case, \
+                 mock.patch.object(inputs, 'whole_window_drift_allowances',
+                                   return_value=SimpleNamespace(status=status, allowances={})), \
+                 self.assertRaisesRegex(inputs.AnalysisInputError,
+                     '^drift_allowance_not_recorded_on_block5_root: ' + status + '$'):
+                case.call()
+
+    def test_f1b_command_stops_without_artifact(self):
+        for status in ('absent', 'legacy'):
+            with self.subTest(status=status), fx.loader_case() as case:
+                args = ClaimCommandTests().args(output=str(case.root / 'no-artifact.json'),
+                    neg8_harvest_archive=str(case.archive.window.archive_root))
+                built = {'gamma_archive': case.archive, 'kept_units': case.units, 'archive_contexts': {}}
+                error = io.StringIO()
+                with mock.patch('joulewise.window_lineage.is_hazard_runs_root', return_value=True), \
+                     mock.patch.object(inputs, 'block5_claim_gate_inputs', return_value=built), \
+                     mock.patch('joulewise.analysis_engine.analyze_claims', side_effect=lambda *a, **k: (case.call(), {'claim_verdicts_id': 'synthetic', 'contrasts': []})[1]), \
+                     mock.patch.object(inputs, 'whole_window_drift_allowances',
+                                       return_value=SimpleNamespace(status=status, allowances={})), \
+                     contextlib.redirect_stderr(error):
+                    self.assertEqual(_cmd_analyze_claims(args), 2)
+                self.assertEqual(error.getvalue(), 'error: drift_allowance_not_recorded_on_block5_root: ' + status + '\n')
+                self.assertFalse(Path(args.output).exists())
+
+
+    def test_f1b_pre_block5_keeps_absent_and_legacy_behavior(self):
+        for status in ('absent', 'legacy'):
+            with self.subTest(status=status), fx.loader_case(removed=()) as case, \
+                 mock.patch.object(inputs, 'is_hazard_runs_root', return_value=False), \
+                 mock.patch.object(inputs, 'whole_window_drift_allowances',
+                                   return_value=SimpleNamespace(status=status, allowances={})):
+                loaded = case.call(kept_units=None, archive_contexts=None, gamma_archive=None,
+                    calibration_ledger_snapshot=inputs.archive_snapshot(case.context))
+                self.assertTrue(loaded.effective)
+                self.assertTrue(all(row.whole_window_drift_allowance_required == (status != 'legacy')
+                                    for row in loaded.effective.values()))
+                self.assertIsNone(loaded.kept_quads)
+
+
+class WindowAgreementFixTests(unittest.TestCase):
+    """F3 regressions with distinct synthetic attempts and context removal sets."""
+    def test_f3_archive_window_mismatch_precedes_midpoint_and_reads(self):
+        with fx.loader_case() as case:
+            wrong = copy.copy(case.archive.window)
+            wrong.archive_root = case.root / 'another-attempt'
+            wrong.harvest_pin = '7' * 40
+            wrong.harvest_record_sha256 = '8' * 64
+            archive = SimpleNamespace(window=wrong)
+            with mock.patch.object(inputs, 'require_contrast_attempt_keeps_midpoint') as guard, \
+                 mock.patch.object(inputs, 'load_manifest', side_effect=AssertionError('manifest opened')), \
+                 self.assertRaisesRegex(inputs.AnalysisInputError, '^context_window_mismatch$'):
+                case.call(gamma_archive=archive)
+            guard.assert_not_called()
+            self.assertEqual(case.reader_calls, [])
+
+    def test_f3_context_archive_mismatch_precedes_midpoint_and_reads(self):
+        with fx.loader_case() as case:
+            context = ww.ArchiveContext(case.root / 'third-archive',
+                window_bracket=case.context.window_bracket, removed_bundle_ids=frozenset())
+            with mock.patch.object(inputs, 'require_contrast_attempt_keeps_midpoint') as guard, \
+                 mock.patch.object(inputs, 'load_manifest', side_effect=AssertionError('manifest opened')), \
+                 self.assertRaisesRegex(inputs.AnalysisInputError, '^context_window_mismatch$'):
+                case.call(archive_contexts={str(case.runs.resolve()): context})
+            guard.assert_not_called()
+            self.assertEqual(case.reader_calls, [])
+
+    def test_f3_registered_removed_set_must_agree_before_members(self):
+        with fx.loader_case() as case:
+            removed = case.units.removed_run_ids()
+            kept = next(row['run_id'] for row in case.loaded.manifest['entries'] if row['run_id'] not in removed)
+            for changed in (removed - {next(iter(removed))}, removed | {kept}):
+                with self.subTest(removed=sorted(changed)):
+                    context = ww.ArchiveContext(case.context.neg8_harvest_archive,
+                        window_bracket=case.context.window_bracket, removed_bundle_ids=changed)
+                    with self.assertRaisesRegex(inputs.AnalysisInputError, '^context_kept_units_mismatch$'):
+                        case.call(archive_contexts={str(case.runs.resolve()): context})
+                    self.assertEqual(case.reader_calls, [])
+
+    def test_f3_removed_references_outside_manifest_are_allowed(self):
+        with fx.loader_case() as case:
+            context = ww.ArchiveContext(case.context.neg8_harvest_archive,
+                window_bracket=case.context.window_bracket,
+                removed_bundle_ids=case.units.removed_run_ids() | {'excluded-reference', 'absent-spare'})
+            loaded = case.call(archive_contexts={str(case.runs.resolve()): context})
+            self.assertEqual(set(case.reader_calls), {row['run_id'] for row in loaded.manifest['entries']}
+                - case.units.removed_run_ids())
+
+
+class LicensingAndScanS5FixTests(unittest.TestCase):
+    def test_ta_only_literal_true_licenses_an_admitted_context_row(self):
+        """Structural finalization; row validator explicitly admits the failed row."""
+        with fx.finalization_case() as fixture:
+            for licensing in (True, False, None, 'true', 1):
+                with self.subTest(claim_licensing=licensing):
+                    verdict = json.loads(fixture['verdict_path'].read_bytes())
+                    verdict.update(status='failed', claim_licensing=licensing)
+                    raw = (json.dumps(verdict) + '\n').encode()
+                    fixture['verdict_path'].write_bytes(raw)
+                    (fixture['runs_root'] / 'campaign_log.jsonl').write_bytes(raw)
+                    with RoleAttachmentTests().seams(fixture):
+                        if licensing is True:
+                            mv3._authenticate_finalization_inputs(fixture['prospective'],
+                                **FinalizationBlock5Tests().args(fixture))
+                        else:
+                            with self.assertRaisesRegex(mv3.AnalysisManifestFinalizationError,
+                                    '^analysis_finalization_verdict_not_passed: whole-window verdict must be claim-licensing and passed$'):
+                                mv3._authenticate_finalization_inputs(fixture['prospective'],
+                                    **FinalizationBlock5Tests().args(fixture))
+
+    def test_tc_loader_scan_hides_removed_bundles_on_disk(self):
+        """Writer-included removed members have configs on disk; S5's scan hides them."""
+        with fx.loader_case() as case:
+            removed = case.units.removed_run_ids()
+            by_id = {row.bundle_id: row for row in case.loaded.registered.values()}
+            for run_id in removed:
+                (case.runs / run_id / 'config.json').write_text(json.dumps(by_id[run_id].raw_config))
+            loaded = case.call()
+            self.assertEqual(loaded.unregistered_matching, ())
+            self.assertEqual(loaded.top_up_entry_ids, frozenset())
+
+
+class FinalizationCoverageS5FixTests(unittest.TestCase):
+    def test_tf_kept_member_must_be_in_verdict_membership(self):
+        with fx.finalization_case() as fixture:
+            units = fixture['units']
+            kept = frozenset(run_id for cid in units.cells for run_id in units.kept_run_ids(cid))
+            verdict = json.loads(fixture['verdict_path'].read_bytes())
+            missing = sorted(kept)[0]
+            verdict['bundle_ids'] = [bid for bid in verdict['bundle_ids'] if bid != missing]
+            with self.assertRaisesRegex(mv3.AnalysisManifestFinalizationError,
+                    '^analysis_finalization_member_cover_mismatch:'):
+                mv3._verify_basis_members(fixture['prospective'], verdict,
+                    manifest_dir=fixture['prospective_path'].parent, runs_root=fixture['runs_root'], kept_run_ids=kept)
+
+    def test_tg_exclusions_role_uses_kept_units_catalog_digest(self):
+        with fx.finalization_case() as fixture, RoleAttachmentTests().seams(fixture):
+            attachments = mv3._authenticate_finalization_inputs(fixture['prospective'],
+                **FinalizationBlock5Tests().args(fixture))
+            self.assertNotEqual(fixture['units'].catalog_sha256, '0' * 64)
+            self.assertEqual(attachments['analysed_attempt_exclusions']['catalog_sha256'],
+                fixture['units'].catalog_sha256)

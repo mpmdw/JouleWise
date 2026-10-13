@@ -2108,7 +2108,7 @@ def _cmd_analyze_claims(args: argparse.Namespace) -> int:
             legacy_l1_mechanics=args.legacy_l1_mechanics,
             legacy_allowlist=_STRICT_LEGACY_BUNDLE_IDENTITIES,
             neg8_harvest_archive=(
-                Path(args.neg8_harvest_archive)
+                built["gamma_archive"].window.archive_root if block5 else Path(args.neg8_harvest_archive)
                 if args.neg8_harvest_archive is not None
                 else None
             ),

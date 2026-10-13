@@ -182,7 +182,7 @@ def loader_case(*, removed=(4,), reasons=()):
              mock.patch.object(im,'_read_bundle',side_effect=read), \
              mock.patch.object(im,'AuthenticatedConsumptionSession',autospec=True,return_value=session), \
              mock.patch.object(im,'whole_window_refusal_reasons',return_value=reasons), \
-             mock.patch.object(im,'whole_window_drift_allowances',return_value=SimpleNamespace(status='legacy',allowances={})):
+             mock.patch.object(im,'whole_window_drift_allowances',return_value=SimpleNamespace(status='allowances',allowances={})):
             yield case
 
 
@@ -344,7 +344,7 @@ def floor_dispatch_case(*, removed=False):
         roots = {rid: root / rid for rid in ('first', 'second')}
         for path in roots.values(): path.mkdir()
         contexts = {str(path.resolve()): ArchiveContext(root / ('archive-' + rid),
-            window_bracket={'status': 'passed', 'b_fiducial_s': .04},
+            window_bracket={'status': 'passed', 'b_fiducial_s': .02 if rid == 'first' else .06},
             removed_bundle_ids=frozenset({'member-' + rid}) if removed else frozenset())
             for rid, path in roots.items()}
         artifact = {'provenance': {'calibration_plan': {'sha256': '3' * 64}}, 'cells': []}
@@ -361,7 +361,9 @@ def floor_dispatch_case(*, removed=False):
         sessions = {}
         def session(path, members, **kwargs):
             value = 42. if Path(path).name == 'first' else 99.
-            result = SimpleNamespace(ready=True, summary_for=lambda bid: {'status': 'succeeded', 'value': value})
+            bound = contexts[str(Path(path).resolve())].window_bracket['b_fiducial_s']
+            result = SimpleNamespace(ready=True, summary_for=lambda bid: {'status': 'succeeded', 'value': value},
+                provenance_for=lambda bid: {'operative_fiducial_bound_s': bound})
             sessions[Path(path).name] = (result, members, kwargs)
             return result
         reader = SimpleNamespace(raw_summary=lambda: {'status': 'succeeded', 'value': 1.},

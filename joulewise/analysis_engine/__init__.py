@@ -543,7 +543,10 @@ def _prepare_contrast_v3(
         contrast["condition_b_id"]: [],
     }
 
-    cell = inputs.kept_quads.get(contrast["contrast_id"]) if inputs.kept_quads is not None else None
+    try:
+        cell = inputs.kept_quads[contrast["contrast_id"]] if inputs.kept_quads is not None else None
+    except KeyError as exc:
+        raise AnalysisInputError("kept_quads_required") from exc
     removed = {unit.unit_id: unit for unit in cell.dropped} if cell is not None else {}
     kept_codes = {"paired_block_incomplete", "fixed_n_plan_incomplete", "window_evidence_precheck_missing",
                   "campaign_cooldown_evidence_missing", "idle_window_suspect"}

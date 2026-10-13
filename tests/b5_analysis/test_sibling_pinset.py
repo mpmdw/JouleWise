@@ -4,11 +4,13 @@ import copy
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 from joulewise.analysis_engine import inputs
 from tests.test_mint_floor_artifact_generalized import freeze_synthetic_v2_pinset
 from scripts import mint_floor_artifact_generalized as mint
+from tests.b5_analysis import fixtures_s5 as fx
 
 _CACHE=None
 
@@ -81,7 +83,8 @@ class FloorContextTests(unittest.TestCase):
                  mock.patch.object(inputs,'_floor_producer_plans',return_value=({},())), \
                  mock.patch.object(inputs,'_campaign_order_binding_problems',return_value=()), \
                  mock.patch.object(inputs,'AuthenticatedConsumptionSession',return_value=SimpleNamespace(ready=False)), \
-                 mock.patch.object(inputs,'whole_window_refusal_reasons',return_value=()):
+                 mock.patch.object(inputs,'whole_window_refusal_reasons',return_value=()), \
+                 self.assertRaisesRegex(inputs.AnalysisInputError, '^operative_bound_not_the_window_bracket$'):
                 inputs.bind_floor_artifact_evidence(value,floor,roots,strict_validator=lambda *_:[],
                     _authenticated_floor=cap,archive_contexts=contexts)
 
@@ -153,3 +156,120 @@ class RemainingFloorDispatchTests(unittest.TestCase):
                 self.assertEqual(members, {'member-' + rid})
                 self.assertIs(kwargs['archive_context'], case.contexts[str(case.roots[rid].resolve())])
                 self.assertEqual(kwargs['calibration_ledger_snapshot'].receipts, ())
+
+
+class FloorOperativeBoundFixTests(unittest.TestCase):
+    """F2: floor dispatch consumes only each structural root's operative summaries."""
+    def session_override(self, case, change):
+        def session(path, members, **kwargs):
+            rid = Path(path).name
+            bound = case.contexts[str(Path(path).resolve())].window_bracket['b_fiducial_s']
+            value = 42. if rid == 'first' else 99.
+            result = SimpleNamespace(ready=True,
+                summary_for=lambda bid: {'status': 'succeeded', 'value': value},
+                provenance_for=lambda bid: {'operative_fiducial_bound_s': bound})
+            change(result, rid)
+            return result
+        return mock.patch.object(inputs, 'AuthenticatedConsumptionSession', side_effect=session)
+
+    def test_f2_not_ready_without_reasons_refuses_before_members(self):
+        with fx.floor_dispatch_case() as case:
+            with self.session_override(case, lambda session, rid: setattr(session, 'ready', False)), \
+                 self.assertRaisesRegex(inputs.AnalysisInputError, '^operative_bound_not_the_window_bracket$'):
+                case.call()
+            case.readers.assert_not_called()
+
+    def test_f2_missing_operative_summary_refuses(self):
+        with fx.floor_dispatch_case() as case:
+            def change(session, rid):
+                if rid == 'first': session.summary_for = lambda bid: None
+            with self.session_override(case, change), \
+                 self.assertRaisesRegex(inputs.AnalysisInputError, '^operative_bound_not_the_window_bracket$'):
+                case.call()
+            self.assertEqual(case.seen, [])
+
+    def test_f2_missing_or_other_root_bound_refuses(self):
+        for provenance in (None, {}, {'operative_fiducial_bound_s': .04},
+                           {'operative_fiducial_bound_s': .01}, {'operative_fiducial_bound_s': .06}):
+            with self.subTest(provenance=provenance), fx.floor_dispatch_case() as case:
+                def change(session, rid):
+                    if rid == 'first': session.provenance_for = lambda bid: provenance
+                with self.session_override(case, change), \
+                     self.assertRaisesRegex(inputs.AnalysisInputError, '^operative_bound_not_the_window_bracket$'):
+                    case.call()
+                self.assertEqual(case.seen, [])
+
+    def test_f2_own_bound_and_summary_do_not_read_stored_summary(self):
+        with fx.floor_dispatch_case() as case:
+            with mock.patch.object(inputs, 'BundleReader', return_value=SimpleNamespace(
+                    raw_summary=mock.Mock(side_effect=AssertionError('stored summary read')),
+                    raw_metadata=lambda: {}, raw_config=lambda: {})):
+                case.call()
+            self.assertEqual(case.seen, [42., 99.])
+
+    def test_f2_pre_block5_root_keeps_stored_summary_behavior(self):
+        with fx.floor_dispatch_case() as case, \
+             mock.patch.object(inputs, 'is_hazard_runs_root', return_value=False), \
+             mock.patch.object(inputs, 'load_calibration_ledger_snapshot', return_value=object()):
+            inputs.bind_floor_artifact_evidence(case.artifact, case.floor, case.roots,
+                strict_validator=lambda *_: [], _authenticated_floor=case.cap,
+                calibration_ledger_snapshot=object())
+            self.assertEqual(case.seen, [1., 1.])
+
+
+class FloorWindowRefusalS5FixTests(unittest.TestCase):
+    def test_tb_floor_row_refusal_stops_binding_before_members(self):
+        with fx.floor_dispatch_case() as case, \
+             mock.patch.object(inputs, 'whole_window_refusal_reasons',
+                               return_value=('whole_window_neg8_verdict_failed',)), \
+             self.assertRaisesRegex(inputs.AnalysisInputError,
+                 '^whole_window_neg8_verdict_failed: whole_window_neg8_verdict_failed$'):
+            case.call()
+        case.readers.assert_not_called()
+
+
+class SiblingWiringS5FixTests(unittest.TestCase):
+    def test_te_e13_output_separation_requires_sibling_pinset(self):
+        from joulewise import analysis_engine as engine
+        loaded = fx.arithmetic_inputs([3.1,2.9,3.3,3.,2.8,3.2,3.1,2.9,3.,2.7])
+        with fx.arithmetic_seams(loaded), \
+             mock.patch.object(engine, 'is_hazard_runs_root', return_value=True), \
+             mock.patch.object(engine, 'declared_evidence_roots', return_value={}) as declared, \
+             mock.patch.object(engine, '_validate_output_separation'), \
+             mock.patch.object(engine, 'write_claim_verdicts_atomic'):
+            engine.analyze_claims(Path('manifest'), Path('runs'), Path('floor'),
+                strict_validator=lambda *_: [], output_path=Path('output'))
+        self.assertIs(declared.call_args.kwargs.get('require_sibling_pinset'), True)
+
+    def test_te_e15_build_and_write_use_the_sibling_pinset(self):
+        from joulewise import analysis_engine as engine
+        loaded = fx.arithmetic_inputs([3.1,2.9,3.3,3.,2.8,3.2,3.1,2.9,3.,2.7])
+        pinset = Path('synthetic-sibling-pinset.json')
+        with fx.arithmetic_seams(loaded), \
+             mock.patch.object(engine, 'declared_evidence_roots', return_value={}), \
+             mock.patch.object(engine, '_validate_output_separation'), \
+             mock.patch.object(engine, 'sibling_floor_pinset', return_value=pinset), \
+             mock.patch.object(engine, 'finalize_claim_verdicts', side_effect=lambda body, **kw: body) as finalize, \
+             mock.patch.object(engine, 'write_claim_verdicts_atomic') as write:
+            engine.analyze_claims(Path('manifest'), Path('runs'), Path('floor'),
+                strict_validator=lambda *_: [], output_path=Path('output'))
+        self.assertEqual(finalize.call_args.kwargs.get('floor_pinset_path'), pinset)
+        self.assertEqual(write.call_args.kwargs.get('floor_pinset_path'), pinset)
+
+    def test_te_i19_loader_requires_sibling_pinset(self):
+        with fx.loader_case() as case:
+            loader = inputs.load_floor_artifact
+            with mock.patch.object(inputs, 'load_floor_artifact', wraps=loader) as load:
+                case.call()
+            self.assertIs(load.call_args.kwargs.get('require_sibling_pinset'), True)
+
+    def test_te_f18_finalization_passes_sibling_and_its_digest(self):
+        import hashlib
+        from joulewise import analysis_manifest_v3 as mv3
+        from tests.b5_analysis.test_finalization_block5 import RoleAttachmentTests, FinalizationBlock5Tests
+        with fx.finalization_case() as fixture, RoleAttachmentTests().seams(fixture):
+            with mock.patch('joulewise.detection_floor.validate_floor_artifact', return_value=[]) as validate:
+                mv3._authenticate_finalization_inputs(fixture['prospective'], **FinalizationBlock5Tests().args(fixture))
+            self.assertEqual(validate.call_args.kwargs.get('pinset_path'), fixture['acceptance_path'])
+            self.assertEqual(validate.call_args.kwargs.get('expected_pinset_sha256'),
+                hashlib.sha256(fixture['acceptance_path'].read_bytes()).hexdigest())
