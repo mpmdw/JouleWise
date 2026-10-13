@@ -1976,3 +1976,286 @@ class ChangedArchiveGrammarContinuationTests(unittest.TestCase):
                         beta_report=Path("beta-report.json"),out_dir=Path(tmp),project_commit="0"*40)
             finally:
                 path.write_bytes(original)
+
+
+class ValidatedSessionBoundFixTests(unittest.TestCase):
+    """The consumption and allowance sessions validate at distinct call sites."""
+
+    def authenticate(self, fixture, *, consumption_bound, allowance_bound, allowance_ready=True, expect_refusal=False):
+        sessions = []
+
+        class DeferredSessionSpy(SessionSpy):
+            bound_override = None
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.ready = False
+                self.operative_fiducial_bound_s = (
+                    consumption_bound if not sessions else allowance_bound
+                )
+                sessions.append(self)
+
+        def validate_consumption(*args, consumption_session, **kwargs):
+            self.assertIs(consumption_session, sessions[0])
+            self.assertFalse(consumption_session.ready)
+            consumption_session.ready = True
+            return ()
+
+        def derive_allowance(*args, consumption_session, **kwargs):
+            self.assertEqual(len(sessions), 2)
+            self.assertIs(consumption_session, sessions[1])
+            self.assertFalse(consumption_session.ready)
+            consumption_session.ready = allowance_ready
+            source = fixture.source.cells["decode"].comparative
+            return SimpleNamespace(status="allowances", allowances={"gross_energy": source.whole_window_drift_allowance})
+
+        source = fixture.source.cells["decode"].comparative
+        paths = fixture.paths["comparative"]
+        with authenticated_core(fixture) as instance, \
+             mock.patch.object(instance, "AuthenticatedConsumptionSession", DeferredSessionSpy), \
+             mock.patch.object(instance, "whole_window_refusal_reasons", side_effect=validate_consumption):
+            def authenticate():
+                return instance._authenticate_component(
+                    instance.ComponentPaths(source.evidence_root_id, fixture.root, fixture.report_path,
+                        paths.spec_path, paths.order_manifest_path, source.calibration_cell_id, "comparative"),
+                    expected_cell_id=source.calibration_cell_id,
+                    expected_basis_sha256=source.whole_window_evaluation_basis_sha256,
+                    strict_validator=lambda *_: (),
+                    calibration_ledger_snapshot=next(iter(case().snapshots.values())),
+                    expected_consumption_semantics_id=ww.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+                    allowance_deriver=derive_allowance)
+            if expect_refusal:
+                with self.assertRaisesRegex(instance.MintError, "^operative_bound_not_the_window_bracket"):
+                    authenticate()
+            else:
+                return authenticate()
+
+    def test_f1a_validated_allowance_wrong_bound_refused(self):
+        fixture = authentication_case()
+        bound = fixture.entry.window_bracket.b_fiducial_s
+        for value in (0.02, math.nextafter(bound, -math.inf)):
+            with self.subTest(bound=value):
+                self.authenticate(fixture, consumption_bound=bound, allowance_bound=value, expect_refusal=True)
+
+    def test_f1b_validated_consumption_wrong_bound_refused(self):
+        fixture = authentication_case()
+        bound = fixture.entry.window_bracket.b_fiducial_s
+        self.authenticate(fixture, consumption_bound=0.02, allowance_bound=bound, expect_refusal=True)
+
+    def test_f1c_allowance_not_ready_refused(self):
+        fixture = authentication_case()
+        bound = fixture.entry.window_bracket.b_fiducial_s
+        self.authenticate(fixture, consumption_bound=bound, allowance_bound=bound, allowance_ready=False, expect_refusal=True)
+
+    def test_f1d_both_validated_sessions_window_bound_admitted(self):
+        fixture = authentication_case()
+        bound = fixture.entry.window_bracket.b_fiducial_s
+        component = self.authenticate(fixture, consumption_bound=bound, allowance_bound=bound)
+        self.assertEqual(len(component.members), 32)
+
+
+class CalibrationPairFixTests(unittest.TestCase):
+    def test_f2_component_uses_window_pair_instead_of_stored_pair(self):
+        fixture = authentication_case()
+        window_pair = ww._archive_thaw(fixture.entry.archive_context.window_bracket)
+        stored_pair = copy.deepcopy(window_pair)
+        for endpoint in ("pre", "post"):
+            self.assertIsInstance(stored_pair[endpoint], dict)
+            stored_pair[endpoint]["attempt_id"] = "stored-" + endpoint
+        basis = json.loads((fixture.root / "campaign_log.jsonl").read_bytes())["evaluation_basis"]
+        basis["calibration_bracket_set"] = stored_pair
+        with authenticated_core(fixture) as instance, \
+             mock.patch.object(instance, "_authenticated_evaluation_basis", return_value=basis):
+            component = authenticate_physical(instance, fixture)
+        self.assertEqual(component.whole_window_calibration_bracket,
+                         dict(fixture.entry.archive_context.window_bracket))
+        self.assertNotEqual(component.whole_window_calibration_bracket, stored_pair)
+
+
+class CompositionGuardFixTests(unittest.TestCase):
+    @staticmethod
+    def compose(fixture):
+        table = {**fx.PACK_TABLE, "beta": {fixture.window.entry_data["pack_id"]: "v5-b5-beta-a{attempt}-"}}
+        with s2.capture_adapter():
+            return mint.compose_indexed_producers(fixture.index, seal_pins=SealPins.load(), pack_table=table,
+                test_only_allow_synthetic_binding=True, repo_root=fixture.local_repo, packs=("beta",))["beta"]
+
+    def test_f3a_each_local_pack_file_must_match_archive(self):
+        fixture, _entry = governed_case()
+        for name in ("order_manifest.json", "calibration_plan.sha256", "extraction_spec.json", "calibration_plan.json"):
+            path = fixture.local_spec.parent / name
+            original = path.read_bytes()
+            try:
+                path.write_bytes(original + b" ")
+                with self.subTest(name=name), self.assertRaisesRegex(
+                        AnalysisRefusal, "^" + name.replace(".", "_") + "_differs_from_archive$"):
+                    self.compose(fixture)
+            finally:
+                path.write_bytes(original)
+
+    def test_f3b_each_allowance_verdict_digest_operand(self):
+        from joulewise.b5_analysis import archive as archive_module, context as context_module
+        fixture, _entry = governed_case()
+        real_open = archive_module.open_archive
+
+        class AlteredAllowanceArchive:
+            def __init__(self, archive, field):
+                self.archive, self.field = archive, field
+
+            def __getattr__(self, name):
+                return getattr(self.archive, name)
+
+            def output_bytes(self, relative):
+                raw = self.archive.output_bytes(relative)
+                if relative == ww.NEG8_HARVEST_ALLOWANCE_RECORD:
+                    record = json.loads(raw)
+                    record["verdict"][self.field] = "0" * 64
+                    return mint._artifact_payload(record)
+                return raw
+
+        for field in ("row_sha256", "evaluation_basis_sha256"):
+            with self.subTest(field=field), \
+                 mock.patch.object(archive_module, "open_archive",
+                    side_effect=lambda *args, **kwargs: AlteredAllowanceArchive(real_open(*args, **kwargs), field)), \
+                 mock.patch.object(context_module, "build_context", wraps=context_module.build_context) as build_context:
+                with self.assertRaisesRegex(AnalysisRefusal, "^whole_window_verdict_provenance_invalid$"):
+                    self.compose(fixture)
+                build_context.assert_not_called()
+
+    def test_f3c_composition_calls_local_plan_identity_guard(self):
+        fixture, entry = governed_case()
+        path = fixture.local_spec.parent / "plan_tree.json"
+        original = path.read_bytes() if path.exists() else None
+        prefix = f"sources/repo/configs/campaigns/{entry.window.pack_id}/"
+        tree = json.loads(entry.archive.source_bytes(prefix + "plan_tree.json"))
+        tree["plan"]["plan_id"] = "wrong-local-producer-plan"
+        try:
+            path.write_bytes(mint._artifact_payload(tree))
+            with self.assertRaisesRegex(AnalysisRefusal, "^producer_plan_identity_mismatch$"):
+                self.compose(fixture)
+        finally:
+            if original is None:
+                path.unlink()
+            else:
+                path.write_bytes(original)
+
+
+class PinsetDirectoryFixTests(unittest.TestCase):
+    @staticmethod
+    def output_path():
+        # The refusal is checked against the actual repository location. A
+        # mutation must fail without creating an unauthorized repository file.
+        return emit.REPO_ROOT / "scripts/floor_mint_pinsets/s6fix-absent-regression-output"
+
+    def test_f4a_direct_writer_refuses_repository_pinset_directory(self):
+        output = self.output_path()
+        self.assertFalse(output.exists())
+        fixture = case()
+        mkdir = Path.mkdir
+
+        def prevent_repository_write(path, *args, **kwargs):
+            if path.resolve().is_relative_to(emit.REPO_ROOT / "scripts/floor_mint_pinsets"):
+                raise AssertionError("writer reached directory creation before refusing repository output")
+            return mkdir(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "mkdir", new=prevent_repository_write), \
+             self.assertRaisesRegex(mint.MintError, "^floor_pinset_not_beside_floor"):
+            emit._write_block5_outputs(output, fixture.pins, block5_manifest(fixture), {"alpha": b"{}", "beta": b"{}"})
+        self.assertFalse(output.exists())
+
+    def test_f4b_indexed_emitter_refuses_before_opening_window(self):
+        output = self.output_path()
+        self.assertFalse(output.exists())
+        with mock.patch.object(mint, "compose_indexed_producers",
+                side_effect=AssertionError("window opened before refusing repository output")) as compose, \
+             self.assertRaisesRegex(mint.MintError, "^floor_pinset_not_beside_floor"):
+            emit.emit_indexed_pinset(window_index=Path("absent-index.json"), alpha_report=Path("alpha.json"),
+                beta_report=Path("beta.json"), out_dir=output, project_commit="0" * 40)
+        compose.assert_not_called()
+        self.assertFalse(output.exists())
+
+
+class OutputCleanupFixTests(unittest.TestCase):
+    def test_f5_type_error_removes_outputs_and_created_directories_then_retry_succeeds(self):
+        fixture = case()
+        manifest = block5_manifest(fixture)
+        with tempfile.TemporaryDirectory(prefix="s6fix-cleanup-") as tmp:
+            root = Path(tmp) / "new-parent" / "out"
+            outputs = (root / "floor-mint-pinset.json", root / "floor-mint-inputs.json",
+                       root / "alpha/calibration_plan.json", root / "beta/calibration_plan.json")
+            with self.assertRaises(TypeError):
+                emit._write_block5_outputs(root, fixture.pins, manifest, {"alpha": b"{}", "beta": "text, not bytes"})
+            self.assertFalse(any(path.exists() for path in outputs))
+            self.assertFalse(root.parent.exists())
+            self.assertTrue(Path(tmp).is_dir())
+            digest = emit._write_block5_outputs(root, fixture.pins, manifest, {"alpha": b"{}", "beta": b"{}"})
+            self.assertEqual(digest, hashlib.sha256(mint._artifact_payload(fixture.pins)).hexdigest())
+            self.assertTrue(all(path.is_file() for path in outputs))
+
+    def test_f5_preserves_existing_directories_and_reraises_same_exception(self):
+        with tempfile.TemporaryDirectory(prefix="s6fix-existing-") as tmp:
+            root = Path(tmp) / "out"
+            (root / "alpha").mkdir(parents=True)
+            keep = root / "unrelated.txt"
+            keep.write_bytes(b"keep")
+            failure = RuntimeError("synthetic write failure")
+            real_open = Path.open
+
+            def fail_last(path, *args, **kwargs):
+                if path == root / "beta/calibration_plan.json":
+                    raise failure
+                return real_open(path, *args, **kwargs)
+
+            with mock.patch.object(Path, "open", new=fail_last), self.assertRaises(RuntimeError) as caught:
+                emit._write_block5_outputs(root, {}, {}, {"alpha": b"{}", "beta": b"{}"})
+            self.assertIs(caught.exception, failure)
+            self.assertEqual(keep.read_bytes(), b"keep")
+            self.assertTrue((root / "alpha").is_dir())
+            self.assertFalse((root / "beta").exists())
+            self.assertEqual(sorted(path.name for path in root.iterdir()), ["alpha", "unrelated.txt"])
+
+
+class KeptBasisMembershipFixTests(unittest.TestCase):
+    def test_f6_basis_membership_checks_kept_members_only(self):
+        fixture = authentication_case()
+        log_path = fixture.root / "campaign_log.jsonl"
+        original = log_path.read_bytes()
+        kept = sorted(core._producer_bundle_ids(fixture.entry))
+        for removed_from_basis in (fixture.removed, {kept[0]}):
+            log = json.loads(original)
+            log["evaluation_basis"]["member_occurrences"] = [item for item in log["evaluation_basis"]["member_occurrences"]
+                if item["bundle_id"] not in removed_from_basis]
+            try:
+                log_path.write_bytes(json.dumps(log, sort_keys=True, separators=(",", ":")).encode() + b"\n")
+                with self.subTest(removed_from_basis=sorted(removed_from_basis)), authenticated_core(fixture) as instance, \
+                     mock.patch.object(instance, "_authenticated_evaluation_basis", side_effect=lambda rows, sha: rows[0]["evaluation_basis"]):
+                    if removed_from_basis == fixture.removed:
+                        component = authenticate_physical(instance, fixture)
+                        self.assertEqual(len(component.members), 32)
+                    else:
+                        with self.assertRaisesRegex(instance.MintError,
+                                "^extraction-spec members are not a subset of the evaluation basis$"):
+                            authenticate_physical(instance, fixture)
+            finally:
+                log_path.write_bytes(original)
+
+
+class RemovedRowValueFixTests(unittest.TestCase):
+    def test_f7_each_removed_row_value_field_refused_at_authentication(self):
+        fixture = authentication_case()
+        values = {"metric_value_j": 1e9, "anchor_shift_bound_j": 5.0,
+                  "consumption_provenance": {"operative_fiducial_bound_s": 0.04},
+                  "reasons": ["synthetic reason"], "cap_hit": True, "launch_lineage": {}}
+        for field, value in values.items():
+            report = copy.deepcopy(fixture.report)
+            cell = next(cell for cell in report["cells"] if cell["kind"] == "comparative")
+            row = next(row for row in cell["members"] if row["excluded"])
+            row[field] = value
+            self.assertIs(row["excluded"], True)
+            path = fixture.directory / ("s6fix-removed-" + field + ".json")
+            path.write_bytes(mint._artifact_payload(report))
+            with self.subTest(field=field), authenticated_core(fixture) as instance:
+                with self.assertRaisesRegex(instance.MintError,
+                        "^floor_mint_kept_unit_mismatch: removed member listed as a pinned member$"):
+                    authenticate_physical(instance, fixture, report_path=path)
+                self.assertEqual(len(SessionSpy.calls), 0)

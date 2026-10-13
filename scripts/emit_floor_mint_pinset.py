@@ -439,16 +439,36 @@ def _write_block5_outputs(out_dir: Path, pinset: Mapping, manifest: Mapping, pla
                **{out_dir / pack / "calibration_plan.json": raw for pack, raw in plans.items()}}
     if set(plans) != {"alpha", "beta"} or any(path.exists() or path.is_symlink() for path in outputs):
         raise mint.MintError("emitter outputs must be distinct absent paths")
-    written = []
+    written, created_directories = [], []
     try:
         for path, raw in outputs.items():
-            path.parent.mkdir(parents=True, exist_ok=True)
+            missing = []
+            directory = path.parent
+            while not directory.exists():
+                missing.append(directory)
+                directory = directory.parent
+            for directory in reversed(missing):
+                try:
+                    directory.mkdir()
+                except FileExistsError:
+                    if not directory.is_dir():
+                        raise
+                else:
+                    created_directories.append(directory)
             with path.open("xb") as stream:
                 written.append(path)
                 stream.write(raw)
-    except OSError:
+    except BaseException:
         for path in written:
-            path.unlink()
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        for directory in sorted(created_directories, key=lambda item: len(item.parts), reverse=True):
+            try:
+                directory.rmdir()
+            except OSError:
+                pass
         raise
     return hashlib.sha256(outputs[out_dir / "floor-mint-pinset.json"]).hexdigest()
 

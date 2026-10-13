@@ -216,6 +216,16 @@ byte-identical to the archive's copy of it.
 `$FINAL_PINSET_SHA256` is the `pinset_sha256` the first command prints. With
 `--window-index`, every flag of the older command lines is refused.
 
+Always pass `--window-index` for a block-5 window. The kept-units treatment
+described above (the catalog minimum, the window's own calibration pair, the
+removed members never opened) is switched on by the index. Without it, the
+mint recognises a block-5 runs root only by the launch-lineage locator file
+in that root, and then stops with `window_index_required`. A root with
+no locator file and no index is minted the older way, with no refusal: a
+report in which nothing was removed would then be held to a minimum n of 10
+and to the calibration pair stored in the campaign log. The floor values would
+be the same; the minimum and the provenance would not be block 5's.
+
 After both commands the floor directory holds the files below; every name but
 the aggregate floor's is fixed by the programs.
 
@@ -258,7 +268,7 @@ Each stops the program before any output is written.
 | `window_index_conflicting_arguments` | the index was given with a flag or a manifest of the older mode |
 | `floor_mint_kept_unit_mismatch` | the report, the pinset, the replay file or the archive disagree about which units are kept |
 | `floor_mint_cell_not_a_target` | a cell that the exclusions file does not mark as a target cell was pinned (in the sealed packs: the 42-token prefill cells, which no claim reads) |
-| `operative_bound_not_the_window_bracket` | a kept member's timing bound was reduced under a bound other than its own window's operative bound |
+| `operative_bound_not_the_window_bracket` | a kept member's timing bound was reduced under a bound other than its own window's operative bound, or the session that would state the bound was not validated |
 | `archive_input_changed_after_authentication` | an archive file read by path no longer has the bytes the archive's inventory lists |
 | `floor_pinset_not_beside_floor` | the pinset and the floor artifact are not in one directory, or the pinset is in this directory |
 | `producer_plan_identity_mismatch` | a pack's calibration plan, plan tree and producer contract do not name one plan id |

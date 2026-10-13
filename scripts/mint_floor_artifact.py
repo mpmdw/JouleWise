@@ -1244,7 +1244,6 @@ def _authenticate_component(
             calibration_ledger_snapshot=calibration_ledger_snapshot,
             **({"archive_context": entry.archive_context} if entry is not None else {}),
         )
-        _require_session_window_bound(entry, allowance_session, referenced_bundle_ids)
         allowance_result = allowance_deriver(
             paths.evidence_root,
             referenced_bundle_ids,
@@ -1280,6 +1279,9 @@ def _authenticate_component(
             "authenticated campaign evidence "
             f"(status={getattr(allowance_result, 'status', None)!r})"
         )
+    if entry is not None and not allowance_session.ready:
+        raise MintError("operative_bound_not_the_window_bracket")
+    _require_session_window_bound(entry, allowance_session, referenced_bundle_ids)
     derived_allowances = getattr(allowance_result, "allowances", None)
     claim_family = neg8_claim_family_for_metric(METRIC)
     derived_allowance = (
