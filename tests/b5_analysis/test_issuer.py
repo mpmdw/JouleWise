@@ -130,6 +130,26 @@ class IssuerTests(unittest.TestCase):
     def test_S8F4_repeat_run_count_refuses_before_member_io(self):
         self.ownership_counterfactual('repeat_count')
 
+    def test_S8F4_kept_ordinal_owned_by_a_dropped_unit_refuses_before_member_io(self):
+        # A hand-built kept object: the ordinals keep the removed repeat's slot and
+        # remove a kept repeat's, while the units themselves are unchanged.
+        cell = self.f.spec['reported_energy_cells'][0]
+        kept = self.f.kept.for_reported_cell(self.f.spec, 0)
+        gone = kept.removed_repeat_ordinals[0]
+        swap = next(n for n in kept.kept_repeat_ordinals if n != gone)
+        forged = replace(kept,
+            kept_repeat_ordinals=tuple(sorted({*kept.kept_repeat_ordinals, gone} - {swap})),
+            removed_repeat_ordinals=tuple(sorted({*kept.removed_repeat_ordinals, swap} - {gone})))
+        summary = mock.Mock(side_effect=self.f.session.summary_for)
+        session = SimpleNamespace(**{**vars(self.f.session), 'summary_for': summary})
+        binding = {'selection_sha256': 'a'*64, 'prompt_pin_sha256': 'b'*64, 'whole_window_basis_sha256': 'c'*64}
+        with self.assertRaises(AnalysisRefusal) as cm:
+            issuer.normalized_rows(cell, forged, session=session, runs_root=self.f.root, context=self.f.context,
+                binding=binding, kept_units=self.f.kept, strict_validator=lambda path, strict: (),
+                allowances={'gross_energy': {'allowance_j': .1}})
+        self.assertEqual(cm.exception.code, 'exclusions_plan_mismatch')
+        summary.assert_not_called()
+
     def test_S8F4_session_contains_exactly_kept_run_ids(self):
         expected = {run for i in range(3)
                     for units in self.f.kept.for_reported_cell(self.f.spec, i).cell.kept.values()
