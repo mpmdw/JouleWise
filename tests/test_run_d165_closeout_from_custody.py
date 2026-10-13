@@ -210,10 +210,18 @@ class CloseoutDriverTests(unittest.TestCase):
         cells = {cell["cell_id"]: cell for cell in fixture["floor"]["cells"]}
         for row in table["ratios"]:
             if row["status"] == "complete":
-                self.assertEqual(row["ratio"], row["numerator_j"] / row["denominator_j"])
                 guard = cells[row["cell_id"]][row["component"]]["guard_factor"]
                 self.assertEqual(guard, math.sqrt(9 / 7))
-                self.assertNotEqual(row["ratio"], row["ratio"] * guard)
+                self.assertNotAlmostEqual(
+                    row["ratio"], (row["numerator_j"] / row["denominator_j"]) * guard,
+                    delta=1e-6,
+                )
+                if row["ratio_id"] == "attribution_dominance_ratio.v1":
+                    self.assertNotAlmostEqual(
+                        row["ratio"], expected[row["component"]] * math.sqrt(9 / 7),
+                        delta=1e-6,
+                    )
+                self.assertEqual(row["ratio"], row["numerator_j"] / row["denominator_j"])
                 if row["ratio_id"] == "attribution_dominance_ratio.v1":
                     self.assertAlmostEqual(row["ratio"], expected[row["component"]], places=12)
 
@@ -494,6 +502,94 @@ class CloseoutDriverTests(unittest.TestCase):
                 record = json.loads(output.with_suffix(".step.json").read_bytes())
                 self.assertEqual(record["refusal"], "d165_closeout_driver_paper_sources_invalid")
                 self.assert_no_outputs(output)
+
+    def test_r8_paper_gate_refusal_on_outcome_arm(self):
+        """Zero denominator -> run d's exit-3 arm still requires exactly ()."""
+        fixture = self.fixture("zero")
+        sources = self.sources(fixture)
+        for result in (("d165_paper_floor_artifact_invalid",), [], None):
+            with self.subTest(result=result), mock.patch.object(core, "validate_d165_paper_sources", return_value=result):
+                output = self.output(fixture)
+                self.assertEqual(driver.run_closeout(sources, output=output), 2)
+                record = json.loads(output.with_suffix(".step.json").read_bytes())
+                self.assertEqual(record["refusal"], "d165_closeout_driver_paper_sources_invalid")
+                self.assert_no_outputs(output)
+
+    def test_n4_manifest_validator_accepts_only_empty_tuple(self):
+        """Falsey non-tuples -> resolve c -> manifest_invalid; () alone accepts."""
+        fixture = self.fixture()
+        for result in (None, [], 0, "", ("x",)):
+            with self.subTest(result=result), mock.patch.object(
+                driver.analysis_manifest_v3, "validate_finalized_analysis_manifest_v3", return_value=result
+            ):
+                self.assert_resolver_refusal(fixture, "d165_closeout_driver_manifest_invalid")
+        with mock.patch.object(driver.analysis_manifest_v3, "validate_finalized_analysis_manifest_v3", return_value=()):
+            sources = self.sources(fixture)
+        self.assertEqual((sources.manifest_bytes, sources.floor_bytes, sources.sidecar_bytes), fixture["cached_bytes"])
+
+    def test_s2_mixed_refusals_rejected_before_paper_gate(self):
+        """Zero first, later comparative fault -> run classification -> blind exit 2."""
+        fixture = self.fixture("zero")
+        closeout = build_d165_dominance_closeout(*fixture["cached_bytes"])
+        self.assertEqual(closeout["refusal_reason"], "dominance_ratio_zero_denominator")
+        for code, status_word, refusal in (
+            ("common_mode_replay_window_domain_invalid", "unclassified_refusal", "unclassified refusal at step 6"),
+            ("floor_member_census_mismatch", "tooling_refusal", "floor_member_census_mismatch"),
+        ):
+            mixed = copy.deepcopy(closeout)
+            mixed["comparative_common_mode_ratios"][0].update(status="refused", refusal_reason=code)
+            with self.subTest(code=code), \
+                 mock.patch.object(driver, "build_d165_dominance_closeout", return_value=mixed), \
+                 mock.patch.object(core, "validate_d165_paper_sources", wraps=core.validate_d165_paper_sources) as paper:
+                output = self.output(fixture)
+                status, record, stdout = self.main_run(fixture, output)
+                self.assertEqual(status, 2)
+                self.assertEqual(record["status"], status_word)
+                self.assertEqual(record["refusal"], refusal)
+                if status_word == "unclassified_refusal":
+                    self.assertNotIn(code, stdout)
+                self.assert_no_outputs(output)
+                paper.assert_not_called()
+
+    def test_s2_classification_checks_both_record_orders(self):
+        """Review's two orders -> pure classifier -> same closed unclassified code."""
+        zero = {"status": "refused", "refusal_reason": "dominance_ratio_zero_denominator"}
+        unclassified = {"status": "refused", "refusal_reason": "common_mode_replay_window_domain_invalid"}
+        complete = {"status": "complete", "refusal_reason": None, "passes": True}
+        for independent, comparative in (([zero, complete], [unclassified]), ([unclassified, zero], [complete])):
+            closeout = dict(core._expected_global_fields(independent, comparative, []),
+                            independent_ratios=independent, comparative_common_mode_ratios=comparative)
+            with self.subTest(independent=independent):
+                self.assertEqual(driver._closeout_refusal_code(closeout), unclassified["refusal_reason"])
+        # The first non-outcome refusal wins, independent before comparative;
+        # unknown text uses the builder exception path's closed-code fallback.
+        for reason in ("floor_member_census_mismatch", "synthetic unknown refusal"):
+            closeout = {"refusal_reason": zero["refusal_reason"],
+                        "independent_ratios": [zero, dict(status="refused", refusal_reason=reason)],
+                        "comparative_common_mode_ratios": [unclassified]}
+            with self.subTest(reason=reason):
+                self.assertEqual(driver._closeout_refusal_code(closeout), core._closed_refusal_code(reason))
+        closeout["refusal_reason"] = "floor_member_census_mismatch"
+        self.assertEqual(driver._closeout_refusal_code(closeout), "floor_member_census_mismatch")
+
+    def test_s2_malformed_ratio_lists_rejected_before_paper_gate(self):
+        """Non-list or non-mapping records -> pure classifier/run -> malformed, exit 2."""
+        fixture = self.fixture("zero")
+        closeout = build_d165_dominance_closeout(*fixture["cached_bytes"])
+        for field in ("independent_ratios", "comparative_common_mode_ratios"):
+            for malformed in (None, {}, (), "records", [None], ["record"]):
+                mixed = copy.deepcopy(closeout)
+                mixed[field] = malformed
+                with self.subTest(field=field, malformed=malformed), \
+                     mock.patch.object(driver, "build_d165_dominance_closeout", return_value=mixed), \
+                     mock.patch.object(core, "validate_d165_paper_sources", wraps=core.validate_d165_paper_sources) as paper:
+                    self.assertEqual(driver._closeout_refusal_code(mixed), "closeout_input_malformed")
+                    output = self.output(fixture)
+                    status, record, _ = self.main_run(fixture, output)
+                    self.assertEqual(status, 2)
+                    self.assertEqual(record["refusal"], "closeout_input_malformed")
+                    self.assert_no_outputs(output)
+                    paper.assert_not_called()
 
     def test_r9_append_only_pair_preflight_and_idempotence(self):
         """Other closeout/table bytes -> run e pair preflight -> output_conflict (M12)."""

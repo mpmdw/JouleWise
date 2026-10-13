@@ -11,6 +11,7 @@ import os
 import re
 import sys
 import tempfile
+from collections.abc import Mapping
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from pathlib import Path
@@ -135,7 +136,7 @@ def resolve_closeout_sources(finalized_manifest_path, custody_root) -> CloseoutS
         invalid = analysis_manifest_v3.validate_finalized_analysis_manifest_v3(
             manifest, manifest_path=manifest_path, custody_root=root
         )
-    if invalid:
+    if invalid != ():
         raise CloseoutDriverRefusal("d165_closeout_driver_manifest_invalid")
     return CloseoutSources(root, manifest_path, manifest_id, manifest_relative,
                            floor_relative, sidecar_relative, manifest_bytes, floor_bytes, sidecar_bytes)
@@ -275,6 +276,26 @@ def _exit_for(code: str | None) -> int:
     return 2
 
 
+def _closeout_refusal_code(closeout: Mapping) -> str | None:
+    """An outcome-class close-out may contain only outcome-class refused records."""
+    records = []
+    for field in ("independent_ratios", "comparative_common_mode_ratios"):
+        group = closeout.get(field)
+        if not isinstance(group, list) or any(not isinstance(record, Mapping) for record in group):
+            return "closeout_input_malformed"
+        records.extend(group)
+    code = closeout["refusal_reason"]
+    if code not in OUTCOME_CLASS_CODES:
+        return code
+    refused = [record for record in records if record.get("status") == "refused"]
+    if all(record.get("refusal_reason") in OUTCOME_CLASS_CODES for record in refused):
+        return code
+    return next(
+        dominance_closeout._closed_refusal_code(str(record.get("refusal_reason")))
+        for record in refused if record.get("refusal_reason") not in OUTCOME_CLASS_CODES
+    )
+
+
 def run_closeout(sources, *, output: Path) -> int:
     output = Path(output)
     code = None
@@ -288,7 +309,7 @@ def run_closeout(sources, *, output: Path) -> int:
                 )
             except (ValueError, TypeError) as exc:
                 raise CloseoutDriverRefusal(dominance_closeout._closed_refusal_code(str(exc))) from None
-            code = closeout["refusal_reason"]
+            code = _closeout_refusal_code(closeout)
             exit_status = _exit_for(code)
             if exit_status in {0, 3}:
                 if dominance_closeout.validate_d165_paper_sources(
