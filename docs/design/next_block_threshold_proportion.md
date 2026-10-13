@@ -519,3 +519,45 @@ paired ordinary-wait and long-wait test for Q2; the graphics-processor rail read
 rails-against-wall-meter check of section 6 (a steady load of 60 s or more, in a battery state where the
 charger carries the load). None of them is a claim session: no registration, no seal, results to
 `/Users/edr/night-archive/threshold-validation/` with a short record on the records branch.
+
+## 9. What block 5's lost sessions teach about writing an acceptance rule (2026-10-13)
+
+An **acceptance rule** here means any check whose failure makes a collected session unusable for a claim, or
+stops a session from starting. Pack BETA needed six attempts of about six hours each. Read from RUN_STATE items
+13 to 28, the five losses were:
+
+| Attempt | What removed it | Cause |
+|---|---|---|
+| 1 | a reference-run screening code; no physical measurement removed it | a rule, rewritten afterwards (Erratum 2) |
+| 2 | an interactive agent session opened at the keyboard and stopped the chain | physical |
+| 3 | the opening calibration failed the alignment screen; nothing was collected | a rule; section 8 now makes this screen a flag |
+| 4 | the Mac slept after the charger lost voltage for 26 s; the calibration acceptance also failed | physical, plus the rule of attempt 5 |
+| 5 | the calibration acceptance was judged stale; the session itself ran whole | a rule, rewritten afterwards (Erratum 3) |
+
+Three of the five went to rules, not to the machine. Each rule had the same three defects, and each defect has a
+cheap cure. The next block's rules are written under these five requirements.
+
+1. **Replay before adopting.** Before a rule is adopted, it is run over every session and baseline already on
+   disk that is known to be good, and the count it refuses is written beside the rule. A rule that refuses a
+   known-good session is resized or becomes a flag. This alone would have caught the quiet-baseline check that
+   13 of 53 quiet baselines fail (section 8), and the staleness rule of attempts 4 and 5, which the ledger
+   already on disk showed would refuse.
+2. **Size in joules.** A rule states the largest error, in joules on the smallest printed quantity, that a
+   session just inside it can carry, and the same for a session just outside. If the two are not far apart
+   relative to the detection floor, the rule separates nothing and is dropped. Sections 2 and 3 do this for the
+   existing rules.
+3. **Know before the session, not after.** Anything the after-session check will test that can be computed
+   before the session starts is computed then, by the same function, and the session is not started if it would
+   be refused. Attempts 4 and 5 each spent six hours on a session that was certain to be refused. Block 5 added
+   this check for the calibration acceptance after attempt 5 (RUN_STATE item 26); it becomes the general rule.
+4. **Collect, flag, decide in the analysis.** Only a physical hazard measured directly stops or removes a
+   session (the doctrine of 2026-10-05, which block 5 applied to starting a session but not to the
+   after-session verdict). Every other condition is written as a flag on the session, the session is kept, and
+   the analysis plan says which flags exclude it. The analysis then also prints the result with the flagged
+   sessions included, labelled as such, so a rule that was too strict costs a footnote and not a night.
+5. **One whole rehearsal per pack through the after-session check before the rules are fixed.** A rule that
+   cannot pass a clean rehearsal of the pack it governs is wrong, and it is cheaper to learn that from a
+   rehearsal than from a claim session. Attempt 1's code would have appeared in a BETA rehearsal.
+
+A rule that is changed later is changed by the orchestrator with one recorded line and one independent check
+when it bears on a number; block 5 spent a cold ruling per change, and the hours between attempts went to that.
