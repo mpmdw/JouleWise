@@ -37,9 +37,14 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Sequence
+
+from joulewise.b5_analysis.kept_units import KeptUnits
+from joulewise.b5_analysis.windows import AnalysisRefusal
+from joulewise.window_lineage import LOCATOR_BASENAME
 
 # A strict validator returns the list of D-030 strict-validation problems for a
 # bundle directory (empty == strict-valid).  Signature matches
@@ -69,7 +74,7 @@ from joulewise.analysis_engine.inputs import (
     governed_idle_variance_pair,
     window_evidence_precheck,
 )
-from joulewise.authentication_io import read_authentication_input
+from joulewise.authentication_io import V2AuthenticationInputError, read_authentication_input
 from joulewise.arm_readiness import (
     LAUNCH_LINEAGE_REASON_CODES,
     LaunchLineageError,
@@ -98,7 +103,9 @@ from joulewise.detection_floor import (
 )
 from joulewise.dominance_closeout import split_common_mode_block_width
 from joulewise.whole_window import (
+    ArchiveContext,
     AuthenticatedConsumptionSession,
+    _is_hazard_runs_root,
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
@@ -1469,6 +1476,7 @@ _D117_MINT_REPORT_KEYS = {
 _D117_MINT_REPORT_OPTIONAL_KEYS = {
     "launch_lineage",
     "single_count_discipline",
+    "kept_units_binding",
 }
 _D117_MINT_CELL_KEYS = {
     "cell_id",
@@ -1596,6 +1604,96 @@ def validate_admitted_report_vocabulary(value: object) -> list[str]:
     ]
 
 
+_KEPT_BINDING_KEYS = {
+    "schema_version", "exclusions_sha256", "catalog_sha256", "harvest_pin", "cells",
+    "sensitivity_label",
+}
+_KEPT_BINDING_CELL_KEYS = {
+    "exclusions_cell_id", "stratum", "minimum", "n_planned", "n_kept",
+    "kept_unit_ids", "removed_unit_ids",
+}
+
+
+def _validate_kept_units_binding(binding: object, cells: list) -> list[str]:
+    errors = _d117_closed_keys(binding, _KEPT_BINDING_KEYS, set(), "kept_units_binding")
+    if not isinstance(binding, Mapping):
+        return errors
+    if binding.get("schema_version") != "joulewise.floor_extraction_kept_units.v1":
+        errors.append("kept_units_binding: unknown schema_version")
+    if binding.get("sensitivity_label") is not None:
+        errors.append("kept_units_binding.sensitivity_label: a sensitivity view is not mintable")
+    for key in ("exclusions_sha256", "catalog_sha256"):
+        if not _is_sha256(binding.get(key)):
+            errors.append(f"kept_units_binding.{key}: must be a sha256")
+    pin = binding.get("harvest_pin")
+    if not isinstance(pin, str) or not pin:
+        errors.append("kept_units_binding.harvest_pin: must be nonempty")
+    rows = binding.get("cells")
+    if any(not isinstance(cell, Mapping) or not isinstance(cell.get("cell_id"), str)
+           or not cell["cell_id"] for cell in cells):
+        return [*errors, "kept_units_binding.cells: report cell ids must be nonempty strings"]
+    if not isinstance(rows, Mapping) or set(rows) != {c.get("cell_id") for c in cells if isinstance(c, Mapping)}:
+        return [*errors, "kept_units_binding.cells: must name every report cell"]
+    for cell in cells:
+        if not isinstance(cell, Mapping):
+            continue
+        where = f"kept_units_binding.cells.{cell.get('cell_id')}"
+        row = rows[cell["cell_id"]]
+        errors.extend(_d117_closed_keys(row, _KEPT_BINDING_CELL_KEYS, set(), where))
+        if not isinstance(row, Mapping):
+            continue
+        floor = cell.get("floor")
+        if floor is not None and (not isinstance(floor, Mapping)
+                or not (cell.get("n_admitted") == floor.get("n") == row.get("n_kept"))):
+            errors.append(f"{where}: floor n differs from kept units")
+        expected_stratum = {"absolute": "repeat", "comparative": "quad"}.get(cell.get("kind"))
+        if row.get("stratum") != expected_stratum:
+            errors.append(f"{where}: stratum differs from cell")
+        if not isinstance(row.get("exclusions_cell_id"), str) or not row["exclusions_cell_id"]:
+            errors.append(f"{where}: exclusions_cell_id must be nonempty")
+        minimum = row.get("minimum")
+        if minimum is not None and (type(minimum) is not int or minimum < 0):
+            errors.append(f"{where}: minimum must be a nonnegative integer or null")
+        valid_ids = True
+        for key in ("kept_unit_ids", "removed_unit_ids"):
+            ids = row.get(key)
+            if (not isinstance(ids, list) or any(not isinstance(x, str) or not x for x in ids)
+                    or ids != sorted(set(ids))):
+                errors.append(f"{where}.{key}: must be sorted unique ids")
+                valid_ids = False
+        if not valid_ids:
+            continue
+        kept, removed = set(row["kept_unit_ids"]), set(row["removed_unit_ids"])
+        members = cell.get("members")
+        if not isinstance(members, list) or any(not isinstance(m, Mapping) for m in members):
+            errors.append(f"{where}: members must be an array of objects")
+            continue
+        unit_field = "bundle_id" if expected_stratum == "repeat" else "block_id"
+        if any(not isinstance(m.get(unit_field), str) or not m[unit_field] for m in members):
+            errors.append(f"{where}: member unit ids must be nonempty strings")
+            continue
+        units = {m.get("bundle_id") if expected_stratum == "repeat" else m.get("block_id")
+                 for m in members if isinstance(m, Mapping)}
+        if kept & removed or kept | removed != units:
+            errors.append(f"{where}: unit membership differs from report")
+        if (type(row.get("n_planned")) is not int or row["n_planned"] != len(units)
+                or row["n_planned"] != cell.get("n_planned")
+                or type(row.get("n_kept")) is not int or row["n_kept"] != len(kept)):
+            errors.append(f"{where}: counts differ from units")
+        for member in members:
+            if not isinstance(member, Mapping):
+                continue
+            uid = member.get("bundle_id") if expected_stratum == "repeat" else member.get("block_id")
+            if uid in removed and (member.get("excluded") is not True
+                    or any(member.get(k) is not None for k in (
+                        "metric_value_j", "cooldown_result", "anchor_shift_bound_j", "operative_anchor_envelope",
+                        "consumption_provenance", "summary_sha256", "bundle_sha256", "config_sha256"))
+                    or member.get("reasons") != [] or member.get("cooldown_verified") is not False
+                    or member.get("cap_hit") is not False or "launch_lineage" in member):
+                errors.append(f"{where}: removed member carries evaluated evidence")
+    return errors
+
+
 def validate_d117_mint_consumption_report(value: object) -> list[str]:
     """Validate the recursively closed report profile used only by v2 minting."""
 
@@ -1613,6 +1711,11 @@ def validate_d117_mint_consumption_report(value: object) -> list[str]:
     cells = value.get("cells")
     if not isinstance(cells, list) or not cells:
         return [*errors, "extraction report.cells: must be a nonempty array"]
+    binding = value.get("kept_units_binding")
+    if "kept_units_binding" in value:
+        binding_errors = _validate_kept_units_binding(binding, cells)
+        if binding_errors:
+            return [*errors, *binding_errors]
     member_launch_lineages: list[Mapping[str, Any] | None] = []
     for cell_index, cell in enumerate(cells):
         cell_where = f"extraction report.cells[{cell_index}]"
@@ -1658,6 +1761,11 @@ def validate_d117_mint_consumption_report(value: object) -> list[str]:
                 errors.append(
                     f"{member_where}.launch_lineage: must be an object"
                 )
+            if isinstance(binding, Mapping) and isinstance(member, Mapping):
+                bound = binding["cells"][cell["cell_id"]]
+                uid = member.get("bundle_id") if bound["stratum"] == "repeat" else member.get("block_id")
+                if uid in bound["removed_unit_ids"]:
+                    continue
             member_launch_lineages.append(
                 member.get("launch_lineage")
                 if isinstance(member, Mapping)
@@ -2217,6 +2325,24 @@ def _unique_bundle_ids(bundle_ids: Sequence[str]) -> None:
         seen.add(bundle_id)
 
 
+def _unevaluated_member(*, slot: str, bundle_id: str, block_id: str | None = None,
+                        position: str | None = None, excluded: bool = True) -> MemberReport:
+    """A structural row: no bundle or member evidence was consulted."""
+    # Extractor evaluation never opens removed bundles; RULING J1(b) 9–10 retain whole-window admission and basis reads.
+    return MemberReport(slot=slot, bundle_id=bundle_id, block_id=block_id, position=position,
+        value_j=None, cooldown_result=None, cooldown_verified=False, cap_hit=False,
+        excluded=excluded, reasons=(), anchor_shift_bound_j=None, operative_anchor_envelope=None,
+        consumption_provenance=None, summary_sha256=None, bundle_sha256=None, config_sha256=None)
+
+
+def _stop_kept_member_exclusion(member: MemberReport, stop: Callable | None) -> None:
+    if stop is not None:
+        if ANCHOR_FALLBACK_MEMBER_REFUSAL in member.reasons:
+            stop(member.bundle_id, ANCHOR_FALLBACK_MEMBER_REFUSAL)
+        if member.cap_hit:
+            stop(member.bundle_id, "cooldown_cap_hit")
+
+
 def extract_absolute_cell(
     *,
     cell_id: str,
@@ -2229,9 +2355,15 @@ def extract_absolute_cell(
     hash_bundles: bool = False,
     strict_validator: StrictValidator | None = None,
     consumption_session: AuthenticatedConsumptionSession | None = None,
+    kept_unit_ids: frozenset[str] | None = None,
+    removed_unit_ids: frozenset[str] = frozenset(),
+    minimum_kept: int | None = None,
+    _member_code_stop: Callable[[str, str], None] | None = None,
 ) -> CellReport:
     """Extract one absolute D-054 cell under the audit gates."""
 
+    if kept_unit_ids is not None and _member_code_stop is None:
+        raise FloorExtractionError("kept_units_stop_required")
     validator = strict_validator or _default_strict_validator
     metric, window_class = governed_cell_metric(metric, window_class)
     _validate_cap_hit_policy(cap_hit_policy)
@@ -2244,6 +2376,9 @@ def extract_absolute_cell(
 
     reports: list[MemberReport] = []
     for row, slot in zip(members, slots):
+        if row["bundle_id"] in removed_unit_ids:
+            reports.append(_unevaluated_member(slot=slot, bundle_id=str(row["bundle_id"])))
+            continue
         reports.append(
             _evaluate_member(
                 slot=slot,
@@ -2261,13 +2396,16 @@ def extract_absolute_cell(
         )
 
     refusals: list[str] = []
+    if minimum_kept is not None and kept_unit_ids is not None and len(kept_unit_ids) < minimum_kept:
+        refusals.append("kept_units_below_minimum")
+    lineage_reports = [m for m in reports if m.bundle_id not in removed_unit_ids]
     launch_lineages = [
         member.launch_lineage
-        for member in reports
+        for member in lineage_reports
         if isinstance(member.launch_lineage, Mapping)
     ]
     if len({canonical_sha256(value) for value in launch_lineages}) > 1 or (
-        launch_lineages and len(launch_lineages) != len(reports)
+        launch_lineages and len(launch_lineages) != len(lineage_reports)
     ):
         refusals.append("launch_lineage_conflict")
     excluded_slots: list[str] = []
@@ -2275,6 +2413,11 @@ def extract_absolute_cell(
     admitted: list[MemberReport] = []
     final_reports: list[MemberReport] = []
     for member in reports:
+        if member.bundle_id in removed_unit_ids:
+            excluded_slots.append(member.slot)
+            final_reports.append(member)
+            continue
+        _stop_kept_member_exclusion(member, _member_code_stop)
         if ANCHOR_FALLBACK_MEMBER_REFUSAL in member.reasons:
             excluded_slots.append(member.slot)
             final_reports.append(_exclude(member))
@@ -2304,8 +2447,11 @@ def extract_absolute_cell(
     anchor_max: float | None = None
     if not refusals:
         if len(admitted) < 2:
-            refusals.append("insufficient_members_after_exclusion")
-            refusals.extend(fallback_exclusion_diagnostics)
+            if kept_unit_ids is None:
+                refusals.append("insufficient_members_after_exclusion")
+                refusals.extend(fallback_exclusion_diagnostics)
+            else:
+                refusals.append("kept_units_below_minimum")
         else:
             anchor_values = [
                 member.anchor_shift_bound_j
@@ -2573,6 +2719,10 @@ def extract_comparative_cell(
     estimator: object = None,
     estimator_registration: object = None,
     calibration_basis: object = None,
+    kept_unit_ids: frozenset[str] | None = None,
+    removed_unit_ids: frozenset[str] = frozenset(),
+    minimum_kept: int | None = None,
+    _member_code_stop: Callable[[str, str], None] | None = None,
 ) -> CellReport:
     """Extract one comparative (ABBA) D-054 cell under the audit gates.
 
@@ -2582,6 +2732,8 @@ def extract_comparative_cell(
     small-sample guard.
     """
 
+    if kept_unit_ids is not None and _member_code_stop is None:
+        raise FloorExtractionError("kept_units_stop_required")
     validator = strict_validator or _default_strict_validator
     metric, window_class = governed_cell_metric(metric, window_class)
     _validate_cap_hit_policy(cap_hit_policy)
@@ -2603,6 +2755,8 @@ def extract_comparative_cell(
     _unique_bundle_ids(all_bundle_ids)
 
     refusals: list[str] = []
+    if minimum_kept is not None and kept_unit_ids is not None and len(kept_unit_ids) < minimum_kept:
+        refusals.append("kept_units_below_minimum")
     use_common_mode = (
         estimator not in (None, METHOD_ID)
         or estimator_registration is not None
@@ -2663,6 +2817,12 @@ def extract_comparative_cell(
     fallback_exclusion_diagnostics: list[str] = []
     for block, block_id in zip(blocks, block_ids):
         block_members = block["members"]
+        if block_id in removed_unit_ids:
+            excluded_slots.append(block_id)
+            final_reports.extend(_unevaluated_member(slot=f"{block_id}:{position}",
+                bundle_id=str(block_members[position]), block_id=block_id, position=position)
+                for position in _ABBA_POSITIONS)
+            continue
         evaluated = [
             _evaluate_member(
                 slot=f"{block_id}:{position}",
@@ -2679,6 +2839,8 @@ def extract_comparative_cell(
             )
             for position in _ABBA_POSITIONS
         ]
+        for member in evaluated:
+            _stop_kept_member_exclusion(member, _member_code_stop)
         if any(
             ANCHOR_FALLBACK_MEMBER_REFUSAL in member.reasons
             for member in evaluated
@@ -2725,21 +2887,25 @@ def extract_comparative_cell(
         admitted_members.extend(evaluated)
 
     floor: FloorEstimate | None = None
+    lineage_reports = [m for m in final_reports if m.block_id not in removed_unit_ids]
     launch_lineages = [
         member.launch_lineage
-        for member in final_reports
+        for member in lineage_reports
         if isinstance(member.launch_lineage, Mapping)
     ]
     if len({canonical_sha256(value) for value in launch_lineages}) > 1 or (
-        launch_lineages and len(launch_lineages) != len(final_reports)
+        launch_lineages and len(launch_lineages) != len(lineage_reports)
     ):
         refusals.append("launch_lineage_conflict")
     point_floor: FloorEstimate | None = None
     anchor_max: float | None = None
     if not refusals:
         if len(block_deltas) < 2:
-            refusals.append("insufficient_members_after_exclusion")
-            refusals.extend(fallback_exclusion_diagnostics)
+            if kept_unit_ids is None:
+                refusals.append("insufficient_members_after_exclusion")
+                refusals.extend(fallback_exclusion_diagnostics)
+            else:
+                refusals.append("kept_units_below_minimum")
         else:
             anchor_values = [
                 member.anchor_shift_bound_j
@@ -2826,6 +2992,25 @@ def extract_comparative_cell(
     return CellReport(**report_fields)
 
 
+def _block5_runs_root(runs_root: Path) -> bool:
+    """Preserve legacy dispatch, but stop on a present unreadable locator."""
+
+    if _is_hazard_runs_root(runs_root):
+        return True
+    locator = Path(runs_root) / LOCATOR_BASENAME
+    if os.path.lexists(locator):
+        try:
+            # Through the authentication reader: this module has no direct
+            # readable I/O (tests.test_authentication_io surface guard).
+            value = json.loads(read_authentication_input(
+                locator, grammar="json", label="floor extraction launch-lineage locator"))
+        except (OSError, ValueError, RecursionError, V2AuthenticationInputError):
+            raise FloorExtractionError("launch_lineage_locator_unreadable") from None
+        if not isinstance(value, dict):
+            raise FloorExtractionError("launch_lineage_locator_unreadable")
+    return False
+
+
 def extract_cells(
     runs_root: Path,
     spec: Mapping[str, Any],
@@ -2837,9 +3022,14 @@ def extract_cells(
     strict_validator: StrictValidator | None = None,
     mode: Literal["read_replay", "issuing"] = "issuing",
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    kept_units: KeptUnits | None = None,
+    archive_context: ArchiveContext | None = None,
+    b_override_s: float | None = None,
 ) -> dict[str, Any]:
     """Extract every cell in a spec document into one fail-closed report."""
 
+    if b_override_s is not None:
+        raise FloorExtractionError("b_override_s_unsupported")
     validator = strict_validator or _default_strict_validator
     spec_errors = validate_extraction_spec(spec)
     if spec_errors:
@@ -2865,28 +3055,63 @@ def extract_cells(
         raise FloorExtractionError("evaluation_basis_sha256 must be 64 lowercase hex")
 
     runs_root = Path(runs_root)
-    cooldowns = campaign_cooldown_evidence(runs_root, manifest_id)
+    block5 = _block5_runs_root(runs_root) or archive_context is not None
+    bindings: dict[str, dict[str, Any]] = {}
+    kept_bundle_ids: set[str] = set()
+    if kept_units is not None:
+        if not isinstance(kept_units, KeptUnits):
+            raise FloorExtractionError("kept_units_invalid")
+        for cell in cells:
+            try:
+                selected, stratum = kept_units.for_floor_cell(cell)
+            except AnalysisRefusal as exc:
+                raise FloorExtractionError(exc.code) from None
+            units = selected.kept[stratum]
+            removed = tuple(u for u in selected.dropped if u.stratum == stratum)
+            planned = (
+                {m["bundle_id"]: {m["bundle_id"]} for m in cell["members"]}
+                if stratum == "repeat" else
+                {b["block_id"]: set(b["members"].values()) for b in cell["blocks"]}
+            )
+            kept_ids, removed_ids = {u.unit_id for u in units}, {u.unit_id for u in removed}
+            if (kept_ids & removed_ids or kept_ids | removed_ids != set(planned)
+                    or len(kept_ids) != len(units) or len(removed_ids) != len(removed)
+                    or any(set(u.run_ids) != planned.get(u.unit_id) for u in (*units, *removed))):
+                raise FloorExtractionError("kept_units_spec_mismatch")
+            kept_bundle_ids.update(run for u in units for run in u.run_ids)
+            bindings[cell["cell_id"]] = {
+                "exclusions_cell_id": selected.cell_id, "stratum": stratum,
+                "minimum": selected.minimum[stratum] if selected.target else None,
+                "n_planned": len(planned), "n_kept": len(units),
+                "kept_unit_ids": sorted(kept_ids), "removed_unit_ids": sorted(removed_ids),
+            }
     referenced_bundle_ids = _spec_referenced_bundle_ids(cells)
-    consumption_session = AuthenticatedConsumptionSession(
+    consumed_bundle_ids = kept_bundle_ids if kept_units is not None else referenced_bundle_ids
+    kept_required = block5 and kept_units is None
+    cooldowns = {} if kept_required else campaign_cooldown_evidence(runs_root, manifest_id)
+    consumption_session = None if kept_required else AuthenticatedConsumptionSession(
         runs_root,
-        referenced_bundle_ids,
+        consumed_bundle_ids,
         mode=mode,
         evaluation_basis_sha256=evaluation_basis_sha256,
         consumption_semantics_id=(
             consumption_semantics_id or MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
         ),
         calibration_ledger_snapshot=calibration_ledger_snapshot,
+        archive_context=archive_context,
     )
-    whole_window_refusals = _whole_window_extraction_refusals(
+    whole_window_refusals = ("kept_units_required",) if kept_required else _whole_window_extraction_refusals(
         runs_root,
-        referenced_bundle_ids,
+        consumed_bundle_ids,
         evaluation_basis_sha256=evaluation_basis_sha256,
         consumption_session=consumption_session,
         consumption_semantics_id=consumption_semantics_id,
     )
+    if block5 and kept_units is not None and archive_context is None:
+        whole_window_refusals = tuple(sorted(set(whole_window_refusals) | {"whole_window_drift_allowance_unrecorded"}))
     member_consumption_session = (
         consumption_session
-        if consumption_session.ready or consumption_session.refusal_reasons
+        if consumption_session is not None and (consumption_session.ready or consumption_session.refusal_reasons)
         else None
     )
     reports: list[CellReport] = []
@@ -2900,6 +3125,27 @@ def extract_cells(
         seen_cell_ids.add(cell_id)
         kind = cell.get("kind")
         cap_hit_policy = cell.get("cap_hit_policy", CAP_HIT_POLICY_EXCLUDE_SAME_SLOT)
+        bound = bindings.get(cell_id)
+        cell_kwargs = {}
+        if bound is not None:
+            def stop(run_id, code, exclusions_cell_id=bound["exclusions_cell_id"]):
+                kept_units.stop_if_member_code_on_kept_unit(exclusions_cell_id, run_id, code)
+            cell_kwargs = dict(kept_unit_ids=frozenset(bound["kept_unit_ids"]),
+                removed_unit_ids=frozenset(bound["removed_unit_ids"]), minimum_kept=bound["minimum"],
+                _member_code_stop=stop)
+        if kept_required:
+            rows = (
+                tuple(_unevaluated_member(slot=m["slot"], bundle_id=m["bundle_id"], excluded=False) for m in cell["members"])
+                if kind == "absolute" else
+                tuple(_unevaluated_member(slot=f"{b['block_id']}:{pos}", bundle_id=b["members"][pos],
+                    block_id=b["block_id"], position=pos, excluded=False)
+                    for b in cell["blocks"] for pos in _ABBA_POSITIONS)
+            )
+            reports.append(CellReport(cell_id=cell_id, kind=kind, metric=cell["metric"],
+                window_class=cell["window_class"], cap_hit_policy=str(cap_hit_policy), members=rows,
+                excluded_slots=(), n_planned=len(cell["members"] if kind == "absolute" else cell["blocks"]),
+                n_admitted=0, refusal_reasons=("kept_units_required",), floor=None, anchor_shift_bound_max_j=None))
+            continue
         if kind == "absolute":
             members = cell.get("members")
             if not isinstance(members, list):
@@ -2916,6 +3162,7 @@ def extract_cells(
                     hash_bundles=hash_bundles,
                     strict_validator=validator,
                     consumption_session=member_consumption_session,
+                    **cell_kwargs,
                 )
             )
         elif kind == "comparative":
@@ -2934,6 +3181,7 @@ def extract_cells(
                     hash_bundles=hash_bundles,
                     strict_validator=validator,
                     consumption_session=member_consumption_session,
+                    **cell_kwargs,
                     estimator=cell.get("estimator"),
                     estimator_registration=cell.get(
                         "estimator_registration"
@@ -2946,11 +3194,24 @@ def extract_cells(
                 f"{cell_id}: kind must be 'absolute' or 'comparative', got {kind!r}"
             )
 
+    if (archive_context is not None and consumption_session is not None
+            and (consumption_session.ready or not whole_window_refusals)):
+        expected_bound = (archive_context.window_bracket or {}).get("b_fiducial_s")
+        for report in reports:
+            for member in report.members:
+                if member.excluded:
+                    # With kept units, excluded rows are exactly the removed members.
+                    continue
+                provenance = member.consumption_provenance
+                actual_bound = provenance.get("operative_fiducial_bound_s") if isinstance(provenance, Mapping) else None
+                if (_finite(actual_bound) is None or _finite(expected_bound) is None or actual_bound != expected_bound):
+                    raise AnalysisRefusal("operative_bound_not_the_window_bracket")
+
     whole_window_allowance_result = None
     if not whole_window_refusals:
         whole_window_allowance_result = whole_window_drift_allowances(
             runs_root,
-            referenced_bundle_ids,
+            consumed_bundle_ids,
             evaluation_basis_sha256=evaluation_basis_sha256,
             consumption_session=consumption_session,
             consumption_semantics_id=consumption_semantics_id,
@@ -2976,7 +3237,8 @@ def extract_cells(
         ]
     elif (
         whole_window_allowance_result is not None
-        and whole_window_allowance_result.status == "absent"
+        and (whole_window_allowance_result.status == "absent"
+             or (block5 and whole_window_allowance_result.status != "allowances"))
     ):
         reports = [
             replace(
@@ -2995,6 +3257,16 @@ def extract_cells(
         ]
     elif whole_window_allowances is not None:
         reports = [
+            replace(
+                report,
+                refusal_reasons=tuple(sorted(set(report.refusal_reasons)
+                    | {"whole_window_drift_allowance_unrecorded"})),
+                floor=None,
+                n_admitted=0,
+                anchor_shift_bound_max_j=None,
+            )
+            if block5 and neg8_claim_family_for_metric(report.metric) not in whole_window_allowances
+            else
             replace(
                 report,
                 whole_window_drift_allowance=whole_window_allowances[
@@ -3074,7 +3346,7 @@ def extract_cells(
         dict(member.launch_lineage)
         for report in reports
         for member in report.members
-        if isinstance(member.launch_lineage, Mapping)
+        if isinstance(member.launch_lineage, Mapping) and (kept_units is None or not member.excluded)
     ]
     result = {
         "schema_version": EXTRACTION_SCHEMA_VERSION,
@@ -3083,11 +3355,11 @@ def extract_cells(
         "manifest_id": manifest_id,
         "consumption_semantics_id": _ingested_consumption_semantics_id(
             consumption_session
-        ),
+        ) if consumption_session is not None else None,
         "consumption_provenance": (
             {
                 bundle_id: dict(provenance)
-                for bundle_id in sorted(referenced_bundle_ids)
+                for bundle_id in sorted(consumed_bundle_ids)
                 if isinstance(
                     (
                         provenance := consumption_session.provenance_for(
@@ -3097,7 +3369,7 @@ def extract_cells(
                     Mapping,
                 )
             }
-            if consumption_session.ready
+            if consumption_session is not None and consumption_session.ready
             else None
         ),
         "governance": {
@@ -3125,6 +3397,15 @@ def extract_cells(
             and not spec_membership_refusals
         ),
     }
+    if kept_units is not None:
+        result["kept_units_binding"] = {
+            "schema_version": "joulewise.floor_extraction_kept_units.v1",
+            "sensitivity_label": kept_units.sensitivity_label,
+            "exclusions_sha256": kept_units.exclusions_sha256,
+            "catalog_sha256": kept_units.catalog_sha256,
+            "harvest_pin": kept_units.window.harvest_pin,
+            "cells": bindings,
+        }
     if report_launch_lineages:
         result["launch_lineage"] = report_launch_lineages[0]
     if any(report.floor_conditions and report.floor is not None for report in reports):
