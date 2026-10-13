@@ -492,13 +492,15 @@
         "allowance_rule": {
           "enum": [
             "max(observed_drift_s,0.010818)",
-            "max(observed_drift_s,0.009724)"
+            "max(observed_drift_s,0.009724)",
+            "max(observed_drift_s,0.014531)"
           ]
         },
         "bracket_screen_s": {
           "enum": [
             "0.010818",
-            "0.009724"
+            "0.009724",
+            "0.014531"
           ]
         },
         "applied_allowance_s": {

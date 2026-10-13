@@ -24,8 +24,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise.authentication_io import V2AuthenticationReadSession, V2AuthenticationInputError  # noqa: E402
+from joulewise.authentication_io import V2AuthenticationReadSession, V2AuthenticationInputError, read_authentication_input  # noqa: E402
 from joulewise.identity_pins import scientific_config_identity_sha256  # noqa: E402
+from joulewise.b5_analysis.kept_units import KeptUnits  # noqa: E402
 from scripts import mint_floor_artifact_generalized as mint  # noqa: E402
 
 
@@ -151,7 +152,9 @@ def _registered_cell_config_sha256(tree: Mapping[str, Any], mapping: Mapping[str
 def build_pinset(*, contracts: Sequence[Mapping[str, Any]],
                  producer_inputs: Mapping[str, mint.V2ProducerInputs],
                  ledger_snapshot: Any, relative_plan_paths: Sequence[str],
-                 pinset_path: Path, project_commit: str) -> dict:
+                 pinset_path: Path, project_commit: str,
+                 kept_units: Mapping[str, KeptUnits] | None = None,
+                 window_brackets: Mapping[str, Mapping] | None = None) -> dict:
     """Freeze inventory and deterministic component hashes through the real builder.
 
     Inputs are the generalized mint's authenticated producer objects. No artifact
@@ -162,6 +165,8 @@ def build_pinset(*, contracts: Sequence[Mapping[str, Any]],
     producers = []
     for contract, relative in zip(contracts, relative_plan_paths, strict=True):
         source = producer_inputs[contract["plan"]["plan_id"]]
+        plan_id = contract["plan"]["plan_id"]
+        snapshot = mint._producer_ledger(ledger_snapshot, plan_id)
         core = mint._fresh_original_core()
         core._safe_relative_posix(relative, "producer plan relative path")
         cells = []
@@ -177,10 +182,24 @@ def build_pinset(*, contracts: Sequence[Mapping[str, Any]],
             _equal(comparative.calibration_cell_id, mapping["comparative_calibration_cell_id"], "comparative cell")
             _equal(binding["condition_family_id"], mapping["condition_family_id"], "producer family")
             absolute_pins, comparative_pins = map(_component_pins, (absolute, comparative))
+            if kept_units is not None:
+                entry = mint.BLOCK5_PRODUCERS.get(str(source.evidence_root.resolve()))
+                if entry is None or entry.kept_units != kept_units[plan_id]:
+                    raise mint.MintError("floor_mint_kept_unit_mismatch: emitter producer entry differs")
+                for component, pins in ((absolute, absolute_pins), (comparative, comparative_pins)):
+                    bindings, _ids = core._authenticate_kept_binding(component.report, component.spec, entry)
+                    bound = bindings[component.calibration_cell_id]
+                    rows, _widths = core._report_members(component.cell, component.spec_cell, component.kind,
+                        removed_unit_ids=frozenset(bound["removed_unit_ids"]))
+                    if [m.bundle_id for m in component.members] != [row["bundle_id"] for row in rows]:
+                        raise mint.MintError("floor_mint_kept_unit_mismatch: emitter members differ")
+                    pins["expected_n"] = bound["n_kept"]
+                if window_brackets is not None and dict(entry.archive_context.window_bracket) != dict(window_brackets[plan_id]):
+                    raise mint.MintError("postcollection_evidence_mismatch: emitter window bracket differs")
             post = _postcollection(
                 {**absolute.cell, **absolute_pins}, {**comparative.cell, **comparative_pins},
                 source.bracket_binding, source.bracket_binding_sha256, absolute.report_sha256,
-                ledger_snapshot, source.calibration_allowance_projection)
+                snapshot, source.calibration_allowance_projection)
             cells.append({
                 "role": role, "cell_id": mapping["artifact_cell_id"],
                 "scientific_config_identity_sha256": config_hash,
@@ -234,7 +253,8 @@ def build_pinset(*, contracts: Sequence[Mapping[str, Any]],
 
 def _bootstrap_producer(pack: Path, runs: Path, report_path: Path, bracket_path: Path,
                         consumer_bindings: Mapping[str, Mapping[str, Any]], acceptance: Mapping[str, Any],
-                        acceptance_hash: str, snapshot: Any, relative: str, prefill_role: str) -> tuple[dict, dict, dict]:
+                        acceptance_hash: str, snapshot: Any, relative: str, prefill_role: str,
+                        kept_units: Any | None = None) -> tuple[dict, dict, dict]:
     core = mint._fresh_original_core()
     tree, tree_hash = _read(pack / "plan_tree.json")
     from joulewise.authentication_io import read_authentication_input
@@ -265,7 +285,15 @@ def _bootstrap_producer(pack: Path, runs: Path, report_path: Path, bracket_path:
         name in consumer_bindings for name in prefill["allowed_consumer_families"]
     ), True, "prefill role")
     report, report_hash = _read(report_path)
-    binding, binding_hash = _read(bracket_path)
+    entry = mint.BLOCK5_PRODUCERS.get(str(Path(runs).resolve()))
+    if entry is None:
+        binding, binding_hash = _read(bracket_path)
+    else:
+        binding_raw = mint._read_block5_archive_input(entry, "derived/bracket-binding.json", str(bracket_path), path=bracket_path)
+        binding = mint._strict_json_value(binding_raw, str(bracket_path))
+        if not isinstance(binding, Mapping):
+            raise mint.MintError(f"{bracket_path}: expected a JSON object")
+        binding_hash = hashlib.sha256(binding_raw).hexdigest()
     pre, post = mint.validate_calibration_bracket_binding(
         binding, snapshot, window_id=binding["window_id"], plan_id=plan["plan_id"], plan_sha256=plan_hash,
         evidence_root_id=contract["evidence_root_id"], runs_root=runs) or (None, None)
@@ -297,19 +325,26 @@ def _bootstrap_producer(pack: Path, runs: Path, report_path: Path, bracket_path:
             cell_id = mapping[f"{kind}_calibration_cell_id"]
             cell = _one(report["cells"], "cell_id", cell_id)
             spec_cell = _one(spec["cells"], "cell_id", cell_id)
-            if not cell.get("extractable") or cell.get("refusal_reasons") or cell.get("excluded_slots"):
+            if not cell.get("extractable") or cell.get("refusal_reasons") or (kept_units is None and cell.get("excluded_slots")):
                 raise mint.MintError(f"{cell_id}: report cell is not fully extractable")
+            if kept_units is not None:
+                selected, stratum = kept_units.for_floor_cell(spec_cell)
+                removed = sorted(u.unit_id for u in selected.dropped if u.stratum == stratum)
+                if sorted(cell.get("excluded_slots", [])) != removed:
+                    raise mint.MintError("floor_mint_kept_unit_mismatch: excluded_slots differ from removed units")
+                core._report_members(cell, spec_cell, kind, removed_unit_ids=frozenset(removed))
             drift = cell["whole_window_drift_allowance"]
             basis = core._authenticated_evaluation_basis(log_rows, drift["whole_window_evaluation_basis_sha256"])
             pins = {"evidence_root_id": contract["evidence_root_id"], "calibration_cell_id": cell_id,
                     "evaluation_basis_sha256": drift["whole_window_evaluation_basis_sha256"],
                     "evaluation_basis_members": len(basis["member_occurrences"]),
                     "extraction_spec_sha256": spec_hash, "extraction_spec_members": len(set(mint._v2_spec_member_ids(spec))),
-                    "expected_n": cell["floor"]["n"], "drift_allowance_j": drift["allowance_j"],
+                    "expected_n": (len(selected.kept[stratum]) if kept_units is not None else cell["floor"]["n"]),
+                    "drift_allowance_j": drift["allowance_j"],
                     "order_manifest_id": order["manifest_id"], "order_manifest_sha256": order_hash,
                     "consumption_semantics_id": report["consumption_semantics_id"],
                     "members": [{"bundle_id": m["bundle_id"], "config_sha256": m["config_sha256"]}
-                                for m in cell["members"]]}
+                                for m in cell["members"] if kept_units is None or m.get("excluded") is False]}
             projected_components[kind] = pins
             report_cells[kind] = {**cell, **pins}
             component_paths[kind] = {"evidence_root": str(runs), "report": str(report_path),
@@ -377,18 +412,141 @@ def _write_pair(pinset_path: Path, manifest_path: Path, pinset: dict, manifest: 
     return hashlib.sha256(mint._artifact_payload(pinset)).hexdigest()
 
 
+def _consumer_bindings(consumer: Path) -> Mapping[str, Mapping]:
+    prospective, _ = _read(consumer / "analysis_manifest_v3.json")
+    from joulewise.analysis_manifest_v3 import validate_prospective_analysis_manifest_v3
+    refusals = validate_prospective_analysis_manifest_v3(
+        prospective, manifest_dir=consumer, plan_tree_path=consumer / "plan_tree.json")
+    if refusals:
+        raise mint.MintError(f"consumer registration refused: {refusals[0]}")
+    from joulewise.detection_floor import CONDITION_FAMILY_DOMAIN, canonical_domain_sha256
+    bindings = {}
+    for row in prospective["condition_families"]:
+        definition, byte_hash = _read(consumer / row["path"])
+        _equal(byte_hash, row["sha256"], "consumer family bytes")
+        digest = canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, definition)
+        _equal(digest, row["canonical_domain_sha256"], "consumer family")
+        bindings[row["condition_family_id"]] = {"condition_family_id": row["condition_family_id"],
+            "condition_family_sha256": digest, "condition_family_definition": definition}
+    return bindings
+
+
+def _write_block5_outputs(out_dir: Path, pinset: Mapping, manifest: Mapping, plans: Mapping[str, bytes]) -> str:
+    if out_dir.resolve().is_relative_to(REPO_ROOT / "scripts/floor_mint_pinsets"):
+        raise mint.MintError("floor_pinset_not_beside_floor")
+    outputs = {out_dir / "floor-mint-pinset.json": mint._artifact_payload(pinset),
+               out_dir / "floor-mint-inputs.json": mint._artifact_payload(manifest),
+               **{out_dir / pack / "calibration_plan.json": raw for pack, raw in plans.items()}}
+    if set(plans) != {"alpha", "beta"} or any(path.exists() or path.is_symlink() for path in outputs):
+        raise mint.MintError("emitter outputs must be distinct absent paths")
+    written = []
+    try:
+        for path, raw in outputs.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("xb") as stream:
+                written.append(path)
+                stream.write(raw)
+    except OSError:
+        for path in written:
+            path.unlink()
+        raise
+    return hashlib.sha256(outputs[out_dir / "floor-mint-pinset.json"]).hexdigest()
+
+
+def emit_indexed_pinset(*, window_index: Path, alpha_report: Path, beta_report: Path,
+                        out_dir: Path, project_commit: str) -> str:
+    if out_dir.resolve().is_relative_to(REPO_ROOT / "scripts/floor_mint_pinsets"):
+        raise mint.MintError("floor_pinset_not_beside_floor")
+    if mint.BLOCK5_PRODUCERS:
+        raise mint.MintError("block5_producer_registry_already_active")
+    from joulewise.cli import validate_bundle
+    try:
+        entries = mint.compose_indexed_producers(window_index, include_consumer=True)
+        producers = {pack: entries[pack] for pack in ("alpha", "beta")}
+        mint.BLOCK5_PRODUCERS.update({str(entry.window.claim_runs_root.resolve()): entry for entry in producers.values()})
+        with V2AuthenticationReadSession():
+            bindings = _consumer_bindings(entries["gamma"].pack_path)
+            triples, manifest_rows, snapshots, plans = [], [], {}, {}
+            for pack, report in (("alpha", alpha_report), ("beta", beta_report)):
+                entry = producers[pack]
+                acceptance_path = entry.window.archive_root / "sources/inputs/acceptance.json"
+                acceptance_raw = mint._read_block5_archive_input(entry, "sources/inputs/acceptance.json", "block5 acceptance")
+                acceptance_hash = hashlib.sha256(acceptance_raw).hexdigest()
+                mint._read_block5_archive_input(entry, "derived/bracket-binding.json", "block5 bracket binding")
+                core = mint._fresh_original_core()
+                acceptance = core.load_calibration_acceptance_bound(acceptance_path)
+                if acceptance is None:
+                    raise mint.MintError("issued calibration acceptance failed authentication")
+                contract, producer, row = _bootstrap_producer(entry.pack_path, entry.window.claim_runs_root,
+                    report, entry.window.archive_root / "derived/bracket-binding.json", bindings,
+                    acceptance, acceptance_hash, entry.ledger_snapshot, f"{pack}/calibration_plan.json",
+                    "prefill_p2048", kept_units=entry.kept_units)
+                triples.append((contract, producer))
+                manifest_rows.append({"plan_id": entry.producer_plan_id, "pack": pack,
+                    "exclusions_sha256": entry.kept_units.exclusions_sha256, "report": str(report.resolve()),
+                    "cells": [{"role": cell["role"], "allowed_consumer_condition_families": cell["allowed_consumer_condition_families"]}
+                              for cell in row["cells"]]})
+                snapshots[entry.producer_plan_id] = entry.ledger_snapshot
+                plans[pack] = read_authentication_input(entry.pack_path / "calibration_plan.json",
+                    grammar="json", label="sealed producer plan copy")
+            manifest = {"schema_version": mint.BLOCK5_INPUT_SCHEMA, "producer_plans": manifest_rows}
+            contracts, rows = map(list, zip(*triples, strict=True))
+            provisional = _document(contracts, rows)
+            with tempfile.TemporaryDirectory(prefix="floor-pin-author-") as tmp:
+                path = Path(tmp) / "floor-mint-pinset.json"
+                raw = mint._artifact_payload(provisional)
+                path.write_bytes(raw)
+                digest = hashlib.sha256(raw).hexdigest()
+                loaded = mint.load_pinset(path, digest)
+                inputs, _roots, snapshots = mint._authenticate_v2_inputs(
+                    pinset=loaded, pinset_path=path, pinset_sha256=digest,
+                    input_manifest_path=Path(tmp) / "inputs.json", input_manifest=manifest,
+                    strict_validator=lambda path, strict: validate_bundle(path, strict=strict), consumption_semantics_id=None)
+                value = build_pinset(contracts=contracts, producer_inputs=inputs, ledger_snapshot=snapshots,
+                    relative_plan_paths=["alpha/calibration_plan.json", "beta/calibration_plan.json"],
+                    pinset_path=out_dir / "floor-mint-pinset.json", project_commit=project_commit,
+                    kept_units={entry.producer_plan_id: entry.kept_units for entry in producers.values()},
+                    window_brackets={entry.producer_plan_id: entry.archive_context.window_bracket for entry in producers.values()})
+            return _write_block5_outputs(out_dir, value, manifest, plans)
+    finally:
+        mint.BLOCK5_PRODUCERS.clear()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    indexed = any(arg == "--window-index" or arg.startswith("--window-index=") for arg in argv)
     parser = argparse.ArgumentParser(description=__doc__)
     for flag in ("producer-pack", "runs-root", "extraction-report", "bracket-binding", "plan-relative-path"):
-        parser.add_argument(f"--{flag}", action="append", required=True,
+        parser.add_argument(f"--{flag}", action="append", required=not indexed,
                             type=str if flag == "plan-relative-path" else Path)
-    parser.add_argument("--prefill-role", default="prefill_p2048")
+    parser.add_argument("--prefill-role", default=None if indexed else "prefill_p2048")
     for flag in ("consumer-pack", "calibration-acceptance", "calibration-ledger", "calibration-ledger-head-pin", "pinset-out", "input-manifest-out"):
-        parser.add_argument(f"--{flag}", required=True, type=Path)
+        parser.add_argument(f"--{flag}", required=not indexed, type=Path)
+    parser.add_argument("--window-index", type=Path)
+    parser.add_argument("--alpha-report", type=Path)
+    parser.add_argument("--beta-report", type=Path)
+    parser.add_argument("--out-dir", type=Path)
     parser.add_argument("--calibration-custody-store", type=Path)
     parser.add_argument("--project-commit", required=True, help="exact commit the subsequent mint will record")
     args = parser.parse_args(argv)
+    from joulewise.b5_analysis.windows import AnalysisRefusal
     try:
+        if args.window_index is not None:
+            if any(getattr(args, name) is not None for name in (
+                    "producer_pack", "runs_root", "extraction_report", "bracket_binding", "plan_relative_path",
+                    "prefill_role", "consumer_pack", "calibration_acceptance", "calibration_ledger",
+                    "calibration_ledger_head_pin", "pinset_out", "input_manifest_out", "calibration_custody_store")):
+                raise mint.MintError("window_index_conflicting_arguments")
+            if any(value is None for value in (args.alpha_report, args.beta_report, args.out_dir)):
+                raise mint.MintError("window_index_reports_and_out_dir_required")
+            digest = emit_indexed_pinset(window_index=args.window_index, alpha_report=args.alpha_report,
+                beta_report=args.beta_report, out_dir=args.out_dir, project_commit=args.project_commit)
+            print(json.dumps({"status": "EMITTED", "pinset_sha256": digest,
+                "pinset": str(args.out_dir / "floor-mint-pinset.json"),
+                "input_manifest": str(args.out_dir / "floor-mint-inputs.json")}, sort_keys=True))
+            return 0
+        for root in args.runs_root:
+            mint._fresh_original_core()._block5_producer(root)
         from joulewise.cli import validate_bundle
         with V2AuthenticationReadSession():
             acceptance, acceptance_hash = _read(args.calibration_acceptance)
@@ -444,6 +602,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps({"status": "EMITTED", "pinset_sha256": digest,
                           "pinset": str(args.pinset_out), "input_manifest": str(args.input_manifest_out)}, sort_keys=True))
         return 0
+    except AnalysisRefusal as exc:
+        print(f"error: {exc.code}", file=sys.stderr)
+        return 2
     except (mint.MintError, V2AuthenticationInputError, OSError, ValueError, KeyError, TypeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

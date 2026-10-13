@@ -241,3 +241,22 @@ class FloorMintEmitterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Block5EmitterClosedKeyTests(unittest.TestCase):
+    def test_kept_member_pinset_uses_existing_key_sets(self):
+        from scripts.emit_floor_mint_pinset import build_pinset
+        from tests.b5_analysis.test_mint_kept_units import case, registered
+        from joulewise import detection_floor
+        fixture = case()
+        with tempfile.TemporaryDirectory(prefix="s6-emitter-") as tmp, registered(fixture.entries):
+            value = build_pinset(contracts=contracts_from_pins(fixture.pins), producer_inputs=fixture.inputs,
+                ledger_snapshot=fixture.snapshots, relative_plan_paths=[p["plan"]["relative_path"] for p in fixture.pins["producer_plans"]],
+                pinset_path=Path(tmp) / "floor-mint-pinset.json", project_commit="0"*40,
+                kept_units={entry.producer_plan_id: entry.kept_units for entry in fixture.entries.values()},
+                window_brackets={entry.producer_plan_id: entry.archive_context.window_bracket for entry in fixture.entries.values()})
+        self.assertIsNotNone(detection_floor._project_floor_mint_pinset_v2(value))
+        mint._parse_v2_pinset(value)
+        for producer in value["producer_plans"]:
+            for cell in producer["cells"]:
+                self.assertEqual((cell["comparative"]["expected_n"], len(cell["comparative"]["members"])), (8, 32))
