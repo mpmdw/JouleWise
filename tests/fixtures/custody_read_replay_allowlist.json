@@ -247,5 +247,12 @@
     "ordinal": 1,
     "line": 305,
     "reason": "The pass recomputes floor cells under a sensitivity bound from already-issued primary outputs; it issues nothing and writes no file."
+  },
+  {
+    "file": "scripts/produce_b5_disclosures.py",
+    "function": "build_disclosure_inputs.contrast_observations",
+    "ordinal": 1,
+    "line": 193,
+    "reason": "The disclosure producer prepares GAMMA's contrast observations again from already-issued inputs for descriptive lines; it issues no claim and writes no ledger entry."
   }
 ]
