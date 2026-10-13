@@ -233,5 +233,26 @@
     "ordinal": 1,
     "line": 4077,
     "reason": "Desk pre-check that the committed pin is the bracket session's terminal head before the verdict writer runs (rehearsal R2-1); the same snapshot the writer loads (require_committed_pin=True), verify_custody=False, and the result only names why no verdict is written."
+  },
+  {
+    "file": "joulewise/b5_analysis/sensitivity.py",
+    "function": "_engine_contrasts",
+    "ordinal": 1,
+    "line": 160,
+    "reason": "The pass recomputes contrasts under a sensitivity bound from already-issued primary outputs; it issues nothing and writes no file."
+  },
+  {
+    "file": "joulewise/b5_analysis/sensitivity.py",
+    "function": "sensitivity_pass",
+    "ordinal": 1,
+    "line": 305,
+    "reason": "The pass recomputes floor cells under a sensitivity bound from already-issued primary outputs; it issues nothing and writes no file."
+  },
+  {
+    "file": "scripts/produce_b5_disclosures.py",
+    "function": "build_disclosure_inputs.contrast_observations",
+    "ordinal": 1,
+    "line": 193,
+    "reason": "The disclosure producer prepares GAMMA's contrast observations again from already-issued inputs for descriptive lines; it issues no claim and writes no ledger entry."
   }
 ]

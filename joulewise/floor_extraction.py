@@ -104,6 +104,7 @@ from joulewise.detection_floor import (
 from joulewise.dominance_closeout import split_common_mode_block_width
 from joulewise.whole_window import (
     ArchiveContext,
+    archive_context_operative_bound_s,
     AuthenticatedConsumptionSession,
     _is_hazard_runs_root,
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
@@ -500,6 +501,35 @@ def _common_mode_floor_from_extracted_inputs(
     calibration_bracket: object,
     shared_edge_bound_s: float,
 ) -> FloorEstimate:
+    """Primary registered seam: preserve the once-widened equality rule."""
+
+    return _common_mode_floor_core(
+        block_deltas_j=block_deltas_j,
+        onset_sweeps_j=onset_sweeps_j,
+        offset_sweeps_j=offset_sweeps_j,
+        zero_point_contrasts_j=zero_point_contrasts_j,
+        bundle_residual_half_widths_j=bundle_residual_half_widths_j,
+        member_window_bounds_s=member_window_bounds_s,
+        member_envelope_integral_sums_j=member_envelope_integral_sums_j,
+        calibration_bracket=calibration_bracket,
+        shared_edge_bound_s=shared_edge_bound_s,
+        sensitivity=False,
+    )
+
+
+def _common_mode_floor_core(
+    block_deltas_j: Sequence[float],
+    *,
+    onset_sweeps_j: Sequence[Sequence[float]],
+    offset_sweeps_j: Sequence[Sequence[float]],
+    zero_point_contrasts_j: Sequence[float],
+    bundle_residual_half_widths_j: Sequence[Sequence[float]],
+    member_window_bounds_s: object,
+    member_envelope_integral_sums_j: Sequence[float],
+    calibration_bracket: object,
+    shared_edge_bound_s: float,
+    sensitivity: bool,
+) -> FloorEstimate:
     """Internal registered arithmetic seam fed by authenticated extraction."""
 
     try:
@@ -533,7 +563,8 @@ def _common_mode_floor_from_extracted_inputs(
     if (
         bound is None
         or bound <= 0.0
-        or not math.isclose(bound, operative, rel_tol=0.0, abs_tol=1e-12)
+        or (bound < operative if sensitivity else
+            not math.isclose(bound, operative, rel_tol=0.0, abs_tol=1e-12))
     ):
         _common_mode_refuse(
             "common_mode_allowance_application_invalid",
@@ -640,6 +671,37 @@ def _common_mode_floor_from_block_inputs(
 
     return _common_mode_floor_from_extracted_inputs(
         block_deltas_j,
+        onset_sweeps_j=[item.onset_values_j for item in block_inputs],
+        offset_sweeps_j=[item.offset_values_j for item in block_inputs],
+        zero_point_contrasts_j=[
+            item.zero_point_contrast_j for item in block_inputs
+        ],
+        bundle_residual_half_widths_j=[
+            item.bundle_residual_half_widths_j for item in block_inputs
+        ],
+        member_window_bounds_s=[
+            item.member_window_bounds_s for item in block_inputs
+        ],
+        member_envelope_integral_sums_j=[
+            item.member_envelope_integral_sum_j for item in block_inputs
+        ],
+        calibration_bracket=calibration_bracket,
+        shared_edge_bound_s=shared_edge_bound_s,
+    )
+
+
+def _sensitivity_common_mode_floor_from_block_inputs(
+    block_deltas_j: Sequence[float],
+    block_inputs: Sequence[_CommonModeBlockInputs],
+    *,
+    calibration_bracket: object,
+    shared_edge_bound_s: float,
+) -> FloorEstimate:
+    """Adapt extraction-owned block records to the internal arithmetic seam."""
+
+    return _common_mode_floor_core(
+        block_deltas_j,
+        sensitivity=True,
         onset_sweeps_j=[item.onset_values_j for item in block_inputs],
         offset_sweeps_j=[item.offset_values_j for item in block_inputs],
         zero_point_contrasts_j=[
@@ -2761,6 +2823,8 @@ def extract_comparative_cell(
         estimator not in (None, METHOD_ID)
         or estimator_registration is not None
     )
+    sensitivity = (consumption_session is not None
+                   and getattr(consumption_session, "sensitivity_bound_s", None) is not None)
     common_mode_bound_s: float | None = None
     if use_common_mode:
         if (
@@ -2798,16 +2862,19 @@ def extract_comparative_cell(
                     isinstance(session_bound, bool)
                     or not isinstance(session_bound, (int, float))
                     or not math.isfinite(float(session_bound))
-                    or not math.isclose(
-                        float(session_bound),
-                        common_mode_bound_s,
-                        rel_tol=0.0,
-                        abs_tol=1e-12,
-                    )
+                    or (float(session_bound) < common_mode_bound_s if sensitivity else
+                        not math.isclose(
+                            float(session_bound),
+                            common_mode_bound_s,
+                            rel_tol=0.0,
+                            abs_tol=1e-12,
+                        ))
                 ):
                     refusals.append(
                         "common_mode_allowance_application_invalid"
                     )
+                elif sensitivity:
+                    common_mode_bound_s = float(session_bound)
     excluded_slots: list[str] = []
     final_reports: list[MemberReport] = []
     block_deltas: list[float] = []
@@ -2937,14 +3004,24 @@ def extract_comparative_cell(
                                 shared_edge_bound_s=common_mode_bound_s,
                             )
                         )
-                    floor = _common_mode_floor_from_block_inputs(
-                        block_deltas,
-                        extracted_inputs,
-                        calibration_bracket=(
-                            consumption_session.calibration_bracket
-                        ),
-                        shared_edge_bound_s=common_mode_bound_s,
-                    )
+                    if sensitivity:
+                        floor = _sensitivity_common_mode_floor_from_block_inputs(
+                            block_deltas,
+                            extracted_inputs,
+                            calibration_bracket=(
+                                consumption_session.calibration_bracket
+                            ),
+                            shared_edge_bound_s=common_mode_bound_s,
+                        )
+                    else:
+                        floor = _common_mode_floor_from_block_inputs(
+                            block_deltas,
+                            extracted_inputs,
+                            calibration_bracket=(
+                                consumption_session.calibration_bracket
+                            ),
+                            shared_edge_bound_s=common_mode_bound_s,
+                        )
                 except CommonModeEstimatorRefusal as exc:
                     refusals.append(exc.reason)
             else:
@@ -2984,7 +3061,7 @@ def extract_comparative_cell(
         anchor_shift_bound_max_j=anchor_max,
         point_floor_diagnostic=point_floor if attribution_limited else None,
     )
-    if floor is not None and use_common_mode:
+    if floor is not None and use_common_mode and not sensitivity:
         return _RegisteredCellReport(
             **report_fields,
             _registration=two_shared_edge_common_mode_registration(),
@@ -3196,7 +3273,7 @@ def extract_cells(
 
     if (archive_context is not None and consumption_session is not None
             and (consumption_session.ready or not whole_window_refusals)):
-        expected_bound = (archive_context.window_bracket or {}).get("b_fiducial_s")
+        expected_bound = archive_context_operative_bound_s(archive_context)
         for report in reports:
             for member in report.members:
                 if member.excluded:
