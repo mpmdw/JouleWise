@@ -20,7 +20,7 @@ PYTHONDONTWRITEBYTECODE=1 TMPDIR=/private/tmp JW_B5_SYNTHETIC_ONLY=1 B5_S0_EXPOR
 
 All member bundles use the committed mock runtime seed, with shifted synthetic stamps. Collection observers, admission observations, calibration-candidate discovery and the synthetic projection's verdict authentication are explicit test seams. This is synthetic shape evidence, not hardware or claim validation.
 
-Complete archives are compressed as `archive.tar.xz` without rewriting their bytes. `INDEX_ENTRY.json` preserves their original synthetic paths and indexed record digest. The loader restores only the builder-owned `/private/tmp/b5-s0-*` original roots, preserving absolute-path bindings.
+Complete archives are compressed as `archive.tar.xz` without rewriting their bytes. `INDEX_ENTRY.json` preserves their original synthetic paths and indexed record digest. Normal loading extracts a private temporary copy, relocates its synthetic locators and rebinds the hashes covering those changes. The committed archive and index remain byte-identical. Temporary roots use the platform's default temporary directory; loading needs no `/private/tmp` directory or shared machine path.
 
 ## S0 closing rebuild, 2026-10-12
 

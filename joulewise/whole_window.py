@@ -20,7 +20,8 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any, Literal
+from types import MappingProxyType
+from typing import Any, Callable, Literal
 
 from joulewise.aggregate import student_t_critical_95
 from joulewise.authentication_io import (
@@ -29,6 +30,7 @@ from joulewise.authentication_io import (
     sha256_authentication_input,
 )
 from joulewise.arm_readiness import (
+    ArmReadinessError,
     LaunchLineageError,
     authenticate_bundle_launch_lineage,
     authenticate_launch_lineage,
@@ -92,6 +94,407 @@ class WholeWindowRowValidation:
     admitted: bool
     status: str | None
     reasons: tuple[str, ...]
+
+
+def _archive_freeze(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _archive_freeze(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_archive_freeze(item) for item in value)
+    if isinstance(value, (set, frozenset)):
+        return frozenset(_archive_freeze(item) for item in value)
+    return value
+
+
+def _archive_thaw(value: Any) -> Any:
+    """Give historical JSON consumers ordinary mappings and lists."""
+    if isinstance(value, Mapping):
+        return {key: _archive_thaw(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_archive_thaw(item) for item in value]
+    return value
+
+
+@dataclass(frozen=True)
+class ArchiveContext:
+    """One window's authenticated archive inputs, fixed for a session's life.
+
+    The context builder owns authentication of the roster, exclusions, S(W)
+    and catalog. The validator authenticates the outputs it consumes again.
+    ``roster_references`` maps every reference and spare id to its slot.
+    Catalog entries are (authenticated descriptor, manifest) pairs, suitable
+    for ``_basis_source_manifests``; neither collection can change in place.
+    """
+
+    neg8_harvest_archive: Path
+    window_bracket: Mapping[str, Any] | None = None
+    governed_e3: bool = False
+    removed_bundle_ids: frozenset[str] = frozenset()
+    roster_references: Mapping[str, str] | None = None
+    survivor_bundle_ids: frozenset[str] = frozenset()
+    sources_replay: Callable[[Mapping[str, Any], Path], str | None] | None = None
+    catalog_manifests: tuple[tuple[Mapping[str, Any], Mapping[str, Any]], ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "neg8_harvest_archive", Path(self.neg8_harvest_archive))
+        for name in ("removed_bundle_ids", "survivor_bundle_ids"):
+            object.__setattr__(self, name, frozenset(getattr(self, name)))
+        object.__setattr__(self, "roster_references", _archive_freeze(self.roster_references or {}))
+        object.__setattr__(self, "window_bracket", _archive_freeze(self.window_bracket))
+        object.__setattr__(self, "catalog_manifests", _archive_freeze(self.catalog_manifests))
+
+
+def _archive_context_or_none(value: Any) -> ArchiveContext | None:
+    """Only the authenticated context type enables archive consumption."""
+    # Mock(spec=ArchiveContext) can spoof __class__; its concrete type still
+    # must be an ArchiveContext (or an actual subclass), not a session double.
+    return value if issubclass(type(value), ArchiveContext) else None
+
+
+@dataclass(frozen=True)
+class ArchiveRowValidation(WholeWindowRowValidation):
+    """Context-only disclosure; the historical result shape stays unchanged."""
+
+    detail: tuple[str, ...] = ()
+    answered_conditions: frozenset[str] = frozenset()
+    allowance_source: str | None = None
+
+
+@dataclass(frozen=True)
+class Neg8ScreenOutcome:
+    passed: bool
+    source: str | None
+    problem: str | None
+    bracket: Mapping[str, Any] | None
+
+
+@dataclass(frozen=True)
+class Neg8Allowance:
+    bracket: Mapping[str, Any] | None
+    source: str | None
+    problem: str | None
+
+
+def _archive_output_object(context: ArchiveContext, relative: str) -> Mapping[str, Any] | None:
+    harvest = _read_json_object(context.neg8_harvest_archive / "harvest.json")
+    outputs = harvest.get("outputs") if isinstance(harvest, Mapping) else None
+    digest = outputs.get(relative) if isinstance(outputs, Mapping) else None
+    return _json_object_bytes(_archive_bytes(context.neg8_harvest_archive,
+        {"path": relative, "sha256": digest}, relative))
+
+
+# Kept equal to the pinned harvest by T-A1. Importing the harvest here would
+# cross its frozen import boundary and bring the analysis into collection.
+_NEG8_BOUND_DEPENDENT_FIELDS = frozenset({
+    "derived_repeatability_bound_j", "screen_passed", "drift_allowance_j", "provenance",
+    "window_duration_s", "bound_envelope_j", "bound_prediction_j"})
+_NEG8_BRACKET_REFERENCE_FIELDS = ("endpoint_protocol", "reference_counts", "start_gross_j", "end_gross_j",
+    "start_admissible_set_j", "end_admissible_set_j")
+
+
+def _neg8_endpoints(bracket: Any) -> dict[str, Any] | None:
+    families = bracket.get("claim_families") if isinstance(bracket, Mapping) else None
+    if not isinstance(families, Mapping) or not families:
+        return None
+    if any(not isinstance(record, Mapping) for record in families.values()):
+        return None
+    return {family: {key: value for key, value in record.items()
+                    if key not in _NEG8_BOUND_DEPENDENT_FIELDS} for family, record in families.items()}
+
+
+def _neg8_bracket_references(bracket: Any) -> dict[str, Any] | None:
+    if not isinstance(bracket, Mapping) or bracket.get("claim_families") != {}:
+        return None
+    companion = bracket.get("idle_subtracted_companion")
+    companion = companion if isinstance(companion, Mapping) else {}
+    return {**{key: bracket.get(key) for key in _NEG8_BRACKET_REFERENCE_FIELDS},
+        "idle_subtracted_start_point_j": companion.get("start_point_j"),
+        "idle_subtracted_end_point_j": companion.get("end_point_j")}
+
+
+def _neg8_reproduces(rederived: Mapping[str, Any], stored: Any, *, energy_unreadable: bool) -> bool:
+    if rederived.get("estimand") != (stored.get("estimand") if isinstance(stored, Mapping) else None):
+        return False
+    endpoints = _neg8_endpoints(rederived)
+    if endpoints is not None:
+        return endpoints == _neg8_endpoints(stored)
+    references = _neg8_bracket_references(rederived)
+    return energy_unreadable and references is not None and references == _neg8_bracket_references(stored)
+
+
+def _archive_loss_ids(screen: Mapping[str, Any], bracket: Mapping[str, Any]) -> set[str] | None:
+    harvest_losses = screen.get("harvest_reference_losses", {})
+    losses = bracket.get("reference_losses", [])
+    if not isinstance(harvest_losses, Mapping) or not isinstance(losses, list):
+        return None
+    if any(not isinstance(item, Mapping) or not isinstance(item.get("bundle_id"), str) for item in losses):
+        return None
+    return set(harvest_losses) | {item["bundle_id"] for item in losses}
+
+
+def _neg8_screen_outcome(row: Mapping[str, Any], *, context: ArchiveContext) -> Neg8ScreenOutcome:
+    allowance = harvest_neg8_allowance(context.neg8_harvest_archive, row)
+    bracket, problem = allowance.bracket, allowance.problem
+    if problem is not None or not isinstance(bracket, Mapping):
+        return Neg8ScreenOutcome(False, None, problem or "screen_not_passed", None)
+    source = allowance.source
+    screen = _archive_output_object(context, "derived/neg8-screen.json")
+    families = bracket.get("claim_families")
+    freshness = bracket.get("bound_freshness")
+    if (source not in {"stored_verdict", "survivor_rescreen"}
+        or bracket.get("decision") != "passed" or bracket.get("conditions") != []
+        or not isinstance(families, Mapping) or set(families) != {
+            NEG8_CLAIM_FAMILY_GROSS, NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED}
+        or any(not isinstance(value, Mapping) or _finite_number(value.get("drift_allowance_j"), positive=True) is None
+               for value in families.values())
+        or not isinstance(freshness, Mapping) or not isinstance(freshness.get("decision"), str)):
+        return Neg8ScreenOutcome(False, source, "survivor_bracket_not_passed", None)
+    if not isinstance(screen, Mapping):
+        return Neg8ScreenOutcome(False, source, "screen_record_unauthenticated", None)
+    lost = _archive_loss_ids(screen, bracket)
+    refs = context.roster_references
+    basis = row.get("evaluation_basis")
+    occurrences = basis.get("member_occurrences", []) if isinstance(basis, Mapping) else []
+    basis_ids = {item.get("bundle_id") for item in occurrences if isinstance(item, Mapping)}
+    if lost is None or not lost.issubset(refs) or context.survivor_bundle_ids != frozenset(set(refs) & basis_ids - lost):
+        return Neg8ScreenOutcome(False, source, "survivor_set_count_mismatch", None)
+    if context.survivor_bundle_ids & context.removed_bundle_ids:
+        return Neg8ScreenOutcome(False, source, "excluded_reference_in_screen", None)
+    counts = {slot: sum(refs[bundle] == slot for bundle in context.survivor_bundle_ids)
+              for slot in ("start", "midpoint", "end")}
+    recorded_counts = bracket.get("reference_counts")
+    if recorded_counts is None:
+        recorded_counts = {"start": 3, "midpoint": 1, "end": 3}
+    if counts != recorded_counts:
+        return Neg8ScreenOutcome(False, source, "survivor_set_count_mismatch", None)
+    return Neg8ScreenOutcome(True, source, None, bracket)
+
+
+_WINDOW_BRACKET_FIELDS = ("status", "reasons", "pre", "post", "endpoint_max_b_fiducial_s", "drift_s",
+    "calibration_drift_allowance_s", "b_fiducial_s", "bracket_binding")
+_WINDOW_ACCEPTANCE_FIELDS = ("freshness", "preflight", "drift", "allowance", "prospective_rederivation")
+
+
+def _archive_window_assessment(context: ArchiveContext) -> Mapping[str, Any] | None:
+    value = _archive_thaw(context.window_bracket)
+    return {key: item for key, item in value.items() if key != "reasons"} if isinstance(value, Mapping) else None
+
+
+def _window_bracket_problem(context: ArchiveContext) -> str | None:
+    bracket = _archive_thaw(context.window_bracket)
+    if not isinstance(bracket, Mapping) or bracket.get("status") != "passed":
+        return "window_bracket_not_passed"
+    wrapper = _archive_output_object(context, "withheld/bracket-evaluation.json")
+    stored = wrapper.get("assessment") if isinstance(wrapper, Mapping) else None
+    if isinstance(stored, Mapping):
+        stored = {**stored, "reasons": wrapper.get("reasons", stored.get("reasons"))}
+    if (not isinstance(stored, Mapping)
+        or any(bracket.get(key) != stored.get(key) for key in _WINDOW_BRACKET_FIELDS)
+        or not isinstance(bracket.get("acceptance"), Mapping) or not isinstance(stored.get("acceptance"), Mapping)
+        or any(bracket["acceptance"].get(key) != stored["acceptance"].get(key)
+               for key in _WINDOW_ACCEPTANCE_FIELDS)):
+        return "window_bracket_differs_from_harvest"
+    return None
+
+
+def _archive_member_removed(context: ArchiveContext, bundle_id: str) -> bool:
+    return (bundle_id not in context.survivor_bundle_ids if bundle_id in context.roster_references
+            else bundle_id in context.removed_bundle_ids)
+
+
+def _answered_conditions(row: Mapping[str, Any], core: Mapping[str, Any], *, context: ArchiveContext,
+                         neg8: Neg8ScreenOutcome, catalog_answered: bool) -> tuple[frozenset[str], tuple[str, ...]]:
+    conditions = core.get("conditions")
+    if not isinstance(conditions, list) or any(not isinstance(word, str) for word in conditions):
+        return frozenset(), ("whole_window_verdict_provenance_invalid",)
+    answered: set[str] = set()
+    problems: set[str] = set()
+    if neg8.passed:
+        answered.update(set(conditions) & NEG8_STORED_CONDITION_CODES)
+    if context.governed_e3:
+        problem = _window_bracket_problem(context)
+        if problem is None:
+            answered.add("calibration_acceptance_bound_stale")
+        else:
+            problems.add(problem)
+    if catalog_answered:
+        answered.add("whole_window_campaign_membership_unresolved")
+    continuity = core.get("adapter_wattage_continuity")
+    if isinstance(continuity, Mapping) and continuity.get("schema_version") == ADAPTER_CONTINUITY_SCHEMA:
+        continuity_conditions = continuity.get("conditions", [])
+        if isinstance(continuity_conditions, list):
+            answered.update(word for word in continuity_conditions if isinstance(word, str))
+    failures = _validated_member_failures(row) or []
+    # The row's attribution is evidence even when its aggregate conditions
+    # accidentally omit the member's reason (review N4).
+    for item in failures:
+        bundle_id = item["member_id"]
+        if bundle_id not in context.roster_references and not _archive_member_removed(context, bundle_id):
+            problems.add(f"member_code_on_kept_unit:{bundle_id}")
+    excluded = row.get("excluded_bundles", [])
+    if not isinstance(excluded, list) or any(
+        not isinstance(item, Mapping) or not isinstance(item.get("bundle_id"), str)
+        or not item["bundle_id"] for item in excluded
+    ):
+        problems.add("whole_window_verdict_provenance_invalid")
+        excluded = []
+    for condition in set(conditions) & set(PROSPECTIVE_MEMBER_FAILURE_REASON_CODES):
+        named = {item["member_id"] for item in failures if item["reason_code"] == condition}
+        if condition == "whole_window_bundle_invalid":
+            named.update(item["bundle_id"] for item in excluded)
+        if not named:
+            problems.add(f"member_condition_unnamed:{condition}")
+            continue
+        for bundle_id in sorted(named):
+            if not _archive_member_removed(context, bundle_id):
+                problems.add(f"reference_in_screen_named_by_verdict:{condition}:{bundle_id}"
+                    if bundle_id in context.roster_references else f"member_code_on_kept_unit:{bundle_id}")
+        if all(_archive_member_removed(context, bundle_id) for bundle_id in named):
+            answered.add(condition)
+    return frozenset(answered & set(conditions)), tuple(sorted(problems))
+
+
+def _archive_catalog_answer(row: Mapping[str, Any], basis: Mapping[str, Any] | None,
+                            runs_root: Path, context: ArchiveContext) -> tuple[bool, str | None]:
+    core = row.get("idle_admission_core")
+    conditions = core.get("conditions") if isinstance(core, Mapping) else None
+    if not isinstance(conditions, list) or "whole_window_campaign_membership_unresolved" not in conditions:
+        return False, None
+    provenance = row.get("row_provenance")
+    sources = provenance.get("source_campaign_manifests") if isinstance(provenance, Mapping) else None
+    screen = _archive_output_object(context, "derived/neg8-screen.json")
+    rescreen = screen.get("rescreen") if isinstance(screen, Mapping) else None
+    source = rescreen.get("reference_source") if isinstance(rescreen, Mapping) else None
+    if (sources not in (None, []) or basis is None or context.sources_replay is None
+        or not isinstance(source, Mapping) or source.get("source") != "claim_campaign_manifests_authenticated"
+        or rescreen.get("evaluated") is not True or rescreen.get("decision") != "passed"):
+        return False, "sources_replay_preconditions_failed"
+    try:
+        problem = context.sources_replay(row, runs_root)
+    except Exception as exc:
+        problem = f"sources_replay_raised:{type(exc).__name__}"
+    return problem is None, problem
+
+
+def _archive_reference_strict_invalid(_bundle_id: str, path: Path) -> bool:
+    # Lazy import: neither frozen collection entry point imports this module.
+    from joulewise.neg8_survivors import neg8_reference_strict_invalid
+    return neg8_reference_strict_invalid(path,
+        strict_problems=strict_validate_bundles([path], workers=1)[0]).invalid
+
+
+def _archive_neg8_replay_reasons(row: Mapping[str, Any], core: Mapping[str, Any],
+        basis: Mapping[str, Any] | None, manifests: Sequence[Mapping[str, Any]], runs_root: Path,
+        policy_sha: Any, context: ArchiveContext, neg8: Neg8ScreenOutcome,
+        catalog_answered: bool) -> set[str]:
+    reasons: set[str] = set()
+    bracket = core.get("neg8_bracket")
+    policy = _registered_bracket_policy(policy_sha)
+    catalog = catalog_answered and (not isinstance(bracket, Mapping) or not _neg8_endpoints(bracket))
+    if not catalog and (not isinstance(bracket, Mapping) or bracket.get("schema_version") != NEG8_BRACKET_SCHEMA):
+        return {"whole_window_verdict_provenance_invalid"}
+    if policy is None or (not catalog and bracket.get("policy") != policy):
+        return {"whole_window_verdict_provenance_invalid"}
+    current = any((path := _safe_source_path(runs_root, item.get("bundle_path"))) is not None
+                  and _current_strict_summary(_read_json_object(path / "summary_metrics.json"), path)
+                  for item in basis.get("member_occurrences", []) if isinstance(item, Mapping)) if basis else (
+        _row_references_current_strict_member(row, runs_root, set(row.get("bundle_ids", []))))
+    point_drift = basis is not None or current
+    if not catalog and (("evaluation_basis" in row or current) and (
+        bracket.get("estimand") != NEG8_POINT_DRIFT_ESTIMAND
+        or not isinstance(bracket.get("claim_families"), Mapping)
+        or "drift_bound_artifact" not in bracket or not isinstance(bracket.get("bound_freshness"), Mapping))):
+        return {"whole_window_verdict_provenance_invalid"}
+    replay_bracket = neg8.bracket if catalog else bracket
+    if not isinstance(replay_bracket, Mapping):
+        return reasons  # the allowance outcome already refuses; no fallback
+    artifact = replay_bracket.get("drift_bound_artifact")
+    if not catalog and artifact is not None and not validate_neg8_drift_bound_artifact(artifact, require_corpus_identity=True):
+        return {"whole_window_verdict_provenance_invalid"}
+    screen = _archive_output_object(context, "derived/neg8-screen.json") or {}
+    harvest_losses = screen.get("harvest_reference_losses", {})
+    options: dict[str, Any] = {}
+    if catalog:
+        wanted = {item.get("bundle_id") for item in (basis or {}).get("member_occurrences", [])
+                  if isinstance(item, Mapping)}
+        options.update(exclude_bundle_ids=harvest_losses, require_replicated_endpoints=True,
+            required_reference_ids=frozenset(context.roster_references), unreadable_energy="lost",
+            surviving_reference_check=lambda bundle_id, _path: (
+                None if bundle_id in wanted else "reference_not_in_verdict_basis"))
+    else:
+        options["stored_strict_losses"] = {item.get("bundle_id") for item in bracket.get("reference_losses") or []
+            if isinstance(item, Mapping) and item.get("reason") == "strict_invalid"}
+    derived, problem = _derived_neg8_decision(manifests, runs_root, policy, current=current,
+        point_drift=point_drift, drift_bound_artifact=artifact, return_bracket=point_drift,
+        strict_invalid=_archive_reference_strict_invalid, unlisted_strict_invalid="refuse",
+        freshness_evaluated_at_s=(replay_bracket.get("bound_freshness") or {}).get("evaluated_at_s"), **options)
+    if problem == "conflict":
+        reasons.add("whole_window_verdict_conflict")
+    elif problem == "bundle_strict_invalid":
+        reasons.add("bundle_strict_invalid")
+    elif problem is not None or derived is None:
+        reasons.add("whole_window_verdict_provenance_invalid")
+    elif point_drift:
+        unreadable = isinstance(harvest_losses, Mapping) and any(value == "energy_unreadable" for value in harvest_losses.values())
+        reproduces = (
+            _neg8_stored_verdict_reproduces(derived, replay_bracket)
+            if neg8.source == "stored_verdict"
+            else isinstance(derived, Mapping) and _neg8_reproduces(derived, replay_bracket, energy_unreadable=unreadable)
+        )
+        if not reproduces:
+            reasons.add("whole_window_verdict_conflict")
+    elif bracket.get("decision") != derived:
+        reasons.add("whole_window_verdict_conflict")
+    return reasons
+
+
+def _neg8_stored_verdict_reproduces(derived: Any, stored: Mapping[str, Any]) -> bool:
+    """The historical full comparison when the stored screen decides.
+
+    Only survivor_rescreen replaces bound-dependent fields. A stored_verdict
+    allowance is the stored row itself, so those fields still need replay.
+    """
+    if not isinstance(derived, Mapping):
+        return False
+    stored_families = stored.get("claim_families")
+    derived_families = derived.get("claim_families")
+    return (
+        isinstance(stored_families, Mapping) and isinstance(derived_families, Mapping)
+        and set(stored_families) == {NEG8_CLAIM_FAMILY_GROSS, NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED}
+        and set(derived_families) == set(stored_families)
+        and all(
+            isinstance(stored_families[family], Mapping) and isinstance(derived_families[family], Mapping)
+            and _finite_number(stored_families[family].get("drift_allowance_j"), positive=True) is not None
+            and {key: value for key, value in stored_families[family].items() if key != "window_duration_s"}
+                == {key: value for key, value in derived_families[family].items() if key != "window_duration_s"}
+            for family in stored_families
+        )
+        and stored.get("decision") == derived.get("decision")
+        and stored.get("bound_freshness") == derived.get("bound_freshness")
+    )
+
+
+def _archive_launch_refusal_reasons(row: Mapping[str, Any], runs_root: Path,
+                                   context: ArchiveContext, neg8: Neg8ScreenOutcome) -> tuple[str, ...]:
+    if not context.governed_e3:
+        return _whole_window_row_launch_refusal_reasons(row, runs_root)
+    basis = row.get("evaluation_basis")
+    occurrences = basis.get("member_occurrences") if isinstance(basis, Mapping) else None
+    if not isinstance(occurrences, list) or not occurrences:
+        return ()
+    paths = [_safe_source_path(runs_root, item.get("bundle_path")) for item in occurrences]
+    if any(path is None for path in paths):
+        return ("whole_window_verdict_provenance_invalid",)
+    try:
+        lineage = _authenticated_bundle_launch_lineage_set(paths, require_completion=True)
+        if lineage is not None:
+            bracket = _archive_thaw(context.window_bracket)
+            artifact = neg8.bracket.get("drift_bound_artifact") if isinstance(neg8.bracket, Mapping) else None
+            _authenticate_whole_window_launch_sources(lineage, calibration_bracket=bracket,
+                drift_bound_artifact=artifact, require_completion=True, require_bound=True)
+    except (LaunchLineageError, ArmReadinessError) as exc:
+        return (exc.reason_code,)
+    return ()
 
 WHOLE_WINDOW_SCHEMA = "joulewise.idle_admission_whole_window_verdict.v1"
 IDLE_ADMISSION_CORE_SCHEMA = "joulewise.idle_admission_core_verdict.v1"
@@ -179,6 +582,13 @@ NEG8_POINT_DRIFT_CONDITION_CODES = frozenset(
         "neg8_bracket_reference_invalid",
     }
 )
+# Closed writer vocabulary, including the legacy and per-segment evaluators
+# imported by run_campaign. Stored bracket lists cannot expand this family.
+NEG8_STORED_CONDITION_CODES = NEG8_POINT_DRIFT_CONDITION_CODES | frozenset({
+    "neg8_bracket_rel_delta_exceeded",
+    "neg8_bracket_not_evaluated",
+    "neg8_bracket_ambiguous_reference",
+})
 NEG8_WHOLE_WINDOW_ALLOWANCE_TERM = "E_whole_window_drift_allowance_j"
 
 # Prospective whole-window row diagnostics have their own code namespace.
@@ -499,6 +909,7 @@ class AuthenticatedConsumptionSession:
         calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
         calibration_bracket_binding: Mapping[str, Any] | None = None,
         _allow_unissued_calibration_fixture: bool = False,
+        archive_context: ArchiveContext | None = None,
     ) -> None:
         if consumption_semantics_id not in {
             MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -508,7 +919,13 @@ class AuthenticatedConsumptionSession:
             raise ValueError(
                 f"unknown whole-window consumption semantics: {consumption_semantics_id!r}"
             )
+        archive_context = _archive_context_or_none(archive_context)
+        if archive_context is not None and consumption_semantics_id != MAX_BRACKET_CONSUMPTION_SEMANTICS_ID:
+            raise ValueError("archive context requires maximum-bracket consumption semantics")
         self.mode = mode
+        self._archive_context = archive_context
+        self._archive_context_changed = False
+        self._row_archive_disclosures: dict[Any, dict[str, Any]] = {}
         self.runs_root = Path(runs_root)
         self.referenced_bundle_ids = frozenset(referenced_bundle_ids)
         self.evaluation_basis_sha256 = evaluation_basis_sha256
@@ -554,6 +971,26 @@ class AuthenticatedConsumptionSession:
     def ready(self) -> bool:
         return self._prepared and not self.refusal_reasons
 
+    @property
+    def archive_context(self) -> ArchiveContext | None:
+        return _archive_context_or_none(self._archive_context)
+
+    @archive_context.setter
+    def archive_context(self, value: ArchiveContext | None) -> None:
+        value = _archive_context_or_none(value)
+        if value != self.archive_context:
+            self._archive_context_changed = True
+            self._fail_global(set(self.refusal_reasons) | {"archive_context_changed"})
+            raise ValueError("archive_context_changed")
+
+    def _accept_archive_context(self, value: ArchiveContext | None) -> bool:
+        value = _archive_context_or_none(value)
+        if self._archive_context_changed or (value is not None and value != self.archive_context):
+            self._archive_context_changed = True
+            self._fail_global(set(self.refusal_reasons) | {"archive_context_changed"})
+            return False
+        return True
+
     def _basis_bracket_binding(self) -> Mapping[str, Any] | None:
         """Recover one exact session binding from the authenticated basis wire.
 
@@ -563,6 +1000,10 @@ class AuthenticatedConsumptionSession:
         binding must validate back to its unique finalized session.
         """
 
+        if self.archive_context is not None and isinstance(self.archive_context.window_bracket, Mapping):
+            binding = self.archive_context.window_bracket.get("bracket_binding")
+            if isinstance(binding, Mapping):
+                return _archive_thaw(binding)
         if isinstance(self.calibration_bracket_binding, Mapping):
             return self.calibration_bracket_binding
         if (
@@ -643,6 +1084,7 @@ class AuthenticatedConsumptionSession:
         self._provenance.clear()
         self.path_refusal_reasons.clear()
         self._row_validation_results.clear()
+        self._row_archive_disclosures.clear()
         self.refusal_reasons = tuple(
             sorted(
                 set(reasons)
@@ -693,6 +1135,7 @@ class AuthenticatedConsumptionSession:
         if (
             self.consumption_semantics_id == MINTED_CONSUMPTION_SEMANTICS_ID
             and bracket_binding is None
+            and self.archive_context is None
         ):
             for bundle_id, path in sorted(bundle_paths.items()):
                 stored_summary = _read_json_object(path / "summary_metrics.json")
@@ -704,35 +1147,44 @@ class AuthenticatedConsumptionSession:
                 self._fail_global(reasons)
             return
 
-        bracket, bracket_reasons = calibration_bracket_for_bundles(
-            self.runs_root,
-            [bundle_paths[bundle_id] for bundle_id in sorted(bundle_paths)],
-            policy.calibration_bracketing,
-            mode=self.mode,
-            ledger_snapshot=self.calibration_ledger_snapshot,
-            bracket_binding=bracket_binding,
-            bracket_window_id=(
-                bracket_binding.get("window_id")
-                if isinstance(bracket_binding, Mapping)
-                else None
-            ),
-            bracket_plan_id=(
-                bracket_binding.get("plan_id")
-                if isinstance(bracket_binding, Mapping)
-                else None
-            ),
-            bracket_plan_sha256=(
-                bracket_binding.get("plan_sha256")
-                if isinstance(bracket_binding, Mapping)
-                else None
-            ),
-            bracket_evidence_root_id=(
-                bracket_binding.get("evidence_root_id")
-                if isinstance(bracket_binding, Mapping)
-                else None
-            ),
-            _allow_unissued_fixture=self._allow_unissued_calibration_fixture,
-        )
+        if self.archive_context is not None:
+            bracket = _archive_window_assessment(self.archive_context)
+            problem = (_window_bracket_problem(self.archive_context) if self.archive_context.governed_e3
+                       else None if isinstance(bracket, Mapping) and bracket.get("status") == "passed"
+                       else "window_bracket_not_passed")
+            bracket_reasons = () if problem is None else (problem,)
+            if not isinstance(bracket, Mapping):
+                bracket = {}
+        else:
+            bracket, bracket_reasons = calibration_bracket_for_bundles(
+                self.runs_root,
+                [bundle_paths[bundle_id] for bundle_id in sorted(bundle_paths)],
+                policy.calibration_bracketing,
+                mode=self.mode,
+                ledger_snapshot=self.calibration_ledger_snapshot,
+                bracket_binding=bracket_binding,
+                bracket_window_id=(
+                    bracket_binding.get("window_id")
+                    if isinstance(bracket_binding, Mapping)
+                    else None
+                ),
+                bracket_plan_id=(
+                    bracket_binding.get("plan_id")
+                    if isinstance(bracket_binding, Mapping)
+                    else None
+                ),
+                bracket_plan_sha256=(
+                    bracket_binding.get("plan_sha256")
+                    if isinstance(bracket_binding, Mapping)
+                    else None
+                ),
+                bracket_evidence_root_id=(
+                    bracket_binding.get("evidence_root_id")
+                    if isinstance(bracket_binding, Mapping)
+                    else None
+                ),
+                _allow_unissued_fixture=self._allow_unissued_calibration_fixture,
+            )
         self.calibration_bracket = bracket
         reasons.update(bracket_reasons)
         raw_bound = bracket.get("b_fiducial_s")
@@ -5370,10 +5822,33 @@ def _current_core_rederivation_reasons(
     runs_root: Path,
     policy_sha256: Any,
     consumption_session: AuthenticatedConsumptionSession | None = None,
+    archive_context: ArchiveContext | None = None,
+    answered_conditions: frozenset[str] = frozenset(),
+    row: Mapping[str, Any] | None = None,
+    disclosure: list[str] | None = None,
 ) -> set[str]:
     """Recompute current-mint CPU/environment/adapter labels from members."""
 
+    archive_context = _archive_context_or_none(archive_context)
     reasons: set[str] = set()
+    if archive_context is not None and not manifests:
+        return {"core_rederivation_sources_empty"}
+    def member_reason(bundle_id: str, reason: str) -> None:
+        if archive_context is None:
+            reasons.add(reason)
+        elif _archive_member_removed(archive_context, bundle_id):
+            if disclosure is not None:
+                disclosure.append(f"removed_member_rederivation:{reason}:{bundle_id}")
+        else:
+            named = [item for item in (_validated_member_failures(row or {}) or [])
+                     if item["member_id"] == bundle_id]
+            if named:
+                if bundle_id in archive_context.roster_references:
+                    reasons.update(f"reference_in_screen_named_by_verdict:{item['reason_code']}:{bundle_id}" for item in named)
+                else:
+                    reasons.add(f"member_code_on_kept_unit:{bundle_id}")
+            else:
+                reasons.add(reason)
     paths = _manifest_bundle_paths(manifests, runs_root)
     # STRUCTURAL frozen gate (delta-review P2): a frozen-only row must exit
     # before ANY current-gate refusal can fire, including registered-policy
@@ -5405,6 +5880,8 @@ def _current_core_rederivation_reasons(
         )
     }
     if not strict_current_ids:
+        if archive_context is not None:
+            reasons.update(f"member_rederivation_incomplete:{bundle_id}" for bundle_id in bundle_ids)
         return reasons
 
     registered = _registered_policy(policy_sha256)
@@ -5452,7 +5929,7 @@ def _current_core_rederivation_reasons(
             continue
         metadata = _read_json_object(path / "metadata.json")
         if not isinstance(metadata, Mapping):
-            reasons.add("environment_admission_missing")
+            member_reason(bundle_id, "environment_admission_missing")
             continue
         admission = metadata.get("environment_admission")
         if bundle_id in strict_current_ids:
@@ -5461,10 +5938,9 @@ def _current_core_rederivation_reasons(
             except (BundleReadError, OSError, TypeError, ValueError):
                 window = None
             if window is None:
-                reasons.add("environment_admission_missing")
+                member_reason(bundle_id, "environment_admission_missing")
                 continue
-            reasons.update(
-                current_environment_refusals(
+            for reason in current_environment_refusals(
                     metadata,
                     bundle_path=path,
                     measured_window_start_s=window.start_s,
@@ -5473,10 +5949,11 @@ def _current_core_rederivation_reasons(
                     # _idle_admission_core_evaluation; ruling on audit-fix
                     # batch 1 item 6): the re-derivation must agree with it.
                     post_run_collector_raised_unmeasured=True,
-                )
-            )
+                ):
+                member_reason(bundle_id, reason)
         else:
-            reasons.update(environment_admission_refusals(admission))
+            for reason in environment_admission_refusals(admission):
+                member_reason(bundle_id, reason)
         attempts = admission.get("attempts") if isinstance(admission, Mapping) else None
         final = attempts[-1] if isinstance(attempts, list) and attempts else None
         attempt = final.get("attempt") if isinstance(final, Mapping) else None
@@ -5495,6 +5972,11 @@ def _current_core_rederivation_reasons(
         )
         derived_members.append((bundle_id, path, metadata, cpu))
 
+    if archive_context is not None:
+        derived_ids = {bundle_id for bundle_id, _path, _metadata, _cpu in derived_members}
+        reasons.update(f"member_rederivation_incomplete:{bundle_id}"
+                       for bundle_id in bundle_ids if bundle_id not in derived_ids)
+
     stored_members = core.get("members")
     if not isinstance(stored_members, list):
         reasons.add("cpu_admission_core_missing")
@@ -5508,10 +5990,11 @@ def _current_core_rederivation_reasons(
             stored = by_id.get(bundle_id)
             stored_cpu = stored.get("cpu_admission") if isinstance(stored, Mapping) else None
             if not isinstance(stored_cpu, Mapping) or dict(stored_cpu) != cpu:
-                reasons.add("cpu_admission_core_failed")
+                member_reason(bundle_id, "cpu_admission_core_failed")
 
     conditions = core.get("conditions")
-    if not isinstance(conditions, list) or conditions:
+    if not isinstance(conditions, list) or (conditions if archive_context is None else
+        any(not isinstance(word, str) or word not in answered_conditions for word in conditions)):
         reasons.add("whole_window_verdict_provenance_invalid")
 
     if len(derived_members) == len(bundle_ids):
@@ -5525,7 +6008,11 @@ def _current_core_rederivation_reasons(
         )
         stored = core.get("adapter_wattage_continuity")
         if not isinstance(stored, Mapping) or dict(stored) != derived:
-            reasons.add("adapter_continuity_failed")
+            reasons.add("adapter_continuity_failed" if archive_context is None else "adapter_continuity_record_mismatch")
+        elif archive_context is not None and disclosure is not None:
+            disclosure.append(f"adapter_continuity_decision:{stored.get('decision')}")
+            disclosure.append(f"adapter_continuity_rederived_decision:{derived.get('decision')}")
+            disclosure.extend(f"adapter_continuity_condition:{word}" for word in stored.get("conditions", []))
         if consumption_session is not None:
             consumption_session._prepare(
                 bundle_paths={
@@ -5558,9 +6045,16 @@ def _current_core_rederivation_reasons(
                 )
             )
         stored_calibration_bracket = core.get("instrument_calibration_bracket")
+        if archive_context is not None and archive_context.governed_e3:
+            calibration_bracket = _archive_window_assessment(archive_context)
+            problem = _window_bracket_problem(archive_context)
+            calibration_reasons = () if problem is None else (problem,)
         if (
+            not (archive_context is not None and archive_context.governed_e3)
+            and (
             not isinstance(stored_calibration_bracket, Mapping)
             or dict(stored_calibration_bracket) != calibration_bracket
+            )
         ):
             reasons.add("whole_window_verdict_conflict")
         reasons.update(calibration_reasons)
@@ -5576,7 +6070,7 @@ def _current_core_rederivation_reasons(
             else None
         )
         if (
-            consumption_session is None
+            consumption_session is None and archive_context is None
             and not isinstance(bracket_bound, bool)
             and isinstance(bracket_bound, int | float)
         ):
@@ -6325,9 +6819,20 @@ def _validate_row(
     referenced: set[str],
     *,
     consumption_session: AuthenticatedConsumptionSession | None = None,
+    archive_context: ArchiveContext | None = None,
+    _disclosure: dict[str, Any] | None = None,
 ) -> tuple[bool, tuple[str, ...]]:
     """Authenticate a verdict row once per collection-scoped session."""
 
+    archive_context = _archive_context_or_none(archive_context)
+    if consumption_session is not None:
+        context = _archive_context_or_none(getattr(consumption_session, "archive_context", None))
+        if (
+            context is not None or archive_context is not None
+            or issubclass(type(consumption_session), AuthenticatedConsumptionSession)
+        ) and not consumption_session._accept_archive_context(archive_context):
+            return False, ("archive_context_changed",)
+        archive_context = context
     cache_key: tuple[str, str, tuple[str, ...], str | None] | None = None
     if consumption_session is not None and not consumption_session.ready:
         consumption_session._row_validation_results.clear()
@@ -6351,14 +6856,21 @@ def _validate_row(
             and consumption_session.ready
             and cache_key in consumption_session._row_validation_results
         ):
+            if _disclosure is not None and archive_context is not None:
+                _disclosure.update(consumption_session._row_archive_disclosures.get(cache_key, {}))
             return consumption_session._row_validation_results[cache_key]
 
+    disclosure: dict[str, Any] = {}
     result = _validate_row_uncached(
         row,
         runs_root,
         referenced,
         consumption_session=consumption_session,
+        archive_context=archive_context,
+        _disclosure=disclosure,
     )
+    if _disclosure is not None:
+        _disclosure.update(disclosure)
     if (
         cache_key is not None
         and result[0]
@@ -6366,6 +6878,8 @@ def _validate_row(
         and consumption_session.ready
     ):
         consumption_session._row_validation_results[cache_key] = result
+        if archive_context is not None:
+            consumption_session._row_archive_disclosures[cache_key] = disclosure
     return result
 
 
@@ -6375,6 +6889,7 @@ def validate_whole_window_verdict_row(
     referenced_bundle_ids: set[str],
     *,
     consumption_session: AuthenticatedConsumptionSession | None = None,
+    archive_context: ArchiveContext | None = None,
 ) -> WholeWindowRowValidation:
     """Replay one row and type authenticity separately from admission.
 
@@ -6383,11 +6898,14 @@ def validate_whole_window_verdict_row(
     result of this replay.
     """
 
+    disclosure: dict[str, Any] = {}
     ok, reasons = _validate_row(
         row,
         Path(runs_root),
         set(referenced_bundle_ids),
         consumption_session=consumption_session,
+        archive_context=archive_context,
+        _disclosure=disclosure,
     )
     status_value = row.get("status")
     status = status_value if isinstance(status_value, str) else None
@@ -6399,6 +6917,15 @@ def validate_whole_window_verdict_row(
             and set(reasons).issubset(_WHOLE_WINDOW_ADMISSION_OUTCOME_REASONS)
         )
     )
+    context = _archive_context_or_none(
+        getattr(consumption_session, "archive_context", None) if consumption_session is not None else archive_context)
+    if context is not None:
+        return ArchiveRowValidation(authentic=authentic,
+            admitted=bool(ok and status in {"passed", "failed"} and
+                          (status == "passed" or disclosure.get("neg8_passed") is True)),
+            status=status, reasons=tuple(reasons), detail=tuple(disclosure.get("detail", ())),
+            answered_conditions=frozenset(disclosure.get("answered", ())),
+            allowance_source=disclosure.get("source"))
     return WholeWindowRowValidation(
         authentic=authentic,
         admitted=bool(ok and status == "passed"),
@@ -6603,8 +7130,22 @@ def _validate_row_uncached(
     referenced: set[str],
     *,
     consumption_session: AuthenticatedConsumptionSession | None = None,
+    archive_context: ArchiveContext | None = None,
+    _disclosure: dict[str, Any] | None = None,
 ) -> tuple[bool, tuple[str, ...]]:
     reasons: set[str] = set()
+    archive_context = _archive_context_or_none(archive_context)
+    if consumption_session is not None:
+        context = _archive_context_or_none(getattr(consumption_session, "archive_context", None))
+        if (
+            context is not None or archive_context is not None
+            or issubclass(type(consumption_session), AuthenticatedConsumptionSession)
+        ) and not consumption_session._accept_archive_context(archive_context):
+            return False, ("archive_context_changed",)
+        archive_context = context
+    detail: list[str] = []
+    answered = frozenset()
+    neg8 = None
     basis_present = "evaluation_basis" in row
     basis = _validated_evaluation_basis(
         row,
@@ -6696,9 +7237,17 @@ def _validate_row_uncached(
         != canonical_sha256(sorted(bundle_ids))
     ):
         reasons.add("whole_window_verdict_provenance_invalid")
+    catalog_answered = False
+    catalog_problem = None
+    if archive_context is not None:
+        catalog_answered, catalog_problem = _archive_catalog_answer(row, basis, runs_root, archive_context)
+        if catalog_problem is not None:
+            reasons.add("whole_window_verdict_provenance_invalid")
+            detail.append(catalog_problem)
     if (
         row_semantics != SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
         and _is_hazard_runs_root(runs_root)
+        and not catalog_answered
     ):
         reasons.update(
             _hazard_membership_replay_reasons(row, runs_root, policy_sha)
@@ -6721,7 +7270,11 @@ def _validate_row_uncached(
     verified_sources: list[
         tuple[Mapping[str, Any], Mapping[str, Any]]
     ] = []
-    if not isinstance(descriptors, list) or not descriptors:
+    if catalog_answered:
+        verified_sources = [tuple(_archive_thaw(pair)) for pair in archive_context.catalog_manifests]
+        if not verified_sources:
+            reasons.add("core_rederivation_sources_empty")
+    elif not isinstance(descriptors, list) or not descriptors:
         reasons.add("whole_window_verdict_provenance_invalid")
     else:
         seen_paths: set[str] = set()
@@ -6815,6 +7368,22 @@ def _validate_row_uncached(
         reasons.add("whole_window_verdict_provenance_invalid")
 
     if isinstance(core, Mapping):
+        if archive_context is not None:
+            neg8 = _neg8_screen_outcome(row, context=archive_context)
+            if not neg8.passed or row.get("status") not in ("passed", "failed"):
+                reasons.add("whole_window_neg8_verdict_failed")
+                if neg8.problem is not None:
+                    detail.append(neg8.problem)
+            answered, problems = _answered_conditions(row, core, context=archive_context,
+                neg8=neg8, catalog_answered=catalog_answered)
+            reasons.update(problems)
+            conditions = core.get("conditions")
+            if not isinstance(conditions, list) or any(not isinstance(word, str) or word not in answered for word in conditions):
+                reasons.add("whole_window_verdict_provenance_invalid")
+            detail.append(f"stored_status:{row.get('status')}")
+            detail.extend(f"answered_condition:{word}" for word in sorted(answered))
+            if isinstance(core.get("neg8_bracket"), Mapping):
+                detail.append(f"stored_neg8_decision:{core['neg8_bracket'].get('decision')}")
         core_reasons = _current_core_rederivation_reasons(
             core=core,
             bundle_ids=bundle_ids,
@@ -6822,13 +7391,18 @@ def _validate_row_uncached(
             runs_root=runs_root,
             policy_sha256=policy_sha,
             consumption_session=consumption_session,
+            archive_context=archive_context,
+            answered_conditions=answered,
+            row=row,
+            disclosure=detail,
         )
         reasons.update(core_reasons)
         # Only dereference calibration lineage after the ordinary ledger and
         # whole-window rederivation has authenticated the stored bracket.
         if not core_reasons and basis is not None:
             reasons.update(
-                _whole_window_row_launch_refusal_reasons(row, runs_root)
+                _whole_window_row_launch_refusal_reasons(row, runs_root) if archive_context is None
+                else _archive_launch_refusal_reasons(row, runs_root, archive_context, neg8)
             )
     if (
         (
@@ -6863,11 +7437,14 @@ def _validate_row_uncached(
         bracket = core.get("neg8_bracket")
         continuity = core.get("adapter_wattage_continuity")
         members = core.get("members")
-        if not isinstance(bracket, Mapping) or bracket.get("schema_version") != NEG8_BRACKET_SCHEMA:
+        if archive_context is not None:
+            reasons.update(_archive_neg8_replay_reasons(row, core, basis, verified_source_manifests,
+                runs_root, policy_sha, archive_context, neg8, catalog_answered))
+        elif not isinstance(bracket, Mapping) or bracket.get("schema_version") != NEG8_BRACKET_SCHEMA:
             reasons.add("whole_window_neg8_verdict_missing")
         elif row.get("status") != "passed" or bracket.get("decision") != "passed":
             reasons.add("whole_window_neg8_verdict_failed")
-        if isinstance(bracket, Mapping):
+        if archive_context is None and isinstance(bracket, Mapping):
             # Tolerances come from the repo-registered policy matching the
             # row's policy_sha256, never from the row's self-asserted copy —
             # and the self-asserted copy must agree with the registered one
@@ -7028,7 +7605,7 @@ def _validate_row_uncached(
                     reasons.add("whole_window_verdict_conflict")
         if not isinstance(continuity, Mapping) or continuity.get("schema_version") != ADAPTER_CONTINUITY_SCHEMA:
             reasons.add("adapter_continuity_evidence_missing")
-        elif continuity.get("decision") != "stable":
+        elif continuity.get("decision") != "stable" and archive_context is None:
             reasons.add("adapter_continuity_failed")
         if not isinstance(members, list) or not members:
             reasons.add("cpu_admission_core_missing")
@@ -7056,13 +7633,32 @@ def _validate_row_uncached(
                 reasons.add("whole_window_verdict_provenance_invalid")
             if not referenced.issubset(member_ids):
                 reasons.add("whole_window_verdict_coverage_incomplete")
-            if any(
+            if archive_context is None and any(
                 not isinstance(member, Mapping)
                 or not isinstance(member.get("cpu_admission"), Mapping)
                 or member["cpu_admission"].get("decision") != "admitted"
                 for member in members
             ):
                 reasons.add("cpu_admission_core_failed")
+            elif archive_context is not None:
+                for member in members:
+                    if (not isinstance(member, Mapping) or not isinstance(member.get("cpu_admission"), Mapping)):
+                        reasons.add("cpu_admission_core_failed")
+                    elif member["cpu_admission"].get("decision") != "admitted":
+                        bundle_id = member.get("bundle_id")
+                        if isinstance(bundle_id, str) and _archive_member_removed(archive_context, bundle_id):
+                            detail.append(f"removed_member_rederivation:cpu_admission_core_failed:{bundle_id}")
+                        elif bundle_id in archive_context.roster_references:
+                            named = [item for item in (member_failures or []) if item["member_id"] == bundle_id]
+                            reasons.update(f"reference_in_screen_named_by_verdict:{item['reason_code']}:{bundle_id}" for item in named)
+                            if not named:
+                                reasons.add("cpu_admission_core_failed")
+                        else:
+                            named = any(item["member_id"] == bundle_id for item in (member_failures or []))
+                            reasons.add(f"member_code_on_kept_unit:{bundle_id}" if named else "cpu_admission_core_failed")
+    if _disclosure is not None and archive_context is not None:
+        _disclosure.update(detail=tuple(sorted(set(detail))), answered=answered,
+            source=neg8.source if neg8 is not None else None, neg8_passed=bool(neg8 and neg8.passed))
     return not reasons, tuple(sorted(reasons))
 
 
@@ -7507,6 +8103,16 @@ def harvest_neg8_allowance_bracket(
     return bracket, None
 
 
+def harvest_neg8_allowance(archive_root: Path | None, row: Mapping[str, Any]) -> Neg8Allowance:
+    """Expose the authenticated source without changing the frozen pair reader."""
+    bracket, problem = harvest_neg8_allowance_bracket(archive_root, row)
+    if problem is not None or archive_root is None:
+        return Neg8Allowance(bracket, None, problem)
+    record = _archive_output_object(ArchiveContext(archive_root), NEG8_HARVEST_ALLOWANCE_RECORD)
+    source = record.get("source") if isinstance(record, Mapping) else None
+    return Neg8Allowance(bracket, source if isinstance(source, str) else None, problem)
+
+
 def whole_window_drift_allowances(
     runs_root: Path,
     referenced_bundle_ids: set[str],
@@ -7531,6 +8137,14 @@ def whole_window_drift_allowances(
     """
 
     root = Path(runs_root)
+    context = _archive_context_or_none(getattr(consumption_session, "archive_context", None))
+    if context is not None:
+        archive = context.neg8_harvest_archive
+        if neg8_harvest_archive is not None and Path(neg8_harvest_archive) != archive:
+            consumption_session._archive_context_changed = True
+            consumption_session._fail_global({"archive_context_changed"})
+            return WholeWindowDriftAllowanceResult("absent", {})
+        neg8_harvest_archive = archive
     if whole_window_refusal_reasons(
         root,
         referenced_bundle_ids,
@@ -7742,7 +8356,11 @@ def _bracket_drift_allowances(
 
 
 __all__ = [
+    "ArchiveContext",
+    "ArchiveRowValidation",
     "AuthenticatedConsumptionSession",
+    "Neg8ScreenOutcome",
+    "Neg8Allowance",
     "CONDITION_NEG8_DRIFT_BOUND_STALE",
     "CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED",
     "CONDITION_NEG8_IDLE_SUB_POINT_DRIFT_EXCEEDED",
@@ -7787,6 +8405,7 @@ __all__ = [
     "evaluate_neg8_point_drift",
     "evaluate_neg8_bound_freshness",
     "harvest_neg8_allowance_bracket",
+    "harvest_neg8_allowance",
     "load_neg8_drift_bound_artifact",
     "launch_lineage_refusal_reasons",
     "mint_neg8_drift_bound_artifact",

@@ -1,7 +1,8 @@
 """S1 synthetic variants, layered over S0 without rebuilding per test.
 
 The pin2 named windows are S0's exported real-writer/real-harvest fixtures.
-Variants copy only authenticated structural outputs, never a bundle summary.
+Pin4 bases use the same S0 committed-archive loader. Variants copy only
+authenticated structural outputs, never a bundle summary.
 """
 from dataclasses import dataclass, replace
 import atexit

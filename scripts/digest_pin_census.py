@@ -34,7 +34,8 @@ still carry it. Unresolved literals (raw data never committed, historical
 digests) are recorded but cannot be recomputed from the tree.
 
 Era records (``ERA_RECORDS``) are documents that record bytes as they were at
-a commit they declare. Literals in a record's declared scope resolve against
+a commit they declare, either document-wide or for each literal. Literals in
+a record's declared scope resolve against
 the files at that commit instead of today's tree; their target key carries
 ``@<commit>`` and ``repin.py --check`` re-reads the bytes with ``git show``.
 
@@ -214,9 +215,16 @@ def parse_target_key(key: str) -> Target:
 #   commit_pointer / commit_line  where the document declares its commit: a
 #                                 JSON pointer, or a regex whose group 1 is the
 #                                 commit on exactly one line
+#   commit_pointer_template       a JSON pointer expanded with captures from
+#                                 scope_pointer for each literal's pointer
 #   scope_pointer / scope_line    which literals are era records: a regex on
 #                                 the JSON pointer, or on the literal's line
 ERA_RECORDS: dict[str, dict[str, str]] = {
+    # Each seal pin records its own code era; the document has no global head.
+    "configs/analysis/b5/seal_pins.json": {
+        "commit_pointer_template": r"/pins/\g<pin>/head",
+        "scope_pointer": r"^/pins/(?P<pin>[^/]+)/files/[^/]+$",
+    },
     # The sealed inventory records every measurement file at the claim commit,
     # including source files later changed by harvest and analysis lanes.
     "configs/campaigns/v5_claim_25g83/sealed_inventory.json": {
@@ -243,15 +251,21 @@ class EraRecordError(ValueError):
     """An era record's declared commit is missing, ambiguous or not in history."""
 
 
-def era_commit(root: Path, path: str, text: str) -> str:
-    """The full commit an era record declares, verified to exist in history."""
+def era_commit(root: Path, path: str, text: str, pointer: str | None = None) -> str:
+    """The full commit declared for a document or literal, verified in history."""
 
     spec = ERA_RECORDS[path]
-    if "commit_pointer" in spec:
+    commit_pointer = spec.get("commit_pointer")
+    if "commit_pointer_template" in spec:
+        match = re.search(spec["scope_pointer"], pointer or "")
+        if match is None:
+            raise EraRecordError(f"{path}: no era scope for literal pointer {pointer!r}")
+        commit_pointer = match.expand(spec["commit_pointer_template"])
+    if commit_pointer is not None:
         try:
-            declared = _pointer(json.loads(text), spec["commit_pointer"])
+            declared = _pointer(json.loads(text), commit_pointer)
         except (ValueError, KeyError, IndexError, TypeError) as error:
-            raise EraRecordError(f"{path}: no declared commit at {spec['commit_pointer']}") from error
+            raise EraRecordError(f"{path}: no declared commit at {commit_pointer}") from error
     else:
         found = re.findall(spec["commit_line"], text, flags=re.MULTILINE)
         if len(found) != 1:
@@ -659,13 +673,23 @@ def census(root: Path = REPO_ROOT) -> dict[str, object]:
             raw = (root / path).read_bytes()
         except OSError:
             continue
-        era: dict[str, list[Target]] | None = None
+        era_indexes: dict[str, dict[str, list[Target]]] = {}
+        document_commit = None
         if path in ERA_RECORDS:
             text = raw.decode("utf-8")
-            era = era_index(root, era_commit(root, path, text), text)
+            if "commit_pointer_template" not in ERA_RECORDS[path]:
+                # Preserve validation of document-wide heads even with no
+                # literals in scope. Per-literal heads need a literal pointer.
+                document_commit = era_commit(root, path, text)
+                era_indexes[document_commit] = era_index(root, document_commit, text)
         for literal in literals_in(path, raw):
-            in_scope = era is not None and in_era_scope(path, literal, text)
-            target = _best_target((era if in_scope else index).get(literal.value, []), path)
+            literal_index = index
+            if path in ERA_RECORDS and in_era_scope(path, literal, text):
+                commit = document_commit or era_commit(root, path, text, literal.pointer)
+                if commit not in era_indexes:
+                    era_indexes[commit] = era_index(root, commit, text)
+                literal_index = era_indexes[commit]
+            target = _best_target(literal_index.get(literal.value, []), path)
             family = classify(literal, target)
             kind = FAMILIES[family]["kind"]
             summary[(kind, family)] += 1

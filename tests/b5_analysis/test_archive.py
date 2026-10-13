@@ -28,6 +28,32 @@ class ArchiveTests(unittest.TestCase):
         with self.assertRaisesRegex(AnalysisRefusal, "^roster_record_unauthenticated$"):
             self.handle.output_bytes("derived/roster.json")
 
+    def test_synthetic_plan_digest_refuses_every_sealed_pack_id(self):
+        from joulewise.b5_analysis.windows import sealed_pack_table
+        for pack, ids in sealed_pack_table(seal_pins=self.pins).items():
+            for pack_id in ids:
+                with self.subTest(pack_id=pack_id):
+                    window = replace(self.window, pack=pack, pack_id=pack_id)
+                    with self.assertRaisesRegex(AnalysisRefusal, "^roster_plan_tree_not_sealed$"):
+                        archive.ArchiveHandle(window, self.handle.record, {}, seal_pins=self.pins,
+                                              synthetic_plan_tree_sha256="a" * 64)
+
+    def test_plan_binding_kind_and_digest_are_in_archive_census(self):
+        from joulewise.b5_analysis.windows import sealed_pack_table, sealed_plan_tree_sha256
+        synthetic = open_archive(self.window, seal_pins=self.pins, pack_table=fx.PACK_TABLE,
+                                 synthetic_plan_tree_sha256="b" * 64)
+        row = next(row for row in synthetic.census() if row.path == "binding/plan_tree")
+        self.assertEqual((row.sha256, row.check), ("b" * 64, "plan_tree_binding:synthetic"))
+        pack_id = next(iter(sealed_pack_table(seal_pins=self.pins)["beta"]))
+        window = replace(self.window, pack="beta", pack_id=pack_id)
+        sealed = archive.ArchiveHandle(window, self.handle.record, {}, seal_pins=self.pins)
+        digest = sealed.plan_tree_sha256()
+        self.assertEqual(digest, sealed_plan_tree_sha256("beta", pack_id, seal_pins=self.pins))
+        row = next(row for row in sealed.census() if row.path == "binding/plan_tree")
+        self.assertEqual((row.sha256, row.check), (digest, "plan_tree_binding:sealed"))
+        with self.assertRaises(AttributeError):
+            synthetic.plan_tree_binding_kind = "sealed"
+
     def test_archive_rechecks_indexed_harvest(self):
         with (self.root / "harvest.json").open("ab") as out:
             out.write(b" ")

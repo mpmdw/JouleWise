@@ -1,8 +1,16 @@
 """Executable comparison with both pinned programs, on synthetic bytes only."""
+import hashlib
 import json
+import os
+import selectors
+import subprocess
+import sys
+import tarfile
+import tempfile
 from decimal import Decimal
 from pathlib import Path
 import unittest
+from unittest import mock
 
 from joulewise import whole_window
 from joulewise.b5_analysis.archive import open_archive, open_attempt_record
@@ -141,6 +149,191 @@ class FixtureShapeTests(unittest.TestCase):
             variants = () if directory.name == "STD" else (directory.name,)
             with self.subTest(case=directory.name), fx.build_window(data["pack"], shape="pin2", variants=variants) as built:
                 self.assert_capture_bounds(built)
+
+    def test_each_committed_pin4_archive_has_exact_producer_identity(self):
+        pin = self.pins.pins["pin4"]
+        directory = fx.FIXTURES / "pin4"
+        self.assertEqual({path.name for path in directory.iterdir() if path.is_dir()}, set(fx.PIN4_CASES))
+        for name, (pack, variants) in fx.PIN4_CASES.items():
+            with self.subTest(case=name):
+                case = directory / name
+                with tarfile.open(case / "archive.tar.xz") as blob:
+                    raw = blob.extractfile("archive/harvest.json").read()
+                record = json.loads(raw)
+                self.assertEqual(record["harvest_checkout"]["head"], pin["head"])
+                self.assertEqual(record["harvest_checkout"]["files"], pin["files"])
+                data = read(case, "INDEX_ENTRY.json")
+                self.assertEqual(data["pack"], pack)
+                self.assertEqual(data["harvest_pin"], pin["head"])
+                self.assertEqual(data["harvest_record_sha256"], hashlib.sha256(raw).hexdigest())
+                self.assertEqual(fx.exported_case(pack, "pin4", variants), name)
+        structure = read(directory, "PROGRAM_STRUCTURE.json")
+        self.assertEqual(structure["harvest_pin"], pin["head"])
+        self.assertEqual(structure["neg8_reference_loss_codes"],
+                         read(fx.FIXTURES / "pin2", "PROGRAM_STRUCTURE.json")["neg8_reference_loss_codes"])
+
+    def test_s3b_archives_preserve_prepared_retry_inputs(self):
+        for name in ("BETA_STD_S3B_ROSTER", "BETA_SOURCES_RECOVERED_S3B_ROSTER"):
+            case = fx.FIXTURES / "pin4" / name
+            data = read(case, "INDEX_ENTRY.json")
+            with self.subTest(case=name), tarfile.open(case / "archive.tar.xz") as blob:
+                def document(relative):
+                    return json.loads(blob.extractfile("archive/" + relative).read())
+                pack = "configs/campaigns/" + data["pack_id"]
+                tree = document("sources/repo/" + pack + "/plan_tree.json")
+                retries = {stage["spare_retry"]["slot"]: stage for stage in tree["stage_graph"]
+                           if stage.get("spare_retry")}
+                self.assertEqual(set(retries), {"start", "midpoint", "end"})
+                prefix = "s0-" if "SOURCES_RECOVERED" in name else "s3b-"
+                self.assertEqual({stage["stage_id"] for stage in retries.values()},
+                                 {prefix + slot for slot in retries})
+                spare = "s3b-end-spare-uninvoked"
+                member = next(item for item in retries["end"]["spare_retry"]["members"]
+                              if item["run_id"] == spare)
+                raw = blob.extractfile("archive/sources/repo/" + member["path"]).read()
+                digest = hashlib.sha256(raw).hexdigest()
+                self.assertEqual(member["sha256"], digest)
+                self.assertEqual(json.loads(raw)["run_id"], spare)
+                inventory = document("sources/inputs/sealed_inventory.json")
+                executed = document("sources/night-custody/night/executed_inventory.json")
+                self.assertEqual(inventory["files"][member["path"]], digest)
+                self.assertEqual(executed["measurement_checkout"]["files"][member["path"]], digest)
+                roster = document("derived/roster.json")
+                self.assertNotIn(spare, {item["run_id"] for item in roster["members"]})
+
+    def test_export_build_still_refuses_wrong_program_hashes(self):
+        with mock.patch.dict(os.environ, {"B5_S0_EXPORT_PIN": self.pins.pins["pin4"]["head"]}), \
+                mock.patch.object(fx, "sha", return_value="0" * 64):
+            with self.assertRaisesRegex(ValueError, "exported program hash differs"):
+                fx.build_window("beta")
+
+    def test_existing_unowned_directory_is_preserved(self):
+        with tempfile.TemporaryDirectory(prefix="s0-unowned-") as directory:
+            sentinel = Path(directory) / "unowned"
+            sentinel.write_bytes(b"preserve these bytes")
+            with mock.patch.object(fx, "_RESTORE_BASE", directory), fx.build_named("BETA_STD") as built:
+                self.assertNotEqual(built.root, Path(directory))
+                self.assertEqual(sentinel.read_bytes(), b"preserve these bytes")
+        self.assertTrue(self.beta.archive.is_dir())
+
+    def test_loaded_handles_have_independent_lifetimes(self):
+        first = fx.build_window("gamma", variants="MIDPOINT_LOST")
+        second = fx.build_window("gamma", variants="MIDPOINT_LOST")
+        try:
+            self.assertNotEqual(first.root, second.root)
+            first.close()
+            self.assertFalse(first.root.exists())
+            self.assertTrue(second.archive.is_dir())
+            self.assertTrue(self.beta.archive.is_dir())
+        finally:
+            first.close()
+            second.close()
+        self.assertFalse(first.root.exists())
+        self.assertFalse(second.root.exists())
+
+    def test_two_processes_load_both_standard_windows_together(self):
+        script = """
+import contextlib, json, sys
+from tests.b5_analysis import fixtures as fx
+print('ready', flush=True)
+assert sys.stdin.readline() == 'go\\n'
+with contextlib.ExitStack() as stack:
+    windows = [stack.enter_context(fx.build_named(name)) for name in ('BETA_STD', 'GAMMA_STD')]
+    for window in windows:
+        record = json.loads((window.archive / 'harvest.json').read_bytes())
+        assert record['pack_id'] == window.entry.pack_id
+        assert record['claim_usable'] is True
+    print(json.dumps([str(window.root) for window in windows]), flush=True)
+    assert sys.stdin.readline() == 'close\\n'
+"""
+        env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+        env.pop("B5_S0_EXPORT_PIN", None)
+        processes = []
+        def line(process):
+            with selectors.DefaultSelector() as selector:
+                selector.register(process.stdout, selectors.EVENT_READ)
+                self.assertTrue(selector.select(timeout=120), "fixture child did not respond")
+                return process.stdout.readline()
+        try:
+            for _ in range(2):
+                processes.append(subprocess.Popen([sys.executable, "-c", script], cwd=fx.ROOT,
+                    env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True))
+            for process in processes:
+                self.assertEqual(line(process).strip(), "ready")
+            for process in processes:
+                process.stdin.write("go\n")
+                process.stdin.flush()
+            roots = [json.loads(line(process)) for process in processes]
+            self.assertEqual(len({root for pair in roots for root in pair}), 4)
+            self.assertTrue(all(Path(root).is_dir() for pair in roots for root in pair))
+            for process in processes:
+                process.stdin.write("close\n")
+                process.stdin.flush()
+            for process in processes:
+                _stdout, stderr = process.communicate(timeout=120)
+                self.assertEqual(process.returncode, 0, stderr)
+            self.assertTrue(all(not Path(root).exists() for pair in roots for root in pair))
+        finally:
+            for process in processes:
+                if process.poll() is None:
+                    process.kill()
+                process.communicate()
+
+    def test_loading_uses_portable_temporary_base(self):
+        with tempfile.TemporaryDirectory(prefix="s0-portable-base-") as directory, \
+                mock.patch.object(fx, "_RESTORE_BASE", directory):
+            for name in ("ALPHA_STD", "BETA_STD", "GAMMA_STD"):
+                with self.subTest(name=name), fx.build_named(name) as built:
+                    self.assertEqual(built.root.parent, Path(directory).resolve())
+                    self.assertTrue(built.claim.is_dir())
+                    self.assert_capture_bounds(built)
+                    record = open_attempt_record(built.entry, seal_pins=self.pins, pack_table=fx.PACK_TABLE)
+                    handle = open_archive(fx.selected_window(record, seal_pins=self.pins),
+                                          seal_pins=self.pins, pack_table=fx.PACK_TABLE)
+                    self.assertEqual(handle.compare_runs_root(), ())
+
+    def test_relocation_preserves_pinned_science_and_authenticates_original_outputs(self):
+        for name, built in (("BETA_STD", self.beta), ("GAMMA_STD", self.gamma)):
+            case = fx.FIXTURES / "pin4" / name
+            with self.subTest(name=name), tarfile.open(case / "archive.tar.xz") as blob:
+                def raw(relative):
+                    return blob.extractfile("archive/" + relative).read()
+                original = json.loads(raw("harvest.json"))
+                for relative, digest in original["outputs"].items():
+                    self.assertEqual(hashlib.sha256(raw(relative)).hexdigest(), digest)
+                writer = json.loads(raw("sources/claim-runs/whole-window-verdict.json"))
+                self.assertEqual(built.writer_row["evaluation_basis"], writer["evaluation_basis"])
+                self.assertEqual(built.writer_row["idle_admission_core"], writer["idle_admission_core"])
+                self.assertEqual(built.writer_row["member_failures"], writer["member_failures"])
+                prefix = b"".join(raw("sources/ledger/calibration_observation_ledger.jsonl").splitlines(keepends=True)[:376])
+                self.assertTrue((built.archive / "sources/ledger/calibration_observation_ledger.jsonl").read_bytes().startswith(prefix))
+                # These outputs are the pinned program's scientific projection.
+                # Location-only relocation must never regenerate them.
+                for relative in ("derived/roster.json", "derived/exclusions.json", "derived/neg8-corpus-physics.json",
+                                 "withheld/neg8-rescreen-bracket.json", "withheld/neg8-clean-bound.json"):
+                    self.assertEqual((built.archive / relative).read_bytes(), raw(relative))
+
+    def test_pin4_provenance_names_producer_commit(self):
+        provenance = (fx.FIXTURES / "pin4/PROVENANCE.md").read_text()
+        self.assertIn(self.pins.pins["pin4"]["head"], provenance)
+        self.assertIn("git archive " + self.pins.pins["pin4"]["head"], provenance)
+
+    def test_pin4_loading_ignores_tree_program_hashes_and_git(self):
+        import subprocess
+        real_run = subprocess.run
+        def no_git(argv, *args, **kwargs):
+            self.assertNotEqual(Path(argv[0]).name, "git")
+            return real_run(argv, *args, **kwargs)
+        # A separate base avoids the standard windows held by setUpClass.
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(fx, "sha", side_effect=AssertionError("tree hash read")), \
+                mock.patch.object(subprocess, "run", side_effect=no_git), \
+                mock.patch.object(subprocess, "check_output", side_effect=AssertionError("git subprocess")):
+            for name in ("BETA_QUAD_MEMBER_REMOVED", "BETA_STD_S3B_ROSTER",
+                         "BETA_SOURCES_RECOVERED_S3B_ROSTER"):
+                with self.subTest(case=name), fx.build_named(name) as built:
+                    self.assertEqual(read(built.archive, "harvest.json")["harvest_checkout"]["head"],
+                                     self.pins.pins["pin4"]["head"])
 
     def test_standard_real_writer_claim_licensing_and_failed_row(self):
         for built in (self.beta, self.gamma):

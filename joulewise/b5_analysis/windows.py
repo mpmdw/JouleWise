@@ -72,27 +72,45 @@ def governing_pin(t0_epoch_s: float, seal: str, *, seal_pins: SealPins | None = 
     return pins.pins[shape]["head"]
 
 
-def sealed_pack_table() -> PackTable:
+def _sealed_pack_rows(*, seal_pins: SealPins | None = None) -> Mapping:
+    """Read the pack inventory only after binding its bytes to the seal."""
+    import hashlib
+    try:
+        pins = seal_pins or SealPins.load()
+        raw = (ROOT / "configs/campaigns/v5_claim_25g83/sizing_b5.json").read_bytes()
+        if hashlib.sha256(raw).hexdigest() != pins.sealed["sizing_sha256"]:
+            raise ValueError()
+        sizing = json.loads(raw)
+        rows = {}
+        for pack in PACKS:
+            row = sizing["packs"][pack.upper()]["plan_tree"]
+            tree = ROOT / row["path"]
+            if (tree.parent.parent != ROOT / "configs/campaigns"
+                    or tree.name != "plan_tree.json"
+                    or hashlib.sha256(tree.read_bytes()).hexdigest() != row["sha256"]):
+                raise ValueError()
+            rows[pack] = {"pack_id": tree.parent.name, "sha256": row["sha256"]}
+        return freeze(rows)
+    except (OSError, ValueError, TypeError, KeyError):
+        raise AnalysisRefusal("window_index_pack_mismatch") from None
+
+
+def sealed_plan_tree_sha256(pack: str, pack_id: str, *, seal_pins: SealPins | None = None) -> str:
+    row = _sealed_pack_rows(seal_pins=seal_pins).get(pack)
+    if row is None or row["pack_id"] != pack_id:
+        raise AnalysisRefusal("window_index_pack_mismatch")
+    return row["sha256"]
+
+
+def sealed_pack_table(*, seal_pins: SealPins | None = None) -> PackTable:
     """Derive ids as the frozen harvest does: the sealed pack directory's name.
 
     The sizing record maps the pack labels to their sealed plan trees. No pack
     id is duplicated here. An explicit pack_table argument is a test-only seam
     for synthetic ids and plan prefixes (with optional {attempt} expansion).
     """
-    import hashlib
-    try:
-        sizing = json.loads((ROOT / "configs/campaigns/v5_claim_25g83/sizing_b5.json").read_bytes())
-        table = {}
-        for pack in PACKS:
-            row = sizing["packs"][pack.upper()]["plan_tree"]
-            tree = ROOT / row["path"]
-            if (tree.parent.parent != ROOT / "configs/campaigns"
-                    or hashlib.sha256(tree.read_bytes()).hexdigest() != row["sha256"]):
-                raise ValueError()
-            table[pack] = {tree.parent.name: f"v5-b5-{pack}-a{{attempt}}-"}
-        return freeze(table)
-    except (OSError, ValueError, TypeError, KeyError):
-        raise AnalysisRefusal("window_index_pack_mismatch") from None
+    rows = _sealed_pack_rows(seal_pins=seal_pins)
+    return freeze({pack: {row["pack_id"]: f"v5-b5-{pack}-a{{attempt}}-"} for pack, row in rows.items()})
 
 
 @dataclass(frozen=True)
@@ -171,7 +189,7 @@ def validate_entry(entry: IndexEntry, *, seal_pins: SealPins, pack_table: PackTa
         raise AnalysisRefusal("window_index_invalid")
     if entry.harvest_pin != governing_pin(entry.t0_epoch_s, entry.seal, seal_pins=seal_pins):
         raise AnalysisRefusal("window_index_pin_mismatch")
-    table = sealed_pack_table() if pack_table is None else pack_table
+    table = sealed_pack_table(seal_pins=seal_pins) if pack_table is None else pack_table
     prefix = table.get(entry.pack, {}).get(entry.pack_id)
     if not isinstance(prefix, str) or not entry.plan_id.startswith(prefix.format(attempt=entry.attempt)):
         raise AnalysisRefusal("window_index_pack_mismatch")
@@ -200,7 +218,7 @@ def load_window_index(path: Path, *, seal_pins: SealPins | None = None,
         value = json.loads(raw)
         if value.get("schema") != INDEX_SCHEMA or not isinstance(value.get("attempts"), list):
             raise ValueError()
-        table = sealed_pack_table() if pack_table is None else pack_table
+        table = sealed_pack_table(seal_pins=seal_pins) if pack_table is None else pack_table
         entries = tuple(IndexEntry.from_mapping(item, seal_pins=seal_pins, pack_table=table) for item in value["attempts"])
     except AnalysisRefusal:
         raise

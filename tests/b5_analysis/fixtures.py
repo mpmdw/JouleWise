@@ -15,6 +15,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import tempfile
 import tarfile
@@ -52,6 +53,35 @@ for _pack in ("ALPHA", "BETA", "GAMMA"):
 NAMED_FIXTURES["GAMMA_MIDPOINT_LOST"] = ("gamma", "pin4", ("MIDPOINT_LOST",))
 NAMED_FIXTURES["BETA_SOURCES_RECOVERED"] = ("beta", "pin4", ("SOURCES_RECOVERED",))
 
+# Only full producer windows used by S0–S3. Counterfactuals derived by editing
+# loaded bytes remain in their stage's helpers and need no additional archive.
+PIN4_CASES = {
+    "BETA_STD": ("beta", ()),
+    **{f"BETA_{variant}": ("beta", (variant,)) for variant in (
+        "REPEAT6_REMOVED", "QUAD_MEMBER_REMOVED", "SIX_QUADS_REMOVED", "FIVE_QUADS_REMOVED",
+        "WRITER_DROPPED_SCIENCE_MEMBER", "WRITER_DROPPED_REFERENCE", "STORED_NEG8_PASSED",
+        "SOURCES_RECOVERED")},
+    "BETA_SOURCES_RECOVERED_REFERENCES_INSUFFICIENT":
+        ("beta", ("SOURCES_RECOVERED", "REFERENCES_INSUFFICIENT")),
+    "GAMMA_STD": ("gamma", ()),
+    "GAMMA_MIDPOINT_LOST": ("gamma", ("MIDPOINT_LOST",)),
+    "BETA_STD_S3B_ROSTER": ("beta", ("S3B_ROSTER",)),
+    "BETA_SOURCES_RECOVERED_S3B_ROSTER": ("beta", ("SOURCES_RECOVERED", "S3B_ROSTER")),
+}
+for _name in ("BETA_STD_S3B_ROSTER", "BETA_SOURCES_RECOVERED_S3B_ROSTER"):
+    NAMED_FIXTURES[_name] = (PIN4_CASES[_name][0], "pin4", PIN4_CASES[_name][1])
+
+
+def exported_case(pack, shape, variants):
+    if shape == "pin4":
+        for name, (case_pack, case_variants) in PIN4_CASES.items():
+            if pack == case_pack and set(variants) == set(case_variants) and len(variants) == len(case_variants):
+                return name
+        raise ValueError("this exported pack/variant combination was not built")
+    if len(variants) > 1:
+        raise ValueError("this exported variant combination was not built")
+    return variants[0] if variants else "STD"
+
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -77,6 +107,8 @@ class BuiltWindow:
     shape: str
     variants: tuple[str, ...]
     science: tuple
+    _release: object = None
+    _closed: bool = False
 
     @property
     def entry(self):
@@ -84,7 +116,13 @@ class BuiltWindow:
         return IndexEntry.from_mapping(self.entry_data, pack_table=PACK_TABLE)
 
     def close(self):
-        shutil.rmtree(self.root)
+        if self._closed:
+            return
+        if self._release is None:
+            shutil.rmtree(self.root)
+        else:
+            self._release()
+        self._closed = True
 
     def __enter__(self):
         return self
@@ -118,13 +156,79 @@ def _load_export_support():
     _SUPPORT_LOADED = True
 
 
-def build_window(pack, *, shape="pin4", variants=()):
-    """Build one full small window; old shapes must execute inside their export.
+@contextlib.contextmanager
+def _prepare_roster_inputs(variants):
+    """Add realistic retry metadata before writer/harvest, never to outputs.
 
-    Set B5_S0_EXPORT_PIN only when running in a git-archive export. The exact
-    three/four program hashes are checked before the fixture can be written.
-    Live paths and measurements are never accepted as builder arguments.
+    S0's standard synthetic plan predates the roster-slot fixture need. Its
+    catalog variant already has retry stages; both get one planned, uninvoked
+    spare to witness the pinned harvest's no-bundle exclusion filter.
     """
+    if "S3B_ROSTER" not in variants:
+        yield
+        return
+    base_put = put
+    extra_configs = {}
+    def write(path, value):
+        path = Path(path)
+        if path.name == "plan_tree.json" and isinstance(value, dict):
+            manifests = (value.get("external_inputs") or {}).get("manifests", [])
+            inputs = {item.get("input_id") for item in manifests}
+            if {slot + "_reference" for slot in ("start", "midpoint", "end")} <= inputs:
+                stages = value["stage_graph"]
+                if "SOURCES_RECOVERED" not in variants and not any(stage.get("spare_retry") for stage in stages):
+                    for slot in ("start", "midpoint", "end"):
+                        stages.append({"stage_id": "s3b-" + slot, "ordinal": 10 + len(stages),
+                            "kind": "campaign_collection", "input_ref": {"kind": "external_input", "input_id": slot + "_reference"},
+                            "spare_retry": {"slot": slot, "members": []}})
+                end = next((stage for stage in stages if stage.get("spare_retry", {}).get("slot") == "end"), None)
+                if end is not None:
+                    spare = "s3b-end-spare-uninvoked"
+                    config = path.parent / "refs" / (spare + ".json")
+                    original = next(item for item in manifests if item.get("input_id") == "end_reference")["members"][0]
+                    source = path.parents[3] / original["path"]
+                    document = json.loads(source.read_bytes())
+                    document["run_id"] = spare
+                    base_put(config, document)
+                    relative = config.relative_to(path.parents[3]).as_posix()
+                    extra_configs[relative] = hashlib.sha256(config.read_bytes()).hexdigest()
+                    retry = end["spare_retry"]
+                    if not any(member["run_id"] == spare for member in retry["members"]):
+                        retry["members"].append({"run_id": spare, "path": relative, "sha256": extra_configs[relative]})
+        if path.name == "sealed_inventory.json" and extra_configs:
+            value["files"].update(extra_configs)
+        if path.name == "executed_inventory.json" and extra_configs:
+            value["measurement_checkout"]["files"].update(extra_configs)
+        base_put(path, value)
+    with mock.patch(__name__ + ".put", write):
+        yield
+
+
+def build_window(pack, *, shape="pin4", variants=()):
+    """Load committed producer bytes, or build in the exact pin's export.
+
+    Normal tests never execute the current tree's writer or invoke git. Set
+    B5_S0_EXPORT_PIN only inside the pinned git-archive export to regenerate;
+    the three/four-file hash fence still precedes every producer build.
+    """
+    variants = (variants,) if isinstance(variants, str) else tuple(variants)
+    if pack not in ("alpha", "beta", "gamma"):
+        raise ValueError("unknown synthetic pack")
+    pin = json.loads(PINS_PATH.read_bytes())["pins"][shape]
+    exported = os.environ.get("B5_S0_EXPORT_PIN")
+    if shape in ("pin2", "pin4") and exported is None:
+        return load_exported_window(pack, shape=shape, variants=variants)
+    if exported != pin["head"]:
+        raise ValueError("fixtures must be built by their exact git-archive export")
+    for path, expected in pin["files"].items():
+        if sha(ROOT / path) != expected:
+            raise ValueError(f"exported program hash differs: {path}")
+    with _prepare_roster_inputs(variants):
+        return _build_export_window(pack, shape=shape, variants=variants)
+
+
+def _build_export_window(pack, *, shape, variants):
+    pin = json.loads(PINS_PATH.read_bytes())["pins"][shape]
     from joulewise import whole_window as ww, calibration_bracketing as br
     from joulewise.calibration_ledger import terminal_head_pin_for_session
     from joulewise.b5 import harvest as h
@@ -142,22 +246,10 @@ def build_window(pack, *, shape="pin4", variants=()):
     trigger.__file__ = str(ROOT / "tests/test_harvest_b5_trigger_scope.py")
     exec(compile(source, trigger.__file__, "exec"), trigger.__dict__)
     from tests import test_run_campaign as campaign_tests
-    pins = json.loads(PINS_PATH.read_bytes())
-    pin = pins["pins"][shape]
-    if pack not in ("alpha", "beta", "gamma"):
-        raise ValueError("unknown synthetic pack")
-    exported = os.environ.get("B5_S0_EXPORT_PIN")
-    if shape != "pin4" and exported != pin["head"]:
-        if shape == "pin2":
-            return load_exported_window(pack, shape=shape, variants=variants)
-        raise ValueError("old-shape fixtures must be built by their git-archive export")
-    for path, expected in pin["files"].items():
-        if sha(ROOT / path) != expected:
-            raise ValueError(f"exported program hash differs: {path}")
     variants = (variants,) if isinstance(variants, str) else tuple(variants)
     allowed = {"REPEAT6_REMOVED", "QUAD_MEMBER_REMOVED", "SIX_QUADS_REMOVED", "FIVE_QUADS_REMOVED",
                "MIDPOINT_LOST", "SOURCES_RECOVERED", "WRITER_DROPPED_SCIENCE_MEMBER", "WRITER_DROPPED_REFERENCE",
-               "STORED_NEG8_PASSED", "NOT_USABLE", "NULL", "NO_COLLECTION", "UNAVAILABLE", "REFERENCES_INSUFFICIENT"}
+               "STORED_NEG8_PASSED", "NOT_USABLE", "NULL", "NO_COLLECTION", "UNAVAILABLE", "REFERENCES_INSUFFICIENT", "S3B_ROSTER"}
     if set(variants) - allowed:
         raise ValueError("unknown synthetic variant")
     root = Path(tempfile.mkdtemp(prefix=f"b5-s0-{pack}-{shape}-"))
@@ -493,18 +585,23 @@ def export_fixtures(shape, destination, *, case=None):
     put(destination / "PROGRAM_STRUCTURE.json", {
         "harvest_pin": os.environ["B5_S0_EXPORT_PIN"],
         "neg8_reference_loss_codes": sorted(harvest.NEG8_REFERENCE_LOSS_CODES)})
-    cases = (("STD", ()), ("REPEAT6_REMOVED", ("REPEAT6_REMOVED",)), ("QUAD_MEMBER_REMOVED", ("QUAD_MEMBER_REMOVED",)),
-             ("NOT_USABLE", ("NOT_USABLE",)),
-             *((name, (name,)) for name in ("SIX_QUADS_REMOVED", "FIVE_QUADS_REMOVED", "WRITER_DROPPED_SCIENCE_MEMBER",
-                                            "WRITER_DROPPED_REFERENCE", "STORED_NEG8_PASSED", "REFERENCES_INSUFFICIENT"))) \
-        if shape == "pin2" else tuple((name, (name,)) for name in ("NOT_USABLE", "NULL", "NO_COLLECTION", "UNAVAILABLE"))
-    for name, variants in cases:
+    if shape == "pin4":
+        cases = tuple((name, pack, variants) for name, (pack, variants) in PIN4_CASES.items())
+    else:
+        old_cases = (("STD", ()), ("REPEAT6_REMOVED", ("REPEAT6_REMOVED",)), ("QUAD_MEMBER_REMOVED", ("QUAD_MEMBER_REMOVED",)),
+                     ("NOT_USABLE", ("NOT_USABLE",)),
+                     *((name, (name,)) for name in ("SIX_QUADS_REMOVED", "FIVE_QUADS_REMOVED", "WRITER_DROPPED_SCIENCE_MEMBER",
+                                                    "WRITER_DROPPED_REFERENCE", "STORED_NEG8_PASSED", "REFERENCES_INSUFFICIENT"))) \
+            if shape == "pin2" else tuple((name, (name,)) for name in ("NOT_USABLE", "NULL", "NO_COLLECTION", "UNAVAILABLE"))
+        cases = tuple((name, "alpha" if shape == "pin1" or shape == "pin2" and name != "NOT_USABLE" else "beta", variants)
+                      for name, variants in old_cases)
+    for name, pack, variants in cases:
         if case is not None and name not in case.split(","):
             continue
-        with build_window("alpha" if shape == "pin1" or shape == "pin2" and name != "NOT_USABLE" else "beta", shape=shape, variants=variants) as built:
+        with build_window(pack, shape=shape, variants=variants) as built:
             target = destination / name
             target.mkdir(parents=True, exist_ok=True)
-            if shape == "pin2":
+            if shape in ("pin2", "pin4"):
                 # Complete archives, including mock raw streams, are compressed
                 # to keep commit-ready fixtures small. No byte is rewritten.
                 with tarfile.open(target / "archive.tar.xz", "w:xz", preset=3) as archive:
@@ -524,6 +621,113 @@ def export_fixtures(shape, destination, *, case=None):
 
 
 _EXTRACTED = {}
+# None means the platform's tempfile.gettempdir(); tests can supply a base
+# without creating, probing, or requiring the archived /private/tmp location.
+_RESTORE_BASE = None
+
+
+def _relocate_archive(archive, old_root, new_root):
+    """Relocate synthetic locators and their hash dependencies, not science.
+
+    Work from the immutable original bytes on every pass. The dependency graph
+    includes file hashes, canonical JSON hashes, ledger receipts and the source
+    inventory. No writer, harvest, evaluator or producer program is rerun.
+    """
+    from joulewise import calibration_ledger as cl
+
+    old, new = str(old_root), str(new_root)
+    digests = {}
+
+    def bind(before, after):
+        if before != after:
+            digests[before] = after
+
+    def relocate(value):
+        if isinstance(value, str):
+            return digests.get(value, value.replace(old, new))
+        if isinstance(value, list):
+            result = [relocate(item) for item in value]
+        elif isinstance(value, dict):
+            result = {key: relocate(item) for key, item in value.items()}
+            # Recognize actual self-hashes by their original payload, rather
+            # than overwriting arbitrary fields called sha256.
+            for key in ("sha256", "binding_digest"):
+                if key in value:
+                    payload = {k: v for k, v in value.items() if k != key}
+                    if value[key] == cl.canonical_sha256(payload):
+                        result[key] = cl.canonical_sha256({k: v for k, v in result.items() if k != key})
+                        bind(value[key], result[key])
+        else:
+            return value
+        if result != value:
+            bind(cl.canonical_sha256(value), cl.canonical_sha256(result))
+        return result
+
+    ledger = archive / "sources/ledger/calibration_observation_ledger.jsonl"
+    original_ledger = ledger.read_bytes()
+    relocated_lines = []
+    offset = 0
+    for line in original_ledger.splitlines(keepends=True):
+        original = json.loads(line)
+        row = relocate(original)
+        if row != original:
+            if not cl._valid_receipt_shape(original):
+                raise ValueError("synthetic ledger receipt is invalid")
+            if row.get("event") == cl.APPEND_INTENT_EVENT:
+                row["base_head"]["byte_offset"] = offset
+                row["target_core_sha256"] = cl.canonical_sha256(row["target_core"])
+                row["operation_id"] = cl._operation_id(
+                    ledger_id=row["ledger_id"], base_head=row["base_head"],
+                    operation_key=row["operation_key"], target_core_sha256=row["target_core_sha256"])
+                bind(original["operation_id"], row["operation_id"])
+            row["receipt_digest"] = cl._receipt_digest(row)
+            bind(original["receipt_digest"], row["receipt_digest"])
+            line = cl.canonical_json_bytes(row) + b"\n"
+        relocated_lines.append(line)
+        offset += len(line)
+    relocated_ledger = b"".join(relocated_lines)
+    ledger.write_bytes(relocated_ledger)
+    bind(hashlib.sha256(original_ledger).hexdigest(), hashlib.sha256(relocated_ledger).hexdigest())
+
+    # Read text records only. Raw adapter streams and bundle bytes never change.
+    # JSONL records without a locator or a changed digest retain exact bytes.
+    originals = {path: path.read_bytes() for path in archive.rglob("*")
+                 if path.is_file() and path != ledger and path.suffix in (".json", ".jsonl")}
+    sources = archive / "sources"
+    sums_path = sources / "SHA256SUMS"
+    original_sums = sums_path.read_bytes()
+    digest_token = re.compile(rb'"([0-9a-f]{64})"')
+    old_bytes, new_bytes = old.encode(), new.encode()
+    for _ in range(len(originals) + 1):
+        previous = dict(digests)
+        for path, raw in originals.items():
+            candidate = raw.replace(old_bytes, new_bytes)
+            candidate = digest_token.sub(
+                lambda match: b'"' + digests.get(match[1].decode(), match[1].decode()).encode() + b'"', candidate)
+            if candidate == raw:
+                continue
+            if path.suffix == ".json":
+                relocate(json.loads(raw))
+            else:
+                for line in raw.splitlines(keepends=True):
+                    if old_bytes in line or digest_token.sub(
+                            lambda match: b'"' + digests.get(match[1].decode(), match[1].decode()).encode() + b'"', line) != line:
+                        relocate(json.loads(line))
+            # Preserve formatting: the writer emits identical bytes to a JSON
+            # verdict and a one-row JSONL log. One old file digest must always
+            # have one new digest, independent of its filename's suffix.
+            rewritten = digest_token.sub(
+                lambda match: b'"' + digests.get(match[1].decode(), match[1].decode()).encode() + b'"',
+                raw.replace(old_bytes, new_bytes))
+            path.write_bytes(rewritten)
+            bind(hashlib.sha256(raw).hexdigest(), hashlib.sha256(rewritten).hexdigest())
+        sums = b"".join(digests.get(line[:64].decode(), line[:64].decode()).encode() + line[64:]
+                        for line in original_sums.splitlines(keepends=True))
+        sums_path.write_bytes(sums)
+        bind(hashlib.sha256(original_sums).hexdigest(), hashlib.sha256(sums).hexdigest())
+        if digests == previous:
+            return
+    raise ValueError("synthetic relocation digest dependencies did not settle")
 
 
 def archived_entry(shape, name, *, archive_root=None, **overrides):
@@ -545,49 +749,52 @@ def archived_entry(shape, name, *, archive_root=None, **overrides):
 
 
 def load_exported_window(pack, *, shape, variants=()):
-    """Restore the original synthetic roots so recorded absolute paths still bind.
-
-    Only the builder's /private/tmp/b5-s0-* roots are restorable. An existing
-    root is preserved and refused; no caller-supplied or real root is written.
-    """
+    """Restore each handle in a private, portable temporary directory."""
     variants = (variants,) if isinstance(variants, str) else tuple(variants)
-    if len(variants) > 1:
-        raise ValueError("this exported variant combination was not built")
-    case = variants[0] if variants else "STD"
+    case = exported_case(pack, shape, variants)
     directory = FIXTURES / shape / case
     data = json.loads((directory / "INDEX_ENTRY.json").read_bytes())
-    entry = archived_entry(shape, case)
-    root = Path(data["archive_root"]).parent
-    if root.parent != Path("/private/tmp") or not root.name.startswith("b5-s0-") or root.exists():
-        raise ValueError("synthetic original fixture root unavailable")
-    from joulewise.b5 import harvest
-    root.mkdir()
+    if shape == "pin4" and data["pack"] != pack:
+        raise ValueError("exported fixture pack differs")
+    old_root = Path(data["archive_root"]).parent
+    if not old_root.is_absolute() or not old_root.name.startswith("b5-s0-"):
+        raise ValueError("exported fixture has no synthetic root")
+    for field in ("archive_root", "claim_runs_root", "bound_runs_root", "custody_root", "measurement_root"):
+        if not Path(data[field]).is_relative_to(old_root) or ".." in Path(data[field]).parts:
+            raise ValueError("exported fixture escapes its synthetic root")
+    tmp = tempfile.TemporaryDirectory(prefix=f"b5-s0-{pack}-{shape}-", dir=_RESTORE_BASE)
+    root = Path(tmp.name).resolve()
     try:
+        from joulewise.b5 import harvest
         archive = root / "archive"
-        harvest.clone_tree(entry.archive_root, archive)
-        for label, key in (("claim-runs", "claim_runs_root"), ("bound-runs", "bound_runs_root"),
-                           ("night-custody", "custody_root"), ("repo", "measurement_root")):
-            target = Path(data[key])
-            if not target.is_relative_to(root):
-                raise ValueError("exported fixture escapes its synthetic root")
-            harvest.clone_tree(archive / "sources" / label, target)
+        with tarfile.open(directory / "archive.tar.xz") as blob:
+            blob.extractall(root, filter="data")
+        _relocate_archive(archive, old_root, root)
+        for field in ("archive_root", "claim_runs_root", "bound_runs_root", "custody_root", "measurement_root"):
+            data[field] = str(root / Path(data[field]).relative_to(old_root))
+        for label, field in (("claim-runs", "claim_runs_root"), ("bound-runs", "bound_runs_root"),
+                             ("night-custody", "custody_root"), ("repo", "measurement_root")):
+            harvest.clone_tree(archive / "sources" / label, Path(data[field]))
         for label, target in (("calibration_observation_ledger.jsonl", Path(data["measurement_root"]) / "runs/calibration_observation_ledger.jsonl"),
                               ("calibration_ledger_head.json", Path(data["measurement_root"]) / "configs/calibration/calibration_ledger_head.json")):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(archive / "sources/ledger" / label, target)
         data["pack"] = pack
+        data["harvest_record_sha256"] = hashlib.sha256((archive / "harvest.json").read_bytes()).hexdigest()
         row = json.loads((Path(data["claim_runs_root"]) / "whole-window-verdict.json").read_bytes())
-        return BuiltWindow(root, archive, Path(data["claim_runs_root"]), Path(data["bound_runs_root"]), Path(data["custody_root"]),
-                           Path(data["measurement_root"]), data, 1 if row["status"] == "failed" else 0, row, shape, variants, ())
     except BaseException:
-        shutil.rmtree(root)
+        tmp.cleanup()
         raise
+    atexit.register(tmp.cleanup)
+    return BuiltWindow(root, root / "archive", Path(data["claim_runs_root"]), Path(data["bound_runs_root"]),
+                       Path(data["custody_root"]), Path(data["measurement_root"]), data,
+                       1 if row["status"] == "failed" else 0, row, shape, variants, (), _release=tmp.cleanup)
 
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("shape", choices=("pin1", "pin2", "pin3"))
+    parser.add_argument("shape", choices=("pin1", "pin2", "pin3", "pin4"))
     parser.add_argument("destination", type=Path)
     parser.add_argument("--case")
     args = parser.parse_args()
@@ -597,16 +804,20 @@ if __name__ == "__main__":
 def structural_archive(root, *, pack="beta", usable=True, release_blocked=False, verdict="COLLECTED", attempt=1):
     """Fast pin4 reader input made by the real harvest's finish method.
 
-    No bundles, estimation or hardware assertions. Full-window integration is
-    tested separately. Other pins use the committed export-produced fixtures.
+    The checkout observation comes from the committed pin4 base. No bundles,
+    estimation or hardware assertions; full-window integration is tested on
+    producer archives separately. Other pins also use export-produced fixtures.
     """
     from joulewise.b5 import harvest as h
     from joulewise.b5_analysis.windows import SealPins, IndexEntry
     pins = SealPins.load()
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
-    checkout = h.harvest_checkout(runner=lambda argv, **_: SimpleNamespace(
-        returncode=0, stdout=pins.pins["pin4"]["head"] + "\n" if "rev-parse" in argv else "", stderr=""))
+    # This is a structural counterfactual, not a new producer window. Reuse
+    # the actual pinned checkout observation from the committed base rather
+    # than combining a synthetic pinned HEAD with current-tree file hashes.
+    base = archived_entry("pin4", "BETA_STD")
+    checkout = json.loads((base.archive_root / "harvest.json").read_bytes())["harvest_checkout"]
     document = {"schema_version": "joulewise.exclusions.v1", "claim_usable": usable,
                 "release_blocked": release_blocked, "catalog_sha256": pins.sealed["catalog_sha256"],
                 "members_excluded": [], "cells": [], "reasons": [] if usable else ["cell.below_minimum"],

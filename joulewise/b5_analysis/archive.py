@@ -9,7 +9,7 @@ import re
 from typing import Any, Mapping
 
 from .windows import (AnalysisRefusal, AnalysedWindow, IndexEntry, PackTable, SealPins, VERDICTS,
-                      _SELECTION_TOKEN, freeze, validate_entry)
+                      _SELECTION_TOKEN, freeze, sealed_pack_table, sealed_plan_tree_sha256, validate_entry)
 
 BASE_KEYS = frozenset(("schema", "verdict", "plan_id", "pack_id", "attempt", "archive_root", "claim_usable",
                        "flags", "members_assessed", "faults", "yield", "exclude_window_reasons",
@@ -226,12 +226,40 @@ def open_attempt_record(entry: IndexEntry, *, seal_pins: SealPins,
 
 
 class ArchiveHandle:
-    def __init__(self, window: AnalysedWindow, record: Mapping[str, Any], census: dict[str, CensusRow]):
+    def __init__(self, window: AnalysedWindow, record: Mapping[str, Any], census: dict[str, CensusRow], *,
+                 seal_pins: SealPins | None = None, synthetic_plan_tree_sha256: str | None = None):
         self.window = window
         self.record = freeze(record)
         self.shape = window.record.record_shape
         self._census = census
         self._source_manifest: dict[str, str] | None = None
+        self._seal_pins = seal_pins
+        if synthetic_plan_tree_sha256 is not None and any(
+                window.pack_id in ids for ids in sealed_pack_table(seal_pins=seal_pins).values()):
+            raise AnalysisRefusal("roster_plan_tree_not_sealed")
+        self._synthetic_plan_tree_sha256 = synthetic_plan_tree_sha256
+        if synthetic_plan_tree_sha256 is not None:
+            self.plan_tree_sha256()
+
+    @property
+    def plan_tree_binding_kind(self) -> str:
+        return "sealed" if self._synthetic_plan_tree_sha256 is None else "synthetic"
+
+    def plan_tree_sha256(self) -> str:
+        """Independent sealed binding, or an explicitly censused fixture seam."""
+        if self._synthetic_plan_tree_sha256 is not None:
+            digest = self._synthetic_plan_tree_sha256
+        else:
+            digest = sealed_plan_tree_sha256(self.window.pack, self.window.pack_id, seal_pins=self._seal_pins)
+        row = CensusRow("binding/plan_tree", digest, "plan_tree_binding:" + self.plan_tree_binding_kind)
+        if row.path in self._census and self._census[row.path] != row:
+            raise AnalysisRefusal("archive_input_changed")
+        self._census[row.path] = row
+        return digest
+
+    def source_names(self) -> tuple[str, ...]:
+        """Inventory names only; content still requires source_bytes."""
+        return tuple(sorted(self._sources()))
 
     def census(self) -> tuple[CensusRow, ...]:
         return tuple(sorted(self._census.values()))
@@ -309,7 +337,11 @@ class ArchiveHandle:
 
 
 def open_archive(window: AnalysedWindow, *, seal_pins: SealPins,
-                 pack_table: PackTable | None = None) -> ArchiveHandle:
+                 pack_table: PackTable | None = None,
+                 synthetic_plan_tree_sha256: str | None = None) -> ArchiveHandle:
+    if synthetic_plan_tree_sha256 is not None and (pack_table is None or not isinstance(
+            synthetic_plan_tree_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", synthetic_plan_tree_sha256)):
+        raise AnalysisRefusal("window_index_pack_mismatch")
     if window.record.verdict != "COLLECTED" or window.record.claim_usable is not True:
         raise AnalysisRefusal("attempt_not_claim_usable")
     if window._selection_token != (_SELECTION_TOKEN, window.record.entry):
@@ -332,4 +364,5 @@ def open_archive(window: AnalysedWindow, *, seal_pins: SealPins,
             or checkout.get("status_lines") != 0
             or checkout.get("errors") != []):
         raise AnalysisRefusal("harvest_checkout_not_clean")
-    return ArchiveHandle(window, parsed, census)
+    return ArchiveHandle(window, parsed, census, seal_pins=seal_pins,
+                         synthetic_plan_tree_sha256=synthetic_plan_tree_sha256)

@@ -1,5 +1,6 @@
 """S2 variants of S0's windows; all inputs and captures are synthetic.
 
+Base windows come from S0's committed pinned-program archives.
 S0's capture files are adapter stubs and its bracket assessment describes a
 different in-memory ledger. These variants give the archived chain, endpoint
 stubs and frozen evaluator one consistent identity, binding and bound pair.
