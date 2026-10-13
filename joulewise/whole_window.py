@@ -144,6 +144,13 @@ class ArchiveContext:
         object.__setattr__(self, "catalog_manifests", _archive_freeze(self.catalog_manifests))
 
 
+def _archive_context_or_none(value: Any) -> ArchiveContext | None:
+    """Only the authenticated context type enables archive consumption."""
+    # Mock(spec=ArchiveContext) can spoof __class__; its concrete type still
+    # must be an ArchiveContext (or an actual subclass), not a session double.
+    return value if issubclass(type(value), ArchiveContext) else None
+
+
 @dataclass(frozen=True)
 class ArchiveRowValidation(WholeWindowRowValidation):
     """Context-only disclosure; the historical result shape stays unchanged."""
@@ -910,6 +917,7 @@ class AuthenticatedConsumptionSession:
             raise ValueError(
                 f"unknown whole-window consumption semantics: {consumption_semantics_id!r}"
             )
+        archive_context = _archive_context_or_none(archive_context)
         if archive_context is not None and consumption_semantics_id != MAX_BRACKET_CONSUMPTION_SEMANTICS_ID:
             raise ValueError("archive context requires maximum-bracket consumption semantics")
         self.mode = mode
@@ -963,17 +971,19 @@ class AuthenticatedConsumptionSession:
 
     @property
     def archive_context(self) -> ArchiveContext | None:
-        return self._archive_context
+        return _archive_context_or_none(self._archive_context)
 
     @archive_context.setter
     def archive_context(self, value: ArchiveContext | None) -> None:
-        if value != self._archive_context:
+        value = _archive_context_or_none(value)
+        if value != self.archive_context:
             self._archive_context_changed = True
             self._fail_global(set(self.refusal_reasons) | {"archive_context_changed"})
             raise ValueError("archive_context_changed")
 
     def _accept_archive_context(self, value: ArchiveContext | None) -> bool:
-        if self._archive_context_changed or (value is not None and value != self._archive_context):
+        value = _archive_context_or_none(value)
+        if self._archive_context_changed or (value is not None and value != self.archive_context):
             self._archive_context_changed = True
             self._fail_global(set(self.refusal_reasons) | {"archive_context_changed"})
             return False
@@ -5817,6 +5827,7 @@ def _current_core_rederivation_reasons(
 ) -> set[str]:
     """Recompute current-mint CPU/environment/adapter labels from members."""
 
+    archive_context = _archive_context_or_none(archive_context)
     reasons: set[str] = set()
     if archive_context is not None and not manifests:
         return {"core_rederivation_sources_empty"}
@@ -6811,10 +6822,15 @@ def _validate_row(
 ) -> tuple[bool, tuple[str, ...]]:
     """Authenticate a verdict row once per collection-scoped session."""
 
+    archive_context = _archive_context_or_none(archive_context)
     if consumption_session is not None:
-        if not consumption_session._accept_archive_context(archive_context):
+        context = _archive_context_or_none(getattr(consumption_session, "archive_context", None))
+        if (
+            context is not None or archive_context is not None
+            or issubclass(type(consumption_session), AuthenticatedConsumptionSession)
+        ) and not consumption_session._accept_archive_context(archive_context):
             return False, ("archive_context_changed",)
-        archive_context = consumption_session.archive_context
+        archive_context = context
     cache_key: tuple[str, str, tuple[str, ...], str | None] | None = None
     if consumption_session is not None and not consumption_session.ready:
         consumption_session._row_validation_results.clear()
@@ -6838,7 +6854,7 @@ def _validate_row(
             and consumption_session.ready
             and cache_key in consumption_session._row_validation_results
         ):
-            if _disclosure is not None:
+            if _disclosure is not None and archive_context is not None:
                 _disclosure.update(consumption_session._row_archive_disclosures.get(cache_key, {}))
             return consumption_session._row_validation_results[cache_key]
 
@@ -6860,7 +6876,8 @@ def _validate_row(
         and consumption_session.ready
     ):
         consumption_session._row_validation_results[cache_key] = result
-        consumption_session._row_archive_disclosures[cache_key] = disclosure
+        if archive_context is not None:
+            consumption_session._row_archive_disclosures[cache_key] = disclosure
     return result
 
 
@@ -6898,7 +6915,8 @@ def validate_whole_window_verdict_row(
             and set(reasons).issubset(_WHOLE_WINDOW_ADMISSION_OUTCOME_REASONS)
         )
     )
-    context = consumption_session.archive_context if consumption_session is not None else archive_context
+    context = _archive_context_or_none(
+        getattr(consumption_session, "archive_context", None) if consumption_session is not None else archive_context)
     if context is not None:
         return ArchiveRowValidation(authentic=authentic,
             admitted=bool(ok and status in {"passed", "failed"} and
@@ -7114,10 +7132,15 @@ def _validate_row_uncached(
     _disclosure: dict[str, Any] | None = None,
 ) -> tuple[bool, tuple[str, ...]]:
     reasons: set[str] = set()
+    archive_context = _archive_context_or_none(archive_context)
     if consumption_session is not None:
-        if not consumption_session._accept_archive_context(archive_context):
+        context = _archive_context_or_none(getattr(consumption_session, "archive_context", None))
+        if (
+            context is not None or archive_context is not None
+            or issubclass(type(consumption_session), AuthenticatedConsumptionSession)
+        ) and not consumption_session._accept_archive_context(archive_context):
             return False, ("archive_context_changed",)
-        archive_context = consumption_session.archive_context
+        archive_context = context
     detail: list[str] = []
     answered = frozenset()
     neg8 = None
@@ -8112,8 +8135,9 @@ def whole_window_drift_allowances(
     """
 
     root = Path(runs_root)
-    if consumption_session is not None and consumption_session.archive_context is not None:
-        archive = consumption_session.archive_context.neg8_harvest_archive
+    context = _archive_context_or_none(getattr(consumption_session, "archive_context", None))
+    if context is not None:
+        archive = context.neg8_harvest_archive
         if neg8_harvest_archive is not None and Path(neg8_harvest_archive) != archive:
             consumption_session._archive_context_changed = True
             consumption_session._fail_global({"archive_context_changed"})

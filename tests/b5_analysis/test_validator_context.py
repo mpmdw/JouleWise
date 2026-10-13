@@ -95,6 +95,66 @@ class ValidatorContextTests(unittest.TestCase):
         self.assertIn("whole_window_neg8_verdict_failed", result.reasons)
         self.assertFalse(hasattr(result, "detail"))
 
+    def test_non_archive_session_attribute_matches_pinned_base_on_stored_failure(self):
+        from dataclasses import asdict
+        case = self.case()
+        with pinned_base(self, "s3_invalid_context_base") as base, fx.adapter_projection(case):
+            with contextlib.ExitStack() as stack:
+                for name in ("_load_idle_records", "current_environment_refusals",
+                             "_custody_strict_invalid", "_current_strict_summary",
+                             "_scientific_config_identity", "_reference_energy_evidence",
+                             "neg8_freshness_bindings_from_metadata"):
+                    stack.enter_context(mock.patch.object(base, name, getattr(ww, name)))
+
+                for value in (mock.Mock(), mock.Mock(spec=ww.ArchiveContext), object(), {}, "archive", None):
+                    with self.subTest(context_type=type(value).__name__):
+                        def probe(module, *, explicit=False):
+                            ready = case.session()
+                            ready._archive_context = None
+                            session = mock.Mock(spec=ww.AuthenticatedConsumptionSession,
+                                **vars(ready), archive_context=value, ready=True)
+                            kwargs = {"consumption_session": session}
+                            if explicit:
+                                kwargs["archive_context"] = value
+                            pair = module._validate_row(case.row, case.window.claim,
+                                set(case.row["bundle_ids"]), **kwargs)
+                            public = module.validate_whole_window_verdict_row(case.row, case.window.claim,
+                                set(case.row["bundle_ids"]), **kwargs)
+                            allowances = module.whole_window_drift_allowances(case.window.claim,
+                                set(case.row["bundle_ids"]), consumption_session=session)
+                            self.assertNotIn("archive_context_changed", pair[1])
+                            self.assertIn("whole_window_neg8_verdict_failed", pair[1])
+                            self.assertFalse(hasattr(public, "detail"))
+                            session._accept_archive_context.assert_not_called()
+                            return pair, asdict(public), asdict(allowances)
+                        expected = probe(base)
+                        self.assertEqual(probe(ww), expected)
+                        self.assertEqual(probe(ww, explicit=True), expected)
+
+    def test_non_archive_arguments_and_session_storage_are_no_context(self):
+        case = self.case()
+        for value in (mock.Mock(), mock.Mock(spec=ww.ArchiveContext), object(), {}, "archive"):
+            with self.subTest(context_type=type(value).__name__):
+                session = ww.AuthenticatedConsumptionSession(case.window.claim, set(case.row["bundle_ids"]),
+                    consumption_semantics_id=ww.MINTED_CONSUMPTION_SEMANTICS_ID,
+                    calibration_ledger_snapshot=case.session().calibration_ledger_snapshot,
+                    archive_context=value)
+                self.assertIsNone(session.archive_context)
+                session.archive_context = value
+                self.assertTrue(session._accept_archive_context(value))
+                session._archive_context = value
+                self.assertIsNone(session.archive_context)
+                with fx.adapter_projection(case):
+                    expected = ww.validate_whole_window_verdict_row(case.row, case.window.claim,
+                        set(case.row["bundle_ids"]))
+                    self.assertEqual(ww.validate_whole_window_verdict_row(case.row, case.window.claim,
+                        set(case.row["bundle_ids"]), archive_context=value), expected)
+                    core_kwargs = dict(core=case.row["idle_admission_core"], bundle_ids=case.row["bundle_ids"],
+                        manifests=[], runs_root=case.window.claim,
+                        policy_sha256=case.row["campaign_policy"]["sha256"])
+                    self.assertEqual(ww._current_core_rederivation_reasons(**core_kwargs, archive_context=value),
+                        ww._current_core_rederivation_reasons(**core_kwargs))
+
     def test_context_nested_immutable_and_copied(self):
         source = {"nested": {"items": [1, 2]}}
         ctx = ww.ArchiveContext(Path("/private/tmp"), window_bracket=source,
