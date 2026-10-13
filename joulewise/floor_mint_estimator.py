@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from joulewise import detection_floor, floor_extraction
-from joulewise.arm_readiness import LaunchLineageError
+from joulewise.arm_readiness import ArmReadinessError, LaunchLineageError
 from joulewise.authentication_io import active_v2_authentication_session
 from joulewise.calibration_bracketing import (
     acceptance_allowance_rule,
@@ -24,6 +24,7 @@ from joulewise.calibration_bracketing import (
 )
 from joulewise.whole_window import (
     AuthenticatedConsumptionSession,
+    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     authenticate_window_launch_lineage,
     canonical_sha256,
     whole_window_refusal_reasons,
@@ -334,6 +335,7 @@ def _authenticate_mint_launch_lineage(
     component: Any,
     *,
     runs_root: Path,
+    producer_entry: Any | None = None,
 ) -> Mapping[str, Any] | None:
     """Reopen authoritative receipts; the copied extraction field is a cache."""
 
@@ -348,16 +350,55 @@ def _authenticate_mint_launch_lineage(
         )
     )
     try:
-        authenticated = authenticate_window_launch_lineage(
-            Path(runs_root),
-            set(member_ids),
-            evaluation_basis_sha256=getattr(
-                component,
-                "whole_window_evaluation_basis_sha256",
-                None,
-            ),
-        )
-    except LaunchLineageError as exc:
+        if producer_entry is not None:
+            # Block 5, governed or not: the lineage is authenticated from the
+            # kept members' own bundles against the window's bracket.  The
+            # sealed route (authenticate_window_launch_lineage) is not used
+            # here because it reads every member of the stored basis and
+            # every candidate directory under the root, removed members
+            # included; what it adds, the equality with the lineage the
+            # stored row carries, is made below from the authenticated row.
+            from joulewise.whole_window import (
+                _authenticated_bundle_launch_lineage_set, _authenticate_whole_window_launch_sources,
+                harvest_neg8_allowance_bracket, _archive_thaw,
+            )
+            member_ids = {run for cell in producer_entry.kept_units.cells.values()
+                          for units in cell.kept.values() for unit in units for run in unit.run_ids}
+            authenticated = _authenticated_bundle_launch_lineage_set(
+                [Path(runs_root) / bid for bid in sorted(member_ids)], require_completion=True)
+            if authenticated is not None:
+                bracket, problem = harvest_neg8_allowance_bracket(
+                    producer_entry.archive_context.neg8_harvest_archive, producer_entry.verdict_row)
+                if problem is not None:
+                    raise _MintEstimatorError(problem)
+                artifact = bracket.get("drift_bound_artifact") if isinstance(bracket, Mapping) else None
+                _authenticate_whole_window_launch_sources(authenticated,
+                    calibration_bracket=_archive_thaw(producer_entry.archive_context.window_bracket),
+                    drift_bound_artifact=artifact, require_completion=True, require_bound=True)
+                if not producer_entry.archive_context.governed_e3:
+                    # A window that Erratum 3 does not govern stored its
+                    # lineage in the verdict row's basis; a governed one has
+                    # none there (Erratum 3 item 9).
+                    row = producer_entry.verdict_row
+                    basis = row.get("evaluation_basis") if isinstance(row, Mapping) else None
+                    stored = basis.get("launch_lineage") if isinstance(basis, Mapping) else None
+                    if not isinstance(stored, Mapping) or canonical_sha256(stored) != canonical_sha256(authenticated):
+                        raise _MintEstimatorError(
+                            "launch_lineage_conflict: the stored whole-window basis does not "
+                            "carry the lineage authenticated from the kept members")
+        else:
+            authenticated = authenticate_window_launch_lineage(
+                Path(runs_root),
+                set(member_ids),
+                evaluation_basis_sha256=getattr(
+                    component,
+                    "whole_window_evaluation_basis_sha256",
+                    None,
+                ),
+            )
+    except (LaunchLineageError, ArmReadinessError) as exc:
+        if producer_entry is None and isinstance(exc, ArmReadinessError):
+            raise
         raise _MintEstimatorError(f"{exc.reason_code}: {exc}") from exc
     report = getattr(component, "report", None)
     copied = (
@@ -390,7 +431,11 @@ _authenticate_mint_launch_lineage = _authenticate_mint_launch_lineage
 def _comparative_layout(component: Any, core: Any) -> tuple[
     tuple[Mapping[str, Any], ...], tuple[float, ...]
 ]:
-    blocks = component.spec_cell.get("blocks")
+    try:
+        blocks = (core._kept_comparative_spec_blocks(component)
+                  if hasattr(core, "_kept_comparative_spec_blocks") else component.spec_cell.get("blocks"))
+    except ValueError as exc:
+        raise _MintEstimatorError(str(exc)) from exc
     if not isinstance(blocks, list) or not blocks:
         raise _MintEstimatorError("authenticated comparative spec has no ABBA blocks")
     flattened: list[str] = []
@@ -419,6 +464,7 @@ def _authenticated_common_mode_session(
     runs_root: Path,
     calibration_ledger_snapshot: Any,
     calibration_bracket_binding: Mapping[str, Any],
+    producer_entry: Any | None = None,
 ) -> AuthenticatedConsumptionSession:
     if active_v2_authentication_session() is None:
         raise _MintEstimatorError(
@@ -426,6 +472,11 @@ def _authenticated_common_mode_session(
         )
     member_ids = _full_spec_member_ids(component.spec)
     referenced = set(member_ids)
+    if producer_entry is not None:
+        if component.consumption_semantics_id != MAX_BRACKET_CONSUMPTION_SEMANTICS_ID:
+            raise _MintEstimatorError("floor_mint_kept_unit_mismatch: block5 consumption requires maximum-bracket semantics")
+        referenced = {run for cell in producer_entry.kept_units.cells.values()
+                      for units in cell.kept.values() for unit in units for run in unit.run_ids}
     session = AuthenticatedConsumptionSession(
         Path(runs_root),
         referenced,
@@ -435,6 +486,7 @@ def _authenticated_common_mode_session(
         consumption_semantics_id=component.consumption_semantics_id,
         calibration_ledger_snapshot=calibration_ledger_snapshot,
         calibration_bracket_binding=calibration_bracket_binding,
+        **({"archive_context": producer_entry.archive_context} if producer_entry is not None else {}),
     )
     reasons = whole_window_refusal_reasons(
         Path(runs_root),
@@ -462,6 +514,18 @@ def _authenticated_common_mode_session(
         raise _MintEstimatorError(
             "authenticated common-mode consumption omitted extraction-spec members"
         )
+    if producer_entry is not None:
+        from joulewise.b5_analysis.bracket import require_member_bound_is_window_bracket
+        from joulewise.b5_analysis.windows import AnalysisRefusal
+        for bundle_id in referenced:
+            try:
+                provenance = session.provenance_for(bundle_id)
+            except (AttributeError, KeyError):
+                provenance = None
+            try:
+                require_member_bound_is_window_bracket(provenance, producer_entry.window_bracket)
+            except AnalysisRefusal as exc:
+                raise _MintEstimatorError(exc.code) from None
     return session
 
 
@@ -479,9 +543,11 @@ def recompute_comparative_estimate(
 ) -> _ComparativeRecomputation:
     """Recompute one comparative cell from authenticated members and bytes."""
 
+    entry = core._block5_producer(Path(runs_root)) if hasattr(core, "_block5_producer") else None
     _authenticate_mint_launch_lineage(
         comparative_component,
         runs_root=Path(runs_root),
+        **({"producer_entry": entry} if entry is not None else {}),
     )
     path = selection_from_authenticated_spec(
         comparative_component.spec_cell,
@@ -506,12 +572,21 @@ def recompute_comparative_estimate(
             runs_root=Path(runs_root),
             calibration_ledger_snapshot=calibration_ledger_snapshot,
             calibration_bracket_binding=calibration_bracket_binding,
+            **({"producer_entry": entry} if entry is not None else {}),
         )
         bracket = session.calibration_bracket
         assert isinstance(bracket, Mapping)
         shared_edge_bound_s = (
             detection_floor.registered_common_mode_operative_bound(bracket)
         )
+        if entry is not None:
+            from joulewise.b5_analysis.bracket import require_member_bound_is_window_bracket
+            from joulewise.b5_analysis.windows import AnalysisRefusal
+            try:
+                require_member_bound_is_window_bracket(
+                    {"operative_fiducial_bound_s": shared_edge_bound_s}, entry.window_bracket)
+            except AnalysisRefusal as exc:
+                raise _MintEstimatorError(exc.code) from None
         session_bound = session.operative_fiducial_bound_s
         if (
             isinstance(session_bound, bool)
@@ -531,7 +606,8 @@ def recompute_comparative_estimate(
             member.bundle_id: member for member in comparative_component.members
         }
         raw_block_inputs = []
-        for spec_block in comparative_component.spec_cell["blocks"]:
+        for spec_block in (core._kept_comparative_spec_blocks(comparative_component)
+                           if hasattr(core, "_kept_comparative_spec_blocks") else comparative_component.spec_cell["blocks"]):
             ids = spec_block["members"]
             block_members = [
                 _EvidenceMember(
@@ -615,9 +691,11 @@ def bind_v2_floor_artifact_evidence(
 ]:
     """Preserve the pinned binder and return its replay record when selected."""
 
+    entry = core._block5_producer(Path(runs_root)) if hasattr(core, "_block5_producer") else None
     _authenticate_mint_launch_lineage(
         comparative_component,
         runs_root=Path(runs_root),
+        **({"producer_entry": entry} if entry is not None else {}),
     )
     path = selection_from_authenticated_spec(
         comparative_component.spec_cell,

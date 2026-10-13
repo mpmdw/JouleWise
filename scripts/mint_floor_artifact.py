@@ -69,6 +69,7 @@ from joulewise.whole_window import (  # noqa: E402
     neg8_claim_family_for_metric,
     whole_window_drift_allowances,
     whole_window_refusal_reasons,
+    _is_hazard_runs_root,
 )
 from joulewise.calibration_bracketing import (  # noqa: E402
     load_calibration_acceptance_bound,
@@ -130,6 +131,87 @@ ConsumptionAuthenticator = Callable[
     tuple[Mapping[str, Mapping[str, Any]], str],
 ]
 AllowanceDeriver = Callable[..., Any]
+
+# Installed on every isolated core for the duration of an indexed mint/emit.
+# Keys are resolved claim runs roots, never caller-selected plan identities.
+BLOCK5_PRODUCERS: Mapping[str, Any] = {}
+_LEGACY_REMOVED_UNITS = frozenset()
+
+
+def _block5_producer(root: Path) -> Any | None:
+    entry = BLOCK5_PRODUCERS.get(str(Path(root).resolve()))
+    if entry is None and _is_hazard_runs_root(Path(root)):
+        raise MintError("window_index_required")
+    return entry
+
+
+def _kept_spec_bindings(spec: Mapping[str, Any], entry: Any) -> tuple[dict, set[str]]:
+    from joulewise.b5_analysis.windows import AnalysisRefusal
+
+    bindings, bundle_ids = {}, set()
+    for cell in spec["cells"]:
+        try:
+            selected, stratum = entry.kept_units.for_floor_cell(cell)
+        except AnalysisRefusal as exc:
+            raise MintError(f"floor_mint_kept_unit_mismatch: {exc.code}") from None
+        kept = selected.kept[stratum]
+        removed = tuple(u for u in selected.dropped if u.stratum == stratum)
+        planned = ({m["bundle_id"]: {m["bundle_id"]} for m in cell["members"]}
+                   if stratum == "repeat" else
+                   {b["block_id"]: set(b["members"].values()) for b in cell["blocks"]})
+        kept_ids, removed_ids = {u.unit_id for u in kept}, {u.unit_id for u in removed}
+        if (kept_ids & removed_ids or kept_ids | removed_ids != set(planned)
+                or len(kept_ids) != len(kept) or len(removed_ids) != len(removed)
+                or any(set(u.run_ids) != planned.get(u.unit_id) for u in (*kept, *removed))):
+            raise MintError("floor_mint_kept_unit_mismatch: archive units differ from spec")
+        bundle_ids.update(run for u in kept for run in u.run_ids)
+        bindings[cell["cell_id"]] = {
+            "exclusions_cell_id": selected.cell_id, "stratum": stratum,
+            "minimum": selected.minimum[stratum] if selected.target else None,
+            "n_planned": len(planned), "n_kept": len(kept),
+            "kept_unit_ids": sorted(kept_ids), "removed_unit_ids": sorted(removed_ids),
+        }
+    return bindings, bundle_ids
+
+
+def _authenticate_kept_binding(report: Mapping, spec: Mapping, entry: Any) -> tuple[dict, set[str]]:
+    binding = report.get("kept_units_binding")
+    if not isinstance(binding, Mapping) or binding.get("sensitivity_label") is not None:
+        raise MintError("floor_mint_kept_unit_mismatch: primary kept_units_binding required")
+    for field, expected in (("exclusions_sha256", entry.kept_units.exclusions_sha256),
+                            ("catalog_sha256", entry.kept_units.catalog_sha256),
+                            ("harvest_pin", entry.kept_units.window.harvest_pin)):
+        if binding.get(field) != expected:
+            raise MintError(f"floor_mint_kept_unit_mismatch: {field} differs from report binding")
+    bindings, bundle_ids = _kept_spec_bindings(spec, entry)
+    if binding.get("cells") != bindings:
+        raise MintError("floor_mint_kept_unit_mismatch: report binding differs from archive kept units")
+    return bindings, bundle_ids
+
+
+def _require_window_bound(entry: Any, provenance: object) -> None:
+    from joulewise.b5_analysis.bracket import require_member_bound_is_window_bracket
+    from joulewise.b5_analysis.windows import AnalysisRefusal
+
+    try:
+        require_member_bound_is_window_bracket(provenance, entry.window_bracket)
+    except AnalysisRefusal as exc:
+        raise MintError(exc.code) from None
+
+
+def _require_session_window_bound(entry: Any, session: Any, bundle_ids: set[str]) -> None:
+    if entry is not None and session.ready:
+        for bundle_id in sorted(bundle_ids):
+            try:
+                provenance = session.provenance_for(bundle_id)
+            except (AttributeError, KeyError):
+                provenance = None
+            _require_window_bound(entry, provenance)
+
+
+def _producer_bundle_ids(entry: Any) -> set[str]:
+    return {run for cell in entry.kept_units.cells.values() for units in cell.kept.values()
+            for unit in units for run in unit.run_ids}
 
 _BINDING_SUMMARY_CACHE: dict[
     tuple[str, str, tuple[tuple[str, str], ...]],
@@ -450,6 +532,11 @@ def _authenticated_consumption_summaries(
 ) -> tuple[Mapping[str, Mapping[str, Any]], str]:
     """Replay the authenticated whole-window consumption semantics once."""
 
+    entry = _block5_producer(runs_root)
+    if entry is not None:
+        referenced_bundle_ids = _producer_bundle_ids(entry)
+        if consumption_semantics_id not in (None, MAX_BRACKET_CONSUMPTION_SEMANTICS_ID):
+            raise MintError("floor_mint_kept_unit_mismatch: block5 consumption requires maximum-bracket semantics")
     session = AuthenticatedConsumptionSession(
         runs_root,
         referenced_bundle_ids,
@@ -459,6 +546,7 @@ def _authenticated_consumption_summaries(
         ),
         calibration_ledger_snapshot=calibration_ledger_snapshot,
         calibration_bracket_binding=calibration_bracket_binding,
+        **({"archive_context": entry.archive_context} if entry is not None else {}),
     )
     reasons = whole_window_refusal_reasons(
         runs_root,
@@ -472,6 +560,7 @@ def _authenticated_consumption_summaries(
             "authenticated whole-window consumption refused: " + reasons[0]
         )
     if session.ready:
+        _require_session_window_bound(entry, session, referenced_bundle_ids)
         for bundle_id in sorted(target_bundle_ids):
             target_reasons = session.path_refusal_reasons.get(
                 bundle_id, {}
@@ -583,8 +672,11 @@ def _target_report_cell(
 
 
 def _report_members(
-    cell: Mapping[str, Any], spec_cell: Mapping[str, Any], kind: str
+    cell: Mapping[str, Any], spec_cell: Mapping[str, Any], kind: str,
+    removed_unit_ids: frozenset[str] = _LEGACY_REMOVED_UNITS,
 ) -> tuple[list[Mapping[str, Any]], tuple[float, ...]]:
+    if removed_unit_ids is not _LEGACY_REMOVED_UNITS:
+        return _kept_report_members(cell, spec_cell, kind, removed_unit_ids)
     raw_members = cell.get("members")
     if not isinstance(raw_members, list) or not all(
         isinstance(row, Mapping) for row in raw_members
@@ -660,6 +752,42 @@ def _report_members(
     if ordered != members:
         raise MintError("comparative report member sequence is not flattened A1/B1/B2/A2")
     return ordered, tuple(widths)
+
+
+def _kept_report_members(cell: Mapping, spec_cell: Mapping, kind: str,
+                         removed_unit_ids: frozenset[str]) -> tuple[list[Mapping], tuple[float, ...]]:
+    rows = cell.get("members")
+    if not isinstance(rows, list) or any(not isinstance(row, Mapping) for row in rows):
+        raise MintError("floor_mint_kept_unit_mismatch: members must be objects")
+    layout = ([(m["bundle_id"], [(m["bundle_id"], None)]) for m in spec_cell["members"]]
+              if kind == "absolute" else
+              [(b["block_id"], [(b["members"][p], p) for p in _ABBA_POSITIONS]) for b in spec_cell["blocks"]])
+    if removed_unit_ids - {uid for uid, _ in layout}:
+        raise MintError("floor_mint_kept_unit_mismatch: removed unit outside spec")
+    if [row.get("bundle_id") for row in rows] != [bid for _, members in layout for bid, _ in members]:
+        raise MintError("floor_mint_kept_unit_mismatch: kept unit missing or member sequence differs")
+    kept, widths, offset = [], [], 0
+    for uid, members in layout:
+        unit_rows = rows[offset:offset + len(members)]
+        offset += len(members)
+        for row, (bid, position) in zip(unit_rows, members, strict=True):
+            if kind == "comparative" and (row.get("block_id") != uid or row.get("position") != position):
+                raise MintError("floor_mint_kept_unit_mismatch: quad membership differs")
+            if uid in removed_unit_ids:
+                if (row.get("excluded") is not True or row.get("reasons") not in ([], ())
+                        or any(row.get(key) is not None for key in (
+                            "metric_value_j", "cooldown_result", "anchor_shift_bound_j", "operative_anchor_envelope",
+                            "consumption_provenance", "summary_sha256", "bundle_sha256", "config_sha256"))
+                        or row.get("cooldown_verified") is not False or row.get("cap_hit") is not False
+                        or "launch_lineage" in row):
+                    raise MintError("floor_mint_kept_unit_mismatch: removed member listed as a pinned member")
+            elif row.get("excluded") is not False or row.get("reasons"):
+                raise MintError("floor_mint_kept_unit_mismatch: kept unit excluded or refused")
+        if uid not in removed_unit_ids:
+            kept.extend(unit_rows)
+            widths.append(math.fsum(_finite(row.get("anchor_shift_bound_j"), f"{row.get('bundle_id')} anchor width",
+                                           nonnegative=True) for row in unit_rows) / (1.0 if kind == "absolute" else 2.0))
+    return kept, tuple(widths)
 
 
 def _verify_report_widths(
@@ -961,6 +1089,7 @@ def _authenticate_component(
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
     calibration_bracket_binding: Mapping[str, Any] | None = None,
 ) -> AuthenticatedComponent:
+    entry = _block5_producer(paths.evidence_root)
     if calibration_ledger_snapshot is None:
         acceptance = load_calibration_acceptance_bound()
         cutoff = (
@@ -1002,17 +1131,31 @@ def _authenticate_component(
         paths.order_manifest_path, "order manifest"
     )
     spec_cell = _target_spec_cell(spec, expected_cell_id, paths.expected_kind)
+    kept_bindings = None
+    if entry is not None:
+        kept_bindings, kept_bundle_ids = _authenticate_kept_binding(report, spec, entry)
+        if _producer_bundle_ids(entry) != kept_bundle_ids:
+            raise MintError("floor_mint_kept_unit_mismatch: producer members differ from spec kept members")
+        if kept_bindings[expected_cell_id]["minimum"] is None:
+            raise MintError("floor_mint_cell_not_a_target")
     cell = _target_report_cell(report, expected_cell_id, paths.expected_kind)
-    report_members, widths = _report_members(cell, spec_cell, paths.expected_kind)
+    report_members, widths = _report_members(cell, spec_cell, paths.expected_kind,
+        **({"removed_unit_ids": frozenset(kept_bindings[expected_cell_id]["removed_unit_ids"])}
+           if kept_bindings is not None else {}))
+    if entry is not None:
+        for row in report_members:
+            _require_window_bound(entry, row.get("consumption_provenance"))
     _verify_report_widths(cell, widths)
     spec_ids = _spec_member_ids(spec)
-    referenced_bundle_ids = set(spec_ids)
+    referenced_bundle_ids = kept_bundle_ids if entry is not None else set(spec_ids)
     target_ids = {
         row.get("bundle_id")
         for row in report_members
         if isinstance(row.get("bundle_id"), str)
     }
     semantics = report.get("consumption_semantics_id")
+    if entry is not None and semantics != MAX_BRACKET_CONSUMPTION_SEMANTICS_ID:
+        raise MintError("floor_mint_kept_unit_mismatch: block5 consumption requires maximum-bracket semantics")
     if semantics not in _SEMANTICS_IDS:
         raise MintError("extraction report consumption_semantics_id is unknown")
     if (
@@ -1059,9 +1202,10 @@ def _authenticate_component(
             comparative=paths.expected_kind == "comparative",
         )
     _validate_order(
-        order,
+        ({**order, "executed_order": [row for row in order["executed_order"]
+                                     if row.get("run_id") in referenced_bundle_ids]} if entry is not None else order),
         target_ids=[member.bundle_id for member in members],
-        spec_ids=spec_ids,
+        spec_ids=([bid for bid in spec_ids if bid in referenced_bundle_ids] if entry is not None else spec_ids),
     )
     campaign_rows, campaign_raw = _load_json_lines(
         paths.evidence_root / "campaign_log.jsonl", "campaign log"
@@ -1073,7 +1217,7 @@ def _authenticate_component(
     basis_members = frozenset(
         item["bundle_id"] for item in evaluation_basis["member_occurrences"]
     )
-    if not set(spec_ids).issubset(basis_members):
+    if not (referenced_bundle_ids if entry is not None else set(spec_ids)).issubset(basis_members):
         raise MintError(
             "extraction-spec members are not a subset of the evaluation basis"
         )
@@ -1098,6 +1242,7 @@ def _authenticate_component(
                 or MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
             ),
             calibration_ledger_snapshot=calibration_ledger_snapshot,
+            **({"archive_context": entry.archive_context} if entry is not None else {}),
         )
         allowance_result = allowance_deriver(
             paths.evidence_root,
@@ -1115,6 +1260,8 @@ def _authenticate_component(
                 "campaign log changed during whole-window allowance "
                 "re-derivation"
             ) from exc
+        if entry is not None and isinstance(exc, MintError):
+            raise
         raise MintError(
             "whole-window drift allowance is not derivable from "
             f"authenticated campaign evidence: {type(exc).__name__}: {exc}"
@@ -1132,6 +1279,9 @@ def _authenticate_component(
             "authenticated campaign evidence "
             f"(status={getattr(allowance_result, 'status', None)!r})"
         )
+    if entry is not None and not allowance_session.ready:
+        raise MintError("operative_bound_not_the_window_bracket")
+    _require_session_window_bound(entry, allowance_session, referenced_bundle_ids)
     derived_allowances = getattr(allowance_result, "allowances", None)
     claim_family = neg8_claim_family_for_metric(METRIC)
     derived_allowance = (
@@ -1177,6 +1327,7 @@ def _authenticate_component(
         scientific_config_identity_sha256=scientific_hash,
         backend=backend,
         whole_window_calibration_bracket=(
+            dict(entry.archive_context.window_bracket) if entry is not None else
             dict(evaluation_basis["calibration_bracket_set"])
             if isinstance(
                 evaluation_basis.get("calibration_bracket_set"), Mapping
@@ -1188,6 +1339,7 @@ def _authenticate_component(
         launch_lineage = floor_mint_estimator._authenticate_mint_launch_lineage(
             component,
             runs_root=paths.evidence_root,
+            **({"producer_entry": entry} if entry is not None else {}),
         )
     except ValueError as exc:
         raise MintError(str(exc)) from exc
@@ -1440,7 +1592,7 @@ def _absolute_observations(
 def _comparative_blocks(
     component: AuthenticatedComponent,
 ) -> tuple[list[Mapping[str, Any]], list[float]]:
-    blocks = component.spec_cell["blocks"]
+    blocks = _kept_comparative_spec_blocks(component)
     member_by_id = {member.bundle_id: member for member in component.members}
     result: list[Mapping[str, Any]] = []
     deltas: list[float] = []
@@ -1477,6 +1629,29 @@ def _comparative_blocks(
             }
         )
     return result, deltas
+
+
+def _component_block5_producer(component: Any) -> Any | None:
+    root = component.report.get("runs_root")
+    return _block5_producer(Path(root)) if isinstance(root, str) else None
+
+
+def _kept_comparative_spec_blocks(component: Any) -> list[Mapping]:
+    blocks = component.spec_cell.get("blocks")
+    entry = _component_block5_producer(component)
+    if entry is None:
+        return blocks
+    bindings, _ids = _authenticate_kept_binding(component.report, component.spec, entry)
+    binding = bindings[component.calibration_cell_id]
+    kept, removed = set(binding["kept_unit_ids"]), set(binding["removed_unit_ids"])
+    member_ids = {member.bundle_id for member in component.members}
+    for block in blocks:
+        ids = set(block["members"].values())
+        if ((block["block_id"] in kept and not ids.issubset(member_ids))
+                or (block["block_id"] in removed and ids & member_ids)
+                or block["block_id"] not in kept | removed):
+            raise MintError("floor_mint_kept_unit_mismatch: comparative quad partly removed")
+    return [block for block in blocks if block["block_id"] in kept]
 
 
 def _component_provenance(
@@ -1739,6 +1914,8 @@ def bind_floor_artifact_evidence(
     the root selected by that component's ``evidence_root_id``.
     """
 
+    for root in evidence_roots.values():
+        _block5_producer(Path(root))
     if calibration_ledger_snapshot is None:
         acceptance = load_calibration_acceptance_bound()
         cutoff = (
@@ -1797,6 +1974,7 @@ def bind_floor_artifact_evidence(
             if root_value is None:
                 raise MintError(f"missing evidence-root mapping for {root_id!r}")
             root = Path(root_value)
+            entry = _block5_producer(root)
             if not root.is_dir():
                 raise MintError(f"evidence root {root_id!r} is not a directory")
             campaign_sha256 = _sha256_file(
@@ -1822,15 +2000,14 @@ def bind_floor_artifact_evidence(
             ):
                 raise MintError(f"{root_id}: component consumption wire is invalid")
             cache_key = _binding_cache_key(root, basis_sha256, record_rows)
-            operative_summaries = _BINDING_SUMMARY_CACHE.get(cache_key)
+            operative_summaries = None if entry is not None else _BINDING_SUMMARY_CACHE.get(cache_key)
             if operative_summaries is None:
                 operative_summaries, actual_semantics = (
                     _authenticated_consumption_summaries(
                         root,
-                        {
-                            str(row["bundle_id"])
-                            for row in record_rows
-                        },
+                        (_producer_bundle_ids(entry) if entry is not None else {
+                            str(row["bundle_id"]) for row in record_rows
+                        }),
                         basis_sha256,
                         target_bundle_ids={
                             str(row["bundle_id"])

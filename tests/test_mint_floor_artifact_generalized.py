@@ -10882,3 +10882,11 @@ class CoreCompatibilityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Block5V2MinimumTests(unittest.TestCase):
+    def test_ten_repeat_five_quad_minimum_is_sealed_five(self):
+        from tests.b5_analysis.test_mint_kept_units import case, build
+        artifact, _components = build(case("t2"))
+        self.assertTrue(all(cell["eligibility"]["minimum_claim_n"] == 5 for cell in artifact["cells"]))
+        self.assertTrue(all(cell["floor_gate_j"] == 2.899596205228953 for cell in artifact["cells"]))
