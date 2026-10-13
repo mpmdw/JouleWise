@@ -9,7 +9,7 @@ import re
 from typing import Any, Mapping
 
 from .windows import (AnalysisRefusal, AnalysedWindow, IndexEntry, PackTable, SealPins, VERDICTS,
-                      _SELECTION_TOKEN, freeze, sealed_plan_tree_sha256, validate_entry)
+                      _SELECTION_TOKEN, freeze, sealed_pack_table, sealed_plan_tree_sha256, validate_entry)
 
 BASE_KEYS = frozenset(("schema", "verdict", "plan_id", "pack_id", "attempt", "archive_root", "claim_usable",
                        "flags", "members_assessed", "faults", "yield", "exclude_window_reasons",
@@ -234,13 +234,28 @@ class ArchiveHandle:
         self._census = census
         self._source_manifest: dict[str, str] | None = None
         self._seal_pins = seal_pins
+        if synthetic_plan_tree_sha256 is not None and any(
+                window.pack_id in ids for ids in sealed_pack_table(seal_pins=seal_pins).values()):
+            raise AnalysisRefusal("roster_plan_tree_not_sealed")
         self._synthetic_plan_tree_sha256 = synthetic_plan_tree_sha256
+        if synthetic_plan_tree_sha256 is not None:
+            self.plan_tree_sha256()
+
+    @property
+    def plan_tree_binding_kind(self) -> str:
+        return "sealed" if self._synthetic_plan_tree_sha256 is None else "synthetic"
 
     def plan_tree_sha256(self) -> str:
-        """Independent sealed binding; the optional override is a fixture seam."""
+        """Independent sealed binding, or an explicitly censused fixture seam."""
         if self._synthetic_plan_tree_sha256 is not None:
-            return self._synthetic_plan_tree_sha256
-        return sealed_plan_tree_sha256(self.window.pack, self.window.pack_id, seal_pins=self._seal_pins)
+            digest = self._synthetic_plan_tree_sha256
+        else:
+            digest = sealed_plan_tree_sha256(self.window.pack, self.window.pack_id, seal_pins=self._seal_pins)
+        row = CensusRow("binding/plan_tree", digest, "plan_tree_binding:" + self.plan_tree_binding_kind)
+        if row.path in self._census and self._census[row.path] != row:
+            raise AnalysisRefusal("archive_input_changed")
+        self._census[row.path] = row
+        return digest
 
     def source_names(self) -> tuple[str, ...]:
         """Inventory names only; content still requires source_bytes."""

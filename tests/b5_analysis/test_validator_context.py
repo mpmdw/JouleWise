@@ -354,6 +354,19 @@ class ValidatorContextTests(unittest.TestCase):
         self.assertFalse(result.admitted)
         self.assertIn("survivor_set_count_mismatch", result.detail)
 
+    def test_public_context_constructor_cannot_admit_excluded_survivor(self):
+        case = self.case()
+        baseline = self.validate(case)
+        self.assertTrue(baseline.admitted, baseline.reasons)
+        target = next(iter(case.context.survivor_bundle_ids))
+        case.context = replace(case.context, removed_bundle_ids=case.context.removed_bundle_ids | {target})
+        outcome = ww._neg8_screen_outcome(case.row, context=case.context)
+        self.assertFalse(outcome.passed)
+        self.assertEqual(outcome.problem, "excluded_reference_in_screen")
+        result = self.validate(case)
+        self.assertFalse(result.admitted)
+        self.assertIn("excluded_reference_in_screen", result.detail)
+
     def test_ungoverned_stored_calibration_comparison_refuses(self):
         # Mutant m7 changes the bypass from governed contexts to all contexts.
         case = self.case()

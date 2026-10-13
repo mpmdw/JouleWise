@@ -10,6 +10,7 @@ from joulewise import whole_window as ww
 from joulewise.b5 import harvest
 from joulewise.b5_analysis import sources_replay as replay
 from joulewise.b5_analysis.context import roster_references
+from joulewise.b5_analysis.windows import AnalysisRefusal
 from joulewise.campaign_provenance import load_authenticated_campaign_catalog
 from tests.b5_analysis import fixtures_s3b as fx
 
@@ -32,6 +33,149 @@ class SourcesReplayTests(unittest.TestCase):
         with fx.adapter_projection(case):
             return replay.replay_claim_sources(row or case.row, case.window.claim, archive=archive,
                 roster=roster if roster is not None else case.roster(archive))
+
+    def test_replay_runs_root_must_be_archive_window_root(self):
+        case = self.case()
+        archive = case.handle()
+        self.assertEqual(replay.replay_claim_sources(case.row, Path(case.tmp.name), archive=archive,
+            roster=case.roster(archive)).problem, "sources_replay_runs_root_differs")
+
+    def test_claim_source_original_bytes_must_match_archive(self):
+        case = self.case()
+        path = case.window.claim / "campaign_log.jsonl"
+        raw = path.read_bytes()
+        try:
+            path.write_bytes(raw + b" \n")
+            with self.assertRaisesRegex(AnalysisRefusal, "^runs_root_differs_from_archive$"):
+                replay._claim_source(case.handle(), case.window.claim, "campaign_log.jsonl")
+        finally:
+            path.write_bytes(raw)
+
+    def test_flags_reader_refuses_non_object_rows(self):
+        case = self.case()
+        case.write("derived/flags.jsonl", ["counterfactual non-object flag"])
+        with self.assertRaisesRegex(AnalysisRefusal, "^sources_replay_flags_invalid$"):
+            replay._flags(case.handle())
+
+    def test_loss_recompute_refuses_invalid_manifest_paths(self):
+        case = self.case()
+        roster = case.roster()
+        with mock.patch.object(ww, "_manifest_bundle_paths", return_value=None):
+            with self.assertRaisesRegex(AnalysisRefusal, "^source_manifest_members_invalid$"):
+                replay.recompute_reference_losses([], case.window.claim, roster, case.flags())
+
+    def test_second_catalog_load_must_authenticate(self):
+        case = self.case()
+        with mock.patch.object(replay, "load_authenticated_campaign_catalog", return_value=[]):
+            self.assertEqual(self.run_replay(case).problem, "source_manifest_unauthenticated")
+
+    def test_second_catalog_raw_bytes_must_equal_archive(self):
+        case = self.case()
+        catalog = load_authenticated_campaign_catalog(case.window.claim, case.window.claim / "campaign_log.jsonl")
+        changed = [replace(catalog[0], raw_bytes=catalog[0].raw_bytes + b" "), *catalog[1:]]
+        with mock.patch.object(replay, "load_authenticated_campaign_catalog", return_value=changed):
+            self.assertEqual(self.run_replay(case).problem, "source_manifest_unauthenticated")
+
+    def test_empty_basis_projection_refuses_at_replay(self):
+        case = self.case()
+        with mock.patch.object(ww, "_basis_source_manifests", return_value=[]):
+            self.assertEqual(self.run_replay(case).problem, "core_rederivation_sources_empty")
+
+    def test_incomplete_basis_projection_refuses_at_replay(self):
+        case = self.case()
+        real_projection, real_paths = ww._basis_source_manifests, ww._manifest_bundle_paths
+        projected = []
+        def project(**kwargs):
+            value = real_projection(**kwargs)
+            projected.append(value)
+            return value
+        def paths(manifests, root):
+            value = real_paths(manifests, root)
+            if projected and manifests is projected[-1]:
+                value = dict(value)
+                value.pop(next(iter(value)))
+            return value
+        with mock.patch.object(ww, "_basis_source_manifests", side_effect=project), \
+                mock.patch.object(ww, "_manifest_bundle_paths", side_effect=paths):
+            self.assertEqual(self.run_replay(case).problem, "evaluation_basis_projection_failed")
+
+    def test_evaluator_loss_rows_are_compared_independently_of_harvest_losses(self):
+        case = self.case()
+        screen = case.read("derived/neg8-screen.json")
+        target = next(run for run in roster_references(case.roster()) if run in case.row["bundle_ids"])
+        screen["rescreen"]["survivors"].setdefault("reference_losses", []).append(
+            {"bundle_id": target, "position": "start", "reason": "summary_unreadable"})
+        case.write("derived/neg8-screen.json", screen)
+        self.assertEqual(self.run_replay(case).problem, "sources_replay_losses_differ")
+
+    def test_duplicate_evaluator_loss_rows_refuse_at_replay(self):
+        case = self.case()
+        screen = case.read("derived/neg8-screen.json")
+        losses = screen["rescreen"]["survivors"]["reference_losses"]
+        self.assertTrue(losses)
+        losses.append(copy.deepcopy(losses[0]))
+        case.write("derived/neg8-screen.json", screen)
+        self.assertEqual(self.run_replay(case).problem, "sources_replay_losses_differ")
+
+    def test_evaluator_problem_is_returned_by_replay(self):
+        case = self.case()
+        with mock.patch.object(ww, "_derived_neg8_decision", return_value=(None, "reference_not_in_verdict_basis")):
+            self.assertEqual(self.run_replay(case).problem, "reference_not_in_verdict_basis")
+
+    def test_bound_allowance_schema_and_row_identity_are_required(self):
+        for field, value, word in (("schema", "counterfactual", "allowance_record_unauthenticated"),
+                ("verdict", {"row_sha256": "0" * 64}, "allowance_record_names_another_row")):
+            with self.subTest(field=field):
+                case = self.case()
+                allowance = case.read(ww.NEG8_HARVEST_ALLOWANCE_RECORD)
+                allowance[field] = value
+                case.write(ww.NEG8_HARVEST_ALLOWANCE_RECORD, allowance)
+                with self.assertRaisesRegex(AnalysisRefusal, "^" + word + "$"):
+                    replay._bound(case.handle(), case.row)
+
+    def test_bound_clean_descriptor_digest_and_artifact_are_required(self):
+        for mode in ("bound_digest", "corpus_descriptor", "artifact_digest"):
+            with self.subTest(mode=mode):
+                case = self.case()
+                allowance = case.read(ww.NEG8_HARVEST_ALLOWANCE_RECORD)
+                if mode == "bound_digest":
+                    allowance["clean_bound"]["sha256"] = "0" * 64
+                elif mode == "corpus_descriptor":
+                    allowance["clean_bound"]["corpus_manifest"]["path"] = "derived/counterfactual.json"
+                else:
+                    allowance["bound_artifact_sha256"] = "0" * 64
+                case.write(ww.NEG8_HARVEST_ALLOWANCE_RECORD, allowance)
+                with self.assertRaisesRegex(AnalysisRefusal, "^clean_bound_unavailable$"):
+                    replay._bound(case.handle(), case.row)
+
+    def test_bound_survivor_descriptor_and_digest_are_required(self):
+        for field in ("path", "sha256"):
+            with self.subTest(field=field):
+                case = self.case()
+                allowance = case.read(ww.NEG8_HARVEST_ALLOWANCE_RECORD)
+                allowance["survivor_bracket"][field] = "withheld/counterfactual.json" if field == "path" else "0" * 64
+                case.write(ww.NEG8_HARVEST_ALLOWANCE_RECORD, allowance)
+                with self.assertRaisesRegex(AnalysisRefusal, "^survivor_bracket_unauthenticated$"):
+                    replay._bound(case.handle(), case.row)
+
+    def test_bound_survivor_screen_and_bound_identity_are_required(self):
+        for mode, word in (("source", "screen_not_passed"), ("decision", "screen_not_passed"),
+                           ("conditions", "screen_not_passed"), ("artifact", "survivor_bound_unauthenticated")):
+            with self.subTest(mode=mode):
+                case = self.case()
+                allowance = case.read(ww.NEG8_HARVEST_ALLOWANCE_RECORD)
+                wrapper = case.read(ww.NEG8_HARVEST_SURVIVOR_BRACKET)
+                if mode == "source":
+                    allowance["source"] = "stored_verdict"
+                else:
+                    key, value = {"decision": ("decision", "failed"), "conditions": ("conditions", ["counterfactual"]),
+                                  "artifact": ("drift_bound_artifact", None)}[mode]
+                    wrapper["bracket"][key] = value
+                    case.write(ww.NEG8_HARVEST_SURVIVOR_BRACKET, wrapper)
+                    allowance["survivor_bracket"]["sha256"] = fx.s0.sha(case.archive / ww.NEG8_HARVEST_SURVIVOR_BRACKET)
+                case.write(ww.NEG8_HARVEST_ALLOWANCE_RECORD, allowance)
+                with self.assertRaisesRegex(AnalysisRefusal, "^" + word + "$"):
+                    replay._bound(case.handle(), case.row)
 
     def test_recovered_catalog_feeds_core_and_reference_rederivation(self):
         case = self.case()
@@ -137,7 +281,7 @@ class SourcesReplayTests(unittest.TestCase):
         units = fx.load_kept_units(archive, sealed_catalog_sha256=fx.PINS.sealed["catalog_sha256"],
             planned_units=fx.s0_planned())
         with fx.adapter_projection(case):
-            context = ctx.build_context(archive.window, archive, units, case.assessment, row)
+            context = ctx.build_context(archive, units, case.assessment, row, test_only_allow_synthetic_binding=True)
         self.assertTrue(context.catalog_manifests)
         self.assertEqual(context.neg8_harvest_archive, case.window.archive)
         self.assertTrue(absent.isdisjoint(context.survivor_bundle_ids))

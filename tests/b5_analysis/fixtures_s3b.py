@@ -123,8 +123,8 @@ class Case(s3.Case):
 
     def build(self, *, bracket=None):
         archive, units = self.inputs()
-        self.context = context_module.build_context(archive.window, archive, units,
-            self.assessment if bracket is None else bracket, self.row)
+        self.context = context_module.build_context(archive, units,
+            self.assessment if bracket is None else bracket, self.row, test_only_allow_synthetic_binding=True)
         return self.context
 
     def flags(self):
@@ -196,6 +196,16 @@ class Case(s3.Case):
         allowance = self.read(ww.NEG8_HARVEST_ALLOWANCE_RECORD)
         allowance["survivor_bracket"] = descriptor
         self.write(ww.NEG8_HARVEST_ALLOWANCE_RECORD, allowance)
+
+    def write_survivors(self, screen):
+        """Explicit two-record counterfactual; never silently repair a probe."""
+        wrapper = self.read(ww.NEG8_HARVEST_SURVIVOR_BRACKET)
+        for key in ("reference_counts", "reference_losses"):
+            if key in screen["rescreen"]["survivors"]:
+                wrapper["bracket"][key] = copy.deepcopy(screen["rescreen"]["survivors"][key])
+            else:
+                wrapper["bracket"].pop(key, None)
+        self.install_rescreen(screen, wrapper)
 
 
 @contextlib.contextmanager

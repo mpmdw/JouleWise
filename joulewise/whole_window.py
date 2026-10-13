@@ -258,6 +258,8 @@ def _neg8_screen_outcome(row: Mapping[str, Any], *, context: ArchiveContext) -> 
     basis_ids = {item.get("bundle_id") for item in occurrences if isinstance(item, Mapping)}
     if lost is None or not lost.issubset(refs) or context.survivor_bundle_ids != frozenset(set(refs) & basis_ids - lost):
         return Neg8ScreenOutcome(False, source, "survivor_set_count_mismatch", None)
+    if context.survivor_bundle_ids & context.removed_bundle_ids:
+        return Neg8ScreenOutcome(False, source, "excluded_reference_in_screen", None)
     counts = {slot: sum(refs[bundle] == slot for bundle in context.survivor_bundle_ids)
               for slot in ("start", "midpoint", "end")}
     recorded_counts = bracket.get("reference_counts")

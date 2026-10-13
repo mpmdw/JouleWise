@@ -18,13 +18,21 @@ from joulewise.b5 import harvest
 from joulewise.flags.catalog import catalog_from_bytes
 from .archive import ArchiveHandle
 from .kept_units import CATALOG_PATH, KeptUnits, _strict_json, require_kept_members_in_verdict
-from .windows import AnalysisRefusal, AnalysedWindow, freeze
+from .windows import AnalysisRefusal, freeze
 
 SLOTS = ("start", "midpoint", "end")
 
 
 def read_output(archive: ArchiveHandle, relative: str) -> dict:
     return _strict_json(archive.output_bytes(relative), "archive_output_shape_invalid")
+
+
+def read_screen_record(archive: ArchiveHandle) -> dict:
+    screen = read_output(archive, "derived/neg8-screen.json")
+    rescreen = screen.get("rescreen")
+    if not isinstance(rescreen, Mapping) or not isinstance(rescreen.get("survivors"), Mapping):
+        raise AnalysisRefusal("neg8_screen_record_invalid")
+    return screen
 
 
 def authenticated_roster(archive: ArchiveHandle, roster: Mapping | None = None) -> dict:
@@ -113,7 +121,7 @@ def rebuilt_roster(archive: ArchiveHandle, row: Mapping, roster: Mapping | None 
         projection, _spans = harvest.l4_exclusion_inputs(filtered, {}, plan_id=actual["plan_id"], attempt=actual["attempt"])
         projection.pop("bundles", None)
         projection.pop("chain_started_monotonic_ns", None)
-        screen = read_output(archive, "derived/neg8-screen.json")
+        screen = read_screen_record(archive)
         occurrences = {item["bundle_id"] for item in basis["member_occurrences"]}
         harvest_losses = screen.get("harvest_reference_losses")
         # Lead's representation ruling for 6(d): an absent spare may be
@@ -164,7 +172,7 @@ def survivor_set(archive: ArchiveHandle, row: Mapping, roster: Mapping) -> Survi
     if basis is None:
         raise AnalysisRefusal("evaluation_basis_invalid")
     basis_ids = frozenset(item["bundle_id"] for item in basis["member_occurrences"] if item["bundle_id"] in references)
-    screen = read_output(archive, "derived/neg8-screen.json")
+    screen = read_screen_record(archive)
     harvest_losses = screen.get("harvest_reference_losses")
     rescreen = screen.get("rescreen")
     survivors = rescreen.get("survivors") if isinstance(rescreen, Mapping) else None
@@ -197,6 +205,22 @@ def survivor_set(archive: ArchiveHandle, row: Mapping, roster: Mapping) -> Survi
     if (not isinstance(counts, Mapping) or set(counts) != set(SLOTS)
             or any(type(counts[slot]) is not int or counts[slot] != len(by_slot[slot]) for slot in SLOTS)):
         count_mismatch()
+    # The derived screen is a projection, not a second authority for losses
+    # or counts. Bind it to the withheld bracket through the allowance's
+    # authenticated descriptor before trusting the tripwire's set.
+    allowance = read_output(archive, ww.NEG8_HARVEST_ALLOWANCE_RECORD)
+    descriptor = allowance.get("survivor_bracket")
+    if (not isinstance(descriptor, Mapping) or descriptor.get("path") != ww.NEG8_HARVEST_SURVIVOR_BRACKET
+            or not ww._sha256_text(descriptor.get("sha256"))):
+        raise AnalysisRefusal("survivor_bracket_unauthenticated")
+    raw = archive.withheld_bytes(ww.NEG8_HARVEST_SURVIVOR_BRACKET)
+    bracket = _strict_json(raw, "survivor_bracket_unauthenticated").get("bracket")
+    if hashlib.sha256(raw).hexdigest() != descriptor["sha256"] or not isinstance(bracket, Mapping):
+        raise AnalysisRefusal("survivor_bracket_unauthenticated")
+    fields = ("reference_losses", "reference_counts")
+    if ww.canonical_sha256({key: survivors[key] for key in fields if key in survivors}) != ww.canonical_sha256(
+            {key: bracket[key] for key in fields if key in bracket}):
+        raise AnalysisRefusal("survivor_set_record_differs_from_bracket")
     return SurvivorSet(ids, freeze(by_slot), basis_ids, freeze(harvest_losses), freeze(losses))
 
 
@@ -257,11 +281,13 @@ def excluded_reference_in_screen(archive: ArchiveHandle, survivors: SurvivorSet,
     members = []
     full = []
     for run in sorted(intersection):
+        public_codes = set()
         for code in codes[run]:
             entry = catalog.codes.get(code)
             public_code = code if entry is not None and entry.get("blinding") == "STRUCTURE" else "restricted code"
-            members.append({"member_id": run, "code": public_code})
+            public_codes.add(public_code)
             full.append({"member_id": run, "code": code})
+        members.append({"member_id": run, "codes": sorted(public_codes)})
     public = {"pack": archive.window.pack, "stop": "excluded_reference_in_screen",
               "survivor_count": len(survivors.bundle_ids), "excluded_reference_count": len(excluded),
               "intersection_count": len(intersection), "members": members}
@@ -290,10 +316,14 @@ def _kept_tripwire(archive: ArchiveHandle, kept_units: KeptUnits, row: Mapping) 
             "kept_units": kept_units.to_record(), "verdict_bundle_ids": row.get("bundle_ids")}) from None
 
 
-def build_context(window: AnalysedWindow, archive: ArchiveHandle, kept_units: KeptUnits,
-                  window_bracket, row: Mapping, *, roster: Mapping | None = None) -> ww.ArchiveContext:
+def build_context(archive: ArchiveHandle, kept_units: KeptUnits,
+                  window_bracket, row: Mapping, *, roster: Mapping | None = None,
+                  test_only_allow_synthetic_binding: bool = False) -> ww.ArchiveContext:
     """One explicit call per window and bound; never mutate an earlier context."""
-    if archive.window != window or kept_units.window != window:
+    window = archive.window
+    if archive.plan_tree_binding_kind == "synthetic" and test_only_allow_synthetic_binding is not True:
+        raise AnalysisRefusal("context_synthetic_binding_requires_test")
+    if kept_units.window != window:
         raise AnalysisRefusal("context_window_mismatch")
     if (kept_units.roster_sha256 != hashlib.sha256(archive.output_bytes("derived/roster.json")).hexdigest()
             or kept_units.exclusions_sha256 != hashlib.sha256(archive.output_bytes("derived/exclusions.json")).hexdigest()):
@@ -310,7 +340,7 @@ def build_context(window: AnalysedWindow, archive: ArchiveHandle, kept_units: Ke
             raise AnalysisRefusal("context_window_mismatch")
         assessment = {**ww._archive_thaw(window_bracket.evaluation), "reasons": []}
     replay, manifests = None, ()
-    screen = read_output(archive, "derived/neg8-screen.json")
+    screen = read_screen_record(archive)
     rescreen = screen.get("rescreen", {})
     source = rescreen.get("reference_source", {})
     provenance = row.get("row_provenance") or {}

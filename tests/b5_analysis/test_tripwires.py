@@ -51,7 +51,7 @@ class TripwireTests(unittest.TestCase):
                 self.assertEqual(public["excluded_reference_count"], 1)
                 self.assertEqual(public["survivor_count"], len(aggregated))
                 expected = code if fx.CATALOG.entry(code)["blinding"] == "STRUCTURE" else "restricted code"
-                self.assertEqual(public["members"], ({"member_id": target, "code": expected},))
+                self.assertEqual(public["members"], ({"member_id": target, "codes": (expected,)},))
                 self.assertIn(target, stop.restricted["survivor_bundle_ids"])
                 self.assertEqual(set(public), {"pack", "stop", "survivor_count", "excluded_reference_count",
                     "intersection_count", "members"})
@@ -98,7 +98,7 @@ class TripwireTests(unittest.TestCase):
                                         "detail": "restricted diagnostic not copied"}]
         with mock.patch.object(ctx, "survivor_set", side_effect=AssertionError("tripwire must run first")):
             with self.assertRaises(ctx.TripwireRefusal) as caught:
-                ctx.build_context(archive.window, archive, units, case.assessment, case.row)
+                ctx.build_context(archive, units, case.assessment, case.row, test_only_allow_synthetic_binding=True)
         stop = caught.exception
         self.assertEqual(stop.code, "kept_member_outside_verdict_membership:" + run)
         self.assertEqual(stop.unrestricted["problems"], ("bundle_strict_invalid",))
@@ -121,9 +121,37 @@ class TripwireTests(unittest.TestCase):
         stop = self.fire(case)
         public = json.loads(json.dumps(stop.to_structure_record()))
         restricted = json.loads(json.dumps(stop.to_record()))
-        self.assertEqual(public["members"], [{"member_id": target, "code": "restricted code"}])
+        self.assertEqual(public["members"], [{"member_id": target, "codes": ["restricted code"]}])
         self.assertEqual(restricted["members"], [{"member_id": target, "code": code}])
         self.assertIn(target, restricted["survivor_bundle_ids"])
         self.assertNotIn("survivor_bundle_ids", public)
-        public["members"][0]["code"] = "local copy changed"
-        self.assertEqual(stop.unrestricted["members"][0]["code"], "restricted code")
+        public["members"][0]["codes"] = ["local copy changed"]
+        self.assertEqual(stop.unrestricted["members"][0]["codes"], ("restricted code",))
+
+    def test_public_stop_has_one_row_and_one_restricted_marker_per_member(self):
+        case = self.case()
+        target = self.reference(case)
+        real_restricted = next(code for code, entry in fx.CATALOG.codes.items() if entry["blinding"] == "RESTRICTED")
+        extra_restricted = "s3b.test_restricted_second"
+        restricted = [real_restricted, extra_restricted]
+        structure = "member.whole_window_member_failure"
+        case.exclude(target, structure)
+        # The sealed catalog has one restricted code. An explicit test-only
+        # catalog projection supplies a second, to pin multiplicity hiding
+        # at the formatter rather than editing the frozen catalog.
+        document = case.read("derived/exclusions.json")
+        next(member for member in document["members_excluded"] if member["run_id"] == target)["codes"].extend(restricted)
+        case.write("derived/exclusions.json", document)
+        archive = case.handle()
+        survivors = ctx.survivor_set(archive, case.row, case.roster(archive))
+        catalog = replace(ctx._catalog(archive), codes={**fx.CATALOG.codes,
+            extra_restricted: fx.CATALOG.codes[real_restricted]})
+        with mock.patch.object(ctx, "_catalog", return_value=catalog):
+            with self.assertRaises(ctx.TripwireRefusal) as caught:
+                ctx.excluded_reference_in_screen(archive, survivors, frozenset({target}))
+        public = caught.exception.to_structure_record()
+        self.assertEqual(public["members"], [{"member_id": target,
+            "codes": sorted([structure, "restricted code"])}])
+        self.assertEqual(len(caught.exception.restricted["members"]), 3)
+        for code in restricted:
+            self.assertNotIn(code, json.dumps(public))

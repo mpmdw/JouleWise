@@ -35,6 +35,164 @@ class ContextTests(unittest.TestCase):
         self.addCleanup(case.close)
         return case
 
+    def test_builder_uses_archive_window_and_refuses_foreign_kept_window(self):
+        case = self.case()
+        archive, units = case.inputs()
+        self.assertNotIn("window", inspect.signature(ctx.build_context).parameters)
+        foreign = replace(units, window=replace(units.window, plan_id="counterfactual-other-window"))
+        with self.assertRaisesRegex(AnalysisRefusal, "^context_window_mismatch$"):
+            ctx.build_context(archive, foreign, case.assessment, case.row, test_only_allow_synthetic_binding=True)
+
+    def test_builder_refuses_foreign_kept_record_digests(self):
+        case = self.case()
+        archive, units = case.inputs()
+        for field in ("roster_sha256", "exclusions_sha256"):
+            with self.subTest(field=field):
+                foreign = replace(units, **{field: "0" * 64})
+                with self.assertRaisesRegex(AnalysisRefusal, "^context_kept_units_mismatch$"):
+                    ctx.build_context(archive, foreign, case.assessment, case.row, test_only_allow_synthetic_binding=True)
+
+    def test_builder_refuses_foreign_window_bracket(self):
+        from types import SimpleNamespace
+        case = self.case()
+        archive, units = case.inputs()
+        bracket = SimpleNamespace(window=replace(archive.window, plan_id="counterfactual-other-window"),
+                                  evaluation=case.assessment)
+        with self.assertRaisesRegex(AnalysisRefusal, "^context_window_mismatch$"):
+            ctx.build_context(archive, units, bracket, case.row, test_only_allow_synthetic_binding=True)
+
+    def test_synthetic_context_requires_explicit_named_test_argument(self):
+        case = self.case()
+        archive, units = case.inputs()
+        self.assertEqual(archive.plan_tree_binding_kind, "synthetic")
+        for value in (False, None, 1, "true"):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(AnalysisRefusal, "^context_synthetic_binding_requires_test$"):
+                    ctx.build_context(archive, units, case.assessment, case.row,
+                                      test_only_allow_synthetic_binding=value)
+        with self.assertRaisesRegex(AnalysisRefusal, "^context_synthetic_binding_requires_test$"):
+            ctx.build_context(archive, units, case.assessment, case.row)
+        context = ctx.build_context(archive, units, case.assessment, case.row, test_only_allow_synthetic_binding=True)
+        self.assertEqual(context.neg8_harvest_archive, archive.window.archive_root)
+        binding = next(row for row in archive.census() if row.path == "binding/plan_tree")
+        self.assertEqual(binding.check, "plan_tree_binding:synthetic")
+        self.assertEqual(binding.sha256, case.plan_tree_digest)
+
+    def test_survivor_record_loss_and_count_edits_cannot_hide_excluded_reference(self):
+        case = self.case()
+        roster = case.roster()
+        target = next(run for run, slot in ctx.roster_references(roster).items() if slot == "start")
+        case.exclude(target, "member.whole_window_member_failure")
+        screen = case.read("derived/neg8-screen.json")
+        screen["rescreen"]["survivors"].update(reference_counts={"start": 2, "midpoint": 1, "end": 3},
+            reference_losses=[{"bundle_id": target, "position": "start", "reason": "strict_invalid"}])
+        case.write("derived/neg8-screen.json", screen)
+        archive = case.handle()
+        with self.assertRaisesRegex(AnalysisRefusal, "^survivor_set_record_differs_from_bracket$"):
+            ctx.survivor_set(archive, case.row, case.roster(archive))
+
+    def test_survivor_record_loss_reason_must_equal_withheld_bracket(self):
+        case = self.case()
+        target = next(run for run, slot in ctx.roster_references(case.roster()).items() if slot == "end")
+        screen = case.read("derived/neg8-screen.json")
+        screen["rescreen"]["survivors"].update(reference_counts={"start": 3, "midpoint": 1, "end": 2},
+            reference_losses=[{"bundle_id": target, "position": "end", "reason": "strict_invalid"}])
+        case.write_survivors(screen)
+        screen["rescreen"]["survivors"]["reference_losses"][0]["reason"] = "counterfactual-loss-reason"
+        case.write("derived/neg8-screen.json", screen)
+        archive = case.handle()
+        with self.assertRaisesRegex(AnalysisRefusal, "^survivor_set_record_differs_from_bracket$"):
+            ctx.survivor_set(archive, case.row, case.roster(archive))
+
+    def test_survivor_withheld_bracket_must_authenticate(self):
+        case = self.case()
+        path = case.archive / ww.NEG8_HARVEST_SURVIVOR_BRACKET
+        path.write_bytes(path.read_bytes() + b" ")
+        archive = case.handle()
+        with self.assertRaisesRegex(AnalysisRefusal, "^survivor_bracket_unauthenticated$"):
+            ctx.survivor_set(archive, case.row, case.roster(archive))
+
+    def test_missing_rescreen_and_malformed_survivors_are_closed_refusals(self):
+        case = self.case()
+        original = case.read("derived/neg8-screen.json")
+        for value in (None, [], "malformed"):
+            for field in ("rescreen", "survivors"):
+                with self.subTest(field=field, value=value):
+                    screen = copy.deepcopy(original)
+                    if field == "rescreen":
+                        screen[field] = value
+                    else:
+                        screen["rescreen"][field] = value
+                    if field == "rescreen" and value is not None:
+                        # S0 already refuses a non-mapping rescreen. Probe
+                        # this function's independent guard as well.
+                        with mock.patch.object(ctx, "read_output", return_value=screen):
+                            with self.assertRaisesRegex(AnalysisRefusal, "^neg8_screen_record_invalid$"):
+                                ctx.read_screen_record(case.handle())
+                    else:
+                        case.write("derived/neg8-screen.json", screen)
+                        with self.assertRaisesRegex(AnalysisRefusal, "^neg8_screen_record_invalid$"):
+                            ctx.rebuilt_roster(case.handle(), case.row)
+                        with self.assertRaisesRegex(AnalysisRefusal, "^neg8_screen_record_invalid$"):
+                            ctx.read_screen_record(case.handle())
+        case.write("derived/neg8-screen.json", {key: value for key, value in original.items() if key != "rescreen"})
+        with self.assertRaisesRegex(AnalysisRefusal, "^neg8_screen_record_invalid$"):
+            ctx.rebuilt_roster(case.handle(), case.row)
+
+    def test_authenticated_roster_rejects_identity_and_supplied_copy(self):
+        case = self.case()
+        archive = case.handle()
+        actual = ctx.authenticated_roster(archive)
+        for field in ("schema", "pack_id", "plan_id", "attempt"):
+            with self.subTest(field=field):
+                wrong = copy.deepcopy(actual)
+                wrong[field] = "counterfactual"
+                case.write("derived/roster.json", wrong)
+                with self.assertRaisesRegex(AnalysisRefusal, "^context_roster_invalid$"):
+                    ctx.authenticated_roster(case.handle())
+        case.write("derived/roster.json", actual)
+        with self.assertRaisesRegex(AnalysisRefusal, "^context_roster_differs_from_archive$"):
+            ctx.authenticated_roster(case.handle(), {**actual, "members": []})
+
+    def test_survivor_loss_record_shape_refuses_at_survivor_function(self):
+        case = self.case()
+        roster = case.roster()
+        original = case.read("derived/neg8-screen.json")
+        for field, value in (("harvest_reference_losses", {"synthetic": 1}),
+                             ("reference_losses", "malformed"),
+                             ("reference_losses", [{"bundle_id": "synthetic", "reason": None}])):
+            with self.subTest(field=field, value=value):
+                screen = copy.deepcopy(original)
+                if field == "harvest_reference_losses":
+                    screen[field] = value
+                else:
+                    screen["rescreen"]["survivors"][field] = value
+                case.write("derived/neg8-screen.json", screen)
+                archive = case.handle()
+                # Isolate this function's guard from the roster replay's
+                # earlier parser, using its real, already computed roster.
+                with mock.patch.object(ctx, "checked_rebuilt_roster", return_value=roster):
+                    with self.assertRaisesRegex(AnalysisRefusal, "^survivor_set_record_invalid$"):
+                        ctx.survivor_set(archive, case.row, roster)
+
+    def test_excluded_record_shape_and_member_codes_refuse_at_reader(self):
+        case = self.case()
+        original = case.read("derived/exclusions.json")
+        for value in (None, [{"run_id": "synthetic", "codes": []}],
+                      [{"run_id": "synthetic", "codes": [None]}]):
+            with self.subTest(value=value):
+                case.write("derived/exclusions.json", {**original, "members_excluded": value})
+                with self.assertRaisesRegex(AnalysisRefusal, "^exclusions_schema_invalid$"):
+                    ctx._excluded(case.handle())
+
+    def test_tripwire_catalog_bytes_must_match_authenticated_catalog_digest(self):
+        case = self.case()
+        path = Path(case.tmp.name) / "counterfactual-catalog.json"
+        path.write_bytes(ctx.CATALOG_PATH.read_bytes() + b" ")
+        with mock.patch.object(ctx, "CATALOG_PATH", path):
+            with self.assertRaisesRegex(AnalysisRefusal, "^exclusions_catalog_mismatch$"):
+                ctx._catalog(case.handle())
+
     def test_computed_survivors_equal_real_pinned_aggregation(self):
         case = self.case()
         archive = fx.original_handle(case.window)
@@ -58,7 +216,7 @@ class ContextTests(unittest.TestCase):
         self.assertEqual(ctx.roster_references(ctx.authenticated_roster(archive)), {})
         rebuilt = ctx.rebuilt_roster(archive, case.row)
         self.assertTrue(ctx.roster_references(rebuilt))
-        context = ctx.build_context(archive.window, archive, units, case.assessment, case.row)
+        context = ctx.build_context(archive, units, case.assessment, case.row, test_only_allow_synthetic_binding=True)
         self.assertEqual(dict(context.roster_references), ctx.roster_references(rebuilt))
         self.assertEqual(raw, archive.output_bytes("derived/roster.json"))
 
@@ -332,7 +490,7 @@ class ContextTests(unittest.TestCase):
         case = self.case()
         screen = case.read("derived/neg8-screen.json")
         screen["rescreen"]["survivors"].pop("reference_counts", None)
-        case.write("derived/neg8-screen.json", screen)
+        case.write_survivors(screen)
         self.assertTrue(case.build().survivor_bundle_ids)
         refs = ctx.roster_references(case.roster())
         screen["harvest_reference_losses"] = {next(iter(refs)): "member.timeout"}
@@ -391,7 +549,7 @@ class ContextTests(unittest.TestCase):
         screen = case.read("derived/neg8-screen.json")
         screen["rescreen"]["survivors"].update(reference_counts={"start": 3, "midpoint": 1, "end": 2},
             reference_losses=[{"bundle_id": target, "position": "end", "reason": "strict_invalid"}])
-        case.write("derived/neg8-screen.json", screen)
+        case.write_survivors(screen)
         archive, _units = case.inputs()
         result = ctx.survivor_set(archive, case.row, case.roster(archive))
         self.assertNotIn(target, result.bundle_ids)
@@ -411,7 +569,7 @@ class ContextTests(unittest.TestCase):
         case.rehash_basis()
         screen = case.read("derived/neg8-screen.json")
         screen["rescreen"]["survivors"]["reference_counts"] = {"start": 2, "midpoint": 1, "end": 3}
-        case.write("derived/neg8-screen.json", screen)
+        case.write_survivors(screen)
         archive, _units = case.inputs()
         result = ctx.survivor_set(archive, case.row, case.roster(archive))
         self.assertNotIn(target, result.bundle_ids)
@@ -424,7 +582,7 @@ class ContextTests(unittest.TestCase):
         screen = case.read("derived/neg8-screen.json")
         screen["harvest_reference_losses"] = {target: "member.timeout"}
         screen["rescreen"]["survivors"].update(reference_counts={"start": 3, "midpoint": 1, "end": 2}, reference_losses=[])
-        case.write("derived/neg8-screen.json", screen)
+        case.write_survivors(screen)
         archive, _units = case.inputs()
         result = ctx.survivor_set(archive, case.row, case.roster(archive))
         self.assertNotIn(target, result.bundle_ids)

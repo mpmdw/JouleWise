@@ -15,7 +15,7 @@ from joulewise.b5 import harvest
 from joulewise.campaign_provenance import load_authenticated_campaign_catalog
 from joulewise.neg8_survivors import neg8_reference_strict_invalid, neg8_reference_energy_unreadable
 from .archive import ArchiveHandle, _read
-from .context import checked_rebuilt_roster, read_output, roster_references
+from .context import checked_rebuilt_roster, read_output, read_screen_record, roster_references
 from .kept_units import _strict_json
 from .windows import AnalysisRefusal, freeze
 
@@ -219,11 +219,11 @@ def _replay_claim_sources(row, runs_root, *, archive, roster):
     paths = ww._manifest_bundle_paths(projected, runs_root)
     if paths is None or set(paths) != {item["bundle_id"] for item in basis["member_occurrences"]}:
         return SourcesReplay("evaluation_basis_projection_failed")
-    screen = read_output(archive, "derived/neg8-screen.json")
+    screen = read_screen_record(archive)
     harvested, losses = recompute_reference_losses(manifests, runs_root, roster, _flags(archive))
     if harvested != screen.get("harvest_reference_losses"):
         return SourcesReplay("sources_replay_losses_differ")
-    recorded = (screen.get("rescreen") or {}).get("survivors") or {}
+    recorded = screen["rescreen"]["survivors"]
     recorded_losses = recorded.get("reference_losses", [])
     if (not isinstance(recorded_losses, list) or any(not isinstance(item, Mapping)
             or not isinstance(item.get("bundle_id"), str) or not isinstance(item.get("reason"), str) for item in recorded_losses)
