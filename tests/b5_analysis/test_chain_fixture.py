@@ -416,11 +416,9 @@ class ChainTests(unittest.TestCase):
             staged['binding'].write_bytes(archive.output_bytes('derived/bracket-binding.json'))
             staged['ledger'].write_bytes(ledger_prefix(archive.source_bytes(LEDGER_COPY),
                 json.loads(archive.output_bytes(TERMINAL_PIN))))
-            type(self).mint_dir=Path(self.floor).parent
             shutil.copyfile(self.floor,staged['floor']);shutil.copyfile(self.sidecar,staged['sidecar'])
             # The floor is authenticated against its pinset beside it, as in the driver's mint/.
             shutil.copyfile(Path(self.floor).parent/'floor-mint-pinset.json',staged['floor'].parent/'floor-mint-pinset.json')
-            type(self).floor=staged['floor'];type(self).sidecar=staged['sidecar']
             prospective=custody/'inputs/gamma-pack/analysis_manifest_v3.json'
             stream=io.StringIO()
             with contextlib.redirect_stdout(stream),contextlib.redirect_stderr(stream):
@@ -454,13 +452,14 @@ class ChainTests(unittest.TestCase):
             self.assertIn(w.truncated,kept.removed_run_ids())
             self.assertFalse((w.claim/w.aborted/'summary_metrics.json').exists())
             self.assertEqual((w.claim/w.truncated/'summary_metrics.json').read_bytes(),b'{"status":')
-            pinset=json.loads((getattr(type(self),'mint_dir',self.floor.parent)/'floor-mint-pinset.json').read_bytes());args=['analyze-claims','--analysis-manifest',str(self.finalized),
+            pinset=json.loads((self.floor.parent/'floor-mint-pinset.json').read_bytes());args=['analyze-claims','--analysis-manifest',str(self.finalized),
                 '--runs-root',str(w.claim),'--floor-artifact',str(self.floor),'--neg8-harvest-archive',str(w.archive),
                 '--window-index',str(self.fixture.index)]
             for pack,producer in zip(('alpha','beta'),pinset['producer_plans'],strict=True):
                 root_id=producer['evidence_root_id']
                 args+=['--evidence-root',root_id+'='+str(self.fixture.windows[pack].claim)]
-            out=self.finalized.parent/'outputs'/'claim-verdicts.json';out.parent.mkdir(exist_ok=True)  # as driver step 9
+            # Outside the finalized manifest's directory, as driver step 9 writes it.
+            out=Path(tempfile.mkdtemp(prefix='claims-',dir=self.custody))/'claim-verdicts.json'
             args+=['--output',str(out)]
             stream=io.StringIO()
             with contextlib.redirect_stdout(stream),contextlib.redirect_stderr(stream):code=cli.main(args)

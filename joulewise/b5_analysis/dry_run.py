@@ -20,6 +20,9 @@ STEP_IDS = ('0', '1', '2', '3', '3b', '4', '5', '8', '6', '9', '9b', '10', '11')
 _TOKEN = re.compile(r'[A-Za-z][A-Za-z0-9_.]*')
 
 
+FINALIZATION = 'finalized'  # an admitted first path component of the record (see the validator)
+
+
 def refusal_token(text: str) -> str | None:
     """Parse the last error line, or a bare final output line, without detail."""
     lines = text.splitlines()
@@ -429,7 +432,7 @@ class RunState:
         if not path.absolute().is_relative_to(self.restricted.absolute()) or path.resolve() != path.absolute():
             raise AnalysisRefusal('custody_path_invalid')
         digest=_sha(path)
-        fixed=(role in ('pinset','mint_inputs','plan_alpha','plan_beta','finalized_manifest','rendered_fills','closeout','ratio_table')
+        fixed=(role in ('pinset','final_pinset','mint_inputs','plan_alpha','plan_beta','finalized_manifest','rendered_fills','closeout','ratio_table')
                or role.startswith('role_census_')
                or role.startswith(('rereduced_','gamma_pack_')) or path.parent.name=='disclosures')
         if not fixed and not path.name.startswith(digest):
@@ -618,17 +621,23 @@ class RunState:
         archive=self.archives['gamma'];window=self.windows['gamma']
         prefix='sources/repo/configs/campaigns/'+window.pack_id+'/'
         # Preserve the entire sealed pack, including referenced config fileself.
+        # Finalization owns one custody root that is also its output directory
+        # (the finalizer requires that), and the engine refuses a claim-verdict
+        # output inside the finalized manifest's directory: so finalization has
+        # its own subdirectory of restricted/, with every attachment staged in it.
         for name in archive.source_names():
             if name.startswith(prefix.removeprefix('sources/')):
                 source='sources/'+name
-                self.write('gamma_pack_'+name,'inputs/gamma-pack/'+name.removeprefix(prefix.removeprefix('sources/')),
+                self.write('gamma_pack_'+name,FINALIZATION+'/inputs/gamma-pack/'+name.removeprefix(prefix.removeprefix('sources/')),
                         raw=archive.source_bytes(source))
-        prospective=self.restricted/'inputs/gamma-pack/analysis_manifest_v3.json'
-        tree=self.restricted/'inputs/gamma-pack/plan_tree.json'
-        self.write('gamma_verdict','inputs/gamma-verdict.json',self.rows['gamma'])
-        self.write('gamma_binding','inputs/gamma-bracket-binding.json',raw=archive.output_bytes('derived/bracket-binding.json'))
-        self.write('gamma_ledger','inputs/gamma-ledger.jsonl',raw=ledger_prefix(archive.source_bytes(LEDGER_COPY),
+        self.write('gamma_verdict',FINALIZATION+'/inputs/gamma-verdict.json',self.rows['gamma'])
+        self.write('gamma_binding',FINALIZATION+'/inputs/gamma-bracket-binding.json',raw=archive.output_bytes('derived/bracket-binding.json'))
+        self.write('gamma_ledger',FINALIZATION+'/inputs/gamma-ledger.jsonl',raw=ledger_prefix(archive.source_bytes(LEDGER_COPY),
             json.loads(archive.output_bytes(TERMINAL_PIN))))
+        # The floor is authenticated against its pinset beside it.
+        self.write('final_floor',FINALIZATION+'/mint/aggregate-floor.json',raw=self.output('floor_artifact').read_bytes())
+        self.write('final_sidecar',FINALIZATION+'/mint/dominance-replay.json',raw=self.output('sidecar').read_bytes())
+        self.write('final_pinset',FINALIZATION+'/mint/'+self.output('pinset').name,raw=self.output('pinset').read_bytes())
         return 0
 
     def kept_bundles(self):
@@ -728,16 +737,16 @@ def step_8(s,r):
     staged=_internal_step(s,r,'8',s.prepare_finalization)
     if staged[0].status!='ok':return staged
     archive=s.archives['gamma'];window=s.windows['gamma']
-    prospective=s.restricted/'inputs/gamma-pack/analysis_manifest_v3.json'
-    tree=s.restricted/'inputs/gamma-pack/plan_tree.json'
-    directory=s.restricted
+    directory=s.restricted/FINALIZATION
+    prospective=directory/'inputs/gamma-pack/analysis_manifest_v3.json'
+    tree=directory/'inputs/gamma-pack/plan_tree.json'
     manifest=json.loads(prospective.read_bytes())
     output=directory/(manifest['manifest_id']+FINALIZED_BASENAME_SUFFIX)
     result,found,code,exit_status=s.invoke(r,main,['--window-index',s.index_path,'--prospective-manifest',prospective,
-        '--plan-tree',tree,'--custody-root',s.restricted,'--runs-root',window.claim_runs_root,
+        '--plan-tree',tree,'--custody-root',directory,'--runs-root',window.claim_runs_root,
         '--whole-window-verdict',s.output('gamma_verdict'),'--bracket-binding',s.output('gamma_binding'),
-        '--calibration-ledger',s.output('gamma_ledger'),'--aggregate-floor-artifact',s.output('floor_artifact'),
-        '--dominance-replay-sidecar',s.output('sidecar'),'--output-dir',directory],step='8',outputs=[('finalized_manifest',output)])
+        '--calibration-ledger',s.output('gamma_ledger'),'--aggregate-floor-artifact',s.output('final_floor'),
+        '--dominance-replay-sidecar',s.output('final_sidecar'),'--output-dir',directory],step='8',outputs=[('finalized_manifest',output)])
     if exit_status and not result.exception:
         try:
             message=json.loads(result.stdout_path.read_text().splitlines()[-1])
@@ -745,16 +754,18 @@ def step_8(s,r):
                 code=refusal_token(message['reason'])
         except (ValueError,TypeError,KeyError,IndexError):pass
     # Finalization also writes a content-addressed exclusions attachment.
-    for path in s.restricted.glob('analysed-attempt-exclusions-*.json'):
+    for path in directory.glob('analysed-attempt-exclusions-*.json'):
         s.register('finalized_exclusions',path)
     return [s.record('8',exit_status=exit_status,code=code,outputs=[s.outputs[k] for k in s.outputs if k not in before])]
 
 
 def step_6(s,r):
     from scripts.run_d165_closeout_from_custody import main
-    output=s.path('outputs/closeout.json');ratio=output.with_name(output.stem+'.ratio-table.json')
+    # The closeout resolves the manifest's attachments under the finalization
+    # custody root and writes its record under that root.
+    output=s.path(FINALIZATION+'/outputs/closeout.json');ratio=output.with_name(output.stem+'.ratio-table.json')
     result,outputs,code,exit_status=s.invoke(r,main,['--window-index',s.index_path,'--finalized-manifest',
-        s.output('finalized_manifest'),'--custody-root',s.restricted,'--output',output],step='6',
+        s.output('finalized_manifest'),'--custody-root',s.restricted/FINALIZATION,'--output',output],step='6',
         outputs=[('closeout',output),('ratio_table',ratio)])
     # This program emits a StepRecord JSON, not a bare refusal token.
     try:

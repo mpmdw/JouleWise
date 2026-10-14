@@ -312,10 +312,14 @@ class DriverDouble(d.StepRunner):
                 for pack in d.PACKS:s.write('kept_'+pack,'kept-units/'+pack+'.json',{'schema_version':'joulewise.b5_kept_units.v1','pack':pack,'cells':{'cell':{'n_r':1,'n_b':1}}})
                 return 0
             if name=='prepare_finalization':
-                for role,relative,value in (('gamma_pack_manifest','inputs/gamma-pack/analysis_manifest_v3.json',{'manifest_id':'am-'+'c'*64}),
-                        ('gamma_pack_tree','inputs/gamma-pack/plan_tree.json',{}),('gamma_verdict','inputs/gamma-verdict.json',{}),
-                        ('gamma_binding','inputs/gamma-binding.json',{}),('gamma_ledger','inputs/gamma-ledger.jsonl',{})):
+                for role,relative,value in (('gamma_pack_manifest','finalized/inputs/gamma-pack/analysis_manifest_v3.json',{'manifest_id':'am-'+'c'*64}),
+                        ('gamma_pack_tree','finalized/inputs/gamma-pack/plan_tree.json',{}),('gamma_verdict','finalized/inputs/gamma-verdict.json',{}),
+                        ('gamma_binding','finalized/inputs/gamma-binding.json',{}),('gamma_ledger','finalized/inputs/gamma-ledger.jsonl',{})):
                     s.write(role,relative,value)
+                for role,basename in (('final_floor','aggregate-floor.json'),('final_sidecar','dominance-replay.json'),
+                                  ('final_pinset','floor-mint-pinset.json')):
+                    s.write(role,'finalized/mint/'+basename,raw=s.output({'final_floor':'floor_artifact',
+                        'final_sidecar':'sidecar','final_pinset':'pinset'}[role]).read_bytes())
                 return 0
             if name=='prepare_brackets':
                 s.b_max=SimpleNamespace(T=1)
@@ -559,6 +563,26 @@ class DriverAcceptanceTests(unittest.TestCase):
             with self.assertRaisesRegex(AnalysisRefusal,'^step10_window_not_admitted_by_step4$'):
                 d.require_step10_admission(rec,projection,{'kept_units_binding':{'harvest_pin':'a'*40,'exclusions_sha256':'e'*64}})
 
+    def test_finalization_has_its_own_custody_root_and_claim_verdicts_lie_outside_it(self):
+        # The finalizer requires output_dir == custody_root; the engine refuses a
+        # claim-verdict output inside the finalized manifest's directory (S10).
+        DriverDouble.calls=[]
+        result=self.execute();self.assertEqual(result.code,0,result.stderr)
+        option=lambda argv,flag:Path(str(argv[argv.index(flag)+1]))
+        final=next(argv for step,_,argv in DriverDouble.calls if step=='8' and argv)
+        self.assertEqual(option(final,'--custody-root'),option(final,'--output-dir'))
+        self.assertEqual(option(final,'--custody-root').name,d.FINALIZATION)
+        for flag in ('--prospective-manifest','--plan-tree','--whole-window-verdict','--bracket-binding',
+                     '--calibration-ledger','--aggregate-floor-artifact','--dominance-replay-sidecar'):
+            self.assertTrue(option(final,flag).is_relative_to(option(final,'--custody-root')),flag)
+        claim=next(argv for step,_,argv in DriverDouble.calls if step=='9' and argv)
+        manifest=option(claim,'--analysis-manifest')
+        self.assertEqual(manifest.parent,option(final,'--output-dir'))
+        self.assertFalse(option(claim,'--output').is_relative_to(manifest.parent))
+        closeout=next(argv for step,_,argv in DriverDouble.calls if step=='6' and argv)
+        self.assertEqual(option(closeout,'--custody-root'),option(final,'--custody-root'))
+        self.assertTrue(option(closeout,'--output').is_relative_to(option(closeout,'--custody-root')))
+
     def test_T15_all_block5_script_argv_include_window_index(self):
         result=self.execute();self.assertEqual(result.code,0,result.stderr)
         for step,_,argv in DriverDouble.calls:
@@ -716,10 +740,11 @@ class JoinedArgumentTests(unittest.TestCase):
                         for path in (args.out, args.single_count_out, args.d165_replay_out)))
                 elif step == '8':
                     self.assertEqual(args.runs_root, Path(entries['gamma']['claim_runs_root']))
-                    self.assertEqual(args.prospective_manifest, restricted / 'inputs/gamma-pack/analysis_manifest_v3.json')
-                    self.assertEqual(args.plan_tree, restricted / 'inputs/gamma-pack/plan_tree.json')
-                    self.assertEqual(args.custody_root, restricted)
-                    self.assertEqual(args.output_dir, restricted)
+                    final = restricted / d.FINALIZATION
+                    self.assertEqual(args.prospective_manifest, final / 'inputs/gamma-pack/analysis_manifest_v3.json')
+                    self.assertEqual(args.plan_tree, final / 'inputs/gamma-pack/plan_tree.json')
+                    self.assertEqual(args.custody_root, final)
+                    self.assertEqual(args.output_dir, final)
                     self.assertTrue(args.prospective_manifest.is_file())
                     self.assertTrue(args.plan_tree.is_file())
                     for name in ('whole_window_verdict', 'bracket_binding', 'calibration_ledger',
@@ -727,10 +752,10 @@ class JoinedArgumentTests(unittest.TestCase):
                         self.assertTrue(getattr(args, name).is_file(), name)
                     for name, role in {'whole_window_verdict':'gamma_verdict',
                         'bracket_binding':'gamma_binding', 'calibration_ledger':'gamma_ledger',
-                        'aggregate_floor_artifact':'floor_artifact', 'dominance_replay_sidecar':'sidecar'}.items():
+                        'aggregate_floor_artifact':'final_floor', 'dominance_replay_sidecar':'final_sidecar'}.items():
                         self.assertEqual(getattr(args, name), state.output(role))
                 elif step == '6':
-                    self.assertEqual(args.custody_root, restricted)
+                    self.assertEqual(args.custody_root, restricted / d.FINALIZATION)
                     self.assertTrue(args.finalized_manifest.is_file())
                     self.assertEqual(args.finalized_manifest, state.output('finalized_manifest'))
                     self.assertEqual(args.output, state.output('closeout'))
