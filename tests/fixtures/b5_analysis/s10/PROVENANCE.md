@@ -14,6 +14,11 @@ No ALPHA rebuild or archive edit was made. This conflict requires a lead ruling.
 
 # S10 production-shaped synthetic windows
 
+Every class that restores these windows (`ChainTests`, the joined driver classes, the probes,
+the argument and partial-index censuses) skips unless `JW_B5_S10_REAL_PROGRAMS=1`: it restores
+about 8 GB and runs the real programs (C5 alone is about an hour; one joined driver run is
+several hours). The ordinary suite and CI therefore never run them.
+
 `chain_fixture()` restores the published archives once per process, exposes
 built packs in `.windows`, and raises `FileNotFoundError: window not built:
 <pack>` for missing packs. The chain module skips missing packs with exactly

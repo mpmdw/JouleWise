@@ -231,8 +231,18 @@ class ChainFixture:
         return frozenset(result)
 
 
+REAL_PROGRAMS_VARIABLE='JW_B5_S10_REAL_PROGRAMS'
+
+
 @lru_cache(maxsize=1)
 def chain_fixture() -> ChainFixture:
+    # With all three windows committed, every class that restores them runs the
+    # real programs for hours (one joined driver run is several hours) and
+    # restores about 8 GB. They run on request, never in the ordinary suite.
+    if os.environ.get(REAL_PROGRAMS_VARIABLE)!='1':
+        import unittest
+        raise unittest.SkipTest('S10 real-program chain: set '+REAL_PROGRAMS_VARIABLE+'=1 to run '
+            '(restores about 8 GB; one joined driver run takes hours)')
     cached=os.environ.get('JW_B5_S10_CHAIN_CACHE')
     if cached:
         root=Path(cached).resolve()
