@@ -2334,7 +2334,8 @@ class EmittedCodeTests(unittest.TestCase):
         from joulewise.flags.catalog import DRAFT_CODES
         from joulewise.flags.core import CORE_FLAG_CODES
         codes = json.loads(raw)["codes"]
-        emitted = set(h.CODES) | set(DRAFT_CODES) | set(CORE_FLAG_CODES)
+        # Block-6 core codes are classified in configs/b6/flag_catalog_b6.json, not the sealed catalog.
+        emitted = (set(h.CODES) | set(DRAFT_CODES) | set(CORE_FLAG_CODES)) - {"calibration.acceptance_preflight_unverified"}
         # Audit-fix batches 1 and 2's codes and the NEG-8 survivors codes (ruling
         # 2026-10-07) reach the design catalog through REG before the seal.
         self.assertEqual(emitted - set(codes) - h.AUDFIX1_CODES - h.AUDFIX2_CODES - h.NEG8_SURVIVOR_CODES,
