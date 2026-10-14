@@ -512,7 +512,8 @@ class RunState:
         return main
 
     def prepare_initial(self, argv):
-        from .windows import load_window_index, open_attempt_record, select_analysed_attempts
+        from .windows import (load_window_index, open_attempt_record, select_analysed_attempts,
+                              sealed_plan_tree_sha256)
         from .archive import open_archive
         from .bracket import require_ledger_copies_are_prefixes
         self.index = load_window_index(self.index_path,seal_pins=self.pins,pack_table=self.pack_table)
@@ -523,7 +524,13 @@ class RunState:
             tree = 'sources/repo/configs/campaigns/'+window.pack_id+'/plan_tree.json'
             # A test pack table authorizes synthetic ids only. Bind its archived
             # tree explicitly; sealed pack ids remain protected by open_archive.
-            tree_sha = _sha(window.archive_root/tree) if self.pack_table is not None else None
+            tree_sha = None
+            if self.pack_table is not None:
+                try:
+                    sealed_plan_tree_sha256(pack,window.pack_id,seal_pins=self.pins)
+                except AnalysisRefusal as exc:
+                    if exc.code!='window_index_pack_mismatch':raise
+                    tree_sha = _sha(window.archive_root/tree)
             archive = open_archive(window,seal_pins=self.pins,pack_table=self.pack_table,
                                    synthetic_plan_tree_sha256=tree_sha)
             self.archives[pack] = archive

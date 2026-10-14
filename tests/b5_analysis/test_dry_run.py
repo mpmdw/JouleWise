@@ -1,8 +1,4 @@
-"""Independent S10 primitives; full driver acceptance awaits a P9 ruling.
-
-These are deliberately not represented as complete T1--T18 driver tests.
-No expensive fixture is built by this module.
-"""
+"""S10 driver primitives, dispatch regression and real joined acceptance."""
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import hashlib
 import io
@@ -18,6 +14,96 @@ from joulewise.b5_analysis.windows import AnalysisRefusal
 from joulewise.b5_analysis.steps import step_record
 
 MARKER = '12.3457331'
+
+
+class JoinedRunTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from tests.b5_analysis.joined_s10 import cached_primary
+        cls.fixture, cls.harness, cls.result = cached_primary()
+        cls.addClassCleanup(cls.harness.remove_repository)
+
+    def rows(self, step):
+        self.assertIsNotNone(self.result.record, self.result.stderr)
+        rows = [row for row in self.result.record['steps'] if row['step'] == step]
+        self.assertTrue(rows, 'missing step ' + step)
+        return rows
+
+    def assert_ok(self, step):
+        for row in self.rows(step):
+            self.assertEqual(row['status'], 'ok', row)
+
+    def test_J1_reaches_step5_with_registered_p42_exit(self):
+        for step in ('0', '1', '2', '3', '3b', '4', '5'):
+            self.assert_ok(step)
+        self.assertEqual({row['window'] for row in self.rows('4')}, {'alpha', 'beta'})
+        for row in self.rows('4'):
+            self.assertEqual((row['exit_status'], row['registered_exit']),
+                             (1, 'p42_floor_cells_only'))
+
+    def test_J2_reaches_step9(self):
+        for step in ('5', '8', '6', '9'):
+            self.assert_ok(step)
+
+    def test_J3_closeout_openers_issuers_and_disclosures_are_ok(self):
+        for step in ('6', '9b', '10', '11'):
+            self.assert_ok(step)
+        self.assertEqual({row['window'] for row in self.rows('10')}, {'alpha', 'beta'})
+        self.assertTrue(self.result.disclosure_reads)
+
+    def test_J4_completed_without_tooling_refusal(self):
+        self.assertIs(self.result.record['completed_without_tooling_refusal'], True)
+        self.assertEqual(self.result.code, 0, self.result.stderr)
+
+    def test_J5_all_public_bytes_are_blind(self):
+        from tests.b5_analysis.joined_s10 import assert_public_bytes
+        assert_public_bytes(self, self.result, self.fixture.restricted_floats())
+
+
+class JoinedHarnessInfrastructureTests(unittest.TestCase):
+    def test_outer_capture_keeps_descriptor_writes_in_driver_streams(self):
+        from tests.b5_analysis.joined_s10 import capture_driver_streams
+        import sys
+        with capture_driver_streams() as streams:
+            print('python-out')
+            print('python-err', file=sys.stderr)
+            os.write(1, b'descriptor-out\n')
+            os.write(2, b'descriptor-err\n')
+        self.assertEqual(set(streams['stdout'].splitlines()), {'python-out', 'descriptor-out'})
+        self.assertEqual(set(streams['stderr'].splitlines()), {'python-err', 'descriptor-err'})
+
+    def test_outer_capture_restores_descriptors_after_exception(self):
+        from tests.b5_analysis.joined_s10 import capture_driver_streams
+        before = [os.fstat(fd) for fd in (1, 2)]
+        with self.assertRaisesRegex(RuntimeError, 'outer-capture'):
+            with capture_driver_streams():
+                raise RuntimeError('outer-capture')
+        self.assertEqual([os.fstat(fd) for fd in (1, 2)], before)
+
+    def test_public_byte_scan_rejects_alternate_float_notation_and_false_restricted_roots(self):
+        from tests.b5_analysis.joined_s10 import assert_public_bytes
+        with tempfile.TemporaryDirectory(prefix='s10-public-scan-') as temporary:
+            custody = Path(temporary).resolve()
+            directory = custody/'dry-run'
+            directory.mkdir()
+            path = directory/'B5-BLIND-DRY-RUN-RECORD.json'
+            path.write_text('{}')
+            result = SimpleNamespace(path=path, custody=custody, record={'steps':[]},
+                                     stdout='a'*64+'\n', stderr='step 0 - ok\n')
+            secret = directory/'restricted/log.txt'
+            secret.parent.mkdir()
+            secret.write_text(MARKER)
+            assert_public_bytes(self, result, {float(MARKER)})
+            for value in (MARKER, '.7331', '-.7331', '7331e-4'):
+                with self.subTest(value=value), self.assertRaises(AssertionError):
+                    result.stdout = value+'\n'
+                    assert_public_bytes(self, result, {float(MARKER)})
+            result.stdout = 'a'*64+'\n'
+            escaped = custody/'notes/restricted/leak.txt'
+            escaped.parent.mkdir(parents=True)
+            escaped.write_text(MARKER)
+            with self.assertRaises(AssertionError):
+                assert_public_bytes(self, result, {float(MARKER)})
 
 
 class DriverPrimitiveTests(unittest.TestCase):
@@ -525,6 +611,265 @@ class DriverAcceptanceTests(unittest.TestCase):
         path=result.path.parent/'restricted'/output['name']
         self.assertEqual(_hash(path),output['sha256']);self.assertIn(MARKER,path.read_text())
         self.assertNotIn(MARKER,result.stdout+result.stderr)
+
+
+class ArgumentCensusDouble(DriverDouble):
+    """Dispatch-only census: no assigned program's main is executed.
+
+    Keep the established double's output skeletons solely to let every real
+    driver dispatch construct its argv. Replace input locators with the public
+    chain index, including its explicitly provisional peers while incomplete.
+    """
+    fixture = None
+    census = []
+
+    def _initial(self, s):
+        from tests.b5_analysis.joined_s10 import chain_entries
+        super()._initial(s)
+        self.real_entries = chain_entries(self.fixture)
+        s.index_path = self.fixture.program_index
+        for pack, window in s.windows.items():
+            entry = self.real_entries[pack]
+            for field in ('claim_runs_root', 'archive_root', 'bound_runs_root', 'custody_root', 'measurement_root'):
+                setattr(window, field, Path(entry[field]))
+
+    def _kept(self, s):
+        super()._kept(s)
+        for pack, kept in s.kept.items():
+            # ALPHA's real member locator; future complete builds supply the
+            # corresponding public writer rows for BETA and GAMMA as well.
+            window = self.fixture.windows.get(pack)
+            if window is None:
+                run_id = 'unbuilt-member'
+            else:
+                exclusions = json.loads((window.archive/'derived/exclusions.json').read_bytes())
+                listed = {(cell['cell_id'], stratum, unit_id) for cell in exclusions['cells']
+                          for stratum, ids in cell['kept_units'].items() for unit_id in ids}
+                roster = json.loads((window.archive/'derived/roster.json').read_bytes())
+                run_id = next(member['run_id'] for member in roster['members']
+                    if any((unit['cell_id'], unit['stratum'], unit['unit_id']) in listed
+                           for unit in member.get('units', [])))
+            kept.kept_run_ids = lambda cid, run_id=run_id: frozenset({run_id})
+
+    def run(self, main, argv, **kwargs):
+        if not hasattr(main, '_operation'):
+            type(self).census.append((kwargs['step'], kwargs.get('window'), main, list(argv)))
+        result = super().run(main, argv, **kwargs)
+        type(self).last_state = self.state
+        return result
+
+
+class JoinedArgumentTests(unittest.TestCase):
+    setUpClass = classmethod(DriverAcceptanceTests.setUpClass.__func__)
+    setUp = DriverAcceptanceTests.setUp
+    execute = DriverAcceptanceTests.execute
+
+    def test_B2_every_real_dispatch_parses_and_uses_chain_input_roles(self):
+        from tests.b5_analysis.fixtures_s10 import chain_fixture
+        from tests.b5_analysis.joined_s10 import parse_program_argv, chain_entries
+        from scripts import produce_b5_disclosures as disclosures
+        ArgumentCensusDouble.fixture = chain_fixture()
+        ArgumentCensusDouble.census = []
+        result = self.execute(runner=ArgumentCensusDouble)
+        self.assertEqual(result.code, 0, result.stderr)
+        entries = chain_entries(ArgumentCensusDouble.fixture)
+        restricted = result.path.parent / 'restricted'
+        state = ArgumentCensusDouble.last_state
+        parsed = []
+        for step, pack, main, argv in ArgumentCensusDouble.census:
+            with self.subTest(step=step, pack=pack, program=main.__module__, argv=argv):
+                args = parse_program_argv(main, argv)
+                parsed.append((step, pack, main.__module__, args))
+                if hasattr(args, 'window_index'):
+                    self.assertEqual(Path(args.window_index), ArgumentCensusDouble.fixture.program_index)
+                if step in ('1', '2'):
+                    self.assertEqual(Path(args.path).parent, Path(entries[pack]['claim_runs_root']))
+                    if pack in ArgumentCensusDouble.fixture.windows:
+                        self.assertTrue(Path(args.path).is_dir())
+                    if step == '1':
+                        self.assertTrue(args.strict)
+                    else:
+                        self.assertEqual(Path(args.output), state.output('rereduced_'+pack+'_'+Path(args.path).name))
+                elif step == '4':
+                    self.assertEqual(args.pack, pack)
+                    self.assertTrue(args.hash_bundles)
+                    self.assertEqual(args.out.parent, restricted / 'mint')
+                elif step == '5' and hasattr(args, 'out_dir'):
+                    self.assertEqual(args.out_dir, restricted / 'mint')
+                    for producer in ('alpha', 'beta'):
+                        self.assertTrue(getattr(args, producer+'_report').is_file())
+                        self.assertEqual(getattr(args, producer+'_report'), state.output('extraction_'+producer))
+                    self.assertEqual(args.project_commit, state.commit)
+                elif step == '5':
+                    self.assertEqual(args.pinset, restricted / 'mint/floor-mint-pinset.json')
+                    self.assertEqual(args.v2_input_manifest, restricted / 'mint/floor-mint-inputs.json')
+                    self.assertEqual(args.project_tree_state, 'clean')
+                    self.assertTrue(args.pinset.is_file())
+                    self.assertTrue(args.v2_input_manifest.is_file())
+                    self.assertEqual(args.pinset_sha256, state.outputs['pinset']['sha256'])
+                    self.assertEqual(args.project_commit, state.commit)
+                    self.assertTrue(all(path.parent == args.pinset.parent
+                        for path in (args.out, args.single_count_out, args.d165_replay_out)))
+                elif step == '8':
+                    self.assertEqual(args.runs_root, Path(entries['gamma']['claim_runs_root']))
+                    self.assertEqual(args.prospective_manifest, restricted / 'inputs/gamma-pack/analysis_manifest_v3.json')
+                    self.assertEqual(args.plan_tree, restricted / 'inputs/gamma-pack/plan_tree.json')
+                    self.assertEqual(args.custody_root, restricted)
+                    self.assertEqual(args.output_dir, restricted)
+                    self.assertTrue(args.prospective_manifest.is_file())
+                    self.assertTrue(args.plan_tree.is_file())
+                    for name in ('whole_window_verdict', 'bracket_binding', 'calibration_ledger',
+                                 'aggregate_floor_artifact', 'dominance_replay_sidecar'):
+                        self.assertTrue(getattr(args, name).is_file(), name)
+                    for name, role in {'whole_window_verdict':'gamma_verdict',
+                        'bracket_binding':'gamma_binding', 'calibration_ledger':'gamma_ledger',
+                        'aggregate_floor_artifact':'floor_artifact', 'dominance_replay_sidecar':'sidecar'}.items():
+                        self.assertEqual(getattr(args, name), state.output(role))
+                elif step == '6':
+                    self.assertEqual(args.custody_root, restricted)
+                    self.assertTrue(args.finalized_manifest.is_file())
+                    self.assertEqual(args.finalized_manifest, state.output('finalized_manifest'))
+                    self.assertEqual(args.output, state.output('closeout'))
+                elif step == '9':
+                    self.assertEqual(Path(args.runs_root), Path(entries['gamma']['claim_runs_root']))
+                    self.assertEqual(Path(args.neg8_harvest_archive), Path(entries['gamma']['archive_root']))
+                    self.assertEqual({str(root) for root in args.evidence_roots.values()},
+                                     {entries[p]['claim_runs_root'] for p in ('alpha', 'beta')})
+                    self.assertTrue(Path(args.analysis_manifest).is_file())
+                    self.assertTrue(Path(args.floor_artifact).is_file())
+                    self.assertEqual(Path(args.analysis_manifest), state.output('finalized_manifest'))
+                    self.assertEqual(Path(args.floor_artifact), state.output('floor_artifact'))
+                elif step == '10':
+                    self.assertEqual(args.pack, pack)
+                    self.assertEqual(args.output.parent, restricted / 'outputs')
+                elif step == '11' and main is disclosures.main:
+                    self.assertEqual(args.custody, restricted)
+                    registry = json.loads(args.step_outputs.read_bytes())
+                    self.assertEqual(set(registry), set(disclosures.ROLES))
+                    self.assertTrue(all((restricted/item['path']).is_file() for item in registry.values()))
+                    self.assertEqual(args.step_outputs, state.output('step_outputs'))
+                    for role, item in registry.items():
+                        self.assertEqual(restricted/item['path'], state.output(role))
+                        self.assertEqual(item['sha256'], state.outputs[role]['sha256'])
+                elif step == '11' and hasattr(args, 'finalized_manifest'):
+                    self.assertEqual(args.custody_root, restricted)
+                    self.assertTrue(args.finalized_manifest.is_file())
+                    self.assertTrue(args.claim_verdicts.is_file())
+                    self.assertEqual(args.finalized_manifest, state.output('finalized_manifest'))
+                    self.assertEqual(args.claim_verdicts, state.output('claim_verdicts'))
+                elif step == '11':
+                    self.assertTrue((args.input or args.validate_rendered).is_file())
+                    self.assertEqual(args.input or args.validate_rendered,
+                                     state.output('fill_input' if args.input else 'rendered_fills'))
+        expected = {'joulewise.cli', 'scripts.extract_detection_floors', 'scripts.emit_floor_mint_pinset',
+            'scripts.mint_floor_artifact_generalized', 'scripts.finalize_analysis_manifest',
+            'scripts.run_d165_closeout_from_custody', 'scripts.issue_reported_energy',
+            'scripts.produce_b5_disclosures', 'scripts.build_results_fill_input', 'scripts.render_results_fills'}
+        self.assertEqual({module for _, _, module, _ in parsed}, expected)
+        self.assertEqual(len(parsed), 19)
+
+
+class JoinedHarnessMockTests(unittest.TestCase):
+    """S0 front-door census, including its missing GAMMA claim manifest.
+
+    This is a fixture-limitation assertion, not J1--J6 acceptance. Advancing
+    these old packs requires new producer inputs; no consumer check is stubbed.
+    """
+    @classmethod
+    def setUpClass(cls):
+        from tests.b5_analysis import fixtures as fx, fixtures_s3 as s3, fixtures_s3b as sb
+        from tests.b5_analysis.joined_s10 import JoinedHarness
+        cls.built = {pack:(sb.cached('BETA_STD') if pack == 'beta' else s3.cached(pack.upper()+'_STD'))
+                     for pack in d.PACKS}
+        rows = [window.entry_data for window in cls.built.values()]
+        beta = cls.built['beta'].entry_data
+        rows = [{**beta, 'attempt':n, 'entry_kind':'no_archive', 'archive_root':None,
+            'harvest_record_sha256':None, 'verdict':'NO_COLLECTION', 'claim_usable':False,
+            'record_citation':'synthetic-history.md:1'} for n in range(1, beta['attempt'])] + rows
+        cls.temporary = tempfile.TemporaryDirectory(prefix='s10-mock-index-')
+        cls.addClassCleanup(cls.temporary.cleanup)
+        index = Path(cls.temporary.name)/'index.json'
+        index.write_bytes(d._canonical({'schema':'joulewise.b5_window_index.v1', 'attempts':rows}))
+        cls.harness = JoinedHarness(index, windows=cls.built.values(), pack_table=fx.PACK_TABLE)
+        cls.addClassCleanup(cls.harness.close)
+        cls.result = cls.harness.execute()
+
+    def test_B1_s0_missing_gamma_manifest_is_the_first_stop(self):
+        self.assertEqual(self.result.record['steps'][0]['status'], 'ok', self.result.stderr)
+        stop = next(row for row in self.result.record['steps'] if row['status'] != 'ok')
+        self.assertEqual((stop['step'], stop['status'], stop['refusal']),
+                         ('1', 'tooling_refusal', 'archive_source_unauthenticated'))
+        state = self.result.state
+        missing = 'repo/configs/campaigns/'+state.windows['gamma'].pack_id+'/analysis_manifest_v3.json'
+        self.assertNotIn(missing, state.archives['gamma'].source_names())
+        self.assertEqual(set(state.kept), {'alpha', 'beta'})
+        self.assertFalse(any(call['step'] == '4' for call in self.result.calls))
+        self.assertTrue(all(row['status'] == 'not_run' for row in self.result.record['steps'][2:]))
+
+    def test_repository_anchor_and_observer_preserve_real_inputs(self):
+        from joulewise import paper_custody as custody
+        self.assertEqual(self.harness.git('show', self.harness.head+':'+custody._B5_WINDOW_INDEX_PATH).encode(),
+                         self.harness.index.read_bytes())
+        self.assertEqual((self.harness.repo/custody._SUPPLY_MAP_PATH).read_bytes(),
+                         (d.ROOT/custody._SUPPLY_MAP_PATH).read_bytes())
+        self.assertEqual(d.analysis_checkout(self.harness.repo), self.harness.head)
+        self.assertIsInstance(self.result.state, d.RunState)
+        self.assertTrue(self.result.calls)
+        self.assertTrue(all(isinstance(call['result'], d.RunnerResult) for call in self.result.calls))
+        self.assertFalse(self.result.disclosure_reads)
+
+    def test_only_git_seams_replay_registered_history_and_tracked_index(self):
+        from joulewise import paper_custody as custody, paper_reported_energy as energy, identity_pins
+        with self.harness.git_seams() as checkout:
+            self.assertEqual(checkout(self.harness.repo), self.harness.head)
+            energy._verify_gate_ordering(self.harness.repo)
+            self.assertEqual(identity_pins._mint_git_anchor(require_origin_main=True),
+                             (self.harness.repo, self.harness.head))
+            ctx = SimpleNamespace(repository=self.harness.repo, head=self.harness.head)
+            self.assertEqual(custody._tracked_window_index(ctx), self.harness.index)
+
+
+class JoinedPartialIndexTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from tests.b5_analysis.fixtures_s10 import chain_fixture
+        from tests.b5_analysis import fixtures as fx
+        from joulewise.b5_analysis.windows import sealed_pack_table
+        from tests.b5_analysis.joined_s10 import JoinedHarness, capture_driver_streams
+        cls.fixture = chain_fixture()
+        table = {pack:{**rows, **fx.PACK_TABLE[pack]} for pack, rows in sealed_pack_table().items()}
+        cls.harness = JoinedHarness(cls.fixture.program_index, pack_table=table)
+        cls.addClassCleanup(cls.harness.close)
+        if len(cls.fixture.windows) == 3:
+            # Keep the binding regression active after the join, without an
+            # additional full driver run. Only the real initial reader runs.
+            restricted = cls.harness.root/'binding-only/restricted'
+            restricted.mkdir(parents=True)
+            state = d.RunState('blind-dry-run', cls.harness.index, restricted, cls.harness.head,
+                pack_table=table, seal_pins=cls.harness.pins, repo_root=cls.harness.repo)
+            with capture_driver_streams() as streams:
+                records = d.step_0(state, d.StepRunner(restricted))
+            cls.result = SimpleNamespace(state=state, stderr=streams['stderr'], reader_failures=[],
+                                         record={'steps':[record.as_dict() for record in records]})
+        else:
+            cls.result = cls.harness.execute()
+
+    def test_B3_mixed_table_keeps_built_sealed_pack_binding(self):
+        state = self.result.state
+        self.assertIn('alpha', state.archives, self.result.stderr)
+        archive = state.archives['alpha']
+        self.assertEqual(archive.plan_tree_binding_kind, 'sealed')
+        archive.plan_tree_sha256()
+        self.assertTrue(any(row.check == 'plan_tree_binding:sealed' for row in archive.census()))
+        if len(self.fixture.windows) == 3:
+            self.assertTrue(all(row['status'] == 'ok' for row in self.result.record['steps']), self.result.stderr)
+        else:
+            first = next(row for row in self.result.record['steps'] if row['status'] != 'ok')
+            self.assertEqual(first['step'], '0')
+            self.assertNotEqual(first['refusal'], 'roster_plan_tree_not_sealed')
+            peer = state.windows['beta']
+            self.assertEqual(self.result.reader_failures, [dict(error='FileNotFoundError',
+                path=str(peer.archive_root/'sources/repo/configs/campaigns'/peer.pack_id/'plan_tree.json'))])
 
 
 class RealReaderDriverTests(unittest.TestCase):
