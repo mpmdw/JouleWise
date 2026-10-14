@@ -1,0 +1,7 @@
+Hand-written from field names, not recorded from a real service.
+diff --git a/gone.txt b/gone.txt
+deleted file mode 100644
+--- a/gone.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-old

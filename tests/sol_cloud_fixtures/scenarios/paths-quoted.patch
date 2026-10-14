@@ -1,0 +1,7 @@
+Hand-written from field names, not recorded from a real service.
+diff --git "a/space \303\251.txt" "b/space \303\251.txt"
+--- "a/space \303\251.txt"
++++ "b/space \303\251.txt"
+@@ -1 +1 @@
+-old
++new

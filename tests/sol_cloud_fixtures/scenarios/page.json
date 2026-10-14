@@ -1,0 +1,21 @@
+{
+  "note": "Hand-written from field names, not recorded from a real service.",
+  "exec": [
+    {
+      "stdout": "Created task_demo\n"
+    }
+  ],
+  "list": [
+    {
+      "stdout": "{\"tasks\": [], \"cursor\": \"page-two\"}"
+    },
+    {
+      "stdout": "{\"tasks\": [{\"id\": \"task_demo\", \"status\": \"ready\", \"url\": \"https://example.invalid/tasks/task_demo\"}], \"cursor\": null}"
+    }
+  ],
+  "diff": [
+    {
+      "stdout_file": "change.patch"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "note": "Hand-written from field names, not recorded from a real service.",
+  "exec": [
+    {
+      "stdout": "Created task_demo\n"
+    }
+  ],
+  "list": [
+    {
+      "stderr": "offline",
+      "rc": 1
+    }
+  ],
+  "diff": [
+    {
+      "stdout_file": "change.patch"
+    }
+  ]
+}

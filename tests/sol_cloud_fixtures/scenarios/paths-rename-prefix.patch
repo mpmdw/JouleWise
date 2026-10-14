@@ -1,0 +1,5 @@
+Hand-written from field names, not recorded from a real service.
+diff --git a/dir/old.txt b/dir/new.txt
+similarity index 100%
+rename from dir/old.txt
+rename to dir/new.txt
