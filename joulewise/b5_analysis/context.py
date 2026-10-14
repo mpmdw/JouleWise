@@ -354,6 +354,11 @@ def build_context(archive: ArchiveHandle, kept_units: KeptUnits,
         manifests = result.catalog_manifests
         def replay(candidate, runs_root):
             return replay_claim_sources(candidate, runs_root, archive=archive, roster=actual).problem
+    corpus = None
+    corpus_path = 'repo/configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json'
+    if corpus_path in archive.source_names():
+        corpus = archive.source_bytes('sources/' + corpus_path)
     return ww.ArchiveContext(neg8_harvest_archive=window.archive_root, window_bracket=assessment,
         governed_e3=window.governed_e3, removed_bundle_ids=removed, roster_references=roster_references(actual),
-        survivor_bundle_ids=survivors.bundle_ids, sources_replay=replay, catalog_manifests=manifests)
+        survivor_bundle_ids=survivors.bundle_ids, sources_replay=replay, catalog_manifests=manifests,
+        neg8_reference_corpus_bytes=corpus)

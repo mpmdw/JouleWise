@@ -135,6 +135,7 @@ class ArchiveContext:
     sources_replay: Callable[[Mapping[str, Any], Path], str | None] | None = None
     catalog_manifests: tuple[tuple[Mapping[str, Any], Mapping[str, Any]], ...] = ()
     sensitivity_bound_s: float | None = None
+    neg8_reference_corpus_bytes: bytes | None = None
 
     def __post_init__(self) -> None:
         bound = self.sensitivity_bound_s
@@ -153,6 +154,8 @@ class ArchiveContext:
         object.__setattr__(self, "roster_references", _archive_freeze(self.roster_references or {}))
         object.__setattr__(self, "window_bracket", _archive_freeze(self.window_bracket))
         object.__setattr__(self, "catalog_manifests", _archive_freeze(self.catalog_manifests))
+        if self.neg8_reference_corpus_bytes is not None:
+            object.__setattr__(self, "neg8_reference_corpus_bytes", bytes(self.neg8_reference_corpus_bytes))
 
 
 def archive_context_operative_bound_s(context: ArchiveContext) -> float | None:
@@ -434,7 +437,8 @@ def _archive_neg8_replay_reasons(row: Mapping[str, Any], core: Mapping[str, Any]
     if not isinstance(replay_bracket, Mapping):
         return reasons  # the allowance outcome already refuses; no fallback
     artifact = replay_bracket.get("drift_bound_artifact")
-    if not catalog and artifact is not None and not validate_neg8_drift_bound_artifact(artifact, require_corpus_identity=True):
+    if not catalog and artifact is not None and not validate_neg8_drift_bound_artifact(artifact,
+        reference_corpus_bytes=context.neg8_reference_corpus_bytes, require_corpus_identity=True):
         return {"whole_window_verdict_provenance_invalid"}
     screen = _archive_output_object(context, "derived/neg8-screen.json") or {}
     harvest_losses = screen.get("harvest_reference_losses", {})
@@ -961,6 +965,12 @@ class AuthenticatedConsumptionSession:
         self._allow_unissued_calibration_fixture = (
             _allow_unissued_calibration_fixture
         )
+        if self.calibration_ledger_snapshot is None and archive_context is not None:
+            # The authenticated context owns this window's archived bracket;
+            # a default session must not reopen the analysis checkout's ledger.
+            from joulewise.analysis_engine.inputs import archive_snapshot
+
+            self.calibration_ledger_snapshot = archive_snapshot(archive_context)
         if self.calibration_ledger_snapshot is None:
             acceptance = load_calibration_acceptance_bound()
             cutoff = (
@@ -1253,11 +1263,15 @@ class AuthenticatedConsumptionSession:
         # preparation path still runs, but none of its caches, bounds or
         # failures can enter another member's result. Clearing only the
         # removal set prevents recursion and preserves survivor handling.
-        for bundle_id in sorted(removed):
+        for bundle_id in sorted(removed & self.referenced_bundle_ids):
             path = bundle_paths.get(bundle_id, self.runs_root / bundle_id)
             member = AuthenticatedConsumptionSession(
                 self.runs_root, {bundle_id},
+                mode=self.mode,
+                consumption_semantics_id=self.consumption_semantics_id,
                 calibration_ledger_snapshot=self.calibration_ledger_snapshot,
+                calibration_bracket_binding=self.calibration_bracket_binding,
+                _allow_unissued_calibration_fixture=self._allow_unissued_calibration_fixture,
                 archive_context=replace(self.archive_context, removed_bundle_ids=frozenset()),
             )
             try:
@@ -1267,7 +1281,7 @@ class AuthenticatedConsumptionSession:
                     _read_json_object(path / "summary_metrics.json"), path
                 ):
                     member_reasons.add("whole_window_verdict_provenance_invalid")
-            except (BundleReadError, OSError, OverflowError, TypeError, ValueError):
+            except Exception:
                 member_reasons = {"whole_window_verdict_provenance_invalid"}
             self.removed_member_preparation.extend(
                 f"removed_member_preparation:{reason}:{bundle_id}"
@@ -7780,6 +7794,25 @@ def _whole_window_semantic_identity(row: Mapping[str, Any]) -> dict[str, Any]:
     return identity
 
 
+def _archive_verdict_rows(
+    rows: Sequence[Mapping[str, Any]], context: ArchiveContext
+) -> list[Mapping[str, Any]] | None:
+    """Select the stored writer row named by the authenticated harvest allowance."""
+    try:
+        record = _archive_output_object(context, NEG8_HARVEST_ALLOWANCE_RECORD)
+        if record is None or record.get("schema") != NEG8_HARVEST_ALLOWANCE_SCHEMA:
+            return None
+        verdict = record.get("verdict")
+        if not isinstance(verdict, Mapping) or not _sha256_text(verdict.get("row_sha256")):
+            return None
+        selected = [row for row in rows if canonical_sha256(row) == verdict["row_sha256"]]
+    except (OSError, UnicodeDecodeError, TypeError, ValueError):
+        return None
+    if not selected or any(row != selected[0] for row in selected[1:]):
+        return None
+    return selected
+
+
 def whole_window_refusal_reasons(
     runs_root: Path,
     referenced_bundle_ids: set[str],
@@ -7802,6 +7835,7 @@ def whole_window_refusal_reasons(
         "adapter_continuity_evidence_missing",
         "cpu_admission_core_missing",
     )
+    context = _archive_context_or_none(getattr(consumption_session, "archive_context", None))
     if consumption_semantics_id is not None and consumption_semantics_id not in {
         MINTED_CONSUMPTION_SEMANTICS_ID,
         MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
@@ -7838,7 +7872,7 @@ def whole_window_refusal_reasons(
             encoding="utf-8",
         ).splitlines()
     except (OSError, UnicodeDecodeError):
-        return missing
+        return ("whole_window_verdict_provenance_invalid",) if context is not None else missing
     verdict_rows: list[Mapping[str, Any]] = []
     history_malformed = False
     for line in lines:
@@ -7860,10 +7894,15 @@ def whole_window_refusal_reasons(
         ids = {
             item for item in bundle_ids or [] if isinstance(item, str)
         } if isinstance(bundle_ids, list) else set()
-        if not ids.intersection(referenced_bundle_ids):
+        if context is None and not ids.intersection(referenced_bundle_ids):
             continue
         verdict_rows.append(row)
-    if consumption_semantics_id is None:
+    if context is not None:
+        selected = _archive_verdict_rows(verdict_rows, context)
+        if selected is None:
+            return ("whole_window_verdict_provenance_invalid",)
+        verdict_rows = selected
+    elif consumption_semantics_id is None:
         verdict_rows = [
             row
             for row in verdict_rows
@@ -7911,7 +7950,7 @@ def whole_window_refusal_reasons(
         if _row_consumption_semantics_id(row)
         == MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
     ]
-    if widened_rows:
+    if widened_rows and context is None:
         # Semantic dispatch is explicit.  A max-bracket row supersedes no
         # mint-time history; it is selected because the consumer requests
         # these semantics, independent of append order.
@@ -8240,7 +8279,12 @@ def whole_window_drift_allowances(
         ]
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return WholeWindowDriftAllowanceResult("absent", {})
-    if consumption_semantics_id is None:
+    if context is not None:
+        selected = _archive_verdict_rows(rows, context)
+        if selected is None:
+            return WholeWindowDriftAllowanceResult("absent", {})
+        rows = selected
+    elif consumption_semantics_id is None:
         rows = [
             row
             for row in rows
@@ -8303,6 +8347,8 @@ def whole_window_drift_allowances(
         if _row_consumption_semantics_id(row)
         == MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
     ]
+    if context is not None:
+        semantic_rows = []
     candidates: list[Mapping[str, Any]] = []
     for row in (
         semantic_rows

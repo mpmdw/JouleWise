@@ -496,6 +496,9 @@ class IndexedCompositionTests(unittest.TestCase):
              mock.patch.object(issuer,'AuthenticatedConsumptionSession',side_effect=session), \
              mock.patch.object(issuer,'BundleReader') as reader,self.assertRaises(AnalysisRefusal) as cm:
             f.issue_indexed_reported(p)
-        self.assertEqual(cm.exception.code,'whole_window_verdict_provenance_invalid')
-        self.assertEqual(sessions[0].refusal_reasons,());self.assertFalse(sessions[0].ready)
+        # Since stage S10 the session selects the archive-named stored row and
+        # reaches preparation, which refuses the mock bundles' capture pipeline;
+        # the session is still unready before the issuer reads any member.
+        self.assertEqual(cm.exception.code,'capture_pipeline_superseded')
+        self.assertEqual(sessions[0].refusal_reasons,('capture_pipeline_superseded',));self.assertFalse(sessions[0].ready)
         reader.assert_not_called()

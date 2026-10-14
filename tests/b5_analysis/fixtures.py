@@ -655,7 +655,8 @@ def _relocate_archive(archive, old_root, new_root, *, include_sidecars=False, kn
                 bind(value["content_id"], result["content_id"])
             # Recognize actual self-hashes by their original payload, rather
             # than overwriting arbitrary fields called sha256.
-            for key in ("sha256", "binding_digest"):
+            for key in (("sha256", "binding_digest", "derivation_sha256")
+                        if include_sidecars else ("sha256", "binding_digest")):
                 if key in value:
                     payload = {k: v for k, v in value.items() if k != key}
                     if value[key] == cl.canonical_sha256(payload):
@@ -700,6 +701,34 @@ def _relocate_archive(archive, old_root, new_root, *, include_sidecars=False, kn
     # JSONL records without a locator or a changed digest retain exact bytes.
     originals = {path: path.read_bytes() for path in archive.rglob("*")
                  if path.is_file() and path != ledger and path.suffix in (".json", ".jsonl")}
+    membership_bindings = []
+    bundle_bindings = []
+    if include_sidecars:
+        from types import SimpleNamespace
+        from joulewise.whole_window import hazard_window_membership_id, _bundle_evidence_sha256
+        for metadata in archive.joinpath('sources').rglob('metadata.json'):
+            directory = metadata.parent
+            if directory.parent.name not in ('runs_bound', 'bound-runs'):
+                continue
+            inventory = {p.relative_to(directory).as_posix(): sha(p)
+                         for p in sorted(directory.rglob('*')) if p.is_file()}
+            original_id = _bundle_evidence_sha256(directory)
+            if original_id == cl.canonical_sha256(inventory):
+                bundle_bindings.append((original_id, inventory))
+        for path, raw in originals.items():
+            if path.name != "whole-window-verdict.json":
+                continue
+            value = json.loads(raw)
+            membership = value.get("window_membership") or {}
+            descriptors = (value.get("row_provenance") or {}).get("source_campaign_manifests") or []
+            paths = [path.parent / item["path"] for item in descriptors]
+            if paths and all(source in originals for source in paths):
+                records = [SimpleNamespace(path=source, raw_bytes=originals[source]) for source in paths]
+                original_id = membership.get("membership_id")
+                # Authenticate the old self-binding before relocating it. The
+                # owner hashes relative paths, file digests and byte sizes.
+                if original_id == hazard_window_membership_id(path.parent, records):
+                    membership_bindings.append((original_id, path.parent, paths))
     sidecars = ({path: path.read_bytes() for path in archive.rglob("*.sha256") if path.is_file()}
                 if include_sidecars else {})
     sources = archive / "sources"
@@ -741,6 +770,12 @@ def _relocate_archive(archive, old_root, new_root, *, include_sidecars=False, kn
         # changed byte hashes must reach ledger content ids and receipt chains
         # after the primary JSON dependencies have settled.
         relocate_ledger()
+        for original_id, inventory in bundle_bindings:
+            bind(original_id, cl.canonical_sha256({name: digests.get(digest, digest)
+                                                  for name, digest in inventory.items()}))
+        for original_id, root, paths in membership_bindings:
+            records = [SimpleNamespace(path=source, raw_bytes=source.read_bytes()) for source in paths]
+            bind(original_id, hazard_window_membership_id(root, records))
         sums = b"".join(digests.get(line[:64].decode(), line[:64].decode()).encode() + line[64:]
                         for line in original_sums.splitlines(keepends=True))
         sums_path.write_bytes(sums)

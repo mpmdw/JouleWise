@@ -919,7 +919,7 @@ class GovernedTests(unittest.TestCase):
     def test_governed_real_session_records_mock_dispatch_limit(self):
         _fixture, entry = governed_case()
         with registered({str(entry.window.claim_runs_root.resolve()): entry}), s2.capture_adapter(), \
-             self.assertRaisesRegex(core.MintError, "authenticated whole-window consumption refused: whole_window_neg8_verdict_missing"):
+            self.assertRaisesRegex(core.MintError, "authenticated whole-window consumption refused: adapter_continuity_record_mismatch"):
             core._authenticated_consumption_summaries(entry.window.claim_runs_root, core._producer_bundle_ids(entry),
                 entry.verdict_row["evaluation_basis"]["sha256"], target_bundle_ids=core._producer_bundle_ids(entry),
                 consumption_semantics_id=ww.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID, calibration_ledger_snapshot=entry.ledger_snapshot)

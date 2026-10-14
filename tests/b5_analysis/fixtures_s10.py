@@ -41,6 +41,7 @@ SEAMS=(
     ('producer','historical calibration custody visibility','The immutable synthetic cutoff prefix has historical locators. During production only, these are absent observations; current and previously built synthetic windows retain real calibration primary files'),
     ('producer','Seams.group_alive / Seams.boot_session_uuid','Synthetic collection has no real chain process or boot observation'),
     ('producer','write_monitor_journals / write_cooldown','Synthetic hardware publishes complete monitor observations and hash-bound raw cooldown records; all joins are real'),
+    ('producer','whole_window.REGISTERED_NEG8_REFERENCE_CORPUS_DIR','The pinned export resolves the exact sealed synthetic measurement corpus; corpus identity and bound arithmetic are still validated from its bytes'),
     ('consumer','windows.sealed_pack_table (partial builds only)','Pinned S0 peers satisfy the full-block selection fence until every S10 window exists; only the built sealed S10 target is opened'),
     ('consumer','mint_floor_artifact_generalized._actual_v2_git_state','The task forbids commits and intentionally leaves an uncommitted fixture; supply the actual base HEAD as the synthetic clean checkout observation'),
 )
@@ -392,6 +393,7 @@ def build_export(pack,destination):
         print('FIRST_MEMBER_COST_S',seed_results[0][1],flush=True)
     else:
         for n,job in enumerate(jobs):
+            m=members[n]
             runs,config,member_base,*_=job
             key=json.dumps([config['model']['name'],config['workload_profile'],config['sampling']],sort_keys=True)
             if key not in templates:
@@ -480,9 +482,18 @@ def build_export(pack,destination):
             row['preceding_campaign_cooldown']=write_cooldown(runs,row['run_id'],'s10-'+pack)
         token=rc.acquire_campaign_lock(runs)
         try:
-            rc.write_campaign_provenance(runs/'campaign_manifests/s10.json',{
-                'schema_version':'joulewise.campaign_provenance.v2','session_id':'s10-'+pack,
-                'analysis_manifest_id':None,'campaign_policy':policy,'members':provenance_rows})
+            # A floor spec addresses complete science campaigns. NEG8 endpoint
+            # launches are a separate reference campaign, as in production;
+            # grouping them with science fabricates omitted-spec members.
+            science_ids={member['run_id'] for member in science}
+            groups=([('s10.json',[row for row in provenance_rows if row['run_id'] in science_ids]),
+                     ('s10-neg8.json',[row for row in provenance_rows if row['run_id'] not in science_ids])]
+                    if runs==w.claim else [('s10.json',provenance_rows)])
+            for filename,campaign_rows in groups:
+                if campaign_rows:
+                    rc.write_campaign_provenance(runs/'campaign_manifests'/filename,{
+                        'schema_version':'joulewise.campaign_provenance.v2','session_id':'s10-'+pack,
+                        'analysis_manifest_id':None,'campaign_policy':policy,'members':campaign_rows})
         finally:rc.release_campaign_lock(token)
     # A physically invalid corpus member forces the real survivor re-screen.
     # The driver records the collected subset before the real mint.
@@ -504,7 +515,6 @@ def build_export(pack,destination):
     writer_args=['--whole-window-verdict','--whole-window-verdict-output',str(w.claim/'whole-window-verdict.json'),
         '--runs-dir',str(w.claim),'--campaign-policy',str(w.measurement/hb.POLICY),
         '--log',str(w.claim/'campaign_log.jsonl'),
-        '--consumption-semantics-id',ww.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
         '--neg8-drift-bound',str(w.bound/'neg8-drift-bound.json'),'--calibration-ledger',str(w.ledger),'--head-pin',str(w.pin),
         '--bracket-binding',str(binding_path)]
     # A git-archive export cannot contain a newly committed synthetic pin.
@@ -513,7 +523,8 @@ def build_export(pack,destination):
     def window_custody(observations,repo_root,*,mode='issuing'):
         return original_custody([o for o in observations if o.sequence>cutoff['sequence']],repo_root,mode=mode)
     with mock.patch.object(ledger,'_committed_pin_bytes',side_effect=lambda path,repo_root:Path(path).read_bytes()), \
-         mock.patch.object(ledger,'_custody_reasons',side_effect=window_custody):
+         mock.patch.object(ledger,'_custody_reasons',side_effect=window_custody), \
+         mock.patch.object(ww,'REGISTERED_NEG8_REFERENCE_CORPUS_DIR',new=corpus.parent):
         writer_exit=rc.main(writer_args)
     row=json.loads((w.claim/'whole-window-verdict.json').read_bytes())
     def checkout():
@@ -530,7 +541,8 @@ def build_export(pack,destination):
     def visible_custody(path,*args,**kwargs):
         if not any(Path(path).is_relative_to(r) for r in visible_roots):return 'absent'
         return original_state(path,*args,**kwargs)
-    with mock.patch.object(ledger,'_custody_state',side_effect=visible_custody):
+    with mock.patch.object(ledger,'_custody_state',side_effect=visible_custody), \
+         mock.patch.object(ww,'REGISTERED_NEG8_REFERENCE_CORPUS_DIR',new=corpus.parent):
         record=w.harvest(seams=seams,prepare_desk=False,run_g3=False)
     entry={'pack':pack,'pack_id':PACK_IDS[pack],'attempt':attempt,'plan_id':attempt_id,
         't0_epoch_s':night_plan['t0_epoch_s'],'seal':'second','entry_kind':'harvested',

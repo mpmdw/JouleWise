@@ -136,6 +136,7 @@ class ChainTests(unittest.TestCase):
         with self.timed('C3',pack):
             archive,kept,bracket,context=self.composition(pack)
             self.assertEqual(w.writer_row['status'],'failed')
+            self.assertEqual(ww._row_consumption_semantics_id(w.writer_row),ww.MINTED_CONSUMPTION_SEMANTICS_ID)
             self.assertIn(w.aborted,context.removed_bundle_ids)
             self.assertNotIn(w.aborted,w.writer_row['bundle_ids'])
             self.assertIn(w.aborted,{row['bundle_id'] for row in w.writer_row['excluded_bundles']})
@@ -152,26 +153,37 @@ class ChainTests(unittest.TestCase):
                 history=self.custody/'previous-extractions';history.mkdir(exist_ok=True)
                 out.rename(history/(pack+'-'+str(time.monotonic_ns())+'.json'))
             stream=io.StringIO()
+            sessions=[]
             # Observe the real program's returned context so later chain
             # steps reuse that exact composition without another replay.
             def observed(code,offset,result):
                 frame=inspect.currentframe().f_back;args=frame.f_locals
                 if isinstance(result,ww.ArchiveContext) and args['archive'].window.pack==pack:
-                    self.kept_cache[pack]=(args['archive'],args['kept'])
-                    self.cache[pack]=(args['archive'],args['kept'],args['bracket'],result)
+                    self.kept_cache[pack]=(args['archive'],args['kept_units'])
+                    self.cache[pack]=(args['archive'],args['kept_units'],args['window_bracket'],result)
+                session=args.get('self')
+                if (isinstance(session,ww.AuthenticatedConsumptionSession)
+                    and session.runs_root==w.claim and len(session.referenced_bundle_ids)>1):
+                    sessions.append({'ready':session.ready,'reasons':list(session.refusal_reasons),
+                        'context':session.archive_context is not None,
+                        'removed_member_preparation':list(session.removed_member_preparation)})
             tool=next(i for i in range(6) if sys.monitoring.get_tool(i) is None)
             event=sys.monitoring.events.PY_RETURN;source=build_context.__code__
             sys.monitoring.use_tool_id(tool,'s10-readonly-context-observer')
             sys.monitoring.register_callback(tool,event,observed)
             sys.monitoring.set_local_events(tool,source,event)
+            preparation=ww.AuthenticatedConsumptionSession._prepare.__code__
+            sys.monitoring.set_local_events(tool,preparation,event)
             try:
                 with contextlib.redirect_stdout(stream),contextlib.redirect_stderr(stream):
                     code=extract.main(['--window-index',str(self.fixture.program_index),'--pack',pack,
                         '--out',str(out),'--hash-bundles'])
             finally:
                 sys.monitoring.set_local_events(tool,source,0)
+                sys.monitoring.set_local_events(tool,preparation,0)
                 sys.monitoring.register_callback(tool,event,None)
                 sys.monitoring.free_tool_id(tool)
+                self.evidence.append({'step':'C4 real sessions','pack':pack,'sessions':sessions})
             self.assertEqual(code,1,stream.getvalue())
             self.assertTrue(out.is_file(),stream.getvalue())
             report=json.loads(out.read_bytes())
@@ -179,6 +191,8 @@ class ChainTests(unittest.TestCase):
             spec=json.loads((ROOT/'configs/campaigns'/PACK_IDS[pack]/'extraction_spec.json').read_bytes())
             self.assertEqual(classify_step4_exit(code,report,spec),'p42_floor_cells_only',
                 json.dumps({c['cell_id']:c['refusal_reasons'] for c in report['cells']}))
+            self.assertTrue(sessions)
+            self.assertTrue(all(s['ready'] and s['context'] for s in sessions),sessions)
             bound=self.composition(pack)[2].b_fiducial_s
             self.assertTrue(report['consumption_provenance'])
             for bid,provenance in report['consumption_provenance'].items():
@@ -397,6 +411,40 @@ class ChainTests(unittest.TestCase):
         self.assertIn(w.truncated,context.removed_bundle_ids)
         self.assertEqual(bracket.evaluation['status'],'passed')
     def test_40_c4_alpha(self):self.check_c4('alpha')
+    def test_34_relocated_allowance_artifact_authenticates(self):
+        w=self.window('alpha')
+        context=self.composition('alpha')[3]
+        outcome=ww._neg8_screen_outcome(w.writer_row,context=context)
+        self.assertTrue(outcome.passed,outcome.problem)
+        self.assertEqual(outcome.source,'survivor_rescreen')
+        self.assertEqual(ww._hazard_membership_replay_reasons(w.writer_row,w.claim,
+            w.writer_row['campaign_policy']['sha256']),set())
+    def test_35_stored_bound_uses_archived_corpus_identity(self):
+        w=self.window('alpha')
+        context=self.composition('alpha')[3]
+        artifact=w.writer_row['idle_admission_core']['neg8_bracket']['drift_bound_artifact']
+        self.assertTrue(ww.validate_neg8_drift_bound_artifact(artifact,
+            reference_corpus_bytes=getattr(context,'neg8_reference_corpus_bytes',None),
+            require_corpus_identity=True))
+    def test_36_reference_campaigns_are_separate_from_floor_campaigns(self):
+        w=self.window('alpha')
+        from joulewise.analysis_engine.inputs import campaign_cooldown_evidence
+        cooldowns=campaign_cooldown_evidence(w.claim,None)
+        spec=json.loads((ROOT/'configs/campaigns'/PACK_IDS['alpha']/'extraction_spec.json').read_bytes())
+        referenced=set()
+        for cell in spec['cells']:
+            if cell['kind']=='absolute':
+                referenced.update(member['bundle_id'] for member in cell['members'])
+            else:
+                referenced.update(bid for block in cell['blocks'] for bid in block['members'].values())
+        campaigns={}
+        for bid,cooldown in cooldowns.items():
+            self.assertTrue(cooldown.get('manifest'),bid)
+            campaigns.setdefault(cooldown['manifest'],set()).add(bid)
+        addressed=[ids for ids in campaigns.values() if ids & referenced]
+        self.assertTrue(addressed)
+        for ids in addressed:
+            self.assertLessEqual(ids,referenced)
     def test_41_c4_beta(self):self.check_c4('beta')
     def test_42_b1_beta(self):self.check_b1()
     def test_50_c5_mint(self):self.check_c5()

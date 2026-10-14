@@ -142,6 +142,54 @@ class RemovedMemberPreparationTests(unittest.TestCase):
                       session.removed_member_preparation)
         self.assertIsNone(session.summary_for("removed"))
 
+    def test_p7_shape_exceptions_are_disclosed_once(self):
+        for error in (KeyError("summary shape"), AttributeError("summary shape")):
+            with self.subTest(error=type(error).__name__):
+                snapshot = CalibrationLedgerSnapshot(LEDGER_SCHEMA, self.root / "ledger", 0, "0" * 64, (), (), ())
+                session = ww.AuthenticatedConsumptionSession(self.root, set(self.paths),
+                    calibration_ledger_snapshot=snapshot, archive_context=self.context)
+                session._archive_context = replace(self.context, removed_bundle_ids=frozenset({"removed"}),
+                    survivor_bundle_ids=frozenset())
+                with mock.patch.object(ww, "capture_pipeline_refusal", return_value=None), \
+                     mock.patch.object(ww, "_current_strict_summary", side_effect=lambda summary, path:
+                         (_ for _ in ()).throw(error) if path.name == "removed" else False):
+                    session._prepare(bundle_paths=self.paths, policy=SimpleNamespace(calibration_bracketing=object()))
+                self.assertTrue(session.ready, session.refusal_reasons)
+                self.assertEqual(session.removed_member_preparation,
+                    ["removed_member_preparation:whole_window_verdict_provenance_invalid:removed"])
+
+    def test_p8_sound_removed_member_has_no_disclosure_and_inherits_settings(self):
+        # Minimal sound preparation payload; instrument and strict checks are
+        # explicit doubles in this isolated audit test, as in P1-P7.
+        (self.paths["removed"] / "summary_metrics.json").write_text(json.dumps({
+            "status": "succeeded", "energy_anchor_shift_envelopes": {}}))
+        snapshot = CalibrationLedgerSnapshot(LEDGER_SCHEMA, self.root / "ledger", 0, "0" * 64, (), (), ())
+        binding = {"synthetic": "parent binding"}
+        ctx = replace(self.context, removed_bundle_ids=frozenset({"removed", "unreferenced"}),
+            survivor_bundle_ids=frozenset())
+        session = ww.AuthenticatedConsumptionSession(self.root, set(self.paths), mode="read_replay",
+            calibration_ledger_snapshot=snapshot, calibration_bracket_binding=binding,
+            _allow_unissued_calibration_fixture=True, archive_context=ctx)
+        original = ww.AuthenticatedConsumptionSession.__init__
+        children = []
+        def child_init(child, *args, **kwargs):
+            original(child, *args, **kwargs)
+            children.append(child)
+        with mock.patch.object(ww.AuthenticatedConsumptionSession, "__init__", new=child_init), \
+             mock.patch.object(ww, "capture_pipeline_refusal", return_value=None), \
+             mock.patch.object(ww, "_current_strict_summary", side_effect=lambda summary, path: path.name == "removed"), \
+             mock.patch.object(ww, "_verify_instrument_calibration", return_value=(.91331, None)), \
+             mock.patch.object(ww, "_classify_precheck_refusals", return_value=(set(), {})):
+            session._prepare(bundle_paths=self.paths, policy=SimpleNamespace(calibration_bracketing=object()))
+        self.assertTrue(session.ready, session.refusal_reasons)
+        self.assertEqual(session.removed_member_preparation, [])
+        self.assertEqual(len(children), 1)
+        self.assertEqual(children[0].referenced_bundle_ids, frozenset({"removed"}))
+        self.assertEqual(children[0].mode, session.mode)
+        self.assertEqual(children[0].consumption_semantics_id, session.consumption_semantics_id)
+        self.assertIs(children[0].calibration_bracket_binding, binding)
+        self.assertTrue(children[0]._allow_unissued_calibration_fixture)
+
 
 if __name__ == "__main__":
     unittest.main()
