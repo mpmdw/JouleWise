@@ -506,3 +506,29 @@ on the records worktree the `seal2-*-window.md` records, `alpha-a1-consult.md`, 
 summaries. Not opened: anything under `/Users/edr/night-custody/v5-b5-*`, `/Users/edr/night-b5/`,
 `/Users/edr/night-g2a/`, `/Users/edr/night-archive/harvest-v5-b5-*`, any runs root under
 `/Users/edr/night-custody/measurement/`, any pull request body.
+
+## 13. Changes after Ed's objections and the three-model check (03:26 PDT 2026-10-14, before any block-5 number is seen)
+
+Ed's objections (02:30 to 02:50): re-staging every fixed failure is silly once the cure is evidenced; a forced sleep cannot be undone unattended (waking needs root `pmset schedule wake`) and only re-proves a detector already proven on BETA a4; a "write the expected result before every check" ground rule is heavy-handed. Then Fable 5.1, Sol 6.1 and Opus 5.5 each answered the design questions blind and reviewed this plan (`/Users/edr/night-archive/block6-check/SYNTHESIS.md`). All three reached, unprompted, the plan's answers on the cause of block 5's losses, the pre-session check, pause instead of stop, and network time; all three chose 10 units, target 3 / minimum 2, interleaved rounds. Decisions (orchestrator):
+
+**Science (fixed now, blind):**
+1. **Replication needs the sign.** A GAMMA contrast is "replicated" only if every counting block-6 session gives the same outcome word AND the same sign of dbar as block 5 (plan 7.2: direction is the sign of dbar). All three found this.
+2. **Exclusion levels come from a formula on non-claim data, never from block 5's results.** The level at which a flag excludes a run (contention, waiting admission, any other) is the level at which the added energy reaches one quarter of the smallest floor the paper prints, its watts measured on the quiet machine (tests M4, M5, M14). Block 5's unblinded sensitivity line is not consulted for any block-6 level; the threshold note's suggestion to read it first (3.3, section 5 item 2) is withdrawn.
+3. **The single-step reconstruction estimator is declared now as a labelled diagnostic** for both blocks (F5: it cut the rehearsal's prefill scatter 4.6 times). It is printed beside estimator 1 and replaces nothing; the independent recompute computes it.
+4. **The between-session summary is simplified:** per printed quantity, each counting session's value, their mean and their standard deviation across sessions. The ratio to a half-width is dropped (undefined for floors, and at four sessions it ranges 0.12 to 0.78 by chance alone).
+5. **Whole-machine energy per phase is redefined to fit what the meter can see:** the meter term only (50 samples a second), gross over the phase, the same basis as the rail cells; the battery term (read once a second, absent in 38% of prefill phases) stays at request level, and a phase whose request shows battery assist is flagged. Same units as estimator 1; GAMMA, which has no repeat stratum, is not given this line.
+6. **An agent sighting** pauses at the next run boundary, and the whole unit overlapping the agent's presence is excluded (a whole quad, since a pause breaks its A B B A spacing), with a flag.
+7. **A lost reference, including GAMMA's midpoint, is a flag;** the drift screen runs on the surviving references and the registration says so.
+8. **Block-6 energies stay blinded until block 6 closes** (3 counting sessions per pack, or 2026-11-07, whichever comes first; a pack that ends short is printed with its count and called short).
+9. **A model-file hash mismatch stops the session** (it is a direct measure of running the wrong experiment, not a record about a record).
+
+**Before block 6 arms:** a fresh calibration acceptance from quiet-machine captures (item 27's doubling trigger stands at 45 of 48 and would fire in block 6's second session); threshold-note test 7 (drift transfer to the 8B workload, and bias between the two models' measurements) added to the measure-first list as M15; compression at the desk never touches a capture the calibration ledger names (item 26; item 34).
+
+**Process, made lighter:**
+- Fault rehearsal per pack is replaced by desk tests on synthetic records at every code change (lost reference, capture over the screen, another session's capture in the ledger, a killed chain, disk fill) and one machine test of about 40 minutes on the final code (agent pause, an idle disturbance up to the 1,500 s cap, meter unplugged). No forced sleep: the cure is a setting in force since 10-10 (item 19) and its detector caught BETA a4's real sleep.
+- No "expected result before every check" rule and no frozen per-pack smoke expectation: the smoke runs the session's own acceptance code and the loop reads its verdict. The smoke is collection, harvest and acceptance only (about 25 minutes plus the harvest); the analysis dry run and the independent recompute run once per code change, in round 0.
+- No duration-based smoke hold (a 50% slower phase is about 1% of a run); a slowed model is caught by the per-run duration flag (note 8.2 item 1).
+- No consult rule on a repeated flag kind; no settle by clock time (idle admission measures quiet directly); pack order rotates by round (A B G, B G A, G A B).
+- Round 0 stays, one full-length non-claim session per pack, BETA first (the 8B pack has never run on a quiet machine).
+
+**Corrections:** four of BETA's five losses were rule-losses, 18.9 of 21.4 hours (88%), not three; 0.86 was survival against one kind of stop, not a usable rate (block 5's second seal: 3 usable of 8 attempts), so the 3.4-day figure is a floor, not an estimate.
