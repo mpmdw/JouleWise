@@ -270,7 +270,7 @@ CODES: dict[str, CodeSpec] = {
     "idle.wait_budget_unreadable": _spec("DIAGNOSTIC", "PHYSICS"),
     "idle.wait_ledger_unwritable": _spec("RECORDS", "REPRESENTATION"),
     "idle.busy_fraction_exceeded": _spec("DIAGNOSTIC", "PHYSICS"),
-    "agent.presence": _spec("DIAGNOSTIC", "PHYSICS"),
+    "agent.presence": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
     "agent.presence_overlap": _spec("PHYSICS_IN_SPAN", "PHYSICS"),
     "agent.capture_overlap": _spec("DIAGNOSTIC", "PHYSICS"),
     "sleep.in_chain": _spec("DIAGNOSTIC", "PHYSICS"),

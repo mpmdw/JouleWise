@@ -10,6 +10,8 @@ import time
 
 # Threshold-proportion council 8.1, S1: strictly more than 1 ms excludes.
 SLEEP_EXCLUDE_NS = 1_000_000
+# A quarter of the 1 ms SLEEP_EXCLUDE_NS line.
+READ_SKEW_MAX_NS = 250_000
 
 
 def append_record(path: Path, row: dict) -> None:
@@ -34,7 +36,8 @@ def read_sleep_offset(reader=time.clock_gettime_ns) -> dict:
     uptime = (first + second) // 2
     return {"uptime_raw_ns": uptime, "monotonic_raw_ns": raw,
             "monotonic_ns": time.monotonic_ns(), "wall_s": time.time(),
-            "sleep_offset_ns": raw - uptime, "read_skew_ns": second - first}
+            "sleep_offset_ns": raw - uptime if second - first <= READ_SKEW_MAX_NS else None,
+            "read_skew_ns": second - first}
 
 
 def safe_sleep_reading() -> dict:

@@ -1,6 +1,7 @@
 """Agent episodes pause future members and exclude overlapping whole units."""
 from __future__ import annotations
 
+from collections import defaultdict, deque
 import json
 import os
 from pathlib import Path
@@ -101,7 +102,7 @@ class PausingCensus:
         if kind == "positive":
             self.last_positive = (probe, refusal)
         if self.pause.observe(kind, probe.stdout):
-            return self.last_positive or (probe, refusal)
+            return probe, self.last_positive[1] if self.last_positive is not None else refusal
         return probe, None
 
     def append(self, *args):
@@ -143,15 +144,28 @@ def presence_intervals(journal_rows, census_rows, chain_start, chain_end):
     return episodes
 
 
+def paired_run_clocks(run_clock_rows):
+    """Pair each start with the next unused end for that run id in file order."""
+    pending = defaultdict(deque)
+    pairs = []
+    for row in run_clock_rows:
+        if row.get("event") == "start":
+            pending[row["run_id"]].append(len(pairs))
+            pairs.append((row, None))
+        elif row.get("event") == "end" and pending[row["run_id"]]:
+            index = pending[row["run_id"]].popleft()
+            pairs[index] = (pairs[index][0], row)
+    return pairs
+
+
 def overlap_flags(intervals, run_clock_rows):
-    ends = {r["run_id"]: r["clock"]["monotonic_ns"] for r in run_clock_rows if r.get("event") == "end"}
+    pairs = paired_run_clocks(run_clock_rows)
     flags = []
     for number, episode in enumerate(intervals, 1):
         units = {}
-        for row in run_clock_rows:
-            if row.get("event") != "start":
-                continue
-            if row["clock"]["monotonic_ns"] <= episode["end"]["monotonic_ns"] and ends.get(row["run_id"], float("inf")) >= episode["start"]["monotonic_ns"]:
+        for row, end in pairs:
+            end_ns = end["clock"]["monotonic_ns"] if end is not None else float("inf")
+            if row["clock"]["monotonic_ns"] <= episode["end"]["monotonic_ns"] and end_ns >= episode["start"]["monotonic_ns"]:
                 unit = units.setdefault(row.get("unit_key", row["run_id"]), {"members": set(), "overlaps": set()})
                 unit["members"].update(row.get("unit_run_ids") or [row["run_id"]])
                 unit["overlaps"].add(row["run_id"])

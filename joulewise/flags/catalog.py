@@ -359,7 +359,7 @@ DRAFT_CODES: Mapping[str, Mapping[str, str]] = {
     "idle.wait_budget_unreadable": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "idle.wait_ledger_unwritable": _code("RECORDS", "REPRESENTATION", DISCLOSE),
     "idle.busy_fraction_exceeded": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
-    "agent.presence": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "agent.presence": _code("PHYSICS_IN_SPAN", "PHYSICS", EXCLUDE_MEMBER),
     "agent.presence_overlap": _code("PHYSICS_IN_SPAN", "PHYSICS", EXCLUDE_MEMBER),
     "agent.capture_overlap": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "sleep.in_chain": _code("DIAGNOSTIC", "PHYSICS", DISCLOSE),

@@ -116,3 +116,42 @@ class AgentPauseTests(unittest.TestCase):
             row = ap.wait_while_paused(root, sleep=mock.Mock(), now=lambda: self.now, pid_alive=lambda _: False)
             self.assertEqual((row["waited_s"], row["stale"]), (0, True))
 
+
+    def test_limit_returns_current_probe_with_last_positive_refusal(self):
+        positive1 = mock.Mock(exit_code=0, stdout="7 claude", monotonic_ns=at(0)["monotonic_ns"])
+        positive2 = mock.Mock(exit_code=0, stdout="7 claude", monotonic_ns=at(7100)["monotonic_ns"])
+        clean = mock.Mock(exit_code=1, stdout="", monotonic_ns=at(7200)["monotonic_ns"])
+        refusal1, refusal2 = object(), object()
+        inner = mock.Mock(side_effect=[(positive1, refusal1), (positive2, refusal2), (clean, None)])
+        inner.classify.side_effect = ["positive", "positive", "clean"]
+        census = ap.PausingCensus(inner, self.pause)
+        self.assertIsNone(census()[1])
+        self.now = 7100
+        self.assertIsNone(census()[1])
+        self.now = 7200
+        probe, refusal = census()
+        self.assertIs(probe, clean)
+        self.assertEqual(probe.monotonic_ns, at(7200)["monotonic_ns"])
+        self.assertIs(refusal, refusal2)
+
+    def test_repeated_run_id_pairs_with_next_end_in_file_order(self):
+        rows = [{"event": event, "run_id": "c07", "clock": at(t)}
+                for event, t in [("start", 0), ("end", 100), ("start", 5000), ("end", 5100)]]
+        pairs = ap.paired_run_clocks(rows)
+        self.assertEqual([(a["clock"], b["clock"]) for a, b in pairs],
+                         [(at(0), at(100)), (at(5000), at(5100))])
+        self.assertEqual(ap.overlap_flags([{"start": at(1990), "end": at(2100)}], rows), [])
+        flags = ap.overlap_flags([{"start": at(5020), "end": at(5030)}], rows)
+        self.assertEqual([r["run_id"] for r in flags], ["c07"])
+        self.assertEqual(ap.paired_run_clocks(rows + [{"event": "start", "run_id": "c07", "clock": at(6000)}])[-1][1], None)
+
+    def test_runner_missing_custody_discloses_pause_unavailable_once(self):
+        from scripts import run_campaign as runner
+        from joulewise.flags import core
+        hazard = core.HazardFlagContext("core-run_campaign", None, "plan", 1, False)
+        with mock.patch.object(runner, "_HAZARD_PAUSE_UNAVAILABLE_RECORDED", False), mock.patch.object(core, "emit") as emit:
+            self.assertIsNone(runner._hazard_wait_for_agent(hazard))
+            self.assertIsNone(runner._hazard_wait_for_agent(hazard))
+        emit.assert_called_once()
+        self.assertEqual(emit.call_args.args[1], "campaign.runner_record_flagged")
+        self.assertEqual(emit.call_args.kwargs["observed"]["kind"], "agent_pause_unavailable")

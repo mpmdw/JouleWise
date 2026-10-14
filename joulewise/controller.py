@@ -2048,6 +2048,7 @@ class _Execution:
         )
         from joulewise.flags import core as flags_core
 
+        # No legacy environment_admission_failed -> flagged: HAZARD repetitions=1; it is set only between repetitions.
         record = self._environment_admission
         assert record is not None
         cap = admission.wait_cap_s if admission.wait_cap_s is not None else WAIT_CAP_S
@@ -2117,6 +2118,7 @@ class _Execution:
                     self._hazard_admit_on_missing_evidence(
                         row, cpu, ignored_conditions={"cpu_busy_ratio_p95_exceeded"})
                     row["admitted"] = True
+                    row["busy_fraction_admitted"] = True
                     flags_core.emit(self._hazard, "idle.busy_fraction_exceeded", level="member",
                                     run_id=self._writer.run_id,
                                     observed={"attempt": attempt, "cpu_admission": cpu})

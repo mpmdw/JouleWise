@@ -144,6 +144,7 @@ class IdleWaitTests(unittest.TestCase):
 
     def test_busy_fraction_only_admits_with_flag(self):
         self.assertEqual(self.run_member(power=(.1,), busy=(.9,)).status, RunStatus.SUCCEEDED)
+        self.assertTrue(self.admission["attempts"][-1]["busy_fraction_admitted"])
         self.assertIn("idle.busy_fraction_exceeded", self.codes)
         self.assertEqual(self.events, ["begin"])
         self.assertEqual(len(self.admission["attempts"]), 1)

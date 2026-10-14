@@ -1193,5 +1193,69 @@ class UnitTests(unittest.TestCase):
             self.assertIsNone(b5_driver.reap_orphan_monitor(night, identity=observe_identity))
 
 
+class B6ReviewRegressionTests(unittest.TestCase):
+    """Run the driver body with synthetic records and no child processes."""
+
+    def drive(self, chain_once, *, readings=None):
+        from joulewise.b6 import sleep_guard
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+        monitor = mock.Mock(crash_loop=False)
+        monitor.stop.return_value = {"restarts": 0, "stop": {"proven_stopped": True}}
+        with (
+            mock.patch.object(b5_driver, "MonitorSupervisor", return_value=monitor),
+            mock.patch.object(b5_driver, "await_monitor_ready", return_value=(True, [])),
+            mock.patch.object(harness.driver, "_run_chain_once", side_effect=lambda *a, **kw: chain_once(harness, **kw)),
+            mock.patch.object(sleep_guard, "safe_sleep_reading", side_effect=readings) if readings else contextlib.nullcontext(),
+        ):
+            self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        return harness
+
+    def test_presence_interval_without_run_clock_excludes_only_overlaps_and_unknown(self):
+        from joulewise.flags.catalog import draft_catalog, EXCLUDE_MEMBER
+        from joulewise.flags.exclusions import compute
+        def chain(harness, census, **kwargs):
+            harness.census.responses.append(
+                probe(night_gate.AGENT_CENSUS_ARGV, exit_code=0, stdout="99 claude\n"))
+            self.assertIsNone(census()[1])
+            return 0, None, 1, [], True
+        harness = self.drive(chain)
+        self.assertFalse((harness.custody / "collection/run_clock.jsonl").exists())
+        flags = [flag for flag in harness.flags if flag["code"] == "agent.presence"]
+        self.assertEqual(len(flags), 1)
+        flag = flags[0]
+        self.assertEqual((flag["scope"]["level"], flag["family"], flag["klass"]),
+                         ("window", "PHYSICS_IN_SPAN", "PHYSICS"))
+        self.assertEqual(draft_catalog().effect(flag["code"]), EXCLUDE_MEMBER)
+        start, end = flag["interval"]["monotonic_ns"]
+        roster = {"plan_id": harness.plan.plan_id, "attempt": harness.plan.hazard_window["attempt"],
+                  "members": [{"run_id": run_id, "units": []} for run_id in ("overlap", "after", "unknown")],
+                  "cells": []}
+        result = compute(flags, roster, {"overlap": {"monotonic_ns": [start, end]},
+                                         "after": {"monotonic_ns": [end + 1, end + 10]}}, draft_catalog())
+        self.assertEqual({r["run_id"] for r in result["members_excluded"]}, {"overlap", "unknown"})
+
+    def test_sleep_pass_pairs_repeated_ids_and_ignores_none_offsets(self):
+        from joulewise.b6.sleep_guard import append_record
+        def chain(harness, **kwargs):
+            path = harness.custody / "collection/run_clock.jsonl"
+            for run_id, event, t, offset in (
+                ("c07", "start", 0, 0), ("c07", "end", 100, 0),
+                ("c07", "start", 5000, 10_000_000), ("c07", "end", 5100, 10_000_000),
+                ("slept", "start", 5200, 10_000_000), ("slept", "end", 5300, 11_000_001),
+                ("unmeasured", "start", 5400, None), ("unmeasured", "end", 5500, 50_000_000),
+            ):
+                append_record(path, {"event": event, "run_id": run_id,
+                                     "clock": {"monotonic_ns": t * 10**9, "sleep_offset_ns": offset}})
+            return 0, None, 0, [], True
+        harness = self.drive(chain, readings=[{"sleep_offset_ns": None, "read_skew_ns": 500_000},
+                                              {"sleep_offset_ns": 0}])
+        self.assertEqual(harness.hazard()["sleep"]["runs_excluded"], ["slept"])
+        self.assertIsNone(harness.hazard()["sleep"]["chain_slept_ns"])
+        codes = [flag["code"] for flag in harness.flags]
+        self.assertIn("sleep.reading_unmeasured", codes)
+        self.assertNotIn("sleep.in_chain", codes)
+
+
 if __name__ == "__main__":
     unittest.main()

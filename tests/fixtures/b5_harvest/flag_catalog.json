@@ -14,8 +14,8 @@
     },
     "agent.presence": {
       "blinding": "STRUCTURE",
-      "effect": "DISCLOSE",
-      "family": "DIAGNOSTIC",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS"
     },
     "agent.presence_overlap": {

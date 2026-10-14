@@ -3781,10 +3781,20 @@ def _hazard_collection_flag(hazard, record, error):
                               "error": str(error)})
 
 
+_HAZARD_PAUSE_UNAVAILABLE_RECORDED = False
+
+
 def _hazard_wait_for_agent(hazard):
+    global _HAZARD_PAUSE_UNAVAILABLE_RECORDED
     from joulewise.b6.agent_pause import wait_while_paused
     from joulewise.flags import core as flags_core
     if hazard.custody_root is None:
+        if not _HAZARD_PAUSE_UNAVAILABLE_RECORDED:
+            _HAZARD_PAUSE_UNAVAILABLE_RECORDED = True
+            flags_core.emit(hazard, "campaign.runner_record_flagged", level="window",
+                            observed={"kind": "agent_pause_unavailable",
+                                      "record": "collection/pause.json",
+                                      "reason": "hazard custody root unavailable"})
         return None
     row = wait_while_paused(hazard.custody_root)
     if row is not None and row["stale"]:
@@ -7220,8 +7230,16 @@ def _idle_admission_core_evaluation(
             extension.cpu_criteria,
             gpu_admitted=_gpu_admission_outcome(evaluation),
         )
-        conditions.update(cpu_admission["conditions"])
-        for reason_code in cpu_admission["conditions"]:
+        # Q3 is disclosure-only for an explicit controller busy-only admission.
+        # Preserve the evaluator output for the whole-window stored/derived replay.
+        cpu_conditions = cpu_admission["conditions"]
+        if attempt is not None:
+            final = evaluation.metadata["environment_admission"]["attempts"][-1]
+            if final.get("busy_fraction_admitted") is True and final.get("admitted") is True:
+                cpu_conditions = [code for code in cpu_conditions
+                                  if code != "cpu_busy_ratio_p95_exceeded"]
+        conditions.update(cpu_conditions)
+        for reason_code in cpu_conditions:
             record = _member_failure_record(
                 evaluation.bundle_id,
                 reason_code,

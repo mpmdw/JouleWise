@@ -2645,18 +2645,16 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
         window.flag("supervision.pass_failed", "RECORDS", "REPRESENTATION", stage="window",
                     observed={"step": "collection_overlap", "error": _error_text(error)})
     for episode in intervals:
-        window.flag("agent.presence", "DIAGNOSTIC", "PHYSICS", stage="window", observed=episode,
+        window.flag("agent.presence", "PHYSICS_IN_SPAN", "PHYSICS", stage="window", observed=episode,
                     interval={"monotonic_ns": [episode["start"]["monotonic_ns"], episode["end"]["monotonic_ns"]],
                               "wall_s": [episode["start"]["wall_s"], episode["end"]["wall_s"]]})
     for overlap in agent_pause.capture_overlaps(intervals, journal):
         window.flag("agent.capture_overlap", "DIAGNOSTIC", "PHYSICS", stage="window", observed=overlap)
-    ends = {row.get("run_id"): row.get("clock") for row in clock_rows if row.get("event") == "end"}
     excluded = []
-    for row in clock_rows:
-        if row.get("event") == "start":
-            slept = sleep_guard.slept_ns(row.get("clock"), ends.get(row.get("run_id")))
-            if slept is not None and slept > sleep_guard.SLEEP_EXCLUDE_NS:
-                excluded.append(row["run_id"])
+    for row, end in agent_pause.paired_run_clocks(clock_rows):
+        slept = sleep_guard.slept_ns(row.get("clock"), end.get("clock") if end else None)
+        if slept is not None and slept > sleep_guard.SLEEP_EXCLUDE_NS:
+            excluded.append(row["run_id"])
     hazard["sleep"] = {"chain_slept_ns": chain_slept, "runs_excluded": sorted(set(excluded)),
                        "start": sleep_start, "end": sleep_end}
     pause._write(pause.marker_writer, None)

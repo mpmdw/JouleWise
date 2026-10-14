@@ -76,3 +76,28 @@ class SleepGuardTests(unittest.TestCase):
             self.assertTrue(keep.poll())
             self.assertFalse(keep.last_loss)
         self.assertEqual(keep.restarts, 1)
+
+    def test_final_skew_bound_marks_reading_unmeasured_and_accepts_200_us(self):
+        for skew, accepted in ((500_000, False), (200_000, True), (250_000, True), (250_001, False)):
+            with self.subTest(skew=skew):
+                reader = mock.Mock(side_effect=[1_000_000, 2_000_000, 1_000_000 + skew] * 3)
+                with mock.patch.object(sg.time, "CLOCK_UPTIME_RAW", 8, create=True):
+                    reading = sg.read_sleep_offset(reader)
+                self.assertEqual(reader.call_count, 9)
+                self.assertEqual(reading["read_skew_ns"], skew)
+                self.assertEqual(reading["sleep_offset_ns"] is not None, accepted)
+                self.assertIn("monotonic_raw_ns", reading)
+                self.assertIn("monotonic_ns", reading)
+                flags = sg.run_sleep_flags(reading, reading)
+                self.assertEqual([f["code"] for f in flags], [] if accepted else ["sleep.reading_unmeasured"])
+                if not accepted:
+                    self.assertIsNone(sg.slept_ns({"sleep_offset_ns": 0}, reading))
+
+    def test_runner_emits_unmeasured_for_none_offset_without_in_run(self):
+        from scripts import run_campaign as runner
+        from joulewise.flags import core
+        reading = {"sleep_offset_ns": None, "read_skew_ns": 500_000}
+        with mock.patch.object(core, "emit") as emit:
+            runner._hazard_emit_sleep_flags(object(), [Path("member")],
+                                           {"sleep_offset_ns": 0}, reading, None)
+        self.assertEqual([call.args[1] for call in emit.call_args_list], ["sleep.reading_unmeasured"])
