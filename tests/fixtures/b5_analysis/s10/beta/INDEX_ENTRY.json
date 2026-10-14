@@ -1,0 +1,20 @@
+{
+  "archive_root": "/Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/tmp/s10-beta-3omeh0gg/archive",
+  "attempt": 3,
+  "bound_runs_root": "/Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/tmp/s10-beta-3omeh0gg/custody/runs_bound",
+  "cause_key": null,
+  "claim_runs_root": "/Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/tmp/s10-beta-3omeh0gg/custody/runs_claim",
+  "claim_usable": true,
+  "custody_root": "/Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/tmp/s10-beta-3omeh0gg/custody",
+  "entry_kind": "harvested",
+  "harvest_pin": "b039c0257d1b1d407ee9598222db3f78f6ad7beb",
+  "harvest_record_sha256": "67aecb16533fc0e5c0d122d82a6844693f15b7e7c205e49a0095fb9b19a1a343",
+  "measurement_root": "/Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/tmp/s10-beta-3omeh0gg/measurement",
+  "pack": "beta",
+  "pack_id": "d117_floor_qwen3-8b_v5",
+  "plan_id": "v5-b5-beta-a3-s10-synthetic",
+  "seal": "second",
+  "superseded_archive_roots": [],
+  "t0_epoch_s": 1791738001,
+  "verdict": "COLLECTED"
+}

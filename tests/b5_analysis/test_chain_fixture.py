@@ -222,6 +222,22 @@ class ChainTests(unittest.TestCase):
             self.assertNotIn(w.aborted,w.writer_row['bundle_ids'])
             self.assertIn(w.aborted,{r['bundle_id'] for r in w.writer_row['excluded_bundles']})
             if w.retired:
+                if w.retired not in w.writer_row['bundle_ids']:
+                    # Disposition 2 permits the aborted-member fallback when
+                    # the real writer drops the preparation-failing candidate.
+                    # Retired floor anchors are collection-integrity failures
+                    # at run_campaign._whole_window_member.
+                    from joulewise.analysis_engine.inputs import anchor_fallback_member_unusable
+                    path=w.claim/w.retired
+                    self.assertIn(w.retired,{r['bundle_id'] for r in w.writer_row['excluded_bundles']})
+                    self.assertNotIn(w.retired,session.referenced_bundle_ids)
+                    self.assertTrue(anchor_fallback_member_unusable(
+                        json.loads((path/'summary_metrics.json').read_bytes()),
+                        json.loads((path/'metadata.json').read_bytes()),path))
+                    self.evidence.append({'step':'C-F1 candidate writer-dropped','pack':pack,
+                        'candidate':w.retired,'writer_gate':'anchor_fallback_member_unusable',
+                        'strong_preparation_probe':False,'fallback':'aborted member absent from row and ready session'})
+                    return
                 self.assertIn(w.retired,w.writer_row['bundle_ids'])
                 self.assertIn(w.retired,self.composition(pack)[3].removed_bundle_ids)
                 self.assertIn('removed_member_preparation:capture_pipeline_superseded:'+w.retired,
@@ -276,6 +292,7 @@ class ChainTests(unittest.TestCase):
             out=Path(tempfile.mkdtemp(prefix='mint-',dir=self.custody))
             stream=io.StringIO()
             sites=[]
+            bootstraps=[]
             def observe(code,offset,result):
                 frame=inspect.currentframe().f_back
                 session=frame.f_locals.get('self')
@@ -287,13 +304,39 @@ class ChainTests(unittest.TestCase):
                             chain.append({'function':caller.f_code.co_name,'line':caller.f_lineno,'file':file,
                                 'module':caller.f_globals.get('__name__')})
                         caller=caller.f_back
-                    sites.append({'site_chain':chain,'runs_root':str(session.runs_root),
-                        'ready':session.ready,'reasons':list(session.refusal_reasons)})
+                    names={(f['file'],f['function']) for f in chain}
+                    site=('common_mode' if ('floor_mint_estimator.py','_authenticated_common_mode_session') in names
+                        else 'artifact_rebinding' if ('mint_floor_artifact.py','bind_floor_artifact_evidence') in names
+                        else 'component_consumption' if ('mint_floor_artifact.py','_authenticated_consumption_summaries') in names
+                        else 'allowance_validation' if ('mint_floor_artifact.py','_authenticate_component') in names
+                        else 'other')
+                    context=session.archive_context
+                    sites.append({'site':site,'site_chain':chain,'runs_root':str(session.runs_root),
+                        'ready':session.ready,'reasons':list(session.refusal_reasons),
+                        'context':context is not None,'window_bound_matches':context is not None and
+                        session.operative_fiducial_bound_s==context.window_bracket['b_fiducial_s']})
+            lines,first=inspect.getsourcelines(emit._bootstrap_producer)
+            branch=first+next(i for i,line in enumerate(lines)
+                if 'selected, stratum = kept_units.for_floor_cell' in line)
+            def bootstrap_line(code,line):
+                if line!=branch:return
+                frame=inspect.currentframe().f_back;args=frame.f_locals
+                caller=frame;chain=[]
+                while caller is not None:
+                    if Path(caller.f_code.co_filename).name=='emit_floor_mint_pinset.py':
+                        chain.append({'function':caller.f_code.co_name,'line':caller.f_lineno})
+                    caller=caller.f_back
+                bootstraps.append({'runs_root':str(args['runs']),'role':args['role'],'kind':args['kind'],
+                    'kept_units':args['kept_units'] is not None,
+                    'site_chain':chain})
             tool=next(i for i in range(6) if sys.monitoring.get_tool(i) is None)
             event=sys.monitoring.events.PY_RETURN;code=ww.AuthenticatedConsumptionSession._prepare.__code__
             sys.monitoring.use_tool_id(tool,'s10-readonly-session-observer')
             sys.monitoring.register_callback(tool,event,observe)
             sys.monitoring.set_local_events(tool,code,event)
+            line_event=sys.monitoring.events.LINE;bootstrap_code=emit._bootstrap_producer.__code__
+            sys.monitoring.register_callback(tool,line_event,bootstrap_line)
+            sys.monitoring.set_local_events(tool,bootstrap_code,line_event)
             try:
                 for pack in ('alpha','beta'):
                     shutil.copyfile(self.custody/(pack+'-extraction.json'),out/(pack+'-extraction.json'))
@@ -302,13 +345,22 @@ class ChainTests(unittest.TestCase):
                 with contextlib.chdir(out):self._mint_c5(emit,mint,out,head,stream)
             finally:
                 sys.monitoring.set_local_events(tool,code,0)
+                sys.monitoring.set_local_events(tool,bootstrap_code,0)
                 sys.monitoring.register_callback(tool,event,None)
+                sys.monitoring.register_callback(tool,line_event,None)
                 sys.monitoring.free_tool_id(tool)
                 self.evidence.append({'step':'C5 real session sites','pack':'alpha+beta','sites':sites})
+                self.evidence.append({'step':'C5 bootstrap kept branch','pack':'alpha+beta','sites':bootstraps})
             self.assertTrue(sites)
-            self.assertTrue(all(s['ready'] for s in sites),sites)
+            self.assertTrue(all(s['ready'] and s['context'] and s['window_bound_matches'] for s in sites),sites)
             self.assertEqual({s['runs_root'] for s in sites},
                 {str(self.fixture.windows[p].claim) for p in ('alpha','beta')})
+            required={'component_consumption','allowance_validation','artifact_rebinding','common_mode'}
+            for pack in ('alpha','beta'):
+                root=str(self.fixture.windows[pack].claim)
+                self.assertTrue(required.issubset({s['site'] for s in sites if s['runs_root']==root}),sites)
+                actual={(s['role'],s['kind']) for s in bootstraps if s['runs_root']==root and s['kept_units']}
+                self.assertEqual(actual,{(r,k) for r in ('decode','prefill') for k in ('absolute','comparative')})
 
     def _mint_c5(self,emit,mint,out,head,stream):
             with contextlib.redirect_stdout(stream),contextlib.redirect_stderr(stream):
@@ -364,6 +416,11 @@ class ChainTests(unittest.TestCase):
         w=self.window('gamma')
         if not hasattr(type(self),'finalized'):self.check_c8()
         with self.timed('C9/C-N4','gamma'),self.fixture.seams():
+            kept=self.composition('gamma')[1]
+            self.assertIn(w.aborted,kept.removed_run_ids())
+            self.assertIn(w.truncated,kept.removed_run_ids())
+            self.assertFalse((w.claim/w.aborted/'summary_metrics.json').exists())
+            self.assertEqual((w.claim/w.truncated/'summary_metrics.json').read_bytes(),b'{"status":')
             pinset=json.loads((self.floor.parent/'floor-mint-pinset.json').read_bytes());args=['analyze-claims','--analysis-manifest',str(self.finalized),
                 '--runs-root',str(w.claim),'--floor-artifact',str(self.floor),'--neg8-harvest-archive',str(w.archive),
                 '--window-index',str(self.fixture.index)]
@@ -377,6 +434,22 @@ class ChainTests(unittest.TestCase):
             verdicts=json.loads(out.read_bytes())
             self.assertEqual(verdicts['schema_version'],'joulewise.claim_verdicts.v1')
             self.assertEqual(len(verdicts['contrasts']),2)
+            from tests.b5_analysis.fixtures_s10 import sha
+            self.assertEqual(verdicts['inputs']['floor_artifact']['file_sha256'],sha(self.floor))
+            outcomes=[]
+            for row in verdicts['contrasts']:
+                cid=row['contrast_id'];count=len(kept.cells[cid].kept['quad'])
+                self.assertEqual(row['sampling']['kept_n'],count)
+                self.assertEqual(row['estimator']['n'],count)
+                self.assertIsNotNone(row['estimator']['estimate'])
+                self.assertEqual(set(row['bundle_blocks']['included_bundle_ids']),kept.kept_run_ids(cid))
+                self.assertEqual(row['floor']['status'],'resolved')
+                self.assertTrue(row['floor']['resolutions'])
+                self.assertTrue(all(r['status'] in ('exact','transported') for r in row['floor']['resolutions']))
+                outcomes.append({'contrast_id':cid,'kept_quads':count,'floor_status':row['floor']['status'],
+                    'resolution_statuses':[r['status'] for r in row['floor']['resolutions']]})
+            self.evidence.append({'step':'C9 evaluated kept quads and minted floors','pack':'gamma',
+                'contrasts':outcomes,'floor_sha256':sha(self.floor)})
             type(self).claims=out
 
     def test_00_c0_alpha(self):self.check_c0('alpha')
@@ -385,6 +458,7 @@ class ChainTests(unittest.TestCase):
     def test_03_c0_complete_index(self):
         for pack in PACK_IDS:self.window(pack)
         with self.timed('C0 complete index','all'),self.fixture.seams():
+            self.assertEqual(self.fixture.program_index,self.fixture.index)
             index=load_window_index(self.fixture.index,seal_pins=self.pins)
             records=tuple(open_attempt_record(e,seal_pins=self.pins) for e in index.entries)
             selected=select_analysed_attempts(index,records,seal_pins=self.pins)
@@ -445,6 +519,15 @@ class ChainTests(unittest.TestCase):
         self.assertTrue(addressed)
         for ids in addressed:
             self.assertLessEqual(ids,referenced)
+    def test_37_mint_composition_skips_authenticated_removed_unreadable_summaries(self):
+        for pack in PACK_IDS:self.window(pack)
+        from scripts import mint_floor_artifact_generalized as mint
+        with self.fixture.seams():
+            entries=mint.compose_indexed_producers(self.fixture.index,include_consumer=True)
+        self.assertEqual(set(entries),set(PACK_IDS))
+        for pack in ('alpha','beta'):
+            self.assertIn(self.window(pack).truncated,entries[pack].archive_context.removed_bundle_ids)
+            self.assertEqual(entries[pack].window_bracket.evaluation['status'],'passed')
     def test_41_c4_beta(self):self.check_c4('beta')
     def test_42_b1_beta(self):self.check_b1()
     def test_50_c5_mint(self):self.check_c5()

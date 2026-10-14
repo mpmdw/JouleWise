@@ -1,4 +1,16 @@
-> **Partial last-round fixture:** ALPHA is promoted to `alpha/` and rebuilt with the production writer's default minted semantics. BETA and GAMMA are not built. The latest extraction reached a real ready session and all four target cells; the two p42 cells refused. A further producer campaign-grouping repair requires a fresh extraction. Exact archive versions, verification and remaining gates are in `.scratch-s10f/S10_LAST_REPORT.md`.
+> **K1 continuation:** The unchanged ALPHA archive passes C0–C4; the director's C4 run took 1289 s, exited 1 with `p42_floor_cells_only`, and observed ready context-bearing sessions with every kept member under its window bracket. BETA and GAMMA extend ALPHA's archived ledger. This continuation's exact verification is recorded in `.scratch-s10f/S10_K1_REPORT.md`.
+
+K1 built BETA (125 members, 1,821,172 archive bytes, 575.399521 s wrapper)
+and GAMMA (107 members, 1,728,712 archive bytes, 653.993691 s wrapper).
+BETA passes C0–C4/C-B1; GAMMA passes C0–C3 and the complete index; both
+floor reports classify `p42_floor_cells_only`. C-F1 passes on GAMMA's retained
+retired member and uses the explicit writer-dropped fallback on BETA.
+C5 enters the real kept-units bootstrap branch and real component/allowance
+sessions, then refuses in `_v2_gate_producer_inventory:2630`: decode and prefill
+runtime identities differ in `output_policy.stop_condition` (`suite_completed`
+versus `requested_tokens_emitted`). The singular-runtime admission rule was
+preserved. C5 acceptance remains failing; C8/C9 and optional probes are unproved.
+No ALPHA rebuild or archive edit was made. This conflict requires a lead ruling.
 
 # S10 production-shaped synthetic windows
 
@@ -6,8 +18,9 @@
 built packs in `.windows`, and raises `FileNotFoundError: window not built:
 <pack>` for missing packs. The chain module skips missing packs with exactly
 `window not built`. No delegated Git commit is made: published archives are
-uncommitted files in this directory. Acceptance evidence is in
-`.scratch-s10f/S10_LAST_REPORT.md`.
+new uncommitted files in this directory; ALPHA and the history fixtures are
+inherited committed bytes. Acceptance evidence is in
+`.scratch-s10f/S10_K1_REPORT.md`.
 
 | Pack | Shape | Governing real writer/harvest pin |
 |---|---|---|
@@ -21,18 +34,53 @@ history record and pin3 NULL record. Those small history fixtures change only
 S0's pack, plan and attempt identities plus their dependent hashes. Original
 pin1–pin4 fixture bytes remain unchanged.
 
-Exports were made with `git archive <pin> | tar -x -C .scratch-s10f/<shape>/`.
-`prepare_exports.py` copies test support into each export; governing production
-hashes are checked before import. Measurement source files are also supplied
-from the sealed source inventory's declared Git head where necessary.
+The pin4 export is restored with the exact commands below. `prepare_exports.py`
+copies only fixture modules, their support, seal-pin data and S10 fixture bytes.
+The deleted `support/` directory is recreated inside the export from the current
+`tests/test_harvest_b5_window.py` and `tests/test_harvest_b5_sources.py` helpers.
+Before any production import, every governing file in `pins.pin4.files` must
+equal both the pin's Git blob and its declared SHA-256. The export's
+`joulewise/` and `scripts/` are never overwritten. Measurement source files are
+supplied separately from the sealed source inventory's declared Git head.
+
+Because the scratch directory was deleted, the builder restores prior synthetic
+custody from each existing archive at its original recorded scratch locators
+before extending the ledger. This is extraction and copying of authenticated
+prior bytes, not collection or re-harvest. Without this restoration, BETA's first
+build recorded `calibration_ledger_custody_invalid` and the pinned harvest refused
+`calibration.bracket_acceptance_failed`. The failed raw tree was deleted before
+the retry. ALPHA's published archive stays byte-identical.
+
+GAMMA's pinned roster carries science config paths relative to its pack, whereas
+the floor rosters carry measurement-relative paths. `member_config_path` resolves
+both producer forms before collection; the first path-failing GAMMA tree was
+deleted before retry. No production reader was changed for this producer lookup.
+
+The BETA retired-method floor candidate is **not** retained by the real writer:
+its retired-method reduction is `energy_uncertainty_status=not_estimable`, so
+`anchor_fallback_member_unusable` makes its `MemberEvaluation.usable` false.
+`run_campaign._run_whole_window_verdict_locked` selects only usable evaluations
+into `bundle_ids`. BETA C-F1 therefore checks disposition 2's aborted-member fallback
+and explicitly verifies the retired candidate's writer exclusion; it does not
+claim a retained-member preparation disclosure or a killed F1 mutation. GAMMA's
+comparative contrast role is outside the writer's floor-member-role gate, so its
+retired candidate is retained by the writer; its C-F1 check exercises the stronger
+preparation probe when the window is built.
+
+```sh
+bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/run.sh mkdir -p /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/pin4
+# export_pin4.sh executes this pipeline, with no change of directory:
+git -C /Users/edr/code/JouleWise-wt-l9-s10f archive b039c0257d1b1d407ee9598222db3f78f6ad7beb | tar -x -C /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/pin4/
+bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/run.sh bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/export_pin4.sh
+bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/run.sh /opt/homebrew/bin/python3.13 -B .scratch-s10f/prepare_exports.py pin4
+```
 
 Replay from the worktree with the one runner:
 
 ```sh
-bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/run.sh /opt/homebrew/bin/python3.13 -B .scratch-s10f/build_window.py alpha
 bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/run.sh /opt/homebrew/bin/python3.13 -B .scratch-s10f/build_window.py beta
 bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/run.sh /opt/homebrew/bin/python3.13 -B .scratch-s10f/build_window.py gamma
-bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/run.sh env PYTHONDONTWRITEBYTECODE=1 TMPDIR=/Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/tmp /opt/homebrew/bin/python3.13 -B -m unittest tests.b5_analysis.test_chain_fixture
+bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/run.sh env PYTHONDONTWRITEBYTECODE=1 TMPDIR=/Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/tmp JW_B5_S10_CHAIN_CACHE=/Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/tmp/s10-chain-cache /opt/homebrew/bin/python3.13 -B -m unittest tests.b5_analysis.test_chain_fixture
 ```
 
 The runner starts with a standalone `cd`, sets `JW_B5_SYNTHETIC_ONLY=1`, unsets

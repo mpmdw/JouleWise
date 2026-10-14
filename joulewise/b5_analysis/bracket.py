@@ -17,6 +17,7 @@ from typing import Any, Mapping, Sequence
 from joulewise import calibration_bracketing as calibration
 from joulewise import calibration_ledger as ledger
 from joulewise.bundle_read import BundleReadError, BundleReader
+from joulewise.authentication_io import V2AuthenticationInputError
 from joulewise.schemas import CampaignPolicy
 
 from .archive import ArchiveHandle, _read
@@ -182,6 +183,12 @@ def _window_inputs(archive: ArchiveHandle, inputs: _Inputs, directory: Path):
                 # The frozen harvest excludes an unreadable member from this
                 # selection. Its authenticated bytes still remain inventoried;
                 # the complete selected set is checked against that harvest.
+                continue
+            except V2AuthenticationInputError as exc:
+                if exc.reason != "v2_authentication_invalid_json":
+                    raise
+                # The enclosing v2 reader rejects malformed JSON before the
+                # tolerant bundle reader can classify this archived member.
                 continue
             uncertainty = metadata.get("uncertainty_evidence")
             anchor = uncertainty.get("clock_anchor") if isinstance(uncertainty, Mapping) else None

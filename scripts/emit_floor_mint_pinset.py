@@ -275,6 +275,7 @@ def _bootstrap_producer(pack: Path, runs: Path, report_path: Path, bracket_path:
         _equal(declaration["sidecar_sha256"], sidecar_hash, "producer plan sidecar bytes")
     _equal(tree["plan"]["declared_sha256"], plan_hash, "declared producer plan")
     spec_path, order_path = pack / "extraction_spec.json", pack / "order_manifest.json"
+    mint._allow_governed_extraction_spec(spec_path)
     spec, spec_hash = _read(spec_path)
     order, order_hash = _read(order_path)
     _equal(spec_hash, contract["extraction_spec"]["sha256"], "extraction spec")

@@ -78,6 +78,12 @@ def ordered_members(roster, tree, measurement, pack_root):
     return ordered
 
 
+def member_config_path(member,measurement,pack_root):
+    """Pinned rosters carry measurement-relative or pack-relative configs."""
+    path=Path(measurement)/member['config_path']
+    return path if path.is_file() else Path(pack_root)/member['config_path']
+
+
 @dataclass
 class ChainWindow:
     root: Path
@@ -253,6 +259,30 @@ class AvailableWindows(dict):
         raise FileNotFoundError('window not built: '+str(key))
 
 
+def restore_prior_custody(destination,pack):
+    """Restore prior synthetic capture locators; never rebuild their archives."""
+    from joulewise.b5.harvest import clone_tree
+    scratch=Path(os.environ['TMPDIR']).resolve()
+    for prior in PACK_IDS:
+        if prior==pack:break
+        directory=Path(destination)/prior
+        descriptor=json.loads((directory/'INDEX_ENTRY.json').read_bytes())
+        root=Path(descriptor['archive_root']).parent.resolve()
+        if not root.is_relative_to(scratch):
+            raise ValueError('prior synthetic custody must be under scratch TMPDIR: '+str(root))
+        if Path(descriptor['claim_runs_root']).exists():continue
+        root.mkdir(parents=True,exist_ok=True)
+        with tarfile.open(directory/'archive.tar.xz') as blob:
+            blob.extractall(root,filter='data')
+        for label,field in [('night-custody','custody_root'),('repo','measurement_root'),
+                            ('claim-runs','claim_runs_root'),('bound-runs','bound_runs_root')]:
+            source=root/'archive/sources'/label
+            if source.exists():clone_tree(source,Path(descriptor[field]))
+        hardware=root/'synthetic-hardware'
+        if hardware.exists():clone_tree(hardware,Path(descriptor['measurement_root'])/'synthetic-hardware')
+        print('RESTORED_PRIOR_CUSTODY',prior,root,flush=True)
+
+
 def build_export(pack,destination):
     """Collect one synthetic window; all production imports are the export's."""
     started=time.monotonic()
@@ -261,6 +291,7 @@ def build_export(pack,destination):
     if os.environ.get('B5_S0_EXPORT_PIN')!=pin['head']:raise ValueError('requires exact pinned export')
     for relative,digest in pin['files'].items():
         if sha(ROOT/relative)!=digest:raise ValueError('pinned program byte mismatch: '+relative)
+    restore_prior_custody(destination,pack)
     s0._load_export_support()
     from tests import test_harvest_b5_window as hb
     from tests.b5_analysis.support_s10.member import calibration,collect_job,clone_job,PHYSICS_CACHE
@@ -380,8 +411,8 @@ def build_export(pack,destination):
             and m['run_id'] not in (aborted,truncated))
     jobs=[]
     for n,m in enumerate(members):
-        source=w.measurement/m['config_path'];config=json.loads(source.read_bytes())
-        runs=w.bound if m.get('stage_id')=='neg8_bound' else w.claim
+        source=member_config_path(m,w.measurement,w.pack);config=json.loads(source.read_bytes())
+        runs=w.bound if m.get('stage_id') in ('neg8_bound','neg8_bound_corpus') else w.claim
         last=base+n*200.
         jobs.append((runs,config,last,w.measurement/hb.POLICY,pre,source,producer.PROCESS))
     # The first pack measures full-controller cost. Later packs collect one
@@ -413,7 +444,7 @@ def build_export(pack,destination):
           else pool.map(clone_job,clone_jobs.values()))
       for n,m in enumerate(members):
         result=seed_results[n] if n in seed_results else next(pending)
-        source=w.measurement/m['config_path'];runs=jobs[n][0]
+        source=member_config_path(m,w.measurement,w.pack);runs=jobs[n][0]
         bundle=Path(result[0]);costs.append(result[1])
         if n in (0,1):
             from joulewise.cli import validate_bundle
