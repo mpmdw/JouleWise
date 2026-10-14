@@ -333,7 +333,13 @@ def build_context(archive: ArchiveHandle, kept_units: KeptUnits,
     survivors = survivor_set(archive, row, actual)
     excluded = excluded_references(archive, actual)
     excluded_reference_in_screen(archive, survivors, excluded)
-    removed = kept_units.removed_run_ids() | frozenset(_excluded(archive))
+    # The context answers for the view it is built from. A labelled sensitivity
+    # view (plan 8.1) restores units the exclusion record removed; their
+    # members are kept in that view and are not removed in its context. On the
+    # primary view no kept member is in the exclusion record, so this is the
+    # union of the two removed sets exactly as before.
+    kept = frozenset(run for cid in kept_units.cells for run in kept_units.kept_run_ids(cid))
+    removed = kept_units.removed_run_ids() | (frozenset(_excluded(archive)) - kept)
     assessment = window_bracket
     if hasattr(window_bracket, "evaluation"):
         if window_bracket.window != window:

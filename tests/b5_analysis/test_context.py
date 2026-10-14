@@ -529,6 +529,26 @@ class ContextTests(unittest.TestCase):
         self.assertTrue(set(quad.run_ids) <= context.removed_bundle_ids)
         self.assertEqual(context.removed_bundle_ids, frozenset(quad.run_ids))
 
+    def test_restored_view_context_keeps_the_restored_members(self):
+        # Early cold passes F1 (S10): a load-correlated view restores a unit the
+        # exclusion record removed; its context must not name those members
+        # removed, or the claim engine refuses context_kept_units_mismatch and
+        # the session never prepares them.
+        case = self.case()
+        _archive, units = case.inputs()
+        cid, cell = next(iter(units.cells.items()))
+        quad = next(iter(cell.kept["quad"]))
+        case.exclude(quad.run_ids[0], "thermal.powermetrics_pressure_elevated")
+        archive, units = case.inputs()
+        primary = ctx.build_context(archive, units, case.assessment, case.row, test_only_allow_synthetic_binding=True)
+        self.assertEqual(primary.removed_bundle_ids, frozenset(quad.run_ids))
+        restored = units.with_units_restored(cid, [quad.unit_id], label="load-correlated")
+        context = ctx.build_context(archive, restored, case.assessment, case.row, test_only_allow_synthetic_binding=True)
+        self.assertEqual(context.removed_bundle_ids, frozenset())
+        self.assertEqual(context.removed_bundle_ids, restored.removed_run_ids())
+        # The primary context is unchanged by building the view's.
+        self.assertEqual(primary.removed_bundle_ids, frozenset(quad.run_ids))
+
     def test_survivor_object_computed_once_and_shared_by_tripwire_and_context(self):
         case = self.case()
         actual = ctx.survivor_set

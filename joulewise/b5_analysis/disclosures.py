@@ -25,7 +25,7 @@ from .kept_units import CATALOG_PATH, _strict_json
 from .steps import classify_step4_exit
 from .windows import AnalysisRefusal, SealPins
 from .context import rebuilt_roster
-from joulewise.analysis_engine.inputs import archived_verdict_row
+from joulewise.analysis_engine.inputs import AnalysisInputError, archived_verdict_row
 
 SCHEMA = "joulewise.b5_disclosures.v1"
 PACK_ORDER = ("alpha", "beta", "gamma")
@@ -301,7 +301,23 @@ def _descriptive_cell(pack, view, cid, cell_id, estimate, minimum):
     return {"status": "one_unit", "mean_j": _one_unit_mean(rows, cell.n_r)}
 
 
+# Plan 8.1: the load-correlated line never replaces the primary value and never
+# gates anything. A typed refusal met while computing it (for example the
+# kept-member stop firing on a restored member) is that line's text, not a
+# refusal of the disclosure record (early cold passes F1, S10).
+_LINE_REFUSALS = (AnalysisRefusal, PaperReportedEnergyRefusal, AnalysisInputError)
+
+
+def _line_refusal(exc):
+    code = getattr(exc, "code", None)
+    code = (code if isinstance(code, str) else str(exc)).split(":", 1)[0]
+    token = code.replace("_", "").replace(".", "")
+    return code if code and code[0].isalpha() and token.isalnum() and token.isascii() else "refused"
+
+
 def _cell_text(value):
+    if value["status"] == "refused":
+        return f"not computable: {value['code']}"
     if value["status"] == "not_computable":
         return "not computable (no unit left in a stratum)"
     if value["status"] == "one_unit":
@@ -327,6 +343,8 @@ def _paired_values(rows):
 
 
 def _paired_text(value):
+    if value["status"] == "refused":
+        return f"not computable: {value['code']}"
     if value["status"] == "not_computable":
         return "not computable (no quad left)"
     if value["status"] == "one_quad":
@@ -383,10 +401,14 @@ def _energy_lines(result, windows, archives, kept, projections, extraction_repor
                         "(thermal pressure, contention) not applied")
                 values = {}
                 if restored:
-                    changed = view.with_units_restored(cell.cell_id, [u.unit_id for u in restored], label="load-correlated")
-                    c2 = changed.cell(cell.cell_id)
-                    values = _descriptive_cell(pack, changed, cell.cell_id, cid, estimate, 5)
-                    text += f" (n_r = {c2.n_r}, n_b = {c2.n_b}): " + _cell_text(values)
+                    try:
+                        changed = view.with_units_restored(cell.cell_id, [u.unit_id for u in restored], label="load-correlated")
+                        c2 = changed.cell(cell.cell_id)
+                        values = _descriptive_cell(pack, changed, cell.cell_id, cid, estimate, 5)
+                        text += f" (n_r = {c2.n_r}, n_b = {c2.n_b}): " + _cell_text(values)
+                    except _LINE_REFUSALS as exc:
+                        values = {"status": "refused", "code": _line_refusal(exc)}
+                        text += ": " + _cell_text(values)
                 else:
                     text += ": no unit restored"
                 text += (f"; restored repeat {counts_r['repeat']}, quad {counts_r['quad']}; "
@@ -465,9 +487,13 @@ def _energy_lines(result, windows, archives, kept, projections, extraction_repor
             text = f"{cid}: sensitivity: load-correlated physics exclusions (thermal pressure, contention) not applied"
             value = {}
             if restored:
-                changed = kept["gamma"].with_units_restored(cid, [u.unit_id for u in restored], label="load-correlated")
-                value = _paired_values(observe(changed)[cid])
-                text += f" (n = {value['n']}): {_paired_text(value)}"
+                try:
+                    changed = kept["gamma"].with_units_restored(cid, [u.unit_id for u in restored], label="load-correlated")
+                    value = _paired_values(observe(changed)[cid])
+                    text += f" (n = {value['n']}): {_paired_text(value)}"
+                except _LINE_REFUSALS as exc:
+                    value = {"status": "refused", "code": _line_refusal(exc)}
+                    text += ": " + _paired_text(value)
             else:
                 text += ": no unit restored"
             text += f"; restored quads {len(restored)}; code families: {', '.join(families)}"

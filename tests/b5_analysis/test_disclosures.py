@@ -308,6 +308,43 @@ class PartBTests(unittest.TestCase):
         self.assertEqual(row["values"]["n"],10); self.assertEqual(row["restored_count"],1)
         self.assertNotIn("outcome",row["values"])
 
+    def test_load_correlated_cell_refusal_is_the_line_not_the_record(self):
+        # Early cold passes F1 (S10): plan 8.1's line never gates anything, so a
+        # typed refusal on the restored view is that line's text.
+        h=Harness((6,),(5,9)); cell=h.kept["alpha"].cell("synthetic")
+        changed=replace(cell,dropped=tuple(replace(u,codes=("thermal.os_level_nonzero",),families=("PHYSICS_IN_SPAN",))
+            if u.stratum=="repeat" else u for u in cell.dropped))
+        h.kept["alpha"]=replace(h.kept["alpha"],cells={"synthetic":changed})
+        primary=h.estimate
+        def estimate(pack,view,minimum):
+            if view.sensitivity_label=="load-correlated":raise AnalysisRefusal("member_code_on_kept_unit")
+            return primary(pack,view,minimum)
+        h.estimate=estimate
+        rec=h.produce(); row=items(rec,"cells","load_correlated_cell")[0]
+        self.assertEqual(row["values"],{"status":"refused","code":"member_code_on_kept_unit"})
+        self.assertIn("not computable: member_code_on_kept_unit",d.render_disclosures(rec,released=True))
+        self.assertTrue(items(rec,"cells","reported_cell"))
+
+    def test_load_correlated_contrast_refusal_is_the_line_and_defects_propagate(self):
+        from joulewise.analysis_engine.inputs import AnalysisInputError
+        h=Harness(); h.add_contrast(); cell=h.kept["gamma"].cell("decode")
+        cell=replace(cell,dropped=tuple(replace(u,codes=("thermal.os_level_nonzero",),families=("PHYSICS_IN_SPAN",)) for u in cell.dropped))
+        h.kept["gamma"]=replace(h.kept["gamma"],cells={"decode":cell})
+        observe=h.observe
+        def refusing(view):
+            if view.sensitivity_label=="load-correlated":raise AnalysisInputError("member_code_on_kept_unit")
+            return observe(view)
+        h.observe=refusing
+        rec=h.produce(); row=items(rec,"contrasts","load_correlated_contrast")[0]
+        self.assertEqual(row["values"],{"status":"refused","code":"member_code_on_kept_unit"})
+        self.assertIn("not computable: member_code_on_kept_unit",row["text"])
+        self.assertTrue(items(rec,"contrasts","primary_contrast"))
+        def broken(view):
+            if view.sensitivity_label=="load-correlated":raise RuntimeError("defect")
+            return observe(view)
+        h.observe=broken
+        with self.assertRaises(RuntimeError):h.produce()
+
     def test_T6_B6_magnitude_ratio_and_token(self):
         h=Harness(); h.add_contrast((10,12,8),removed=(),sides=((10,20),(10,22),(10,18)))
         text=h.text(); self.assertIn("1.9933 [1.5534, 2.5578]",text)
