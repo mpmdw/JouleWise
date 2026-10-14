@@ -385,31 +385,64 @@ class ChainTests(unittest.TestCase):
 
     def check_c8(self):
         w=self.window('gamma')
-        if not hasattr(type(self),'floor'):self.check_c5()
+        if not hasattr(type(self),'floor'):
+            # With the persistent chain cache, reuse the last completed real
+            # mint (C5 takes about an hour); otherwise mint now.
+            done=sorted(self.custody.glob('mint-*/aggregate-floor.json'),key=lambda p:p.stat().st_mtime)
+            if done and os.environ.get('JW_B5_S10_CHAIN_CACHE') and (done[-1].parent/'dominance-replay.json').is_file():
+                type(self).floor=done[-1];type(self).sidecar=done[-1].parent/'dominance-replay.json'
+            else:self.check_c5()
         with self.timed('C8','gamma'),self.fixture.seams():
             from scripts import finalize_analysis_manifest as finalize
-            pack=w.measurement/'configs/campaigns'/PACK_IDS['gamma']
-            stream=io.StringIO();output=Path(tempfile.mkdtemp(prefix='finalized-',dir=self.custody))
+            from joulewise.analysis_manifest_v3 import FINALIZED_BASENAME_SUFFIX
+            from joulewise.analysis_engine.inputs import archived_verdict_row
+            from joulewise.b5_analysis.bracket import LEDGER_COPY,TERMINAL_PIN,ledger_prefix
+            from joulewise.b5_analysis.dry_run import _canonical
+            archive=self.composition('gamma')[0]
+            # Stage every attachment under one custody root that is also the
+            # output directory, exactly as the driver's step 8 does.
+            custody=Path(tempfile.mkdtemp(prefix='finalized-',dir=self.custody))
+            prefix='repo/configs/campaigns/'+PACK_IDS['gamma']+'/'
+            for name in archive.source_names():
+                if name.startswith(prefix):
+                    target=custody/'inputs/gamma-pack'/name.removeprefix(prefix)
+                    target.parent.mkdir(parents=True,exist_ok=True)
+                    target.write_bytes(archive.source_bytes('sources/'+name))
+            staged={'verdict':custody/'inputs/gamma-verdict.json','binding':custody/'inputs/gamma-bracket-binding.json',
+                    'ledger':custody/'inputs/gamma-ledger.jsonl','floor':custody/'mint/aggregate-floor.json',
+                    'sidecar':custody/'mint/dominance-replay.json'}
+            staged['floor'].parent.mkdir()
+            staged['verdict'].write_bytes(_canonical(archived_verdict_row(archive)))
+            staged['binding'].write_bytes(archive.output_bytes('derived/bracket-binding.json'))
+            staged['ledger'].write_bytes(ledger_prefix(archive.source_bytes(LEDGER_COPY),
+                json.loads(archive.output_bytes(TERMINAL_PIN))))
+            type(self).mint_dir=Path(self.floor).parent
+            shutil.copyfile(self.floor,staged['floor']);shutil.copyfile(self.sidecar,staged['sidecar'])
+            # The floor is authenticated against its pinset beside it, as in the driver's mint/.
+            shutil.copyfile(Path(self.floor).parent/'floor-mint-pinset.json',staged['floor'].parent/'floor-mint-pinset.json')
+            type(self).floor=staged['floor'];type(self).sidecar=staged['sidecar']
+            prospective=custody/'inputs/gamma-pack/analysis_manifest_v3.json'
+            stream=io.StringIO()
             with contextlib.redirect_stdout(stream),contextlib.redirect_stderr(stream):
                 code=finalize.main(['--window-index',str(self.fixture.index),
-                    '--prospective-manifest',str(pack/'analysis_manifest_v3.json'),
-                    '--plan-tree',str(pack/'plan_tree.json'),'--custody-root',str(self.fixture.root),
-                    '--runs-root',str(w.claim),'--whole-window-verdict',str(w.claim/'whole-window-verdict.json'),
-                    '--bracket-binding',str(w.archive/'derived/bracket-binding.json'),
-                    '--calibration-ledger',str(w.measurement/'runs/calibration_observation_ledger.jsonl'),
-                    '--aggregate-floor-artifact',str(self.floor),'--dominance-replay-sidecar',str(self.sidecar),
-                    '--output-dir',str(output)])
+                    '--prospective-manifest',str(prospective),
+                    '--plan-tree',str(custody/'inputs/gamma-pack/plan_tree.json'),'--custody-root',str(custody),
+                    '--runs-root',str(w.claim),'--whole-window-verdict',str(staged['verdict']),
+                    '--bracket-binding',str(staged['binding']),'--calibration-ledger',str(staged['ledger']),
+                    '--aggregate-floor-artifact',str(staged['floor']),'--dominance-replay-sidecar',str(staged['sidecar']),
+                    '--output-dir',str(custody)])
             self.assertEqual(code,0,stream.getvalue())
-            paths=list(output.glob('*.json'));self.assertEqual(len(paths),1)
-            type(self).finalized=paths[0]
-            manifest=json.loads(paths[0].read_bytes())
+            path=custody/(json.loads(prospective.read_bytes())['manifest_id']+FINALIZED_BASENAME_SUFFIX)
+            self.assertTrue(path.is_file(),stream.getvalue())
+            type(self).finalized=path
+            manifest=json.loads(path.read_bytes())
             self.assertEqual(manifest['schema_version'],'joulewise.analysis_manifest.v3.finalized')
             self.assertEqual(manifest['evidence']['window_bracket']['evaluation_sha256'],
                 ww.canonical_sha256(ww._archive_thaw(self.composition('gamma')[2].evaluation)))
             # The role is authenticated by the finalizer; inspect its digest
             # again without replacing the claim-input builder.
             from joulewise.analysis_engine.inputs import block5_claim_gate_inputs
-            built=block5_claim_gate_inputs(self.fixture.index,paths[0],w.claim)
+            built=block5_claim_gate_inputs(self.fixture.index,path,w.claim)
             self.assertEqual(built['brackets']['gamma'].b_fiducial_s,self.composition('gamma')[2].b_fiducial_s)
 
     def check_c9(self):
@@ -421,7 +454,7 @@ class ChainTests(unittest.TestCase):
             self.assertIn(w.truncated,kept.removed_run_ids())
             self.assertFalse((w.claim/w.aborted/'summary_metrics.json').exists())
             self.assertEqual((w.claim/w.truncated/'summary_metrics.json').read_bytes(),b'{"status":')
-            pinset=json.loads((self.floor.parent/'floor-mint-pinset.json').read_bytes());args=['analyze-claims','--analysis-manifest',str(self.finalized),
+            pinset=json.loads((getattr(type(self),'mint_dir',self.floor.parent)/'floor-mint-pinset.json').read_bytes());args=['analyze-claims','--analysis-manifest',str(self.finalized),
                 '--runs-root',str(w.claim),'--floor-artifact',str(self.floor),'--neg8-harvest-archive',str(w.archive),
                 '--window-index',str(self.fixture.index)]
             for pack,producer in zip(('alpha','beta'),pinset['producer_plans'],strict=True):

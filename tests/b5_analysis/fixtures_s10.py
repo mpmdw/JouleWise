@@ -60,6 +60,54 @@ CONDITIONAL_SEAMS=(
 )
 
 
+CONDITIONAL_SEAMS+=(
+    ('consumer','analysis_manifest_v3._authenticate_floor_dependencies (exact_stack_only lookup only)',
+     'CONDITIONAL on open question Q-EXACTSTACK (stage S10 director, 2026-10-14): the sealed GAMMA manifest '
+     'declares exact_stack_only transport, and the finalizer then requires a floor cell keyed on the consumer '
+     'family itself (sw-*), while every block-5 floor is measured on its floor-pack family (df-*) and names the '
+     'consumers in its same-stack transport group. The fixture proceeds on the recommended reading: the consumer '
+     'is served by its transport group\'s single source cell, whose group admits the consumer and whose stack '
+     'identity equals the consumer\'s (both still checked). The finalizer sees, for that lookup only, the source '
+     'cell also under each admitted consumer key; the bound floor_cell_id is the real source cell. Results from '
+     'C8 on, and the joined run from step 8 on, are conditional on the ruling.'),
+)
+
+
+@contextlib.contextmanager
+def conditional_exact_stack_seam():
+    """Apply Q-EXACTSTACK's fixture-only option; see CONDITIONAL_SEAMS."""
+    from joulewise import analysis_manifest_v3 as v3
+    from scripts import finalize_analysis_manifest as finalize
+    original=v3._authenticate_floor_dependencies
+    def authenticate(prospective,floor,*,bundle_paths):
+        cells=[c for c in floor.get('cells',[]) if isinstance(c,dict)]
+        by_id={c.get('cell_id'):c for c in cells}
+        aliases=[]
+        for group in floor.get('transport_groups',[]):
+            sources=group.get('source_cell_ids') if isinstance(group,dict) else None
+            if not isinstance(sources,list) or len(sources)!=1 or sources[0] not in by_id:continue
+            source=by_id[sources[0]];key=source.get('key')
+            if not isinstance(key,dict):continue
+            for row in group.get('allowed_consumer_condition_families') or []:
+                if row.get('condition_family_id')==key.get('condition_family_id'):continue
+                alias=copy.deepcopy(source)
+                alias['key']={**alias['key'],'condition_family_id':row.get('condition_family_id'),
+                              'condition_family_sha256':row.get('condition_family_sha256')}
+                aliases.append(alias)
+        view={**floor,'cells':[*floor.get('cells',[]),*aliases]}
+        return original(prospective,view,bundle_paths=bundle_paths)
+    with mock.patch.object(v3,'_authenticate_floor_dependencies',authenticate), \
+         mock.patch.object(finalize,'_authenticate_floor_dependencies',authenticate):
+        yield
+
+
+@contextlib.contextmanager
+def conditional_seams():
+    """Every conditional seam of CONDITIONAL_SEAMS, as one context."""
+    with conditional_aggregate_lineage_seam(),conditional_exact_stack_seam():
+        yield
+
+
 @contextlib.contextmanager
 def conditional_aggregate_lineage_seam():
     """Apply Q-LINEAGE's fixture-only option; see CONDITIONAL_SEAMS."""
@@ -199,7 +247,7 @@ class ChainFixture:
         head=subprocess.run(['git','-C',str(ROOT),'rev-parse','HEAD'],check=True,capture_output=True,text=True).stdout.strip()
         with contextlib.ExitStack() as stack:
             stack.enter_context(mock.patch.object(mint,'_actual_v2_git_state',return_value=(head,None)))
-            stack.enter_context(conditional_aggregate_lineage_seam())
+            stack.enter_context(conditional_seams())
             if len(self.windows)==3:
                 yield
                 return

@@ -111,6 +111,31 @@ class SingleCountStatementTests(unittest.TestCase):
             self.write(artifact, root)
 
 
+class ClaimGateFloorSpecReaderTests(unittest.TestCase):
+    """block5_claim_gate_inputs reads each floor pack's sealed spec only for its planned units."""
+
+    SPEC = g.ROOT / "configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json" \
+        if hasattr(g, "ROOT") else Path(__file__).resolve().parents[2] / \
+        "configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json"
+
+    def test_sealed_floor_spec_declares_registration_and_is_read_as_governed(self):
+        from joulewise.analysis_engine import inputs
+        import inspect
+        raw = self.SPEC.read_bytes()
+        with self.assertRaisesRegex(inputs.AnalysisInputError, "forbidden key 'estimator_registration'"):
+            inputs._strict_json_admission_bytes(raw, "floor spec")
+        spec = inputs._strict_json_admission_bytes(raw, "floor spec", governed_extraction_spec=True)
+        self.assertTrue(any("estimator_registration" in cell for cell in spec["cells"]))
+        source = inspect.getsource(inputs.block5_claim_gate_inputs)
+        self.assertIn('"floor spec",\n', source)
+        self.assertIn("governed_extraction_spec=True", source)
+
+    def test_other_inputs_still_refuse_registration_vocabulary(self):
+        from joulewise.analysis_engine import inputs
+        with self.assertRaisesRegex(inputs.AnalysisInputError, "forbidden key"):
+            inputs._strict_json_admission_bytes(b'{"contrasts":[{"estimator_registration":{}}]}', "analysis manifest")
+
+
 def _window_lineage(index):
     lineage = g.launch_lineage()
     lineage["window_id"] = f"window-{index + 1}"

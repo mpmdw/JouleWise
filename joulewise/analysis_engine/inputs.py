@@ -363,7 +363,8 @@ def block5_claim_gate_inputs(window_index_path: Path, manifest_path: Path,
             planned = planned_contrast_units(manifest)
         else:
             relative = f"sources/repo/configs/campaigns/{window.pack_id}/extraction_spec.json"
-            spec = _strict_json_admission_bytes(archive.source_bytes(relative), "floor spec")
+            spec = _strict_json_admission_bytes(archive.source_bytes(relative), "floor spec",
+                                                governed_extraction_spec=True)
             planned = {}
             for cell in spec["cells"]:
                 strata = planned.setdefault(cell["condition_family_id"], {})
@@ -465,8 +466,13 @@ def _strict_json_admission_bytes(
     object_pairs_hook: Callable[
         [list[tuple[str, Any]]], dict[str, Any]
     ] = _reject_duplicate_admission_keys,
+    governed_extraction_spec: bool = False,
 ) -> Any:
-    """Strict-parse one analysis input and refuse deleted vocabulary."""
+    """Strict-parse one analysis input and refuse deleted vocabulary.
+
+    A sealed floor pack's extraction spec is the one governed document that
+    declares estimator registration; its reader passes governed_extraction_spec.
+    """
 
     try:
         value = json.loads(
@@ -482,7 +488,7 @@ def _strict_json_admission_bytes(
         raise AnalysisInputError(
             f"{label} is not valid UTF-8 JSON: {exc}"
         ) from exc
-    forbidden = _registration_vocabulary_paths(value, label)
+    forbidden = [] if governed_extraction_spec else _registration_vocabulary_paths(value, label)
     if forbidden:
         raise AnalysisInputError(
             f"{label}: forbidden key 'estimator_registration' at {forbidden[0]}"
