@@ -1,9 +1,37 @@
-"""Commitment-comparison primitives; R1--R5 full-run acceptance is not built."""
+"""Commitment comparison on dispatch doubles and the joined real programs."""
 from copy import deepcopy
 import hashlib
 import unittest
 from joulewise.b5_analysis import dry_run as d
 from joulewise.b5_analysis.windows import AnalysisRefusal
+
+
+class JoinedReleaseTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from tests.b5_analysis.joined_s10 import JoinedHarness, require_windows
+        cls.fixture = require_windows()
+        cls.harness = JoinedHarness(cls.fixture.index)
+        cls.addClassCleanup(cls.harness.close)
+        cls.first = cls.harness.execute('first')
+        cls.second = cls.harness.execute('second')
+        cls.release = cls.harness.execute(mode='release', custody=cls.first.custody)
+
+    def test_J6_two_custody_roots_have_identical_output_digests(self):
+        from tests.b5_analysis.joined_s10 import output_digests
+        self.assertEqual((self.first.code, self.second.code), (0, 0),
+                         self.first.stderr + self.second.stderr)
+        self.assertNotEqual(self.first.custody, self.second.custody)
+        self.assertEqual(self.first.record, self.second.record)
+        self.assertEqual(output_digests(self.first), output_digests(self.second))
+        d.require_release_equality(self.first.record, self.second.record)
+
+    def test_J6_release_after_dry_run_passes(self):
+        self.assertEqual(self.release.code, 0, self.release.stderr)
+        self.assertIs(self.release.record['completed_without_tooling_refusal'], True)
+        self.assertEqual(self.release.record['mode'], 'release')
+        self.assertEqual(self.first.record['steps'], self.release.record['steps'])
+        d.require_release_equality(self.first.record, self.release.record)
 
 
 def record():
