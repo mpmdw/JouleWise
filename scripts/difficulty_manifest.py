@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from joulewise.benchmark_import_math import load_math_test
 from joulewise.packs.difficulty.config import load_config
-from joulewise.packs.difficulty.manifest import build_manifest
+from joulewise.packs.difficulty.manifest import build_manifest, selections_only
 
 
 def main(argv=None):
@@ -48,6 +48,8 @@ def main(argv=None):
         return 2
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    selection_path = output.parent / f"selections-{config['version']}.json"
+    selection_path.write_text(json.dumps(selections_only(manifest), indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return 0
 
 

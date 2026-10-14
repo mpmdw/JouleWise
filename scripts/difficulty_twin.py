@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Independent stdlib DIFFICULTY recomputation, derived from SPEC.md v1.1.
+"""Independent DIFFICULTY v2 recomputation from SPEC-v2.md, stdlib only.
 
-No production estimator is imported. Parsing, t inversion, centred least
-squares, and interval propagation are independently implemented here.
+No repository modules are imported. The numerical primitives retained from
+v1.1 were also independently derived; all v2 analysis follows sections 6–10.
 """
-
 from __future__ import annotations
 
 import argparse
@@ -13,47 +12,32 @@ import csv
 from functools import lru_cache
 import json
 import math
+from pathlib import Path
+import platform
+import random
 import re
 from statistics import NormalDist
-import sys
-from pathlib import Path
 
 
-BENCH_COLUMNS = (
-    "model", "mode", "item_id", "level", "outcome", "correct",
-    "prompt_tokens", "generated_tokens", "cap_hit", "flags",
-)
-ENERGY_COLUMNS = (
-    "model", "mode", "level", "item_id", "boundary", "energy_j",
-    "prompt_tokens", "generated_tokens", "flags",
-)
-CELL_COLUMNS = (
-    "boundary", "model", "mode", "level", "n_bench", "k_correct",
-    "accuracy", "acc_lo", "acc_hi", "mean_generated_tokens_bench",
-    "cap_hit_rate_bench", "m_energy", "mean_energy_j", "energy_lo_j",
-    "energy_hi_j", "n_holdout", "k_holdout", "epc_j", "epc_lo_j", "epc_hi_j", "epc_status",
-    "j_per_token", "jpt_lo", "jpt_hi", "token_mismatch_count", "excluded_rows",
-)
-DECOMPOSITION_COLUMNS = (
-    "boundary", "model", "mode", "N", "a_j", "a_se", "b_prompt_j_per_tok",
-    "b_prompt_se", "b_gen_j_per_tok", "b_gen_se", "r2", "r2_gen_only",
-    "gen_share", "status",
-)
-RESIDUAL_COLUMNS = (
-    "boundary", "model", "mode", "level", "m", "mean_residual_j",
-    "lo_j", "hi_j", "contains_zero",
-)
-CROSSOVER_COLUMNS = (
-    "boundary", "level", "cheapest", "cheapest_epc_j", "status", "tied",
-)
-ENERGY_ALWAYS_EXCLUDE = {
-    "bad_number", "bad_level", "bad_mode", "duplicate", "unknown_item",
-    "unknown_config",
-}
-BENCH_ALWAYS_EXCLUDE = {
-    "unknown_item", "unknown_config", "duplicate", "bad_number", "missing_text",
-    "bad_level", "bad_mode",
-}
+BENCH_COLUMNS = "model mode item_id level attempt outcome correct prompt_tokens generated_tokens cap_hit flags".split()
+ENERGY_COLUMNS = "model mode level item_id boundary attempt energy_j prompt_tokens generated_tokens flags".split()
+CELL_COLUMNS = "variant boundary model mode level cell_status n_bench_target n_bench k_correct accuracy acc_lo acc_hi mean_generated_tokens_bench cap_hit_rate_bench loop_rate_bench n_holdout_target n_holdout k_holdout holdout_accuracy mean_prompt_tokens_holdout mean_generated_tokens_holdout m_energy_target m_energy mean_energy_j energy_lo_j energy_hi_j model_energy_j epc_model_j epc_model_lo_j epc_model_hi_j epc_model_status epc_direct_j epc_direct_lo_j epc_direct_hi_j epc_direct_status epc_j epc_lo_j epc_hi_j epc_status primary_source primary_reason j_per_token jpt_lo jpt_hi token_mismatch_count rows_not_used replaced_rows".split()
+DECOMPOSITION_COLUMNS = "variant boundary model mode N a_j a_se a_lo_j a_hi_j b_prompt_j_per_tok b_prompt_se b_prompt_lo b_prompt_hi b_gen_j_per_tok b_gen_se b_gen_lo b_gen_hi r2 r2_gen_only gen_share status".split()
+RESIDUAL_COLUMNS = "variant boundary model mode level m mean_residual_j lo_j hi_j contains_zero boot_lo_j boot_hi_j misfit".split()
+PRIMARY_COLUMNS = "variant boundary level a b epc_a_j epc_b_j source_a source_b log_ratio ratio desc_lo desc_hi dec_lo dec_hi status cheaper reason".split()
+RIVAL_COLUMNS = "variant boundary level cheapest rival log_ratio desc_lo desc_hi dec_lo dec_hi beaten reason".split()
+CROSSOVER_COLUMNS = "variant boundary level cheapest cheapest_epc_j status tied incomplete".split()
+ALWAYS = {"bad_number", "bad_level", "bad_mode", "unknown_item", "unknown_config", "not_selected", "unknown_boundary", "duplicate"}
+VARIANTS = ("primary", "flagged_inclusive")
+LEVELS = range(1, 6)
+SCHEMAS = {"cells.csv": CELL_COLUMNS, "decomposition.csv": DECOMPOSITION_COLUMNS,
+           "level_residuals.csv": RESIDUAL_COLUMNS, "primary.csv": PRIMARY_COLUMNS,
+           "rivals.csv": RIVAL_COLUMNS, "crossover.csv": CROSSOVER_COLUMNS}
+KEYS = {name: columns[:4] + (["level"] if name in {"cells.csv", "level_residuals.csv"} else [])
+        for name, columns in SCHEMAS.items()}
+KEYS.update({"primary.csv": ["variant", "boundary", "level"],
+             "rivals.csv": ["variant", "boundary", "level", "cheapest", "rival"],
+             "crossover.csv": ["variant", "boundary", "level"]})
 
 
 def _beta_fraction(a: float, b: float, x: float) -> float:
@@ -196,202 +180,489 @@ def read_table(path, columns):
         return list(reader)
 
 
-def parse_tables(bench, energy, exclude_flags):
-    bench_cells = defaultdict(list)
-    bench_lookup = {}
-    bench_flag_counts, energy_flag_counts = Counter(), Counter()
-    for raw in bench:
-        row = dict(raw)
-        row["level"] = _integer(raw.get("level"))
-        for field in ("prompt_tokens", "generated_tokens", "correct", "cap_hit"):
-            row[field] = _integer(raw.get(field), 0, 1 if field in {"correct", "cap_hit"} else None)
-        flags = _flags(raw.get("flags"))
-        if row["level"] not in range(1, 6):
-            flags.add("bad_level")
-        if row["mode"] not in {"off", "on"}:
-            flags.add("bad_mode")
-        if any(row[field] is None for field in ("prompt_tokens", "generated_tokens", "correct", "cap_hit")):
-            flags.add("bad_number")
-        identity = (row["model"], row["mode"], row["item_id"])
-        if identity in bench_lookup:
-            flags.add("duplicate")
-        bench_flag_counts.update(flags)
-        bench_lookup.setdefault(identity, row)
-        if row["level"] is not None and not flags & (BENCH_ALWAYS_EXCLUDE | exclude_flags):
-            bench_cells[row["model"], row["mode"], row["level"]].append(row)
+def validate_config(config):
+    """Validate number-bearing inputs without substituting defaults (§2)."""
+    def require(condition, key):
+        if not condition:
+            raise ValueError(f"invalid config key: {key}")
 
-    energy_cells = defaultdict(list)
-    excluded = Counter()
-    seen = set()
-    for raw in energy:
-        row = dict(raw)
-        flags = _flags(raw.get("flags"))
-        row["level"] = _integer(raw.get("level"))
-        if row["level"] not in range(1, 6):
-            flags.add("bad_level")
-        if row["mode"] not in {"off", "on"}:
-            flags.add("bad_mode")
-        try:
-            value = float(raw.get("energy_j") or "")
-        except (ValueError, OverflowError):
-            value = math.nan
-        row["energy_j"] = value
-        for field in ("prompt_tokens", "generated_tokens"):
-            row[field] = _integer(raw.get(field))
-        if not math.isfinite(value) or value <= 0.0 or any(row[field] is None for field in ("prompt_tokens", "generated_tokens")):
-            flags.add("bad_number")
-        identity = (row["boundary"], row["model"], row["mode"], row["item_id"])
-        if identity in seen:
-            flags.add("duplicate")
-        seen.add(identity)
-        reference = bench_lookup.get((row["model"], row["mode"], row["item_id"]))
-        if reference is None:
-            flags.add("not_in_bench")
-        else:
-            if row["level"] != reference["level"]:
-                flags.add("level_mismatch")
-            if (row["generated_tokens"] is not None and reference["generated_tokens"] is not None
-                    and row["generated_tokens"] != reference["generated_tokens"]):
-                flags.add("token_mismatch")
-        row["flags"] = flags
-        energy_flag_counts.update(flags)
-        key = (row["boundary"], row["model"], row["mode"], row["level"])
-        if flags & (ENERGY_ALWAYS_EXCLUDE | exclude_flags):
-            if not flags & {"bad_level", "bad_mode"}:
-                excluded[key] += 1
-        else:
-            energy_cells[key].append(row)
-    return bench_cells, energy_cells, excluded, bench_flag_counts, energy_flag_counts
+    def integer(value, low):
+        return type(value) is int and value >= low
+
+    def string(value):
+        return isinstance(value, str) and bool(value.strip())
+
+    def number(value, low, high, inclusive=False):
+        return (type(value) in (int, float) and math.isfinite(value)
+                and low < value and (value <= high if inclusive else value < high))
+
+    require(isinstance(config, dict), "config")
+    if "confidence" in config or "energy_per_level" in config:
+        raise ValueError("confidence/energy_per_level replaced in v2 by descriptive_confidence/decision_confidence and sizes")
+    require(config.get("schema_version") == "difficulty_config.v2", "schema_version")
+    for key in ("version", "seed"):
+        require(string(config.get(key)), key)
+    require(integer(config.get("n_per_level"), 1), "n_per_level")
+    sizes = config.get("sizes")
+    require(isinstance(sizes, dict) and set(sizes) == {"off", "on"}, "sizes")
+    for mode in ("off", "on"):
+        require(isinstance(sizes[mode], dict) and set(sizes[mode]) == {"bench", "energy"}, f"sizes.{mode}")
+        for role in ("bench", "energy"):
+            values = sizes[mode][role]
+            require(isinstance(values, dict) and set(values) == set(map(str, LEVELS)), f"sizes.{mode}.{role}")
+            for level, value in values.items():
+                require(integer(value, 0), f"sizes.{mode}.{role}.{level}")
+        for level in map(str, LEVELS):
+            require(0 <= sizes[mode]["energy"][level] <= sizes[mode]["bench"][level] <= config["n_per_level"], f"sizes.{mode}.{level}")
+    boundaries = config.get("boundaries")
+    require(isinstance(boundaries, list) and bool(boundaries) and all(isinstance(b, str) for b in boundaries), "boundaries")
+    require(len(set(boundaries)) == len(boundaries), "boundaries")
+    roster = config.get("configurations")
+    require(isinstance(roster, list) and bool(roster), "configurations")
+    identifiers = set()
+    for i, entry in enumerate(roster):
+        prefix = f"configurations.{i}"
+        require(isinstance(entry, dict), prefix)
+        require(string(entry.get("model")), prefix + ".model")
+        require(isinstance(entry.get("mode"), str) and entry["mode"] in {"off", "on"}, prefix + ".mode")
+        require(integer(entry.get("output_cap"), 1), prefix + ".output_cap")
+        require(isinstance(entry.get("status"), str) and entry["status"] in {"measured", "optional"}, prefix + ".status")
+        identifier = entry["model"] + "/" + entry["mode"]
+        require(identifier not in identifiers, prefix + ".model/mode")
+        identifiers.add(identifier)
+    pair = config.get("primary_comparison")
+    require(isinstance(pair, dict), "primary_comparison")
+    for key in ("a", "b"):
+        require(isinstance(pair.get(key), str) and pair[key] in identifiers, "primary_comparison." + key)
+    require(pair["a"] != pair["b"], "primary_comparison")
+    for key in ("descriptive_confidence", "decision_confidence"):
+        require(number(config.get(key), 0.5, 1), key)
+    bootstrap = config.get("bootstrap")
+    require(isinstance(bootstrap, dict), "bootstrap")
+    require(integer(bootstrap.get("replicates"), 20), "bootstrap.replicates")
+    require(string(bootstrap.get("seed")), "bootstrap.seed")
+    for key in ("exclude_flags", "physical_exclude_flags"):
+        require(isinstance(config.get(key), list) and all(isinstance(v, str) for v in config[key]), key)
+    require(not set(config["exclude_flags"]) & set(config["physical_exclude_flags"]), "physical_exclude_flags")
+    loop = config.get("loop_detector")
+    require(isinstance(loop, dict), "loop_detector")
+    require(number(loop.get("tail_fraction"), 0, 1, True), "loop_detector.tail_fraction")
+    require(integer(loop.get("min_span"), 1), "loop_detector.min_span")
+    require(integer(loop.get("min_repeats"), 2), "loop_detector.min_repeats")
+    return config
 
 
-def make_cells(bench_cells, energy_cells, excluded, confidence, energy_items):
-    boundaries = {key[0] for key in energy_cells}
-    keys = set(energy_cells)
-    keys.update((boundary, *key) for boundary in boundaries for key in bench_cells)
+def row_key(row, energy=False):
+    key = row["model"], row["mode"], row["item_id"]
+    return (row["boundary"], *key) if energy else key
+
+
+def exclusion(config, variant, energy=False):
+    flags = ALWAYS | set(config["exclude_flags"])
+    if not energy:
+        flags = flags | {"missing_text"}
+    if variant == "primary":
+        flags = flags | set(config["physical_exclude_flags"])
+    return flags
+
+
+def mark_retries(rows, excluded, energy=False):
+    """File-order same-attempt duplicates, then primary-based later attempts."""
+    seen, groups = set(), defaultdict(list)
+    for row in rows:
+        attempt = row["attempt"]
+        if attempt is None:
+            continue
+        key = row_key(row, energy)
+        signature = key, attempt
+        if signature in seen:
+            row["flags"].add("duplicate")
+        seen.add(signature)
+        groups[key].append(row)
+    for group in groups.values():
+        selected = next((r for r in sorted(group, key=lambda r: r["attempt"])
+                         if not r["flags"] & excluded), None)
+        if selected is not None:
+            for row in group:
+                if row["attempt"] > selected["attempt"]:
+                    row["flags"].add("duplicate")
+
+
+def parse_tables(bench, energy, config, selections):
+    roster = {(c["model"], c["mode"]) for c in config["configurations"]}
     result = []
-    for boundary, model, mode, level in sorted(keys):
-        key = (boundary, model, mode, level)
-        b = bench_cells.get((model, mode, level), [])
-        e = energy_cells.get(key, [])
-        n, k, m = len(b), sum(row["correct"] for row in b), len(e)
-        p, plo, phi = wilson(k, n, confidence)
-        holdout = [row for row in b if row["item_id"] not in energy_items[model, mode]]
-        nh, kh = len(holdout), sum(row["correct"] for row in holdout)
-        ph, phlo, phhi = wilson(kh, nh, confidence)
-        energies = [row["energy_j"] for row in e]
-        mean, elo, ehi = mean_interval(energies, confidence)
-        epc, epclo, epchi, status = energy_per_correct(mean, elo, ehi, ph, phlo, phhi, kh, m)
-        ratio, rlo, rhi = joules_per_token(energies, [row["generated_tokens"] for row in e], confidence)
-        result.append(dict(zip(CELL_COLUMNS, (
-            boundary, model, mode, level, n, k, p, plo, phi,
-            math.fsum(row["generated_tokens"] for row in b)/n if n else None,
-            sum(row["cap_hit"] for row in b)/n if n else None,
-            m, mean, elo, ehi, nh, kh, epc, epclo, epchi, status, ratio, rlo, rhi,
-            sum("token_mismatch" in row["flags"] for row in e), excluded[key],
-        ))))
+    # The v1.1 generated-token check uses the first bench row for the key.
+    lookup = {}
+    for raw_rows, role in ((bench, "bench"), (energy, "energy")):
+        parsed = []
+        for raw in raw_rows:
+            row = dict(raw)
+            flags = _flags(raw.get("flags"))
+            row["flags"] = flags
+            row["level"] = _integer(raw.get("level"), 1, 5)
+            row["attempt"] = _integer(raw.get("attempt"), 1)
+            fields = ["prompt_tokens", "generated_tokens"]
+            if role == "bench":
+                fields += ["correct", "cap_hit"]
+            for field in fields:
+                row[field] = _integer(raw.get(field), 0, 1 if field in {"correct", "cap_hit"} else None)
+            if row["level"] is None:
+                flags.add("bad_level")
+            if row["mode"] not in {"off", "on"}:
+                flags.add("bad_mode")
+            if row["attempt"] is None or any(row[f] is None for f in fields):
+                flags.add("bad_number")
+            if (row["model"], row["mode"]) not in roster:
+                flags.add("unknown_config")
+            selected = selections.get(row["mode"], {}).get(role, {}).get(str(row["level"]), [])
+            if row["item_id"] not in selected:
+                flags.add("not_selected")
+            if role == "energy":
+                try:
+                    value = float(raw.get("energy_j") or "")
+                except (ValueError, OverflowError):
+                    value = math.nan
+                row["energy_j"] = value
+                if not math.isfinite(value) or value <= 0:
+                    flags.add("bad_number")
+                if row["boundary"] not in config["boundaries"]:
+                    flags.add("unknown_boundary")
+                reference = lookup.get(row_key(row))
+                if reference is None:
+                    flags.add("not_in_bench")
+                elif (row["generated_tokens"] is not None and reference["generated_tokens"] is not None
+                      and row["generated_tokens"] != reference["generated_tokens"]):
+                    flags.add("token_mismatch")
+            else:
+                lookup.setdefault(row_key(row), row)
+            parsed.append(row)
+        mark_retries(parsed, exclusion(config, "primary", role == "energy"), role == "energy")
+        result.append(parsed)
     return result
 
 
-def decompose(rows, confidence):
-    """Solve centred two-predictor normal equations and recover intercept."""
+def used_rows(rows, excluded, energy=False):
+    chosen = {}
+    for row in sorted(rows, key=lambda r: r["attempt"] if r["attempt"] is not None else math.inf):
+        if not row["flags"] & excluded:
+            chosen.setdefault(row_key(row, energy), row)
+    return list(chosen.values())
+
+
+def ols(rows):
+    """Centred two-predictor fit, checking singularity in exact integers."""
     n = len(rows)
-    output = {column: None for column in DECOMPOSITION_COLUMNS[3:]}
-    output["N"] = n
     if n < 4:
-        output["status"] = "few_rows"
-        return output, []
-    p = [row["prompt_tokens"] for row in rows]
-    g = [row["generated_tokens"] for row in rows]
-    e = [row["energy_j"] for row in rows]
+        return {"N": n, "status": "few_rows"}
+    p = [r["prompt_tokens"] for r in rows]
+    g = [r["generated_tokens"] for r in rows]
+    e = [r["energy_j"] for r in rows]
+    ip = n * sum(x*x for x in p) - sum(p)**2
+    ig = n * sum(x*x for x in g) - sum(g)**2
+    ipg = n * sum(x*y for x, y in zip(p, g)) - sum(p)*sum(g)
+    if ip*ig - ipg*ipg == 0:
+        return {"N": n, "status": "singular"}
     pm, gm, em = (math.fsum(values)/n for values in (p, g, e))
-    pc, gc, ec = ([value-mean for value in values] for values, mean in ((p, pm), (g, gm), (e, em)))
-    pp = math.fsum(value*value for value in pc)
-    gg = math.fsum(value*value for value in gc)
+    pc, gc, ec = ([v-mean for v in values] for values, mean in ((p, pm), (g, gm), (e, em)))
+    pp = math.fsum(v*v for v in pc)
+    gg = math.fsum(v*v for v in gc)
     pg = math.fsum(x*y for x, y in zip(pc, gc))
     pe = math.fsum(x*y for x, y in zip(pc, ec))
     ge = math.fsum(x*y for x, y in zip(gc, ec))
-    determinant = pp*gg-pg*pg
-    if determinant <= 0.0:
-        output["status"] = "singular"
-        return output, []
+    determinant = pp*gg - pg*pg
     bp = (pe*gg-ge*pg)/determinant
     bg = (ge*pp-pe*pg)/determinant
-    a = em-bp*pm-bg*gm
-    residuals = [energy-(a+bp*prompt+bg*generated) for prompt, generated, energy in zip(p, g, e)]
-    rss = math.fsum(value*value for value in residuals)
-    tss = math.fsum(value*value for value in ec)
+    return {"N": n, "status": "ok", "a_j": em-bp*pm-bg*gm,
+            "b_prompt_j_per_tok": bp, "b_gen_j_per_tok": bg,
+            "_pm": pm, "_gm": gm, "_em": em, "_pp": pp, "_gg": gg,
+            "_pg": pg, "_ge": ge, "_tss": math.fsum(v*v for v in ec), "_det": determinant}
+
+
+def predict(fit, p, g):
+    return fit["a_j"] + fit["b_prompt_j_per_tok"]*p + fit["b_gen_j_per_tok"]*g
+
+
+def decompose(rows, confidence):
+    fit = ols(rows)
+    if fit["status"] != "ok":
+        return fit, []
+    n = len(rows)
+    residuals = [r["energy_j"]-predict(fit, r["prompt_tokens"], r["generated_tokens"]) for r in rows]
+    rss = math.fsum(r*r for r in residuals)
     sigma2 = rss/(n-3)
-    output.update(
-        a_j=a, a_se=math.sqrt(sigma2*(1/n+(pm*pm*gg-2*pm*gm*pg+gm*gm*pp)/determinant)),
-        b_prompt_j_per_tok=bp, b_prompt_se=math.sqrt(sigma2*gg/determinant),
-        b_gen_j_per_tok=bg, b_gen_se=math.sqrt(sigma2*pp/determinant),
-        r2=1-rss/tss if tss else None,
-        r2_gen_only=ge*ge/(gg*tss) if gg and tss else None,
-        gen_share=bg*gm/em, status="ok",
-    )
+    pm, gm, pp, gg, pg, det = (fit[f"_{k}"] for k in ("pm", "gm", "pp", "gg", "pg", "det"))
+    fit.update(a_se=math.sqrt(max(0, sigma2*(1/n + (pm*pm*gg-2*pm*gm*pg+gm*gm*pp)/det))),
+               b_prompt_se=math.sqrt(sigma2*gg/det), b_gen_se=math.sqrt(sigma2*pp/det),
+               r2=1-rss/fit["_tss"] if fit["_tss"] else None,
+               r2_gen_only=fit["_ge"]**2/(gg*fit["_tss"]) if gg and fit["_tss"] else None,
+               gen_share=fit["b_gen_j_per_tok"]*gm/fit["_em"])
+    t = student_t_quantile((1+confidence)/2, n-3)
+    for point, se, lower, upper in (("a_j", "a_se", "a_lo_j", "a_hi_j"),
+                                  ("b_prompt_j_per_tok", "b_prompt_se", "b_prompt_lo", "b_prompt_hi"),
+                                  ("b_gen_j_per_tok", "b_gen_se", "b_gen_lo", "b_gen_hi")):
+        fit[lower], fit[upper] = fit[point]-t*fit[se], fit[point]+t*fit[se]
     by_level = defaultdict(list)
     for row, residual in zip(rows, residuals):
         by_level[row["level"]].append(residual)
     levels = []
     for level, values in sorted(by_level.items()):
         mean, lo, hi = mean_interval(values, confidence)
-        # Section 5.5 defines the level mean even for one residual. Only
-        # its t interval requires a positive df; section 5.2's blank mean
-        # rule applies specifically to whole-request energy per attempt.
         if len(values) == 1:
             mean = values[0]
-        levels.append(dict(zip(RESIDUAL_COLUMNS[3:], (
-            level, len(values), mean, lo, hi,
-            int(lo <= 0.0 <= hi) if lo is not None else None,
-        ))))
-    return output, levels
+        levels.append(dict(level=level, m=len(values), mean_residual_j=mean, lo_j=lo, hi_j=hi,
+                           contains_zero=int(lo <= 0 <= hi) if lo is not None else None))
+    return fit, levels
 
 
-def make_decompositions(energy_cells, confidence):
-    pooled = defaultdict(list)
-    for key, rows in sorted(energy_cells.items()):
-        pooled[key[:3]].extend(rows)
-    decomposition, residuals = [], []
-    for key, rows in sorted(pooled.items()):
-        identity = dict(zip(DECOMPOSITION_COLUMNS[:3], key))
-        fit, levels = decompose(rows, confidence)
-        decomposition.append(identity | fit)
-        residuals.extend(identity | level for level in levels)
-    return decomposition, residuals
+def average(rows, field):
+    return math.fsum(r[field] for r in rows)/len(rows) if rows else None
 
 
-def make_crossovers(cells):
-    groups = defaultdict(list)
-    for row in cells:
-        groups[row["boundary"], row["level"]].append(row)
-    result, summary = [], {}
-    for (boundary, level), rows in sorted(groups.items()):
-        eligible = [row for row in rows if row["epc_status"] in {"ok", "energy_lower_nonpositive"}]
+def percentile(values, confidence):
+    if not values or any(v is None for v in values):
+        return None, None
+    ordered = sorted(values)
+    k = max(1, math.floor(len(values)*(1-confidence)/2 + 1e-9))
+    return ordered[k-1], ordered[-k]
+
+
+def bootstrap(energy_levels, holdout_levels, config, variant, boundary, model, mode):
+    """§8.7: all EN draws, then all HO draws, refit; keep replicate indices."""
+    rng = random.Random(f"{config['bootstrap']['seed']}/{variant}/{boundary}/{model}/{mode}")
+    en = {l: sorted(energy_levels[l], key=lambda r: r["item_id"]) for l in LEVELS}
+    ho = {l: sorted(holdout_levels[l], key=lambda r: r["item_id"]) for l in LEVELS}
+    output = {l: {"direct": [], "model": [], "residual": []} for l in LEVELS}
+    for _ in range(config["bootstrap"]["replicates"]):
+        es = {l: [en[l][rng.randrange(len(en[l]))] for _ in en[l]] for l in LEVELS}
+        hs = {l: [ho[l][rng.randrange(len(ho[l]))] for _ in ho[l]] for l in LEVELS}
+        fit = ols([r for l in LEVELS for r in es[l]])
+        for l in LEVELS:
+            values = output[l]
+            em = average(es[l], "energy_j")
+            residual = None
+            if es[l] and fit["status"] == "ok":
+                residual = em - predict(fit, average(es[l], "prompt_tokens"), average(es[l], "generated_tokens"))
+            values["residual"].append(residual)
+            direct = model_epc = None
+            if es[l] and hs[l]:
+                k = sum(r["correct"] for r in hs[l])
+                ph = k/len(hs[l])
+                direct = em/ph if k else math.inf
+                if fit["status"] == "ok":
+                    mu = predict(fit, average(hs[l], "prompt_tokens"), average(hs[l], "generated_tokens"))
+                    if mu > 0:
+                        model_epc = mu/ph if k else math.inf
+            values["direct"].append(direct)
+            values["model"].append(model_epc)
+    return output
+
+
+def make_cell(config, selection, variant, boundary, model, mode, level, b, e, h, raw_b, raw_e, fit, boot, misfit):
+    confidence = config["descriptive_confidence"]
+    row = dict.fromkeys(CELL_COLUMNS)
+    n, k, m, nh, kh = len(b), sum(r["correct"] for r in b), len(e), len(h), sum(r["correct"] for r in h)
+    nt = config["sizes"][mode]["bench"][str(level)]
+    mt = config["sizes"][mode]["energy"][str(level)]
+    status = "complete" if (n, nh, m) == (nt, nt-mt, mt) else "missing" if n == m == 0 else "short"
+    p, plo, phi = wilson(k, n, confidence)
+    ph, phlo, phhi = wilson(kh, nh, confidence)
+    em, elo, ehi = mean_interval([r["energy_j"] for r in e], confidence)
+    direct, dlo, dhi, direct_status = energy_per_correct(em, elo, ehi, ph, phlo, phhi, kh, m)
+    mu = predict(fit, average(h, "prompt_tokens"), average(h, "generated_tokens")) if h and fit["status"] == "ok" else None
+    model_epc = mu/ph if mu is not None and kh else None
+    # §8.6 lists structural fit errors first, then level-specific errors.
+    if fit["status"] != "ok":
+        model_status = "fit_" + fit["status"]
+    elif m < 2:
+        model_status = "few_attempts"
+    elif kh == 0:
+        model_status = "zero_correct"
+    elif mu <= 0:
+        model_status = "nonpositive"
+    elif any(v is None for v in boot["model"]):
+        model_status = "bootstrap_invalid"
+    else:
+        model_status = "ok"
+    mlo, mhi = percentile(boot["model"], confidence) if model_status == "ok" else (None, None)
+    source, reason, point, lo, hi, epc_status = "", "", None, None, None, direct_status
+    if model_status == "ok" and not misfit:
+        source, point, epc_status = "model", model_epc, "ok"
+    elif kh >= 1 and m >= 2:
+        source, reason, point, epc_status = "direct", "misfit" if misfit else "model_" + model_status, direct, "ok"
+    if source:
+        lo, hi = percentile(boot[source], confidence)
+    ratio, rlo, rhi = joules_per_token([r["energy_j"] for r in e], [r["generated_tokens"] for r in e], confidence)
+    used_b, used_e = {id(r) for r in b}, {id(r) for r in e}
+    bkeys, ekeys = {row_key(r) for r in b}, {row_key(r, True) for r in e}
+    not_used_b = [r for r in raw_b if id(r) not in used_b]
+    not_used_e = [r for r in raw_e if id(r) not in used_e]
+    row.update(variant=variant, boundary=boundary, model=model, mode=mode, level=level, cell_status=status,
+               n_bench_target=nt, n_bench=n, k_correct=k, accuracy=p, acc_lo=plo, acc_hi=phi,
+               mean_generated_tokens_bench=average(b, "generated_tokens"), cap_hit_rate_bench=average(b, "cap_hit"),
+               loop_rate_bench=sum("repetition_loop" in r["flags"] for r in b)/n if n else None,
+               n_holdout_target=nt-mt, n_holdout=nh, k_holdout=kh, holdout_accuracy=ph,
+               mean_prompt_tokens_holdout=average(h, "prompt_tokens"), mean_generated_tokens_holdout=average(h, "generated_tokens"),
+               m_energy_target=mt, m_energy=m, mean_energy_j=em, energy_lo_j=elo, energy_hi_j=ehi,
+               model_energy_j=mu, epc_model_j=model_epc, epc_model_lo_j=mlo, epc_model_hi_j=mhi, epc_model_status=model_status,
+               epc_direct_j=direct, epc_direct_lo_j=dlo, epc_direct_hi_j=dhi, epc_direct_status=direct_status,
+               epc_j=point, epc_lo_j=lo, epc_hi_j=hi, epc_status=epc_status, primary_source=source, primary_reason=reason,
+               j_per_token=ratio, jpt_lo=rlo, jpt_hi=rhi,
+               token_mismatch_count=sum("token_mismatch" in r["flags"] for r in e),
+               rows_not_used=len(not_used_b)+len(not_used_e),
+               replaced_rows=sum(row_key(r) in bkeys for r in not_used_b)+sum(row_key(r, True) in ekeys for r in not_used_e))
+    return row
+
+
+def ineligible(cell):
+    if cell is None:
+        return "not_measured"
+    if cell["cell_status"] != "complete":
+        return cell["cell_status"]
+    if cell["epc_status"] != "ok":
+        return cell["epc_status"]
+    return ""
+
+
+def log_replicates(x, y):
+    return [0.0 if math.isinf(a) and math.isinf(b) else math.log(a)-math.log(b) for a, b in zip(x, y)]
+
+
+def intervals(x, y, config):
+    values = log_replicates(x, y)
+    return (*percentile(values, config["descriptive_confidence"]), *percentile(values, config["decision_confidence"]))
+
+
+def primary_verdict(rows):
+    return "cheaper_size_changes_with_level" if len({r["cheaper"] for r in rows if r["status"] == "resolved"}) > 1 else "no_resolved_change"
+
+
+def make_comparisons(config, variant, boundary, cells, draws):
+    primary, rivals, crossovers = [], [], []
+    a, b = (config["primary_comparison"][key] for key in ("a", "b"))
+    parties = sorted(cells)
+    for level in LEVELS:
+        ca, cb = cells.get(a, {}).get(level), cells.get(b, {}).get(level)
+        row = dict.fromkeys(PRIMARY_COLUMNS)
+        row.update(variant=variant, boundary=boundary, level=level, a=a, b=b, cheaper="", reason="",
+                   epc_a_j=ca["epc_j"] if ca else None, epc_b_j=cb["epc_j"] if cb else None,
+                   source_a=ca["primary_source"] if ca else "", source_b=cb["primary_source"] if cb else "")
+        failures = [f"{identifier}:{ineligible(cell)}" for identifier, cell in ((a, ca), (b, cb)) if ineligible(cell)]
+        if failures:
+            row.update(status="unresolved_incomplete", reason=";".join(failures))
+        else:
+            d = math.log(ca["epc_j"]/cb["epc_j"])
+            dl, dh, cl, ch = intervals(draws[a][level], draws[b][level], config)
+            cheaper = b if cl > 0 else a if ch < 0 else ""
+            row.update(log_ratio=d, ratio=ca["epc_j"]/cb["epc_j"], desc_lo=dl, desc_hi=dh,
+                       dec_lo=cl, dec_hi=ch, status="resolved" if cheaper else "unresolved", cheaper=cheaper)
+        primary.append(row)
+        eligible = [identifier for identifier in parties if not ineligible(cells[identifier][level])]
+        incomplete = [f"{identifier}:{ineligible(cells[identifier][level])}" for identifier in parties if ineligible(cells[identifier][level])]
+        cross = dict(variant=variant, boundary=boundary, level=level, cheapest="", cheapest_epc_j=None,
+                     status="none_estimable", tied="", incomplete=";".join(incomplete))
         if not eligible:
-            result.append(dict(zip(CROSSOVER_COLUMNS, (boundary, level, None, None, "none_estimable", ""))))
-            summary.setdefault(boundary, {})
+            # No cheapest exists: there can be no rows 'other than cheapest'.
+            crossovers.append(cross)
             continue
-        cheapest = min(eligible, key=lambda row: (row["epc_j"], row["model"], row["mode"]))
+        cheapest = min(eligible, key=lambda identifier: (cells[identifier][level]["epc_j"], identifier))
         tied = []
-        for rival in eligible:
-            if rival is cheapest:
+        for rival in parties:
+            if rival == cheapest:
                 continue
-            lower = -math.inf if rival["epc_lo_j"] == 0.0 else (
-                math.log(rival["epc_j"]/cheapest["epc_j"])
-                - math.hypot(math.log(rival["epc_j"]/rival["epc_lo_j"]), math.log(cheapest["epc_hi_j"]/cheapest["epc_j"]))
-            )
-            if lower <= 0.0:
-                tied.append(f"{rival['model']}/{rival['mode']}")
-        status = "unresolved" if tied else "resolved"
-        winner = f"{cheapest['model']}/{cheapest['mode']}"
-        result.append(dict(zip(CROSSOVER_COLUMNS, (boundary, level, winner, cheapest["epc_j"], status, ";".join(sorted(tied))))))
-        winners = summary.setdefault(boundary, {})
-        if status == "resolved":
-            winners[str(level)] = winner
-    return result, {
-        boundary: {"verdict": "crossover_resolved" if len(set(winners.values())) > 1 else "no_resolved_crossover", "resolved_winners": winners}
-        for boundary, winners in sorted(summary.items())
-    }
+            r = dict.fromkeys(RIVAL_COLUMNS)
+            r.update(variant=variant, boundary=boundary, level=level, cheapest=cheapest, rival=rival, reason="")
+            why = ineligible(cells[rival][level])
+            if why:
+                r["reason"] = f"{rival}:{why}"
+            else:
+                dl, dh, cl, ch = intervals(draws[rival][level], draws[cheapest][level], config)
+                r.update(log_ratio=math.log(cells[rival][level]["epc_j"]/cells[cheapest][level]["epc_j"]),
+                         desc_lo=dl, desc_hi=dh, dec_lo=cl, dec_hi=ch, beaten=int(cl > 0))
+                if cl <= 0:
+                    tied.append(rival)
+            rivals.append(r)
+        cross.update(cheapest=cheapest, cheapest_epc_j=cells[cheapest][level]["epc_j"], tied=";".join(tied),
+                     status="unresolved_incomplete" if incomplete else "unresolved" if tied else "resolved")
+        crossovers.append(cross)
+    winners = {str(r["level"]): r["cheapest"] for r in crossovers if r["status"] == "resolved"}
+    summary = {"primary_question": {"verdict": primary_verdict(primary), "levels": {
+        str(r["level"]): {key: r[key] for key in ("status", "cheaper", "log_ratio", "dec_lo", "dec_hi")} for r in primary}},
+        "secondary": {"verdict": "crossover_resolved" if len(set(winners.values())) > 1 else "no_resolved_crossover", "resolved_winners": winners}}
+    return primary, rivals, crossovers, summary
+
+
+def analyze(config, selections, bench, energy):
+    braw, eraw = parse_tables(bench, energy, config, selections)
+    present = {row_key(r)[:2] for r in braw + eraw}
+    roster = {f"{c['model']}/{c['mode']}": "not_measured" if c["status"] == "optional" and (c["model"], c["mode"]) not in present else c["status"] for c in config["configurations"]}
+    parties = sorted((c for c in config["configurations"] if roster[f"{c['model']}/{c['mode']}"] != "not_measured"), key=lambda c: (c["model"], c["mode"]))
+    tables = {name: [] for name in SCHEMAS}
+    summary = {"variants": {}, "roster": roster, "targets": config["sizes"],
+               "descriptive_confidence": config["descriptive_confidence"], "decision_confidence": config["decision_confidence"],
+               "bootstrap": config["bootstrap"], "python_version": platform.python_version(),
+               "exclusions": {"always": sorted(ALWAYS | {"missing_text"}), "exclude_flags": config["exclude_flags"],
+                              "physical_exclude_flags": config["physical_exclude_flags"]},
+               "flag_counts": {role: dict(sorted(Counter(f for r in rows for f in r["flags"]).items())) for role, rows in (("bench", braw), ("energy", eraw))},
+               "selection_size_mismatch": [f"selection_size_mismatch:{mode}:{role}:{l}" for mode in ("off", "on") for role in ("bench", "energy") for l in map(str, LEVELS) if len(selections[mode][role][l]) != config["sizes"][mode][role][l]]}
+    for variant in VARIANTS:
+        b = used_rows(braw, exclusion(config, variant))
+        e = used_rows(eraw, exclusion(config, variant, True), True)
+        summary["variants"][variant] = {}
+        for boundary in sorted(config["boundaries"]):
+            cells, draws, misfits = {}, {}, []
+            for party in parties:
+                model, mode = party["model"], party["mode"]
+                identifier = model + "/" + mode
+                def bench_cell(r, l):
+                    return (r["model"], r["mode"], r["level"]) == (model, mode, l) and not r["flags"] & {"bad_level", "bad_mode"}
+                def energy_cell(r, l):
+                    return r["boundary"] == boundary and bench_cell(r, l)
+                bl = {l: sorted([r for r in b if bench_cell(r, l)], key=lambda r: r["item_id"]) for l in LEVELS}
+                el = {l: sorted([r for r in e if energy_cell(r, l)], key=lambda r: r["item_id"]) for l in LEVELS}
+                hl = {l: [r for r in bl[l] if r["item_id"] not in selections[mode]["energy"][str(l)]] for l in LEVELS}
+                pooled = [r for l in LEVELS for r in el[l]]
+                fit, residuals = decompose(pooled, config["descriptive_confidence"])
+                identity = dict(variant=variant, boundary=boundary, model=model, mode=mode)
+                tables["decomposition.csv"].append(identity | {k: v for k, v in fit.items() if not k.startswith("_")})
+                boot = bootstrap(el, hl, config, variant, boundary, model, mode)
+                tol = 1e-9*max(1, average(pooled, "energy_j") or 0)
+                misfit_levels = set()
+                for residual in residuals:
+                    l = residual["level"]
+                    # NEEDS_RULING: §8.7 specifies B order statistics but does
+                    # not say how §8.8 handles a singular refit's missing r*.
+                    # Best reading: a partial list cannot form that interval.
+                    lo, hi = percentile(boot[l]["residual"], config["descriptive_confidence"])
+                    misfit = lo is not None and (lo > tol or hi < -tol)
+                    residual.update(boot_lo_j=lo, boot_hi_j=hi, misfit=int(misfit))
+                    tables["level_residuals.csv"].append(identity | residual)
+                    if misfit:
+                        misfit_levels.add(l)
+                        misfits.append(f"{identifier}:{l}")
+                cells[identifier], draws[identifier] = {}, {}
+                for l in LEVELS:
+                    cell = make_cell(config, selections, variant, boundary, model, mode, l, bl[l], el[l], hl[l],
+                                     [r for r in braw if bench_cell(r, l)], [r for r in eraw if energy_cell(r, l)], fit, boot[l], l in misfit_levels)
+                    tables["cells.csv"].append(cell)
+                    cells[identifier][l] = cell
+                    draws[identifier][l] = boot[l][cell["primary_source"]] if cell["primary_source"] else []
+            primary, rivals, crossovers, part_summary = make_comparisons(config, variant, boundary, cells, draws)
+            tables["primary.csv"].extend(primary)
+            tables["rivals.csv"].extend(rivals)
+            tables["crossover.csv"].extend(crossovers)
+            summary["variants"][variant][boundary] = part_summary | {"misfit_cells": sorted(misfits)}
+    summary["method_note"] = (
+        "Primary EPC uses a pooled token model per configuration and holdout token means; direct EPC is secondary. "
+        "The descriptive bootstrap residual interval excluding zero beyond 1e-9 times pooled mean energy switches misfit cells to direct: "
+        + json.dumps({v: {b: s['misfit_cells'] for b, s in bs.items()} for v, bs in summary['variants'].items()}, sort_keys=True)
+        + f". Problem-level bootstrap is stratified by level, B={config['bootstrap']['replicates']}, percentile order statistics. "
+        + f"Descriptive confidence {config['descriptive_confidence']}; decisions use only {config['decision_confidence']}. "
+        "Incomplete parties keep comparisons unresolved. Excluded attempts may be retried; after the first primary-usable attempt later runs are duplicates. "
+        "Flagged-inclusive uses the first physically flagged attempt, retaining one row per problem. Level is a published stratum, not a cause."
+    )
+    for name, rows in tables.items():
+        rows.sort(key=lambda r: tuple(r[k] for k in KEYS[name]))
+    return tables, summary
 
 
 def write_csv(path, columns, rows):
@@ -399,54 +670,34 @@ def write_csv(path, columns, rows):
         writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(columns)
         for row in rows:
-            writer.writerow("" if row.get(column) is None else repr(row[column]) if isinstance(row[column], float) else str(row[column]) for column in columns)
+            writer.writerow("" if row.get(c) is None else repr(row[c]) if isinstance(row[c], float) else str(row[c]) for c in columns)
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--bench", required=True, type=Path)
-    parser.add_argument("--energy", required=True, type=Path)
-    parser.add_argument("--out", required=True, type=Path)
-    parser.add_argument("--confidence", type=float, default=0.95)
-    parser.add_argument("--exclude-flags", default="runtime_failed")
+    for option in ("config", "selections", "bench", "energy", "out"):
+        parser.add_argument("--" + option, type=Path, required=True)
     args = parser.parse_args(argv)
-    if not math.isfinite(args.confidence) or not 0 < args.confidence < 1 or (1+args.confidence)/2 == 1:
-        parser.error("--confidence must be strictly between 0 and 1")
     try:
+        config = validate_config(json.loads(args.config.read_text(encoding="utf-8")))
+        selection_file = json.loads(args.selections.read_text(encoding="utf-8"))
+        selections = selection_file["selections"]
+        # Selection-length mismatch is data, not an invalid config (§7).
+        for mode in ("off", "on"):
+            for role in ("bench", "energy"):
+                for l in map(str, LEVELS):
+                    values = selections[mode][role][l]
+                    if not isinstance(values, list) or any(not isinstance(v, str) for v in values):
+                        raise ValueError(f"invalid selections: {mode}/{role}/{l}")
         bench = read_table(args.bench, BENCH_COLUMNS)
         energy = read_table(args.energy, ENERGY_COLUMNS)
-    except (OSError, UnicodeError, csv.Error, ValueError) as error:
+        tables, summary = analyze(config, selections, bench, energy)
+        args.out.mkdir(parents=True, exist_ok=True)
+        for name, columns in SCHEMAS.items():
+            write_csv(args.out/name, columns, tables[name])
+        (args.out/"summary.json").write_text(json.dumps(summary, indent=2, allow_nan=True) + "\n", encoding="utf-8")
+    except (OSError, UnicodeError, csv.Error, ValueError, KeyError, TypeError) as error:
         parser.error(str(error))
-    exclude = {flag.strip() for flag in args.exclude_flags.split(",") if flag.strip()}
-    b, e, excluded, bench_flags, energy_flags = parse_tables(bench, energy, exclude)
-    energy_items = defaultdict(set)
-    for row in energy:
-        energy_items[row["model"], row["mode"]].add(row["item_id"])
-    cells = make_cells(b, e, excluded, args.confidence, energy_items)
-    decompositions, residuals = make_decompositions(e, args.confidence)
-    crossovers, boundary_summary = make_crossovers(cells)
-    args.out.mkdir(parents=True, exist_ok=True)
-    for filename, columns, rows in (
-        ("cells.csv", CELL_COLUMNS, cells),
-        ("decomposition.csv", DECOMPOSITION_COLUMNS, decompositions),
-        ("level_residuals.csv", RESIDUAL_COLUMNS, residuals),
-        ("crossover.csv", CROSSOVER_COLUMNS, crossovers),
-    ):
-        write_csv(args.out / filename, columns, rows)
-    summary = {
-        "boundaries": boundary_summary, "confidence": args.confidence,
-        "flag_counts": {"bench": dict(sorted(bench_flags.items())), "energy": dict(sorted(energy_flags.items()))},
-        "method_note": (
-            "Wilson accuracy intervals and Student t energy intervals are combined by log-scale MOVER. "
-            "EPC accuracy uses the used bench problems outside the energy subset, excluding every item "
-            "with an energy row for the same model and mode across all boundaries, flagged or not. "
-            "The combined intervals are independent; headline accuracy uses all used bench problems. "
-            "Crossover comparisons treat configurations as independent despite "
-            "shared problems; correlated accuracies would narrow the ratio interval, so the rule errs "
-            "toward unresolved. Confidence is unadjusted for multiple comparisons."
-        ),
-    }
-    (args.out / "summary.json").write_text(json.dumps(summary, indent=2, allow_nan=False)+"\n", encoding="utf-8")
     return 0
 
 
