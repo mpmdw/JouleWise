@@ -74,8 +74,12 @@ def _free(path: Path) -> int:
 
 def _append(record_dir: Path, row: dict) -> None:
     record_dir.mkdir(parents=True, exist_ok=True)
-    with (record_dir / "compression.jsonl").open("a", encoding="utf-8") as stream:
-        stream.write(json.dumps(row, sort_keys=True) + "\n")
+    with (record_dir / "compression.jsonl").open("a+b") as stream:
+        if stream.tell():
+            stream.seek(-1, os.SEEK_END)
+            if stream.read(1) != b"\n":
+                stream.write(b"\n")
+        stream.write((json.dumps(row, sort_keys=True) + "\n").encode("utf-8"))
         stream.flush()
         os.fsync(stream.fileno())
 
@@ -107,14 +111,21 @@ def _protected(path: Path, protected_roots: list[Path]) -> bool:
     return False
 
 
-def _ledger_roots(ledgers: list[Path]) -> list[Path]:
+def _ledger_roots(ledgers: list[Path], skipped: list[dict]) -> list[Path]:
     roots = []
     for ledger in ledgers:
-        with ledger.open(encoding="utf-8") as stream:
-            for line in stream:
+        with ledger.open("rb") as stream:
+            lines = stream.readlines()
+            for index, line in enumerate(lines):
                 if not line.strip():
                     continue
-                row = json.loads(line)
+                try:
+                    row = json.loads(line)
+                except (ValueError, UnicodeError):
+                    if index != len(lines) - 1:
+                        raise ValueError("ledger_unreadable") from None
+                    skipped.append({"event": "ledger_line_skipped", "path": str(ledger), "line": index + 1})
+                    continue
                 if not isinstance(row, dict):
                     raise ValueError("ledger_unreadable")
                 locator, runs = row.get("custody_locator"), row.get("runs_root")
@@ -165,18 +176,21 @@ def compress(*, archive: Path, custody: Path, runs_roots=(), ledgers=(),
     archive_ledger = archive / "sources/ledger/calibration_observation_ledger.jsonl"
     if archive_ledger.exists():
         copies.append(archive_ledger)
+    ledger_skipped = []
     try:
-        protected = _ledger_roots(copies)
+        protected = _ledger_roots(copies, ledger_skipped)
     except (OSError, ValueError, TypeError):
         row = {"event": "ledger_unreadable", "t": time.time()}
         _append(record_dir, row)
         _summary(record_dir, {"reason": "ledger_unreadable"})
         return 5, {"reason": "ledger_unreadable"}
     roots = [("runs", Path(path).absolute()) for path in runs_roots]
+    for row in ledger_skipped:
+        _append(record_dir, {**row, "t": time.time()})
     roots += [("custody", custody), ("archive", archive / "sources")]
     started, free_before = time.monotonic(), _free(archive)
     summary = {"files": 0, "bytes_before": 0, "bytes_after": 0,
-               "skipped_protected": 0, "mismatches": 0}
+               "skipped_protected": 0, "mismatches": 0, "ledger_lines_skipped": len(ledger_skipped)}
     # Decide restore leftovers before creating any new compressed siblings.
     for _, path in _files(roots):
         if path.is_symlink() or not path.is_file() or _protected(path, protected):
@@ -227,14 +241,31 @@ def compress(*, archive: Path, custody: Path, runs_roots=(), ledgers=(),
     return (2 if summary["mismatches"] else 0), summary
 
 
-def status(record_dir: Path, root="all") -> list[dict]:
+def status(record_dir: Path, root="all", *, summary: dict | None = None) -> list[dict]:
+    """Return restorable rows; optionally report damaged manifest lines in summary."""
     latest = {}
+    skipped = 0
     manifest = Path(record_dir) / "compression.jsonl"
     if manifest.exists():
-        for line in manifest.read_text().splitlines():
-            row = json.loads(line)
+        for line in manifest.read_bytes().splitlines():
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+                if not isinstance(row, dict):
+                    raise ValueError
+                if row.get("event") in ("compress", "restore") and (
+                        not isinstance(row.get("path"), str) or not isinstance(row.get("root"), str)
+                        or type(row.get("size")) is not int or row["size"] < 0
+                        or not isinstance(row.get("sha256"), str)):
+                    raise ValueError
+            except (ValueError, UnicodeError):
+                skipped += 1
+                continue
             if row.get("event") in ("compress", "restore"):
                 latest[row["path"]] = row
+    if summary is not None:
+        summary["manifest_lines_skipped"] = skipped
     return [row for row in latest.values() if row["event"] == "compress"
             and root in ("all", row["root"])]
 
@@ -245,7 +276,8 @@ def restore(*, record_dir: Path, root="all", reserve_gib=20):
         _zstd_version()
     except (OSError, subprocess.CalledProcessError):
         return 4, {"reason": "zstd_unavailable"}
-    rows = status(record_dir, root)
+    summary = {"files": 0, "mismatches": 0}
+    rows = status(record_dir, root, summary=summary)
     # Check every filesystem before writing even a partial restore.
     required, locations = {}, {}
     for row in rows:
@@ -256,8 +288,8 @@ def restore(*, record_dir: Path, root="all", reserve_gib=20):
     shortfall = max((int(size + reserve_gib * 1024**3) - _free(locations[device])
                      for device, size in required.items()), default=0)
     if shortfall > 0:
-        return 3, {"reason": "restore_space", "shortfall_bytes": shortfall}
-    summary = {"files": 0, "mismatches": 0}
+        return 3, {"reason": "restore_space", "shortfall_bytes": shortfall,
+                   "manifest_lines_skipped": summary["manifest_lines_skipped"]}
     for row in rows:
         path = Path(row["path"])
         compressed, partial = Path(str(path) + ".zst"), Path(str(path) + ".partial")
@@ -312,11 +344,14 @@ def main(argv=None) -> int:
             parser.error("reserve-gib must be nonnegative")
         rc, result = restore(record_dir=args.record_dir, root=args.root, reserve_gib=args.reserve_gib)
     else:
-        rc, result = 0, {"files": len(status(args.record_dir, args.root))}
+        rc, result = 0, {}
+        result["files"] = len(status(args.record_dir, args.root, summary=result))
     if "reason" in result:
         print(f"{args.command} reason={result['reason']} shortfall_bytes={result.get('shortfall_bytes', 0)}")
     else:
         print(f"{args.command} files={result['files']} before={result.get('bytes_before', 0)} "
               f"after={result.get('bytes_after', 0)} freed_statvfs={result.get('freed_statvfs', 0)} "
-              f"mismatches={result.get('mismatches', 0)}")
+              f"mismatches={result.get('mismatches', 0)} "
+              f"manifest_lines_skipped={result.get('manifest_lines_skipped', 0)} "
+              f"ledger_lines_skipped={result.get('ledger_lines_skipped', 0)}")
     return rc

@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import math
+import os
 from pathlib import Path
 import shutil
 import statistics
@@ -57,6 +58,60 @@ class PackStoppingTests(unittest.TestCase):
                 public, _ = self.evaluate(sessions, today=today)
                 self.assertEqual((public['decision'], public['short']), (decision, short))
         self.assertEqual(self.evaluate(self.sessions([0]), today=date(2026, 11, 1))[0]['decision'], 'CONTINUE')
+
+    def run_records(self, records, *, resume=0, mtimes=None):
+        sessions_dir = self.root / 'sessions'
+        if sessions_dir.exists():
+            shutil.rmtree(sessions_dir)
+        for i, record in enumerate(records):
+            path = sessions_dir / f'd{i}' / 'structure.json'
+            path.parent.mkdir(parents=True)
+            path.write_text(record if isinstance(record, str) else json.dumps(record))
+            os.utime(path, ns=(1, mtimes[i] if mtimes else i + 1))
+        reg = self.root / 'registration.json'
+        reg.write_text(json.dumps(self.registration))
+        output = self.root / 'records'
+        with redirect_stdout(io.StringIO()):
+            rc = stopping.main(['--registration', str(reg), '--sessions-dir', str(sessions_dir),
+                                '--record-dir', str(output), '--today', self.today.isoformat(),
+                                '--resume-after-attempt', str(resume)])
+        self.assertEqual(rc, 0)
+        return json.loads((output / 'stopping.json').read_text())
+
+    def test_review_p1_invalid_attempt_and_unparsable_records_are_flags(self):
+        good = self.sessions([0])[0][0]
+        invalid = [{**good, 'attempt': value, 'counting': False} for value in (None, 0, -1, True, 'x')]
+        decimal = {**good, 'attempt': '2', 'counting': False}  # a decimal string is still an attempt
+        record = self.run_records([good, *invalid, decimal, '{', '[]'])
+        self.assertEqual((record['decision'], record['counting'], record['attempts'], record['skipped_records']),
+                         ('CONTINUE', 1, 2, 7))
+
+    def test_pause_fires_for_direct_records_without_attempt(self):
+        sessions = [({**record, 'attempt': None}, analysis)
+                    for record, analysis in self.sessions([0] * 5, [True, False, False, False, False])]
+        self.assertEqual(self.evaluate(sessions)[0]['decision'], 'PAUSE_ATTEMPTS')
+
+    def test_review_p2_duplicate_attempt_latest_mtime_then_path_wins(self):
+        one, two = [row[0] for row in self.sessions([0, 0])]
+        records = [one, {**two, 'counting': False}, two]
+        for mtimes, expected in (([1, 2, 3], 2), ([1, 3, 2], 1), ([1, 2, 2], 2)):
+            with self.subTest(mtimes=mtimes):
+                record = self.run_records(records, mtimes=mtimes)
+                self.assertEqual((record['decision'], record['counting'], record['attempts'], record['superseded_records']),
+                                 ('CONTINUE', expected, 2, 1))
+
+    def test_review_p3_and_p3b_resume_restarts_pause_budget(self):
+        for n in (5, 6):
+            with self.subTest(n=n):
+                records = [row[0] for row in self.sessions([0] * n, [i in (0, 5) for i in range(n)])]
+                self.assertEqual(self.run_records(records)['decision'], 'PAUSE_ATTEMPTS')
+                resumed = self.run_records(records, resume=5)
+                self.assertEqual(resumed['decision'], 'CONTINUE')
+                self.assertEqual(resumed['resume_after_attempt'], 5)
+                self.assertEqual(resumed['attempts_since_resume'], n - 5)
+                self.assertEqual(resumed['counting'], 1 if n == 5 else 2)
+        records = [row[0] for row in self.sessions([0] * 10, [True] + [False] * 9)]
+        self.assertEqual(self.run_records(records, resume=5)['decision'], 'PAUSE_ATTEMPTS')
 
     def test_between_session_arithmetic_hand_values(self):
         for values, critical in (([1, 3], 12.706), ([1, 2, 3], 4.303), ([1, 2, 3, 4], 3.182)):

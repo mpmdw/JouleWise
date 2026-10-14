@@ -83,13 +83,17 @@ def validate_registration(registration):
         raise ValueError("unparsable registration") from None
 
 
-def evaluate(registration, sessions, *, today: date, key_dir: Path | None = None):
+def evaluate(registration, sessions, *, today: date, key_dir: Path | None = None,
+             resume_after_attempt: int = 0):
     """sessions: ordered (structure record, precision record or None) pairs."""
     stopping = validate_registration(registration)
     pack_id = registration.get("pack_id", "UNKNOWN")
     counting_sessions = [(record, analysis) for record, analysis in sessions
                          if record.get("counting") is True]
     counting, attempts = len(counting_sessions), len(sessions)
+    # A record without an integer attempt counts as after the resume, so the pause still fires.
+    attempts_since_resume = sum(type(record.get("attempt")) is not int
+                                or record["attempt"] > resume_after_attempt for record, _ in sessions)
     precision = stopping.get("precision")
     quantities, withheld = {}, {}
     for quantity in precision["quantities"] if precision else ():
@@ -140,13 +144,15 @@ def evaluate(registration, sessions, *, today: date, key_dir: Path | None = None
     elif today > date.fromisoformat(stopping["end_date"]):
         decision, reason = "STOP_END_DATE", "end_date"
         short = counting < stopping["min_sessions"]
-    elif attempts >= stopping["max_attempts"] and counting < stopping["target_sessions"]:
+    elif attempts_since_resume >= stopping["max_attempts"] and counting < stopping["target_sessions"]:
         decision, reason = "PAUSE_ATTEMPTS", "max_attempts"
     else:
         decision, reason = "CONTINUE", "target_pending"
     public = {"schema": "joulewise.b6_pack_stopping.v1", "pack_id": pack_id,
               "decision": decision, "reason": reason, "counting": counting, "attempts": attempts,
               "quantities": quantities, "date": today.isoformat(), "short": short}
+    public.update(resume_after_attempt=resume_after_attempt, attempts_since_resume=attempts_since_resume,
+                  skipped_records=0, superseded_records=0)
     private = {"schema": "joulewise.b6_stopping_withheld.v1", "pack_id": pack_id,
                "quantities": withheld}
     return public, private
@@ -176,43 +182,56 @@ def main(argv=None):
     parser.add_argument("--today", type=date.fromisoformat, default=date.today())
     parser.add_argument("--key-dir", type=Path)
     parser.add_argument("--withheld-dir", type=Path)
+    parser.add_argument("--resume-after-attempt", type=int, default=0)
     parser.add_argument("--precision-dir", type=Path,
                         help="optional analysis directory containing <session_id>.json; default: session/precision.json")
     args = parser.parse_args(argv)
+    if args.resume_after_attempt < 0:
+        parser.error("resume-after-attempt must be nonnegative")
     try:
         registration = _load(args.registration)
         validate_registration(registration)
     except (OSError, ValueError, TypeError):
         parser.error("unparsable registration")
-    sessions = []
-    try:
-        for path in args.sessions_dir.rglob("structure.json"):
+    latest = {}
+    skipped = superseded = 0
+    for path in sorted(args.sessions_dir.rglob("structure.json")):
+        try:
             record = _load(path)
+            if not isinstance(record, dict):
+                raise ValueError
             if record.get("pack_id") != registration.get("pack_id", "UNKNOWN"):
                 continue
             attempt = record.get("attempt")
             if isinstance(attempt, str) and attempt.isdecimal():
-                attempt = int(attempt)
+                attempt = record["attempt"] = int(attempt)
             if type(attempt) is not int or attempt < 1:
                 raise ValueError
-            analysis = None
-            if record.get("counting") is True and registration["stopping"].get("precision"):
-                ident = record.get("session_id", record.get("plan_id", path.parent.name))
-                if not isinstance(ident, str) or Path(ident).name != ident:
-                    raise ValueError
+            order = (path.stat().st_mtime_ns, str(path))
+        except (OSError, ValueError, TypeError):
+            skipped += 1
+            continue
+        if attempt in latest:
+            superseded += 1
+            if order <= latest[attempt][0]:
+                continue
+        latest[attempt] = (order, path, record)
+    sessions = []
+    for attempt in sorted(latest):
+        _, path, record = latest[attempt]
+        analysis = None
+        if record.get("counting") is True and registration["stopping"].get("precision"):
+            ident = record.get("session_id", record.get("plan_id", path.parent.name))
+            if isinstance(ident, str) and ident and Path(ident).name == ident:
                 analysis_path = args.precision_dir / (ident + ".json") if args.precision_dir else path.parent / "precision.json"
                 try:
                     analysis = _load(analysis_path)
                 except (OSError, ValueError):
                     pass  # Missing or malformed analysis is a recorded unavailable precision.
-            sessions.append((attempt, record, analysis))
-        sessions.sort(key=lambda row: row[0])
-        if len({row[0] for row in sessions}) != len(sessions):
-            raise ValueError
-    except (OSError, ValueError, TypeError, AttributeError):
-        parser.error("unparsable session records")
-    public, private = evaluate(registration, [(record, analysis) for _, record, analysis in sessions],
-                               today=args.today, key_dir=args.key_dir)
+        sessions.append((record, analysis))
+    public, private = evaluate(registration, sessions, today=args.today, key_dir=args.key_dir,
+                               resume_after_attempt=args.resume_after_attempt)
+    public.update(skipped_records=skipped, superseded_records=superseded)
     _write(args.record_dir / "stopping.json", public)
     _write((args.withheld_dir or args.record_dir / "withheld") / "stopping-withheld.json", private)
     print(stopping_line(public))

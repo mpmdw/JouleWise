@@ -11,11 +11,29 @@ import re
 
 from joulewise.flags.schema import BLINDINGS, KLASSES
 
-PHYSICS_STOP_REASONS = ("clock", "battery", "thermal", "contention", "disk", "sampler", "agent-pause-budget")
+PHYSICS_STOP_REASONS = ("clock", "battery", "thermal", "contention", "disk", "sampler", "agent-pause-budget",
+                        "sleep", "agent", "time-limit", "monitor")
+# Literal driver vocabulary: do not import the collection driver at the desk.
+PHYSICAL_STOP_CODES = {
+    "night_stopped_disk_low": "disk",
+    "night_stopped_monitor_outage": "sampler",
+    "night_refused_instrument_not_sampling": "sampler",
+    "night_aborted_agent_present": "agent",
+    "night_refused_agent_present": "agent",
+    "night_refused_battery_float": "battery",
+    "night_refused_not_quiet": "contention",
+    "non_observer_process_busy": "contention",
+    "night_refused_boot_changed": "clock",
+    "night_refused_boot_clock": "clock",
+    "night_window_exceeded": "time_limit",
+    "night_refused_hazard": "hazard",
+}
+CHAIN_STOP_EXITS = {10: "reservation_failed", 11: "pre_calibration_capture_failed",
+                    12: "pre_calibration_screen_failed"}
 REQUIRED_RECORDS = ("harvest.json", "derived/yield.json", "derived/roster.json",
                     "derived/exclusions.json", "derived/flags.jsonl", "night/chain-stages.jsonl",
                     "night/result.json", "instrument_validation/opening", "instrument_validation/closing")
-REQUIRED_MEMBER_FILES = ("metadata.json", "summary_metrics.json", "events.jsonl",
+REQUIRED_MEMBER_FILES = ("metadata.json", "events.jsonl",
                          "power_trace.csv", "raw/powermetrics.plist")
 COUNT_FIELDS = ("planned", "present", "raw_valid", "succeeded")
 HARVEST_VERDICTS = ("COLLECTED", "NO_COLLECTION", "NULL", "HARVEST_FAULT")
@@ -24,6 +42,8 @@ HARVEST_VERDICTS = ("COLLECTED", "NO_COLLECTION", "NULL", "HARVEST_FAULT")
 def _physical(reason):
     if not isinstance(reason, str):
         return None
+    if reason in PHYSICAL_STOP_CODES:
+        return PHYSICAL_STOP_CODES[reason]
     word = reason.lower().replace("_", "-")
     return next((item for item in PHYSICS_STOP_REASONS
                  if word == item or re.match(re.escape(item) + r"[.\s:-]", word)), None)
@@ -50,17 +70,27 @@ def _json(path, invalid):
         return {}
 
 
-def _lines(path, invalid):
+def _lines(path, damaged):
     if not path.is_file():
         return []
     try:
-        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-        if any(not isinstance(row, dict) for row in rows):
-            raise ValueError
-        return rows
-    except (OSError, ValueError):
-        invalid.append(path.name)
+        with path.open("rb") as stream:
+            lines = stream.readlines()
+    except OSError:
+        damaged[path.name] += 1
         return []
+    rows = []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+            if not isinstance(row, dict):
+                raise ValueError
+            rows.append(row)
+        except (ValueError, UnicodeError):
+            damaged[path.name] += 1
+    return rows
 
 
 def _captures(roots, role):
@@ -95,74 +125,85 @@ def check(*, archive: Path, custody: Path, registration: dict, harvest_rc=0,
           attempt: int | None = None, session_id: str | None = None):
     """Return the public structure record, reading only the named desk inputs."""
     archive, custody = Path(archive), Path(custody)
-    invalid = []
-    harvest = _json(archive / "harvest.json", invalid)
-    yielded = _json(archive / "derived/yield.json", invalid)
-    roster = _json(archive / "derived/roster.json", invalid)
-    exclusions = _json(archive / "derived/exclusions.json", invalid)
-    flags = _lines(archive / "derived/flags.jsonl", invalid)
-    stages = _lines(custody / "night/chain-stages.jsonl", invalid)
-    result = _json(custody / "night/result.json", invalid)
-    started = _json(custody / "night/chain.started", invalid)
-    exited = _json(custody / "night/chain.exited", invalid)
+    harvest_damage, custody_damage, damaged_lines = [], [], Counter()
+    harvest = _json(archive / "harvest.json", harvest_damage)
+    yielded = _json(archive / "derived/yield.json", harvest_damage)
+    roster = _json(archive / "derived/roster.json", harvest_damage)
+    exclusions = _json(archive / "derived/exclusions.json", harvest_damage)
+    flags = _lines(archive / "derived/flags.jsonl", damaged_lines)
+    stages = _lines(custody / "night/chain-stages.jsonl", damaged_lines)
+    result = _json(custody / "night/result.json", custody_damage)
+    started = _json(custody / "night/chain.started", custody_damage)
+    exited = _json(custody / "night/chain.exited", custody_damage)
     structure = registration.get("structure", {})
     physical = _physical(result.get("aborted_reason"))
     roots = [Path(path) for path in runs_roots] or [archive / "sources/claim-runs", archive / "sources/bound-runs"]
     roots += [custody]
     defects = []
     terminal = custody / "night/result.json"
-    if not terminal.is_file():
-        defects.append("terminal_record_missing")
-    if not physical and (any(_number(row.get("rc")) not in (None, 0) for row in stages)
-                         or _number(exited.get("rc", exited.get("exit_code"))) not in (None, 0)):
+    terminal_missing = not terminal.is_file() or "result.json" in custody_damage
+    chain_rc = _number(exited.get("rc", exited.get("exit_code")))
+    if chain_rc is None:
+        chain_rc = _number(result.get("chain_exit_code"))
+    chain_stopped = CHAIN_STOP_EXITS.get(chain_rc)
+    if chain_stopped is None and result.get("verdict") == "CHAIN_STOPPED":
+        chain_stopped = "recorded"
+    if not physical and not chain_stopped and (chain_rc not in (None, 0)
+                                               or result.get("verdict") == "ABORTED"):
         defects.append("chain_crashed")
     for name in structure.get("required_records", REQUIRED_RECORDS):
         if name in ("instrument_validation/opening", "instrument_validation/closing"):
+            if physical or chain_stopped:
+                continue
             exists = _captures(roots, name.rsplit("/", 1)[1])
+        elif name == "night/result.json":
+            continue  # HV-9: missing terminal marker is a flag.
         else:
             exists = ((custody if name.startswith("night/") else archive) / name).exists()
         if not exists:
             defects.append("record_class_missing:" + name)
-    if invalid:
-        defects.extend("record_class_invalid:" + name for name in sorted(set(invalid)))
     members = roster.get("members", [])
-    if not isinstance(members, list):
+    if not isinstance(members, list) or any(not isinstance(row, dict) for row in members):
         members = []
-        defects.append("record_class_invalid:roster.json")
+        harvest_damage.append("roster.json")
     roster_counts = yielded.get("per_roster_stage", [])
     if not isinstance(roster_counts, list) or any(not isinstance(row, dict) for row in roster_counts):
         roster_counts = []
-        defects.append("record_class_invalid:yield.json")
+        harvest_damage.append("yield.json")
     excluded_members = exclusions.get("members_excluded", [])
     if (not isinstance(excluded_members, list)
             or any(not isinstance(row, dict) or not isinstance(row.get("codes", []), list)
                    or any(not isinstance(code, str) for code in row.get("codes", []))
                    for row in excluded_members)):
         excluded_members = []
-        defects.append("record_class_invalid:exclusions.json")
-    missing = 0
+        harvest_damage.append("exclusions.json")
+    excluded_ids = {row.get("run_id") for row in excluded_members if isinstance(row.get("run_id"), str)}
+    missing = summary_missing = 0
     for member in members:
-        if not isinstance(member, dict):
-            missing += 1
+        if isinstance(member.get("run_id"), str) and member["run_id"] in excluded_ids:
             continue
         bundle = _bundle(member, roots)
         # A planned but absent member is a loss, not a structural code failure.
         if bundle is not None and any(not (bundle / name).is_file() and not Path(str(bundle / name) + ".zst").is_file()
-                                      for name in structure.get("required_member_files", REQUIRED_MEMBER_FILES)):
+                                      for name in structure.get("required_member_files", REQUIRED_MEMBER_FILES)
+                                      if name != "summary_metrics.json"):
             missing += 1
+        if (bundle is not None and not (bundle / "summary_metrics.json").is_file()
+                and not (bundle / "summary_metrics.json.zst").is_file()):
+            summary_missing += 1
     if missing:
         defects.append(f"member_files_missing:{missing}")
     unresolved = yielded.get("unresolved_collection_stages", [])
-    if isinstance(unresolved, list) and unresolved and not physical:
+    if isinstance(unresolved, list) and unresolved and not physical and not chain_stopped:
         defects.append(f"stage_unresolved:{len(unresolved)}")
     if handover_record is not None:
-        transitions = _lines(Path(handover_record), invalid)
+        transitions = _lines(Path(handover_record), damaged_lines)
         if not any(row.get("transition") == "chain-exit-to-desk"
                    or (row.get("from") == "chain-exit" and row.get("to") == "desk") for row in transitions):
             defects.append("handover_missing")
-    if not (custody / "night/chain.exited").is_file():
+    if not (custody / "night/chain.exited").is_file() and not terminal.is_file():
         verdict, reasons = "NOT_READY", ["chain_not_exited"]
-    elif harvest_rc in (2, 3) or harvest.get("verdict") == "HARVEST_FAULT":
+    elif harvest_rc in (2, 3) or harvest.get("verdict") == "HARVEST_FAULT" or harvest_damage:
         verdict, reasons = "HARVEST_FAULT", ["harvest_fault"]
     elif defects:
         verdict, reasons = "STRUCTURE_DEFECT", defects
@@ -208,6 +249,10 @@ def check(*, archive: Path, custody: Path, registration: dict, harvest_rc=0,
         counting_reasons.append("claim_unusable")
     if physical:
         counting_reasons.append("physical_stop:" + physical)
+    if chain_stopped:
+        counting_reasons.append("chain_stopped:" + chain_stopped)
+    if terminal_missing:
+        counting_reasons.append("terminal_record_missing")
     counting_reasons.extend("excluding_flag:" + code for code in sorted(excluding_seen)
                             if classifications.get(code, False))
     if any(not classifications.get(code, False) for code in excluding_seen):
@@ -234,6 +279,10 @@ def check(*, archive: Path, custody: Path, registration: dict, harvest_rc=0,
             "per_roster_stage": stage_counts, "excluded_members": len(excluded_members),
             "exclusions": {"STRUCTURE": dict(excluded), "RESTRICTED": restricted_exclusions},
             "flags": {"STRUCTURE": dict(public_flags), "RESTRICTED": restricted},
+            "physical_stop": physical, "chain_stopped": chain_stopped,
+            "terminal_record_missing": terminal_missing, "member_summary_missing": summary_missing,
+            "damaged_lines": dict(damaged_lines),
+            "damaged_records": sorted(set(harvest_damage + custody_damage)),
             "stages": stage_records, "stages_rc_nonzero": sum(row["rc"] not in (None, 0) for row in stage_records),
             "chain_seconds": max(0, end - begin) if begin is not None and end is not None else None}
 

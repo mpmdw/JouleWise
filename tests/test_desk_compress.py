@@ -96,7 +96,7 @@ class DeskCompressTests(DeskCompressFixture):
     def test_unreadable_or_malformed_ledger_keeps_every_original(self):
         path = self.put(self.runs / "raw")
         bad = self.root / "bad-ledger"
-        for text in (None, 'not-json', '[]', '{"custody_locator":3}'):
+        for text in (None, 'not-json\n{}\n', '[]', '{"custody_locator":3}'):
             with self.subTest(text=text):
                 if text is not None:
                     bad.write_text(text)
@@ -104,6 +104,58 @@ class DeskCompressTests(DeskCompressFixture):
                 self.assertTrue(path.exists())
                 self.assertFalse(Path(str(path) + '.zst').exists())
         self.assertIn('ledger_unreadable', (self.records / 'compression.jsonl').read_text())
+
+    def test_review_d1_torn_last_ledger_line_is_recorded_and_compressed(self):
+        raw = self.put(self.runs / 'r1/raw/powermetrics.plist', b'A' * (2 * 1048576))
+        protected = self.put(self.runs / 'instrument_validation/opening/raw')
+        ledger = self.root / 'ledger.jsonl'
+        ledger.write_text(json.dumps({'custody_locator': str(self.root / 'elsewhere')}) + '\n{"custody_loc')
+        rc, summary = self.compress(ledgers=[ledger])
+        self.assertEqual((rc, summary['files'], summary['ledger_lines_skipped']), (0, 1, 1))
+        self.assertFalse(raw.exists())
+        self.assertTrue(Path(str(raw) + '.zst').exists())
+        self.assertTrue(protected.exists())
+        rows = [json.loads(line) for line in (self.records / 'compression.jsonl').read_text().splitlines()]
+        self.assertEqual((rows[0]['event'], rows[0]['line']), ('ledger_line_skipped', 2))
+        self.assertEqual(desk.restore(record_dir=self.records, reserve_gib=0)[0], 0)
+        ledger.write_text('{}\n{"custody_loc\n{}\n')
+        self.assertEqual(self.compress(ledgers=[ledger])[0], 5)
+        self.assertTrue(raw.exists())
+
+    def test_review_d2_status_restore_skip_torn_manifest_line(self):
+        raw = self.put(self.runs / 'raw')
+        expected = raw.read_bytes()
+        self.assertEqual(self.compress()[0], 0)
+        manifest = self.records / 'compression.jsonl'
+        with manifest.open('a') as stream:
+            stream.write('{"event": "compre')
+        summary = {}
+        self.assertEqual(len(desk.status(self.records, summary=summary)), 1)
+        self.assertEqual(summary['manifest_lines_skipped'], 1)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(desk.main(['status', '--record-dir', str(self.records)]), 0)
+        self.assertIn('manifest_lines_skipped=1', out.getvalue())
+        rc, summary = desk.restore(record_dir=self.records, reserve_gib=0)
+        self.assertEqual((rc, summary['files'], summary['manifest_lines_skipped']), (0, 1, 1))
+        self.assertEqual(raw.read_bytes(), expected)
+        self.assertEqual(json.loads(manifest.read_text().splitlines()[-1])['event'], 'restore')
+
+    def test_review_d2b_new_compress_row_is_parseable_and_restorable(self):
+        first = self.put(self.runs / 'r1/raw/powermetrics.plist')
+        self.assertEqual(self.compress()[0], 0)
+        manifest = self.records / 'compression.jsonl'
+        with manifest.open('a') as stream:
+            stream.write('{"event": "compre')
+        second = self.put(self.runs / 'r2/raw/powermetrics.plist', b'B' * (2 * 1048576))
+        self.assertEqual(self.compress()[0], 0)
+        last = json.loads(manifest.read_text().splitlines()[-1])
+        self.assertEqual((last['event'], last['path']), ('compress', str(second)))
+        self.assertEqual(len(desk.status(self.records)), 2)
+        rc, summary = desk.restore(record_dir=self.records, reserve_gib=0)
+        self.assertEqual((rc, summary['files'], summary['manifest_lines_skipped']), (0, 2, 1))
+        self.assertEqual(second.read_bytes(), b'B' * (2 * 1048576))
+        self.assertTrue(first.exists())
 
     def test_ledger_session_rows_and_archive_copy_locators(self):
         capture = self.put(self.runs / 'capture/raw')

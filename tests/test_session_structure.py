@@ -41,7 +41,7 @@ class SessionStructureTests(unittest.TestCase):
         for role in ('opening', 'closing'):
             (self.runs / 'instrument_validation' / role).mkdir(parents=True)
         for member in ('r1', 'r2'):
-            for name in structure.REQUIRED_MEMBER_FILES:
+            for name in (*structure.REQUIRED_MEMBER_FILES, 'summary_metrics.json'):
                 self.put(self.runs / member / name, 'unread member bytes')
 
     def put(self, path, value):
@@ -68,13 +68,13 @@ class SessionStructureTests(unittest.TestCase):
         self.put(previous, record)
         self.assertFalse(self.check(previous=[previous])['first_session_of_pack'])
 
-    def test_crashed_stage_or_chain_holds_loop(self):
+    def test_nonzero_stage_is_recorded_but_chain_crash_holds_loop(self):
         journal = self.custody / 'night/chain-stages.jsonl'
         self.put(journal, json.dumps({'stage_id': 'science', 'rc': 7}) + '\n')
         record = self.check()
-        self.assertEqual((record['verdict'], record['action']), ('STRUCTURE_DEFECT', 'HOLD_LOOP'))
-        self.assertIn('chain_crashed', record['reasons'])
-        self.assertFalse(record['counting'])
+        self.assertEqual((record['verdict'], record['action']), ('STRUCTURE_OK', 'CONTINUE'))
+        self.assertEqual(record['stages_rc_nonzero'], 1)
+        self.assertTrue(record['counting'])
         self.put(journal, '')
         self.put(self.custody / 'night/chain.exited', {'exit_code': 7, 'epoch_s': 45})
         self.assertIn('chain_crashed', self.check()['reasons'])
@@ -91,6 +91,7 @@ class SessionStructureTests(unittest.TestCase):
                 self.assertFalse(record['counting'])
                 self.assertIn('physical_stop:' + word, record['counting_reasons'])
         self.put(self.custody / 'night/result.json', {'aborted_reason': 'thermalish'})
+        self.put(self.custody / 'night/chain.exited', {'rc': 7})
         self.assertEqual(self.check()['verdict'], 'STRUCTURE_DEFECT')
 
     def test_each_required_record_missing(self):
@@ -105,7 +106,11 @@ class SessionStructureTests(unittest.TestCase):
                     saved = path.read_bytes()
                     path.unlink()
                 record = self.check()
-                self.assertIn('record_class_missing:' + name, record['reasons'])
+                if name == 'night/result.json':
+                    self.assertEqual(record['verdict'], 'STRUCTURE_OK')
+                    self.assertIn('terminal_record_missing', record['counting_reasons'])
+                else:
+                    self.assertIn('record_class_missing:' + name, record['reasons'])
                 if saved is None:
                     path.mkdir()
                 else:
@@ -119,12 +124,134 @@ class SessionStructureTests(unittest.TestCase):
         compressed.unlink()
         self.assertIn('member_files_missing:1', self.check()['reasons'])
 
+    def test_review_s1_and_s1b_nonzero_stage_codes(self):
+        for codes in ((1,), (2, 1), (75, 124)):
+            with self.subTest(codes=codes):
+                kinds = ('campaign_collection',) if len(codes) == 1 else ('bound_derivation', 'calibration_capture')
+                rows = [{'stage_id': str(i), 'kind': kind, 'rc': rc} for i, (kind, rc) in enumerate(zip(kinds, codes))]
+                self.put(self.custody / 'night/chain-stages.jsonl', ''.join(json.dumps(row) + '\n' for row in rows))
+                self.put(self.custody / 'night/result.json', {'verdict': 'GO', 'chain_exit_code': 0})
+                record = self.check()
+                self.assertEqual((record['verdict'], record['action'], record['counting']),
+                                 ('STRUCTURE_OK', 'CONTINUE', True))
+                self.assertEqual(record['stages_rc_nonzero'], len(codes))
+
+    def test_physical_code_map_tracks_registered_vocabulary(self):
+        from joulewise.night_gate import NIGHT_DRIVER_REASON_CODES, HAZARD_DRIVER_REASON_CODES, NIGHT_GATE_REASON_CODES
+        registered = NIGHT_DRIVER_REASON_CODES | HAZARD_DRIVER_REASON_CODES | NIGHT_GATE_REASON_CODES
+        self.assertLessEqual(set(structure.PHYSICAL_STOP_CODES), registered)
+        self.assertIsNone(structure._physical('night_stopped_census_unmeasured'))
+        for code, kind in structure.PHYSICAL_STOP_CODES.items():
+            self.assertEqual(structure._physical(code), kind)
+        from joulewise.b5.chain import STOP_EXITS
+        self.assertEqual(structure.CHAIN_STOP_EXITS, {value: key for key, value in STOP_EXITS.items()})
+
+    def test_review_s2_and_s3_physical_stop_without_captures(self):
+        for role in ('opening', 'closing'):
+            (self.runs / 'instrument_validation' / role).rmdir()
+        self.put(self.custody / 'night/chain-stages.jsonl', '{"rc":-15}\n')
+        self.put(self.custody / 'night/chain.exited', {'exit_code': -15})
+        for reason, kind in (('night_stopped_disk_low', 'disk'), ('night_stopped_monitor_outage', 'sampler'),
+                             ('night_aborted_agent_present', 'agent'), ('disk_low', 'disk')):
+            with self.subTest(reason=reason):
+                self.put(self.custody / 'night/result.json', {'verdict': 'ABORTED', 'aborted_reason': reason})
+                record = self.check()
+                self.assertEqual((record['verdict'], record['action'], record['counting']),
+                                 ('STRUCTURE_OK', 'CONTINUE', False))
+                self.assertIn('physical_stop:' + kind, record['counting_reasons'])
+
+    def test_review_s5_terminal_missing_and_nonphysical_abort(self):
+        (self.custody / 'night/result.json').unlink()
+        record = self.check()
+        self.assertEqual((record['verdict'], record['action'], record['counting']),
+                         ('STRUCTURE_OK', 'CONTINUE', False))
+        self.assertTrue(record['terminal_record_missing'])
+        self.put(self.custody / 'night/chain.exited', {'exit_code': 1})
+        self.assertIn('chain_crashed', self.check()['reasons'])
+        self.assertEqual(self.check()['action'], 'HOLD_LOOP')
+        self.put(self.custody / 'night/chain.exited', {'exit_code': 0})
+        self.put(self.custody / 'night/result.json', {'verdict': 'ABORTED', 'aborted_reason': 'night_probe_error'})
+        self.assertIn('chain_crashed', self.check()['reasons'])
+        self.assertEqual(self.check()['action'], 'HOLD_LOOP')
+
+    def test_chain_stops_and_result_without_exit_are_terminal(self):
+        for role in ('opening', 'closing'):
+            (self.runs / 'instrument_validation' / role).rmdir()
+        for rc, kind in structure.CHAIN_STOP_EXITS.items():
+            with self.subTest(rc=rc):
+                self.put(self.custody / 'night/chain.exited', {'exit_code': rc})
+                self.put(self.custody / 'night/result.json', {'verdict': 'CHAIN_STOPPED', 'chain_exit_code': rc})
+                record = self.check()
+                self.assertEqual((record['verdict'], record['action'], record['counting']),
+                                 ('STRUCTURE_OK', 'CONTINUE', False))
+                self.assertIn('chain_stopped:' + kind, record['counting_reasons'])
+        (self.custody / 'night/chain.exited').unlink()
+        self.assertEqual(self.check()['verdict'], 'STRUCTURE_OK')
+        self.put(self.custody / 'night/result.json', {'verdict': 'REFUSED', 'aborted_reason': 'night_refused_battery_float'})
+        self.assertEqual(self.check()['verdict'], 'STRUCTURE_OK')
+        self.put(self.custody / 'night/result.json', {'verdict': 'ABORTED', 'chain_exit_code': 1})
+        self.assertIn('chain_crashed', self.check()['reasons'])
+
+    def test_review_s4_excluded_member_and_missing_summary(self):
+        summary = self.runs / 'r2/summary_metrics.json'
+        summary.unlink()
+        record = self.check()
+        self.assertEqual((record['verdict'], record['counting'], record['member_summary_missing']),
+                         ('STRUCTURE_OK', True, 1))
+        self.put(self.archive / 'derived/exclusions.json', {'members_excluded': [{'run_id': 'r2', 'codes': ['member.timeout']}]})
+        (self.runs / 'r2/raw/powermetrics.plist').unlink()
+        self.assertEqual(self.check()['verdict'], 'STRUCTURE_OK')
+        self.assertEqual(self.check()['member_summary_missing'], 0)
+        self.put(self.archive / 'derived/exclusions.json', {'members_excluded': []})
+        self.assertIn('member_files_missing:1', self.check()['reasons'])
+
+    def test_review_f4_torn_lines_keep_valid_rows_and_count_damage(self):
+        self.put(self.archive / 'derived/flags.jsonl', json.dumps(self.flag('safe.record')) + '\n{"code":"clock.st')
+        self.put(self.custody / 'night/chain.started', '{')
+        self.put(self.custody / 'night/chain-stages.jsonl', '{"rc":1}\n{')
+        handover = self.root / 'handover.jsonl'
+        self.put(handover, '{"transition":"chain-exit-to-desk"}\n{')
+        record = self.check(handover_record=handover)
+        self.assertEqual((record['verdict'], record['action'], record['counting']),
+                         ('STRUCTURE_OK', 'CONTINUE', True))
+        self.assertEqual(record['damaged_lines'], {'flags.jsonl': 1, 'chain-stages.jsonl': 1, 'handover.jsonl': 1})
+        self.assertEqual(record['damaged_records'], ['chain.started'])
+        self.assertEqual(record['flags']['STRUCTURE'], {'safe.record': 1})
+        self.assertEqual(record['stages_rc_nonzero'], 1)
+        self.put(self.custody / 'night/result.json', '{')
+        self.put(self.custody / 'night/chain.exited', '{')
+        record = self.check()
+        self.assertEqual(record['verdict'], 'STRUCTURE_OK')
+        self.assertFalse(record['counting'])
+        self.assertTrue(record['terminal_record_missing'])
+
+    def test_torn_harvest_objects_require_reharvest(self):
+        for name in ('harvest.json', 'derived/yield.json', 'derived/roster.json', 'derived/exclusions.json'):
+            with self.subTest(name=name):
+                path = self.archive / name
+                saved = path.read_text()
+                self.put(path, '{')
+                record = self.check()
+                self.assertEqual((record['verdict'], record['action'], record['counting']),
+                                 ('HARVEST_FAULT', 'REHARVEST', False))
+                self.assertIn(path.name, record['damaged_records'])
+                self.put(path, saved)
+
+    def test_damaged_utf8_line_keeps_valid_flag_rows(self):
+        path = self.archive / 'derived/flags.jsonl'
+        path.write_bytes((json.dumps(self.flag('safe.record')) + '\n').encode() + b'\xff\n')
+        record = self.check()
+        self.assertTrue(record['counting'])
+        self.assertEqual(record['flags']['STRUCTURE'], {'safe.record': 1})
+        self.assertEqual(record['damaged_lines'], {'flags.jsonl': 1})
+
     def test_harvest_fault_and_not_ready(self):
         self.assertEqual((self.check(harvest_rc=2)['verdict'], self.check(harvest_rc=2)['action']),
                          ('HARVEST_FAULT', 'REHARVEST'))
         self.put(self.archive / 'harvest.json', {'verdict': 'HARVEST_FAULT'})
         self.assertEqual(self.check()['verdict'], 'HARVEST_FAULT')
         (self.custody / 'night/chain.exited').unlink()
+        (self.custody / 'night/result.json').unlink()
         self.assertEqual(self.check()['verdict'], 'NOT_READY')
 
     def test_missing_harvest_preserves_explicit_session_identity(self):
@@ -153,7 +280,8 @@ class SessionStructureTests(unittest.TestCase):
         self.put(handover, '{"transition":"chain-exit-to-desk"}\n')
         self.assertNotIn('handover_missing', self.check(handover_record=handover)['reasons'])
         self.put(self.archive / 'derived/roster.json', 'bad-json')
-        self.assertIn('record_class_invalid:roster.json', self.check()['reasons'])
+        self.assertEqual((self.check()['verdict'], self.check()['action']), ('HARVEST_FAULT', 'REHARVEST'))
+        self.assertIn('roster.json', self.check()['damaged_records'])
 
     def test_energy_firewall_checks_every_open_and_public_output(self):
         restricted_code = 'sentinel.restricted_secret'
@@ -192,7 +320,7 @@ class SessionStructureTests(unittest.TestCase):
         self.assertIn('excluding_flag:RESTRICTED', public)
 
     def test_cli_emits_record_even_for_defect_and_usage_is_two(self):
-        (self.custody / 'night/result.json').unlink()
+        (self.runs / 'r1/raw/powermetrics.plist').unlink()
         result = subprocess.run([sys.executable, 'scripts/session_structure_check.py', '--archive', str(self.archive),
                                  '--custody', str(self.custody), '--registration', str(self.registration_path),
                                  '--record-dir', str(self.records)], capture_output=True, text=True)
