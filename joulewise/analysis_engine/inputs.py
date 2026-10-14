@@ -890,9 +890,16 @@ def _lexical_child_path(
 
 
 def _finalized_runs_root(
-    manifest: Mapping[str, Any], manifest_path: Path, supplied_runs_root: Path
+    manifest: Mapping[str, Any], manifest_path: Path, supplied_runs_root: Path,
+    *, indexed_runs_root: Path | None = None,
 ) -> Path:
-    """Bind consumption to the runs root authenticated by finalization."""
+    """Bind consumption to the runs root authenticated by finalization.
+
+    On a block-5 root the indexed GAMMA claim runs root owns the bundles and
+    lies outside custody (as the finalizer authenticates it); custody owns the
+    attachments. Both the bracket's authenticated root and the supplied root
+    must then be that indexed root.
+    """
 
     supplied = Path(supplied_runs_root)
     if manifest.get("schema_version") != ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
@@ -923,6 +930,17 @@ def _finalized_runs_root(
             "analysis_manifest_runs_root_mismatch: bracket has no authenticated runs root"
         )
     authenticated = Path(authenticated_text)
+    if indexed_runs_root is not None:
+        try:
+            indexed = Path(indexed_runs_root).resolve(strict=True)
+            if (indexed.is_dir() and authenticated.resolve(strict=True) == indexed
+                    and supplied.resolve(strict=True) == indexed):
+                return indexed
+        except (OSError, RuntimeError, ValueError):
+            pass
+        raise AnalysisInputError(
+            "analysis_manifest_runs_root_mismatch: runs_root_not_the_indexed_window"
+        )
     custody = Path(manifest_path).parent.absolute()
     resolved_custody = custody.resolve(strict=True)
     try:
@@ -3572,6 +3590,7 @@ def load_analysis_inputs(
         manifest,
         analysis_manifest_path,
         Path(runs_root),
+        **({"indexed_runs_root": gamma_archive.window.claim_runs_root} if block5 else {}),
     )
     kept_quads = _check_kept_plan(manifest, kept_units) if block5 else None
     kept_run_ids = (frozenset(run for cell in kept_quads.values() for unit in cell.kept["quad"] for run in unit.run_ids)

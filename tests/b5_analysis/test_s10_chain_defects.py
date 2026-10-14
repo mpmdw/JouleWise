@@ -136,6 +136,41 @@ class ClaimGateFloorSpecReaderTests(unittest.TestCase):
             inputs._strict_json_admission_bytes(b'{"contrasts":[{"estimator_registration":{}}]}', "analysis manifest")
 
 
+class ClaimSideIndexedRunsRootTests(unittest.TestCase):
+    """analyze-claims authenticates the block-5 runs root by the window index, as finalization does."""
+
+    def setUp(self):
+        import json
+        from joulewise.analysis_engine import inputs
+        self.inputs = inputs
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name).resolve()
+        self.custody, self.runs, self.other = root / "custody", root / "gamma-runs", root / "other-runs"
+        for path in (self.custody, self.runs, self.other):
+            path.mkdir()
+        (self.custody / "bracket.json").write_text(json.dumps({"runs_root": str(self.runs)}))
+        self.manifest = {"schema_version": inputs.ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA,
+                         "evidence": {"bracket_binding": {"path": "bracket.json"}}}
+        self.path = self.custody / "am.finalized.json"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_without_the_index_a_root_outside_custody_still_refuses(self):
+        with self.assertRaisesRegex(self.inputs.AnalysisInputError, "escapes custody"):
+            self.inputs._finalized_runs_root(self.manifest, self.path, self.runs)
+
+    def test_indexed_root_outside_custody_is_admitted(self):
+        self.assertEqual(self.inputs._finalized_runs_root(self.manifest, self.path, self.runs,
+                                                          indexed_runs_root=self.runs), self.runs)
+
+    def test_another_root_than_the_indexed_one_refuses(self):
+        for supplied, indexed in ((self.other, self.runs), (self.runs, self.other)):
+            with self.subTest(supplied=supplied.name, indexed=indexed.name), \
+                 self.assertRaisesRegex(self.inputs.AnalysisInputError, "runs_root_not_the_indexed_window"):
+                self.inputs._finalized_runs_root(self.manifest, self.path, supplied, indexed_runs_root=indexed)
+
+
 def _window_lineage(index):
     lineage = g.launch_lineage()
     lineage["window_id"] = f"window-{index + 1}"
