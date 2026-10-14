@@ -38,6 +38,11 @@ class MailerTests(unittest.TestCase):
         self.clock = Clock()
         self.transport = Transport()
         self.mailer = Mailer(self.root, CATALOG, clock=self.clock, transport=self.transport)
+        self.addCleanup(self.assert_messages_not_withheld)
+
+    def assert_messages_not_withheld(self):
+        for path in (self.root / "outbox").glob("*.json"):
+            self.assertFalse(json.loads(path.read_text())["blocked"], path.name)
 
     def test_dedupe_two_holds_one_message(self):
         a = self.mailer.enqueue("loop_hold", "s1", "cause", {"state": "HOLD_LOOP"})
@@ -58,6 +63,21 @@ class MailerTests(unittest.TestCase):
         text, blocked = body({"state": "ARM_WAIT", "detail": "12 J positive", "flags": ["disk.low"]}, catalog)
         self.assertFalse(blocked)
         self.assertNotIn("12", text)
+
+    def test_screen_joined_units_and_underscored_analysis_words(self):
+        for cause in ("12Wh", "3kWh", "5_J", "40uJ", "12.5_W", "dbar_neg"):
+            with self.subTest(cause=cause):
+                self.assertTrue(body({"state": "HOLD_LOOP", "cause": cause}, CATALOG)[1])
+        for cause in ("r1-alpha", "interleave_unconfirmed:H3", "battery_float", "exception:OSError:SESSION_RUN"):
+            with self.subTest(cause=cause):
+                self.assertFalse(body({"state": "HOLD_LOOP", "cause": cause, "flags": ["disk.low"]}, CATALOG)[1])
+
+    def test_previous_flags_drop_unknown_codes_without_null_entries(self):
+        previous = {"verdict": "COLLECTED", "flags": ["notice.undelivered", "registration.after_first_session",
+                                                     "notice.no_unreadable", "battery.accumulator_activity"]}
+        text, blocked = body({"state": "ARM_WAIT", "previous": previous}, CATALOG)
+        self.assertFalse(blocked)
+        self.assertEqual(json.loads(text)["previous"]["flags"], ["battery.accumulator_activity"])
 
     def test_backoff_failure_recorded_retried_and_no_transport_default(self):
         key = self.mailer.enqueue("loop_hold", "s", "x", {"state": "HOLD_LOOP"})

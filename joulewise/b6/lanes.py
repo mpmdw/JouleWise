@@ -49,6 +49,12 @@ class Running:
 
 
 @dataclass(frozen=True)
+class Refused:
+    """The driver refused at arm or t0; no measured run started (driver lane at merge)."""
+    hazards: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Done:
     chain_rc: int = 0
     physics_stop: str | None = None
@@ -98,8 +104,8 @@ class D1(Protocol):
 
 
 class D2(Protocol):
-    def launch(self, prepared: Prepared) -> Running | Done | LaneMissing: ...
-    def status(self, handle: Running) -> Running | Done | LaneMissing: ...
+    def launch(self, prepared: Prepared) -> Running | Done | Refused | LaneMissing: ...
+    def status(self, handle: Running) -> Running | Done | Refused | LaneMissing: ...
 
 
 class S1(Protocol):
@@ -155,6 +161,15 @@ def resolve() -> Lanes:
     return Lanes(PrecheckStub(), DriverStub(), DeskStub(), HarvestStub(), AnalysisStub())
 
 
+def collection_live(loop_root) -> bool:
+    """A collection may be measuring: the marker exists and its terminal record does not (yet)."""
+    try:
+        lines = (Path(loop_root) / "collection.active").read_text().splitlines()
+    except FileNotFoundError:
+        return False
+    return not lines or not lines[0] or not Path(lines[0]).exists()
+
+
 class Waker:
     """Record once per reason/context, optionally bootstrap a one-shot job."""
     def __init__(self, loop_root, *, wake_argv=(), run=None):
@@ -177,7 +192,7 @@ class Waker:
         return record
 
     def bootstrap_deferred(self):
-        if (self.root.parent / "collection.active").exists():
+        if collection_live(self.root.parent):
             return
         for path in sorted(self.root.glob("*.json")):
             record = json.loads(path.read_text())
@@ -186,7 +201,7 @@ class Waker:
 
     def _bootstrap(self, record_path, record):
         if self.argv and self.run is not None and not record.get("bootstrap_attempted"):
-            if (self.root.parent / "collection.active").exists():
+            if collection_live(self.root.parent):
                 record["job_deferred"] = True
                 record_path.write_text(json.dumps(record) + "\n")
                 return

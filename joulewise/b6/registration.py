@@ -31,7 +31,7 @@ def load(path: str | Path) -> Registration:
     return Registration(json.loads(Path(path).read_text()), str(path))
 
 
-def validate(reg: Registration, catalog: Catalog) -> list[str]:
+def validate(reg: Registration, catalog: Catalog, *, root=None) -> list[str]:
     d = reg.data
     if not isinstance(d, dict):
         return ["registration must be an object"]
@@ -60,6 +60,15 @@ def validate(reg: Registration, catalog: Catalog) -> list[str]:
         check(field, d.get(field) in choices)
     if d.get("session_shape") == "fixed":
         check("plan_tree_ref", text(d.get("plan_tree_ref")))
+        if root is not None and d.get("status") == "registered" and text(d.get("plan_tree_ref")):
+            try:
+                checkout = Path(root).resolve()
+                path = (checkout / d["plan_tree_ref"]).resolve()
+                path.relative_to(checkout)
+                tree = json.loads(path.read_text())
+                check("plan_tree_ref", isinstance(tree, dict) and isinstance(tree.get("stage_graph"), list))
+            except (OSError, ValueError):
+                check("plan_tree_ref", False)
     modules = d.get("modules")
     check("modules", isinstance(modules, list) and (bool(modules) or d.get("session_shape") == "fixed"))
     ids = []
@@ -82,18 +91,18 @@ def validate(reg: Registration, catalog: Catalog) -> list[str]:
         if "run_count" in m:
             check(prefix + ".run_count", type(m["run_count"]) is int and m["run_count"] == expected)
         if isinstance(dirs, list) and dirs and all(text(x) for x in dirs):
-            root = Path(__file__).resolve().parents[2]
+            manifest_root = Path(root) if root is not None else Path(__file__).resolve().parents[2]
             if reg.path:
                 configs = next((p for p in Path(reg.path).resolve().parents if p.name == "configs"), None)
-                if configs:
-                    root = configs.parent
+                if configs and root is None:
+                    manifest_root = configs.parent
             count = 0
             try:
                 for directory in dirs:
                     relative = Path(directory)
                     if relative.is_absolute() or ".." in relative.parts or relative.parts[0] != "configs":
                         raise ValueError("not a repository config directory")
-                    manifest = json.loads((root / relative / "order_manifest.json").read_text())
+                    manifest = json.loads((manifest_root / relative / "order_manifest.json").read_text())
                     count += len(manifest["executed_order"])
                 check(prefix + ".run_count", count == expected)
             except (OSError, ValueError, KeyError, TypeError):
@@ -115,7 +124,7 @@ def validate(reg: Registration, catalog: Catalog) -> list[str]:
     if integer(d.get("target_sessions")) and integer(d.get("minimum_sessions")):
         check("minimum_sessions", d["minimum_sessions"] <= d["target_sessions"])
     estimators = d.get("estimators")
-    check("estimators", isinstance(estimators, list))
+    check("estimators", isinstance(estimators, list) and (draft or bool(estimators)))
     for i, e in enumerate(estimators if isinstance(estimators, list) else []):
         if not isinstance(e, dict):
             check(f"estimators[{i}]", False)
@@ -163,7 +172,7 @@ def open_packs(checkout: str | Path, *, run: Callable, rejected: Callable = lamb
             tracked = run(argv + ["ls-files", "--error-unmatch", "--", relative])
             dirty = run(argv + ["status", "--porcelain", "--", relative])
             catalog = load_catalog(root / reg.flag_catalog)
-            problems = validate(reg, catalog)
+            problems = validate(reg, catalog, root=root)
             if tracked.returncode or dirty.returncode or dirty.stdout.strip():
                 problems.append("untracked_or_dirty")
             if reg.status != "registered":

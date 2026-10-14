@@ -35,6 +35,22 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(order, ["alpha", "beta", "gamma", "beta", "gamma", "alpha", "gamma", "alpha", "beta"])
         self.assertIsInstance(queue.next_session(state, self.regs, NOW), queue.Close)
 
+    def test_missing_known_pack_blocks_close_but_not_other_selections(self):
+        regs = registrations(target=1)
+        state = deepcopy(self.state)
+        state["packs"] = {p: {"status": "open"} for p in regs}
+        state = started(state, queue.Selection(("alpha",), 1))
+        self.assertEqual(queue.next_session(state, {p: regs[p] for p in ("alpha", "beta")}, NOW),
+                         queue.Selection(("beta",), 1))
+        state = started(state, queue.Selection(("beta",), 1))
+        result = queue.next_session(state, {p: regs[p] for p in ("alpha", "beta")}, NOW)
+        self.assertIsInstance(result, queue.Idle)
+        self.assertEqual(result.reasons["gamma"], "pack_not_open")
+        self.assertEqual(queue.next_session(state, {}, NOW).reasons["gamma"], "pack_not_open")
+        self.assertEqual(queue.next_session(state, regs, NOW), queue.Selection(("gamma",), 1))
+        state = started(state, queue.Selection(("gamma",), 1))
+        self.assertIsInstance(queue.next_session(state, regs, NOW), queue.Close)
+
     def test_noncounting_retries_next_round_and_held_skips(self):
         state = started(self.state, queue.Selection(("alpha",), 1), "not_counting", "test")
         self.assertEqual(queue.next_session(state, self.regs, NOW).packs, ("beta",))

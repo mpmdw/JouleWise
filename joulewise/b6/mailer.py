@@ -7,14 +7,16 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from joulewise.b6.lanes import collection_live
+
 VERDICTS = {"COLLECTED", "NO_COLLECTION", "NULL", "HARVEST_FAULT"}
 STATES = {"NEXT", "PRECHECK", "WAIT_PHYSICS", "SMOKE_RUN", "SMOKE_DESK", "ARM_WAIT", "SESSION_RUN",
           "SESSION_DESK", "ROTATE", "HOLD_LOOP", "DONE"}
 ANALYSIS_WORDS = ("resolved", "unresolved", "positive", "negative", "direction", "replicated", "not_replicated",
                   "higher", "lower", "above_floor", "below_floor", "equivalent", "different", "dbar",
                   "direction_supported", "not_estimable", "not_resolvable", "not_distinguished", "inconclusive")
-SCREEN = re.compile(r"\d(?:\.\d+)?\s*(?:mJ|kJ|J|W|joules?|watts?)\b|\b(?:" +
-                    "|".join(ANALYSIS_WORDS) + r")\b", re.I)
+SCREEN = re.compile(r"\d(?:\.\d+)?[\s_]*(?:[mkuµ]?J|[mk]?Wh?|joules?|watts?)(?![A-Za-z])|(?<![A-Za-z])(?:" +
+                    "|".join(ANALYSIS_WORDS) + r")(?![A-Za-z])", re.I)
 TOKEN = re.compile(r"[a-zA-Z0-9_.:/+-]+\Z")
 FIELDS = {"packs", "pack_id", "session_id", "round", "t0_not_before", "smoke", "predicted_flags", "thin_margin",
           "previous", "verdict", "counting", "flags", "minutes", "chain", "harvest", "desk", "state", "cause",
@@ -32,7 +34,8 @@ def body(fields, catalog):
             return {k: clean(v, k) for k, v in value.items()
                     if k in FIELDS or (key in {"counting", "counts", "short"} and TOKEN.fullmatch(k))}
         if isinstance(value, (list, tuple)):
-            return [clean(x, key) for x in value]
+            items = [clean(x, key) for x in value]
+            return [x for x in items if x is not None] if key in {"flags", "predicted_flags"} else items
         if type(value) in (int, float, bool) or value is None:
             return value
         if isinstance(value, str):
@@ -169,7 +172,7 @@ class Mailer:
 
     def flush(self, *, state=None, deferred_overrun=False):
         overrun_hold = state == "HOLD_LOOP" and deferred_overrun
-        if ((self.root / "collection.active").exists() and not overrun_hold) or state in {"SMOKE_RUN", "SESSION_RUN"}:
+        if (collection_live(self.root) and not overrun_hold) or state in {"SMOKE_RUN", "SESSION_RUN"}:
             return
         for path in sorted(self.outbox.glob("*.json")):
             entry = json.loads(path.read_text())

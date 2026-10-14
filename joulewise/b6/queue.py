@@ -68,19 +68,20 @@ def done_reason(state, reg, now):
 
 
 def next_session(state, regs, now):
+    missing = {p: "pack_not_open" for p in state.get("packs", {}) if p not in regs}
     if not regs:
-        return Idle({"registrations": "no_open_packs"})
+        return Idle(missing or {"registrations": "no_open_packs"})
     cap = state.get("science_minutes_max", 265)
     oversized = {p for p, r in regs.items() if r.session_shape == "modular"
                  and sum(m["est_minutes"] for m in r.modules) > cap}
     eligible = [p for p, r in regs.items() if p not in oversized and not done_reason(state, r, now)
                 and pack_state(state, r).get("status", "open") == "open"]
     if not eligible:
-        if all(done_reason(state, r, now) for r in regs.values()):
+        if not missing and all(done_reason(state, r, now) for r in regs.values()):
             return Close({p: len(counting_ids(state, p)) for p in regs},
                          {p: len(counting_ids(state, p)) for p, r in regs.items() if done_reason(state, r, now).startswith("short:")})
-        return Idle({p: "pack_unit_exceeds_cap" if p in oversized else pack_state(state, r).get("hold_reason")
-                     for p, r in regs.items()})
+        return Idle({**{p: "pack_unit_exceeds_cap" if p in oversized else pack_state(state, r).get("hold_reason")
+                       for p, r in regs.items()}, **missing})
     round_number = state.get("round", 1)
     used = set(state.get("slots", {}).get(str(round_number), ()))
     order = rotation(state.get("base_order", ["alpha", "beta", "gamma"]), regs, round_number)

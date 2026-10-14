@@ -20,6 +20,7 @@ def registrations(*, target=3):
     for p in ("alpha", "beta", "gamma"):
         data = deepcopy(load(ROOT / f"configs/b6/packs/{p}/registration.json").data)
         data.update(status="registered", target_sessions=target)
+        data["estimators"] = [{"name": "desk", "library": "joulewise.test", "function": "desk", "version": "fixture"}]
         data.pop("draft_notes", None)
         # Synthetic registrations decide every previously unset effect.
         data["flag_effects"] = {code: effect if effect is not None else CATALOG.effect(code)
@@ -50,6 +51,31 @@ def modular(pack="beta", *, interleave="none"):
 
 
 class RegistrationTests(unittest.TestCase):
+    def test_registered_fixed_tree_exists_under_root_and_has_stage_graph(self):
+        reg = registrations()["alpha"]
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            path = root / "plan.json"
+            reg = replace(reg, data={**reg.data, "plan_tree_ref": "plan.json"})
+            self.assertEqual(validate(reg, CATALOG, root=root), ["plan_tree_ref"])
+            for contents in ("broken", "{}", "[]", '{"stage_graph": null}'):
+                path.write_text(contents)
+                with self.subTest(contents=contents):
+                    self.assertEqual(validate(reg, CATALOG, root=root), ["plan_tree_ref"])
+            path.write_text('{"stage_graph": []}')
+            self.assertEqual(validate(reg, CATALOG, root=root), [])
+            escaped = replace(reg, data={**reg.data, "plan_tree_ref": "../plan.json"})
+            self.assertEqual(validate(escaped, CATALOG, root=root), ["plan_tree_ref"])
+            self.assertEqual(validate(replace(escaped, data={**escaped.data, "status": "draft"}), CATALOG, root=root), [])
+
+    def test_registered_estimators_nonempty_but_empty_effects_valid(self):
+        reg = registrations()["beta"]
+        reg = replace(reg, data={**reg.data, "flag_effects": {}})
+        self.assertEqual(validate(reg, CATALOG), [])
+        reg = replace(reg, data={**reg.data, "estimators": []})
+        self.assertEqual(validate(reg, CATALOG), ["estimators"])
+        self.assertEqual(validate(replace(reg, data={**reg.data, "status": "draft"}), CATALOG), [])
+
     def test_template_and_drafts_validate(self):
         template = load(ROOT / "configs/b6/registration_template.json")
         self.assertEqual(validate(template, CATALOG), [])
@@ -172,6 +198,9 @@ class RegistrationTests(unittest.TestCase):
             d["flag_catalog"] = "catalog.json"
             path = repo / "configs/b6/packs/alpha/registration.json"
             path.parent.mkdir(parents=True)
+            tree = repo / d["plan_tree_ref"]
+            tree.parent.mkdir(parents=True)
+            tree.write_text('{"stage_graph": []}')
             path.write_text(json.dumps(d))
             rejected = []
             self.assertEqual(open_packs(repo, run=run, rejected=lambda *x: rejected.append(x)), [])
@@ -182,6 +211,10 @@ class RegistrationTests(unittest.TestCase):
             opened = open_packs(repo, run=run)
             self.assertEqual([r.pack_id for r in opened], ["alpha"])
             self.assertGreater(opened[0].commit_time, 0)
+            tree.unlink()
+            self.assertEqual(open_packs(repo, run=run, rejected=lambda *x: rejected.append(x)), [])
+            self.assertIn("plan_tree_ref", rejected[-1][1])
+            tree.write_text('{"stage_graph": []}')
             path.write_text(json.dumps(d) + "\n")
             self.assertEqual(open_packs(repo, run=run), [])
             d["status"] = "draft"

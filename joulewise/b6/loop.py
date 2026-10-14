@@ -9,7 +9,8 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 from joulewise.b6 import compose, queue
-from joulewise.b6.lanes import Done, LaneMissing, Prepared, Running, SessionLine, Waker, resolve
+from joulewise.b6.lanes import (Done, LaneMissing, Prepared, Refused, Running, SessionLine, Waker, collection_live,
+                                resolve)
 from joulewise.b6.mailer import Mailer
 from joulewise.b6.registration import Registration, open_packs
 from joulewise.flags.catalog import load_catalog
@@ -17,6 +18,7 @@ from joulewise.flags.catalog import load_catalog
 DEFAULT_LOOP_ROOT = "/Users/edr/night-b6/loop"
 STOP_REF_GLOB = "refs/heads/ops/stop*"
 COLLECTING = {"SMOKE_RUN", "SESSION_RUN"}
+LOOP_WINDOW_FLAGS = frozenset({"registration.after_first_session", "notice.undelivered", "notice.no_unreadable"})
 
 
 def atomic_state(path, state):
@@ -86,16 +88,52 @@ class Loop:
             return 0
         with lock:
             self.state = self.read_state()
-            self._registrations()
             state = self.state["state"]
-            if state not in {"HOLD_LOOP", "DONE"}:
-                getattr(self, "_" + state.lower())()
+            try:
+                self._registrations()
+                if state not in {"HOLD_LOOP", "DONE"}:
+                    getattr(self, "_" + state.lower())()
+            except Exception as exc:
+                session = self.state.get("session") or {}
+                prefix = "smoke_" if state == "SMOKE_RUN" else ""
+                if state in COLLECTING and not session.get(prefix + "handle") and not session.get(prefix + "launch_confirmed"):
+                    self._rollback_launch(state == "SMOKE_RUN")
+                cause = f"exception:{type(exc).__name__}:{state}"
+                self.state["hold_reason"] = cause
+                self.state["last_exception"] = {"type": type(exc).__name__, "message": str(exc)[:200], "state": state}
+                self._transition("HOLD_LOOP")
+                self._notify_or_defer("loop_hold", cause)
+            if self.state["state"] == "HOLD_LOOP" and self.state.get("deferred_event") and not collection_live(self.root):
+                # The collection that deferred this hold has ended: tell Ed and wake now.
+                deferred = self.state.pop("deferred_event")
+                self._io(deferred["kind"], lambda: self._event(deferred["kind"], deferred["cause"]))
             atomic_state(self.root / "state.json", self.state)
             # Overrun holds may deliver program mail while wake jobs still wait.
-            self.mailer.flush(state=self.state["state"], deferred_overrun=self.state.get("deferred_overrun", False))
-            if not (self.root / "collection.active").exists():
-                self.waker.bootstrap_deferred()
+            io_failed = not self._flush(state=self.state["state"], deferred_overrun=self.state.get("deferred_overrun", False))
+            if not collection_live(self.root):
+                io_failed = not self._io("waker.bootstrap_deferred", self.waker.bootstrap_deferred) or io_failed
+            if io_failed:
+                atomic_state(self.root / "state.json", self.state)
         return 0
+
+    def _io(self, operation, action):
+        try:
+            action()
+            return True
+        except Exception as exc:
+            # Transport text can contain credentials; only the type is recorded.
+            self.state["last_io_error"] = {"operation": operation, "type": type(exc).__name__}
+            return False
+
+    def _notify_or_defer(self, kind, cause):
+        # While a collection may be measuring, keep the notice until its terminal record exists.
+        if collection_live(self.root):
+            self.state["deferred_event"] = {"kind": kind, "cause": cause}
+        else:
+            self._io(kind, lambda: self._event(kind, cause))
+
+    def _flush(self, **kwargs):
+        return self._io("mailer.flush", lambda: self.mailer.flush(**kwargs))
 
     def _transition(self, state):
         if self.state["state"] != state:
@@ -103,10 +141,11 @@ class Loop:
                 self.state["wait"] = None
             if self.state["state"] == "HOLD_LOOP":
                 self.state.pop("deferred_overrun", None)
+                self.state.pop("deferred_event", None)
             self.state.update(state=state, since=self.clock())
 
     def _event(self, kind, cause=None, packs=None, *, wake=True, fields=None):
-        if self.state["state"] in COLLECTING or ((self.root / "collection.active").exists() and kind != "overrun"):
+        if self.state["state"] in COLLECTING or (collection_live(self.root) and kind != "overrun"):
             raise RuntimeError("notification during collection")
         session = self.state.get("session") or {}
         identity = session.get("id") or ",".join(packs or []) or "loop"
@@ -119,17 +158,17 @@ class Loop:
         if not isinstance(result, LaneMissing):
             return False
         # Missing status cannot establish that a running collection has ended.
-        # Hold without waking or mailing until the terminal path exists.
-        active = self.root / "collection.active"
+        # Hold, and defer mail and wake until the terminal path exists.
         self.state["hold_reason"] = "lane_missing:" + result.name
         self._transition("HOLD_LOOP")
-        if not active.exists():
-            self._event("lane_missing", result.name)
+        self._notify_or_defer("lane_missing", result.name)
         return True
 
     def _layout(self):
         s = self.state["session"]
-        return compose.layout(queue.Selection(tuple(s["packs"]), s["round"]), self.regs, self.repo)
+        layout = compose.layout(queue.Selection(tuple(s["packs"]), s["round"]), self.regs, self.repo)
+        attempt = s.get("launch_attempt", 0)
+        return replace(layout, session_id=s["id"] + f"-a{attempt}") if attempt else layout
 
     def _prepared(self, smoke=False):
         return Prepared(**self.state["session"]["smoke_prepared" if smoke else "prepared"])
@@ -143,6 +182,10 @@ class Loop:
             return
         if isinstance(selection, queue.Idle):
             self.state["idle_reasons"] = selection.reasons
+            self.state["session"] = None
+            for p, reason in selection.reasons.items():
+                if reason == "pack_not_open":
+                    self._event("loop_hold", "pack_not_open:" + p, [p])
             return
         self.state.pop("idle_reasons", None)
         layout = compose.layout(selection, self.regs, self.repo)
@@ -154,16 +197,23 @@ class Loop:
             if self._missing(capability):
                 return
             if not capability.block_id_strata:
-                self.state["hold_reason"] = "interleave_unconfirmed:H3"
-                self._transition("HOLD_LOOP")
-                self._event("loop_hold", "interleave_unconfirmed:H3")
+                packs = [p for p in selection.packs if self.regs[p].data.get("interleave") == "quad_round_robin"]
+                self.state["session"] = None
+                for p in packs:
+                    self.state["packs"][p].update(status="held", hold_reason="interleave_unconfirmed:H3")
+                    self._event("loop_hold", "interleave_unconfirmed:H3", [p])
                 return
+        if self._prepare_session(layout):
+            self._transition("PRECHECK")
+
+    def _prepare_session(self, layout=None):
+        layout = layout or self._layout()
         prepared = self.lanes.driver.prepare_session(layout, compose.render(layout), smoke=False, keep={},
                                                      staging_root=self.root / "staging" / layout.session_id)
         if self._missing(prepared):
-            return
+            return False
         self.state["session"]["prepared"] = asdict(prepared)
-        self._transition("PRECHECK")
+        return True
 
     def _wait_for(self, result, return_state):
         hazard = result.would_refuse[0].hazard
@@ -195,6 +245,15 @@ class Loop:
         self._transition("HOLD_LOOP" if repeated else "NEXT")
         self._event(kind, ",".join(code_set), packs)
 
+    def _certain_exclusion(self, result):
+        if not result.certain_exclusion:
+            return False
+        packs = set()
+        for x in result.certain_exclusion:
+            packs.update([x.pack_id] if x.pack_id else self.state["session"]["packs"])
+        self._hold_packs("certain_exclusion", [x.code for x in result.certain_exclusion], sorted(packs))
+        return True
+
     def _precheck(self):
         layout = self._layout()
         result = self.lanes.precheck.run(layout, self._prepared().plan_path)
@@ -203,11 +262,7 @@ class Loop:
         if result.would_refuse:
             self._wait_for(result, "PRECHECK")
             return
-        if result.certain_exclusion:
-            packs = set()
-            for x in result.certain_exclusion:
-                packs.update([x.pack_id] if x.pack_id else self.state["session"]["packs"])
-            self._hold_packs("certain_exclusion", [x.code for x in result.certain_exclusion], sorted(packs))
+        if self._certain_exclusion(result):
             return
         self.state["last_certain_exclusion"] = None
         self.state["wait"] = None
@@ -225,23 +280,20 @@ class Loop:
             "t0_not_before": self.clock() + 1800, "smoke": smoke, "thin_margin": result.thin_margin,
             "predicted_flags": result.predicted_flags, "previous": self.state.get("previous")})
         # Deliver before entering a collection state, so the NO window runs during smoke.
-        self.mailer.flush(state="PRECHECK")
+        self._flush(state="PRECHECK")
         self._transition("SMOKE_RUN" if smoke else "ARM_WAIT")
 
     def _wait_physics(self):
         episode = self.state["wait"]
-        if self.clock() - episode["last_check"] < 300:
+        if self.clock() - episode["last_check"] < 240:
             return
         result = self.lanes.precheck.run(self._layout(), self._prepared().plan_path)
         if self._missing(result):
             return
         if result.would_refuse:
             self._wait_for(result, episode["return_state"])
-        elif result.certain_exclusion:
-            packs = set()
-            for x in result.certain_exclusion:
-                packs.update([x.pack_id] if x.pack_id else self.state["session"]["packs"])
-            self._hold_packs("certain_exclusion", [x.code for x in result.certain_exclusion], sorted(packs))
+        elif self._certain_exclusion(result):
+            return
         else:
             self.state["wait"] = None
             self._transition(episode["return_state"])
@@ -251,6 +303,27 @@ class Loop:
         if not path.exists():
             path.write_text(f"{prepared.terminal_path}\n{prepared.max_s + 3600}\n")
 
+    def _rollback_launch(self, smoke):
+        (self.root / "collection.active").unlink(missing_ok=True)
+        session = self.state.get("session") or {}
+        if not smoke and "started" in session:
+            slots = self.state.get("slots", {}).get(str(session["round"]), [])
+            for p in session["packs"]:
+                if p in slots:
+                    slots.remove(p)
+                    self.state["packs"][p]["attempts_since_resume"] -= 1
+
+    def _new_smoke(self):
+        session = self.state["session"]
+        session["smoke_attempt"] = session.get("smoke_attempt", 0) + 1
+        for key in ("smoke_prepared", "smoke_handle", "smoke_started", "smoke_done", "smoke_launch_confirmed"):
+            session.pop(key, None)
+
+    def _retry_physics(self, hazards, return_state):
+        self.state["wait"] = {"hazard": hazards[0] if hazards else "physics_refused", "since": self.clock(),
+                              "remedied_hazards": [], "mailed": False, "last_check": self.clock(), "return_state": return_state}
+        self._transition("WAIT_PHYSICS")
+
     def _run_collection(self, smoke):
         session = self.state["session"]
         prefix = "smoke_" if smoke else ""
@@ -258,7 +331,7 @@ class Loop:
             layout = self._layout()
             layout = replace(layout, session_id=layout.session_id + f"-smoke-{session.get('smoke_attempt', 0)}")
             prepared = self.lanes.driver.prepare_session(layout, compose.render(layout), smoke=True,
-                keep=compose.smoke_keep(layout), staging_root=self.root / "staging" / (session["id"] + "-smoke"))
+                keep=compose.smoke_keep(layout), staging_root=self.root / "staging" / layout.session_id)
             if self._missing(prepared):
                 return
             session["smoke_prepared"] = asdict(prepared)
@@ -278,13 +351,21 @@ class Loop:
         result = self.lanes.driver.status(Running(handle)) if handle else self.lanes.driver.launch(prepared)
         if isinstance(result, LaneMissing):
             # A failed launch stub has started nothing; remove the active marker.
-            if handle is None:
-                (self.root / "collection.active").unlink(missing_ok=True)
-                if not smoke and not session.get("launch_confirmed"):
-                    for p in session["packs"]:
-                        self.state["slots"][str(session["round"])].remove(p)
-                        self.state["packs"][p]["attempts_since_resume"] -= 1
+            if handle is None and not session.get(prefix + "launch_confirmed"):
+                self._rollback_launch(smoke)
             self._missing(result)
+            return
+        if isinstance(result, Refused):
+            self._rollback_launch(smoke)
+            if smoke:
+                self._new_smoke()
+            else:
+                for key in ("started", "t0", "handle", "launch_confirmed", "prepared"):
+                    session.pop(key, None)
+                session["launch_attempt"] = session.get("launch_attempt", 0) + 1
+                if not self._prepare_session():
+                    return
+            self._retry_physics(result.hazards, "SMOKE_RUN" if smoke else "ARM_WAIT")
             return
         session["launch_confirmed" if not smoke else "smoke_launch_confirmed"] = True
         if isinstance(result, Running):
@@ -318,12 +399,8 @@ class Loop:
             self._transition("ARM_WAIT")
         elif result.status == "physics":
             # A new smoke gets its own idempotency key after a physics stop.
-            s["smoke_attempt"] = s.get("smoke_attempt", 0) + 1
-            for key in ("smoke_prepared", "smoke_handle", "smoke_started", "smoke_done"):
-                s.pop(key, None)
-            self.state["wait"] = {"hazard": result.codes[0] if result.codes else "smoke_physics", "since": self.clock(),
-                                  "remedied_hazards": [], "mailed": False, "last_check": self.clock(), "return_state": "SMOKE_RUN"}
-            self._transition("WAIT_PHYSICS")
+            self._new_smoke()
+            self._retry_physics(result.codes or ("smoke_physics",), "SMOKE_RUN")
         else:
             self._hold_packs("smoke_hold", result.codes, s["packs"])
 
@@ -350,8 +427,36 @@ class Loop:
         s = self.state["session"]
         if self.clock() < s["notice_sent"] + 1800:
             return
-        if self._stop() or self.mailer.has_no(s["notice_key"], self.config["owner_login"]):
+        stop = self._stop()
+        if self.state.get("stop_probe_unavailable"):
+            s["no_unreadable"] = True
+        if stop:
             self._owner_hold()
+            return
+        no = False
+        try:
+            no = self.mailer.has_no(s["notice_key"], self.config["owner_login"])
+            if self.mailer.entry(s["notice_key"]).get("no_probe_failed"):
+                s["no_unreadable"] = True
+        except Exception:
+            s["no_unreadable"] = True
+        if no:
+            self._owner_hold()
+            return
+        result = self.lanes.precheck.run(self._layout(), self._prepared().plan_path)
+        if self._missing(result):
+            return
+        if result.would_refuse:
+            self._wait_for(result, "ARM_WAIT")
+            return
+        if self._certain_exclusion(result):
+            return
+        self.state["last_certain_exclusion"] = None
+        if any(self.state["packs"][p]["last_smoke_fingerprint"] != result.fingerprint for p in s["packs"]):
+            s["fingerprint"] = result.fingerprint
+            s["needs_smoke"] = True
+            self._new_smoke()
+            self._transition("SMOKE_RUN")
         else:
             self._transition("SESSION_RUN")
 
@@ -372,7 +477,9 @@ class Loop:
                 flags.append("registration.after_first_session")
         if s["notice_undelivered"]:
             flags.append("notice.undelivered")
-        line = replace(line, window_flags=tuple(sorted(set(flags))))
+        if s.get("no_unreadable"):
+            flags.append("notice.no_unreadable")
+        line = replace(line, session_id=s["id"], window_flags=tuple(sorted(set(flags))))
         outcomes = {p: queue.outcome(self.regs[p], line, self.catalog) for p in s["packs"]}
         record = {"session_id": s["id"], "round": s["round"], "packs": s["packs"], "t0": s["t0"],
                   "outcomes": outcomes, "structure_ok": line.structure_ok,
@@ -448,7 +555,7 @@ class Loop:
                 if pack is not None and pack not in self.state["packs"]:
                     raise ValueError("unknown pack")
                 self.state = queue.resume(self.state, pack, attempts)
-                if self.state["state"] == "HOLD_LOOP":
+                if self.state["state"] in {"HOLD_LOOP", "DONE"}:
                     self.state["wait"] = None
                     if recovering:
                         self._transition(recovering)
@@ -476,6 +583,9 @@ class Loop:
                     return 0
                 if not line.structure_ok or line.harvest_rc in (2, 3):
                     raise ValueError("reharvest is not structurally complete")
+                original = next(a for a in self.state["attempts"] if a["session_id"] == session_id)
+                flags = set(line.window_flags) | (set(original["line"]["window_flags"]) & LOOP_WINDOW_FLAGS)
+                line = replace(line, window_flags=tuple(sorted(flags)))
                 regs = {p: Registration(r["data"], commit_time=r["commit_time"]) for p, r in pending["registrations"].items()}
                 self.state.setdefault("reharvested", {})[session_id] = {p: queue.outcome(r, line, self.catalog) for p, r in regs.items()}
                 del self.state["pending_sessions"][session_id]

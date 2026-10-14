@@ -15,6 +15,7 @@ from unittest.mock import patch
 from joulewise.b6 import loop as loop_module, queue
 from joulewise.b6.lanes import Done, Exclusion, HarvestCapabilities, Hazard, LaneMissing, Lanes, Prepared, PrecheckResult, Running, SessionLine, SmokeResult, Waker, resolve
 from joulewise.b6.mailer import Mailer
+from joulewise.flags.catalog import Catalog
 from scripts import b6_loop as cli_module
 from scripts.b6_loop import main
 from tests.test_b6_mailer import Clock, Transport
@@ -102,6 +103,11 @@ class LoopTests(unittest.TestCase):
         self.regs = registrations()
         self.loop = loop_module.Loop(ROOT, self.root, regs=self.regs, clock=self.clock, run=self.runner,
             lanes=Lanes(self.precheck, self.driver, self.desk, Harvest(), self.analysis), mailer=self.mailer, catalog=CATALOG)
+        self.addCleanup(self.assert_messages_not_withheld)
+
+    def assert_messages_not_withheld(self):
+        for path in (self.root / "outbox").glob("*.json"):
+            self.assertFalse(json.loads(path.read_text())["blocked"], path.name)
 
     def runner(self, argv):
         self.run_calls.append(argv)
@@ -133,6 +139,264 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(len(self.transport.closed), 9)
         self.loop.tick()
         self.assertEqual(len(self.messages("close")), 1)
+
+    def test_transient_missing_pack_not_close_and_return_resumes(self):
+        self.loop.regs_source = registrations(target=1)
+        for _ in range(2):
+            self.tick_to("ROTATE")
+            self.loop.tick()
+        regs = self.loop.regs_source
+        self.loop.regs_source = {p: regs[p] for p in ("alpha", "beta")}
+        for _ in range(2):
+            self.assertEqual(self.loop.tick(), 0)
+            self.assertEqual(self.state()["state"], "NEXT")
+            self.assertEqual(self.state()["idle_reasons"]["gamma"], "pack_not_open")
+        self.assertEqual(self.messages("close"), [])
+        self.assertEqual(len(self.messages("loop_hold")), 1)
+        self.assertEqual(json.loads(self.messages("loop_hold")[0]["body"])["cause"], "pack_not_open:gamma")
+        self.assertEqual(len(list((self.root / "wake").glob("*.json"))), 1)
+        self.loop.regs_source = regs
+        self.loop.tick()
+        self.assertEqual(self.state()["state"], "PRECHECK")
+        self.assertEqual(self.state()["session"]["packs"], ["gamma"])
+
+    def test_resume_done_returns_to_next(self):
+        state = self.state()
+        state["state"] = "DONE"
+        loop_module.atomic_state(self.root / "state.json", state)
+        self.loop.control("resume")
+        self.assertEqual(self.state()["state"], "NEXT")
+
+    def test_missing_tree_compose_exception_records_hold_and_notifies_once(self):
+        reg = self.regs["alpha"]
+        self.loop.regs_source = {"alpha": replace(reg, data={**reg.data, "plan_tree_ref": "configs/missing-b6-plan.json"})}
+        self.assertEqual(self.loop.tick(), 0)
+        state = self.state()
+        self.assertEqual(state["state"], "HOLD_LOOP")
+        self.assertEqual(state["hold_reason"], "exception:FileNotFoundError:NEXT")
+        self.assertEqual(state["last_exception"]["type"], "FileNotFoundError")
+        self.assertEqual(state["last_exception"]["state"], "NEXT")
+        self.assertLessEqual(len(state["last_exception"]["message"]), 200)
+        self.loop.tick()
+        self.assertEqual(len(self.messages("loop_hold")), 1)
+        self.assertNotIn("missing-b6-plan", self.messages("loop_hold")[0]["body"])
+        self.assertEqual(len(list((self.root / "wake").glob("*.json"))), 1)
+
+    def test_registration_exception_is_inside_tick_boundary(self):
+        with patch.object(self.loop, "_registrations", side_effect=OSError("x" * 220)):
+            self.assertEqual(self.loop.tick(), 0)
+        self.assertEqual(self.state()["hold_reason"], "exception:OSError:NEXT")
+        self.assertEqual(len(self.state()["last_exception"]["message"]), 200)
+
+    def assert_launch_exception_rolls_back(self, state):
+        self.tick_to(state)
+        with patch.object(self.driver, "launch", side_effect=OSError("synthetic launch failure")):
+            self.assertEqual(self.loop.tick(), 0)
+        self.assertEqual(self.state()["state"], "HOLD_LOOP")
+        self.assertEqual(self.state()["hold_reason"], "exception:OSError:" + state)
+        self.assertFalse((self.root / "collection.active").exists())
+        self.assertEqual(self.state()["packs"]["alpha"]["attempts_since_resume"], 0)
+        self.assertEqual(self.state()["slots"].get("1", []), [])
+        self.assertEqual(len(self.messages("loop_hold")), 1)
+        self.assertEqual(len(list((self.root / "wake").glob("*.json"))), 1)
+
+    def test_session_launch_exception_returns_slot_and_attempt(self):
+        self.assert_launch_exception_rolls_back("SESSION_RUN")
+
+    def test_smoke_launch_exception_removes_marker(self):
+        self.assert_launch_exception_rolls_back("SMOKE_RUN")
+
+    def test_status_exception_keeps_marker_and_defers_notifications(self):
+        self.tick_to("SESSION_RUN")
+        self.loop.tick()
+        self.assertIn("handle", self.state()["session"])
+        with patch.object(self.driver, "status", side_effect=OSError("synthetic status failure")):
+            self.assertEqual(self.loop.tick(), 0)
+        self.assertEqual(self.state()["hold_reason"], "exception:OSError:SESSION_RUN")
+        self.assertTrue((self.root / "collection.active").exists())
+        self.assertEqual(self.state()["packs"]["alpha"]["attempts_since_resume"], 1)
+        self.assertEqual(self.messages("loop_hold"), [])
+        self.assertFalse((self.root / "wake").exists())
+        with self.assertRaises(ValueError):
+            self.loop.control("resume")
+        self.loop.tick()
+        self.assertEqual(self.messages("loop_hold"), [])
+        Path(self.state()["session"]["prepared"]["terminal_path"]).write_text("{}")
+        # The collection has ended: the deferred hold is mailed and wakes once, then resume recovers.
+        self.loop.tick()
+        self.loop.tick()
+        self.assertEqual(len(self.messages("loop_hold")), 1)
+        self.assertTrue(self.messages("loop_hold")[0]["delivered"])
+        self.assertEqual(len(list((self.root / "wake").glob("*.json"))), 1)
+        self.assertNotIn("deferred_event", self.state())
+        self.loop.control("resume")
+        self.assertEqual(self.state()["state"], "SESSION_RUN")
+        self.tick_to("ROTATE")
+        self.assertEqual(len(self.state()["attempts"]), 1)
+
+    def test_flush_errors_recorded_without_stalling_precheck(self):
+        self.loop.tick()
+        with patch.object(self.mailer, "flush", side_effect=OSError("synthetic io failure")):
+            self.assertEqual(self.loop.tick(), 0)
+        self.assertEqual(self.state()["state"], "SMOKE_RUN")
+        self.assertEqual(self.state()["last_io_error"], {"operation": "mailer.flush", "type": "OSError"})
+
+    def test_bootstrap_errors_do_not_escape_tick(self):
+        with patch.object(self.loop.waker, "bootstrap_deferred", side_effect=OSError("synthetic io failure")):
+            self.assertEqual(self.loop.tick(), 0)
+        self.assertEqual(self.state()["state"], "PRECHECK")
+        self.assertEqual(self.state()["last_io_error"], {"operation": "waker.bootstrap_deferred", "type": "OSError"})
+
+    def test_arm_wait_remeasures_thermal_before_launch_and_slot(self):
+        self.tick_to("ARM_WAIT")
+        self.clock.advance(1800)
+        self.precheck.results = [PrecheckResult(would_refuse=(Hazard("thermal"),))]
+        self.loop.tick()
+        self.assertEqual(self.state()["state"], "WAIT_PHYSICS")
+        self.assertEqual(self.state()["wait"]["return_state"], "ARM_WAIT")
+        self.assertEqual(self.state()["slots"], {})
+        self.assertEqual(self.state()["packs"]["alpha"]["attempts_since_resume"], 0)
+        self.assertFalse(any("-smoke" not in sid for sid in self.driver.launch_calls))
+        self.clock.advance(299)
+        self.loop.tick()
+        self.assertEqual(self.state()["state"], "ARM_WAIT")
+        self.transport.no = True
+        self.loop.tick()
+        self.assertEqual(self.state()["hold_reason"], "owner_no")
+        self.assertFalse(any("-smoke" not in sid for sid in self.driver.launch_calls))
+
+    def test_arm_wait_clear_remeasure_then_launch(self):
+        self.tick_to("ARM_WAIT")
+        self.clock.advance(1800)
+        self.precheck.results = [PrecheckResult(would_refuse=(Hazard("thermal"),))]
+        self.loop.tick()
+        self.clock.advance(299)
+        self.tick_to("SESSION_RUN")
+        self.loop.tick()
+        self.assertIn("r1-alpha", self.driver.launch_calls)
+        self.assertEqual(self.state()["slots"], {"1": ["alpha"]})
+
+    def test_arm_wait_fingerprint_change_runs_fresh_smoke(self):
+        self.tick_to("ARM_WAIT")
+        old = self.state()["session"]["smoke_prepared"]
+        self.clock.advance(1800)
+        self.precheck.fingerprint = {**self.precheck.fingerprint, "boot_session": "new-boot"}
+        self.loop.tick()
+        self.assertEqual(self.state()["state"], "SMOKE_RUN")
+        self.assertEqual(self.state()["session"]["fingerprint"], self.precheck.fingerprint)
+        self.assertNotIn("smoke_prepared", self.state()["session"])
+        self.loop.tick()
+        self.assertNotEqual(self.state()["session"]["smoke_prepared"]["terminal_path"], old["terminal_path"])
+
+    def test_arm_wait_certain_exclusion_holds_pack(self):
+        self.tick_to("ARM_WAIT")
+        self.clock.advance(1800)
+        self.precheck.results = [PrecheckResult(certain_exclusion=(Exclusion("model.identity_mismatch"),))]
+        self.loop.tick()
+        self.assertEqual(self.state()["state"], "NEXT")
+        self.assertEqual(self.state()["packs"]["alpha"]["status"], "held")
+        self.assertEqual(self.state()["slots"], {})
+
+    def assert_session_refusals_retry(self, at_status):
+        from joulewise.b6.lanes import Refused
+        self.tick_to("SESSION_RUN")
+        launched = []
+        launch, status = self.driver.launch, self.driver.status
+        def launch_retry(prepared):
+            launched.append(prepared)
+            return launch(prepared) if at_status or len(launched) > 2 else Refused(("battery_float",))
+        def status_retry(handle):
+            return Refused(("battery_float",)) if len(launched) <= 2 else status(handle)
+        with patch.object(self.driver, "launch", side_effect=launch_retry), patch.object(self.driver, "status", side_effect=status_retry):
+            for _ in range(2):
+                self.tick_to("WAIT_PHYSICS")
+                state = self.state()
+                self.assertFalse((self.root / "collection.active").exists())
+                self.assertEqual(state["attempts"], [])
+                self.assertEqual(state["packs"]["alpha"]["attempts_since_resume"], 0)
+                self.assertEqual(state["slots"]["1"], [])
+                self.assertEqual(state["wait"]["hazard"], "battery_float")
+                self.assertEqual(state["wait"]["return_state"], "ARM_WAIT")
+                self.assertFalse(any(k in state["session"] for k in ("started", "t0", "handle", "launch_confirmed")))
+                self.tick_to("SESSION_RUN")
+            self.tick_to("ROTATE")
+        state = self.state()
+        self.assertEqual(state["packs"]["alpha"]["status"], "open")
+        self.assertEqual(state["packs"]["alpha"]["attempts_since_resume"], 1)
+        self.assertEqual(state["slots"], {"1": ["alpha"]})
+        self.assertEqual([a["session_id"] for a in state["attempts"]], ["r1-alpha"])
+        self.assertEqual(state["attempts"][0]["line"]["session_id"], "r1-alpha")
+        self.assertEqual(len({Path(p.plan_path).parent for p in launched}), 3)
+        self.assertEqual(len({p.terminal_path for p in launched}), 3)
+        self.assertEqual([p.session_id for p in launched], ["r1-alpha", "r1-alpha-a1", "r1-alpha-a2"])
+
+    def test_session_refused_at_status_twice_is_one_measured_attempt(self):
+        self.assert_session_refusals_retry(at_status=True)
+
+    def test_session_refused_at_launch_twice_is_one_measured_attempt(self):
+        self.assert_session_refusals_retry(at_status=False)
+
+    def test_smoke_refused_retries_under_new_staging(self):
+        from joulewise.b6.lanes import Refused
+        self.tick_to("SMOKE_RUN")
+        with patch.object(self.driver, "launch", return_value=Refused(("thermal",))):
+            self.loop.tick()
+        old = next(iter(p for p in self.driver.prepared.values() if "-smoke" in p.session_id))
+        self.assertEqual(self.state()["state"], "WAIT_PHYSICS")
+        self.assertFalse((self.root / "collection.active").exists())
+        self.assertEqual(self.state()["wait"]["return_state"], "SMOKE_RUN")
+        self.tick_to("ARM_WAIT")
+        self.assertNotEqual(old.terminal_path, self.state()["session"]["smoke_prepared"]["terminal_path"])
+        self.assertEqual(self.state()["packs"]["alpha"]["attempts_since_resume"], 0)
+
+    def test_reharvest_keeps_loop_owned_flags_before_outcome(self):
+        codes = ("registration.after_first_session", "notice.undelivered", "notice.no_unreadable")
+        catalog = Catalog({**CATALOG.codes, **{c: {"effect": "DISCLOSE", "blinding": "STRUCTURE"} for c in codes}}, None)
+        self.loop.catalog = self.mailer.catalog = catalog
+        reg = self.regs["alpha"]
+        self.regs["alpha"] = replace(reg, data={**reg.data, "flag_effects": {c: "EXCLUDE_WINDOW" for c in codes}})
+        self.desk.lines = [SessionLine("r1-alpha", ("alpha",), harvest_rc=2, window_flags=codes + ("disk.low",))]
+        self.tick_to("ROTATE")
+        original = (self.root / "attempts.jsonl").read_bytes()
+        with patch.object(queue, "outcome", wraps=queue.outcome) as outcome:
+            self.loop.control("reharvested", session_id="r1-alpha")
+        self.assertEqual(set(outcome.call_args.args[1].window_flags), set(codes))
+        self.assertEqual(self.state()["reharvested"]["r1-alpha"]["alpha"]["status"], "not_counting")
+        self.assertEqual(queue.counting_ids(self.state(), "alpha"), [])
+        self.assertEqual((self.root / "attempts.jsonl").read_bytes(), original)
+
+    def test_no_probe_exception_flags_attempt_and_still_runs(self):
+        self.tick_to("ARM_WAIT")
+        self.clock.advance(1800)
+        with patch.object(self.mailer, "has_no", side_effect=OSError("synthetic no failure")):
+            self.tick_to("ROTATE")
+        self.assertIn("notice.no_unreadable", self.state()["attempts"][0]["line"]["window_flags"])
+
+    def test_no_probe_reported_failure_flags_attempt(self):
+        with patch.object(self.transport, "has_no", side_effect=OSError("synthetic no failure")):
+            self.tick_to("ROTATE")
+        self.assertIn("notice.no_unreadable", self.state()["attempts"][0]["line"]["window_flags"])
+
+    def test_confirmed_owner_no_survives_probe_record_read_error(self):
+        self.tick_to("ARM_WAIT")
+        self.clock.advance(1800)
+        with patch.object(self.mailer, "has_no", return_value=True), patch.object(self.mailer, "entry", side_effect=OSError("synthetic record read error")):
+            self.loop.tick()
+        self.assertEqual(self.state()["hold_reason"], "owner_no")
+        self.assertEqual(self.state()["state"], "HOLD_LOOP")
+
+    def test_remote_stop_unavailable_flags_attempt(self):
+        self.loop.run = lambda argv: SimpleNamespace(returncode=1, stdout="")
+        self.tick_to("ROTATE")
+        self.assertIn("notice.no_unreadable", self.state()["attempts"][0]["line"]["window_flags"])
+
+    def test_physics_wait_299_second_ticks_measure_twelve_times(self):
+        self.loop.tick()
+        self.precheck.results = [PrecheckResult(would_refuse=(Hazard("thermal"),))] * 12
+        for _ in range(12):
+            self.loop.tick()
+            self.clock.advance(299)
+        self.assertEqual(len(self.precheck.calls), 12)
 
     def test_physics_wait_intervals_one_remedy_one_mail_at_two_hours(self):
         result = PrecheckResult(would_refuse=(Hazard("disk", "12 J restricted"),), remedies=("disk",))
@@ -359,6 +623,7 @@ class LoopTests(unittest.TestCase):
     def test_smoke_physics_wait_and_retry_new_key(self):
         self.desk.smokes = [SmokeResult("physics", ("thermal",)), SmokeResult("pass")]
         self.tick_to("SMOKE_DESK")
+        first = self.state()["session"]["smoke_prepared"]
         self.loop.tick()
         self.assertEqual(self.state()["state"], "WAIT_PHYSICS")
         previous = len(self.driver.launch_calls)
@@ -369,6 +634,9 @@ class LoopTests(unittest.TestCase):
         self.tick_to("ARM_WAIT")
         self.assertEqual(len(self.driver.launch_calls), previous + 1)
         self.assertEqual(self.state()["packs"]["alpha"]["attempts_since_resume"], 0)
+        retry = self.state()["session"]["smoke_prepared"]
+        self.assertNotEqual(Path(first["plan_path"]).parent, Path(retry["plan_path"]).parent)
+        self.assertNotEqual(first["terminal_path"], retry["terminal_path"])
 
     def test_physics_stop_faults_rotates_and_records_not_counting(self):
         self.desk.lines = [SessionLine("r1-alpha", ("alpha",), physics_stop="thermal")]
@@ -385,8 +653,43 @@ class LoopTests(unittest.TestCase):
         self.loop.regs_source = {"beta": modular("beta", interleave="quad_round_robin")}
         self.loop.lanes = replace(self.loop.lanes, harvest=Unconfirmed())
         self.loop.tick()
-        self.assertEqual(self.state()["hold_reason"], "interleave_unconfirmed:H3")
+        self.assertEqual(self.state()["state"], "NEXT")
+        self.assertEqual(self.state()["packs"]["beta"]["hold_reason"], "interleave_unconfirmed:H3")
+        self.assertEqual(self.state()["packs"]["beta"]["status"], "held")
+        self.assertIsNone(self.state()["session"])
         self.assertEqual(self.driver.prepared, {})
+        self.loop.tick()
+        self.assertEqual(len(self.messages("loop_hold")), 1)
+        self.assertEqual(len(list((self.root / "wake").glob("*.json"))), 1)
+
+    def test_unconfirmed_interleave_holds_beta_and_alpha_proceeds(self):
+        class Unconfirmed:
+            def capabilities(self): return HarvestCapabilities(True, True, False)
+        self.loop.config = {**self.loop.config, "base_order": ["beta", "alpha"]}
+        self.loop.regs_source = {"beta": modular("beta", interleave="quad_round_robin"), "alpha": self.regs["alpha"]}
+        self.loop.lanes = replace(self.loop.lanes, harvest=Unconfirmed())
+        self.loop.tick()
+        self.assertEqual(self.state()["state"], "NEXT")
+        self.assertEqual(self.state()["packs"]["beta"]["status"], "held")
+        self.loop.tick()
+        self.assertEqual(self.state()["session"]["packs"], ["alpha"])
+        self.tick_to("ROTATE")
+        self.assertEqual(len(self.messages("loop_hold")), 1)
+
+    def test_measured_done_physics_stops_still_count_attempts_and_same_cause(self):
+        self.loop.regs_source = {"alpha": self.regs["alpha"]}
+        self.desk.lines = [SessionLine("r1-alpha", ("alpha",), physics_stop="battery_float"),
+                           SessionLine("r2-alpha", ("alpha",), physics_stop="battery_float")]
+        status = self.driver.status
+        with patch.object(self.driver, "status", side_effect=lambda handle: replace(status(handle), physics_stop="battery_float")):
+            for _ in range(2):
+                self.tick_to("ROTATE")
+                self.loop.tick()
+        state = self.state()
+        self.assertEqual(state["packs"]["alpha"]["hold_reason"], "same_cause_twice")
+        self.assertEqual(state["packs"]["alpha"]["attempts_since_resume"], 2)
+        self.assertEqual(state["slots"], {"1": ["alpha"], "2": ["alpha"]})
+        self.assertEqual([a["outcomes"]["alpha"]["status"] for a in state["attempts"]], ["physics_stopped"] * 2)
 
     def test_end_date_short_prints_count_and_empty_queue_waits(self):
         self.loop.regs_source = {}
