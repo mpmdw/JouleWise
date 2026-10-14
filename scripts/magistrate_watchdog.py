@@ -253,7 +253,7 @@ class RealProcessTable:
             check=False,
             capture_output=True,
             text=True,
-            timeout=1,
+            timeout=10,  # 2026-10-14: 1 s timed out at load average 30 to 44 and cost three relaunches
         )
         if result.returncode != 0:
             raise RuntimeError(f"ps failed: {result.stderr.strip()}")
