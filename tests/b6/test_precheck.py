@@ -1,0 +1,273 @@
+import dataclasses
+import io
+from contextlib import redirect_stdout
+from fractions import Fraction
+import json
+import os
+from pathlib import Path
+import signal
+from types import SimpleNamespace
+from unittest import mock
+
+from joulewise.b5 import plan
+from joulewise.b6 import precheck as p, fingerprint
+from joulewise.b6.acceptance_interface import AcceptanceResult, StubAcceptance
+from joulewise.hazards import battery, clock, instrument
+from joulewise.hazards.base import Context, PASS
+from scripts import fixture_orphan_census as census
+from tests.hazards.fakes import FakeClocks, Runner, completed, FAKE_POWERMETRICS
+from tests.b6.support import DeskCase, ROOT, PACKS, fp, synthetic_checkout, fake_environment
+
+
+class FakeAcceptance(StubAcceptance):
+    def __init__(self, nominal=False, margin=False, structural=False, flags=()):
+        self.nominal, self.margin, self.structural, self.flags = nominal, margin, structural, flags
+        self.preparations = []
+        self.evaluations = []
+
+    def prepare(self, **kwargs):
+        self.preparations.append(kwargs)
+        return 'prepared'
+
+    def evaluate(self, prepared, evidence):
+        self.evaluations.append(evidence)
+        failed = any(member.status == 'failed' for stage in evidence.stages for member in stage.members)
+        exclude = self.margin if failed else self.nominal
+        return AcceptanceResult('EXCLUDE' if exclude else 'ACCEPT', ('test exclusion',) if exclude else (),
+                                self.flags, self.structural)
+
+
+class PrecheckTests(DeskCase):
+    def setUp(self):
+        super().setUp()
+        self.measurement, self.state, self.model = synthetic_checkout(self.root)
+
+    def check(self, *, acceptance=None, smoke=False, out=None, **kwargs):
+        ctx, seams, table = fake_environment(self.measurement, **kwargs)
+        if not smoke:
+            index = self.state / 'smoke-passes.jsonl'
+            if not index.exists():
+                fingerprint.record_pass(fp(), self.root, index)
+        return p.run_precheck(PACKS['alpha'], self.measurement, self.state, ctx=ctx, seams=seams,
+                              acceptance=acceptance, out=out), ctx
+
+    def test_01_clock_fit_exact_boundary_steps_boot_and_span(self):
+        limits = p.PRECHECK_DEFAULTS['clock']
+
+        def series(rate, count=61, spacing=10, step=0):
+            rows = []
+            for i in range(count):
+                t = i * spacing * 10**9
+                rows.append({'anchor': {'monotonic_raw_ns': t, 'anchor_ns': 10**18 + Fraction(str(rate)) * t / 10**6
+                                        + (step if i >= count // 2 else 0), 'read_skew_ns': 100},
+                             'frequency': {'raw_word': 0}, 'error': None})
+            return rows
+        for rate, expected in ((2, []), (4, ['clock.rate']), (3.63059, []),
+                               (3.6306, ['clock.rate']), (3.6307, ['clock.rate'])):
+            reading, codes = p.clock_rate(series(rate), 'boot', 'boot', limits)
+            self.assertEqual(codes, expected)
+            self.assertAlmostEqual(reading['rate_ppm'], rate, delta=1e-6)
+        self.assertIn('clock.step', p.clock_rate(series(2, step=2_000_000), 'boot', 'boot', limits)[1])
+        self.assertIn('clock.boot_changed', p.clock_rate(series(2), 'boot', 'other', limits)[1])
+        self.assertIn('clock.unmeasured', p.clock_rate(series(2, count=41, spacing=1), 'boot', 'boot', limits)[1])
+        samples = series(2)
+        samples[2]['anchor'] = None
+        samples[2]['error'] = 'read skew'
+        self.assertEqual(p.clock_rate(samples, 'boot', 'boot', limits)[1], [])
+
+    def test_02_battery_and_thermal(self):
+        for kwargs, code in (({'battery_name': 'on-battery-synthetic-from-real.ioreg'}, 'battery.float'),
+                             ({'current_ma': 250}, 'battery.float'), ({'thermal_level': 1}, 'thermal.pressure')):
+            result, _ = self.check(**kwargs)
+            self.assertIn(code, [item['code'] for item in result['would_refuse']])
+        result, _ = self.check(current_ma=150)
+        self.assertEqual(result['would_refuse'], [])
+        self.assertEqual(result['readings']['battery']['verdict']['status'], PASS)
+
+    def test_03_assertion_wait_custom_sleep_record_only(self):
+        result, _ = self.check(assertion=False)
+        self.assertIn('power.no_sleep_assertion_absent', [item['code'] for item in result['would_refuse']])
+        clean, _ = self.check()
+        self.assertIn('sleep 1', clean['readings']['power']['custom']['stdout'])
+        self.assertEqual(clean['decision'], 'START')
+
+    def test_04_initial_final_agents_and_hid(self):
+        # At the census seam, retain an actual agent identity without consulting
+        # the live kernel for our deliberately synthetic pid.
+        with mock.patch('joulewise.hazards.arm.agent_identity.filter_census',
+                        side_effect=lambda text, **kwargs: SimpleNamespace(ignored=[], kept_text=text)):
+            for kwargs in ({'initial_agent': True}, {'final_agent': True}, {'idle_s': 120}):
+                result, _ = self.check(**kwargs)
+                self.assertEqual(result['decision'], 'WAIT')
+                self.assertTrue(any(item['hazard'] == 'agents' for item in result['would_refuse']))
+        self.assertEqual(self.check(idle_s=900)[0]['decision'], 'START')
+
+    def test_05_contention_dwell_no_wall_sleep(self):
+        result, ctx = self.check(busy=True)
+        self.assertIn('contention.dwell', [item['code'] for item in result['would_refuse']])
+        self.assertGreaterEqual(result['readings']['contention']['measurement']['values']['elapsed_s'], 600)
+        clean, _ = self.check()
+        self.assertGreaterEqual(clean['readings']['contention']['measurement']['values']['clean_run_s'], 180)
+        self.assertLess(clean['readings']['contention']['measurement']['values']['elapsed_s'], 181)
+        self.assertTrue(ctx.clocks.sleeps)
+
+    def test_06_orphan_signatures_and_uid_kill_seam(self):
+        signatures = census.load_signatures()
+        rows = []
+        for pid, path in ((100, 'tests/fixtures/fake_powermetrics_process.py'),
+                          (101, 'tests/fixtures/hazards/instrument/fake_powermetrics.py')):
+            command = f'/opt/homebrew/bin/python3.13 /tmp/synthetic/{path} -n 300'
+            line = f'{pid} 1 Thu Sep 3 10:20:30 2026 100 {command}\n'
+            matched = census.census(line, signatures)
+            self.assertEqual(len(matched), 1)
+            rows.extend(matched)
+            self.assertEqual(census.census(line.replace(f'{pid} 1 ', f'{pid} 2 '), signatures), [])
+        self.assertEqual(census.census('120 1 Thu Sep 3 10:20:30 2026 100 /usr/bin/sleep 30\n', signatures), [])
+        calls = []
+        ctx = Context(clocks=FakeClocks())
+        result = p.reap_orphans(ctx, collect=lambda: rows, process_uid=lambda pid: 123,
+                               uid=123, kill=lambda pid, sig: calls.append((pid, sig)))
+        self.assertEqual(calls, [(100, signal.SIGTERM), (100, signal.SIGKILL),
+                                 (101, signal.SIGTERM), (101, signal.SIGKILL)])
+        self.assertEqual(len(result['rows']), 2)
+        self.assertEqual(p.reap_orphans(ctx, collect=lambda: rows, process_uid=lambda pid: 999,
+                                       uid=123, kill=lambda *args: self.fail('foreign uid'))['rows'], [])
+
+    def test_07_disk_smoke_budget_and_remedy(self):
+        result, _ = self.check(smoke=True, free_gib=60)
+        low = next(item for item in result['would_refuse'] if item['code'] == 'disk.low')
+        self.assertEqual(low['remedy'], 'wake_orchestrator')
+        self.assertEqual(low['limit']['planned_bytes'], 43 * 1024**3 + 6 * 190_840_832 * 2)
+        self.assertEqual(self.check(free_gib=70)[0]['decision'], 'START')
+
+    def test_08_real_cadence_parser_fake_binary(self):
+        # Every child is owned by instrument.measure and reaped before return;
+        # no real sampler or signal to an unrelated process is used.
+        base = json.loads((ROOT / 'tests/fixtures/hazards/instrument/cadence-20261004-block3-idle.json').read_text())
+        for cadence in (255, 100):
+            fixture = self.root / f'cadence-{cadence}.json'
+            fixture.write_text(json.dumps({**base, 'elapsed_ns': [cadence * 10**6] * 300}))
+            def capture(argv, timeout):
+                output = io.StringIO()
+                original_popen = instrument.subprocess.Popen
+
+                def spawn(*args, **kwargs):
+                    process = original_popen(*args, **kwargs)
+                    self.processes.append(process)
+                    return process
+                # The process-table census is injected; the adapter's child is
+                # the fake fixture we own and wait for in _child_main.
+                with mock.patch.object(instrument, 'group_absent', return_value=(True, [])), \
+                        mock.patch.object(instrument.subprocess, 'Popen', side_effect=spawn), redirect_stdout(output):
+                    rc = instrument._child_main(argv[argv.index('--output'):])
+                return completed(argv, output.getvalue().encode(), returncode=rc)
+            with mock.patch.dict(os.environ, {'FAKE_PM_FIXTURE': str(fixture), 'FAKE_PM_SLEEP_S': '0',
+                                             'FAKE_PM_FRAMES': '300', 'FAKE_PM_EXIT': '0'}):
+                os.environ.pop('FAKE_PM_SPAWN_ORPHAN', None)
+                measurement = instrument.measure(Context(clocks=FakeClocks(), run=capture),
+                                                 executable=str(FAKE_POWERMETRICS), privilege_prefix=())
+            self.assertEqual(instrument.judge(measurement, instrument.DEFAULT_THRESHOLDS).status == PASS, cadence == 100)
+            self.assertTrue(measurement.values['group_gone'])
+        result, _ = self.check(cadence_ms=255)
+        self.assertEqual(next(item for item in result['would_refuse'] if item['code'] == 'instrument.cadence')['remedy'],
+                         'relaunch_in_production_context')
+
+    def test_09_evicted_file_download_only_and_simulated_poll(self):
+        ledger = self.root / 'synthetic-ledger.jsonl'
+        rows = [{'custody_locator': 'capture', 'artifact_sha256': {'evidence.json': 'a'*64}}]
+        ledger.write_text(json.dumps(rows))
+        for clears in (True, False):
+            clocks = FakeClocks()
+            calls = []
+            runner = Runner({'/usr/bin/brctl': lambda argv: (calls.append(argv) or completed(argv))}, real_python=False)
+            def lstat(path):
+                self.assertEqual(Path(path), self.root / 'capture/evidence.json')
+                return SimpleNamespace(st_flags=0 if clears and clocks.sleeps else 0x40000000)
+            with mock.patch.object(Path, 'read_bytes', side_effect=AssertionError('hydrating file read')):
+                reading, flags = p.restore_evicted(json.loads(ledger.read_text()), self.root,
+                                                   ctx=Context(run=runner, clocks=clocks), lstat=lstat)
+            self.assertEqual(calls, [('/usr/bin/brctl', 'download', str(self.root / 'capture/evidence.json'))])
+            self.assertEqual(bool(flags), not clears)
+            if not clears:
+                self.assertEqual(flags[0]['observed']['count'], 1)
+                self.assertEqual(sum(clocks.sleeps), 600)
+        directory = SimpleNamespace(st_flags=0x40000000, st_mode=0o040755)
+        runner = Runner({}, real_python=False)
+        p.restore_evicted(rows, self.root, ctx=Context(run=runner, clocks=FakeClocks()),
+                          lstat=lambda path: directory)
+        self.assertEqual(runner.calls, [])
+
+    def test_10_model_hash_mismatch(self):
+        self.assertIsNone(self.check()[0]['certain_exclusion'])
+        self.model.write_bytes(b'synthetic weightX')
+        result, _ = self.check()
+        self.assertEqual(result['decision'], 'DO_NOT_START')
+        self.assertEqual(result['certain_exclusion']['source'], 'model_hash')
+        self.assertIn('model.hash_mismatch', result['certain_exclusion']['reasons'][0])
+
+    def test_11_acceptance_nominal_margin_and_stub(self):
+        a = FakeAcceptance(nominal=True)
+        result, _ = self.check(acceptance=a)
+        self.assertEqual(result['decision'], 'DO_NOT_START')
+        self.assertEqual(len(a.preparations), 1)
+        a = FakeAcceptance(margin=True)
+        result, _ = self.check(acceptance=a)
+        self.assertEqual(result['decision'], 'START')
+        self.assertEqual(result['margin']['status'], 'thin')
+        self.assertEqual(result['margin']['excluding_placements'], [s.stage_id for s in a.evaluations[0].stages
+                                                                  if s.kind == 'campaign_collection'])
+        # First 3-member reference placement spills five losses into science.
+        ref = next(e for e in a.evaluations[1:] if e.stages[4].members and e.stages[4].members[0].status == 'failed')
+        self.assertEqual(sum(m.status == 'failed' for s in ref.stages for m in s.members), 8)
+        result, _ = self.check(acceptance=StubAcceptance())
+        self.assertEqual(result['decision'], 'START')
+        self.assertEqual(result['acceptance']['status'], 'unavailable')
+        self.assertIn('precheck.acceptance_unavailable', [f['code'] for f in result['predicted_flags']])
+
+    def test_12_full_session_counts_valid_median_and_ledger_adapter(self):
+        rows = [{'sequence': i, 'disposition': 'invalid' if i % 5 == 0 else 'valid',
+                 'exact_bound_lexeme_s': str(Fraction(i, 1000))} for i in range(1, 31)]
+        # Use decimal lexemes, just as the ledger does.
+        for row in rows:
+            row['exact_bound_lexeme_s'] = str(row['sequence'] / 1000)
+        for pack, count in (('alpha', 125), ('beta', 125), ('gamma', 107)):
+            evidence = p.synthetic_session(ROOT / 'configs/campaigns' / PACKS[pack], ROOT, rows, {})
+            self.assertEqual(sum(len(s.members) for s in evidence.stages), count)
+            self.assertEqual(evidence.captures[0].bound_ms, 15)
+            self.assertTrue(all(c.synthetic for c in evidence.captures))
+        empty = p.synthetic_session(ROOT / 'configs/campaigns' / PACKS['alpha'], ROOT, [], {})
+        self.assertIsNone(empty.captures[0].bound_ms)
+        result, _ = self.check()
+        self.assertIn('precheck.no_valid_capture', [f['code'] for f in result['predicted_flags']])
+        # Adapter reuses existing parse/observation calls, never historical byte replay.
+        from joulewise import calibration_ledger as ledger
+        with mock.patch.object(ledger, '_parse_ledger', return_value=(['receipt'], set())) as parsed, \
+                mock.patch.object(ledger, '_attempts_and_observations', return_value=(['observation'], [], set())) as observed, \
+                mock.patch.object(ledger, '_custody_observations', return_value=[SimpleNamespace(sequence=1)]):
+            self.assertEqual(len(p.ledger_rows(self.measurement / plan.DEFAULT_LEDGER_RELATIVE)), 1)
+            parsed.assert_called_once()
+            observed.assert_called_once_with(['receipt'])
+        self.assertEqual(p.ledger_rows(self.root / 'missing'), [])
+
+    def test_13_precedence_exit_codes_and_create_once(self):
+        out = self.root / 'precheck.json'
+        for kwargs, expected in (({'acceptance': FakeAcceptance(nominal=True), 'current_ma': 250}, 20),
+                                 ({'current_ma': 250}, 10), ({}, 0)):
+            result, _ = self.check(**kwargs)
+            self.assertEqual(p.exit_code(result), expected)
+            if expected == 20:
+                self.assertTrue(result['would_refuse'])
+                self.assertIn('instrument', result['readings'])
+        result, _ = self.check(out=out)
+        self.assertEqual(json.loads(out.read_text()), json.loads(json.dumps(result)))
+        with self.assertRaises(FileExistsError):
+            self.check(out=out)
+        self.assertEqual(p.PENDING, tuple(result['pending']))
+        # The CLI's raw directory retains exact stdout and stderr for every
+        # executed probe, including the two agent census calls.
+        ctx, seams, _ = fake_environment(self.measurement)
+        ctx.raw_dir = self.root / 'raw'
+        raw_result = p.run_precheck(PACKS['alpha'], self.measurement, self.state, ctx=ctx, seams=seams)
+        self.assertEqual(raw_result['decision'], 'START')
+        self.assertEqual(len(list(ctx.raw_dir.glob('probe-*.stdout'))), len(ctx.run.calls))
+        self.assertEqual(len(list(ctx.raw_dir.glob('probe-*.stderr'))), len(ctx.run.calls))
