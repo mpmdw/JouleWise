@@ -3,6 +3,7 @@ import fcntl
 import json
 import os
 import plistlib
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -14,6 +15,7 @@ from unittest.mock import patch
 from joulewise.b6 import loop as loop_module, queue
 from joulewise.b6.lanes import Done, Exclusion, HarvestCapabilities, Hazard, LaneMissing, Lanes, Prepared, PrecheckResult, Running, SessionLine, SmokeResult, Waker, resolve
 from joulewise.b6.mailer import Mailer
+from scripts import b6_loop as cli_module
 from scripts.b6_loop import main
 from tests.test_b6_mailer import Clock, Transport
 from tests.test_b6_registration import CATALOG, ROOT, modular, registrations
@@ -164,6 +166,42 @@ class LoopTests(unittest.TestCase):
         self.tick_to("SMOKE_RUN")
         self.assertTrue(self.state()["session"]["needs_smoke"])
 
+    def test_changing_hazards_keep_continuous_wait_clock_and_mail_once(self):
+        self.loop.tick()
+        started = self.clock()
+        for minute, hazard in ((0, "contention"), (50, "thermal"), (100, "contention"),
+                               (115, "contention"), (125, "contention"), (130, "thermal")):
+            self.clock.now = started + minute * 60
+            self.precheck.results = [PrecheckResult(would_refuse=(Hazard(hazard),))]
+            self.loop.tick()
+            with self.subTest(minute=minute):
+                self.assertEqual(self.state()["wait"]["since"], started)
+                self.assertEqual(self.state()["wait"]["hazard"], hazard)
+                self.assertEqual(len(self.messages("physics_wait_2h")), int(minute >= 120))
+        self.assertEqual(len([e for e in self.transport.sent if e["kind"] == "physics_wait_2h"]), 1)
+        self.clock.advance(300)
+        self.loop.tick()
+        self.assertEqual(self.state()["state"], "PRECHECK")
+        self.assertIsNone(self.state()["wait"])
+        self.precheck.results = [PrecheckResult(would_refuse=(Hazard("thermal"),))]
+        self.loop.tick()
+        self.assertEqual(self.state()["wait"]["since"], self.clock())
+        self.assertFalse(self.state()["wait"]["mailed"])
+        self.loop.control("hold")
+        self.assertIsNone(self.state()["wait"])
+
+    def test_each_offered_remedy_runs_once_per_hazard_per_wait_episode(self):
+        self.loop.tick()
+        for hazard in ("disk", "sampler", "disk", "sampler"):
+            self.precheck.results = [PrecheckResult(would_refuse=(Hazard(hazard),), remedies=(hazard,))]
+            self.loop.tick()
+            self.clock.advance(300)
+        self.assertEqual(self.precheck.remedies, ["disk", "sampler"])
+        self.loop.tick()
+        self.precheck.results = [PrecheckResult(would_refuse=(Hazard("disk"),), remedies=("disk",))]
+        self.loop.tick()
+        self.assertEqual(self.precheck.remedies, ["disk", "sampler", "disk"])
+
     def test_smoke_failure_holds_pack_next_proceeds_same_codes_hold_loop(self):
         self.desk.smokes = [SmokeResult("fail", ("disk.low",)), SmokeResult("fail", ("disk.low",))]
         self.tick_to("NEXT")
@@ -232,19 +270,42 @@ class LoopTests(unittest.TestCase):
         self.assertEqual((self.root / "attempts.jsonl").read_bytes(), original)
         self.tick_to("SMOKE_RUN")
 
-    def test_overrun_records_wake_never_kills_or_flushes_while_active(self):
+    def test_overrun_delivers_once_while_active_defers_wake_never_kills(self):
+        self.loop.waker = Waker(self.root, wake_argv=["/usr/bin/true"], run=self.runner)
         self.tick_to("SESSION_RUN")
         self.driver.running_forever = True
         self.loop.tick()
         sent = len(self.transport.sent)
+        active_during_send = []
+        send = self.transport.send
+        def observe_send(entry):
+            active_during_send.append((self.root / "collection.active").exists())
+            return send(entry)
+        self.transport.send = observe_send
+        prior = self.mailer.enqueue("loop_hold", "prior", "queued", {"state": "HOLD_LOOP"})
         self.clock.advance(3961)
         self.loop.tick()
         self.assertEqual(self.state()["hold_reason"], "overrun")
         self.assertEqual(len(self.messages("overrun")), 1)
-        self.assertEqual(len(self.transport.sent), sent)
+        self.assertEqual(len(self.transport.sent), sent + 2)
+        self.assertTrue(self.mailer.entry(prior)["delivered"])
+        self.assertEqual(active_during_send, [True, True])
+        self.assertEqual(len([e for e in self.transport.sent if e["kind"] == "overrun"]), 1)
         self.assertEqual(len(list((self.root / "wake").glob("*.json"))), 1)
+        wake = json.loads(next((self.root / "wake").glob("*.json")).read_text())
+        self.assertTrue(wake["job_deferred"])
         self.assertTrue((self.root / "collection.active").exists())
-        self.assertFalse(any("kill" in argv for argv in self.run_calls))
+        self.loop.tick()
+        self.assertEqual(len(self.transport.sent), sent + 2)
+        self.assertFalse(any("kill" in argv or "launchctl" in argv for argv in self.run_calls))
+        Path(self.state()["session"]["prepared"]["terminal_path"]).write_text("{}")
+        self.loop.control("resume")
+        later = self.mailer.enqueue("loop_hold", "later", "manual", {"state": "HOLD_LOOP"})
+        (self.root / "collection.active").write_text("synthetic\n100\n")
+        self.loop.control("hold")
+        self.loop.tick()
+        self.assertFalse(self.mailer.entry(later)["delivered"])
+        self.assertEqual(len(self.transport.sent), sent + 2)
 
     def test_crash_after_launch_next_tick_adopts_no_second_job(self):
         self.tick_to("SESSION_RUN")
@@ -373,6 +434,78 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(len(self.state()["attempts"]), 2)
         self.assertEqual(len(self.analysis.calls), 1)
 
+    def test_deferred_wakes_bootstrap_once_on_first_marker_free_tick_after_flush(self):
+        calls = []
+        key = self.mailer.enqueue("loop_hold", "s", "wait", {"state": "HOLD_LOOP"})
+        def run(argv):
+            self.assertTrue(self.mailer.entry(key)["delivered"])
+            calls.append(argv)
+        self.loop.waker = Waker(self.root, wake_argv=["/usr/bin/true"], run=run)
+        self.loop.state = self.state()
+        self.loop.state["state"] = "HOLD_LOOP"
+        loop_module.atomic_state(self.root / "state.json", self.loop.state)
+        active = self.root / "collection.active"
+        active.write_text("synthetic\n100\n")
+        for reason in ("overrun", "lane_missing"):
+            self.loop.waker.wake(reason, {"session_id": "s"})
+        self.loop.tick()
+        self.assertEqual(calls, [])
+        active.unlink()
+        self.loop.tick()
+        self.assertEqual(len(calls), 2)
+        for argv in calls:
+            self.assertEqual(argv[:2], ["launchctl", "bootstrap"])
+            self.assertEqual(plistlib.loads(Path(argv[-1]).read_bytes())["ProgramArguments"], ["/usr/bin/true"])
+        self.loop.tick()
+        self.assertEqual(len(calls), 2)
+        records = [json.loads(p.read_text()) for p in (self.root / "wake").glob("*.json")]
+        self.assertTrue(all(r["bootstrap_attempted"] and not r["job_deferred"] for r in records))
+
+    def test_cli_live_runner_draft_reasons_github_delivery_and_stop_probe(self):
+        repo, loop_root = self.root / "repo", self.root / "loop"
+        for relative in ("configs/b6/loop.json", "configs/campaigns/v5_claim_25g83/flag_catalog.json",
+                         *(f"configs/b6/packs/{p}/registration.json" for p in ("alpha", "beta", "gamma"))):
+            target = repo / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / relative, target)
+        config = json.loads((repo / "configs/b6/loop.json").read_text())
+        mailer = Mailer(loop_root, CATALOG, clock=lambda: 0)
+        key = mailer.enqueue("loop_hold", "prior", None, {"state": "HOLD_LOOP"})
+        loops, calls = [], []
+        def factory(*args, **kwargs):
+            loop = loop_module.Loop(*args, **kwargs)
+            loops.append(loop)
+            return loop
+        def run(argv, **kwargs):
+            self.assertIn(argv[0], {"git", "gh"})
+            self.assertFalse(any("@" in arg for arg in argv))
+            self.assertEqual(kwargs, {"capture_output": True, "text": True, "timeout": 120, "check": False})
+            calls.append(argv)
+            output = json.dumps([{"number": 9}]) if argv[0] == "gh" and "issues?" in argv[2] else ""
+            return SimpleNamespace(returncode=0, stdout=output)
+        with patch.object(cli_module.subprocess, "run", side_effect=run):
+            self.assertEqual(main(["--repo-root", str(repo), "--loop-root", str(loop_root), "tick"], factory=factory), 0)
+            loop = loops[0]
+            self.assertFalse(loop._stop())
+        state = loop.read_state()
+        self.assertEqual(state["packs"], {})
+        self.assertIsNone(state["session"])
+        self.assertEqual(state["pack_not_open"], {
+            f"configs/b6/packs/{p}/registration.json": ["draft"] for p in ("alpha", "beta", "gamma")})
+        self.assertTrue(mailer.entry(key)["delivered"])
+        self.assertEqual(loop.mailer.transport.repo, config["github_repo"])
+        self.assertIsInstance(loop.lanes.driver, type(resolve().driver))
+        self.assertTrue(any(argv[0] == "gh" for argv in calls))
+        self.assertTrue(any("ls-remote" in argv for argv in calls))
+
+    def test_cli_live_runner_timeout_returns_failure(self):
+        argv = ["git", "status"]
+        with patch.object(cli_module.subprocess, "run", side_effect=subprocess.TimeoutExpired(argv, 120)) as run:
+            result = cli_module.live_run(argv)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        run.assert_called_once_with(argv, capture_output=True, text=True, timeout=120, check=False)
+
     def test_guard_skip_pass_terminal_and_overrun_plist_and_cli_override(self):
         template = (ROOT / "configs/launchd/com.joulewise.b6loop.plist.template").read_text()
         plist = plistlib.loads(template.replace("__REPO_ROOT__", str(ROOT)).replace("__LOOP_ROOT__", str(self.root)).encode())
@@ -404,7 +537,7 @@ class LoopTests(unittest.TestCase):
         guard()
         self.assertTrue(marker.exists())
         factories = []
-        def factory(repo, root, config=None):
+        def factory(repo, root, **kwargs):
             factories.append(root)
             return SimpleNamespace(read_state=lambda: {})
         with patch("builtins.print"):

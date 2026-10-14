@@ -176,6 +176,14 @@ class Waker:
         self._bootstrap(path, record)
         return record
 
+    def bootstrap_deferred(self):
+        if (self.root.parent / "collection.active").exists():
+            return
+        for path in sorted(self.root.glob("*.json")):
+            record = json.loads(path.read_text())
+            if record.get("job_deferred"):
+                self._bootstrap(path, record)
+
     def _bootstrap(self, record_path, record):
         if self.argv and self.run is not None and not record.get("bootstrap_attempted"):
             if (self.root.parent / "collection.active").exists():

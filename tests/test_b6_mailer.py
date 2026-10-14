@@ -102,6 +102,20 @@ class MailerTests(unittest.TestCase):
         self.mailer.flush(state="ARM_WAIT")
         self.assertEqual(len(self.transport.sent), 1)
 
+    def test_active_flush_exception_requires_both_overrun_and_hold_loop(self):
+        key = self.mailer.enqueue("overrun", "s", "overrun", {"state": "HOLD_LOOP"})
+        active = self.root / "collection.active"
+        active.write_text("synthetic\n100\n")
+        for state, deferred in ((None, True), ("HOLD_LOOP", False), ("ARM_WAIT", True),
+                                ("SMOKE_RUN", True), ("SESSION_RUN", True)):
+            with self.subTest(state=state, deferred=deferred):
+                self.mailer.flush(state=state, deferred_overrun=deferred)
+                self.assertFalse(self.mailer.entry(key)["delivered"])
+        self.mailer.flush(state="HOLD_LOOP", deferred_overrun=True)
+        self.mailer.flush(state="HOLD_LOOP", deferred_overrun=True)
+        self.assertEqual(len(self.transport.sent), 1)
+        self.assertTrue(active.exists())
+
     def test_gh_issue_comment_no_close_and_no_address_argv(self):
         calls = []
         def run(argv):

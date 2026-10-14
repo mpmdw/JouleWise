@@ -72,16 +72,16 @@
     "clock.step_overlap_calibration": null,
     "clock.systematic": null,
     "clock.unmeasured": null,
-    "code.executed_differs_from_sealed": "EXCLUDE_WINDOW",
+    "code.executed_differs_from_sealed": null,
     "code.identity_unmeasured": null,
     "collection.failure_histogram": null,
     "collection.zero_yield": null,
     "contention.arm_unmeasured": null,
     "contention.kernel_task_share": null,
-    "contention.request_overlap": "EXCLUDE_MEMBER",
+    "contention.request_overlap": null,
     "contention.unmeasured": null,
     "cooldown.result_unknown": null,
-    "diagnostic.s1_structural": "EXCLUDE_WINDOW",
+    "diagnostic.s1_structural": null,
     "disk.arm_unmeasured": null,
     "disk.low": null,
     "env.member_guard_flagged": null,
@@ -232,5 +232,10 @@
   "blinding": {
     "hidden_offset": true
   },
-  "interleave": "none"
+  "interleave": "none",
+  "draft_notes": [
+    "Exclude an agent-overlap unit (a whole quad); its catalog code is pending in the harvest lane (design 13 item 6; CA-7).",
+    "Exclude an unreviewed number-bearing acquisition or reduction code change; its catalog code is pending in the harvest lane (HV-23; CA-46).",
+    "Structural collection failure is excluded by structure_ok in the loop and desk (design 13.1); diagnostic.s1_structural is a disclosure at every harvest."
+  ]
 }

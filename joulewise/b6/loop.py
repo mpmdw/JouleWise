@@ -91,12 +91,18 @@ class Loop:
             if state not in {"HOLD_LOOP", "DONE"}:
                 getattr(self, "_" + state.lower())()
             atomic_state(self.root / "state.json", self.state)
-            # Never flush in the tick that still has a collection active.
-            self.mailer.flush(state=self.state["state"])
+            # Overrun holds may deliver program mail while wake jobs still wait.
+            self.mailer.flush(state=self.state["state"], deferred_overrun=self.state.get("deferred_overrun", False))
+            if not (self.root / "collection.active").exists():
+                self.waker.bootstrap_deferred()
         return 0
 
     def _transition(self, state):
         if self.state["state"] != state:
+            if self.state["state"] == "WAIT_PHYSICS":
+                self.state["wait"] = None
+            if self.state["state"] == "HOLD_LOOP":
+                self.state.pop("deferred_overrun", None)
             self.state.update(state=state, since=self.clock())
 
     def _event(self, kind, cause=None, packs=None, *, wake=True, fields=None):
@@ -162,14 +168,17 @@ class Loop:
     def _wait_for(self, result, return_state):
         hazard = result.would_refuse[0].hazard
         episode = self.state.get("wait")
-        if episode is None or episode["hazard"] != hazard:
-            episode = {"hazard": hazard, "since": self.clock(), "remedied": False, "mailed": False,
+        if episode is None or self.state["state"] != "WAIT_PHYSICS":
+            episode = {"hazard": hazard, "since": self.clock(), "remedied_hazards": [], "mailed": False,
                        "last_check": self.clock(), "return_state": return_state}
+        episode["hazard"] = hazard
         episode["last_check"] = self.clock()
         self.state["wait"] = episode
         self._transition("WAIT_PHYSICS")
-        if hazard in result.remedies and not episode["remedied"]:
-            episode["remedied"] = True
+        remedied = set(episode.get("remedied_hazards", []))
+        if hazard in result.remedies and hazard not in remedied:
+            remedied.add(hazard)
+            episode["remedied_hazards"] = sorted(remedied)
             remedy = self.lanes.precheck.remedy(hazard)
             self._missing(remedy)
         if self.clock() - episode["since"] >= 7200 and not episode["mailed"]:
@@ -285,7 +294,7 @@ class Loop:
                 session["overrun"] = True
                 self.state["hold_reason"] = "overrun"
                 self._transition("HOLD_LOOP")
-                # The marker remains: external wake/mail waits for a terminal record.
+                # Keep the marker and defer the agent job; program mail can flush.
                 self.state["deferred_overrun"] = True
                 self._event("overrun", "overrun")
             return
@@ -313,7 +322,7 @@ class Loop:
             for key in ("smoke_prepared", "smoke_handle", "smoke_started", "smoke_done"):
                 s.pop(key, None)
             self.state["wait"] = {"hazard": result.codes[0] if result.codes else "smoke_physics", "since": self.clock(),
-                                  "remedied": False, "mailed": False, "last_check": self.clock(), "return_state": "SMOKE_RUN"}
+                                  "remedied_hazards": [], "mailed": False, "last_check": self.clock(), "return_state": "SMOKE_RUN"}
             self._transition("WAIT_PHYSICS")
         else:
             self._hold_packs("smoke_hold", result.codes, s["packs"])

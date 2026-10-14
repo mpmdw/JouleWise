@@ -167,8 +167,9 @@ class Mailer:
         entry["close_pending"] = not entry["delivered"] or entry["receipt"] is not None
         self._write(self.outbox / (key + ".json"), entry)
 
-    def flush(self, *, state=None):
-        if (self.root / "collection.active").exists() or state in {"SMOKE_RUN", "SESSION_RUN"}:
+    def flush(self, *, state=None, deferred_overrun=False):
+        overrun_hold = state == "HOLD_LOOP" and deferred_overrun
+        if ((self.root / "collection.active").exists() and not overrun_hold) or state in {"SMOKE_RUN", "SESSION_RUN"}:
             return
         for path in sorted(self.outbox.glob("*.json")):
             entry = json.loads(path.read_text())

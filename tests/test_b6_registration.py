@@ -20,6 +20,7 @@ def registrations(*, target=3):
     for p in ("alpha", "beta", "gamma"):
         data = deepcopy(load(ROOT / f"configs/b6/packs/{p}/registration.json").data)
         data.update(status="registered", target_sessions=target)
+        data.pop("draft_notes", None)
         # Synthetic registrations decide every previously unset effect.
         data["flag_effects"] = {code: effect if effect is not None else CATALOG.effect(code)
                                 for code, effect in data["flag_effects"].items()}
@@ -74,6 +75,42 @@ class RegistrationTests(unittest.TestCase):
         d = deepcopy(reg.data)
         d["minimum_sessions"] = 4
         self.assertIn("minimum_sessions", validate(Registration(d), CATALOG))
+
+    def test_minimum_two_only_for_replications_and_never_above_target(self):
+        for kind, minimum, target, valid in (
+            ("replication", 1, 3, False), ("replication", 2, 3, True),
+            ("new", 1, 1, True), ("new", 0, 3, False), ("new", 4, 3, False),
+        ):
+            d = deepcopy(registrations()["alpha"].data)
+            d.update(kind=kind, minimum_sessions=minimum, target_sessions=target)
+            d["stopping"]["count"] = target
+            if kind == "new":
+                d["corpus"]["stop_after_valid"] = 12
+            with self.subTest(kind=kind, minimum=minimum, target=target):
+                self.assertEqual(validate(Registration(d), CATALOG), [] if valid else ["minimum_sessions"])
+
+    def test_draft_effects_do_not_turn_disclosures_into_window_exclusions(self):
+        for p in ("alpha", "beta", "gamma"):
+            reg = load(ROOT / f"configs/b6/packs/{p}/registration.json")
+            with self.subTest(pack=p):
+                for code, effect in reg.flag_effects.items():
+                    if CATALOG.effect(code) == "DISCLOSE":
+                        self.assertNotEqual(effect, "EXCLUDE_WINDOW", code)
+                for code in ("code.executed_differs_from_sealed", "contention.request_overlap",
+                             "diagnostic.s1_structural"):
+                    self.assertIsNone(reg.flag_effects[code], code)
+                self.assertEqual(reg.flag_effects["model.identity_mismatch"], "EXCLUDE_WINDOW")
+                self.assertEqual(len(reg.draft_notes), 3)
+                self.assertTrue(all(isinstance(note, str) and note for note in reg.draft_notes))
+
+    def test_draft_notes_ignored_for_drafts_and_refused_when_registered(self):
+        d = deepcopy(registrations()["alpha"].data)
+        d["draft_notes"] = ["Unresolved catalog code"]
+        self.assertEqual(validate(Registration(d), CATALOG), ["draft_notes"])
+        d["draft_notes"] = []
+        self.assertEqual(validate(Registration(d), CATALOG), ["draft_notes"])
+        d.update(status="draft", draft_notes={"ignored": True})
+        self.assertEqual(validate(Registration(d), CATALOG), [])
 
     def test_unknown_code_count_date_and_draft_relaxations(self):
         reg = modular()

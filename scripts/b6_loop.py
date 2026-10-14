@@ -1,17 +1,28 @@
 #!/opt/homebrew/bin/python3.13
-"""Block-6 controls. Merge supplies live runners and lane adapters."""
+"""Block-6 controls with live Git/GitHub runners; merge supplies lane adapters."""
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from joulewise.b6.loop import DEFAULT_LOOP_ROOT, Loop
+from joulewise.b6.mailer import GitHubTransport, Mailer
+from joulewise.flags.catalog import load_catalog
+
+
+def live_run(argv):
+    try:
+        return subprocess.run(argv, capture_output=True, text=True, timeout=120, check=False)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(argv, 1, stdout="", stderr="command_timeout")
 
 
 def main(argv=None, *, factory=Loop):
@@ -31,8 +42,11 @@ def main(argv=None, *, factory=Loop):
         if name == "reharvested":
             sub.add_argument("session_id")
     args = parser.parse_args(argv)
-    config = json.loads(Path(args.config).read_text()) if args.config else None
-    loop = factory(args.repo_root, args.loop_root, config=config)
+    repo = Path(args.repo_root)
+    config = json.loads((Path(args.config) if args.config else repo / "configs/b6/loop.json").read_text())
+    catalog = load_catalog(repo / config["flag_catalog"])
+    mailer = Mailer(args.loop_root, catalog, clock=time.time, transport=GitHubTransport(config["github_repo"], live_run))
+    loop = factory(args.repo_root, args.loop_root, config=config, run=live_run, mailer=mailer)
     if args.command == "status":
         print(json.dumps(loop.read_state(), indent=2))
         return 0

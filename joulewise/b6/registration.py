@@ -49,6 +49,7 @@ def validate(reg: Registration, catalog: Catalog) -> list[str]:
         return isinstance(value, str) and bool(value.strip())
 
     check("schema_version", d.get("schema_version") == SCHEMA)
+    check("draft_notes", draft or "draft_notes" not in d)
     check("pack_id", isinstance(d.get("pack_id"), str) and bool(ID.fullmatch(d["pack_id"])))
     for field in ("title", "question", "flag_catalog"):
         check(field, text(d.get(field)))
@@ -110,7 +111,7 @@ def validate(reg: Registration, catalog: Catalog) -> list[str]:
               and integer(corpus.get("planned"), 12))
     for field in ("target_sessions", "minimum_sessions", "attempts_before_pause"):
         check(field, integer(d.get(field)))
-    check("minimum_sessions", integer(d.get("minimum_sessions"), 2))
+    check("minimum_sessions", integer(d.get("minimum_sessions"), 2 if d.get("kind") == "replication" else 1))
     if integer(d.get("target_sessions")) and integer(d.get("minimum_sessions")):
         check("minimum_sessions", d["minimum_sessions"] <= d["target_sessions"])
     estimators = d.get("estimators")
