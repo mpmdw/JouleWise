@@ -361,4 +361,4 @@ def build_context(archive: ArchiveHandle, kept_units: KeptUnits,
     return ww.ArchiveContext(neg8_harvest_archive=window.archive_root, window_bracket=assessment,
         governed_e3=window.governed_e3, removed_bundle_ids=removed, roster_references=roster_references(actual),
         survivor_bundle_ids=survivors.bundle_ids, sources_replay=replay, catalog_manifests=manifests,
-        neg8_reference_corpus_bytes=corpus)
+        archived_reference_corpus_bytes=corpus)

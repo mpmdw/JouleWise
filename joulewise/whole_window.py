@@ -135,7 +135,7 @@ class ArchiveContext:
     sources_replay: Callable[[Mapping[str, Any], Path], str | None] | None = None
     catalog_manifests: tuple[tuple[Mapping[str, Any], Mapping[str, Any]], ...] = ()
     sensitivity_bound_s: float | None = None
-    neg8_reference_corpus_bytes: bytes | None = None
+    archived_reference_corpus_bytes: bytes | None = None
 
     def __post_init__(self) -> None:
         bound = self.sensitivity_bound_s
@@ -154,8 +154,8 @@ class ArchiveContext:
         object.__setattr__(self, "roster_references", _archive_freeze(self.roster_references or {}))
         object.__setattr__(self, "window_bracket", _archive_freeze(self.window_bracket))
         object.__setattr__(self, "catalog_manifests", _archive_freeze(self.catalog_manifests))
-        if self.neg8_reference_corpus_bytes is not None:
-            object.__setattr__(self, "neg8_reference_corpus_bytes", bytes(self.neg8_reference_corpus_bytes))
+        if self.archived_reference_corpus_bytes is not None:
+            object.__setattr__(self, "archived_reference_corpus_bytes", bytes(self.archived_reference_corpus_bytes))
 
 
 def archive_context_operative_bound_s(context: ArchiveContext) -> float | None:
@@ -438,7 +438,7 @@ def _archive_neg8_replay_reasons(row: Mapping[str, Any], core: Mapping[str, Any]
         return reasons  # the allowance outcome already refuses; no fallback
     artifact = replay_bracket.get("drift_bound_artifact")
     if not catalog and artifact is not None and not validate_neg8_drift_bound_artifact(artifact,
-        reference_corpus_bytes=context.neg8_reference_corpus_bytes, require_corpus_identity=True):
+        reference_corpus_bytes=context.archived_reference_corpus_bytes, require_corpus_identity=True):
         return {"whole_window_verdict_provenance_invalid"}
     screen = _archive_output_object(context, "derived/neg8-screen.json") or {}
     harvest_losses = screen.get("harvest_reference_losses", {})

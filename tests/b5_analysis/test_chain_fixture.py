@@ -424,7 +424,7 @@ class ChainTests(unittest.TestCase):
         context=self.composition('alpha')[3]
         artifact=w.writer_row['idle_admission_core']['neg8_bracket']['drift_bound_artifact']
         self.assertTrue(ww.validate_neg8_drift_bound_artifact(artifact,
-            reference_corpus_bytes=getattr(context,'neg8_reference_corpus_bytes',None),
+            reference_corpus_bytes=getattr(context,'archived_reference_corpus_bytes',None),
             require_corpus_identity=True))
     def test_36_reference_campaigns_are_separate_from_floor_campaigns(self):
         w=self.window('alpha')
