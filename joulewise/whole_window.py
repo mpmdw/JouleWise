@@ -18,7 +18,7 @@ import math
 import statistics
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any, Callable, Literal
@@ -980,6 +980,10 @@ class AuthenticatedConsumptionSession:
         self.calibration_bracket: Mapping[str, Any] | None = None
         self.operative_fiducial_bound_s: float | None = None
         self.refusal_reasons: tuple[str, ...] = ()
+        # Member-level preparation failures are disclosures for an archived
+        # removed non-survivor. Callers may inspect this list even when ready;
+        # no summary or provenance from these members is ever served.
+        self.removed_member_preparation: list[str] = []
         self.path_refusal_reasons: dict[
             str,
             dict[tuple[str, ...], tuple[str, ...]],
@@ -1148,9 +1152,12 @@ class AuthenticatedConsumptionSession:
                 set(self.calibration_ledger_snapshot.refusal_reasons)
             )
             return
+        removed = (self.archive_context.removed_bundle_ids
+                   - self.archive_context.survivor_bundle_ids
+                   if self.archive_context is not None else frozenset())
         if (
-            not self.referenced_bundle_ids.issubset(bundle_paths)
-            or not bundle_paths
+            not (self.referenced_bundle_ids - removed).issubset(bundle_paths)
+            or (not bundle_paths and not (self.referenced_bundle_ids & removed))
         ):
             self._fail_global(
                 {"whole_window_verdict_provenance_invalid"}
@@ -1242,6 +1249,31 @@ class AuthenticatedConsumptionSession:
             return
         self.operative_fiducial_bound_s = operative_bound
 
+        # Audit removed members in isolated preparation sessions. The exact
+        # preparation path still runs, but none of its caches, bounds or
+        # failures can enter another member's result. Clearing only the
+        # removal set prevents recursion and preserves survivor handling.
+        for bundle_id in sorted(removed):
+            path = bundle_paths.get(bundle_id, self.runs_root / bundle_id)
+            member = AuthenticatedConsumptionSession(
+                self.runs_root, {bundle_id},
+                calibration_ledger_snapshot=self.calibration_ledger_snapshot,
+                archive_context=replace(self.archive_context, removed_bundle_ids=frozenset()),
+            )
+            try:
+                member._prepare(bundle_paths={bundle_id: path}, policy=policy)
+                member_reasons = set(member.refusal_reasons)
+                if not member_reasons and not _current_strict_summary(
+                    _read_json_object(path / "summary_metrics.json"), path
+                ):
+                    member_reasons.add("whole_window_verdict_provenance_invalid")
+            except (BundleReadError, OSError, OverflowError, TypeError, ValueError):
+                member_reasons = {"whole_window_verdict_provenance_invalid"}
+            self.removed_member_preparation.extend(
+                f"removed_member_preparation:{reason}:{bundle_id}"
+                for reason in sorted(member_reasons)
+            )
+
         physics_cache: dict[str, float] = {}
         pending: list[
             tuple[
@@ -1254,6 +1286,8 @@ class AuthenticatedConsumptionSession:
             ]
         ] = []
         for bundle_id, path in sorted(bundle_paths.items()):
+            if bundle_id in removed:
+                continue
             stored_summary = _read_json_object(path / "summary_metrics.json")
             metadata = _read_json_object(path / "metadata.json")
             pipeline_refusal = capture_pipeline_refusal(metadata)
@@ -6054,6 +6088,10 @@ def _current_core_rederivation_reasons(
                 },
                 policy=registered_typed_policy,
             )
+            if archive_context is not None and disclosure is not None:
+                preparation = getattr(consumption_session, "removed_member_preparation", ())
+                if isinstance(preparation, list):
+                    disclosure.extend(preparation)
             calibration_bracket = (
                 dict(consumption_session.calibration_bracket)
                 if isinstance(

@@ -626,7 +626,7 @@ _EXTRACTED = {}
 _RESTORE_BASE = None
 
 
-def _relocate_archive(archive, old_root, new_root):
+def _relocate_archive(archive, old_root, new_root, *, include_sidecars=False, known_digests=None):
     """Relocate synthetic locators and their hash dependencies, not science.
 
     Work from the immutable original bytes on every pass. The dependency graph
@@ -636,7 +636,7 @@ def _relocate_archive(archive, old_root, new_root):
     from joulewise import calibration_ledger as cl
 
     old, new = str(old_root), str(new_root)
-    digests = {}
+    digests = dict(known_digests or {})
 
     def bind(before, after):
         if before != after:
@@ -649,6 +649,10 @@ def _relocate_archive(archive, old_root, new_root):
             result = [relocate(item) for item in value]
         elif isinstance(value, dict):
             result = {key: relocate(item) for key, item in value.items()}
+            if ("content_id" in value and isinstance(value.get("artifact_sha256"), dict)
+                    and value["content_id"] == cl.content_id_from_artifact_hashes(value["artifact_sha256"])):
+                result["content_id"] = cl.content_id_from_artifact_hashes(result["artifact_sha256"])
+                bind(value["content_id"], result["content_id"])
             # Recognize actual self-hashes by their original payload, rather
             # than overwriting arbitrary fields called sha256.
             for key in ("sha256", "binding_digest"):
@@ -665,34 +669,39 @@ def _relocate_archive(archive, old_root, new_root):
 
     ledger = archive / "sources/ledger/calibration_observation_ledger.jsonl"
     original_ledger = ledger.read_bytes()
-    relocated_lines = []
-    offset = 0
-    for line in original_ledger.splitlines(keepends=True):
-        original = json.loads(line)
-        row = relocate(original)
-        if row != original:
-            if not cl._valid_receipt_shape(original):
-                raise ValueError("synthetic ledger receipt is invalid")
-            if row.get("event") == cl.APPEND_INTENT_EVENT:
-                row["base_head"]["byte_offset"] = offset
-                row["target_core_sha256"] = cl.canonical_sha256(row["target_core"])
-                row["operation_id"] = cl._operation_id(
-                    ledger_id=row["ledger_id"], base_head=row["base_head"],
-                    operation_key=row["operation_key"], target_core_sha256=row["target_core_sha256"])
-                bind(original["operation_id"], row["operation_id"])
-            row["receipt_digest"] = cl._receipt_digest(row)
-            bind(original["receipt_digest"], row["receipt_digest"])
-            line = cl.canonical_json_bytes(row) + b"\n"
-        relocated_lines.append(line)
-        offset += len(line)
-    relocated_ledger = b"".join(relocated_lines)
-    ledger.write_bytes(relocated_ledger)
-    bind(hashlib.sha256(original_ledger).hexdigest(), hashlib.sha256(relocated_ledger).hexdigest())
+    def relocate_ledger():
+        relocated_lines = []
+        offset = 0
+        for line in original_ledger.splitlines(keepends=True):
+            original = json.loads(line)
+            row = relocate(original)
+            if row != original:
+                if not cl._valid_receipt_shape(original):
+                    raise ValueError("synthetic ledger receipt is invalid")
+                if row.get("event") == cl.APPEND_INTENT_EVENT:
+                    row["base_head"]["byte_offset"] = offset
+                    row["target_core_sha256"] = cl.canonical_sha256(row["target_core"])
+                    row["operation_id"] = cl._operation_id(
+                        ledger_id=row["ledger_id"], base_head=row["base_head"],
+                        operation_key=row["operation_key"], target_core_sha256=row["target_core_sha256"])
+                    bind(original["operation_id"], row["operation_id"])
+                row["receipt_digest"] = cl._receipt_digest(row)
+                bind(original["receipt_digest"], row["receipt_digest"])
+                line = cl.canonical_json_bytes(row) + b"\n"
+            relocated_lines.append(line)
+            offset += len(line)
+        relocated_ledger = b"".join(relocated_lines)
+        ledger.write_bytes(relocated_ledger)
+        bind(hashlib.sha256(original_ledger).hexdigest(), hashlib.sha256(relocated_ledger).hexdigest())
+
+    relocate_ledger()
 
     # Read text records only. Raw adapter streams and bundle bytes never change.
     # JSONL records without a locator or a changed digest retain exact bytes.
     originals = {path: path.read_bytes() for path in archive.rglob("*")
                  if path.is_file() and path != ledger and path.suffix in (".json", ".jsonl")}
+    sidecars = ({path: path.read_bytes() for path in archive.rglob("*.sha256") if path.is_file()}
+                if include_sidecars else {})
     sources = archive / "sources"
     sums_path = sources / "SHA256SUMS"
     original_sums = sums_path.read_bytes()
@@ -721,12 +730,23 @@ def _relocate_archive(archive, old_root, new_root):
                 raw.replace(old_bytes, new_bytes))
             path.write_bytes(rewritten)
             bind(hashlib.sha256(raw).hexdigest(), hashlib.sha256(rewritten).hexdigest())
+        for path, raw in sidecars.items():
+            rewritten = re.sub(rb"(?m)^([0-9a-f]{64})(?=\s)",
+                lambda match: digests.get(match[1].decode(), match[1].decode()).encode(),
+                raw.replace(old_bytes, new_bytes))
+            if rewritten != raw:
+                path.write_bytes(rewritten)
+                bind(hashlib.sha256(raw).hexdigest(), hashlib.sha256(rewritten).hexdigest())
+        # Calibration evidence contains synthetic executable locators. Its
+        # changed byte hashes must reach ledger content ids and receipt chains
+        # after the primary JSON dependencies have settled.
+        relocate_ledger()
         sums = b"".join(digests.get(line[:64].decode(), line[:64].decode()).encode() + line[64:]
                         for line in original_sums.splitlines(keepends=True))
         sums_path.write_bytes(sums)
         bind(hashlib.sha256(original_sums).hexdigest(), hashlib.sha256(sums).hexdigest())
         if digests == previous:
-            return
+            return digests
     raise ValueError("synthetic relocation digest dependencies did not settle")
 
 

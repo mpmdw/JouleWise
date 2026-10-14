@@ -176,7 +176,13 @@ def _window_inputs(archive: ArchiveHandle, inputs: _Inputs, directory: Path):
                 output.parent.mkdir(parents=True, exist_ok=True)
                 output.write_bytes(inputs.source(f"{source_root}/{name}"))
             reader = BundleReader(target)
-            metadata, summary = reader.raw_metadata() or {}, reader.raw_summary() or {}
+            try:
+                metadata, summary = reader.raw_metadata() or {}, reader.raw_summary() or {}
+            except BundleReadError:
+                # The frozen harvest excludes an unreadable member from this
+                # selection. Its authenticated bytes still remain inventoried;
+                # the complete selected set is checked against that harvest.
+                continue
             uncertainty = metadata.get("uncertainty_evidence")
             anchor = uncertainty.get("clock_anchor") if isinstance(uncertainty, Mapping) else None
             if (summary.get("status") == "succeeded" and isinstance(anchor, Mapping) and anchor.get("status") == "bounded"
