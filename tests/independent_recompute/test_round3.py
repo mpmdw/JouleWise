@@ -5,6 +5,7 @@ import json
 import math
 from pathlib import Path
 import plistlib
+import random
 import shutil
 import statistics
 import tempfile
@@ -256,9 +257,79 @@ class Round3ArithmeticTests(unittest.TestCase):
             expected['interval']['variance'] / original['interval']['variance']), delta=1e-12)
         self.assertNotIn('B_j', row['interval'])
 
-    @unittest.skip('NEEDS_RULING: GAMMA has no estimator-1 m; energy numerator for its scale factor is unspecified')
-    def test_scaled_GAMMA_D_and_outcome_acceptance_8_pending_ruling(self):
-        pass
+    def test_scaled_GAMMA_D_and_outcome_acceptance_8(self):
+        reference = SimpleNamespace(run_id='reference', usable=True,
+            model='Qwen2.5-1.5B-Instruct-4bit', energies={'request': 10.}, edges={'request': (0., 1.)})
+        cid = 'ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b'
+        for E_a, E_b, T_b, factor, expected_outcome in (
+                (17., 20., .5, 2., 'not_resolvable'),
+                (20., 17., .5, 2., 'not_resolvable'),
+                (5., 8., .5, 1., 'direction_supported'),
+                (5., 8., 3., 3., 'not_resolvable')):
+            with self.subTest(E_a=E_a, E_b=E_b, T_b=T_b):
+                windows = {pack: SimpleNamespace(members={'reference': reference},
+                    neg8={'survivor_ids': ['reference'], 'allowance_j': 2. if pack == 'GAMMA' else .1},
+                    exclusion_cells={}) for pack in ('ALPHA', 'BETA', 'GAMMA')}
+                quads = []
+                for index in range(5):
+                    members = []
+                    for position in r.POSITIONS:
+                        side = position[0]
+                        energy = (E_a if side == 'a' else E_b) + (-.5 if position[-1] == '1' else .5)
+                        duration = ((.2 if position[-1] == '1' else .8) if side == 'a' else
+                                    T_b + (-.2 if position[-1] == '1' else .2))
+                        members.append(SimpleNamespace(run_id=f'unit-b{index + 1:02}-{position}',
+                            energies={'decode': energy}, edges={'decode': (0., duration)},
+                            op={'decode': {'max_abs_delta_j': .2}}))
+                    quads.append((f'unit-b{index + 1:02}', members))
+                selections = {('GAMMA', cid): {'quad': quads}}
+                output = {key: {} for key in PROTECTED}
+                output['disclosures'] = {}
+                for pack in ('ALPHA', 'BETA'):
+                    reported_cid = 'df-ph-decode-' + ('qwen3-1p7b' if pack == 'ALPHA' else 'qwen3-8b')
+                    selections[(pack, reported_cid)] = {'repeat': [('repeat', [SimpleNamespace(
+                        edges={'decode': (0., .5)})])], 'quad': []}
+                    output['reported_cells'][reported_cid] = r.reported_estimate([5.] * 5, [5.] * 5, (.1, 0., .05))
+                    prefix = r.MODELS[pack] + '/decode'
+                    output['floor_cells'][prefix] = {'floor_abs_j': .5, 'floor_cmp_j': .5, 'floor_gate_j': .5}
+                    for form in ('absolute', 'comparative'):
+                        output['floors'][prefix + '/' + form] = {'allowance_j': .1, 'guarded_floor_j': .4,
+                            'drift_widened_guarded_floor_j': .5}
+                stats, kinds, _, _ = r.contrast_inputs(windows['GAMMA'], quads, 'decode')
+                registered = r.finish_contrast(stats, 1., .5, [uid for uid, _ in quads], kinds)
+                output['contrasts'][cid] = registered
+                self.assertEqual(registered['outcome'], 'direction_supported')
+                before = copy.deepcopy(output)
+                r.add_scaled_allowance(output, selections, windows)
+                assert_registered_equal(self, before, output)
+                line = output['disclosures']['scaled_allowance']
+                row = line['contrasts'][cid]
+                self.assertEqual((row['E_a_j'], row['E_b_j']), (E_a, E_b))
+                self.assertAlmostEqual(row['T_a_s'], .5, delta=1e-15)
+                self.assertAlmostEqual(row['T_b_s'], T_b, delta=1e-15)
+                self.assertEqual(row['factor'], factor)
+                self.assertEqual(row['D_terms_j'][2], stats['D_terms_j'][2] * factor)
+                self.assertEqual(row['scaled_allowance_j'], 2. * factor)
+                self.assertEqual(row['D_terms_j'][:2], stats['D_terms_j'][:2])
+                self.assertAlmostEqual(row['D_j'], .4 + 2. * factor, delta=1e-15)
+                self.assertEqual(row['outcome'], expected_outcome)
+                self.assertEqual(row['registered_outcome'], registered['outcome'])
+                self.assertEqual(row['outcome_equals_primary'], factor == 1.)
+                self.assertEqual(row['metrology_interval_j'], registered['metrology_interval_j'])
+                self.assertEqual(row['decision_interval_j'], r.contrast_stats(
+                    [E_b - E_a] * 5, .4 + 2. * factor)['decision_interval_j'])
+                self.assertEqual(line['decision_vs_floor'][cid], factor == 1.)
+                for key in ('p', 'holm_p', 'holm_reject'):
+                    self.assertEqual(row[key], registered[key])
+                self.assertEqual(row['floor']['attained_by'], ['ALPHA', 'BETA'])
+                self.assertEqual(row['floor_gate_j'], .5)
+                for side, energy, duration in (('a', E_a, .5), ('b', E_b, T_b)):
+                    own_factor = max(1., energy / 10., duration)
+                    self.assertEqual(row['sides'][side]['factor'], own_factor)
+                    self.assertEqual(row['sides'][side]['scaled_allowance_j'], 2. * own_factor)
+                if factor == 1.:
+                    self.assertEqual(row['D_j'], registered['D_j'])
+                    self.assertEqual(row['decision_interval_j'], registered['decision_interval_j'])
 
     def test_scaled_allowance_energy_duration_and_floor(self):
         primary = r.reported_estimate([20.] * 5, [20.] * 5, (1., 0., 2.))
@@ -436,7 +507,33 @@ class Round3SyntheticArchiveTests(unittest.TestCase):
         self.assertTrue(all(not f['stops_comparison'] for f in flags))
         self.assertFalse(self.out['disclosures']['whole_machine']['windows']['GAMMA'].get('cells'))
 
-    def test_two_extra_BETA_synthetic_copies_isolated_sessions_flags_and_cap(self):
+    def test_S10_GAMMA_scaled_factors_floors_intervals_and_registered_p_values(self):
+        line = self.out['disclosures']['scaled_allowance']
+        basis = line['windows']['GAMMA']
+        for cid, row in line['contrasts'].items():
+            with self.subTest(contrast=cid):
+                expected_factor = max(1., row['E_a_j'] / basis['E_ref_j'], row['E_b_j'] / basis['E_ref_j'],
+                                      row['T_a_s'] / basis['T_ref_s'], row['T_b_s'] / basis['T_ref_s'])
+                self.assertEqual(row['factor'], expected_factor)
+                primary = self.out['contrasts'][cid]
+                self.assertEqual(row['D_terms_j'][2], primary['D_terms_j'][2] * expected_factor)
+                self.assertEqual(row['D_terms_j'][:2], primary['D_terms_j'][:2])
+                self.assertEqual(row['D_j'], math.fsum(row['D_terms_j']))
+                self.assertEqual(row['decision_interval_j'], [primary['metrology_interval_j'][0] - row['D_j'],
+                                                            primary['metrology_interval_j'][1] + row['D_j']])
+                for key in ('p', 'holm_p', 'holm_reject'):
+                    self.assertEqual(row[key], primary[key])
+                phase = 'decode' if 'decode' in cid else 'prefill'
+                expected_floor = max(line['floor_cells'][model + '/' + phase]['floor_gate_j']
+                                     for model in r.MODELS.values())
+                self.assertEqual(row['floor_gate_j'], expected_floor)
+                self.assertEqual(row['floor']['floor_gate_j'], expected_floor)
+                self.assertTrue(row['floor']['attained_by'])
+                self.assertEqual(row['registered_outcome'], primary['outcome'])
+                self.assertEqual(line['decision_vs_floor'][cid],
+                                 r.decision_beyond_floor(row, expected_floor))
+
+    def test_two_extra_BETA_synthetic_copies_isolated_sessions_flags_and_upper_bound(self):
         args = []
         changed_rid, expected_energy_change = None, None
         for attempt in (1, 4):
@@ -492,11 +589,69 @@ class Round3SyntheticArchiveTests(unittest.TestCase):
         self.assertEqual(inclusive['pooled']['allowance_j'], max(s['allowance_j'] for s in inclusive['pooled']['session_allowances']))
         for floor in inclusive['pooled']['floors'].values():
             self.assertGreater(floor['n'], 16)
-            self.assertIsNone(floor['minted_floor_j'])
-            self.assertIn('capped at 16', floor['reason'])
+            self.assertEqual(floor['status'], 'computed')
+            self.assertTrue(math.isfinite(floor['minted_floor_j']))
+            self.assertEqual(floor['corner_method'], 'triangle_inequality_upper_bound')
+            self.assertGreaterEqual(floor['operative_unguarded_floor_j'], floor['point_unguarded_floor_j'])
+            self.assertEqual(floor['minted_floor_j'], floor['guarded_floor_j'] + inclusive['pooled']['allowance_j'])
+            self.assertIn('upper bound on the registered arithmetic, never smaller', floor['label'])
 
 
 class Round3PoolTests(unittest.TestCase):
+    def test_triangle_inequality_bound_dominates_exact_corners_seeded_both_forms(self):
+        rng = random.Random(20261014)
+        for form in ('absolute', 'comparative'):
+            for case in range(60):
+                n = rng.randint(5, 12)
+                values = [rng.uniform(-30., 30.) for _ in range(n)]
+                widths = [rng.uniform(0., 10.) if case % 10 else 0. for _ in range(n)]
+                with self.subTest(form=form, case=case, n=n):
+                    bound = r.corner_upper_bound(values, widths, form)
+                    self.assertGreaterEqual(bound['corner_widened_unguarded_floor_j'], r.corner_max(values, widths, form))
+
+    def test_pooled_method_keeps_exact_small_floor_and_registered_cap(self):
+        for n in (5, 16, 17):
+            for form in ('absolute', 'comparative'):
+                values = [i * .1 for i in range(n)]
+                widths = [.01 * (i + 1) for i in range(n)]
+                with self.subTest(n=n, form=form):
+                    registered = r.floor_estimate(values, widths, form)
+                    pooled = r.pooled_floor_estimate(values, widths, form)
+                    self.assertNotIn('corner_method', registered)
+                    if n <= 16:
+                        self.assertEqual(pooled.pop('corner_method'), 'exact_enumeration')
+                        self.assertEqual(pooled, registered)
+                    else:
+                        self.assertEqual(registered['status'], 'not_computed')
+                        self.assertEqual(registered['reason'], 'width_unavailable_or_corner_cap')
+                        self.assertIsNone(registered['guarded_floor_j'])
+                        self.assertEqual(pooled['corner_method'], 'triangle_inequality_upper_bound')
+                        self.assertEqual(pooled['status'], 'computed')
+                        self.assertEqual(pooled['guard'], 1.)
+                        self.assertTrue(math.isfinite(pooled['guarded_floor_j']))
+        invalid = r.pooled_floor_estimate([1.] * 17, [None] * 17, 'absolute')
+        self.assertEqual(invalid['status'], 'not_computed')
+        self.assertIsNone(invalid['guarded_floor_j'])
+
+    def test_large_pooled_BETA_finite_minted_floor(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        windows = [r.Window('BETA', full_pack(Path(tmp) / str(i), 'BETA', 5), []) for i in range(4)]
+        for index, window in enumerate(windows):
+            window.neg8['allowance_j'] = float(index + 1)
+        out = {'disclosures': {}}
+        r.add_beta_inclusive(out, windows[0], windows[1:])
+        pooled = out['disclosures']['beta_including_removed_sessions']['pooled']
+        self.assertEqual(pooled['allowance_j'], 4.)
+        self.assertEqual(len(pooled['floors']), 4)
+        for floor in pooled['floors'].values():
+            self.assertEqual(floor['n'], 20)
+            self.assertEqual(floor['status'], 'computed')
+            self.assertEqual(floor['corner_method'], 'triangle_inequality_upper_bound')
+            self.assertTrue(math.isfinite(floor['minted_floor_j']))
+            self.assertGreaterEqual(floor['guarded_floor_j'], floor['point_unguarded_floor_j'])
+            self.assertEqual(floor['minted_floor_j'], floor['guarded_floor_j'] + 4.)
+
     def test_small_pooled_BETA_floor_hand_corner_and_own_bounds_largest_allowance(self):
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp)
@@ -533,6 +688,7 @@ class Round3PoolTests(unittest.TestCase):
                            t * statistics.stdev(shifted) * math.sqrt(1 + 1 / 15))
         floor = pooled['floors'][r.MODELS['BETA'] + '/decode/absolute']
         self.assertEqual(floor['n'], 15)
+        self.assertEqual(floor['corner_method'], 'exact_enumeration')
         self.assertAlmostEqual(floor['guarded_floor_j'], expected, delta=1e-12)
         self.assertAlmostEqual(floor['minted_floor_j'], expected + 3., delta=1e-12)
         self.assertEqual(floor['widths_j'], widths)

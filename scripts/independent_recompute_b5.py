@@ -55,7 +55,8 @@ PHASE_MACHINE_BOUNDARY = ("whole-machine gross DC input, measured at the USB-C i
 RECONSTRUCTION_LABEL = "diagnostic: single-step reconstruction (F5); replaces nothing"
 SCALED_ALLOWANCE_LABEL = ("sensitivity: drift allowance scaled by max(1, E/E_ref, T/T_ref); "
                           "the registered result is unchanged")
-BETA_INCLUSIVE_LABEL = "including three BETA sessions removed by rules later rewritten"
+BETA_INCLUSIVE_LABEL = ("including three BETA sessions removed by rules later rewritten; above 16 units "
+                        "the pooled floor is an upper bound on the registered arithmetic, never smaller")
 
 
 def finite(value):
@@ -958,6 +959,44 @@ def floor_estimate(values, widths, form, shared=None, local=None):
                         for sign in (-1, 1))
         result["common_mode_numerator_j"] = numerator
         result["R_cm"] = numerator / point if point else None
+    return result
+
+
+def corner_upper_bound(values, widths, form):
+    """Director's pooled-only bound on every corner, without enumerating the box."""
+    n = len(values)
+    point = point_floor(values, form)
+    mean = statistics.fmean(values)
+    if form == "absolute":
+        linear = max(abs(v - mean) + w * (1 - 1 / n) +
+                     sum(widths[j] for j in range(n) if j != i) / n
+                     for i, (v, w) in enumerate(zip(values, widths)))
+    else:
+        linear = max(abs(v) + w for v, w in zip(values, widths))
+    s_bound = point["s_j"] + math.sqrt(math.fsum(w ** 2 for w in widths) / (n - 1))
+    prediction = round(student_quantile(n - 1), 3) * s_bound * math.sqrt(1 + 1 / n)
+    if form == "comparative":
+        prediction += abs(mean) + statistics.fmean(widths)
+    return {"corner_widened_unguarded_floor_j": max(linear, prediction),
+            "linear_deviation_bound_j": linear, "s_upper_bound_j": s_bound,
+            "prediction_upper_bound_j": prediction}
+
+
+def pooled_floor_estimate(values, widths, form):
+    """Keep the registered estimator/cap intact; only pooled samples may use the bound."""
+    result = floor_estimate(values, widths, form)
+    n = len(values)
+    result["corner_method"] = ("exact_enumeration" if n <= 16 else "triangle_inequality_upper_bound")
+    if n <= 16 or len(widths) != n or not all(finite(w) and w >= 0 for w in widths):
+        return result
+    bounds = corner_upper_bound(values, widths, form)
+    corner = bounds["corner_widened_unguarded_floor_j"]
+    point = result["point_unguarded_floor_j"]
+    operative = max(point, corner)
+    guard = 1.0 if n >= 10 else math.sqrt(9 / (n - 1))
+    result.pop("reason", None)
+    result.update(bounds, status="computed", operative_unguarded_floor_j=operative,
+                  guard=guard, guarded_floor_j=guard * operative, R=corner / point if point else None)
     return result
 
 
@@ -1942,10 +1981,37 @@ def scaled_floor(primary, factor):
             "allowance_j": scaled, "scaled_allowance_j": scaled, "drift_widened_guarded_floor_j": minted}
 
 
-def add_scaled_allowance(output, selections, windows):
+def scaled_gamma_inputs(window, quads, phase, basis):
+    registered, kinds, a, b = contrast_inputs(window, quads, phase)
+    sides = {}
+    for side, energies in (("a", a), ("b", b)):
+        members = [m for m in flatten(quads) if m.run_id.rsplit("-", 1)[-1].startswith(side)]
+        energy = statistics.fmean(energies) if energies else None
+        duration = statistics.fmean(m.edges[phase][1] - m.edges[phase][0] for m in members) if members else None
+        factor = allowance_factor(energy, duration, basis)
+        allowance = window.neg8["allowance_j"]
+        sides[side] = {"model": SIDE_MODELS[side], "E_j": energy, "T_s": duration, "factor": factor,
+                       "registered_allowance_j": allowance, "scaled_allowance_j": allowance * factor
+                       if all(finite(v) for v in (allowance, factor)) else None}
+    factors = [side["factor"] for side in sides.values()]
+    factor = max(factors) if all(finite(v) for v in factors) else None
+    scaled_kinds = [[*k[:2], k[2] * factor if all(finite(v) for v in (k[2], factor)) else None] for k in kinds]
+    terms = [statistics.fmean(k[j] for k in scaled_kinds)
+             if scaled_kinds and all(finite(k[j]) for k in scaled_kinds) else None for j in range(3)]
+    D = math.fsum(terms) if all(finite(v) for v in terms) else None
+    return {**contrast_stats(registered["d_k"], D), "label": SCALED_ALLOWANCE_LABEL, "factor": factor,
+            "E_a_j": sides["a"]["E_j"], "E_b_j": sides["b"]["E_j"],
+            "T_a_s": sides["a"]["T_s"], "T_b_s": sides["b"]["T_s"], "sides": sides,
+            "registered_allowance_j": window.neg8["allowance_j"], "scaled_allowance_j": terms[2],
+            "registered_D_j": registered["D_j"], "registered_D_terms_j": registered["D_terms_j"],
+            "D_terms_j": terms}, scaled_kinds
+
+
+def add_scaled_allowance(output, selections, windows, diagnostic=False):
     line = {"label": SCALED_ALLOWANCE_LABEL, "windows": {p: reference_scale_basis(w) for p, w in windows.items()},
-            "reported_cells": {}, "floors": {}, "floor_cells": {}, "contrasts": {}}
+            "reported_cells": {}, "floors": {}, "floor_cells": {}, "contrasts": {}, "decision_vs_floor": {}}
     output["disclosures"]["scaled_allowance"] = line
+    gamma_rows = {}
     for (pack, cid), chosen in selections.items():
         if "p42" in cid:
             continue
@@ -1953,12 +2019,7 @@ def add_scaled_allowance(output, selections, windows):
         w = windows[pack]
         basis = line["windows"][pack]
         if pack == "GAMMA":
-            # There is no estimator-1 m on GAMMA (no repeat stratum).
-            # The brief does not determine its numerator; do not invent a D or outcome.
-            line["contrasts"][cid] = {"label": SCALED_ALLOWANCE_LABEL, "status": "needs_ruling",
-                "reason": "GAMMA has no estimator-1 mean; its factor's energy numerator is unspecified",
-                "factor": None, "scaled_allowance_j": None,
-                "registered_D_j": get(output, "contrasts", cid, "D_j")}
+            gamma_rows[cid] = scaled_gamma_inputs(w, chosen["quad"], phase, basis)
             continue
         primary = output["reported_cells"][cid]
         members = flatten(chosen["repeat"] + chosen["quad"])
@@ -1976,9 +2037,28 @@ def add_scaled_allowance(output, selections, windows):
             "floor_cmp_j": comparative, "floor_gate_j": max(absolute, comparative)
             if all(finite(v) for v in (absolute, comparative)) else None,
             "registered": output["floor_cells"][prefix]}
-    for cid, row in line["contrasts"].items():
+    for cid, (row, kinds) in gamma_rows.items():
         phase = "decode" if "decode" in cid else "prefill"
-        row["floor"] = contrast_floor(line["floor_cells"], phase)
+        floor = contrast_floor(line["floor_cells"], phase)
+        primary = get(output, "contrasts", cid)
+        if primary is None:
+            line["contrasts"][cid] = {**row, "floor": floor, "status": "not_computed", "reason": "pack_missing"}
+            continue
+        row["p"] = primary["p"]
+        other_p = next((c["p"] for key, c in output["contrasts"].items() if key != cid), 1.0)
+        chosen = selections[("GAMMA", cid)]["quad"]
+        declared_n = len(strings(get(windows["GAMMA"].exclusion_cells.get(cid, {}), "kept_units", "quad")))
+        missing = not diagnostic and len(chosen) < declared_n
+        contrast = finish_contrast(row, other_p, floor["floor_gate_j"], [u for u, _ in chosen], kinds,
+                                   2 if diagnostic else 5, missing)
+        # As for the timing-bound sensitivity, this line issues no second LOO ceiling.
+        for key in ("loo", "loo_verdict_influential", "loo_magnitude_influential", "ceiling"):
+            contrast.pop(key, None)
+        contrast.update(floor=floor, registered_outcome=primary["outcome"],
+                        registered_decision_interval_j=primary["decision_interval_j"],
+                        outcome_equals_primary=contrast["outcome"] == primary["outcome"])
+        line["contrasts"][cid] = contrast
+        line["decision_vs_floor"][cid] = decision_beyond_floor(contrast, floor["floor_gate_j"])
 
 
 def alternative_allowance(window):
@@ -2098,13 +2178,11 @@ def add_beta_inclusive(output, registered, extras):
                 widths.extend(a)
                 units.extend({"identifier": identifier, "unit_id": uid, "b_op_s": w.b["b_op_s"]}
                              for uid, _ in selected[cid]["repeat" if form == "absolute" else "quad"])
-            floor = floor_estimate(values, widths, form)
+            floor = pooled_floor_estimate(values, widths, form)
             guarded = floor["guarded_floor_j"]
             minted = guarded + allowance if all(finite(v) for v in (guarded, allowance)) else None
             floor.update(label=BETA_INCLUSIVE_LABEL, allowance_j=allowance, minted_floor_j=minted,
                          drift_widened_guarded_floor_j=minted, units=units)
-            if len(values) > 16:
-                floor["reason"] = "PLAN 5 exact corner enumeration is capped at 16 units; no approximation substituted"
             forms[form] = floor
         absolute, comparative = (forms[f]["minted_floor_j"] for f in ("absolute", "comparative"))
         cell = {"floor_abs_j": absolute, "floor_cmp_j": comparative,
@@ -2284,7 +2362,7 @@ def recompute(windows, flags, member_detail=False, diagnostic=False, meter_dir=N
     add_sensitivity(output, selections, windows, diagnostic)
     add_machine(output, selections, windows, meter_dir)
     add_reconstruction(output, selections, windows)
-    add_scaled_allowance(output, selections, windows)
+    add_scaled_allowance(output, selections, windows, diagnostic)
     add_alternative_allowance(output, windows)
     for pack, window in windows.items():
         if member_detail:
