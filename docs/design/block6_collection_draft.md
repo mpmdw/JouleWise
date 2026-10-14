@@ -382,7 +382,7 @@ flag, not proof the run was bad.
 
 ### 6.3 Two window-code changes this needs (so they enter block 6's seal)
 
-1. **Pause instead of stop on an agent sighting.** One 20-second `claude` session cost BETA 2.5 h of chain plus an
+1. **Pause instead of stop on an agent sighting** (adopted 2026-10-14 02:26 PDT; Ed: "the only doctrine is good science"). One 20-second `claude` session cost BETA 2.5 h of chain plus an
    attempt. The hazard is real (8 to 47 W) and belongs to the runs it overlaps, not the session. First the
    one-setting test (doctrine gate 5): a shell function in Ed's `~/.zshrc` that, while a session is armed, prints
    its end time and asks before starting `claude`. That is Ed's file and his call. Build the pause anyway, since
