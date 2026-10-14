@@ -542,8 +542,8 @@ Ed, 2026-10-14: "the only doctrine is good science"; and on my decisions, that t
 4. **Agent pause: done** (Ed, 02:26).
 5. **Tag the release tree: yes.** The L9 merge commit is tagged; the release and the recompute run from the tag; (c) rows may then start in parallel.
 6. **TASK_QUEUE.md and the state kernel: delete**, after the L9 merge, with the references to them in CLAUDE.md and the playbook. RUN_STATE is the pointer.
-7. **Arm notice refusal when no channel reaches Ed:** Ed's control; asked in the morning email. Unchanged until he answers.
-8. **Ed's global files:** the retired skill text (OP-20) is removed by me; the sentence for `~/.claude/CLAUDE.md` is Ed's to add, offered in the email.
+7. **Arm notice refusal when no channel reaches Ed: FLAG** (Ed, 02:58: "nah flag em now"). If neither mail nor GitHub reaches him, the session arms anyway and the record says the notice was not delivered.
+8. **Ed's global files:** the retired skill text (OP-20) is removed by me; the scope sentence is added to `~/.claude/CLAUDE.md`'s writing standard (done 02:59; Ed: "what do u need me for").
 
 Execution order: (a) rows that touch no file the L9 lane edits, and every process row, after the L9 merge (to avoid conflicts with lane branches); (c) rows from the tag in parallel with the release; (b) rows after the block-5 numbers and the recompute agree.
 
