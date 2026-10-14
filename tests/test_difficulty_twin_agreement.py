@@ -23,7 +23,7 @@ REFERENCE = ROOT / "scripts" / "difficulty_estimate.py"
 
 # Output schemas are copied from spec section 7, independently of the twin.
 SCHEMAS = {
-    "cells.csv": "boundary model mode level n_bench k_correct accuracy acc_lo acc_hi mean_generated_tokens_bench cap_hit_rate_bench m_energy mean_energy_j energy_lo_j energy_hi_j epc_j epc_lo_j epc_hi_j epc_status j_per_token jpt_lo jpt_hi token_mismatch_count excluded_rows".split(),
+    "cells.csv": "boundary model mode level n_bench k_correct accuracy acc_lo acc_hi mean_generated_tokens_bench cap_hit_rate_bench m_energy mean_energy_j energy_lo_j energy_hi_j n_holdout k_holdout epc_j epc_lo_j epc_hi_j epc_status j_per_token jpt_lo jpt_hi token_mismatch_count excluded_rows".split(),
     "decomposition.csv": "boundary model mode N a_j a_se b_prompt_j_per_tok b_prompt_se b_gen_j_per_tok b_gen_se r2 r2_gen_only gen_share status".split(),
     "level_residuals.csv": "boundary model mode level m mean_residual_j lo_j hi_j contains_zero".split(),
     "crossover.csv": "boundary level cheapest cheapest_epc_j status tied".split(),
@@ -35,7 +35,7 @@ KEYS = {
     "crossover.csv": ("boundary", "level"),
 }
 STRINGS = {"boundary", "model", "mode", "epc_status", "status", "cheapest", "tied"}
-INTEGERS = {"level", "n_bench", "k_correct", "m_energy", "token_mismatch_count", "excluded_rows", "N", "m", "contains_zero"}
+INTEGERS = {"level", "n_bench", "k_correct", "n_holdout", "k_holdout", "m_energy", "token_mismatch_count", "excluded_rows", "N", "m", "contains_zero"}
 BENCH_COLUMNS = "model mode item_id level outcome correct prompt_tokens generated_tokens cap_hit flags".split()
 ENERGY_COLUMNS = "model mode level item_id boundary energy_j prompt_tokens generated_tokens flags".split()
 
@@ -124,9 +124,16 @@ def parsing_tables():
     )):
         energy.append(energy_row(bench[13], 180, item_id=f"excluded-{i}", **override))
     energy.append(energy[0] | {"energy_j": 999, "level": 5})
+    energy.extend(energy_row(bench[i], 180, generated_tokens=value)
+                  for i, value in ((14, "abc"), (15, "12.0")))
     for i, flag in enumerate(("unknown_item", "unknown_config", "duplicate", "bad_number", "missing_text", "contention")):
         bench.append(bench_row("parse", 1, f"bench-excluded-{i}", flags=flag))
-    bench.extend((bench_row("parse", "", "blank-level"), bench_row("parse", "1.5", "noninteger-level"), bench_row("parse", 1, "retained-flag", flags="unknown_finish_reason")))
+    bench.extend((bench_row("parse", "", "blank-level"), bench_row("parse", "1.5", "noninteger-level"),
+                  bench_row("parse", 9, "out-of-range-level"), bench_row("parse", "١", "non-ascii-level"),
+                  bench_row("parse", 1, "bad-mode", mode="invalid"), dict(bench[0]),
+                  bench_row("parse", 1, "retained-flag", flags="unknown_finish_reason")))
+    out_of_range = next(row for row in bench if row["item_id"] == "out-of-range-level")
+    energy.append(energy_row(out_of_range, 100, level=8))
     # An excluded-only boundary cannot produce output rows.
     energy.append(energy_row(bench[0], 0, boundary="excluded-boundary"))
     return bench, energy
@@ -164,6 +171,7 @@ class TwinAgreementTests(unittest.TestCase):
             keys = [self.row_key(name, row) for row in tables[name]]
             self.assertEqual(keys, sorted(keys), f"{script.name}/{name} not sorted")
             self.assertEqual(len(keys), len(set(keys)), f"{script.name}/{name} duplicate keys")
+        tables["summary.json"] = json.loads((out/"summary.json").read_text(encoding="utf-8"))
         return tables
 
     @staticmethod
@@ -183,10 +191,12 @@ class TwinAgreementTests(unittest.TestCase):
                     if column in STRINGS or column in INTEGERS or actual == "" or expected == "":
                         matches = actual == expected
                     else:
-                        matches = math.isclose(float(actual), float(expected), rel_tol=tolerance, abs_tol=0.0)
+                        matches = math.isclose(float(actual), float(expected), rel_tol=tolerance, abs_tol=1e-12)
                     if not matches:
                         differences.append(f"{name} {key} {column}: twin={actual!r}, first={expected!r}")
         self.assertFalse(differences, "\n"+"\n".join(differences[:60])+f"\nTotal disagreements: {len(differences)}")
+        self.assertEqual({k: v for k, v in reference["summary.json"].items() if k != "method_note"},
+                         {k: v for k, v in twin["summary.json"].items() if k != "method_note"})
 
     def agreement(self, fixture, options=()):
         self.write_inputs(*fixture)
@@ -208,6 +218,31 @@ class TwinAgreementTests(unittest.TestCase):
             with self.subTest(options=options):
                 self.agreement(parsing_tables(), options)
 
+    def test_case_I_holdout_agrees_and_matches_pins(self):
+        bench = [bench_row("I", 1, f"i{i:02}", correct=int(i == 1 or 6 <= i <= 20))
+                 for i in range(1, 26)]
+        energy = [energy_row(row, value) for row, value in zip(bench, (100, 120, 140, 160, 180))]
+        self.write_inputs(bench, energy)
+        tables = self.run_program(TWIN, "holdout")
+        self.compare(self.run_program(REFERENCE, "holdout-first"), tables)
+        cell = tables["cells.csv"][0]
+        self.assertEqual((cell["n_bench"], cell["k_correct"], cell["accuracy"],
+                          cell["n_holdout"], cell["k_holdout"]), ("25", "16", "0.64", "20", "15"))
+        for field, expected, digits in (("epc_j", 186.6667, 4), ("epc_lo_j", 128.934, 3),
+                                        ("epc_hi_j", 285.303, 3)):
+            self.assert_printed(cell[field], expected, digits)
+
+    def test_holdout_all_energy_rows_and_runtime_defaults_agree(self):
+        bench = [bench_row("holdout", 1, f"i{i}") for i in range(8)]
+        bench[7].update(flags="runtime_failed", correct=0, outcome="malformed")
+        energy = [energy_row(bench[0], 100), energy_row(bench[1], 120),
+                  energy_row(bench[2], 140, boundary="wall", flags="contention"),
+                  energy_row(bench[3], 100, level=9), energy_row(bench[4], "nan"),
+                  energy_row(bench[5], 100, model="other"), energy_row(bench[6], 100, mode="on")]
+        for options in ((), ("--exclude-flags", "contention,runtime_failed"), ("--exclude-flags", "")):
+            with self.subTest(options=options):
+                self.agreement((bench, energy), options)
+
     def assert_printed(self, value, expected, digits):
         # Half a unit in the last printed decimal, not an agreement tolerance.
         self.assertAlmostEqual(float(value), expected, delta=0.5*10**(-digits))
@@ -220,14 +255,15 @@ class TwinAgreementTests(unittest.TestCase):
         for field, expected, digits in (
             ("accuracy", 0.75, 2), ("acc_lo", 0.531299, 6), ("acc_hi", 0.888138, 6),
             ("mean_energy_j", 140, 0), ("energy_lo_j", 100.7351, 4), ("energy_hi_j", 179.2649, 4),
-            ("epc_j", 186.6667, 4), ("epc_lo_j", 128.934, 3), ("epc_hi_j", 285.303, 3),
+            ("epc_j", 210, 0), ("epc_lo_j", 139.664, 3), ("epc_hi_j", 356.798, 3),
             ("j_per_token", 1.75, 2), ("jpt_lo", 1.610097, 6), ("jpt_hi", 1.889903, 6),
         ):
             with self.subTest(case="A-D", field=field):
                 self.assert_printed(c[field], expected, digits)
         self.assertEqual(c["epc_status"], "ok")
+        self.assertEqual((c["n_holdout"], c["k_holdout"]), ("15", "10"))
         all_correct = cells["rails", "C-all", 1]
-        for field, expected, digits in (("acc_lo", 0.838875, 6), ("acc_hi", 1, 0), ("epc_j", 140, 0), ("epc_lo_j", 100.735, 3), ("epc_hi_j", 189.604, 3)):
+        for field, expected, digits in (("acc_lo", 0.838875, 6), ("acc_hi", 1, 0), ("epc_j", 140, 0), ("epc_lo_j", 100.735, 3), ("epc_hi_j", 195.969, 3)):
             self.assert_printed(all_correct[field], expected, digits)
         zero = cells["rails", "C-zero", 1]
         self.assert_printed(zero["acc_lo"], 0, 0)
@@ -290,7 +326,7 @@ class TwinAgreementTests(unittest.TestCase):
         self.assertEqual(cells[1]["n_bench"], "21")
         self.assertEqual(cells[1]["m_energy"], "11")
         self.assertEqual(cells[1]["token_mismatch_count"], "1")
-        self.assertEqual(cells[1]["excluded_rows"], "9")
+        self.assertEqual(cells[1]["excluded_rows"], "11")
         self.assertEqual(cells[2]["m_energy"], "1")
         self.assertEqual(cells[2]["n_bench"], "0")
         singleton = next(r for r in tables["level_residuals.csv"] if r["level"] == "2")
@@ -301,12 +337,17 @@ class TwinAgreementTests(unittest.TestCase):
         counts = json.loads((self.directory/"parse"/"summary.json").read_text())["flag_counts"]["energy"]
         for flag in ("bad_number", "bad_level", "bad_mode", "duplicate", "not_in_bench", "level_mismatch", "token_mismatch"):
             self.assertGreater(counts[flag], 0, flag)
+        self.assertEqual(counts["token_mismatch"], 1)
+        counts = tables["summary.json"]["flag_counts"]["bench"]
+        self.assertEqual(counts["bad_level"], 4)
+        self.assertEqual(counts["bad_mode"], 1)
+        self.assertEqual(counts["duplicate"], 2)
 
     def test_twin_empty_and_ineligible_cells(self):
         bench = [bench_row("empty", 1, "b")]
         self.write_inputs(bench, [energy_row(bench[0], "nan")])
         tables = self.run_program(TWIN, "empty")
-        self.assertTrue(all(not rows for rows in tables.values()))
+        self.assertTrue(all(not tables[name] for name in SCHEMAS))
         self.write_inputs([bench_row("zero", 1, "z", correct=0)], [energy_row(bench_row("zero", 1, "z", correct=0), 1)])
         tables = self.run_program(TWIN, "zero")
         self.assertEqual(tables["crossover.csv"][0]["status"], "none_estimable")

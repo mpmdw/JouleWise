@@ -1,4 +1,4 @@
-"""Specification cases A-H, parse flags, exclusion, and estimator CLI."""
+"""Specification cases A-I, parse flags, exclusion, and estimator CLI."""
 import csv
 import json
 import math
@@ -160,7 +160,7 @@ class TableTests(unittest.TestCase):
             with self.subTest(energy=value):
                 self.assertIn("bad_number", self.parse(energy_row(energy_j=value))[0]["flags"])
         for key in ("prompt_tokens", "generated_tokens"):
-            for value in (-1, "1.5", True, None, "", "1.0"):
+            for value in (-1, "1.5", True, None, "", "1.0", "١", "++1"):
                 with self.subTest(key=key, value=value):
                     self.assertIn("bad_number", self.parse(energy_row(**{key: value}))[0]["flags"])
         for level in (0, 6, "1.0", None):
@@ -173,6 +173,66 @@ class TableTests(unittest.TestCase):
         self.assertNotIn("duplicate", first["flags"])
         self.assertIn("duplicate", second["flags"])
         self.assertNotIn("duplicate", wall["flags"])
+
+    def test_token_comparison_requires_two_parsed_counts(self):
+        for value in ("abc", "12.0", "١"):
+            self.assertEqual(self.parse(energy_row(generated_tokens=value))[0]["flags"], {"bad_number"})
+            bench = est.parse_bench([bench_row(generated_tokens=value)])
+            self.assertEqual(est.parse_energy([energy_row()], bench)[0]["flags"], set())
+
+    def test_holdout_uses_all_energy_items_for_same_model_and_mode(self):
+        bench = [bench_row(i) for i in range(8)]
+        energy = [energy_row(0), energy_row(1), energy_row(2, boundary="wall", flags="contention"),
+                  energy_row(3, level=9), energy_row(4, energy_j="nan"),
+                  energy_row(5, model="Y"), energy_row(6, mode="on")]
+        tables = est.estimate_tables(bench, energy, exclude_flags=["contention"])
+        cell = next(row for row in tables["cells"] if row["model"] == "X" and row["mode"] == "off")
+        self.assertEqual((cell["n_bench"], cell["n_holdout"], cell["k_holdout"]), (8, 3, 3))
+        cell = est.estimate_tables(bench[:2], energy[:2])["cells"][0]
+        self.assertEqual((cell["n_holdout"], cell["k_holdout"]), (0, 0))
+        self.assertEqual(cell["epc_status"], "not_estimable_zero_correct")
+        self.assertIsNone(cell["epc_j"])
+
+    def test_I_holdout_accuracy_through_cli(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            bench = [bench_row(i, item_id=f"i{i:02}", correct=int(i == 1 or 6 <= i <= 20))
+                     for i in range(1, 26)]
+            energy = [energy_row(i, item_id=f"i{i:02}", energy_j=value)
+                      for i, value in enumerate(ENERGIES, 1)]
+            est.write_csv(path / "bench.csv", est.BENCH_COLUMNS, bench)
+            est.write_csv(path / "energy.csv", est.ENERGY_COLUMNS, energy)
+            result = subprocess.run([sys.executable, str(ROOT / "scripts/difficulty_estimate.py"),
+                                     "--bench", str(path / "bench.csv"), "--energy", str(path / "energy.csv"),
+                                     "--out", str(path / "out")], capture_output=True, text=True,
+                                    env=os.environ.copy())
+            self.assertEqual(result.returncode, 0, result.stderr)
+            with (path / "out/cells.csv").open(newline="") as stream:
+                cell = next(csv.DictReader(stream))
+            self.assertEqual((cell["n_bench"], cell["k_correct"], cell["accuracy"],
+                              cell["n_holdout"], cell["k_holdout"]), ("25", "16", "0.64", "20", "15"))
+            for key, expected, digits in (("epc_j", 186.6667, 4), ("epc_lo_j", 128.934, 3),
+                                          ("epc_hi_j", 285.303, 3)):
+                self.assertAlmostEqual(float(cell[key]), expected, delta=.5 * 10**-digits)
+
+    def test_runtime_failed_cli_default_and_empty_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            bench = [bench_row(0), bench_row(1, correct=0, outcome="malformed", flags="runtime_failed")]
+            est.write_csv(path / "bench.csv", est.BENCH_COLUMNS, bench)
+            est.write_csv(path / "energy.csv", est.ENERGY_COLUMNS, [energy_row(2), energy_row(3)])
+            self.assertEqual(est.estimate_tables(bench, [energy_row(2), energy_row(3)])["cells"][0]["n_bench"], 1)
+            command = [sys.executable, str(ROOT / "scripts/difficulty_estimate.py"),
+                       "--bench", str(path / "bench.csv"), "--energy", str(path / "energy.csv"),
+                       "--out", str(path / "out")]
+            for options, n, accuracy in (([], "1", "1.0"), (["--exclude-flags", ""], "2", "0.5")):
+                result = subprocess.run(command + options, capture_output=True, text=True, env=os.environ.copy())
+                self.assertEqual(result.returncode, 0, result.stderr)
+                with (path / "out/cells.csv").open(newline="") as stream:
+                    cell = next(csv.DictReader(stream))
+                self.assertEqual((cell["n_bench"], cell["k_correct"], cell["accuracy"]), (n, "1", accuracy))
+                summary = json.loads((path / "out/summary.json").read_text())
+                self.assertEqual(summary["flag_counts"]["bench"]["runtime_failed"], 1)
 
     def test_exclusion_counts_and_default_use_of_adapter_flags(self):
         bench = [bench_row(i) for i in range(12)]
@@ -267,8 +327,9 @@ class TableTests(unittest.TestCase):
         self.assertEqual(cell["n_bench"], "20")
         self.assertEqual(cell["k_correct"], "15")
         self.assertEqual(cell["m_energy"], "5")
-        self.assertEqual(cell["epc_j"], repr(140/.75))
-        self.assertAlmostEqual(float(cell["epc_hi_j"]), 285.303, places=3)
+        self.assertEqual((cell["n_holdout"], cell["k_holdout"]), ("15", "10"))
+        self.assertEqual(cell["epc_j"], repr(140/(10/15)))
+        self.assertAlmostEqual(float(cell["epc_hi_j"]), 356.798, places=3)
         self.assertEqual(json.loads((path / "out/summary.json").read_text())["confidence"], .95)
         est.write_csv(path / "energy.csv", est.ENERGY_COLUMNS, energy + [energy_row(99, energy_j="nan")])
         result = subprocess.run(command[:-2], capture_output=True, text=True, env=os.environ.copy())

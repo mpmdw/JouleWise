@@ -2,6 +2,7 @@
 import csv
 import json
 import math
+import re
 from collections import Counter, defaultdict
 from functools import lru_cache
 from pathlib import Path
@@ -13,7 +14,7 @@ ENERGY_COLUMNS = ("model", "mode", "level", "item_id", "boundary", "energy_j",
                   "prompt_tokens", "generated_tokens", "flags")
 CELL_COLUMNS = ("boundary", "model", "mode", "level", "n_bench", "k_correct", "accuracy",
                 "acc_lo", "acc_hi", "mean_generated_tokens_bench", "cap_hit_rate_bench",
-                "m_energy", "mean_energy_j", "energy_lo_j", "energy_hi_j", "epc_j",
+                "m_energy", "mean_energy_j", "energy_lo_j", "energy_hi_j", "n_holdout", "k_holdout", "epc_j",
                 "epc_lo_j", "epc_hi_j", "epc_status", "j_per_token", "jpt_lo", "jpt_hi",
                 "token_mismatch_count", "excluded_rows")
 DECOMPOSITION_COLUMNS = ("boundary", "model", "mode", "N", "a_j", "a_se",
@@ -27,8 +28,9 @@ BENCH_EXCLUDE = ALWAYS_EXCLUDE | {"missing_text"}
 METHOD_NOTE = (
     "Accuracy uses Wilson intervals; mean gross whole-request energy uses Student t intervals; "
     "energy per correct answer uses log-scale MOVER. The numerator averages all attempts. "
-    "Accuracy and energy are treated as independent although the energy subset overlaps the "
-    "bench and wrong answers can run longer; the neglected dependence scales with m/n. "
+    "EPC accuracy uses the used bench problems outside the energy subset: every item with an "
+    "energy row for the same model and mode is removed across all boundaries, flagged or not. "
+    "The combined intervals are independent; headline accuracy uses all used bench problems. "
     "Crossover comparisons treat configurations as independent although they answer the same "
     "problems, tending toward unresolved results. Confidence is unadjusted for multiple "
     "comparisons; pack registration sets that policy. Published MATH level is a stratum, "
@@ -218,7 +220,7 @@ def _integer(value):
         return None
     try:
         text = str(value).strip()
-        if not text or not text.lstrip("+-").isdigit():
+        if re.fullmatch(r"[+-]?[0-9]+", text) is None:
             return None
         number = int(text)
         return number if number >= 0 else None
@@ -298,15 +300,17 @@ def parse_energy(rows, bench):
     return parsed
 
 
-def estimate_tables(bench_rows, energy_rows, confidence=0.95, exclude_flags=()):
+def estimate_tables(bench_rows, energy_rows, confidence=0.95, exclude_flags=("runtime_failed",)):
     bench = parse_bench(bench_rows)
     energy = parse_energy(energy_rows, bench)
     exclude = set(exclude_flags)
     bench_cells, energy_cells, excluded = defaultdict(list), defaultdict(list), Counter()
+    energy_items = defaultdict(set)
     for row in bench:
         if not row["flags"] & (BENCH_EXCLUDE | exclude):
             bench_cells[row["model"], row["mode"], row["level"]].append(row)
     for row in energy:
+        energy_items[row["model"], row["mode"]].add(row["item_id"])
         key = row["boundary"], row["model"], row["mode"], row["level"]
         if row["flags"] & (ALWAYS_EXCLUDE | exclude):
             if not row["flags"] & {"bad_level", "bad_mode"}:
@@ -322,13 +326,16 @@ def estimate_tables(bench_rows, energy_rows, confidence=0.95, exclude_flags=()):
         e = energy_cells.get(key, [])
         n, k, m = len(b), sum(row["correct"] for row in b), len(e)
         p, p_lo, p_hi = wilson(k, n, confidence)
+        holdout = [row for row in b if row["item_id"] not in energy_items[model, mode]]
+        n_holdout, k_holdout = len(holdout), sum(row["correct"] for row in holdout)
         energies, tokens = [row["energy_j"] for row in e], [row["generated_tokens"] for row in e]
         ratio, ratio_lo, ratio_hi = joules_per_token(energies, tokens, confidence)
         cells.append({"boundary": boundary, "model": model, "mode": mode, "level": level,
                       "n_bench": n, "k_correct": k, "accuracy": p, "acc_lo": p_lo, "acc_hi": p_hi,
                       "mean_generated_tokens_bench": float(mean(row["generated_tokens"] for row in b)) if n else None,
                       "cap_hit_rate_bench": sum(row["cap_hit"] for row in b)/n if n else None,
-                      "m_energy": m, **energy_per_correct(k, n, energies, confidence),
+                      "m_energy": m, "n_holdout": n_holdout, "k_holdout": k_holdout,
+                      **energy_per_correct(k_holdout, n_holdout, energies, confidence),
                       "j_per_token": ratio, "jpt_lo": ratio_lo, "jpt_hi": ratio_hi,
                       "token_mismatch_count": sum("token_mismatch" in row["flags"] for row in e),
                       "excluded_rows": excluded[key]})

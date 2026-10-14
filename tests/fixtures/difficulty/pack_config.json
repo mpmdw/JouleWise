@@ -12,5 +12,5 @@
      "revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e", "mode": "on", "output_cap": 1024}
   ],
   "confidence": 0.95,
-  "exclude_flags": []
+  "exclude_flags": ["runtime_failed"]
 }

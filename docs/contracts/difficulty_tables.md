@@ -1,4 +1,4 @@
-# DIFFICULTY tables (v1)
+# DIFFICULTY tables (SPEC v1.1)
 
 The pack measures gross whole-request energy per correct answer at each published
 MATH level. Accuracy and token counts come from the generation bench; energy
@@ -31,13 +31,20 @@ and incorrect. Thinking-on answers require `</think>` before their final answer.
 Scoring flags: `unknown_item`, `unknown_config`, `missing_text`,
 `unknown_finish_reason`, `duplicate` (second and later attempt with the same
 model, mode, item), and `bad_number` (a token count is not an integer ≥ 0).
-An unknown finish reason scores as runtime failure and remains usable unless
+`finish_reason=error` also adds `runtime_failed`; its outcome stays `malformed`,
+correct 0. These harness failures are excluded by default. An unknown finish
+reason adds only `unknown_finish_reason`, scores as runtime failure and remains usable unless
 explicitly excluded. Invalid JSON generation lines become empty attempts and
 receive the applicable missing-field flags; every line produces a row.
 
 Bench rows flagged `unknown_item`, `unknown_config`, `duplicate`, `bad_number`,
 `missing_text`, or a configured excluding flag are excluded from bench cells.
 Invalid CSV levels or modes receive `bad_level` or `bad_mode` and are excluded.
+Both programs add bench parse flags: `bad_number` for invalid correct/cap-hit
+bits or token counts, `bad_level` for any level outside integer 1–5 (including
+blank), `bad_mode` for modes other than `off`/`on`, and `duplicate` for repeated
+(model, mode, item_id). Integer text accepts only an optional sign followed by
+ASCII `[0-9]` digits; `"١"` and `"12.0"` are invalid on either input table.
 Each (model, mode, level) bench cell supplies accuracy, generated-token mean and
 cap-hit rate to every measured boundary.
 
@@ -76,7 +83,7 @@ Estimator-added flags:
 
 The join uses the first bench row for an item, including flagged bench rows;
 `not_in_bench` describes absence, not exclusion. A malformed token count receives
-`bad_number`; comparison requires two parsed counts. Original adapter flags are
+`bad_number` without `token_mismatch`; comparison requires two parsed counts. Original adapter flags are
 retained. Flag counts count each flag at most once per row.
 
 ## Exclusion and output interpretation
@@ -84,7 +91,11 @@ retained. Flag counts count each flag at most once per row.
 Energy rows flagged `bad_number`, `bad_level`, `bad_mode`, `duplicate`,
 `unknown_item`, or `unknown_config` are always excluded. Config `exclude_flags`
 adds exclusions. Other flagged rows remain used. Bench exclusions are described
-above. Cells exist for keys with used energy or used bench rows, crossed with
+above. `exclude_flags` defaults to `["runtime_failed"]` when absent from config
+or when the estimate CLI has neither config nor `--exclude-flags`. An explicit
+config list replaces that default; `--exclude-flags ""` excludes no optional
+flags. The twin also defaults to `runtime_failed`. Cells exist for keys with used
+energy or used bench rows, crossed with
 boundaries appearing in used energy rows. With no used energy, cells are empty.
 `excluded_rows` counts excluded energy rows for that exact cell; `bad_level` and
 `bad_mode` rows are unplaceable and appear only in summary flag counts.
@@ -93,7 +104,16 @@ and residuals use exactly the same energy rows as cells.
 
 Intervals follow the DIFFICULTY spec: Wilson accuracy, Student t mean energy,
 log-scale MOVER energy per correct answer, and a ratio interval for whole-request
-joules per generated token. Fewer than two energy attempts leave mean energy
+joules per generated token. EPC divides mean energy by holdout accuracy:
+used bench rows of (model, mode, level) whose item_id appears in no energy row
+with that model and mode, across every boundary, flagged or not, used or excluded.
+Headline `n_bench`, `k_correct`, `accuracy`, `acc_lo`, and `acc_hi` still use all
+used bench rows. `cells.csv` inserts integer `n_holdout`, `k_holdout` between
+`energy_hi_j` and `epc_j`. EPC's Wilson interval uses these holdout counts, making
+the accuracy and energy intervals independent. `k_holdout=0`, including an empty
+holdout, leaves EPC blank with `not_estimable_zero_correct`; fewer than two
+energy attempts give `not_estimable_few_attempts` when holdout correctness is nonzero.
+Fewer than two energy attempts leave mean energy
 and its interval blank. Level residual means use all available rows; their
 intervals require two rows. `contains_zero` is blank when the interval is unavailable. OLS coefficients
 and standard errors use centred prompt/generated token counts and a recovered
@@ -104,7 +124,16 @@ lexicographically first configuration; rivals, excluding the winner, appear in
 
 `summary.json` contains `boundaries` (each with `verdict` and `resolved_winners`,
 keyed by level string), `flag_counts` (separate `bench` and `energy` maps),
-`confidence`, and `method_note`. The note discloses subset/bench dependence,
+`confidence`, and `method_note`. The note states the independent holdout rule,
+the headline accuracy's use of all used bench rows,
 configuration dependence, unadjusted confidence and the whole-request basis.
 Published level is a stratum and licenses no causal difficulty claim. Pack
 registration owns estimator adoption and the multiple-comparisons policy.
+
+## Manifest exclusion files
+
+Every configured `exclude_item_id_files` entry must be readable UTF-8 text
+(one item id per line; blank lines ignored). A missing or unreadable entry stops
+the build with a message naming the file. The manifest CLI exits 2 for this
+configuration error and writes no manifest. Bad table data remains flagged and
+the scoring and estimation CLIs exit 0; usage errors and unreadable inputs fail.

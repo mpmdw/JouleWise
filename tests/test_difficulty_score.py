@@ -36,6 +36,7 @@ class ScoreTests(unittest.TestCase):
                 self.assertEqual(row["outcome"], expected)
                 self.assertEqual(row["correct"], int(finish == "stop"))
                 self.assertEqual(row["cap_hit"], int(finish == "length"))
+                self.assertEqual(row["flags"], "runtime_failed" if finish == "error" else "")
 
     def test_thinking_close_and_last_box(self):
         self.assertEqual(self.score(generation(mode="on"))[0]["outcome"], "malformed")

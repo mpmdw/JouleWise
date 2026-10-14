@@ -27,6 +27,11 @@ def main(argv=None):
         output = (args.out or Path.home() / "jw_data/difficulty" / f"manifest-{config['version']}.json").expanduser()
         if output.resolve().is_relative_to(ROOT.resolve()):
             parser.error("full manifests containing problem text must be written outside the repository")
+        for filename in config["exclude_item_id_files"]:
+            try:
+                Path(filename).expanduser().read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as exc:
+                raise ValueError(f"cannot read configured exclusion file {filename}: {exc}") from exc
         # Check readability separately: the importer wraps some read errors in ValueError.
         for path in (args.test_jsonl, args.train_jsonl, args.pointer_test, args.pointer_train, args.license):
             with path.expanduser().open("rb"):

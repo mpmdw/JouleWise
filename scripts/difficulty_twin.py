@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent stdlib DIFFICULTY recomputation, derived from SPEC.md v1.
+"""Independent stdlib DIFFICULTY recomputation, derived from SPEC.md v1.1.
 
 No production estimator is imported. Parsing, t inversion, centred least
 squares, and interval propagation are independently implemented here.
@@ -31,7 +31,7 @@ CELL_COLUMNS = (
     "boundary", "model", "mode", "level", "n_bench", "k_correct",
     "accuracy", "acc_lo", "acc_hi", "mean_generated_tokens_bench",
     "cap_hit_rate_bench", "m_energy", "mean_energy_j", "energy_lo_j",
-    "energy_hi_j", "epc_j", "epc_lo_j", "epc_hi_j", "epc_status",
+    "energy_hi_j", "n_holdout", "k_holdout", "epc_j", "epc_lo_j", "epc_hi_j", "epc_status",
     "j_per_token", "jpt_lo", "jpt_hi", "token_mismatch_count", "excluded_rows",
 )
 DECOMPOSITION_COLUMNS = (
@@ -52,6 +52,7 @@ ENERGY_ALWAYS_EXCLUDE = {
 }
 BENCH_ALWAYS_EXCLUDE = {
     "unknown_item", "unknown_config", "duplicate", "bad_number", "missing_text",
+    "bad_level", "bad_mode",
 }
 
 
@@ -201,14 +202,20 @@ def parse_tables(bench, energy, exclude_flags):
     bench_flag_counts, energy_flag_counts = Counter(), Counter()
     for raw in bench:
         row = dict(raw)
-        row["level"] = _integer(raw.get("level"), 1, 5)
+        row["level"] = _integer(raw.get("level"))
         for field in ("prompt_tokens", "generated_tokens", "correct", "cap_hit"):
             row[field] = _integer(raw.get(field), 0, 1 if field in {"correct", "cap_hit"} else None)
         flags = _flags(raw.get("flags"))
+        if row["level"] not in range(1, 6):
+            flags.add("bad_level")
+        if row["mode"] not in {"off", "on"}:
+            flags.add("bad_mode")
         if any(row[field] is None for field in ("prompt_tokens", "generated_tokens", "correct", "cap_hit")):
             flags.add("bad_number")
-        bench_flag_counts.update(flags)
         identity = (row["model"], row["mode"], row["item_id"])
+        if identity in bench_lookup:
+            flags.add("duplicate")
+        bench_flag_counts.update(flags)
         bench_lookup.setdefault(identity, row)
         if row["level"] is not None and not flags & (BENCH_ALWAYS_EXCLUDE | exclude_flags):
             bench_cells[row["model"], row["mode"], row["level"]].append(row)
@@ -219,8 +226,8 @@ def parse_tables(bench, energy, exclude_flags):
     for raw in energy:
         row = dict(raw)
         flags = _flags(raw.get("flags"))
-        row["level"] = _integer(raw.get("level"), 1, 5)
-        if row["level"] is None:
+        row["level"] = _integer(raw.get("level"))
+        if row["level"] not in range(1, 6):
             flags.add("bad_level")
         if row["mode"] not in {"off", "on"}:
             flags.add("bad_mode")
@@ -243,7 +250,8 @@ def parse_tables(bench, energy, exclude_flags):
         else:
             if row["level"] != reference["level"]:
                 flags.add("level_mismatch")
-            if row["generated_tokens"] != reference["generated_tokens"]:
+            if (row["generated_tokens"] is not None and reference["generated_tokens"] is not None
+                    and row["generated_tokens"] != reference["generated_tokens"]):
                 flags.add("token_mismatch")
         row["flags"] = flags
         energy_flag_counts.update(flags)
@@ -256,7 +264,7 @@ def parse_tables(bench, energy, exclude_flags):
     return bench_cells, energy_cells, excluded, bench_flag_counts, energy_flag_counts
 
 
-def make_cells(bench_cells, energy_cells, excluded, confidence):
+def make_cells(bench_cells, energy_cells, excluded, confidence, energy_items):
     boundaries = {key[0] for key in energy_cells}
     keys = set(energy_cells)
     keys.update((boundary, *key) for boundary in boundaries for key in bench_cells)
@@ -267,15 +275,18 @@ def make_cells(bench_cells, energy_cells, excluded, confidence):
         e = energy_cells.get(key, [])
         n, k, m = len(b), sum(row["correct"] for row in b), len(e)
         p, plo, phi = wilson(k, n, confidence)
+        holdout = [row for row in b if row["item_id"] not in energy_items[model, mode]]
+        nh, kh = len(holdout), sum(row["correct"] for row in holdout)
+        ph, phlo, phhi = wilson(kh, nh, confidence)
         energies = [row["energy_j"] for row in e]
         mean, elo, ehi = mean_interval(energies, confidence)
-        epc, epclo, epchi, status = energy_per_correct(mean, elo, ehi, p, plo, phi, k, m)
+        epc, epclo, epchi, status = energy_per_correct(mean, elo, ehi, ph, phlo, phhi, kh, m)
         ratio, rlo, rhi = joules_per_token(energies, [row["generated_tokens"] for row in e], confidence)
         result.append(dict(zip(CELL_COLUMNS, (
             boundary, model, mode, level, n, k, p, plo, phi,
             math.fsum(row["generated_tokens"] for row in b)/n if n else None,
             sum(row["cap_hit"] for row in b)/n if n else None,
-            m, mean, elo, ehi, epc, epclo, epchi, status, ratio, rlo, rhi,
+            m, mean, elo, ehi, nh, kh, epc, epclo, epchi, status, ratio, rlo, rhi,
             sum("token_mismatch" in row["flags"] for row in e), excluded[key],
         ))))
     return result
@@ -397,7 +408,7 @@ def main(argv=None) -> int:
     parser.add_argument("--energy", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--confidence", type=float, default=0.95)
-    parser.add_argument("--exclude-flags", default="")
+    parser.add_argument("--exclude-flags", default="runtime_failed")
     args = parser.parse_args(argv)
     if not math.isfinite(args.confidence) or not 0 < args.confidence < 1 or (1+args.confidence)/2 == 1:
         parser.error("--confidence must be strictly between 0 and 1")
@@ -408,7 +419,10 @@ def main(argv=None) -> int:
         parser.error(str(error))
     exclude = {flag.strip() for flag in args.exclude_flags.split(",") if flag.strip()}
     b, e, excluded, bench_flags, energy_flags = parse_tables(bench, energy, exclude)
-    cells = make_cells(b, e, excluded, args.confidence)
+    energy_items = defaultdict(set)
+    for row in energy:
+        energy_items[row["model"], row["mode"]].add(row["item_id"])
+    cells = make_cells(b, e, excluded, args.confidence, energy_items)
     decompositions, residuals = make_decompositions(e, args.confidence)
     crossovers, boundary_summary = make_crossovers(cells)
     args.out.mkdir(parents=True, exist_ok=True)
@@ -424,8 +438,10 @@ def main(argv=None) -> int:
         "flag_counts": {"bench": dict(sorted(bench_flags.items())), "energy": dict(sorted(energy_flags.items()))},
         "method_note": (
             "Wilson accuracy intervals and Student t energy intervals are combined by log-scale MOVER. "
-            "The energy subset and bench accuracy are treated as independent, neglecting dependence "
-            "that scales with m/n. Crossover comparisons treat configurations as independent despite "
+            "EPC accuracy uses the used bench problems outside the energy subset, excluding every item "
+            "with an energy row for the same model and mode across all boundaries, flagged or not. "
+            "The combined intervals are independent; headline accuracy uses all used bench problems. "
+            "Crossover comparisons treat configurations as independent despite "
             "shared problems; correlated accuracies would narrow the ratio interval, so the rule errs "
             "toward unresolved. Confidence is unadjusted for multiple comparisons."
         ),

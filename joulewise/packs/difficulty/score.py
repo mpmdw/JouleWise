@@ -27,6 +27,8 @@ def score_generations(manifest, config, generations):
             finish if isinstance(finish, str) else "", "runtime_failed")
         if finish not in ("stop", "length", "error"):
             flags.append("unknown_finish_reason")
+        if finish == "error":
+            flags.append("runtime_failed")
         key = (model, mode, item_id)
         if key in seen:
             flags.append("duplicate")

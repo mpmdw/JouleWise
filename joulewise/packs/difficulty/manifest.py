@@ -16,8 +16,11 @@ def build_manifest(config, rows):
         excluded.update(row["source_item_id"] for row in pilot)
         excluded.update(row["source_item_id"] for row in select_items(eligible, pilot, 128))
     for filename in config.get("exclude_item_id_files", []):
-        excluded.update(line.strip() for line in Path(filename).expanduser().read_text(
-            encoding="utf-8").splitlines() if line.strip())
+        try:
+            text = Path(filename).expanduser().read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            raise ValueError(f"cannot read configured exclusion file {filename}: {exc}") from exc
+        excluded.update(line.strip() for line in text.splitlines() if line.strip())
     domain = "joulewise.packs.difficulty.selection.v1/" + config["seed"]
     levels = {}
     for level in range(1, 6):

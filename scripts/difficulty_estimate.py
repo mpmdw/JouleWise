@@ -31,7 +31,7 @@ def main(argv=None):
     if not 0 < confidence < 1:
         parser.error("--confidence must be between 0 and 1")
     exclude = (args.exclude_flags.split(",") if args.exclude_flags is not None
-               else config.get("exclude_flags", []))
+               else config.get("exclude_flags", ["runtime_failed"]))
     tables = estimate_tables(bench, energy, confidence, [flag.strip() for flag in exclude if flag.strip()])
     write_tables(args.out, tables)
     return 0

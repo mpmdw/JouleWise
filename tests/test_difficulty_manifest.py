@@ -1,5 +1,9 @@
 """Synthetic workload selection tests; no MATH installation is required."""
 import tempfile
+import json
+import os
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -66,6 +70,35 @@ class ManifestTests(unittest.TestCase):
         self.assertTrue(excluded.isdisjoint(item["item_id"] for item in manifest["items"]))
         self.assertEqual(manifest["excluded_count"], 5 * (16 + 128))
         self.assertEqual(manifest["level_counts"], dict.fromkeys(map(str, range(1, 6)), 12))
+
+    def test_unreadable_exclusion_stops_build_and_cli(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            for excluded in (path / "missing.txt", path):
+                with self.subTest(excluded=excluded):
+                    config = {**self.config, "exclude_item_id_files": [str(excluded)]}
+                    with self.assertRaisesRegex(ValueError, "configured exclusion file") as error:
+                        build_manifest(config, self.rows)
+                    self.assertIn(str(excluded), str(error.exception))
+                    (path / "config.json").write_text(json.dumps(config), encoding="utf-8")
+                    result = subprocess.run([sys.executable, str(ROOT / "scripts/difficulty_manifest.py"),
+                                             "--config", str(path / "config.json"),
+                                             "--out", str(path / "out/manifest.json")],
+                                            capture_output=True, text=True, env=os.environ.copy())
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn(str(excluded), result.stderr)
+                    self.assertFalse((path / "out").exists())
+
+    def test_config_exclusion_default_and_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            config = dict(self.config)
+            del config["exclude_flags"]
+            path.write_text(json.dumps(config), encoding="utf-8")
+            self.assertEqual(load_config(path)["exclude_flags"], ["runtime_failed"])
+            config["exclude_flags"] = []
+            path.write_text(json.dumps(config), encoding="utf-8")
+            self.assertEqual(load_config(path)["exclude_flags"], [])
 
     def test_short_level_and_missing_level(self):
         rows = [row for row in self.rows if row["level"] != 5
