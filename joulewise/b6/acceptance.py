@@ -1,0 +1,451 @@
+"""One structure-only acceptance function for harvest, precheck and smoke."""
+
+from __future__ import annotations
+
+import json
+from collections import Counter, defaultdict
+from dataclasses import dataclass
+from decimal import Decimal
+from pathlib import Path
+from typing import Any, Mapping, Sequence
+
+from joulewise.b6 import calibration, capture_list, code_check, model_files, registration
+from joulewise.b6.acceptance_interface import (
+    AcceptanceResult, CaptureEvidence, MemberEvidence, SessionEvidence, StageEvidence,
+)
+from joulewise.flags.catalog import Catalog, EXCLUDE_WINDOW, load_catalog
+from joulewise.flags.exclusions import compute
+from joulewise.flags.schema import make_flag, make_scope, make_source
+
+ROOT = Path(__file__).resolve().parents[2]
+# Collection-lane placeholders, intentionally centralized for reconciliation.
+PHYSICS_STOP_REASONS = frozenset({
+    "sampler_down", "disk_exhausted", "thermal_emergency", "session_time_limit",
+    "agent_pause_beyond_2h", "operative_bound_above_stop",
+})
+SCHEMA = "joulewise.b6_acceptance.v1"
+COUNT_REASONS = frozenset({"cell.below_minimum", "neg8.survivor_screen_undefined"})
+
+
+@dataclass(frozen=True)
+class Prepared:
+    registration: Mapping
+    expected_model: Mapping
+    catalog: Catalog
+    code: Mapping
+    capture_rows: tuple[Mapping, ...]
+    preparation_flags: tuple[str, ...]
+    plan_tree: Mapping
+    roster: Mapping
+
+
+def _json(path: Path, default: Any = None) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return default
+
+
+def _flag(code: str, catalog: Catalog, *, run_id: str | None = None,
+          stage_id: str | None = None, observed: Any = None) -> dict:
+    entry = catalog.entry(code)
+    return make_flag(code=code, family=entry["family"] or "RECORDS",
+                     klass=entry["klass"] or "REPRESENTATION",
+                     scope=make_scope("member" if run_id else "window", run_id=run_id, stage_id=stage_id),
+                     source=make_source("harvest", "b6.acceptance"), observed=observed,
+                     catalog_sha256=catalog.sha256,
+                     emitted={"wall_s": 0, "monotonic_ns": 0, "boot_session_uuid": None})
+
+
+def _bindings(plan: Mapping) -> dict:
+    # Window plans have used both top-level and nested arm bindings.
+    result = dict(plan)
+    for name in ("bindings", "arm_bindings", "harvest"):
+        if isinstance(plan.get(name), Mapping):
+            result.update(plan[name])
+    return result
+
+
+def _stage_roles(tree: Mapping) -> tuple[dict, dict]:
+    """Map manifest member ids to collection stages and reference roles."""
+    stages, roles = {}, {}
+    external = tree.get("external_inputs") or {}
+    manifests = external.get("manifests", []) if isinstance(external, Mapping) else external
+    for stage in tree.get("stage_graph", []):
+        ref = stage.get("input_ref") or {}
+        source = stage.get("input") or {}
+        for manifest in manifests:
+            inner = manifest.get("manifest") or {}
+            input_id = manifest.get("external_input_id", manifest.get("input_id"))
+            if not ((ref.get("input_id") and ref["input_id"] == input_id)
+                    or (source.get("path") and source["path"] == inner.get("path", manifest.get("manifest_path")))):
+                continue
+            role = {"neg8_bound": "corpus", "neg8_start": "start", "neg8_midpoint": "midpoint",
+                    "neg8_end": "end"}.get(input_id)
+            # The floor and contrast manifests spell reference roles differently.
+            if role is None:
+                role = next((value for word, value in (("corpus", "corpus"), ("bound", "corpus"),
+                                                      ("start", "start"), ("midpoint", "midpoint"),
+                                                      ("end", "end")) if word in str(input_id)), "science")
+            for member in manifest.get("members", []):
+                stages[member["run_id"]] = stage["stage_id"]
+                roles[member["run_id"]] = role
+    for member in tree.get("science", []):
+        roles[member["run_id"]] = "science"
+        stages[member["run_id"]] = member.get("stage_id")
+        # Science stage ids in the roster are config directories; the graph's
+        # input_ref names that directory on contrast packs.
+        for stage in tree.get("stage_graph", []):
+            ref = stage.get("input_ref") or {}
+            source = stage.get("input") or {}
+            if (ref.get("stage_id") == member.get("stage_id")
+                    or str(ref.get("path", "")).startswith(str(member.get("stage_id")) + "/")
+                    or str(source.get("path", "")).endswith("/" + str(member.get("stage_id")) + "/order_manifest.json")):
+                stages[member["run_id"]] = stage["stage_id"]
+    return stages, roles
+
+
+class BlockSixAcceptance:
+    def prepare(self, *, ledger_path: Path, plan_tree: Mapping,
+                registration_dir: Path, code_identity: Mapping,
+                pack_root: Path | None = None, ledger_rows: Sequence | None = None) -> Prepared:
+        reg = registration.load(registration_dir)
+        pins = json.loads((Path(registration_dir) / "identity_pins.json").read_text(encoding="utf-8"))
+        repo = Path(code_identity.get("repo_root", code_identity.get("repo", ROOT)))
+        catalog = load_catalog(repo / reg["catalog"])
+        if reg["cell_unit_minimum"] != catalog.cell_unit_minimum:
+            catalog = Catalog(catalog.codes, catalog.sha256, catalog.path,
+                              {**catalog.rules, "cell_unit_minimum": reg["cell_unit_minimum"]})
+        reviewed = json.loads((repo / reg["reviewed_commits_path"]).read_text(encoding="utf-8"))
+        code = code_check.check(repo, reg["registered_commit"], code_identity.get("executed_head"),
+                                reg["number_bearing_paths"], reviewed)
+        problems = []
+        if ledger_rows is not None:
+            rows = list(ledger_rows)
+        else:
+            # The plain list replaces the legacy list, not the capture bytes.
+            first = None
+            try:
+                first = json.loads(next(line for line in Path(ledger_path).read_bytes().splitlines() if line.strip()))
+            except (OSError, ValueError, StopIteration):
+                pass
+            if isinstance(first, Mapping) and str(first.get("schema_version", "")).startswith("joulewise.calibration_"):
+                rows = capture_list.import_custody_ledger(ledger_path)
+            else:
+                rows, problems = capture_list.read(ledger_path)
+        for row in rows:
+            if row.get("evidence_path") and capture_list.check_bytes(row) == "changed":
+                problems.append("calibration.capture_bytes_changed")
+        if reg["defaults_used"]:
+            problems.append("registration.default_used")
+        if any("spare_retry" in stage for stage in plan_tree.get("stage_graph", [])):
+            problems.append("plan.spare_retry_present")
+        roster = {}
+        candidate = Path(pack_root) if pack_root else repo / "configs/campaigns" / reg["pack_id"]
+        if (candidate / "plan_tree.json").is_file():
+            from joulewise.b5.harvest import build_roster, l4_exclusion_inputs
+
+            roster, _ = l4_exclusion_inputs(build_roster(candidate, repo), {}, plan_id=None, attempt=None)
+        return Prepared(reg, model_files.expected(pins), catalog, code, tuple(rows),
+                        tuple(sorted(set(p.split(":", 1)[0] for p in problems))), plan_tree, roster)
+
+    def evaluate(self, prepared: Prepared, evidence: SessionEvidence) -> AcceptanceResult:
+        """Deterministic: no file reads, clock or energy quantities."""
+        catalog, reg = prepared.catalog, prepared.registration
+        internal = evidence.runtime.get("_b6", {})
+        mode = "synthetic" if evidence.synthetic else "smoke" if internal.get("smoke") else "archive"
+        members = [member for stage in evidence.stages for member in stage.members]
+        emitted: list[dict] = []
+
+        def emit(code: str, member: MemberEvidence | None = None, observed: Any = None) -> None:
+            emitted.append(_flag(code, catalog, run_id=member.run_id if member else None,
+                                 stage_id=member.stage_id if member else None, observed=observed))
+
+        flags = list(internal.get("flags", ()))
+        existing = {(row["code"], row["scope"].get("run_id")) for row in flags}
+        for code in evidence.window_flags:
+            if (code, None) not in existing:
+                flags.append(_flag(code, catalog))
+        for member in members:
+            for code in member.flags:
+                if (code, member.run_id) not in existing:
+                    flags.append(_flag(code, catalog, run_id=member.run_id, stage_id=member.stage_id))
+            if member.status != "succeeded":
+                emit("member.status_not_succeeded", member)
+        for code in prepared.preparation_flags:
+            emit(code, observed={"keys": reg["defaults_used"]} if code == "registration.default_used" else None)
+        structural_failures = []
+        physics_stop = evidence.stop_reason in PHYSICS_STOP_REASONS
+        if evidence.stop_reason not in (None, "completed") and not physics_stop:
+            structural_failures.append("structure.chain_crashed")
+        if not evidence.captures:
+            structural_failures.append("structure.no_capture_records")
+        if not members:
+            structural_failures.append("structure.no_roster")
+        for i, stage in enumerate(evidence.stages):
+            absent = not stage.members or all(m.runtime.get("bundle_present", True) is False
+                                             or "member.bytes_missing" in m.flags for m in stage.members)
+            later_ran = any(m.runtime.get("bundle_present", True) and m.status == "succeeded"
+                            for later in evidence.stages[i + 1:] for m in later.members)
+            if stage.expected_count and stage.kind == "campaign_collection" and absent and later_ran:
+                structural_failures.append("structure.missing_stage_bundles")
+        for code in sorted(set(structural_failures)):
+            emit(code)
+        blueprints = {member["run_id"]: member for member in prepared.roster.get("members", [])}
+        duplicates = {run_id for run_id, n in Counter(m.run_id for m in members).items() if n > 1}
+        roster_members = []
+        seen = set()
+        for member in members:
+            if member.run_id in seen:
+                continue
+            seen.add(member.run_id)
+            units = [{"cell_id": cell, "stratum": stratum, "unit_id": unit}
+                     for cell, stratum, unit in member.units]
+            if not units:
+                units = blueprints.get(member.run_id, {}).get("units", [])
+            roster_members.append({"run_id": member.run_id, "stage_id": member.stage_id, "units": units})
+        for run_id in sorted(duplicates):
+            emit("roster.duplicate_run_id", observed={"run_id": run_id})
+            # Every unit fed by an ambiguous planned position is lost, while
+            # the duplicate-record flag itself only discloses (CA-13).
+            emit("member.bytes_ambiguous", next(m for m in members if m.run_id == run_id))
+        cell_specs = internal.get("cells", prepared.roster.get("cells", []))
+        if not cell_specs:
+            strata = defaultdict(set)
+            for member in roster_members:
+                for unit in member["units"]:
+                    strata[unit["cell_id"]].add(unit["stratum"])
+            cell_specs = [{"cell_id": cell, "strata": sorted(values)} for cell, values in sorted(strata.items())]
+        roster = {"pack_id": evidence.pack_id, "plan_id": internal.get("plan_id"),
+                  "attempt": internal.get("attempt"), "members": roster_members, "cells": cell_specs}
+        applied = compute(flags + emitted, roster, internal.get("spans", {}), catalog, pack_scoped=False)
+        for code in sorted({row["code"] for row in flags + emitted if row["code"] not in catalog.codes}):
+            emit("catalog.code_unclassified", observed={"code": code})
+        excluding = [{"code": code, "scope": "window", "why": catalog.codes.get(code, {}).get("note", code)}
+                     for code in applied["reasons"]]
+        member_excluding = [{"code": code, "scope": "member", "run_id": item["run_id"], "why": code}
+                            for item in applied["members_excluded"] for code in item["codes"]]
+
+        def capture(slot: str) -> calibration.Capture:
+            exact = internal.get("captures", {}).get(slot)
+            if exact is not None:
+                return calibration.Capture(None if exact["value_s"] is None else Decimal(exact["value_s"]), exact["status"])
+            item = next((c for c in evidence.captures if c.slot == slot), None)
+            if item is None or item.bound_ms is None:
+                return calibration.Capture(None, "absent")
+            return calibration.Capture(Decimal(str(item.bound_ms)) / Decimal(1000), item.status)
+
+        own_ids = tuple(internal.get("own_session_ids", ())) + ((evidence.session_id,) if evidence.session_id else ())
+        cal = calibration.evaluate(capture("pre"), capture("post"), reg, prepared.capture_rows, own_ids,
+                                   bool(internal.get("estimator_changed")))
+        for item in cal["flags"]:
+            emit(item["code"], observed={k: v for k, v in item.items() if k != "code"})
+        excluding.extend({"code": code, "scope": "window", "why": code} for code in cal.pop("excluding"))
+        if "calibration.operative_bound_above_stop" in {item["code"] for item in excluding}:
+            physics_stop = True
+        neg8 = {"planned": dict(reg["neg8"]["planned"])}
+        if evidence.synthetic:
+            roles = _stage_roles(prepared.plan_tree)[1]
+            counts = Counter(roles.get(m.run_id, m.role) for m in members if m.status == "succeeded")
+            neg8.update(survivors={slot: counts[slot] for slot in ("start", "midpoint", "end")},
+                        corpus_clean_n=counts["corpus"], verdict="pending")
+        else:
+            screen = internal.get("neg8") or {"verdict": "undefined", "reason": "bound_absent",
+                                             "survivors": {}, "corpus_clean_n": 0}
+            # Only named structural projections may leave withheld.
+            neg8.update({key: screen.get(key) for key in ("survivors", "corpus_clean_n", "verdict", "reason")})
+            for code in screen.get("flags", []):
+                emit(code)
+            code = "neg8.survivor_screen_" + str(screen["verdict"])
+            if code not in screen.get("flags", []):
+                emit(code)
+            if screen["verdict"] in ("failed", "undefined"):
+                excluding.append({"code": code, "scope": "window", "why": screen.get("reason") or "screen_failed"})
+        mismatches = []
+        for member in members:
+            observed = member.runtime or evidence.runtime
+            for mismatch in model_files.compare(prepared.expected_model, model_files.run_identity(observed)):
+                item = {**mismatch, "run_id": member.run_id}
+                mismatches.append(item)
+                emit(item["code"], member, {"fields": item["fields"]})
+                if catalog.entry(item["code"])["effect"] == EXCLUDE_WINDOW:
+                    excluding.append({"code": item["code"], "scope": "window", "run_id": member.run_id,
+                                      "why": ",".join(item["fields"])})
+        for code in prepared.code["flags"]:
+            emit(code, observed={"paths": prepared.code["changed"]} if code == "code.changed_since_registration" else None)
+            if catalog.entry(code)["effect"] == EXCLUDE_WINDOW:
+                excluding.append({"code": code, "scope": "window", "why": "unreviewed_number_bearing_change"})
+        # Calibration excluding codes also get standard flag records.
+        all_codes = {row["code"] for row in flags + emitted}
+        for item in excluding:
+            if item["code"] not in all_codes:
+                emit(item["code"])
+                all_codes.add(item["code"])
+        expected_smoke = []
+        if mode == "smoke":
+            expected_smoke = [item for item in excluding if item["code"] == "cell.below_minimum"
+                              or (item["code"] == "neg8.survivor_screen_undefined"
+                                  and item["why"] in ("bound_absent", "references_insufficient"))]
+            excluding = [item for item in excluding if item not in expected_smoke]
+        unique = {row["flag_id"]: row for row in flags + emitted}
+        counts = dict(sorted(Counter(row["code"] for row in unique.values()).items()))
+        reasons = tuple(sorted({item["code"] for item in excluding}))
+        verdict = "EXCLUDE" if reasons else "ACCEPT"
+        if "records.source_changed_during_harvest" in counts:
+            verdict = "HARVEST_RERUN"
+        structural = bool(structural_failures) or (mode == "smoke" and bool(excluding))
+        record = {"schema": SCHEMA, "mode": mode, "pack_id": evidence.pack_id,
+                  "session_id": evidence.session_id, "verdict": verdict,
+                  "counting": verdict == "ACCEPT" and not physics_stop, "physics_stop": physics_stop,
+                  "stop_reason": evidence.stop_reason,
+                  "structural_failures": sorted(set(structural_failures)), "excluding": excluding + member_excluding,
+                  "flag_counts": counts, "cells": {c["cell_id"]: c["n_kept"] for c in applied["cells"]},
+                  "calibration": cal, "neg8": neg8, "model": {"mismatches": mismatches},
+                  "code": {key: prepared.code[key] for key in
+                           ("registered", "executed", "number_bearing_changed", "unreviewed")},
+                  "emitted_flags": list({row["flag_id"]: row for row in emitted}.values())}
+        if evidence.synthetic:
+            record["pending"] = list(evidence.pending)
+        if mode == "smoke":
+            record["expected_in_smoke"] = expected_smoke
+        return AcceptanceResult(verdict, reasons, tuple(counts), structural, record["counting"], record)
+
+
+ACCEPTANCE = BlockSixAcceptance()
+
+
+def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
+                          registration_dir: Path | str) -> SessionEvidence:
+    """Read structure, raw flags and metadata; never read a summary energy.
+
+    The b_fiducial_s decode and refit live in calibration.read_own_capture.
+    """
+    root = Path(archive_root)
+    if not isinstance(plan, Mapping):
+        plan = json.loads(Path(plan).read_text(encoding="utf-8"))
+    bindings = _bindings(plan)
+    roster = _json(root / "derived/roster.json", {})
+    pack_id = roster.get("pack_id", bindings.get("pack_id"))
+    if not pack_id:
+        pack_id = registration.load(registration_dir)["pack_id"]
+    tree = _json(root / "sources/repo/configs/campaigns" / pack_id / "plan_tree.json", {})
+    if not tree:
+        tree = _json(root / "sources/pack/plan_tree.json", {})
+    if not tree and bindings.get("pack_root"):
+        tree = _json(Path(bindings["pack_root"]) / "plan_tree.json", {})
+    stages_for, roles = _stage_roles(tree)
+    flags = []
+    try:
+        lines = (root / "derived/flags.jsonl").read_bytes().splitlines()
+    except FileNotFoundError:
+        lines = []
+    for line in lines:
+        try:
+            row = json.loads(line)
+            flags.append({key: row[key] for key in ("code", "scope", "interval", "flag_id")})
+        except (ValueError, TypeError, KeyError):
+            flags.append(_flag("records.malformed_flag_exclusion_possible", load_catalog(ROOT / "configs/b6/flag_catalog_b6.json")))
+    by_run = defaultdict(list)
+    for row in flags:
+        if row["scope"].get("run_id"):
+            by_run[row["scope"]["run_id"]].append(row["code"])
+    grouped = defaultdict(list)
+    roots = [root / "sources/claim-runs", root / "sources/bound-runs"]
+    custody = Path(bindings["custody_root"]) if bindings.get("custody_root") else None
+    if custody:
+        for key in ("claim_runs_root", "bound_runs_root"):
+            if bindings.get(key):
+                try:
+                    roots.append(root / "sources/night-custody" / Path(bindings[key]).relative_to(custody))
+                except ValueError:
+                    pass
+    roots.extend(Path(bindings[key]) for key in ("claim_runs_root", "bound_runs_root") if bindings.get(key))
+    for member in roster.get("members", []):
+        run_id = member["run_id"]
+        bundle = next((base / run_id for base in roots if (base / run_id).is_dir()), None)
+        metadata = _json(bundle / "metadata.json", {}) if bundle else {}
+        status_record = _json(bundle / "status.json", {}) if bundle else {}
+        recorded_status = status_record.get("status", metadata.get("status")) or {}
+        status = recorded_status.get("state") if isinstance(recorded_status, Mapping) else recorded_status
+        if status is None:
+            status = "succeeded" if bundle else "failed"
+        units = tuple((u["cell_id"], u["stratum"], str(u["unit_id"])) for u in member.get("units", []))
+        stage = stages_for.get(run_id, member.get("stage_id") or "unplaced")
+        role = roles.get(run_id, member.get("role", "science"))
+        runtime = {**metadata, "bundle_present": bundle is not None}
+        grouped[stage].append(MemberEvidence(stage, run_id, status, tuple(by_run[run_id]), units, role,
+                                             member.get("config_key"), runtime))
+    stages = []
+    smoke_tree = (tree.get("smoke_reduction") or {}).get("schema") == "joulewise.b6_smoke_reduction.v1"
+    for stage in tree.get("stage_graph", []):
+        if stage.get("kind") != "campaign_collection":
+            continue
+        stage_id = stage["stage_id"]
+        rows = tuple(grouped.pop(stage_id, ()))
+        if smoke_tree:
+            rows = rows[:stage["expected_count"]]
+        stages.append(StageEvidence(stage_id, stage["kind"], stage["expected_count"], rows))
+    if not smoke_tree:
+        stages.extend(StageEvidence(stage_id, "campaign_collection", len(rows), tuple(rows))
+                      for stage_id, rows in grouped.items())
+    captures, exact_captures, capture_meta = [], {}, []
+    for slot, key in (("pre", "pre_calibration_dir"), ("post", "post_calibration_dir")):
+        if not bindings.get(key):
+            continue
+        directory = Path(bindings[key])
+        # Prefer the clone of the bound capture when present.
+        clones = [root / "sources" / (slot + "-calibration")]
+        for runs_key, name in (("claim_runs_root", "claim-runs"), ("bound_runs_root", "bound-runs"),
+                               ("custody_root", "night-custody")):
+            if bindings.get(runs_key):
+                try:
+                    clones.append(root / "sources" / name / directory.relative_to(Path(bindings[runs_key])))
+                except ValueError:
+                    pass
+        cloned = next((path for path in clones if path.is_dir()), directory)
+        capture = calibration.read_own_capture(cloned)
+        if capture.status != "absent":
+            captures.append(CaptureEvidence(slot, None if capture.value_s is None else float(capture.value_s * 1000),
+                                            capture.status, False))
+        exact_captures[slot] = {"value_s": None if capture.value_s is None else str(capture.value_s), "status": capture.status}
+        capture_meta.append(capture.metadata)
+    raw_spans = _json(root / "withheld/spans.json", {})
+    raw_spans = raw_spans.get("spans", raw_spans)
+    spans = {run_id: {"monotonic_ns": span.get("monotonic_ns", span.get("member"))}
+             for run_id, span in raw_spans.items() if isinstance(span, Mapping)}
+    journal = []
+    for base in (root / "night", root / "sources/night-custody/night", root / "sources/night",
+                 Path(bindings.get("custody_root", root)) / "night"):
+        path = base / "chain-stages.jsonl"
+        if path.is_file():
+            for line in path.read_bytes().splitlines():
+                try:
+                    journal.append(json.loads(line))
+                except ValueError:
+                    pass
+            break
+    stop = next((row.get("reason", row.get("kind")) for row in reversed(journal)
+                 if row.get("event", row.get("stage_id")) == "chain.stop"), None)
+    if stop is None:
+        result = _json(root / "night/hazard_result.json", {})
+        if not result:
+            result = _json(root / "sources/night-custody/night/hazard_result.json", {})
+        if not result:
+            result = _json(root / "sources/night/hazard_result.json", {})
+        exit_code = bindings.get("chain_exit_code", result.get("chain_exit_code", result.get("chain", {}).get("exit_code")))
+        if exit_code == 0:
+            stop = "completed"
+        elif exit_code is not None:
+            stop = "chain_crashed"
+    screen = _json(root / "withheld/b6-neg8.json", {})
+    neg8 = {key: screen[key] for key in ("verdict", "survivors", "corpus_clean_n", "reason", "flags") if key in screen}
+    reg_cal = registration.load(registration_dir)["calibration"]
+    estimator_changed = any(reg_cal.get(key) is not None and meta.get(key) != reg_cal[key]
+                            for meta in capture_meta for key in ("protocol_sha256", "estimator_sha256"))
+    runtime = {"_b6": {"flags": flags, "cells": roster.get("cells", []), "spans": spans, "smoke": smoke_tree,
+                       "captures": exact_captures, "neg8": neg8, "estimator_changed": estimator_changed,
+                       "own_session_ids": [bindings[key] for key in ("session_id", "bracket_session_id") if bindings.get(key)],
+                       "plan_id": roster.get("plan_id"), "attempt": roster.get("attempt")}}
+    return SessionEvidence(pack_id, tuple(stages), tuple(captures), runtime, False, (),
+                           bindings.get("session_id", bindings.get("bracket_session_id")), stop,
+                           tuple(sorted({row["code"] for row in flags if not row["scope"].get("run_id")})))

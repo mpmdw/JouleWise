@@ -28,6 +28,10 @@ B_LEXEME = re.compile(r"b_fiducial_s|exact_bound_lexeme_s")
 
 # file -> (classification, gate, and for a refusal the test that proves it).
 READERS = {
+    "joulewise/b6/calibration.py": ("bracket rows", "outside the derivation scope: own-capture exact lexeme and physics refit"),
+    "joulewise/b6/capture_list.py": ("bracket rows", "outside the derivation scope: one-way finalized observation adapter"),
+    "joulewise/b6/capture_screen.py": ("bracket rows", "outside the derivation scope: opening capture screen"),
+    "joulewise/b6/acceptance.py": ("bracket rows", "outside the derivation scope: session's own refitted capture times"),
     "scripts/issue_calibration_acceptance_generation.py": (
         "gated", "check dry run and prepare-candidate, both through authenticate_battery_epoch "
         "(authenticate_committed_verdict); proved by test_battery_float_consumers and the "
