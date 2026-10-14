@@ -27,7 +27,7 @@ def main(argv=None) -> int:
             reader = csv.DictReader(stream)
             columns = reader.fieldnames
             rows = [row if row.get("non_claim", "").lower() == "true" else
-                    blinding.unblind(row, blinding.factor(args.key_dir, row["config_key"])) for row in reader]
+                    blinding.unblind(row, blinding.stored_factor(args.key_dir, row["config_key"])) for row in reader]
 
         def write_csv(stream):
             writer = csv.DictWriter(stream, fieldnames=columns)
@@ -38,7 +38,8 @@ def main(argv=None) -> int:
         print(json.dumps({"export": str(args.out), "rows": len(rows), "unblinded": True}, sort_keys=True))
         return 0
     except Exception as exc:
-        print("block-six unblind program fault: " + type(exc).__name__, file=sys.stderr)
+        detail = str(exc) if isinstance(exc, ValueError) and str(exc).startswith("blinding key ") else type(exc).__name__
+        print("block-six unblind program fault: " + detail, file=sys.stderr)
         return 1
 
 

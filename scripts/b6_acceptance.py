@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import json
 import sys
 from pathlib import Path
@@ -12,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from joulewise.b6.acceptance import ACCEPTANCE, _bindings, evidence_from_archive, write_result
+from joulewise.b6.session import accept_archive
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -25,20 +24,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         plan = json.loads(args.plan.read_text(encoding="utf-8"))
-        bindings = _bindings(plan)
-        pack_root = Path(bindings["pack_root"]) if bindings.get("pack_root") else None
-        tree = json.loads((pack_root / "plan_tree.json").read_text()) if pack_root else plan.get("plan_tree", {})
-        code = json.loads((args.archive / "derived/code-identity.json").read_text())
-        code["repo_root"] = bindings.get("measurement_root", ROOT)
-        prepared = ACCEPTANCE.prepare(ledger_path=args.ledger or Path(bindings.get("ledger_path", args.archive / "capture-list.jsonl")),
-                                      plan_tree=tree, registration_dir=args.registration_dir,
-                                      code_identity=code, pack_root=pack_root)
-        evidence = evidence_from_archive(args.archive, plan, args.registration_dir)
-        if args.smoke:
-            evidence = dataclasses.replace(evidence, runtime={**evidence.runtime,
-                "_b6": {**evidence.runtime.get("_b6", {}), "smoke": True}})
-        result = ACCEPTANCE.evaluate(prepared, evidence)
-        write_result(args.archive, result)
+        result, _ = accept_archive(args.archive, plan, args.registration_dir, ledger_path=args.ledger,
+                                   plan_path=args.plan, smoke=args.smoke)
         print(json.dumps({"verdict": result.verdict, "counting": result.counting,
                           "structural": result.structural, "flag_counts": result.record["flag_counts"]}, sort_keys=True))
         return 0

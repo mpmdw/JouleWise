@@ -34,7 +34,7 @@ def main(argv=None) -> int:
             return 3
         phase = 4
         plan = json.loads(args.plan.read_text(encoding="utf-8"))
-        result, evidence = accept_archive(args.archive_root, plan, args.registration_dir)
+        result, evidence = accept_archive(args.archive_root, plan, args.registration_dir, plan_path=args.plan)
         phase = 5
         exported = export(args.archive_root, plan, args.registration_dir, args.pack_records_root,
                           args.export_dir, non_claim=args.non_claim, evidence=evidence,
@@ -44,7 +44,8 @@ def main(argv=None) -> int:
                           "flag_counts": result.record["flag_counts"], "export": exported.structure()}, sort_keys=True))
         return 0
     except Exception as exc:
-        print("block-six session program fault: " + type(exc).__name__, file=sys.stderr)
+        detail = str(exc) if isinstance(exc, ValueError) and str(exc).startswith("blinding key ") else type(exc).__name__
+        print("block-six session program fault: " + detail, file=sys.stderr)
         return phase
 
 

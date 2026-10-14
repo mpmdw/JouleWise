@@ -22,9 +22,10 @@ class CatalogTests(unittest.TestCase):
         actual = json.loads(builder.build())["codes"]
         retained = {code for code, entry in actual.items() if entry["effect"] == "EXCLUDE_WINDOW" and code in source}
         self.assertEqual(retained, {"calibration.capture_battery_span", "calibration.capture_battery_pair_failed",
-            "clock.step_overlap_calibration", "cell.below_minimum", "model.identity_mismatch",
-            "model.identity_inconsistent_in_window", "roster.no_science_bundles", "records.source_changed_during_harvest"})
-        self.assertEqual(sum(source[c]["effect"] == "EXCLUDE_WINDOW" for c in builder.RECLASSIFY), 24)
+            "calibration.capture_battery_unmeasured", "clock.step_overlap_calibration", "cell.below_minimum",
+            "roster.no_science_bundles", "records.source_changed_during_harvest"})
+        self.assertEqual(sum(source[c]["effect"] == "EXCLUDE_WINDOW" for c in builder.RECLASSIFY), 25)
+        self.assertNotIn("calibration.capture_bytes_changed", actual)
         for code, entry in actual.items():
             if entry["effect"].startswith("EXCLUDE"):
                 self.assertTrue(entry.get("note"), code)

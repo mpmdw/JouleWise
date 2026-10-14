@@ -39,7 +39,54 @@ class ModelFileTests(unittest.TestCase):
             "name": "mlx", "prepare_metadata": {"model_source": "synthetic-model",
                 "model_artifact_identity": {"status": "ok", "folded_sha256": "a" * 64},
                 "mlx_version": "1", "mlx_lm_version": "2", "transformers_version": "3"}}}}
-        self.assertEqual(model_files.run_identity(metadata), IDENTITY)
+        self.assertEqual(model_files.run_identity(metadata), {**IDENTITY, "runtime_version": "1"})
+
+    def test_unpinned_source_discloses_without_byte_exclusion(self):
+        self.assertEqual(model_files.compare(self.expected, {**IDENTITY, "model_source": "unpinned"}),
+                         [{"code": "model.source_unpinned", "fields": ["model_source"]}])
+
+    def test_missing_recorded_fields_are_not_mismatches(self):
+        observed = {key: IDENTITY[key] for key in ("model_source", "model_artifact_sha256", "status")}
+        self.assertEqual(model_files.compare(self.expected, observed), [])
+        self.assertEqual(model_files.compare(self.expected, {**observed, "kernel_library": "unavailable"}), [])
+
+    def test_kernel_tokenizer_and_mlx_metal_from_metadata(self):
+        self.pins["runtime_versions"]["packages"] = {**IDENTITY["packages"], "mlx-metal": "1"}
+        stack = self.pins["units"]["one"]["stack_identity"]
+        stack.update(kernel_library="metal-kernels", runtime_version={"name": "mlx", "version": "1"},
+                     tokenizer_identity={"identifier": "tokenizer", "revision": "r1", "vocab_size": 123})
+        metadata = {"quantization": IDENTITY["quantization"], "environment": {"python_packages": {
+            "mlx-metal": {"present": True, "version": "1"}}}, "workload_provenance": {"tokenizer": {
+            "identifier": "/another/location/tokenizer", "revision": "r1", "vocab_size": 123}},
+            "adapters": {"runtime": {"name": "mlx", "prepare_metadata": {
+                "model_source": "synthetic-model", "model_artifact_identity": {"status": "ok", "folded_sha256": "a" * 64},
+                "mlx_version": "1", "mlx_lm_version": "2", "transformers_version": "3", "kernel_library": "metal-kernels"}}}}
+        expected = model_files.expected(self.pins)
+        self.assertEqual(model_files.compare(expected, model_files.run_identity(metadata)), [])
+        for field in ("kernel_library", "runtime_version", "mlx-metal", "tokenizer.identifier", "tokenizer.revision", "tokenizer.vocab_size"):
+            observed = model_files.run_identity(metadata)
+            if field.startswith("tokenizer."):
+                observed["tokenizer"][field.split(".")[1]] = "changed"
+            elif field == "mlx-metal":
+                observed["packages"][field] = "changed"
+            else:
+                observed[field] = "changed"
+            with self.subTest(field=field):
+                self.assertEqual(model_files.compare(expected, observed),
+                                 [{"code": "model.stack_differs_from_registered", "fields": [field]}])
+        metadata["environment"] = {}
+        metadata["adapters"]["runtime"]["prepare_metadata"]["mlx_metal_version"] = "changed"
+        self.assertIn("mlx-metal", model_files.compare(expected, model_files.run_identity(metadata))[0]["fields"])
+
+    def test_tokenizer_matches_the_unit_with_the_same_digest(self):
+        one = self.pins["units"]["one"]
+        one["stack_identity"]["tokenizer_identity"] = {"revision": "first"}
+        two = copy.deepcopy(one)
+        two["model_artifact_sha256"] = "b" * 64
+        two["stack_identity"]["tokenizer_identity"] = {"revision": "second"}
+        self.pins["units"]["two"] = two
+        rows = model_files.compare(model_files.expected(self.pins), {**IDENTITY, "tokenizer": {"revision": "second"}})
+        self.assertEqual(rows, [{"code": "model.stack_differs_from_registered", "fields": ["tokenizer.revision"]}])
 
     def test_os_sampler_output_policy_not_compared(self):
         self.assertEqual(model_files.compare(self.expected, {**IDENTITY, "platform": "other", "sampler": "other",

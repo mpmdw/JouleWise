@@ -24,6 +24,7 @@ ENERGIES = tuple("phase_" + phase + "_j" for phase in PHASES) + (
 ) + tuple("bound_" + term + "_j" for term in BOUND_TERMS) + (
     "idle_power_w", "idle_variance_of_mean_w2",
 )
+REFERENCE_KEY = "neg8_reference"
 COLUMNS = (
     "pack_id", "session_id", "attempt", "run_id", "stage_id", "role", "order_index",
     "cell_ids", "strata", "unit_ids", "abba_block_id", "abba_label", "config_key",
@@ -107,7 +108,7 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
         run_id = flag["scope"].get("run_id")
         if run_id:
             codes[run_id].add(flag["code"])
-    rows, reference_key = [], None
+    rows = []
     for index, member in enumerate(roster.get("members", [])):
         run_id = member["run_id"]
         bundle = bundle_of(root, plan, run_id)
@@ -115,8 +116,7 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
         model, workload = config.get("model") or {}, config.get("workload_profile") or {}
         key = blinding.configuration_key(config)
         if member["role"] in ("corpus", "start", "midpoint", "end"):
-            reference_key = reference_key or key
-            key = reference_key
+            key = REFERENCE_KEY
         tags = dict(tag.split("=", 1) for tag in (config.get("run_metadata") or {}).get("tags", [])
                     if isinstance(tag, str) and "=" in tag)
         units = member.get("units", [])

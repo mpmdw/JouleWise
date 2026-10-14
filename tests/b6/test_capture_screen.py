@@ -46,3 +46,20 @@ class ChainScreenTests(unittest.TestCase):
                 self.assertEqual("flag calibration.alignment_above_reference" in ran.stdout, flagged)
                 if rc:
                     self.assertIn("chain.stop operative_bound_above_stop 12", ran.stdout)
+
+    def test_missing_opening_bound_stops_via_existing_chain_caller(self):
+        from joulewise.b6.capture_screen import SCREEN_SHELL
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shell = ('CLAIM_RUNS_ROOT=fixture\nflag() { print -r -- "flag $1"; }\n'
+                     'stop_chain() { print -r -- "chain.stop $1 $2"; exit $2; }\n')
+            script = root / "screen.zsh"
+            script.write_text(shell + SCREEN_SHELL + '\nscreen_b6_calibration "$1" || stop_chain pre_calibration_screen_failed 12\nprint continued\n')
+            for document in (None, '{"b_fiducial_s":null}'):
+                if document:
+                    (root / "instrument_evidence.json").write_text(document)
+                ran = subprocess.run(["/bin/zsh", "-f", str(script), str(root)], capture_output=True, text=True)
+                self.assertEqual(ran.returncode, 12)
+                self.assertIn("flag calibration.bracket_incomplete", ran.stdout)
+                self.assertIn("chain.stop pre_calibration_screen_failed 12", ran.stdout)
+                self.assertNotIn("continued", ran.stdout)

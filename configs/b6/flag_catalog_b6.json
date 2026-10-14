@@ -184,17 +184,10 @@
     },
     "calibration.capture_battery_unmeasured": {
       "blinding": "STRUCTURE",
-      "effect": "DISCLOSE",
+      "effect": "EXCLUDE_WINDOW",
       "family": "CALIBRATION",
       "klass": "PHYSICS",
-      "note": "Doctrine 2: the measured capture battery span remains excluding."
-    },
-    "calibration.capture_bytes_changed": {
-      "blinding": "STRUCTURE",
-      "effect": "DISCLOSE",
-      "family": "CALIBRATION",
-      "klass": "REPRESENTATION",
-      "note": "HV-6: historical capture changed bytes disclose."
+      "note": "Core-prune N7: a calibration capture's battery pair verdict did not pass and the journal cannot stand in for it: no capture span, no battery journal, a join that could not run, or the missing-evidence predicate of registration 6.4 (battery.unmeasured) over its span. The join reads the 1 s SMC reads, and the driver stops the monitor no sooner than 5 s after the chain exits (mock rehearsal round 3, R3-5)."
     },
     "calibration.capture_invalid": {
       "blinding": "STRUCTURE",
@@ -460,7 +453,7 @@
       "effect": "DISCLOSE",
       "family": "CODE_IDENTITY",
       "klass": "REPRESENTATION",
-      "note": "HV-23/CA-46: changed committed paths are recorded."
+      "note": "HV-23/CA-46: changed committed and tracked-edit paths are recorded."
     },
     "code.executed_differs_from_sealed": {
       "blinding": "STRUCTURE",
@@ -489,6 +482,13 @@
       "family": "CODE_IDENTITY",
       "klass": "NUMBER",
       "note": "HV-23/CA-46: unreviewed acquisition or reduction changes can move a printed number."
+    },
+    "code.tracked_edits_unrecorded": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CODE_IDENTITY",
+      "klass": "REPRESENTATION",
+      "note": "HV-23/CA-46: absent executed porcelain discloses."
     },
     "collection.failure_histogram": {
       "blinding": "STRUCTURE",
@@ -1024,17 +1024,17 @@
     },
     "model.identity_inconsistent_in_window": {
       "blinding": "STRUCTURE",
-      "effect": "EXCLUDE_WINDOW",
+      "effect": "DISCLOSE",
       "family": "MODEL_IDENTITY",
       "klass": "NUMBER",
-      "note": "Two distinct model or runtime identities within one identity unit of one window. All NEG-8 references and spares form one unit, neg8_reference (registration 4.6 item 3), so a reference or spare of another model emits this code beside its member-level model.identity_mismatch (Fable cold pass 4, note N-1); either removes the window."
+      "note": "HV-21: direct files and stack comparisons decide the computation."
     },
     "model.identity_mismatch": {
       "blinding": "STRUCTURE",
-      "effect": "EXCLUDE_WINDOW",
+      "effect": "DISCLOSE",
       "family": "MODEL_IDENTITY",
       "klass": "NUMBER",
-      "note": "Model, tokenizer or runtime realized at arm or recorded in a bundle differs from the frozen pins. It removes the window at any scope, member level included: the exclusion function applies EXCLUDE_WINDOW before its member branch. NEG-8 references and spares (registration 0.12): every one of them is checked against one identity unit, neg8_reference, whose expected identity is the sealed pin under units.neg8_reference of identity_pins.json (the strict majority of the window's references and spares only when no such pin is present). A reference or spare that ran another model gets this code at member level, so the window is excluded: the pack that executed differs from the sealed one, a number-integrity failure (orchestrator call (ii), 2026-10-07; registration 6.5). The harvest also counts the code as a reference loss, so the survivors screen never reads that energy, but the window stays excluded whatever the screen says."
+      "note": "HV-21: direct files and stack comparisons decide the computation."
     },
     "model.identity_underivable": {
       "blinding": "STRUCTURE",
@@ -1063,6 +1063,13 @@
       "family": "MODEL_IDENTITY",
       "klass": "REPRESENTATION",
       "note": "HV-21: precheck directly measures the files; a missing run identity discloses."
+    },
+    "model.source_unpinned": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "MODEL_IDENTITY",
+      "klass": "REPRESENTATION",
+      "note": "HV-21: an observed source without a pin discloses; no measured byte difference."
     },
     "model.stack_differs_from_registered": {
       "blinding": "STRUCTURE",
@@ -1113,6 +1120,13 @@
       "klass": "NUMBER",
       "note": "HV-18/design 13.7: clean corpus and surviving counts decide the bound."
     },
+    "neg8.corpus_energy_unreadable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "NEG8",
+      "klass": "REPRESENTATION",
+      "note": "Design 13.7: unreadable energy drops this member; screen uses survivors."
+    },
     "neg8.corpus_member_dropped": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -1126,6 +1140,13 @@
       "family": "NEG8",
       "klass": "NUMBER",
       "note": "NEG-8 ruling 2026-10-07 (registration 0.12): the midpoint reference was lost and its spare did not restore it, so the screen ran without it (the screen never needed it) and the drift allowance used the two-value spread |end mean - start mean|. Window level; observed names the lost midpoint. DISCLOSE here: the window keeps its screen result and its numbers. On GAMMA only (orchestrator ruling Q11, 2026-10-07, confirmed by the seal gate at stage 1), joulewise.flags.exclusions.PACK_SCOPED_WINDOW_REASONS adds the window reason neg8.midpoint_lost_primary, so the attempt is not claim-usable and GAMMA is re-armed (registration 0.16, 7.2; analysis_plan_block5.md section 2.4); on ALPHA and BETA it is disclosed only: a lost midpoint can understate those windows' allowance by an amount nothing measured, but no decision rests on their reported cells, whereas on GAMMA the allowance enters the deterministic bound D of the contrasts, on which a decision rests (analysis_plan_block5.md section 2.4). Once a block's midpoint record, which is read only after that block's release event, shows the midpoint never moved the spread beyond the bound, an erratum may downgrade it on GAMMA for a later block; it cannot reinstate a block-5 attempt that was re-armed."
+    },
+    "neg8.reference_energy_unreadable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "NEG8",
+      "klass": "REPRESENTATION",
+      "note": "Design 13.7: unreadable energy drops this member; screen uses survivors."
     },
     "neg8.reference_lost": {
       "blinding": "STRUCTURE",

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import fcntl
-import hashlib
 import json
 import os
 import time
@@ -14,7 +13,6 @@ from joulewise.b6.registration import decimal_s
 
 SCHEMA = "joulewise.b6_capture_list.v1"
 LOCK_TIMEOUT_S = 30.0
-DATALESS = 0x40000000
 FIELDS = ("seq", "session_id", "slot", "attempt_id", "value_s", "disposition",
           "captured_utc", "evidence_path", "evidence_sha256")
 
@@ -118,16 +116,3 @@ def import_custody_ledger(ledger_path: Path | str) -> list[dict]:
         except (ValueError, TypeError, KeyError, UnicodeDecodeError):
             continue
     return sorted(rows, key=lambda row: row["seq"])
-
-
-def check_bytes(row: Mapping) -> str:
-    """lstat before opening: an evicted file must never be hydrated here."""
-    path = Path(row["evidence_path"])
-    try:
-        info = path.lstat()
-        if getattr(info, "st_flags", 0) & DATALESS:
-            return "evicted"
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError:
-        return "missing"
-    return "ok" if digest == row.get("evidence_sha256") else "changed"

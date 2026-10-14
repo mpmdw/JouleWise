@@ -3,6 +3,7 @@ import csv
 import io
 import json
 import math
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -112,6 +113,53 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(len({row["phase_decode_j"] for row in refs}), 1)
         gamma = [row for row in rows if row["run_id"].startswith("gamma")]
         self.assertNotEqual(gamma[0]["phase_decode_j"], gamma[1]["phase_decode_j"])
+
+    def test_two_sessions_reference_key_ignores_first_missing_bundle(self):
+        first = self.rows(self.export())
+        archive, reg, plan, record = archive_fixture(self.root / "second")
+        shutil.rmtree(archive / "sources/claim-runs/corpus")
+        record["session_id"] = plan["session_id"] = "second-session"
+        second = self.rows(export_runs.export(archive, plan, reg, self.root / "packs", self.root / "out",
+                                             acceptance_record=record))
+        refs = [row for row in first + second if row["run_id"] == "ref"]
+        self.assertEqual(len(refs), 2)
+        self.assertEqual({row["config_key"] for row in refs}, {export_runs.REFERENCE_KEY})
+        self.assertEqual(refs[0]["gross_energy_j"], refs[1]["gross_energy_j"])
+        self.assertEqual(next(row for row in second if row["run_id"] == "corpus")["config_key"], export_runs.REFERENCE_KEY)
+
+    def test_unblind_missing_key_fault_names_file_without_writing(self):
+        result = self.export()
+        key_dir = self.root / "wrong-empty-keys"
+        output = self.root / "unblinded.csv"
+        for missing in ("pack", "config"):
+            if missing == "config":
+                key_dir.mkdir()
+                (key_dir / "pack.json").write_text('{"factor":1.11713}')
+            before = {p.name: p.read_bytes() for p in key_dir.iterdir()} if key_dir.exists() else {}
+            with contextlib.redirect_stdout(io.StringIO()) as stdout, contextlib.redirect_stderr(io.StringIO()) as stderr:
+                self.assertEqual(b6_unblind.main(["--export", str(result.csv_path), "--key-dir", str(key_dir),
+                                                "--out", str(output)]), 1)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertIn(str(key_dir / ("pack.json" if missing == "pack" else "config-")), stderr.getvalue())
+            self.assertNotIn("1.11713", stderr.getvalue())
+            self.assertFalse(output.exists())
+            after = {p.name: p.read_bytes() for p in key_dir.iterdir()} if key_dir.exists() else {}
+            self.assertEqual(before, after)
+
+    def test_corrupt_export_key_fault_is_bounded_and_names_file(self):
+        key = self.root / "packs/desk-pack/blinding/pack.json"
+        key.parent.mkdir(parents=True)
+        key.write_text("")
+        argv = ["--archive", str(self.archive), "--plan", str(self.root / "plan.json"),
+                "--registration-dir", str(self.reg), "--pack-records-root", str(self.root / "packs"),
+                "--export-dir", str(self.root / "out")]
+        with patch.object(blinding, "DECODE_RETRY_TIMEOUT_S", .01), \
+             contextlib.redirect_stdout(io.StringIO()) as stdout, contextlib.redirect_stderr(io.StringIO()) as stderr:
+            self.assertEqual(b6_export_runs.main(argv), 5)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn(str(key), stderr.getvalue())
+        self.assertEqual(key.read_text(), "")
+        self.assertFalse((self.root / "out").exists())
 
     def test_csv_sidecar_stdout_hide_offset_and_unblind_round_trips(self):
         argv = ["--archive", str(self.archive), "--plan", str(self.root / "plan.json"),

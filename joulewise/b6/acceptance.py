@@ -15,7 +15,7 @@ from joulewise.b6.acceptance_interface import (
     AcceptanceResult, CaptureEvidence, MemberEvidence, SessionEvidence, StageEvidence,
 )
 from joulewise.flags.catalog import Catalog, EXCLUDE_WINDOW, load_catalog
-from joulewise.flags.exclusions import compute
+from joulewise.flags.exclusions import _same, compute
 from joulewise.flags.schema import make_flag, make_scope, make_source, render_line, validate_flag
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -110,7 +110,7 @@ class BlockSixAcceptance:
                               {**catalog.rules, "cell_unit_minimum": reg["cell_unit_minimum"]})
         reviewed = json.loads((repo / reg["reviewed_commits_path"]).read_text(encoding="utf-8"))
         code = code_check.check(repo, reg["registered_commit"], code_identity.get("executed_head"),
-                                reg["number_bearing_paths"], reviewed)
+                                reg["number_bearing_paths"], reviewed, code_identity.get("status_porcelain"))
         problems = []
         if ledger_rows is not None:
             rows = list(ledger_rows)
@@ -125,9 +125,6 @@ class BlockSixAcceptance:
                 rows = capture_list.import_custody_ledger(ledger_path)
             else:
                 rows, problems = capture_list.read(ledger_path)
-        for row in rows:
-            if row.get("evidence_path") and capture_list.check_bytes(row) == "changed":
-                problems.append("calibration.capture_bytes_changed")
         if reg["defaults_used"]:
             problems.append("registration.default_used")
         if any("spare_retry" in stage for stage in plan_tree.get("stage_graph", [])):
@@ -254,10 +251,35 @@ class BlockSixAcceptance:
             if screen["verdict"] in ("failed", "undefined"):
                 excluding.append({"code": code, "scope": "window", "why": screen.get("reason") or "screen_failed"})
         mismatches = []
+        for row in flags:
+            if not all(_same(roster.get(key), row["scope"].get(key)) for key in ("plan_id", "attempt")):
+                continue
+            observed, expected = row.get("observed") or {}, row.get("expected") or {}
+            if not isinstance(observed, Mapping) or not isinstance(expected, Mapping):
+                continue
+            bytes_differ = False
+            if row["code"] == "model.identity_mismatch":
+                actual, pinned = observed.get("model_artifact_sha256"), expected.get("model_artifact_sha256")
+                bytes_differ = bool(actual and pinned and actual != pinned)
+            elif row["code"] == "model.identity_inconsistent_in_window":
+                digests = {pair[0] for pair in observed.get("distinct", [])
+                           if isinstance(pair, (list, tuple)) and len(pair) == 2 and pair[0]}
+                bytes_differ = len(digests) > 1
+            if bytes_differ:
+                run_id = row["scope"].get("run_id")
+                code = "model.files_differ_from_registered"
+                mismatches.append({"code": code, "fields": ["model_artifact_sha256"], "run_id": run_id})
+                emitted.append(_flag(code, catalog, run_id=run_id, stage_id=row["scope"].get("stage_id"),
+                                     observed={"fields": ["model_artifact_sha256"], "harvest_flag_id": row["flag_id"]}))
+                excluding.append({"code": code, "scope": "window", "run_id": run_id,
+                                  "why": "model_artifact_sha256"})
         for member in members:
             observed = member.runtime or evidence.runtime
             for mismatch in model_files.compare(prepared.expected_model, model_files.run_identity(observed)):
                 item = {**mismatch, "run_id": member.run_id}
+                if any(previous["code"] == item["code"] and previous["run_id"] == member.run_id
+                       for previous in mismatches):
+                    continue
                 mismatches.append(item)
                 emit(item["code"], member, {"fields": item["fields"]})
                 if catalog.entry(item["code"])["effect"] == EXCLUDE_WINDOW:
@@ -285,7 +307,11 @@ class BlockSixAcceptance:
         verdict = "EXCLUDE" if reasons else "ACCEPT"
         if "records.source_changed_during_harvest" in counts:
             verdict = "HARVEST_RERUN"
-        structural = bool(structural_failures) or (mode == "smoke" and bool(excluding))
+        if mode == "smoke" and any(catalog.entry(item["code"])["klass"] == "PHYSICS"
+                                    for item in excluding + member_excluding):
+            physics_stop = True
+        structural = bool(structural_failures) or (mode == "smoke" and any(
+            catalog.entry(item["code"])["klass"] != "PHYSICS" for item in excluding))
         record = {"schema": SCHEMA, "mode": mode, "pack_id": evidence.pack_id,
                   "session_id": evidence.session_id, "verdict": verdict,
                   "counting": verdict == "ACCEPT" and not physics_stop, "physics_stop": physics_stop,
@@ -349,7 +375,10 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
     for line in lines:
         try:
             row = json.loads(line)
-            flags.append({key: row[key] for key in ("code", "scope", "interval", "flag_id")})
+            projection = {key: row[key] for key in ("code", "scope", "interval", "flag_id")}
+            if row["code"] in ("model.identity_mismatch", "model.identity_inconsistent_in_window"):
+                projection.update(observed=row.get("observed"), expected=row.get("expected"))
+            flags.append(projection)
         except (ValueError, TypeError, KeyError):
             flags.append(_flag("records.malformed_flag_exclusion_possible", load_catalog(ROOT / "configs/b6/flag_catalog_b6.json")))
     by_run = defaultdict(list)
@@ -357,12 +386,14 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
         if row["scope"].get("run_id"):
             by_run[row["scope"]["run_id"]].append(row["code"])
     grouped = defaultdict(list)
+    assessments = _json(root / "withheld/member-assessments.json", {}).get("members", {})
     for member in roster.get("members", []):
         run_id = member["run_id"]
         bundle = bundle_of(root, plan, run_id)
         metadata = _json(bundle / "metadata.json", {}) if bundle else {}
+        assessment = assessments.get(run_id) or {}
         status_record = _json(bundle / "status.json", {}) if bundle else {}
-        recorded_status = status_record.get("status", metadata.get("status")) or {}
+        recorded_status = assessment.get("status", status_record.get("status", metadata.get("status"))) or {}
         status = recorded_status.get("state") if isinstance(recorded_status, Mapping) else recorded_status
         if status is None:
             status = "succeeded" if bundle else "failed"

@@ -82,16 +82,45 @@ def screen(roster: Mapping, member_effects: Mapping,
         record["flags"] = sorted(flags)
         return ScreenResult(verdict, counts, len(kept_corpus), reason, tuple(sorted(flags)), record)
 
-    if len(kept_corpus) < settings["corpus_minimum"]:
-        return finish("undefined", "bound_absent")
-    if counts["start"] < 2 or counts["end"] < 2:
-        return finish("undefined", "references_insufficient")
-    try:
+    energies = {}
+    unreadable = []
+
+    def read_energy(member: Mapping, role: str) -> bool:
         record["energy_reader_used"] = True
-        energies = {member["run_id"]: energy_of(member)
-                    for member in kept_corpus + [m for rows in slots.values() for m in rows]}
-        record["sources"] = {run_id: value.get("source") for run_id, value in energies.items()}
-        record["readers"] = {run_id: value.get("reader") for run_id, value in energies.items()}
+        try:
+            value = energy_of(member)
+            if not all(math.isfinite(value[family]) for family in FAMILIES):
+                raise ValueError("nonfinite reference energy")
+        except (OSError, ValueError, KeyError, TypeError, ArithmeticError):
+            unreadable.append(member["run_id"])
+            flags.add(f"neg8.{role}_energy_unreadable")
+            return False
+        energies[member["run_id"]] = value
+        return True
+
+    kept_corpus = []
+    for member in corpus:
+        if clean(member) and read_energy(member, "corpus"):
+            kept_corpus.append(member)
+            if len(kept_corpus) == settings["corpus_cap"]:
+                break
+    for slot, rows in slots.items():
+        readable = [member for member in rows if read_energy(member, "reference")]
+        if len(readable) != len(rows):
+            flags.add("neg8.midpoint_lost" if slot == "midpoint" else "neg8.reference_lost")
+        slots[slot] = readable
+    counts.update({slot: len(rows) for slot, rows in slots.items()})
+    record.update(corpus_clean_n=len(kept_corpus),
+                  corpus_run_ids=[m["run_id"] for m in kept_corpus],
+                  reference_run_ids={slot: [m["run_id"] for m in rows] for slot, rows in slots.items()},
+                  energy_unreadable_run_ids=unreadable,
+                  sources={run_id: value.get("source") for run_id, value in energies.items()},
+                  readers={run_id: value.get("reader") for run_id, value in energies.items()})
+    if len(kept_corpus) < settings["corpus_minimum"]:
+        return finish("undefined", "energy_unreadable" if unreadable else "bound_absent")
+    if counts["start"] < 2 or counts["end"] < 2:
+        return finish("undefined", "energy_unreadable" if unreadable else "references_insufficient")
+    try:
         passed = True
         for family in FAMILIES:
             points = [energies[member["run_id"]][family] for member in kept_corpus]

@@ -29,7 +29,8 @@ def main(argv=None) -> int:
         print(json.dumps(result.structure(), sort_keys=True))
         return 0
     except Exception as exc:
-        print("block-six export program fault: " + type(exc).__name__, file=sys.stderr)
+        detail = str(exc) if isinstance(exc, ValueError) and str(exc).startswith("blinding key ") else type(exc).__name__
+        print("block-six export program fault: " + detail, file=sys.stderr)
         return 5
 
 

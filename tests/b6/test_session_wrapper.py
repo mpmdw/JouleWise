@@ -50,3 +50,12 @@ class WrapperTests(unittest.TestCase):
                      {"return_value": (type("Result", (), {"record": self.record})(), object())})), \
                  patch.object(wrapper, "export", side_effect=RuntimeError()), contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(wrapper.main(self.argv), code)
+
+    def test_export_key_fault_preserves_filename_without_factor(self):
+        with patch.object(wrapper, "resolve_inputs"), patch.object(wrapper, "harvest", return_value={"verdict": "COLLECTED"}), \
+             patch.object(wrapper, "accept_archive", return_value=(type("Result", (), {"record": self.record})(), object())), \
+             patch.object(wrapper, "export", side_effect=ValueError("blinding key unreadable: /synthetic/pack.json")), \
+             contextlib.redirect_stderr(io.StringIO()) as stderr, contextlib.redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(wrapper.main(self.argv), 5)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("blinding key unreadable: /synthetic/pack.json", stderr.getvalue())

@@ -13,6 +13,7 @@ from typing import Any, Mapping
 
 PACK_RANGE = (0.8, 1.25)
 CONFIG_RANGE = (0.97, 1.03)
+DECODE_RETRY_TIMEOUT_S = 5.0
 
 
 def _draw(bounds: tuple[float, float]) -> float:
@@ -23,6 +24,7 @@ def _stored_or_draw(directory: Path, name: str, bounds: tuple[float, float],
                     identity: Mapping, session_id: str | None) -> float:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / name
+    deadline = time.monotonic() + DECODE_RETRY_TIMEOUT_S
     while True:
         try:
             return json.loads(path.read_text(encoding="utf-8"))["factor"]
@@ -30,6 +32,8 @@ def _stored_or_draw(directory: Path, name: str, bounds: tuple[float, float],
             pass
         except json.JSONDecodeError:
             # An exclusive creator has opened the file and is still writing.
+            if time.monotonic() >= deadline:
+                raise ValueError(f"blinding key unreadable: {path}") from None
             time.sleep(0.001)
             continue
         value = _draw(bounds)
@@ -56,8 +60,26 @@ def pack_factor(directory: Path | str, *, session_id: str | None = None) -> floa
 
 
 def config_factor(directory: Path | str, key: str, *, session_id: str | None = None) -> float:
-    name = "config-" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:16] + ".json"
-    return _stored_or_draw(Path(directory), name, CONFIG_RANGE, {"key": key}, session_id)
+    return _stored_or_draw(Path(directory), _config_filename(key), CONFIG_RANGE, {"key": key}, session_id)
+
+
+def _config_filename(key: str) -> str:
+    return "config-" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:16] + ".json"
+
+
+def stored_factor(directory: Path | str, key: str) -> float:
+    """Read both existing keys for release; never draw or create a file."""
+    values = []
+    for name in ("pack.json", _config_filename(key)):
+        path = Path(directory) / name
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))["factor"]
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 < value < float("inf"):
+                raise ValueError
+        except (OSError, ValueError, KeyError, TypeError):
+            raise ValueError(f"blinding key missing or unreadable: {path}") from None
+        values.append(value)
+    return values[0] * values[1]
 
 
 def factor(directory: Path | str, key: str, *, session_id: str | None = None) -> float:

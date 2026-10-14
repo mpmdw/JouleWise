@@ -4,8 +4,10 @@ import json
 import multiprocessing
 import secrets
 import tempfile
+import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from joulewise.b6 import blinding
 
@@ -35,6 +37,38 @@ class BlindingTests(unittest.TestCase):
             self.assertEqual(len(configs), 1)
             config = json.loads(configs[0].read_text())
             self.assertTrue(blinding.CONFIG_RANGE[0] <= config["factor"] <= blinding.CONFIG_RANGE[1])
+
+    def test_stored_factor_reads_only_and_names_missing_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "keys"
+            with self.assertRaisesRegex(ValueError, str(directory / "pack.json")):
+                blinding.stored_factor(directory, "key")
+            self.assertFalse(directory.exists())
+            value = blinding.factor(directory, "key")
+            before = {p.name: p.read_bytes() for p in directory.iterdir()}
+            with patch.object(blinding, "_draw", side_effect=AssertionError("release drew a key")):
+                self.assertEqual(blinding.stored_factor(directory, "key"), value)
+                with self.assertRaisesRegex(ValueError, "config-.*json"):
+                    blinding.stored_factor(directory, "wrong-key")
+            self.assertEqual(before, {p.name: p.read_bytes() for p in directory.iterdir()})
+            config = next(directory.glob("config-*.json"))
+            config.write_text('{"factor":"SECRET_VALUE"}')
+            with self.assertRaises(ValueError) as raised:
+                blinding.stored_factor(directory, "key")
+            self.assertIn(str(config), str(raised.exception))
+            self.assertNotIn("SECRET_VALUE", str(raised.exception))
+
+    def test_corrupt_key_decode_retry_is_bounded_and_names_file(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(blinding, "DECODE_RETRY_TIMEOUT_S", .01):
+            path = Path(tmp) / "pack.json"
+            for content in ("", "{broken"):
+                path.write_text(content)
+                started = time.monotonic()
+                with self.assertRaises(ValueError) as raised:
+                    blinding.pack_factor(tmp)
+                self.assertLess(time.monotonic() - started, .5)
+                self.assertIn(str(path), str(raised.exception))
+                self.assertEqual(path.read_text(), content)
 
     def test_racing_first_draw_one_file_one_value(self):
         with tempfile.TemporaryDirectory() as tmp:

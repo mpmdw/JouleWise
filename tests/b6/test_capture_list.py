@@ -1,10 +1,8 @@
-import hashlib
 import json
 import multiprocessing
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from joulewise.b6 import capture_list
@@ -68,21 +66,6 @@ class CaptureListTests(unittest.TestCase):
             with patch.object(capture_list.os, "write", side_effect=OSError("write")):
                 self.assertIn("write_error", capture_list.append(path, row()))
             self.assertIn("write_error", capture_list.append(path, {**row(), "value_s": "NaN"}))
-
-    def test_dataless_never_reads_and_changed_bytes(self):
-        value = row()
-        with patch.object(Path, "lstat", return_value=SimpleNamespace(st_flags=capture_list.DATALESS)), \
-             patch.object(Path, "read_bytes", side_effect=AssertionError("must not hydrate")):
-            self.assertEqual(capture_list.check_bytes(value), "evicted")
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "evidence.json"
-            path.write_bytes(b"first")
-            value.update(evidence_path=str(path), evidence_sha256=hashlib.sha256(b"first").hexdigest())
-            self.assertEqual(capture_list.check_bytes(value), "ok")
-            path.write_bytes(b"changed")
-            self.assertEqual(capture_list.check_bytes(value), "changed")
-            path.unlink()
-            self.assertEqual(capture_list.check_bytes(value), "missing")
 
     def test_legacy_finalized_observations_only(self):
         receipt = {"sequence": 2, "event": "bracket-session-slot-finalization", "session_id": "session",

@@ -1,34 +1,48 @@
-"""Committed acquisition/reduction changes and their executing reviews."""
+"""Committed and tracked acquisition/reduction changes and their reviews."""
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 from typing import Mapping, Sequence
 
+from joulewise.b5.harvest import _porcelain_path
+
+
+def _tracked_paths(porcelain: str) -> set[str]:
+    paths = set()
+    for line in porcelain.splitlines():
+        if not line.strip() or line.startswith("??"):
+            continue
+        body = line[3:]
+        renamed = re.fullmatch(r'("(?:\\.|[^"\\])*"|.*?) -> ("(?:\\.|[^"\\])*"|.*)', body)
+        names = renamed.groups() if renamed and any(c in line[:2] for c in "RC") else (body,)
+        paths.update(_porcelain_path(name) for name in names)
+    return paths
+
 
 def check(repo: Path | str, registered: str, executed: str | None,
-          paths: Sequence[str], reviewed: Sequence) -> dict:
+          paths: Sequence[str], reviewed: Sequence, tracked_edits: str | None = None) -> dict:
     result = {"registered": registered, "executed": executed,
               "changed": [], "number_bearing_changed": [], "unreviewed": [], "flags": []}
+    tracked = _tracked_paths(tracked_edits) if isinstance(tracked_edits, str) else set()
+    if not isinstance(tracked_edits, str):
+        result["flags"].append("code.tracked_edits_unrecorded")
     if executed is None:
         result["flags"].append("code.executed_head_unrecorded")
-        return result
-    if registered == executed:
-        # An unchanged commit has no changed paths, even in a desk checkout
-        # that does not retain the rehearsal clone's historical git objects.
-        return result
 
     def git(*args: str) -> str:
         return subprocess.run(["git", "-C", str(repo), *args], check=True,
                               capture_output=True, text=True).stdout
 
-    changed = sorted(filter(None, git("diff", "--no-renames", "--name-only", "-z",
-                                      registered, executed, "--").split("\0")))
+    committed = set(filter(None, git("diff", "--no-renames", "--name-only", "-z",
+                                    registered, executed, "--").split("\0"))) if executed and registered != executed else set()
+    changed = sorted(committed | tracked)
     numbers = [path for path in changed if path in paths]
     commits = {row["commit"] if isinstance(row, Mapping) else row for row in reviewed}
-    unreviewed = [path for path in numbers
-                  if git("log", "-1", "--format=%H", executed, "--", path).strip() not in commits]
+    unreviewed = [path for path in numbers if path in tracked or
+                  git("log", "-1", "--format=%H", executed, "--", path).strip() not in commits]
     result.update(changed=changed, number_bearing_changed=numbers, unreviewed=unreviewed)
     if changed:
         result["flags"].append("code.changed_since_registration")

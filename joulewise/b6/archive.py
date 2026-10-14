@@ -70,3 +70,26 @@ def ordered_roster(roster: Mapping, evidence) -> dict:
                 "config_key": m.config_key}
                for stage in evidence.stages for m in stage.members]
     return {**roster, "members": members}
+
+
+def executed_porcelain(root: Path, plan: Mapping, plan_path: Path | None = None) -> str | None:
+    """Read the same executed checkout as harvest, including every edit line."""
+    from joulewise.b5.harvest import _inventory_checkout, _plan_value
+
+    custody = Path(_plan_value(plan, "custody_root") or (plan_path.parent if plan_path else root))
+    supplied = _plan_value(plan, "executed_inventory_path", "executed_inventory")
+    original = Path(supplied) if supplied else custody / "night/executed_inventory.json"
+    if not original.is_absolute():
+        original = custody / original
+    candidates = []
+    try:
+        candidates.append(root / "sources/night-custody" / original.relative_to(custody))
+    except ValueError:
+        pass
+    candidates.extend((root / "night/executed_inventory.json", root / "sources/night/executed_inventory.json", original))
+    for path in candidates:
+        inventory = read_json(path)
+        if inventory is not None:
+            value = _inventory_checkout(inventory).get("status_porcelain")
+            return value if isinstance(value, str) else None
+    return None

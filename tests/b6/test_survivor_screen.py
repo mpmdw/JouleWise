@@ -1,6 +1,5 @@
 import copy
 import json
-import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -39,6 +38,53 @@ class SurvivorTests(unittest.TestCase):
         self.assertIn("neg8.reference_lost", result.flags)
         points = [energies({"run_id": f"c{i}"})["gross"] for i in range(12)]
         self.assertEqual(result.withheld["families"]["gross"]["bound_terms"], neg8_count_adjusted_bound(points, 3, 2))
+
+    def test_unreadable_end_energy_drops_only_that_reference(self):
+        def read(member):
+            if member["run_id"] == "end2":
+                raise OSError(11, "synthetic unavailable summary")
+            return energies(member)
+        result = self.screen(n=12, energy=read)
+        self.assertEqual(result.verdict, "passed")
+        self.assertEqual(result.counts, {"start": 3, "midpoint": 1, "end": 2})
+        self.assertIn("neg8.reference_energy_unreadable", result.flags)
+        self.assertIn("neg8.reference_lost", result.flags)
+        self.assertEqual(result.withheld["reference_run_ids"]["end"], ["end0", "end1"])
+        points = [energies({"run_id": f"c{i}"})["gross"] for i in range(12)]
+        self.assertEqual(result.withheld["families"]["gross"]["bound_terms"], neg8_count_adjusted_bound(points, 3, 2))
+
+    def test_unreadable_corpus_energy_uses_thirteenth_clean_member(self):
+        read_ids = []
+        def read(member):
+            read_ids.append(member["run_id"])
+            if member["run_id"] == "c0":
+                raise OSError(11, "synthetic unavailable summary")
+            return energies(member)
+        result = self.screen(energy=read)
+        self.assertEqual(result.verdict, "passed")
+        self.assertEqual(result.withheld["corpus_run_ids"], [f"c{i}" for i in range(1, 13)])
+        self.assertNotIn("c13", read_ids)
+        self.assertIn("neg8.corpus_energy_unreadable", result.flags)
+
+    def test_unreadable_losses_that_break_counts_have_distinct_reason(self):
+        for losses, n in (({"end1", "end2"}, 12), ({"c0"}, 6), ({"c0"}, 5)):
+            def read(member):
+                if member["run_id"] in losses:
+                    raise OSError(11, "synthetic unavailable summary")
+                return energies(member)
+            result = self.screen(n=n, energy=read)
+            self.assertEqual((result.verdict, result.reason), ("undefined", "energy_unreadable"))
+
+    def test_unreadable_midpoint_discloses_lost_without_voiding_screen(self):
+        def read(member):
+            if member["run_id"] == "midpoint0":
+                raise KeyError("synthetic missing energy")
+            return energies(member)
+        result = self.screen(n=12, energy=read)
+        self.assertEqual(result.verdict, "passed")
+        self.assertEqual(result.counts["midpoint"], 0)
+        self.assertIn("neg8.midpoint_lost", result.flags)
+        self.assertIn("neg8.reference_energy_unreadable", result.flags)
 
     def test_two_end_lost_is_undefined(self):
         result = self.screen(exclusions={"end2": ["physics"], "end1": ["physics"]})
@@ -138,7 +184,7 @@ class SurvivorTests(unittest.TestCase):
             self.assertEqual((value["gross"], value["idle_subtracted"]), (10, 8))
             self.assertEqual(value["source"], str(bundle))
             reader = survivor_screen.archive_energy_of(root)
-            short = survivor_screen.screen(roster(5), {}, reader, document())
+            short = survivor_screen.screen({"members": []}, {}, reader, document())
             self.assertEqual(short.withheld["energy_reader"], "whole_window._reference_energy_evidence")
             self.assertFalse(short.withheld["energy_reader_used"])
             reduced.unlink()
