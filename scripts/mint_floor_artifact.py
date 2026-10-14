@@ -142,6 +142,13 @@ def _block5_producer(root: Path) -> Any | None:
     entry = BLOCK5_PRODUCERS.get(str(Path(root).resolve()))
     if entry is None and _is_hazard_runs_root(Path(root)):
         raise MintError("window_index_required")
+    if entry is not None:
+        from joulewise.b5_analysis.steps import require_primary_context
+        from joulewise.b5_analysis.windows import AnalysisRefusal
+        try:
+            require_primary_context(entry.archive_context)
+        except AnalysisRefusal as exc:
+            raise MintError(exc.code) from None
     return entry
 
 
@@ -548,6 +555,13 @@ def _authenticated_consumption_summaries(
         calibration_bracket_binding=calibration_bracket_binding,
         **({"archive_context": entry.archive_context} if entry is not None else {}),
     )
+    if entry is not None:
+        from joulewise.b5_analysis.steps import require_primary_context
+        from joulewise.b5_analysis.windows import AnalysisRefusal
+        try:
+            require_primary_context(session)
+        except AnalysisRefusal as exc:
+            raise MintError(exc.code) from None
     reasons = whole_window_refusal_reasons(
         runs_root,
         referenced_bundle_ids,
@@ -1244,6 +1258,13 @@ def _authenticate_component(
             calibration_ledger_snapshot=calibration_ledger_snapshot,
             **({"archive_context": entry.archive_context} if entry is not None else {}),
         )
+        if entry is not None:
+            from joulewise.b5_analysis.steps import require_primary_context
+            from joulewise.b5_analysis.windows import AnalysisRefusal
+            try:
+                require_primary_context(allowance_session)
+            except AnalysisRefusal as exc:
+                raise MintError(exc.code) from None
         allowance_result = allowance_deriver(
             paths.evidence_root,
             referenced_bundle_ids,

@@ -109,6 +109,8 @@ def extract_indexed_pack(window_index: Path | None, pack: str | None, *, hash_bu
         raise AnalysisRefusal("whole_window_verdict_provenance_invalid")
     context = build_context(archive, kept, bracket, row,
                            test_only_allow_synthetic_binding=test_only_allow_synthetic_binding)
+    from joulewise.b5_analysis.steps import require_primary_context
+    require_primary_context(context)
     return extract_cells(window.claim_runs_root, spec, kept_units=kept, archive_context=context,
         evaluation_basis_sha256=row["evaluation_basis"]["sha256"],
         consumption_semantics_id=MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,

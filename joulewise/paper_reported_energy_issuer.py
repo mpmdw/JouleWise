@@ -224,6 +224,8 @@ def issue_pack(window_index: Path, pack: str, *, repo_root=REPO_ROOT, strict_val
         row['evaluation_basis']['sha256']!=allowance['verdict']['evaluation_basis_sha256']):
         raise AnalysisRefusal('whole_window_verdict_provenance_invalid')
     context = build_context(archive,kept,bracket,row,test_only_allow_synthetic_binding=test_only_allow_synthetic_binding)
+    from joulewise.b5_analysis.steps import require_primary_context
+    require_primary_context(context)
     parents = []
     for name in ('selection.json','prefill_prompt_pin.json'):
         archived = archive.source_bytes(prefix+'prefill_pin/'+name)

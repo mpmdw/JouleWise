@@ -6,6 +6,7 @@ import io
 import json
 from pathlib import Path
 import shutil
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
@@ -439,6 +440,107 @@ class PublicFinalizedReplayTests(unittest.TestCase):
                     custody_root=f['root'], acceptance_bound_path=f['acceptance_path'], window_index=index,
                     _block5_inputs=f['block5_inputs']), ())
                 builder.assert_not_called()
+
+
+class IndexedExternalRunsRootTests(unittest.TestCase):
+    """F1: reuse S5's structural fixture and its documented replay doubles."""
+
+    @contextlib.contextmanager
+    def custody(self, fixture):
+        with tempfile.TemporaryDirectory(prefix='s10-finalize-custody-') as temporary:
+            root = Path(temporary)
+            for child in fixture['root'].iterdir():
+                if child in (fixture['runs_root'], fixture['archive'].window.archive_root):
+                    continue
+                destination = root / child.name
+                if child.is_dir():
+                    shutil.copytree(child, destination)
+                else:
+                    shutil.copyfile(child, destination)
+            yield root
+
+    def args(self, fixture, custody, **overrides):
+        values = {'custody_root': custody, 'output_dir': custody, 'runs_root': fixture['runs_root'],
+                  'window_index': fixture['root'] / 'window-index.json',
+                  'acceptance_bound_path': fixture['acceptance_path']}
+        for argument, key in (('plan_tree_path', 'plan_tree_path'),
+                              ('whole_window_verdict_path', 'verdict_path'),
+                              ('bracket_binding_path', 'bracket_path'),
+                              ('calibration_ledger_path', 'ledger_path'),
+                              ('aggregate_floor_artifact_path', 'floor_path')):
+            values[argument] = custody / fixture[key].relative_to(fixture['root'])
+        values.update(overrides)
+        return values
+
+    def finalize(self, fixture, custody, **overrides):
+        prospective = custody / fixture['prospective_path'].relative_to(fixture['root'])
+        return mv3.finalize_prospective_analysis_manifest_v3(
+            prospective, **self.args(fixture, custody, **overrides))
+
+    def test_F1_a_indexed_external_root_finalizes_replays_and_is_custody_independent(self):
+        with fx.finalization_case() as f, self.custody(f) as first, self.custody(f) as second, \
+             RoleAttachmentTests().seams(f), \
+             mock.patch.object(inputs, 'block5_claim_gate_inputs', return_value=f['block5_inputs']) as builder:
+            self.assertFalse(f['runs_root'].is_relative_to(first))
+            manifests = []
+            for custody in (first, second):
+                manifest = self.finalize(f, custody)
+                path = custody / (f['prospective']['manifest_id'] + mv3.FINALIZED_BASENAME_SUFFIX)
+                self.assertEqual(mv3.validate_finalized_analysis_manifest_v3(
+                    manifest, manifest_path=path, custody_root=custody,
+                    acceptance_bound_path=f['acceptance_path'], window_index=f['root'] / 'window-index.json'), ())
+                for role in mv3._REQUIRED_ATTACHMENT_ROLES:
+                    self.assertFalse(Path(manifest['evidence'][role]['path']).is_absolute())
+                manifests.append(path.read_bytes())
+            self.assertEqual(manifests[0], manifests[1])
+            self.assertEqual(builder.call_count, 4)
+            with self.assertRaisesRegex(mv3.AnalysisManifestFinalizationError,
+                    '^analysis_finalization_attachment_invalid: whole-window verdict: path is outside custody$'):
+                self.finalize(f, first, whole_window_verdict_path=f['verdict_path'])
+
+    def test_F1_b_an_external_copy_is_not_the_indexed_window(self):
+        with fx.finalization_case() as f, self.custody(f) as custody, \
+             RoleAttachmentTests().seams(f), \
+             mock.patch.object(inputs, 'block5_claim_gate_inputs', return_value=f['block5_inputs']):
+            other = custody.parent / (custody.name + '-runs-copy')
+            shutil.copytree(f['runs_root'], other)
+            self.addCleanup(shutil.rmtree, other)
+            with self.assertRaisesRegex(mv3.AnalysisManifestFinalizationError,
+                    '^analysis_finalization_attachment_invalid: runs_root_not_the_indexed_window$'):
+                mv3._finalization_runs_root(other, custody, 'runs root', f['block5_inputs'])
+            with self.assertRaisesRegex(mv3.AnalysisManifestFinalizationError,
+                    '^analysis_finalization_attachment_invalid: runs_root_not_the_indexed_window$'):
+                self.finalize(f, custody, runs_root=other)
+
+    def test_F1_c_no_index_keeps_the_original_containment_refusal(self):
+        with fx.finalization_case() as f, self.custody(f) as custody:
+            with self.assertRaisesRegex(mv3.AnalysisManifestFinalizationError,
+                    '^analysis_finalization_attachment_invalid: runs root: path is outside custody$'):
+                mv3._finalization_runs_root(f['runs_root'], custody, 'runs root', None)
+            with self.assertRaisesRegex(mv3.AnalysisManifestFinalizationError,
+                    '^analysis_finalization_attachment_invalid: runs root: path is outside custody$'):
+                self.finalize(f, custody, window_index=None)
+
+    def test_F1_d_bracket_root_must_be_the_indexed_window(self):
+        with fx.finalization_case() as f, self.custody(f) as custody, \
+             RoleAttachmentTests().seams(f), \
+             mock.patch.object(inputs, 'block5_claim_gate_inputs', return_value=f['block5_inputs']):
+            bracket_path = self.args(f, custody)['bracket_binding_path']
+            bracket = json.loads(bracket_path.read_bytes())
+            bracket['runs_root'] = str(custody)
+            bracket_path.write_text(json.dumps(bracket))
+            with self.assertRaisesRegex(mv3.AnalysisManifestFinalizationError,
+                    '^analysis_finalization_attachment_invalid: runs_root_not_the_indexed_window$'):
+                self.finalize(f, custody)
+
+    def test_index_builder_mismatch_retains_the_F1_detail(self):
+        with fx.finalization_case() as f, self.custody(f) as custody, \
+             RoleAttachmentTests().seams(f), \
+             mock.patch.object(inputs, 'block5_claim_gate_inputs',
+                               side_effect=inputs.AnalysisInputError('runs_root_differs_from_window_index')):
+            with self.assertRaisesRegex(mv3.AnalysisManifestFinalizationError,
+                    '^analysis_finalization_attachment_invalid: runs_root_not_the_indexed_window$'):
+                self.finalize(f, custody)
 
 
 class Block5ClosedSetScanTests(unittest.TestCase):

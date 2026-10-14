@@ -2,7 +2,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
+
+
+def require_primary_context(*objects) -> None:
+    """Fence registered writers from the unregistered sensitivity bound.
+
+    Deliberately duck-typed: importing step records must not load whole_window.
+    Containers are expanded once; contexts and sessions expose the same field.
+    """
+    from .windows import AnalysisRefusal
+
+    for obj in objects:
+        values = (obj.values() if isinstance(obj, Mapping) else obj
+                  if isinstance(obj, Sequence) and not isinstance(obj, (str, bytes)) else (obj,))
+        for value in values:
+            if value is not None and getattr(value, "sensitivity_bound_s", None) is not None:
+                raise AnalysisRefusal("sensitivity_context_on_registered_path")
 
 
 def classify_step4_exit(exit_status: int, report: Mapping[str, Any], spec: Mapping[str, Any]) -> str:
@@ -60,7 +76,11 @@ def step_record(step: str, *, window: str | None = None, exit_status: int | None
                 flags=(), **kwargs) -> StepRecord:
     """Keep outcome and unclassified codes out of the blind record."""
     classes = classes or {}
-    if refusal_code is None:
+    registered_p42 = (str(step) == "4" and exit_status == 1
+                      and kwargs.get("registered_exit") == "p42_floor_cells_only")
+    if refusal_code is None and exit_status not in (None, 0) and not registered_p42:
+        status, refusal = "unclassified_refusal", f"unclassified refusal at step {step}"
+    elif refusal_code is None:
         status, refusal = "ok", None
     elif refusal_code in classes.get("tooling", classes.get("tooling_refusal", ())):
         status, refusal = "tooling_refusal", refusal_code

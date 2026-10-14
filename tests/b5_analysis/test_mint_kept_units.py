@@ -1781,11 +1781,12 @@ class IndexedEmitterContinuationTests(unittest.TestCase):
              mock.patch.object(emit, "_bootstrap_producer", side_effect=triples), \
              mock.patch.object(mint, "_authenticate_v2_inputs", return_value=(fixture.inputs, {}, fixture.snapshots)) as authenticate:
             root = Path(tmp)
-            emit.emit_indexed_pinset(window_index=Path("synthetic-index.json"),alpha_report=Path("alpha-report.json"),
-                beta_report=Path("beta-report.json"),out_dir=root,project_commit="0"*40)
+            emit.emit_indexed_pinset(window_index=Path("synthetic-index.json"),alpha_report=root / "alpha-report.json",
+                beta_report=root / "beta-report.json",out_dir=root,project_commit="0"*40)
             manifest = json.loads((root / "floor-mint-inputs.json").read_bytes())
             self.assertEqual([row["plan_id"] for row in manifest["producer_plans"]], [e.producer_plan_id for e in fixture.entries.values()])
             self.assertEqual(authenticate.call_args.kwargs["input_manifest"], manifest)
+            self.assertEqual([row["report"] for row in manifest["producer_plans"]], ["alpha-report.json", "beta-report.json"])
             self.assertEqual(sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file()),
                 ["alpha/calibration_plan.json", "beta/calibration_plan.json", "floor-mint-inputs.json", "floor-mint-pinset.json"])
         self.assertFalse(mint.BLOCK5_PRODUCERS)
@@ -2259,3 +2260,60 @@ class RemovedRowValueFixTests(unittest.TestCase):
                         "^floor_mint_kept_unit_mismatch: removed member listed as a pinned member$"):
                     authenticate_physical(instance, fixture, report_path=path)
                 self.assertEqual(len(SessionSpy.calls), 0)
+
+
+class S10RelativeReportPathTests(unittest.TestCase):
+    """Disposition 5: block-5 input manifests are portable custody records."""
+    def emit_into(self, root):
+        fixture = public_arithmetic_case()
+        contracts = contracts_from_pins(fixture.pins)
+        by_pack = {e.window.pack:e for e in fixture.entries.values()}
+        triples = [(contract, producer, {'cells':[{'role':cell['role'],
+            'allowed_consumer_condition_families':cell['allowed_consumer_condition_families']}
+            for cell in producer['cells']]}) for contract,producer in zip(contracts,fixture.pins['producer_plans'],strict=True)]
+        original=mint._fresh_original_core
+        def loader():
+            instance=original()
+            instance.load_calibration_acceptance_bound=lambda *_:next(iter(fixture.inputs.values())).calibration_acceptance
+            return instance
+        with mock.patch.object(mint,'_fresh_original_core',side_effect=loader), \
+             mock.patch.object(estimator,'AuthenticatedConsumptionSession',SessionSpy), \
+             mock.patch.object(estimator,'whole_window_refusal_reasons',return_value=()), \
+             mock.patch.object(fe,'_common_mode_block_inputs_from_evidence',new=common_block_input), \
+             mock.patch.object(mint,'compose_indexed_producers',return_value={**by_pack,'gamma':SimpleNamespace(pack_path=root)}), \
+             mock.patch.object(emit,'_consumer_bindings',return_value={}), \
+             mock.patch.object(emit,'_bootstrap_producer',side_effect=triples), \
+             mock.patch.object(mint,'_authenticate_v2_inputs',return_value=(fixture.inputs,{},fixture.snapshots)):
+            emit.emit_indexed_pinset(window_index=Path('synthetic-index.json'),alpha_report=root/'alpha-report.json',
+                beta_report=root/'beta-report.json',out_dir=root,project_commit='0'*40)
+        return (root/'floor-mint-inputs.json').read_bytes()
+
+    def test_emitter_two_directories_have_byte_identical_block5_manifests(self):
+        with tempfile.TemporaryDirectory(prefix='s10-relative-emitter-') as tmp:
+            root=Path(tmp)
+            first=self.emit_into(root/'one');second=self.emit_into(root/'two')
+        self.assertEqual(first,second)
+        self.assertEqual([row['report'] for row in json.loads(first)['producer_plans']],
+                         ['alpha-report.json','beta-report.json'])
+
+    def test_block5_manifest_refuses_absolute_escape_and_symlink_report(self):
+        fixture=case()
+        with tempfile.TemporaryDirectory(prefix='s10-relative-mint-') as tmp:
+            root=Path(tmp);inside=root/'manifest-dir';inside.mkdir();outside=root/'outside.json';outside.write_text('{}')
+            (inside/'alias.json').symlink_to(outside)
+            for path in (str(outside), '../outside.json', 'alias.json'):
+                manifest=block5_manifest(fixture);manifest['producer_plans'][0]['report']=path
+                with self.subTest(path=path),registered(fixture.entries), \
+                     self.assertRaisesRegex(mint.MintError,'^floor_mint_input_path_not_relative$'):
+                    mint._expand_block5_manifest(manifest,manifest_dir=inside)
+
+    def test_block5_relative_report_resolves_at_manifest_directory(self):
+        fixture=case();manifest=block5_manifest(fixture)
+        with tempfile.TemporaryDirectory(prefix='s10-relative-mint-') as tmp,registered(manifest_entries(fixture)), \
+             mock.patch.object(mint,'_read_block5_archive_input',return_value=b'{}'):
+            root=Path(tmp)
+            expanded=mint._expand_block5_manifest(manifest,manifest_dir=root)
+            for producer in expanded['producer_plans']:
+                for cell in producer['cells']:
+                    self.assertEqual(cell['absolute']['report'],str(root/'synthetic-report.json'))
+                    self.assertEqual(cell['comparative']['report'],str(root/'synthetic-report.json'))

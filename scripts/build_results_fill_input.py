@@ -62,6 +62,8 @@ def build(window_index,custody_root,finalized_manifest,claim_verdicts):
     windows=select_analysed_attempts(index,records,seal_pins=pins)
     expected=_registered_contrast_ids(windows['gamma'].pack_id)
     built=block5_claim_gate_inputs(Path(window_index),Path(finalized_manifest).absolute(),windows['gamma'].claim_runs_root)
+    from joulewise.b5_analysis.steps import require_primary_context
+    require_primary_context(built.get('archive_contexts'))
     units=built['kept_units']
     campaigns={}
     for pack in ('alpha','beta'):

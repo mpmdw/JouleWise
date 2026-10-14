@@ -767,5 +767,100 @@ class CloseoutDriverTests(unittest.TestCase):
             self.assertNotIn("7331", stdout.getvalue())
 
 
+class WindowIndexHandoffTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.fixture = finalized_fixture()
+        from tests.b5_analysis import fixtures_s5
+        from tests.b5_analysis import test_finalization_block5
+        with fixtures_s5.finalization_case() as block5:
+            manifest, _path = test_finalization_block5.RoleAttachmentTests().build(block5)
+            cls.role = copy.deepcopy(manifest['evidence']['analysed_attempt_exclusions'])
+            cls.built = block5['block5_inputs']
+
+    def block5_manifest(self):
+        value = copy.deepcopy(self.fixture['manifest'])
+        value['evidence']['analysed_attempt_exclusions'] = self.role
+        value['manifest_id'] = manifests.calculate_manifest_id(value)
+        tmp = tempfile.TemporaryDirectory(prefix='s10-index-', dir=self.fixture['root'])
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name)/'manifest.json'
+        path.write_bytes(_file_json_bytes(value))
+        return path
+
+    def invoke(self, path, *, window_index=None):
+        out = path.parent/'closeout.json'
+        args = ['--finalized-manifest',str(path),'--custody-root',str(self.fixture['root']),
+                '--output',str(out)]
+        if window_index is not None:args += ['--window-index',str(window_index)]
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            status = driver.main(args)
+        self.assertEqual(stderr.getvalue(),'')
+        return status, json.loads(stdout.getvalue()), out
+
+    def test_P2_without_window_index_keeps_manifest_refusal(self):
+        status, record, out = self.invoke(self.block5_manifest())
+        self.assertEqual(status,2)
+        self.assertEqual(record['refusal'],'d165_closeout_driver_manifest_invalid')
+        self.assertFalse(out.exists())
+
+    def test_P2_index_reaches_both_finalized_validator_sites(self):
+        index = self.fixture['root']/'synthetic-window-index.json'
+        with mock.patch.object(driver,'block5_claim_gate_inputs',return_value=self.built) as builder, \
+             mock.patch.object(manifests,'validate_finalized_analysis_manifest_v3',return_value=()) as first, \
+             mock.patch.object(core,'validate_finalized_analysis_manifest_v3',return_value=()) as second:
+            status, record, out = self.invoke(self.block5_manifest(), window_index=index)
+        self.assertEqual((status, record['status']),(0,'ok'), record)
+        self.assertTrue(out.exists())
+        first.assert_called_once(); second.assert_called_once()
+        self.assertEqual(first.call_args.kwargs.get('window_index'),index)
+        self.assertIs(first.call_args.kwargs.get('_block5_inputs'),self.built)
+        builder.assert_called_once()
+        self.assertEqual(second.call_args.kwargs.get('window_index'),index)
+
+    def test_P2_custody_gate_passes_its_tracked_index(self):
+        from types import SimpleNamespace
+        from joulewise import paper_custody as custody
+        binding = custody._BoundFile('runs_root',Path('manifest.json'),'0'*64,
+                                      custody.InputRole.FINALIZED_MANIFEST,'generated')
+        ctx = SimpleNamespace(sources=(binding,),repository=self.fixture['root'],
+            runs_root=self.fixture['root'],raws={custody.InputRole.FINALIZED_MANIFEST:
+                _file_json_bytes({'evidence':{'analysed_attempt_exclusions':self.role}}),
+                custody.InputRole.D165_CLOSEOUT:b'{}',custody.InputRole.FLOOR_ARTIFACT:b'{}',
+                custody.InputRole.REPLAY_SIDECAR:b'{}'})
+        index = self.fixture['root']/'tracked-index.json'
+        with mock.patch.object(custody,'_tracked_window_index',return_value=index) as tracked, \
+             mock.patch.object(core,'validate_d165_paper_sources',return_value=('synthetic_refusal',)) as replay:
+            self.assertFalse(custody._d165_issuance_gate(ctx).authentic)
+        tracked.assert_called_once_with(ctx)
+        self.assertEqual(replay.call_args.kwargs.get('window_index'),index)
+
+
+class Block5PredicateTests(unittest.TestCase):
+    def test_d165_custody_gate_uses_every_block5_role_and_keeps_legacy_behavior(self):
+        from types import SimpleNamespace
+        from joulewise import paper_custody as custody
+        root=Path('synthetic-custody')
+        binding=custody._BoundFile('runs_root',Path('manifest.json'),'0'*64,
+                                  custody.InputRole.FINALIZED_MANIFEST,'generated')
+        for role in (*sorted(manifests._BLOCK5_ROLES),None):
+            evidence={} if role is None else {role:{}}
+            ctx=SimpleNamespace(sources=(binding,),repository=root,runs_root=root,
+                raws={custody.InputRole.FINALIZED_MANIFEST:_file_json_bytes({'evidence':evidence}),
+                      custody.InputRole.D165_CLOSEOUT:b'{}',custody.InputRole.FLOOR_ARTIFACT:b'{}',
+                      custody.InputRole.REPLAY_SIDECAR:b'{}'})
+            index=root/'tracked-index.json'
+            with self.subTest(role=role),mock.patch.object(custody,'_tracked_window_index',return_value=index) as tracked, \
+                 mock.patch.object(core,'validate_d165_paper_sources',return_value=('synthetic_refusal',)) as replay:
+                self.assertFalse(custody._d165_issuance_gate(ctx).authentic)
+                if role is None:
+                    tracked.assert_not_called()
+                    self.assertNotIn('window_index',replay.call_args.kwargs)
+                else:
+                    tracked.assert_called_once_with(ctx)
+                    self.assertEqual(replay.call_args.kwargs['window_index'],index)
+
+
 if __name__ == "__main__":
     unittest.main()
