@@ -460,7 +460,8 @@ class ChainTests(unittest.TestCase):
             for pack,producer in zip(('alpha','beta'),pinset['producer_plans'],strict=True):
                 root_id=producer['evidence_root_id']
                 args+=['--evidence-root',root_id+'='+str(self.fixture.windows[pack].claim)]
-            out=self.finalized.parent/'claim-verdicts.json';args+=['--output',str(out)]
+            out=self.finalized.parent/'outputs'/'claim-verdicts.json';out.parent.mkdir(exist_ok=True)  # as driver step 9
+            args+=['--output',str(out)]
             stream=io.StringIO()
             with contextlib.redirect_stdout(stream),contextlib.redirect_stderr(stream):code=cli.main(args)
             self.assertEqual(code,0,stream.getvalue())
