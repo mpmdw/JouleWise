@@ -1,0 +1,16 @@
+{
+  "version": "difficulty-v1",
+  "seed": "joulewise.packs.difficulty.v1",
+  "n_per_level": 200,
+  "energy_per_level": 20,
+  "exclude_importer_sets": true,
+  "exclude_item_id_files": ["/Users/edr/night-archive/pilots/difficulty/pilot_item_ids.txt"],
+  "configurations": [
+    {"model": "qwen3-1.7b", "repo": "mlx-community/Qwen3-1.7B-4bit",
+     "revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e", "mode": "off", "output_cap": 1024},
+    {"model": "qwen3-1.7b", "repo": "mlx-community/Qwen3-1.7B-4bit",
+     "revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e", "mode": "on", "output_cap": 1024}
+  ],
+  "confidence": 0.95,
+  "exclude_flags": []
+}
