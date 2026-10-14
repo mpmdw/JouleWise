@@ -1,4 +1,4 @@
-> **K1 continuation:** The unchanged ALPHA archive passes C0–C4; the director's C4 run took 1289 s, exited 1 with `p42_floor_cells_only`, and observed ready context-bearing sessions with every kept member under its window bracket. BETA and GAMMA extend ALPHA's archived ledger. This continuation's exact verification is recorded in `.scratch-s10f/S10_K1_REPORT.md`.
+> **State (stage S10 continuation, 2026-10-14):** ALPHA, BETA and GAMMA are built by the pinned programs and committed. C0 to C4, C-B1 and C-F1 pass on the real programs. The mint passes the per-cell runtime identity check (round K2) and, under the conditional Q-LINEAGE seam below, reaches artifact rebinding; C5 onward and the joined driver from step 5 are conditional on that question. Exact evidence: `/Users/edr/night-archive/b5-consults/l9-rulings/s10/`.
 
 K1 built BETA (125 members, 1,821,172 archive bytes, 575.399521 s wrapper)
 and GAMMA (107 members, 1,728,712 archive bytes, 653.993691 s wrapper).
@@ -106,8 +106,10 @@ raw build trees before retrying, and publish successful archives atomically.
 | producer | `whole_window.REGISTERED_NEG8_REFERENCE_CORPUS_DIR` | Resolve the exact sealed synthetic measurement `settled_corpus.json` during writer/harvest execution. The pinned export's default corpus is from another source tree. The identity check and bound arithmetic run unchanged. |
 | consumer | `windows.sealed_pack_table (partial builds only)` | Pinned S0 peers satisfy the full-block selection fence until every S10 window exists; only the built sealed S10 target is opened |
 | consumer | `mint_floor_artifact_generalized._actual_v2_git_state` | The task forbids commits and intentionally leaves an uncommitted fixture; supply the actual base HEAD as the synthetic clean checkout observation |
+| consumer, **conditional** | `mint_floor_artifact_generalized._common_minted_artifact_launch_lineage` (aggregate only; `fixtures_s10.CONDITIONAL_SEAMS`) | Open question Q-LINEAGE: the aggregate floor joins producers from two windows, so its component lineages differ and the unchanged rule refuses. The fixture omits the aggregate carrier only when every component carries one and they differ; per-producer equality and component authentication are unchanged. Every result from C5 on is conditional on the ruling. |
 
-No session, strict validator, reducer, bracket evaluator, exclusion function,
+With three windows the pack-table seam is inactive (the ordinary index is
+used). No session, strict validator, reducer, bracket evaluator, exclusion function,
 extraction calculator, mint calculation, finalizer or claim engine is replaced.
 The consumer Git observation is necessary because the task forbids committing
 the fixture. The partial-only pack-table seam disappears when all three sealed

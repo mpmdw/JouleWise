@@ -454,8 +454,11 @@ class DriverAcceptanceTests(unittest.TestCase):
         exposed=[result.stdout,result.stderr]
         for path in result.custody.rglob('*'):
             if path.is_file() and 'restricted' not in path.parts:exposed.append(path.read_text())
+        import re
         for text in exposed:
-            self.assertNotIn('7331',text)
+            # A random SHA-256 (the record's own digest on stdout) can contain
+            # the marker's digits; search the text with hex digests removed.
+            self.assertNotIn('7331',re.sub(r'[0-9a-f]{64}','',text))
             # Hex digests are explicitly admitted tokens, including sequences
             # such as 1e9. Search numeric tokens, not substrings of hashes.
             self.assertIsNone(d._FLOAT_TOKEN.search(text),text)
