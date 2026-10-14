@@ -2,6 +2,7 @@
 import contextlib
 import datetime
 import importlib.util
+import hashlib
 import io
 import json
 import math
@@ -144,7 +145,8 @@ def full_pack(parent, pack, n=10):
             bundle(claim, rid, 5., "Qwen2.5-1.5B-Instruct-4bit", bop=bop)
             members.append({"kind": "auxiliary", "run_id": rid, "stage_id": which + "_reference", "units": []})
     allowance = recompute.neg8_bound(energies, 3, 3)["bound_j"]
-    dump(archive / "harvest.json", {"pack_id": pack, "attempt": 1})
+    dump(archive / "harvest.json", {"pack_id": pack, "attempt": 1, "harvest_checkout": {
+        "status_clean": True, "status_lines": 0, "errors": []}})
     dump(archive / "derived/roster.json", {"pack_id": pack, "attempt": 1, "cells": cells, "members": members})
     dump(archive / "derived/exclusions.json", {"schema": "joulewise.exclusions.v1", "pack_id": pack,
          "attempt": 1, "claim_usable": True, "members_excluded": [], "cells": exclusions})
@@ -156,8 +158,32 @@ def full_pack(parent, pack, n=10):
     dump(archive / "withheld/neg8-rescreen-bracket.json", {"bracket": {
          "drift_allowances": {"gross_energy": {"allowance_j": allowance}}}})
     dump(archive / "withheld/bracket-evaluation.json", {"assessment": {"b_fiducial_s": bop}})
+    dump(claim / "whole-window-verdict.json", {"bundle_ids": [m["run_id"] for m in members],
+         "evaluation_basis": {"member_occurrences": [{"bundle_id": m["run_id"]} for m in members]}})
+    stages, external = [], []
+    for which in ("start", "midpoint", "end"):
+        manifest = "fixture/" + which + "/order_manifest.json"
+        refs = [m for m in members if m["kind"] == "auxiliary" and which in m["stage_id"]]
+        stages.append({"input": {"path": manifest}, "spare_retry": {"slot": which, "members": [
+            {"run_id": "neg8-window-" + which + "-spare-1"}]}})
+        external.append({"manifest": {"path": manifest}, "members": [{"run_id": m["run_id"]} for m in refs]})
+    tree_path = archive / "sources/repo/configs/campaigns" / pack / "plan_tree.json"
+    dump(tree_path, {"stage_graph": stages, "external_inputs": {"manifests": external}})
+    dump(archive / "sources/repo/configs/campaigns/v5_claim_25g83/sizing_b5.json", {
+         "packs": {pack: {"plan_tree": {"sha256": hashlib.sha256(tree_path.read_bytes()).hexdigest()}}}})
+    dump(archive / "derived/bracket-binding.json", {"endpoints": {
+        s: {"attempt_id": "fixture-cal-" + s} for s in ("pre", "post")}})
+    dump(archive / "derived/terminal-pin.json", {"sequence": 400})
+    dump(archive / "sources/repo/configs/calibration/calibration_acceptance_fixture.json", {
+         "acceptance_id": "d079_calibration_acceptance_v2_n24_25g83_r2", "identity_epoch": {"test": "epoch"},
+         "derivation_corpus": {"members": [{"member_id": str(i), "b_fiducial_s": ".035"} for i in range(24)]}})
+    ledger = archive / "sources/ledger/calibration_observation_ledger.jsonl"
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    ledger.write_text(json.dumps({"sequence": 400, "disposition": "valid", "identity_epoch": {"test": "epoch"},
+                                 "exact_bound_lexeme_s": ".035", "attempt_id": "fixture"}) + "\n")
     for slot in ("pre", "post"):
-        dump(claim / f"instrument_validation/fixture-cal-{slot}/instrument_evidence.json", {"b_fiducial_s": pre})
+        dump(claim / f"instrument_validation/fixture-cal-{slot}/instrument_evidence.json", {
+            "b_fiducial_s": pre, "validation_id": "fixture-cal-" + slot})
     return archive
 
 

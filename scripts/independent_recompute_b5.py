@@ -18,6 +18,7 @@ from pathlib import Path
 import plistlib
 import re
 import statistics
+import struct
 from xml.parsers.expat import ExpatError
 
 SCHEMA = "joulewise.independent_recompute_b5.v1"
@@ -34,7 +35,19 @@ b_op_from_record bracket_drift_over_budget member_pre_bound_mismatch stored_ener
 stored_envelope_mismatch interpolation_bound_nonzero neg8_allowance_mismatch
 neg8_allowance_unrecorded neg8_survivor_count_mismatch unknown_auxiliary_member
 gamma_midpoint_lost_on_analysed_attempt dominance_ratio_zero_denominator nonfinite_value
-pack_missing""".split())
+pack_missing calibration_capture_name_fallback excluded_reference_in_screen
+kept_member_outside_verdict_membership neg8_source_not_rescreen harvest_checkout_not_clean
+reference_slot_disagrees roster_pack_not_archived roster_plan_tree_not_sealed
+loo_kept_n_equals_minimum sensitivity_inputs_unavailable meter_stream_malformed
+meter_no_fit meter_span_uncovered meter_offset_from_journal meter_offset_unavailable
+meter_battery_unavailable meter_request_mismatch meter_baseline_unavailable""".split())
+STOP_FLAG_CODES = frozenset({"excluded_reference_in_screen", "kept_member_outside_verdict_membership",
+                            "neg8_source_not_rescreen", "harvest_checkout_not_clean",
+                            "reference_slot_disagrees", "roster_pack_not_archived",
+                            "roster_plan_tree_not_sealed", "kept_units_disagree"})
+STRUCTURE_FLAG_CODES = STOP_FLAG_CODES | {"loo_kept_n_equals_minimum", "calibration_capture_name_fallback"}
+MACHINE_BOUNDARY = ("whole-machine DC input plus the battery term, measured at the USB-C input; "
+                    "the adapter's AC-to-DC loss is not included.")
 
 
 def finite(value):
@@ -317,6 +330,7 @@ def plist_records(data, anchor, reader=None, scope=""):
 class Member:
     def __init__(self, path, run_id, reader, bop, member_role="science"):
         self.run_id, self.role = run_id, member_role
+        self.path = path
         self.reader = reader
         self.metadata = reader.json(path / "metadata.json", run_id + "/metadata.json")
         self.summary = reader.json(path / "summary_metrics.json", run_id + "/summary_metrics.json")
@@ -366,6 +380,7 @@ class Member:
             self.usable = False
         else:
             origin = placed[0][0]
+            self.origin = origin
             self.records = [(a - origin, b - origin, p) for a, b, p in placed]
             for phase, start_type, end_type in (("prefill", "phase_start", "phase_end"),
                                                ("decode", "phase_start", "phase_end"),
@@ -482,6 +497,13 @@ class Window:
         if self.exclusions.get("claim_usable") is not True:
             r.flag("claim_usable_false", "window", "exclusions claim_usable is false or absent")
         self.members = {}
+        self.verdict = r.json(self.claim_root / "whole-window-verdict.json", "whole-window-verdict.json")
+        self.verdict_members = set(strings(self.verdict.get("bundle_ids")))
+        self.reference_slots, self.plan_binding = self.read_reference_slots()
+        checkout = mapping(self.harvest.get("harvest_checkout"))
+        if (checkout.get("status_clean") is not True or checkout.get("status_lines") != 0
+                or checkout.get("errors") != []):
+            r.flag("harvest_checkout_not_clean", "window", "harvest checkout not recorded clean and error-free")
         self.units = {}
         for m in objects(self.roster.get("members")):
             if m.get("kind") != "science" or not isinstance(m.get("run_id"), str):
@@ -495,15 +517,75 @@ class Window:
         self.b = self.calibration()
         self.neg8 = self.compute_neg8()
 
+    def read_reference_slots(self):
+        """ROS(ii): independently parse the archived tree; never rebuild via repo code."""
+        r = self.reader
+        pack_id = self.roster.get("pack_id", self.harvest.get("pack_id"))
+        if not isinstance(pack_id, str) or Path(pack_id).name != pack_id:
+            r.flag("roster_pack_not_archived", "plan_tree", "invalid pack id")
+            return {}, {}
+        relative = "configs/campaigns/" + pack_id + "/plan_tree.json"
+        path = self.archive / "sources/repo" / relative
+        data = r.raw(path, "plan_tree", False)
+        if data is None:
+            r.flag("roster_pack_not_archived", "plan_tree", "archived tree missing")
+            return {}, {}
+        tree = r.json(path, "plan_tree")
+        sizing_path = self.archive / "sources/repo/configs/campaigns/v5_claim_25g83/sizing_b5.json"
+        source = "archive"
+        if not sizing_path.is_file():
+            # ROS(ii)(b) explicitly reads the analysis checkout's sealed pack table.
+            sizing_path = Path(__file__).resolve().parents[1] / "configs/campaigns/v5_claim_25g83/sizing_b5.json"
+            source = "analysis_checkout"
+        sizing = r.json(sizing_path, "sizing_b5.json")
+        expected = get(sizing, "packs", self.pack, "plan_tree", "sha256")
+        digest = hashlib.sha256(data).hexdigest()
+        if digest != expected:
+            r.flag("roster_plan_tree_not_sealed", "plan_tree", {"own_sha256": digest, "sealed_sha256": expected})
+        slots = {}
+        external_value = tree.get("external_inputs")
+        external = objects(external_value if isinstance(external_value, list) else get(external_value, "manifests"))
+        for stage in objects(tree.get("stage_graph")):
+            retry = mapping(stage.get("spare_retry"))
+            slot = retry.get("slot")
+            if slot not in ("start", "midpoint", "end"):
+                continue
+            input_path, input_id = get(stage, "input", "path"), get(stage, "input_ref", "input_id")
+            primary = [m for ext in external if (
+                (input_path is not None and get(ext, "manifest", "path") == input_path)
+                or (input_id is not None and ext.get("input_id") == input_id))
+                       for m in objects(ext.get("members"))]
+            for member in primary + objects(retry.get("members")):
+                rid = member.get("run_id")
+                if not isinstance(rid, str) or Path(rid).name != rid or rid in (".", ".."):
+                    r.flag("unit_shape_invalid", "plan_tree", "invalid reference run id")
+                    continue
+                if rid in slots:
+                    r.flag("unit_shape_invalid", rid, "reference listed twice in tree")
+                slots[rid] = slot
+                named = role(rid)
+                if named != slot:
+                    r.flag("reference_slot_disagrees", rid, {"run_id_role": named, "plan_slot": slot})
+        return slots, {"sha256": digest, "sealed_sha256": expected, "sizing_source": source}
+
     def calibration(self):
         r = self.reader
         record = r.json(self.archive / "withheld/bracket-evaluation.json", "withheld/bracket-evaluation.json")
         recorded = get(record, "assessment", "b_fiducial_s")
+        binding = r.json(self.archive / "derived/bracket-binding.json", "derived/bracket-binding.json", False)
+        inventory = [(p, r.json(p, "calibration/" + p.parent.name)) for p in
+                     sorted((self.claim_root / "instrument_validation").glob("*/instrument_evidence.json"))]
         captures = {}
         for slot in ("pre", "post"):
-            paths = sorted((self.claim_root / "instrument_validation").glob("*-cal-" + slot + "/instrument_evidence.json"))
-            if len(paths) == 1:
-                capture = r.json(paths[0], "cal-" + slot + "/instrument_evidence.json")
+            attempt = get(binding, "endpoints", slot, "attempt_id")
+            matches = [(p, c) for p, c in inventory if isinstance(attempt, str)
+                       and c.get("attempt_id", c.get("validation_id")) == attempt]
+            if not matches:
+                matches = [(p, c) for p, c in inventory if p.parent.name.endswith("-cal-" + slot)]
+                if matches:
+                    r.flag("calibration_capture_name_fallback", "cal-" + slot, "binding absent or names no existing capture")
+            if len(matches) == 1:
+                capture = matches[0][1]
                 value = capture.get("b_fiducial_s")
                 if finite(value) and value >= 0:
                     captures[slot] = value
@@ -539,11 +621,14 @@ class Window:
         source = r.json(a / "derived/neg8-allowance.json", "derived/neg8-allowance.json")
         screen = r.json(a / "derived/neg8-screen.json", "derived/neg8-screen.json")
         clean = r.json(a / "derived/neg8-clean-corpus.json", "derived/neg8-clean-corpus.json", False)
+        registered_source = source.get("source") == "survivor_rescreen"
+        if not registered_source and not self.diagnostic:
+            r.flag("neg8_source_not_rescreen", "window", {"source": source.get("source")})
         clean_members = objects(clean.get("members"))
         if clean_members:
             ids = [m.get("bundle_id") for m in clean_members]
         else:
-            if source.get("clean_bound"):
+            if source.get("clean_bound") or not self.diagnostic:
                 r.flag("archive_file_missing", "derived/neg8-clean-corpus.json", "named clean corpus missing")
                 ids = []
             else:
@@ -565,50 +650,46 @@ class Window:
         survivors = mapping(get(screen, "rescreen", "survivors"))
         losses = {m["bundle_id"] for m in objects(get(survivors, "reference_losses"))
                    if isinstance(m.get("bundle_id"), str)}
+        losses.update(mapping(screen.get("harvest_reference_losses")))
+        basis = {m["bundle_id"] for m in objects(get(self.verdict, "evaluation_basis", "member_occurrences"))
+                 if isinstance(m.get("bundle_id"), str)}
+        survivor_ids = sorted(set(self.reference_slots) & basis - losses)
+        intersection = sorted(set(survivor_ids) & self.excluded)
+        if intersection:
+            r.flag("excluded_reference_in_screen", "window", {"run_ids": intersection})
         refs = {"start": [], "midpoint": [], "end": []}
-        for mrow in objects(self.roster.get("members")):
-            if mrow.get("kind") != "auxiliary":
-                continue
-            run_id = mrow.get("run_id")
-            if not isinstance(run_id, str):
-                continue
-            which = role(run_id)
-            if which == "diagnostic" or which == "corpus":
-                continue
-            if which == "unknown":
-                r.flag("unknown_auxiliary_member", run_id, "not a NEG-8 role")
-                continue
-            stage = str(mrow.get("stage_id", ""))
-            if which not in stage:
-                r.flag("unknown_auxiliary_member", run_id, "role disagrees with stage_id")
-                continue
-            if run_id in losses or not (self.claim_root / run_id).is_dir():
-                continue
+        for run_id in survivor_ids:
+            which = self.reference_slots[run_id]
             m = self.member(run_id, which)
             if m.usable and "request" in m.energies and m.model == "Qwen2.5-1.5B-Instruct-4bit":
                 refs[which].append(m.energies["request"])
             else:
                 r.flag("kept_member_unusable", run_id, "survivor has no usable reference request")
-        counts = {k: len(v) for k, v in refs.items()}
+        counts = {k: sum(self.reference_slots[i] == k for i in survivor_ids) for k in refs}
         shape_valid = counts["midpoint"] <= 1 and counts["start"] <= 3 and counts["end"] <= 3
         if not shape_valid:
             r.flag("unit_shape_invalid", "neg8/references", "at most 3 start, 1 midpoint and 3 end references")
-        if not 10 <= len(corpus) <= 18:
-            r.flag("unit_shape_invalid", "neg8/corpus", {"corpus_n": len(corpus), "expected": "10..18"})
-        recorded_counts = get(survivors, "reference_counts")
-        if recorded_counts is not None and recorded_counts != counts:
+        maximum_n = 18 if self.diagnostic else 12
+        if not 10 <= len(corpus) <= maximum_n:
+            r.flag("unit_shape_invalid", "neg8/corpus", {"corpus_n": len(corpus), "expected": "10.." + str(maximum_n)})
+            if not self.diagnostic:
+                corpus = []
+        recorded_counts = get(survivors, "reference_counts", default={"start": 3, "midpoint": 1, "end": 3})
+        if recorded_counts != counts:
             r.flag("neg8_survivor_count_mismatch", "window", {"own": counts, "recorded": recorded_counts})
         if self.pack == "GAMMA" and get(survivors, "midpoint_lost"):
             r.flag("gamma_midpoint_lost_on_analysed_attempt", "window", "screen records lost midpoint")
         result = {"source": source.get("source"), "screen_decision": get(screen, "rescreen", "decision"),
-                  "corpus_n": len(corpus), "corpus_ids": actual_ids,
+                  "corpus_n": len(corpus), "corpus_ids": actual_ids, "survivor_ids": survivor_ids,
                   "n_start": counts["start"], "n_mid": counts["midpoint"], "n_end": counts["end"],
                   "start_mean_j": statistics.fmean(refs["start"]) if refs["start"] else None,
                   "midpoint_j": statistics.fmean(refs["midpoint"]) if refs["midpoint"] else None,
                   "end_mean_j": statistics.fmean(refs["end"]) if refs["end"] else None,
                   "t": None, "s_j": None, "bound_envelope_j": None, "bound_prediction_j": None,
                   "bound_j": None, "spread_j": None, "allowance_j": None, "allowance_recorded_j": None}
-        own_bound = neg8_bound(corpus, counts["start"], counts["end"]) if shape_valid else None
+        own_bound = neg8_bound(corpus, counts["start"], counts["end"]) if (
+            shape_valid and all(len(refs[k]) == counts[k] for k in refs)
+            and (registered_source or self.diagnostic)) else None
         if own_bound:
             result.update(own_bound)
             result["spread_j"], result["allowance_j"] = drift_allowance(
@@ -616,9 +697,8 @@ class Window:
         if source.get("source") == "survivor_rescreen":
             bracket = r.json(a / "withheld/neg8-rescreen-bracket.json", "withheld/neg8-rescreen-bracket.json")
             bracket = bracket.get("bracket", {})
-        elif source.get("source") == "stored_verdict":
-            verdict = r.json(self.claim_root / "whole-window-verdict.json", "whole-window-verdict.json")
-            bracket = get(verdict, "idle_admission_core", "neg8_bracket", default={})
+        elif source.get("source") == "stored_verdict" and self.diagnostic:
+            bracket = get(self.verdict, "idle_admission_core", "neg8_bracket", default={})
         else:
             bracket = {}
         recorded = get(bracket, "drift_allowances", "gross_energy", "allowance_j")
@@ -668,6 +748,9 @@ class Window:
             if self.diagnostic and not all((self.claim_root / i).is_dir() for i in ids):
                 continue
             members = [self.member(i) for i in ids]
+            for rid in ids:
+                if compare and not self.diagnostic and rid not in self.verdict_members:
+                    r.flag("kept_member_outside_verdict_membership", unit_id, {"run_id": rid})
             if self.diagnostic and not all(m.usable for m in members):
                 continue
             valid = True
@@ -721,7 +804,15 @@ def flatten(units):
     return [m for _, members in units for m in members]
 
 
-def make_reported(window, cell_id, repeats, quads, minimum=5):
+def phase_bound(member, phase, bound=None):
+    if bound is None:
+        return get(member.op, phase, "max_abs_delta_j")
+    if not finite(bound) or not all(finite(x) for x in (member.s, member.m)) or phase not in member.edges:
+        return None
+    return shift_envelope(member.records, *member.edges[phase], bound, member.s, member.m)["max_abs_delta_j"]
+
+
+def make_reported(window, cell_id, repeats, quads, minimum=5, bound=None):
     phase = "decode" if "decode" in cell_id else "prefill"
     rm, qm = flatten(repeats), flatten(quads)
     all_members = sorted(rm + qm, key=lambda m: (ordinal(m.run_id), m.run_id))
@@ -745,12 +836,13 @@ def make_reported(window, cell_id, repeats, quads, minimum=5):
             result["diagnostic_quad_mean_j"] = statistics.fmean(values)
             result["diagnostic_quad_stdev_j"] = statistics.stdev(values)
         return result
-    bound = lambda m: get(m.op, phase, "max_abs_delta_j")
-    if all(finite(bound(m)) for m in all_members):
-        anchor_average = 0.2 * statistics.fmean(bound(m) for m in rm) + 0.8 * statistics.fmean(bound(m) for m in qm)
-        maximum = max(bound(m) for m in all_members)
-        result["attribution_floor"] = {"value_j": maximum, "minimum_j": min(bound(m) for m in all_members),
-                                       "attained_by": next(m.run_id for m in all_members if bound(m) == maximum)}
+    bounds = {m.run_id: phase_bound(m, phase, bound) for m in all_members}
+    if all(finite(v) for v in bounds.values()):
+        anchor_average = (0.2 * statistics.fmean(bounds[m.run_id] for m in rm)
+                          + 0.8 * statistics.fmean(bounds[m.run_id] for m in qm))
+        maximum = max(bounds.values())
+        result["attribution_floor"] = {"value_j": maximum, "minimum_j": min(bounds.values()),
+                                       "attained_by": next(m.run_id for m in all_members if bounds[m.run_id] == maximum)}
     else:
         anchor_average = None
         window.reader.flag("kept_member_unusable", cell_id, "phase bound unavailable")
@@ -892,6 +984,12 @@ def contains_zero(interval):
     return all(finite(x) for x in interval) and interval[0] <= 0 <= interval[1]
 
 
+def decision_beyond_floor(contrast, floor):
+    decision, mean = contrast["decision_interval_j"], contrast["dbar_j"]
+    return ((decision[0] > floor if mean > 0 else decision[1] < -floor)
+            if finite(floor) and finite(mean) and all(finite(v) for v in decision) else None)
+
+
 def evaluate_outcome(row, floor, reject, minimum=5, missing=False):
     mean = row["dbar_j"]
     if row["n"] < minimum or not finite(mean) or missing:
@@ -905,7 +1003,23 @@ def evaluate_outcome(row, floor, reject, minimum=5, missing=False):
     return "direction_supported"
 
 
-def finish_contrast(row, other_p, floor, ids=None, kind_rows=None, minimum=5, missing=False):
+def block_number(unit_id):
+    match = re.search(r"-b(\d+)$", unit_id)
+    return int(match[1]) if match else unit_id
+
+
+def reduced_contrast(row, ids, kinds, omitted):
+    keep = [i for i, uid in enumerate(ids) if block_number(uid) != omitted]
+    if kinds is not None:
+        terms = [statistics.fmean(kinds[i][j] for i in keep)
+                 if keep and all(finite(kinds[i][j]) for i in keep) else None for j in range(3)]
+        D = math.fsum(terms) if all(finite(t) for t in terms) else None
+    else:
+        terms, D = row.get("D_terms_j"), row["D_j"]
+    return {**contrast_stats([row["d_k"][i] for i in keep], D), "D_terms_j": terms}
+
+
+def finish_contrast(row, other_p, floor, ids=None, kind_rows=None, minimum=5, missing=False, partner=None):
     row = dict(row)
     if row["n"] < minimum or missing or not finite(row["dbar_j"]):
         row["p"] = 1.0
@@ -918,16 +1032,18 @@ def finish_contrast(row, other_p, floor, ids=None, kind_rows=None, minimum=5, mi
     loo, verdict_influential, magnitude_influential = [], False, False
     if row["n"] >= 3:
         for i, unit_id in enumerate(row["kept_quads"]):
-            d = row["d_k"][:i] + row["d_k"][i + 1:]
-            if kind_rows is not None:
-                remaining = kind_rows[:i] + kind_rows[i + 1:]
-                terms = [statistics.fmean(k[j] for k in remaining) if all(finite(k[j]) for k in remaining)
-                         else None for j in range(3)]
-                D = math.fsum(terms) if all(finite(x) for x in terms) else None
-            else:
-                terms, D = row.get("D_terms_j"), row["D_j"]
-            reduced = contrast_stats(d, D)
-            adjusted = holm([reduced["p"], other_p])[0]
+            omitted = block_number(unit_id)
+            reduced = reduced_contrast(row, row["kept_quads"], kind_rows, omitted)
+            partner_p, partner_n = other_p, None
+            if partner is not None:
+                partner_row, partner_ids, partner_kinds, partner_missing = partner
+                paired = reduced_contrast(partner_row, partner_ids, partner_kinds, omitted)
+                partner_n = paired["n"]
+                partner_p = 1.0 if partner_missing else paired["p"]
+                # An unchanged partner retains its full-data minimum rule.
+                if paired["n"] == partner_row["n"] and paired["n"] < minimum:
+                    partner_p = 1.0
+            adjusted = holm([1.0 if missing else reduced["p"], partner_p])[0]
             reject = adjusted <= 0.05
             outcome = evaluate_outcome(reduced, floor, reject, 2, missing)
             sign = "positive" if reduced["dbar_j"] > 0 else ("negative" if reduced["dbar_j"] < 0 else None)
@@ -936,7 +1052,8 @@ def finish_contrast(row, other_p, floor, ids=None, kind_rows=None, minimum=5, mi
             verdict_influential |= (sign != row["direction"] or above != full_above
                                     or reject != row["holm_reject"] or outcome != row["outcome"])
             magnitude_influential |= finite(floor) and abs(reduced["dbar_j"] - row["dbar_j"]) > 0.25 * floor
-            loo.append({**reduced, "dropped": unit_id, "D_terms_j": terms, "holm_p": adjusted,
+            loo.append({**reduced, "dropped": unit_id, "block_number": omitted, "partner_n": partner_n,
+                        "partner_p": partner_p, "holm_p": adjusted,
                         "holm_reject": reject, "above_floor": above, "outcome": outcome, "direction": sign})
     row.update(loo=loo, loo_verdict_influential=verdict_influential,
                loo_magnitude_influential=magnitude_influential)
@@ -979,14 +1096,14 @@ def cross_window(side_means, reported):
             "agree": abs(delta) <= math.sqrt(h ** 2 + hf ** 2), "n": len(side_means)}
 
 
-def contrast_inputs(window, quads, phase):
+def contrast_inputs(window, quads, phase, bound=None):
     d, kinds, a, b = [], [], [], []
     for _, members in quads:
         d.append(quad_difference(members, phase))
         energies = {m.run_id.rsplit("-", 1)[-1]: m.energies[phase] for m in members}
         a.append((energies["a1"] + energies["a2"]) / 2)
         b.append((energies["b1"] + energies["b2"]) / 2)
-        anchors = [get(m.op, phase, "max_abs_delta_j") for m in members]
+        anchors = [phase_bound(m, phase, bound) for m in members]
         allowance = window.neg8["allowance_j"]
         kinds.append([0.5 * sum(anchors) if all(finite(v) for v in anchors) else None, 0.0,
                       allowance if finite(allowance) else None])
@@ -1000,16 +1117,476 @@ def missing_pack():
     return {"status": "not_computed", "reason": "pack_missing"}
 
 
-def recompute(windows, flags, member_detail=False, diagnostic=False):
+def make_floors(window, phase, chosen, reported, bound=None):
+    forms = {}
+    for form, stratum in (("absolute", "repeat"), ("comparative", "quad")):
+        units = chosen[stratum]
+        if form == "absolute":
+            values = [ms[0].energies[phase] for _, ms in units]
+            widths = [phase_bound(ms[0], phase, bound) for _, ms in units]
+            shared = local = None
+        else:
+            values = [quad_difference(ms, phase, True) for _, ms in units]
+            splits = [common_width(ms, phase, window.b["b_op_s"] if bound is None else bound) for _, ms in units]
+            widths = [s["width_j"] if s else None for s in splits]
+            shared = [s["shared_j"] if s else None for s in splits]
+            local = [s["local_j"] if s else None for s in splits]
+        result = floor_estimate(values, widths, form, shared, local)
+        if not window.diagnostic and reported["status"] == "below_minimum":
+            result = floor_estimate([], [], form)
+            result["n"] = len(units)
+        result.update(kept_units=[u for u, _ in units], removed_units=reported["removed_units"],
+                      allowance_j=window.neg8["allowance_j"], allowance_source=window.neg8["source"])
+        guarded, allowance = result["guarded_floor_j"], result["allowance_j"]
+        result["drift_widened_guarded_floor_j"] = (guarded + allowance
+            if finite(guarded) and finite(allowance) else None)
+        if result["status"] == "computed" and not finite(allowance):
+            result.update(status="not_computed", reason="whole_window_drift_allowance_unrecorded")
+        if form == "absolute":
+            result["widths_bpre_j"] = [get(ms[0].pre, phase, "max_abs_delta_j") for _, ms in units]
+        forms[form] = result
+    absolute = forms["absolute"]["drift_widened_guarded_floor_j"]
+    comparative = forms["comparative"]["drift_widened_guarded_floor_j"]
+    return forms, {"floor_abs_j": absolute, "floor_cmp_j": comparative,
+                   "floor_gate_j": max(absolute, comparative) if all(finite(v) for v in (absolute, comparative)) else None}
+
+
+def contrast_floor(cells, phase):
+    sides = {pack: cells.get(model + "/" + phase, {}) for pack, model in MODELS.items()}
+    values = [c.get("floor_gate_j") for c in sides.values()]
+    value = max(values) if all(finite(v) for v in values) else None
+    attained = [pack for pack, cell in sides.items() if value is not None and cell.get("floor_gate_j") == value]
+    return {"floor_gate_j": value, "attained_by": attained, "sides": sides}
+
+
+def number(value):
+    try:
+        result = float(value)
+        return result if finite(result) and result >= 0 else None
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def fit_line(points):
+    """Centered ordinary least squares, preserving ns-scale host precision."""
+    x0, y0 = points[0]
+    xs, ys = [x - x0 for x, _ in points], [y - y0 for _, y in points]
+    xm, ym = statistics.fmean(xs), statistics.fmean(ys)
+    denominator = math.fsum((x - xm) ** 2 for x in xs)
+    if not denominator:
+        return None
+    slope = math.fsum((x - xm) * (y - ym) for x, y in zip(xs, ys)) / denominator
+    return y0 + ym - slope * (x0 + xm), slope
+
+
+class MeterStream:
+    """Independent raw-byte decoder and clock fit, RECONCILE-r2 section 3."""
+    def __init__(self, path, reader):
+        self.name, self.reader = path.name, reader
+        self.times, self.powers, self.battery_times, self.battery_powers = [], [], [], []
+        self.header, self.trailer, self.fit, self.r_max_s = {}, {}, None, None
+        rows = reader.lines(path, "meter/" + self.name)
+        headers = [x for x in rows if x.get("k") == "h"]
+        trailers = [x for x in rows if x.get("k") == "t"]
+        if len(headers) != 1 or headers[0].get("rate_idx") not in (0, 1, 2, 3):
+            reader.flag("meter_stream_malformed", self.name, "need one header with a known rate")
+            return
+        self.header = headers[0]
+        self.trailer = trailers[-1] if trailers else {}
+        device, powers, points = [], [], []
+        previous_seq, previous_rx, current, running_max, duplicates = None, None, 0, None, 0
+        decoder = struct.Struct("<HHiiHHHH")
+        for row in rows:
+            if row.get("k") != "b":
+                continue
+            tx, rx, n = row.get("tx"), row.get("rx"), row.get("n")
+            try:
+                if not all(finite(v) for v in (tx, rx, n)) or not isinstance(n, int) or n < 0:
+                    raise ValueError("invalid batch timestamps/count")
+                payload = bytes.fromhex(row.get("p", ""))
+                if len(payload) != n * decoder.size:
+                    raise ValueError("payload length differs from count")
+            except (ValueError, TypeError):
+                reader.flag("meter_stream_malformed", self.name, "invalid batch")
+                continue
+            newest = None
+            for k, (seq, _, voltage, current_ua, *_aux) in enumerate(decoder.iter_unpack(payload)):
+                if previous_seq is not None:
+                    step = ((seq - previous_seq + 32768) % 65536) - 32768
+                    if k == 0 and previous_rx is not None:
+                        host_ms = (rx - previous_rx) / 1e6
+                        if host_ms > 32768:
+                            step += round((host_ms - step) / 65536) * 65536
+                    current += step
+                previous_seq = seq
+                if running_max is not None and current <= running_max:
+                    duplicates += 1
+                    continue
+                running_max, newest = current, current
+                device.append(current)
+                powers.append((voltage / 1e6) * (current_ua / 1e6))
+            if payload:
+                previous_rx = rx
+            if newest is not None and 0 < n < 63 and 0 <= rx - tx < 3e6:
+                points.append((newest, rx))
+            ac, av = get(row, "smc", "B0AC"), get(row, "smc", "B0AV")
+            if finite(ac) and finite(av):
+                self.battery_times.append(rx)
+                self.battery_powers.append(-ac * av / 1e6)
+        initial = fit_line(points) if len(points) >= 20 else None
+        minima = {}
+        if initial:
+            a, b = initial
+            for point in points:
+                residual = point[1] - (a + b * point[0])
+                key = point[0] // 10000
+                if key not in minima or residual < minima[key][0]:
+                    minima[key] = (residual, point)
+        final = fit_line([minima[k][1] for k in sorted(minima)]) if len(minima) >= 2 else None
+        if final is None or final[1] <= 0 or not all(finite(v) for v in final):
+            reader.flag("meter_no_fit", self.name, {"fit_points": len(points), "minimum_bins": len(minima)})
+            return
+        a, b = final
+        self.fit = {"intercept_ns": a, "slope_ns_per_ms": b, "fit_points": len(points),
+                    "minimum_bins": len(minima), "duplicates_dropped": duplicates}
+        self.r_max_s = max(0.0, max(y - (a + b * x) for x, y in points) / 1e9)
+        self.times = [a + b * x for x in device]
+        self.powers = powers
+        ordered = sorted(zip(self.battery_times, self.battery_powers))
+        self.battery_times = [t for t, _ in ordered]
+        self.battery_powers = [p for _, p in ordered]
+
+    def offset(self, mono_midpoint, journal, scope):
+        start = (self.header.get("start_raw_ns"), self.header.get("start_mono_ns"))
+        end = (self.trailer.get("end_raw_ns"), self.trailer.get("end_mono_ns"))
+        if all(finite(v) for v in start + end):
+            offset = start[0] - start[1]
+            if abs((end[0] - end[1]) - offset) <= 1e6:
+                return offset, "stream"
+        candidates = []
+        for row in journal:
+            stamp = mapping(row.get("finished", row.get("started")))
+            mono, raw = stamp.get("monotonic_ns"), stamp.get("monotonic_raw_ns")
+            if all(finite(v) for v in (mono, raw)):
+                candidates.append((abs(mono - mono_midpoint), mono, raw - mono))
+        if candidates:
+            offset = min(candidates)[2]
+            self.reader.flag("meter_offset_from_journal", scope, {"stream": self.name})
+            return offset, "journal"
+        self.reader.flag("meter_offset_unavailable", scope, {"stream": self.name})
+        return None, None
+
+
+def sampled_term(times, powers, phase, baseline):
+    lo, hi = (bisect.bisect_left(times, edge) for edge in phase)
+    u0, u1 = (bisect.bisect_left(times, edge) for edge in baseline)
+    if lo == hi or u0 == u1:
+        return None
+    T = (phase[1] - phase[0]) / 1e9
+    mean, idle = statistics.fmean(powers[lo:hi]), statistics.fmean(powers[u0:u1])
+    energy = mean * T
+    return {"energy_J": energy, "baseline_W": idle, "delta_J": energy - idle * T,
+            "n": hi - lo, "n_baseline": u1 - u0}
+
+
+def idle_span(member):
+    completions = [e.get("timestamp_s") for e in member.events if e.get("phase") == "idle_baseline"
+                   and e.get("event_type") == "stage_completed" and finite(e.get("timestamp_s"))]
+    if not completions:
+        return None
+    end = completions[-1]
+    starts = [e.get("timestamp_s") for e in member.events if e.get("phase") == "idle_baseline"
+              and e.get("event_type") == "stage_started" and finite(e.get("timestamp_s")) and e["timestamp_s"] < end]
+    return (max(starts), end) if starts else None
+
+
+def machine_member(member, phase, streams, journal, bop, shifts=(0.0, 0.0), flag=True):
+    """No stored machine number enters the computation."""
+    scope = member.run_id + "/" + phase
+    baseline = idle_span(member)
+    anchor = mapping(member.metadata.get("clock_anchor") or get(member.metadata, "uncertainty_evidence", "clock_anchor"))
+    lower, upper = anchor.get("wall_minus_monotonic_lower_s"), anchor.get("wall_minus_monotonic_upper_s")
+    if baseline is None or phase not in member.edges or not all(finite(v) for v in (lower, upper)):
+        if flag:
+            member.reader.flag("meter_baseline_unavailable", scope, "idle edges or wall/monotonic anchor unavailable")
+        return {"delta_J": None, "boundary": MACHINE_BOUNDARY}
+    wall = (lower + upper) / 2
+    phase_wall = [member.origin + edge for edge in member.edges[phase]]
+    phase_mono = [(edge - wall) * 1e9 for edge in phase_wall]
+    baseline_mono = [(edge - wall) * 1e9 for edge in baseline]
+    for stream in streams:
+        if not stream.times:
+            continue
+        offset, source = stream.offset(statistics.fmean(phase_mono), journal, scope)
+        if offset is None:
+            continue
+        delta = bop + stream.r_max_s if finite(bop) else None
+        if shifts != (0.0, 0.0) and delta is None:
+            continue
+        phase_raw = [t + offset + shift * (delta or 0.0) * 1e9 for t, shift in zip(phase_mono, shifts)]
+        base_raw = [t + offset for t in baseline_mono]
+        if (phase_raw[1] <= phase_raw[0] or min(phase_raw[0], base_raw[0]) < stream.times[0]
+                or max(phase_raw[1], base_raw[1]) > stream.times[-1]):
+            continue
+        meter = sampled_term(stream.times, stream.powers, phase_raw, base_raw)
+        if meter is None:
+            continue
+        battery = sampled_term(stream.battery_times, stream.battery_powers, phase_raw, base_raw)
+        if battery is None and flag:
+            member.reader.flag("meter_battery_unavailable", scope, {"stream": stream.name})
+        machine = meter["delta_J"] + (battery["delta_J"] if battery else 0.0)
+        length = (phase_raw[1] - phase_raw[0]) / 1e9
+        rail_phase = tuple(edge + shift * (delta or 0.0) for edge, shift in zip(member.edges[phase], shifts))
+        rail_idle = overlap(member.records, baseline[0] - member.origin, baseline[1] - member.origin)[0]
+        rail = overlap(member.records, *rail_phase)[0] - rail_idle / (baseline[1] - baseline[0]) * length
+        return {"delta_J": machine, "rail_delta_J": rail, "rho": rail / machine if machine > 0 else None,
+                "meter": meter, "battery": battery, "battery_term_available": battery is not None,
+                "duration_s": length, "window_ns": phase_raw, "baseline_ns": base_raw,
+                "offset_source": source, "stream": stream.name, "edge_delta_s": delta,
+                "metadata_idle_baseline_power_w_mean": get(member.metadata, "idle_baseline", "power_w_mean"),
+                "boundary": MACHINE_BOUNDARY}
+    if flag:
+        member.reader.flag("meter_span_uncovered", scope, "no fitted stream covers phase and baseline")
+    return {"delta_J": None, "boundary": MACHINE_BOUNDARY}
+
+
+def machine_mean(repeats, quads, values, side=None):
+    kept_r = [(uid, ms) for uid, ms in repeats if all(finite(get(values, m.run_id, "delta_J")) for m in ms)]
+    kept_b = [(uid, ms) for uid, ms in quads if all(finite(get(values, m.run_id, "delta_J")) for m in ms)]
+    scalar = lambda m: values[m.run_id]["delta_J"]
+    if side is None:
+        ordered = sorted(flatten(kept_r + kept_b), key=lambda m: (ordinal(m.run_id), m.run_id))
+        row = reported_estimate([scalar(ms[0]) for _, ms in kept_r],
+                                [statistics.fmean(scalar(m) for m in ms) for _, ms in kept_b],
+                                ordered_energies=[scalar(m) for m in ordered])
+        if row["mean_j"] is None and kept_r and kept_b:
+            row["mean_j"] = (0.2 * statistics.fmean(scalar(ms[0]) for _, ms in kept_r)
+                             + 0.8 * statistics.fmean(statistics.fmean(scalar(m) for m in ms) for _, ms in kept_b))
+        row["h_j"] = None
+        if row["interval"]:
+            # Descriptive within-window interval: h only, no deterministic B.
+            row["h_j"] = row["interval"]["h_j"]
+            row["interval"].pop("B_j")
+            row["interval"].pop("kind_averages_j")
+        row["missing_units_by_stratum"] = {"repeat": len(repeats) - len(kept_r), "quad": len(quads) - len(kept_b)}
+        members = flatten(kept_r + kept_b)
+        minimum = min(len(kept_r), len(kept_b))
+    else:
+        means = [statistics.fmean(scalar(m) for m in ms if m.run_id.rsplit("-", 1)[-1].startswith(side))
+                 for _, ms in kept_b]
+        n = len(means)
+        mean = statistics.fmean(means) if means else None
+        h = student_quantile(n - 1) * statistics.stdev(means) / math.sqrt(n) if n >= 2 else None
+        row = {"n": n, "mean_j": mean, "h_j": h,
+               "lower_j": mean - h if h is not None else None, "upper_j": mean + h if h is not None else None,
+               "missing_quads": len(quads) - n}
+        members = [m for m in flatten(kept_b) if m.run_id.rsplit("-", 1)[-1].startswith(side)]
+        minimum = n
+    rhos = [values[m.run_id]["rho"] for m in members if finite(values[m.run_id].get("rho"))]
+    row.update(status="computed" if minimum >= 5 else "below_registered_minimum",
+               note="" if minimum >= 5 else "below the registered minimum",
+               battery_unavailable_members=sum(not values[m.run_id].get("battery_term_available") for m in members),
+               rho_median=statistics.median(rhos) if rhos else None, rho_n=len(rhos), boundary=MACHINE_BOUNDARY)
+    return row
+
+
+def add_machine(output, selections, windows, meter_dir=None):
+    disclosure = {"label": "descriptive; never a claim number", "boundary": MACHINE_BOUNDARY, "windows": {}}
+    output["disclosures"]["whole_machine"] = disclosure
+    for pack, w in windows.items():
+        directory = Path(meter_dir) if meter_dir else w.archive / "sources/night-custody/hazards/meter"
+        paths = sorted(directory.glob("stream-*.jsonl"))
+        if not paths:
+            disclosure["windows"][pack] = {"status": "not_computed", "reason": "meter_absent", "boundary": MACHINE_BOUNDARY}
+            continue
+        streams = [MeterStream(p, w.reader) for p in paths]
+        clock_path = w.archive / "sources/night-custody/hazards/monitor/clock.jsonl"
+        journal = w.reader.lines(clock_path, "meter/clock_journal") if clock_path.exists() else []
+        line = {"members": {}, "cells": {}, "streams": {s.name: {"fit": s.fit, "r_max_s": s.r_max_s} for s in streams},
+                "meter_flags": [f for f in w.flag_rows if str(f.get("code", "")).startswith("meter.")],
+                "boundary": MACHINE_BOUNDARY}
+        disclosure["windows"][pack] = line
+        # Request cross-check covers every collected member, including removed and corpus members.
+        recorded = w.reader.json(w.archive / "withheld/meter.json", "withheld/meter.json", False)
+        collected = {m["run_id"]: m for m in objects(w.roster.get("members")) if isinstance(m.get("run_id"), str)}
+        collected.update({rid: {} for rid in mapping(recorded.get("members"))})
+        for rid, roster in sorted(collected.items()):
+            if Path(rid).name != rid or rid in (".", ".."):
+                continue
+            which = "corpus" if role(rid) == "corpus" else ("science" if roster.get("kind") == "science" else role(rid))
+            root = w.bound_root if which == "corpus" else w.claim_root
+            if not (root / rid / "metadata.json").is_file():
+                continue
+            member = w.member(rid, which)
+            values = {phase: machine_member(member, phase, streams, journal, w.b["b_op_s"])
+                      for phase in ("request", "decode", "prefill")}
+            line["members"][rid] = {"model": member.model, "phases": values}
+            stored = get(recorded, "members", rid, "machine")
+            if isinstance(stored, dict):
+                own = values["request"]
+                mismatch = []
+                for keys in (("delta_J",), ("meter", "energy_J"), ("meter", "baseline_W")):
+                    actual, expected = get(own, *keys), get(stored, *keys)
+                    if not all(finite(v) for v in (actual, expected)) or abs(actual - expected) > max(.5, .005 * abs(expected)):
+                        mismatch.append("/".join(keys))
+                for keys, tolerance in ((("meter", "n"), 2), (("battery", "n"), 0)):
+                    actual, expected = get(own, *keys), get(stored, *keys)
+                    if actual != expected and (not all(finite(v) for v in (actual, expected)) or abs(actual - expected) > tolerance):
+                        mismatch.append("/".join(keys))
+                actual_start = own.get("window_ns", [None])[0]
+                expected_start = stored.get("window_ns", [None])[0]
+                if not all(finite(v) for v in (actual_start, expected_start)) or abs(actual_start - expected_start) > 1e6:
+                    mismatch.append("window_start_ns")
+                values["request"]["recorded_comparison"] = {"matches": not mismatch, "mismatched_fields": mismatch}
+                if mismatch:
+                    w.reader.flag("meter_request_mismatch", rid, {"fields": mismatch})
+        for (selected_pack, cid), chosen in selections.items():
+            if selected_pack != pack:
+                continue
+            phase = "decode" if "decode" in cid else "prefill"
+            repeats, quads = chosen.get("repeat", []), chosen["quad"]
+            values = {rid: get(row, "phases", phase, default={}) for rid, row in line["members"].items()}
+            sides = ("a", "b") if pack == "GAMMA" else (None,)
+            for side in sides:
+                key = cid + ("/" + SIDE_MODELS[side] if side else "")
+                cell = machine_mean(repeats, quads, values, side)
+                cell["phase"] = "prefill-p42" if "p42" in cid else ("decode" if phase == "decode" else "prefill-p2048")
+                if "p42" in cid:
+                    cell["label"] = "diagnostic: about four meter samples; often no SMC read"
+                shifts = []
+                for on, off in itertools.product((-1, 1), repeat=2):
+                    shifted = {m.run_id: machine_member(m, phase,
+                               [s for s in streams if s.name == values[m.run_id].get("stream")],
+                               journal, w.b["b_op_s"], (on, off), False)
+                               for m in flatten(repeats + quads) if finite(get(values, m.run_id, "delta_J"))}
+                    changed = machine_mean(repeats, quads, shifted, side)
+                    mean, primary = changed.get("mean_j"), cell.get("mean_j")
+                    # A sensitivity cannot silently switch its units when a shifted edge loses coverage.
+                    count_keys = ("n",) if side else ("n_r", "n_b")
+                    valid = all(changed.get(k) == cell.get(k) for k in count_keys)
+                    shifts.append({"on_sign": on, "off_sign": off,
+                                   "change_j": mean - primary if valid and all(finite(v) for v in (mean, primary)) else None})
+                cell["edge_shift_sensitivity"] = {"label": "edge-shift sensitivity (b_op + clock-fit residual)",
+                    "corners": shifts, "max_abs_change_j": max(abs(v["change_j"]) for v in shifts)
+                    if all(finite(v["change_j"]) for v in shifts) else None}
+                line["cells"][key] = cell
+
+
+def sensitivity_bound(windows):
+    pins = {pack: w.reader.json(w.archive / "derived/terminal-pin.json", "derived/terminal-pin.json")
+            for pack, w in windows.items()}
+    terminal = [(p.get("sequence"), pack) for pack, p in pins.items() if positive_int(p.get("sequence"))]
+    result = {"label": "sensitivity", "B_max_s": None, "attaining_sequence": None, "T": None, "windows": {}}
+    if not terminal:
+        return result
+    T, pack = max(terminal)
+    window = windows[pack]
+    r = window.reader
+    acceptance_relative = "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
+    acceptances = sorted((window.archive / "sources/repo/configs/calibration").glob("calibration_acceptance*.json"))
+    # The registered acceptance id, rather than a glob's first draft, owns the epoch.
+    acceptance = next((a for p in acceptances if (a := r.json(p, "calibration_acceptance"))
+                       .get("acceptance_id") == "d079_calibration_acceptance_v2_n24_25g83_r2"), {})
+    source = "archive"
+    if not acceptance:
+        # E3 item 14 fixes the block's issued acceptance; S10 does not archive it.
+        acceptance = r.json(Path(__file__).resolve().parents[1] / acceptance_relative, "calibration_acceptance")
+        source = "analysis_checkout"
+    members = objects(get(acceptance, "derivation_corpus", "members"))
+    epoch = acceptance.get("identity_epoch")
+    ledger = r.lines(window.archive / "sources/ledger/calibration_observation_ledger.jsonl", "calibration_ledger")
+    candidates = []
+    for member in members:
+        value, member_id = number(member.get("b_fiducial_s")), member.get("member_id")
+        if value is None:
+            continue
+        sequences = [row["sequence"] for row in ledger if positive_int(row.get("sequence"))
+                     and row["sequence"] <= 376 and row.get("attempt_id") == member_id
+                     and row.get("identity_epoch") == epoch and row.get("disposition") == "valid"
+                     and number(row.get("exact_bound_lexeme_s")) == value]
+        candidates.append((value, min(sequences) if sequences else None, member_id))
+    for row in ledger:
+        seq = row.get("sequence")
+        if (positive_int(seq) and 376 < seq <= T and row.get("identity_epoch") == epoch
+                and row.get("disposition", row.get("class")) in ("valid", "systematic-invalid")):
+            value = number(row.get("exact_bound_lexeme_s", row.get("b_fiducial_s")))
+            if value is not None:
+                candidates.append((value, seq, row.get("attempt_id")))
+    if len(members) != 24 or not epoch or not candidates or not ledger:
+        r.flag("sensitivity_inputs_unavailable", "sensitivity", "need acceptance's 24 members, epoch and archived ledger")
+        return {**result, "T": T}
+    # Ties disclose the earliest attaining ledger sequence, or the acceptance member.
+    maximum = max(v for v, _, _ in candidates)
+    winners = sorted((c for c in candidates if c[0] == maximum), key=lambda c: (c[1] is None, c[1] or 0, c[2] or ""))
+    _, sequence, member_id = winners[0]
+    result.update(B_max_s=maximum, attaining_sequence=sequence, attaining_member=member_id, T=T,
+                  acceptance_source=source)
+    for pack, window in windows.items():
+        operative = window.b["b_op_s"]
+        bound = max(operative, maximum) if finite(operative) else None
+        result["windows"][pack] = {"b_sens_s": bound, "equals_primary_bound": bound == operative,
+                                  "note": "sensitivity values equal primary" if bound == operative else "bound widened"}
+    return result
+
+
+def add_sensitivity(output, selections, windows, diagnostic):
+    line = sensitivity_bound(windows)
+    line.update(reported_cells={}, floors={}, floor_cells={}, contrasts={})
+    output["disclosures"]["sensitivity_bound"] = line
+    if not finite(line["B_max_s"]):
+        line.update(status="not_computed", reason="sensitivity_inputs_unavailable")
+        return
+    rows, operands = {}, {}
+    for (pack, cid), chosen in selections.items():
+        if "p42" in cid:
+            continue
+        w = windows[pack]
+        bound = line["windows"][pack]["b_sens_s"]
+        phase = "decode" if "decode" in cid else "prefill"
+        if not finite(bound):
+            continue
+        if pack != "GAMMA":
+            reported = make_reported(w, cid, chosen["repeat"], chosen["quad"], None if diagnostic else 5, bound)
+            line["reported_cells"][cid] = reported
+            forms, cell = make_floors(w, phase, chosen, reported, bound)
+            prefix = MODELS[pack] + "/" + phase
+            line["floor_cells"][prefix] = cell
+            for form, floor in forms.items():
+                line["floors"][prefix + "/" + form] = floor
+        else:
+            row, kinds, _, _ = contrast_inputs(w, chosen["quad"], phase, bound)
+            missing = len(chosen["quad"]) < len(strings(get(w.exclusion_cells.get(cid, {}), "kept_units", "quad")))
+            if not diagnostic and (row["n"] < 5 or missing):
+                row["p"] = 1.0
+            rows[cid], operands[cid] = row, (phase, kinds, missing and not diagnostic)
+    if set(windows) != {"ALPHA", "BETA", "GAMMA"}:
+        line["contrasts"] = missing_pack()
+        return
+    for cid, row in rows.items():
+        phase, kinds, missing = operands[cid]
+        floor = contrast_floor(line["floor_cells"], phase)
+        other = next((r["p"] for c, r in rows.items() if c != cid), 1.0)
+        ids = [u for u, _ in selections[("GAMMA", cid)]["quad"]]
+        contrast = finish_contrast(row, other, floor["floor_gate_j"], ids, kinds,
+                                   2 if diagnostic else 5, missing)
+        # The sensitivity registers an outcome word, not a second LOO ceiling.
+        for key in ("loo", "loo_verdict_influential", "loo_magnitude_influential", "ceiling"):
+            contrast.pop(key, None)
+        contrast["floor"] = floor
+        contrast["outcome_equals_primary"] = contrast["outcome"] == output["contrasts"][cid]["outcome"]
+        line["contrasts"][cid] = contrast
+
+
+def recompute(windows, flags, member_detail=False, diagnostic=False, meter_dir=None):
     output = {"schema": SCHEMA, "mode": "DIAGNOSTIC_NOT_REGISTERED" if diagnostic else "REGISTERED",
               "program_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               "inputs": {}, "windows": {}, "reported_cells": {}, "p42": {}, "floors": {},
-              "floor_gate": {}, "floor_gate_unguarded": {}, "dominance": {}, "contrasts": {},
+              "floor_gate": {}, "floor_cells": {}, "floor_gate_unguarded": {}, "dominance": {}, "contrasts": {},
               "descriptive": {}, "disclosures": {"load_sensitivity": {}, "battery_assist": {},
                                                  "cross_window": {}, "decision_vs_floor": {}}}
     selections = {}
     for pack, window in windows.items():
-        output["windows"][pack] = {**window.b, "neg8": window.neg8}
+        output["windows"][pack] = {**window.b, "neg8": window.neg8, "plan_tree_binding": window.plan_binding}
         for cell in objects(window.roster.get("cells")):
             cid = cell.get("cell_id")
             if not isinstance(cid, str):
@@ -1032,33 +1609,12 @@ def recompute(windows, flags, member_detail=False, diagnostic=False):
             model = MODELS[pack]
             reported = make_reported(window, cid, chosen["repeat"], chosen["quad"], None if diagnostic else 5)
             output["reported_cells"][cid] = reported
-            for form, stratum in (("absolute", "repeat"), ("comparative", "quad")):
-                units = chosen[stratum]
-                if form == "absolute":
-                    values = [ms[0].energies[phase] for _, ms in units]
-                    widths = [max(e["point_j"] - e["lower_j"], e["upper_j"] - e["point_j"], e["max_abs_delta_j"])
-                              if (e := ms[0].op.get(phase)) else None for _, ms in units]
-                    pre_widths = [get(ms[0].pre, phase, "max_abs_delta_j") for _, ms in units]
-                    shared = local = None
-                else:
-                    values = [quad_difference(ms, phase, True) for _, ms in units]
-                    splits = [common_width(ms, phase, window.b["b_op_s"]) for _, ms in units]
-                    widths = [s["width_j"] if s else None for s in splits]
-                    shared = [s["shared_j"] if s else None for s in splits]
-                    local = [s["local_j"] if s else None for s in splits]
-                result = floor_estimate(values, widths, form, shared, local)
-                if not diagnostic and reported["status"] == "below_minimum":
-                    # A target cell cannot publish any registered number below its stratum minimum.
-                    result = floor_estimate([], [], form)
-                    result["n"] = len(units)
-                result["kept_units"] = [u for u, _ in units]
-                result["removed_units"] = reported["removed_units"]
-                if form == "absolute":
-                    result["widths_bpre_j"] = pre_widths
+            forms, floor_cell = make_floors(window, phase, chosen, reported)
+            for form, result in forms.items():
                 output["floors"][model + "/" + phase + "/" + form] = result
-            fs = [output["floors"][model + "/" + phase + "/" + f] for f in ("absolute", "comparative")]
-            output["floor_gate"][model + "/" + phase] = (max(f["guarded_floor_j"] for f in fs)
-                if all(finite(f["guarded_floor_j"]) for f in fs) else None)
+            output["floor_cells"][model + "/" + phase] = floor_cell
+            output["floor_gate"][model + "/" + phase] = floor_cell["floor_gate_j"]
+            fs = list(forms.values())
             output["floor_gate_unguarded"][model + "/" + phase] = (max(f["operative_unguarded_floor_j"] for f in fs)
                 if all(finite(f["operative_unguarded_floor_j"]) for f in fs) else None)
     complete = set(windows) == {"ALPHA", "BETA", "GAMMA"}
@@ -1115,19 +1671,27 @@ def recompute(windows, flags, member_detail=False, diagnostic=False):
         for cid, row in rows.items():
             other = next((r["p"] for c, r in rows.items() if c != cid), 1.0)
             kinds, a, b, phase = operands[cid]
-            model_floors = [output["floor_gate"].get(model + "/" + phase) for model in MODELS.values()]
-            floor = max(model_floors) if all(finite(f) for f in model_floors) else None
+            floor_record = contrast_floor(output["floor_cells"], phase)
+            floor = floor_record["floor_gate_j"]
             chosen = selections[("GAMMA", cid)]["quad"]
             declared_n = len(strings(get(gamma.exclusion_cells.get(cid, {}), "kept_units", "quad")))
             missing = not diagnostic and len(chosen) < declared_n
+            other_cid = next((c for c in rows if c != cid), None)
+            partner = None
+            if other_cid is not None:
+                other_chosen = selections[("GAMMA", other_cid)]["quad"]
+                other_declared = len(strings(get(gamma.exclusion_cells.get(other_cid, {}), "kept_units", "quad")))
+                partner = (rows[other_cid], [u for u, _ in other_chosen], operands[other_cid][0],
+                           not diagnostic and len(other_chosen) < other_declared)
             contrast = finish_contrast(row, other, floor, [u for u, _ in chosen], kinds,
-                                       2 if diagnostic else 5, missing)
+                                       2 if diagnostic else 5, missing, partner)
+            contrast["floor"] = floor_record
+            if row["n"] == 5:
+                gamma.reader.flag("loo_kept_n_equals_minimum", cid, {"kept_n": 5, "loo_n": 4})
             output["contrasts"][cid] = contrast
             output["descriptive"][cid] = descriptive_estimate(a, b, contrast, phase)
             decision = contrast["decision_interval_j"]
-            output["disclosures"]["decision_vs_floor"][cid] = (
-                (decision[0] > floor if contrast["dbar_j"] > 0 else decision[1] < -floor)
-                if finite(floor) and finite(contrast["dbar_j"]) and all(finite(v) for v in decision) else None)
+            output["disclosures"]["decision_vs_floor"][cid] = decision_beyond_floor(contrast, floor)
             for model, side in ((MODELS["ALPHA"], a), (MODELS["BETA"], b)):
                 reported = next((r for r in output["reported_cells"].values()
                                  if r["model"] == model and r["phase"] == phase), {})
@@ -1144,7 +1708,8 @@ def recompute(windows, flags, member_detail=False, diagnostic=False):
         load = [d for d in dropped if isinstance(d.get("codes"), list) and d["codes"]
                 and len(strings(d["codes"])) == len(d["codes"])
                 and set(d["codes"]) <= LOAD_CODES]
-        if load:
+        triggered = [d for d in dropped if set(strings(d.get("codes"))) & LOAD_CODES]
+        if triggered:
             restored = {}
             for stratum, units in selected.items():
                 ids = [u for u, _ in units] + [d["unit_id"] for d in load
@@ -1152,14 +1717,18 @@ def recompute(windows, flags, member_detail=False, diagnostic=False):
                 restored[stratum] = window.select(cid, stratum, ids, False)
             if pack == "GAMMA":
                 phase = "decode" if "decode" in cid else "prefill"
-                row, kinds, _, _ = contrast_inputs(window, restored["quad"], phase)
-                primary = output["contrasts"].get(cid, {})
-                other = next((r.get("p", 1.0) for c, r in output["contrasts"].items()
-                              if c != cid and isinstance(r, dict)), 1.0)
-                disclosure = finish_contrast(row, other, primary.get("floor_gate_j"),
-                                            [u for u, _ in restored["quad"]], kinds)
+                stats, _, _, _ = contrast_inputs(window, restored["quad"], phase)
+                disclosure = {k: stats[k] for k in ("n", "dbar_j", "s_d_j", "se_j", "t_star", "metrology_interval_j")}
             else:
                 disclosure = make_reported(window, cid, restored["repeat"], restored["quad"], None)
+            restored_counts = {s: len(restored[s]) - len(selected[s]) for s in selected}
+            disclosure["restored_by_stratum"] = restored_counts
+            disclosure["restored_count"] = sum(restored_counts.values())
+            codes = sorted({c for d in triggered for c in strings(d.get("codes")) if c in LOAD_CODES})
+            disclosure["codes"] = codes
+            disclosure["code_families"] = sorted({"thermal pressure" if c.startswith("thermal.") else "contention"
+                                                  for c in codes})
+            disclosure["note"] = "no unit restored" if not sum(restored_counts.values()) else "load-correlated exclusions not applied"
             output["disclosures"]["load_sensitivity"][cid] = disclosure
         counts = {s: sum(m.run_id in window.assist for m in flatten(units)) for s, units in selected.items()}
         unassisted = {s: [(u, ms) for u, ms in units if not any(m.run_id in window.assist for m in ms)]
@@ -1175,6 +1744,8 @@ def recompute(windows, flags, member_detail=False, diagnostic=False):
             disclosure = make_reported(window, cid, unassisted["repeat"], unassisted["quad"], None)
         disclosure["assist_members_by_stratum"] = counts
         output["disclosures"]["battery_assist"][cid] = disclosure
+    add_sensitivity(output, selections, windows, diagnostic)
+    add_machine(output, selections, windows, meter_dir)
     for pack, window in windows.items():
         if member_detail:
             # Include every collected roster bundle, but never diagnostic interior references.
@@ -1216,6 +1787,7 @@ def main(argv=None) -> int:
         parser.add_argument("--bound-runs-" + pack)
     parser.add_argument("--member-detail", action="store_true")
     parser.add_argument("--diagnostic-ignore-exclusions", action="store_true")
+    parser.add_argument("--meter-dir", help="override the archive's raw meter-stream directory")
     parser.add_argument("--out", required=True)
     args = parser.parse_args(argv)
     flags, windows = [], {}
@@ -1235,10 +1807,14 @@ def main(argv=None) -> int:
         windows[pack.upper()] = Window(pack.upper(), archive, flags, getattr(args, pack + "_exclusions"),
                                         getattr(args, "claim_runs_" + pack), getattr(args, "bound_runs_" + pack),
                                         args.diagnostic_ignore_exclusions)
-    output = recompute(windows, flags, args.member_detail, args.diagnostic_ignore_exclusions)
+    output = recompute(windows, flags, args.member_detail, args.diagnostic_ignore_exclusions, args.meter_dir)
     clean = sanitize(output, flags)
     clean["flags"] = sorted((sanitize(f, [], "flag") for f in flags),
                             key=lambda f: (f["code"], f["pack"], f["scope"], json.dumps(f["detail"], sort_keys=True)))
+    for flag in clean["flags"]:
+        flag["stops_comparison"] = flag["code"] in STOP_FLAG_CODES
+        flag["blinding"] = "STRUCTURE" if flag["code"] in STRUCTURE_FLAG_CODES else "not_classified"
+    clean["comparison_stopped"] = any(f["stops_comparison"] for f in clean["flags"])
     data = (json.dumps(clean, sort_keys=True, indent=1, allow_nan=False) + "\n").encode("utf-8")
     try:
         Path(args.out).write_bytes(data)
