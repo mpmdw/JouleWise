@@ -40,7 +40,8 @@ kept_member_outside_verdict_membership neg8_source_not_rescreen harvest_checkout
 reference_slot_disagrees roster_pack_not_archived roster_plan_tree_not_sealed
 loo_kept_n_equals_minimum sensitivity_inputs_unavailable meter_stream_malformed
 meter_no_fit meter_span_uncovered meter_offset_from_journal meter_offset_unavailable
-meter_battery_unavailable meter_request_mismatch meter_baseline_unavailable""".split())
+meter_battery_unavailable meter_request_mismatch meter_baseline_unavailable
+member_pre_bound_missing meter_battery_activity""".split())
 STOP_FLAG_CODES = frozenset({"excluded_reference_in_screen", "kept_member_outside_verdict_membership",
                             "neg8_source_not_rescreen", "harvest_checkout_not_clean",
                             "reference_slot_disagrees", "roster_pack_not_archived",
@@ -48,6 +49,13 @@ STOP_FLAG_CODES = frozenset({"excluded_reference_in_screen", "kept_member_outsid
 STRUCTURE_FLAG_CODES = STOP_FLAG_CODES | {"loo_kept_n_equals_minimum", "calibration_capture_name_fallback"}
 MACHINE_BOUNDARY = ("whole-machine DC input plus the battery term, measured at the USB-C input; "
                     "the adapter's AC-to-DC loss is not included.")
+PHASE_MACHINE_LABEL = "descriptive: gross meter energy per phase; battery assist flagged at request level"
+PHASE_MACHINE_BOUNDARY = ("whole-machine gross DC input, measured at the USB-C input; "
+                          "battery energy and the adapter's AC-to-DC loss are not included.")
+RECONSTRUCTION_LABEL = "diagnostic: single-step reconstruction (F5); replaces nothing"
+SCALED_ALLOWANCE_LABEL = ("sensitivity: drift allowance scaled by max(1, E/E_ref, T/T_ref); "
+                          "the registered result is unchanged")
+BETA_INCLUSIVE_LABEL = "including three BETA sessions removed by rules later rewritten"
 
 
 def finite(value):
@@ -612,7 +620,9 @@ class Window:
             self.members[run_id] = Member(root / run_id, run_id, self.reader, self.b["b_op_s"], member_role)
             m = self.members[run_id]
             pre = self.b["b_pre_s"]
-            if member_role == "science" and finite(pre) and m.bpre != pre:
+            if member_role == "science" and not finite(m.bpre):
+                self.reader.flag("member_pre_bound_missing", run_id, {"window_s": pre, "member_s": m.bpre})
+            elif member_role == "science" and finite(pre) and m.bpre != pre:
                 self.reader.flag("member_pre_bound_mismatch", run_id, {"window_s": pre, "member_s": m.bpre})
         return self.members[run_id]
 
@@ -1184,6 +1194,7 @@ class MeterStream:
     def __init__(self, path, reader):
         self.name, self.reader = path.name, reader
         self.times, self.powers, self.battery_times, self.battery_powers = [], [], [], []
+        self.battery_current_times, self.battery_currents = [], []
         self.header, self.trailer, self.fit, self.r_max_s = {}, {}, None, None
         rows = reader.lines(path, "meter/" + self.name)
         headers = [x for x in rows if x.get("k") == "h"]
@@ -1230,6 +1241,9 @@ class MeterStream:
             if newest is not None and 0 < n < 63 and 0 <= rx - tx < 3e6:
                 points.append((newest, rx))
             ac, av = get(row, "smc", "B0AC"), get(row, "smc", "B0AV")
+            if finite(ac):
+                self.battery_current_times.append(rx)
+                self.battery_currents.append(ac)
             if finite(ac) and finite(av):
                 self.battery_times.append(rx)
                 self.battery_powers.append(-ac * av / 1e6)
@@ -1248,13 +1262,17 @@ class MeterStream:
             return
         a, b = final
         self.fit = {"intercept_ns": a, "slope_ns_per_ms": b, "fit_points": len(points),
-                    "minimum_bins": len(minima), "duplicates_dropped": duplicates}
+                    "minimum_bins": len(minima), "duplicates_dropped": duplicates,
+                    "bin_origin": "device time 0 at the first kept sample", "bin_width_device_ms": 10000}
         self.r_max_s = max(0.0, max(y - (a + b * x) for x, y in points) / 1e9)
         self.times = [a + b * x for x in device]
         self.powers = powers
         ordered = sorted(zip(self.battery_times, self.battery_powers))
         self.battery_times = [t for t, _ in ordered]
         self.battery_powers = [p for _, p in ordered]
+        currents = sorted(zip(self.battery_current_times, self.battery_currents))
+        self.battery_current_times = [t for t, _ in currents]
+        self.battery_currents = [c for _, c in currents]
 
     def offset(self, mono_midpoint, journal, scope):
         start = (self.header.get("start_raw_ns"), self.header.get("start_mono_ns"))
@@ -1300,20 +1318,58 @@ def idle_span(member):
     return (max(starts), end) if starts else None
 
 
+def rail_idle_power(member):
+    """REG 5.8: elapsed_ns-weighted rich idle telemetry, never the trace's idle overlap."""
+    if not hasattr(member, "_rail_idle_power"):
+        rows = member.reader.lines(member.path / "rich_telemetry_idle.jsonl", member.run_id + "/rich_telemetry_idle.jsonl")
+        valid = [row for row in rows if positive_int(row.get("elapsed_ns"))
+                 and finite(row.get("rail_sum_power_w")) and row["rail_sum_power_w"] >= 0]
+        member._rail_idle_power = (math.fsum(row["rail_sum_power_w"] * row["elapsed_ns"] for row in valid)
+                                  / sum(row["elapsed_ns"] for row in valid)) if valid and len(valid) == len(rows) else None
+        if member._rail_idle_power is None:
+            member.reader.flag("meter_baseline_unavailable", member.run_id + "/request",
+                               "rich idle telemetry lacks valid elapsed_ns and rail_sum_power_w")
+    return member._rail_idle_power
+
+
+def sampled_gross(times, powers, span):
+    lo, hi = (bisect.bisect_left(times, edge) for edge in span)
+    if lo == hi:
+        return None
+    mean = statistics.fmean(powers[lo:hi])
+    return {"energy_J": mean * ((span[1] - span[0]) / 1e9), "mean_W": mean, "n": hi - lo}
+
+
+def request_battery_activity(member, stream, wall, offset, flag):
+    if "request" not in member.edges:
+        return {"available": False, "active": False, "n": 0}
+    span = [(member.origin + edge - wall) * 1e9 + offset for edge in member.edges["request"]]
+    lo, hi = (bisect.bisect_left(stream.battery_current_times, edge) for edge in span)
+    active = any(c != 0 for c in stream.battery_currents[lo:hi])
+    if active and flag:
+        member.reader.flag("meter_battery_activity", member.run_id,
+                           {"source": "request B0AC read not zero", "stream": stream.name})
+    return {"available": lo != hi, "active": active, "n": hi - lo}
+
+
 def machine_member(member, phase, streams, journal, bop, shifts=(0.0, 0.0), flag=True):
-    """No stored machine number enters the computation."""
+    """Request: REG 5.8 delta. Phases: 03:26 amendment, gross meter only."""
     scope = member.run_id + "/" + phase
     baseline = idle_span(member)
     anchor = mapping(member.metadata.get("clock_anchor") or get(member.metadata, "uncertainty_evidence", "clock_anchor"))
     lower, upper = anchor.get("wall_minus_monotonic_lower_s"), anchor.get("wall_minus_monotonic_upper_s")
-    if baseline is None or phase not in member.edges or not all(finite(v) for v in (lower, upper)):
+    request = phase == "request"
+    unavailable = {"delta_J": None, "boundary": MACHINE_BOUNDARY} if request else {
+        "energy_J": None, "label": PHASE_MACHINE_LABEL, "basis": "gross meter term only; adapter loss excluded",
+        "boundary": PHASE_MACHINE_BOUNDARY}
+    if (request and baseline is None) or phase not in member.edges or not all(finite(v) for v in (lower, upper)):
         if flag:
             member.reader.flag("meter_baseline_unavailable", scope, "idle edges or wall/monotonic anchor unavailable")
-        return {"delta_J": None, "boundary": MACHINE_BOUNDARY}
+        return unavailable
     wall = (lower + upper) / 2
     phase_wall = [member.origin + edge for edge in member.edges[phase]]
     phase_mono = [(edge - wall) * 1e9 for edge in phase_wall]
-    baseline_mono = [(edge - wall) * 1e9 for edge in baseline]
+    baseline_mono = [(edge - wall) * 1e9 for edge in baseline] if request else []
     for stream in streams:
         if not stream.times:
             continue
@@ -1325,29 +1381,42 @@ def machine_member(member, phase, streams, journal, bop, shifts=(0.0, 0.0), flag
             continue
         phase_raw = [t + offset + shift * (delta or 0.0) * 1e9 for t, shift in zip(phase_mono, shifts)]
         base_raw = [t + offset for t in baseline_mono]
-        if (phase_raw[1] <= phase_raw[0] or min(phase_raw[0], base_raw[0]) < stream.times[0]
-                or max(phase_raw[1], base_raw[1]) > stream.times[-1]):
+        coverage = phase_raw + base_raw
+        if phase_raw[1] <= phase_raw[0] or min(coverage) < stream.times[0] or max(coverage) > stream.times[-1]:
             continue
-        meter = sampled_term(stream.times, stream.powers, phase_raw, base_raw)
+        meter = (sampled_term(stream.times, stream.powers, phase_raw, base_raw) if request else
+                 sampled_gross(stream.times, stream.powers, phase_raw))
         if meter is None:
             continue
+        activity = request_battery_activity(member, stream, wall, offset, flag)
+        length = (phase_raw[1] - phase_raw[0]) / 1e9
+        rail_phase = tuple(edge + shift * (delta or 0.0) for edge, shift in zip(member.edges[phase], shifts))
+        gross_rail = overlap(member.records, *rail_phase)[0]
+        if not request:
+            energy = meter["energy_J"]
+            return {"energy_J": energy, "meter": meter, "gross_rail_energy_J": gross_rail,
+                    "gross_share": gross_rail / energy if energy > 0 else None, "share_label": "gross share",
+                    "battery_activity": activity, "duration_s": length, "window_ns": phase_raw,
+                    "offset_source": source, "stream": stream.name, "edge_delta_s": delta,
+                    "label": PHASE_MACHINE_LABEL, "basis": "gross meter term only; adapter loss excluded",
+                    "boundary": PHASE_MACHINE_BOUNDARY}
         battery = sampled_term(stream.battery_times, stream.battery_powers, phase_raw, base_raw)
         if battery is None and flag:
             member.reader.flag("meter_battery_unavailable", scope, {"stream": stream.name})
         machine = meter["delta_J"] + (battery["delta_J"] if battery else 0.0)
-        length = (phase_raw[1] - phase_raw[0]) / 1e9
-        rail_phase = tuple(edge + shift * (delta or 0.0) for edge, shift in zip(member.edges[phase], shifts))
-        rail_idle = overlap(member.records, baseline[0] - member.origin, baseline[1] - member.origin)[0]
-        rail = overlap(member.records, *rail_phase)[0] - rail_idle / (baseline[1] - baseline[0]) * length
-        return {"delta_J": machine, "rail_delta_J": rail, "rho": rail / machine if machine > 0 else None,
+        idle = rail_idle_power(member)
+        rail = gross_rail - idle * length if finite(idle) else None
+        return {"delta_J": machine, "rail_delta_J": rail,
+                "rho": rail / machine if machine > 0 and finite(rail) else None,
                 "meter": meter, "battery": battery, "battery_term_available": battery is not None,
+                "rail_idle_baseline_W": idle, "battery_activity": activity,
                 "duration_s": length, "window_ns": phase_raw, "baseline_ns": base_raw,
                 "offset_source": source, "stream": stream.name, "edge_delta_s": delta,
                 "metadata_idle_baseline_power_w_mean": get(member.metadata, "idle_baseline", "power_w_mean"),
                 "boundary": MACHINE_BOUNDARY}
     if flag:
         member.reader.flag("meter_span_uncovered", scope, "no fitted stream covers phase and baseline")
-    return {"delta_J": None, "boundary": MACHINE_BOUNDARY}
+    return unavailable
 
 
 def machine_mean(repeats, quads, values, side=None):
@@ -1390,6 +1459,233 @@ def machine_mean(repeats, quads, values, side=None):
     return row
 
 
+def diagnostic_estimate(repeats, quad_means):
+    """Estimator 1's fixed stratum weights; h only, including counts below the minimum."""
+    row = reported_estimate(repeats, quad_means)
+    if row["mean_j"] is None and repeats and quad_means:
+        row["mean_j"] = .2 * statistics.fmean(repeats) + .8 * statistics.fmean(quad_means)
+    row["h_j"] = get(row, "interval", "h_j")
+    if row["interval"]:
+        row["interval"].pop("B_j")
+        row["interval"].pop("kind_averages_j")
+    row["status"] = "computed" if min(len(repeats), len(quad_means)) >= 5 else "below_registered_minimum"
+    row["note"] = "" if row["status"] == "computed" else "below the registered minimum"
+    return row
+
+
+def step_edge(records, stamp, left_power, right_power):
+    """F5 real.py 23-33, including clamp rescaling to preserve the record's energy."""
+    for i, (a, b, power) in enumerate(records):
+        if a < stamp < b:
+            T, f = b - a, (stamp - a) / (b - a)
+            gp = .5 if left_power == right_power else min(1., max(0., (power - right_power) / (left_power - right_power)))
+            left = T * (min(f, gp) * left_power + max(0., f - gp) * right_power)
+            right = T * (max(0., gp - f) * left_power + (1 - max(f, gp)) * right_power)
+            scale = (power * T) / (left + right) if left + right > 0 else 1.
+            left *= scale
+            right *= scale
+            return {"record": i, "f": f, "step_fraction": gp, "duration_s": T, "power_w": power,
+                    "left_bias_j": f * T * power - left, "right_bias_j": (1 - f) * T * power - right,
+                    "left_model_j": left, "right_model_j": right, "rescale": scale}
+    # A stamp exactly on a record boundary has no allocation ambiguity.
+    for i, (a, b, power) in enumerate(records):
+        if stamp == a or stamp == b:
+            return {"record": i, "f": 0. if stamp == a else 1., "step_fraction": None,
+                    "duration_s": b - a, "power_w": power, "left_bias_j": 0., "right_bias_j": 0.,
+                    "rescale": 1.}
+    return None
+
+
+def single_step_member(member):
+    if hasattr(member, "_single_step"):
+        return member._single_step
+    result = {"label": RECONSTRUCTION_LABEL, "status": "not_computed", "reason": None,
+              "bias_j": {}, "energy_j": {}, "edges": {}, "plateau_w": {}}
+    member._single_step = result
+    if not all(p in member.edges for p in ("prefill", "decode")):
+        result["reason"] = "phase stamps unavailable"
+        return result
+    # F5 sums every equal support first, independent of whether the rails are adjacent.
+    supports = {}
+    for a, b, power in member.records:
+        supports[(a, b)] = supports.get((a, b), 0.) + power
+    records = [(a, b, p) for (a, b), p in supports.items()]
+    # F5's long-prompt middle stamp is prefill end (real.py 38); the
+    # brief explicitly uses the decode-start stamp for short-prompt decode.
+    t0, t1, t2 = member.edges["prefill"][0], member.edges["prefill"][1], member.edges["decode"][1]
+    def holding(stamp):
+        return next((i for i, (a, b, _) in enumerate(records) if a <= stamp < b), None)
+    i0, i1, i2 = (holding(t) for t in (t0, t1, t2))
+    if None in (i0, i1, i2) or i0 < 5 or i2 + 3 >= len(records):
+        result["reason"] = "edge records or five idle-before / three idle-after records unavailable"
+        return result
+    idle_b = statistics.median(p for _, _, p in records[i0-5:i0])
+    idle_a = statistics.median(p for _, _, p in records[i2+1:i2+4])
+    pre_in = [p for _, _, p in records[i0+1:i1]]
+    dec_in = [p for _, _, p in records[i1+1:i2]]
+    Ppre = statistics.median(pre_in[1:]) if len(pre_in) > 2 else None
+    if len(dec_in) <= 2:
+        result["reason"] = "decode plateau has no interior records after dropping first and last"
+        return result
+    Pdec = statistics.median(dec_in[1:-1])
+    result["plateau_w"] = {"idle_before": idle_b, "idle_after": idle_a, "prefill": Ppre, "decode": Pdec}
+    short = Ppre is None
+    if short:
+        t1 = member.edges["decode"][0]
+        i1 = holding(t1)
+    # Short prompts have no measured prefill plateau: both onset records use idle -> decode.
+    eS = step_edge(records, t0, idle_b, Pdec if short else Ppre)
+    eM = step_edge(records, t1, idle_b if short else Ppre, Pdec)
+    eE = step_edge(records, t2, Pdec, idle_a)
+    if any(edge is None for edge in (eS, eM, eE)):
+        result["reason"] = "phase edge outside trace"
+        return result
+    result.update(status="computed", reason=None, kind="decode42" if short else "prefill2048",
+                  onset_records="same" if i0 == i1 else "different",
+                  middle_stamp_basis="decode start" if short else "prefill end (F5 real.py 38)",
+                  edges={"prefill_start": eS, "decode_start": eM, "decode_end": eE})
+    result["bias_j"] = {"decode": eM["right_bias_j"] + eE["left_bias_j"],
+                        "request": eS["right_bias_j"] + eE["left_bias_j"]}
+    if not short:
+        result["bias_j"]["prefill"] = eS["right_bias_j"] + eM["left_bias_j"]
+    else:
+        result["prefill"] = {"status": "not_computed", "reason": "prefill-p42 has no resolved prefill plateau"}
+    result["energy_j"] = {phase: member.energies[phase] - bias for phase, bias in result["bias_j"].items()
+                          if phase in member.energies}
+    return result
+
+
+def add_reconstruction(output, selections, windows):
+    line = {"label": RECONSTRUCTION_LABEL, "cells": {}, "p42": {}}
+    output["disclosures"]["single_step_reconstruction"] = line
+    for (pack, cid), chosen in selections.items():
+        if pack == "GAMMA":
+            continue
+        if "p42" in cid:
+            line["p42"][cid] = {"label": RECONSTRUCTION_LABEL, "status": "not_computed",
+                                "reason": "prefill-p42 has no resolved prefill plateau"}
+            continue
+        phase = "decode" if "decode" in cid else "prefill"
+        members = flatten(chosen["repeat"] + chosen["quad"])
+        values = {m.run_id: single_step_member(m) for m in members}
+        missing = sorted(m.run_id for m in members if not finite(get(values, m.run_id, "energy_j", phase)))
+        row = {"label": RECONSTRUCTION_LABEL, "phase": phase, "model": MODELS[pack],
+               "kept_units": {s: [uid for uid, _ in units] for s, units in chosen.items()}, "unavailable_members": missing,
+               "n_r": len(chosen["repeat"]), "n_b": len(chosen["quad"]),
+               "mean_j": None, "h_j": None, "shift_j": None, "stratified_sd_ratio": None,
+               "registered_estimator1_mean_j": output["reported_cells"][cid]["mean_j"]}
+        line["cells"][cid] = row
+        if missing:
+            row.update(status="not_computed", reason="reconstruction unavailable for a kept member; units unchanged")
+            continue
+        original = diagnostic_estimate([ms[0].energies[phase] for _, ms in chosen["repeat"]],
+            [statistics.fmean(m.energies[phase] for m in ms) for _, ms in chosen["quad"]])
+        recon = diagnostic_estimate([values[ms[0].run_id]["energy_j"][phase] for _, ms in chosen["repeat"]],
+            [statistics.fmean(values[m.run_id]["energy_j"][phase] for m in ms) for _, ms in chosen["quad"]])
+        row.update(recon, estimator1_mean_j=original["mean_j"], estimator1_h_j=original["h_j"])
+        if finite(recon["mean_j"]) and finite(original["mean_j"]):
+            row["shift_j"] = recon["mean_j"] - original["mean_j"]
+        # The standard deviation of estimator 1's stratified m is sqrt(V), PLAN 4 step 3.
+        def stratified_sd(estimate):
+            interval = estimate["interval"]
+            return math.sqrt(interval["variance"]) if interval else None
+        sd_recon, sd_original = stratified_sd(recon), stratified_sd(original)
+        row["stratified_sd_j"] = sd_recon
+        row["estimator1_stratified_sd_j"] = sd_original
+        row["stratified_sd_ratio"] = sd_recon / sd_original if sd_original and sd_recon is not None else None
+        row["sd_definition"] = "sqrt(V) of estimator 1's stratified mean; reconstructed / assigned"
+
+
+def phase_machine_mean(repeats, quads, values):
+    kept = {s: [(uid, ms) for uid, ms in units if all(finite(get(values, m.run_id, "energy_J")) for m in ms)]
+            for s, units in (("repeat", repeats), ("quad", quads))}
+    scalar = lambda m: values[m.run_id]["energy_J"]
+    row = diagnostic_estimate([scalar(ms[0]) for _, ms in kept["repeat"]],
+                              [statistics.fmean(scalar(m) for m in ms) for _, ms in kept["quad"]])
+    members = flatten(kept["repeat"] + kept["quad"])
+    shares = [values[m.run_id]["gross_share"] for m in members if finite(values[m.run_id].get("gross_share"))]
+    flagged = sorted(m.run_id for m in flatten(repeats + quads) if get(values, m.run_id, "battery_activity", "active"))
+    row.update(label=PHASE_MACHINE_LABEL, basis="gross meter term only; adapter loss excluded",
+               missing_units_by_stratum={"repeat": len(repeats) - len(kept["repeat"]), "quad": len(quads) - len(kept["quad"])},
+               battery_assist_count=len(flagged), battery_assist_members=flagged,
+               gross_share={"label": "gross share", "median": statistics.median(shares) if shares else None, "n": len(shares)},
+               boundary=PHASE_MACHINE_BOUNDARY)
+    return row
+
+
+def percentile(values, q):
+    if not values:
+        return None
+    v = sorted(values)
+    position = (len(v) - 1) * q / 100
+    lower, upper = math.floor(position), math.ceil(position)
+    return v[lower] + (v[upper] - v[lower]) * (position - lower)
+
+
+def plausible_machine(row):
+    rho, machine, rail = row.get("rho"), row.get("delta_J"), row.get("rail_delta_J")
+    return all(finite(v) for v in (rho, machine, rail)) and 0 < rho <= 1 and machine - rail >= 0
+
+
+def request_cross_check(lines):
+    """PLAN 8.2, all collected members grouped by their actual model, never pooled into a claim cell."""
+    result = {"label": "registered descriptive request cross-check (PLAN 8.2); never a claim number",
+              "boundary": MACHINE_BOUNDARY, "windows": {}, "central_bands": {},
+              "order_basis": "chronological first collected science/reference request; ties by window identifier and pack"}
+    ordered = sorted(lines.items(), key=lambda item: (item[1].get("first_request_epoch_s") is None,
+                     item[1].get("first_request_epoch_s") or 0, item[1]["identifier"], item[0]))
+    for pack, line in ordered:
+        meter_flags = objects(line.get("meter_flags"))
+        window_flags = [f for f in meter_flags if f.get("code") != "meter.battery_activity"]
+        battery_ids = {get(f, "scope", "run_id") for f in meter_flags if f.get("code") == "meter.battery_activity"}
+        battery_ids.update(rid for rid, m in line.get("members", {}).items()
+                           if get(m, "phases", "request", "battery_activity", "active"))
+        clean = line.get("reason") != "meter_absent" and not window_flags and not battery_ids
+        groups = {}
+        for rid, member in line.get("members", {}).items():
+            row = get(member, "phases", "request", default={})
+            if not all(finite(row.get(k)) for k in ("delta_J", "rail_delta_J")):
+                continue
+            groups.setdefault(member.get("model") or "unknown", []).append((rid, row))
+        record = {"identifier": line["identifier"], "clean": clean, "models": {}, "boundary": MACHINE_BOUNDARY}
+        result["windows"][pack] = record
+        for model, members in sorted(groups.items()):
+            rhos = [m["rho"] for _, m in members if finite(m.get("rho"))]
+            plausible = [m["rho"] for _, m in members if plausible_machine(m)]
+            median = statistics.median(plausible) if plausible else None
+            spread = (max(plausible) - min(plausible)) / median if median is not None else None
+            outside = [{"run_id": rid, "delta_J": row["delta_J"], "rail_delta_J": row["rail_delta_J"], "rho": row.get("rho"),
+                        "member_battery_activity": rid in battery_ids,
+                        "meter_flags": window_flags + [f for f in meter_flags
+                            if f.get("code") == "meter.battery_activity" and get(f, "scope", "run_id") == rid],
+                        "raw_battery_activity": row.get("battery_activity"), "removed_by_this_check": False}
+                       for rid, row in members if not plausible_machine(row)]
+            summary = {"n_members": len(members), "rho_n": len(rhos), "rho_median": statistics.median(rhos) if rhos else None,
+                       "rail_delta_median_J": statistics.median(row["rail_delta_J"] for _, row in members),
+                       "machine_delta_median_J": statistics.median(row["delta_J"] for _, row in members),
+                       "rho_min": min(rhos) if rhos else None, "rho_max": max(rhos) if rhos else None,
+                       "rho_iqr": [percentile(rhos, 25), percentile(rhos, 75)],
+                       "outside_hard_band": outside, "plausible_n": len(plausible),
+                       "within_model_spread": spread,
+                       "consistency": "consistent" if spread is not None and spread <= .2 else (
+                           "not consistent" if spread is not None else "not computed"), "boundary": MACHINE_BOUNDARY}
+            if clean and plausible and model not in result["central_bands"]:
+                result["central_bands"][model] = {"window_identifier": line["identifier"], "pack": pack,
+                                                 "rho_min": min(plausible), "rho_max": max(plausible)}
+            band = result["central_bands"].get(model)
+            if band:
+                inside = sum(band["rho_min"] <= rho <= band["rho_max"] for rho in rhos)
+                summary["central_band"] = {**band, "inside_n": inside, "n": len(members),
+                    "note": "sets the first clean window's band" if band["pack"] == pack else
+                            f"{inside} of {len(members)} member windows inside the first clean window's band"}
+            else:
+                summary["central_band"] = {"note": "no clean analysed window with plausible values for this model; no central band is set"}
+            record["models"][model] = summary
+    result["note"] = ("no window is clean; no central band is set" if not any(w["clean"] for w in result["windows"].values())
+                      else "central bands use each model's first clean analysed window with plausible values")
+    return result
+
+
 def add_machine(output, selections, windows, meter_dir=None):
     disclosure = {"label": "descriptive; never a claim number", "boundary": MACHINE_BOUNDARY, "windows": {}}
     output["disclosures"]["whole_machine"] = disclosure
@@ -1397,19 +1693,22 @@ def add_machine(output, selections, windows, meter_dir=None):
         directory = Path(meter_dir) if meter_dir else w.archive / "sources/night-custody/hazards/meter"
         paths = sorted(directory.glob("stream-*.jsonl"))
         if not paths:
-            disclosure["windows"][pack] = {"status": "not_computed", "reason": "meter_absent", "boundary": MACHINE_BOUNDARY}
+            disclosure["windows"][pack] = {"status": "not_computed", "reason": "meter_absent", "boundary": MACHINE_BOUNDARY,
+                                           "identifier": w.harvest.get("plan_id", w.archive.name)}
             continue
         streams = [MeterStream(p, w.reader) for p in paths]
         clock_path = w.archive / "sources/night-custody/hazards/monitor/clock.jsonl"
         journal = w.reader.lines(clock_path, "meter/clock_journal") if clock_path.exists() else []
         line = {"members": {}, "cells": {}, "streams": {s.name: {"fit": s.fit, "r_max_s": s.r_max_s} for s in streams},
                 "meter_flags": [f for f in w.flag_rows if str(f.get("code", "")).startswith("meter.")],
-                "boundary": MACHINE_BOUNDARY}
+                "boundary": MACHINE_BOUNDARY, "identifier": w.harvest.get("plan_id", w.archive.name),
+                "first_request_epoch_s": None}
         disclosure["windows"][pack] = line
         # Request cross-check covers every collected member, including removed and corpus members.
         recorded = w.reader.json(w.archive / "withheld/meter.json", "withheld/meter.json", False)
         collected = {m["run_id"]: m for m in objects(w.roster.get("members")) if isinstance(m.get("run_id"), str)}
-        collected.update({rid: {} for rid in mapping(recorded.get("members"))})
+        for rid in mapping(recorded.get("members")):
+            collected.setdefault(rid, {})
         for rid, roster in sorted(collected.items()):
             if Path(rid).name != rid or rid in (".", ".."):
                 continue
@@ -1418,8 +1717,19 @@ def add_machine(output, selections, windows, meter_dir=None):
             if not (root / rid / "metadata.json").is_file():
                 continue
             member = w.member(rid, which)
+            if which != "corpus" and "request" in member.edges:
+                start = member.origin + member.edges["request"][0]
+                old = line["first_request_epoch_s"]
+                line["first_request_epoch_s"] = min(start, old) if old is not None else start
             values = {phase: machine_member(member, phase, streams, journal, w.b["b_op_s"])
-                      for phase in ("request", "decode", "prefill")}
+                      for phase in (("request",) if pack == "GAMMA" else ("request", "decode", "prefill"))}
+            request_activity = get(values, "request", "battery_activity", default={})
+            archived_activity = any(f.get("code") == "meter.battery_activity" and get(f, "scope", "run_id") == rid
+                                    for f in w.flag_rows)
+            for phase in ("decode", "prefill"):
+                if phase in values:
+                    values[phase]["battery_activity"] = {**request_activity,
+                        "active": bool(request_activity.get("active") or archived_activity)}
             line["members"][rid] = {"model": member.model, "phases": values}
             stored = get(recorded, "members", rid, "machine")
             if isinstance(stored, dict):
@@ -1429,6 +1739,11 @@ def add_machine(output, selections, windows, meter_dir=None):
                     actual, expected = get(own, *keys), get(stored, *keys)
                     if not all(finite(v) for v in (actual, expected)) or abs(actual - expected) > max(.5, .005 * abs(expected)):
                         mismatch.append("/".join(keys))
+                for field in ("rail_delta_J", "rho"):
+                    actual, expected = own.get(field), get(recorded, "members", rid, field)
+                    if actual != expected and (not all(finite(v) for v in (actual, expected))
+                            or abs(actual - expected) > max(.5, .005 * abs(expected))):
+                        mismatch.append(field)
                 for keys, tolerance in ((("meter", "n"), 2), (("battery", "n"), 0)):
                     actual, expected = get(own, *keys), get(stored, *keys)
                     if actual != expected and (not all(finite(v) for v in (actual, expected)) or abs(actual - expected) > tolerance):
@@ -1439,27 +1754,30 @@ def add_machine(output, selections, windows, meter_dir=None):
                     mismatch.append("window_start_ns")
                 values["request"]["recorded_comparison"] = {"matches": not mismatch, "mismatched_fields": mismatch}
                 if mismatch:
-                    w.reader.flag("meter_request_mismatch", rid, {"fields": mismatch})
+                    cause = "anchor unknown: independently placed rail energy differs" if not member.usable else "raw recomputation differs from withheld record"
+                    w.reader.flag("meter_request_mismatch", rid, {"fields": mismatch, "cause": cause,
+                        "rail_difference_J": own.get("rail_delta_J") - get(recorded, "members", rid, "rail_delta_J")
+                        if all(finite(v) for v in (own.get("rail_delta_J"), get(recorded, "members", rid, "rail_delta_J"))) else None})
         for (selected_pack, cid), chosen in selections.items():
-            if selected_pack != pack:
+            if selected_pack != pack or pack == "GAMMA":
                 continue
             phase = "decode" if "decode" in cid else "prefill"
             repeats, quads = chosen.get("repeat", []), chosen["quad"]
             values = {rid: get(row, "phases", phase, default={}) for rid, row in line["members"].items()}
-            sides = ("a", "b") if pack == "GAMMA" else (None,)
+            sides = (None,)
             for side in sides:
                 key = cid + ("/" + SIDE_MODELS[side] if side else "")
-                cell = machine_mean(repeats, quads, values, side)
+                cell = phase_machine_mean(repeats, quads, values)
                 cell["phase"] = "prefill-p42" if "p42" in cid else ("decode" if phase == "decode" else "prefill-p2048")
                 if "p42" in cid:
-                    cell["label"] = "diagnostic: about four meter samples; often no SMC read"
+                    cell["label"] = "diagnostic: gross prefill-p42 meter energy; about four meter samples"
                 shifts = []
                 for on, off in itertools.product((-1, 1), repeat=2):
                     shifted = {m.run_id: machine_member(m, phase,
                                [s for s in streams if s.name == values[m.run_id].get("stream")],
                                journal, w.b["b_op_s"], (on, off), False)
-                               for m in flatten(repeats + quads) if finite(get(values, m.run_id, "delta_J"))}
-                    changed = machine_mean(repeats, quads, shifted, side)
+                               for m in flatten(repeats + quads) if finite(get(values, m.run_id, "energy_J"))}
+                    changed = phase_machine_mean(repeats, quads, shifted)
                     mean, primary = changed.get("mean_j"), cell.get("mean_j")
                     # A sensitivity cannot silently switch its units when a shifted edge loses coverage.
                     count_keys = ("n",) if side else ("n_r", "n_b")
@@ -1470,6 +1788,7 @@ def add_machine(output, selections, windows, meter_dir=None):
                     "corners": shifts, "max_abs_change_j": max(abs(v["change_j"]) for v in shifts)
                     if all(finite(v["change_j"]) for v in shifts) else None}
                 line["cells"][key] = cell
+    disclosure["request_cross_check"] = request_cross_check(disclosure["windows"])
 
 
 def sensitivity_bound(windows):
@@ -1575,6 +1894,224 @@ def add_sensitivity(output, selections, windows, diagnostic):
         contrast["floor"] = floor
         contrast["outcome_equals_primary"] = contrast["outcome"] == output["contrasts"][cid]["outcome"]
         line["contrasts"][cid] = contrast
+
+
+def reference_scale_basis(window):
+    members = [window.members[rid] for rid in window.neg8["survivor_ids"]
+               if rid in window.members and window.members[rid].usable
+               and window.members[rid].model == "Qwen2.5-1.5B-Instruct-4bit"
+               and finite(window.members[rid].energies.get("request"))]
+    return {"label": SCALED_ALLOWANCE_LABEL, "reference_ids": [m.run_id for m in members], "n": len(members),
+            "E_ref_j": statistics.fmean(m.energies["request"] for m in members) if members else None,
+            "T_ref_s": statistics.fmean(m.edges["request"][1] - m.edges["request"][0] for m in members) if members else None,
+            "allowance_j": window.neg8["allowance_j"]}
+
+
+def allowance_factor(energy, duration, basis):
+    Eref, Tref = basis["E_ref_j"], basis["T_ref_s"]
+    if not all(finite(v) for v in (energy, duration, Eref, Tref)) or min(Eref, Tref) <= 0:
+        return None
+    return max(1., energy / Eref, duration / Tref)
+
+
+def scaled_reported(primary, factor, allowance):
+    result = {**primary, "label": SCALED_ALLOWANCE_LABEL, "factor": factor,
+              "registered_allowance_j": allowance, "scaled_allowance_j": allowance * factor
+              if all(finite(v) for v in (allowance, factor)) else None}
+    if primary["interval"] and finite(result["scaled_allowance_j"]):
+        kinds = list(primary["interval"]["kind_averages_j"])
+        kinds[2] = result["scaled_allowance_j"] / 2
+        if not all(finite(value) for value in kinds):
+            return {**result, "status": "not_computed", "reason": "registered bound term unavailable"}
+        B = math.fsum(kinds)
+        result["interval"] = {**primary["interval"], "kind_averages_j": kinds, "B_j": B}
+        result["lower_j"] = primary["mean_j"] - primary["interval"]["h_j"] - B
+        result["upper_j"] = primary["mean_j"] + primary["interval"]["h_j"] + B
+    else:
+        result.update(status="not_computed", reason="cell mean or reference scale basis unavailable")
+    return result
+
+
+def scaled_floor(primary, factor):
+    allowance = primary["allowance_j"]
+    scaled = allowance * factor if all(finite(v) for v in (allowance, factor)) else None
+    guarded = primary["guarded_floor_j"]
+    minted = guarded + scaled if all(finite(v) for v in (guarded, scaled)) else None
+    return {**primary, "label": SCALED_ALLOWANCE_LABEL, "factor": factor, "registered_allowance_j": allowance,
+            "registered_minted_floor_j": primary["drift_widened_guarded_floor_j"],
+            "allowance_j": scaled, "scaled_allowance_j": scaled, "drift_widened_guarded_floor_j": minted}
+
+
+def add_scaled_allowance(output, selections, windows):
+    line = {"label": SCALED_ALLOWANCE_LABEL, "windows": {p: reference_scale_basis(w) for p, w in windows.items()},
+            "reported_cells": {}, "floors": {}, "floor_cells": {}, "contrasts": {}}
+    output["disclosures"]["scaled_allowance"] = line
+    for (pack, cid), chosen in selections.items():
+        if "p42" in cid:
+            continue
+        phase = "decode" if "decode" in cid else "prefill"
+        w = windows[pack]
+        basis = line["windows"][pack]
+        if pack == "GAMMA":
+            # There is no estimator-1 m on GAMMA (no repeat stratum).
+            # The brief does not determine its numerator; do not invent a D or outcome.
+            line["contrasts"][cid] = {"label": SCALED_ALLOWANCE_LABEL, "status": "needs_ruling",
+                "reason": "GAMMA has no estimator-1 mean; its factor's energy numerator is unspecified",
+                "factor": None, "scaled_allowance_j": None,
+                "registered_D_j": get(output, "contrasts", cid, "D_j")}
+            continue
+        primary = output["reported_cells"][cid]
+        members = flatten(chosen["repeat"] + chosen["quad"])
+        duration = statistics.fmean(m.edges[phase][1] - m.edges[phase][0] for m in members) if members else None
+        factor = allowance_factor(primary["mean_j"], duration, basis)
+        line["reported_cells"][cid] = {**scaled_reported(primary, factor, w.neg8["allowance_j"]),
+                                       "E_j": primary["mean_j"], "T_s": duration}
+        prefix = MODELS[pack] + "/" + phase
+        for form in ("absolute", "comparative"):
+            key = prefix + "/" + form
+            line["floors"][key] = scaled_floor(output["floors"][key], factor)
+        absolute = line["floors"][prefix + "/absolute"]["drift_widened_guarded_floor_j"]
+        comparative = line["floors"][prefix + "/comparative"]["drift_widened_guarded_floor_j"]
+        line["floor_cells"][prefix] = {"label": SCALED_ALLOWANCE_LABEL, "factor": factor, "floor_abs_j": absolute,
+            "floor_cmp_j": comparative, "floor_gate_j": max(absolute, comparative)
+            if all(finite(v) for v in (absolute, comparative)) else None,
+            "registered": output["floor_cells"][prefix]}
+    for cid, row in line["contrasts"].items():
+        phase = "decode" if "decode" in cid else "prefill"
+        row["floor"] = contrast_floor(line["floor_cells"], phase)
+
+
+def alternative_allowance(window):
+    excluded = sorted(set(window.neg8["survivor_ids"]) & window.excluded)
+    result = {"label": "sensitivity: drift allowance without references named by excluded_reference_in_screen",
+              "registered_allowance_j": window.neg8["allowance_j"], "excluded_reference_ids": excluded,
+              "tripwire": "excluded_reference_in_screen" if excluded else None,
+              "note": "excluded references removed from the screen" if excluded else "no excluded reference in the screen"}
+    ids = [rid for rid in window.neg8["survivor_ids"] if rid not in excluded]
+    refs = {slot: [window.members[rid].energies.get("request") for rid in ids
+                   if window.reference_slots[rid] == slot and rid in window.members and window.members[rid].usable
+                   and window.members[rid].model == "Qwen2.5-1.5B-Instruct-4bit"] for slot in ("start", "midpoint", "end")}
+    counts = {slot: sum(window.reference_slots[rid] == slot for rid in ids) for slot in refs}
+    result.update(survivor_ids=ids, corpus_n=window.neg8["corpus_n"],
+                  n_start=counts["start"], n_mid=counts["midpoint"], n_end=counts["end"],
+                  allowance_j=None, bound_j=None, spread_j=None, difference_j=None)
+    corpus = ([window.members[rid].energies["request"] for rid in window.neg8["corpus_ids"]]
+              if len(window.neg8["corpus_ids"]) == window.neg8["corpus_n"] else [])
+    bound = neg8_bound(corpus, counts["start"], counts["end"])
+    if bound and all(len(refs[k]) == counts[k] and all(finite(v) for v in refs[k]) for k in refs):
+        result.update(bound)
+        means = {k: statistics.fmean(v) if v else None for k, v in refs.items()}
+        result.update(start_mean_j=means["start"], midpoint_j=means["midpoint"], end_mean_j=means["end"])
+        result["spread_j"], result["allowance_j"] = drift_allowance(means["start"], means["midpoint"], means["end"], bound["bound_j"])
+    if not excluded:
+        result["allowance_j"] = window.neg8["allowance_j"]
+    if all(finite(v) for v in (result["allowance_j"], result["registered_allowance_j"])):
+        result["difference_j"] = result["allowance_j"] - result["registered_allowance_j"]
+    return result
+
+
+def add_alternative_allowance(output, windows):
+    line = {"label": "sensitivity: drift allowance with and without excluded screen references", "windows": {}}
+    output["disclosures"]["excluded_reference_allowance"] = line
+    for pack, w in windows.items():
+        record = alternative_allowance(w)
+        record["floors"] = {}
+        for key, primary in output["floors"].items():
+            if not key.startswith(MODELS.get(pack, "__gamma__") + "/"):
+                continue
+            guarded = primary["guarded_floor_j"]
+            record["floors"][key] = {"registered_minted_floor_j": primary["drift_widened_guarded_floor_j"],
+                "alternative_minted_floor_j": guarded + record["allowance_j"]
+                if all(finite(v) for v in (guarded, record["allowance_j"])) else None}
+        line["windows"][pack] = record
+
+
+def floor_sample(window, chosen, phase, form):
+    units = chosen["repeat" if form == "absolute" else "quad"]
+    if form == "absolute":
+        return [ms[0].energies[phase] for _, ms in units], [phase_bound(ms[0], phase) for _, ms in units]
+    splits = [common_width(ms, phase, window.b["b_op_s"]) for _, ms in units]
+    return [quad_difference(ms, phase, True) for _, ms in units], [s["width_j"] if s else None for s in splits]
+
+
+def flag_counts(rows):
+    counts = {}
+    for row in rows:
+        code = row.get("code") if isinstance(row.get("code"), str) else "unknown"
+        counts[code] = counts.get(code, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def beta_floor_quantities(window, selections):
+    result = {"floors": {}, "floor_cells": {}}
+    for cid, chosen in selections.items():
+        phase = "decode" if "decode" in cid else "prefill"
+        reported = make_reported(window, cid, chosen["repeat"], chosen["quad"])
+        forms, cell = make_floors(window, phase, chosen, reported)
+        prefix = MODELS["BETA"] + "/" + phase
+        result["floor_cells"][prefix] = cell
+        for form, floor in forms.items():
+            result["floors"][prefix + "/" + form] = {**floor, "minted_floor_j": floor["drift_widened_guarded_floor_j"], **cell}
+    return result
+
+
+def add_beta_inclusive(output, registered, extras):
+    """Extras have isolated readers/flags and cannot mutate any registered output or selection."""
+    line = {"label": BETA_INCLUSIVE_LABEL, "sessions": [], "pooled": {"floors": {}, "floor_cells": {}},
+            "cli_form": "repeat --extra-beta ARCHIVE [CLAIM_ROOT [BOUND_ROOT]]; '-' uses the archive default"}
+    output["disclosures"]["beta_including_removed_sessions"] = line
+    sessions = []
+    if registered is not None:
+        sessions.append(registered)
+    sessions.extend(extras)
+    chosen_sessions = []
+    for index, w in enumerate(sessions):
+        selections = {c["cell_id"]: {s: w.select(c["cell_id"], s) for s in ("repeat", "quad")}
+                      for c in objects(w.roster.get("cells")) if isinstance(c.get("cell_id"), str)
+                      and "p42" not in c["cell_id"] and c["cell_id"].endswith("-qwen3-8b")}
+        identifier = w.harvest.get("plan_id", w.archive.name)
+        chosen_sessions.append((w, identifier, selections))
+        quantities = beta_floor_quantities(w, selections)
+        if w is not registered:
+            line["sessions"].append({"identifier": identifier, "archive": str(w.archive),
+                "attempt": w.exclusions.get("attempt", w.harvest.get("attempt")),
+                "claim_usable": w.exclusions.get("claim_usable"), "allowance_j": w.neg8["allowance_j"],
+                "b_op_s": w.b["b_op_s"], "harvest_flags": w.flag_rows, "harvest_flag_counts": flag_counts(w.flag_rows),
+                "script_flags": w.reader.flags, "script_flag_counts": flag_counts(w.reader.flags), **quantities})
+    allowances = [w.neg8["allowance_j"] for w, _, _ in chosen_sessions]
+    allowance = max(allowances) if allowances and all(finite(a) for a in allowances) else None
+    line["pooled"]["allowance_j"] = allowance
+    line["pooled"]["session_allowances"] = [{"identifier": identifier, "allowance_j": w.neg8["allowance_j"]}
+                                           for w, identifier, _ in chosen_sessions]
+    cids = sorted({cid for _, _, chosen in chosen_sessions for cid in chosen})
+    for cid in cids:
+        phase = "decode" if "decode" in cid else "prefill"
+        prefix = MODELS["BETA"] + "/" + phase
+        forms = {}
+        for form in ("absolute", "comparative"):
+            values, widths, units = [], [], []
+            for w, identifier, selected in chosen_sessions:
+                if cid not in selected:
+                    continue
+                v, a = floor_sample(w, selected[cid], phase, form)
+                values.extend(v)
+                widths.extend(a)
+                units.extend({"identifier": identifier, "unit_id": uid, "b_op_s": w.b["b_op_s"]}
+                             for uid, _ in selected[cid]["repeat" if form == "absolute" else "quad"])
+            floor = floor_estimate(values, widths, form)
+            guarded = floor["guarded_floor_j"]
+            minted = guarded + allowance if all(finite(v) for v in (guarded, allowance)) else None
+            floor.update(label=BETA_INCLUSIVE_LABEL, allowance_j=allowance, minted_floor_j=minted,
+                         drift_widened_guarded_floor_j=minted, units=units)
+            if len(values) > 16:
+                floor["reason"] = "PLAN 5 exact corner enumeration is capped at 16 units; no approximation substituted"
+            forms[form] = floor
+        absolute, comparative = (forms[f]["minted_floor_j"] for f in ("absolute", "comparative"))
+        cell = {"floor_abs_j": absolute, "floor_cmp_j": comparative,
+                "floor_gate_j": max(absolute, comparative) if all(finite(v) for v in (absolute, comparative)) else None}
+        line["pooled"]["floor_cells"][prefix] = {"label": BETA_INCLUSIVE_LABEL, **cell}
+        for form, floor in forms.items():
+            line["pooled"]["floors"][prefix + "/" + form] = {**floor, **cell}
 
 
 def recompute(windows, flags, member_detail=False, diagnostic=False, meter_dir=None):
@@ -1746,6 +2283,9 @@ def recompute(windows, flags, member_detail=False, diagnostic=False, meter_dir=N
         output["disclosures"]["battery_assist"][cid] = disclosure
     add_sensitivity(output, selections, windows, diagnostic)
     add_machine(output, selections, windows, meter_dir)
+    add_reconstruction(output, selections, windows)
+    add_scaled_allowance(output, selections, windows)
+    add_alternative_allowance(output, windows)
     for pack, window in windows.items():
         if member_detail:
             # Include every collected roster bundle, but never diagnostic interior references.
@@ -1758,6 +2298,9 @@ def recompute(windows, flags, member_detail=False, diagnostic=False, meter_dir=N
             for path in sorted(window.bound_root.glob("neg8-refcorpus-r*/metadata.json")):
                 window.member(path.parent.name, "corpus")
             output.setdefault("members", {})[pack] = {rid: m.detail() for rid, m in sorted(window.members.items())}
+            for rid, m in sorted(window.members.items()):
+                if m.role == "science":
+                    output["members"][pack][rid]["single_step_reconstruction"] = single_step_member(m)
         output["inputs"][pack] = {"archive": str(window.archive), "exclusions_sha256": window.exclusion_hash,
                                   "claim_usable": window.exclusions.get("claim_usable"),
                                   "attempt": window.exclusions.get("attempt"),
@@ -1788,6 +2331,8 @@ def main(argv=None) -> int:
     parser.add_argument("--member-detail", action="store_true")
     parser.add_argument("--diagnostic-ignore-exclusions", action="store_true")
     parser.add_argument("--meter-dir", help="override the archive's raw meter-stream directory")
+    parser.add_argument("--extra-beta", action="append", nargs="+", default=[],
+                        metavar="PATH", help="extra BETA ARCHIVE [CLAIM_ROOT [BOUND_ROOT]]; '-' means archive default")
     parser.add_argument("--out", required=True)
     args = parser.parse_args(argv)
     flags, windows = [], {}
@@ -1808,6 +2353,15 @@ def main(argv=None) -> int:
                                         getattr(args, "claim_runs_" + pack), getattr(args, "bound_runs_" + pack),
                                         args.diagnostic_ignore_exclusions)
     output = recompute(windows, flags, args.member_detail, args.diagnostic_ignore_exclusions, args.meter_dir)
+    if args.extra_beta:
+        extras = []
+        for entry in args.extra_beta:
+            if len(entry) > 3:
+                parser.error("--extra-beta takes ARCHIVE and at most two runs roots")
+            archive, claim, bound = [*entry, *([None] * (3 - len(entry)))]
+            extras.append(Window("BETA", archive, [], claim_root=claim if claim != "-" else None,
+                                 bound_root=bound if bound != "-" else None))
+        add_beta_inclusive(output, windows.get("BETA"), extras)
     clean = sanitize(output, flags)
     clean["flags"] = sorted((sanitize(f, [], "flag") for f in flags),
                             key=lambda f: (f["code"], f["pack"], f["scope"], json.dumps(f["detail"], sort_keys=True)))

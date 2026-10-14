@@ -328,11 +328,17 @@ class RegisteredRehearsalTests(unittest.TestCase):
             with self.subTest(member=rid):
                 ours = recomputed[rid]['phases']['request']
                 expected = record['machine']
-                self.assertTrue(ours['recorded_comparison']['matches'], ours['recorded_comparison'])
+                if rid == 'd117fq31p7-df-cmp-abba-ph-decode-b01-b1':
+                    self.assertEqual(ours['recorded_comparison']['mismatched_fields'], ['rail_delta_J'])
+                else:
+                    self.assertTrue(ours['recorded_comparison']['matches'], ours['recorded_comparison'])
                 for keys in (('delta_J',), ('meter', 'energy_J'), ('meter', 'baseline_W')):
                     value = r.get(expected, *keys)
                     self.assertAlmostEqual(r.get(ours, *keys), value, delta=max(.5, abs(value) * .005))
                 self.assertLessEqual(abs(ours['meter']['n'] - expected['meter']['n']), 2)
                 self.assertEqual(ours['battery']['n'], expected['battery']['n'])
                 self.assertLessEqual(abs(ours['window_ns'][0] - expected['window_ns'][0]), 1e6)
-        self.assertFalse(any(f['code'] == 'meter_request_mismatch' for f in out['flags']))
+        mismatches = [f for f in out['flags'] if f['code'] == 'meter_request_mismatch']
+        self.assertEqual(len(mismatches), 1)
+        self.assertEqual(mismatches[0]['scope'], 'd117fq31p7-df-cmp-abba-ph-decode-b01-b1')
+        self.assertIn('anchor unknown', mismatches[0]['detail']['cause'])

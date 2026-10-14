@@ -38,7 +38,7 @@ def member(reader, rail_phase=30., rail_idle=.047):
         events=[{'event_type': 'stage_started', 'phase': 'idle_baseline', 'timestamp_s': .5},
                 {'event_type': 'stage_started', 'phase': 'idle_baseline', 'timestamp_s': 1.},
                 {'event_type': 'stage_completed', 'phase': 'idle_baseline', 'timestamp_s': 3.}],
-        edges={'decode': (20., 22.)},
+        edges={'decode': (20., 22.), 'request': (20., 22.)}, _rail_idle_power=rail_idle,
         records=[(0., 19., rail_idle), (19., 24., rail_phase), (24., 46., rail_idle)])
 
 
@@ -57,7 +57,7 @@ class MeterTests(unittest.TestCase):
                 stream_file(path, lambda t: 50. if t >= 15. else 10.,
                             battery=(lambda t: 0.) if available else (lambda t: None))
                 stream = r.MeterStream(path, self.reader)
-                row = r.machine_member(member(self.reader), 'decode', [stream], [], .045)
+                row = r.machine_member(member(self.reader), 'request', [stream], [], .045)
                 self.assertEqual(row['meter']['n'], 100)
                 self.assertEqual(row['duration_s'], 2.)
                 self.assertEqual(row['meter']['baseline_W'], 10.)
@@ -76,11 +76,11 @@ class MeterTests(unittest.TestCase):
         stream = r.MeterStream(path, self.reader)
         journal = [{'finished': {'monotonic_ns': base, 'monotonic_raw_ns': base + 400_000}},
                    {'finished': {'monotonic_ns': base + 21_000_000_000, 'monotonic_raw_ns': base + 21_000_000_000 + 200_000}}]
-        row = r.machine_member(member(self.reader), 'decode', [stream], journal, .045)
+        row = r.machine_member(member(self.reader), 'request', [stream], journal, .045)
         self.assertEqual(row['offset_source'], 'journal')
         self.assertEqual(row['window_ns'][0], base + 20_000_000_000 + 200_000)
         self.assertTrue(any(f['code'] == 'meter_offset_from_journal' for f in self.flags))
-        absent = r.machine_member(member(self.reader), 'decode', [stream], [], .045)
+        absent = r.machine_member(member(self.reader), 'request', [stream], [], .045)
         self.assertIsNone(absent['delta_J'])
         self.assertTrue(any(f['code'] == 'meter_offset_unavailable' for f in self.flags))
 
@@ -89,7 +89,7 @@ class MeterTests(unittest.TestCase):
         stream_file(path, lambda t: 50., count=19)
         stream = r.MeterStream(path, self.reader)
         self.assertIsNone(stream.fit)
-        row = r.machine_member(member(self.reader), 'decode', [stream], [], .045)
+        row = r.machine_member(member(self.reader), 'request', [stream], [], .045)
         self.assertIsNone(row['delta_J'])
         self.assertTrue({'meter_no_fit', 'meter_span_uncovered'} <= {f['code'] for f in self.flags})
 
@@ -100,10 +100,10 @@ class MeterTests(unittest.TestCase):
         stream_file(path, power)
         stream = r.MeterStream(path, self.reader)
         m = member(self.reader)
-        primary = r.machine_member(m, 'decode', [stream], [], .062)
+        primary = r.machine_member(m, 'request', [stream], [], .062)
         for corner, sign in (((-1, -1), -1), ((-1, 1), 1), ((1, -1), -1), ((1, 1), 1)):
             with self.subTest(corner=corner):
-                row = r.machine_member(m, 'decode', [stream], [], .062, corner)
+                row = r.machine_member(m, 'request', [stream], [], .062, corner)
                 self.assertGreater(sign * (row['delta_J'] - primary['delta_J']), 0.)
                 self.assertEqual(row['baseline_ns'], primary['baseline_ns'])
                 self.assertAlmostEqual(row['duration_s'], 2. + (corner[1] - corner[0]) * .062, delta=1e-12)
@@ -116,14 +116,14 @@ class MeterTests(unittest.TestCase):
         # A known latency residual contributes 17 ms to the sensitivity delta.
         stream.r_max_s = .017
         m = member(self.reader)
-        row = r.machine_member(m, 'decode', [stream], [], .045)
+        row = r.machine_member(m, 'request', [stream], [], .045)
         self.assertEqual(row['meter']['energy_J'], 144.)
         self.assertEqual(row['meter']['delta_J'], 126.)
         self.assertEqual(row['battery']['delta_J'], 1.)
         self.assertEqual(row['delta_J'], 127.)
         self.assertAlmostEqual(row['rail_delta_J'], 59.906, delta=1e-12)
         self.assertAlmostEqual(row['rho'], .4717, delta=.00005)
-        corner = r.machine_member(m, 'decode', [stream], [], .045, (-1, 1))
+        corner = r.machine_member(m, 'request', [stream], [], .045, (-1, 1))
         self.assertEqual(corner['duration_s'], 2.124)
         self.assertAlmostEqual(corner['meter']['delta_J'] - row['meter']['delta_J'], 7.812, delta=1e-12)
         # REG 3523-3527: battery energy uses changed T too. The example's
@@ -210,7 +210,7 @@ class MeterTests(unittest.TestCase):
         for cid, cell in cells.items():
             with self.subTest(cell=cid):
                 self.assertEqual(len(cell['edge_shift_sensitivity']['corners']), 4)
-                self.assertEqual(cell['boundary'], r.MACHINE_BOUNDARY)
+                self.assertEqual(cell['boundary'], r.PHASE_MACHINE_BOUNDARY)
                 if 'p42' in cid:
                     # A 31-ms diagnostic phase has an inverted span at the
                     # inward 2*b_op corner, so that corner has no phase value.
