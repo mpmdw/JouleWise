@@ -2342,6 +2342,27 @@ def floor_mint_config_set_sha256(scientific_hashes: Sequence[str]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def floor_mint_runtime_set_sha256(runtime_hashes: Sequence[str]) -> str:
+    """Use the same canonical set encoding for per-cell runtime identities."""
+    return floor_mint_config_set_sha256(runtime_hashes)
+
+
+def floor_mint_producer_runtime_set(producer: Mapping) -> str | None:
+    """Validate optional runtime pins without changing the legacy inventory."""
+    cells = producer["cells"]
+    present = ["runtime_identity_sha256" in cell for cell in cells]
+    if not any(present):
+        return None
+    if not all(present):
+        raise ValueError("per-cell runtime pins must cover every producer cell")
+    if any("scientific_config_identity_sha256" not in cell for cell in cells):
+        raise ValueError("per-cell runtime pins require per-cell scientific config pins")
+    digest = floor_mint_runtime_set_sha256([cell["runtime_identity_sha256"] for cell in cells])
+    if producer["model_runtime_config"]["runtime_identity_sha256"] != digest:
+        raise ValueError("runtime-set pin does not match the sorted per-cell runtime set")
+    return digest
+
+
 def floor_mint_producer_config_set(producer: Mapping) -> dict | None:
     """Project a full per-cell binding, or the unchanged legacy single-config form."""
 
@@ -2585,11 +2606,11 @@ def _project_floor_mint_pinset_v2(
         producer_members: set[str] = set()
         custody_pins: list[tuple[object, ...]] = []
         for cell in cells:
-            optional = ({"scientific_config_identity_sha256"}
-                        if isinstance(cell, Mapping) and "scientific_config_identity_sha256" in cell else set())
+            optional = ({name for name in ("scientific_config_identity_sha256", "runtime_identity_sha256")
+                         if name in cell} if isinstance(cell, Mapping) else set())
             if not _v2_exact_mapping(cell, _V2_CELL_KEYS | optional):
                 return None
-            if optional and not _is_hex(cell["scientific_config_identity_sha256"]):
+            if any(not _is_hex(cell[name]) for name in optional):
                 return None
             role = cell.get("role")
             expected_metric = {
@@ -2748,6 +2769,7 @@ def _project_floor_mint_pinset_v2(
             return None
         try:
             config_set = floor_mint_producer_config_set(producer)
+            floor_mint_producer_runtime_set(producer)
         except ValueError:
             return None
         config_sets_by_identity[(mint_tool_version, plan["plan_id"], plan["sha256"])] = (
@@ -3355,6 +3377,13 @@ def _validate_provenance(
 def _validate_launch_lineage_provenance(value, where, errors) -> None:
     """Validate the optional settled-lineage carrier without reopening custody."""
 
+    from joulewise import window_lineage
+    if window_lineage.is_hazard_lineage(value):
+        try:
+            window_lineage.validate_lineage(value)
+        except window_lineage.HazardLineageError as exc:
+            errors.append(f"{where}: {exc}")
+        return
     if not _check_keys(value, _LAUNCH_LINEAGE_KEYS, where, errors):
         return
     if value["schema_version"] != LAUNCH_LINEAGE_SCHEMA:

@@ -58,10 +58,16 @@ class FloorMintEmitterTests(unittest.TestCase):
             for actual, expected in zip(value["producer_plans"], original["producer_plans"], strict=True):
                 for key in ("plan", "evidence_root_id", "extraction_spec", "calibration_acceptance"):
                     self.assertEqual(actual[key], expected[key])
-                for key in ("model_artifact_sha256", "runtime_identity_sha256"):
-                    self.assertEqual(actual["model_runtime_config"][key], expected["model_runtime_config"][key])
-                self.assertEqual([{k: v for k, v in cell.items() if k != "scientific_config_identity_sha256"}
-                                  for cell in actual["cells"]], expected["cells"])
+                self.assertEqual(actual["model_runtime_config"]["model_artifact_sha256"],
+                                 expected["model_runtime_config"]["model_artifact_sha256"])
+                runtime_hash = expected["model_runtime_config"]["runtime_identity_sha256"]
+                self.assertEqual([cell["runtime_identity_sha256"] for cell in actual["cells"]],
+                                 [runtime_hash, runtime_hash])
+                self.assertEqual(actual["model_runtime_config"]["runtime_identity_sha256"],
+                    hashlib.sha256(json.dumps([runtime_hash], separators=(",", ":")).encode()).hexdigest())
+                self.assertEqual([{k: v for k, v in cell.items()
+                                   if k not in ("scientific_config_identity_sha256", "runtime_identity_sha256")}
+                                   for cell in actual["cells"]], expected["cells"])
             rows = []
             for producer in original["producer_plans"]:
                 plan_id = producer["plan"]["plan_id"]

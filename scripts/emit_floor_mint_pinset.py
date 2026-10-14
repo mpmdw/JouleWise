@@ -170,10 +170,17 @@ def build_pinset(*, contracts: Sequence[Mapping[str, Any]],
         core = mint._fresh_original_core()
         core._safe_relative_posix(relative, "producer plan relative path")
         cells = []
+        runtime = None
         for role in ("decode", "prefill"):
             cell_inputs = source.cells[role]
             mapping = _one(contract["roles"], "artifact_cell_id", contract["selected_cells"][role])
             absolute, comparative = cell_inputs.absolute, cell_inputs.comparative
+            cell_runtime = mint.derive_model_runtime_config(
+                absolute.source_regime["stack_identity"], absolute.scientific_config_identity_sha256)
+            if runtime is None:
+                runtime = dict(cell_runtime)
+            else:
+                _equal(cell_runtime["model_artifact_sha256"], runtime["model_artifact_sha256"], "producer model artifact")
             config_hash = mapping.get("scientific_config_identity_sha256", absolute.scientific_config_identity_sha256)
             for component in (absolute, comparative):
                 _equal(component.scientific_config_identity_sha256, config_hash, f"{role} scientific config")
@@ -203,6 +210,7 @@ def build_pinset(*, contracts: Sequence[Mapping[str, Any]],
             cells.append({
                 "role": role, "cell_id": mapping["artifact_cell_id"],
                 "scientific_config_identity_sha256": config_hash,
+                "runtime_identity_sha256": cell_runtime["runtime_identity_sha256"],
                 "transport_group_id": mapping["transport_group_id"],
                 **_family_pins([binding])[0], "metric": mapping["metric"], "window_class": "phase",
                 "target_precheck_path": mapping["target_precheck_path"],
@@ -210,10 +218,10 @@ def build_pinset(*, contracts: Sequence[Mapping[str, Any]],
                 "absolute": absolute_pins, "comparative": comparative_pins, "postcollection": post,
             })
         first = source.cells["decode"].absolute
-        runtime = mint.derive_model_runtime_config(
-            first.source_regime["stack_identity"], first.scientific_config_identity_sha256)
         runtime["config_set_sha256"] = mint.detection_floor.floor_mint_config_set_sha256(
             [cell["scientific_config_identity_sha256"] for cell in cells])
+        runtime["runtime_identity_sha256"] = mint.detection_floor.floor_mint_runtime_set_sha256(
+            [cell["runtime_identity_sha256"] for cell in cells])
         producers.append({
             "plan": {"plan_id": source.plan["plan_id"], "sha256": source.plan_sha256,
                      "declared_sha256": source.plan_declared_sha256,
@@ -255,6 +263,10 @@ def _bootstrap_producer(pack: Path, runs: Path, report_path: Path, bracket_path:
                         consumer_bindings: Mapping[str, Mapping[str, Any]], acceptance: Mapping[str, Any],
                         acceptance_hash: str, snapshot: Any, relative: str, prefill_role: str,
                         kept_units: Any | None = None) -> tuple[dict, dict, dict]:
+    if mint.active_v2_authentication_session() is None:
+        with V2AuthenticationReadSession():
+            return _bootstrap_producer(pack, runs, report_path, bracket_path, consumer_bindings,
+                acceptance, acceptance_hash, snapshot, relative, prefill_role, kept_units=kept_units)
     core = mint._fresh_original_core()
     tree, tree_hash = _read(pack / "plan_tree.json")
     from joulewise.authentication_io import read_authentication_input
@@ -313,6 +325,7 @@ def _bootstrap_producer(pack: Path, runs: Path, report_path: Path, bracket_path:
     contract["selected_cells"] = {}
     runtime = None
     for role, pack_role in (("decode", "decode"), ("prefill", prefill_role)):
+        cell_runtime = None
         mapping = _one(contract["roles"], "role", pack_role)
         config_hash = _registered_cell_config_sha256(tree, mapping)
         # This in-memory projection carries the pack-derived pin into the final
@@ -350,16 +363,21 @@ def _bootstrap_producer(pack: Path, runs: Path, report_path: Path, bracket_path:
             report_cells[kind] = {**cell, **pins}
             component_paths[kind] = {"evidence_root": str(runs), "report": str(report_path),
                                      "spec": str(spec_path), "order_manifest": str(order_path)}
-            if runtime is None:
+            if cell_runtime is None:
                 member = pins["members"][0]["bundle_id"]
                 config, _ = _read(runs / member / "config.json")
                 metadata, _ = _read(runs / member / "metadata.json")
-                runtime = mint.derive_model_runtime_config(core.build_stack_identity(config, metadata),
+                cell_runtime = mint.derive_model_runtime_config(core.build_stack_identity(config, metadata),
                     core.canonical_json_sha256(core.scientific_config_identity(config)))
+                if runtime is None:
+                    runtime = dict(cell_runtime)
+                else:
+                    _equal(cell_runtime["model_artifact_sha256"], runtime["model_artifact_sha256"], "producer model artifact")
             if kind == "absolute":
                 family = spec_cell["condition_family_definitions"]["all"]
                 _equal(family["condition_family_id"], mapping["condition_family_id"], "producer family")
         cells.append({"role": role, "cell_id": mapping["artifact_cell_id"],
+                      "runtime_identity_sha256": cell_runtime["runtime_identity_sha256"],
                       "scientific_config_identity_sha256": config_hash,
                       "transport_group_id": mapping["transport_group_id"], **_family_pins([family])[0],
                       "metric": mapping["metric"], "window_class": "phase", "target_precheck_path": mapping["target_precheck_path"],
@@ -369,6 +387,8 @@ def _bootstrap_producer(pack: Path, runs: Path, report_path: Path, bracket_path:
         manifest_cells.append({"role": role, **component_paths, "allowed_consumer_condition_families": allowed})
     runtime["config_set_sha256"] = mint.detection_floor.floor_mint_config_set_sha256(
         [cell["scientific_config_identity_sha256"] for cell in cells])
+    runtime["runtime_identity_sha256"] = mint.detection_floor.floor_mint_runtime_set_sha256(
+        [cell["runtime_identity_sha256"] for cell in cells])
     producer = {"plan": {"plan_id": plan["plan_id"], "sha256": plan_hash, "declared_sha256": plan_hash,
                          "sidecar_sha256": sidecar_hash, "relative_path": relative,
                          "declared_calibration_scope": plan["calibration_scope"], "artifact_calibration_scope": "production_window"},

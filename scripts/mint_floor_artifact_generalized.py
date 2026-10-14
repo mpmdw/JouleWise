@@ -1088,10 +1088,14 @@ def _parse_v2_pinset(value: object) -> V2Pinset:
                     "comparative",
                     "postcollection",
                 } | ({"scientific_config_identity_sha256"}
-                     if isinstance(cell_value, Mapping) and "scientific_config_identity_sha256" in cell_value else set()),
+                     if isinstance(cell_value, Mapping) and "scientific_config_identity_sha256" in cell_value else set())
+                  | ({"runtime_identity_sha256"}
+                     if isinstance(cell_value, Mapping) and "runtime_identity_sha256" in cell_value else set()),
             )
             if "scientific_config_identity_sha256" in cell:
                 _sha256(cell["scientific_config_identity_sha256"], f"{cell_label}.scientific_config_identity_sha256")
+            if "runtime_identity_sha256" in cell:
+                _sha256(cell["runtime_identity_sha256"], f"{cell_label}.runtime_identity_sha256")
             role = _string(cell["role"], f"{cell_label}.role")
             roles.append(role)
             expected_metric = {
@@ -1201,6 +1205,7 @@ def _parse_v2_pinset(value: object) -> V2Pinset:
             raise MintError(f"{label}.cells must contain one decode and one prefill role")
         try:
             detection_floor.floor_mint_producer_config_set(producer)
+            detection_floor.floor_mint_producer_runtime_set(producer)
         except ValueError as exc:
             raise MintError(f"{label}: {exc}") from exc
         if len(set(producer_custody_pins)) != 1:
@@ -2626,8 +2631,21 @@ def _v2_gate_producer_inventory(
     runtime_pins = producer["model_runtime_config"]
     if model_hashes != {runtime_pins["model_artifact_sha256"]}:
         raise MintError(f"producer {plan_id!r}: model artifact inventory mismatch")
-    if runtime_hashes != {runtime_pins["runtime_identity_sha256"]}:
-        raise MintError(f"producer {plan_id!r}: runtime identity inventory mismatch")
+    try:
+        runtime_set = detection_floor.floor_mint_producer_runtime_set(producer) if "cells" in producer else None
+    except ValueError as exc:
+        raise MintError(f"producer {plan_id!r}: {exc}") from exc
+    if runtime_set is None:
+        if runtime_hashes != {runtime_pins["runtime_identity_sha256"]}:
+            raise MintError(f"producer {plan_id!r}: runtime identity inventory mismatch")
+    else:
+        for cell_pin in producer["cells"]:
+            cell_inputs = inputs.cells[cell_pin["role"]]
+            for component in (cell_inputs.absolute, cell_inputs.comparative):
+                observed = derive_model_runtime_config(component.source_regime.get("stack_identity", {}),
+                    component.scientific_config_identity_sha256)
+                if observed["runtime_identity_sha256"] != cell_pin["runtime_identity_sha256"]:
+                    raise MintError(f"producer {plan_id!r}: runtime identity inventory mismatch")
     try:
         config_set = detection_floor.floor_mint_producer_config_set(producer) if "cells" in producer else None
     except ValueError as exc:
@@ -3352,6 +3370,11 @@ def _build_v2_artifacts(
                 cell_pins["allowed_consumer_condition_families"],
                 label=f"producer[{producer_index}].cells[{cell_index}].allowlist",
             )
+            source_family = group["allowed_consumer_condition_families"][0]
+            if not any((row["condition_family_id"], row["condition_family_sha256"]) ==
+                       (source_family["condition_family_id"], source_family["condition_family_sha256"])
+                       for row in allowed):
+                allowed.insert(0, source_family)
             group["allowed_consumer_condition_families"] = allowed
             producer_cells.append(cell)
             producer_groups.append(group)
@@ -3574,6 +3597,11 @@ def _validate_v2_artifact_binding(
             if roots != {producer["evidence_root_id"]}:
                 errors.append(f"cells[{cell_pin['cell_id']}]: evidence-root pin mismatch")
             group = group_by_id.get(cell_pin["transport_group_id"])
+            expected_allowed = [(row["condition_family_id"], row["condition_family_sha256"])
+                                for row in cell_pin["allowed_consumer_condition_families"]]
+            source_family = (cell_pin["condition_family_id"], cell_pin["condition_family_sha256"])
+            if source_family not in expected_allowed:
+                expected_allowed.insert(0, source_family)
             if not isinstance(group, Mapping) or group.get("source_cell_ids") != [
                 cell_pin["cell_id"]
             ]:
@@ -3584,10 +3612,7 @@ def _validate_v2_artifact_binding(
                 (row.get("condition_family_id"), row.get("condition_family_sha256"))
                 for row in group.get("allowed_consumer_condition_families", [])
                 if isinstance(row, Mapping)
-            ] != [
-                (row["condition_family_id"], row["condition_family_sha256"])
-                for row in cell_pin["allowed_consumer_condition_families"]
-            ]:
+            ] != expected_allowed:
                 errors.append(f"cells[{cell_pin['cell_id']}]: transport allowlist mismatch")
 
             aggregate_entry = next(
