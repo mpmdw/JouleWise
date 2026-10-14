@@ -20,8 +20,9 @@ class JoinedRunTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from tests.b5_analysis.joined_s10 import cached_primary
+        # The scratch repository outlives this class: the release tests reuse
+        # this run as their first dry run; the harness removes it at exit.
         cls.fixture, cls.harness, cls.result = cached_primary()
-        cls.addClassCleanup(cls.harness.remove_repository)
 
     def rows(self, step):
         self.assertIsNotNone(self.result.record, self.result.stderr)

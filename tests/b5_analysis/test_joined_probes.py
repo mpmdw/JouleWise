@@ -7,8 +7,8 @@ from tests.b5_analysis.joined_s10 import cached_primary
 class JoinedProbeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # The scratch repository is removed by the release tests or at exit.
         cls.fixture, cls.harness, cls.result = cached_primary()
-        cls.addClassCleanup(cls.harness.remove_repository)
 
     def test_load_correlated_restored_units_pass_real_tripwire_and_validator(self):
         from joulewise.b5_analysis.disclosures import LOAD_CODES

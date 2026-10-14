@@ -6,6 +6,7 @@ archives and never run a collection program from the analysis checkout.
 from __future__ import annotations
 import atexit
 import base64
+import copy
 import contextlib
 from dataclasses import dataclass
 from functools import lru_cache
@@ -64,14 +65,31 @@ def conditional_aggregate_lineage_seam():
     """Apply Q-LINEAGE's fixture-only option; see CONDITIONAL_SEAMS."""
     from scripts import mint_floor_artifact_generalized as mint
     original=mint._common_minted_artifact_launch_lineage
+    original_variants=mint._artifact_sha256_containment_variants
+    # Producer lineages the same mint run authenticated, by producer plan id:
+    # the post-bind check rebuilds each component from the aggregate, which
+    # under this option carries none, so the rebuild takes its producer's.
+    producer_lineages={}
+    def plan_id(artifact):
+        return ((artifact.get('provenance') or {}).get('calibration_plan') or {}).get('plan_id')
     def aggregate(artifacts,*,label):
         if label=='aggregate components':
             lineages=[(a.get('provenance') or {}).get('launch_lineage') for a in artifacts]
             if (len(lineages)>1 and all(isinstance(l,dict) for l in lineages)
                     and len({mint._canonical_json_sha256(l) for l in lineages})==len(lineages)):
+                for artifact,lineage in zip(artifacts,lineages):
+                    producer_lineages[plan_id(artifact)]=copy.deepcopy(lineage)
                 return None
         return original(artifacts,label=label)
-    with mock.patch.object(mint,'_common_minted_artifact_launch_lineage',aggregate):
+    def variants(artifact):
+        provenance=artifact.get('provenance')
+        if (isinstance(provenance,dict) and 'launch_lineage' not in provenance
+                and plan_id(artifact) in producer_lineages):
+            artifact=copy.deepcopy(dict(artifact))
+            artifact['provenance']['launch_lineage']=copy.deepcopy(producer_lineages[plan_id(artifact)])
+        return original_variants(artifact)
+    with mock.patch.object(mint,'_common_minted_artifact_launch_lineage',aggregate), \
+         mock.patch.object(mint,'_artifact_sha256_containment_variants',variants):
         yield
 
 

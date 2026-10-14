@@ -9,11 +9,12 @@ from joulewise.b5_analysis.windows import AnalysisRefusal
 class JoinedReleaseTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from tests.b5_analysis.joined_s10 import JoinedHarness, require_windows
-        cls.fixture = require_windows()
-        cls.harness = JoinedHarness(cls.fixture.index)
-        cls.addClassCleanup(cls.harness.close)
-        cls.first = cls.harness.execute('first')
+        # The primary joined run (shared with JoinedRunTests and the probes)
+        # is the first dry run; one more dry run and the release follow in the
+        # same scratch repository, so the three share one anchor commit.
+        from tests.b5_analysis.joined_s10 import cached_primary
+        cls.fixture, cls.harness, cls.first = cached_primary()
+        cls.addClassCleanup(cls.harness.remove_repository)
         cls.second = cls.harness.execute('second')
         cls.release = cls.harness.execute(mode='release', custody=cls.first.custody)
 

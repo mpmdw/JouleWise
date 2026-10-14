@@ -3658,6 +3658,12 @@ def _validate_v2_artifact_binding(
                 component["provenance"]["calibration_custody_store"] = (
                     copy.deepcopy(provenance["calibration_custody_store"])
                 )
+            if provenance.get("launch_lineage") is not None:
+                # _build_v2_artifacts gives every component its producer's
+                # lineage and the aggregate carries the one common value.
+                component["provenance"]["launch_lineage"] = copy.deepcopy(
+                    provenance["launch_lineage"]
+                )
             component["cells"] = [
                 copy.deepcopy(cell_by_id[cell_id])
                 for cell_id in producer_cell_ids
