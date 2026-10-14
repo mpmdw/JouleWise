@@ -46,6 +46,7 @@ CORE_FLAG_CODES: Mapping[str, tuple[str, str]] = {
     "env.stage_preflight_not_admitted": ("DIAGNOSTIC", "REPRESENTATION"),
     "campaign.runner_record_flagged": ("RECORDS", "REPRESENTATION"),
     "calibration.writer_record_flagged": ("CALIBRATION", "REPRESENTATION"),
+    "calibration.acceptance_preflight_unverified": ("CALIBRATION", "REPRESENTATION"),
     "code.executed_differs_from_sealed": ("CODE_IDENTITY", "NUMBER"),
     # Gate-prune 2, lane P2-CHAIN: written by the rendered block-5 chain (joulewise/b5/chain.py,
     # writer "b5-chain") through this module. Effects live in the catalog (lane P2-HARV, REG).

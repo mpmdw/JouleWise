@@ -74,6 +74,11 @@ SECTION_5 = {
 PRUNE2_CONSUMER_PENDING = frozenset()
 HARVEST_NONCORE_CODES = ("neg8.corpus_member_dropped", "calibration.capture_battery_span",
                          "calibration.capture_battery_unmeasured", "calibration.capture_invalid")
+# Block-six additions are classified in their own catalog; the block-five
+# consumer tables and sealed catalog retain their original vocabulary.
+BLOCK6_CORE_CODES = {
+    "calibration.acceptance_preflight_unverified": ("CALIBRATION", "REPRESENTATION", DISCLOSE),
+}
 # The protected-core files whose literal codes must be in CORE_FLAG_CODES.
 CORE_WRITER_FILES = ("joulewise/controller.py", "scripts/run_campaign.py",
                      "scripts/validate_powermetrics_fiducial.py", "scripts/reserve_calibration_window_bracket.py")
@@ -322,13 +327,15 @@ class HarvestFoldTests(unittest.TestCase):
 
 
 class VocabularyTests(unittest.TestCase):
-    """Interface I5: CORE_FLAG_CODES = fixture catalog = DRAFT_CODES = harvest CODES (= sealed draft)."""
+    """Core codes match their owning catalog and the block-five consumer tables."""
 
-    def test_every_core_code_has_its_section_5_classification_everywhere(self):
+    def test_every_block_five_core_code_has_its_section_5_classification_everywhere(self):
         from joulewise.b5 import harvest as h
 
         fixture = json.loads(FIXTURE_CATALOG.read_bytes())["codes"]
         for code, (family, klass) in flags_core.CORE_FLAG_CODES.items():
+            if code in BLOCK6_CORE_CODES:
+                continue
             with self.subTest(code):
                 expected = SECTION_5[code]
                 self.assertEqual((family, klass), expected[:2])
@@ -340,10 +347,19 @@ class VocabularyTests(unittest.TestCase):
                                  expected)
                 self.assertEqual((h.CODES[code].family, h.CODES[code].klass), expected[:2])
         pending = {code for code in PRUNE2_CONSUMER_PENDING if code not in h.CORE_WRITER_CODES}
-        self.assertEqual(set(flags_core.CORE_FLAG_CODES) - {"code.executed_differs_from_sealed"} - pending,
+        self.assertEqual(set(flags_core.CORE_FLAG_CODES) - set(BLOCK6_CORE_CODES)
+                         - {"code.executed_differs_from_sealed"} - pending,
                          set(h.CORE_WRITER_CODES))
         self.assertEqual(set(flags_core.WRITERS),
                          {"core-controller", "core-run_campaign", "core-fiducial", "core-reservation"})
+
+    def test_block_six_core_codes_match_the_block_six_catalog(self):
+        catalog = load_catalog(REPO / "configs/b6/flag_catalog_b6.json")
+        for code, expected in BLOCK6_CORE_CODES.items():
+            with self.subTest(code):
+                self.assertEqual(flags_core.CORE_FLAG_CODES[code], expected[:2])
+                entry = catalog.codes[code]
+                self.assertEqual((entry["family"], entry["klass"], entry["effect"]), expected)
 
     def test_the_harvest_codes_of_this_lane_are_classified(self):
         from joulewise.b5 import harvest as h

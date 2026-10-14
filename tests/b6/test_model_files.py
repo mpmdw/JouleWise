@@ -1,0 +1,98 @@
+import copy
+import json
+import unittest
+
+from joulewise.b6 import model_files
+from tests.b6.support import IDENTITY, ROOT
+
+
+class ModelFileTests(unittest.TestCase):
+    def setUp(self):
+        self.pins = {"runtime_versions": {"packages": IDENTITY["packages"]}, "units": {"one": {
+            "model_source": IDENTITY["model_source"], "model_artifact_sha256": IDENTITY["model_artifact_sha256"],
+            "stack_identity": {"runtime_version": {"name": "mlx"}, "quantization": IDENTITY["quantization"]}}}}
+        self.expected = model_files.expected(self.pins)
+
+    def test_clean_and_multiple_units_for_one_source(self):
+        self.pins["units"]["two"] = copy.deepcopy(self.pins["units"]["one"])
+        self.assertEqual(model_files.compare(model_files.expected(self.pins), IDENTITY), [])
+        self.assertEqual(len(self.expected["models"]["synthetic-model"]["sha256s"]), 1)
+
+    def test_files_differ(self):
+        rows = model_files.compare(self.expected, {**IDENTITY, "model_artifact_sha256": "b" * 64})
+        self.assertEqual(rows[0]["code"], "model.files_differ_from_registered")
+
+    def test_each_computation_field_differs(self):
+        changes = [{"runtime": "other"}, {"quantization": {"name": "int8"}}]
+        changes.extend({"packages": {**IDENTITY["packages"], key: "other"}} for key in model_files.PACKAGES)
+        for change in changes:
+            with self.subTest(change=change):
+                self.assertEqual(model_files.compare(self.expected, {**IDENTITY, **change})[0]["code"],
+                                 "model.stack_differs_from_registered")
+
+    def test_missing_identity_only_discloses(self):
+        self.assertEqual(model_files.compare(self.expected, {"status": "missing"}),
+                         [{"code": "model.identity_unrecorded", "fields": []}])
+
+    def test_actual_prepare_metadata_shape(self):
+        metadata = {"quantization": IDENTITY["quantization"], "adapters": {"runtime": {
+            "name": "mlx", "prepare_metadata": {"model_source": "synthetic-model",
+                "model_artifact_identity": {"status": "ok", "folded_sha256": "a" * 64},
+                "mlx_version": "1", "mlx_lm_version": "2", "transformers_version": "3"}}}}
+        self.assertEqual(model_files.run_identity(metadata), {**IDENTITY, "runtime_version": "1"})
+
+    def test_unpinned_source_discloses_without_byte_exclusion(self):
+        self.assertEqual(model_files.compare(self.expected, {**IDENTITY, "model_source": "unpinned"}),
+                         [{"code": "model.source_unpinned", "fields": ["model_source"]}])
+
+    def test_missing_recorded_fields_are_not_mismatches(self):
+        observed = {key: IDENTITY[key] for key in ("model_source", "model_artifact_sha256", "status")}
+        self.assertEqual(model_files.compare(self.expected, observed), [])
+        self.assertEqual(model_files.compare(self.expected, {**observed, "kernel_library": "unavailable"}), [])
+
+    def test_kernel_tokenizer_and_mlx_metal_from_metadata(self):
+        self.pins["runtime_versions"]["packages"] = {**IDENTITY["packages"], "mlx-metal": "1"}
+        stack = self.pins["units"]["one"]["stack_identity"]
+        stack.update(kernel_library="metal-kernels", runtime_version={"name": "mlx", "version": "1"},
+                     tokenizer_identity={"identifier": "tokenizer", "revision": "r1", "vocab_size": 123})
+        metadata = {"quantization": IDENTITY["quantization"], "environment": {"python_packages": {
+            "mlx-metal": {"present": True, "version": "1"}}}, "workload_provenance": {"tokenizer": {
+            "identifier": "/another/location/tokenizer", "revision": "r1", "vocab_size": 123}},
+            "adapters": {"runtime": {"name": "mlx", "prepare_metadata": {
+                "model_source": "synthetic-model", "model_artifact_identity": {"status": "ok", "folded_sha256": "a" * 64},
+                "mlx_version": "1", "mlx_lm_version": "2", "transformers_version": "3", "kernel_library": "metal-kernels"}}}}
+        expected = model_files.expected(self.pins)
+        self.assertEqual(model_files.compare(expected, model_files.run_identity(metadata)), [])
+        for field in ("kernel_library", "runtime_version", "mlx-metal", "tokenizer.identifier", "tokenizer.revision", "tokenizer.vocab_size"):
+            observed = model_files.run_identity(metadata)
+            if field.startswith("tokenizer."):
+                observed["tokenizer"][field.split(".")[1]] = "changed"
+            elif field == "mlx-metal":
+                observed["packages"][field] = "changed"
+            else:
+                observed[field] = "changed"
+            with self.subTest(field=field):
+                self.assertEqual(model_files.compare(expected, observed),
+                                 [{"code": "model.stack_differs_from_registered", "fields": [field]}])
+        metadata["environment"] = {}
+        metadata["adapters"]["runtime"]["prepare_metadata"]["mlx_metal_version"] = "changed"
+        self.assertIn("mlx-metal", model_files.compare(expected, model_files.run_identity(metadata))[0]["fields"])
+
+    def test_tokenizer_matches_the_unit_with_the_same_digest(self):
+        one = self.pins["units"]["one"]
+        one["stack_identity"]["tokenizer_identity"] = {"revision": "first"}
+        two = copy.deepcopy(one)
+        two["model_artifact_sha256"] = "b" * 64
+        two["stack_identity"]["tokenizer_identity"] = {"revision": "second"}
+        self.pins["units"]["two"] = two
+        rows = model_files.compare(model_files.expected(self.pins), {**IDENTITY, "tokenizer": {"revision": "second"}})
+        self.assertEqual(rows, [{"code": "model.stack_differs_from_registered", "fields": ["tokenizer.revision"]}])
+
+    def test_os_sampler_output_policy_not_compared(self):
+        self.assertEqual(model_files.compare(self.expected, {**IDENTITY, "platform": "other", "sampler": "other",
+                                                             "output_policy": "other"}), [])
+
+    def test_existing_pin_document_parses_without_opening_sources(self):
+        expected = model_files.expected(json.loads((ROOT / "configs/campaigns/v5_claim_25g83/identity_pins.json").read_text()))
+        self.assertEqual(len(expected["models"]), 3)
+        self.assertTrue(all(x["sha256s"] for x in expected["models"].values()))

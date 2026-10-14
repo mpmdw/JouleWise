@@ -2402,11 +2402,18 @@ def main(argv: list[str] | None = None) -> int:
                 **({} if hazard is None else {"allow_stale_code": True, "allow_stale_pin": True}),
             )
         except _AcceptancePreflightError as exc:
-            return emit_refusal(
-                RefusalCode.FROZEN_PROTOCOL_INVALID,
-                context={"reason": exc.reason, **exc.context},
-                stream=sys.stderr,
+            if hazard is None:
+                return emit_refusal(
+                    RefusalCode.FROZEN_PROTOCOL_INVALID,
+                    context={"reason": exc.reason, **exc.context},
+                    stream=sys.stderr,
+                )
+            flags_core.emit(
+                hazard, "calibration.acceptance_preflight_unverified", level="window",
+                observed={"reason": exc.reason, "context": exc.context},
+                detail="acceptance preflight could not be verified; capture carried",
             )
+            preflight_systematic_screen_s = None
         if hazard is not None and "stale_code" in acceptance_preflight:
             flags_core.emit(
                 hazard, "code.executed_differs_from_sealed", level="window",
