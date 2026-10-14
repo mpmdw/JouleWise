@@ -1,5 +1,6 @@
 import copy
 import json
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -118,3 +119,27 @@ class SurvivorTests(unittest.TestCase):
                 helper.assert_called_with({"synthetic_marker": "stored"})
                 helper.return_value = (None, None)
                 self.assertRaises(ValueError, reader, {"run_id": "r"})
+
+    def test_main_reference_reader_uses_primary_bundle_even_with_rereduction(self):
+        # Old-shaped summaries take the main reader's compatibility leg;
+        # there is no substitute energy arithmetic in the block-six reader.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            summary = {"gross_energy_j": 10, "idle_subtracted_energy_j": 8,
+                       "energy_anchor_shift_envelopes": {"/gross_energy_j":
+                           {"point_j": 10, "lower_j": 9, "upper_j": 11}}}
+            reduced = root / "withheld/reductions/r.summary_metrics.rereduced.json"
+            bundle = root / "sources/claim-runs/r/summary_metrics.json"
+            for path in (reduced, bundle):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(summary))
+            value = survivor_screen.archive_energy_of(root)({"run_id": "r"})
+            self.assertEqual(value["reader"], "whole_window._reference_energy_evidence")
+            self.assertEqual((value["gross"], value["idle_subtracted"]), (10, 8))
+            self.assertEqual(value["source"], str(bundle))
+            reader = survivor_screen.archive_energy_of(root)
+            short = survivor_screen.screen(roster(5), {}, reader, document())
+            self.assertEqual(short.withheld["energy_reader"], "whole_window._reference_energy_evidence")
+            self.assertFalse(short.withheld["energy_reader_used"])
+            reduced.unlink()
+            self.assertEqual(survivor_screen.archive_energy_of(root)({"run_id": "r"})["source"], str(bundle))

@@ -14,6 +14,10 @@ def check(repo: Path | str, registered: str, executed: str | None,
     if executed is None:
         result["flags"].append("code.executed_head_unrecorded")
         return result
+    if registered == executed:
+        # An unchanged commit has no changed paths, even in a desk checkout
+        # that does not retain the rehearsal clone's historical git objects.
+        return result
 
     def git(*args: str) -> str:
         return subprocess.run(["git", "-C", str(repo), *args], check=True,

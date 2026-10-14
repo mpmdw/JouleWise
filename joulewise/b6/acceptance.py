@@ -10,12 +10,13 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from joulewise.b6 import calibration, capture_list, code_check, model_files, registration
+from joulewise.b6.archive import bindings as _bindings, bundle_of, plan_tree as read_plan_tree
 from joulewise.b6.acceptance_interface import (
     AcceptanceResult, CaptureEvidence, MemberEvidence, SessionEvidence, StageEvidence,
 )
 from joulewise.flags.catalog import Catalog, EXCLUDE_WINDOW, load_catalog
 from joulewise.flags.exclusions import compute
-from joulewise.flags.schema import make_flag, make_scope, make_source
+from joulewise.flags.schema import make_flag, make_scope, make_source, render_line, validate_flag
 
 ROOT = Path(__file__).resolve().parents[2]
 # Collection-lane placeholders, intentionally centralized for reconciliation.
@@ -55,15 +56,6 @@ def _flag(code: str, catalog: Catalog, *, run_id: str | None = None,
                      source=make_source("harvest", "b6.acceptance"), observed=observed,
                      catalog_sha256=catalog.sha256,
                      emitted={"wall_s": 0, "monotonic_ns": 0, "boot_session_uuid": None})
-
-
-def _bindings(plan: Mapping) -> dict:
-    # Window plans have used both top-level and nested arm bindings.
-    result = dict(plan)
-    for name in ("bindings", "arm_bindings", "harvest"):
-        if isinstance(plan.get(name), Mapping):
-            result.update(plan[name])
-    return result
 
 
 def _stage_roles(tree: Mapping) -> tuple[dict, dict]:
@@ -314,6 +306,21 @@ class BlockSixAcceptance:
 ACCEPTANCE = BlockSixAcceptance()
 
 
+def write_result(archive: Path, result) -> None:
+    derived = archive / "derived"
+    derived.mkdir(parents=True, exist_ok=True)
+    rows = result.record["emitted_flags"]
+    for row in rows:
+        if validate_flag(row):
+            raise ValueError("acceptance emitted an invalid flag")
+    with (derived / "b6-acceptance.json").open("x", encoding="utf-8") as record_stream:
+        with (derived / "b6-flags.jsonl").open("xb") as flags_stream:
+            json.dump(result.record, record_stream, sort_keys=True, indent=2, allow_nan=False)
+            record_stream.write("\n")
+            for row in rows:
+                flags_stream.write(render_line(row))
+
+
 def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
                           registration_dir: Path | str) -> SessionEvidence:
     """Read structure, raw flags and metadata; never read a summary energy.
@@ -328,12 +335,12 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
     pack_id = roster.get("pack_id", bindings.get("pack_id"))
     if not pack_id:
         pack_id = registration.load(registration_dir)["pack_id"]
-    tree = _json(root / "sources/repo/configs/campaigns" / pack_id / "plan_tree.json", {})
-    if not tree:
-        tree = _json(root / "sources/pack/plan_tree.json", {})
-    if not tree and bindings.get("pack_root"):
-        tree = _json(Path(bindings["pack_root"]) / "plan_tree.json", {})
+    tree, _ = read_plan_tree(root, plan, pack_id)
     stages_for, roles = _stage_roles(tree)
+    external = tree.get("external_inputs") or {}
+    manifests = external.get("manifests", []) if isinstance(external, Mapping) else external
+    plan_members = [m for manifest in manifests for m in manifest.get("members", [])] + tree.get("science", [])
+    order = {m["run_id"]: i for i, m in enumerate(plan_members)}
     flags = []
     try:
         lines = (root / "derived/flags.jsonl").read_bytes().splitlines()
@@ -350,19 +357,9 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
         if row["scope"].get("run_id"):
             by_run[row["scope"]["run_id"]].append(row["code"])
     grouped = defaultdict(list)
-    roots = [root / "sources/claim-runs", root / "sources/bound-runs"]
-    custody = Path(bindings["custody_root"]) if bindings.get("custody_root") else None
-    if custody:
-        for key in ("claim_runs_root", "bound_runs_root"):
-            if bindings.get(key):
-                try:
-                    roots.append(root / "sources/night-custody" / Path(bindings[key]).relative_to(custody))
-                except ValueError:
-                    pass
-    roots.extend(Path(bindings[key]) for key in ("claim_runs_root", "bound_runs_root") if bindings.get(key))
     for member in roster.get("members", []):
         run_id = member["run_id"]
-        bundle = next((base / run_id for base in roots if (base / run_id).is_dir()), None)
+        bundle = bundle_of(root, plan, run_id)
         metadata = _json(bundle / "metadata.json", {}) if bundle else {}
         status_record = _json(bundle / "status.json", {}) if bundle else {}
         recorded_status = status_record.get("status", metadata.get("status")) or {}
@@ -381,7 +378,7 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
         if stage.get("kind") != "campaign_collection":
             continue
         stage_id = stage["stage_id"]
-        rows = tuple(grouped.pop(stage_id, ()))
+        rows = tuple(sorted(grouped.pop(stage_id, ()), key=lambda m: order.get(m.run_id, len(order))))
         if smoke_tree:
             rows = rows[:stage["expected_count"]]
         stages.append(StageEvidence(stage_id, stage["kind"], stage["expected_count"], rows))
@@ -432,7 +429,9 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
             result = _json(root / "sources/night-custody/night/hazard_result.json", {})
         if not result:
             result = _json(root / "sources/night/hazard_result.json", {})
-        exit_code = bindings.get("chain_exit_code", result.get("chain_exit_code", result.get("chain", {}).get("exit_code")))
+        completed = next((row.get("exit_code", row.get("rc")) for row in reversed(journal)
+                          if row.get("stage_id") == "chain.complete"), None)
+        exit_code = bindings.get("chain_exit_code", result.get("chain_exit_code", result.get("chain", {}).get("exit_code", completed)))
         if exit_code == 0:
             stop = "completed"
         elif exit_code is not None:

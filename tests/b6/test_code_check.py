@@ -50,3 +50,9 @@ class CodeCheckTests(unittest.TestCase):
         (self.repo / "reduce.py").unlink()
         executed = self.commit()
         self.assertEqual(check(self.repo, self.base, executed, ["reduce.py"], [])["unreviewed"], ["reduce.py"])
+
+    def test_equal_commits_need_no_historical_objects(self):
+        commit = "a" * 40
+        result = check(self.repo / "absent", commit, commit, ["reduce.py"], [])
+        self.assertEqual(result["changed"], [])
+        self.assertEqual(result["flags"], [])

@@ -12,24 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from joulewise.b6.acceptance import ACCEPTANCE, _bindings, evidence_from_archive
-from joulewise.flags.schema import render_line, validate_flag
-
-
-def write_result(archive: Path, result) -> None:
-    derived = archive / "derived"
-    derived.mkdir(parents=True, exist_ok=True)
-    rows = result.record["emitted_flags"]
-    for row in rows:
-        if validate_flag(row):
-            raise ValueError("acceptance emitted an invalid flag")
-    # Reserve both create-once names before writing either payload.
-    with (derived / "b6-acceptance.json").open("x", encoding="utf-8") as record_stream:
-        with (derived / "b6-flags.jsonl").open("xb") as flags_stream:
-            json.dump(result.record, record_stream, sort_keys=True, indent=2, allow_nan=False)
-            record_stream.write("\n")
-            for row in rows:
-                flags_stream.write(render_line(row))
+from joulewise.b6.acceptance import ACCEPTANCE, _bindings, evidence_from_archive, write_result
 
 
 def main(argv: list[str] | None = None) -> int:

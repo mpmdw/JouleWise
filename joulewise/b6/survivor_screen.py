@@ -70,6 +70,8 @@ def screen(roster: Mapping, member_effects: Mapping,
     counts = {slot: len(rows) for slot, rows in slots.items()}
     record: dict[str, Any] = {"schema": "joulewise.b6_neg8.v1", "survivors": counts,
                               "corpus_clean_n": len(kept_corpus),
+                              "energy_reader": getattr(energy_of, "reader_name", "synthetic"),
+                              "energy_reader_used": False,
                               "corpus_run_ids": [m["run_id"] for m in kept_corpus],
                               "reference_run_ids": {slot: [m["run_id"] for m in rows]
                                                     for slot, rows in slots.items()}, "families": {}}
@@ -85,9 +87,11 @@ def screen(roster: Mapping, member_effects: Mapping,
     if counts["start"] < 2 or counts["end"] < 2:
         return finish("undefined", "references_insufficient")
     try:
+        record["energy_reader_used"] = True
         energies = {member["run_id"]: energy_of(member)
                     for member in kept_corpus + [m for rows in slots.values() for m in rows]}
         record["sources"] = {run_id: value.get("source") for run_id, value in energies.items()}
+        record["readers"] = {run_id: value.get("reader") for run_id, value in energies.items()}
         passed = True
         for family in FAMILIES:
             points = [energies[member["run_id"]][family] for member in kept_corpus]
@@ -109,22 +113,39 @@ def screen(roster: Mapping, member_effects: Mapping,
 
 def archive_energy_of(archive_root: Path | str, bundle_roots: tuple[Path, ...] = ()) -> Callable:
     """Call the owning reader; do not reproduce its energy arithmetic."""
-    from joulewise.whole_window import _neg8_writer_reference_energy
+    from joulewise import whole_window
+
+    helper = getattr(whole_window, "_neg8_writer_reference_energy", None)
 
     root = Path(archive_root)
 
     def energy_of(member: Mapping) -> Mapping:
         run_id = member["run_id"]
+        candidates = [base / run_id for base in
+                      (root / "sources/claim-runs", root / "sources/bound-runs", *bundle_roots)]
+        bundle = next((path for path in candidates if path.is_dir()), candidates[0])
         summary = root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json")
         if not summary.is_file():
-            candidates = [base / run_id / "summary_metrics.json" for base in
-                          (root / "sources/claim-runs", root / "sources/bound-runs", *bundle_roots)]
-            summary = next((path for path in candidates if path.is_file()), candidates[0])
-        gross, idle = _neg8_writer_reference_energy(json.loads(summary.read_text(encoding="utf-8")))
+            summary = bundle / "summary_metrics.json"
+        if helper is not None:
+            gross, idle = helper(json.loads(summary.read_text(encoding="utf-8")))
+            reader = "whole_window._neg8_writer_reference_energy"
+        else:
+            reader = "whole_window._reference_energy_evidence"
+            # Main's reader re-derives from a primary bundle. Keep its real
+            # location: relative calibration paths depend on the bundle's
+            # siblings. L9's summary reader above uses harvest reductions.
+            summary = bundle / "summary_metrics.json"
+            gross, idle, problem = whole_window._reference_energy_evidence(bundle)
+            if problem is not None:
+                raise ValueError("NEG8 reference energy is unavailable")
         if gross is None or idle is None:
             raise ValueError("NEG8 reference energy is unavailable")
-        return {"gross": gross["point_j"], "idle_subtracted": idle, "source": str(summary)}
+        return {"gross": gross["point_j"], "idle_subtracted": idle,
+                "source": str(summary), "reader": reader}
 
+    energy_of.reader_name = ("whole_window._neg8_writer_reference_energy" if helper is not None
+                             else "whole_window._reference_energy_evidence")
     return energy_of
 
 
