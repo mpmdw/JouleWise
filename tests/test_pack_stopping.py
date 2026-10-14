@@ -70,6 +70,18 @@ class PackStoppingTests(unittest.TestCase):
                 self.assertAlmostEqual(private['quantities']['q']['blinded_half_width'], expected, places=12)
                 self.assertEqual(private['quantities']['q']['df'], len(values) - 1)
 
+    def test_target_stops_without_precision_but_precision_uses_cap(self):
+        self.registration['stopping']['target_sessions'] = 2
+        public, _ = self.evaluate(self.sessions([1, 1]))
+        self.assertEqual((public['decision'], public['reason']), ('STOP_CAP', 'target_sessions'))
+        self.precision()
+        self.registration['stopping']['session_cap'] = 3
+        public, _ = self.evaluate(self.sessions([1, 1]))
+        self.assertEqual(public['quantities']['q']['reached'], False)
+        self.assertEqual(public['decision'], 'CONTINUE')
+        public, _ = self.evaluate(self.sessions([1, 1, 1]))
+        self.assertEqual((public['decision'], public['reason']), ('STOP_CAP', 'session_cap'))
+
     def test_location_invariance_and_estimate_independence(self):
         self.precision('between_sessions', target=1)
         for base in ([1, 1.1, 1.2], [1, 3, 5]):

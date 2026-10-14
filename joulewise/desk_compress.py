@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -13,10 +14,16 @@ import time
 
 statvfs = os.statvfs  # Injectable for the restore-space check.
 CHUNK_BYTES = 1024 * 1024
+ZSTD_FALLBACK = "/opt/homebrew/bin/zstd"
 
 
 def zstd_path() -> str:
-    return shutil.which("zstd") or "/opt/homebrew/bin/zstd"
+    return shutil.which("zstd") or ZSTD_FALLBACK
+
+
+def _zstd_version() -> str:
+    return subprocess.run([zstd_path(), "--version"], check=True,
+                          capture_output=True, text=True).stdout.strip()
 
 
 def _hash_stream(stream) -> str:
@@ -45,9 +52,17 @@ def read_bytes(path: Path) -> bytes:
     path = Path(path)
     if path.exists():
         return path.read_bytes()
-    return subprocess.run([zstd_path(), "-d", "-q", "-c", str(path) + ".zst"],
-                          check=True, stdout=subprocess.PIPE,
-                          stderr=subprocess.DEVNULL).stdout
+    compressed = Path(str(path) + ".zst")
+    if not compressed.exists():
+        raise FileNotFoundError(errno.ENOENT, "file not found", str(compressed))
+    try:
+        return subprocess.run([zstd_path(), "-d", "-q", "-c", str(compressed)],
+                              check=True, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL).stdout
+    except OSError as exc:
+        raise OSError(exc.errno, "zstd_unavailable", str(compressed)) from None
+    except subprocess.CalledProcessError:
+        raise OSError(errno.EIO, "decompression_failed", str(compressed)) from None
 
 
 def _free(path: Path) -> int:
@@ -142,6 +157,10 @@ def compress(*, archive: Path, custody: Path, runs_roots=(), ledgers=(),
         ready = False
     if not ready:
         return 4, {"reason": "NOT_READY"}
+    try:
+        version = _zstd_version()
+    except (OSError, subprocess.CalledProcessError):
+        return 4, {"reason": "zstd_unavailable"}
     copies = list(map(Path, ledgers))
     archive_ledger = archive / "sources/ledger/calibration_observation_ledger.jsonl"
     if archive_ledger.exists():
@@ -153,21 +172,24 @@ def compress(*, archive: Path, custody: Path, runs_roots=(), ledgers=(),
         _append(record_dir, row)
         _summary(record_dir, {"reason": "ledger_unreadable"})
         return 5, {"reason": "ledger_unreadable"}
-    version = subprocess.run([zstd_path(), "--version"], check=True,
-                             capture_output=True, text=True).stdout.strip()
     roots = [("runs", Path(path).absolute()) for path in runs_roots]
     roots += [("custody", custody), ("archive", archive / "sources")]
     started, free_before = time.monotonic(), _free(archive)
     summary = {"files": 0, "bytes_before": 0, "bytes_after": 0,
                "skipped_protected": 0, "mismatches": 0}
+    # Decide restore leftovers before creating any new compressed siblings.
+    for _, path in _files(roots):
+        if path.is_symlink() or not path.is_file() or _protected(path, protected):
+            continue
+        if (path.name.endswith(".zst.partial")
+                or (path.name.endswith(".partial")
+                    and Path(str(path)[:-len(".partial")] + ".zst").exists())):
+            path.unlink()
     for kind, path in _files(roots):
         if path.is_symlink() or not path.is_file():
             continue
         if _protected(path, protected):
             summary["skipped_protected"] += 1
-            continue
-        if path.name.endswith(".partial"):
-            path.unlink()
             continue
         if path.name.endswith(".zst") or path.stat().st_size < min_bytes:
             continue
@@ -219,6 +241,10 @@ def status(record_dir: Path, root="all") -> list[dict]:
 
 def restore(*, record_dir: Path, root="all", reserve_gib=20):
     record_dir = Path(record_dir)
+    try:
+        _zstd_version()
+    except (OSError, subprocess.CalledProcessError):
+        return 4, {"reason": "zstd_unavailable"}
     rows = status(record_dir, root)
     # Check every filesystem before writing even a partial restore.
     required, locations = {}, {}

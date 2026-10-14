@@ -131,8 +131,9 @@ def evaluate(registration, sessions, *, today: date, key_dir: Path | None = None
         quantities[ident] = {"reached": reached}
         withheld[ident] = {"blinded_half_width": width, "k": k, "df": df}
     short = False
-    if counting >= stopping["session_cap"]:
-        decision, reason = "STOP_CAP", "session_cap"
+    limit = "session_cap" if precision else "target_sessions"
+    if counting >= stopping[limit]:
+        decision, reason = "STOP_CAP", limit
     elif (precision and counting >= max(stopping["min_sessions"], 2)
           and all(row["reached"] is True for row in quantities.values())):
         decision, reason = "STOP_PRECISION", "registered_precision_reached"

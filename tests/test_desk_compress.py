@@ -20,8 +20,7 @@ from joulewise.b5.harvest import tree_inventory
 ZSTD = shutil.which("zstd") or "/opt/homebrew/bin/zstd"
 
 
-@unittest.skipUnless(Path(ZSTD).is_file(), "zstd CLI required")
-class DeskCompressTests(unittest.TestCase):
+class DeskCompressFixture(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.root)
@@ -40,6 +39,9 @@ class DeskCompressTests(unittest.TestCase):
         path.write_bytes(data)
         return path
 
+
+@unittest.skipUnless(Path(ZSTD).is_file(), "zstd CLI required")
+class DeskCompressTests(DeskCompressFixture):
     def test_round_trip_modes_times_reader_and_harvest_inventory(self):
         files = [self.put(self.runs / "random", random.Random(5).randbytes(1048576)),
                  self.put(self.runs / "repeat"), self.put(self.runs / "empty", b""),
@@ -144,13 +146,34 @@ class DeskCompressTests(unittest.TestCase):
     def test_crash_recovery_original_wins(self):
         raw = self.put(self.runs / "raw")
         compressed = self.put(Path(str(raw) + '.zst'), b'invalid-old-output')
-        partial = self.put(self.runs / "orphan.partial", b'partial')
+        partials = [self.put(self.runs / name, b'partial')
+                    for name in ('raw.partial', 'raw.zst.partial', 'orphan.zst.partial')]
+        ordinary = self.put(self.runs / 'orphan.partial', b'ordinary data')
         self.assertEqual(self.compress()[0], 0)
-        self.assertFalse(partial.exists())
+        for partial in partials:
+            self.assertFalse(partial.exists())
+        self.assertEqual(ordinary.read_bytes(), b'ordinary data')
         self.assertFalse(raw.exists())
         self.assertTrue(compressed.exists())
         self.assertEqual(desk.read_bytes(raw), b'a' * 1048577)
         self.assertEqual(desk.restore(record_dir=self.records, reserve_gib=0)[0], 0)
+
+    def test_ordinary_partial_data_round_trips_in_every_root(self):
+        data = random.Random(7).randbytes(2 * 1048576)
+        expected = hashlib.sha256(data).hexdigest()
+        paths = [self.put(root / 'foo.partial', data)
+                 for root in (self.runs, self.custody, self.archive / 'sources')]
+        # Creating foo.zst during this pass must not turn foo.partial into a leftover.
+        siblings = [self.put(path.with_suffix(''), b'other data' * 200000) for path in paths]
+        self.assertEqual(self.compress()[0], 0)
+        for path in paths:
+            self.assertEqual(hashlib.sha256(desk.read_bytes(path)).hexdigest(), expected)
+            self.assertTrue(Path(str(path) + '.zst').exists())
+        self.assertEqual(desk.restore(record_dir=self.records, reserve_gib=0)[0], 0)
+        for path in paths:
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), expected)
+        for sibling in siblings:
+            self.assertEqual(sibling.read_bytes(), b'other data' * 200000)
 
     def test_restore_space_is_checked_before_any_write(self):
         self.put(self.runs / 'raw')
@@ -189,3 +212,75 @@ class DeskCompressTests(unittest.TestCase):
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('status files=1', result.stdout)
+
+
+class DeskUnavailableTests(DeskCompressFixture):
+    def unavailable_paths(self):
+        empty = self.root / 'empty-bin'
+        empty.mkdir()
+        broken = self.root / 'broken-zstd'
+        broken.write_text(f'#!{sys.executable}\nimport sys\nsys.exit(1)\n')
+        broken.chmod(0o755)
+        nonexecutable = self.put(self.root / 'nonexecutable-zstd', b'not executable')
+        nonexecutable.chmod(0o644)
+        return empty, (self.root / 'missing-zstd', broken, nonexecutable)
+
+    def test_compress_unavailable_exit_four_preserves_all_bytes(self):
+        for root in (self.runs, self.custody, self.archive / 'sources'):
+            self.put(root / 'raw')
+            self.put(root / 'raw.zst.partial', b'crashed compress')
+            self.put(root / 'raw.partial', b'crashed restore')
+            self.put(root / 'raw.zst', b'compressed sibling')
+        empty, fallbacks = self.unavailable_paths()
+        before = tree_inventory(self.root)
+        for fallback in fallbacks:
+            with self.subTest(fallback=fallback.name), patch.dict(os.environ, {'PATH': str(empty)}), \
+                    patch.object(desk, 'ZSTD_FALLBACK', str(fallback)):
+                self.assertEqual(self.compress(), (4, {'reason': 'zstd_unavailable'}))
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    rc = desk.main(['compress', '--archive', str(self.archive), '--custody', str(self.custody),
+                                    '--runs-root', str(self.runs)])
+                self.assertEqual(rc, 4)
+                self.assertIn('reason=zstd_unavailable', output.getvalue())
+                self.assertEqual(tree_inventory(self.root), before)
+                self.assertFalse(self.records.exists())
+
+    def test_restore_unavailable_exit_four_preserves_all_bytes(self):
+        raw = self.runs / 'raw'
+        self.put(Path(str(raw) + '.zst'), b'synthetic compressed bytes')
+        self.put(Path(str(raw) + '.partial'), b'crashed restore')
+        self.put(self.records / 'compression.jsonl', (json.dumps({
+            'event': 'compress', 'path': str(raw), 'root': 'runs', 'size': 1048576,
+            'sha256': '0' * 64}) + '\n').encode())
+        empty, fallbacks = self.unavailable_paths()
+        before = tree_inventory(self.root)
+        for fallback in fallbacks:
+            with self.subTest(fallback=fallback.name), patch.dict(os.environ, {'PATH': str(empty)}), \
+                    patch.object(desk, 'ZSTD_FALLBACK', str(fallback)):
+                self.assertEqual(desk.restore(record_dir=self.records, reserve_gib=0),
+                                 (4, {'reason': 'zstd_unavailable'}))
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    rc = desk.main(['restore', '--record-dir', str(self.records), '--reserve-gib', '0'])
+                self.assertEqual(rc, 4)
+                self.assertIn('reason=zstd_unavailable', output.getvalue())
+                self.assertEqual(tree_inventory(self.root), before)
+
+    def test_reader_errors_name_data_path_without_process_argv(self):
+        raw = self.runs / 'raw'
+        compressed = self.put(Path(str(raw) + '.zst'), b'synthetic compressed bytes')
+        empty, fallbacks = self.unavailable_paths()
+        for fallback in fallbacks:
+            with self.subTest(fallback=fallback.name), patch.dict(os.environ, {'PATH': str(empty)}), \
+                    patch.object(desk, 'ZSTD_FALLBACK', str(fallback)):
+                with self.assertRaises(OSError) as caught:
+                    desk.read_bytes(raw)
+                self.assertEqual(caught.exception.filename, str(compressed))
+                self.assertNotIsInstance(caught.exception, subprocess.CalledProcessError)
+                self.assertNotIn(str(fallback), str(caught.exception))
+                plain = self.put(self.runs / 'plain', b'plain data')
+                self.assertEqual(desk.read_bytes(plain), b'plain data')
+        with self.assertRaises(FileNotFoundError) as caught:
+            desk.read_bytes(self.runs / 'missing')
+        self.assertEqual(caught.exception.filename, str(self.runs / 'missing.zst'))
