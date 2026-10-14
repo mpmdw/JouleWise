@@ -47,6 +47,34 @@ SEAMS=(
 )
 
 
+CONDITIONAL_SEAMS=(
+    ('consumer','mint_floor_artifact_generalized._common_minted_artifact_launch_lineage (aggregate only)',
+     'CONDITIONAL on open question Q-LINEAGE (stage S10 director, 2026-10-14): an aggregate floor joins two '
+     'producers collected in two windows, so its two component lineages differ and the unchanged rule refuses '
+     '(launch_lineage_conflict, generalized mint near line 3086). The fixture proceeds on the one option '
+     'buildable without a production change: the aggregate omits its lineage carrier when, and only when, every '
+     'component carries one and they differ. Each producer still requires one lineage across its own cells, '
+     'and each component lineage is authenticated at mint. No number depends on the carrier. Every result from '
+     'C5 on, and the joined run from step 5 on, is conditional on the ruling.'),
+)
+
+
+@contextlib.contextmanager
+def conditional_aggregate_lineage_seam():
+    """Apply Q-LINEAGE's fixture-only option; see CONDITIONAL_SEAMS."""
+    from scripts import mint_floor_artifact_generalized as mint
+    original=mint._common_minted_artifact_launch_lineage
+    def aggregate(artifacts,*,label):
+        if label=='aggregate components':
+            lineages=[(a.get('provenance') or {}).get('launch_lineage') for a in artifacts]
+            if (len(lineages)>1 and all(isinstance(l,dict) for l in lineages)
+                    and len({mint._canonical_json_sha256(l) for l in lineages})==len(lineages)):
+                return None
+        return original(artifacts,label=label)
+    with mock.patch.object(mint,'_common_minted_artifact_launch_lineage',aggregate):
+        yield
+
+
 def sha(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 def put(path,value):s0.put(path,value)
 
@@ -153,6 +181,7 @@ class ChainFixture:
         head=subprocess.run(['git','-C',str(ROOT),'rev-parse','HEAD'],check=True,capture_output=True,text=True).stdout.strip()
         with contextlib.ExitStack() as stack:
             stack.enter_context(mock.patch.object(mint,'_actual_v2_git_state',return_value=(head,None)))
+            stack.enter_context(conditional_aggregate_lineage_seam())
             if len(self.windows)==3:
                 yield
                 return
