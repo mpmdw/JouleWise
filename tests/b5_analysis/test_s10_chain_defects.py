@@ -85,6 +85,32 @@ class PostBindComponentLineageTests(unittest.TestCase):
         self.assertTrue([e for e in errors if "component artifact hash mismatch" in e], errors)
 
 
+class SingleCountStatementTests(unittest.TestCase):
+    """The v2 writer's convenience statement for a floor with no attribution-limited cell."""
+
+    def write(self, artifact, root):
+        paths = {name: Path(root) / name for name in ("floor.json", "single-count.md", "replay.json")}
+        generalized._write_v2_artifact_outputs(
+            output_core=generalized._fresh_original_core(), artifact=artifact, sidecar={"replay": True},
+            floor_path=paths["floor.json"], statement_path=paths["single-count.md"],
+            d165_replay_out=paths["replay.json"])
+        return paths
+
+    def test_floor_without_attribution_limited_cell_writes_the_not_applicable_statement(self):
+        artifact = {"cells": [{"cell_id": "c1", "absolute": {}, "comparative": {}}], "transport_groups": []}
+        with tempfile.TemporaryDirectory() as root:
+            paths = self.write(artifact, root)
+            self.assertEqual(paths["single-count.md"].read_text(),
+                             generalized.V2_SINGLE_COUNT_NOT_APPLICABLE_STATEMENT)
+            self.assertTrue(paths["floor.json"].is_file() and paths["replay.json"].is_file())
+
+    def test_non_canonical_discipline_still_refuses(self):
+        artifact = {"cells": [{"cell_id": "c1", "single_count_discipline": {"rule_id": "tampered"}}],
+                    "transport_groups": []}
+        with tempfile.TemporaryDirectory() as root, self.assertRaisesRegex(Exception, "single-count discipline is not canonical"):
+            self.write(artifact, root)
+
+
 def _window_lineage(index):
     lineage = g.launch_lineage()
     lineage["window_id"] = f"window-{index + 1}"

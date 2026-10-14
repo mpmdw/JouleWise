@@ -65,6 +65,10 @@ PINSET_SCHEMA_VERSION = "joulewise.floor_mint_pinset.v1"
 PINSET_SCHEMA_VERSION_V2 = "joulewise.floor_mint_pinset.v2"
 PIN_REQUIREMENTS_SCHEMA_VERSION_V2 = "joulewise.floor_mint_pin_requirements.v2"
 V2_MINT_TOOL_VERSION = "joulewise.floor_mint.generalized.v2"
+V2_SINGLE_COUNT_NOT_APPLICABLE_STATEMENT = (
+    "No cell of this floor artifact carries the attribution-limited floor of D-078 "
+    "clause 11; the single-count discipline does not apply to it.\n"
+)
 
 
 def allowance_rule_for(acceptance_id: str) -> str | None:
@@ -4333,9 +4337,20 @@ def _write_v2_artifact_outputs(
     artifact_payload = (
         json.dumps(artifact, indent=2, sort_keys=True, allow_nan=False) + "\n"
     ).encode("utf-8")
-    statement_payload = output_core.render_single_count_statement(artifact).encode(
-        "utf-8"
-    )
+    try:
+        disciplines = detection_floor.read_single_count_profile(
+            artifact, profile="floor", where="artifact"
+        )
+    except detection_floor.SingleCountDisciplineError:
+        disciplines = None  # the renderer below reports the canonical refusal
+    # The statement is convenience prose about the clause-11 discipline. A
+    # floor with no attribution-limited cell carries no discipline object; the
+    # claim side then reads none, and the statement says that it does not apply.
+    statement_payload = (
+        V2_SINGLE_COUNT_NOT_APPLICABLE_STATEMENT
+        if disciplines == ()
+        else output_core.render_single_count_statement(artifact)
+    ).encode("utf-8")
     sidecar_payload = (
         json.dumps(sidecar, indent=2, sort_keys=True, allow_nan=False) + "\n"
     ).encode("utf-8")
