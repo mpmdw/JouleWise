@@ -7,6 +7,8 @@ backoff; SOL_CLOUD_TEST_POLL_FLOOR overrides the default 0.1s polling floor.
 Continuation finds <out>.state.json in the current directory (or
 SOL_CLOUD_STATE_DIR); --state-file identifies an explicit state file. No global
 registry is maintained. Cloud model/effort selection remains unverified.
+Do not run this tool from the measurement Mac while it measures: its local CLI
+calls appear in the agent census, treated as the agent-at-keyboard hazard.
 """
 from __future__ import annotations
 
@@ -387,7 +389,7 @@ class Transport:
 
 
 def rate_limited(proc):
-    return bool(re.search(rb'429|rate limit', proc.stdout + proc.stderr, re.I))
+    return proc.returncode != 0 and bool(re.search(rb'\b429\b|rate.?limit', proc.stderr, re.I))
 
 
 def rate_wait():
@@ -401,7 +403,7 @@ def parse_task_id(text):
     return (match.group(1) or match.group(2)) if match else None
 
 
-def list_tasks(transport):
+def list_tasks(transport, *, stop_at_target=True):
     tasks, cursor = [], None
     for _ in range(5):
         argv = ['list', '--env', transport.state['cloud_env'], '--json', '--limit', '20']
@@ -424,14 +426,16 @@ def list_tasks(transport):
         except (ValueError, KeyError, TypeError):
             return None, 'failed'
         tasks.extend(page)
-        if not cursor or any(t.get('id') == transport.state.get('session_id') for t in page):
+        if not cursor or (stop_at_target and
+                          any(t.get('id') == transport.state.get('session_id') for t in page)):
             break
     return tasks, None
 
 
 def submit(transport, prompt):
     state = transport.state
-    submitted = dt.datetime.now(dt.timezone.utc)
+    before, snapshot_failure = list_tasks(transport, stop_at_target=False)
+    snapshot = {t['id'] for t in before if isinstance(t.get('id'), str)} if before is not None else None
     argv = ['exec', '--env', state['cloud_env'], '--branch', state['cloud_branch']]
     if state['model']:
         argv += ['-c', 'model=' + json.dumps(state['model'])]
@@ -453,18 +457,19 @@ def submit(transport, prompt):
         task_id = parse_task_id(proc.stdout + proc.stderr)
         if task_id:
             return task_id
-        tasks, failure = list_tasks(transport)
-        candidates = []
-        for task in tasks or []:
-            try:
-                updated = dt.datetime.fromisoformat(task['updated_at'].replace('Z', '+00:00'))
-                if updated >= submitted and isinstance(task.get('id'), str):
-                    candidates.append((updated, task['id']))
-            except (KeyError, TypeError, ValueError, AttributeError):
-                pass
-        if candidates:
-            return max(candidates)[1]
-        raise Refusal(f'cannot identify submitted task ({failure or "not listed"})', 1)
+        tasks, failure = list_tasks(transport, stop_at_target=False)
+        candidates = {t['id']: t for t in tasks or [] if isinstance(t.get('id'), str)
+                      and t['id'] and (snapshot is None or t['id'] not in snapshot)}
+        log(state, 'submit fallback candidates=' + compact(sorted(candidates)))
+        if snapshot is None:
+            raise Refusal(f'cannot identify submitted task (snapshot {snapshot_failure})', 1)
+        if len(candidates) > 1:
+            candidates = {tid: t for tid, t in candidates.items()
+                          if isinstance(t.get('title'), str) and state['run_key'] in t['title']}
+        if len(candidates) == 1:
+            return next(iter(candidates))
+        reason = failure or ('ambiguous' if candidates else 'not listed or no unique title match')
+        raise Refusal(f'cannot identify submitted task ({reason})', 1)
 
 
 def poll(transport):
@@ -629,7 +634,7 @@ def patch_paths_git(patch_path):
     return paths
 
 
-def check_scope(paths, scope, job, modes=None, apply_base=None):
+def check_scope(paths, scope, job, modes=None, base_repo=None, base_sha=None):
     violations, kinds = set(), {}
     report = report_path(job)
     for path in paths:
@@ -645,12 +650,19 @@ def check_scope(paths, scope, job, modes=None, apply_base=None):
         if kind:
             violations.add(path)
             kinds[path] = kind
-    if apply_base:
+    if base_repo is not None and base_sha is not None:
+        modes_at_base = {}
         for entry in scope:
-            current = Path(apply_base)
-            for part in (entry[:-3] if entry.endswith('/**') else entry).split('/'):
-                current /= part
-                if current.is_symlink():
+            parts = (entry[:-3] if entry.endswith('/**') else entry).split('/')
+            for length in range(1, len(parts) + 1):
+                ancestor = '/'.join(parts[:length])
+                if ancestor not in modes_at_base:
+                    proc = git(base_repo, 'ls-tree', '-z', base_sha, '--',
+                               ':(literal)' + ancestor, check=False)
+                    if proc.returncode:
+                        raise ValueError('cannot inspect apply base tree')
+                    modes_at_base[ancestor] = proc.stdout.split(b' ', 1)[0]
+                if modes_at_base[ancestor] == b'120000':
                     violations.add(entry)
                     kinds[entry] = 'symlink_ancestor'
                     break
@@ -819,21 +831,8 @@ def inspect_patch(state, patch):
     parsed = patch_paths_git(state['patch_path'])
     if headers != parsed:
         raise ValueError('patch parse disagreement')
-    base = state['apply_worktree'] if Path(state['apply_worktree']).exists() else None
-    # A detached temporary worktree exposes symlinks at the remote base, which
-    # can differ from the launch repo's current checkout. It is always removed.
-    if base:
-        violations, kinds = check_scope(headers, state['write_scope'], state['job'], modes, base)
-    else:
-        with tempfile.TemporaryDirectory(prefix='sol-base-') as temp:
-            base = Path(temp) / 'base'
-            proc = git(state['cdir'], 'worktree', 'add', '--detach', base, state['base_sha'], check=False)
-            if proc.returncode:
-                raise ValueError('cannot inspect apply base')
-            try:
-                violations, kinds = check_scope(headers, state['write_scope'], state['job'], modes, base)
-            finally:
-                git(state['cdir'], 'worktree', 'remove', '--force', base)
+    violations, kinds = check_scope(headers, state['write_scope'], state['job'], modes,
+                                    state['cdir'], state['base_sha'])
     report = report_path(state['job'])
     report_sections = [s for s in sections if report in (s['a'], s['b'])]
     if report_sections and (report not in new_files or len(report_sections) != 1 or

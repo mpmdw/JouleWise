@@ -80,6 +80,8 @@ class CloudSuiteTests(unittest.TestCase):
         self.env = patch.dict(os.environ, {
             "CLOUD_SUITE_TEST_CREATED_TIMEOUT": "2",
             "CLOUD_SUITE_TEST_POST_CREATE_WAIT": "0.02",
+            "CLOUD_SUITE_TEST_TRUST_GAP": "0.08",
+            "CLOUD_SUITE_TEST_UNSHALLOW_TIMEOUT": "2",
             "CLOUD_SUITE_TEST_KILL_GRACE": "0.1",
             "CLOUD_SUITE_TEST_WATCH_POLL": "0.01",
             "CLOUD_SUITE_TEST_PUSH_BACKOFF": "0,0,0",
@@ -167,6 +169,9 @@ class CloudSuiteTests(unittest.TestCase):
         self.assertEqual(ci["calibration-writer-crash-matrix-exclusive"]["shards"], [1, 2])
         self.assertEqual(ci["calibration-exits-exclusive"]["command"],
                          "python -m unittest -v tests.test_calibration_exits")
+        self.assertIn('shard_tests.run_units(', ci["test"]["body"])
+        self.assertIn('shard_tests.run_units(', ci["calibration-writer-crash-matrix-exclusive"]["body"])
+        self.assertNotIn('shard_tests.run_units', ci["calibration-exits-exclusive"]["command"])
         self.make_repo()
         path = self.repo / ".github" / "workflows" / "ci.yml"
         path.write_text(text.replace(suite.STEPS["test"], "Renamed unit step"))
@@ -229,6 +234,10 @@ class CloudSuiteTests(unittest.TestCase):
             accepted = self.launch(trust=True)
             self.assertEqual(accepted.status, "LAUNCHED")
             self.assertIn("trust 1b5b420d", record.read_text())
+            reads = [line.split() for line in record.read_text().splitlines()
+                     if line.startswith("trust-read ")]
+            self.assertEqual([row[1] for row in reads], ["1b5b42", "0d"])
+            self.assertGreaterEqual(float(reads[1][2]) - float(reads[0][2]), 0.06)
             record.unlink()
             refused = self.launch()
             self.assertEqual(refused.status, "LAUNCH_FAILED")
@@ -250,6 +259,7 @@ class CloudSuiteTests(unittest.TestCase):
         self.assertEqual(data["job"], "ord-1")
         self.assertEqual(data["sha"], sha)
         self.assertEqual(data["zsh"], "missing")
+        self.assertEqual(data["shallow"], "no")
         self.assertEqual(data["rc"], 0)
         self.assertFalse(data["timed_out"])
         self.assertEqual(data["tests"], 2)
@@ -308,7 +318,17 @@ class CloudSuiteTests(unittest.TestCase):
         self.git("update-ref", "-d", "refs/remotes/origin/x-suite-R1-ord-1")
         state = self.state(sha)
         before = self.git("for-each-ref", "--format=%(refname)")
-        suite.collect(state)
+        original_git = suite._git
+        def legacy_result(repo, *args, **kwargs):
+            response = original_git(repo, *args, **kwargs)
+            if args == ("show", "FETCH_HEAD:suite/R1/ord-1.json"):
+                data = json.loads(response.stdout)
+                data.pop("shard_summary")
+                response.stdout = json.dumps(data)
+            return response
+        with patch.object(suite, "_git", side_effect=legacy_result):
+            suite.collect(state)
+        self.assertTrue(state["jobs"]["ord-1"]["data"]["shard_summary"])
         self.assertEqual(self.git("for-each-ref", "--format=%(refname)"), before)
         rc, output, report = self.report(state)
         self.assertEqual(rc, 0)
@@ -410,6 +430,158 @@ class CloudSuiteTests(unittest.TestCase):
             self.git("add", "new")
             self.git("commit", "-m", "unpushed")
             self.assertEqual(suite.main(argv), 2)
+
+    def run_args(self):
+        return ["run", "--repo", str(self.repo), "--only", "ord-1", "--shards", "12",
+                "--out-dir", str(self.out), "--cli", str(self.fake_cli),
+                "--pty-wrapper", str(self.fake_pty), "--branch-prefix", "x-suite",
+                "--deadline-min", "0", "--poll", "0.01"]
+
+    def test_C1_missing_remote_tool_refuses_before_launch(self):
+        self.make_repo()
+        self.git("rm", "scripts/cloud_suite.py")
+        self.git("commit", "-m", "no remote half")
+        self.git("push", "origin", "fixture-main")
+        sha = self.git("rev-parse", "HEAD")
+        error = io.StringIO()
+        with redirect_stderr(error), patch.object(suite, "launch", wraps=suite.launch) as launched:
+            self.assertEqual(suite.main(self.run_args()), 2)
+        self.assertIn("scripts/cloud_suite.py", error.getvalue())
+        self.assertIn(sha, error.getvalue())
+        launched.assert_not_called()
+        self.assertFalse((self.root / "fake-record").exists())
+        self.assertFalse((self.out / "run.json").exists())
+
+    def test_M1_older_remote_tool_notes_and_continues(self):
+        self.make_repo()
+        with (self.repo / "scripts" / "cloud_suite.py").open("a") as stream:
+            stream.write("\n# Different remote revision.\n")
+        self.git("add", "scripts/cloud_suite.py")
+        self.git("commit", "-m", "remote version differs")
+        self.git("push", "origin", "fixture-main")
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(suite.main(self.run_args()), 3)
+        notes = [line for line in output.getvalue().splitlines() if line.startswith("NOTE:")]
+        self.assertEqual(len(notes), 1)
+        self.assertIn(self.git("rev-parse", "HEAD"), notes[0])
+        self.assertIn("scripts/cloud_suite.py", notes[0])
+        self.assertTrue((self.root / "fake-record").exists())
+
+    def test_C2_sharded_jobs_require_summary_unittest_control(self):
+        path = self.root / "no-summary.log"
+        for text, rc, exclusive_status in [
+                ("Ran 3 tests in 0.1s\n\nOK\n", 0, "PASS"),
+                ("test_a ... FAIL\nRan 9 tests in 1.0s\n\nFAILED (failures=2, errors=1)\n", 1, "FAIL"),
+                ("Ran 9 tests in 1.0s\n\nOK (skipped=2)\n", 0, "PASS"),
+                ("*** Error compiling tests/x.py\n", 1, "FAIL")]:
+            path.write_text(text)
+            counts, failed = suite._log_counts(path)
+            for name in ("ord-1", "excl-crash-1", "excl-exits"):
+                with self.subTest(text=text, job=name):
+                    data = dict(run="R", job=name, sha="s", rc=rc, timed_out=False,
+                                failed_modules=failed, **counts)
+                    self.assertEqual(suite.classify(data, "s"),
+                                     exclusive_status if name == "excl-exits" else "FAIL")
+        path.write_text("SHARD SUMMARY index=1/12 modules=2 tests=3 failures=0 errors=0 "
+                        "skipped=1 result=PASS\nRan 1 test in 0.1s\n\nOK\n")
+        counts, _ = suite._log_counts(path)
+        self.assertTrue(counts["shard_summary"])
+        self.assertEqual(counts["tests"], 3)
+
+    def shallow_clone(self):
+        self.make_repo()
+        (self.repo / "second").write_text("second commit\n")
+        self.git("add", "second")
+        self.git("commit", "-m", "second commit")
+        self.git("push", "origin", "fixture-main")
+        self.git("symbolic-ref", "HEAD", "refs/heads/fixture-main", repo=self.bare)
+        clone = self.root / "shallow"
+        subprocess.run(["git", "clone", "--depth", "1", self.bare.as_uri(), str(clone)],
+                       capture_output=True, text=True, check=True, timeout=10)
+        # Clone inherits content, not the disposable repo's maintenance config.
+        init_git_fixture(clone)
+        self.repo = clone
+        self.assertEqual(self.git("rev-parse", "--is-shallow-repository"), "true")
+        return self.git("rev-parse", "HEAD")
+
+    def test_M2_local_shallow_clone_unshallows_before_worker(self):
+        sha = self.shallow_clone()
+        data, _ = self.remote(sha, detach=False)
+        self.assertEqual(data["shallow"], "unshallowed")
+        self.assertEqual(self.git("rev-parse", "--is-shallow-repository"), "false")
+        self.assertEqual(suite.classify(data, sha), "PASS")
+
+    def test_M2_fetch_failure_is_environment_note(self):
+        sha = self.shallow_clone()
+        original = suite._git
+        def failed_fetch(repo, *args, **kwargs):
+            if args == ("fetch", "--unshallow"):
+                self.assertEqual(kwargs["timeout"], 2)
+                return subprocess.CompletedProcess([], 1, "", "fixture fetch failed")
+            return original(repo, *args, **kwargs)
+        argv = ["remote-shard", "--repo", str(self.repo), "--run", "R1", "--job", "ord-1",
+                "--shards", "12", "--sha", sha, "--branch-prefix", "x-suite",
+                "--zsh-path", sys.executable, "--no-install"]
+        with patch.object(suite, "_git", side_effect=failed_fetch) as calls:
+            self.assertEqual(suite.main(argv), 0)
+        self.assertEqual(sum(call.args[1:] == ("fetch", "--unshallow")
+                             for call in calls.call_args_list), 1)
+        self.assertEqual(self.git("rev-parse", "--is-shallow-repository"), "true")
+        state = self.state(sha)
+        suite.collect(state)
+        self.assertEqual(state["jobs"]["ord-1"]["data"]["shallow"], "yes")
+        rc, _, report = self.report(state)
+        self.assertEqual(rc, 0)
+        self.assertIn("shallow=yes", report["jobs"][0]["environment_notes"])
+        self.assertIn("shallow=yes", (self.out / "report.md").read_text())
+        with patch.object(suite, "_git", side_effect=[
+                subprocess.CompletedProcess([], 0, "true\n", ""),
+                subprocess.TimeoutExpired(["git", "fetch", "--unshallow"], 2)]):
+            self.assertEqual(suite._shallow_status(self.repo), "yes")
+
+    def test_L3_late_branch_survives_automatic_cleanup(self):
+        sha = self.make_repo()
+        original_collect = suite.collect
+        def collect_then_branch(state):
+            original_collect(state)
+            late = f"x-suite-{state['run']}-ord-1"
+            self.git("push", "origin", f"fixture-main:refs/heads/{late}")
+            return state
+        output = io.StringIO()
+        with patch.object(suite, "collect", side_effect=collect_then_branch), redirect_stdout(output):
+            self.assertEqual(suite.main(self.run_args()), 3)
+        saved = self.out / "run.json"
+        state = json.loads(saved.read_text())
+        late = f"x-suite-{state['run']}-ord-1"
+        self.assertEqual(state["leftover_branches"], [late])
+        self.assertEqual(state["deleted_branches"], [])
+        self.assertFalse(state["jobs"]["ord-1"].get("collected"))
+        self.assertIn(late, self.git("for-each-ref", "--format=%(refname)", repo=self.bare))
+        self.assertIn(late, output.getvalue())
+        self.assertIn(f"cleanup --state {saved}", output.getvalue())
+        self.assertEqual(state["sha"], sha)
+        self.assertEqual(suite.main(["cleanup", "--state", str(saved)]), 0)
+        self.assertNotIn(late, self.git("for-each-ref", "--format=%(refname)", repo=self.bare))
+        self.assertEqual(json.loads(saved.read_text())["leftover_branches"], [])
+
+    def test_Info1_launch_timing_defaults(self):
+        real_sleep = time.sleep
+        delays = []
+        def shortened_sleep(seconds):
+            delays.append(seconds)
+            real_sleep(0.08 if seconds in (1, 60) else seconds)
+        with patch.dict(os.environ):
+            os.environ.pop("CLOUD_SUITE_TEST_POST_CREATE_WAIT", None)
+            os.environ.pop("CLOUD_SUITE_TEST_TRUST_GAP", None)
+            with patch.object(suite.time, "sleep", side_effect=shortened_sleep):
+                self.assertEqual(self.launch().status, "LAUNCHED")
+                with patch.dict(os.environ, {"FAKE_CC_MODE": "trust"}):
+                    self.assertEqual(self.launch(trust=True).status, "LAUNCHED")
+        self.assertEqual(delays.count(60), 2)
+        self.assertIn(1, delays)
+        self.assertIn("POST_CREATE_WAIT (60)", suite.__doc__)
+        self.assertIn("TRUST_GAP (1)", suite.__doc__)
 
 
 if __name__ == "__main__":

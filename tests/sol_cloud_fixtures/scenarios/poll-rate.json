@@ -7,6 +7,9 @@
   ],
   "list": [
     {
+      "stdout": "{\"tasks\": [], \"cursor\": null}"
+    },
+    {
       "stderr": "rate limit",
       "rc": 1
     },

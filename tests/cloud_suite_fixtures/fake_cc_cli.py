@@ -35,6 +35,9 @@ def main():
                 value = os.read(sys.stdin.fileno(), 4 - len(answer))
                 if not value:
                     return 1
+                if record:
+                    with Path(record).open("a") as stream:
+                        stream.write(f"trust-read {value.hex()} {time.monotonic():.6f}\n")
                 answer.extend(value)
         if record:
             with Path(record).open("a") as stream:

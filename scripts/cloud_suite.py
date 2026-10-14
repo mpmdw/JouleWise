@@ -3,13 +3,19 @@
 
 Stdlib only. Local commands are run/collect/cleanup; cloud commands are
 remote-shard/remote-wait. collect and cleanup take --state PATH (run.json).
+Do not run this tool from the measurement Mac while it measures: its local CLI
+calls appear in the agent census, treated as the agent-at-keyboard hazard.
 Timing overrides for synthetic tests: CLOUD_SUITE_TEST_CREATED_TIMEOUT (120),
-CLOUD_SUITE_TEST_POST_CREATE_WAIT (10), CLOUD_SUITE_TEST_KILL_GRACE (3),
+CLOUD_SUITE_TEST_POST_CREATE_WAIT (60), CLOUD_SUITE_TEST_TRUST_GAP (1),
+CLOUD_SUITE_TEST_KILL_GRACE (3), CLOUD_SUITE_TEST_UNSHALLOW_TIMEOUT (120),
 CLOUD_SUITE_TEST_WATCH_POLL (0.1), CLOUD_SUITE_TEST_PUSH_BACKOFF (10,30,90),
 CLOUD_SUITE_TEST_TMP_ROOT (/tmp), and CLOUD_SUITE_TEST_LOG_LIMIT (41943040).
 Backoff entries apply after failed push attempts; only the first two are
 needed between the three attempts. TMP_ROOT contains jwsuite-RUN-JOB directories.
 Test timing overrides do not alter the commands or result classifications.
+After creation, wait 60 s; answer trust with Down, a 1 s pause, then Enter.
+Automatic cleanup deletes collected branches; manual cleanup --state deletes
+all branches currently present for that run's jobs.
 """
 
 from __future__ import annotations
@@ -220,14 +226,17 @@ def launch(job, *, repo, out_dir, run, shards, sha, branch_prefix="claude/suite"
                         return LaunchResult("LAUNCH_FAILED", error=
                                             "trust prompt; rerun with --accept-trust", attempts=attempt)
                     try:
-                        process.stdin.write(b"\x1b[B\r")
+                        process.stdin.write(b"\x1b[B")
+                        process.stdin.flush()
+                        time.sleep(_setting("TRUST_GAP", 1))
+                        process.stdin.write(b"\r")
                         process.stdin.flush()
                     except (BrokenPipeError, OSError) as exc:
                         return LaunchResult("LAUNCH_FAILED", error=str(exc), attempts=attempt)
                     accepted = True
                 created = parse_created(transcript)
                 if created:
-                    time.sleep(_setting("POST_CREATE_WAIT", 10))
+                    time.sleep(_setting("POST_CREATE_WAIT", 60))
                     return LaunchResult("LAUNCHED", *created, attempts=attempt)
                 if process.poll() is not None:
                     break
@@ -240,8 +249,9 @@ def launch(job, *, repo, out_dir, run, shards, sha, branch_prefix="claude/suite"
                         (f": {error}" if error else f" (launcher rc={process.returncode})"), attempts=2)
 
 
-def _git(repo, *args, check=True):
-    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+def _git(repo, *args, check=True, timeout=None):
+    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True,
+                            text=True, timeout=timeout)
     if check and result.returncode:
         raise SuiteError(f"git {' '.join(args)}: {result.stderr.strip()}")
     return result
@@ -286,12 +296,13 @@ def _run_logged(argv, *, repo, env, log, body, deadline):
 
 def _log_counts(path):
     counts = {}
+    summary = None
     modules = []
     with path.open(errors="replace") as log:
         for line in log:
             if match := SUMMARY.fullmatch(line):
-                counts = {k: int(v) if k != "result" else v
-                          for k, v in match.groupdict().items()}
+                summary = {k: int(v) if k != "result" else v
+                           for k, v in match.groupdict().items()}
             if match := re.match(r"MODULE FAIL (\S+)", line):
                 modules.append(match.group(1))
             if match := re.match(r"Ran (\d+) tests? in ", line):
@@ -302,7 +313,8 @@ def _log_counts(path):
                 for key in ("failures", "errors", "skipped"):
                     if match := re.search(rf"\b{key}=(\d+)", line):
                         counts[key] = int(match.group(1))
-    return counts, list(dict.fromkeys(modules))
+    return {**(summary if summary is not None else counts),
+            "shard_summary": summary is not None}, list(dict.fromkeys(modules))
 
 
 def _trim_log(path):
@@ -338,9 +350,13 @@ def _remote_worker(args, repo, actual_sha, zsh):
     json_path = directory / f"{args.job}.json"
     result = {"run": args.run, "job": args.job, "sha": args.sha,
               "python": sys.version, "user_site": site.ENABLE_USER_SITE, "zsh": zsh,
+              "shallow": None,
               "rc": 1, "timed_out": False, "started": _utc(), "failed_modules": []}
     pushed = False
     try:
+        # Unshallow here, after detaching, so the foreground cloud command
+        # stays short; a fetch can take up to UNSHALLOW_TIMEOUT.
+        result["shallow"] = _shallow_status(repo)
         with log_path.open("w") as log:
             if actual_sha != args.sha:
                 result["status"] = "SHA_MISMATCH"
@@ -388,6 +404,20 @@ def _remote_worker(args, repo, actual_sha, zsh):
     finally:
         (tmp / "done").write_text("pushed" if pushed else "push_failed")
     return 0 if pushed else 1
+
+
+def _shallow_status(repo):
+    if _git(repo, "rev-parse", "--is-shallow-repository").stdout.strip() != "true":
+        return "no"
+    try:
+        fetched = _git(repo, "fetch", "--unshallow", check=False,
+                       timeout=_setting("UNSHALLOW_TIMEOUT", 120))
+        if (fetched.returncode == 0 and
+                _git(repo, "rev-parse", "--is-shallow-repository").stdout.strip() == "false"):
+            return "unshallowed"
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return "yes"
 
 
 def remote_shard(args):
@@ -444,6 +474,10 @@ def classify(job_json, parent_sha):
         return "SHA_MISMATCH"
     if job_json.get("timed_out"):
         return "TIMEOUT"
+    # CI's ordinary and crash-matrix jobs call shard_tests.run_units.
+    if (job_json.get("job", "").startswith(("ord-", "excl-crash-"))
+            and not job_json.get("shard_summary")):
+        return "FAIL"
     if (job_json.get("rc") == 0 and job_json.get("result") == "PASS"
             and job_json.get("failures") == 0 and job_json.get("errors") == 0
             and not job_json.get("failed_modules")):
@@ -483,6 +517,9 @@ def collect(state):
                     raise ValueError("result must be an object")
             except (ValueError, TypeError):
                 result = {}
+            # Read the log even for an older remote half whose JSON predates
+            # the summary-presence field; a claimed PASS alone is insufficient.
+            result["shard_summary"] = _log_counts(out / f"{name}.log")[0]["shard_summary"]
             identity = (result.get("run"), result.get("job"), result.get("sha"))
             valid = (identity == (state["run"], name, state["sha"])
                      and raw.returncode == log.returncode == parent.returncode == 0)
@@ -513,6 +550,8 @@ def write_report(state, *, emit=True):
             notes.append("zsh=missing")
         if data.get("user_site") is False:
             notes.append("user_site=false")
+        if data.get("shallow") == "yes":
+            notes.append("shallow=yes")
         rows.append({**data, "job": name, "status": job.get("status", "MISSING"),
                      "session_url": job.get("url"), "environment_notes": notes,
                      "launch_error": job.get("error")})
@@ -540,11 +579,20 @@ def write_report(state, *, emit=True):
     return 1 if failed else 3 if incomplete else 0
 
 
-def cleanup(state):
-    branches = _branches(state)
+def cleanup(state, *, all_present=False):
+    present = set(_branches(state))
+    collected = {f"{state['branch_prefix']}-{state['run']}-{name}"
+                 for name, job in state["jobs"].items() if job.get("collected")}
+    branches = sorted(present if all_present else present & collected)
     if branches:
         _git(state["repo"], "push", "origin", "--delete", *sorted(branches))
     state["deleted_branches"] = branches
+    state["leftover_branches"] = sorted(present - set(branches))
+    if state["leftover_branches"]:
+        print("Uncollected branches left on origin: " + ", ".join(state["leftover_branches"]))
+        print("Remove later: " + shlex.join([sys.executable, str(Path(__file__).resolve()),
+                                            "cleanup", "--state",
+                                            str(Path(state["out_dir"]) / "run.json")]))
     _save_state(state)
     return 0
 
@@ -560,6 +608,13 @@ def _run(args):
     if not ref or current != ref:
         raise SuiteError("requested branch must be checked out in --repo")
     sha = _git(repo, "rev-parse", ref).stdout.strip()
+    tool = "scripts/cloud_suite.py"
+    if _git(repo, "cat-file", "-e", f"{sha}:{tool}", check=False).returncode:
+        raise SuiteError(f"{tool} is absent at SHA {sha}; launch refused")
+    blob = _git(repo, "rev-parse", f"{sha}:{tool}").stdout.strip()
+    running_blob = _git(repo, "hash-object", str(Path(__file__).resolve())).stdout.strip()
+    if blob != running_blob:
+        print(f"NOTE: {tool} at SHA {sha} differs from the running file; continuing")
     remote = _git(repo, "ls-remote", "origin", f"refs/heads/{ref}").stdout.split()
     if not remote or remote[0] != sha:
         raise SuiteError("push first: origin branch must equal the checked-out tip")
@@ -659,7 +714,7 @@ def main(argv=None):
             return remote_wait(args)
         state = json.loads(Path(args.state).read_text())
         if args.command == "cleanup":
-            return cleanup(state)
+            return cleanup(state, all_present=True)
         for key in ("poll", "deadline_min", "keep_branches"):
             if getattr(args, key) is not None:
                 state[key] = getattr(args, key)

@@ -177,8 +177,13 @@ class RunnerTests(unittest.TestCase):
                 ({'.codex-report/job.md'}, [], {}, []),
                 ({'../escape'}, ['in/**'], {}, ['../escape'])]:
             self.assertEqual(runner.check_scope(paths, scope, 'job', modes)[0], expected)
-        (self.root/'link').symlink_to(self.root/'missing')
-        self.assertEqual(runner.check_scope([], ['link/x'], 'job', apply_base=self.root)[0], ['link/x'])
+        self.setup_repo()
+        (self.repo/'link').symlink_to('missing')
+        git(self.repo, 'add', 'link')
+        git(self.repo, 'commit', '-m', 'symlink base')
+        base = git(self.repo, 'rev-parse', 'HEAD').decode().strip()
+        self.assertEqual(runner.check_scope([], ['link/x'], 'job', base_repo=self.repo,
+                                            base_sha=base)[0], ['link/x'])
         self.assertEqual(runner.decide(runner.parse_report(b'', 'implementation'))[:2], ('ACCEPTANCE_FAILED',65))
         valid=runner.parse_report(report(envelope(expansion=True)), 'implementation')
         self.assertEqual(runner.decide(valid)[:2], ('NEEDS_SCOPE',79))
@@ -206,8 +211,9 @@ class RunnerTests(unittest.TestCase):
         for directory in self.root.glob('apply-*'):
             git(self.repo, 'worktree', 'remove', '--force', directory)
 
-    def scenario(self, name, patch_bytes=None):
-        scenario = json.loads((FIXTURES/'scenarios'/f'{name}.json').read_text())
+    def scenario(self, name, patch_bytes=None, responses=None):
+        scenario = (responses if responses is not None else
+                    json.loads((FIXTURES/'scenarios'/f'{name}.json').read_text()))
         folder = self.root / name
         folder.mkdir(exist_ok=True)
         if patch_bytes is not None:
@@ -290,9 +296,9 @@ class RunnerTests(unittest.TestCase):
                 calls = [json.loads(line) for line in Path(env['SOL_CLOUD_TEST_CALLS']).read_text().splitlines()]
                 self.assertFalse(any(re.search('claude|codex', ' '.join(call['argv']), re.I) for call in calls))
                 if name=='page':
-                    self.assertIn('--cursor', calls[2]['argv'])
+                    self.assertTrue(any('--cursor' in call['argv'] for call in calls))
                 if name=='list-fail':
-                    self.assertEqual(sum(call['argv'][1]=='list' for call in calls),5)
+                    self.assertEqual(sum(call['argv'][1]=='list' for call in calls),6)
                 if rc in {0,65,79}:
                     self.assertEqual(runner.staged_paths(state['apply_worktree']), set() if name=='empty' else {'inside.txt'})
                     self.assertFalse(Path(state['apply_worktree'], '.codex-report').exists())
@@ -353,8 +359,9 @@ class RunnerTests(unittest.TestCase):
         with patch.dict(os.environ,env):
             self.assertEqual(self.run_main(args),0)
         calls=[json.loads(x) for x in Path(env['SOL_CLOUD_TEST_CALLS']).read_text().splitlines()]
-        invocation=calls[0]['argv']
-        amended=calls[0]['prompt']
+        submitted = next(call for call in calls if call['argv'][1] == 'exec')
+        invocation=submitted['argv']
+        amended=submitted['prompt']
         self.assertEqual(invocation[invocation.index('--branch')+1],state['apply_branch'])
         self.assertIn('WRITE_SCOPE: ["inside.txt","outside.txt"]',amended)
         self.assertIn('SCOPE EXPANSION APPROVED BY LEAD: Go',amended)
@@ -362,6 +369,142 @@ class RunnerTests(unittest.TestCase):
         final=json.loads(Path(state['state_file']).read_text())
         self.assertEqual(final['attempt'],2)
         self.assertEqual(runner.staged_paths(state['apply_worktree']),{'outside.txt'})
+
+    def test_H1_success_output_is_not_a_rate_limit(self):
+        self.setup_repo()
+        for name, task_id, neighbour in [
+                ('S1', 'task_demo', {'id': 'task_other', 'status': 'ready',
+                                    'summary': {'files_changed': 3, 'lines_added': 1429,
+                                                'lines_removed': 2}}),
+                ('S2', 'task_e3429f', None),
+                ('S3', 'task_demo', {'id': 'task_b', 'status': 'pending',
+                                    'title': 'Handle the API rate limit'})]:
+            with self.subTest(probe=name):
+                tasks = [{'id': task_id, 'status': 'ready'}] + ([neighbour] if neighbour else [])
+                responses = {'exec': [{'stdout': f'Created {task_id}\n'}],
+                             'list': [self.listing([]), self.listing(tasks)],
+                             'diff': [{'stdout_file': 'change.patch'}]}
+                body = self.modification() + add_patch(f'.codex-report/{name}.md', report(envelope()))
+                out, args = self.invocation(name, timeout='3')
+                env = self.scenario(name, body, responses)
+                with patch.dict(os.environ, env):
+                    self.assertEqual(self.run_main(args), 0)
+                calls = self.calls(env)
+                self.assertEqual(sum(c['argv'][1] == 'exec' for c in calls), 1)
+                self.assertEqual(sum(c['argv'][1] == 'list' for c in calls), 2)
+
+    @staticmethod
+    def listing(tasks):
+        return {'stdout': json.dumps({'tasks': tasks, 'cursor': None})}
+
+    @staticmethod
+    def calls(env):
+        return [json.loads(line) for line in Path(env['SOL_CLOUD_TEST_CALLS']).read_text().splitlines()]
+
+    def test_H1_rate_limit_requires_nonzero_and_stderr(self):
+        for rc, stdout, stderr, limited in [
+                (0, b'429 rate limit', b'429 rate limit', False),
+                (1, b'429 rate limit', b'offline', False),
+                (1, b'', b'1429 task_e3429f', False),
+                (1, b'', b'HTTP 429', True),
+                (1, b'', b'RATE-LIMIT', True),
+                (1, b'', b'rate_limit', True)]:
+            with self.subTest(rc=rc, stderr=stderr):
+                self.assertEqual(runner.rate_limited(subprocess.CompletedProcess(
+                    [], rc, stdout, stderr)), limited)
+        transport = unittest.mock.Mock()
+        transport.state = {'cloud_env': 'fixture'}
+        transport.call.return_value = subprocess.CompletedProcess(
+            [], 0, self.listing([])['stdout'].encode(), b'429 rate limit')
+        self.assertEqual(runner.list_tasks(transport), ([], None))
+        transport.wait.assert_not_called()
+
+    def test_M3_snapshot_fallback_and_ambiguity(self):
+        self.setup_repo()
+        other = {'id': 'task_other', 'status': 'ready', 'updated_at': '2099-01-01T00:01:00Z'}
+        mine = {'id': 'task_mine', 'status': 'ready', 'updated_at': '2099-01-01T00:00:05Z'}
+        for name, snapshot, after, expected in [
+                ('S4', self.listing([other]), [mine, other], 0),
+                ('ambiguous', self.listing([]), [mine, other], 1),
+                ('snapshot-failed', {'stderr': 'offline', 'rc': 1}, [mine], 1),
+                ('no-new-task', self.listing([other]), [other], 1)]:
+            with self.subTest(probe=name):
+                responses = {'exec': [{'stdout': 'Submitted.\n'}],
+                             'list': [snapshot, self.listing(after)],
+                             'diff': [{'stdout_file': 'change.patch'}]}
+                body = self.modification() + add_patch(f'.codex-report/{name}.md', report(envelope()))
+                out, args = self.invocation(name)
+                env = self.scenario(name, body, responses)
+                with patch.dict(os.environ, env):
+                    self.assertEqual(self.run_main(args), expected)
+                state = json.loads(Path(str(out) + '.state.json').read_text())
+                calls = self.calls(env)
+                self.assertEqual([c['argv'][1] for c in calls[:2]], ['list', 'exec'])
+                if expected == 0:
+                    self.assertEqual(state['session_id'], 'task_mine')
+                    self.assertEqual(next(c for c in calls if c['argv'][1] == 'diff')['argv'][-1], 'task_mine')
+                else:
+                    self.assertEqual(state['run_status'], 'FAILED')
+                    self.assertFalse(any(c['argv'][1] == 'diff' for c in calls))
+                    rows = [json.loads(x) for x in Path(state['manifest']).read_text().splitlines()]
+                    self.assertEqual(rows[-1]['error_stage'], 'execution')
+                    if name == 'ambiguous':
+                        log = Path(str(out) + '.log').read_text()
+                        self.assertIn('candidates=["task_mine","task_other"]', log)
+
+    def test_M3_run_key_title_tiebreak(self):
+        transport = unittest.mock.Mock()
+        transport.state = {'cloud_env': 'fixture', 'cloud_branch': 'main', 'model': None,
+                           'effort': None, 'retries': 0, 'run_key': 'RUN-key',
+                           'out': str(self.root / 'title')}
+        tasks = [{'id': 'task_mine', 'title': 'Implement RUN-key'},
+                 {'id': 'task_other', 'title': 'Another seat'}]
+        transport.call.side_effect = [
+            subprocess.CompletedProcess([], 0, self.listing([])['stdout'].encode(), b''),
+            subprocess.CompletedProcess([], 0, b'Submitted.', b''),
+            subprocess.CompletedProcess([], 0, self.listing(tasks)['stdout'].encode(), b'')]
+        self.assertEqual(runner.submit(transport, 'prompt'), 'task_mine')
+
+    def test_M3_resume_snapshot_and_fallback_page_past_previous_task(self):
+        transport = unittest.mock.Mock()
+        transport.state = {'cloud_env': 'fixture', 'cloud_branch': 'main', 'model': None,
+                           'effort': None, 'retries': 0, 'run_key': 'RUN-key',
+                           'session_id': 'task_previous', 'out': str(self.root / 'pages')}
+        first = {'tasks': [{'id': 'task_previous'}], 'cursor': 'page-two'}
+        old = {'id': 'task_other', 'title': 'Another seat'}
+        mine = {'id': 'task_mine'}
+        responses = [json.dumps(first).encode(), self.listing([old])['stdout'].encode(),
+                     b'Submitted.', json.dumps(first).encode(),
+                     self.listing([old, mine])['stdout'].encode()]
+        transport.call.side_effect = [subprocess.CompletedProcess([], 0, body, b'')
+                                      for body in responses]
+        self.assertEqual(runner.submit(transport, 'prompt'), 'task_mine')
+        self.assertEqual(transport.call.call_count, 5)
+        self.assertEqual(transport.call.call_args_list[2].args[0], 'exec')
+
+    def test_L4_inspect_uses_base_tree_without_checkout(self):
+        self.setup_repo()
+        (self.repo / 'link').symlink_to('missing')
+        git(self.repo, 'add', 'link')
+        git(self.repo, 'commit', '-m', 'base with symlink')
+        base = git(self.repo, 'rev-parse', 'HEAD').decode().strip()
+        git(self.repo, 'rm', 'link')
+        git(self.repo, 'commit', '-m', 'current checkout has no symlink')
+        patch_path = self.root / 'tree.patch'
+        patch_path.write_bytes(self.modification())
+        for existing in (False, True):
+            with self.subTest(resume=existing):
+                state = {'cdir': str(self.repo), 'base_sha': base, 'job': 'tree',
+                         'write_scope': ['inside.txt', 'link/deep/**'],
+                         'patch_path': str(patch_path),
+                         'apply_worktree': str(self.repo if existing else self.root / 'absent')}
+                before = git(self.repo, 'worktree', 'list', '--porcelain')
+                with patch.object(runner, 'git', wraps=runner.git) as calls:
+                    _, violations, kinds, _ = runner.inspect_patch(state, patch_path.read_bytes())
+                self.assertEqual(violations, ['link/deep/**'])
+                self.assertEqual(kinds['link/deep/**'], 'symlink_ancestor')
+                self.assertFalse(any('worktree' in call.args for call in calls.call_args_list))
+                self.assertEqual(git(self.repo, 'worktree', 'list', '--porcelain'), before)
 
     def B8_guard_and_refusals(self):
         with self.assertRaisesRegex(AssertionError,'agent census'):

@@ -7,6 +7,9 @@
   ],
   "list": [
     {
+      "stdout": "{\"tasks\": [], \"cursor\": null}"
+    },
+    {
       "stdout": "{\"tasks\": [{\"id\": \"task_demo\", \"status\": \"pending\", \"updated_at\": \"2099-01-01T00:00:00Z\"}], \"cursor\": null}"
     },
     {

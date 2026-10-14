@@ -11,6 +11,9 @@
   ],
   "list": [
     {
+      "stdout": "{\"tasks\": [], \"cursor\": null}"
+    },
+    {
       "stdout": "{\"tasks\": [{\"id\": \"task_demo\", \"status\": \"ready\", \"url\": \"https://example.invalid/tasks/task_demo\"}], \"cursor\": null}"
     }
   ],
