@@ -583,3 +583,10 @@ What protects the result is that arithmetic and exclusions are fixed before data
 4. **Each session's structure (counts, flags, verdict words) is checked as soon as it ends;** no energy is involved.
 5. **Precision-based stopping, registered per pack:** a pack stops when its registered intervals reach a stated half-width, or at its session cap or end date. It depends on spread, not on the estimate, so it adds no bias.
 6. **Collect first, analyse later where the design allows:** DIFFICULTY records generated text and scores it afterwards; BYTES reuses block 5's fixed request.
+
+## 17. Build and merge staging (06:18 PDT 2026-10-14; Ed: "not too many changes at once right?")
+
+All block-6 changes are built now in six lanes (`lane/2026-10-14-b6-{harvest,driver,precheck,loop,desk,cloud}`, papers `/Users/edr/night-archive/b6-build/`), each with desk tests and an executing review. Nothing merges before the block-5 release. Then:
+- **Stage 1, what the replications need:** harvest (flags, one acceptance function, carried calibration bound, own-capture staleness, spare removed, model hash refusal), driver (pause on agent, own keep-awake hold, per-run sleep reading, waiting admission), pre-check and smoke (fingerprint, copied ledger), desk (compression, structure check). Merged one lane at a time with the whole suite on the merged tree; then the one machine test (about 40 minutes: agent pause, idle disturbance to the cap, meter unplugged); then the replications.
+- **Stage 2, for the new packs:** hidden-offset factors and the blinded export, the queue and modular sessions, precision-based stopping, cloud tooling. Merged while the replications run; BYTES and DIFFICULTY start on top of a stage 1 already proven in real sessions.
+Hardware-dependent code is marked untested until the machine test and each pack's first session (structural-failure rule, 13.1).
