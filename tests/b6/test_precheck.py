@@ -271,3 +271,115 @@ class PrecheckTests(DeskCase):
         self.assertEqual(raw_result['decision'], 'START')
         self.assertEqual(len(list(ctx.raw_dir.glob('probe-*.stdout'))), len(ctx.run.calls))
         self.assertEqual(len(list(ctx.raw_dir.glob('probe-*.stderr'))), len(ctx.run.calls))
+
+    def test_f1_directory_model_folded_hash_and_changed_byte(self):
+        from joulewise.provenance import model_artifact_identity
+        model = self.measurement / 'directory-model'
+        model.mkdir()
+        (model / 'weights.bin').write_bytes(b'weights')
+        (model / 'config.json').write_bytes(b'{}')
+        digest = model_artifact_identity(str(model))['folded_sha256']
+        registration = self.measurement / p.REGISTRATION_RELATIVE / 'identity_pins.json'
+        pins = json.loads(registration.read_text())
+        pins['units']['test'].update(model_source=str(model), model_artifact_sha256=digest)
+        registration.write_text(json.dumps(pins))
+        tree = json.loads((self.measurement / 'configs/campaigns' / PACKS['alpha'] / 'plan_tree.json').read_text())
+        for dispatch in plan.resolve_stage_dispatches(tree, self.measurement):
+            directory = self.measurement / dispatch.config_dir
+            manifest = json.loads((directory / 'order_manifest.json').read_text())
+            for entry in manifest['executed_order']:
+                (directory / entry['config']).write_text(json.dumps({'model': {'source': str(model)}}))
+        result, _ = self.check()
+        self.assertEqual(result['decision'], 'START')
+        self.assertIsNone(result['certain_exclusion'])
+        self.assertEqual(result['readings']['model_files']['measured'][str(model)], digest)
+        (model / 'weights.bin').write_bytes(b'weightX')
+        result, _ = self.check()
+        self.assertEqual(result['decision'], 'DO_NOT_START')
+        self.assertEqual(result['certain_exclusion']['reasons'], [f'model.hash_mismatch: {model}'])
+
+    def test_f4_missing_capture_is_reported_without_polling(self):
+        rows = [{'custody_locator': 'capture', 'artifact_sha256': {'missing.json': 'a'*64}}]
+        path = self.root / 'capture/missing.json'
+        runner = Runner({}, real_python=False)
+        clocks = FakeClocks()
+        with mock.patch('os.lstat', side_effect=FileNotFoundError(str(path))) as lstat:
+            reading, flags = p.restore_evicted(rows, self.root, ctx=Context(run=runner, clocks=clocks),
+                                               lstat=lstat)
+        self.assertEqual(clocks.sleeps, [])
+        self.assertEqual(runner.calls, [])
+        lstat.assert_called_once_with(path)
+        self.assertEqual(reading['missing'], [str(path)])
+        self.assertEqual(reading['unavailable'], [str(path)])
+        self.assertEqual(flags[0]['code'], 'calibration.historical_custody_unmeasured')
+
+    def test_f5_unreadable_or_absent_ledger_is_a_flag(self):
+        ledger = self.measurement / plan.DEFAULT_LEDGER_RELATIVE
+        for content in ('{not json', None):
+            with self.subTest(content=content):
+                if content is None:
+                    ledger.unlink()
+                else:
+                    ledger.write_text(content)
+                result, _ = self.check()
+                self.assertEqual(result['decision'], 'START')
+                flag = next((f for f in result['predicted_flags'] if f['code'] == 'precheck.ledger_unreadable'), None)
+                self.assertIsNotNone(flag)
+                self.assertTrue(flag['observed'])
+                self.assertEqual(result['would_refuse'], [])
+
+    def test_f6_sigkill_requires_same_pid_signature_and_parent(self):
+        row = {'pid': 100, 'ppid': 1, 'signature': 'fixture'}
+        for refreshed, kill_expected in (([], False), ([{**row, 'signature': 'other'}], False),
+                                         ([{**row, 'ppid': 2}], False), ([row], True)):
+            with self.subTest(refreshed=refreshed):
+                collect = mock.Mock(side_effect=[[row], refreshed])
+                calls = []
+                ctx = Context(clocks=FakeClocks())
+                p.reap_orphans(ctx, collect=collect, kill=lambda pid, sig: calls.append((pid, sig)),
+                               process_uid=lambda pid: 123, uid=123)
+                expected = [(100, signal.SIGTERM)] + ([(100, signal.SIGKILL)] if kill_expected else [])
+                self.assertEqual(calls, expected)
+                self.assertEqual(collect.call_count, 2)
+        collect = mock.Mock(side_effect=[[row], OSError('ps failed')])
+        calls = []
+        reaped = p.reap_orphans(Context(clocks=FakeClocks()), collect=collect,
+                                kill=lambda pid, sig: calls.append((pid, sig)), process_uid=lambda pid: 123, uid=123)
+        self.assertEqual(calls, [(100, signal.SIGTERM)])
+        self.assertIn('recensus failed', reaped['rows'][0]['outcome'])
+
+    def test_f9a_clock_linearity_has_own_wait_code(self):
+        samples = []
+        for i in range(61):
+            t = i * 10**9
+            residual = 2_000_000 if i % 2 else -2_000_000
+            samples.append({'anchor': {'monotonic_raw_ns': t, 'anchor_ns': 10**18 + residual,
+                                       'read_skew_ns': 100}, 'error': None})
+        limits = {**p.PRECHECK_DEFAULTS['clock'], 'step_ns': 10_000_000}
+        reading, codes = p.clock_rate(samples, 'boot', 'boot', limits)
+        self.assertEqual(codes, ['clock.linearity'])
+        ctx, seams, _ = fake_environment(self.measurement)
+        with mock.patch.object(p, 'clock_rate', return_value=(reading, codes)):
+            result = p.run_precheck(PACKS['alpha'], self.measurement, self.state, ctx=ctx, seams=seams)
+        wait = next(item for item in result['would_refuse'] if item['code'] == 'clock.linearity')
+        self.assertEqual(wait['retry_after_s'], 600)
+
+    def test_f9b_dispatch_error_writes_exclusion_and_skips_acceptance(self):
+        tree = json.loads((self.measurement / 'configs/campaigns' / PACKS['alpha'] / 'plan_tree.json').read_text())
+        dispatch = next(iter(plan.resolve_stage_dispatches(tree, self.measurement)))
+        (self.measurement / dispatch.config_dir / 'order_manifest.json').unlink()
+        out = self.root / 'dispatch-precheck.json'
+        acceptance = FakeAcceptance()
+        result, _ = self.check(out=out, acceptance=acceptance)
+        self.assertEqual(result['decision'], 'DO_NOT_START')
+        self.assertEqual(p.exit_code(result), 20)
+        self.assertTrue(any(reason.startswith(f'plan.dispatch_unresolved: {dispatch.stage_id}:')
+                            for reason in result['certain_exclusion']['reasons']))
+        self.assertFalse(any(reason.startswith('model.hash_mismatch:')
+                             for reason in result['certain_exclusion']['reasons']))
+        self.assertEqual(result['acceptance']['status'], 'skipped')
+        self.assertEqual(acceptance.preparations, [])
+        self.assertEqual(acceptance.evaluations, [])
+        self.assertIsNone(result['margin'])
+        self.assertIn('instrument', result['readings'])
+        self.assertEqual(json.loads(out.read_text())['decision'], 'DO_NOT_START')

@@ -9,9 +9,12 @@ import copy
 import dataclasses
 import datetime as dt
 import hashlib
+import importlib
+import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import shutil
 import subprocess
@@ -24,6 +27,7 @@ from joulewise.hazards.base import canonical_json, write_create_once
 
 REDUCTION_SCHEMA = "joulewise.b6_smoke_reduction.v1"
 KEEP_PATH = Path(__file__).resolve().parents[2] / "configs/b6/smoke_keep.json"
+CATALOG_PATH = Path(__file__).resolve().parents[2] / "configs/campaigns/v5_claim_25g83/flag_catalog.json"
 HARVEST_ARGV = ("scripts/harvest_b5_window.py",)
 PHYSICAL_PREFIXES = ("battery.", "thermal.", "clock.", "contention.", "disk.", "instrument.",
                      "sleep.", "member.idle_")
@@ -301,20 +305,21 @@ def driver_argv(prepared):
 
 
 def _harvest_hooks():
+    if importlib.util.find_spec("joulewise.b6.acceptance") is None:
+        return None, _is_physical
+    module = importlib.import_module("joulewise.b6.acceptance")
+    return getattr(module, "evidence_from_archive", None), getattr(module, "is_physical", _is_physical)
+
+
+def _is_physical(code):
     try:
-        from joulewise.b6.acceptance import evidence_from_archive, is_physical
-        return evidence_from_archive, is_physical
-    except ImportError:
-        # Either optional hook may exist independently.
-        try:
-            from joulewise.b6.acceptance import evidence_from_archive
-        except ImportError:
-            evidence_from_archive = None
-        try:
-            from joulewise.b6.acceptance import is_physical
-        except ImportError:
-            is_physical = lambda code: code.startswith(PHYSICAL_PREFIXES)
-        return evidence_from_archive, is_physical
+        codes = json.loads(CATALOG_PATH.read_text())["codes"]
+        if code in codes:
+            row = codes[code]
+            return row["klass"] == "PHYSICS" and row["effect"] in {"EXCLUDE_MEMBER", "EXCLUDE_WINDOW"}
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return code.startswith(PHYSICAL_PREFIXES)
 
 
 def _flag_codes(value):
@@ -330,13 +335,13 @@ def _flag_codes(value):
     elif isinstance(value, (list, tuple)):
         for item in value:
             yield from _flag_codes(item)
-    elif isinstance(value, str):
+    elif isinstance(value, str) and re.fullmatch(r"[a-z0-9_]+(\.[a-z0-9_]+)+", value):
         yield value
 
 
 def classify(*, stages_ok, driver_exit, harvest_exit, acceptance_result, flags, is_physical=None,
              physical_arm_refusal=False):
-    physical = is_physical or (lambda code: code.startswith(PHYSICAL_PREFIXES))
+    physical = is_physical or _is_physical
     if physical_arm_refusal or any(physical(code) for code in flags):
         return "physics"
     if stages_ok and driver_exit in (0, 6) and harvest_exit == 0 and not acceptance_result.structural:

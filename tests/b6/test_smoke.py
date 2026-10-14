@@ -2,14 +2,18 @@ import copy
 import dataclasses
 import datetime as dt
 import hashlib
+import importlib.abc
+import importlib.util
 import json
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 from joulewise.b5 import chain, plan
 from joulewise.b6 import smoke as s
+from joulewise.b6 import acceptance_interface as ai
 from joulewise.b6.acceptance_interface import AcceptanceResult, SessionEvidence, StubAcceptance
 from tests.b6.support import DeskCase, ROOT, PACKS, tree, fp, synthetic_checkout
 from tests.b6.test_precheck import FakeAcceptance
@@ -18,6 +22,71 @@ from tests.fixtures.b5_plan import fake_window
 
 
 class SmokeTests(DeskCase):
+    def test_f2_catalogue_class_and_effect_override_prefixes(self):
+        expected = {'clock.sntp_offset': 'pass', 'instrument.binary_identity_rederived': 'pass',
+                    'env.member_quiet_state_violated': 'physics',
+                    'calibration.capture_battery_span': 'physics', 'meter.absent': 'pass',
+                    'clock.rate': 'physics'}
+        for code, status in expected.items():
+            with self.subTest(code=code):
+                self.assertEqual(s.classify(stages_ok=True, driver_exit=0, harvest_exit=0,
+                                           acceptance_result=AcceptanceResult('ACCEPT', (), (), False),
+                                           flags=[code]), status)
+
+    def test_f2_unreadable_catalogue_uses_prefixes_and_hook_wins(self):
+        with mock.patch.object(s, 'CATALOG_PATH', self.root / 'missing-catalogue.json'):
+            _, physical = s._harvest_hooks()
+            self.assertTrue(physical('clock.sntp_offset'))
+            self.assertFalse(physical('env.member_quiet_state_violated'))
+        self.assertEqual(s.classify(stages_ok=True, driver_exit=0, harvest_exit=0,
+                                   acceptance_result=AcceptanceResult('ACCEPT', (), (), False),
+                                   flags=['clock.rate'], is_physical=lambda code: False), 'pass')
+
+    def test_f3_installed_acceptance_dependency_error_propagates(self):
+        name = 'joulewise.b6.acceptance'
+
+        class BrokenAcceptance(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname == name:
+                    return importlib.util.spec_from_loader(fullname, self)
+
+            def create_module(self, spec):
+                return None
+
+            def exec_module(self, module):
+                raise ModuleNotFoundError("No module named 'scipy'", name='scipy')
+
+        with mock.patch.dict(sys.modules), mock.patch.object(sys, 'meta_path', [BrokenAcceptance(), *sys.meta_path]):
+            sys.modules.pop(name, None)
+            for load in (ai.load_acceptance, s._harvest_hooks):
+                with self.subTest(load=load.__name__):
+                    with self.assertRaises(ModuleNotFoundError) as caught:
+                        load()
+                    self.assertEqual(caught.exception.name, 'scipy')
+
+    def test_f3_absent_module_and_optional_hooks(self):
+        with mock.patch('importlib.util.find_spec', return_value=None):
+            self.assertIsInstance(ai.load_acceptance(), StubAcceptance)
+            loader, physical = s._harvest_hooks()
+            self.assertIsNone(loader)
+            self.assertTrue(physical('clock.rate'))
+        module = SimpleNamespace(ACCEPTANCE=FakeAcceptance())
+        with mock.patch('importlib.util.find_spec', return_value=object()), \
+                mock.patch.dict(sys.modules, {'joulewise.b6.acceptance': module}):
+            self.assertIs(ai.load_acceptance(), module.ACCEPTANCE)
+            loader, physical = s._harvest_hooks()
+            self.assertIsNone(loader)
+            self.assertFalse(physical('clock.sntp_offset'))
+            module.is_physical = lambda code: code == 'custom.physical'
+            module.evidence_from_archive = lambda archive: archive
+            self.assertEqual(s._harvest_hooks(), (module.evidence_from_archive, module.is_physical))
+
+    def test_f9c_bare_strings_must_be_flag_codes(self):
+        record = {'verdict': 'GO', 'reasons': ['REFUSED', 'clock.rate', 'a free-text reason',
+                                             'Clock.rate', 'clock.rate trailing'],
+                  'arm': {'verdict': 'REFUSED', 'flags': ['battery.float', 'module_1.arm_refusal']}}
+        self.assertEqual(list(s._flag_codes(record)), ['clock.rate', 'battery.float', 'module_1.arm_refusal'])
+
     def test_17_exact_reduced_graphs_and_gamma_member_order(self):
         keeps = json.loads(s.KEEP_PATH.read_text())
         expected_science = {
@@ -210,7 +279,7 @@ def main():
                 ('pass', 0, 0, FakeAcceptance(), [], 'pass'),
                 ('courier', 6, 0, FakeAcceptance(), [], 'pass'),
                 ('implicit', None, 0, FakeAcceptance(), [], 'pass'),
-                ('physics', 0, 0, FakeAcceptance(flags=('battery.draw',)), [], 'physics'),
+                ('physics', 0, 0, FakeAcceptance(flags=('battery.member_span',)), [], 'physics'),
                 ('archive-physics', 0, 0, FakeAcceptance(), [], 'physics'),
                 ('harvest', 0, 1, FakeAcceptance(), [], 'fail'),
                 ('structural', 0, 0, FakeAcceptance(structural=True), [], 'fail'),
@@ -234,7 +303,7 @@ def main():
             if name == 'archive-physics':
                 derived = base / 'archive/derived'
                 derived.mkdir(parents=True)
-                (derived / 'window_flags.json').write_text(json.dumps({'flags': {'by_code': {'battery.draw': 1}}}))
+                (derived / 'window_flags.json').write_text(json.dumps({'flags': {'by_code': {'battery.member_span': 1}}}))
             prepared = s.SmokePrepared(base, measurement, base / 'plan.json', base / 'custody',
                                        base / 'state', PACKS['alpha'], 'SMOKE-test-calibration', fp(), {}, pack)
             pin_calls = []

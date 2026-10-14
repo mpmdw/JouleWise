@@ -75,15 +75,21 @@ def thresholds_for(measurement_root, pack_id, registration_dir, overrides=None):
     return result
 
 
-def ledger_rows(path) -> list:
+def ledger_rows(path, *, flags=None) -> list:
     """The sole adapter to the current ledger; observations only, never custody reads."""
     from joulewise import calibration_ledger
     try:
-        receipts, _ = calibration_ledger._parse_ledger(Path(path).read_bytes())
+        receipts, errors = calibration_ledger._parse_ledger(Path(path).read_bytes())
+        if errors and flags is not None:
+            flags.append({"code": "precheck.ledger_unreadable", "source": "ledger",
+                          "observed": ", ".join(sorted(errors))})
         observations, sessions, _ = calibration_ledger._attempts_and_observations(receipts)
         return sorted(calibration_ledger._custody_observations(observations, sessions),
                       key=lambda row: row.sequence)
-    except Exception:
+    except Exception as exc:
+        if flags is not None:
+            flags.append({"code": "precheck.ledger_unreadable", "source": "ledger",
+                          "observed": f"{type(exc).__name__}: {exc}"})
         return []
 
 
@@ -101,36 +107,46 @@ def restore_evicted(rows, measurement_root, *, ctx, lstat=os.lstat,
         for relative in _value(row, "artifact_sha256", {}):
             files.add(locator / relative)
 
+    missing = set()
+
     def unavailable(path):
         try:
             item = lstat(path)
             return bool(getattr(item, "st_flags", 0) & 0x40000000)
         except OSError:
+            missing.add(path)
             return True
 
-    pending = {path for path in files if unavailable(path)}
+    pending = set()
+    unavailable_files = set()
     downloads = []
-    for path in sorted(pending):
+    for path in sorted(files):
         try:
             item = lstat(path)
         except OSError:
+            missing.add(path)
             continue
-        if getattr(item, "st_flags", 0) & 0x40000000 and not stat_module.S_ISDIR(getattr(item, "st_mode", 0)):
-            result = ctx.run(("/usr/bin/brctl", "download", str(path)), ctx.probe_timeout_s)
-            ctx.keep_raw(f"eviction-{len(downloads)}.txt", result.stdout)
-            downloads.append({"file": str(path), "returncode": result.returncode,
-                              "error": result.error, "timed_out": result.timed_out})
+        if getattr(item, "st_flags", 0) & 0x40000000:
+            unavailable_files.add(path)
+            if not stat_module.S_ISDIR(getattr(item, "st_mode", 0)):
+                result = ctx.run(("/usr/bin/brctl", "download", str(path)), ctx.probe_timeout_s)
+                ctx.keep_raw(f"eviction-{len(downloads)}.txt", result.stdout)
+                downloads.append({"file": str(path), "returncode": result.returncode,
+                                  "error": result.error, "timed_out": result.timed_out})
+                pending.add(path)
     elapsed = 0
-    pending = {path for path in pending if unavailable(path)}
+    downloaded = set(pending)
+    pending = {path for path in pending if unavailable(path) and path not in missing}
     while pending and elapsed < cap_s:
         duration = min(poll_s, cap_s - elapsed)
         ctx.clocks.sleep(duration)
         elapsed += duration
-        pending = {path for path in pending if unavailable(path)}
+        pending = {path for path in pending if unavailable(path) and path not in missing}
+    pending |= missing | (unavailable_files - downloaded)
     flags = ([{"code": "calibration.historical_custody_unmeasured", "source": "evicted_captures",
                "observed": {"count": len(pending), "files": sorted(map(str, pending))}}] if pending else [])
     return {"files_checked": len(files), "downloads": downloads,
-            "unavailable": sorted(map(str, pending)), "elapsed_s": elapsed}, flags
+            "unavailable": sorted(map(str, pending)), "missing": sorted(map(str, missing)), "elapsed_s": elapsed}, flags
 
 
 def _process_uid(ctx, pid):
@@ -155,8 +171,16 @@ def reap_orphans(ctx, *, collect=fixture_orphan_census.collect, kill=os.kill,
         try:
             kill(row["pid"], signal.SIGTERM)
             ctx.clocks.sleep(5)
-            kill(row["pid"], signal.SIGKILL)
-            entry["outcome"] = "sigkill_sent"
+            try:
+                again = collect()
+            except Exception as exc:
+                entry["outcome"] = f"sigterm_sent; recensus failed: {type(exc).__name__}: {exc}"
+                rows.append(entry)
+                continue
+            if any(match.get("pid") == row["pid"] and match.get("signature") == row["signature"]
+                   and match.get("ppid") == 1 for match in again):
+                kill(row["pid"], signal.SIGKILL)
+                entry["outcome"] = "sigkill_sent"
         except ProcessLookupError:
             pass
         except OSError as exc:
@@ -174,7 +198,7 @@ def model_files(tree, measurement_root, pins, *, identity=None) -> tuple[dict, l
     errors = []
     for dispatch in plan.resolve_stage_dispatches(tree, measurement_root):
         if dispatch.error:
-            errors.append(f"model.hash_mismatch: {dispatch.stage_id}: {dispatch.error}")
+            errors.append(f"plan.dispatch_unresolved: {dispatch.stage_id}: {dispatch.error}")
             continue
         manifest = json.loads((Path(measurement_root) / dispatch.config_dir / "order_manifest.json").read_text())
         for entry in manifest["executed_order"]:
@@ -185,7 +209,8 @@ def model_files(tree, measurement_root, pins, *, identity=None) -> tuple[dict, l
     measured = {}
     for source in sorted(sources):
         try:
-            measured[source] = identity(source).get("sha256")
+            artifact = identity(source)
+            measured[source] = artifact.get("folded_sha256") or artifact.get("sha256")
         except Exception:
             measured[source] = None
         if measured[source] is None or measured[source] != expected.get(source):
@@ -223,7 +248,7 @@ def synthetic_session(pack_root, measurement_root, rows, runtime, *, capture_med
         if stage.kind == "campaign_collection":
             dispatch = dispatches[stage.stage_id]
             if dispatch.error or dispatch.run_ids is None:
-                raise ValueError(f"synthetic dispatch: {dispatch.error}")
+                raise ValueError(f"plan.dispatch_unresolved: {dispatch.stage_id}: {dispatch.error}")
             members = tuple(MemberEvidence(stage.stage_id, run_id, "succeeded")
                             for run_id in dispatch.run_ids[:stage.expected_count])
         stages.append(StageEvidence(stage.stage_id, stage.kind, stage.expected_count, members))
@@ -289,8 +314,10 @@ def clock_rate(samples, boot_start, boot_end, thresholds):
     residuals = [y - ym - slope * (x - xm) for x, y in zip(xs, ys)]
     bound = Fraction(str(thresholds["h_ms"])) + (abs(rate) + Fraction(
         str(thresholds["frequency_margin_ppm"]))) * Fraction(str(thresholds["t_stream_max_s"])) / 1000
-    if bound > Fraction(str(thresholds["limit_ms"])) or max(map(abs, residuals)) > thresholds["residual_max_ns"]:
+    if bound > Fraction(str(thresholds["limit_ms"])):
         codes.append("clock.rate")
+    if max(map(abs, residuals)) > thresholds["residual_max_ns"]:
+        codes.append("clock.linearity")
     if any(abs(b - a) > thresholds["step_ns"] for a, b in zip(residuals, residuals[1:])):
         codes.append("clock.step")
     frequency = next((item["frequency"] for item in samples if item.get("frequency")), None)
@@ -429,7 +456,7 @@ def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None
         flags.append({"code": "code.executed_differs_from_sealed", "source": "fingerprint", "observed": True})
     if fp.get("meter_device") is None:
         flags.append({"code": "meter.absent", "source": "fingerprint", "observed": None})
-    rows = ledger_rows(ledger)
+    rows = ledger_rows(ledger, flags=flags)
     readings["evicted_captures"], eviction_flags = restore_evicted(rows, measurement, ctx=ctx, lstat=seams.lstat)
     flags.extend(eviction_flags)
     disk_limits = {"planned_bytes": limits["disk"]["largest_session_bytes"] + (
@@ -442,17 +469,24 @@ def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None
                                             process_uid=seams.process_uid)
     if model_errors:
         result["certain_exclusion"] = {"source": "model_hash", "reasons": model_errors}
-    evidence = synthetic_session(pack_root, measurement, rows,
-                                 {"model_hashes": models["measured"], "runtime_versions": runtime},
-                                 capture_median_count=limits["capture_median_count"])
-    if evidence.captures[0].bound_ms is None:
-        flags.append({"code": "precheck.no_valid_capture", "source": "ledger", "observed": 0})
-    acceptance = acceptance or load_acceptance()
-    prepared = acceptance.prepare(ledger_path=ledger, plan_tree=tree, registration_dir=registration, code_identity=fp)
-    result["acceptance"], result["margin"], exclusion, acceptance_flags = acceptance_checks(
-        acceptance, prepared, evidence, margin_loss_runs=limits["margin_loss_runs"])
-    flags.extend(acceptance_flags)
-    result["certain_exclusion"] = result["certain_exclusion"] or exclusion
+    try:
+        evidence = synthetic_session(pack_root, measurement, rows,
+                                     {"model_hashes": models["measured"], "runtime_versions": runtime},
+                                     capture_median_count=limits["capture_median_count"])
+    except ValueError as exc:
+        if not str(exc).startswith("plan.dispatch_unresolved:"):
+            raise
+        result["certain_exclusion"] = result["certain_exclusion"] or {"source": "model_hash", "reasons": [str(exc)]}
+        result["acceptance"] = {"status": "skipped", "reason": str(exc)}
+    else:
+        if evidence.captures[0].bound_ms is None:
+            flags.append({"code": "precheck.no_valid_capture", "source": "ledger", "observed": 0})
+        acceptance = acceptance or load_acceptance()
+        prepared = acceptance.prepare(ledger_path=ledger, plan_tree=tree, registration_dir=registration, code_identity=fp)
+        result["acceptance"], result["margin"], exclusion, acceptance_flags = acceptance_checks(
+            acceptance, prepared, evidence, margin_loss_runs=limits["margin_loss_runs"])
+        flags.extend(acceptance_flags)
+        result["certain_exclusion"] = result["certain_exclusion"] or exclusion
     judged(battery, battery.measure(ctx, smc_read=seams.smc_read), limits["battery"], "battery.float")
     judged(thermal, thermal.measure(ctx), limits["thermal"], "thermal.pressure")
     first = arm.agent_census(ctx)
