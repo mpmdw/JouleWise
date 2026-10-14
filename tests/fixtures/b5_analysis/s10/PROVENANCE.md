@@ -1,3 +1,21 @@
+> **Rebuilt from clean source checkouts (stage S10 resumed director, 2026-10-14, after the 15:05 restart).**
+> The claim gate (`analysis_engine.inputs._read_bundle` through `_source_provenance_admission_problems`)
+> admits only members whose recorded source state is clean, and C9 stopped with `member_code_on_kept_unit`
+> on GAMMA's first kept decode quad. Every member of all three earlier archives recorded
+> `claim_eligible: false` (`start/end_tracked_dirty`, `start/end_untracked_dirty`, some also
+> `source_changed_during_run`): the export under `.scratch-s10f/<pin>/` had no `.git`, so the controller's
+> `git rev-parse --show-toplevel` (`joulewise/bundle.py` `_capture_source_state`) found the enclosing
+> analysis worktree, dirty with the seats' uncommitted work. A real member is collected from the
+> measurement clone, a clean checkout. This was a fixture inconsistency, not a production defect: all three
+> windows were rebuilt by `.scratch-s10f/build_clean.py`, which makes the export a Git repository of its own
+> (one synthetic commit of the exported tree; `git status --porcelain` empty before and after the build), and
+> `build_export` now refuses to publish a window whose members are not claim-eligible. In the same rebuild the
+> controller, run outside a sandbox for the first time, compared the window's synthetic boot with the host's
+> real `kern.bootsessionuuid` (`window_lineage.authenticate_lineage`; inside the seats' sandbox the read failed
+> and the comparison was skipped); the builder now supplies the window's synthetic boot to the collection, the
+> producer-side seam listed below. ChainTests C1 asserts the claim gate's own source-state admission on every
+> kept member.
+>
 > **State (stage S10 continuation, 2026-10-14):** ALPHA, BETA and GAMMA are built by the pinned programs and committed. C0 to C4, C-B1 and C-F1 pass on the real programs. The mint passes the per-cell runtime identity check (round K2) and, under the conditional Q-LINEAGE seam below, reaches artifact rebinding; C5 onward and the joined driver from step 5 are conditional on that question. Exact evidence: `/Users/edr/night-archive/b5-consults/l9-rulings/s10/`.
 
 K1 built BETA (125 members, 1,821,172 archive bytes, 575.399521 s wrapper)
@@ -80,7 +98,17 @@ bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/run.sh bash /Users/edr/c
 bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/run.sh /opt/homebrew/bin/python3.13 -B .scratch-s10f/prepare_exports.py pin4
 ```
 
-Replay from the worktree with the one runner:
+Replay from the worktree with the one runner. Since the resumed director's rebuild, all three windows are
+built in order by `.scratch-s10f/build_clean.py` (extract the pin with `git archive`, `prepare_exports.prepare`,
+`git init` and one synthetic commit of the export, then the builder below with the export as its working directory):
+
+```sh
+bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/run.sh /opt/homebrew/bin/python3.13 -B .scratch-s10f/build_clean.py alpha
+bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/run.sh /opt/homebrew/bin/python3.13 -B .scratch-s10f/build_clean.py beta
+bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/run.sh /opt/homebrew/bin/python3.13 -B .scratch-s10f/build_clean.py gamma
+```
+
+The earlier rounds' commands were:
 
 ```sh
 bash /Users/edr/code/JouleWise-wt-l9-s10f/.scratch-s10f/run.sh /opt/homebrew/bin/python3.13 -B .scratch-s10f/build_window.py beta
@@ -106,12 +134,13 @@ raw build trees before retrying, and publish successful archives atomically.
 | producer | `harvest_checkout runner` | git archive has no .git; only head/status observations are supplied; file digests are real |
 | producer | `calibration_ledger._committed_pin_bytes` | git archive has no commit for the new synthetic head pin; supply only its Git blob observation, with all ledger parsing and digest checks real |
 | producer | `historical calibration custody visibility` | The immutable synthetic cutoff prefix has historical locators. During production only, these are absent observations; current and previously built synthetic windows retain real calibration primary files |
-| producer | `Seams.group_alive / Seams.boot_session_uuid` | Synthetic collection has no real chain process or boot observation |
+| producer | `Seams.group_alive / Seams.boot_session_uuid / window_lineage.current_boot_session_id` | Synthetic collection has no real chain process or boot observation; the collection and the harvest observe the window's synthetic boot (`fixtures_s10.SYNTHETIC_BOOT`) |
 | producer | `write_monitor_journals / write_cooldown` | Synthetic hardware publishes complete monitor observations and hash-bound raw cooldown records; all joins are real |
 | producer | `whole_window.REGISTERED_NEG8_REFERENCE_CORPUS_DIR` | Resolve the exact sealed synthetic measurement `settled_corpus.json` during writer/harvest execution. The pinned export's default corpus is from another source tree. The identity check and bound arithmetic run unchanged. |
 | consumer | `windows.sealed_pack_table (partial builds only)` | Pinned S0 peers satisfy the full-block selection fence until every S10 window exists; only the built sealed S10 target is opened |
 | consumer | `mint_floor_artifact_generalized._actual_v2_git_state` | The task forbids commits and intentionally leaves an uncommitted fixture; supply the actual base HEAD as the synthetic clean checkout observation |
 | consumer, **conditional** | `mint_floor_artifact_generalized._common_minted_artifact_launch_lineage` (aggregate only; `fixtures_s10.CONDITIONAL_SEAMS`) | Open question Q-LINEAGE: the aggregate floor joins producers from two windows, so its component lineages differ and the unchanged rule refuses. The fixture omits the aggregate carrier only when every component carries one and they differ; per-producer equality and component authentication are unchanged. Every result from C5 on is conditional on the ruling. |
+| consumer, **conditional** | `analysis_manifest_v3._authenticate_floor_dependencies` (exact_stack_only lookup only; `fixtures_s10.CONDITIONAL_SEAMS`) | Open question Q-EXACTSTACK: the sealed GAMMA manifest declares exact_stack_only transport, and the finalizer then looks for a floor cell keyed on the consumer family itself, while every block-5 floor is measured on its floor-pack family and names the consumers in its same-stack transport group. The fixture serves the consumer by its transport group's single source cell (group admission and stack identity still checked). Results from C8 on are conditional on the ruling. |
 
 With three windows the pack-table seam is inactive (the ordinary index is
 used). No session, strict validator, reducer, bracket evaluator, exclusion function,

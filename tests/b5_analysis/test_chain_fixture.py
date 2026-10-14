@@ -120,6 +120,14 @@ class ChainTests(unittest.TestCase):
         w=self.window(pack);archive,kept=self.kept_composition(pack)
         ids=sorted(set().union(*(kept.kept_run_ids(cid) for cid in kept.cells)))
         with self.timed(step,pack):
+            if step=='C1':
+                # The claim gate's own source-state admission: every kept member
+                # was collected from a clean checkout, as on the measurement clone.
+                from joulewise.analysis_engine.inputs import _source_provenance_admission_problems
+                for bid in ids:
+                    self.assertEqual(_source_provenance_admission_problems(
+                        json.loads((w.claim/bid/'metadata.json').read_bytes()),
+                        json.loads((w.claim/bid/'summary_metrics.json').read_bytes())),[],bid)
             destination=(Path(tempfile.mkdtemp(prefix=pack+'-C2-',dir=self.custody)) if step=='C2' else None)
             commands=[]
             for bid in ids:

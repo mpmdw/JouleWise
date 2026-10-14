@@ -31,6 +31,7 @@ ROOT=Path(__file__).resolve().parents[2]
 FIXTURES=ROOT/'tests/fixtures/b5_analysis/s10'
 PACK_IDS={'alpha':'d117_floor_qwen3-1p7b_v5','beta':'d117_floor_qwen3-8b_v5',
           'gamma':'d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5'}
+SYNTHETIC_BOOT='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
 SEAMS=(
     ('producer','Runtime / mock-runtime duration constants','Model launch executes pinned prompts with synthetic model identities and .004331/.017331 per-token durations'),
     ('producer','Registry.resolve_telemetry / fake_powermetrics_process.py','The real PowermetricsTelemetryAdapter consumes synthetic primary XML'),
@@ -40,7 +41,7 @@ SEAMS=(
     ('producer','harvest_checkout runner','git archive has no .git; only head/status observations are supplied; file digests are real'),
     ('producer','calibration_ledger._committed_pin_bytes','git archive has no commit for the new synthetic head pin; supply only its Git blob observation, with all ledger parsing and digest checks real'),
     ('producer','historical calibration custody visibility','The immutable synthetic cutoff prefix has historical locators. During production only, these are absent observations; current and previously built synthetic windows retain real calibration primary files'),
-    ('producer','Seams.group_alive / Seams.boot_session_uuid','Synthetic collection has no real chain process or boot observation'),
+    ('producer','Seams.group_alive / Seams.boot_session_uuid / window_lineage.current_boot_session_id','Synthetic collection has no real chain process or boot observation; collection and harvest observe the window\'s synthetic boot'),
     ('producer','write_monitor_journals / write_cooldown','Synthetic hardware publishes complete monitor observations and hash-bound raw cooldown records; all joins are real'),
     ('producer','whole_window.REGISTERED_NEG8_REFERENCE_CORPUS_DIR','The pinned export resolves the exact sealed synthetic measurement corpus; corpus identity and bound arithmetic are still validated from its bytes'),
     ('consumer','windows.sealed_pack_table (partial builds only)','Pinned S0 peers satisfy the full-block selection fence until every S10 window exists; only the built sealed S10 target is opened'),
@@ -389,7 +390,13 @@ def restore_prior_custody(destination,pack):
 
 
 def build_export(pack,destination):
-    """Collect one synthetic window; all production imports are the export's."""
+    """Collect one synthetic window; all production imports are the export's.
+
+    The export directory is its own clean Git repository (one synthetic commit
+    of the exported tree), as the measurement clone is: the controller records
+    the state of the checkout holding its own source, and the claim gate admits
+    only members whose recorded source state is clean.
+    """
     started=time.monotonic()
     shape='pin2' if pack=='alpha' else 'pin4'
     pin=json.loads(s0.PINS_PATH.read_bytes())['pins'][shape]
@@ -406,6 +413,10 @@ def build_export(pack,destination):
     from joulewise.identity_pins import derive_model_runtime_config_from_metadata
     from scripts import run_campaign as rc
     from joulewise.schemas import BenchmarkConfig
+    # Collection happens in the window's (synthetic) boot, as in production;
+    # the host's real boot identity is not the window's. In a sandbox that
+    # cannot read kern.bootsessionuuid the controller skipped this comparison.
+    mock.patch.object(lineage,'current_boot_session_id',return_value=SYNTHETIC_BOOT).start()
     root=Path(tempfile.mkdtemp(prefix='s10-'+pack+'-')).resolve()
     (root/'builder.pid').write_text(str(os.getpid()))
     print('BUILD_ROOT',root,flush=True)
@@ -499,7 +510,7 @@ def build_export(pack,destination):
     published=lineage.publish_window_lineage(pack_root=w.pack,pack_id=PACK_IDS[pack],plan_id=plan['plan_id'],
         window_id=identity['window_id'],bracket_session_id=session_id,pre_attempt_id=pre.name,post_attempt_id=post.name,
         claim_runs_root=w.claim,bound_runs_root=w.bound,custody_root=w.custody,pack_sha256=sha(w.pack/'plan_tree.json'),
-        arm_decision_path=w.custody/'hazards/arm.json',boot_session_id='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee')
+        arm_decision_path=w.custody/'hazards/arm.json',boot_session_id=SYNTHETIC_BOOT)
     roster=h.build_roster(w.pack,w.measurement)
     members=ordered_members(roster,tree,w.measurement,w.pack)
     science=[m for m in members if m['kind']=='science']
@@ -557,6 +568,12 @@ def build_export(pack,destination):
             print('FIRST_MEMBER_STRICT',problems,flush=True)
             if problems:raise ValueError('first member is not strict-valid')
         raw_metadata=json.loads((bundle/'metadata.json').read_bytes())
+        # A production member is collected from the measurement clone, a clean
+        # checkout; the claim gate excludes a member whose recorded source state
+        # is not clean. The export must therefore be a clean repository of its own.
+        provenance=raw_metadata.get('source_provenance') or {}
+        if provenance.get('claim_eligible') is not True:
+            raise ValueError('producer source checkout is not clean: '+str(provenance.get('reason_codes')))
         _stack,triple=derive_model_runtime_config_from_metadata(json.loads((bundle/'config.json').read_bytes()),raw_metadata)
         if m['kind']=='science':
             rel=source.relative_to(w.pack).as_posix()
@@ -666,7 +683,7 @@ def build_export(pack,destination):
     def checkout():
         def runner(argv,**kw):return SimpleNamespace(returncode=0,stdout=pin['head']+'\n' if 'rev-parse' in argv else '',stderr='')
         return h.harvest_checkout(runner=runner)
-    seams=h.Seams(group_alive=lambda _:False,boot_session_uuid=lambda:'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+    seams=h.Seams(group_alive=lambda _:False,boot_session_uuid=lambda:SYNTHETIC_BOOT,
                   harvest_checkout=checkout,exclusions_compute=hb.EXCLUSIONS,workers=8)
     original_state=ledger._custody_state
     visible_roots={w.root}
