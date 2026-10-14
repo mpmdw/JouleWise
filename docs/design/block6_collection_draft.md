@@ -338,6 +338,8 @@ are removed after their record, or block-6 archives move to a local external dri
 (iCloud cannot be used: item 34). This is Ed's hardware call and comes before registration. If it is not
 solved, the registration says 2 sessions per pack, decided before any data.
 
+**Update 03:01 PDT 2026-10-14: disk is solved by compression.** Measured on a non-claim rehearsal: a 83.0 MB powermetrics plist compresses to 1.2 MB with `zstd -3` (about 70 times; byte-identical round trip), and a session's archive also holds a second full copy of its runs root (8.2 of 17 GB in `corpus18-20261009T1949Z`). Compressing raw files at the session desk, after the harvest and the recompute (never between runs: that time is the next run's idle baseline), brings a session from about 43 GiB to well under 2 GiB. Target 3 per pack stands with no external drive. An external SSD may hold an off-machine backup, connected only at the desk and ejected before arming.
+
 ## 6. The unattended loop
 
 ### 6.1 The loop
