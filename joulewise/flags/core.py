@@ -34,6 +34,18 @@ UNKNOWN_CODE_CLASS = ("RECORDS", "REPRESENTATION")
 
 # code -> (family, klass).  Effects live only in the sealed catalog (DESIGN.md section 5).
 CORE_FLAG_CODES: Mapping[str, tuple[str, str]] = {
+    # Block-6 collection spec; idle.waited remains DISCLOSE pending M2.
+    "agent.pause_marker_stale": ("RECORDS", "REPRESENTATION"),
+    "sleep.in_run": ("PHYSICS_IN_SPAN", "PHYSICS"),
+    "sleep.between_runs": ("DIAGNOSTIC", "PHYSICS"),
+    "sleep.reading_unmeasured": ("DIAGNOSTIC", "PHYSICS"),
+    "idle.waited": ("DIAGNOSTIC", "PHYSICS"),
+    "idle.wait_cap_skip": ("MEMBER_VALIDITY", "PHYSICS"),
+    "idle.wait_budget_skip": ("MEMBER_VALIDITY", "PHYSICS"),
+    "idle.wait_budget_exhausted": ("DIAGNOSTIC", "PHYSICS"),
+    "idle.wait_budget_unreadable": ("DIAGNOSTIC", "PHYSICS"),
+    "idle.wait_ledger_unwritable": ("RECORDS", "REPRESENTATION"),
+    "idle.busy_fraction_exceeded": ("DIAGNOSTIC", "PHYSICS"),
     "calibration.capture_battery_pair_unverified": ("CALIBRATION", "PHYSICS"),
     "records.pin_ledger": ("RECORDS", "REPRESENTATION"),
     "calibration.power_policy_unverified": ("CALIBRATION", "REPRESENTATION"),

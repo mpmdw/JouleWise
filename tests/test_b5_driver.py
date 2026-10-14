@@ -528,12 +528,86 @@ class LaunchTests(unittest.TestCase):
 
     def test_in_window_agent_census_still_aborts_the_chain(self):
         harness = Harness(self)
-        harness.replace_chain("#!/bin/zsh -f\n/bin/sleep 60\n")
+        harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
         harness.census.responses += [probe(night_gate.AGENT_CENSUS_ARGV), probe(night_gate.AGENT_CENSUS_ARGV),
                                      probe(night_gate.AGENT_CENSUS_ARGV, exit_code=0, stdout="99 claude\n")]
-        self.assertEqual(harness.driver.EXIT_ABORTED, harness.run())
+        def chain_once(*args, census, **kwargs):
+            first, refused = census()
+            self.assertIsNone(refused)
+            self.assertTrue((harness.custody / "collection/pause.json").exists())
+            since = census.pause.since
+            census.pause.clock = lambda: {**since, "monotonic_ns": since["monotonic_ns"] + 7200 * 10**9}
+            _, refused = census()
+            self.assertEqual(refused.reason, "night_refused_agent_present")
+            return 143, harness.driver._refusal_mapping("night_aborted_agent_present", refused.detail, None), 2, [], True
+        with mock.patch.object(harness.driver, "_run_chain_once", side_effect=chain_once):
+            self.assertEqual(harness.driver.EXIT_ABORTED, harness.run())
         self.assertEqual("night_aborted_agent_present", harness.result()["aborted_reason"])
         self.assertFalse(harness.hazard()["g10"]["ran"])
+
+    def test_sighting_excludes_the_quad_and_chain_finishes_go(self):
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+        harness.census.responses += [probe(night_gate.AGENT_CENSUS_ARGV), probe(night_gate.AGENT_CENSUS_ARGV),
+                                     probe(night_gate.AGENT_CENSUS_ARGV, exit_code=0, stdout="99 claude\n")]
+        def chain_once(*args, census, **kwargs):
+            from joulewise.b6.sleep_guard import append_record
+            path = harness.custody / "collection/run_clock.jsonl"
+            append_record(path, {"event": "start", "run_id": "m2", "unit_key": "q",
+                                "unit_run_ids": ["m1", "m2", "m3", "m4"], "clock": b5_driver.stamp()})
+            self.assertIsNone(census()[1])
+            append_record(path, {"event": "end", "run_id": "m2", "clock": b5_driver.stamp()})
+            return 0, None, 1, [], True
+        with mock.patch.object(harness.driver, "_run_chain_once", side_effect=chain_once):
+            self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        flags = [r for r in harness.flags if r["code"] == "agent.presence_overlap"]
+        self.assertEqual({r["scope"]["run_id"] for r in flags}, {"m1", "m2", "m3", "m4"})
+        self.assertEqual(harness.hazard()["agent_pause"]["episodes"][0]["basenames"], ["claude"])
+
+    def test_keep_awake_starts_before_arm_and_stops_on_refusal_abort_and_go(self):
+        for mode in ("refusal", "abort", "go"):
+            with self.subTest(mode=mode):
+                harness = Harness(self, g10=False, arm=FakeArm(verdicts={"thermal": "REFUSE"}) if mode == "refusal" else None)
+                harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+                keep = mock.Mock(restarts=0)
+                keep.verify.return_value = {"pid": 77, "verified": True}
+                keep.poll.side_effect = [True, False]
+                real_arm = harness.arm
+                def arm(context):
+                    keep.start.assert_called_once()
+                    return real_arm(context)
+                harness.arm = arm
+                harness.driver._hazard_seams = lambda: dataclasses.replace(harness.seams(), keep_awake=lambda pid: keep)
+                def chain_once(*args, supervise, **kwargs):
+                    supervise()
+                    supervise()
+                    return (143, harness.driver._refusal_mapping("night_aborted_agent_present", "synthetic stop", None), 0, [], True) if mode == "abort" else (0, None, 0, [], True)
+                with mock.patch.object(harness.driver, "_run_chain_once", side_effect=chain_once):
+                    code = harness.run()
+                self.assertEqual(code, {"refusal": harness.driver.EXIT_REFUSED, "abort": harness.driver.EXIT_ABORTED, "go": harness.driver.EXIT_GO}[mode])
+                keep.stop.assert_called_once()
+                self.assertEqual(keep.verify.call_count, 2)
+                if mode != "refusal":
+                    self.assertEqual([r["code"] for r in harness.flags].count("sleep.assertion_lost"), 1)
+
+    def test_keep_awake_failed_start_discloses_once_over_many_passes(self):
+        from joulewise.b6.sleep_guard import KeepAwake
+        harness = Harness(self, g10=False)
+        harness.replace_chain("#!/bin/zsh -f\nexit 0\n")
+        popen = mock.Mock(side_effect=OSError("desk start fault"))
+        keep = KeepAwake(popen=popen, run_command=mock.Mock(
+            return_value=subprocess.CompletedProcess([], 0, "", "")), pid=12)
+        harness.driver._hazard_seams = lambda: dataclasses.replace(harness.seams(), keep_awake=lambda pid: keep)
+        def chain_once(*args, supervise, **kwargs):
+            for _ in range(20):
+                supervise()
+            return 0, None, 0, [], True
+        with mock.patch.object(harness.driver, "_run_chain_once", side_effect=chain_once):
+            self.assertEqual(harness.driver.EXIT_GO, harness.run())
+        self.assertEqual(popen.call_count, 21)
+        self.assertEqual(keep.restarts, 0)
+        self.assertEqual([r["code"] for r in harness.flags].count("sleep.assertion_unverified"), 1)
+        self.assertNotIn("sleep.assertion_lost", [r["code"] for r in harness.flags])
 
     def test_survivors_of_a_natural_exit_are_proven_gone_before_the_exit_is_recorded(self):
         harness = Harness(self, g10=False)

@@ -41,6 +41,17 @@ PLAN_ID = "plan-core-flags"
 
 # DESIGN.md section 5: code -> (family, klass, effect).
 SECTION_5 = {
+    "agent.pause_marker_stale": ("RECORDS", "REPRESENTATION", DISCLOSE),
+    "sleep.in_run": ("PHYSICS_IN_SPAN", "PHYSICS", EXCLUDE_MEMBER),
+    "sleep.between_runs": ("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "sleep.reading_unmeasured": ("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "idle.waited": ("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "idle.wait_cap_skip": ("MEMBER_VALIDITY", "PHYSICS", EXCLUDE_MEMBER),
+    "idle.wait_budget_skip": ("MEMBER_VALIDITY", "PHYSICS", EXCLUDE_MEMBER),
+    "idle.wait_budget_exhausted": ("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "idle.wait_budget_unreadable": ("DIAGNOSTIC", "PHYSICS", DISCLOSE),
+    "idle.wait_ledger_unwritable": ("RECORDS", "REPRESENTATION", DISCLOSE),
+    "idle.busy_fraction_exceeded": ("DIAGNOSTIC", "PHYSICS", DISCLOSE),
     "calibration.capture_battery_pair_unverified": ("CALIBRATION", "PHYSICS", DISCLOSE),
     "records.pin_ledger": ("RECORDS", "REPRESENTATION", DISCLOSE),
     "calibration.power_policy_unverified": ("CALIBRATION", "REPRESENTATION", DISCLOSE),
@@ -68,6 +79,7 @@ SECTION_5 = {
     "calibration.refit_cache_miss": ("CALIBRATION", "REPRESENTATION", DISCLOSE),
     "records.auxiliary_match_raised": ("RECORDS", "REPRESENTATION", DISCLOSE),
 }
+B6_CODES = frozenset(code for code in SECTION_5 if code.startswith(("agent.", "sleep.", "idle.")))
 # Core codes whose consumer tables (DRAFT_CODES, the harvest's CODES and
 # CORE_WRITER_CODES, the fixture catalog) were still to be filled by lane
 # P2-HARV.  Empty since integration int3: every core code is cross-checked in full.
@@ -369,6 +381,8 @@ class VocabularyTests(unittest.TestCase):
             self.skipTest("the sealed catalog is not in this tree (the orchestrator adds these codes to the draft)")
         catalog = load_catalog(sealed)
         for code, expected in SECTION_5.items():
+            if code in B6_CODES:
+                continue  # Proposed block-6 codes do not rewrite block 5's seal.
             entry = catalog.codes.get(code)
             self.assertIsNotNone(entry, code)
             self.assertEqual((entry["family"], entry["klass"], entry["effect"]), expected, code)

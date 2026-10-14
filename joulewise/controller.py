@@ -1903,7 +1903,11 @@ class _Execution:
                         "idle_baseline", FailureReason.UNKNOWN_ERROR, reason
                     )
 
-        if admission is not None and admission.enabled:
+        waiting = self._hazard is not None and admission is not None and admission.enabled
+        if waiting:
+            self._wait_hazard_idle(admission, attempts, probe_during_sampler_start)
+
+        if admission is not None and admission.enabled and not waiting:
             begin_sampling = getattr(
                 self._telemetry, "begin_admission_window_sampling", None
             )
@@ -1942,8 +1946,9 @@ class _Execution:
                     "telemetry admission-window sampling failed",
                 )
 
-        self._baseline = self._measure_idle_admission_attempt(1, attempts)
-        if admission is not None and admission.enabled:
+        if not waiting:
+            self._baseline = self._measure_idle_admission_attempt(1, attempts)
+        if admission is not None and admission.enabled and not waiting:
             self._enforce_post_capture_admission_guard(1)
             if not attempts[-1]["admitted"]:
                 if admission.retry_backoff_s > 0:
@@ -2036,6 +2041,150 @@ class _Execution:
             },
         )
 
+    def _wait_hazard_idle(self, admission, attempts, probe_during_sampler_start) -> None:
+        from joulewise.b6.idle_wait import (
+            WaitLedger, WAIT_CAP_S, SESSION_WAIT_BUDGET_S, abandon_admission_sampling,
+            busy_fraction_only, next_step,
+        )
+        from joulewise.flags import core as flags_core
+
+        record = self._environment_admission
+        assert record is not None
+        cap = admission.wait_cap_s if admission.wait_cap_s is not None else WAIT_CAP_S
+        budget = (admission.session_wait_budget_s if admission.session_wait_budget_s is not None
+                  else SESSION_WAIT_BUDGET_S)
+        ledger = (WaitLedger(self._hazard.custody_root / "collection/idle_wait.jsonl")
+                  if self._hazard.custody_root is not None else None)
+        remaining = float(budget)
+        exhausted_recorded = False
+        try:
+            if ledger is None:
+                raise ValueError("collection root unavailable")
+            remaining = ledger.remaining(budget)
+            exhausted_recorded = ledger.exhausted_recorded
+        except Exception as error:
+            flags_core.emit(self._hazard, "idle.wait_budget_unreadable", level="window",
+                            observed={"error": str(error)})
+        exhausted = remaining <= 0 and not exhausted_recorded
+        if exhausted:
+            flags_core.emit(self._hazard, "idle.wait_budget_exhausted", level="window",
+                            observed={"budget_s": budget, "remaining_s": remaining})
+        record.update(wait_cap_s=cap, session_wait_budget_s=budget,
+                      effective_wait_cap_s=max(0, min(cap, remaining)),
+                      retry_backoff_ignored={"requested_s": admission.retry_backoff_s})
+        first_start = None
+        first_duration = 0.0
+        outcome = "aborted"
+        wait_s = 0.0
+        try:
+            attempt = 0
+            while True:
+                attempt += 1
+                sampler_start = self._clock.now()
+                if first_start is None:
+                    first_start = sampler_start
+                wait_s = sampler_start - first_start
+                begin = getattr(self._telemetry, "begin_admission_window_sampling", None)
+                if callable(begin):
+                    probe = _GuardProbe(self._guard_observation_payload)
+                    self._sampling_start_in_progress = True
+                    try:
+                        result = self._start_telemetry_with_parent_adoption(begin)
+                    except BaseException:
+                        probe.join()
+                        raise
+                    observation = probe.join()
+                    probe.raise_error()
+                    observation = self._admission_guard_observation(
+                        f"before_attempt_{attempt}", collected=observation)
+                    reason = self._admission_environment_failure(observation)
+                    if reason is not None:
+                        self._record_hazard_guard_observation(observation, reason)
+                    self._check(result, "idle_baseline", "telemetry admission-window sampling failed")
+                elif attempt > 1:
+                    observation = self._admission_guard_observation(f"before_attempt_{attempt}")
+                    reason = self._admission_environment_failure(observation)
+                    if reason is not None:
+                        self._record_hazard_guard_observation(observation, reason)
+                self._baseline = self._measure_idle_admission_attempt(attempt, attempts)
+                attempts[-1]["sampler_start_s"] = sampler_start
+                self._enforce_post_capture_admission_guard(attempt)
+                row = attempts[-1]
+                cpu = row.get("cpu_admission")
+                if (isinstance(cpu, dict)
+                        and busy_fraction_only(cpu, evidence_conditions=_IDLE_ADMISSION_EVIDENCE_CONDITIONS)
+                        and row.get("gpu_admitted") is not False):
+                    self._hazard_admit_on_missing_evidence(
+                        row, cpu, ignored_conditions={"cpu_busy_ratio_p95_exceeded"})
+                    row["admitted"] = True
+                    flags_core.emit(self._hazard, "idle.busy_fraction_exceeded", level="member",
+                                    run_id=self._writer.run_id,
+                                    observed={"attempt": attempt, "cpu_admission": cpu})
+                duration = self._clock.now() - sampler_start
+                if attempt == 1:
+                    first_duration = duration
+                if row["admitted"]:
+                    promote = getattr(self._telemetry, "promote_idle_admission_attempt", None)
+                    if callable(promote):
+                        promote(run_id=self._context.run_id, attempt=attempt, context=self._context)
+                    record.update(decision="admitted", wait_s=wait_s)
+                    outcome = "admitted"
+                    if attempt > 1:
+                        flags_core.emit(self._hazard, "idle.waited", level="member",
+                                        run_id=self._writer.run_id,
+                                        observed={"wait_s": wait_s, "attempts": attempt})
+                    return
+                abandon = getattr(self._telemetry, "abandon_admission_window_sampling", None)
+                if callable(abandon) or self._telemetry.name == "powermetrics":
+                    if callable(abandon):
+                        abandon(context=self._context)
+                    else:
+                        abandon_admission_sampling(self._telemetry, self._context)
+                    self._sampling_start_in_progress = False
+                    if self._telemetry.name == "powermetrics":
+                        # The existing custodian adopts one stream only. Keep
+                        # that stream's ordinary termination evidence in its
+                        # attempt, then give the next stream its own custodian.
+                        teardown = self._sampler_teardown.teardown()
+                        row["sampler_teardown"] = dict(teardown)
+                        if self._sampler_teardown.spawned and teardown.get("status") != "clean":
+                            survivors = teardown.get("group_survivors")
+                            escaped = teardown.get("escaped_candidates")
+                            self._emit_hazard_teardown_survivors(
+                                kind="sampler", status=teardown.get("status"),
+                                group_survivors=len(survivors) if isinstance(survivors, list) else None,
+                                escaped_candidates=len(escaped) if isinstance(escaped, list) else None,
+                                message="failed idle attempt's sampler teardown was not clean",
+                                legacy_site="joulewise/controller.py:_wait_hazard_idle",
+                                pids=_survivor_pids(survivors, escaped))
+                        self._sampler_teardown = SamplerTeardown()
+                step = next_step(attempt_start_s=first_start, now_s=self._clock.now(),
+                                 last_attempt_s=duration, cap_s=cap, remaining_s=remaining)
+                if step != "retry":
+                    wait_s = (0.0 if attempt == 1 else
+                              max(0.0, self._clock.now() - first_start - first_duration))
+                    skip = "wait_budget_exhausted" if step == "skip_budget" else "wait_cap_reached"
+                    code = "idle.wait_budget_skip" if step == "skip_budget" else "idle.wait_cap_skip"
+                    reason = "no quiet 576-record idle span within the wait cap"
+                    record.update(decision="abort", skip_reason=skip, wait_s=wait_s,
+                                  failure=reason, claim_reason="environment_admission_failed")
+                    flags_core.emit(self._hazard, code, level="member", run_id=self._writer.run_id,
+                                    observed={"wait_s": wait_s, "attempts": attempt,
+                                              "effective_cap_s": max(0, min(cap, remaining))})
+                    outcome = "skipped"
+                    raise _StageFailure("idle_baseline", FailureReason.UNKNOWN_ERROR, reason)
+        finally:
+            record["wait_s"] = wait_s
+            try:
+                if ledger is None:
+                    raise ValueError("collection root unavailable")
+                ledger.append(run_id=self._writer.run_id, wait_s=wait_s, outcome=outcome,
+                              budget_exhausted=exhausted)
+            except Exception as error:
+                flags_core.emit(self._hazard, "idle.wait_ledger_unwritable", level="member",
+                                run_id=self._writer.run_id,
+                                observed={"record": "collection/idle_wait.jsonl", "error": str(error)})
+
     def _measure_idle_admission_attempt(
         self, attempt: int, attempts: list[dict[str, Any]]
     ) -> IdleBaseline:
@@ -2099,14 +2248,15 @@ class _Execution:
         return baseline
 
     def _hazard_admit_on_missing_evidence(
-        self, row: dict[str, Any], cpu_admission: dict[str, Any]
+        self, row: dict[str, Any], cpu_admission: dict[str, Any], *, ignored_conditions=()
     ) -> None:
         """A18: admit when only evidence conditions failed; flag the member.
 
         The recorded ``cpu_admission`` stays the evaluator's own output (it
         says the admission did not pass); only the controller's decision to
-        proceed changes.  Any threshold condition keeps the row not admitted,
-        so retry and abort stay.  A baseline whose CPU quietness is
+        proceed changes. Measured power or GPU failure keeps the row not
+        admitted. The waiting caller ignores Q3's busy-fraction disclosure.
+        A baseline whose CPU quietness is
         unmeasured never serves as a cooldown reference: its
         ``reference_provenance_present`` is recorded false, which every
         reference-eligibility reader already refuses.
@@ -2117,7 +2267,8 @@ class _Execution:
             row.get("admitted") is True
             or not isinstance(conditions, list)
             or not conditions
-            or not set(conditions) <= _IDLE_ADMISSION_EVIDENCE_CONDITIONS
+            or not set(conditions) - set(ignored_conditions)
+            or not set(conditions) - set(ignored_conditions) <= _IDLE_ADMISSION_EVIDENCE_CONDITIONS
         ):
             return
         row["admitted"] = True
