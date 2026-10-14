@@ -20,7 +20,7 @@ from joulewise.analysis_manifest_v3 import (  # noqa: E402
     finalize_prospective_analysis_manifest_v3,
     _authenticate_floor_dependencies,
     _derive_arms_and_entries,
-    _directory_under_root,
+    _finalization_runs_root,
     _dominance_floor_identity_enabled,
     _path_under_root,
     _read_strict_object,
@@ -141,6 +141,9 @@ def _preflight_other_inputs(args: argparse.Namespace, *,
         )
     if getattr(args, "window_index", None) is not None and block5_inputs is None:
         block5_inputs = block5_claim_gate_inputs(args.window_index, prospective_path, args.runs_root)
+    if block5_inputs is not None:
+        from joulewise.b5_analysis.steps import require_primary_context
+        require_primary_context(block5_inputs["archive_contexts"])
     try:
         _finalize(args, None, block5_inputs=block5_inputs)
     except AnalysisManifestFinalizationError as exc:
@@ -153,7 +156,7 @@ def _preflight_other_inputs(args: argparse.Namespace, *,
             "dominance-enabled finalization did not require its replay sidecar",
         )
     verdict, _raw = _read_strict_object(args.whole_window_verdict, "whole-window verdict")
-    runs_root = _directory_under_root(args.runs_root, args.custody_root, "runs root")
+    runs_root = _finalization_runs_root(args.runs_root, args.custody_root, "runs root", block5_inputs)
     removed_run_ids = frozenset()
     kept_run_ids = None
     if block5_inputs is not None:
@@ -179,6 +182,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         sidecar_path = None
         block5_inputs = (block5_claim_gate_inputs(args.window_index, args.prospective_manifest, args.runs_root)
                          if args.window_index is not None else None)
+        if block5_inputs is not None:
+            from joulewise.b5_analysis.steps import require_primary_context
+            require_primary_context(block5_inputs["archive_contexts"])
         if args.dominance_replay_sidecar is not None:
             _preflight_other_inputs(args, block5_inputs=block5_inputs)
             sidecar_path = stage_dominance_replay_sidecar(
@@ -186,6 +192,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         manifest = _finalize(args, sidecar_path, block5_inputs=block5_inputs)
     except (AnalysisManifestFinalizationError, AnalysisRefusal, AnalysisInputError) as exc:
+        if isinstance(exc, AnalysisRefusal) and exc.code == "sensitivity_context_on_registered_path":
+            print(f"error: {exc.code}", file=sys.stderr)
+            return 2
         print(
             json.dumps(
                 {

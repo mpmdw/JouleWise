@@ -182,6 +182,8 @@ def compose_indexed_producers(window_index: Path, *, seal_pins=None, pack_table=
                 or row["evaluation_basis"]["sha256"] != allowance["verdict"]["evaluation_basis_sha256"]):
             raise AnalysisRefusal("whole_window_verdict_provenance_invalid")
         context = build_context(archive, kept, bracket, row, test_only_allow_synthetic_binding=test_only_allow_synthetic_binding)
+        from joulewise.b5_analysis.steps import require_primary_context
+        require_primary_context(context)
         # Reuse the bracket reader's authenticated archived copy and prefix loader.
         ledger_inputs = wb._Inputs(archive)
         _raw, ledger_prefix, terminal_pin = wb._copy(ledger_inputs)
@@ -267,7 +269,7 @@ def _producer_by_pack(pack: str) -> Any:
     return matches[0]
 
 
-def _expand_block5_manifest(manifest: Mapping) -> Mapping:
+def _expand_block5_manifest(manifest: Mapping, *, manifest_dir: Path = Path(".")) -> Mapping:
     root = _object(manifest, "block5 input manifest", {"schema_version", "producer_plans"})
     if root["schema_version"] != BLOCK5_INPUT_SCHEMA:
         raise MintError("window_index_conflicting_arguments")
@@ -289,6 +291,12 @@ def _expand_block5_manifest(manifest: Mapping) -> Mapping:
             raise MintError("block5 producer plan_id mismatch")
         if row["exclusions_sha256"] != entry.kept_units.exclusions_sha256:
             raise MintError("floor_mint_kept_unit_mismatch: manifest exclusions_sha256 differs from archive")
+        relative = Path(_string(row["report"], "block5 report"))
+        directory = Path(manifest_dir).resolve()
+        report = directory / relative
+        if (relative.is_absolute() or ".." in relative.parts
+                or not report.resolve().is_relative_to(directory)):
+            raise MintError("floor_mint_input_path_not_relative")
         cells = row["cells"]
         if not isinstance(cells, list) or len(cells) != 2:
             raise MintError("block5 producer must contain two cells")
@@ -300,7 +308,7 @@ def _expand_block5_manifest(manifest: Mapping) -> Mapping:
             roles.add(cell["role"])
             if not isinstance(cell["allowed_consumer_condition_families"], list):
                 raise MintError("block5 allowed families must be an array")
-            paths = {"evidence_root": str(entry.window.claim_runs_root), "report": _string(row["report"], "block5 report"),
+            paths = {"evidence_root": str(entry.window.claim_runs_root), "report": str(report),
                      "spec": str(entry.pack_path / "extraction_spec.json"), "order_manifest": str(entry.pack_path / "order_manifest.json")}
             projected.append({**cell, "absolute": dict(paths), "comparative": dict(paths)})
         for relative in ("sources/inputs/acceptance.json", "derived/bracket-binding.json"):
@@ -3869,7 +3877,7 @@ def _authenticate_v2_inputs(
     )
     block5 = manifest.get("schema_version") == BLOCK5_INPUT_SCHEMA
     if block5:
-        manifest = _expand_block5_manifest(manifest)
+        manifest = _expand_block5_manifest(manifest, manifest_dir=input_manifest_path.parent)
     rows = manifest["producer_plans"]
     if len(rows) != len(pinset.value["producer_plans"]):
         raise MintError("v2 input manifest must contain every producer plan exactly once")

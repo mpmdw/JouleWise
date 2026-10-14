@@ -448,6 +448,7 @@ def validate_d165_paper_sources(
     custody_root: Path,
     floor_artifact_bytes: bytes,
     replay_sidecar_bytes: bytes,
+    window_index: Path | None = None,
 ) -> tuple[str, ...]:
     """Replay D-165's four owners and expose only closed nested codes."""
 
@@ -457,6 +458,7 @@ def validate_d165_paper_sources(
         manifest,
         manifest_path=finalized_manifest_path,
         custody_root=custody_root,
+        window_index=window_index,
     ):
         codes.append("d165_paper_finalized_manifest_invalid")
     try:

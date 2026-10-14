@@ -40,10 +40,10 @@ import math
 import os
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Callable, Literal, Mapping, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence, TYPE_CHECKING
 
-from joulewise.b5_analysis.kept_units import KeptUnits
-from joulewise.b5_analysis.windows import AnalysisRefusal
+if TYPE_CHECKING:
+    from joulewise.b5_analysis.kept_units import KeptUnits
 from joulewise.window_lineage import LOCATOR_BASENAME
 
 # A strict validator returns the list of D-030 strict-validation problems for a
@@ -3136,6 +3136,9 @@ def extract_cells(
     bindings: dict[str, dict[str, Any]] = {}
     kept_bundle_ids: set[str] = set()
     if kept_units is not None:
+        from joulewise.b5_analysis.kept_units import KeptUnits
+        from joulewise.b5_analysis.windows import AnalysisRefusal
+
         if not isinstance(kept_units, KeptUnits):
             raise FloorExtractionError("kept_units_invalid")
         for cell in cells:
@@ -3282,6 +3285,8 @@ def extract_cells(
                 provenance = member.consumption_provenance
                 actual_bound = provenance.get("operative_fiducial_bound_s") if isinstance(provenance, Mapping) else None
                 if (_finite(actual_bound) is None or _finite(expected_bound) is None or actual_bound != expected_bound):
+                    from joulewise.b5_analysis.windows import AnalysisRefusal
+
                     raise AnalysisRefusal("operative_bound_not_the_window_bracket")
 
     whole_window_allowance_result = None

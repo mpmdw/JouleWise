@@ -571,6 +571,7 @@ def _validate_floor_acceptance(ctx: _GateContext) -> None:
 
 def _d165_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     from joulewise.dominance_closeout import validate_d165_paper_sources, _expected_global_fields
+    from joulewise.analysis_manifest_v3 import _BLOCK5_ROLES
 
     manifest = next(binding for binding in ctx.sources if binding.role is InputRole.FINALIZED_MANIFEST)
     closeout = _json_object(ctx.raws[InputRole.D165_CLOSEOUT])
@@ -579,6 +580,8 @@ def _d165_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
         finalized_manifest_path=_binding_root(manifest, ctx.repository, ctx.runs_root) / manifest.path,
         custody_root=ctx.runs_root, floor_artifact_bytes=ctx.raws[InputRole.FLOOR_ARTIFACT],
         replay_sidecar_bytes=ctx.raws[InputRole.REPLAY_SIDECAR],
+        **({"window_index": _tracked_window_index(ctx)}
+           if _BLOCK5_ROLES & set(_json_object(ctx.raws[InputRole.FINALIZED_MANIFEST]).get("evidence", {})) else {}),
     )
     if codes:
         return _FamilyReplay(False, False, (), tuple(codes))

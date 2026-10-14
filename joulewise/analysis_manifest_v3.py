@@ -1651,6 +1651,25 @@ def _directory_under_root(path: Path, root: Path, label: str) -> Path:
     return resolved
 
 
+def _finalization_runs_root(
+    path: Path, custody_root: Path, label: str,
+    block5_inputs: Mapping[str, Any] | None,
+) -> Path:
+    """The indexed GAMMA root owns block-5 bundles; custody owns attachments."""
+    if block5_inputs is None:
+        return _directory_under_root(path, custody_root, label)
+    try:
+        resolved = Path(path).resolve(strict=True)
+        indexed = Path(block5_inputs["gamma_archive"].window.claim_runs_root).resolve(strict=True)
+        if resolved == indexed and resolved.is_dir():
+            return resolved
+    except (OSError, RuntimeError, ValueError):
+        pass
+    raise AnalysisManifestFinalizationError(
+        "analysis_finalization_attachment_invalid", "runs_root_not_the_indexed_window"
+    )
+
+
 def _canonical_sha(value: Any) -> str:
     return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
 
@@ -3557,7 +3576,7 @@ def _authenticate_finalization_inputs(
     schemas = _declared_attachment_schemas(prospective)
     custody_input = Path(custody_root).absolute()
     custody = custody_input.resolve(strict=True)
-    resolved_runs = _directory_under_root(runs_root, custody_input, "runs root")
+    resolved_runs = _finalization_runs_root(runs_root, custody_input, "runs root", block5_inputs)
 
     verdict_path, verdict_relative = _path_under_root(
         whole_window_verdict_path, custody_input, "whole-window verdict"
@@ -3596,6 +3615,12 @@ def _authenticate_finalization_inputs(
         bracket_binding_path, custody_input, "bracket binding"
     )
     bracket, bracket_raw = _read_strict_object(bracket_path, "bracket binding")
+    if block5_inputs is not None:
+        bracket_runs_root = _finalization_runs_root(
+            Path(bracket["runs_root"]), custody_input, "bracket-authenticated runs root", block5_inputs
+        ) if isinstance(bracket.get("runs_root"), str) else None
+    else:
+        bracket_runs_root = None
     try:
         bracket_runs_root = (
             _directory_under_root(
@@ -3603,8 +3628,8 @@ def _authenticate_finalization_inputs(
                 custody_input,
                 "bracket-authenticated runs root",
             )
-            if isinstance(bracket.get("runs_root"), str)
-            else None
+            if block5_inputs is None and isinstance(bracket.get("runs_root"), str)
+            else bracket_runs_root
         )
     except (KeyError, AnalysisManifestFinalizationError) as exc:
         raise AnalysisManifestFinalizationError(
@@ -4216,7 +4241,9 @@ def finalize_prospective_analysis_manifest_v3(
         try:
             block5_inputs = block5_claim_gate_inputs(window_index, prospective_path, runs_root)
         except ValueError as exc:
-            raise AnalysisManifestFinalizationError("analysis_finalization_attachment_invalid", str(exc)) from exc
+            detail = ("runs_root_not_the_indexed_window"
+                      if str(exc) == "runs_root_differs_from_window_index" else str(exc))
+            raise AnalysisManifestFinalizationError("analysis_finalization_attachment_invalid", detail) from exc
     attachments = _authenticate_finalization_inputs(
         prospective,
         manifest_dir=prospective_path.parent,
@@ -4533,7 +4560,9 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
                 try:
                     _block5_inputs = block5_claim_gate_inputs(window_index, prospective_path, runs_root)
                 except (AnalysisInputError, AnalysisRefusal) as exc:
-                    raise AnalysisManifestFinalizationError("analysis_finalization_attachment_invalid", str(exc)) from exc
+                    detail = ("runs_root_not_the_indexed_window"
+                              if str(exc) == "runs_root_differs_from_window_index" else str(exc))
+                    raise AnalysisManifestFinalizationError("analysis_finalization_attachment_invalid", detail) from exc
             role = evidence["analysed_attempt_exclusions"]
             path = _safe_relative_file(custody, role.get("path"))
             if path is None or hashlib.sha256(_read_manifest_input(path, label="analysed exclusions")).hexdigest() != role.get("sha256"):

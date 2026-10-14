@@ -254,5 +254,12 @@
     "ordinal": 1,
     "line": 193,
     "reason": "The disclosure producer prepares GAMMA's contrast observations again from already-issued inputs for descriptive lines; it issues no claim and writes no ledger entry."
+  },
+  {
+    "file": "joulewise/b5_analysis/dry_run.py",
+    "function": "_step_results",
+    "ordinal": 1,
+    "line": 947,
+    "reason": "Step-11 metadata replay of the selected window under its guarded primary ArchiveContext and archive_snapshot: the owning whole-window validator supplies answered conditions and stored-member facts. This replay neither mints, appends a ledger receipt, publishes a binding nor finalizes an analysis manifest; JOULEWISE_BACKUP_ROOTS is removed for the full driver run."
   }
 ]

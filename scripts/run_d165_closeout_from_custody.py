@@ -24,6 +24,8 @@ if str(REPO_ROOT) not in sys.path:
 from joulewise import analysis_manifest_v3, dominance_closeout  # noqa: E402
 from joulewise.authentication_io import read_authentication_input_nofollow  # noqa: E402
 from joulewise.b5_analysis import steps  # noqa: E402
+from joulewise.b5_analysis.windows import AnalysisRefusal  # noqa: E402
+from joulewise.analysis_engine.inputs import block5_claim_gate_inputs  # noqa: E402
 from scripts.build_d165_dominance_closeout import build_d165_dominance_closeout  # noqa: E402
 
 
@@ -75,6 +77,7 @@ class CloseoutSources:
     manifest_bytes: bytes
     floor_bytes: bytes
     sidecar_bytes: bytes
+    window_index: Path | None = None
 
 
 def _read_attachment(root: Path, record: object) -> tuple[str, bytes]:
@@ -99,7 +102,7 @@ def _check_attachment_digest(raw: bytes, record: dict, code: str) -> None:
         raise CloseoutDriverRefusal(code)
 
 
-def resolve_closeout_sources(finalized_manifest_path, custody_root) -> CloseoutSources:
+def resolve_closeout_sources(finalized_manifest_path, custody_root, *, window_index=None) -> CloseoutSources:
     """Check a, b, c's location/id, d/e, then c's full custody replay."""
     manifest_path = Path(finalized_manifest_path).absolute()
     try:
@@ -132,14 +135,27 @@ def resolve_closeout_sources(finalized_manifest_path, custody_root) -> CloseoutS
     sidecar_relative, sidecar_bytes = _read_attachment(root, sidecar_record)
     _check_attachment_digest(floor_bytes, floor_record, "floor_artifact_source_hash_mismatch")
     _check_attachment_digest(sidecar_bytes, sidecar_record, "replay_sidecar_digest_mismatch")
+    built = None
+    if window_index is not None and analysis_manifest_v3._BLOCK5_ROLES & set(evidence):
+        _relative, bracket_bytes = _read_attachment(root, evidence.get("bracket_binding"))
+        _check_attachment_digest(bracket_bytes, evidence["bracket_binding"], "d165_closeout_driver_manifest_invalid")
+        try:
+            bracket = json.loads(bracket_bytes)
+            prospective = root / manifest["lineage"]["prospective_manifest_path"]
+            prospective, _relative = analysis_manifest_v3._path_under_root(prospective, root, "D-165 prospective manifest")
+            built = block5_claim_gate_inputs(Path(window_index), prospective, Path(bracket["runs_root"]))
+        except (ValueError, KeyError, TypeError):
+            raise CloseoutDriverRefusal("d165_closeout_driver_manifest_invalid") from None
+        steps.require_primary_context(built["archive_contexts"])
     with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
         invalid = analysis_manifest_v3.validate_finalized_analysis_manifest_v3(
-            manifest, manifest_path=manifest_path, custody_root=root
+            manifest, manifest_path=manifest_path, custody_root=root, window_index=window_index,
+            **({"_block5_inputs": built} if built is not None else {}),
         )
     if invalid != ():
         raise CloseoutDriverRefusal("d165_closeout_driver_manifest_invalid")
     return CloseoutSources(root, manifest_path, manifest_id, manifest_relative,
-                           floor_relative, sidecar_relative, manifest_bytes, floor_bytes, sidecar_bytes)
+                           floor_relative, sidecar_relative, manifest_bytes, floor_bytes, sidecar_bytes, window_index)
 
 
 def default_output_path(sources) -> Path:
@@ -316,6 +332,7 @@ def run_closeout(sources, *, output: Path) -> int:
                     closeout=closeout, finalized_manifest_bytes=sources.manifest_bytes,
                     finalized_manifest_path=sources.manifest_path, custody_root=sources.custody_root,
                     floor_artifact_bytes=sources.floor_bytes, replay_sidecar_bytes=sources.sidecar_bytes,
+                    window_index=sources.window_index,
                 ) != ():
                     raise CloseoutDriverRefusal("d165_closeout_driver_paper_sources_invalid")
                 raw = _file_bytes(closeout)
@@ -345,11 +362,14 @@ class _QuietParser(argparse.ArgumentParser):
         raise ValueError
 
 
-def _parser() -> argparse.ArgumentParser:
+def _parser(*, include_window_index: bool = False) -> argparse.ArgumentParser:
     parser = _QuietParser(description=__doc__)
     parser.add_argument("--finalized-manifest", required=True, type=Path)
     parser.add_argument("--custody-root", required=True, type=Path)
     parser.add_argument("--output", type=Path)
+    # Preserve the legacy parser factory; main opts into the indexed surface.
+    if include_window_index:
+        parser.add_argument("--window-index", type=Path)
     return parser
 
 
@@ -366,15 +386,17 @@ def main(argv=None) -> int:
     output = None
     record = None
     record_needs_write = True
+    sensitivity_refusal = False
     with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
         try:
-            parser = _parser()
+            parser = _parser(include_window_index=True)
             args = parser.parse_args(argv)
             if args.output is not None:
                 if not _output_under_root(args.output, args.custody_root):
                     parser.error("output must be under custody root")
                 output = args.output
-            sources = resolve_closeout_sources(args.finalized_manifest, args.custody_root)
+            sources = resolve_closeout_sources(args.finalized_manifest, args.custody_root,
+                                              window_index=args.window_index)
             output = output if output is not None else default_output_path(sources)
             exit_status = run_closeout(sources, output=output)
             record = json.loads(output.with_suffix(".step.json").read_bytes())
@@ -382,15 +404,22 @@ def main(argv=None) -> int:
         except CloseoutDriverRefusal as exc:
             exit_status = _exit_for(exc.code)
             record = _step_record(exit_status, exc.code)
+        except AnalysisRefusal as exc:
+            exit_status = 2
+            sensitivity_refusal = exc.code == "sensitivity_context_on_registered_path"
+            record = _step_record(2, None if sensitivity_refusal else "unclassified")
         except (Exception, SystemExit):
             exit_status = 2
             record = _step_record(exit_status, "unclassified")
-        if record is not None and output is not None and record_needs_write:
+        if record is not None and output is not None and record_needs_write and not sensitivity_refusal:
             try:
                 _replace_step(output, record)
             except Exception:
                 exit_status, record = 2, _step_record(2, "unclassified")
-    sys.stdout.write(_step_bytes(record).decode("utf-8"))
+    if sensitivity_refusal:
+        print("error: sensitivity_context_on_registered_path", file=sys.stderr)
+    else:
+        sys.stdout.write(_step_bytes(record).decode("utf-8"))
     return exit_status
 
 

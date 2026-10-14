@@ -483,6 +483,8 @@ def emit_indexed_pinset(*, window_index: Path, alpha_report: Path, beta_report: 
     try:
         entries = mint.compose_indexed_producers(window_index, include_consumer=True)
         producers = {pack: entries[pack] for pack in ("alpha", "beta")}
+        from joulewise.b5_analysis.steps import require_primary_context
+        require_primary_context([entry.archive_context for entry in producers.values()])
         mint.BLOCK5_PRODUCERS.update({str(entry.window.claim_runs_root.resolve()): entry for entry in producers.values()})
         with V2AuthenticationReadSession():
             bindings = _consumer_bindings(entries["gamma"].pack_path)
@@ -502,8 +504,12 @@ def emit_indexed_pinset(*, window_index: Path, alpha_report: Path, beta_report: 
                     acceptance, acceptance_hash, entry.ledger_snapshot, f"{pack}/calibration_plan.json",
                     "prefill_p2048", kept_units=entry.kept_units)
                 triples.append((contract, producer))
+                try:
+                    report_relative = report.resolve().relative_to(out_dir.resolve()).as_posix()
+                except ValueError:
+                    raise mint.MintError("floor_mint_input_path_not_relative") from None
                 manifest_rows.append({"plan_id": entry.producer_plan_id, "pack": pack,
-                    "exclusions_sha256": entry.kept_units.exclusions_sha256, "report": str(report.resolve()),
+                    "exclusions_sha256": entry.kept_units.exclusions_sha256, "report": report_relative,
                     "cells": [{"role": cell["role"], "allowed_consumer_condition_families": cell["allowed_consumer_condition_families"]}
                               for cell in row["cells"]]})
                 snapshots[entry.producer_plan_id] = entry.ledger_snapshot
@@ -520,7 +526,7 @@ def emit_indexed_pinset(*, window_index: Path, alpha_report: Path, beta_report: 
                 loaded = mint.load_pinset(path, digest)
                 inputs, _roots, snapshots = mint._authenticate_v2_inputs(
                     pinset=loaded, pinset_path=path, pinset_sha256=digest,
-                    input_manifest_path=Path(tmp) / "inputs.json", input_manifest=manifest,
+                    input_manifest_path=out_dir / "floor-mint-inputs.json", input_manifest=manifest,
                     strict_validator=lambda path, strict: validate_bundle(path, strict=strict), consumption_semantics_id=None)
                 value = build_pinset(contracts=contracts, producer_inputs=inputs, ledger_snapshot=snapshots,
                     relative_plan_paths=["alpha/calibration_plan.json", "beta/calibration_plan.json"],
