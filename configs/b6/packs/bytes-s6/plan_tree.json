@@ -1,0 +1,2280 @@
+{
+  "acceptance_policy": {
+    "arming_prerequisites": [
+      {
+        "id": "D117-U2",
+        "status": "required_before_arm"
+      },
+      {
+        "id": "D117-POSTCOLLECTION-TRUST-01",
+        "status": "required_before_mint"
+      },
+      {
+        "id": "D117-U11-IDPIN-PROJECTION",
+        "status": "required_before_arm"
+      }
+    ],
+    "issued_acceptance": {
+      "acceptance_id": "d079_calibration_acceptance_v2_n24_25g83_r2",
+      "artifact_sha256": "f949f511254e03b50b0be1cea37f74c1e8e6b4c49926c6c197024beea07b3660",
+      "derivation_sha256": "10965d36527c73217154efdbd75ab923412685f3e79526bd31f33e6f9142e5c0",
+      "path": "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
+    },
+    "issued_ledger_head": {
+      "head_sha256": "a5b825b7dd77856be8d612be759be84f925a32f6e671481c2662bb03cbf57014",
+      "path": "configs/calibration/calibration_ledger_head.json"
+    },
+    "selection": "issued_d116_artifact_only",
+    "successor_effect": "invalidate_and_reissue_readiness_and_pin_projection"
+  },
+  "arm_attachments": {},
+  "attempt_policy": {
+    "authority": "R6; Block-6 catalog unchanged",
+    "minimum_kept_units_per_stratum": 5,
+    "outcome_dependent_top_up": "forbidden",
+    "science_member_replacements": 0
+  },
+  "b6_layout": {
+    "corpus": {
+      "planned": 18,
+      "stop_after_valid": 12
+    },
+    "packs": [
+      "bytes-s6"
+    ],
+    "schema_version": "joulewise.b6_session_layout.v1"
+  },
+  "blinding_group": "bytes",
+  "bytes_pass": 1,
+  "campaign_policy": {
+    "path": "configs/campaign_policies/quiet_mac_p2_b5.json",
+    "sha256": "ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60"
+  },
+  "closeout_attachments": {
+    "backup_requirements": {
+      "bound_root_verified": true,
+      "claim_root_verified": true,
+      "required_successful_backups": 2
+    },
+    "bracket_binding_sha256": null,
+    "evaluation_basis_sha256": null,
+    "extraction_report_sha256": null,
+    "postcollection_receipt_digests": [],
+    "terminal_ledger_head": null,
+    "todo": "TODO(postcollection): leave receipt-derived closeout fields empty until a completed claim window supplies authenticated evidence.",
+    "whole_window_verdict_sha256": null
+  },
+  "draft_notes": [
+    "Ruling: docs/design/bytes_pack_design.md R1-R6; not registered or armable.",
+    "One blinding_group=bytes is preserved as top-level data; stage-1 validator permits it but current blinding code does not consume it. C6/C7 remain R8 item 7.",
+    "Stage 1 uses only plan_tree_ref: selecting pass_plan_tree_refs[2] and reversing BYTES slot order require the later driver before pass 2; do not collect pass 2 using pass 1's tree.",
+    "R8 C4/C5 identity pins, runtime budget, contention, clock and disk gates await Mac desk checks; 8B-8bit revision is pending R8 item 5.",
+    "R8 analysis, independent twin, estimator registration, cold gate and smoke fingerprints remain before first t0.",
+    "R6 disagreement requiring an inclusion ruling before registration: 'catalog unchanged' retains 43 EXCLUDE_MEMBER and 19 EXCLUDE_WINDOW codes (including nonthermal), whereas 'the rest are flags' can mean nonthermal disclosure only. Drafts preserve the existing catalog pending that ruling.",
+    "Planning minutes use pilot maximum request seconds plus inherited idle/settle, 50 runs and 20% margin; 8B-8bit uses R1's 150 minutes. These are not measured session footprints."
+  ],
+  "draft_status": "draft",
+  "external_inputs": [
+    "manifests",
+    "artifacts"
+  ],
+  "generator": {
+    "path": "scripts/bytes_plan_trees.py",
+    "sha256": "129870ce65367ca7d07cc74ffe0a6d42e930a0bd0e54b75fb4d13f4cdadbcd4f"
+  },
+  "module_order": [
+    "bytes-qwen35-122b"
+  ],
+  "plan": {
+    "actual_sha256": "4956f76aa432c8782544577eee6306d0c62cd93d91e51d7fa5e74f2e037e3365",
+    "declared_sha256": "4956f76aa432c8782544577eee6306d0c62cd93d91e51d7fa5e74f2e037e3365",
+    "path": "collection_plan.json",
+    "plan_id": "bytes-s6-pass1"
+  },
+  "roots": {
+    "bound_root_leaf": "runs_bytes-s6_pass1_bound",
+    "claim_root_leaf": "runs_bytes-s6_pass1"
+  },
+  "schema_version": "joulewise.d117_plan_tree.v1",
+  "science": [
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 1,
+      "config": "bytes-qwen35-122b-abs-r01.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/01_decode_absolute/bytes-qwen35-122b-abs-r01.json",
+      "config_sha256": "8db50600ae2ca815f4f3d6f8afbcf882cd8453dd05b6f32056abeb7e197cfaf4",
+      "index": 1,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen35-122b-abs-r01",
+      "stage_id": "bytes-qwen35-122b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 2,
+      "config": "bytes-qwen35-122b-abs-r02.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/01_decode_absolute/bytes-qwen35-122b-abs-r02.json",
+      "config_sha256": "71d6906b9443fbf775b32ff89f9cd73a28af07386b5bced2f4b6219f2a897f9c",
+      "index": 2,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 2,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen35-122b-abs-r02",
+      "stage_id": "bytes-qwen35-122b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 3,
+      "config": "bytes-qwen35-122b-abs-r03.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/01_decode_absolute/bytes-qwen35-122b-abs-r03.json",
+      "config_sha256": "7fd3009984f8b5ce732842b3a508799ee0d9f0a018499d6372049762d7e68f85",
+      "index": 3,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 3,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen35-122b-abs-r03",
+      "stage_id": "bytes-qwen35-122b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 4,
+      "config": "bytes-qwen35-122b-abs-r04.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/01_decode_absolute/bytes-qwen35-122b-abs-r04.json",
+      "config_sha256": "cf12f56cf1712c4c5d0208a524c3fd469c394b791ffcad63181d54561016a78a",
+      "index": 4,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 4,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen35-122b-abs-r04",
+      "stage_id": "bytes-qwen35-122b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 5,
+      "config": "bytes-qwen35-122b-abs-r05.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/01_decode_absolute/bytes-qwen35-122b-abs-r05.json",
+      "config_sha256": "ce2122600390aa9051689c1b4eed1b7501ad33eb2871e550360ff0b8181ab315",
+      "index": 5,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 5,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen35-122b-abs-r05",
+      "stage_id": "bytes-qwen35-122b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 6,
+      "config": "bytes-qwen35-122b-abs-r06.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/01_decode_absolute/bytes-qwen35-122b-abs-r06.json",
+      "config_sha256": "8c2afc6de9e725073f8f59556a17617ee789b8f5f031bd7510d243a4948bef1b",
+      "index": 6,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 6,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen35-122b-abs-r06",
+      "stage_id": "bytes-qwen35-122b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 7,
+      "config": "bytes-qwen35-122b-abs-r07.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/01_decode_absolute/bytes-qwen35-122b-abs-r07.json",
+      "config_sha256": "0f2b6125930bb3051bd9aef75e0bc1c5271bfc8df55460e861643993351bfea1",
+      "index": 7,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 7,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen35-122b-abs-r07",
+      "stage_id": "bytes-qwen35-122b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 8,
+      "config": "bytes-qwen35-122b-abs-r08.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/01_decode_absolute/bytes-qwen35-122b-abs-r08.json",
+      "config_sha256": "d260a7448e83d021a9d9470dfd93349c1af59ceca93d8c2c16b4e0cbf545166f",
+      "index": 8,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 8,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen35-122b-abs-r08",
+      "stage_id": "bytes-qwen35-122b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 9,
+      "config": "bytes-qwen35-122b-abs-r09.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/01_decode_absolute/bytes-qwen35-122b-abs-r09.json",
+      "config_sha256": "0a2c08a495acba62700ff4c714438b619a532bc79b5ebefaaab44846fc38942a",
+      "index": 9,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 9,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen35-122b-abs-r09",
+      "stage_id": "bytes-qwen35-122b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 10,
+      "config": "bytes-qwen35-122b-abs-r10.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/01_decode_absolute/bytes-qwen35-122b-abs-r10.json",
+      "config_sha256": "cec9ebcf62ae2dc32a8d7af44a6a553db03ce277cb256b47ae0d07c57a0b5834",
+      "index": 10,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 10,
+      "role": "absolute_repeat",
+      "run_id": "bytes-qwen35-122b-abs-r10",
+      "stage_id": "bytes-qwen35-122b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b01",
+      "block_index": 1,
+      "config": "bytes-qwen35-122b-null-b01-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b01-a1.json",
+      "config_sha256": "35485da7ec8f23ed3ec5e24205ea7d8f2014631fc1b0d33461c4393e80dbfbd7",
+      "index": 1,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b01-a1",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b01",
+      "block_index": 1,
+      "config": "bytes-qwen35-122b-null-b01-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b01-b1.json",
+      "config_sha256": "eab6d48615ae46be36f82caa13b807be0b106502cfc3ea1ad1d2a2a7360617d9",
+      "index": 2,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 1,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b01-b1",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b01",
+      "block_index": 1,
+      "config": "bytes-qwen35-122b-null-b01-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b01-b2.json",
+      "config_sha256": "ab160657d60cb504c579682bf4e9e83d729e37bb5398816fc2929190372546af",
+      "index": 3,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 1,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b01-b2",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b01",
+      "block_index": 1,
+      "config": "bytes-qwen35-122b-null-b01-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b01-a2.json",
+      "config_sha256": "9e01578a065d80d5da2c02bbea7ad9242603a2b57f848c215141914f8fa1638c",
+      "index": 4,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 1,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b01-a2",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b02",
+      "block_index": 2,
+      "config": "bytes-qwen35-122b-null-b02-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b02-a1.json",
+      "config_sha256": "bd402c3357f6d6b14dcbb29e4fdfb83afd9007410fbbafb939dc53749c907dc4",
+      "index": 5,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 2,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b02-a1",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b02",
+      "block_index": 2,
+      "config": "bytes-qwen35-122b-null-b02-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b02-b1.json",
+      "config_sha256": "6c617512ff69387a7b3e0740f36494305c25ec9a7127df0a306b0f9d28e07f38",
+      "index": 6,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 2,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b02-b1",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b02",
+      "block_index": 2,
+      "config": "bytes-qwen35-122b-null-b02-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b02-b2.json",
+      "config_sha256": "9864d923bdc4af7f48a1db9f4aad51b90381c53fba2c10a9c160a49f7fdfa259",
+      "index": 7,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 2,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b02-b2",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b02",
+      "block_index": 2,
+      "config": "bytes-qwen35-122b-null-b02-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b02-a2.json",
+      "config_sha256": "23d7cef89695a875969dedc55ac0074ebf491c29b4757904dca9f6069391d52e",
+      "index": 8,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 2,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b02-a2",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b03",
+      "block_index": 3,
+      "config": "bytes-qwen35-122b-null-b03-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b03-a1.json",
+      "config_sha256": "e7bc2b63fc785566c78727b0b0b6bbab0e29ec22719df73ca45662834dcb27ed",
+      "index": 9,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 3,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b03-a1",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b03",
+      "block_index": 3,
+      "config": "bytes-qwen35-122b-null-b03-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b03-b1.json",
+      "config_sha256": "71cb8e7ea7337ab96997964508a3931d2b38cc638ec02b01e35c32102eb399e1",
+      "index": 10,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 3,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b03-b1",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b03",
+      "block_index": 3,
+      "config": "bytes-qwen35-122b-null-b03-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b03-b2.json",
+      "config_sha256": "4ac1f88b51246ac31fe4cc87c5041eacfb94004f03ea3b44e9986eb9eab01afb",
+      "index": 11,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 3,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b03-b2",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b03",
+      "block_index": 3,
+      "config": "bytes-qwen35-122b-null-b03-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b03-a2.json",
+      "config_sha256": "f0b2653c339ac3d7237fe7bdc3d11d9b547c27fcb90655df8294c034588a6be6",
+      "index": 12,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 3,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b03-a2",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b04",
+      "block_index": 4,
+      "config": "bytes-qwen35-122b-null-b04-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b04-a1.json",
+      "config_sha256": "9bcb9da12b364c2a4457008b0d9a0eece093190bdfe5348d453d7c1c59e90c1f",
+      "index": 13,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 4,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b04-a1",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b04",
+      "block_index": 4,
+      "config": "bytes-qwen35-122b-null-b04-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b04-b1.json",
+      "config_sha256": "696757167e73187a8a42496a2cb41e76907f337c2cb5dc61cd8a7bef1f54053e",
+      "index": 14,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 4,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b04-b1",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b04",
+      "block_index": 4,
+      "config": "bytes-qwen35-122b-null-b04-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b04-b2.json",
+      "config_sha256": "1eac2e89c725e3a70e42e5b9034989aea06418c8d337b2db7bb2f1c175e8c10c",
+      "index": 15,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 4,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b04-b2",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b04",
+      "block_index": 4,
+      "config": "bytes-qwen35-122b-null-b04-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b04-a2.json",
+      "config_sha256": "281143a0bfb4acfc8b449acc49e336c05d7592d2b5b899e18ae5023eaa1344c8",
+      "index": 16,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 4,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b04-a2",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b05",
+      "block_index": 5,
+      "config": "bytes-qwen35-122b-null-b05-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b05-a1.json",
+      "config_sha256": "586f44d3e869d306166fe01a9a6714c3ead7cd4b84b890ff3f2370a5a7f9b041",
+      "index": 17,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 5,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b05-a1",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b05",
+      "block_index": 5,
+      "config": "bytes-qwen35-122b-null-b05-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b05-b1.json",
+      "config_sha256": "4e952ea0cb7a28530d8800a672d61dceb6f9f1d09c3570c7b0c840590b5e6dbc",
+      "index": 18,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 5,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b05-b1",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b05",
+      "block_index": 5,
+      "config": "bytes-qwen35-122b-null-b05-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b05-b2.json",
+      "config_sha256": "8b8b6834b62c3f43c6b3e05d86174e55f7f887163a8280fd6f4268cbe09b47b1",
+      "index": 19,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 5,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b05-b2",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b05",
+      "block_index": 5,
+      "config": "bytes-qwen35-122b-null-b05-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/bytes-qwen35-122b-null-b05-a2.json",
+      "config_sha256": "423326b3a1bd7fad61f960b26226bbcf923889ed36caea928cb0d67c81a68b40",
+      "index": 20,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 5,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b05-a2",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b06",
+      "block_index": 6,
+      "config": "bytes-qwen35-122b-null-b06-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b06-a1.json",
+      "config_sha256": "0bd14bb2b4f6645d822329215ddbe66d745beaa3fa8bf971424f56c4fcd115aa",
+      "index": 1,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 6,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b06-a1",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b06",
+      "block_index": 6,
+      "config": "bytes-qwen35-122b-null-b06-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b06-b1.json",
+      "config_sha256": "c6beb1a48785b753da81f326dcd4566592235a666c07ef640671f5ecc7067399",
+      "index": 2,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 6,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b06-b1",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b06",
+      "block_index": 6,
+      "config": "bytes-qwen35-122b-null-b06-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b06-b2.json",
+      "config_sha256": "749588ace1b20bb9521f6436ade7a19847eab47f83117cd80d20a5f7a0d8d41b",
+      "index": 3,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 6,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b06-b2",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b06",
+      "block_index": 6,
+      "config": "bytes-qwen35-122b-null-b06-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b06-a2.json",
+      "config_sha256": "c2ef82589d249f09cc943fe69934fad92d27f4e09f0810b05f9c8ed421a96082",
+      "index": 4,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 6,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b06-a2",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b07",
+      "block_index": 7,
+      "config": "bytes-qwen35-122b-null-b07-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b07-a1.json",
+      "config_sha256": "6a0b04e14b8f462a929bbe5fa7962e23b11c791257666ec986fcdc4c62d3ce3e",
+      "index": 5,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 7,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b07-a1",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b07",
+      "block_index": 7,
+      "config": "bytes-qwen35-122b-null-b07-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b07-b1.json",
+      "config_sha256": "119f2bb133341769c9f2aa11598a389bd701ec92448cfb464ce01401f1f7c216",
+      "index": 6,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 7,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b07-b1",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b07",
+      "block_index": 7,
+      "config": "bytes-qwen35-122b-null-b07-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b07-b2.json",
+      "config_sha256": "837a92fb3847672d3be9ac18661dc76b3c74614bc5dc50add0edac6c0b0f22f7",
+      "index": 7,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 7,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b07-b2",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b07",
+      "block_index": 7,
+      "config": "bytes-qwen35-122b-null-b07-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b07-a2.json",
+      "config_sha256": "6d0954b03162795a35350958164bfba77f48bdb01d65346fcde84085a89875a2",
+      "index": 8,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 7,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b07-a2",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b08",
+      "block_index": 8,
+      "config": "bytes-qwen35-122b-null-b08-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b08-a1.json",
+      "config_sha256": "a7d7aacde1ce15921d044dad8f094388146b9d9b230f87448e133945941aed40",
+      "index": 9,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 8,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b08-a1",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b08",
+      "block_index": 8,
+      "config": "bytes-qwen35-122b-null-b08-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b08-b1.json",
+      "config_sha256": "d0a12df879d767bcb5a0b84abe44ecb163f4f5c97404d78fedc5628d227a07b6",
+      "index": 10,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 8,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b08-b1",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b08",
+      "block_index": 8,
+      "config": "bytes-qwen35-122b-null-b08-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b08-b2.json",
+      "config_sha256": "ffa927fb8c51d63d45f8ab4abb0cb30e718156a19ac0f7dbe21c32460f3492ce",
+      "index": 11,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 8,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b08-b2",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b08",
+      "block_index": 8,
+      "config": "bytes-qwen35-122b-null-b08-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b08-a2.json",
+      "config_sha256": "5ba6567f406a7760a138b4e2f984341f9ab3d45f63810588e39456760894ca4d",
+      "index": 12,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 8,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b08-a2",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b09",
+      "block_index": 9,
+      "config": "bytes-qwen35-122b-null-b09-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b09-a1.json",
+      "config_sha256": "db1fa1bc39aac23ddcc6073b1029e2ee9de17384a7a08e9f09e1c42e71db1a01",
+      "index": 13,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 9,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b09-a1",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b09",
+      "block_index": 9,
+      "config": "bytes-qwen35-122b-null-b09-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b09-b1.json",
+      "config_sha256": "c3f37186e083228b717e5300bdabe4728eaa8eee6bb10427f42ead0f6f8e722e",
+      "index": 14,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 9,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b09-b1",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b09",
+      "block_index": 9,
+      "config": "bytes-qwen35-122b-null-b09-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b09-b2.json",
+      "config_sha256": "ec42065252c1dab10a779f80ec3c93468c7e270d544149c679804105039132ea",
+      "index": 15,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 9,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b09-b2",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b09",
+      "block_index": 9,
+      "config": "bytes-qwen35-122b-null-b09-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b09-a2.json",
+      "config_sha256": "a497d232c39f5699040933cd7982c7fa5c33c7d61ec645c5a67869b23b30681e",
+      "index": 16,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 9,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b09-a2",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b10",
+      "block_index": 10,
+      "config": "bytes-qwen35-122b-null-b10-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b10-a1.json",
+      "config_sha256": "c4eb93684bdc9ef0493134419a110195ef29d39680e4e451a9495864f5bcfa0c",
+      "index": 17,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 10,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b10-a1",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b10",
+      "block_index": 10,
+      "config": "bytes-qwen35-122b-null-b10-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b10-b1.json",
+      "config_sha256": "f202ddbde10316c11132315cd4bf7cb106d09065ad63c52f8d0ba782f936cafa",
+      "index": 18,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 10,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b10-b1",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-qwen35-122b-null-b10",
+      "block_index": 10,
+      "config": "bytes-qwen35-122b-null-b10-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b10-b2.json",
+      "config_sha256": "d64bf09443f4b9abbd29a2272cf9bd6220788b5a4deea174daf10480aa19347b",
+      "index": 19,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 10,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b10-b2",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-qwen35-122b-null-b10",
+      "block_index": 10,
+      "config": "bytes-qwen35-122b-null-b10-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/bytes-qwen35-122b-null-b10-a2.json",
+      "config_sha256": "8ed0a3e97d713a096bd2a33b8b44116f23ac6bbf08d8b9e9c77e00174e2334ec",
+      "index": 20,
+      "model_tag": "qwen35-122b-mlx",
+      "module_id": "bytes-qwen35-122b",
+      "pack_id": "bytes-s6",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 10,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-qwen35-122b-null-b10-a2",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    }
+  ],
+  "stage_graph": [
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings"
+      },
+      "kind": "bracket_reservation",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--ledger"
+                },
+                {
+                  "kind": "binding",
+                  "value": "ledger_path"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--head-pin"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/calibration/calibration_ledger_head.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/b6/packs/bytes-s6/collection_plan.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--window-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/window_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/plan_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-sha256"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/actual_sha256"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--evidence-root-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/evidence_root_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--identity-epoch-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "identity_epoch_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--t1-bindings-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "t1_bindings_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--execute"
+                }
+              ],
+              "interface_id": "joulewise.calibration_window_bracket_reservation.cli.v1",
+              "tool_id": "bracket_reserver"
+            },
+            "command_id": "bytes-s6-bracket-reservation.bracket_reservation",
+            "command_kind": "bracket_reservation",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 1,
+      "predecessor": null,
+      "stage_id": "bytes-s6-bracket-reservation",
+      "successor": "bytes-s6-pre-calibration"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings",
+        "slot": "pre"
+      },
+      "kind": "calibration_capture",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "instrument_validation",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "pre"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ],
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "tool_id": "fiducial_capture"
+            },
+            "command_id": "bytes-s6-pre-calibration.calibration_capture",
+            "command_kind": "calibration_capture",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 2,
+      "predecessor": "bytes-s6-bracket-reservation",
+      "stage_id": "bytes-s6-pre-calibration",
+      "successor": "bytes-s6-bound-collection"
+    },
+    {
+      "corpus": {
+        "planned": 18,
+        "stop_after_valid": 12
+      },
+      "expected_count": 18,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-reference-corpus-order-v2",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
+        "sha256": "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus_v5"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-s6-bound-collection.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 3,
+      "predecessor": "bytes-s6-pre-calibration",
+      "stage_id": "bytes-s6-bound-collection",
+      "successor": "bytes-s6-bound-derivation"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "external_artifact",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+        "sha256": "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
+      },
+      "kind": "bound_derivation",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--derive-neg8-drift-bound"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound-output"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "neg8-drift-bound.json",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-s6-bound-derivation.bound_derivation",
+            "command_kind": "bound_derivation",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 4,
+      "predecessor": "bytes-s6-bound-collection",
+      "stage_id": "bytes-s6-bound-derivation",
+      "successor": "bytes-s6-reference-start"
+    },
+    {
+      "expected_count": 3,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-start-triplet-v1",
+        "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
+        "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references_v5/start_triplet"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-s6-reference-start.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 5,
+      "predecessor": "bytes-s6-bound-derivation",
+      "stage_id": "bytes-s6-reference-start",
+      "successor": "bytes-qwen35-122b-absolute"
+    },
+    {
+      "expected_count": 10,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "bytes-qwen35-122b-01_decode_absolute",
+        "path": "configs/campaigns/bytes_v1/qwen35-122b/01_decode_absolute/order_manifest.json",
+        "sha256": "259c61f42a5acf2518cd069862579e9548920942dc92762c73c9255ef7db5485"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes_v1/qwen35-122b/01_decode_absolute"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-qwen35-122b-absolute.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 6,
+      "predecessor": "bytes-s6-reference-start",
+      "stage_id": "bytes-qwen35-122b-absolute",
+      "successor": "bytes-qwen35-122b-quads-01-05"
+    },
+    {
+      "expected_count": 20,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "bytes-qwen35-122b-02_decode_abba_01_05",
+        "path": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05/order_manifest.json",
+        "sha256": "370b69be5cbdb5243cabc988a64205ec27ef0195f0e15b672aa0bc750a4ca87b"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes_v1/qwen35-122b/02_decode_abba_01_05"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-qwen35-122b-quads-01-05.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 7,
+      "predecessor": "bytes-qwen35-122b-absolute",
+      "stage_id": "bytes-qwen35-122b-quads-01-05",
+      "successor": "bytes-s6-reference-midpoint"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-midpoint-v1",
+        "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
+        "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references_v5/midpoint"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-s6-reference-midpoint.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 8,
+      "predecessor": "bytes-qwen35-122b-quads-01-05",
+      "stage_id": "bytes-s6-reference-midpoint",
+      "successor": "bytes-qwen35-122b-quads-06-10"
+    },
+    {
+      "expected_count": 20,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "bytes-qwen35-122b-03_decode_abba_06_10",
+        "path": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10/order_manifest.json",
+        "sha256": "fc0f633eedac93b7da935d59a2efd461c761d55adab2581427685200dbf63755"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes_v1/qwen35-122b/03_decode_abba_06_10"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-qwen35-122b-quads-06-10.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 9,
+      "predecessor": "bytes-s6-reference-midpoint",
+      "stage_id": "bytes-qwen35-122b-quads-06-10",
+      "successor": "bytes-s6-reference-end"
+    },
+    {
+      "expected_count": 3,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-end-triplet-v1",
+        "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
+        "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references_v5/end_triplet"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-s6-reference-end.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 10,
+      "predecessor": "bytes-qwen35-122b-quads-06-10",
+      "stage_id": "bytes-s6-reference-end",
+      "successor": "bytes-s6-post-calibration"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings",
+        "slot": "post"
+      },
+      "kind": "calibration_capture",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "instrument_validation",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "post"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ],
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "tool_id": "fiducial_capture"
+            },
+            "command_id": "bytes-s6-post-calibration.calibration_capture",
+            "command_kind": "calibration_capture",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 11,
+      "predecessor": "bytes-s6-reference-end",
+      "stage_id": "bytes-s6-post-calibration",
+      "successor": "bytes-s6-whole-window-verdict"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "collected_roots"
+      },
+      "kind": "whole_window_verdict",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--whole-window-verdict"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "neg8-drift-bound.json",
+                  "value": "bound_runs_root"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-s6-whole-window-verdict.whole_window_verdict",
+            "command_kind": "whole_window_verdict",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 12,
+      "predecessor": "bytes-s6-post-calibration",
+      "stage_id": "bytes-s6-whole-window-verdict",
+      "successor": "bytes-s6-backup"
+    },
+    {
+      "expected_count": 2,
+      "input": {
+        "kind": "collected_roots"
+      },
+      "kind": "backup",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_backup_destination"
+                }
+              ],
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "tool_id": "backup_runs"
+            },
+            "command_id": "bytes-s6-backup.backup",
+            "command_kind": "backup",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          },
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_backup_destination"
+                }
+              ],
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "tool_id": "backup_runs"
+            },
+            "command_id": "bytes-s6-backup.backup",
+            "command_kind": "backup",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 13,
+      "predecessor": "bytes-s6-whole-window-verdict",
+      "stage_id": "bytes-s6-backup",
+      "successor": null
+    }
+  ],
+  "window_identity": {
+    "evidence_root_id": "evidence-bytes-s6-pass1",
+    "window_id": "bytes-s6-pass1"
+  }
+}

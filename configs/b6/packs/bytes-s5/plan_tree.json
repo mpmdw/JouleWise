@@ -1,0 +1,2280 @@
+{
+  "acceptance_policy": {
+    "arming_prerequisites": [
+      {
+        "id": "D117-U2",
+        "status": "required_before_arm"
+      },
+      {
+        "id": "D117-POSTCOLLECTION-TRUST-01",
+        "status": "required_before_mint"
+      },
+      {
+        "id": "D117-U11-IDPIN-PROJECTION",
+        "status": "required_before_arm"
+      }
+    ],
+    "issued_acceptance": {
+      "acceptance_id": "d079_calibration_acceptance_v2_n24_25g83_r2",
+      "artifact_sha256": "f949f511254e03b50b0be1cea37f74c1e8e6b4c49926c6c197024beea07b3660",
+      "derivation_sha256": "10965d36527c73217154efdbd75ab923412685f3e79526bd31f33e6f9142e5c0",
+      "path": "configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json"
+    },
+    "issued_ledger_head": {
+      "head_sha256": "a5b825b7dd77856be8d612be759be84f925a32f6e671481c2662bb03cbf57014",
+      "path": "configs/calibration/calibration_ledger_head.json"
+    },
+    "selection": "issued_d116_artifact_only",
+    "successor_effect": "invalidate_and_reissue_readiness_and_pin_projection"
+  },
+  "arm_attachments": {},
+  "attempt_policy": {
+    "authority": "R6; Block-6 catalog unchanged",
+    "minimum_kept_units_per_stratum": 5,
+    "outcome_dependent_top_up": "forbidden",
+    "science_member_replacements": 0
+  },
+  "b6_layout": {
+    "corpus": {
+      "planned": 18,
+      "stop_after_valid": 12
+    },
+    "packs": [
+      "bytes-s5"
+    ],
+    "schema_version": "joulewise.b6_session_layout.v1"
+  },
+  "blinding_group": "bytes",
+  "bytes_pass": 1,
+  "campaign_policy": {
+    "path": "configs/campaign_policies/quiet_mac_p2_b5.json",
+    "sha256": "ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60"
+  },
+  "closeout_attachments": {
+    "backup_requirements": {
+      "bound_root_verified": true,
+      "claim_root_verified": true,
+      "required_successful_backups": 2
+    },
+    "bracket_binding_sha256": null,
+    "evaluation_basis_sha256": null,
+    "extraction_report_sha256": null,
+    "postcollection_receipt_digests": [],
+    "terminal_ledger_head": null,
+    "todo": "TODO(postcollection): leave receipt-derived closeout fields empty until a completed claim window supplies authenticated evidence.",
+    "whole_window_verdict_sha256": null
+  },
+  "draft_notes": [
+    "Ruling: docs/design/bytes_pack_design.md R1-R6; not registered or armable.",
+    "One blinding_group=bytes is preserved as top-level data; stage-1 validator permits it but current blinding code does not consume it. C6/C7 remain R8 item 7.",
+    "Stage 1 uses only plan_tree_ref: selecting pass_plan_tree_refs[2] and reversing BYTES slot order require the later driver before pass 2; do not collect pass 2 using pass 1's tree.",
+    "R8 C4/C5 identity pins, runtime budget, contention, clock and disk gates await Mac desk checks; 8B-8bit revision is pending R8 item 5.",
+    "R8 analysis, independent twin, estimator registration, cold gate and smoke fingerprints remain before first t0.",
+    "R6 disagreement requiring an inclusion ruling before registration: 'catalog unchanged' retains 43 EXCLUDE_MEMBER and 19 EXCLUDE_WINDOW codes (including nonthermal), whereas 'the rest are flags' can mean nonthermal disclosure only. Drafts preserve the existing catalog pending that ruling.",
+    "Planning minutes use pilot maximum request seconds plus inherited idle/settle, 50 runs and 20% margin; 8B-8bit uses R1's 150 minutes. These are not measured session footprints."
+  ],
+  "draft_status": "draft",
+  "external_inputs": [
+    "manifests",
+    "artifacts"
+  ],
+  "generator": {
+    "path": "scripts/bytes_plan_trees.py",
+    "sha256": "129870ce65367ca7d07cc74ffe0a6d42e930a0bd0e54b75fb4d13f4cdadbcd4f"
+  },
+  "module_order": [
+    "bytes-llama-70b"
+  ],
+  "plan": {
+    "actual_sha256": "848d140939d00d1144b02ebfd0fe85c3c1abe2317ee2255599ab18ebe13e5d0a",
+    "declared_sha256": "848d140939d00d1144b02ebfd0fe85c3c1abe2317ee2255599ab18ebe13e5d0a",
+    "path": "collection_plan.json",
+    "plan_id": "bytes-s5-pass1"
+  },
+  "roots": {
+    "bound_root_leaf": "runs_bytes-s5_pass1_bound",
+    "claim_root_leaf": "runs_bytes-s5_pass1"
+  },
+  "schema_version": "joulewise.d117_plan_tree.v1",
+  "science": [
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 1,
+      "config": "bytes-llama-70b-abs-r01.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r01.json",
+      "config_sha256": "c20965685f62960df201829a871cabe93afaec761c7d8ac0243198c195a8a13e",
+      "index": 1,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "absolute_repeat",
+      "run_id": "bytes-llama-70b-abs-r01",
+      "stage_id": "bytes-llama-70b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 2,
+      "config": "bytes-llama-70b-abs-r02.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r02.json",
+      "config_sha256": "13b655d835a39868557c9c322687bf47ae5c6a02d4faba0231ff72be04ad8a69",
+      "index": 2,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 2,
+      "role": "absolute_repeat",
+      "run_id": "bytes-llama-70b-abs-r02",
+      "stage_id": "bytes-llama-70b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 3,
+      "config": "bytes-llama-70b-abs-r03.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r03.json",
+      "config_sha256": "803e5134505473a6fc8e20a1419b615f1c3f2d1cbf8eb4f7a9fc4baedea51e05",
+      "index": 3,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 3,
+      "role": "absolute_repeat",
+      "run_id": "bytes-llama-70b-abs-r03",
+      "stage_id": "bytes-llama-70b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 4,
+      "config": "bytes-llama-70b-abs-r04.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r04.json",
+      "config_sha256": "489335547cc9cf04976dbacd5af0573ee50d7433dd0770691934f28950c1ed6a",
+      "index": 4,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 4,
+      "role": "absolute_repeat",
+      "run_id": "bytes-llama-70b-abs-r04",
+      "stage_id": "bytes-llama-70b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 5,
+      "config": "bytes-llama-70b-abs-r05.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r05.json",
+      "config_sha256": "96659202106cadaa6fedb3bee03cfec156dd1db1a6d0907caa8d9cebf07efe8e",
+      "index": 5,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 5,
+      "role": "absolute_repeat",
+      "run_id": "bytes-llama-70b-abs-r05",
+      "stage_id": "bytes-llama-70b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 6,
+      "config": "bytes-llama-70b-abs-r06.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r06.json",
+      "config_sha256": "3616afdb5585a7308e6adebacff52e34191f17c4746a35839a4bdf9f4aa8a701",
+      "index": 6,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 6,
+      "role": "absolute_repeat",
+      "run_id": "bytes-llama-70b-abs-r06",
+      "stage_id": "bytes-llama-70b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 7,
+      "config": "bytes-llama-70b-abs-r07.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r07.json",
+      "config_sha256": "4b970c4c719ec8287e0455932505d2c050c238dacf50b7a90a0f5e659acc7333",
+      "index": 7,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 7,
+      "role": "absolute_repeat",
+      "run_id": "bytes-llama-70b-abs-r07",
+      "stage_id": "bytes-llama-70b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 8,
+      "config": "bytes-llama-70b-abs-r08.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r08.json",
+      "config_sha256": "d1e03e1d88dd4df8a5af4e06e42b02961b9e60dff09fd329de21d88cb8c95ce0",
+      "index": 8,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 8,
+      "role": "absolute_repeat",
+      "run_id": "bytes-llama-70b-abs-r08",
+      "stage_id": "bytes-llama-70b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 9,
+      "config": "bytes-llama-70b-abs-r09.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r09.json",
+      "config_sha256": "017e4e36a49c4cb0370cddbc28dd87d679ae72a51ea75bc638cc5f8a68ba8510",
+      "index": 9,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 9,
+      "role": "absolute_repeat",
+      "run_id": "bytes-llama-70b-abs-r09",
+      "stage_id": "bytes-llama-70b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": null,
+      "block_id": null,
+      "block_index": 10,
+      "config": "bytes-llama-70b-abs-r10.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/bytes-llama-70b-abs-r10.json",
+      "config_sha256": "7357bddc54de2c6529d212cdc28a098867d02cf70114fb18bea6e56b6517d1af",
+      "index": 10,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": null,
+      "position_in_block": 1,
+      "rep": 10,
+      "role": "absolute_repeat",
+      "run_id": "bytes-llama-70b-abs-r10",
+      "stage_id": "bytes-llama-70b-absolute",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b01",
+      "block_index": 1,
+      "config": "bytes-llama-70b-null-b01-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b01-a1.json",
+      "config_sha256": "7a856ccc7c6773e5ac092fa5e2873b2062a68a64e6ef8ec96b1980e1ca5d4a9d",
+      "index": 1,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 1,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b01-a1",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b01",
+      "block_index": 1,
+      "config": "bytes-llama-70b-null-b01-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b01-b1.json",
+      "config_sha256": "143a5b32ec3c90f179fe2e000498b1714deede9091e461b9facb06ae066204d4",
+      "index": 2,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 1,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b01-b1",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b01",
+      "block_index": 1,
+      "config": "bytes-llama-70b-null-b01-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b01-b2.json",
+      "config_sha256": "9d9cfe6e9e8eed36f1d57b38edb2edba0b46c4b4dc516a882c03876755020e01",
+      "index": 3,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 1,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b01-b2",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b01",
+      "block_index": 1,
+      "config": "bytes-llama-70b-null-b01-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b01-a2.json",
+      "config_sha256": "eb584d1ebef66fc29dfa1ac4f4360b9ecd1f9645cb4546d4183fa256a3b4fb71",
+      "index": 4,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 1,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b01-a2",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b02",
+      "block_index": 2,
+      "config": "bytes-llama-70b-null-b02-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b02-a1.json",
+      "config_sha256": "788d1d6c5d2cffb1df32146307617cab3793ebafdbc925a6b56a562d7e69b41c",
+      "index": 5,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 2,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b02-a1",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b02",
+      "block_index": 2,
+      "config": "bytes-llama-70b-null-b02-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b02-b1.json",
+      "config_sha256": "37c21227546044dfaefcd1c9d053af4168c30fa2499c246718aaccf3bebd233b",
+      "index": 6,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 2,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b02-b1",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b02",
+      "block_index": 2,
+      "config": "bytes-llama-70b-null-b02-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b02-b2.json",
+      "config_sha256": "7f9eb74b6eda5b4f2c24921574c6e659d1ebb3a49bb3a28409dcb0407a28f359",
+      "index": 7,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 2,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b02-b2",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b02",
+      "block_index": 2,
+      "config": "bytes-llama-70b-null-b02-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b02-a2.json",
+      "config_sha256": "b1e0852258493f48c9749e8b0934691ff14e024d2e9d3649e7dcb48087f7d199",
+      "index": 8,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 2,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b02-a2",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b03",
+      "block_index": 3,
+      "config": "bytes-llama-70b-null-b03-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b03-a1.json",
+      "config_sha256": "0f377bd343058f7090315a15ca20cf2a51125b3118bfffe56f6a26b7f561326e",
+      "index": 9,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 3,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b03-a1",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b03",
+      "block_index": 3,
+      "config": "bytes-llama-70b-null-b03-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b03-b1.json",
+      "config_sha256": "6196b626eef596902db059e2fc86315fa06708d8bfe074e5e04a46f9fec00c9a",
+      "index": 10,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 3,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b03-b1",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b03",
+      "block_index": 3,
+      "config": "bytes-llama-70b-null-b03-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b03-b2.json",
+      "config_sha256": "fc077f9f1cedd4c45e7df5dff5f12e9957789c0ebbf172594f6eaef48914e95f",
+      "index": 11,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 3,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b03-b2",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b03",
+      "block_index": 3,
+      "config": "bytes-llama-70b-null-b03-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b03-a2.json",
+      "config_sha256": "d50ef2b2471bc927e79e6728e8b8081e0d6b4dc055150d2d5b893f661bb6def6",
+      "index": 12,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 3,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b03-a2",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b04",
+      "block_index": 4,
+      "config": "bytes-llama-70b-null-b04-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b04-a1.json",
+      "config_sha256": "2906dc337cf34b3f06a2b552d79d902c40b4dc0d9174289c8b0ee96b857a7c76",
+      "index": 13,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 4,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b04-a1",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b04",
+      "block_index": 4,
+      "config": "bytes-llama-70b-null-b04-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b04-b1.json",
+      "config_sha256": "2845cf7883fb39d5b3eb2cff1bb5a5c6f6675801036f3ff226954e3dfce646b5",
+      "index": 14,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 4,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b04-b1",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b04",
+      "block_index": 4,
+      "config": "bytes-llama-70b-null-b04-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b04-b2.json",
+      "config_sha256": "9fde6a54c59d791b4e1da531f7778396aa24d12dffadad1a85d51e5f75338cb3",
+      "index": 15,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 4,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b04-b2",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b04",
+      "block_index": 4,
+      "config": "bytes-llama-70b-null-b04-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b04-a2.json",
+      "config_sha256": "076e0c5427321ade99c30aee5638f3c58bd3fd67d2a39c1b03d6a12609866dfd",
+      "index": 16,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 4,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b04-a2",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b05",
+      "block_index": 5,
+      "config": "bytes-llama-70b-null-b05-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b05-a1.json",
+      "config_sha256": "a7acae1326cef82eee27e11422e28c3479551dcf7bb49f45cd5f873768c62323",
+      "index": 17,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 5,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b05-a1",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b05",
+      "block_index": 5,
+      "config": "bytes-llama-70b-null-b05-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b05-b1.json",
+      "config_sha256": "43a69480b7702d2a01010ce9f91bd3ea3bd1748aca8631386a40851336693b07",
+      "index": 18,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 5,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b05-b1",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b05",
+      "block_index": 5,
+      "config": "bytes-llama-70b-null-b05-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b05-b2.json",
+      "config_sha256": "c17849114f3559c914b55b3d01824581e4149b6ca47f10a617f5d5900cf2845c",
+      "index": 19,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 5,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b05-b2",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b05",
+      "block_index": 5,
+      "config": "bytes-llama-70b-null-b05-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/bytes-llama-70b-null-b05-a2.json",
+      "config_sha256": "710bae39711c58ca0773f3c243f018007db7c0c7dee733f819ec8ba06fa11952",
+      "index": 20,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 5,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b05-a2",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b06",
+      "block_index": 6,
+      "config": "bytes-llama-70b-null-b06-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b06-a1.json",
+      "config_sha256": "2925eaffaa529b54dffc0d1c11387b84e42e5cfe5f4847fd658b9920de6df80b",
+      "index": 1,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 6,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b06-a1",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b06",
+      "block_index": 6,
+      "config": "bytes-llama-70b-null-b06-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b06-b1.json",
+      "config_sha256": "2ecec25905d8e36679d1c2a7d0a7d14d4615713cc0a0a00330a49d5e3c0bb652",
+      "index": 2,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 6,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b06-b1",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b06",
+      "block_index": 6,
+      "config": "bytes-llama-70b-null-b06-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b06-b2.json",
+      "config_sha256": "70df6556d12807bb7911205024eaf50cefb6753ee7d41a1627ccbbfe8874b0e3",
+      "index": 3,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 6,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b06-b2",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b06",
+      "block_index": 6,
+      "config": "bytes-llama-70b-null-b06-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b06-a2.json",
+      "config_sha256": "0abe39d5ab3d71c4cbe49acc3aa60c84b0d7f67a053a2679f1a7b31b8a9d479d",
+      "index": 4,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 6,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b06-a2",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b07",
+      "block_index": 7,
+      "config": "bytes-llama-70b-null-b07-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b07-a1.json",
+      "config_sha256": "79981f957ae182900ecab9853fc8bba5e29e2d77973789371583e63d2a9e6018",
+      "index": 5,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 7,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b07-a1",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b07",
+      "block_index": 7,
+      "config": "bytes-llama-70b-null-b07-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b07-b1.json",
+      "config_sha256": "f9ab267cb15a13dfa19497db36a570b3f4f8111445e515e5139cd8e7ab4fd07d",
+      "index": 6,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 7,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b07-b1",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b07",
+      "block_index": 7,
+      "config": "bytes-llama-70b-null-b07-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b07-b2.json",
+      "config_sha256": "42f7579c806f382b9be519b3ae6d425e138924e39acebac993751b2114141565",
+      "index": 7,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 7,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b07-b2",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b07",
+      "block_index": 7,
+      "config": "bytes-llama-70b-null-b07-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b07-a2.json",
+      "config_sha256": "f0a468414fcdd77ae55c7baaeac73889c5686056780b48a4b92856a13d653b74",
+      "index": 8,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 7,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b07-a2",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b08",
+      "block_index": 8,
+      "config": "bytes-llama-70b-null-b08-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b08-a1.json",
+      "config_sha256": "b282f8d070fb6d20e844a9c5d82b7ee34866af041778a3d4db03478372b49bdf",
+      "index": 9,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 8,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b08-a1",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b08",
+      "block_index": 8,
+      "config": "bytes-llama-70b-null-b08-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b08-b1.json",
+      "config_sha256": "fcb4a00b5af6abf467f12a47db502ebc40fa24b75e076f50ee6e3ba63881d427",
+      "index": 10,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 8,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b08-b1",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b08",
+      "block_index": 8,
+      "config": "bytes-llama-70b-null-b08-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b08-b2.json",
+      "config_sha256": "c1be598c4adb6c4d99f84d5f63ccddf3e2268541277c72de7a07aa39b627f5ca",
+      "index": 11,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 8,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b08-b2",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b08",
+      "block_index": 8,
+      "config": "bytes-llama-70b-null-b08-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b08-a2.json",
+      "config_sha256": "99bcfdfed97ac8692841aeb79fc54a5cacc49ea65eff6c1906927a7876a9fdc1",
+      "index": 12,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 8,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b08-a2",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b09",
+      "block_index": 9,
+      "config": "bytes-llama-70b-null-b09-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b09-a1.json",
+      "config_sha256": "f0d73402eab5d0862c915a13d0d8a418047349a30df2aff1d782a52f3ce21875",
+      "index": 13,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 9,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b09-a1",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b09",
+      "block_index": 9,
+      "config": "bytes-llama-70b-null-b09-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b09-b1.json",
+      "config_sha256": "0a61949156b40e2138b532675b83188f2c3c83ce0dcf63c3c0a719a7c14f457f",
+      "index": 14,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 9,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b09-b1",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b09",
+      "block_index": 9,
+      "config": "bytes-llama-70b-null-b09-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b09-b2.json",
+      "config_sha256": "599a0fb8f0dfc520d38665cde49a45b47225ea736633657783835754d85e0e99",
+      "index": 15,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 9,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b09-b2",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b09",
+      "block_index": 9,
+      "config": "bytes-llama-70b-null-b09-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b09-a2.json",
+      "config_sha256": "84915a220752e0da63a028d886af302f74485389c5cb1aeabafc5d86b2328bbb",
+      "index": 16,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 9,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b09-a2",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b10",
+      "block_index": 10,
+      "config": "bytes-llama-70b-null-b10-a1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b10-a1.json",
+      "config_sha256": "432400568aacb9af4be895a040e80697120817eb127c8ddb4f3149c3e7dcbab9",
+      "index": 17,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A1",
+      "position_in_block": 1,
+      "rep": 10,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b10-a1",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b10",
+      "block_index": 10,
+      "config": "bytes-llama-70b-null-b10-b1.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b10-b1.json",
+      "config_sha256": "1d7cc4aafdcfaebd4f85d23680fd20743362a5c527aef33e5f4b8289fcc2ce50",
+      "index": 18,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B1",
+      "position_in_block": 2,
+      "rep": 10,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b10-b1",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "B",
+      "block_id": "bytes-llama-70b-null-b10",
+      "block_index": 10,
+      "config": "bytes-llama-70b-null-b10-b2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b10-b2.json",
+      "config_sha256": "de7785f390fff6f62c2a7c0b409e8a536ff30fff670ce71183c06b55b026531e",
+      "index": 19,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "B2",
+      "position_in_block": 3,
+      "rep": 10,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b10-b2",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    },
+    {
+      "arm": "A",
+      "block_id": "bytes-llama-70b-null-b10",
+      "block_index": 10,
+      "config": "bytes-llama-70b-null-b10-a2.json",
+      "config_path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/bytes-llama-70b-null-b10-a2.json",
+      "config_sha256": "6a13f9d86a72d121aae92fdab74226c36a5ecdbb0f465a2b2849577f17a16434",
+      "index": 20,
+      "model_tag": "llama-70b-mlx",
+      "module_id": "bytes-llama-70b",
+      "pack_id": "bytes-s5",
+      "position": "A2",
+      "position_in_block": 4,
+      "rep": 10,
+      "role": "comparative_abba_member",
+      "run_id": "bytes-llama-70b-null-b10-a2",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "workload": "bytes_synthetic_2048_decode_512"
+    }
+  ],
+  "stage_graph": [
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings"
+      },
+      "kind": "bracket_reservation",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--ledger"
+                },
+                {
+                  "kind": "binding",
+                  "value": "ledger_path"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--head-pin"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/calibration/calibration_ledger_head.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/b6/packs/bytes-s5/collection_plan.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--window-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/window_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/plan_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-sha256"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/actual_sha256"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--evidence-root-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/evidence_root_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--identity-epoch-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "identity_epoch_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--t1-bindings-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "t1_bindings_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--execute"
+                }
+              ],
+              "interface_id": "joulewise.calibration_window_bracket_reservation.cli.v1",
+              "tool_id": "bracket_reserver"
+            },
+            "command_id": "bytes-s5-bracket-reservation.bracket_reservation",
+            "command_kind": "bracket_reservation",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 1,
+      "predecessor": null,
+      "stage_id": "bytes-s5-bracket-reservation",
+      "successor": "bytes-s5-pre-calibration"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings",
+        "slot": "pre"
+      },
+      "kind": "calibration_capture",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "instrument_validation",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "pre"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ],
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "tool_id": "fiducial_capture"
+            },
+            "command_id": "bytes-s5-pre-calibration.calibration_capture",
+            "command_kind": "calibration_capture",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 2,
+      "predecessor": "bytes-s5-bracket-reservation",
+      "stage_id": "bytes-s5-pre-calibration",
+      "successor": "bytes-s5-bound-collection"
+    },
+    {
+      "corpus": {
+        "planned": 18,
+        "stop_after_valid": 12
+      },
+      "expected_count": 18,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-reference-corpus-order-v2",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/order_manifest.json",
+        "sha256": "9cad99874d11a194eec5f56964a7d9a7f4ae361f6ff1f95e1a55dfe3216ff36f"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus_v5"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-s5-bound-collection.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 3,
+      "predecessor": "bytes-s5-pre-calibration",
+      "stage_id": "bytes-s5-bound-collection",
+      "successor": "bytes-s5-bound-derivation"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "external_artifact",
+        "path": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+        "sha256": "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
+      },
+      "kind": "bound_derivation",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--derive-neg8-drift-bound"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound-output"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "neg8-drift-bound.json",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-s5-bound-derivation.bound_derivation",
+            "command_kind": "bound_derivation",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 4,
+      "predecessor": "bytes-s5-bound-collection",
+      "stage_id": "bytes-s5-bound-derivation",
+      "successor": "bytes-s5-reference-start"
+    },
+    {
+      "expected_count": 3,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-start-triplet-v1",
+        "path": "configs/campaigns/window_references_v5/start_triplet/order_manifest.json",
+        "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references_v5/start_triplet"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-s5-reference-start.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 5,
+      "predecessor": "bytes-s5-bound-derivation",
+      "stage_id": "bytes-s5-reference-start",
+      "successor": "bytes-llama-70b-absolute"
+    },
+    {
+      "expected_count": 10,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "bytes-llama-70b-01_decode_absolute",
+        "path": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute/order_manifest.json",
+        "sha256": "4dfdd1f5fbcae1aa3257e7a028065cf73a3689d9089749665c2c855d41765b47"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes_v1/llama-70b/01_decode_absolute"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-llama-70b-absolute.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 6,
+      "predecessor": "bytes-s5-reference-start",
+      "stage_id": "bytes-llama-70b-absolute",
+      "successor": "bytes-llama-70b-quads-01-05"
+    },
+    {
+      "expected_count": 20,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "bytes-llama-70b-02_decode_abba_01_05",
+        "path": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05/order_manifest.json",
+        "sha256": "f53ec444154a927dc967f9266103796168a5c04c1335599ceee4c61ab74f1f5f"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes_v1/llama-70b/02_decode_abba_01_05"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-llama-70b-quads-01-05.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 7,
+      "predecessor": "bytes-llama-70b-absolute",
+      "stage_id": "bytes-llama-70b-quads-01-05",
+      "successor": "bytes-s5-reference-midpoint"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-midpoint-v1",
+        "path": "configs/campaigns/window_references_v5/midpoint/order_manifest.json",
+        "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references_v5/midpoint"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-s5-reference-midpoint.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 8,
+      "predecessor": "bytes-llama-70b-quads-01-05",
+      "stage_id": "bytes-s5-reference-midpoint",
+      "successor": "bytes-llama-70b-quads-06-10"
+    },
+    {
+      "expected_count": 20,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "bytes-llama-70b-03_decode_abba_06_10",
+        "path": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10/order_manifest.json",
+        "sha256": "35a9f68b7ef652c5147101c8b5bf2602e4195f739451f7158d3cd49b16ce0885"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/bytes_v1/llama-70b/03_decode_abba_06_10"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-llama-70b-quads-06-10.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 9,
+      "predecessor": "bytes-s5-reference-midpoint",
+      "stage_id": "bytes-llama-70b-quads-06-10",
+      "successor": "bytes-s5-reference-end"
+    },
+    {
+      "expected_count": 3,
+      "input": {
+        "kind": "manifest",
+        "manifest_id": "neg8-window-reference-end-triplet-v1",
+        "path": "configs/campaigns/window_references_v5/end_triplet/order_manifest.json",
+        "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references_v5/end_triplet"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-s5-reference-end.campaign_collection",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 10,
+      "predecessor": "bytes-llama-70b-quads-06-10",
+      "stage_id": "bytes-s5-reference-end",
+      "successor": "bytes-s5-post-calibration"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "arm_bindings",
+        "slot": "post"
+      },
+      "kind": "calibration_capture",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "instrument_validation",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "post"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ],
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "tool_id": "fiducial_capture"
+            },
+            "command_id": "bytes-s5-post-calibration.calibration_capture",
+            "command_kind": "calibration_capture",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 11,
+      "predecessor": "bytes-s5-reference-end",
+      "stage_id": "bytes-s5-post-calibration",
+      "successor": "bytes-s5-whole-window-verdict"
+    },
+    {
+      "expected_count": 1,
+      "input": {
+        "kind": "collected_roots"
+      },
+      "kind": "whole_window_verdict",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--whole-window-verdict"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_b5.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "neg8-drift-bound.json",
+                  "value": "bound_runs_root"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "bytes-s5-whole-window-verdict.whole_window_verdict",
+            "command_kind": "whole_window_verdict",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 12,
+      "predecessor": "bytes-s5-post-calibration",
+      "stage_id": "bytes-s5-whole-window-verdict",
+      "successor": "bytes-s5-backup"
+    },
+    {
+      "expected_count": 2,
+      "input": {
+        "kind": "collected_roots"
+      },
+      "kind": "backup",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_backup_destination"
+                }
+              ],
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "tool_id": "backup_runs"
+            },
+            "command_id": "bytes-s5-backup.backup",
+            "command_kind": "backup",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          },
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_backup_destination"
+                }
+              ],
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "tool_id": "backup_runs"
+            },
+            "command_id": "bytes-s5-backup.backup",
+            "command_kind": "backup",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 13,
+      "predecessor": "bytes-s5-whole-window-verdict",
+      "stage_id": "bytes-s5-backup",
+      "successor": null
+    }
+  ],
+  "window_identity": {
+    "evidence_root_id": "evidence-bytes-s5-pass1",
+    "window_id": "bytes-s5-pass1"
+  }
+}

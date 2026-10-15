@@ -1,0 +1,53 @@
+{
+  "hardware_target": {
+    "device_kind": "apple_silicon_unified_memory",
+    "id": "macbook_m3_max",
+    "notes": "BYTES draft; requires C4 identity pins and R8 Mac checks before registration.",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "transport": "local"
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "model": {
+    "family": "qwen3",
+    "name": "Qwen3-1.7B-4bit",
+    "revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen3-1.7B-4bit",
+    "weight_format": "mlx"
+  },
+  "quantization": {
+    "bits": 4,
+    "group_size": 64,
+    "name": "int4"
+  },
+  "run_id": "bytes-qwen3-1p7b-null-b01-b2",
+  "run_metadata": {
+    "operator": "lead",
+    "project": "capstone-joulewise",
+    "tags": [
+      "bytes-v1",
+      "floor-calibration",
+      "launch_lineage_required",
+      "draft",
+      "bytes-model=qwen3-1p7b",
+      "bytes-phase=decode",
+      "bytes-null-contrast",
+      "rep1"
+    ]
+  },
+  "sampling": {
+    "idle_seconds": 57.6,
+    "power_hz": 10.0,
+    "warmup_seconds": 5.0
+  },
+  "schema_version": "0.1",
+  "workload_profile": {
+    "name": "bytes_synthetic_2048_decode_512",
+    "output_tokens": 512,
+    "prompt_tokens": 2048,
+    "repetitions": 1,
+    "warmup_runs": 1
+  }
+}
