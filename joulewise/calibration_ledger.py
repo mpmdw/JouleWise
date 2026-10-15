@@ -6140,13 +6140,7 @@ def resume_finalize_bracket_session(
         if session.state != "open":
             raise CalibrationLedgerError(RefusalCode.SESSION_NOT_OPEN)
         derivation = session.session_kind == SESSION_KIND_DERIVATION
-        block6 = uses_block6_capture_screen(session.runs_root, window_plan_path=window_plan_path)
-        diagnostic_screen_s = systematic_screen_s if block6 else None
-        if block6:
-            # Block-6 registration §5.5: the chain judges b_op; capture level
-            # is diagnostic only. Keep the authenticated acceptance comparator.
-            systematic_screen_s = None
-        if not block6 and derivation != (systematic_screen_s is None):
+        if derivation != (systematic_screen_s is None):
             # A derivation session must never be judged by the level screen of
             # the PRIOR epoch's acceptance, and a bracket session must never be
             # finalized without one.
@@ -6157,6 +6151,12 @@ def resume_finalize_bracket_session(
                     "session_kind": session.session_kind,
                 },
             )
+        block6 = uses_block6_capture_screen(session.runs_root, window_plan_path=window_plan_path)
+        diagnostic_screen_s = systematic_screen_s if block6 else None
+        if block6:
+            # Block-6 registration §5.5: the chain judges b_op; capture level
+            # is diagnostic only. Keep the authenticated acceptance comparator.
+            systematic_screen_s = None
         expected_slot = session.next_slot
         if slot != expected_slot:
             raise CalibrationLedgerError(

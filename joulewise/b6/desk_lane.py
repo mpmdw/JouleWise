@@ -9,6 +9,7 @@ import time
 from joulewise import desk_compress, session_structure
 from joulewise.b5 import chain, plan
 from joulewise.b6 import smoke
+from joulewise.b6.courier import block_six_plan
 from joulewise.b6.driver_lane import metadata_path, read, write
 from joulewise.b6.lanes import SessionLine, SmokeResult
 from joulewise.flags.catalog import load_catalog
@@ -68,7 +69,9 @@ class DeskLane:
                             "--ledger", str(measurement / plan.DEFAULT_LEDGER_RELATIVE),
                             "--head-pin", str(measurement / plan.HEAD_PIN_RELATIVE),
                             "resume-finalize", "--session-id", session_id, "--slot", name,
-                            "--plan", frozen_plan, "--window-plan", metadata["prepared"]["plan_path"]],
+                            "--plan", frozen_plan,
+                            *(["--window-plan", metadata["prepared"]["plan_path"]]
+                              if block_six_plan(night_plan) else [])],
                             check=False, capture_output=True, text=True,
                             timeout=120, env=self.env)
                         record = {"slot": name, "rc": result.returncode,
