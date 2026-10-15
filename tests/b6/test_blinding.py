@@ -73,7 +73,11 @@ class BlindingTests(unittest.TestCase):
     def test_racing_first_draw_one_file_one_value(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp) / "pack" / "blinding"
-            ctx = multiprocessing.get_context("spawn")
+            # "spawn" re-imports __main__ from its file; the shard runner (CI and the
+            # local method) feeds the test program on stdin (main path "<stdin>"), which
+            # kills spawn children at startup (precedent: tests/test_agent_census_concurrency.py,
+            # PR #371). These children only draw or append, so a forked child is safe.
+            ctx = multiprocessing.get_context("fork" if "fork" in multiprocessing.get_all_start_methods() else "spawn")
             gate, queue = ctx.Event(), ctx.Queue()
             processes = [ctx.Process(target=factor_child, args=(directory, gate, queue)) for _ in range(2)]
             try:
