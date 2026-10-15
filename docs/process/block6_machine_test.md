@@ -17,12 +17,14 @@ The four stage-1 lanes of design section 17, merged one at a time in its order, 
 | 3 | `lane/2026-10-14-b6-precheck` | `82dfb8bdc` | the pre-session check (`precheck.json`), smoke by fingerprint, a copied ledger |
 | 4 | `lane/2026-10-14-b6-desk` | `8c69dff71` | compression, the session structure check, pack stopping |
 | 5 | `lane/2026-10-14-b6-loop` | `7bd443286` | the unattended loop under launchd (precheck, smoke, session, desk, rotate), program mail |
+| 6 | `lane/2026-10-14-b6-adapters` | `165b1972f` (merge `b2837ba38`) | the loop's lane adapters (P1/P2, D1/D2, S1/K1, H3, A1), block-6 plan inputs, one harvest path for smoke and session, the registration loaders and copies of block 5's pins and sizing, `plan.resolve_stage_dispatch`, the program courier, the wake job |
 
 The loop is in stage 1 because stage 1 cannot run without it: the pre-session check waits while any `claude` or
 `codex` process is alive or the keyboard was used in the last 600 s (`joulewise/b6/precheck.py`), so no agent can
-run it to a start, and the smoke module leaves launching to the loop (`joulewise/b6/smoke.py`). The loop's
-connections to the other lanes (`joulewise/b6/lanes.py` `resolve`) are still stubs; until they are built (open
-issue 1 below) the loop starts nothing.
+run it to a start, and the smoke module leaves launching to the loop (`joulewise/b6/smoke.py`). Since lane 6, the
+loop's connections to the other lanes (`joulewise/b6/lanes.py` `resolve(repo_root, loop_root, ...)`) are real
+adapters; with registered packs the loop no longer holds on `lane_missing`. Lane 6's build, review and fixes are in
+`/Users/edr/night-archive/b6-build/stage2/DISPOSITIONS-adapters.md`.
 
 ## The measurement checkout (both commands need it)
 
@@ -43,8 +45,10 @@ Built once, by the block-5 post-seal runbook's steps 3 to 5
   and no block-5 runs root is read. Block 5's own captures (rows after 402) are then not in block 6's ledger:
   block 6's acceptance judges each session by its own captures and only discloses other sessions' captures, so
   this changes flags, not which sessions count (open issue 4).
-- **Registration directory:** `configs/b6/registration/` must be committed at `P` before round 1 (open issue 2).
-  The machine test does not need it: it writes its own non-claim one.
+- **Registration directory:** `configs/b6/registration/` holds, since lane 6, the loaders' README, copies of block
+  5's `identity_pins.json` and `sizing_b5.json`, and their schemas. `acceptance.json` (registration draft S-4 to
+  S-9) is absent until the registration seat writes it from quiet-machine numbers (open issue 2). The machine test
+  does not need it: it writes its own non-claim one.
 
 ## The machine test
 
@@ -77,8 +81,9 @@ Every argument:
   files written into the checkout.
 - `prepare`: build everything under `--out` and never write into `$M`: a non-claim block-6 registration
   directory (acceptance times of the non-claim replay, pins and sizing copied from
-  `configs/campaigns/v5_claim_25g83/`), the two desk identity files from the live machine, the plan inputs (the
-  sealed block-5 threshold block, ALPHA's sizing), the fingerprint, then `joulewise.b6.smoke.prepare`: a fresh
+  `configs/campaigns/v5_claim_25g83/`), the two desk identity files from the live machine
+  (`joulewise/b6/desk_identity.py`), the plan inputs (`joulewise/b6/plan_inputs.py`, the same code the loop's D1
+  uses: the sealed block-5 threshold block, ALPHA's sizing), the fingerprint, then `joulewise.b6.smoke.prepare`: a fresh
   clone of `$M` at its head inside `--out`, a copy of the ledger and pin, the plan tree reduced to the smoke's
   4 runs by `configs/b6/smoke_keep.json`, the plan. Then the night-job plists (the installer in render-only
   mode) and the injector plist, and `install.zsh`.
@@ -115,7 +120,8 @@ the cap wait in full.
 /opt/homebrew/bin/python3.13 -B "$M/scripts/b6_machine_test.py" report --uninstall --state "<out>/machine-test.json"
 ```
 
-It runs the smoke desk (the block-5 harvester, then block 6's acceptance in smoke mode), uninstalls the night
+It runs the smoke desk (since lane 6 the session's own harvest, `scripts/harvest_b6_session.py --smoke` with the
+block-6 catalog and the test's registration directory, then reads its `derived/b6-acceptance.json`), uninstalls the night
 job and the injector, writes `<out>/report.json`, and prints, structure only, for each item whether the records
 show it: the agent pause (an episode, resume no sooner than 600 s after the last sighting, the overlapping run
 excluded, the chain not stopped); the idle cap (exactly one `idle.wait_cap_skip`, later runs measured); the meter
@@ -155,18 +161,49 @@ Every argument:
   hold on a certain exclusion), arm notice to GitHub issue mail with Ed's 30-minute NO, smoke if the fingerprint
   changed, install the session by the night-job route, desk it (harvest, structure check, compression), rotate.
 
+**What each step now starts (lane 6 adapters, `joulewise/b6/*_lane.py`).**
+
+- *Pre-check (P1/P2, `precheck_lane.py`):* writes `precheck.json` from the registration directory; a missing
+  `acceptance.json` is the flag `precheck.acceptance_unavailable`, not a stop. It kills registered orphaned
+  fixtures (parent pid 1) after a fresh census (lead fix L-4).
+- *Prepare (D1, `driver_lane.py` `prepare_session`):* plan inputs from `joulewise/b6/plan_inputs.py` (the block-6
+  registration's pins and sizing, the sealed threshold block) and the two desk identity files
+  (`desk_identity.py`). Session ids are `r<round>-<pack>`, then `-n<k>` when reused, `-a<k>` after a refusal,
+  `-smoke-<k>` for smokes; each id is used once. Paths: `/Users/edr/night-b6/sessions/<id>/{custody,runs-parent,
+  backup-claim,backup-bound,archive,export}`, staging `/Users/edr/night-b6/loop/staging/<id>`.
+- *Launch (D2):* t0 is bound at launch, `launch_lead_s` (420 s, `configs/b6/loop.json`) after the tick, rounded
+  up to a minute; the plan is written then, and the night job is installed by `scripts/install_night_agent.sh
+  --courier-bin $M/scripts/b6_courier.sh` (labels `com.joulewise.night` and `.deadman`). The courier is a program
+  that writes the driver's mail request to `<session>/courier-program/` and marks it sent; block-6 mail goes by
+  the loop's mailer. Status reads `launchctl print` (`runs`, `state`, `pid`) and the chain's process group; an
+  arm or t0 refusal on physics (agent census, unmeasured instrument, clock, battery, ...) returns `Refused` and
+  the loop waits without using a slot. The night job is uninstalled once the terminal record exists.
+- *Smoke (S1):* the same route on a 4-run clone; its desk is the session harvest with `--smoke`.
+- *Desk (K1, `desk_lane.py`):* `scripts/harvest_b6_session.py` (4 h timeout), `joulewise/session_structure.check`,
+  `joulewise/desk_compress.compress`, then the ledger pin advance. Harvest exit 6 (acceptance unavailable) keeps
+  every number and flag and records the session `pending_registration`; `b6_loop.py reharvested <id>` judges it
+  once `acceptance.json` exists. Any exit other than 0 and 6 is a harvest fault, `pending_harvest`, never a
+  judged session. A lost chain (job gone or ended with no terminal record, process group gone) has its ledger
+  bracket aborted and is flagged `records.terminal_record_absent`.
+- *Wake:* on a hold the loop bootstraps `com.joulewise.b6wake.<n>`, which runs `$M/scripts/b6_wake.zsh` → `claude
+  -p` with `docs/process/b6_wake_brief.md` from `/Users/edr/code/JouleWise` (deferred while a collection is live);
+  output in `/Users/edr/night-b6/loop/wake/com.joulewise.b6wake.<n>.out/.err`. A woken agent makes the next
+  pre-check wait until it has exited.
+
 **What must be true first, or the loop holds and starts nothing** (it says why in `state.json` and by one mail):
 
-1. The loop's lane adapters exist on the pinned commit (open issue 1). Until then a tick with registered packs
-   holds with `lane_missing:driver`; with draft packs it idles (`pack_not_open`).
+1. Done at `b2837ba38`: the lane adapters are on the branch.
 2. `configs/b6/packs/{alpha,beta,gamma}/registration.json` are `registered`, committed and valid (after a tick,
    `/opt/homebrew/bin/python3.13 -B "$M/scripts/b6_loop.py" status` shows `pack_not_open` with each refused
-   pack's reasons; today all three say `draft`), and `configs/b6/registration/` is committed (open issue 2).
+   pack's reasons; today all three say `draft`; they name `configs/b6/flag_catalog_b6.json`). With registered
+   packs and no `acceptance.json`, sessions run and wait as `pending_registration`, and pending sessions count
+   toward `attempts_before_pause` (5 per pack, then `pack_paused` and a wake): commit `acceptance.json` first.
 3. The machine test passed on the same commit.
-4. `gh` is logged in for `mpmdw/JouleWise` (the mail transport); `loop.json` `wake_argv` names the orchestrator's
-   wake command if the loop should start one (empty today: a wake is a record and a mail).
-5. Nothing else is installed: `launchctl list | grep com.joulewise` prints nothing, and no agent is alive when
-   the first session's pre-check runs (it waits otherwise; it does not fail).
+4. `gh` is logged in for `mpmdw/JouleWise` (the mail transport); `claude` is at `/Users/edr/.local/bin/claude`
+   for the wake job.
+5. Nothing else is installed: `launchctl list | grep com.joulewise` prints nothing (wake jobs stay loaded after
+   their run; boot out any `com.joulewise.b6wake.*` left from a test), and no agent is alive when the first
+   session's pre-check runs (it waits otherwise; it does not fail).
 
 To stop: `/opt/homebrew/bin/python3.13 -B "$M/scripts/b6_loop.py" hold` (the loop holds after its current step; a running
 collection is never killed), then `launchctl bootout gui/$(id -u)/com.joulewise.b6loop` once `collection.active`
@@ -174,7 +211,7 @@ is gone.
 
 ## Decisions made at the integration (the texts determine them)
 
-- **The loop joins stage 1**, inert until its adapters exist (above).
+- **The loop joins stage 1**; its adapters arrived with lane 6.
 - **Driver M2: the session's kill deadline covers both budgets.** The driver lane asked that `window_max_s` add
   the pause limit and the session wait budget (7,200 + 7,200 s), and the registration draft (section 7 item 2)
   registers it. `joulewise/b5/plan.py` now writes `window_max_s` = the pack's programmed span + the 3,300 s arm
@@ -192,32 +229,28 @@ is gone.
 
 ## Open issues
 
-1. **The loop's lane adapters are not built.** `joulewise/b6/lanes.py` `resolve()` returns stubs for the
-   pre-check (P1, P2), the driver (D1 prepare, D2 launch and status), the smoke and session desk (S1, K1), the
-   harvest (H3) and the analysis (A1). The loop spec (`/Users/edr/night-archive/b6-build/loop/SPEC.md` section 4)
-   assigned D1 and D2 to the driver lane, which did not build them. They are a lane of their own: plan inputs
-   from the block-6 registration (the block-5 bench helpers `b5_plan_inputs.py` and `b5_desk_identity.py` ported
-   into the repository), t0 chosen at launch rather than at `prepare_session` (the plan writer binds t0, and the
-   loop prepares before the pre-check and the 30-minute NO window), install and uninstall through
-   `install_night_agent.sh`, the ledger pin advance after each chain, the `Refused` result for an arm or t0
-   refusal, K1 as `scripts/harvest_b6_session.py` plus `joulewise/session_structure.py` plus
-   `joulewise/desk_compress.py`, the production `wake_argv`, and `--courier-bin` on every install (the installer
-   accepts it since this integration; without it the night job runs block 5's `claude -p` courier after the
-   chain, while design 6.4 says block 6's mail is sent by a program, the loop's mailer).
+1. **Closed at `b2837ba38`: the loop's lane adapters** (lane 6; see "What each step now starts"). Untested on
+   hardware, for the machine test or the first round to show: the `launchctl print` fields D2 parses; a live
+   install and uninstall through the program courier; live arm and t0 refusal records; a lost session after a
+   restart; the wake job (`claude -p` from launchd); `gh` mail; the 4 h harvest timeout under the live runner.
 2. **The block-6 registration directory** `configs/b6/registration/` (acceptance.json in
    `joulewise.b6_acceptance_registration.v1`, identity_pins.json, sizing_b5.json, optional
    precheck_thresholds.json) is where the pre-check, the smoke desk and the session harvest all read the
-   registration (`joulewise.b6.registration.DEFAULT_DIR_RELATIVE`). The registration seat writes it, and the
-   three pack registrations should name `configs/b6/flag_catalog_b6.json` (they name block 5's sealed catalog,
-   which the block-6 catalog contains, so they validate either way).
+   registration (`joulewise.b6.registration.DEFAULT_DIR_RELATIVE`). Since lane 6 the pins and sizing are
+   committed copies of block 5's and the pack registrations name `configs/b6/flag_catalog_b6.json`;
+   `acceptance.json` (S-4 to S-9) is still absent and the packs are still `draft`. The registration seat writes
+   the one and flips the other.
 3. **Effects of the driver's codes** are set in the block-6 catalog from the design texts (agent overlap and a
    sleep inside a run exclude the run; a run skipped at the wait cap or budget is excluded; the rest disclose;
    `idle.waited` discloses until test M2). The registration may set others through `flag_effects`.
 4. **Ledger seed.** This page seeds block 6 from block 3's terminal ledger (row 402, the pin committed here).
    Carrying block 5's later captures would mean reading the block-5 clone's `runs/` directory, which the block-5
    blinding rule of the integration brief names; the orchestrator decides whether that read is allowed.
-5. **The smoke desk harvests with block 5's harvester** (`scripts/harvest_b5_window.py --prepare-desk`, the plan's
-   catalog), then judges with block 6's acceptance in smoke mode, while a session's desk is to use
-   `scripts/harvest_b6_session.py` (block-6 catalog and registration pins). The block-5 harvester records codes
-   its catalog lacks as unclassified and goes on, so the smoke still runs; the adapter lane should make the two
-   desks harvest the same way. The machine test is the first run of either on a block-6 archive (harvest lane L4).
+5. **Closed at `b2837ba38`: one harvest path.** Smoke and session both run `scripts/harvest_b6_session.py` with the
+   block-6 catalog. The machine test is still the first run of it on a real block-6 archive (harvest lane L4).
+6. **Review of the integration's own commits is unfinished.** Stage B's executing review seat (Sol 6.1 xhigh,
+   brief `/Users/edr/night-archive/b6-build/stage2/BRIEF-sol-rev1.md`) stopped without a report; its partial
+   evidence is in the review worktree's `.scratch-review/`. Commits 7cfcd73d0, ca65937e1, 7c545adc7, 459575bbb,
+   ff0d63f04, 00e640909 and e9fc63757 still need an executing review before the machine test's pin.
+7. **Cold passes** (Fable and Opus, blind, executing) on the measurement, calibration and claim-path code of this
+   branch are not run; the list is in `/Users/edr/night-archive/b6-build/stage2/OPEN-ISSUES.md`.
