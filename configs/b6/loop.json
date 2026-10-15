@@ -1,0 +1,10 @@
+{
+  "schema_version": "joulewise.b6_loop.v1",
+  "loop_root": "/Users/edr/night-b6/loop",
+  "base_order": ["alpha", "beta", "gamma"],
+  "science_minutes_max": 265,
+  "owner_login": "mpmdw",
+  "github_repo": "mpmdw/JouleWise",
+  "flag_catalog": "configs/campaigns/v5_claim_25g83/flag_catalog.json",
+  "wake_argv": []
+}
