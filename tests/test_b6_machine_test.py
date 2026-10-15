@@ -255,6 +255,15 @@ class PrepareTests(Case):
             self.assertEqual(inputs[key]["source_pointer"], f"/packs/ALPHA/{key}")
         plan_json = json.loads(Path(state["plan_path"]).read_text())
         self.assertEqual(plan_json["hazard_window"]["member_count"], 4)
+        bindings = plan_json["hazard_window"]["bindings"]
+        self.assertEqual(bindings["capture_screen"], {
+            "alignment_reference_s": "0.036462861644980", "bracket_screen_s": "0.014531",
+            "operative_bound_stop_s": None})
+        self.assertIs(bindings["spare_retries"], False)
+        rendered = Path(plan_json["chain_path"]).read_text()
+        self.assertIn("screen_b6_calibration()", rendered)
+        self.assertNotIn("screen_pre_calibration()", rendered)
+        self.assertNotIn("Spare-slot retry", rendered)
         smoke_state = json.loads(Path(state["smoke_state"]).read_text())
         self.assertEqual(smoke_state["registration_dir"], str(out / "registration"))
         self.assertEqual(smoke_state["driver_argv"], smoke.driver_argv(smoke.SmokePrepared.from_json(smoke_state)))

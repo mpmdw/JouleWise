@@ -5,7 +5,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from joulewise.b5 import chain
 from tests.fixtures.b5_plan import corpus18_render
 
 
@@ -20,18 +19,11 @@ class ChainScreenTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(normalized).hexdigest(), expected)
 
     def test_rendered_screen_under_zsh_on_fake_captures(self):
-        # Intercept the helper's render call only to add the plan binding.
-        original = chain.render_chain
-        from unittest.mock import patch
-
-        def render(**kwargs):
-            kwargs["bindings"]["capture_screen"] = {"alignment_reference_s": "0.036462861644980",
-                "bracket_screen_s": "0.014531", "operative_bound_stop_s": "0.092"}
-            return original(**kwargs)
-
-        with tempfile.TemporaryDirectory() as tmp, patch.object(chain, "render_chain", side_effect=render):
+        with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            raw, *_ = corpus18_render.render_pack("alpha", root)
+            raw, *_ = corpus18_render.render_pack("alpha", root, bindings_overrides={"capture_screen": {
+                "alignment_reference_s": "0.036462861644980", "bracket_screen_s": "0.014531",
+                "operative_bound_stop_s": "0.092"}})
             rendered = raw.decode()
             self.assertIn("screen_b6_calibration", rendered)
             self.assertNotIn("screen_pre_calibration()", rendered)
@@ -46,6 +38,28 @@ class ChainScreenTests(unittest.TestCase):
                 self.assertEqual("flag calibration.alignment_above_reference" in ran.stdout, flagged)
                 if rc:
                     self.assertIn("chain.stop operative_bound_above_stop 12", ran.stdout)
+
+    def test_null_screen_values_never_become_zero_thresholds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for calibration in (
+                dict.fromkeys(("alignment_reference_s", "bracket_screen_s", "operative_bound_stop_s")),
+                {"alignment_reference_s": None, "bracket_screen_s": "0.014531", "operative_bound_stop_s": None},
+                {"alignment_reference_s": None, "bracket_screen_s": None, "operative_bound_stop_s": "0.092"},
+            ):
+                raw, *_ = corpus18_render.render_pack("alpha", root, bindings_overrides={
+                    "capture_screen": calibration, "spare_retries": False})
+                rendered = raw.decode()
+                self.assertNotIn("Spare-slot retry", rendered)
+                source = rendered[rendered.index("B6_ALIGNMENT_REFERENCE_S="):rendered.index('cd "$REPO"')]
+                script = root / "screen.zsh"
+                script.write_text('CLAIM_RUNS_ROOT=fixture\nflag() { print -r -- "flag $1"; }\n'
+                                  'stop_chain() { exit $2; }\n' + source + '\nscreen_b6_calibration "$1"\n')
+                for ms in (30.6, 36.5, 40.14, 48.01):
+                    (root / "instrument_evidence.json").write_text(json.dumps({"b_fiducial_s": ms / 1000}))
+                    ran = subprocess.run(["/bin/zsh", "-f", str(script), str(root)], capture_output=True, text=True)
+                    self.assertEqual(ran.returncode, 0, ran.stderr)
+                    self.assertNotIn("flag calibration.alignment_above_reference", ran.stdout)
 
     def test_missing_opening_bound_stops_via_existing_chain_caller(self):
         from joulewise.b6.capture_screen import SCREEN_SHELL

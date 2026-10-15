@@ -83,7 +83,7 @@ _INPUT_KEYS = {
     "identity_epoch_json", "t1_bindings_json", "t0_epoch_s", "programmed_span_s",
     "T_stream_max_s", "bytes_per_member", "thresholds", "g10", "registration",
 }
-_OPTIONAL_INPUT_KEYS = {"ledger_path"}
+_OPTIONAL_INPUT_KEYS = {"ledger_path", "capture_screen", "spare_retries"}
 # The 25-key window environment allowlist (the exact key set of the T-0
 # window.env contract, copied so this module stays off the retired arm path).
 WINDOW_ENV_KEYS = (
@@ -540,6 +540,13 @@ def _validate_inputs(inputs: Mapping[str, Any]) -> None:
     # their committed source once the measurement checkout is known.
     _number(inputs["bytes_per_member"], "bytes_per_member", integer=True)
     _require(type(inputs["g10"]) is bool, "g10 must be a boolean")
+    if "spare_retries" in inputs:
+        _require(type(inputs["spare_retries"]) is bool, "spare_retries must be a boolean")
+    if "capture_screen" in inputs:
+        screen = inputs["capture_screen"]
+        _require(isinstance(screen, Mapping) and set(screen) == {
+            "alignment_reference_s", "bracket_screen_s", "operative_bound_stop_s"},
+            "capture_screen must give the three block-six calibration values")
     thresholds = inputs["thresholds"]
     _require(isinstance(thresholds, Mapping) and set(thresholds) == set(night_gate.HAZARD_MODULES)
              and all(isinstance(thresholds[name], Mapping) for name in night_gate.HAZARD_MODULES),
@@ -792,9 +799,11 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
                   if stage.in_chain and stage.kind == "campaign_collection")
     # NEG-8 ruling 2026-10-07 (registration 0.12): the spare-slot retry can add
     # up to each reference stage's largest spare set; the disk budget carries
-    # that worst case (member_count stays the planned roster).
+    # that worst case (member_count stays the planned roster). Block six
+    # removes those retries, so it budgets only the planned members.
     spare_members = sum(max(stage.spare_sets) for stage in stages
-                        if stage.in_chain and stage.kind == "campaign_collection" and stage.spare_sets)
+                        if stage.in_chain and stage.kind == "campaign_collection" and stage.spare_sets
+                        and inputs.get("spare_retries", True))
     dispatches = resolve_stage_dispatches(tree, measurement)
     refusal = dispatch_refusal(dispatches)
     _require(refusal is None, f"stage dispatch: {refusal}")
@@ -873,6 +882,9 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         "identity_epoch_json": str(identity_path),
         "t1_bindings_json": str(t1_path),
     }
+    for key in ("capture_screen", "spare_retries"):
+        if key in inputs:
+            bindings[key] = inputs[key]
     chain_path = custody / CHAIN_BASENAME
     try:
         runbook_text = (measurement / b5_chain.RUNBOOK_RELATIVE).read_text(encoding="utf-8")

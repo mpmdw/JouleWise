@@ -1003,7 +1003,7 @@ horizon_skip() {
 
 
 def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[Stage],
-                 bindings: Mapping[str, str], measurement_root: Path, pack_root: Path,
+                 bindings: Mapping[str, Any], measurement_root: Path, pack_root: Path,
                  plan_id: str, runbook_text: str, settle_s: int | float = SETTLE_S,
                  horizon_s: int = CALIBRATION_HORIZON_S) -> bytes:
     """Return the chain bytes. Every value is a literal; nothing is written.
@@ -1201,7 +1201,7 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
             if stage is corpus_stage and corpus_manifest is not None:
                 lines += corpus_retry_lines(stage, argv, corpus_manifest, corpus_runs_dir, python,
                                             log_path, run, budgeted, collection_allowance(stage), remaining(stage))
-            if stage.spare_sets:
+            if stage.spare_sets and bindings.get("spare_retries", True):
                 lines += spare_retry_lines(stage, argv, root, python, log_path, run, budgeted, remaining(stage))
             lines.append(f"else horizon_skip {stage.stage_id}; fi")
         elif stage.kind == "bound_derivation":
