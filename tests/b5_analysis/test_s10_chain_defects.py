@@ -205,6 +205,41 @@ class QLineageConditionalSeamTests(unittest.TestCase):
                  {"provenance": {"launch_lineage": _window_lineage(1)}}], label="producer 'p' cells")
 
 
+class OrderManifestBesidePlanCopyTests(unittest.TestCase):
+    """C9: the claim gate's floor binder resolves each producer plan copy's order
+    manifest beside it (multi-producer branch); the indexed emitter wrote only the
+    plan copies, so every floor cell refused component_evidence_root_disagreement
+    (producer order manifest path_resolution_refused) and no contrast floor resolved."""
+
+    def test_emitter_writes_each_order_manifest_where_the_binder_resolves_it(self):
+        import json
+        from scripts import emit_floor_mint_pinset as emit
+        from joulewise.analysis_engine import inputs as ai
+        with tempfile.TemporaryDirectory(prefix="s10-order-") as tmp:
+            out = Path(tmp) / "mint"
+            out.mkdir()
+            plans = {p: json.dumps({"order_manifest": "order_manifest.json", "pack": p}).encode() for p in ("alpha", "beta")}
+            orders = {p: json.dumps({"executed_order": [{"run_id": p + "-r01"}]}).encode() for p in plans}
+            emit._write_block5_outputs(out, {"pins": "synthetic"}, {"inputs": "synthetic"}, plans, orders)
+            for pack in plans:
+                resolved = ai._lexical_child_path(out / pack, json.loads(plans[pack])["order_manifest"],
+                                                  label="producer order manifest", require_directory=False)
+                self.assertEqual(resolved.read_bytes(), orders[pack])
+
+    def test_order_manifests_must_cover_both_plans(self):
+        from scripts import emit_floor_mint_pinset as emit, mint_floor_artifact_generalized as mint
+        with tempfile.TemporaryDirectory(prefix="s10-order-") as tmp:
+            with self.assertRaises(mint.MintError):
+                emit._write_block5_outputs(Path(tmp), {}, {}, {"alpha": b"{}", "beta": b"{}"}, {"alpha": b"{}"})
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+
+    def test_indexed_emitter_hands_the_order_manifests_to_the_writer(self):
+        import inspect
+        from scripts import emit_floor_mint_pinset as emit
+        source = inspect.getsource(emit.emit_indexed_pinset)
+        self.assertIn("_write_block5_outputs(out_dir, value, manifest, plans, orders)", source)
+
+
 class PaperSourcesBlockFiveFloorTests(unittest.TestCase):
     """Joined run, step 6: the close-out's paper-source replay authenticated the block-5
     aggregate floor against the registered pinsets only, which name no block-5 floor, and

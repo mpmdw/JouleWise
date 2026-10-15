@@ -1027,16 +1027,28 @@ class IndexedCliTests(unittest.TestCase):
                 self.assertFalse(out.exists())
                 extract.assert_not_called()
 
-    def test_real_synthetic_extraction_documents_endpoint_limit(self):
-        # The mocked telemetry corpus can authenticate structure and context,
-        # but cannot serve as a production powermetrics reduction fixture.
-        with s2.capture_adapter():
-            report = cli.extract_indexed_pack(self.fixture.index, "beta", seal_pins=SealPins.load(),
-                pack_table=fx.PACK_TABLE, test_only_allow_synthetic_binding=True,
-                repo_root=self.fixture.local_repo, mode="read_replay")
+    def test_s10_production_shaped_extraction_admits_every_target_cell(self):
+        # Inverted at S10. The S0 mock-adapter corpus authenticated structure and
+        # context but could not be re-reduced (every cell refused, among others
+        # capture_pipeline_superseded). The S10 windows are collected through the
+        # production reduction path: on the sealed BETA pack every target cell is
+        # extractable through a real ready session and only the registered p42
+        # floor cells refuse. Runs only with JW_B5_S10_REAL_PROGRAMS=1.
+        from tests.b5_analysis.fixtures_s10 import ROOT as S10_ROOT, chain_fixture
+        chain = chain_fixture()
+        if "beta" not in chain.windows:
+            self.skipTest("window not built")
+        with chain.seams():
+            report = cli.extract_indexed_pack(chain.index, "beta", seal_pins=SealPins.load(),
+                repo_root=chain.repo_root, mode="read_replay")
+        pack_id = chain.windows["beta"].entry_data["pack_id"]
+        spec = json.loads((S10_ROOT / "configs/campaigns" / pack_id / "extraction_spec.json").read_bytes())
         self.assertFalse(report["all_cells_extractable"])
-        self.assertTrue(all(not c["extractable"] for c in report["cells"]))
-        self.assertIn("capture_pipeline_superseded", {reason for cell in report["cells"] for reason in cell["refusal_reasons"]})
+        self.assertEqual(classify_step4_exit(1, report, spec), "p42_floor_cells_only",
+                         {c["cell_id"]: c["refusal_reasons"] for c in report["cells"]})
+        self.assertTrue(any(c["extractable"] for c in report["cells"]))
+        self.assertNotIn("capture_pipeline_superseded",
+                         {reason for cell in report["cells"] for reason in cell["refusal_reasons"]})
 
 
 class CliRefusalTests(unittest.TestCase):

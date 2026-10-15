@@ -357,7 +357,8 @@ class DriverDouble(d.StepRunner):
                 if self.p42 or self.target_refusal:return 1
             elif step=='5' and '--out-dir' in argv:
                 directory=Path(option('--out-dir'))
-                for relative in ('floor-mint-pinset.json','floor-mint-inputs.json','alpha/calibration_plan.json','beta/calibration_plan.json'):
+                for relative in ('floor-mint-pinset.json','floor-mint-inputs.json','alpha/calibration_plan.json','beta/calibration_plan.json',
+                                 'alpha/order_manifest.json','beta/order_manifest.json'):
                     write(directory/relative,{'schema_version':'joulewise.floor_mint_inputs.block5.v1',**value})
             elif step=='5':
                 value.update(schema_version='joulewise.detection_floor_artifact.v2',cells=[{

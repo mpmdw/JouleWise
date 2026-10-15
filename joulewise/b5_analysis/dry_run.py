@@ -435,7 +435,7 @@ class RunState:
         # A file another program names by its path keeps its name: the finalized
         # manifest records its exclusions attachment by the name the finalizer
         # gave it, and the close-out and claim gate replay that path.
-        fixed=(role in ('pinset','final_pinset','mint_inputs','plan_alpha','plan_beta','finalized_manifest',
+        fixed=(role in ('pinset','final_pinset','mint_inputs','plan_alpha','plan_beta','order_alpha','order_beta','finalized_manifest',
                         'finalized_exclusions','rendered_fills','closeout','ratio_table')
                or role.startswith('role_census_')
                or role.startswith(('rereduced_','gamma_pack_')) or path.parent.name=='disclosures')
@@ -720,7 +720,9 @@ def step_5(s,r):
     from scripts import emit_floor_mint_pinset as emit, mint_floor_artifact_generalized as mint
     directory=s.path('mint/floor-mint-pinset.json').parent
     expected=[('pinset',directory/'floor-mint-pinset.json'),('mint_inputs',directory/'floor-mint-inputs.json'),
-              ('plan_alpha',directory/'alpha/calibration_plan.json'),('plan_beta',directory/'beta/calibration_plan.json')]
+              ('plan_alpha',directory/'alpha/calibration_plan.json'),('plan_beta',directory/'beta/calibration_plan.json'),
+              # Each plan copy names its order manifest beside it; the claim gate's floor binder reads it there.
+              ('order_alpha',directory/'alpha/order_manifest.json'),('order_beta',directory/'beta/order_manifest.json')]
     result,outputs,code,exit_status=s.invoke(r,emit.main,['--window-index',s.index_path,
         '--alpha-report',s.output('extraction_alpha'),'--beta-report',s.output('extraction_beta'),
         '--out-dir',directory,'--project-commit',s.commit],step='5',outputs=expected)

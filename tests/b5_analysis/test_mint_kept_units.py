@@ -916,13 +916,27 @@ class GovernedTests(unittest.TestCase):
         self.assertEqual(projection["applied_allowance_s"], "0.014531")
         self.assertEqual(bracket["calibration_drift_allowance_s"], 0.014531)
 
-    def test_governed_real_session_records_mock_dispatch_limit(self):
-        _fixture, entry = governed_case()
-        with registered({str(entry.window.claim_runs_root.resolve()): entry}), s2.capture_adapter(), \
-            self.assertRaisesRegex(core.MintError, "authenticated whole-window consumption refused: adapter_continuity_record_mismatch"):
-            core._authenticated_consumption_summaries(entry.window.claim_runs_root, core._producer_bundle_ids(entry),
-                entry.verdict_row["evaluation_basis"]["sha256"], target_bundle_ids=core._producer_bundle_ids(entry),
-                consumption_semantics_id=ww.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID, calibration_ledger_snapshot=entry.ledger_snapshot)
+    def test_s10_governed_window_serves_every_kept_member_through_a_real_session(self):
+        # Inverted at S10. On S0's mock-dispatch window the governed session
+        # refused adapter_continuity_record_mismatch. On the S10 governed BETA
+        # window, collected through production dispatch, the mint's consumption
+        # site returns a re-reduced summary for every kept member under the
+        # maximum-bracket semantics. Runs only with JW_B5_S10_REAL_PROGRAMS=1.
+        from tests.b5_analysis.fixtures_s10 import chain_fixture
+        chain = chain_fixture()
+        if set(("alpha", "beta", "gamma")) - set(chain.windows):
+            self.skipTest("window not built")
+        with chain.seams():
+            entry = mint.compose_indexed_producers(chain.index, include_consumer=True)["beta"]
+            self.assertTrue(entry.window.governed_e2)
+            ids = core._producer_bundle_ids(entry)
+            with registered({str(entry.window.claim_runs_root.resolve()): entry}):
+                summaries, semantics = core._authenticated_consumption_summaries(entry.window.claim_runs_root, ids,
+                    entry.verdict_row["evaluation_basis"]["sha256"], target_bundle_ids=ids,
+                    consumption_semantics_id=ww.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+                    calibration_ledger_snapshot=entry.ledger_snapshot)
+        self.assertEqual(set(summaries), ids)
+        self.assertEqual(semantics, ww.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID)
 
     def test_governed_spy_retains_real_context_and_units(self):
         _fixture, entry = governed_case()
@@ -1510,6 +1524,10 @@ def public_arithmetic_case():
         pack_path = directory / (entry.window.pack + "-pack")
         pack_path.mkdir()
         (pack_path / "calibration_plan.json").write_bytes(plan_raw)
+        # A sealed pack carries the order manifest its plan names (S10: the
+        # indexed emitter copies it beside the plan copy for the claim gate).
+        (pack_path / source.plan["order_manifest"]).write_bytes(
+            mint._artifact_payload(full_source.cells["decode"].absolute.order_manifest))
         pinned = {"sources/inputs/acceptance.json":mint._artifact_payload(source.calibration_acceptance),
                   "derived/bracket-binding.json":mint._artifact_payload(binding)}
         for relative, raw in pinned.items():
@@ -1788,7 +1806,11 @@ class IndexedEmitterContinuationTests(unittest.TestCase):
             self.assertEqual(authenticate.call_args.kwargs["input_manifest"], manifest)
             self.assertEqual([row["report"] for row in manifest["producer_plans"]], ["alpha-report.json", "beta-report.json"])
             self.assertEqual(sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file()),
-                ["alpha/calibration_plan.json", "beta/calibration_plan.json", "floor-mint-inputs.json", "floor-mint-pinset.json"])
+                ["alpha/calibration_plan.json", "alpha/order_manifest.json", "beta/calibration_plan.json",
+                 "beta/order_manifest.json", "floor-mint-inputs.json", "floor-mint-pinset.json"])
+            for pack, entry in by_pack.items():
+                self.assertEqual((root / pack / "order_manifest.json").read_bytes(),
+                                 (entry.pack_path / "order_manifest.json").read_bytes())
         self.assertFalse(mint.BLOCK5_PRODUCERS)
 
     def test_ca_emitter_changed_archive_inputs(self):
@@ -1810,20 +1832,42 @@ class IndexedEmitterContinuationTests(unittest.TestCase):
                 path.write_bytes(original)
         self.assertFalse(mint.BLOCK5_PRODUCERS)
 
-    def test_v3_composed_synthetic_packs_lack_bootstrap_contract(self):
-        for pack in ("beta", "alpha"):
-            fixture, entry = governed_case() if pack == "beta" else alpha_composed_case()
-            self.assertFalse((entry.pack_path / "producer_contract.json").exists())
-            with self.subTest(pack=pack), tempfile.TemporaryDirectory(prefix="s6-bootstrap-limit-") as tmp:
-                root=Path(tmp)
-                prefix=f"sources/repo/configs/campaigns/{entry.window.pack_id}/"
-                raw=entry.archive.source_bytes(prefix+"plan_tree.json")
-                (root/"plan_tree.json").write_bytes(raw)
-                (root/"plan_tree.sha256").write_text(hashlib.sha256(raw).hexdigest()+"  plan_tree.json\n")
-                with self.assertRaisesRegex(mint.MintError,"producer_contract.json cannot be read"):
-                    emit._bootstrap_producer(root,entry.window.claim_runs_root,fixture.directory/"absent-report.json",
-                        entry.window.archive_root/"derived/bracket-binding.json",{}, {},"0"*64,entry.ledger_snapshot,
-                        pack+"/calibration_plan.json","prefill_p2048",kept_units=entry.kept_units)
+    def test_s10_sealed_floor_packs_bootstrap_their_producer_contracts(self):
+        # Inverted at S10. S0's synthetic packs had no producer_contract.json and
+        # the bootstrap refused reading it. The S10 windows are built over the
+        # sealed floor packs, which carry the contract: the emitter's bootstrap
+        # reads it and returns both roles' pins over each window's kept units, as
+        # the indexed emitter calls it. It reuses the chain cache's extraction
+        # reports (ChainTests C4 with JW_B5_S10_CHAIN_CACHE). Runs only with
+        # JW_B5_S10_REAL_PROGRAMS=1.
+        from tests.b5_analysis.fixtures_s10 import chain_fixture
+        chain = chain_fixture()
+        if set(("alpha", "beta", "gamma")) - set(chain.windows):
+            self.skipTest("window not built")
+        reports = {pack: chain.root / "chain-custody" / (pack + "-extraction.json") for pack in ("alpha", "beta")}
+        if not all(path.is_file() for path in reports.values()):
+            self.skipTest("chain extraction reports not built (ChainTests C4 with JW_B5_S10_CHAIN_CACHE)")
+        with chain.seams():
+            entries = mint.compose_indexed_producers(chain.index, include_consumer=True)
+            mint.BLOCK5_PRODUCERS.update({str(entries[p].window.claim_runs_root.resolve()): entries[p] for p in ("alpha", "beta")})
+            try:
+                with V2AuthenticationReadSession():
+                    bindings = emit._consumer_bindings(entries["gamma"].pack_path)
+                    for pack in ("alpha", "beta"):
+                        entry = entries[pack]
+                        with self.subTest(pack=pack):
+                            self.assertTrue((entry.pack_path / "producer_contract.json").is_file())
+                            acceptance_raw = mint._read_block5_archive_input(entry, "sources/inputs/acceptance.json", "block5 acceptance")
+                            acceptance = mint._fresh_original_core().load_calibration_acceptance_bound(
+                                entry.window.archive_root / "sources/inputs/acceptance.json")
+                            contract, producer, row = emit._bootstrap_producer(entry.pack_path, entry.window.claim_runs_root,
+                                reports[pack], entry.window.archive_root / "derived/bracket-binding.json", bindings,
+                                acceptance, hashlib.sha256(acceptance_raw).hexdigest(), entry.ledger_snapshot,
+                                f"{pack}/calibration_plan.json", "prefill_p2048", kept_units=entry.kept_units)
+                            self.assertEqual([cell["role"] for cell in row["cells"]], ["decode", "prefill"])
+                            self.assertEqual(producer["plan"]["plan_id"], entry.producer_plan_id)
+            finally:
+                mint.BLOCK5_PRODUCERS.clear()
 
 
 class ComposedSessionSiteTests(unittest.TestCase):

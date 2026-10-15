@@ -452,13 +452,22 @@ def _consumer_bindings(consumer: Path) -> Mapping[str, Mapping]:
     return bindings
 
 
-def _write_block5_outputs(out_dir: Path, pinset: Mapping, manifest: Mapping, plans: Mapping[str, bytes]) -> str:
+def _write_block5_outputs(out_dir: Path, pinset: Mapping, manifest: Mapping, plans: Mapping[str, bytes],
+                          order_manifests: Mapping[str, bytes] | None = None) -> str:
+    """Write the pinset, the input manifest and each producer's sealed plan copy.
+
+    A plan copy names its order manifest by a path relative to itself; the claim
+    gate's floor binder resolves it there (analysis_engine.inputs, multi-producer
+    order-manifest check), so the sealed order manifest travels beside its plan.
+    """
     if out_dir.resolve().is_relative_to(REPO_ROOT / "scripts/floor_mint_pinsets"):
         raise mint.MintError("floor_pinset_not_beside_floor")
     outputs = {out_dir / "floor-mint-pinset.json": mint._artifact_payload(pinset),
                out_dir / "floor-mint-inputs.json": mint._artifact_payload(manifest),
-               **{out_dir / pack / "calibration_plan.json": raw for pack, raw in plans.items()}}
-    if set(plans) != {"alpha", "beta"} or any(path.exists() or path.is_symlink() for path in outputs):
+               **{out_dir / pack / "calibration_plan.json": raw for pack, raw in plans.items()},
+               **{out_dir / pack / "order_manifest.json": raw for pack, raw in (order_manifests or {}).items()}}
+    if (set(plans) != {"alpha", "beta"} or (order_manifests is not None and set(order_manifests) != set(plans))
+            or any(path.exists() or path.is_symlink() for path in outputs)):
         raise mint.MintError("emitter outputs must be distinct absent paths")
     written, created_directories = [], []
     try:
@@ -509,7 +518,7 @@ def emit_indexed_pinset(*, window_index: Path, alpha_report: Path, beta_report: 
         mint.BLOCK5_PRODUCERS.update({str(entry.window.claim_runs_root.resolve()): entry for entry in producers.values()})
         with V2AuthenticationReadSession():
             bindings = _consumer_bindings(entries["gamma"].pack_path)
-            triples, manifest_rows, snapshots, plans = [], [], {}, {}
+            triples, manifest_rows, snapshots, plans, orders = [], [], {}, {}, {}
             for pack, report in (("alpha", alpha_report), ("beta", beta_report)):
                 entry = producers[pack]
                 acceptance_path = entry.window.archive_root / "sources/inputs/acceptance.json"
@@ -536,6 +545,11 @@ def emit_indexed_pinset(*, window_index: Path, alpha_report: Path, beta_report: 
                 snapshots[entry.producer_plan_id] = entry.ledger_snapshot
                 plans[pack] = read_authentication_input(entry.pack_path / "calibration_plan.json",
                     grammar="json", label="sealed producer plan copy")
+                # compose_indexed_producers authenticated these sealed bytes against the archive.
+                if json.loads(plans[pack]).get("order_manifest") != "order_manifest.json":
+                    raise mint.MintError("producer order manifest must sit beside its plan")
+                orders[pack] = read_authentication_input(entry.pack_path / "order_manifest.json",
+                    grammar="json", label="sealed producer order manifest copy")
             manifest = {"schema_version": mint.BLOCK5_INPUT_SCHEMA, "producer_plans": manifest_rows}
             contracts, rows = map(list, zip(*triples, strict=True))
             provisional = _document(contracts, rows)
@@ -554,7 +568,7 @@ def emit_indexed_pinset(*, window_index: Path, alpha_report: Path, beta_report: 
                     pinset_path=out_dir / "floor-mint-pinset.json", project_commit=project_commit,
                     kept_units={entry.producer_plan_id: entry.kept_units for entry in producers.values()},
                     window_brackets={entry.producer_plan_id: entry.archive_context.window_bracket for entry in producers.values()})
-            return _write_block5_outputs(out_dir, value, manifest, plans)
+            return _write_block5_outputs(out_dir, value, manifest, plans, orders)
     finally:
         mint.BLOCK5_PRODUCERS.clear()
 
