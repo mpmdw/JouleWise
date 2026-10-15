@@ -6082,9 +6082,11 @@ def uses_block6_capture_screen(
             return False
         window_plan_path = custody / WINDOW_PLAN_BASENAME
     try:
-        window = json.loads(Path(window_plan_path).read_bytes())
+        window = json.loads(read_authentication_input(
+            window_plan_path, grammar="json", label="calibration capture window policy",
+        ))
         return block_six_plan(window)
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, V2AuthenticationInputError):
         return False
 
 

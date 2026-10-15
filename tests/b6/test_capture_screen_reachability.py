@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from unittest import mock
 
@@ -27,6 +28,23 @@ def window_binding(runs, custody, *, block6):
         'attempt': 1, 'bindings': {'capture_screen': {
             'alignment_reference_s': REFERENCE, 'bracket_screen_s': '0.014531',
             'operative_bound_stop_s': '0.092'}} if block6 else {}}})
+
+
+class PolicyReadTests(unittest.TestCase):
+    def test_window_policy_joins_the_existing_authentication_read_session(self):
+        from joulewise.authentication_io import V2AuthenticationReadSession
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs, custody = root / 'runs', root / 'custody'
+            window_binding(runs, custody, block6=True)
+            policy = custody / 'night_plan.json'
+            expected = hashlib.sha256(policy.read_bytes()).hexdigest()
+            with V2AuthenticationReadSession() as session:
+                self.assertTrue(ledger.uses_block6_capture_screen(runs))
+                self.assertTrue(ledger.uses_block6_capture_screen(runs, window_plan_path=policy))
+                record = session.records[str(policy.resolve())]
+                self.assertEqual((record.grammar, record.sha256, record.read_count), ('json', expected, 2))
 
 
 class CaptureDispositionTests(unittest.TestCase):
