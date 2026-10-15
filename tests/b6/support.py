@@ -64,7 +64,7 @@ def synthetic_checkout(root):
     registration.mkdir(parents=True)
     pack = PACKS['alpha']
     pack_root = measurement / 'configs/campaigns' / pack
-    pack_root.mkdir()
+    pack_root.mkdir(parents=True)
     t = tree('alpha')
     (pack_root / 'plan_tree.json').write_text(json.dumps(t))
     model = measurement / 'model.safetensors'

@@ -9,6 +9,13 @@ from pathlib import Path
 from typing import Any, Mapping
 
 SCHEMA = "joulewise.b6_acceptance_registration.v1"
+# Stage-1 integration: the one block-6 registration directory of a measurement
+# checkout, read by the pre-session check, the smoke desk and the session
+# harvest alike: acceptance.json (this module's schema), identity_pins.json,
+# and for the pre-session check sizing_b5.json and an optional
+# precheck_thresholds.json. The registration seat writes it; for a replication
+# the pins and sizing are copies of configs/campaigns/v5_claim_25g83's.
+DEFAULT_DIR_RELATIVE = "configs/b6/registration"
 NUMBER_BEARING_PATHS = (
     "joulewise/adapters/mlx_runtime.py", "joulewise/adapters/powermetrics.py",
     "joulewise/reduce.py", "joulewise/powermetrics_fiducial.py",

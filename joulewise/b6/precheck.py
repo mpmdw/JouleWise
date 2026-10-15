@@ -25,7 +25,10 @@ from joulewise.hazards import arm, battery, clock, contention, disk, instrument,
 from joulewise.hazards.base import Context, PASS, canonical_json, write_create_once
 from scripts import fixture_orphan_census
 
-REGISTRATION_RELATIVE = "configs/campaigns/v5_claim_25g83"
+# Stage-1 integration: the block-6 registration directory (acceptance.json,
+# identity_pins.json, sizing_b5.json), the same one the smoke desk and the
+# session harvest read; see joulewise.b6.registration.DEFAULT_DIR_RELATIVE.
+REGISTRATION_RELATIVE = "configs/b6/registration"
 PENDING = ("closing_capture", "sleep", "clock_steps_in_runs", "actual_losses")
 HID_ARGV = ("/usr/sbin/ioreg", "-c", "IOHIDSystem", "-d", "4", "-r", "-k", "HIDIdleTime")
 ASSERTIONS_ARGV = ("/usr/bin/pmset", "-g", "assertions")
@@ -482,11 +485,25 @@ def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None
         if evidence.captures[0].bound_ms is None:
             flags.append({"code": "precheck.no_valid_capture", "source": "ledger", "observed": 0})
         acceptance = acceptance or load_acceptance()
-        prepared = acceptance.prepare(ledger_path=ledger, plan_tree=tree, registration_dir=registration, code_identity=fp)
-        result["acceptance"], result["margin"], exclusion, acceptance_flags = acceptance_checks(
-            acceptance, prepared, evidence, margin_loss_runs=limits["margin_loss_runs"])
-        flags.extend(acceptance_flags)
-        result["certain_exclusion"] = result["certain_exclusion"] or exclusion
+        # Stage-1 integration: the harvest lane's acceptance reads the block-6
+        # acceptance registration (<registration_dir>/acceptance.json and
+        # identity_pins.json) and compares the executed commit with the
+        # registered one. A registration it cannot read is a record condition,
+        # not physics: the precheck records it and goes on, as with the stub.
+        code_identity = {**fp, "repo_root": str(measurement), "executed_head": fp.get("code_commit")}
+        try:
+            prepared = acceptance.prepare(ledger_path=ledger, plan_tree=tree, registration_dir=registration,
+                                          code_identity=code_identity)
+        except Exception as exc:  # noqa: BLE001 - recorded; the precheck never stops on a record
+            result["acceptance"] = {"status": "unavailable",
+                                    "reason": f"acceptance registration unreadable: {type(exc).__name__}"}
+            flags.append({"code": "precheck.acceptance_unavailable", "source": "acceptance",
+                          "observed": {"error": type(exc).__name__, "registration_dir": str(registration)}})
+        else:
+            result["acceptance"], result["margin"], exclusion, acceptance_flags = acceptance_checks(
+                acceptance, prepared, evidence, margin_loss_runs=limits["margin_loss_runs"])
+            flags.extend(acceptance_flags)
+            result["certain_exclusion"] = result["certain_exclusion"] or exclusion
     judged(battery, battery.measure(ctx, smc_read=seams.smc_read), limits["battery"], "battery.float")
     judged(thermal, thermal.measure(ctx), limits["thermal"], "thermal.pressure")
     first = arm.agent_census(ctx)

@@ -27,7 +27,9 @@ from joulewise.hazards.base import canonical_json, write_create_once
 
 REDUCTION_SCHEMA = "joulewise.b6_smoke_reduction.v1"
 KEEP_PATH = Path(__file__).resolve().parents[2] / "configs/b6/smoke_keep.json"
-CATALOG_PATH = Path(__file__).resolve().parents[2] / "configs/campaigns/v5_claim_25g83/flag_catalog.json"
+# Block 6 classifies its own codes (the driver's agent.*, sleep.*, idle.*) in its
+# own catalog; the sealed block-5 catalog does not list them (stage-1 integration).
+CATALOG_PATH = Path(__file__).resolve().parents[2] / "configs/b6/flag_catalog_b6.json"
 HARVEST_ARGV = ("scripts/harvest_b5_window.py",)
 PHYSICAL_PREFIXES = ("battery.", "thermal.", "clock.", "contention.", "disk.", "instrument.",
                      "sleep.", "member.idle_")
@@ -236,7 +238,7 @@ class SmokePrepared:
 
 def prepare(pack_id, code_commit, claim_measurement_root, smoke_root, *, plan_inputs=None,
             fp=None, state_root=None, now=None, run=subprocess.run, plan_writer=plan.write_window_plan,
-            wrapper_writer=write_wrapper):
+            wrapper_writer=write_wrapper, registration_dir=None):
     """Plan inputs carry the session's registered sizing, thresholds and identities.
 
     They may be supplied by the loop or read from the checkout's
@@ -284,7 +286,10 @@ def prepare(pack_id, code_commit, claim_measurement_root, smoke_root, *, plan_in
                   ledger_path=str(measurement / plan.DEFAULT_LEDGER_RELATIVE))
     Path(inputs["runs_parent"]).mkdir()
     record = plan_writer(inputs)
-    registration = measurement / "configs/campaigns/v5_claim_25g83"
+    # The block-6 registration directory of the smoke's own clone (stage-1
+    # integration), unless the caller names one (a non-claim machine test).
+    from joulewise.b6.registration import DEFAULT_DIR_RELATIVE
+    registration = Path(registration_dir).resolve() if registration_dir else measurement / DEFAULT_DIR_RELATIVE
     prepared = SmokePrepared(smoke_dir, measurement, Path(record["plan"]["path"]), Path(inputs["custody_root"]),
                              Path(state_root or Path(smoke_root).parent).resolve(), pack_id,
                              inputs["bracket_session_id"], fp, keep, registration)
@@ -309,6 +314,13 @@ def _harvest_hooks():
         return None, _is_physical
     module = importlib.import_module("joulewise.b6.acceptance")
     return getattr(module, "evidence_from_archive", None), getattr(module, "is_physical", _is_physical)
+
+
+def _session_desk():
+    """The harvest lane's archive acceptance (joulewise.b6.session.accept_archive), if present."""
+    if importlib.util.find_spec("joulewise.b6.session") is None:
+        return None
+    return importlib.import_module("joulewise.b6.session").accept_archive
 
 
 def _is_physical(code):
@@ -395,17 +407,32 @@ def desk(prepared, *, driver_exit=None, run=subprocess.run, acceptance=None,
         except OSError as exc:
             errors.append(f"harvest: {exc}")
     loader, physical = _harvest_hooks()
-    loader = evidence_loader or loader
     physical = is_physical or physical
-    acceptance = acceptance or load_acceptance()
+    session_desk = _session_desk() if acceptance is None and evidence_loader is None else None
     try:
-        evidence = loader(archive) if loader and harvest_exit == 0 else SessionEvidence(
-            prepared.pack_id, (), (), {}, False, ())
-        prepared_a = acceptance.prepare(ledger_path=prepared.measurement / plan.DEFAULT_LEDGER_RELATIVE,
-                                        plan_tree=json.loads((prepared.measurement / "configs/campaigns" /
-                                                              prepared.pack_id / "plan_tree.json").read_text()),
-                                        registration_dir=prepared.registration_dir, code_identity=prepared.fingerprint)
-        a_result = acceptance.evaluate(prepared_a, evidence)
+        if session_desk is not None and harvest_exit == 0:
+            # Stage-1 integration: the smoke runs the session's own acceptance
+            # path (design 13), the harvest lane's accept_archive, in smoke
+            # mode: flags folded through the block-6 catalog, the survivor
+            # screen, and the count-only exclusions a four-run smoke must show
+            # reported as expected rather than excluding.
+            a_result, _ = session_desk(archive, json.loads(Path(prepared.plan_path).read_text()),
+                                       prepared.registration_dir,
+                                       ledger_path=prepared.measurement / plan.DEFAULT_LEDGER_RELATIVE,
+                                       plan_path=Path(prepared.plan_path), smoke=True)
+        else:
+            loader = evidence_loader or loader
+            acceptance = acceptance or load_acceptance()
+            if loader and harvest_exit == 0:
+                evidence = loader(archive) if evidence_loader else loader(
+                    archive, Path(prepared.plan_path), prepared.registration_dir)
+            else:
+                evidence = SessionEvidence(prepared.pack_id, (), (), {}, False, ())
+            prepared_a = acceptance.prepare(ledger_path=prepared.measurement / plan.DEFAULT_LEDGER_RELATIVE,
+                                            plan_tree=json.loads((prepared.measurement / "configs/campaigns" /
+                                                                  prepared.pack_id / "plan_tree.json").read_text()),
+                                            registration_dir=prepared.registration_dir, code_identity=prepared.fingerprint)
+            a_result = acceptance.evaluate(prepared_a, evidence)
     except Exception as exc:
         errors.append(f"acceptance: {type(exc).__name__}: {exc}")
         a_result = AcceptanceResult("UNAVAILABLE", ("acceptance failed",), (), True)

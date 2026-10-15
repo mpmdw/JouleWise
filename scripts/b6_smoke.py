@@ -18,6 +18,8 @@ def main(argv=None):
     prepare.add_argument("--code-commit", required=True)
     for name in ("claim-measurement-root", "smoke-root", "state-root", "plan-inputs", "precheck"):
         prepare.add_argument("--" + name, type=Path, required=True)
+    prepare.add_argument("--registration-dir", type=Path, default=None,
+                         help="block-6 registration directory (default: the clone's configs/b6/registration)")
     desk = commands.add_parser("desk")
     desk.add_argument("--state", type=Path, required=True)
     desk.add_argument("--driver-exit", type=int, required=True)
@@ -26,7 +28,8 @@ def main(argv=None):
         if args.command == "prepare":
             prepared = smoke.prepare(args.pack, args.code_commit, args.claim_measurement_root, args.smoke_root,
                                      state_root=args.state_root, plan_inputs=json.loads(args.plan_inputs.read_text()),
-                                     fp=json.loads(args.precheck.read_text())["fingerprint"])
+                                     fp=json.loads(args.precheck.read_text())["fingerprint"],
+                                     registration_dir=args.registration_dir)
             print(prepared.smoke_dir / "smoke-state.json")
             return 0
         prepared = smoke.SmokePrepared.from_json(json.loads(args.state.read_text()))
