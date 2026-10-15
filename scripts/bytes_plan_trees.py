@@ -49,7 +49,7 @@ def registration(number, pass_number):
     value.update(pack_id=pack_id, title=f"BYTES sub-pack s{number}, pass {pass_number}",
                  question="Does decode energy follow format-derived bytes per token, resident size, or decode time?",
                  status="draft", kind="new", session_shape="fixed", plan_tree_ref=(path / "plan_tree.json").as_posix(),
-                 target_sessions=1, minimum_sessions=1 if pass_number == 1 else 0, estimators=[], flag_catalog="configs/b6/flag_catalog_b6.json",
+                 target_sessions=1, minimum_sessions=1, estimators=[], flag_catalog="configs/b6/flag_catalog_b6.json",
                  stopping={"count": 1, "end_t0_before": "2026-11-02T00:00:00-08:00", "precision": None},
                  blinding_group="bytes", interleave="none", reference_cadence="session_half")
     value["modules"] = [{"module_id": "bytes-" + model_id, "kind": "floor", "phase": "decode",
@@ -64,7 +64,7 @@ def registration(number, pass_number):
     value["draft_notes"] = [
         "Ruling: docs/design/bytes_pack_design.md R1-R6 and Addendum 5 at 6b2007220; not registered or armable.",
         "One blinding_group=bytes is preserved as top-level data; stage-1 validator permits it but current blinding code does not consume it. C6/C7 remain R8 item 7.",
-        "Stage 1 reads this pass's plan_tree_ref directly. Pass 1 has target/minimum 1/1, pass 2 has 1/0. loop.json base_order places all pass-1 packs before pass-2 packs, with reversed sub-pack order in pass 2.",
+        "Stage 1 reads this pass's plan_tree_ref directly. Both passes have target/minimum 1/1 (minimum_sessions is read only by precision stopping, which BYTES does not use; that pass 2 is optional is a rule of the analysis, Addendum 6). loop.json base_order places all pass-1 packs before pass-2 packs, with reversed sub-pack order in pass 2.",
         "Addendum 5: 512 decode forward passes, one of which yields no returned token. The pinned stream_generate(max_tokens=512) includes look-ahead inside the measured request: e=E_dec/512, tau=T_dec/512, BW=b/tau; KV averages snapshots at 2048 and 2560 positions.",
         "R8 C4/C5 identity pins, runtime budget, contention, clock and disk gates await Mac desk checks; 8B-8bit revision is pending R8 item 5.",
         "R8 analysis, independent twin, estimator registration, cold gate and smoke fingerprints remain before first t0.",
@@ -75,9 +75,6 @@ def registration(number, pass_number):
         "Fixed packs bypass the 265-minute science cap. Sub-pack s4 is planned at 254 minutes, leaving 11 minutes on planning numbers only.",
         "Planning minutes use pilot maximum request seconds plus inherited idle/settle, 50 runs and 20% margin; 8B-8bit uses R1's 150 minutes. These are not measured session footprints.",
     ]
-    if pass_number == 2:
-        value["draft_notes"].append(
-            "Existing-code disagreement: pack_registration.validate requires minimum_sessions>=1 for new packs and reports minimum_sessions for this ruled optional pass (0). That validator must support Addendum 5 before pass-2 registration; this config lane changes no joulewise/b6 code.")
     return value
 
 
@@ -165,12 +162,7 @@ def build_files(repo_root=ROOT):
         for pass_number in (1, 2):
             value = registration(number, pass_number)
             errors = validate(Registration(value), catalog, root=repo_root)
-            # Addendum 5 mandates minimum=0 for optional pass 2. The existing
-            # validator requires >=1 for all new packs; b6 changes are outside
-            # this config lane. Preserve the ruled draft value and expose the
-            # exact compatibility gap, while refusing every other error.
-            allowed = ["minimum_sessions"] if pass_number == 2 else []
-            if any(error not in allowed for error in errors):
+            if errors:
                 raise ValueError(f"{value['pack_id']}: {errors}")
             path = Path("configs/b6/packs") / value["pack_id"] / "registration.json"
             files[path] = configs.raw_json(value)

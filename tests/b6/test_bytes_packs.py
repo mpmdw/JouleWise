@@ -93,10 +93,9 @@ class BytesPackTests(unittest.TestCase):
             for pass_number in (1, 2):
                 with self.subTest(subpack=n, pass_number=pass_number):
                     reg = load(ROOT / f'configs/b6/packs/bytes-s{n}-p{pass_number}/registration.json')
-                    self.assertEqual(validate(reg, self.catalog, root=ROOT),
-                                     [] if pass_number == 1 else ['minimum_sessions'])
+                    self.assertEqual(validate(reg, self.catalog, root=ROOT), [])
                     self.assertEqual((reg.status, reg.kind, reg.session_shape), ('draft', 'new', 'fixed'))
-                    self.assertEqual((reg.target_sessions, reg.minimum_sessions), (1, 1 if pass_number == 1 else 0))
+                    self.assertEqual((reg.target_sessions, reg.minimum_sessions), (1, 1))
                     self.assertEqual(reg.corpus, {'planned': 18, 'stop_after_valid': 12})
                     self.assertEqual(reg.stopping, {'count': 1, 'end_t0_before': '2026-11-02T00:00:00-08:00', 'precision': None})
                     self.assertEqual(reg.blinding_group, 'bytes')
