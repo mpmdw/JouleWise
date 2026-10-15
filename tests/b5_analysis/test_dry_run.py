@@ -1098,6 +1098,8 @@ class CustodyDocumentSchemaTests(unittest.TestCase):
                     if input_role is c.InputRole.FLOOR_ACCEPTANCE:continue
                     s.write(input_role.value,'inputs/'+input_role.value+'.json',{'schema_version':'synthetic'})
                     inputs[input_role.value]=s.output(input_role.value)
+                if pack=='gamma':
+                    s.write('pinset','mint/floor-mint-pinset.json',{'schema_version':'synthetic pinset'})
                 d._custody_documents(s,pack=pack,family=spec.family,role=role,inputs=inputs,census_name=census_name)
                 with c.V2AuthenticationReadSession() as session,mock.patch.object(c,'_git_blob',return_value=supply_map):
                     supply=c._load_supply_entry(session,repo,s.commit,role,spec,runs_root=s.restricted)
@@ -1110,6 +1112,10 @@ class CustodyDocumentSchemaTests(unittest.TestCase):
                     family=spec.family,sources=consumed)
                 self.assertEqual(receipt['status'],'PASS')
                 if pack=='gamma':
+                    # S10 joined run: the gate's replay reads the floor's sibling pinset,
+                    # so the claim-evidence census binds it (runs_root, generated).
+                    self.assertIn(('runs_root','mint/floor-mint-pinset.json',s.outputs['pinset']['sha256']),
+                        {(b.base,b.path.as_posix(),b.expected_sha256) for b in supply.source_census})
                     c._validate_floor_acceptance(SimpleNamespace(source_census=supply.source_census,repository=d.ROOT,head=head,
                         raws={c.InputRole.FLOOR_ACCEPTANCE:s.output('floor_acceptance').read_bytes(),
                               c.InputRole.FLOOR_ARTIFACT:inputs['floor_artifact'].read_bytes()}))
@@ -1137,6 +1143,8 @@ class DriverProductionCensusTests(unittest.TestCase):
             s.evidence_roots=lambda:{pack+'-evidence':s.windows[pack].claim_runs_root for pack in ('alpha','beta')}
             for role in ('finalized_manifest','floor_artifact','claim_verdicts'):
                 s.write(role,'inputs/'+role+'.json',{'schema_version':'synthetic'})
+            # Step 5's pinset beside the floor, which the claim-evidence census binds.
+            s.write('pinset','mint/floor-mint-pinset.json',{'schema_version':'synthetic pinset'})
             binding={'exclusions_sha256':'e'*64,'harvest_pin':'a'*40}
             projections={}
             for pack in ('alpha','beta'):
@@ -1184,7 +1192,10 @@ class DriverProductionCensusTests(unittest.TestCase):
             self.assertEqual(len(contexts),1)
             census=s.read('role_census_gamma')
             self.assertTrue(all(row['base']=='runs_root' for row in census['inputs']))
-            self.assertEqual([row['path'] for row in census['source_census']],[c._B5_WINDOW_INDEX_PATH])
+            # The window index from the repository, and (S10) the floor's sibling
+            # pinset from custody, which the gate's verdict replay reads.
+            self.assertEqual([(row['base'],row['path']) for row in census['source_census']],
+                             [('repository',c._B5_WINDOW_INDEX_PATH),('runs_root','mint/floor-mint-pinset.json')])
             for role in ('claim_request','floor_acceptance','receipt_gamma','inventory_gamma','role_census_gamma'):
                 self.assertTrue(s.output(role).is_file())
 

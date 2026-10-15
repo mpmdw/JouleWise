@@ -815,6 +815,11 @@ def _custody_documents(s, *, pack, family, role, inputs, census_name):
     # Validator source digests are bound by the receipt's registered helper;
     # its callable census is not a filesystem inventory.
 
+    if family=='claim_evidence':
+        # The claim gate's replay authenticates the embedded block-5 floor against
+        # the pinset beside the floor; the gate may read only census-bound files.
+        source_rows.append({'base':'runs_root','path':s.output('pinset').relative_to(s.restricted).as_posix(),
+                            'authority':'generated','expected_sha256':s.outputs['pinset']['sha256']})
     source_rows=sorted({(row['base'],row['path']):row for row in source_rows}.values(),key=lambda row:(row['base'],row['path']))
     bindings=[]
     for input_role,path in sorted(inputs.items()):

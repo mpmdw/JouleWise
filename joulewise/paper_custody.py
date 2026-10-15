@@ -575,10 +575,13 @@ def _d165_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
 
     manifest = next(binding for binding in ctx.sources if binding.role is InputRole.FINALIZED_MANIFEST)
     closeout = _json_object(ctx.raws[InputRole.D165_CLOSEOUT])
+    manifest_path = _binding_root(manifest, ctx.repository, ctx.runs_root) / manifest.path
     codes = validate_d165_paper_sources(
         closeout=closeout, finalized_manifest_bytes=ctx.raws[InputRole.FINALIZED_MANIFEST],
-        finalized_manifest_path=_binding_root(manifest, ctx.repository, ctx.runs_root) / manifest.path,
-        custody_root=ctx.runs_root, floor_artifact_bytes=ctx.raws[InputRole.FLOOR_ARTIFACT],
+        finalized_manifest_path=manifest_path,
+        # The finalizer writes a manifest into its own custody root (its output
+        # directory), whose attachments it names relative to that root.
+        custody_root=manifest_path.parent, floor_artifact_bytes=ctx.raws[InputRole.FLOOR_ARTIFACT],
         replay_sidecar_bytes=ctx.raws[InputRole.REPLAY_SIDECAR],
         **({"window_index": _tracked_window_index(ctx)}
            if _BLOCK5_ROLES & set(_json_object(ctx.raws[InputRole.FINALIZED_MANIFEST]).get("evidence", {})) else {}),
@@ -648,7 +651,7 @@ def _replay_claim_verdicts(ctx, request) -> bytes:
     def replay():
         from joulewise.analysis_engine import analyze_claims
         from joulewise.analysis_engine.artifact import render_claim_verdicts
-        from joulewise.analysis_engine.inputs import block5_claim_gate_inputs, authenticate_floor_artifact_bytes
+        from joulewise.analysis_engine.inputs import block5_claim_gate_inputs, load_floor_artifact
         from joulewise.b5_analysis.windows import SealPins, load_window_index, select_analysed_attempts
         from joulewise.b5_analysis.archive import open_attempt_record
         from joulewise.cli import validate_bundle
@@ -666,15 +669,20 @@ def _replay_claim_verdicts(ctx, request) -> bytes:
         index = load_window_index(index_path, seal_pins=pins)
         records = tuple(open_attempt_record(entry, seal_pins=pins) for entry in index.entries)
         windows = select_analysed_attempts(index, records, seal_pins=pins)
-        declared = authenticate_floor_artifact_bytes(ctx.raws[InputRole.FLOOR_ARTIFACT]).root_ids
-        if set(request["evidence_roots"]) != declared:
-            raise _ClaimReplayRefused()
-        roots = {rid: windows[pack].claim_runs_root for rid, pack in request["evidence_roots"].items()}
         manifest_binding = next(b for b in ctx.sources if b.role is InputRole.FINALIZED_MANIFEST)
         floor_binding = next(b for b in ctx.sources if b.role is InputRole.FLOOR_ARTIFACT)
         if manifest_binding.base != "runs_root" or floor_binding.base != "runs_root":
             raise _ClaimReplayRefused()
         manifest_path, floor_path = ctx.runs_root / manifest_binding.path, ctx.runs_root / floor_binding.path
+        # A block-5 floor authenticates against the pinset beside it (the claim
+        # gate's own load); the bytes must be the bound floor's.
+        authenticated = load_floor_artifact(floor_path, require_sibling_pinset=True)
+        if authenticated.file_sha256 != _sha256(ctx.raws[InputRole.FLOOR_ARTIFACT]):
+            raise _ClaimReplayRefused()
+        declared = authenticated.root_ids
+        if set(request["evidence_roots"]) != declared:
+            raise _ClaimReplayRefused()
+        roots = {rid: windows[pack].claim_runs_root for rid, pack in request["evidence_roots"].items()}
         built = block5_claim_gate_inputs(index_path, manifest_path, windows["gamma"].claim_runs_root, roots)
         artifact = analyze_claims(manifest_path, windows["gamma"].claim_runs_root, floor_path,
             strict_validator=validate_bundle, evidence_roots=roots, output_path=None,
@@ -700,12 +708,27 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     artifact = _json_object(ctx.raws[InputRole.CLAIM_VERDICTS])
     floor = _json_object(ctx.raws[InputRole.FLOOR_ARTIFACT])
     sidecar = ctx.raws[InputRole.CLAIM_SIDE_BOUND]
-    codes = list(validate_finalized_analysis_manifest_v3(
-        manifest, manifest_path=_binding_root(manifest_binding, ctx.repository, ctx.runs_root) / manifest_binding.path,
-        custody_root=ctx.runs_root,
+    manifest_path = _binding_root(manifest_binding, ctx.repository, ctx.runs_root) / manifest_binding.path
+    # The finalizer writes a manifest into its own custody root (its output
+    # directory), whose attachments it names relative to that root. Its refusals
+    # are records; the replay reports their reason codes.
+    codes = [getattr(refusal, "reason_code", refusal) for refusal in validate_finalized_analysis_manifest_v3(
+        manifest, manifest_path=manifest_path,
+        custody_root=manifest_path.parent,
         **({"window_index": ctx.repository / _B5_WINDOW_INDEX_PATH}
-           if InputRole.CLAIM_REPLAY_REQUEST in ctx.raws else {})))
-    codes.extend(validate_claim_verdicts(artifact, frozen_manifest=manifest))
+           if InputRole.CLAIM_REPLAY_REQUEST in ctx.raws else {}))]
+    verdict_kwargs = {}
+    if InputRole.CLAIM_REPLAY_REQUEST in ctx.raws:
+        # Block 5: the embedded floor authenticates against the pinset beside the
+        # floor, as the engine validated it when it wrote the verdicts.
+        from joulewise.analysis_engine.inputs import AnalysisInputError, sibling_floor_pinset
+        floor_binding = next(binding for binding in ctx.sources if binding.role is InputRole.FLOOR_ARTIFACT)
+        try:
+            verdict_kwargs["floor_pinset_path"] = sibling_floor_pinset(
+                _binding_root(floor_binding, ctx.repository, ctx.runs_root) / floor_binding.path)
+        except AnalysisInputError as exc:
+            codes.append(str(exc).split(":", 1)[0])
+    codes.extend(validate_claim_verdicts(artifact, frozen_manifest=manifest, **verdict_kwargs))
     codes.extend(validate_claim_side_bound(sidecar, claim_verdicts_raw=ctx.raws[InputRole.CLAIM_VERDICTS],
                                            finalized_manifest=manifest, floor_artifact=floor))
     embedded = artifact.get("inputs", {}).get("floor_artifact", {}).get("embedded_bytes_base64")

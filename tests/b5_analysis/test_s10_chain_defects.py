@@ -240,6 +240,129 @@ class OrderManifestBesidePlanCopyTests(unittest.TestCase):
         self.assertIn("_write_block5_outputs(out_dir, value, manifest, plans, orders)", source)
 
 
+class ClaimCustodyManifestRootTests(unittest.TestCase):
+    """Joined run, step 9b: the claim-evidence custody gate validated the finalized
+    manifest with the custody's runs root as its custody root, while the driver
+    finalizes into its own subdirectory (restricted/finalized), so every attachment
+    path missed; the refusals were records, not codes, and surfaced as
+    paper_custody_not_issuable."""
+
+    def gate(self, refusals):
+        import json
+        from joulewise import paper_custody as c
+        from joulewise import analysis_manifest_v3 as v3
+        from joulewise.authentication_io import V2AuthenticationReadSession
+        seen = {}
+        with tempfile.TemporaryDirectory(prefix="s10-claim-custody-") as tmp:
+            runs = Path(tmp) / "restricted"
+            (runs / "finalized").mkdir(parents=True)
+            binding = c._BoundFile("runs_root", Path("finalized/am-x.finalized.json"), "0" * 64,
+                                   c.InputRole.FINALIZED_MANIFEST, "generated")
+            raws = {c.InputRole.FINALIZED_MANIFEST: b"{}", c.InputRole.CLAIM_VERDICTS: json.dumps({"inputs": {}}).encode(),
+                    c.InputRole.FLOOR_ARTIFACT: b"{}", c.InputRole.CLAIM_SIDE_BOUND: b"{}"}
+            ctx = c._GateContext("claim_evidence", "production.claim_evidence.gamma.v5", "production", "claim-evidence.v1",
+                                 ("ctr",), Path(tmp) / "repository", runs, "a" * 40, (binding,), (), raws,
+                                 V2AuthenticationReadSession())
+
+            def validate(manifest, **kwargs):
+                seen.update(kwargs)
+                return refusals
+
+            from joulewise.analysis_engine import artifact, claim_side_bound
+            with mock.patch.object(v3, "validate_finalized_analysis_manifest_v3", validate), \
+                 mock.patch.object(artifact, "validate_claim_verdicts", return_value=()), \
+                 mock.patch.object(claim_side_bound, "validate_claim_side_bound", return_value=()):
+                replay = c._claim_issuance_gate(ctx)
+            return replay, seen, runs
+
+    def test_manifest_is_validated_in_its_own_custody_root(self):
+        replay, seen, runs = self.gate(())
+        self.assertEqual(seen["custody_root"], runs / "finalized")
+        self.assertEqual(seen["manifest_path"], runs / "finalized" / "am-x.finalized.json")
+
+    def test_block5_verdict_replay_authenticates_the_floor_with_its_sibling_pinset(self):
+        # Joined run, step 9b, next refusal: validate_claim_verdicts authenticated the
+        # embedded block-5 floor against the registered pinsets only.
+        import json
+        from joulewise import paper_custody as c
+        from joulewise import analysis_manifest_v3 as v3
+        from joulewise.analysis_engine import artifact, claim_side_bound, inputs
+        from joulewise.authentication_io import V2AuthenticationReadSession
+        seen = {}
+        with tempfile.TemporaryDirectory(prefix="s10-claim-pinset-") as tmp:
+            runs = Path(tmp) / "restricted"
+            (runs / "mint").mkdir(parents=True)
+            manifest = c._BoundFile("runs_root", Path("finalized/am-x.finalized.json"), "0" * 64,
+                                    c.InputRole.FINALIZED_MANIFEST, "generated")
+            floor = c._BoundFile("runs_root", Path("mint/d-aggregate-floor.json"), "0" * 64,
+                                 c.InputRole.FLOOR_ARTIFACT, "generated")
+            raws = {c.InputRole.FINALIZED_MANIFEST: b"{}", c.InputRole.CLAIM_VERDICTS: json.dumps({"inputs": {}}).encode(),
+                    c.InputRole.FLOOR_ARTIFACT: b"{}", c.InputRole.CLAIM_SIDE_BOUND: b"{}",
+                    c.InputRole.CLAIM_REPLAY_REQUEST: b"{}"}
+            ctx = c._GateContext("claim_evidence", "production.claim_evidence.gamma.v5", "production", "claim-evidence.v1",
+                                 ("ctr",), Path(tmp) / "repository", runs, "a" * 40, (manifest, floor), (), raws,
+                                 V2AuthenticationReadSession())
+            sibling = runs / "mint" / "floor-mint-pinset.json"
+
+            def verdicts(value, **kwargs):
+                seen.update(kwargs)
+                return []
+
+            with mock.patch.object(v3, "validate_finalized_analysis_manifest_v3", return_value=()), \
+                 mock.patch.object(inputs, "sibling_floor_pinset", side_effect=lambda path: (seen.setdefault("floor", path), sibling)[1]), \
+                 mock.patch.object(artifact, "validate_claim_verdicts", verdicts), \
+                 mock.patch.object(claim_side_bound, "validate_claim_side_bound", return_value=()):
+                c._claim_issuance_gate(ctx)
+        self.assertEqual(seen["floor"], runs / "mint" / "d-aggregate-floor.json")
+        self.assertEqual(seen["floor_pinset_path"], sibling)
+
+    def test_claim_replay_loads_the_block5_floor_with_its_sibling_pinset(self):
+        # Joined run, step 9b, next refusal (claim_verdicts_replay_refused): the replay
+        # read the floor's evidence roots through the registered pinsets only.
+        import hashlib
+        from types import SimpleNamespace
+        from joulewise import paper_custody as c
+        from joulewise.analysis_engine import inputs
+        from joulewise.b5_analysis import windows, archive
+        from joulewise.authentication_io import V2AuthenticationReadSession
+        calls = []
+        with tempfile.TemporaryDirectory(prefix="s10-claim-replay-") as tmp:
+            runs = Path(tmp) / "restricted"
+            manifest = c._BoundFile("runs_root", Path("finalized/am-x.finalized.json"), "0" * 64,
+                                    c.InputRole.FINALIZED_MANIFEST, "generated")
+            floor = c._BoundFile("runs_root", Path("mint/d-aggregate-floor.json"), "0" * 64,
+                                 c.InputRole.FLOOR_ARTIFACT, "generated")
+            raws = {c.InputRole.FINALIZED_MANIFEST: b"{}", c.InputRole.CLAIM_VERDICTS: b"{}", c.InputRole.FLOOR_ARTIFACT: b"{}"}
+            ctx = c._GateContext("claim_evidence", "production.claim_evidence.gamma.v5", "production", "claim-evidence.v1",
+                                 ("ctr",), Path(tmp) / "repository", runs, "a" * 40, (manifest, floor), (), raws,
+                                 V2AuthenticationReadSession())
+            digest = hashlib.sha256(b"{}").hexdigest()
+            request = {"claim_verdicts_sha256": digest, "analysis_manifest_sha256": digest, "floor_artifact_sha256": digest,
+                       "window_index_sha256": hashlib.sha256(b"index").hexdigest(), "evidence_roots": {"root-a": "alpha"}}
+
+            def load(path, *, require_sibling_pinset=False):
+                calls.append((Path(path), require_sibling_pinset))
+                return SimpleNamespace(file_sha256=digest, root_ids={"root-other"})
+
+            with mock.patch.object(c, "_check_claim_replay_request"), \
+                 mock.patch.object(c, "_tracked_window_index", return_value=Path(tmp) / "index.json"), \
+                 mock.patch.object(c, "_git_blob", return_value=b"index"), \
+                 mock.patch.object(windows, "load_window_index", return_value=SimpleNamespace(entries=())), \
+                 mock.patch.object(archive, "open_attempt_record"), \
+                 mock.patch.object(windows, "select_analysed_attempts", return_value={}), \
+                 mock.patch.object(inputs, "load_floor_artifact", side_effect=load), \
+                 self.assertRaises(c._ClaimReplayRefused):
+                c._replay_claim_verdicts(ctx, request)
+        self.assertEqual(calls, [(runs / "mint" / "d-aggregate-floor.json", True)])
+
+    def test_manifest_refusals_become_reason_codes(self):
+        from joulewise.analysis_manifest_v3 import ManifestRefusal
+        replay, _seen, _runs = self.gate((ManifestRefusal("analysis_manifest_lineage_mismatch", "synthetic"),))
+        self.assertFalse(replay.authentic)
+        self.assertIn("analysis_manifest_lineage_mismatch", replay.validator_codes)
+        self.assertTrue(all(type(code) is str for code in replay.validator_codes))
+
+
 class PaperSourcesBlockFiveFloorTests(unittest.TestCase):
     """Joined run, step 6: the close-out's paper-source replay authenticated the block-5
     aggregate floor against the registered pinsets only, which name no block-5 floor, and
