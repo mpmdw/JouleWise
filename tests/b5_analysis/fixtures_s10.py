@@ -123,9 +123,39 @@ def conditional_exact_stack_seam():
         except (KeyError,TypeError,AttributeError):
             view=finalized_manifest
         return original_recheck(view,floor_artifact,replay_sidecar)
+    # The same reading at the claim gate's floor resolution
+    # (analysis_engine.resolve_floor, reached from the engine): the request of a
+    # consumer family is resolved against its transport group's single source
+    # cell, seen under the consumer's key, so the exact branch applies (stack
+    # identity, binding, eligibility and values still checked) and the resolution
+    # names the real source cell. Without it the v3 claim-verdict validator
+    # refuses the transported resolution (v3 permits only exact or refused).
+    from joulewise import analysis_engine as engine
+    original_resolve=engine.resolve_floor
+    def resolve(artifact,artifact_sha256,request,*,evidence_binding=None):
+        view=artifact
+        try:
+            cells={c['cell_id']:c for c in artifact['cells']}
+            family=(request.condition_family_id,request.condition_family_sha256)
+            for group in artifact.get('transport_groups',[]):
+                sources=group.get('source_cell_ids')
+                if not (isinstance(sources,list) and len(sources)==1 and sources[0] in cells):continue
+                admitted={(r.get('condition_family_id'),r.get('condition_family_sha256'))
+                          for r in group.get('allowed_consumer_condition_families') or []}
+                source=cells[sources[0]]
+                if family not in admitted or (source['key']['condition_family_id'],source['key']['condition_family_sha256'])==family:
+                    continue
+                alias=copy.deepcopy(source)
+                alias['key']={**alias['key'],'condition_family_id':family[0],'condition_family_sha256':family[1]}
+                view={**artifact,'cells':[alias if c.get('cell_id')==alias['cell_id'] else c for c in artifact['cells']]}
+                break
+        except (KeyError,TypeError,AttributeError):
+            view=artifact
+        return original_resolve(view,artifact_sha256,request,evidence_binding=evidence_binding)
     with mock.patch.object(v3,'_authenticate_floor_dependencies',authenticate), \
          mock.patch.object(finalize,'_authenticate_floor_dependencies',authenticate), \
-         mock.patch.object(closeout,'_contrast_floor_binding_error',recheck):
+         mock.patch.object(closeout,'_contrast_floor_binding_error',recheck), \
+         mock.patch.object(engine,'resolve_floor',resolve):
         yield
 
 
@@ -579,7 +609,11 @@ def build_export(pack,destination):
     base=1791649000. if shape=='pin2' else 1791739000.
     put(w.custody/'night/chain.started',{'epoch_s':base-1800.,'pgid':999999,'pid':999999,
         'monotonic_ns':round((base-1800.-producer.EPOCH_ORIGIN+100.)*1e9),'start_time':None})
-    lag=.021331+list(PACK_IDS).index(pack)*.001
+    # Three different operative bounds (B1). GAMMA's is the smallest: the claim
+    # gate transports a floor only to a consumer whose clock-anchor bound is no
+    # harder than the floor window's (detection_floor.transport_refusal_reasons),
+    # and with one seed per workload the synthetic envelopes have no spread.
+    lag={'alpha':.021331,'beta':.022331,'gamma':.020331}[pack]
     pre=w.claim/'instrument_validation'/f'{session_id}-pre'
     evidence=calibration(pre,base-600.,lag)
     bindings=evidence['bindings']
