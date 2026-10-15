@@ -208,7 +208,7 @@ The twin was written from the ruling text before Addenda 1 and 2. These rulings 
 9. **Rest fit near-collinearity** (twin note 5): print the VIF of BW and P̄_rails beside λ and ε_rest. Their intervals stay in H2's k. No word is drawn from λ.
 10. **Twin limits accepted:** no hazard-journal fallback for the meter offset (a stream without pairs gives no DC-input number, flagged), and the manifest reader is narrowed once `scripts/bytes_manifest.py` fixes the schema.
 
-## Addendum 4 (15:12 PDT): the executing review of the analysis (Opus cloud, JouleWise-data claude/bytes-analysis-review-opus @ 6039fff)
+## Addendum 4 (15:07 PDT): the executing review of the analysis (Opus cloud, JouleWise-data claude/bytes-analysis-review-opus @ 6039fff)
 
 Every finding is accepted. Fix round: Sol 6.1 xhigh on lane/2026-10-15-bytes-analysis.
 
