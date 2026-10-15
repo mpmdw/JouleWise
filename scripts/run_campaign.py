@@ -646,6 +646,7 @@ class OrderEntry:
     block_index: int | None = None
     position_in_block: int | None = None
     sentinel_position: str | None = None
+    block_id: str | None = None
 
     def to_log(self) -> dict[str, Any]:
         row: dict[str, Any] = {
@@ -661,6 +662,7 @@ class OrderEntry:
             "block_index",
             "position_in_block",
             "sentinel_position",
+            "block_id",
         ):
             value = getattr(self, field_name)
             if value is not None:
@@ -3159,6 +3161,7 @@ def load_order_entries(config_dir: Path) -> tuple[list[OrderEntry], str | None]:
                 workload=raw.get("workload") if isinstance(raw.get("workload"), str) else None,
                 role=raw.get("role") if isinstance(raw.get("role"), str) else None,
                 block_index=block_index,
+                block_id=raw.get("block_id") if isinstance(raw.get("block_id"), str) else None,
                 position_in_block=position_in_block,
                 sentinel_position=(
                     raw.get("sentinel_position")
@@ -3769,6 +3772,85 @@ HAZARD_IDLE_ADMISSION_CORE_DEFERRED = MappingProxyType({"status": "deferred_to_d
 # the grace; after this many consecutive timed-out members the window drains
 # (only end references still run; the post-calibration is not a campaign stage).
 HAZARD_MEMBER_CAP_S = 1800.0
+
+
+def _hazard_collection_flag(hazard, record, error):
+    from joulewise.flags import core as flags_core
+    flags_core.emit(hazard, "campaign.runner_record_flagged", level="window",
+                    observed={"kind": "collection_write_failed", "record": record,
+                              "error": str(error)})
+
+
+_HAZARD_PAUSE_UNAVAILABLE_RECORDED = False
+
+
+def _hazard_wait_for_agent(hazard):
+    global _HAZARD_PAUSE_UNAVAILABLE_RECORDED
+    from joulewise.b6.agent_pause import wait_while_paused
+    from joulewise.flags import core as flags_core
+    if hazard.custody_root is None:
+        if not _HAZARD_PAUSE_UNAVAILABLE_RECORDED:
+            _HAZARD_PAUSE_UNAVAILABLE_RECORDED = True
+            flags_core.emit(hazard, "campaign.runner_record_flagged", level="window",
+                            observed={"kind": "agent_pause_unavailable",
+                                      "record": "collection/pause.json",
+                                      "reason": "hazard custody root unavailable"})
+        return None
+    row = wait_while_paused(hazard.custody_root)
+    if row is not None and row["stale"]:
+        flags_core.emit(hazard, "agent.pause_marker_stale", level="window", observed=row)
+    return row
+
+
+def _hazard_effective_wait_cap(hazard, policy):
+    from joulewise.b6.idle_wait import WaitLedger, WAIT_CAP_S, SESSION_WAIT_BUDGET_S
+    admission = policy.idle_admission
+    if not admission.enabled:
+        return 0.0
+    cap = admission.wait_cap_s if admission.wait_cap_s is not None else WAIT_CAP_S
+    budget = (admission.session_wait_budget_s if admission.session_wait_budget_s is not None
+              else SESSION_WAIT_BUDGET_S)
+    try:
+        remaining = WaitLedger(hazard.custody_root / "collection/idle_wait.jsonl").remaining(budget)
+    except Exception:
+        return float(cap)  # The controller records the unreadable ledger.
+    return max(0.0, min(cap, remaining))
+
+
+def _hazard_run_clock(hazard, event, bundle_dirs, *, stage_dir, unit_key, unit_run_ids):
+    from joulewise.b6 import sleep_guard
+    clock = sleep_guard.safe_sleep_reading()
+    previous = None
+    path = None
+    try:
+        path = hazard.custody_root / "collection/run_clock.jsonl"
+        if event == "start" and path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                row = json.loads(line)
+                if row.get("event") == "end":
+                    previous = row.get("clock")
+    except Exception as error:
+        _hazard_collection_flag(hazard, "collection/run_clock.jsonl", error)
+    try:
+        for directory in bundle_dirs:
+            run_id = directory.name
+            sleep_guard.append_record(path, {"event": event, "run_id": run_id,
+                                      "stage_dir": str(stage_dir), "unit_key": unit_key or run_id,
+                                      "unit_run_ids": unit_run_ids if unit_key else [run_id], "clock": clock})
+    except Exception as error:
+        _hazard_collection_flag(hazard, "collection/run_clock.jsonl", error)
+    return clock, previous
+
+
+def _hazard_emit_sleep_flags(hazard, bundle_dirs, start, end, previous):
+    from joulewise.b6.sleep_guard import run_sleep_flags
+    from joulewise.flags import core as flags_core
+    for directory in bundle_dirs:
+        for flag in run_sleep_flags(start, end, previous):
+            flags_core.emit(hazard, flag["code"], level="member", run_id=directory.name,
+                            observed=flag["observed"])
+
+
 HAZARD_MEMBER_TERM_GRACE_S = 30.0
 HAZARD_MEMBER_TIMEOUT_DRAIN_AFTER = 2
 HAZARD_MEMBER_TIMEOUT_DIRNAME = "member-timeouts"
@@ -4273,6 +4355,7 @@ def _hazard_run_authenticated_campaign_child(
     hazard: Any,
     absent: list[Path],
     run_id: str,
+    cap_s: float | None = None,
 ) -> tuple[subprocess.CompletedProcess[Any], _HazardMemberRun]:
     """``run_authenticated_campaign_child`` on the HAZARD path.
 
@@ -4307,7 +4390,8 @@ def _hazard_run_authenticated_campaign_child(
         state["child"] = process
         state["run_id"] = run_id
         watch = _HazardMemberWatch(
-            process, cap_s=HAZARD_MEMBER_CAP_S, grace_s=HAZARD_MEMBER_TERM_GRACE_S
+            process, cap_s=HAZARD_MEMBER_CAP_S if cap_s is None else cap_s,
+            grace_s=HAZARD_MEMBER_TERM_GRACE_S
         ).start()
     except BaseException:
         state["child"] = None
@@ -6560,7 +6644,7 @@ def _final_idle_admission_attempt(evaluation: MemberEvaluation) -> int | None:
     ``rich_telemetry_idle_attempt_{n}.jsonl`` (see
     ``joulewise/adapters/powermetrics.py``).
 
-    Only ``[1]`` and ``[1, 2]`` are legal, in that order and without
+    Consecutive attempts ``[1, ..., k]`` are legal, in order and without
     duplicates.  The final row's admitted bit must support the top-level
     decision.  Environment eligibility is reported separately and does not
     make a structurally valid ledger disappear.  Any missing/malformed/unbound
@@ -6582,7 +6666,7 @@ def _final_idle_admission_attempt(evaluation: MemberEvaluation) -> int | None:
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             return None
         numbers.append(value)
-    if numbers not in ([1], [1, 2]):
+    if numbers != list(range(1, len(numbers) + 1)):
         return None
     final = attempts[-1]
     admitted = final.get("admitted")
@@ -7146,8 +7230,16 @@ def _idle_admission_core_evaluation(
             extension.cpu_criteria,
             gpu_admitted=_gpu_admission_outcome(evaluation),
         )
-        conditions.update(cpu_admission["conditions"])
-        for reason_code in cpu_admission["conditions"]:
+        # Q3 is disclosure-only for an explicit controller busy-only admission.
+        # Preserve the evaluator output for the whole-window stored/derived replay.
+        cpu_conditions = cpu_admission["conditions"]
+        if attempt is not None:
+            final = evaluation.metadata["environment_admission"]["attempts"][-1]
+            if final.get("busy_fraction_admitted") is True and final.get("admitted") is True:
+                cpu_conditions = [code for code in cpu_conditions
+                                  if code != "cpu_busy_ratio_p95_exceeded"]
+        conditions.update(cpu_conditions)
+        for reason_code in cpu_conditions:
             record = _member_failure_record(
                 evaluation.bundle_id,
                 reason_code,
@@ -10978,6 +11070,10 @@ def run_campaign(args: argparse.Namespace) -> int:
                 )
                 continue
             first_physical_bundle_id = physical_bundle_dirs[0].name
+            if hazard is not None:
+                paused = _hazard_wait_for_agent(hazard)
+                if paused is not None:
+                    order_extra["agent_pause"] = paused
             following_physical_info = replace(
                 info,
                 run_id=first_physical_bundle_id,
@@ -11104,15 +11200,27 @@ def run_campaign(args: argparse.Namespace) -> int:
             start = time.monotonic()
             absent_child_metadata: list[Path] = []
             if hazard is not None:
-                result, member_run = _hazard_run_authenticated_campaign_child(
-                    command,
-                    env=child_environment,
-                    outer_authentication=launch_authentication,
-                    bundle_paths=expected_member_dirs(info, runs_dir),
-                    hazard=hazard,
-                    absent=absent_child_metadata,
-                    run_id=info.run_id,
-                )
+                unit_ids = [path.name for path in physical_bundle_dirs]
+                unit_key = order_entry.block_id if order_entry is not None else None
+                if unit_key is not None:
+                    unit_ids = [path.name for candidate in items if isinstance(candidate, ConfigInfo)
+                                and order_by_config.get(candidate.path.name) is not None
+                                and order_by_config[candidate.path.name].block_id == unit_key
+                                for path in expected_member_dirs(candidate, runs_dir)]
+                member_cap = HAZARD_MEMBER_CAP_S + _hazard_effective_wait_cap(hazard, policy_binding.policy)
+                clock_start, previous_end = _hazard_run_clock(
+                    hazard, "start", physical_bundle_dirs, stage_dir=log_path.parent,
+                    unit_key=unit_key, unit_run_ids=unit_ids)
+                try:
+                    result, member_run = _hazard_run_authenticated_campaign_child(
+                        command, env=child_environment, outer_authentication=launch_authentication,
+                        bundle_paths=physical_bundle_dirs, hazard=hazard,
+                        absent=absent_child_metadata, run_id=info.run_id, cap_s=member_cap)
+                finally:
+                    clock_end, _ = _hazard_run_clock(
+                        hazard, "end", physical_bundle_dirs, stage_dir=log_path.parent,
+                        unit_key=unit_key, unit_run_ids=unit_ids)
+                    _hazard_emit_sleep_flags(hazard, physical_bundle_dirs, clock_start, clock_end, previous_end)
             else:
                 result = run_authenticated_campaign_child(
                     command,
@@ -11138,7 +11246,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                 if member_timed_out:
                     print(
                         f"timeout {info.run_id}: member ran past the "
-                        f"{HAZARD_MEMBER_CAP_S:.0f} s cap and was terminated"
+                        f"{member_cap:.0f} s cap and was terminated"
                         + ("; the window now drains" if drain_now else ""),
                         file=sys.stderr,
                     )

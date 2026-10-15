@@ -12228,5 +12228,74 @@ class G2aLowCountCampaignTests(unittest.TestCase):
             self.assertEqual([row["status"] for row in rows], ["ok", "ok"])
 
 
+class B6RunnerAdmissionTests(unittest.TestCase):
+    def test_final_attempt_accepts_consecutive_four_and_rejects_bad_ledgers(self):
+        entry = run_campaign_module.OrderEntry(index=1, config="member.json", block_id="quad")
+        self.assertEqual(entry.to_log()["block_id"], "quad")
+        self.assertNotIn("block_id", run_campaign_module.OrderEntry(index=1, config="member.json").to_log())
+        for numbers, decision, admitted, expected in (
+            ([1, 2, 3, 4], "admitted", True, 4),
+            ([1, 3], "admitted", True, None),
+            ([1, 2, 2], "admitted", True, None),
+            ([1, 2, 3, 4], "abort", True, None),
+        ):
+            with self.subTest(numbers=numbers, decision=decision):
+                evaluation = SimpleNamespace(metadata={"environment_admission": {
+                    "decision": decision, "attempts": [{"attempt": k, "admitted": admitted if i == len(numbers)-1 else False}
+                                                        for i, k in enumerate(numbers)]}})
+                self.assertEqual(run_campaign_module._final_idle_admission_attempt(evaluation), expected)
+
+
+from tests.test_run_campaign_hazard_flags import _Stage as _B6Stage
+
+
+class B6RunnerBoundaryTests(_B6Stage):
+    def test_waits_between_two_fake_members_and_legacy_never_waits(self):
+        import scripts.run_campaign as rc
+        from joulewise.b6 import agent_pause as ap
+        runs = self.hazard_root()
+        configs = self.configs("b6-first", "b6-second")
+        marker = self.custody / "collection/pause.json"
+        original = rc._hazard_run_authenticated_campaign_child
+        events = []
+        tick = [0]
+        def child(*args, **kw):
+            events.append(kw["run_id"])
+            result = original(*args, **kw)
+            if kw["run_id"] == "b6-first":
+                ap.write_marker(marker, {"driver_pid": 123})
+            return result
+        def sleep(seconds):
+            events.append("paused")
+            tick[0] += seconds
+            marker.unlink()
+        real_wait = ap.wait_while_paused
+        def wait(root):
+            return real_wait(root, sleep=sleep, now=lambda: tick[0], pid_alive=lambda _: True)
+        with patch.object(rc, "_hazard_run_authenticated_campaign_child", side_effect=child), \
+                patch.object(ap, "wait_while_paused", side_effect=wait):
+            result = self.run_stage(configs, runs)
+        self.assertEqual(self.invoked(runs), ["b6-first", "b6-second"], result.err)
+        self.assertEqual(events, ["b6-first", "paused", "b6-second"])
+        rows = [json.loads(line) for line in (self.custody / "collection/run_clock.jsonl").read_text().splitlines()]
+        self.assertEqual([r["event"] for r in rows], ["start", "end", "start", "end"])
+        plain = self.plain_root()
+        with patch.object(ap, "wait_while_paused") as waiting:
+            self.run_stage(configs, plain)
+        waiting.assert_not_called()
+
+    def test_member_cap_adds_effective_wait_keys(self):
+        import scripts.run_campaign as rc
+        runs = self.hazard_root()
+        policy = self.idle_policy()
+        payload = json.loads(policy.read_text())
+        payload["idle_admission"].update(wait_cap_s=1500, session_wait_budget_s=7200)
+        policy.write_text(json.dumps(payload))
+        with patch.object(rc, "_hazard_run_authenticated_campaign_child", wraps=rc._hazard_run_authenticated_campaign_child) as child:
+            result = self.run_stage(self.configs("b6-cap"), runs, policy=policy)
+        self.assertEqual(self.invoked(runs), ["b6-cap"], result.err)
+        self.assertEqual(child.call_args.kwargs["cap_s"], 3300)
+
+
 if __name__ == "__main__":
     unittest.main()
