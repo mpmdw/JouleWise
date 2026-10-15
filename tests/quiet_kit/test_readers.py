@@ -28,7 +28,11 @@ class ProductionReaderTests(unittest.TestCase):
         self.assertEqual(len(parse((fixture/'ps.txt').read_bytes())),1)
         self.assertEqual(readers.parse_sntp((fixture/'sntp.txt').read_text()),.012345)
         self.assertTrue(readers.meter(fixture/'meter.jsonl')[1].present)
-        self.assertEqual(readers.run_bundle(fixture,{'bundle':'run_bundle'})['phase_energy_j']['decode'],1.2)
+        expected = json.loads((fixture/'run_bundle/summary_metrics.json').read_text())
+        actual = readers.run_bundle(fixture, {'bundle': 'run_bundle'})
+        self.assertEqual(actual['phase_energy_j'], expected['phase_energy_j'])
+        self.assertEqual(actual['failure_reasons'], [])
+        self.assertEqual(actual['flags'], [])
 
     def test_real_plist_rails_chain_and_cpu_time(self):
         power_attempt(self.root/'attempt', [
@@ -85,12 +89,31 @@ class ProductionReaderTests(unittest.TestCase):
         path = self.root/'runs/qk-example'
         path.mkdir(parents=True)
         path.joinpath('summary_metrics.json').write_text(json.dumps({
-            'status': 'ok', 'phase_energy_j': {'prefill': .3, 'decode': 1.2},
+            'status': 'succeeded', 'phase_energy_j': {'prefill': .3, 'decode': 1.2},
             'ttft_s': 1., 'decode_latency_s': 149., 'throughput_tokens_s': 24.}))
         row = readers.run_bundle(self.root, {'bundle': 'runs/qk-example'})
         self.assertEqual(row['phase_energy_j']['prefill'], .3)
         self.assertEqual(row['duration_s'], 150.)
         self.assertEqual(row['token_rate'], 24.)
+        self.assertEqual(row['failure_reasons'], [])
+
+    def test_only_enum_success_with_null_failure_reason_is_success(self):
+        from joulewise.schemas import RunStatus
+        bundle = self.root/'runs/status-test'
+        bundle.mkdir(parents=True)
+        for status, reason, succeeded in (
+            (RunStatus.SUCCEEDED.value, None, True),
+            (RunStatus.SUCCEEDED.value, '', False),
+            (RunStatus.SUCCEEDED.value, 'idle_admission_failed', False),
+            (RunStatus.FAILED.value, None, False),
+            (RunStatus.UNSUPPORTED.value, None, False),
+            ('ok', None, False), (None, None, False)):
+            with self.subTest(status=status, failure_reason=reason):
+                (bundle/'summary_metrics.json').write_text(json.dumps({'status': status,
+                    'failure_reason': reason, 'phase_energy_j': {'prefill': .3, 'decode': 1.2}}))
+                row = readers.run_bundle(self.root, {'bundle': 'runs/status-test', 'returncode': 0})
+                self.assertEqual(not row['failure_reasons'], succeeded)
+                self.assertEqual(not row['flags'], succeeded)
 
     def test_ps_layout_library_cpu_seconds(self):
         from joulewise.hazards.contention import parse

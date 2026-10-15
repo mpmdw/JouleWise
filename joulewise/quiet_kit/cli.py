@@ -85,6 +85,8 @@ def main(argv=None, *, seams=None, emit=print) -> int:
     parser.add_argument('--deadline-hours', type=float, default=2*TOTAL_SECONDS/3600 + 6)
     parser.add_argument('--test', choices=tuple(BY_ID))
     parser.add_argument('--scale', type=float)
+    parser.add_argument('--capture-scale', type=float, default=1.,
+                        help='plumbing capture duration scale (default: full frozen protocol)')
     parser.add_argument('--archive', type=Path, default=ARCHIVE,
                         help='output root (default threshold-validation; useful for desk seams)')
     args = parser.parse_args(argv)
@@ -93,6 +95,8 @@ def main(argv=None, *, seams=None, emit=print) -> int:
     fence(args.model_python)
     if args.scale is not None and args.scale <= 0:
         parser.error('--scale must be positive')
+    if args.capture_scale <= 0 or args.capture_scale != 1. and not args.plumbing_check:
+        parser.error('--capture-scale must be positive and is only for plumbing checks')
     if args.scale is not None and args.run and seams is None:
         parser.error('--scale is for plumbing checks and desk seams; real measurements use the frozen durations')
     if args.deadline_hours <= 0:
@@ -119,5 +123,5 @@ def main(argv=None, *, seams=None, emit=print) -> int:
     if args.reanalyze:
         return worker.reanalyze(args.reanalyze)
     if args.plumbing_check:
-        return worker.plumbing(args.test or 'm5-gpu-rail', args.scale)
+        return worker.plumbing(args.test or 'm5-gpu-rail', args.scale, capture_scale=args.capture_scale)
     return worker.run()

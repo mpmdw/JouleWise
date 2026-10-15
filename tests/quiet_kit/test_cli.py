@@ -33,6 +33,15 @@ class CLITests(unittest.TestCase):
         self.assertIn(f'Total estimated wall hours: {TOTAL_SECONDS/3600:.3f}', output[0])
         self.assertLess(output[0].index('m4-contention-watts'), output[0].index('m5-gpu-rail'))
 
+    def test_plumbing_capture_scale_default_and_override_reach_runner(self):
+        from .fakes import FakeHardware
+        for extra, expected in (([], 1.), (['--capture-scale', '.25'], .25)):
+            with self.subTest(extra=extra), patch('joulewise.quiet_kit.runner.Runner.plumbing', return_value=1) as plumbing:
+                self.assertEqual(main(['--plumbing-check', '--test', 'm13-meter-edges',
+                    '--scale', '.01', '--archive', str(self.root), *extra],
+                    seams=FakeHardware().seams(), emit=lambda _: None), 1)
+                plumbing.assert_called_once_with('m13-meter-edges', .01, capture_scale=expected)
+
     def test_script_plan_suppresses_import_bytecode_even_if_caller_enabled_it(self):
         import sys
         checkout=self.root/'minimal-checkout'

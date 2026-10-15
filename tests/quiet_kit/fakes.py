@@ -6,7 +6,7 @@ from pathlib import Path
 
 from joulewise.quiet_kit.paths import append, atomic_json, read_json
 from joulewise.quiet_kit.runner import Seams, Interrupted
-from .fixtures import EPOCH, RAW, power_attempt, synthetic_capture
+from .fixtures import EPOCH, RAW, power_attempt, synthetic_capture, capture_meter_stream
 
 
 class FakeHardware:
@@ -138,7 +138,7 @@ class FakeHardware:
                     'meter_file': 'meter.jsonl' if plan.meter else None, 'sampler_spans_s':[200.]})
                 if plan.meter:
                     from .fixtures import meter_stream
-                    (attempt/'meter.jsonl').write_bytes(meter_stream([28.,40.]*500))
+                    (attempt/'meter.jsonl').write_bytes(capture_meter_stream(events))
             elif plan.model_runs:
                 runs = []
                 for i, s in enumerate(plan.segments):
@@ -150,15 +150,20 @@ class FakeHardware:
                     w = s['workload']
                     energy = {'R':10.,'A':20.,'B':40.}[w]
                     energy += .3 if s.get('arm') == 'L' or s.get('block') == 'end' else 0
-                    atomic_json(directory/'summary_metrics.json', {'status':'ok', 'phase_energy_j':
+                    atomic_json(directory/'summary_metrics.json', {'status':'succeeded', 'phase_energy_j':
                         {'prefill':energy, 'decode':2*energy}, 'ttft_s':1., 'decode_latency_s':149., 'throughput_tokens_s':24.})
                     runs.append({**s,'id':run_id,'bundle':f'runs/{run_id}'})
                 atomic_json(attempt/'collection.json', {'kind':kind,'test_id':plan.test_id,'runs':runs})
             else:
-                arm = 'gpu' if any(s.get('kind') == 'gpu' for s in plan.segments) else 'cpu'
-                power_attempt(attempt, [{'kind':'idle','power':.05},
-                    {'kind':arm,'power':.30,'duty':.05,'cpu_seconds':.1},
-                    {'kind':'idle','power':.05}], meter=plan.meter, kind=kind)
+                segments = []
+                for spec in plan.segments:
+                    duration = 20. if spec['kind'] == 'burst' else 2.
+                    duty = spec.get('duty', 0.)
+                    power = .05 + (5*duty if spec['kind'] in ('cpu', 'mixed') else 0) + (10*duty if spec['kind'] in ('gpu', 'mixed') else 0)
+                    segments.append({**spec, 'duration_s': duration, 'power': power,
+                        'gpu': 10*duty if spec['kind'] in ('gpu', 'mixed') else 0.,
+                        'cpu_seconds': duration*duty, 'meter_power': 28+power})
+                power_attempt(attempt, segments, meter=plan.meter, kind=kind)
                 doc = read_json(attempt/'collection.json')
                 doc['test_id'] = plan.test_id
                 atomic_json(attempt/'collection.json',doc)

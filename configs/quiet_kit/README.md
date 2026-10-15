@@ -95,6 +95,20 @@ the measurement's start observation.
 
 ## Desk verification
 
+Every analysis returns `incomplete_reason` (null when its primary quantities
+meet the required counts). The runner retains incomplete attempts and retries
+them on the next pass. A successful model bundle uses the project's
+`RunStatus.SUCCEEDED` value and a null failure reason.
+
+Capture plumbing (`m1-capture-stop-line` or `m13-meter-edges`) collects only the
+first capture. `--capture-scale` defaults to 1.0 so that capture uses the full
+frozen protocol and schedule authentication; `--scale` still controls the
+other plumbing segments. The 570-second deadline remains in force. A single
+capture cannot meet the experiment's full capture counts: its result and
+summary are retained with `complete: false`, and the command exits 1 for that
+explicit reason even when the child succeeds. Read its captured bound and
+child status when assessing the plumbing.
+
 ```
 export TMPDIR="$PWD/.scratch-qk/tmp" PYTHONDONTWRITEBYTECODE=1
 mkdir -p "$TMPDIR"

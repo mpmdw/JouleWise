@@ -1,0 +1,4 @@
+0.000000 resolved runtime adapter 'mock'
+0.000000 runtime prepare succeeded
+2.550000 completed 1 warmup run(s)
+2.550000 post-warmup settling for 0.1 s before sampling

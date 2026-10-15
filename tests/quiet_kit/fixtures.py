@@ -143,3 +143,22 @@ def synthetic_capture(*, count=59, offset=.012):
                 events.append({'timestamp_s': epoch, 'event_type': f'{kind}_command_{edge}',
                                'metadata': {'clock_stamp': dataclasses.asdict(cs(epoch)), f'{kind}_index': i}})
     return raw, ''.join(json.dumps(e)+'\n' for e in events).encode(), anchor, PROTOCOL_ID
+
+
+def capture_meter_stream(events):
+    """Meter bytes with a 12 ms lag from these synthetic capture commands."""
+    pending, pairs = {}, []
+    for row in (json.loads(line) for line in events.splitlines()):
+        kind, edge = row['event_type'].split('_command_')
+        t = row['timestamp_s']-EPOCH
+        if edge == 'on':
+            pending[kind] = t
+        else:
+            pairs.append((pending.pop(kind), t))
+    duration = max(off for _, off in pairs)+5
+    powers = []
+    for i in range(math.ceil(duration/.02)):
+        t = i*.02
+        powers.append(28.+sum(10*min(max(0., min(1., (t-(on+.012-.02))/.04)),
+                                      max(0., min(1., ((off+.012+.02)-t)/.04))) for on, off in pairs))
+    return meter_stream(powers)

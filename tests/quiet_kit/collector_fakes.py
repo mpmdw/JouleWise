@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from joulewise.quiet_kit.paths import atomic_json, append, read_json
 from joulewise.quiet_kit.collectors import collect
 from .fakes import FakeHardware
-from .fixtures import EPOCH, RAW, plist_stream, meter_stream, ps_bytes, synthetic_capture
+from .fixtures import EPOCH, RAW, plist_stream, meter_stream, ps_bytes, synthetic_capture, capture_meter_stream
 
 
 class CollectorHardware(FakeHardware):
@@ -121,7 +121,7 @@ class FakeChild:
             self.event={'kind':kind,'duty':duty,'start':self.start,'end':self.end}
             hw.events.append(self.event)
         elif 'joulewise.quiet_kit.capture' in argv:
-            self.end+=264*hw.scale
+            self.end+=264*float(argv[argv.index('--scale')+1])
             out=Path(argv[argv.index('--out')+1])
             if hw.captures is None:hw.captures=synthetic_capture()
             raw,events,anchor,protocol=hw.captures
@@ -138,7 +138,7 @@ class FakeChild:
             root=Path(argv[argv.index('--runs-dir')+1])/config['run_id']
             root.mkdir(parents=True,exist_ok=True)
             energy=10. if '1.5B' in config['model']['name'] else 20. if '1.7B' in config['model']['name'] else 40.
-            atomic_json(root/'summary_metrics.json',{'status':'ok','phase_energy_j':{'prefill':energy,'decode':energy*2},
+            atomic_json(root/'summary_metrics.json',{'status':'succeeded','phase_energy_j':{'prefill':energy,'decode':energy*2},
                 'ttft_s':1.,'decode_latency_s':2.,'throughput_tokens_s':24.})
             self.end+=150*hw.scale
         elif any(a.endswith('km003c_monitor.py') for a in argv):
@@ -151,7 +151,8 @@ class FakeChild:
             path,_=self.meter
             n=max(2,round((hw.time-self.start)/.02))
             powers=[28.+sum(hw.power(self.start+i*.02)) for i in range(n)]
-            path.write_bytes(meter_stream(powers,start_raw=RAW+self.start,start_epoch=EPOCH+self.start))
+            path.write_bytes(capture_meter_stream(hw.captures[1]) if hw.captures else
+                             meter_stream(powers,start_raw=RAW+self.start,start_epoch=EPOCH+self.start))
             self.end=hw.time
             self.meter=None
         if hw.time >= self.end and self.returncode is None:

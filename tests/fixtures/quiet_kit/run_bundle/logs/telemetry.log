@@ -1,0 +1,3 @@
+0.000000 resolved telemetry adapter 'mock'
+2.500000 idle baseline: mean 5.0 W over 0.5 s (5 samples)
+6.234000 measured window captured 36 power sample(s)

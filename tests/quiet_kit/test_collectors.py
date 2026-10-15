@@ -62,13 +62,46 @@ class CollectorChainTests(unittest.TestCase):
             root=Path(tmp)/'archive'
             runner=Runner(REPO,root,'/fake/model-python',hw.seams(),plans=plans,scale=.01,emit=lambda _:None)
             self.assertEqual(runner.run(),0)
-            self.assertEqual(read_json(root/'DONE')['incomplete_tests'],[])
-            m4=read_json(root/'m4-contention-watts/result.json')
+            # These deliberately partial plans exercise the executor, while
+            # the new completeness contract correctly requests a later retry.
+            self.assertEqual({r['test_id'] for r in read_json(root/'DONE')['incomplete_tests']},
+                             {'m4-contention-watts', 'm14-meter-idle-power', 'm2-long-wait'})
+            m4=read_json(root/'m4-contention-watts/attempts/1/analysis.result.json')
             self.assertAlmostEqual(m4['measured']['arms'][0]['watts_per_cpu_rate']['value'],5.,delta=.05)
             argv=read_json(root/'m4-contention-watts/attempts/1/collection.json')['segments'][1]['argv'][0]
             self.assertEqual(argv[:2],['/usr/sbin/taskpolicy','-b'])
             self.assertTrue(m4['measured']['bursts'][0]['accounting_intervals'])
-            m2=read_json(root/'m2-long-wait/result.json')
+            m2=read_json(root/'m2-long-wait/attempts/1/analysis.result.json')
             self.assertEqual(len(m2['measured']['run_table']),4)
             self.assertFalse(hw.sample_active)
             self.assertTrue(all(c.returncode is not None for c in hw.processes.children))
+
+    def test_capture_plumbing_runs_one_full_capture_and_preserves_other_scale(self):
+        from joulewise.quiet_kit.schedule import BY_ID
+        for test_id in ('m1-capture-stop-line', 'm13-meter-edges'):
+            for capture_scale in (1., .25):
+                with self.subTest(test_id=test_id, capture_scale=capture_scale), tempfile.TemporaryDirectory(prefix='quiet-kit-capture-plumb-') as tmp:
+                    root = Path(tmp)
+                    hw = CollectorHardware(scale=.001)
+                    runner = Runner(REPO, root, '/fake/model-python', hw.seams(),
+                                    plans=(BY_ID[test_id],), emit=lambda _: None)
+                    # A single plumbing capture cannot satisfy the full
+                    # experiment's counts, and remains explicitly incomplete.
+                    self.assertEqual(runner.plumbing(test_id, .001, capture_scale=capture_scale), 1)
+                    result = next(root.glob('_plumbing/*/result.json'))
+                    doc = read_json(result)
+                    attempt = result.parent/'attempts/1'
+                    manifest = read_json(attempt/'collection.json')
+                    self.assertEqual(len(manifest['captures']), 1)
+                    self.assertEqual(manifest['scale'], .001)
+                    self.assertEqual(manifest['capture_scale'], capture_scale)
+                    child = next(c for c in hw.processes.children if 'joulewise.quiet_kit.capture' in c.argv)
+                    self.assertEqual(float(child.argv[child.argv.index('--scale')+1]), capture_scale)
+                    self.assertLess(hw.time, 570)
+                    self.assertFalse(doc['complete'])
+                    if test_id == 'm1-capture-stop-line':
+                        self.assertEqual(doc['measured']['conditions']['quiet']['bounded_capture_count'], 1)
+                    else:
+                        self.assertIsNotNone(doc['measured']['sampler_lag_mean']['value'])
+                    self.assertTrue((result.parent/'summary.md').is_file())
+                    self.assertNotIn('display_sleep', hw.actions)

@@ -17,8 +17,7 @@ from joulewise.quiet_kit.schedule import PLANS, TestPlan
 from .fakes import FakeHardware
 
 REPO = Path(__file__).resolve().parents[2]
-SHORT = tuple(TestPlan(p.test_id, (dict(kind='idle',duration_s=2),dict(kind='cpu',duty=.05,duration_s=2),
-                                 dict(kind='idle',duration_s=2))) for p in PLANS[:3])
+SHORT = (PLANS[0], PLANS[1], PLANS[6])
 
 
 class RunnerTests(unittest.TestCase):
@@ -120,7 +119,7 @@ class RunnerTests(unittest.TestCase):
 
     def test_clock_resume_retains_previous_segments_and_updates_stream_budget(self):
         clock=next(p for p in PLANS if p.test_id=='m3-clock-rate')
-        meter=TestPlan('m14-meter-idle-power',SHORT[0].segments,meter=True)
+        meter=next(p for p in PLANS if p.test_id=='m14-meter-idle-power')
         self.hw.meter_present=False
         self.assertEqual(self.runner((clock,meter)).run(),0)
         source=self.root/clock.test_id/'attempts/1'

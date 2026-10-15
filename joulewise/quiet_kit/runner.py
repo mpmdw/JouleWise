@@ -170,6 +170,7 @@ class Runner:
         self.clock_handle = None
         self.clock_info = None
         self.kind = 'measurement'
+        self.capture_scale = 1.
         self.network = None
         self.caffeinate = None
         self._previous_signals = {}
@@ -396,7 +397,7 @@ class Runner:
         attempt_info = read_json(attempt / 'attempt.json', {})
         collection = read_json(attempt / 'collection.json', {})
         reason = collection.get('incomplete_reason')
-        if plan.test_id == 'm2b-short-baseline' and measured.get('incomplete_reason'):
+        if measured.get('incomplete_reason'):
             reason = measured['incomplete_reason']
         if not conditions.get('end_stamp'):
             reason = 'collection_not_finished'
@@ -406,8 +407,6 @@ class Runner:
             reason = 'interrupted: ' + attempt_info.get('reason', 'unknown')
         if plan.meter and data.get('meter_present') is not True:
             reason = 'meter_absent'
-        if plan.test_id == 'm3-clock-rate' and measured.get('span_s', 0) < 10800*self.scale:
-            reason = 'clock_span_under_3h'
         before, after = conditions.get('start', {}), conditions.get('end', {})
         agents = {}
         for name in ('mediaanalysisd', 'photoanalysisd'):
@@ -456,7 +455,8 @@ class Runner:
             'raw_relative_to': f'attempts/{attempt.name}',
             'code': read_json(attempt / 'code.json', {}),
             'analysis_function': f'{fn.__module__}.{fn.__name__}',
-            'analysis_parameters': {'scale': self.scale, 'F_min_J': 'parameter; no block-5 outcome',
+            'analysis_parameters': {'scale': self.scale, 'capture_scale': collection.get('capture_scale'),
+                                    'F_min_J': 'parameter; no block-5 outcome',
                                     'segment_plan': list(plan.segments)}}
         atomic_json(attempt / 'analysis.result.json', result)
         if plan.test_id == 'm3-clock-rate' and collection.get('clock_file') == 'clock-end.jsonl':
@@ -807,8 +807,9 @@ class Runner:
         self.emit(f'{test_id}: recomputed from attempt {attempt.name}')
         return 0 if result['complete'] else 1
 
-    def plumbing(self, test_id, scale=None):
+    def plumbing(self, test_id, scale=None, *, capture_scale=1.):
         self.kind = 'plumbing_check'
+        self.capture_scale = capture_scale
         plan = BY_ID[test_id]
         # Default m5: 20+20+20 s shortened probes, segments ~180 s, overhead.
         self.scale = scale if scale is not None else 180/(10800 if test_id == 'm3-clock-rate' else max(plan.estimate_s-300, 1))
@@ -818,7 +819,7 @@ class Runner:
         # Journal is local too. No STATUS, DONE or wake state touches archive.
         self.root = parent
         atomic_json(parent / 'kind.json', {'kind': self.kind, 'test_id': test_id,
-                                          'scale': self.scale, 'measurement': False})
+                                          'scale': self.scale, 'capture_scale': self.capture_scale, 'measurement': False})
         self._signals()
         try:
             result = self.test(plan, target=parent, record_only=True)

@@ -65,7 +65,7 @@ class RuledScheduleTests(unittest.TestCase):
             self.assertAlmostEqual(out['phases'][phase]['percent']['value'], 3.)
             self.assertAlmostEqual(out['phases'][phase]['percent']['uncertainty']['value'][0],
                                    100*(.3-2.776*expected_se)/10)
-        self.assertNotIn('incomplete_reason', out)
+        self.assertIsNone(out['incomplete_reason'])
         runs[1]['failure_reasons'] = [{'reason':'idle_admission_failed'}]
         runs[1]['returncode'] = 1
         refused = analysis.m2b({'runs':runs})
@@ -85,7 +85,7 @@ class RuledScheduleTests(unittest.TestCase):
                 records.append({'start_s':cursor,'end_s':cursor+duration,'cpu_power':.05,'gpu_power':0.,'ane_power':0.})
                 cursor += duration
             (raw/'powermetrics_idle.plist').write_bytes(plist_stream(records))
-            atomic_json(raw.parent/'summary_metrics.json', {'status':'ok','phase_energy_j':{'prefill':10.}})
+            atomic_json(raw.parent/'summary_metrics.json', {'status':'succeeded','phase_energy_j':{'prefill':10.}})
             row = run_bundle(attempt, {'bundle':'runs/qk-short','returncode':0,'sampling_idle_seconds':50.})
             self.assertAlmostEqual(row['idle_baseline_delivered_s'], sum(durations), places=6)
             self.assertEqual(row['idle_baseline_record_count'],4)

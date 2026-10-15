@@ -8,6 +8,8 @@ import statistics
 import struct
 from pathlib import Path
 
+from joulewise.schemas import RunStatus
+
 from .paths import children, fence, read_bytes, read_json
 
 
@@ -114,7 +116,8 @@ def run_bundle(directory, row):
     doc = read_json(relative(directory, row['bundle'] + '/summary_metrics.json'), {})
     ttft, decode = doc.get('ttft_s'), doc.get('decode_latency_s')
     flags = [] if doc else [{'reason': 'run summary missing'}]
-    if row.get('returncode') not in (0, None) or doc.get('status') not in ('ok', None):
+    succeeded = doc.get('status') == RunStatus.SUCCEEDED.value and doc.get('failure_reason') is None
+    if row.get('returncode') not in (0, None) or not succeeded:
         flags.append({'reason': 'model child or bundle reported a non-success status',
                       'returncode': row.get('returncode'), 'bundle_status': doc.get('status')})
     failures = []
@@ -125,9 +128,9 @@ def run_bundle(directory, row):
                          'diagnostics': row.get('exit_diagnostics')})
     if not doc:
         failures.append({'reason': 'run_summary_missing'})
-    elif doc.get('status') != 'ok' or doc.get('failure_reason'):
-        failures.append({'reason': doc.get('failure_reason') or 'run_status_not_ok',
-                         'status': doc.get('status'), 'message': doc.get('message')})
+    elif not succeeded:
+        failures.append({'reason': doc.get('failure_reason') or 'run_status_not_succeeded',
+                         'status': doc.get('status'), 'message': doc.get('failure_message')})
     if not doc.get('phase_energy_j'):
         failures.append({'reason': 'phase_energies_missing'})
     baseline = {'idle_baseline_delivered_s': None, 'idle_baseline_record_count': None,
@@ -172,7 +175,15 @@ def capture(directory, row):
         values = {'bound_s': None, 'flags': [{'reason': f'capture rederivation undefined: {e}'}]}
     values['flags'] += info.get('instrument_flags', [])
     if row.get('returncode') not in (0, None):
-        values['flags'].append({'reason': 'capture child reported a nonzero exit', 'returncode': row['returncode']})
+        diagnostics = None
+        if row.get('child_stderr'):
+            try:
+                diagnostics = read_bytes(relative(capdir, row['child_stderr'])).decode(errors='replace')[-4000:]
+            except OSError as exc:
+                diagnostics = f'child stderr unavailable: {exc}'
+        last_line = diagnostics.strip().splitlines()[-1] if diagnostics and diagnostics.strip() else 'reason unavailable'
+        values['flags'].append({'reason': 'capture child failed: '+last_line, 'returncode': row['returncode'],
+                                'detail': diagnostics, 'capture': row.get('id')})
     return {**row, **values, 'cadence_median_ms': info.get('cadence_median_ms'),
             'faulty_context_reproduced': (info.get('cadence_median_ms') or 0) > 200
                 if row.get('condition') == 'utility' else None,
@@ -270,6 +281,7 @@ def read_attempt(directory):
     data['flags'] += [{'reason': 'clock logger probe unmeasured', 'detail': r['error']}
                      for r in data['clock'] if r.get('error')]
     data['longest_sampler_s'] = document.get('longest_sampler_s', 0)
+    data['minimum_clock_span_s'] = 10800*document.get('scale', 1.)
     data['queries'] = json_lines(relative(directory, document.get('queries_file', 'sntp.jsonl')))
     data['long_waits'] = json_lines(directory / 'long-wait.jsonl')
     if document.get('test_id') == 'm13-meter-edges':

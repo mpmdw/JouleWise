@@ -103,7 +103,7 @@ def load_report(child):
         return {'error': 'load child supplied no CPU time report', 'cpu_seconds': None}
 
 
-def model_config(repo, workload, run_id, *, short_baseline=False):
+def model_config(repo, workload, run_id, *, short_baseline=False, config_transform=None):
     config = read_json(fence(repo / WORKLOADS[workload]))
     if config is None:
         raise ValueError(f'missing workload {workload}')
@@ -115,6 +115,9 @@ def model_config(repo, workload, run_id, *, short_baseline=False):
     config['run_id'] = run_id
     tags = config['run_metadata']['tags']
     config['run_metadata']['tags'] = [t for t in tags if t != 'launch_lineage_required'] + ['quiet-kit', 'non-claim']
+    # Desk-only injection; production always uses the unchanged ruled config.
+    if config_transform is not None:
+        config_transform(config)
     fence(config['model']['source'])
     manifest = config.get('workload_profile', {}).get('suite_manifest_ref')
     if manifest:
@@ -122,11 +125,12 @@ def model_config(repo, workload, run_id, *, short_baseline=False):
     return config
 
 
-def model_run(hw, segment, attempt, index, control):
+def model_run(hw, segment, attempt, index, control, *, config_transform=None):
     workload = segment['workload']
     run_id = f'qk-{attempt.parent.parent.name}-a{attempt.name}-{index:04d}-{workload.lower()}'
     short_baseline = segment.get('arm') == 'S' and segment.get('sampling_idle_seconds') == 50.0
-    config = model_config(hw.repo, workload, run_id, short_baseline=short_baseline)
+    config = model_config(hw.repo, workload, run_id, short_baseline=short_baseline,
+                          config_transform=config_transform)
     path = fence(attempt / 'configs' / (run_id+'.json'))
     atomic_json(path, config)
     root = mkdir(attempt / 'runs')
@@ -196,10 +200,11 @@ def long_wait(hw, segment, attempt, scale, control):
     return rows
 
 
-def collect(hw, plan, attempt, scale, control, kind):
+def collect(hw, plan, attempt, scale, control, kind, *, config_transform=None):
     if plan.test_id == 'm9-time-server':
         return time_queries(hw, plan, attempt, scale, control, kind)
-    manifest = {'kind': kind, 'scale': scale, 'test_id': plan.test_id, 'segments': [], 'runs': [], 'captures': [],
+    capture_scale = control.runner.capture_scale if kind == 'plumbing_check' else scale
+    manifest = {'kind': kind, 'scale': scale, 'capture_scale': capture_scale, 'test_id': plan.test_id, 'segments': [], 'runs': [], 'captures': [],
                 'sampler_spans_s': [], 'tree_roots': [os.getpid()],
                 'workload_choices': WORKLOADS if plan.model_runs else {}}
     path = fence(attempt / 'collection.json')
@@ -220,14 +225,16 @@ def collect(hw, plan, attempt, scale, control, kind):
             control.segment = {'id': current['id'], **segment}
             control.runner.state('collecting', segment=control.segment)
             if segment['kind'] == 'capture':
+                if kind == 'plumbing_check' and manifest['captures']:
+                    continue
                 directory = mkdir(attempt / f'capture-{index:03d}')
                 argv = [hw.model_python, '-m', 'joulewise.quiet_kit.capture', '--out', str(directory),
-                        '--scale', str(scale), '--kind', kind]
+                        '--scale', str(capture_scale), '--kind', kind]
                 if segment.get('condition') == 'utility':
                     argv = ['/usr/sbin/taskpolicy', '-c', 'utility', *argv]
                 cpu = None
                 if segment.get('condition') == 'load':
-                    cpu, _ = launch_load(hw, 'cpu', 1., 500*scale, directory)
+                    cpu, _ = launch_load(hw, 'cpu', 1., 500*capture_scale, directory)
                 child = hw.processes.spawn(argv, directory)
                 code = hw.processes.wait(child, control, timeout=1200)
                 hw.processes.stop(child)
@@ -236,14 +243,15 @@ def collect(hw, plan, attempt, scale, control, kind):
                 if cpu:
                     hw.processes.stop(cpu)
                 manifest['captures'].append({**current, 'end': hw.stamp(), 'directory': directory.name,
-                    'returncode': code, 'argv': argv, 'id': f'capture-{index:03d}'})
+                    'returncode': code, 'argv': argv, 'id': f'capture-{index:03d}',
+                    'child_stderr': child.quiet_kit_stderr.name})
                 cap = read_json(directory / 'capture.json', {})
                 if cap.get('sampler_span_s'):
                     manifest['sampler_spans_s'].append(cap['sampler_span_s'])
             elif segment['kind'] == 'model':
                 if sampler:
                     raise RuntimeError('kit sampler must not overlap model sampler')
-                row = model_run(hw, segment, attempt, index, control)
+                row = model_run(hw, segment, attempt, index, control, config_transform=config_transform)
                 manifest['runs'].append(row)
                 if row.get('sampler_span_s'):
                     manifest['sampler_spans_s'].append(row['sampler_span_s'])
@@ -254,7 +262,8 @@ def collect(hw, plan, attempt, scale, control, kind):
                 n = 0
                 while hw.now() < deadline:
                     w = ('A', 'B')[n%2]
-                    row = model_run(hw, {'kind': 'model', 'workload': w, 'block': 'soak'}, attempt, 1000+n, control)
+                    row = model_run(hw, {'kind': 'model', 'workload': w, 'block': 'soak'}, attempt, 1000+n, control,
+                                    config_transform=config_transform)
                     manifest['runs'].append(row)
                     if row.get('sampler_span_s'):
                         manifest['sampler_spans_s'].append(row['sampler_span_s'])
