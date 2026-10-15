@@ -6062,6 +6062,32 @@ def advance_calibration_head_pin(
         return _frozen_mapping(result)
 
 
+def uses_block6_capture_screen(
+    runs_root: Path | str, *, window_plan_path: Path | None = None,
+) -> bool:
+    """The existing HAZARD plan binding selects block 6's calibration policy.
+
+    Reservation plans name reused block-5 packs. The desk supplies its window
+    plan directly; capture reaches it through the runs-root lineage. Its
+    capture_screen binding selects the same policy as the chain and courier.
+    Missing/unreadable plans keep the historical policy and add no gate.
+    """
+    from joulewise.b6.courier import block_six_plan
+    from joulewise.flags.core import WINDOW_PLAN_BASENAME, hazard_flag_context
+
+    if window_plan_path is None:
+        context = hazard_flag_context(runs_root, writer="calibration-screen-policy")
+        custody = getattr(context, "custody_root", None)
+        if custody is None:
+            return False
+        window_plan_path = custody / WINDOW_PLAN_BASENAME
+    try:
+        window = json.loads(Path(window_plan_path).read_bytes())
+        return block_six_plan(window)
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
 def resume_finalize_bracket_session(
     ledger_path: Path,
     head_pin_path: Path,
@@ -6070,6 +6096,7 @@ def resume_finalize_bracket_session(
     slot: str,
     plan_path: Path,
     systematic_screen_s: Decimal | None,
+    window_plan_path: Path | None = None,
     require_committed_pin: bool = True,
     repo_root: Path = REPO_ROOT,
 ) -> Mapping[str, Any]:
@@ -6079,7 +6106,9 @@ def resume_finalize_bracket_session(
     this epoch.  A ``derivation``-kind session has no such acceptance yet, so
     its caller passes ``None``, the disposition collapses to ``valid`` or
     ``ordinary-invalid``, and no early auto-abort applies: the session closes
-    only on its last declared slot or an explicit abort.
+    only on its last declared slot or an explicit abort. Block-6 window plans
+    also withhold the level screen from disposition, retaining its comparison
+    in the recovery record; their chain alone screens the operative bound.
     """
 
     _refuse_custody_override_mint()
@@ -6109,7 +6138,13 @@ def resume_finalize_bracket_session(
         if session.state != "open":
             raise CalibrationLedgerError(RefusalCode.SESSION_NOT_OPEN)
         derivation = session.session_kind == SESSION_KIND_DERIVATION
-        if derivation != (systematic_screen_s is None):
+        block6 = uses_block6_capture_screen(session.runs_root, window_plan_path=window_plan_path)
+        diagnostic_screen_s = systematic_screen_s if block6 else None
+        if block6:
+            # Block-6 registration §5.5: the chain judges b_op; capture level
+            # is diagnostic only. Keep the authenticated acceptance comparator.
+            systematic_screen_s = None
+        if not block6 and derivation != (systematic_screen_s is None):
             # A derivation session must never be judged by the level screen of
             # the PRIOR epoch's acceptance, and a bracket session must never be
             # finalized without one.
@@ -6246,6 +6281,12 @@ def resume_finalize_bracket_session(
                 "receipt": receipt,
                 "head_pin_candidate": candidate,
                 "needs_pin_commit": candidate is not None,
+                **({
+                    "screen_basis": {"preflight_level_screen_s": str(diagnostic_screen_s)},
+                    "exceeds_prior_level_screen": bool(
+                        bound is not None and bound > diagnostic_screen_s
+                    ),
+                } if diagnostic_screen_s is not None else {}),
             }
         )
 

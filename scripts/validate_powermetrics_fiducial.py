@@ -2425,6 +2425,18 @@ def main(argv: list[str] | None = None) -> int:
                        "acceptance's prospective_rederivation digests",
             )
 
+    from joulewise.calibration_ledger import uses_block6_capture_screen  # noqa: PLC0415
+
+    if not args.derivation_only and uses_block6_capture_screen(Path(args.output_root).parent):
+        # Block-6 registration §5.5: retain the acceptance comparison inside
+        # hashed custody, but leave level decisions to screen_b6_calibration.
+        if preflight_systematic_screen_s is not None:
+            screen_basis = {
+                "acceptance_id": acceptance_preflight["acceptance_id"],
+                "preflight_level_screen_s": str(preflight_systematic_screen_s),
+            }
+        preflight_systematic_screen_s = None
+
     import mlx.core as mx  # noqa: PLC0415
 
     logical_test_clock = (
@@ -2993,7 +3005,10 @@ def main(argv: list[str] | None = None) -> int:
         screen_basis=screen_basis,
     )
     if screen_basis is not None:
-        evidence_payload["derivation_only"] = True
+        if args.derivation_only:
+            evidence_payload["derivation_only"] = True
+        else:
+            evidence_payload["acceptance_preflight"] = acceptance_preflight
         evidence_payload["screen_basis"] = screen_basis
         evidence_payload["exceeds_prior_level_screen"] = (
             exceeds_prior_level_screen
@@ -3021,7 +3036,10 @@ def main(argv: list[str] | None = None) -> int:
         | {"raw/powermetrics.plist": sha256_path(capture_path)},
     }
     if screen_basis is not None:
-        manifest["derivation_only"] = True
+        if args.derivation_only:
+            manifest["derivation_only"] = True
+        else:
+            manifest["acceptance_preflight"] = acceptance_preflight
         manifest["screen_basis"] = screen_basis
         manifest["exceeds_prior_level_screen"] = evidence_payload[
             "exceeds_prior_level_screen"

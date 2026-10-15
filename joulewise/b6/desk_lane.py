@@ -68,12 +68,21 @@ class DeskLane:
                             "--ledger", str(measurement / plan.DEFAULT_LEDGER_RELATIVE),
                             "--head-pin", str(measurement / plan.HEAD_PIN_RELATIVE),
                             "resume-finalize", "--session-id", session_id, "--slot", name,
-                            "--plan", frozen_plan], check=False, capture_output=True, text=True,
+                            "--plan", frozen_plan, "--window-plan", metadata["prepared"]["plan_path"]],
+                            check=False, capture_output=True, text=True,
                             timeout=120, env=self.env)
                         record = {"slot": name, "rc": result.returncode,
                                   "status": "FINALIZED" if result.returncode == 0 else "FAILED"}
                         if result.returncode:
                             flags.append("records.pin_ledger")
+                        else:
+                            try:
+                                recovered = json.loads(result.stdout)
+                            except (ValueError, TypeError):
+                                recovered = {}
+                            for key in ("screen_basis", "exceeds_prior_level_screen"):
+                                if key in recovered:
+                                    record[key] = recovered[key]
                     except Exception as exc:
                         record = {"slot": name, "status": "FAILED", "error": type(exc).__name__}
                         flags.append("records.pin_ledger")
@@ -85,7 +94,8 @@ class DeskLane:
                                  if r.get("stage_id") == "chain.stop"), None)
                     stop = stop or read(night / "result.json").get("aborted_reason") or read(
                         night / "hazard_result.json").get("aborted_reason")
-                    reason = stop or f"chain_exit:{metadata.get('chain_exit_code', 'unknown')}"
+                    exit_code = metadata.get("chain_exit_code", "unknown")
+                    reason = stop or session_structure.CHAIN_STOP_EXITS.get(exit_code) or f"chain_exit:{exit_code}"
                     calibration_ledger.abort_bracket_session(measurement / plan.DEFAULT_LEDGER_RELATIVE,
                         session_id=session_id, reason=reason)
                     metadata["bracket_aborted"] = True
