@@ -7234,7 +7234,13 @@ def _idle_admission_core_evaluation(
         # Preserve the evaluator output for the whole-window stored/derived replay.
         cpu_conditions = cpu_admission["conditions"]
         if attempt is not None:
-            final = evaluation.metadata["environment_admission"]["attempts"][-1]
+            # Read defensively (stage-1 integration): callers that bind the attempt
+            # number without an environment_admission ledger must not raise here.
+            admission = (evaluation.metadata.get("environment_admission")
+                         if isinstance(evaluation.metadata, Mapping) else None)
+            attempts = admission.get("attempts") if isinstance(admission, Mapping) else None
+            final = (attempts[-1] if isinstance(attempts, list) and attempts
+                     and isinstance(attempts[-1], Mapping) else {})
             if final.get("busy_fraction_admitted") is True and final.get("admitted") is True:
                 cpu_conditions = [code for code in cpu_conditions
                                   if code != "cpu_busy_ratio_p95_exceeded"]
