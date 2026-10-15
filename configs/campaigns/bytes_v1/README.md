@@ -153,4 +153,3 @@ requested two test files, whole Block-6 suite and relevant census checks are run
 No Mac KV command, real-model inference, real safetensors-header validation or
 measurement was run. The full repository suite was not run. The Mac whole-suite
 run remains the merge gate; the 213-test cloud run is not a green merge gate.
-
