@@ -22,6 +22,8 @@ H1_CHECKS = 21
 # epsilon (all and tier), rho, four tier deviations per boundary; rest epsilon/lambda.
 H2_INTERVALS = 3 * (1 + 1 + 1 + 4) + 2
 SCHEMA = "joulewise.bytes_predictions.v1"
+BOUND_KINDS = ("E_clock_anchor_shift_bound_j", "E_interpolation_joint_edge_bound_j",
+               "E_whole_window_drift_allowance_j")
 
 
 class AnalysisError(ValueError):
@@ -244,59 +246,76 @@ def _event_span(events, phase, metadata):
     return span
 
 
-def _shift_values(times, spans, bound):
-    # integrate changes only as an endpoint crosses a sample. Include both sides of each discontinuity.
-    shifts = {-bound, 0, bound}
-    for span in spans:
-        for edge in span:
-            lo, hi = bisect.bisect_left(times, edge - bound), bisect.bisect_right(times, edge + bound)
-            for stamp in times[lo:hi]:
-                d = stamp - edge
-                shifts.update((max(-bound, d - 1), d, min(bound, d + 1)))
-    return sorted(shifts)
+def meter_decode(stream, decode_span, idle_span):
+    """R3 DC input integration and the 2026-10-15 phase-edge ruling.
 
-
-def meter_decode(stream, decode_span, idle_span, *, clock_bound_ns):
-    """DC input only, without a battery correction. Exact common-shift envelope.
-
-    The bound is a required prospectively frozen input: km003c_parse supplies
-    diagnostics, not an accepted uncertainty bound. No residual percentile is
-    silently promoted to a coverage guarantee.
+    Samples contain [sample time, next sample time); an exact edge uses the
+    sample starting there. The ruled bound applies to decode, for both bases.
+    It is an attribution bound, not a physical-energy confidence statement.
     """
     from joulewise.external import km003c_parse as kp
-    bound = number(clock_bound_ns, "meter_clock_bound_ns", nonnegative=True)
-    if int(bound) != bound:
-        raise AnalysisError("meter clock bound must be integer nanoseconds")
-    bound = int(bound)
     offset = kp.raw_offset_ns(stream)
-    if not stream.aligned or offset is None:
-        raise AnalysisError("meter raw/monotonic mapping unavailable")
+    if stream.fit is None or not stream.aligned or offset is None:
+        raise AnalysisError("meter clock fit or raw/monotonic mapping unavailable" +
+                            (": " + stream.fit_error if stream.fit_error else ""))
     spans = [[edge + offset for edge in span] for span in (decode_span, idle_span)]
-    if any(span[0] - bound < stream.host_ns[0] or span[1] + bound > stream.host_ns[-1] for span in spans):
-        raise AnalysisError("meter does not cover decode and own idle spans plus uncertainty")
+    if any(span[0] < stream.host_ns[0] or span[1] > stream.host_ns[-1] or
+           span[1] <= span[0] for span in spans):
+        raise AnalysisError("meter does not cover decode and own idle spans")
     duration = (spans[0][1] - spans[0][0]) / 1e9
     idle_duration = (spans[1][1] - spans[1][0]) / 1e9
-    values = []
-    for shift in _shift_values(stream.host_ns, spans, bound):
-        gross, n = kp.integrate(stream.host_ns, stream.watts, *(edge + shift for edge in spans[0]))
-        base, nb = kp.integrate(stream.host_ns, stream.watts, *(edge + shift for edge in spans[1]))
-        if gross is None or base is None:
-            raise AnalysisError("meter span has no samples")
-        values.append((shift, gross, gross - base / idle_duration * duration, base / idle_duration, n, nb))
-    point = next(v for v in values if v[0] == 0)
-    return {"gross_j": point[1], "secondary_j": point[2], "idle_power_w": point[3],
-            "gross_clock_j": max(abs(v[1] - point[1]) for v in values),
-            "secondary_clock_j": max(abs(v[2] - point[2]) for v in values),
-            "n": point[4], "n_idle": point[5], "clock_bound_ns": bound,
-            "clock_fit": stream.fit.stats}
+    gross, n = kp.integrate(stream.host_ns, stream.watts, *spans[0])
+    base, nb = kp.integrate(stream.host_ns, stream.watts, *spans[1])
+    if gross is None or base is None:
+        raise AnalysisError("meter span has no samples")
+    stats = stream.fit.stats
+    residual = max(abs(number(stats[key], key)) for key in
+                   ("excess_latency_ms_min", "excess_latency_ms_max")) / 1000
+    interval = number(stream.samples.step_ms, "meter sample interval", positive=True) / 1000
+    powers = [number(stream.watts[bisect.bisect_right(stream.host_ns, edge) - 1],
+                     "meter edge power", nonnegative=True) for edge in spans[0]]
+    u = math.fsum(powers) * (residual + interval)
+    return {"gross_j": gross, "secondary_j": gross - base / idle_duration * duration,
+            "idle_power_w": base / idle_duration, "phase_edge_j": u,
+            "edge_powers_w": powers, "r_max_s": residual, "sample_interval_s": interval,
+            "n": n, "n_idle": nb, "clock_fit": stats}
+
+
+def operative_summary(bundle, acceptance, *, synthetic=False, stored=None, physics_cache=None):
+    """Consume B6's evaluated own-session bound; never recompute a bracket.
+
+    B6 calibration.evaluate owns max(pre,post)+max(drift,screen). The existing
+    output-free reducer seam owns re-derivation and rejects narrowed bounds.
+    """
+    from joulewise.reduce import _rederive_summary_for_authenticated_fiducial_bound
+    cal = acceptance.get("calibration") or {}
+    value = cal.get("operative_bound_s")
+    if value is None or isinstance(value, bool):
+        raise AnalysisError("operative-bracket join missing: b6-acceptance.calibration.operative_bound_s")
+    bound = number(float(value), "harvest operative bound", nonnegative=True)
+    summary = _rederive_summary_for_authenticated_fiducial_bound(
+        bundle, authenticated_fiducial_bound_s=bound,
+        _instrument_calibration_physics_cache=physics_cache)
+    envelope = (summary.get("energy_anchor_shift_envelopes") or {}).get("/phase_energy_j/decode")
+    # Mock telemetry has no native interval support, mint calibration, or
+    # operative edge envelope. Only explicitly labelled simulation fixtures
+    # may supply a timing bound; never treat that as live join validation.
+    if synthetic and (stored or {}).get("bytes_synthetic_timing_fixture") is True:
+        return stored, {"operative_bound_s": bound, "status": "synthetic_timing_fixture",
+                        "missing": ["native powermetrics interval-support trace",
+                                    "member instrument-calibration primary evidence",
+                                    "operative decode envelope from that evidence"]}
+    if summary.get("status") != "succeeded" or envelope is None:
+        raise AnalysisError("operative-bracket re-reduction has no decode envelope; "
+                            "requires native trace, clock stamps and valid member instrument calibration: " +
+                            str(summary.get("failure_message") or summary.get("energy_uncertainty_status")))
+    return summary, {"operative_bound_s": bound, "status": "rereduced"}
 
 
 def _session_streams(root):
     from joulewise.external import km003c_parse as kp
     directory = root / "sources/night-custody/hazards/meter"
     paths = sorted(directory.glob("stream-*.jsonl"))
-    if not paths:
-        raise AnalysisError("archive has no raw KM003C streams")
     return [(path.name, kp.parse(path)) for path in paths]
 
 
@@ -314,17 +333,22 @@ def archive_records(root, manifest, session, *, stage):
         raise AnalysisError("session is not a counting accepted attempt")
     selected = {cell: m for m in manifest["models"] for cell in m["cell_ids"]
                 if stage == "all" or m["role"] == stage}
-    exclusions = {e["run_id"] for e in acceptance.get("excluding", []) if e.get("scope") == "member"}
+    member_exclusions = [e for e in acceptance.get("excluding", []) if e.get("scope") == "member"]
+    exclusions = {e["run_id"] for e in member_exclusions}
+    catalog = read_json(Path(__file__).resolve().parents[1] / "configs/b6/flag_catalog_b6.json")["codes"]
+    nonphysical = {e["run_id"] for e in member_exclusions
+                   if catalog.get(e["code"], {}).get("klass") != "PHYSICS"}
     flags, window_flags = {}, set()
-    path = root / "derived/flags.jsonl"
-    for raw in path.read_text().splitlines():
-        flag = json.loads(raw)
+    flag_rows = [json.loads(raw) for raw in (root / "derived/flags.jsonl").read_text().splitlines() if raw.strip()]
+    flag_rows += acceptance.get("emitted_flags", [])
+    for flag in flag_rows:
         scope = flag.get("scope") or {}
         if scope.get("run_id"):
             flags.setdefault(scope["run_id"], set()).add(flag["code"])
         else:
             window_flags.add(flag["code"])
     streams = None
+    physics_cache = {}
     seen = set()
     for member in roster["members"]:
         units = [u for u in member.get("units", []) if u["cell_id"] in selected]
@@ -346,7 +370,9 @@ def archive_records(root, manifest, session, *, stage):
             raise AnalysisError("roster/config model mismatch")
         metadata = read_json(bundle / "metadata.json")
         events = [json.loads(s) for s in (bundle / "events.jsonl").read_text().splitlines() if s.strip()]
-        summary = read_json(root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json"))
+        stored = read_json(root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json"))
+        summary, operative = operative_summary(bundle, acceptance,
+            synthetic=manifest.get("synthetic") is True, stored=stored, physics_cache=physics_cache)
         counts = metadata.get("workload_observed", {})
         if counts.get("output_token_count") != 512:
             raise AnalysisError("runtime-observed output count must be 512")
@@ -359,13 +385,11 @@ def archive_records(root, manifest, session, *, stage):
         errors = []
         for name, stream in streams:
             try:
-                meter = meter_decode(stream, decode, idle, clock_bound_ns=session["meter_clock_bound_ns"])
+                meter = meter_decode(stream, decode, idle)
                 meter["stream"] = name
                 break
             except AnalysisError as exc:
                 errors.append(str(exc))
-        if meter is None:
-            raise AnalysisError("no usable decode meter stream: " + "; ".join(errors))
         energy = number(summary["phase_energy_j"]["decode"], "phase energy", nonnegative=True)
         envelope = summary["energy_anchor_shift_envelopes"]["/phase_energy_j/decode"]
         anchor_bound = number(envelope["max_abs_delta_j"], "decode anchor bound", nonnegative=True)
@@ -373,12 +397,14 @@ def archive_records(root, manifest, session, *, stage):
         if summary.get("energy_bound_terms_j", {}).get("E_interpolation_joint_edge_bound_j") != 0:
             raise AnalysisError("phase joint interpolation bound unavailable for non-interval trace")
         own_idle = number(summary["idle_baseline"]["power_w_mean"], "own rails idle", nonnegative=True)
-        run_flags = sorted(flags.get(run_id, set()) | window_flags)
+        run_flags = sorted(flags.get(run_id, set()) | window_flags |
+                           ({"bytes.meter_decode_unavailable"} if meter is None else set()))
         yield {"model": model["model"], "pass_id": session["pass_id"], "session_id": acceptance["session_id"],
                "run_id": run_id, "stratum": unit["stratum"], "unit_id": str(unit["unit_id"]),
                "duration_s": duration, "rails_j": energy, "rails_secondary_j": energy - own_idle * duration,
-               "rails_anchor_j": anchor_bound, "meter": meter,
-               "excluded": any(f in ("thermal.os_level_nonzero", "thermal.powermetrics_pressure_elevated") for f in run_flags),
+               "rails_anchor_j": anchor_bound, "meter": meter, "operative": operative,
+               "meter_unavailable_reason": "; ".join(errors) or "no raw KM003C streams" if meter is None else None,
+               "excluded": run_id in exclusions, "nonphysical_excluded": run_id in nonphysical,
                "harvest_excluded": run_id in exclusions, "flags": run_flags,
                "status": summary["status"]}
 
@@ -444,35 +470,76 @@ def _kept(records, inclusive):
     for (stratum, unit), rows in units.items():
         if len(rows) != (1 if stratum == "repeat" else 4):
             raise AnalysisError("floor unit census invalid")
-        invalid = any(r["status"] != "succeeded" or (r["excluded"] and not inclusive) for r in rows)
+        invalid = any(r["status"] != "succeeded" or r.get("nonphysical_excluded", False)
+                      or (r["excluded"] and not inclusive) for r in rows)
         (removed if invalid else kept).extend(rows)
     if sum(r["stratum"] == "repeat" for r in kept) < 5 or len({r["unit_id"] for r in kept if r["stratum"] == "quad"}) < 5:
         raise AnalysisError("fewer than five kept units per stratum")
     return kept, [r["run_id"] for r in removed]
 
 
+def estimate_phase_energy(repeats, quads, repeat_bounds, quad_bounds):
+    """Block-5 analysis_plan_block5.md §4 steps 1–5, generalized only in shape.
+
+    No model identity, custody issuance, or inference dependency. Equivalence
+    tests exercise every registered cell shape against the unchanged kernel.
+    """
+    n_r, n_b = len(repeats), len(quads)
+    if min(n_r, n_b) < 5 or len(repeat_bounds) != n_r or len(quad_bounds) != n_b:
+        raise AnalysisError("phase estimator requires five kept units per stratum and matching bounds")
+    if any(len(q) != 4 for q in quads) or any(len(q) != 4 for q in quad_bounds):
+        raise AnalysisError("phase estimator requires complete four-member quads")
+    repeats = [number(e, "phase energy") for e in repeats]  # R3 secondary permits negative values.
+    quads = [[number(e, "phase energy") for e in q] for q in quads]
+    blocks = [statistics.fmean(q) for q in quads]
+    flat = repeats + list(itertools.chain.from_iterable(quads))
+    # §4.1: canonical full-module fmean; fixed strata weights after exclusions.
+    mean = statistics.fmean(flat) if n_r == n_b == 10 else (
+        .2 * statistics.fmean(repeats) + .8 * statistics.fmean(blocks))
+    # §4.2–3: sample SD per independence stratum; conservative minimum df.
+    s_r, s_b = statistics.stdev(repeats), statistics.stdev(blocks)
+    variance = .2 ** 2 * s_r ** 2 / n_r + .8 ** 2 * s_b ** 2 / n_b
+    df = min(n_r, n_b) - 1
+    critical = 2.262157162798205 if df == 9 else student_t_quantile(.975, df)
+    half = critical * math.sqrt(variance)
+    # §4.4: every named kind mandatory; stratified means and math.fsum B.
+    all_bounds = repeat_bounds + list(itertools.chain.from_iterable(quad_bounds))
+    for bound in all_bounds:
+        if set(bound) != set(BOUND_KINDS):
+            raise AnalysisError("missing or extra phase bound kind")
+        for kind in BOUND_KINDS:
+            number(bound[kind], kind, nonnegative=True)
+    terms = {}
+    for kind in BOUND_KINDS:
+        terms[kind] = statistics.fmean(b[kind] for b in all_bounds) if n_r == n_b == 10 else (
+            .2 * statistics.fmean(b[kind] for b in repeat_bounds) +
+            .8 * statistics.fmean(b[kind] for q in quad_bounds for b in q))
+    bound = math.fsum(terms.values())
+    # §4.5: subtract/add in registered order; never clamp secondary endpoints.
+    result = {"mean_j": mean, "lower_j": mean - half - bound, "upper_j": mean + half + bound,
+              "interval": {"n_r": n_r, "n_b": n_b, "df": df, "s_r": s_r, "s_b": s_b,
+                           "variance": variance, "h_j": half, "kind_averages_j": terms, "B_j": bound}}
+    json.dumps(result, allow_nan=False)
+    return result
+
+
 def _registered_estimate(records, energies, bounds):
-    # The shared function is deliberately resolved lazily: importing BYTES has
-    # no measurement dependencies. The current repository's fixed-cell kernel
-    # cannot accept this general floor-module interface (contract documents it).
-    from joulewise import paper_reported_energy
-    function = getattr(paper_reported_energy, "estimate_phase_energy", None)
-    if function is None:
-        raise AnalysisError("Block-5 library lacks general estimate_phase_energy; shared-kernel scope addition required")
+    if not len(records) == len(energies) == len(bounds):
+        raise AnalysisError("mismatched phase records")
     repeats, quads, repeat_bounds, quad_bounds = [], {}, [], {}
     for row, energy, bound in zip(records, energies, bounds):
         if row["stratum"] == "repeat":
             repeats.append(energy)
             repeat_bounds.append(bound)
-        else:
+        elif row["stratum"] == "quad":
             quads.setdefault(row["unit_id"], []).append(energy)
             quad_bounds.setdefault(row["unit_id"], []).append(bound)
-    return function(repeats, list(quads.values()), repeat_bounds, list(quad_bounds.values()))
+        else:
+            raise AnalysisError("unexpected floor stratum")
+    return estimate_phase_energy(repeats, list(quads.values()), repeat_bounds, list(quad_bounds.values()))
 
 
 def reduce_models(records, manifest, *, inclusive=False):
-    if manifest.get("synthetic") is not True:
-        raise AnalysisError("production R3 operative-bracket consumption join is not implemented; stored capture bounds cannot substitute")
     grouped = {}
     for row in records:
         grouped.setdefault((row["model"], row["pass_id"], row["session_id"]), []).append(row)
@@ -480,42 +547,59 @@ def reduce_models(records, manifest, *, inclusive=False):
     session_specs = {s["session_id"]: s for s in manifest["sessions"]}
     rows = []
     for (model, pass_id, session_id), module in sorted(grouped.items()):
-        kept, removed = _kept(module, inclusive)
         spec, session = model_specs[model], session_specs[session_id]
-        duration = _weighted(kept, [r["duration_s"] for r in kept])
-        reference = session["drift_reference"]
-        for secondary in (False, True):
+        for secondary, boundary in itertools.product((False, True), BOUNDARIES):
+            base = {"model": model, "pass_id": pass_id, "session_id": session_id, "boundary": boundary,
+                    "basis": "idle-subtracted secondary" if secondary else "gross primary",
+                    "selection": "flagged-inclusive" if inclusive else "primary",
+                    "bytes": (spec["W_bytes"] + spec["KV_bytes"]) / 1e9,
+                    "resident": spec["R_bytes"] / 1e9, "role": spec["role"], "moe": spec["moe"], "tier": spec["tier"]}
+            # §2.2: loss of one member removes its whole unit. Missing DC never
+            # changes rails selection. Inclusive restores physics, not absent data.
+            candidate = [dict(r, status="meter_unavailable") if boundary != "rails" and r["meter"] is None
+                         else r for r in module]
+            try:
+                kept, removed = _kept(candidate, inclusive)
+            except AnalysisError as exc:
+                if boundary == "rails":
+                    raise
+                rows.append({**base, "status": "unavailable", "reason": str(exc),
+                             "unavailable_runs": [r["run_id"] for r in module if r["meter"] is None],
+                             "flags": sorted({f for r in module for f in r["flags"]})})
+                continue
+            duration = _weighted(kept, [r["duration_s"] for r in kept])
+            reference = session["drift_reference"]
             rails = [r["rails_secondary_j"] if secondary else r["rails_j"] for r in kept]
-            dc = [r["meter"]["secondary_j" if secondary else "gross_j"] for r in kept]
-            clock = [r["meter"]["secondary_clock_j" if secondary else "gross_clock_j"] for r in kept]
-            for boundary in BOUNDARIES:
-                energies = rails if boundary == "rails" else dc if boundary == "DC input" else [d - r for d, r in zip(dc, rails)]
-                gross_values = [r["rails_j"] if boundary == "rails" else r["meter"]["gross_j"]
-                                if boundary == "DC input" else r["meter"]["gross_j"] - r["rails_j"] for r in kept]
-                scale = 1.0 if reference["test7_passed"] else max(1.0,
-                    _weighted(kept, gross_values) / number(reference["energy_j"][boundary], "E_ref", positive=True),
-                    duration / number(reference["duration_s"], "T_ref", positive=True))
-                drift = number(session["drift_allowance_j"][boundary], "drift allowance", nonnegative=True) * .5 * scale
-                bounds = [{"E_clock_anchor_shift_bound_j": r["rails_anchor_j"] if boundary != "DC input" else 0.0,
-                           "E_interpolation_joint_edge_bound_j": 0.0,
-                           "E_whole_window_drift_allowance_j": drift} for r in kept]
-                estimate = _registered_estimate(kept, energies, bounds)
-                interval = estimate["interval"]
-                h = student_t_quantile(1 - .05 / (2 * H1_CHECKS), interval["df"]) * math.sqrt(interval["variance"])
-                clock_j = 0.0 if boundary == "rails" else _weighted(kept, clock)
-                bound = interval["B_j"]
-                mean = estimate["mean_j"]
-                rows.append({"model": model, "pass_id": pass_id, "session_id": session_id,
-                             "boundary": boundary, "basis": "idle-subtracted secondary" if secondary else "gross primary",
-                             "selection": "flagged-inclusive" if inclusive else "primary",
-                             "mean_j": mean, "lower_j": mean - h - bound - clock_j,
-                             "upper_j": mean + h + bound + clock_j, "h_j": h, "B_j": bound,
-                             "meter_clock_j": clock_j, "variance": interval["variance"], "df": interval["df"],
-                             "duration_s": duration, "drift_scale": scale, "n_r": interval["n_r"], "n_b": interval["n_b"],
-                             "removed_runs": removed, "flags": sorted({f for r in kept for f in r["flags"]}),
-                             "attribution_floor_j": max(r["rails_anchor_j"] for r in kept) if boundary != "DC input" else 0.0,
-                             "bytes": (spec["W_bytes"] + spec["KV_bytes"]) / 1e9,
-                             "resident": spec["R_bytes"] / 1e9, "role": spec["role"], "moe": spec["moe"], "tier": spec["tier"]})
+            dc = [r["meter"]["secondary_j" if secondary else "gross_j"] for r in kept] if boundary != "rails" else []
+            energies = rails if boundary == "rails" else dc if boundary == "DC input" else [d-r for d,r in zip(dc, rails)]
+            gross_values = [r["rails_j"] if boundary == "rails" else r["meter"]["gross_j"]
+                            if boundary == "DC input" else r["meter"]["gross_j"] - r["rails_j"] for r in kept]
+            scale = 1.0 if reference["test7_passed"] else max(1.0,
+                _weighted(kept, gross_values) / number(reference["energy_j"][boundary], "E_ref", positive=True),
+                duration / number(reference["duration_s"], "T_ref", positive=True))
+            drift = number(session["drift_allowance_j"][boundary], "drift allowance", nonnegative=True) * .5 * scale
+            edge = [(r["rails_anchor_j"] if boundary != "DC input" else 0.0) +
+                    (r["meter"]["phase_edge_j"] if boundary != "rails" else 0.0) for r in kept]
+            bounds = [dict(zip(BOUND_KINDS, (u, 0.0, drift))) for u in edge]
+            estimate = _registered_estimate(kept, energies, bounds)
+            interval = estimate["interval"]
+            # R5 multiplicity widens h only; registered B is unchanged.
+            h = student_t_quantile(1 - .05 / (2 * H1_CHECKS), interval["df"]) * math.sqrt(interval["variance"])
+            bound, mean = interval["B_j"], estimate["mean_j"]
+            rows.append({**base, "status": "computed", "mean_j": mean,
+                         "lower_j": mean - h - bound, "upper_j": mean + h + bound,
+                         "h_j": h, "B_j": bound, "kind_averages_j": interval["kind_averages_j"],
+                         "meter_phase_edge_mean_j": _weighted(kept, [r["meter"]["phase_edge_j"] for r in kept]) if boundary != "rails" else 0.0,
+                         "variance": interval["variance"], "df": interval["df"],
+                         "duration_s": duration, "drift_scale": scale, "n_r": interval["n_r"], "n_b": interval["n_b"],
+                         "removed_runs": removed, "kept_runs": [r["run_id"] for r in kept],
+                         "meter_unavailable": [{"run_id": r["run_id"], "reason": r.get("meter_unavailable_reason")}
+                                               for r in module if r["meter"] is None],
+                         "flags": sorted({f for r in kept for f in r["flags"]}),
+                         "attribution_floor_j": max(edge),
+                         "meter_attribution_floor_j": max(r["meter"]["phase_edge_j"] for r in kept) if boundary != "rails" else None,
+                         "rails_attribution_floor_j": max(r["rails_anchor_j"] for r in kept) if boundary != "DC input" else None,
+                         "operative": list({digest(r["operative"]): r["operative"] for r in kept}.values())})
     return rows
 
 
@@ -531,19 +615,27 @@ def combine_passes(rows):
         group.sort(key=lambda r: r["pass_id"])
         n = len(group)
         point = {k: group[0][k] for k in ("model", "boundary", "basis", "selection", "bytes", "resident", "role", "moe", "tier")}
+        if any(r.get("status") == "unavailable" for r in group):
+            points.append({**point, "status": "unavailable", "reason": "one or more passes unavailable",
+                           "passes": group})
+            continue
         mean = statistics.fmean(r["mean_j"] for r in group)
         # Independent sessions' sampling variances add; systematic allowances do not shrink.
         variance = math.fsum(r["variance"] for r in group) / n ** 2
         df = min(r["df"] for r in group)
         h = student_t_quantile(1 - .05 / (2 * H1_CHECKS), df) * math.sqrt(variance)
-        bound, clock = (statistics.fmean(r[k] for r in group) for k in ("B_j", "meter_clock_j"))
+        bound = statistics.fmean(r["B_j"] for r in group)
+        meter_edge = statistics.fmean(r["meter_phase_edge_mean_j"] for r in group)
         duration = statistics.fmean(r["duration_s"] for r in group)
-        point.update(mean_j=mean, lower_j=mean - h - bound - clock, upper_j=mean + h + bound + clock,
-                     h_j=h, B_j=bound, meter_clock_j=clock, duration_s=duration,
+        point.update(mean_j=mean, lower_j=mean - h - bound, upper_j=mean + h + bound,
+                     status="computed", h_j=h, B_j=bound, meter_phase_edge_mean_j=meter_edge, duration_s=duration,
+                     attribution_floor_j=max(r["attribution_floor_j"] for r in group),
+                     meter_attribution_floor_j=max((r["meter_attribution_floor_j"] for r in group
+                         if r["meter_attribution_floor_j"] is not None), default=None),
                      pass_values_j=[r["mean_j"] for r in group],
                      pass_difference_j=group[1]["mean_j"] - group[0]["mean_j"] if n == 2 else None,
-                     e=mean / DECODE_STEPS, lower=(mean - h - bound - clock) / DECODE_STEPS,
-                     upper=(mean + h + bound + clock) / DECODE_STEPS,
+                     e=mean / DECODE_STEPS, lower=(mean - h - bound) / DECODE_STEPS,
+                     upper=(mean + h + bound) / DECODE_STEPS,
                      printed_j_per_output_token=mean / 512, output_label=OUTPUT_LABEL,
                      time=duration / DECODE_STEPS, power=mean / duration,
                      BW=point["bytes"] * DECODE_STEPS / duration)
@@ -559,21 +651,26 @@ def frozen_predictions(points, manifest):
             ("gross primary", "idle-subtracted secondary"), BOUNDARIES):
         subset = [p for p in points if (p["selection"], p["basis"], p["boundary"]) == (selection, basis, boundary)]
         lines.append({"selection": selection, "basis": basis, "boundary": boundary,
-                      "lines": freeze_lines(subset)})
+                      "lines": freeze_lines(subset) if all(p.get("status") != "unavailable" for p in subset) else None})
     return {"schema": SCHEMA, "manifest_sha256": digest(manifest), "H1_checks": H1_CHECKS,
             "H2_intervals": H2_INTERVALS, "fit_points": points, "rival_lines": lines,
             "tier_fit_inputs": [{k: p[k] for k in ("model", "boundary", "basis", "selection", "BW", "power")}
-                                for p in points if p["tier"]],
+                                for p in points if p["tier"] and p.get("status") != "unavailable"],
             "note": "Dense held-out models test linearity over the format-derived bytes range; their small rival splits do not identify the hypothesis."}
 
 
 def evaluate(points, frozen):
-    h1_rows, moe_rows, h2_rows = [], [], []
+    h1_rows, moe_rows, h2_rows, unavailable = [], [], [], []
     for group in frozen["rival_lines"]:
         key = tuple(group[k] for k in ("selection", "basis", "boundary"))
         subset = [p for p in points if tuple(p[k] for k in ("selection", "basis", "boundary")) == key]
         if len(subset) != 10:
             raise AnalysisError("held-out analysis requires all ten models")
+        missing = [p["model"] for p in subset if p.get("status") == "unavailable"]
+        if group["lines"] is None or missing:
+            unavailable.append({**dict(zip(("selection", "basis", "boundary"), key)),
+                                "models": missing, "reason": "H1/H2 require complete fit and ten-model cells"})
+            continue
         results = []
         for point in subset:
             result = h1_point(group["lines"], point)
@@ -584,7 +681,7 @@ def evaluate(points, frozen):
         moe_rows.append({**dict(zip(("selection", "basis", "boundary"), key)), **active_or_resident(results)})
         rails = {p["model"]: p["power"] for p in points if (p["selection"], p["basis"], p["boundary"]) == (*key[:2], "rails")}
         h2_rows.append({**dict(zip(("selection", "basis", "boundary"), key)), **h2(subset, rails)})
-    return {"h1": h1_rows, "moe": moe_rows, "h2": h2_rows}
+    return {"h1": h1_rows, "moe": moe_rows, "h2": h2_rows, "unavailable": unavailable}
 
 
 def write_predictions(out, payload):

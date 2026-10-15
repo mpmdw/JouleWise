@@ -3,18 +3,12 @@
 Authority: `docs/design/bytes_pack_design.md` at `7a3cea2e0`, R3/R5/R8.3.
 Implementation: `joulewise/bytes_analysis.py`; CLI: `scripts/bytes_analyze.py`.
 
-**Status: incomplete, fail-closed at the shared estimator.** At the requested
-Block-6 base, the only registered Block-5 phase arithmetic function is
-`paper_reported_energy._project_cell`. It is a private, non-issuing kernel
-restricted to the two Block-5 model registrations and exactly 50 strictly valid,
-nonnegative members. It does not implement the analysis plan's reduced-unit
-estimator. No general `estimate_phase_energy` function exists. BYTES does not
-fabricate registered model identities, clone the arithmetic, patch the library,
-or publish replacement-estimator simulation rates. `_registered_estimate`
-refuses explicitly until the shared interface below is available. The pending
-scope request names `joulewise/paper_reported_energy.py`, which is outside the
-user's WRITE list. End-to-end fit/heldout CLI success and the 60 campaign word
-rates are therefore **not validated or complete**.
+**Status: implemented and verified with synthetic evidence only.** The BYTES-local
+`estimate_phase_energy` follows Block-5 analysis-plan §4, including its canonical
+full-module mean and its reduced-unit arithmetic. Block-5's registered library
+is unchanged. The acceptance calibration bound joins the existing output-free
+re-reducer. Real analysis still requires frozen R4 inputs and authorized staged
+release; this desk build neither collects data nor grants paper custody.
 
 No import-fence or inventory registry needs an entry for the current module:
 it imports no measurement runtime, battery verdict seam, paper custody issuer,
@@ -33,11 +27,12 @@ The archive reader consumes these native shapes:
 |---|---|
 | `derived/roster.json` | `members[].run_id`, `units[].cell_id,stratum,unit_id`; identify model and whole repeat/quad before opening model files. `stratum` is `repeat` or `quad`. |
 | `derived/b6-acceptance.json` | `counting` must be true; `session_id`, member `excluding` records. This reader is not a paper-custody authentication capability. |
-| `derived/flags.jsonl` | `code`, `scope.run_id`; window flags propagate to all selected runs. |
+| `derived/flags.jsonl`, acceptance `emitted_flags` | `code`, `scope.run_id`; window flags propagate to all selected runs. All harvest member exclusions remove whole units in primary. |
 | `sources/claim-runs/<run>/config.json` | `model.name` must match the manifest model. |
 | `sources/claim-runs/<run>/metadata.json` | observed output count and sampling-start epoch/monotonic clock pair. |
 | `sources/claim-runs/<run>/events.jsonl` | unique complete `decode` phase and own `idle_baseline` stage; `timestamp_s` and optional `metadata.monotonic_ns`. |
-| `withheld/reductions/<run>.summary_metrics.rereduced.json` | `status`, `phase_energy_j.decode`, `idle_baseline.power_w_mean`, decode `energy_anchor_shift_envelopes` and joint interpolation bound. |
+| `derived/b6-acceptance.json.calibration.operative_bound_s` | Already computed by `b6.calibration.evaluate`: max(pre, post) + max(drift, bracket screen). Passed to `reduce._rederive_summary_for_authenticated_fiducial_bound`; never recomputed in BYTES. Native energies, idle and phase envelopes come from that in-memory summary, not the stored pre-capture reduction. |
+| `withheld/reductions/<run>.summary_metrics.rereduced.json` | Retained harvest locator; only an explicitly marked synthetic mock timing fixture may supply a zero phase envelope. |
 | `sources/night-custody/hazards/meter/stream-*.jsonl` | native KM003C header, batches, trailer. `km003c_parse.parse` calls `clock_fit`; `integrate` integrates the decode and own idle spans. Raw/monotonic start/end pairs must agree. |
 
 The actual harvest's `member-assessments.json` contains run paths, validation,
@@ -60,7 +55,6 @@ interface is explicit pending integration with R4. JSON object:
 | `models[].W_bytes,KV_bytes,R_bytes` | Frozen R4 stored weight reads, mean KV reads, resident storage in bytes; GB is decimal 10^9. These are not inferred from parameter count, RSS or pilot estimates. |
 | `models[].cell_ids` | Nonoverlapping native decode floor-family IDs from the roster. |
 | `sessions[].session_id,archive,pass_id` | Native session ID, retained archive locator, pass ordering key. |
-| `sessions[].meter_clock_bound_ns` | Required nonnegative integer bound for a common meter/phase clock displacement; **no default or coverage interpretation inferred from fit diagnostics**. |
 | `sessions[].drift_allowance_j` | Object keyed by `rails`, `DC input`, `rest`: frozen full gross-family allowances. Half is the member's Block-5 drift term. |
 | `sessions[].drift_reference.energy_j` | Object keyed by boundary: positive E_ref values. |
 | `sessions[].drift_reference.duration_s` | Positive T_ref. |
@@ -71,58 +65,88 @@ interface is explicit pending integration with R4. JSON object:
 regressors, an invented 8B-8bit row, and twenty explicit seeds per world. It is
 not a frozen R4 manifest or hardware validation.
 
-## Estimation and remaining integration gaps
+## Estimation and the operative-bracket join
 
-The proposed shared call is
-`estimate_phase_energy(repeats, quads, repeat_bounds, quad_bounds)` returning
-`mean_j` and `interval {n_r,n_b,df,variance,B_j}`. Quads and quad bounds retain
-all four members, with the three named Block-5 bound kinds. The existing
-registered kernel should delegate to that same arithmetic without changing
-its registered outputs; BYTES then changes only the statistical t critical
-for H1 and adds the separately reported meter clock term. **This function has
-not been added without write authority.**
+`estimate_phase_energy(repeats, quads, repeat_bounds, quad_bounds)` accepts
+arbitrary signed energies and counts of at least five kept units in each
+stratum. Every quad retains four members. Every member must supply all three
+nonnegative named bounds. It follows `analysis_plan_block5.md` §4 in order:
+canonical `fmean` over 50 members at 10/10; otherwise fixed 0.2/0.8 stratified
+mean; sample-SD variance; t with min(n_r,n_b)-1 df; stratified kind averages
+summed with `math.fsum`; unclamped m-h-B and m+h+B. H1 replaces only the t
+critical for its 21-check Bonferroni family. Comments cite each plan step.
 
-Each model/pass is one 50-run module, ten repeats and ten complete null quads.
-A removed member removes its whole unit; fewer than five kept units in either
-stratum refuses. Durations and bound averages use the same 0.2/0.8 strata as
-energy. H1 uses e=E/511, tau=T/511; the separately named printed output-token
-value is E/512. Unclamped negative secondary values are retained.
+Each planned model/pass is a 50-run module, ten repeats and ten null quads.
+Loss of any member removes its whole unit. Primary reads the harvest's member
+exclusions, including thermal and every other physical exclusion. The labelled
+flagged-inclusive sensitivity restores every physically excluded unit with
+usable data. The existing B6 catalog's `klass=PHYSICS` determines physical
+exclusions. Representation, structural or unknown exclusions remain excluded;
+failed or absent members are never reconstructed. Below five
+kept units a rails cell refuses; missing meter data can make DC/rest unavailable
+without refusing rails. Missing DC members remove whole DC/rest units; their
+runs and reasons remain recorded. Missing a pass never silently changes the
+pass average or the ten-model H2 roster: the affected result is unavailable.
 
-Gross is primary. Secondary subtracts each run's own baseline power times that
-run's decode duration before aggregation. DC input is Vbus*Ibus only: no battery
-energy is added. Rest is the paired DC-input minus rails energy on each run.
-The meter uncertainty enumerates all sample-crossing shifts within the supplied
-common clock bound, including both sides of every discontinuity; it evaluates
-gross and own-idle subtraction jointly. That is a deterministic shift envelope,
-not a physical confidence guarantee. No samples or missing uncertainty terms
-are replaced with zero. The phase joint interpolation term must explicitly be
-zero, as for interval-support traces; unsupported traces refuse.
+H1 uses E/511 and tau=T/511. The printed output-token quantity is E/512 with the
+fixed label. Gross is primary; secondary subtracts each run's own boundary idle
+mean power times its decode duration before aggregation. Negative secondary
+values remain. Rest is each run's paired DC-input minus rails energy, before
+unit aggregation. Battery assistance is flagged; no battery energy is added.
 
-Further disagreements/gaps requiring integration before real analysis:
+DC integration uses `km003c_parse.clock_fit` (via `parse`) and `integrate` over
+the mapped decode and own idle spans. The phase-edge ruling of 2026-10-15 fixes
+per-member u=(P_start+P_end)*(r_max+sample_interval). r_max is the maximum
+absolute value of the fit's recorded minimum and maximum residuals (ms converted
+to seconds); the interval is `Samples.step_ms/1000`. A sample contains its time
+through the next sample time; an exact edge uses the sample beginning there.
+For both gross and secondary, the same decode u enters the first bound kind
+for DC input, replacing rails timing. Rest's first kind is rails timing + u.
+Their stratified means enter B once. The largest u is printed as
+`meter_attribution_floor_j`, never added again. There is no extra common-shift
+clock term. No usable fit/mapping/coverage gives `meter=null`, a recorded
+`bytes.meter_decode_unavailable` flag and reason, while retaining rails.
 
-* Harvest re-reductions use the bundle's stored calibration. R3/Block-5 needs
-  the authenticated operative max bracket, through the existing whole-window
-  consumption session and in-memory re-reducer. Reading the harvest summary
-  alone does not establish that wider phase bound; this route is not yet
-  connected. Real reduction therefore refuses explicitly, even if the shared
-  estimator is subsequently provided. The synthetic archive uses a labelled
-  zero envelope, not a claim
-  of live bracket validation.
-* Stage 1 blinding draws per pack/configuration. It has no shared `bytes` group
-  or subset unblind API. This CLI can preserve fit/heldout read separation,
-  but cannot implement the missing collection/release operation. It reads
-  already authorized archive material and never opens blinding keys.
-* R3's reference to “design section 14” has no target in the supplied ruling.
-  The provenance/values of E_ref, T_ref, test 7, and DC/rest drift allowances
-  must be frozen outside this consumer; it invents none.
-* The existing catalog excludes several physics failures, not just thermal
-  pressure. R6 says thermal excludes and the rest are flags. The current
-  adapter records harvest exclusions but applies the R6 thermal-only rule;
-  missing/malformed data still refuses, rather than inventing an energy.
-* The ruling does not define the derivation/coverage of a meter clock-fit
-  uncertainty. Its parser only returns diagnostic residual/RTT statistics.
-* An independent twin is not in the supplied commits or this WRITE list;
-  twin agreement has not been tested.
+`operative_summary` reads the accepted session's existing operative bound and
+uses `_rederive_summary_for_authenticated_fiducial_bound`. The reducer still
+checks the member calibration, rejects narrowing, dispatches by stored reducer
+identity, and writes nothing. Missing `calibration.operative_bound_s` refuses
+with that exact missing field. An absent native decode envelope reports the
+needed native trace, clock stamps and member calibration. A native fixture
+regression proves the envelope widens and every bundle file stays unchanged.
+
+The 1,000-run mock campaign has a real B6 `calibration.evaluate` output, but its
+compact constant-power point traces lack **native powermetrics interval-support
+traces, member instrument-calibration primary evidence, and an operative decode
+envelope from that evidence**. The code cannot produce a native operative
+phase bound for those traces. Its explicitly labelled
+`bytes_synthetic_timing_fixture=true` supplies a zero timing envelope only in
+synthetic mode, and every pass prints these three missing items. This fixture
+is not hardware validation. Every energy nevertheless passes through the real
+`reduce_bundle`, native B6 exporter, archive reader and analysis CLI.
+
+## Ruling/code disagreements and external dependencies
+
+* R3 says to use the library function unchanged. The existing registered
+  `_project_cell` accepts only two model registrations and exactly 50 valid
+  nonnegative members; it does not expose the plan's reduced-unit estimator.
+  The orchestrator ruled a BYTES-local generalization, with equivalence tests.
+  The Block-5 module remains byte-for-byte unchanged.
+* Harvest reductions use stored capture calibration and request-span meter
+  energy. BYTES now re-reduces with the harvest's session bound and integrates
+  the meter over decode analysis-side, as R3 requires.
+* R6's wording says thermal excludes and the rest are flags. The existing
+  catalog excludes other physical failures. The continuation ruling fixes
+  flagged-inclusive to restore all of them; primary follows harvest exclusions.
+* Stage 1 blinding is per configuration, with no shared `bytes` group or subset
+  release API. The CLI enforces fit/heldout read separation and commitment hashes;
+  collection/release infrastructure remains owned elsewhere. A matching hash
+  does not prove that a historical commit preceded release.
+* No R4 manifest producer or independent twin is in these supplied commits or
+  this write scope. Neither is claimed complete by this lane. Frozen reference
+  energies, durations, drift allowances and test-7 status must be supplied.
+  R3's “design section 14” has no target in the supplied ruling; BYTES uses the
+  explicit max(1,E/E_ref,T/T_ref) scaling it states and invents no reference data.
 
 ## Output files and columns
 
@@ -157,19 +181,22 @@ alone does not prove a historical commit.
 ### Pass estimates
 
 `fit_pass_estimates.json` and `heldout_pass_estimates.json` read selected native
-runs, frozen regressors, drift policy, and the shared registered estimator.
+runs, frozen regressors, drift policy, and the equivalent local estimator.
 One row per model/pass/boundary/basis/selection:
 
 | Columns | Meaning |
 |---|---|
 | `model,pass_id,session_id,boundary` | Identities; boundary exactly `rails`, `DC input`, or `rest`. |
 | `basis,selection` | `gross primary` or `idle-subtracted secondary`; `primary` or `flagged-inclusive`. |
-| `mean_j,lower_j,upper_j` | E and E ± (H1-adjusted h + B + meter_clock). |
-| `h_j,B_j,meter_clock_j` | Statistical, registered systematic, and separate meter clock half-widths in joules. Clock is zero for rails. |
+| `status` | `computed` or `unavailable`; unavailable DC/rest rows carry `reason,unavailable_runs,flags` and no energy. |
+| `mean_j,lower_j,upper_j` | E and E ± (H1-adjusted h + B). |
+| `h_j,B_j,kind_averages_j` | Statistical half-width, total systematic bound and its three stratified kind averages in joules. |
+| `meter_phase_edge_mean_j` | Stratified mean u, already included once in B; zero for rails. |
 | `variance,df,n_r,n_b` | Shared-library variance, conservative degrees of freedom, kept repeat/quad counts. |
 | `duration_s,drift_scale` | Same-unit duration and boundary-specific R3 scaling factor. |
-| `removed_runs,flags` | Removed whole-unit member IDs; union of kept flags, including session flags. |
-| `attribution_floor_j` | Largest member decode anchor bound, printed beside and never added again. |
+| `kept_runs,removed_runs,flags,meter_unavailable` | Unit selection and missing-meter reasons; union of kept flags, including session flags. |
+| `attribution_floor_j,rails_attribution_floor_j,meter_attribution_floor_j` | Largest member first-kind bound, rails timing and meter u respectively; absent components null. Printed beside, never added again. |
+| `operative` | Consumed bound and `rereduced` provenance, or explicit synthetic timing fixture with its missing evidence list. |
 | `bytes,resident,role,moe,tier` | Frozen model metadata; GB per decode step, resident GB, and membership. |
 
 ### Model estimates
@@ -180,7 +207,9 @@ model/boundary/basis/selection. `predictions.fit_points` has the same row shape.
 | Columns | Meaning |
 |---|---|
 | `model,boundary,basis,selection,bytes,resident,role,moe,tier` | As above. |
-| `mean_j,lower_j,upper_j,h_j,B_j,meter_clock_j,duration_s` | Equal-pass mean. Sampling variances add divided by number of passes squared; systematic/clock terms are averaged without independence shrinkage; df is the minimum pass df. |
+| `status` | `computed` or `unavailable` if any planned pass lacks a cell. |
+| `mean_j,lower_j,upper_j,h_j,B_j,meter_phase_edge_mean_j,duration_s` | Equal-pass mean. Sampling variances add divided by pass count squared; systematic terms are averaged without independence shrinkage; df is the minimum pass df. The meter mean is diagnostic decomposition of B. |
+| `attribution_floor_j,meter_attribution_floor_j` | Maxima over the passes, printed beside the combined cell. |
 | `pass_values_j,pass_difference_j` | Ordered per-pass E values; pass 2 minus pass 1, or null at one pass. |
 | `e,lower,upper` | Mean and interval in J per decode step, E/511. |
 | `printed_j_per_output_token,output_label` | E/512; `512 output tokens, 511 generated in the decode phase`. |
@@ -237,6 +266,10 @@ out-of-tier prediction interval. `loo_description[]` has
 `model,predicted_w,observed_w`, from a separate nine-model two-term fit for each
 omitted point, explicitly descriptive.
 
+`unavailable.json` records each selection/basis/boundary whose fit or ten-model
+roster is incomplete; no invented H1 word or H2 fit is issued for that group.
+Other complete boundaries still export normally.
+
 ### Analysis record
 
 `analysis_record.json` columns are `stage,predictions_sha256,manifest_sha256,
@@ -246,70 +279,168 @@ historical release/commit or twin agreement.
 
 ## Decisions I made
 
-* Freeze line coefficient functions and all eight corner functions, so fit
-  does not read held-out times. Heldout uses the frozen fit points rather than
-  recomputing them from an expanded archive.
-* Keep 511-step arithmetic and separately label the E/512 printed quantity.
-* Count the explicitly named H2 intervals as 23 across boundaries; expose the
-  primary rows separately from diagnostic regression matrices.
-* Use ordinary OLS residual prediction intervals for tier signed deviations;
-  leave-one-out values are description. Singular designs refuse.
-* Average pass estimates equally; independent sampling variances add while
-  deterministic bounds are averaged without shrinking them as random errors.
-* Require explicit frozen reference/clock inputs; do not derive them from the
-  pilot, and do not turn a diagnostic percentile into an uncertainty bound.
-* Preserve negative secondary energies and use an explicit null log status.
-* Keep all nonthermal flags in primary; remove entire thermal-affected units.
-  The provisional flagged-inclusive calculation restores thermal-only losses,
-  while a failed run status is never restored.
+* Generalize §4 locally, preserving the canonical full-module arithmetic and
+  all bound names; do not edit or impersonate Block-5 registrations.
+* Keep 511-step regressions and the separately labelled E/512 printed value.
+* Retain the previously chosen 23 named H2 primary intervals, ordinary OLS
+  residual prediction intervals for tier deviations, descriptive leave-one-out
+  fits, and equal-pass means with unshrunk deterministic bounds.
+* Freeze line functions and eight corner functions without reading held-out
+  model data; reuse the frozen fit points after held-out release.
+* Follow harvest member exclusions for primary; restore every computable
+  physically excluded unit for flagged-inclusive. Missing data remain missing.
+* Use the ruled decode u for both bases. At an exact meter sample edge use the
+  sample starting there; read the largest absolute fit residual, including a
+  negative extreme. Keep attribution maxima beside the cell, inside B only as
+  their weighted means, with no additional clock envelope.
+* Treat a missing meter run as an unavailable DC/rest member, removing its
+  whole unit for those boundaries only. Below the minimum retain an explicit
+  unavailable cell; never silently use one pass or fewer models for H2.
+* Consume the B6 harvest's bound and call the existing in-memory reducer;
+  disclose mock timing fixture limitations exactly, alongside each pass.
+* For simulations use the existing pilot-scale regressors, invented 8-bit row,
+  two passes, 50 runs per model/pass, 0.2% independent member noise and fixed
+  seed lists. Pure truths are e=0.01*b, e=3*tau, e=0.01*R. DC is twice rails;
+  rest is their per-run difference. These are simulation assumptions, not data.
+* Report H2 two-term coverage of the fixed ten-model population projection
+  slope (resident truth has omitted-variable association); separately report
+  resident-extended coverage of the structural epsilon, 0.01/0/0 for the
+  bytes/time/resident worlds. Bonferroni-adjusted intervals are used in both.
 
-## NEEDS_RULING / remaining numerical policy
+## NEEDS_RULING
 
-1. What prospectively validated rule supplies the DC-input clock bound and
-   covers independent phase-edge timing, rather than only common clock shift?
-   Options: register such a bound/envelope, or retain DC/rest as diagnostics.
-   Recommendation: register and validate the bound before printing primary
-   DC/rest intervals. This changes printed endpoints and H1 words.
-2. Does “flagged-inclusive” restore thermal-excluded units, or repeat the
-   thermal-valid primary with all its already-kept flags? Recommendation:
-   keep thermal exclusions in both unless the registration explicitly permits
-   a separate sensitivity calculation. This changes which data count. Current
-   restoration behavior is provisional and cannot be a registered result.
+None for the authorized analysis implementation. The continuation rulings
+settle the previous meter and inclusive questions. Frozen inputs, shared
+unblinding infrastructure, independent twin agreement, registration/cold gate
+and live calibration checks remain external prerequisites, not new choices
+about which data count or a printed number.
 
-The shared-kernel scope addition, operative-bracket join, manifest producer,
-subset release infrastructure and twin are implementation/authority gaps,
-not invented scientific rulings. The explicit test refuses the unavailable
-kernel instead of reporting an end-to-end success.
+## Verification
 
-## Verification in this build
+Python 3.13; `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1`, with created
+`TMPDIR=/tmp/jw-bytes-tests`. No inference or hardware measurement. The native
+powermetrics path uses only the repository fake process and mock runtime.
 
-All test commands used Python 3.13 with `JW_B5_SYNTHETIC_ONLY=1` and
-`PYTHONDONTWRITEBYTECODE=1`. No model inference or measurement was run.
+The equivalence test compares both models × all four registered prefill lengths ×
+all three cell shapes × 51 inputs: **1,224 exact-equality comparisons** (1,200
+random valid inputs plus the full worked example in each shape). m, V, h, B,
+kind averages and both endpoints are exactly equal, without a tolerance. The
+reduced-unit worked example and counts 5/5, 5/9, 9/5, 17/23, signed secondary,
+mandatory bounds, missing meter, unit restoration, stage separation, file hash
+commitment, separately invoked fit/heldout CLI success, and operative
+widening/immutability have additional regressions.
 
-* Final `tests.test_bytes_analysis`: **24 cases, 23 passed, 1 skipped**
-  (66.461 s). The skip is the complete 60-campaign word-rate test, not an
-  optional hardware test.
-* Native export and relevant battery/custody inventory fences: **37 passed**.
-  No new registry entries were needed. Native Block-6 acceptance: **33 passed**.
-* The 1000-run archive test uses ten models, fifty runs each, two passes,
-  the real `reduce_bundle` path and actual `export_runs.export`; fit reads
-  300 records and heldout reads 700. Poisoning held-out configurations and
-  reductions leaves the fit records identical.
-* Canonical `unittest discover -s tests` was attempted and interrupted after
-  existing environment failures and slow monitor waits; there is no complete
-  aggregate or green-suite claim. Two native plan-render tests independently
-  reproduce `KeyError: TMPDIR`; focused checks set `TMPDIR=/tmp`. The required
-  `/opt/homebrew/bin/python3.13` symlink could not be created: this account
-  cannot write `/opt`, and `sudo` is absent. Other canonical failures were
-  observed but were not fully diagnosed. The interrupted test's identified
-  synthetic sleeping monitor was terminated.
+All **28 BYTES test cases passed**, including the unskipped campaign case,
+across the focused invocations below; no BYTES cases were skipped. A further
+**85 dependency cases passed** (100 total in that command, including 15 BYTES
+cases). The full repository suite was not run: this continuation explicitly
+requires the touched modules' tests. Only the three existing authorized files
+were edited; `paper_reported_energy.py` is unchanged.
 
-| Synthetic truth | Registered seeds | Completed word campaigns | Correct-word rate |
-|---|---|---:|---|
-| bytes | 1100–1119 | 0/20 | unavailable: shared estimator missing |
-| time | 2100–2119 | 0/20 | unavailable: shared estimator missing |
-| resident | 3100–3119 | 0/20 | unavailable: shared estimator missing |
+Commands, all with the environment above:
 
-The bytes-world seed 1100 archive ingress was validated; that is not a word
-campaign result. No percentages are inferred from the hand examples, the
-upstream reducer check, or a stand-in for the missing registered library.
+* `python3.13 -m unittest tests.test_bytes_analysis.H1WorkedExamples tests.test_bytes_analysis.H2WorkedExamples tests.test_bytes_analysis.MeterWorkedExamples tests.test_bytes_analysis.RegisteredArithmeticTests tests.b6.test_calibration tests.b6.test_acceptance tests.b6.test_export_runs tests.test_custody_mode_inventory tests.test_paper_reported_energy`: 100 passed, 109.563 s.
+* `python3.13 -m unittest tests.test_bytes_analysis.BoundaryAndStagingTests tests.test_bytes_analysis.ProductionArchiveTests tests.test_bytes_analysis.RegisteredArithmeticTests`: 15 passed, 69.180 s (native fixture, archive and arithmetic checks).
+* `python3.13 -m unittest tests.test_bytes_analysis.CampaignWordRates`: 1 passed, 415.617 s. Sixty full campaigns, 60,000 run bundles through the reducer and exporter, including the full analysis CLI and result tables.
+* Subsequent selection/archive checks cover the final catalog-class restoration guard and eight unavailable result groups; all pass.
+
+## Simulation results
+
+Synthetic only, 20 independent campaigns per truth world; 1,000 runs each
+(ten models, fifty runs per model, two passes). Seeds are 1100–1119 for bytes,
+2100–2119 for time, 3100–3119 for resident, as committed in the fixture. The
+synthetic timing fixture limitations above apply. Primary gross selection is
+reported here; both bases and both selections were reduced and exported.
+
+Every table entry is rate ± Monte Carlo SE, with SE=sqrt(p*(1-p)/20), estimated
+per model and boundary across campaigns, never pooled over correlated models.
+An empirical rate of zero or one has plug-in SE zero; twenty campaigns do not
+establish a population probability of zero or one.
+
+
+| Truth | Boundary | Held-out model | bytes | resident | time | unresolved | neither |
+|---|---|---|---:|---:|---:|---:|---:|
+| bytes | rails | Llama-3.3-70B-Instruct-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | rails | Qwen3-14B-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | rails | Qwen3-30B-A3B-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | rails | Qwen3-32B-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | rails | Qwen3-Next-80B-A3B-Instruct-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | rails | Qwen3.5-122B-A10B-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | rails | Qwen3-8B-8bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | DC input | Llama-3.3-70B-Instruct-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | DC input | Qwen3-14B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | DC input | Qwen3-30B-A3B-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | DC input | Qwen3-32B-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | DC input | Qwen3-Next-80B-A3B-Instruct-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | DC input | Qwen3.5-122B-A10B-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | DC input | Qwen3-8B-8bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | rest | Llama-3.3-70B-Instruct-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | rest | Qwen3-14B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | rest | Qwen3-30B-A3B-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | rest | Qwen3-32B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | rest | Qwen3-Next-80B-A3B-Instruct-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | rest | Qwen3.5-122B-A10B-4bit | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| bytes | rest | Qwen3-8B-8bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| time | rails | Llama-3.3-70B-Instruct-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| time | rails | Qwen3-14B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| time | rails | Qwen3-30B-A3B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| time | rails | Qwen3-32B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| time | rails | Qwen3-Next-80B-A3B-Instruct-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| time | rails | Qwen3.5-122B-A10B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| time | rails | Qwen3-8B-8bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| time | DC input | Llama-3.3-70B-Instruct-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| time | DC input | Qwen3-14B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| time | DC input | Qwen3-30B-A3B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| time | DC input | Qwen3-32B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| time | DC input | Qwen3-Next-80B-A3B-Instruct-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| time | DC input | Qwen3.5-122B-A10B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| time | DC input | Qwen3-8B-8bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| time | rest | Llama-3.3-70B-Instruct-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| time | rest | Qwen3-14B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| time | rest | Qwen3-30B-A3B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| time | rest | Qwen3-32B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| time | rest | Qwen3-Next-80B-A3B-Instruct-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| time | rest | Qwen3.5-122B-A10B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| time | rest | Qwen3-8B-8bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | rails | Llama-3.3-70B-Instruct-4bit | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | rails | Qwen3-14B-4bit | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | rails | Qwen3-30B-A3B-4bit | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | rails | Qwen3-32B-4bit | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | rails | Qwen3-Next-80B-A3B-Instruct-4bit | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | rails | Qwen3.5-122B-A10B-4bit | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | rails | Qwen3-8B-8bit | 0.00 ± 0.000 | 0.05 ± 0.049 | 0.00 ± 0.000 | 0.95 ± 0.049 | 0.00 ± 0.000 |
+| resident | DC input | Llama-3.3-70B-Instruct-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | DC input | Qwen3-14B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | DC input | Qwen3-30B-A3B-4bit | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | DC input | Qwen3-32B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | DC input | Qwen3-Next-80B-A3B-Instruct-4bit | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | DC input | Qwen3.5-122B-A10B-4bit | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | DC input | Qwen3-8B-8bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | rest | Llama-3.3-70B-Instruct-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | rest | Qwen3-14B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | rest | Qwen3-30B-A3B-4bit | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | rest | Qwen3-32B-4bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | rest | Qwen3-Next-80B-A3B-Instruct-4bit | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | rest | Qwen3.5-122B-A10B-4bit | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 |
+| resident | rest | Qwen3-8B-8bit | 0.00 ± 0.000 | 0.00 ± 0.000 | 0.00 ± 0.000 | 1.00 ± 0.000 | 0.00 ± 0.000 |
+
+H2 uses the Bonferroni-adjusted primary-family t intervals. The two-term target
+is the fixed-roster population OLS projection slope of the noiseless powers.
+In the resident world this is an association induced by omitting resident
+reads; it is **not** the structural bytes coefficient. The resident-extended
+target is the generative structural epsilon. All coverage estimates below are
+per world/fit/boundary across 20 campaigns.
+
+| Truth | Boundary | True two-term projection ε (J/GB) | True extended structural ε (J/GB) | Two-term coverage ± MCSE | Extended coverage ± MCSE |
+|---|---|---:|---:|---:|---:|
+| bytes | rails | 0.01 | 0.01 | 1.00 ± 0.000 | 1.00 ± 0.000 |
+| bytes | DC input | 0.02 | 0.02 | 1.00 ± 0.000 | 1.00 ± 0.000 |
+| bytes | rest | 0.01 | 0.01 | 1.00 ± 0.000 | 1.00 ± 0.000 |
+| time | rails | 0 | 0 | 1.00 ± 0.000 | 1.00 ± 0.000 |
+| time | DC input | 0 | 0 | 1.00 ± 0.000 | 1.00 ± 0.000 |
+| time | rest | 0 | 0 | 1.00 ± 0.000 | 1.00 ± 0.000 |
+| resident | rails | -0.125778025963 | 0 | 1.00 ± 0.000 | 1.00 ± 0.000 |
+| resident | DC input | -0.251556051926 | 0 | 1.00 ± 0.000 | 1.00 ± 0.000 |
+| resident | rest | -0.125778025963 | 0 | 1.00 ± 0.000 | 1.00 ± 0.000 |
+
+SHA-256 of the exact JSON simulation report printed by the test: `7fc378852a7898439370e9b9a7ff6a2f3be96001161a1d3f697bebf576a7ef70`.
