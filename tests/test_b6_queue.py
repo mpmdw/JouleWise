@@ -90,6 +90,10 @@ class QueueTests(unittest.TestCase):
         state, events = queue.rotate(state, self.regs)
         self.assertEqual(events, [("same_cause_twice", "alpha")])
         self.assertEqual(queue.next_session(state, self.regs, NOW).packs, ("beta",))
+        state = started(self.state, queue.Selection(('alpha',), 1), 'not_counting', 'CALIBRATION,NEG8')
+        state = started(state, queue.Selection(('alpha',), 2), 'not_counting', 'CALIBRATION')
+        _, events = queue.rotate(state, self.regs)
+        self.assertEqual(events, [('same_cause_twice', 'alpha')])
 
     def test_target_end_short_and_precision_minimum(self):
         state = self.state
@@ -99,18 +103,24 @@ class QueueTests(unittest.TestCase):
             state = started(state, queue.Selection(("alpha",), i+1))
         self.assertEqual(queue.done_reason(state, self.regs["alpha"], NOW), "precision")
         self.assertEqual(queue.done_reason(state, self.regs["beta"], NOW + 30*86400), "short:0")
+        state['packs']['alpha']['precision_reached'] = False
+        self.assertEqual(queue.done_reason(state, self.regs['alpha'], NOW + 30*86400), 'short:2')
         state = started(state, queue.Selection(("alpha",), 3))
         self.assertEqual(queue.done_reason(state, self.regs["alpha"], NOW), "target")
 
-    def test_pending_reharvest_and_pack_scoped_effects(self):
+    def test_pending_reharvest_and_acceptance_owns_counting(self):
         state = started(self.state, queue.Selection(("alpha",), 1), "pending_harvest")
         self.assertEqual(queue.counting_ids(state, "alpha"), [])
         state["reharvested"] = {"s0": {"alpha": {"status": "counting", "cause": None}}}
         self.assertEqual(queue.counting_ids(state, "alpha"), ["s0"])
         line = SessionLine("s", ("alpha", "beta"), window_flags=("disk.low",),
-                           pack_flags={"alpha": ["model.identity_mismatch"]})
-        self.assertEqual(queue.outcome(self.regs["alpha"], line, CATALOG)["status"], "not_counting")
+                           pack_flags={"alpha": ["model.identity_mismatch"]}, acceptance_verdict="ACCEPT", counting=True)
+        self.assertEqual(queue.outcome(self.regs["alpha"], line, CATALOG)["status"], "counting")
         self.assertEqual(queue.outcome(self.regs["beta"], line, CATALOG)["status"], "counting")
+        excluded = SessionLine("s", ("alpha",), acceptance_verdict="EXCLUDE", counting=False,
+                               excluding_reasons=("cell.below_minimum",))
+        self.assertEqual(queue.outcome(self.regs["alpha"], excluded, CATALOG),
+                         {"status": "not_counting", "cause": "ROSTER"})
 
     def test_modular_whole_units_and_fixed_not_colocated(self):
         regs = {p: modular(p) for p in ("alpha", "beta")}

@@ -25,6 +25,7 @@ NUMBER_BEARING_PATHS = (
     "joulewise/controller.py", "joulewise/clock.py", "joulewise/kernel_clock.py",
     "joulewise/idle_admission.py", "joulewise/bundle.py", "joulewise/suite.py",
     "scripts/run_campaign.py", "joulewise/b5/driver.py", "joulewise/b5/chain.py",
+    "joulewise/b6/idle_wait.py", "joulewise/b6/agent_pause.py", "joulewise/b6/sleep_guard.py",
 )
 DEFAULTS = {
     "catalog": "configs/b6/flag_catalog_b6.json",

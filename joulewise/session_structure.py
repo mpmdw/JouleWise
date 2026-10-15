@@ -15,6 +15,7 @@ PHYSICS_STOP_REASONS = ("clock", "battery", "thermal", "contention", "disk", "sa
                         "sleep", "agent", "time-limit", "monitor")
 # Literal driver vocabulary: do not import the collection driver at the desk.
 PHYSICAL_STOP_CODES = {
+    "operative_bound_above_stop": "calibration.operative_bound_above_stop",
     "night_stopped_disk_low": "disk",
     "night_stopped_monitor_outage": "sampler",
     "night_refused_instrument_not_sampling": "sampler",
@@ -136,7 +137,8 @@ def check(*, archive: Path, custody: Path, registration: dict, harvest_rc=0,
     started = _json(custody / "night/chain.started", custody_damage)
     exited = _json(custody / "night/chain.exited", custody_damage)
     structure = registration.get("structure", {})
-    physical = _physical(result.get("aborted_reason"))
+    hazard = _json(custody / "night/hazard_result.json", custody_damage)
+    physical = _physical(result.get("aborted_reason")) or _physical(hazard.get("aborted_reason"))
     roots = [Path(path) for path in runs_roots] or [archive / "sources/claim-runs", archive / "sources/bound-runs"]
     roots += [custody]
     defects = []
@@ -145,7 +147,9 @@ def check(*, archive: Path, custody: Path, registration: dict, harvest_rc=0,
     chain_rc = _number(exited.get("rc", exited.get("exit_code")))
     if chain_rc is None:
         chain_rc = _number(result.get("chain_exit_code"))
-    chain_stopped = CHAIN_STOP_EXITS.get(chain_rc)
+    stop_row = next((row for row in reversed(stages) if row.get("stage_id", row.get("event")) == "chain.stop"), {})
+    chain_stopped = stop_row.get("reason", stop_row.get("kind")) or CHAIN_STOP_EXITS.get(chain_rc)
+    physical = physical or _physical(chain_stopped)
     if chain_stopped is None and result.get("verdict") == "CHAIN_STOPPED":
         chain_stopped = "recorded"
     if not physical and not chain_stopped and (chain_rc not in (None, 0)
@@ -257,6 +261,16 @@ def check(*, archive: Path, custody: Path, registration: dict, harvest_rc=0,
                             if classifications.get(code, False))
     if any(not classifications.get(code, False) for code in excluding_seen):
         counting_reasons.append("excluding_flag:RESTRICTED")
+    acceptance_path = archive / "derived/b6-acceptance.json"
+    acceptance = _json(acceptance_path, harvest_damage)
+    if acceptance_path.exists():
+        counting_reasons = []
+        if verdict != "STRUCTURE_OK":
+            counting_reasons.append("structure:" + verdict)
+        if acceptance.get("counting") is not True:
+            counting_reasons.append("b6_acceptance:" + str(acceptance.get("verdict", "UNKNOWN")))
+        if terminal_missing:
+            counting_reasons.append("terminal_record_missing")
     stage_counts = [{"stage_id": row.get("stage_id"), **{key: _count(row.get(key)) for key in COUNT_FIELDS}}
                     for row in roster_counts]
     stage_records = []
@@ -272,6 +286,8 @@ def check(*, archive: Path, custody: Path, registration: dict, harvest_rc=0,
             "harvest_verdict": harvest_verdict, "reasons": reasons,
             "action": {"STRUCTURE_DEFECT": "HOLD_LOOP", "HARVEST_FAULT": "REHARVEST"}.get(verdict, "CONTINUE"),
             "counting": not counting_reasons, "counting_reasons": counting_reasons,
+            "counting_source": "b6_acceptance" if acceptance_path.exists() else "b5_harvest",
+            "b5_harvest_claim_usable": harvest.get("claim_usable"),
             "pack_id": pack_id, "plan_id": harvest.get("plan_id") or session_id,
             "attempt": harvest.get("attempt") if harvest.get("attempt") is not None else attempt,
             "first_session_of_pack": not any(row.get("pack_id") == pack_id for row in prior),

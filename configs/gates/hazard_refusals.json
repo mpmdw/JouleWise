@@ -165,6 +165,7 @@
    "legacy_key": "named only as a legacy refusal key (PROTECTS/SUPERSEDES or a runbook reference); the retired ARM/T0 path runs it, block 5 does not"
   },
   "not_scanned": {
+   "joulewise/session_structure.py": "desk",
    "joulewise/b6/precheck.py": "desk",
    "joulewise/__init__.py": "data",
    "joulewise/adapters/local_transport.py": "mock",

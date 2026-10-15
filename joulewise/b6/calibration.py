@@ -25,7 +25,7 @@ def read_own_capture(directory: Path | str) -> Capture:
     root = Path(directory)
     try:
         raw = (root / "instrument_evidence.json").read_bytes()
-    except FileNotFoundError:
+    except (FileNotFoundError, NotADirectoryError):
         return Capture(None, "absent")
     try:
         exact = json.loads(raw, parse_float=Decimal)

@@ -9,7 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from joulewise.b6 import calibration, capture_list, code_check, model_files, registration
+from joulewise.b6 import calibration, capture_list, code_check, model_files, registration, survivor_screen
 from joulewise.b6.archive import bindings as _bindings, bundle_of, plan_tree as read_plan_tree
 from joulewise.b6.acceptance_interface import (
     AcceptanceResult, CaptureEvidence, MemberEvidence, SessionEvidence, StageEvidence,
@@ -17,13 +17,11 @@ from joulewise.b6.acceptance_interface import (
 from joulewise.flags.catalog import Catalog, EXCLUDE_WINDOW, load_catalog
 from joulewise.flags.exclusions import _same, compute
 from joulewise.flags.schema import make_flag, make_scope, make_source, render_line, validate_flag
+from joulewise.session_structure import PHYSICAL_STOP_CODES
 
 ROOT = Path(__file__).resolve().parents[2]
-# Collection-lane placeholders, intentionally centralized for reconciliation.
-PHYSICS_STOP_REASONS = frozenset({
-    "sampler_down", "disk_exhausted", "thermal_emergency", "session_time_limit",
-    "agent_pause_beyond_2h", "operative_bound_above_stop",
-})
+PHYSICS_STOP_REASONS = frozenset(PHYSICAL_STOP_CODES)
+CALIBRATION_STOPS = frozenset({"pre_calibration_capture_failed", "pre_calibration_screen_failed"})
 SCHEMA = "joulewise.b6_acceptance.v1"
 COUNT_REASONS = frozenset({"cell.below_minimum", "neg8.survivor_screen_undefined"})
 
@@ -72,13 +70,12 @@ def _stage_roles(tree: Mapping) -> tuple[dict, dict]:
             if not ((ref.get("input_id") and ref["input_id"] == input_id)
                     or (source.get("path") and source["path"] == inner.get("path", manifest.get("manifest_path")))):
                 continue
-            role = {"neg8_bound": "corpus", "neg8_start": "start", "neg8_midpoint": "midpoint",
-                    "neg8_end": "end"}.get(input_id)
-            # The floor and contrast manifests spell reference roles differently.
-            if role is None:
-                role = next((value for word, value in (("corpus", "corpus"), ("bound", "corpus"),
-                                                      ("start", "start"), ("midpoint", "midpoint"),
-                                                      ("end", "end")) if word in str(input_id)), "science")
+            role = {"neg8_bound": "corpus", "neg8_bound_corpus": "corpus",
+                    "neg8_settled_corpus": "corpus", "start_references": "start", "end_references": "end",
+                    "start_reference": "start",
+                    "midpoint_reference": "midpoint", "end_reference": "end",
+                    "decode_midpoint_reference": "diagnostic_reference",
+                    "prefill_midpoint_reference": "diagnostic_reference"}.get(input_id, "science")
             for member in manifest.get("members", []):
                 stages[member["run_id"]] = stage["stage_id"]
                 roles[member["run_id"]] = role
@@ -134,8 +131,6 @@ class BlockSixAcceptance:
                 rows, problems = capture_list.read(ledger_path)
         if reg["defaults_used"]:
             problems.append("registration.default_used")
-        if any("spare_retry" in stage for stage in plan_tree.get("stage_graph", [])):
-            problems.append("plan.spare_retry_present")
         roster = {}
         candidate = Path(pack_root) if pack_root else repo / "configs/campaigns" / reg["pack_id"]
         if (candidate / "plan_tree.json").is_file():
@@ -170,11 +165,14 @@ class BlockSixAcceptance:
                 emit("member.status_not_succeeded", member)
         for code in prepared.preparation_flags:
             emit(code, observed={"keys": reg["defaults_used"]} if code == "registration.default_used" else None)
+        if internal.get("spare_retries") is True or any(m.role == "spare" for m in members):
+            emit("plan.spare_retry_present")
         structural_failures = []
         physics_stop = evidence.stop_reason in PHYSICS_STOP_REASONS
-        if evidence.stop_reason not in (None, "completed") and not physics_stop:
+        calibration_stop = evidence.stop_reason in CALIBRATION_STOPS
+        if evidence.stop_reason not in (None, "completed") and not physics_stop and not calibration_stop:
             structural_failures.append("structure.chain_crashed")
-        if not evidence.captures:
+        if not evidence.captures and not (physics_stop or calibration_stop):
             structural_failures.append("structure.no_capture_records")
         if not members:
             structural_failures.append("structure.no_roster")
@@ -183,7 +181,11 @@ class BlockSixAcceptance:
                                              or "member.bytes_missing" in m.flags for m in stage.members)
             later_ran = any(m.runtime.get("bundle_present", True) and m.status == "succeeded"
                             for later in evidence.stages[i + 1:] for m in later.members)
-            if stage.expected_count and stage.kind == "campaign_collection" and absent and later_ran:
+            # §1.8/§8.2 govern reference losses, including a wholly absent
+            # midpoint. They are judged by survivor counts, not by S1.
+            references_only = bool(stage.members) and all(m.role in {
+                "corpus", "start", "midpoint", "end", "diagnostic_reference"} for m in stage.members)
+            if stage.expected_count and stage.kind == "campaign_collection" and absent and later_ran and not references_only:
                 structural_failures.append("structure.missing_stage_bundles")
         for code in sorted(set(structural_failures)):
             emit(code)
@@ -237,26 +239,32 @@ class BlockSixAcceptance:
         for item in cal["flags"]:
             emit(item["code"], observed={k: v for k, v in item.items() if k != "code"})
         excluding.extend({"code": code, "scope": "window", "why": code} for code in cal.pop("excluding"))
+        if calibration_stop:
+            excluding.append({"code": "calibration.bracket_incomplete", "scope": "window",
+                              "why": evidence.stop_reason})
+        if evidence.stop_reason == "operative_bound_above_stop":
+            excluding.append({"code": "calibration.operative_bound_above_stop", "scope": "window",
+                              "why": evidence.stop_reason})
         if "calibration.operative_bound_above_stop" in {item["code"] for item in excluding}:
             physics_stop = True
         neg8 = {"planned": dict(reg["neg8"]["planned"])}
         if evidence.synthetic:
             roles = _stage_roles(prepared.plan_tree)[1]
-            counts = Counter(roles.get(m.run_id, m.role) for m in members if m.status == "succeeded")
-            neg8.update(survivors={slot: counts[slot] for slot in ("start", "midpoint", "end")},
-                        corpus_clean_n=counts["corpus"], verdict="pending")
+            population = {"members": [{"run_id": m.run_id, "role": roles.get(m.run_id, m.role),
+                                       "status": m.status} for m in members]}
+            screen = survivor_screen.screen(population, applied, None, reg, counts_only=True).acceptance_evidence()
         else:
             screen = internal.get("neg8") or {"verdict": "undefined", "reason": "bound_absent",
                                              "survivors": {}, "corpus_clean_n": 0}
-            # Only named structural projections may leave withheld.
-            neg8.update({key: screen.get(key) for key in ("survivors", "corpus_clean_n", "verdict", "reason")})
-            for code in screen.get("flags", []):
-                emit(code)
-            code = "neg8.survivor_screen_" + str(screen["verdict"])
-            if code not in screen.get("flags", []):
-                emit(code)
-            if screen["verdict"] in ("failed", "undefined"):
-                excluding.append({"code": code, "scope": "window", "why": screen.get("reason") or "screen_failed"})
+        # Only named structural projections may leave withheld.
+        neg8.update({key: screen.get(key) for key in ("survivors", "corpus_clean_n", "verdict", "reason")})
+        for code in screen.get("flags", []):
+            emit(code)
+        code = "neg8.survivor_screen_" + str(screen["verdict"])
+        if screen["verdict"] != "pending" and code not in screen.get("flags", []):
+            emit(code)
+        if screen["verdict"] in ("failed", "undefined"):
+            excluding.append({"code": code, "scope": "window", "why": screen.get("reason") or "screen_failed"})
         mismatches = []
         for row in flags:
             if not all(_same(roster.get(key), row["scope"].get(key)) for key in ("plan_id", "attempt")):
@@ -311,17 +319,22 @@ class BlockSixAcceptance:
         unique = {row["flag_id"]: row for row in flags + emitted}
         counts = dict(sorted(Counter(row["code"] for row in unique.values()).items()))
         reasons = tuple(sorted({item["code"] for item in excluding}))
-        verdict = "EXCLUDE" if reasons else "ACCEPT"
+        verdict = "EXCLUDE" if reasons or physics_stop else "ACCEPT"
         if "records.source_changed_during_harvest" in counts:
             verdict = "HARVEST_RERUN"
         if mode == "smoke" and any(catalog.entry(item["code"])["klass"] == "PHYSICS"
                                     for item in excluding + member_excluding):
             physics_stop = True
+            if verdict == "ACCEPT":
+                verdict = "EXCLUDE"
         structural = bool(structural_failures) or (mode == "smoke" and any(
             catalog.entry(item["code"])["klass"] != "PHYSICS" for item in excluding))
         record = {"schema": SCHEMA, "mode": mode, "pack_id": evidence.pack_id,
                   "session_id": evidence.session_id, "verdict": verdict,
                   "counting": verdict == "ACCEPT" and not physics_stop, "physics_stop": physics_stop,
+                  "physical_stop_kind": PHYSICAL_STOP_CODES.get(evidence.stop_reason,
+                      "calibration.operative_bound_above_stop"
+                      if "calibration.operative_bound_above_stop" in reasons else None),
                   "stop_reason": evidence.stop_reason,
                   "structural_failures": sorted(set(structural_failures)), "excluding": excluding + member_excluding,
                   "flag_counts": counts, "cells": {c["cell_id"]: c["n_kept"] for c in applied["cells"]},
@@ -397,6 +410,11 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
     for member in roster.get("members", []):
         run_id = member["run_id"]
         bundle = bundle_of(root, plan, run_id)
+        spare = run_id not in stages_for and str(member.get("stage_id", "")).endswith(".spares")
+        # Sealed block-5 trees retain reserve slots. They are not planned block-6
+        # observations, even if stray spare bytes were collected.
+        if spare and bundle is None:
+            continue
         metadata = _json(bundle / "metadata.json", {}) if bundle else {}
         assessment = assessments.get(run_id) or {}
         status_record = _json(bundle / "status.json", {}) if bundle else {}
@@ -406,7 +424,9 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
             status = "succeeded" if bundle else "failed"
         units = tuple((u["cell_id"], u["stratum"], str(u["unit_id"])) for u in member.get("units", []))
         stage = stages_for.get(run_id, member.get("stage_id") or "unplaced")
-        role = roles.get(run_id, member.get("role", "science"))
+        role = "spare" if spare else roles.get(run_id, member.get("role", "science"))
+        if spare:
+            units = ()
         runtime = {**metadata, "bundle_present": bundle is not None}
         grouped[stage].append(MemberEvidence(stage, run_id, status, tuple(by_run[run_id]), units, role,
                                              member.get("config_key"), runtime))
@@ -421,7 +441,7 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
             rows = rows[:stage["expected_count"]]
         stages.append(StageEvidence(stage_id, stage["kind"], stage["expected_count"], rows))
     if not smoke_tree:
-        stages.extend(StageEvidence(stage_id, "campaign_collection", len(rows), tuple(rows))
+        stages.extend(StageEvidence(stage_id, "unplanned_collection", len(rows), tuple(rows))
                       for stage_id, rows in grouped.items())
     captures, exact_captures, capture_meta = [], {}, []
     for slot, key in (("pre", "pre_calibration_dir"), ("post", "post_calibration_dir")):
@@ -462,17 +482,20 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
     stop = next((row.get("reason", row.get("kind")) for row in reversed(journal)
                  if row.get("event", row.get("stage_id")) == "chain.stop"), None)
     if stop is None:
-        result = _json(root / "night/hazard_result.json", {})
-        if not result:
-            result = _json(root / "sources/night-custody/night/hazard_result.json", {})
-        if not result:
-            result = _json(root / "sources/night/hazard_result.json", {})
+        results = [_json(base / name, {}) for base in
+                   (root / "night", root / "sources/night-custody/night", root / "sources/night",
+                    Path(bindings.get("custody_root", root)) / "night")
+                   for name in ("hazard_result.json", "result.json")]
+        result = next((row for row in results if row.get("aborted_reason") in PHYSICS_STOP_REASONS),
+                      next((row for row in results if row), {}))
         completed = next((row.get("exit_code", row.get("rc")) for row in reversed(journal)
                           if row.get("stage_id") == "chain.complete"), None)
         exit_code = bindings.get("chain_exit_code", result.get("chain_exit_code", result.get("chain", {}).get("exit_code", completed)))
-        if exit_code == 0:
+        if result.get("aborted_reason") in PHYSICS_STOP_REASONS:
+            stop = result["aborted_reason"]
+        elif exit_code == 0:
             stop = "completed"
-        elif exit_code is not None:
+        else:
             stop = "chain_crashed"
     screen = _json(root / "withheld/b6-neg8.json", {})
     neg8 = {key: screen[key] for key in ("verdict", "survivors", "corpus_clean_n", "reason", "flags") if key in screen}
@@ -483,7 +506,10 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
         reg_cal = {}
     estimator_changed = any(reg_cal.get(key) is not None and meta.get(key) != reg_cal[key]
                             for meta in capture_meta for key in ("protocol_sha256", "estimator_sha256"))
+    included = {m.run_id for stage in stages for m in stage.members}
+    flags = [row for row in flags if not row["scope"].get("run_id") or row["scope"]["run_id"] in included]
     runtime = {"_b6": {"flags": flags, "cells": roster.get("cells", []), "spans": spans, "smoke": smoke_tree,
+                       "spare_retries": bindings.get("spare_retries"), "capture_screen": bindings.get("capture_screen"),
                        "captures": exact_captures, "neg8": neg8, "estimator_changed": estimator_changed,
                        "own_session_ids": [bindings[key] for key in ("session_id", "bracket_session_id") if bindings.get(key)],
                        "plan_id": roster.get("plan_id"), "attempt": roster.get("attempt")}}

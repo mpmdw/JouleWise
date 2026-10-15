@@ -57,9 +57,23 @@
       },
       "remainder_weight_seconds": 310.224,
       "_attribution_note": "The module ran whole (one shard) in all 5 runs. The heavy test's seconds are the GitHub log timestamp of its verbose result line minus that of the preceding result line; the remainder is the module's MODULE PASS seconds minus the heavy test, per run; median of each."
+    },
+    "tests.b6.test_cold_pass_fixes": {
+      "granularity": "test",
+      "reason": "Each FullRoundTests method owns an isolated TemporaryDirectory and synthetic measurement/loop roots. The process-local primary-byte seed and reference template are built once and only cloned thereafter; no method mutates them. All five methods pass individually from fresh processes. Split the five full-shape desk methods; the nine pure/short regressions stay in the computed remainder.",
+      "declared": {
+        "tests.b6.test_cold_pass_fixes.FullRoundTests.test_completed_full_alpha": 274.632,
+        "tests.b6.test_cold_pass_fixes.FullRoundTests.test_lost_start_reference_without_spare_counts": 251.568,
+        "tests.b6.test_cold_pass_fixes.FullRoundTests.test_gamma_lost_midpoint_counts_and_overrides_b5_claim": 257.262,
+        "tests.b6.test_cold_pass_fixes.FullRoundTests.test_physical_and_opening_no_bound_stops_rotate": 217.043,
+        "tests.b6.test_cold_pass_fixes.FullRoundTests.test_exit4_and_acceptance_unavailable_reharvest_into_new_archive": 697.303
+      },
+      "remainder_weight_seconds": 0.3,
+      "_attribution_note": "Local /opt/homebrew/bin/python3.13 synthetic-only desk observations, five isolated unittest processes scheduled by three concurrent workers. Per-method seconds include fixture setup, real harvest, acceptance, structure, compression and loop control; the reharvest method covers both exits 4 and 6. The nine short regressions took 0.232 s. Module weight 1800 s conservatively exceeds the sum of the isolated observations. Scheduling hints, not hosted medians or hardware evidence. No count, catalog threshold, validator or reducer is lowered."
     }
   },
   "seconds_by_module": {
+    "tests.b6.test_cold_pass_fixes": 1800.0,
     "tests.b6.test_loop_round_desk": 160.727,
     "tests.flags.test_flags_catalog": 0.005,
     "tests.flags.test_flags_collect": 28.678,

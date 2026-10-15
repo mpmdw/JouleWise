@@ -100,7 +100,7 @@ class AcceptanceTests(unittest.TestCase):
                                   ({"status": "missing"}, None)):
             replaced = dataclasses.replace(member, runtime={**IDENTITY, **changed})
             stage = dataclasses.replace(base.stages[0], members=(replaced,) + base.stages[0].members[1:])
-            result = self.evaluate(dataclasses.replace(base, stages=(stage,)))
+            result = self.evaluate(dataclasses.replace(base, stages=(stage, *base.stages[1:])))
             if expected:
                 self.assertEqual(result.verdict, "EXCLUDE")
                 self.assertIn(expected, result.reasons)
@@ -120,7 +120,7 @@ class AcceptanceTests(unittest.TestCase):
     def test_physics_stop_kept_noncounting_crash_structural(self):
         for reason in acceptance.PHYSICS_STOP_REASONS:
             result = self.evaluate(dataclasses.replace(session(), stop_reason=reason))
-            self.assertEqual(result.verdict, "ACCEPT")
+            self.assertEqual(result.verdict, "EXCLUDE")
             self.assertFalse(result.counting)
             self.assertFalse(result.structural)
             self.assertTrue(result.record["physics_stop"])
@@ -174,12 +174,12 @@ class AcceptanceTests(unittest.TestCase):
             base = session()
             member = dataclasses.replace(base.stages[0].members[0], runtime={**IDENTITY, key: value})
             stage = dataclasses.replace(base.stages[0], members=(member, *base.stages[0].members[1:]))
-            result = self.evaluate(dataclasses.replace(base, stages=(stage,)), prep)
+            result = self.evaluate(dataclasses.replace(base, stages=(stage, *base.stages[1:])), prep)
             self.assertIn("model.stack_differs_from_registered", result.reasons)
         base = session()
         member = dataclasses.replace(base.stages[0].members[0], runtime={**IDENTITY, "model_source": "unpinned"})
         stage = dataclasses.replace(base.stages[0], members=(member, *base.stages[0].members[1:]))
-        result = self.evaluate(dataclasses.replace(base, stages=(stage,)))
+        result = self.evaluate(dataclasses.replace(base, stages=(stage, *base.stages[1:])))
         self.assertEqual(result.verdict, "ACCEPT")
         self.assertIn("model.source_unpinned", result.flags)
         self.assertNotIn("model.files_differ_from_registered", result.flags)
@@ -217,11 +217,11 @@ class AcceptanceTests(unittest.TestCase):
         base = session()
         member = dataclasses.replace(base.stages[0].members[0], flags=("agent.unit_overlap",))
         stage = dataclasses.replace(base.stages[0], members=(member, *base.stages[0].members[1:]))
-        result = self.evaluate(dataclasses.replace(base, stages=(stage,)))
+        result = self.evaluate(dataclasses.replace(base, stages=(stage, *base.stages[1:])))
         self.assertEqual(result.record["cells"]["decode"]["repeat"], 4)
         self.assertIn("cell.below_minimum", result.reasons)
         stage = dataclasses.replace(base.stages[0], members=(*base.stages[0].members, base.stages[0].members[0]))
-        result = self.evaluate(dataclasses.replace(base, stages=(stage,)))
+        result = self.evaluate(dataclasses.replace(base, stages=(stage, *base.stages[1:])))
         self.assertEqual(result.record["cells"]["decode"]["repeat"], 4)
         self.assertIn("roster.duplicate_run_id", result.flags)
         self.assertNotIn("roster.duplicate_run_id", result.reasons)
@@ -230,7 +230,7 @@ class AcceptanceTests(unittest.TestCase):
         base = session(6)
         stage = dataclasses.replace(base.stages[0], members=(dataclasses.replace(base.stages[0].members[0],
             flags=("agent.unit_overlap",)), *base.stages[0].members[1:]))
-        result = self.evaluate(dataclasses.replace(base, stages=(stage,)))
+        result = self.evaluate(dataclasses.replace(base, stages=(stage, *base.stages[1:])))
         self.assertEqual(result.verdict, "ACCEPT")
         self.assertEqual(result.reasons, ())
         self.assertEqual(result.record["cells"]["decode"]["repeat"], 5)
@@ -253,7 +253,7 @@ class AcceptanceTests(unittest.TestCase):
         old_style = acceptance_interface.SessionEvidence(base.pack_id,
             (StageEvidence("science", "campaign_collection", 1, (old_member,)),),
             base.captures, IDENTITY, True, ())
-        self.assertEqual(self.evaluate(old_style).verdict, "ACCEPT")
+        self.assertIn("neg8.survivor_screen_undefined", self.evaluate(old_style).reasons)
         self.assertIs(acceptance_interface.load_acceptance(), acceptance.ACCEPTANCE)
         with patch.dict("sys.modules", {"joulewise.b6.acceptance": None}):
             stub = acceptance_interface.load_acceptance()
@@ -264,7 +264,7 @@ class AcceptanceTests(unittest.TestCase):
         blueprint = {"members": [{"run_id": f"s{i}", "units": [{"cell_id": "decode", "stratum": "repeat", "unit_id": str(i)}]}
                                  for i in range(5)], "cells": [{"cell_id": "decode", "strata": ["repeat"]}]}
         members = tuple(MemberEvidence("science", f"s{i}", "succeeded") for i in range(5))
-        evidence = dataclasses.replace(session(), stages=(StageEvidence("science", "campaign_collection", 5, members),))
+        evidence = dataclasses.replace(session(), stages=(StageEvidence("science", "campaign_collection", 5, members), *session().stages[1:]))
         result = self.evaluate(evidence, dataclasses.replace(self.prepared, roster=blueprint))
         self.assertEqual(result.verdict, "ACCEPT")
         self.assertEqual(result.record["cells"]["decode"]["repeat"], 5)
@@ -305,8 +305,8 @@ class ArchiveAndCliTests(unittest.TestCase):
         self.assertNotIn("bound_j", evidence.runtime["_b6"]["neg8"])
         night = self.archive / "sources/night-custody/night"
         night.mkdir(parents=True)
-        (night / "chain-stages.jsonl").write_text(json.dumps({"stage_id": "chain.stop", "kind": "sampler_down", "rc": 12}) + "\n")
-        self.assertEqual(self.read().stop_reason, "sampler_down")
+        (night / "chain-stages.jsonl").write_text(json.dumps({"stage_id": "chain.stop", "kind": "operative_bound_above_stop", "rc": 12}) + "\n")
+        self.assertEqual(self.read().stop_reason, "operative_bound_above_stop")
         write_json(self.archive / "sources/claim-runs/s0/status.json", {"status": "failed"})
         self.assertEqual(self.read().stages[0].members[0].status, "failed")
 

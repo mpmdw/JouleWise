@@ -355,7 +355,7 @@ def _flag_codes(value):
 def classify(*, stages_ok, driver_exit, harvest_exit, acceptance_result, flags, is_physical=None,
              physical_arm_refusal=False):
     physical = is_physical or _is_physical
-    if physical_arm_refusal or any(physical(code) for code in flags):
+    if physical_arm_refusal or acceptance_result.record.get("physics_stop") or any(physical(code) for code in flags):
         return "physics"
     if stages_ok and driver_exit in (0, 6) and harvest_exit in (0, 6) and not acceptance_result.structural:
         return "pass"

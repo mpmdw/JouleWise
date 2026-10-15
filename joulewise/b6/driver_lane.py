@@ -14,7 +14,7 @@ import time
 from joulewise.b5 import plan
 from joulewise.b6 import desk_identity, plan_inputs, registration, session_paths, smoke as smoke_module
 from joulewise.b6.lanes import Done, LaneMissing, Prepared, Refused, Running
-from joulewise.session_structure import _physical
+from joulewise.session_structure import PHYSICAL_STOP_CODES, _physical
 
 LABELS = ("com.joulewise.night", "com.joulewise.night.deadman")
 ARM_UNMEASURED_REFUSES = frozenset({"instrument"})  # joulewise.b5.driver, not imported at the desk
@@ -31,9 +31,7 @@ def process_group_alive(pgid):
     except PermissionError:
         return True
     return True
-PHYSICAL_STOPS = {"sampler_down": "sampler", "disk_exhausted": "disk", "thermal_emergency": "thermal",
-                  "session_time_limit": "time_limit", "agent_pause_beyond_2h": "agent-pause-budget",
-                  "operative_bound_above_stop": "calibration.operative_bound_above_stop"}
+PHYSICAL_STOPS = dict(PHYSICAL_STOP_CODES)
 
 
 def read(path, default=None):
@@ -238,14 +236,15 @@ class DriverLane:
         if terminal.exists():
             self._uninstall(path, metadata)
             result, hazard = read(terminal), read(night / "hazard_result.json")
-            # chain.started means a process launched, not necessarily that a
-            # measured stage ran. Arm/t0 physics can still refuse before it.
+            # chain.started means a process launched, not necessarily that its
+            # first stage ran. The reservation is that first stage (§1.6).
             from joulewise.b5.chain import stage_journal
             journal = stage_journal(night)
-            measured = any(row.get("kind") in ("campaign_collection", "calibration_capture") for row in journal)
+            stage_started = any(row.get("kind") in ("bracket_reservation", "campaign_collection", "calibration_capture")
+                                for row in journal)
             arm = hazard.get("arm") or read(Path(metadata["paths"]["custody"]) / "hazards/arm.json")
             hazards = []
-            if not measured and not (night / "chain.started").exists():
+            if not stage_started:
                 reason = _physical(result.get("aborted_reason"))
                 if reason and reason != "hazard":
                     hazards.append(reason)
