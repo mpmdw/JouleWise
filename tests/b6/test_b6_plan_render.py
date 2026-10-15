@@ -122,12 +122,36 @@ class ProductionPlanRenderTests(DeskCase):
         # Admission's wall-clock install span is independent of binding shape.
         # The installer itself parses the written plan and runs its real child
         # preflight, with a fixture battery reading and no launchd calls.
-        with mock.patch.object(night_agent_install, "BATTERY_PROBE_RUNNER", battery_float_fixture.runner()), \
-                mock.patch.object(night_agent_install.Prepared, "admit"), \
-                mock.patch.object(night_agent_install.subprocess, "run", side_effect=desk_run), \
-                contextlib.redirect_stdout(io.StringIO()):
-            installed = night_agent_install.validate_install(args, self.measurement)
+        def install(courier_bin):
+            with mock.patch.object(night_agent_install, "BATTERY_PROBE_RUNNER", battery_float_fixture.runner()), \
+                    mock.patch.object(night_agent_install.Prepared, "admit"), \
+                    mock.patch.object(night_agent_install.subprocess, "run", side_effect=desk_run), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                return night_agent_install.validate_install(
+                    SimpleNamespace(**{**vars(args), "courier_bin": courier_bin}), self.measurement)
+
+        installed = install("/usr/bin/true")
         self.assertEqual(installed.plan.hazard_window["bindings"], written["hazard_window"]["bindings"])
+        # Stage-3 review F1/F4: a block-6 plan never renders an agent courier, by
+        # default or by name, and the courier's directory never leads the job's PATH.
+        system_path = "/usr/bin:/bin:/usr/sbin:/sbin"
+        self.assertEqual(installed.courier_path, system_path)
+        default = install(None)
+        self.assertEqual(Path(default.courier), self.measurement / "scripts/b6_courier.sh")
+        self.assertEqual(default.courier_path, system_path)
+        agents = self.root / "agent-couriers"
+        agents.mkdir(exist_ok=True)
+        named = agents / "claude"
+        named.write_text("#!/bin/sh\nexit 0\n")
+        named.chmod(0o755)
+        linked = agents / "courier-link"
+        if not linked.is_symlink():
+            linked.symlink_to(named)
+        for agent in (named, linked):
+            with self.subTest(courier=agent.name), self.assertRaises(night_agent_install.Refused) as refused:
+                install(str(agent))
+            self.assertEqual(refused.exception.code, 2)
+            self.assertIn("must be a program, not an agent", str(refused.exception))
 
     def test_each_production_pack_uses_b6_screen_and_no_spares(self):
         for pack, maximum, members in (("alpha", 124620, 125), ("beta", 127020, 125),

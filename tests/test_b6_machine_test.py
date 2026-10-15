@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import plistlib
 import shutil
+import signal
 import subprocess
 import tempfile
 from types import SimpleNamespace
@@ -459,6 +460,41 @@ class InjectTests(Case):
                 self.assertIn("exception", [r["event"] for r in mt.read_rows(state.parent / "injections.jsonl")])
                 self.root = base
 
+    def test_sigterm_stops_injection_and_reaps_every_child(self):
+        # Stage-3 review F2: SIGTERM (launchd bootout) left the agent and busy
+        # children running. A recording handler stands in for the default action
+        # so the old code cannot end the test process; it must be restored after.
+        received = []
+
+        def outer(signum, _frame):
+            received.append(signum)
+
+        previous = signal.signal(signal.SIGTERM, outer)
+        self.addCleanup(signal.signal, signal.SIGTERM, previous)
+        for second in (4, 9):  # mid-agent, mid-busy
+            with self.subTest(second=second):
+                base = self.root
+                self.root = base / f"term-{second}"
+                self.root.mkdir()
+                state, seams, clock, children, _ = self.environment()
+                tick = clock.tick
+
+                def signalled(now, tick=tick, second=second):
+                    tick(now)
+                    if now == second:
+                        os.kill(os.getpid(), signal.SIGTERM)
+
+                clock.tick = signalled
+                self.assertEqual(mt.inject(state, seams=seams), 1)
+                self.assertEqual(clock.second, second)
+                self.assertTrue(children)
+                self.assertTrue(all(c.terminated and c.waits for c in children))
+                events = mt.read_rows(state.parent / "injections.jsonl")
+                self.assertIn("exception", [e["event"] for e in events])
+                self.assertIs(signal.getsignal(signal.SIGTERM), outer)
+                self.assertEqual(received, [])
+                self.root = base
+
     def test_census_failure_reaps_agent_and_never_starts_busy(self):
         state, seams, _, children, starts = self.environment()
         seams.run = lambda *a, **kw: SimpleNamespace(returncode=1, stdout="")
@@ -575,6 +611,15 @@ class ReportTests(Case):
         put(archive / "sources/claim-runs/end-reference/summary_metrics.json", {"status": "succeeded"})
         result = {"status": "physics", "errors": [], "harvest_exit": 0, "archive": str(archive),
                   "flags": ["agent.presence", "agent.presence_overlap", "idle.wait_cap_skip", "meter.absent"]}
+        # The report checks every kept run against the reduced plan roster.
+        tree = smoke.reduce_tree(json.loads((ROOT / "configs/campaigns" / mt.PACK / "plan_tree.json").read_text()),
+                                 json.loads(smoke.KEEP_PATH.read_text())[mt.PACK])
+        dispatches = plan.resolve_stage_dispatches(tree, ROOT)
+        names = ("reference", "decode", "prefill", "end-reference")
+        for dispatch, run_id in zip(dispatches, names):
+            put(prepared.measurement / dispatch.config_dir / "order_manifest.json",
+                {"executed_order": [{"run_id": run_id}]})
+        put(prepared.measurement / "configs/campaigns" / mt.PACK / "plan_tree.json", tree)
         return out / "machine-test.json", custody, archive, result
 
     def run_report(self, state, result, **kwargs):
@@ -596,6 +641,25 @@ class ReportTests(Case):
         self.assertNotRegex(output.getvalue(), r"\b\d+(?:\.\d+)?\s*(?:J|W|s|seconds|minutes)\b")
         self.assertNotIn("1425", output.getvalue())
         self.assertNotIn("1500", output.getvalue())
+
+    def test_every_planned_run_requires_start_and_end_sleep_readings(self):
+        for run_id in ("reference", "decode", "prefill", "end-reference"):
+            for event in ("both", "start", "end"):
+                with self.subTest(run_id=run_id, event=event):
+                    base = self.root
+                    self.root = base / (run_id + "-" + event)
+                    self.root.mkdir()
+                    try:
+                        state, custody, archive, result = self.custody_fixture()
+                        path = custody / "collection/run_clock.jsonl"
+                        rows = [row for row in mt.read_rows(path)
+                                if not (row["run_id"] == run_id and (event == "both" or row["event"] == event))]
+                        path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+                        item = self.run_report(state, result)["per-run sleep readings"]
+                        self.assertFalse(item["observed"])
+                        self.assertIn(run_id, item["detail"]["missing_or_incomplete_run_ids"])
+                    finally:
+                        self.root = base
 
     def test_each_item_missing_or_bad_is_not_observed(self):
         for name in ("agent pause", "agent census", "runner pause", "fresh idle admission", "idle cap", "sampler restarts", "sampler startup readings",

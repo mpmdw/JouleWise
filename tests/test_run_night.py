@@ -5023,6 +5023,56 @@ class ProcessGroupRetryTests(unittest.TestCase):
                         self.assertGreater(len(sent), 1)
 
 
+class BlockSixCourierTests(unittest.TestCase):
+    """Stage-3 review F1: a block-6 plan's courier is a program, never `claude`, never substituted."""
+
+    def setUp(self) -> None:
+        self.driver = _load_driver(module_name="run_night_b6_courier_test")
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root)
+        (self.root / "measurement/scripts").mkdir(parents=True)
+        self.default = self.root / "measurement/scripts/b6_courier.sh"
+        self.default.write_text("#!/bin/sh\nexit 0\n")
+        self.default.chmod(0o755)
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.claude = self.bin / "claude"
+        self.claude.write_text("#!/bin/sh\nexit 0\n")
+        self.claude.chmod(0o755)
+        self.plan = types.SimpleNamespace(
+            measurement_root=str(self.root / "measurement"),
+            hazard_window={"bindings": {"capture_screen": {"alignment_reference_s": None}}})
+
+    def test_block_six_plan_is_the_capture_screen_binding(self) -> None:
+        from joulewise.b6 import courier
+        self.assertTrue(courier.block_six_plan(self.plan))
+        for plan in (types.SimpleNamespace(hazard_window={"bindings": {"pre_attempt_id": "x"}}),
+                     types.SimpleNamespace(hazard_window={}), types.SimpleNamespace(), None):
+            with self.subTest(plan=plan):
+                self.assertFalse(courier.block_six_plan(plan))
+        night_plan = types.SimpleNamespace(**{f.name: None for f in dataclasses.fields(night_gate.NightPlan)})
+        self.assertFalse(courier.block_six_plan(night_plan))  # no hazard_window field at all
+
+    def test_default_is_the_checkout_program_courier_and_claude_is_refused(self) -> None:
+        with mock.patch.dict(os.environ, {"PATH": f"{self.bin}:/usr/bin:/bin"}, clear=True):
+            self.assertEqual(self.driver._resolve_courier_bin(None, plan=self.plan), (self.default, None, None))
+            link = self.root / "courier-link"
+            link.symlink_to(self.claude)
+            for agent in (self.claude, link):
+                with self.subTest(courier=agent.name):
+                    found, error, substitution = self.driver._resolve_courier_bin(agent, plan=self.plan)
+                    self.assertIsNone(found)
+                    self.assertIn("not an agent", error)
+                    self.assertIsNone(substitution)
+            # A missing program courier is never replaced by `claude` from PATH.
+            found, error, substitution = self.driver._resolve_courier_bin(self.root / "gone.sh", plan=self.plan)
+            self.assertEqual((found, substitution), (None, None))
+            self.assertIn("unavailable", error)
+            # Block-5 behaviour is unchanged: no plan, claude from PATH and substitution.
+            self.assertEqual(self.driver._resolve_courier_bin(None)[0], self.claude)
+            self.assertEqual(self.driver._resolve_courier_bin(self.root / "gone.sh")[2]["used"], str(self.claude))
+
+
 if __name__ == "__main__":
     unittest.main()
 
