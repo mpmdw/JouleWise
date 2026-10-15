@@ -180,8 +180,8 @@ class ProductionPlanRenderTests(DeskCase):
                     self.assertIn("flag calibration.bracket_incomplete", missing.stdout)
                     if registered:
                         stopped = self.screen(rendered, .080)
-                        self.assertEqual(stopped.returncode, 12, stopped.stderr)
-                        self.assertIn("chain.stop operative_bound_above_stop 12", stopped.stdout)
+                        self.assertEqual(stopped.returncode, 13, stopped.stderr)
+                        self.assertIn("chain.stop operative_bound_above_stop 13", stopped.stdout)
                     checked = self.check_plan(prepared)
                     self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
                     self.check_readers(prepared, written)

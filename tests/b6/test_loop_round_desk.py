@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from joulewise.b5 import plan
-from joulewise.b6.driver_lane import metadata_path, read
+from joulewise.b6.driver_lane import metadata_path, read, write
 from joulewise.b6.lanes import Done, Prepared, Refused, Running
 from joulewise.b6.loop import atomic_state
 from tests.b6.round_support import Round
@@ -17,6 +17,26 @@ def tearDownModule():
 
 
 class RoundTests(DeskCase):
+    def test_stops_close_bracket_advance_pin_and_reach_next_smoke(self):
+        for stop in ('night_stopped_disk_low', 'operative_bound_above_stop',
+                     'pre_calibration_screen_failed', 'pre_calibration_capture_failed'):
+            with self.subTest(stop=stop):
+                root = self.root / stop
+                root.mkdir()
+                r = Round(root)
+                r.until('SESSION_RUN')
+                write(r.control, {**read(r.control), 'stop': stop})
+                r.until('ROTATE')
+                prepared = Prepared(**r.state()['session']['prepared'])
+                metadata = read(metadata_path(prepared))
+                self.assertTrue(metadata.get('bracket_aborted'), metadata)
+                self.assertEqual(metadata['pin_advance']['status'], 'ADVANCED')
+                self.assertFalse(plan.ledger_head_status(r.measurement)['open_sessions'])
+                self.assertFalse(plan.ledger_head_status(r.measurement)['blocking'])
+                write(r.control, {**read(r.control), 'stop': None})
+                r.until('SMOKE_DESK')
+                self.assertEqual(r.state()['session']['packs'], ['beta'])
+
     def test_alpha_smoke_session_desk_and_beta_rotation(self):
         r = Round(self.root)
         r.until('PRECHECK')

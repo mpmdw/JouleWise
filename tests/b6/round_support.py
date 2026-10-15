@@ -502,7 +502,14 @@ def synthesize(plan_path, state):
         for run_id in dispatch.run_ids[:next(s['expected_count'] for s in t['stage_graph'] if s['stage_id'] == dispatch.stage_id)]:
             if run_id in state.get('missing', ()):
                 continue
-            windows.copy_member(Path(os.environ['JW_B6_BUNDLE_TEMPLATE']) / run_id, claim / run_id)
+            source = Path(os.environ['JW_B6_BUNDLE_TEMPLATE']) / run_id
+            if not source.exists() and t.get('smoke_reduction'):
+                # A Round builds strict bundles for its selected pack only.
+                # The next pack's smoke still launches through the installer
+                # to exercise ledger reservation at the hand-over. Retain the
+                # seed's identity: harvesting it would disclose the mismatch.
+                source = next(Path(os.environ['JW_B6_BUNDLE_TEMPLATE']).glob('*/metadata.json')).parent
+            windows.copy_member(source, claim / run_id)
     # Real ledger appends and finalization, retaining the builder's capture
     # shapes, so pin advance must make a real pin-only Git commit.
     epoch = read(Path(b['identity_epoch_json']))
@@ -540,9 +547,6 @@ def synthesize(plan_path, state):
         ledger.finalize_bracket_session_slot(ledger_path, session_id=b['bracket_session_id'], slot=slot,
             disposition='valid', custody_locator=str(capture), artifact_sha256=ledger.artifact_hashes(capture),
             identity_epoch=epoch, t1_bindings=t1, capture_wall_time_s='99.0', exact_bound_lexeme_s='0.025')
-    if state.get('stop'):
-        ledger.abort_bracket_session(measurement / plan.DEFAULT_LEDGER_RELATIVE,
-                                     session_id=b['bracket_session_id'], reason=state['stop'])
     rows = [{'stage_id': s.stage_id, 'kind': s.kind, 'rc': 0, 'started_epoch_s': 1786206000,
              'ended_epoch_s': 1786206001} for s in chain.stage_plan(t) if s.in_chain]
     if state.get('lost'):
@@ -562,15 +566,16 @@ def synthesize(plan_path, state):
         return
     if state.get('stop'):
         stop = state['stop']
-        if stop.startswith('night_'):
+        if stop.startswith('night_') or stop == 'non_observer_process_busy':
             write(night / 'hazard_result.json', {'verdict': 'ABORTED', 'aborted_reason': stop, 'chain': {'exit_code': -15}})
             write(night / 'result.json', {'verdict': 'ABORTED', 'aborted_reason': stop, 'chain_exit_code': -15})
             write(night / 'chain.exited', {'epoch_s': 1786216000, 'exit_code': -15})
         else:
+            rc = chain.STOP_EXITS[stop]
             with (night / chain.STAGE_JOURNAL).open('a') as journal:
-                journal.write(json.dumps({'stage_id': 'chain.stop', 'kind': stop, 'rc': 12}) + '\n')
-            write(night / 'chain.exited', {'epoch_s': 1786216000, 'exit_code': 12})
-            write(night / 'result.json', {'verdict': 'CHAIN_STOPPED', 'chain_exit_code': 12})
+                journal.write(json.dumps({'stage_id': 'chain.stop', 'kind': stop, 'rc': rc}) + '\n')
+            write(night / 'chain.exited', {'epoch_s': 1786216000, 'exit_code': rc})
+            write(night / 'result.json', {'verdict': 'CHAIN_STOPPED', 'chain_exit_code': rc})
         return
     write(night / 'chain.exited', {'epoch_s': 1786216000, 'exit_code': 0})
     write(night / 'result.json', {'verdict': 'GO', 'aborted_reason': None, 'chain_exit_code': 0, 'artifacts': []})

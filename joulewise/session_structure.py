@@ -30,7 +30,7 @@ PHYSICAL_STOP_CODES = {
     "night_refused_hazard": "hazard",
 }
 CHAIN_STOP_EXITS = {10: "reservation_failed", 11: "pre_calibration_capture_failed",
-                    12: "pre_calibration_screen_failed"}
+                    12: "pre_calibration_screen_failed", 13: "operative_bound_above_stop"}
 REQUIRED_RECORDS = ("harvest.json", "derived/yield.json", "derived/roster.json",
                     "derived/exclusions.json", "derived/flags.jsonl", "night/chain-stages.jsonl",
                     "night/result.json", "instrument_validation/opening", "instrument_validation/closing")

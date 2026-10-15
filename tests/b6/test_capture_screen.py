@@ -28,7 +28,7 @@ class ChainScreenTests(unittest.TestCase):
             self.assertIn("screen_b6_calibration", rendered)
             self.assertNotIn("screen_pre_calibration()", rendered)
             source = rendered[rendered.index("B6_ALIGNMENT_REFERENCE_S="):rendered.index('cd "$REPO"')]
-            for value, rc, flagged in ((.030, 0, False), (.040, 0, True), (.100, 12, True), (.077469, 0, True)):
+            for value, rc, flagged in ((.030, 0, False), (.040, 0, True), (.100, 13, True), (.077469, 0, True)):
                 (root / "instrument_evidence.json").write_text(json.dumps({"b_fiducial_s": value}))
                 shell = "CLAIM_RUNS_ROOT=fixture\nflag() { print -r -- \"flag $1\"; }\nstop_chain() { print -r -- \"chain.stop $1 $2\"; exit $2; }\n"
                 script = root / "screen.zsh"
@@ -37,7 +37,7 @@ class ChainScreenTests(unittest.TestCase):
                 self.assertEqual(ran.returncode, rc, ran.stderr)
                 self.assertEqual("flag calibration.alignment_above_reference" in ran.stdout, flagged)
                 if rc:
-                    self.assertIn("chain.stop operative_bound_above_stop 12", ran.stdout)
+                    self.assertIn("chain.stop operative_bound_above_stop 13", ran.stdout)
 
     def test_null_screen_values_never_become_zero_thresholds(self):
         with tempfile.TemporaryDirectory() as tmp:

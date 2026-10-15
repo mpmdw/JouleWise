@@ -486,8 +486,11 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
                    (root / "night", root / "sources/night-custody/night", root / "sources/night",
                     Path(bindings.get("custody_root", root)) / "night")
                    for name in ("hazard_result.json", "result.json")]
+        def terminal_exit(row):
+            return row.get("chain_exit_code", (row.get("chain") or {}).get("exit_code"))
+
         result = next((row for row in results if row.get("aborted_reason") in PHYSICS_STOP_REASONS),
-                      next((row for row in results if row), {}))
+                      next((row for row in results if terminal_exit(row) is not None), {}))
         completed = next((row.get("exit_code", row.get("rc")) for row in reversed(journal)
                           if row.get("stage_id") == "chain.complete"), None)
         exit_code = bindings.get("chain_exit_code", result.get("chain_exit_code", result.get("chain", {}).get("exit_code", completed)))
@@ -496,7 +499,8 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
         elif exit_code == 0:
             stop = "completed"
         else:
-            stop = "chain_crashed"
+            from joulewise.session_structure import CHAIN_STOP_EXITS
+            stop = CHAIN_STOP_EXITS.get(exit_code, "chain_crashed")
     screen = _json(root / "withheld/b6-neg8.json", {})
     neg8 = {key: screen[key] for key in ("verdict", "survivors", "corpus_clean_n", "reason", "flags") if key in screen}
     try:

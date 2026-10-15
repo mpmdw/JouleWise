@@ -115,11 +115,13 @@ EXIT_COMPLETED = 0
 EXIT_RESERVATION_FAILED = 10
 EXIT_PRE_CAPTURE_FAILED = 11
 EXIT_PRE_SCREEN_FAILED = 12
+EXIT_OPERATIVE_BOUND_STOP = 13
 EXIT_INSPECTION_REFUSED = 64
 STOP_EXITS = {
     "reservation_failed": EXIT_RESERVATION_FAILED,
     "pre_calibration_capture_failed": EXIT_PRE_CAPTURE_FAILED,
     "pre_calibration_screen_failed": EXIT_PRE_SCREEN_FAILED,
+    "operative_bound_above_stop": EXIT_OPERATIVE_BOUND_STOP,
 }
 
 STAGE_JOURNAL = "chain-stages.jsonl"
