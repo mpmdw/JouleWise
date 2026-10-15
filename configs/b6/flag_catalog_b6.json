@@ -1,5 +1,33 @@
 {
   "codes": {
+    "agent.capture_overlap": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Agent presence overlapped a calibration capture; disclosed."
+    },
+    "agent.pause_marker_stale": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "A pause marker from an earlier process was found; disclosed."
+    },
+    "agent.presence": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS",
+      "note": "Design 13.6: an agent was present; the presence interval excludes overlapping members."
+    },
+    "agent.presence_overlap": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "PHYSICS_IN_SPAN",
+      "klass": "PHYSICS",
+      "note": "Design 13.6: agent presence overlaps this member; its whole unit is excluded."
+    },
     "agent.unit_overlap": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
@@ -637,12 +665,54 @@
       "klass": "NUMBER",
       "note": "Aggregate: G3's F5-2 independent recompute of the whole-window verdict did not find a clean pass. Not window-removing for the same reason as whole_window.not_passed; its parts act through neg8.screen_failed, calibration.bracket_acceptance_failed and member.whole_window_member_failure (registration 6.5)."
     },
+    "idle.busy_fraction_exceeded": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Driver H1: the busy fraction alone is disclosed; power and GPU still decide admission."
+    },
+    "idle.wait_budget_exhausted": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Design 6.2: the session wait budget was spent."
+    },
+    "idle.wait_budget_skip": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_MEMBER",
+      "family": "MEMBER_VALIDITY",
+      "klass": "PHYSICS",
+      "note": "Design 6.2: the session wait budget was spent; the run was skipped."
+    },
+    "idle.wait_budget_unreadable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "The session wait ledger could not be read; disclosed."
+    },
     "idle.wait_cap_skip": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "MEMBER_VALIDITY",
       "klass": "PHYSICS",
-      "note": "Q2: measured idle admission never passed within the cap; collection-lane placeholder."
+      "note": "Design 6.2: no quiet idle span within the 1,500 s cap; the run was skipped."
+    },
+    "idle.wait_ledger_unwritable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "The session wait ledger could not be written; disclosed."
+    },
+    "idle.waited": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Design 6.2: the idle baseline slid before admission; test M2 decides any other effect."
     },
     "instrument.binary_identity_rederived": {
       "blinding": "STRUCTURE",
@@ -1449,12 +1519,47 @@
       "klass": "NUMBER",
       "note": "The bundle's metadata.json run_id differs from its directory. A misfiled bundle already fails the per-member config check; this covers a bundle whose own records disagree about which member it is. A kept member needs one identity in every record a later program may key on, or one energy could count under two units or the wrong quad position (registration 6.7). The emitter and the test fixture now carry the same class and effect (audit-fix item 7, 2026-10-07); configs/gates/hazard_refusals.json lists it as a NUMBER_INTEGRITY member exclusion."
     },
+    "sleep.assertion_lost": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Design 6.3: the driver's no-sleep hold exited and was restarted."
+    },
+    "sleep.assertion_unverified": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Design 6.3: the driver's no-sleep hold could not be verified."
+    },
+    "sleep.between_runs": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Council S1: sleep between runs; disclosed."
+    },
+    "sleep.in_chain": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Council S1: sleep outside any run; disclosed."
+    },
     "sleep.in_run": {
       "blinding": "STRUCTURE",
       "effect": "EXCLUDE_MEMBER",
       "family": "PHYSICS_IN_SPAN",
       "klass": "PHYSICS",
-      "note": "S1: sleep breaks the run's record sequence; collection-lane placeholder."
+      "note": "Council S1: the sleep-counting minus sleep-blind offset grew by more than 1 ms inside the run."
+    },
+    "sleep.reading_unmeasured": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Council S1: a per-run sleep reading failed; disclosed."
     },
     "stage.members_refused_pre_bundle_identical": {
       "blinding": "STRUCTURE",

@@ -92,6 +92,45 @@ NEW_CODES = {
     "member.duration_outlier": _entry("DIAGNOSTIC", "REPRESENTATION", "DISCLOSE", "Design 13: duration is a per-run flag; collection-lane placeholder."),
     "clock.time_server_offset": _entry("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "C1: query-only diagnostic; collection-lane placeholder."),
 }
+# Stage-1 integration (2026-10-14): the codes the block-6 driver lane actually
+# writes (joulewise/b6/{agent_pause,idle_wait,sleep_guard}.py, the controller
+# and the driver), with the family, class and effect of its proposal in
+# joulewise.flags.catalog.DRAFT_CODES. The effects follow the design texts:
+# agent overlap excludes the overlapping unit (design 13 item 6), a sleep inside
+# a run excludes that run (design 3.4, council S1), a run skipped at the idle
+# wait cap or the session wait budget is a skip with a flag (design 6.2), and
+# everything else discloses (idle.waited until test M2 says otherwise). A pack
+# registration may still set other effects through its flag_effects.
+COLLECTION_CODES = {
+    code: _entry(family, klass, effect, note) for code, (family, klass, effect, note) in {
+        "agent.presence": ("PHYSICS_IN_SPAN", "PHYSICS", "EXCLUDE_MEMBER",
+                           "Design 13.6: an agent was present; the presence interval excludes overlapping members."),
+        "agent.presence_overlap": ("PHYSICS_IN_SPAN", "PHYSICS", "EXCLUDE_MEMBER",
+                                   "Design 13.6: agent presence overlaps this member; its whole unit is excluded."),
+        "agent.capture_overlap": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE",
+                                  "Agent presence overlapped a calibration capture; disclosed."),
+        "agent.pause_marker_stale": ("RECORDS", "REPRESENTATION", "DISCLOSE",
+                                     "A pause marker from an earlier process was found; disclosed."),
+        "sleep.in_run": ("PHYSICS_IN_SPAN", "PHYSICS", "EXCLUDE_MEMBER",
+                         "Council S1: the sleep-counting minus sleep-blind offset grew by more than 1 ms inside the run."),
+        "sleep.between_runs": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "Council S1: sleep between runs; disclosed."),
+        "sleep.in_chain": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "Council S1: sleep outside any run; disclosed."),
+        "sleep.reading_unmeasured": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "Council S1: a per-run sleep reading failed; disclosed."),
+        "sleep.assertion_lost": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "Design 6.3: the driver's no-sleep hold exited and was restarted."),
+        "sleep.assertion_unverified": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "Design 6.3: the driver's no-sleep hold could not be verified."),
+        "idle.waited": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "Design 6.2: the idle baseline slid before admission; test M2 decides any other effect."),
+        "idle.wait_cap_skip": ("MEMBER_VALIDITY", "PHYSICS", "EXCLUDE_MEMBER",
+                               "Design 6.2: no quiet idle span within the 1,500 s cap; the run was skipped."),
+        "idle.wait_budget_skip": ("MEMBER_VALIDITY", "PHYSICS", "EXCLUDE_MEMBER",
+                                  "Design 6.2: the session wait budget was spent; the run was skipped."),
+        "idle.wait_budget_exhausted": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "Design 6.2: the session wait budget was spent."),
+        "idle.wait_budget_unreadable": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "The session wait ledger could not be read; disclosed."),
+        "idle.wait_ledger_unwritable": ("RECORDS", "REPRESENTATION", "DISCLOSE", "The session wait ledger could not be written; disclosed."),
+        "idle.busy_fraction_exceeded": ("DIAGNOSTIC", "PHYSICS", "DISCLOSE",
+                                        "Driver H1: the busy fraction alone is disclosed; power and GPU still decide admission."),
+    }.items()
+}
+NEW_CODES.update(COLLECTION_CODES)
 
 
 def build() -> bytes:
