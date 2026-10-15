@@ -2,6 +2,8 @@
 
 **Status.** This is a pre-registration: the question, the problems, the sample sizes and every piece of arithmetic are fixed in writing before the data exist. A **pack** is one question with its own registration, collection and release (`docs/design/block6_collection_draft.md` section 14). Registered before any DIFFICULTY energy measurement exists: no power has been captured for any problem of this pack, and nothing below depends on such a measurement. The commit that adds this file is the registration time. It supersedes version 1 (`docs/registrations/difficulty_pack_v1.md`), withdrawn on 2026-10-14 before any DIFFICULTY energy existed, for the reasons in its header. Author: Opus 5.5, in the orchestrator role (the model seat that directs this project's work and records its decisions). Sources: specification v2 (`/Users/edr/night-archive/difficulty-pack/SPEC-v2.md`, "the spec"), the executing review of the code built from it (`REVIEW-v2.md` in the same folder; the reviewer ran the code rather than only reading it), the refuter of version 1 (`refuter/sol.md`; a different model that tried to break version 1 by running its code), the power simulation (`POWER-v2.md`) and the pilot (`/Users/edr/night-archive/pilots/difficulty/SUMMARY.md`). Paths under `/Users/edr/night-archive/` are the project's local archive on the measurement laptop.
 
+**Revision before landing (2026-10-14, still before any DIFFICULTY energy).** A refuter (Sol 6.1, `refuter-v2/sol.md`) ran the code against this text's first draft (commit `8c47aa656`, never on main) and found nine faults; the orchestrator reproduced them and recorded what changed in `refuter-v2/DISPOSITIONS.md`. Two change the design, not only the words. The simulation that set the sizes assumed 4B spends 1.7 times as much per generated token as 1.7B; the pilot's own wall time says 2.06, and with that the draft's sizes resolved the level-5 comparison in only about half of simulated campaigns, so the thinking-off bench is now 400 problems at levels 3 and 4 and 600 at level 5 (section 4.1). And the claim that five 0.99 decisions keep the chance of any false decision at or below 0.05 holds only when each interval reaches its nominal coverage; section 4.1 now prints the worlds where it does not. The configuration's version string is `difficulty-v2.1`, so its bytes are not mistaken for the draft's.
+
 ## 1. The question, and why it is asked this way
 
 A language model answers a math problem by writing text one **token** at a time (a token is a short piece of text: a word, part of a word, a digit or a symbol). Every token costs energy, so a long answer costs more than a short one. A larger model costs more energy per token but is right more often. What a user pays for a correct answer therefore depends on both: if a small model is wrong half the time, every correct answer also carries the energy of a wrong one.
@@ -32,7 +34,7 @@ Level is a label the dataset's authors attached to each problem before any model
 | `qwen3-4b/on` | `mlx-community/Qwen3-4B-4bit` at `4dcb3d101c2a062e5c1d4bb173588c54ea6c4d25` | 16,384 | measured |
 | `qwen3-8b/on` | `mlx-community/Qwen3-8B-4bit` at `545dc4251c05440727734bcd94334791f6ab0192` | 16,384 | optional |
 
-The revisions are the ones the pilot ran (`run_pilot.py` lines 35 to 37) and the ones the local copies under `/Users/edr/jw_models/mlx-community/` hold. An **optional** configuration is measured only if machine time allows before the end date (section 9); if any row of it exists, it is analysed exactly like the others. Qwen3-1.7B with thinking on is not measured (pilot: less accurate than 4B thinking off at every level and 4 to 6 times slower per correct answer). Caps are the pilot's: at 4,096 tokens most thinking-off answers that still hit the cap repeat the same text until cut off; 16,384 was reached in 2 of 197 4B and 8B thinking-on runs.
+The revisions are the ones the pilot ran (`run_pilot.py` lines 35 to 37) and the ones the local copies under `/Users/edr/jw_models/mlx-community/` hold. An **optional** configuration is measured only if machine time allows before the end date (section 9); if any row of it exists, it is analysed exactly like the others. Qwen3-1.7B with thinking on is not measured. In the pilot (8 problems per level for it, 20 for 4B thinking off) it took 2.3 times as long per correct answer as 4B thinking off at level 1 and 4.1 to 6.1 times as long at levels 2 to 5, for accuracies of 100, 88, 88, 88 and 62% against 95, 95, 95, 85 and 65%: no accuracy gain beyond one problem in eight, at several times the cost. Caps are the pilot's: at 4,096 tokens most thinking-off answers that still hit the cap repeat the same text until cut off; 16,384 was reached by 2 of the pilot's 195 4B and 8B thinking-on answers (134 of those were run at that cap; the others had finished under the 4,096 cap of the pilot's first pass).
 
 **Decoding.** Greedy: at each step the single most probable next token is written, with no randomness, so two runs of the same prompt should write the same text. The prompt is the problem followed by "Please reason step by step, and put your final answer within \boxed{}." in Qwen3's chat format (the importer's template `math_levels_v1/qwen3_chat_boxed_v1`, SHA-256 `1a0796c08f1175730c3dde6a9e7d38312904f985853cb2ad46d594a90dd2319d`).
 
@@ -65,62 +67,98 @@ key = SHA-256 of the text `D + "/" + tag + "/" + item_id`, written as 64 hexadec
 where SHA-256 is a standard cryptographic hash (any change to the text changes the key unpredictably), `D` is `joulewise.packs.difficulty.selection.v2/joulewise.packs.difficulty.v2` (a fixed prefix built from the seed `joulewise.packs.difficulty.v2`, so that this pack's keys differ from those of any other draw from the same problems), `tag` names the purpose and `item_id` names the problem. Sorting a set by key gives a random order that the seed fixes; the first k problems of it are a simple random sample of size k, and so is every shorter beginning of the list.
 
 For each level L, in this order:
-1. **Manifest list** `M_L`: the pool sorted by key with tag `level`, first 200. (The **manifest** is the file that lists the pack's problems with their text and reference answers.)
-2. **Thinking-off bench**: `M_L` sorted by tag `bench/off/L`, first 200 (all of `M_L`, in a new order).
+1. **Manifest list** `M_L`: the pool sorted by key with tag `level`, first 600 (the whole pool at levels 1 and 2, which hold 217 and 569). (The **manifest** is the file that lists the pack's problems with their text and reference answers.)
+2. **Thinking-off bench**: `M_L` sorted by tag `bench/off/L`, first 200 at levels 1 and 2, 400 at levels 3 and 4, 600 at level 5 (all of `M_5`, in a new order).
 3. **Thinking-off energy subset** (the bench problems that also get energy attempts): the thinking-off bench sorted by tag `energy/off/L`, first 30.
 4. **Thinking-on bench**: `M_L` sorted by tag `bench/on/L`, first 64.
 5. **Thinking-on energy subset**: the thinking-on bench sorted by tag `energy/on/L`, first 20.
 
-The **holdout** of a mode is its bench minus its energy subset: 170 problems per level with thinking off, 44 with thinking on. Every configuration of a mode uses that mode's lists, so all configurations answer the same problems.
+The **holdout** of a mode is its bench minus its energy subset: 170, 170, 370, 370 and 570 problems at levels 1 to 5 with thinking off, 44 per level with thinking on. Every configuration of a mode uses that mode's lists, so all configurations answer the same problems.
 
-Worked example (level 1, purpose `energy/off/1`). The text `joulewise.packs.difficulty.selection.v2/joulewise.packs.difficulty.v2/energy/off/1/math_test_prealgebra_1859` hashes to `00c578a19a44f7fc…`, the smallest key among the 200 level-1 bench problems, so `math_test_prealgebra_1859` is first in that order; `math_test_prealgebra_1457` (`029d331f…`) is second. The 30th is `math_test_algebra_1985` (`2c51f703…`) and the 31st `math_test_algebra_1149` (`2c6b445c…`), so the level-1 thinking-off energy subset ends at the 30th.
+Worked example (level 1, purpose `energy/off/1`). The text `joulewise.packs.difficulty.selection.v2/joulewise.packs.difficulty.v2/energy/off/1/math_test_prealgebra_1859` hashes to `00c578a19a44f7fc…`, the smallest key among the 200 level-1 bench problems, so `math_test_prealgebra_1859` is first in that order; `math_test_algebra_1624` (`04dc06aa…`) is second. The 30th is `math_test_algebra_1149` (`2c6b445c…`) and the 31st `math_test_algebra_1600` (`2c725511…`), so the level-1 thinking-off energy subset ends at the 30th.
 
 ```
 pool_L (217 to 871 problems)                 every remaining scorable level-L problem
- └─ M_L: 200 by key "level"                  the manifest list
-     ├─ thinking-off bench: all 200           accuracy and tokens, no power
+ └─ M_L: up to 600 by key "level"            the manifest list (217, 569, 600, 600, 600)
+     ├─ thinking-off bench: 200, 200, 400, 400, 600 by "bench/off/L"   accuracy and tokens, no power
      │   ├─ energy subset: 30 by "energy/off/L"   power captured
-     │   └─ holdout: the other 170                 accuracy and token means for EPC
+     │   └─ holdout: the rest (170 to 570)         accuracy and token means for EPC
      └─ thinking-on bench: 64 by "bench/on/L"
          ├─ energy subset: 20 by "energy/on/L"
          └─ holdout: the other 44
 ```
 
-Each name on the left is a set of problems, with its size; each indented set is drawn from the one above it by the key tag in quotes; the text on the right says what the set is used for. Because each list is a random sample of the same population, the energy subset and the holdout estimate the same problems' quantities; any difference between them (for example, Algebra and Prealgebra are 10 of the 30 level-3 energy problems but 91 of the 170 level-3 holdout problems) is sampling noise, and the intervals of section 6, which resample the measured problems, include it. Subject counts are printed as description only; no subject balance is claimed.
+Each name on the left is a set of problems, with its size; each indented set is drawn from the one above it by the key tag in quotes; the text on the right says what the set is used for. Because each list is a random sample of the same population, the energy subset and the holdout estimate the same problems' quantities; any difference between them (for example, Algebra and Prealgebra are 16 of the 30 level-3 energy problems but 182 of the 370 level-3 holdout problems) is sampling noise, and the intervals of section 6, which resample the measured problems, include it. Subject counts are printed as description only; no subject balance is claimed.
 
-**The registered lists.** Built by `scripts/difficulty_manifest.py` (section 10) from the configuration in appendix A over the MATH files above: no shortfall flags, the sizes above, energy within bench within `M_L` for both modes. Two builds gave identical bytes. The selections file `selections-difficulty-v2.json` (problem ids only) has SHA-256 `291e7636d57b6447240089d831849d170e9f7d76840615d887afb73ab57a781b` and is kept at `/Users/edr/night-archive/difficulty-pack/v2-registration/`; the full manifest (which holds problem text and stays outside the repository) has SHA-256 `164610e70d53407b0225baa99325194abbb90a7b9da6e44737ada59e51a60861`. The seed was fixed in the spec before any list at these sizes was drawn and is not changed here.
+**The registered lists.** Built by `scripts/difficulty_manifest.py` (section 10) from the configuration in appendix A over the MATH files above: the sizes above, energy within bench within `M_L` for both modes, no short selection, and the two expected flags `short_level:1:217` and `short_level:2:569` (the manifest list at levels 1 and 2 is the whole pool, because 600 exceeds it). Two builds gave identical bytes. The selections file `selections-difficulty-v2.1.json` (problem ids only) has SHA-256 `b16a5ad7ab113d16a96b83762bcc1e4f173e98a0b63c5b2df91e0ba107e84eac` and is kept at `/Users/edr/night-archive/difficulty-pack/v2.1-registration/`; the full manifest (2,586 problems; it holds problem text and stays outside the repository) has SHA-256 `a800ccb85a3d150a9f503f4a4808e8d7f59aee157cc5a94690af9b4919dbb623`. The seed was fixed in the spec before any list at these sizes was drawn and is not changed here; the draft's lists (`v2-registration/`, 200 per level) are superseded and nothing was measured on them.
 
 ## 4. How many, and what that buys
 
 | Mode | Bench per level | Energy subset per level | Holdout per level | Configurations |
 |---|---:|---:|---:|---|
-| thinking off | 200 | 30 | 170 | 1.7B, 4B, 8B |
+| thinking off | 200, 200, 400, 400, 600 | 30 | 170, 170, 370, 370, 570 | 1.7B, 4B, 8B |
 | thinking on | 64 | 20 | 44 | 4B; 8B optional |
 
-That is 450 thinking-off energy attempts (30 × 3 configurations × 5 levels), 100 for 4B thinking on and 100 more if 8B thinking on is measured; 3,000 thinking-off bench attempts and 320 per thinking-on configuration.
+That is 450 thinking-off energy attempts (30 × 3 configurations × 5 levels), 100 for 4B thinking on and 100 more if 8B thinking on is measured; 5,400 thinking-off bench attempts (1,800 × 3 configurations) and 320 per thinking-on configuration.
 
 ### 4.1 How the thinking-off sizes were chosen
 
 Two words first. An interval at **nominal confidence** 0.99 is built so that, if the whole experiment were repeated many times, it would contain the true value in 99% of the repetitions; its **coverage** is the fraction in which it actually does. The **power** of a design is the probability that it gives the answer that is true.
 
-The sizes come from a simulation (`POWER-v2.md`) that ran the registered estimator code (section 10) on synthetic data. Each simulated **campaign** is one complete repetition of the pack. The synthetic world was built from the pilot: at each level, the 20 pilot problems with their real correctness and token counts for each thinking-off model; each bench drawn from those 20 with replacement; energy = c × (generated tokens) × e^Z, with c = 1 for 1.7B, 1.7 for 4B and 2.4535 for 8B (the pilot's relative seconds per token) and Z a normal random number with mean −s²/2 and standard deviation s, so that energy scatters by about s around the token line. Two spreads were run: s = 0.2 (20%) and s = 0.3 (30%). In that world the true ln(EPC 1.7B / EPC 4B) by level is −0.579, −0.458, +0.161, −0.160 and +0.670 (ln is the natural logarithm; −0.579 means 1.7B costs e^−0.579 = 0.56 times what 4B costs, +0.670 means 1.95 times), so 1.7B is cheaper at levels 1, 2 and 4 and 4B at levels 3 and 5.
+The sizes come from simulations that ran the registered estimator code (section 10) on synthetic data. Each simulated **campaign** is one complete repetition of the pack. Every synthetic world is built from the pilot: at each level, the 20 pilot problems with their real correctness and token counts for each thinking-off model; each bench drawn from those 20 with replacement, the same draw for every configuration, so that a slot is one problem answered by all of them. Energy is made in one of three ways:
 
-Two bars decide which sizes pass: the **intended pattern** (1.7B resolved cheaper at level 1 or 2 and 4B resolved cheaper at level 5, where a level is **resolved** when the 0.99 interval of the ratio EPC 1.7B / EPC 4B lies wholly above 1 or wholly below 1, so the data decide which is cheaper; section 7.3 gives the rule) in at least 0.8 of campaigns, and coverage of at least 0.97 for every 0.99 interval checked (the primary ratio at levels 1 and 5, and each thinking-off configuration's EPC at levels 1 and 5). Every rate carries its **Monte Carlo standard error** (MC SE), the uncertainty from simulating finitely many campaigns: √(p(1 − p)/R) for a rate p over R campaigns. Each setting ran R = 2,000 campaigns (4,000 for bench 200 with energy 20).
+- **World A** (`POWER-v2.md`): energy = c × (generated tokens) × e^Z, with c = 1 for 1.7B, 1.7 for 4B and 2.4535 for 8B, and Z a normal random number with mean −s²/2 and standard deviation s, so that energy scatters by about s around the token line. The 1.7 is an assumption, not a pilot number: the pilot's wall seconds per generated token put 4B at 2.06 times 1.7B and 8B at 1.443 times 4B, and 2.4535 = 1.7 × 1.443 keeps only the second ratio.
+- **World B**: world A with c = 2.0618 for 4B, the pilot's own ratio of wall seconds per generated token.
+- **World C**: the energy of an attempt is 100 × (that problem's pilot wall time for that model, in seconds) × e^Z, as if every model drew the same power.
 
-**Result at the registered sizes (bench 200, energy 30):**
+None is joules. B and C replace A's assumed cost factor with the pilot's time; if 4B draws more watts than 1.7B, the real level-5 ratio is closer to 1 than in C. Two spreads were run, s = 0.2 (20%) and s = 0.3 (30%). The true ln(EPC 1.7B / EPC 4B) by level is −0.579, −0.458, +0.161, −0.160, +0.670 in world A, −0.772, −0.651, −0.032, −0.353, +0.477 in B, and −0.986, −0.877, −0.040, −0.343, +0.574 in C (ln is the natural logarithm; −0.579 means 1.7B costs e^−0.579 = 0.56 times what 4B costs, +0.670 means 1.95 times). In all three, 1.7B is cheaper at levels 1, 2 and 4 and 4B at level 5; level 3 is close to even.
+
+Two bars decide which sizes pass: the **intended pattern** (1.7B resolved cheaper at level 1 or 2 and 4B resolved cheaper at level 5, where a level is **resolved** when the 0.99 interval of the ratio EPC 1.7B / EPC 4B lies wholly above 1 or wholly below 1, so the data decide which is cheaper; section 7.3 gives the rule) in at least 0.8 of campaigns, and coverage of at least 0.97 for every 0.99 interval checked (the primary ratio at levels 1 and 5, and each thinking-off configuration's EPC at levels 1 and 5). Every rate carries its **Monte Carlo standard error** (MC SE), the uncertainty from simulating finitely many campaigns: √(p(1 − p)/R) for a rate p over R campaigns.
+
+**The draft's sizes (bench 200, energy 30 at every level), world A, R = 2,000 campaigns per spread:**
 
 | Spread | L1 resolved, 1.7B cheaper | L2 resolved, 1.7B cheaper | L5 resolved, 4B cheaper | Intended pattern | Some level resolved the wrong way | Worst coverage of a 0.99 interval |
 |---|---:|---:|---:|---:|---:|---:|
 | 20% | 0.993 ± 0.002 | 0.996 ± 0.001 | 0.909 ± 0.006 | 0.908 ± 0.006 | 0.002 ± 0.001 | 0.977 ± 0.003 (8B, level 1) |
 | 30% | 0.906 ± 0.007 | 0.980 ± 0.003 | 0.856 ± 0.008 | 0.851 ± 0.008 | 0.001 ± 0.000 | 0.979 ± 0.003 (8B, level 1) |
 
-The 0.99 interval of the primary ratio covered 0.997 and 0.996 (levels 1 and 5) at 20% spread and 0.995 and 0.998 at 30%. Levels 3 and 4, whose true ratios are close to 1 (1.17 and 0.85), are rarely resolved: with the true sign in 0.0355 and 0.006 of campaigns at 20% spread and 0.041 and 0.0055 at 30% (counted from the simulation's result files `power_v2_branch.jsonl` and `power_v2_branch_s03.jsonl`). That is the correct behaviour for ratios this close to 1 at these sizes.
+In worlds B and C the same sizes fall below the bar: intended pattern 0.470 ± 0.035 and 0.550 ± 0.035 in B, 0.705 ± 0.033 and 0.599 ± 0.035 in C, at 20% and 30% spread (200 campaigns each; `refuter-v2/DISPOSITIONS.md`). Level 1 and 2 still resolve in nearly every campaign; level 5 does not. What is missing is the precision of level-5 accuracy, which the holdout supplies: 1.7B answers about a third of level-5 problems, and 170 problems fix that fraction only to about 12% of itself (one standard error). Bench attempts capture no power and the level-5 pool holds 871 problems, so the bench grew instead of the energy subset.
 
-**Why not fewer or more.** With energy 20 per level the point estimates also pass (intended pattern 0.890 ± 0.005 at 20%, 0.809 ± 0.004 at 30% over 7,652 campaigns; 8B level-1 coverage 0.970 and 0.971), but by less than the Monte Carlo error, so at 30% spread it is close to even odds against the 0.8 bar. Version 1's shape (20, 20, 40, 40, 40) is about as powerful (0.850 ± 0.008 at 30%, 0.921 ± 0.006 at 20%) and costs more (480 runs, 1.10 h of generation, against 450 runs and 0.91 h). A bench above 217 is impossible at level 1, whose pool holds 217 problems; a larger bench at the other levels would buy level-5 power (bench 300, level 1 at its 217, with energy 30: 0.943 ± 0.005 at 30%), which is not needed to pass.
+**The registered sizes (bench 200, 200, 400, 400, 600; energy 30 at every level):**
 
-**A cell the sizes cannot fix.** The 0.99 interval of 8B thinking-off EPC at level 1 covered between 0.969 and 0.988 at every size simulated, with no trend in bench or energy size. The pilot's level-1 8B lengths have one problem at 5.5 times the mean length (2,007 tokens against a mean of 366.3). The primary estimate (section 6.6) predicts energy from the holdout's tokens; when a check (section 6.8) finds a level's energy departing from that prediction, the cell falls back to the simpler direct estimate (mean energy divided by accuracy, section 6.3), and in this cell the direct interval undercovers. This is printed beside that cell (section 8.3).
+| World | Spread | R | L1 resolved, 1.7B cheaper | L2 resolved, 1.7B cheaper | L4 resolved, 1.7B cheaper | L5 resolved, 4B cheaper | Intended pattern | Some level resolved the wrong way | Lowest coverage of the primary 0.99 interval (L1, L5) |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| A | 20% | 112 | 0.991 ± 0.009 | 1.000 ± 0.000 | 0.000 ± 0.000 | 0.991 ± 0.009 | 0.991 ± 0.009 | 0.000 ± 0.000 | 0.991 (L5) |
+| A | 30% | 112 | 0.911 ± 0.027 | 0.955 ± 0.020 | 0.027 ± 0.015 | 0.982 ± 0.013 | 0.973 ± 0.015 | 0.009 ± 0.009 | 0.991 (L1) |
+| B | 20% | 112 | 1.000 ± 0.000 | 1.000 ± 0.000 | 0.545 ± 0.047 | 0.946 ± 0.021 | 0.946 ± 0.021 | 0.000 ± 0.000 | 1.000 (L1) |
+| B | 30% | 257 | 0.977 ± 0.009 | 0.992 ± 0.005 | 0.494 ± 0.031 | 0.864 ± 0.021 | 0.864 ± 0.021 | 0.004 ± 0.004 | 0.992 (L1) |
+| C | 20% | 112 | 1.000 ± 0.000 | 1.000 ± 0.000 | 0.536 ± 0.047 | 0.955 ± 0.020 | 0.955 ± 0.020 | 0.009 ± 0.009 | 0.946 (L1) |
+| C | 30% | 256 | 1.000 ± 0.000 | 1.000 ± 0.000 | 0.371 ± 0.030 | 0.902 ± 0.019 | 0.902 ± 0.019 | 0.000 ± 0.000 | 0.961 (L1) |
 
-**Limits of the simulation.** Its population is the pilot's 20 problems per level; real pools hold 217 to 871 problems with tails the pilot may not have met. Its energy follows tokens exactly, times a random factor, so the token prediction is right by construction and the simulation cannot show what the check of section 6.8 guards against. Its coefficients are relative seconds per token, not joules.
+R differs because the two 30% rows of B and C pool two runs. Every world passes the power bar. World C fails the coverage bar at level 1: there the 0.99 interval of the primary ratio covered 0.946 ± 0.021 and 0.961 ± 0.012 (pooled over every size tried in C, 1,201 of 1,251 campaigns, 0.960), because the pilot's 1.7B level-1 times sit 21% above that model's line (below). Level 1 is still resolved the right way in every campaign, its true ln ratio being −0.99. The shortfall does not depend on the sizes (level 1 holds only 217 problems), so it is printed beside the level-1 row (section 8.3) rather than fixed.
+
+Other sizes, in worlds B and C (about 120 campaigns each; 20% / 30% spread): level-5 bench 400 with levels 3 and 4 at 200 gave intended pattern 0.889 / 0.761 (B) and 0.957 / 0.897 (C); levels 3 to 5 at 400 gave 0.819 (B, 30%) and 0.983 / 0.949 (C); level-5 energy 40 instead of 30 gave no gain (0.775 in B and 0.892 in C, 30%, levels 3 to 5 at 400). Level 5 at 600 is taken for the margin in world B at 30% spread, and levels 3 and 4 at 400 because they raise the chance of resolving level 4 (true ratio about 0.71 in B and C, 1.7B cheaper) from about 0.11 to between 0.4 and 0.55. A bench above 217 is impossible at level 1, whose pool holds 217 problems, and levels 1 and 2 already resolve. In world A the level-3 and level-4 ratios (1.17 and 0.85) are rarely resolved at any size tried, the correct behaviour for ratios this close to 1. Energy stays at 30 per level: energy 20 also passed the power bar in world A (intended pattern 0.890 ± 0.005 at 20% and 0.809 ± 0.004 at 30% over 7,652 campaigns, 1.9 Monte Carlo standard errors above 0.8), but its 8B level-1 coverage, 0.970 and 0.971, sat on the 0.97 bar within Monte Carlo error; version 1's energy shape (20, 20, 40, 40, 40) was about as powerful in world A (0.850 ± 0.008 at 30%, 0.921 ± 0.006 at 20%) and needs 480 runs against 450.
+
+**A cell the sizes cannot fix.** The 0.99 interval of 8B thinking-off EPC at level 1 covered between 0.969 and 0.988 at every size simulated in world A, with no trend in bench or energy size; its printed 0.95 interval covered 0.927 and 0.940 at bench 200 and energy 30. The pilot's level-1 8B lengths have one problem at 5.5 times the mean length (2,007 tokens against a mean of 366.3). The primary estimate (section 6.6) predicts energy from the holdout's tokens; when a check (section 6.8) finds a level's energy departing from that prediction, the cell falls back to the simpler direct estimate (mean energy divided by accuracy, section 6.3), and in this cell the direct interval undercovers. This is printed beside that cell (section 8.3). The level-1 sizes did not change, so neither did this cell.
+
+**When the decisions can be wrong.** Section 7.1's bound of 0.05 on any false primary decision holds only if every level's 0.99 interval reaches its coverage. The refuter of this version and the orchestrator ran worlds in which the truth is known through the registered code, at the draft's sizes unless marked (R = 200 unless shown; where there are two numbers, the second is the orchestrator's independent rerun with its own generator and seeds):
+
+| World: what is true in it | Some level falsely resolved | "Changes with level" printed falsely |
+|---|---:|---:|
+| A, with the level-3 ratio moved to +0.08 | 0.005 ± 0.005; 0.005 ± 0.005 | 0; 0 |
+| A, level-3 ratio +0.08, with 5% of 1.7B level-3 runs at five times the energy | 0 | 0 |
+| A, with 1.7B's energy growing faster than its tokens (G(1 + G/1000) instead of G) | 0 | 0 |
+| Null 1: every ratio 1, made by multiplying 1.7B's joules per token by 1.78, 1.58, 0.85, 1.17 and 0.51 at levels 1 to 5 | 0.110 ± 0.016 (R 400); 0.095 ± 0.021 | 0; 0 |
+| Null 1 drawn without replacement from pools of the real sizes | 0.140 ± 0.025 | 0 |
+| Null 2: every ratio 1; 100 J per attempt, equal accuracies, each model right exactly where the other is wrong | 0.125 ± 0.023; 0.095 ± 0.021 | 0.010 ± 0.007; 0 |
+| Null 3: null 1 with 0.5% of 1.7B level-1 runs at 101 times the energy, tokens unchanged | 0.665 ± 0.033 | 0 |
+| A, level-3 ratio +0.08, with that 101-fold excursion at level 3 | 0.140 ± 0.025 | 0 (a true change verdict listed level 3 wrongly in 0.100 ± 0.021) |
+| Null 1, registered sizes | 0.063 ± 0.023 (R 111) | 0 |
+| Null 2, registered sizes | 0.063 ± 0.023 (R 111) | 0 |
+
+Each failure needs a departure the pilot does not show. Null 1's false resolutions come from the model-based estimate when the misfit check (6.8) misses a level whose joules per token are off the configuration's line: at level 1, 17 of 81 campaigns resolved falsely when both cells used the model estimate, against 1 of 103 when 1.7B fell back to the direct one (refuter's 200 campaigns). Fitting the plane of 6.5 to the pilot's wall times (each model's 100 thinking-off answers, time standing in for energy), the levels depart from it by 0.1 to 4.9%, except 1.7B at level 1 by +21%, which is the kind of departure the misfit check exists for (on a complete synthetic pack built from those times it flagged that cell). Null 2 needs correctness that is anti-correlated between the two models; in the pilot it is positively correlated or near zero (7.2). Null 3 needs a rare energy excursion that the token counts do not show: thirty runs miss a 0.5% excursion 86% of the time, and no estimator recovers what the sample lacks; a 101-fold energy at the same tokens means a run about 100 times as long or at 100 times the power, which the physical flags of 5.1 are there to catch. Resampling both configurations on the same problems (paired streams) removed null 2's false resolutions (0.005 ± 0.005) but raised null 1's (0.150 ± 0.025) and lowered level-3 coverage in world A to 0.955, so the registered independent streams stay. These rates are printed with the results (section 8.3).
+
+**Limits of the simulation.** Its population is the pilot's 20 problems per level; real pools hold 217 to 871 problems with tails the pilot may not have met. In worlds A and B energy follows tokens exactly, times a random factor, so the token prediction is right by construction; world C uses the pilot's measured times, which depart from one line per model by up to 21% (1.7B at level 1, above), so it exercises the check of section 6.8. No world is joules.
 
 ### 4.2 Thinking-on sizes (not simulated)
 
@@ -128,7 +166,7 @@ Bench 64 and energy 20 per level are the spec's sizes, from the pilot's accuracy
 
 ### 4.3 Machine time
 
-From the pilot's mean seconds per attempt (thinking off, 4,096 cap, measured while other jobs ran, so upper bounds for a quiet machine): the 450 thinking-off energy attempts need about 0.91 h of generation (11.3 min for 1.7B, 17.7 for 4B, 25.8 for 8B), and the 3,000 thinking-off bench attempts about 6.1 h. 4B thinking on needs about 3.9 h for its 64-per-level bench and about 1.2 h (20/64 of that) for its energy attempts; 8B thinking on about 5.6 h of bench. These exclude the idle baseline before each energy run, waits between runs and re-measured attempts.
+From the pilot's mean seconds per attempt (thinking off, 4,096 cap, measured while other jobs ran, so upper bounds for a quiet machine): the 450 thinking-off energy attempts need about 0.91 h of generation (11.3 min for 1.7B, 17.7 for 4B, 25.8 for 8B), and the 5,400 thinking-off bench attempts about 13.0 h (2.8 h for 1.7B, 4.1 for 4B, 6.0 for 8B; the draft's 3,000 needed 6.1 h). 4B thinking on needs about 3.8 h for its 64-per-level bench and about 1.2 h (20/64 of that) for its energy attempts; 8B thinking on about 5.6 h of bench. These exclude the idle baseline before each energy run, waits between runs and re-measured attempts.
 
 ## 5. Rows, flags, retries, and what counts
 
@@ -154,15 +192,15 @@ An answer cut off at the cap is used and scored wrong (column `cap_hit`), and so
 A **key** is (configuration, problem) for bench rows and (boundary, configuration, problem) for energy rows. Within a key, rows are ordered by attempt number:
 1. A row with the same key and attempt number as an earlier row is a `duplicate`.
 2. The first row carrying none of the excluding flags (the always-excluded set, `runtime_failed` and the four physical flags) is the key's **selected row**. Every later attempt is a `duplicate`.
-3. Rows before the selected row are **replaced**: they stay in the files, are counted as `replaced_rows`, and are not used in the primary line.
+3. Every other row of a key that has a selected row (an earlier attempt carrying an excluding flag, which is **replaced**, or a later `duplicate`) stays in the files, is counted in the cell's `replaced_rows`, and is not used in the primary line. `rows_not_used` counts every unused row of the cell, whether or not its problem has a selected row.
 
 **Ruling (spec section 14 item 2, left open by the spec and the review).** Replacement covers every excluding flag, physical ones included, as the pinned code does. Collection re-measures an attempt that carries an excluding flag, in the same or a later session, until each selected problem has a usable row at both boundaries or the end date arrives. Reasons: an excluded attempt has no usable energy; without a re-measurement the problem silently leaves the sample, and long runs, which overlap agents and contention more often, would leave it more often, tilting the sample toward short problems; and the flag is a physical reading written before anyone sees the energy (energies are hidden until release, section 9), so a retry cannot be chosen by its result. The flagged-inclusive line (5.4) keeps the first attempt, so nothing is hidden. The collection design's rule "a measured science run that failed is never replaced" concerns its replication units, whose count is the design; here the unit is a selected problem. There is no limit on attempts; the end date bounds them, and every replaced row is counted in the output.
 
-Worked example (spec case P item 3). Bench problems i00 to i24 all clean; energy subset {i00, i01}; energy rows i00 attempt 1 `runtime_failed`, i00 attempt 2 clean, i01 attempt 1 clean. Result: two energy rows used, one replaced row, no duplicate, holdout 23 problems, cell complete. A further clean i01 attempt 2 would be a `duplicate`, and the count stays 2.
+Worked example (spec case P item 3). Bench problems i00 to i24 all clean; energy subset {i00, i01}; energy rows i00 attempt 1 `runtime_failed`, i00 attempt 2 clean, i01 attempt 1 clean. Result: two energy rows used, `replaced_rows` 1, no duplicate, holdout 23 problems, cell complete. A further clean i01 attempt 2 would be a `duplicate`: still two energy rows used, and `replaced_rows` 2.
 
 ### 5.3 Targets and complete cells
 
-A **cell** is one combination of line (primary or flagged-inclusive), boundary, configuration and level. Its targets come from the registered sizes, never from the data: bench 200, energy 30 and holdout 170 with thinking off; 64, 20 and 44 with thinking on. A cell is **complete** when its used bench rows, used holdout rows and used energy rows all equal their targets, **missing** when it has no used bench and no used energy rows, and **short** otherwise. The holdout is defined by the registered lists, so a missing energy row never moves its problem into the holdout.
+A **cell** is one combination of line (primary or flagged-inclusive), boundary, configuration and level. Its targets come from the registered sizes, never from the data: with thinking off, energy 30 at every level and bench 200, 200, 400, 400 and 600 (holdout 170, 170, 370, 370 and 570); 64, 20 and 44 with thinking on. A cell is **complete** when its used bench rows, used holdout rows and used energy rows all equal their targets, **missing** when it has no used bench and no used energy rows, and **short** otherwise. The holdout is defined by the registered lists, so a missing energy row never moves its problem into the holdout.
 
 A measured configuration always takes part in every comparison, complete or not. An optional configuration with no row in either file is `not_measured` and is left out of every comparison; with any row it takes part like the others.
 
@@ -256,11 +294,11 @@ Each line ending in "?" is a test on the cell; "yes" and "no" are its answers; t
 
 ### 7.1 Two confidences
 
-A decision is taken at c_D = 0.99 and described at c_d = 0.95, from the same replicates. The primary question makes five decisions (one per level); testing each at 0.99 keeps the chance of any false decision across the five at or below 0.05 (Bonferroni's bound: five chances of 0.01). This family is the primary question on the rails boundary in the primary line. The wall boundary, the flagged-inclusive line and the secondary comparison are printed beside it and are not further decisions in that family. Worked example (case O): replicates d_b = b/100 − 0.03 for b = 1 to 200. At 0.95, the rank of 6.7 is k = 5 and the interval is [0.02, 1.93], which excludes zero; at 0.99, k = 1 and the interval is [−0.02, 1.97], which contains zero, so the decision is unresolved although the description excludes zero.
+A decision is taken at c_D = 0.99 and described at c_d = 0.95, from the same replicates. The primary question makes five decisions (one per level). If each level's 0.99 interval reached its nominal coverage, the chance of any false decision across the five would be at most 0.05 (Bonferroni's bound: five chances of 0.01). That is a condition, not a guarantee: the bootstrap's coverage depends on the data, and section 4.1 ("When the decisions can be wrong") prints the simulated worlds where the bound held and those where it failed (up to 0.11 to 0.14 when one configuration's joules per token differed between levels by 15 to 78%, and 0.67 with a rare energy excursion the token counts do not show). This family is the primary question on the rails boundary in the primary line. The wall boundary, the flagged-inclusive line and the secondary comparison are printed beside it and are not further decisions in that family. Worked example (case O): replicates d_b = b/100 − 0.03 for b = 1 to 200. At 0.95, the rank of 6.7 is k = 5 and the interval is [0.02, 1.93], which excludes zero; at 0.99, k = 1 and the interval is [−0.02, 1.97], which contains zero, so the decision is unresolved although the description excludes zero.
 
 ### 7.2 Who may be compared
 
-A configuration is **eligible** at a level when its cell is complete (5.3) and its EPC is estimable (6.9). For two eligible configurations x and y, replicate b of ln(EPC_x/EPC_y) is ln EPC*_x,b − ln EPC*_y,b, each from its own primary source and its own stream, paired by replicate number (+∞ − (+∞) is taken as 0: both draws had no correct answer, which says nothing about order). The point is ln(EPC_x/EPC_y) from the reported points. The streams are independent although the configurations answer the same problems, which widens these intervals; the simulated 0.99 coverage was 0.995 to 0.998, above nominal.
+A configuration is **eligible** at a level when its cell is complete (5.3) and its EPC is estimable (6.9). For two eligible configurations x and y, replicate b of ln(EPC_x/EPC_y) is ln EPC*_x,b − ln EPC*_y,b, each from its own primary source and its own stream, paired by replicate number (+∞ − (+∞) is taken as 0: both draws had no correct answer, which says nothing about order). The point is ln(EPC_x/EPC_y) from the reported points. The streams are independent although the configurations answer the same problems. That widens the interval when the two configurations' token counts and correctness rise and fall together across problems, as in the pilot (thinking off, 1.7B against 4B on the same 20 problems per level: correlation of generated tokens +0.41 to +0.95 at every level; of correctness +0.31 to +0.64 at levels 3 to 5 and −0.05 at levels 1 and 2, where 18 of 20 problems were right for both); in world A of section 4.1 the 0.99 coverage was 0.995 to 0.998, above nominal. It narrows the interval when they move in opposite directions: in a constructed world where each model was right exactly where the other was wrong, the per-level false-resolution rate was 0.015 to 0.045 against a nominal 0.01. Resampling both configurations on the same problems (paired streams) was tried and not adopted (section 4.1).
 
 ### 7.3 The primary question
 
@@ -302,8 +340,9 @@ The wall boundary is printed under the same words as a labelled line beside rail
 
 ### 8.3 Caveats printed with the results
 
-- Beside 8B thinking-off at level 1: "In simulation this 99% interval covered 97 to 99% of true values at every sample size tried, because of a long-tailed length distribution; read it as roughly a 97% interval."
+- Beside 8B thinking-off at level 1: "In simulation this 95% interval covered 92 to 94% of true values at every sample size tried (the 99% interval used for decisions, 97 to 99%), because of a long-tailed length distribution; read it as roughly a 93% interval."
 - Beside every thinking-on cell whose bench contains an answer cut off at the cap: "With 44 holdout problems this interval may miss a rare very long problem; in simulation one such cell's 99% interval covered 89%. Descriptive only."
+- With the primary decisions: "The 99% intervals have their nominal coverage only where each configuration's energy follows one line in its token counts across levels, or the misfit check catches the level that does not, and no rare energy excursion lies outside the token counts. In simulations built from the pilot, a level was falsely resolved in 0 to 1% of campaigns; in constructed worlds that break those conditions, in up to 14% (one configuration's joules per token differing by 15 to 78% between levels) and 67% (a 101-fold excursion in 0.5% of runs). The verdict that the cheaper size changes with level was false in 1% of campaigns in one constructed world and never in the others." Beside the level-1 row also: "In the simulation built from the pilot's own wall times this 99% interval covered about 96% of true values."
 - With every energy number: energy is gross whole-request energy (idle power not subtracted), from one machine.
 - With every accuracy number: MATH (2021) and PRM800K (2023) predate Qwen3 and are widely copied, so the models may have seen these problems in training; accuracy describes this subset of rational-answer problems and is not a capability claim (importer contamination note).
 - Level is a stratum, not a cause (section 1).
@@ -332,13 +371,13 @@ The registered computation is the code at commit `fc40786675afaee7607b04f65f02ec
 | `scripts/difficulty_estimate.py` | `b39da89f1da4a6f37091cea6b111f0c0c2db4d65b72be2c1c3f0d22e5c283ee2` |
 | `scripts/difficulty_twin.py` | `4ec1b833bb37e51bc1341543b5cbcd108d12d20087621019d1ab94d6481cbd8e` |
 | `docs/contracts/difficulty_tables.md` | `8426920b9c527b171146dfa676e9d7df52a8f21770006b41a58c1eb67b8d0c05` |
-| configuration, appendix A | `bf7c0be33d7a8a9b0dd5bfd9af0e1f4cc0977846fcd5a4fcdc7e6eedd971beb9` |
+| configuration, appendix A | `1dcfc0ccdf67239c62cce0ba552916d111fce33597e8fcc5ba40d64198566e9d` |
 
 Steps: `scripts/difficulty_manifest.py --config <appendix A> --out <path outside the repository>` builds the manifest and the selections file (section 3); `scripts/difficulty_score.py --manifest --config --generations --out bench.csv` scores recorded generations; `scripts/difficulty_estimate.py --config --selections --bench --energy --out DIR` writes the tables of section 8. The configuration file is the only source of confidences, sizes, exclusions and bootstrap settings; the programs take no overrides. The code may be merged or rebased; the registered result is what these bytes compute.
 
-**Twin.** `scripts/difficulty_twin.py` is a second program written from the spec without reading the main estimator, using only Python's standard library, with the same inputs and outputs and the same random draws. Before unblinding, both run on the real tables and must agree: identical row keys and text fields in all six tables, numbers within relative 10⁻⁹ (10⁻⁸ for the decomposition) or absolute 10⁻¹², and identical `summary.json` apart from the method note. A disagreement is a fault fixed before release, never averaged.
+**Twin.** `scripts/difficulty_twin.py` is a second program written from the spec without reading the main estimator, using only Python's standard library, with the same inputs and outputs and the same random draws. Before unblinding, both run on the real tables and must agree: identical row keys and text fields in all six tables, numbers within relative 10⁻⁹ (10⁻⁸ for the decomposition) or absolute 10⁻¹², and the same `summary.json` apart from the method note: identical keys, structure, text, whole numbers and verdicts, with its decimal numbers within relative 10⁻⁹ or absolute 10⁻¹² (they repeat table values, and two independent programs need not round the last binary digit alike: on a complete synthetic pack the refuter of this version found seven such differences, the largest 1.8 × 10⁻¹⁵). A disagreement is a fault fixed before release, never averaged.
 
-State of the code at registration: the four pack test modules (56 tests, including every acceptance case quoted in section 6) pass at `fc4078667`; the executing review re-ran every refuter witness of version 1 against it and found each fixed, and found main and twin in exact agreement on a registered-size synthetic campaign with defects of every kind (the two programs together took 92.6 s on it, on a loaded machine).
+State of the code at registration: the four pack test modules (56 tests, including every acceptance case quoted in section 6) pass at `fc4078667`; the executing review re-ran every refuter witness of version 1 against it and found each fixed, and found main and twin in exact agreement on a registered-size synthetic campaign with defects of every kind (the two programs together took 92.6 s on it, on a loaded machine). At the sizes of appendix A, a complete production-shaped synthetic pack (6,040 bench and 1,303 energy rows: every configuration including the optional one, both boundaries, token counts and correctness from the pilot's rows, energy from its wall times, with a re-measured failed run, a re-measured physical flag, a later duplicate and a loop flag) ran through both programs: all 100 cells complete, all six tables within the tolerances above, `summary.json` within the rule above (15 decimal leaves differ in the last digits, none beyond tolerance); 48 s for the main program and 59 s for the twin, on a loaded machine. The code is unchanged by the revision; only the configuration and the lists changed.
 
 ## 11. What would make this registration wrong, and how an erratum is taken
 
@@ -355,7 +394,7 @@ Not errors: an unresolved or incomplete result; real spreads or tails unlike the
 
 ## 12. Decisions this registration makes beyond the spec
 
-1. Thinking-off energy subset 30 per level at every level (spec: 20, 20, 40, 40, 40), from the power simulation (section 4.1).
+1. Thinking-off energy subset 30 per level at every level (spec: 20, 20, 40, 40, 40) and thinking-off bench 200, 200, 400, 400 and 600 (spec: 200 at every level), from the power simulations of section 4.1, the second set run after the refuter showed the first rested on an assumed 4B/1.7B cost factor.
 2. Thinking-on sizes kept at 64 and 20 (not simulated); the review's thinking-on coverage finding is handled by the printed caveat (section 8.3) rather than a larger thinking-on bench, because thinking-on configurations are never in the primary question.
 3. Re-measurement replaces attempts carrying any excluding flag, physical ones included (section 5.2; spec section 14 item 2).
 4. Physical flags are written on energy rows only (section 5.1; review note N1).
@@ -364,25 +403,26 @@ Not errors: an unresolved or incomplete result; real spreads or tails unlike the
 7. The contention level is the collection design's, as in force at the first DIFFICULTY energy session (section 5.1).
 8. Thinking-off configurations are interleaved within sessions (section 9).
 9. Collection ends on 2027-01-31 at the latest, matching the plan to run DIFFICULTY in December and January (`docs/design/block6_collection_draft.md` section 15, Timeline, which also says later packs set their own end dates). Version 1's 2026-11-07 is the last-data date of the same section's earlier six-week calendar, which the Timeline paragraph replaced for DIFFICULTY.
+10. Independent bootstrap streams per configuration are kept; paired streams were simulated and not adopted (sections 4.1 and 7.2).
 
 ## Appendix A. The registered configuration
 
-Byte for byte (UTF-8, two-space indent, final newline; SHA-256 `bf7c0be33d7a8a9b0dd5bfd9af0e1f4cc0977846fcd5a4fcdc7e6eedd971beb9`; a copy is `/Users/edr/night-archive/difficulty-pack/v2-registration/pack_config_difficulty_v2.json`). It differs from the code's test fixture `tests/fixtures/difficulty/pack_config.json` only in the thinking-off energy sizes (30 instead of 20, 20, 40, 40, 40) and the 4B and 8B revisions.
+Byte for byte (UTF-8, two-space indent, final newline; SHA-256 `1dcfc0ccdf67239c62cce0ba552916d111fce33597e8fcc5ba40d64198566e9d`; a copy is `/Users/edr/night-archive/difficulty-pack/v2.1-registration/pack_config_difficulty_v2.1.json`). It differs from the code's test fixture `tests/fixtures/difficulty/pack_config.json` only in the version string, `n_per_level` (600 instead of 200), the thinking-off bench sizes at levels 3 to 5 (400, 400, 600 instead of 200), the thinking-off energy sizes (30 instead of 20, 20, 40, 40, 40) and the 4B and 8B revisions.
 
 ```json
 {
   "schema_version": "difficulty_config.v2",
-  "version": "difficulty-v2",
+  "version": "difficulty-v2.1",
   "seed": "joulewise.packs.difficulty.v2",
-  "n_per_level": 200,
+  "n_per_level": 600,
   "sizes": {
     "off": {
       "bench": {
         "1": 200,
         "2": 200,
-        "3": 200,
-        "4": 200,
-        "5": 200
+        "3": 400,
+        "4": 400,
+        "5": 600
       },
       "energy": {
         "1": 30,
