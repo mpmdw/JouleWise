@@ -19,6 +19,7 @@ The four stage-1 lanes of design section 17, merged one at a time in its order, 
 | 5 | `lane/2026-10-14-b6-loop` | `7bd443286` | the unattended loop under launchd (precheck, smoke, session, desk, rotate), program mail |
 | 6 | `lane/2026-10-14-b6-adapters` | `165b1972f` (merge `b2837ba38`) | the loop's lane adapters (P1/P2, D1/D2, S1/K1, H3, A1), block-6 plan inputs, one harvest path for smoke and session, the registration loaders and copies of block 5's pins and sizing, `plan.resolve_stage_dispatch`, the program courier, the wake job |
 | 7 | `lane/2026-10-15-b6-cold-chain`, `lane/2026-10-15-b6-cold-acceptance`, `lane/2026-10-15-b6-cold-packroot` | `2b2bea4cc`, `f67854d41`, `76aa47884` (merges `90d9222de`, `dd9a9be35`, `3827f63de`) | the cold passes' fixes: every block-6 chain renders the block-6 opening screen (flag above the alignment reference, stop only on b_pre + s_bracket above the registered line, null values while `acceptance.json` is absent) and no spare retries; a driver's physical stop is a physical stop (rotate), an opening capture with no bound is N1; the loop counts from the acceptance verdict; compression waits for a judged harvest and a re-harvest uses a fresh archive root; GAMMA's interior references have their own role; the pack registrations close at 2026-11-02T00:00:00-08:00; the pre-check and smoke desk judge each pack with its own roster (one `acceptance.json` serves all three packs) |
+| 8 | `fix/2026-10-15-b6-s3-review`, `lane/2026-10-15-b6-s3-cold` | `9409c83b2`, `d9ce14fcb` (merges `e81e60530`, `91e37e7c6`) | stage 3: the review of the integration's own commits and the second pair of cold passes. A block-6 night job's courier is a program (default `scripts/b6_courier.sh`; an agent courier is refused and a missing one is never replaced by `claude`) and the job's PATH is `/usr/bin:/bin:/usr/sbin:/sbin`; the machine-test injector reaps its children on SIGTERM; the machine-test report needs a start and an end sleep reading for every run of the reduced plan; after any chain stop the desk finalizes or aborts the open calibration bracket and advances the pin, so a stop no longer holds the loop; a physical stop keeps the structural defects it cannot explain; the operative-bound stop exits 13 (12 stays the opening-screen failure); a session dropped at the pack close closes its arm notice and is recorded `never_armed`; `configs/b6/executing_reviews.json` lists the executing reviews of every number-bearing commit |
 
 The loop is in stage 1 because stage 1 cannot run without it: the pre-session check waits while any `claude` or
 `codex` process is alive or the keyboard was used in the last 600 s (`joulewise/b6/precheck.py`), so no agent can
@@ -33,7 +34,8 @@ Built once, by the block-5 post-seal runbook's steps 3 to 5
 (`docs/process_traces/2026-10-07-block5-seal/30-post-seal-runbook.md`), with these values:
 
 - **Commit:** a pinned commit of this branch, `P` below (the head after the open issues that matter for the test
-  are closed). The checkout is never pulled, fetched or edited afterwards; its only later commits are the ledger
+  are closed). Candidate `P` (stage 3, 2026-10-15): the commit that adds this sentence; its hash is in
+  `/Users/edr/night-archive/b6-build/stage3/DISPOSITIONS-cold.md`. The checkout is never pulled, fetched or edited afterwards; its only later commits are the ledger
   pin advances the chain's desk step makes.
 - **Path:** `/Users/edr/night-custody/measurement/JouleWise-measurement-<UTC stamp>-b6`. No path may contain
   `claude` or `codex`: the agent census matches those strings anywhere in a process's arguments.
@@ -174,14 +176,18 @@ Every argument:
   backup-claim,backup-bound,archive,export}`, staging `/Users/edr/night-b6/loop/staging/<id>`.
 - *Launch (D2):* t0 is bound at launch, `launch_lead_s` (420 s, `configs/b6/loop.json`) after the tick, rounded
   up to a minute; the plan is written then, and the night job is installed by `scripts/install_night_agent.sh
-  --courier-bin $M/scripts/b6_courier.sh` (labels `com.joulewise.night` and `.deadman`). The courier is a program
-  that writes the driver's mail request to `<session>/courier-program/` and marks it sent; block-6 mail goes by
+  --courier-bin $M/scripts/b6_courier.sh` (labels `com.joulewise.night` and `.deadman`; without `--courier-bin` a
+  block-6 plan gets that file too, an agent courier is refused, and both jobs run with PATH
+  `/usr/bin:/bin:/usr/sbin:/sbin`). The courier is a program that writes the driver's mail request to `<session>/courier-program/` and marks it sent; block-6 mail goes by
   the loop's mailer. Status reads `launchctl print` (`runs`, `state`, `pid`) and the chain's process group; an
   arm or t0 refusal on physics (agent census, unmeasured instrument, clock, battery, ...) returns `Refused` and
   the loop waits without using a slot. The night job is uninstalled once the terminal record exists.
 - *Smoke (S1):* the same route on a 4-run clone; its desk is the session harvest with `--smoke`.
-- *Desk (K1, `desk_lane.py`):* `scripts/harvest_b6_session.py` (4 h timeout), `joulewise/session_structure.check`,
-  `joulewise/desk_compress.compress`, then the ledger pin advance. Harvest exit 6 (acceptance unavailable) keeps
+- *Desk (K1, `desk_lane.py`):* first the ledger: a chain that stopped before its closing capture leaves its bracket
+  session open, so the desk finalizes a slot whose capture custody is complete (`recover_calibration_ledger.py
+  resume-finalize` with the reservation's frozen plan), aborts what is still open with the stop as the reason, and
+  advances the pin; then `scripts/harvest_b6_session.py` (4 h timeout), `joulewise/session_structure.check` and,
+  after a judged harvest, `joulewise/desk_compress.compress`. Harvest exit 6 (acceptance unavailable) keeps
   every number and flag and records the session `pending_registration`; `b6_loop.py reharvested <id>` judges it
   once `acceptance.json` exists. Any exit other than 0 and 6 is a harvest fault, `pending_harvest`, never a
   judged session. A lost chain (job gone or ended with no terminal record, process group gone) has its ledger
@@ -250,13 +256,24 @@ is gone.
    blinding rule of the integration brief names; the orchestrator decides whether that read is allowed.
 5. **Closed at `b2837ba38`: one harvest path.** Smoke and session both run `scripts/harvest_b6_session.py` with the
    block-6 catalog. The machine test is still the first run of it on a real block-6 archive (harvest lane L4).
-6. **Review of the integration's own commits is unfinished.** Stage B's executing review seat (Sol 6.1 xhigh,
-   brief `/Users/edr/night-archive/b6-build/stage2/BRIEF-sol-rev1.md`) stopped without a report; its partial
-   evidence is in the review worktree's `.scratch-review/`. Commits 7cfcd73d0, ca65937e1, 7c545adc7, 459575bbb,
-   ff0d63f04, 00e640909 and e9fc63757 still need an executing review before the machine test's pin.
+6. **Closed at `e81e60530`: review of the integration's own commits.** A Sol 6.1 finder and the stage-3 director
+   reviewed the seven commits on `696164b31`; four findings, all fixed (`fix/2026-10-15-b6-s3-review`). Dispositions:
+   `/Users/edr/night-archive/b6-build/stage3/DISPOSITIONS-integration-review.md`.
 7. **Closed at `dd9a9be35`: cold passes.** Fable 5.1 and Opus 5.5 ran blind executing passes on `850265137`; their
    three refusal-class findings survived re-execution and are fixed (row 7), with an executing re-check by Opus 5.5.
    Dispositions: `/Users/edr/night-archive/b6-build/stage2/DISPOSITIONS-cold.md`.
-8. **The pin must register its reviews.** `configs/b6/executing_reviews.json` is `[]`; until the pin either lists the
-   executing reviews of every number-bearing change since `registered_commit` or sets `registered_commit` to the pin,
-   the harvest marks those paths `code.number_bearing_unreviewed` (session-excluding, W3).
+8. **Closed at stage 3: the pin's review list.** `configs/b6/executing_reviews.json` lists every commit since
+   main's `3bb305d7a` that changed a number-bearing file (`joulewise.b6.registration.NUMBER_BEARING_PATHS`), with its
+   executing reviews and their papers; `code_check` on the candidate pin with `registered_commit` = `3bb305d7a` reports
+   no unreviewed path (stage-3 dispositions). Any later commit to a number-bearing file needs its own row.
+9. **Second cold passes (stage 3).** Fable 5.1 and Opus 5.5 ran blind executing passes on `850265137..696164b31`;
+   Opus's one refusal-class finding (a chain stop left the calibration bracket open and the next session's plan
+   write held the loop) survived re-execution and is fixed (row 8). Dispositions:
+   `/Users/edr/night-archive/b6-build/stage3/DISPOSITIONS-cold.md`.
+10. **For the machine test (hardware only):** besides open issue 1's list, a real `launchctl bootout` of the injector
+   (the SIGTERM path), the rendered courier and PATH of the night and dead-man jobs on the real block-6 plan, and,
+   if the faults allow, one chain stop followed by the desk's bracket close on the real ledger.
+11. **Still before round 1:** `acceptance.json` from the quiet-machine measurements (registration S-4 to S-9); the
+   three pack registrations flipped from `draft`; the registration through its cold gate; the pin (S-1, with the
+   catalog digest S-3 and pins S-18) and the 40-minute machine test on it. CI does not run on this branch (pushes to
+   main and pull requests only); the local whole suite stands in for it.
