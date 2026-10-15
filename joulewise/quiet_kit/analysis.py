@@ -89,11 +89,21 @@ def _step(load, before, after, rail='total'):
                      'method': 'SE(load)^2 + (SE(before)^2 + SE(after)^2)/4, square root'}, sources)
 
 
-def _arms(segments):
+def _arms(segments, exclude_flagged=False):
     for i, s in enumerate(segments):
         if s.get('kind') not in ('idle', 'burst') and 0 < i < len(segments)-1:
             if segments[i-1].get('kind') == segments[i+1].get('kind') == 'idle':
+                if exclude_flagged and any(x.get('hazard_flags') for x in (segments[i-1], s, segments[i+1])):
+                    continue
                 yield s, segments[i-1], segments[i+1]
+
+
+def _outside_rates(load, before, after):
+    rates = {name: s.get('outside_cpu_rate') for name, s in
+             (('before', before), ('load', load), ('after', after))}
+    difference = (rates['load']-(rates['before']+rates['after'])/2
+                  if all(v is not None for v in rates.values()) else None)
+    return {'outside_cpu_rate': rates, 'outside_rate_difference': difference}
 
 
 def _binomial_cdf(k, n, p):
@@ -119,7 +129,8 @@ def clopper_pearson(k, n):
 def m4(data):
     segments = data.get('segments', [])
     arms = []
-    for s, before, after in _arms(segments):
+    clean = data.get('exclude_flagged_segments', False)
+    for s, before, after in _arms(segments, clean):
         step = _step(s, before, after)
         rate = s.get('cpu_seconds', 0)/s.get('elapsed_s', 1) if s.get('elapsed_s', 0) > 0 else 0
         if rate <= 0 or step['value'] is None:
@@ -130,7 +141,14 @@ def m4(data):
                           if step['uncertainty']['value'] is not None else None,
                           'method': step['uncertainty']['method'] + '; true resource CPU time treated as observed'},
                          step['sources'])
-        arms.append({'segment': s.get('id'), 'priority': s.get('priority'), 'duty': s.get('duty'),
+        outside = _outside_rates(s, before, after)
+        total_rate = rate+outside['outside_rate_difference'] if outside['outside_rate_difference'] is not None else None
+        alternative = (quantity(step['value']/total_rate, 'W / (CPU-s/s)', sources=step['sources'])
+                       if total_rate is not None and total_rate != 0 and step['value'] is not None else
+                       undefined('zero or undefined total CPU rate or power step', 'W / (CPU-s/s)'))
+        alternative['label'] = ('alternative assuming outside work costs the same watts per CPU-s/s as the load; not the main result')
+        arms.append({'segment': s.get('id'), 'priority': s.get('priority'), 'duty': s.get('duty'), **outside,
+                     'watts_per_total_cpu_rate': alternative,
                      'true_cpu_rate': quantity(rate, 'CPU-s/s'), 'power_step': step, 'watts_per_cpu_rate': w,
                      'inside_one_accounting_interval_energy': quantity(.5*w['value'], 'J',
                          {**w['uncertainty'], 'value': .5*w['uncertainty']['value'] if w['uncertainty']['value'] is not None else None})
@@ -139,8 +157,10 @@ def m4(data):
     for i, s in enumerate(segments):
         if s.get('kind') != 'burst':
             continue
-        before = next((x for x in reversed(segments[:i]) if x.get('kind') == 'idle'), {})
-        after = next((x for x in segments[i+1:] if x.get('kind') == 'idle'), {})
+        before = segments[i-1] if i > 0 and segments[i-1].get('kind') == 'idle' else {}
+        after = segments[i+1] if i+1 < len(segments) and segments[i+1].get('kind') == 'idle' else {}
+        if clean and any(x.get('hazard_flags') for x in (before, s, after)):
+            continue
         bv, av = _segment(before), _segment(after)
         start, end = s.get('burst_on_s', 0)-.5, s.get('burst_off_s', 0)+1.
         records = [r for x in segments for r in x.get('records', [])]
@@ -176,9 +196,9 @@ def m4(data):
     inference = [{'segment': s.get('id'), 'outside_cpu_rate': s.get('outside_cpu_rate'),
                   'rail_mean': mean(_segment(s), 'W', [s.get('id')]),
                   'simultaneous_ticks': s.get('ticks', [])}
-                 for s in segments if s.get('kind') == 'idle']
+                 for s in segments if s.get('kind') == 'idle' and not (clean and s.get('hazard_flags'))]
     paired = [(tick.get('outside_cpu_rate'), tick.get('rail_power_w')) for s in segments
-              if s.get('kind') == 'idle' for tick in s.get('ticks', [])
+              if s.get('kind') == 'idle' and not (clean and s.get('hazard_flags')) for tick in s.get('ticks', [])
               if tick.get('outside_cpu_rate') is not None and tick.get('rail_power_w') is not None]
     fit = linear([p[0] for p in paired], [p[1] for p in paired])
     complete = (len(arms) == 6 and all(_defined(a['watts_per_cpu_rate']) for a in arms)
@@ -193,12 +213,15 @@ def m4(data):
 
 def m5(data):
     segments = data.get('segments', [])
-    idle_gpu = [v for s in segments if s.get('kind') == 'idle' for v in _segment(s, 'gpu_power')]
+    clean = data.get('exclude_flagged_segments', False)
+    idle_gpu = [v for s in segments if s.get('kind') == 'idle' and not (clean and s.get('hazard_flags'))
+                for v in _segment(s, 'gpu_power')]
     levels = [{'segment': s.get('id'), 'kind': s.get('kind'), 'duty': s.get('duty'),
                'added_power': {rail: _step(s, b, a, rail) for rail in ('cpu_power', 'gpu_power', 'ane_power', 'total')},
+               **_outside_rates(s, b, a),
                'contender_cpu_rate': quantity(s.get('cpu_seconds', 0)/s['elapsed_s'], 'CPU-s/s')
                if s.get('elapsed_s', 0) > 0 else undefined('no measured duration', 'CPU-s/s')}
-              for s, b, a in _arms(segments)]
+              for s, b, a in _arms(segments, clean)]
     idle_mean = mean(idle_gpu, 'W')
     complete = (_defined(idle_mean) and len(levels) == 6
                 and all(_defined(l['added_power']['gpu_power']) for l in levels))
@@ -212,6 +235,9 @@ def m5(data):
 
 def m1(data):
     captures = data.get('captures', [])
+    utility_not_reproduced = [c for c in captures if c.get('condition') == 'utility'
+                              and c.get('faulty_context_reproduced') is False]
+    captures = [c for c in captures if c not in utility_not_reproduced]
     groups = {}
     for condition in ('quiet', 'load', 'utility'):
         rows = [c for c in captures if c.get('condition') == condition]
@@ -237,29 +263,61 @@ def m1(data):
         p['operative_bound']['value'] is not None for p in qp) else None)
     dmin = (min(p['operative_bound']['value'] for p in dp) if dp and all(
         p['operative_bound']['value'] is not None for p in dp) else None)
-    complete = all(groups[c]['bounded_capture_count'] >= n for c, n in
-                   (('quiet', 8), ('load', 3), ('utility', 3)))
+    separation, ranges = {}, {}
+    for condition in ('load', 'utility'):
+        rows = [c for c in disturbed if c.get('condition') == condition]
+        cp = pairs(quiet, rows)+pairs(rows, quiet)
+        cmin = (min(p['operative_bound']['value'] for p in cp) if cp and all(
+            p['operative_bound']['value'] is not None for p in cp) else None)
+        separation[condition] = (quantity(cmin-qmax, 'ms') if cmin is not None and qmax is not None else
+                                 undefined('missing quiet or '+condition+' pair', 'ms'))
+        ranges[condition] = {'lower_ms': qmax, 'upper_ms': cmin,
+            'nonempty': cmin is not None and qmax is not None and cmin > qmax,
+            'note': 'reports separation only; chooses no stop line'}
+        groups[condition].update(separation=separation[condition], stop_line_range=ranges[condition],
+                                 quiet_disturbed_ordered_pairs=cp)
+    complete = all(groups[c]['bounded_capture_count'] >= n for c, n in (('quiet', 8), ('load', 3)))
+    pooled = (quantity(dmin-qmax, 'ms') if dmin is not None and qmax is not None else
+              undefined('missing quiet or disturbed pair', 'ms'))
+    pooled['label'] = 'pooled load and reproduced utility conditions against quiet pairs'
     return {'conditions': groups, 'incomplete_reason': None if complete else 'captures_unbounded',
             'quiet_fraction_above_screen': quantity(k/n, 'fraction', {'kind': '95% interval',
                'value': clopper_pearson(k, n), 'n': n, 'method': 'exact Clopper-Pearson binomial interval'})
                if n and not missing_quiet else undefined('one or more quiet bounds undefined' if n else 'no quiet captures', 'fraction'),
             'quiet_ordered_pairs': qp, 'quiet_disturbed_ordered_pairs': dp,
-            'separation': quantity(dmin-qmax, 'ms') if dmin is not None and qmax is not None else
-               undefined('missing quiet or disturbed pair', 'ms'),
-            'stop_line_range': {'lower_ms': qmax, 'upper_ms': dmin,
+            'separation': separation, 'stop_line_range': ranges,
+            'utility_not_reproduced': utility_not_reproduced, 'separation_pooled': pooled,
+            'stop_line_range_pooled': {'lower_ms': qmax, 'upper_ms': dmin,
                'nonempty': qmax is not None and dmin is not None and dmin > qmax,
                'note': 'reports separation only; chooses no stop line'}}
 
 
+def _complete_quad_tries(runs, arm):
+    selected = {}
+    phases = {phase for r in runs for phase in r.get('phase_energy_j', {})}
+    for q in range(5):
+        tries = sorted({r.get('quad_try', 0) for r in runs if r.get('quad') == q})
+        for attempt in tries:
+            rows = [r for r in runs if r.get('quad') == q and r.get('quad_try', 0) == attempt]
+            if (len(rows) == 4 and sum(r.get('arm') == 'N' for r in rows) == 2 and
+                    sum(r.get('arm') == arm for r in rows) == 2 and all(
+                        not r.get('failure_reasons') and not r.get('run_path_error') and
+                        r.get('returncode') in (0, None) and r.get('phase_energy_j') and
+                        all(_defined({'value': r['phase_energy_j'].get(phase)}) for phase in phases) for r in rows)):
+                selected[q] = (attempt, rows)
+                break
+    return selected
+
+
 def m2(data, arm='L'):
     runs = data.get('runs', [])
+    selected = _complete_quad_tries(runs, arm)
     phases = sorted({'prefill', 'decode'} | {phase for r in runs for phase in r.get('phase_energy_j', {})})
     measured = {}
     for phase in phases:
         quads, ordinary = [], []
         for q in range(5):
-            rows = [r for r in runs if r.get('quad') == q and not r.get('failure_reasons')
-                    and r.get('returncode') in (0, None)]
+            rows = selected.get(q, (None, []))[1]
             ns = [r['phase_energy_j'][phase] for r in rows if r.get('arm') == 'N' and phase in r.get('phase_energy_j', {})]
             ls = [r['phase_energy_j'][phase] for r in rows if r.get('arm') == arm and phase in r.get('phase_energy_j', {})]
             if len(ns) == len(ls) == 2 and all(_defined({'value': v}) for v in ns+ls):
@@ -285,21 +343,27 @@ def m2(data, arm='L'):
                           'short_minus_ordinary' if arm == 'S' else 'long_minus_ordinary': qmean, 'percent': percent}
     complete = all(p['complete_quad_count'] == 5 for p in measured.values())
     return {'phases': measured, 'run_table': runs, 'long_waits': data.get('long_waits', []),
+            'selected_quad_tries': {str(q): attempt for q, (attempt, _) in selected.items()},
             'incomplete_reason': None if complete else 'five_complete_quads_required',
             'undefined': 'no measured phase energies' if not any(r.get('phase_energy_j') for r in runs) else None}
 
 
 def m2b(data):
     result = m2(data, arm='S')
+    selected = _complete_quad_tries(data.get('runs', []), 'S')
     failures = [{'run': r.get('id'), 'returncode': r.get('returncode'),
+                 'quad': r.get('quad'), 'quad_try': r.get('quad_try', 0),
+                 'retried_ok': r.get('quad') in selected and selected[r['quad']][0] > r.get('quad_try', 0),
                  'reasons': r.get('failure_reasons') or [{'reason': 'nonzero_exit'}]}
                 for r in data.get('runs', []) if r.get('arm') == 'S' and
-                (r.get('failure_reasons') or r.get('returncode') not in (0, None))]
+                (r.get('failure_reasons') or r.get('run_path_error') or r.get('returncode') not in (0, None))]
     result['short_baseline_refusals'] = failures
-    if failures:
+    failed_tries = {q: {f['quad_try'] for f in failures if f['quad'] == q} for q in
+                    {f['quad'] for f in failures}}
+    present_tries = {q: {r.get('quad_try', 0) for r in data.get('runs', []) if r.get('quad') == q}
+                     for q in failed_tries}
+    if any({0, 1} <= tries or len(present_tries[q]) == 1 for q, tries in failed_tries.items()):
         result['incomplete_reason'] = 'short_baseline_refused_by_run_path'
-    elif len(data.get('runs', [])) != 20 or any(r.get('failure_reasons') for r in data.get('runs', [])):
-        result['incomplete_reason'] = 'short_baseline_run_table_incomplete'
     elif result['incomplete_reason']:
         result['incomplete_reason'] = 'short_baseline_run_table_incomplete'
     return result
@@ -428,13 +492,14 @@ def m9(data):
 
 def m14(data):
     levels = []
-    for s, b, a in _arms(data.get('segments', [])):
+    clean = data.get('exclude_flagged_segments', False)
+    for s, b, a in _arms(data.get('segments', []), clean):
         meter, rails = _step(s, b, a, 'meter'), _step(s, b, a)
         ratio = rails['value']/meter['value'] if meter['value'] and rails['value'] is not None else None
         sr, sm = rails['uncertainty']['value'], meter['uncertainty']['value']
         ratio_se = (math.sqrt(sr*sr/meter['value']**2+rails['value']**2*sm*sm/meter['value']**4)
                     if ratio is not None and sr is not None and sm is not None else None)
-        levels.append({'segment': s.get('id'), 'kind': s.get('kind'), 'duty': s.get('duty'),
+        levels.append({'segment': s.get('id'), 'kind': s.get('kind'), 'duty': s.get('duty'), **_outside_rates(s, b, a),
                        'meter_step': meter, 'rail_step': rails, 'rails_over_meter': quantity(ratio, 'ratio',
                            {'kind': 'standard error', 'value': ratio_se,
                             'n': [rails['uncertainty']['n'], meter['uncertainty']['n']],
@@ -442,7 +507,7 @@ def m14(data):
                        'battery_current_ma': s.get('battery_current_ma', []),
                        'battery_flag': any(abs(v) > 200 for v in s.get('battery_current_ma', []))})
     idles = [{'segment': s.get('id'), 'noise': sd(_segment(s, 'meter'), 'W')}
-             for s in data.get('segments', []) if s.get('kind') == 'idle']
+             for s in data.get('segments', []) if s.get('kind') == 'idle' and not (clean and s.get('hazard_flags'))]
     complete = len(levels) == 8 and all(_defined(l['meter_step']) and _defined(l['rail_step']) for l in levels)
     return {'levels': levels, 'idle_noise': idles,
             'incomplete_reason': 'meter_absent' if data.get('meter_present') is not True else
@@ -521,7 +586,7 @@ def m10(data):
     charger_fit = fit_rows([r for r in level_means if r['charger_supplied']])
     all_fit = fit_rows(level_means)
     return {'levels': rows, 'charger_supplied_fit': fit_rows([r for r in rows if r['charger_supplied']]),
-            'incomplete_reason': None if _defined(charger_fit['slope']) or _defined(all_fit['slope'])
+            'incomplete_reason': None if _defined(charger_fit['slope'])
                 else 'palindrome_level_mean_fit_undefined',
             'all_levels_fit': fit_rows(rows), 'all_levels_label': 'includes battery assist/charging and missing battery reads',
             'palindrome_level_means': level_means,
@@ -532,12 +597,16 @@ def m10(data):
 
 
 def m13(data):
-    meter_lags, sampler_lags = [], []
+    meter_lags, sampler_lags, paired = [], [], []
+    captures = {}
     for edge in data.get('edges', []):
         if edge.get('meter_s') is not None:
             meter_lags.append((edge['meter_s']-edge['command_s'])*1000)
+            captures.setdefault(edge.get('capture'), []).append((edge['meter_s']-edge['command_s'])*1000)
         if edge.get('sampler_s') is not None:
             sampler_lags.append((edge['sampler_s']-edge['command_s'])*1000)
+        if edge.get('meter_s') is not None and edge.get('sampler_s') is not None:
+            paired.append((edge['meter_s']-edge['sampler_s'])*1000)
     precision = statistics.stdev(meter_lags)/math.sqrt(len(meter_lags)) if len(meter_lags) > 1 else None
     sampler_captures = {e['capture'] for e in data.get('edges', [])
                         if e.get('capture') is not None and e.get('sampler_s') is not None}
@@ -549,11 +618,18 @@ def m13(data):
             'meter_edge_count': len(meter_lags), 'sampler_capture_count': len(sampler_captures),
             'meter_lag_mean': meter_mean, 'meter_lag_sd': sd(meter_lags, 'ms'),
             'sampler_lag_mean': sampler_mean, 'sampler_lag_sd': sd(sampler_lags, 'ms'),
-            'meter_alignment_precision': quantity(precision, 'ms', {'kind': 'standard error', 'value': precision,
-                  'n': len(meter_lags), 'method': 'edge lag standard deviation / sqrt(edge count)'}),
+            'meter_mean_lag_pooled_se': quantity(precision, 'ms', {'kind': 'standard error', 'value': precision,
+                  'n': len(meter_lags), 'method': 'SE of the mean lag: pooled edge SD / sqrt(edge count)'}),
+            'meter_lag_by_capture': [{'capture': name, 'n': len(values), 'mean': mean(values, 'ms'),
+                'sd': sd(values, 'ms'), 'mean_lag_se': quantity(statistics.stdev(values)/math.sqrt(len(values)), 'ms')
+                    if len(values) > 1 else undefined('fewer than two edges in capture', 'ms')}
+                for name, values in captures.items()],
+            'meter_minus_sampler': {'mean': mean(paired, 'ms'), 'sd': sd(paired, 'ms'), 'n': len(paired)},
             'typical_sampler_bound': quantity(30., 'ms'),
-            'precision_below_typical_bound': precision < 30 if precision is not None else None,
-            'interpretation': 'precision comparison; power-path lag is retained, not subtracted as clock error'}
+            'precision_below_typical_bound': statistics.stdev(meter_lags) < 30 if len(meter_lags) > 1 else None,
+            'interpretation': "precision comparison; meter lag, including the meter clock fit's earliest-arrival "
+                              'offset (up to one sample period plus round trip) and the power path, is retained, '
+                              'not subtracted as clock error'}
 
 
 def m15(data):

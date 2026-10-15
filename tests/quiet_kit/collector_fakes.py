@@ -160,7 +160,8 @@ class FakeChild:
             if self.event:
                 duration=self.end-self.start
                 self.quiet_kit_stdout.write_text(json.dumps({'cpu_seconds':duration*self.event['duty']*(.01 if self.event['kind']=='gpu' else 1),
-                                                             'elapsed_s':duration})+'\n')
+                    'elapsed_s':duration, 'start_raw_ns':round((RAW+self.start)*1e9),
+                    'end_raw_ns':round((RAW+self.end)*1e9)})+'\n')
         return self.returncode
 
 

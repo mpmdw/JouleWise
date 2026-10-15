@@ -121,13 +121,14 @@ def atomic_json(path: str | Path, value) -> None:
     atomic(path, (json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + '\n').encode())
 
 
-def append(path: str | Path, value) -> None:
+def append(path: str | Path, value, *, sync=True) -> None:
     target = fence(path)
     mkdir(target.parent)
     with target.open('ab') as handle:
         handle.write((json.dumps(value, sort_keys=True, allow_nan=False) + '\n').encode())
         handle.flush()
-        os.fsync(handle.fileno())
+        if sync:
+            os.fsync(handle.fileno())
 
 
 def create_once(path: str | Path, data: bytes) -> bool:

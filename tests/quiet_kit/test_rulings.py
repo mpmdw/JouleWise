@@ -150,10 +150,10 @@ class RuledScheduleTests(unittest.TestCase):
             self.assertEqual(done['incomplete_tests'][0]['last_reason'],'short_baseline_refused_by_run_path')
             result = read_json(root/'m2b-short-baseline/attempts/2/analysis.result.json')
             self.assertFalse(result['complete'])
-            self.assertEqual(len(result['measured']['run_table']),20)
-            self.assertEqual(len(result['measured']['short_baseline_refusals']),10)
+            self.assertEqual(len(result['measured']['run_table']),40)
+            self.assertEqual(len(result['measured']['short_baseline_refusals']),20)
             rows = result['measured']['run_table']
-            self.assertEqual([r['returncode'] for r in rows],[0,1,1,0]*5)
+            self.assertEqual([r['returncode'] for r in rows],[0,1,1,0]*10)
             for row in rows:
                 config = read_json(root/'m2b-short-baseline/attempts/2/configs'/f"{row['id']}.json")
                 self.assertEqual(row['sampling_idle_seconds'],50. if row['arm']=='S' else 57.6)
@@ -182,7 +182,7 @@ class RuledScheduleTests(unittest.TestCase):
                 self.assertEqual(runner.run(),0)
                 result = read_json(root/'m2b-short-baseline/attempts/2/analysis.result.json')
                 self.assertEqual(result['incomplete_reason'],'short_baseline_refused_by_run_path')
-                self.assertEqual(len(result['measured']['short_baseline_refusals']),10)
+                self.assertEqual(len(result['measured']['short_baseline_refusals']),20)
                 shorts = [r for r in result['measured']['run_table'] if r['arm']=='S']
                 self.assertTrue(all(r['run_path_error'] for r in shorts))
                 self.assertTrue(all(r['returncode'] == (-15 if failure=='timeout' else None) for r in shorts))

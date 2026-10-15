@@ -6,6 +6,7 @@ import ctypes
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -216,7 +217,7 @@ class Hardware:
             completed = ctx.run(argv, 10.)
             return {'argv': argv, 'returncode': completed.returncode, 'error': completed.error,
                     'stdout': completed.stdout.decode(errors='replace'), 'stderr': completed.stderr.decode(errors='replace')}
-        hid = probe(['/usr/sbin/ioreg', '-c', 'IOHIDSystem', '-l'])
+        hid = probe(['/usr/sbin/ioreg', '-r', '-c', 'IOHIDSystem', '-k', 'HIDIdleTime', '-d', '1'])
         display = probe(['/usr/sbin/ioreg', '-r', '-c', 'IODisplayWrangler', '-l'])
         usb = probe(['/usr/sbin/ioreg', '-p', 'IOUSB', '-l'])
         osbuild = probe(['/usr/sbin/sysctl', '-n', 'kern.osversion'])
@@ -259,9 +260,16 @@ class Hardware:
         return row
 
     def code(self, model=False):
+        git_errors = []
         def git(args):
-            p = subprocess.run(['git', '-C', str(self.repo), *args], capture_output=True, timeout=10)
-            return p.stdout.decode().strip()
+            try:
+                p = subprocess.run(['git', '-C', str(self.repo), *args], capture_output=True, timeout=10)
+                if p.returncode:
+                    raise RuntimeError(f'git {args}: exit {p.returncode}: {p.stderr.decode(errors="replace").strip()}')
+                return p.stdout.decode().strip()
+            except Exception as exc:
+                git_errors.append(f'{type(exc).__name__}: {exc}')
+                return None
         commit, dirty = git(['rev-parse', 'HEAD']), git(['status', '--porcelain'])
         versions = {}
         if model:
@@ -274,7 +282,8 @@ class Hardware:
                 versions = json.loads(reply.stdout)
             except ValueError:
                 versions = {'error': reply.stderr.decode(errors='replace') or reply.error}
-        return {'git_commit': commit, 'dirty': bool(dirty), 'git_status_porcelain': dirty,
+        return {'git_commit': commit, 'dirty': bool(dirty) if dirty is not None else None, 'git_status_porcelain': dirty,
+                'git_error': '; '.join(git_errors) or None,
                 'python': sys.executable, 'model_python': self.model_python, 'mlx_versions': versions}
 
     def clock_start(self, attempt, kind):
@@ -298,8 +307,18 @@ class Hardware:
         return self.processes.recover(root)
 
     def wake(self, content, logfile):
+        env = {k: os.environ[k] for k in ('HOME', 'USER', 'LOGNAME', 'LANG') if k in os.environ}
+        env['PATH'] = (env.get('HOME', '')+'/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin')
+        wrapper = ('/bin/zsh -c '+shlex.quote(content)+'\n'
+                   'wake_rc=$?\n'
+                   'echo "wake exit $wake_rc $(/bin/date -u +%Y-%m-%dT%H:%M:%SZ)"\n'
+                   'exit "$wake_rc"\n')
         with fence(logfile).open('ab') as handle:
-            process = subprocess.Popen(['/bin/zsh', '-c', content], stdin=subprocess.DEVNULL,
-                stdout=handle, stderr=handle, start_new_session=True,
-                cwd=self.repo, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+            try:
+                process = subprocess.Popen(['/bin/zsh', '-c', wrapper], stdin=subprocess.DEVNULL,
+                    stdout=handle, stderr=handle, start_new_session=True, cwd=self.repo, env=env)
+            except Exception as exc:
+                error = f'{type(exc).__name__}: {exc}'
+                handle.write(('wake Popen failure '+error+'\n').encode())
+                return {'detached': False, 'error': error}
         return {'pid': process.pid, 'detached': True}

@@ -95,6 +95,7 @@ class CLITests(unittest.TestCase):
         self.assertTrue(value['RunAtLoad'])
         self.assertFalse(value['KeepAlive'])
         self.assertTrue(value['AbandonProcessGroup'])
+        self.assertEqual(value['ExitTimeOut'], 90)
         self.assertEqual(value['ProgramArguments'], ['/opt/homebrew/bin/python3.13',
             str(REPO/'scripts/quiet_kit.py'), '--run', '--model-python', '/fake/model-python'])
         self.assertEqual(value['EnvironmentVariables']['TMPDIR'], '/private/tmp/jw-quiet-kit')

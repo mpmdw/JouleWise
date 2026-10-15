@@ -32,6 +32,13 @@ All modes are one script, run with the stdlib interpreter:
 
 Before arming: put the wake-up command in `threshold-validation/WAKE_CMD` if one is wanted, then end every agent
 session. The job does nothing measurable until the agent census has been clean for 10 minutes in a row.
+`WAKE_CMD` should use absolute paths. It runs detached with only HOME, USER,
+LOGNAME and LANG from the current environment, and a PATH beginning with
+`$HOME/.local/bin` followed by the system paths and `/opt/homebrew/bin`.
+The wrapper appends `wake exit <status> <UTC time>` to `wake.log` when the
+command finishes. Launch failures are recorded there and in `DONE`.
+Re-arming archives earlier `DONE` and `WAKE_DONE` into `handoffs/<UTC stamp>/`,
+so the next armed job can wake once; a login rerun without re-arming cannot.
 
 ## What the job does
 

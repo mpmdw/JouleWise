@@ -229,8 +229,8 @@ class RunnerTests(unittest.TestCase):
             self.assertTrue((self.root/'WAKE_DONE').is_file())
             raise OSError('simulated launch failure')
         self.hw.wake=wake
-        with self.assertRaises(OSError):
-            self.runner(SHORT[:1]).run()
+        self.assertEqual(self.runner(SHORT[:1]).run(), 0)
+        self.assertIn('simulated launch failure', read_json(self.root/'DONE')['wake']['error'])
         self.hw.wake=lambda *_:self.fail('wake was repeated')
         self.assertEqual(self.runner(SHORT[:1]).run(),0)
 

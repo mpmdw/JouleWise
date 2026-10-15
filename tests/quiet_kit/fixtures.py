@@ -86,7 +86,7 @@ def power_attempt(path, segments, *, meter=False, kind='measurement'):
             if 'scatter' in s:
                 power += s['scatter'][j%len(s['scatter'])]
             rows.append({'start_s': cursor+j*.1, 'end_s': cursor+(j+1)*.1,
-                         'cpu_power': power, 'gpu_power': s.get('gpu', 0), 'ane_power': 0.})
+                         'cpu_power': power, 'gpu_power': s.get('gpu', 0), 'ane_power': s.get('ane', 0.)})
         powers += [s.get('meter_power', s.get('power', .05)) for _ in range(round(duration/.02))]
         cursor += duration
         rawcursor += duration

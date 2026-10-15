@@ -9,6 +9,7 @@ import signal
 import subprocess
 import threading
 import time
+import traceback
 import uuid
 from pathlib import Path
 from typing import Callable
@@ -60,6 +61,13 @@ class Interrupted(Exception):
 
 class Deadline(Exception):
     pass
+
+
+class CensusUnmeasured(Deadline):
+    """The agent census failed on every read for 10 minutes: end the job with DONE and a wake."""
+
+
+CENSUS_ERROR_LIMIT = 20  # consecutive failed reads, 30 s apart: 10 minutes
 
 
 class Control:
@@ -178,6 +186,7 @@ class Runner:
         self.job_id = uuid.uuid4().hex
         self.recovery = []
         self.director_actions = []
+        self.end_reason = None
         self.seams.bind_cancel(lambda: bool(self.stop) or self.seams.now() >= self.deadline)
 
     def stamp(self):
@@ -268,10 +277,24 @@ class Runner:
     def clean_agents(self, attempt, preflight, *, initial=False):
         clean_since = None
         seen = False
+        census_errors = 0
         while True:
             Control(self, attempt).check(watch=False)
-            row = self.seams.census(attempt)
+            try:
+                row = self.seams.census(attempt)
+                census_errors = 0
+            except TeardownBlocked:
+                raise
+            except Exception as exc:
+                census_errors += 1
+                row = {'clean': False, 'error': f'{type(exc).__name__}: {exc}',
+                       'detail': 'agent census failed', 'consecutive_failures': census_errors}
             preflight['census'].append({'stamp': self.stamp(), **row})
+            if census_errors >= CENSUS_ERROR_LIMIT:
+                # An unmeasured census never counts as clean; a census that
+                # stays broken is a fault for the director, not a 28 h wait.
+                atomic_json(attempt / 'preflight.json', preflight)
+                raise CensusUnmeasured(f'agent census failed on {census_errors} consecutive reads: {row["error"]}')
             now = self.seams.now()
             if not row.get('clean'):
                 seen = True
@@ -393,6 +416,9 @@ class Runner:
                       'runs': [r for r in data.get('runs', []) if not r.get('hazard_flags')],
                       'captures': [c for c in data.get('captures', []) if not c.get('hazard_flags')],
                       'clock': data.get('clock_clean', data.get('clock', []))}
+        if plan.test_id in ('m4-contention-watts', 'm5-gpu-rail', 'm14-meter-idle-power'):
+            # Preserve adjacency: each arm owns its original two brackets.
+            clean_data.update(segments=data.get('segments', []), exclude_flagged_segments=True)
         without = fn(clean_data)
         attempt_info = read_json(attempt / 'attempt.json', {})
         collection = read_json(attempt / 'collection.json', {})
@@ -528,7 +554,7 @@ class Runner:
                 if record_only:
                     handle = self.seams.clock_start(attempt, self.kind)
                     try:
-                        control.wait(min(180., 10800*self.scale))
+                        control.wait(10800*self.scale+15)
                     finally:
                         self.seams.clock_stop(handle)
                 else:
@@ -573,6 +599,7 @@ class Runner:
             info = read_json(attempt / 'attempt.json', {})
             reason = f'{type(exc).__name__}: {exc}'
             atomic_json(attempt / 'attempt.json', {**info, 'state': 'incomplete', 'reason': reason,
+                                                  'traceback': traceback.format_exc(),
                                                   'failure_stage': 'analysis' if conditions.get('end_stamp') else 'collection',
                                                   'process_groups': gone, 'end': self.stamp()})
             self.state('incomplete', reason=reason)
@@ -647,8 +674,9 @@ class Runner:
 
     def _final_clock(self):
         if self.clock_handle is not None:
-            self.seams.clock_stop(self.clock_handle)
+            handle = self.clock_handle
             self.clock_handle = None
+            self.seams.clock_stop(handle)
         if self.clock_attempt and self.clock_source_attempt and fence(self.clock_source_attempt / 'clock.jsonl').exists():
             plan = BY_ID['m3-clock-rate']
             self._clock_snapshot(self.clock_attempt, 'end')
@@ -667,12 +695,21 @@ class Runner:
             self.publish(plan, self.clock_attempt)
 
     def finish(self):
-        self.cleanup_test()
+        cleanup_error = None
+        try:
+            self.cleanup_test()
+        except Exception as exc:
+            cleanup_error = {'error': f'{type(exc).__name__}: {exc}', 'traceback': traceback.format_exc()}
+            append(self.root/'journal.jsonl', {'event': 'finish_cleanup_error', **cleanup_error})
+        final_clock_error = None
         if not self.director_actions:
             try:
                 self._final_clock()
             except TeardownBlocked as exc:
                 self.record_teardown_block(exc)
+            except Exception as exc:
+                final_clock_error = {'error': f'{type(exc).__name__}: {exc}', 'traceback': traceback.format_exc()}
+                append(self.root/'journal.jsonl', {'event': 'final_clock_error', **final_clock_error})
         done, incomplete = [], []
         for p in self.plans:
             if complete(self.root, p.test_id):
@@ -686,7 +723,8 @@ class Runner:
                     'deadline before test' if self.seams.now() >= self.deadline else 'not started')})
         record = {'kind': self.kind, 'complete_tests': done, 'incomplete_tests': incomplete,
                   'wall_time_s': self.seams.now()-self.started, 'end_time': self.stamp(), 'recovery': self.recovery,
-                  'director_actions': self.director_actions}
+                  'director_actions': self.director_actions, 'final_clock_error': final_clock_error,
+                  'cleanup_error': cleanup_error, 'end_reason': self.end_reason}
         atomic_json(self.root / 'DONE', record)
         self.current = None
         self.state('done', **record)
@@ -694,7 +732,13 @@ class Runner:
         if wake.is_file() and not fence(self.root / 'WAKE_DONE').exists():
             content = read_bytes(wake).decode()
             if create_once(self.root / 'WAKE_DONE', (self.seams.utc()+'\n').encode()):
-                self.seams.wake(content, fence(self.root / 'wake.log'))
+                try:
+                    record['wake'] = self.seams.wake(content, fence(self.root / 'wake.log'))
+                except Exception as exc:
+                    record['wake'] = {'error': f'{type(exc).__name__}: {exc}'}
+                    with fence(self.root/'wake.log').open('ab') as handle:
+                        handle.write(('wake failure '+record['wake']['error']+'\n').encode())
+                atomic_json(self.root/'DONE', record)
         return 0
 
     def run(self):
@@ -760,6 +804,7 @@ class Runner:
                         while counts.get(plan.test_id, 0) < 3:
                             Control(self, self.root).check(watch=False)
                             counts[plan.test_id] = counts.get(plan.test_id, 0)+1
+                            self.active_attempt = None
                             try:
                                 result = self.test(plan, attempt=self._clock_attempt_for_test() if plan.test_id == 'm3-clock-rate' else None)
                             except Interrupted as exc:
@@ -768,28 +813,55 @@ class Runner:
                                 # Fresh preflight applies the 10-minute clean
                                 # handoff rule before the retry.
                                 continue
+                            except (Deadline, TeardownBlocked):
+                                raise
+                            except Exception as exc:
+                                attempt = self.active_attempt or self.new_attempt(plan.test_id)
+                                info = read_json(attempt/'attempt.json', {})
+                                atomic_json(attempt/'attempt.json', {**info, 'state': 'incomplete',
+                                    'reason': f'{type(exc).__name__}: {exc}', 'traceback': traceback.format_exc(),
+                                    'failure_stage': 'test', 'end': self.stamp()})
+                                self.cleanup_test()
+                                self.state('incomplete', reason=f'{type(exc).__name__}: {exc}')
                             break  # incomplete non-agent result gets later pass
                 return self.finish()
             except TeardownBlocked as exc:
                 self.record_teardown_block(exc)
                 return self.finish()
-            except Deadline:
+            except Deadline as exc:
+                self.end_reason = str(exc)
                 return self.finish()
             except Interrupted as exc:
                 self.state('stopped', reason=str(exc))
                 return 128+int(getattr(signal, self.stop, signal.SIGTERM)) if self.stop else 130
+            except Exception as exc:
+                append(self.root/'journal.jsonl', {'event': 'unexpected_exception',
+                    'error': f'{type(exc).__name__}: {exc}', 'traceback': traceback.format_exc(),
+                    'stamp': self.stamp(), 'job_id': self.job_id})
+                self.end_reason = f'unexpected_exception: {type(exc).__name__}: {exc}'
+                return self.finish()
             finally:
                 if self.clock_handle is not None:
                     try:
                         self.seams.clock_stop(self.clock_handle)
                     except TeardownBlocked as exc:
                         self.record_teardown_block(exc)
+                    except Exception as exc:
+                        append(self.root/'journal.jsonl', {'event': 'clock_stop_error',
+                            'error': f'{type(exc).__name__}: {exc}', 'traceback': traceback.format_exc()})
                     self.clock_handle = None
-                self.cleanup_test()
+                try:
+                    self.cleanup_test()
+                except Exception as exc:
+                    append(self.root/'journal.jsonl', {'event': 'cleanup_error',
+                        'error': f'{type(exc).__name__}: {exc}', 'traceback': traceback.format_exc()})
                 try:
                     self.seams.action('stop_caffeinate', self.root)
                 except TeardownBlocked as exc:
                     self.record_teardown_block(exc)
+                except Exception as exc:
+                    append(self.root/'journal.jsonl', {'event': 'stop_caffeinate_error',
+                        'error': f'{type(exc).__name__}: {exc}', 'traceback': traceback.format_exc()})
                 self._restore_signals()
 
     def reanalyze(self, test_id):
@@ -887,14 +959,18 @@ def summary(result):
                     uncertainty = value.get('uncertainty', {})
                     uv = uncertainty.get('value')
                     utext = f'; {uncertainty.get("kind")} {uv}' if uv is not None else '; uncertainty undefined'
-                    numbers.append(f'{label(name)}: {value["value"]:.6g} {units.get(value["unit"], value["unit"])}{utext}')
+                    assumption = f' ({value["label"]})' if value.get('label') else ''
+                    numbers.append(f'{label(name)}{assumption}: {value["value"]:.6g} {units.get(value["unit"], value["unit"])}{utext}')
             else:
                 for key, v in value.items():
                     if key not in ('run_table', 'captures', 'offsets', 'quiet_ordered_pairs', 'quiet_disturbed_ordered_pairs'):
                         walk(v, (name+' '+key).strip())
         elif isinstance(value, list):
             for i, v in enumerate(value):
-                walk(v, f'{name} {i+1}')
+                arm_label = (f'{v["priority"]} {100*v["duty"]:g}%'
+                             if name == 'arms' and isinstance(v, dict) and v.get('priority') is not None
+                             and v.get('duty') is not None else str(i+1))
+                walk(v, f'{name} {arm_label}')
     walk(measured)
     methods = {'m1': 'the frozen pulse protocol and the shared interval detector',
                'm2': 'five ordinary, long, long, ordinary quads through the unchanged single-run path',

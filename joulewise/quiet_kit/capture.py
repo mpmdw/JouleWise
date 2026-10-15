@@ -6,6 +6,7 @@ import atexit
 import dataclasses
 import hashlib
 import importlib.metadata
+import os
 import signal
 import sys
 import time
@@ -49,7 +50,7 @@ def main(argv=None):
         raw_after = time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW)
         append(events, {'kind': args.kind, 'timestamp_s': clock_stamp.epoch_s, 'event_type': kind,
             'phase': 'instrument_validation', 'metadata': {'clock_stamp': dataclasses.asdict(clock_stamp),
-                'monotonic_raw_ns': (raw_before+raw_after)//2, 'raw_read_skew_ns': raw_after-raw_before, **fields}})
+                'monotonic_raw_ns': (raw_before+raw_after)//2, 'raw_read_skew_ns': raw_after-raw_before, **fields}}, sync=False)
         return clock_stamp
     event('sampling_started')
     try:
@@ -95,7 +96,12 @@ def main(argv=None):
             **report(detection)})
         return 0
     finally:
-        hw.cleanup()
+        try:
+            with events.open('ab') as handle:
+                handle.flush()
+                os.fsync(handle.fileno())
+        finally:
+            hw.cleanup()
 
 
 if __name__ == '__main__':

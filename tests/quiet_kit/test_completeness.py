@@ -25,12 +25,15 @@ class CompletenessTests(unittest.TestCase):
                     for condition, count, bounded in [('quiet', 10, 8), ('load', 4, 3), ('utility', 4, 3)]
                     for i in range(count)]
         self.assertIsNone(analysis.m1({'captures': captures})['incomplete_reason'])
-        for condition in ('quiet', 'load', 'utility'):
+        for condition in ('quiet', 'load'):
             bad = copy.deepcopy(captures)
             next(c for c in bad if c['condition'] == condition)['bound_s'] = None
             out = analysis.m1({'captures': bad})
             self.assertEqual(out['incomplete_reason'], 'captures_unbounded')
             self.assertEqual(sum(c['capture_count'] for c in out['conditions'].values()), 18)
+        for capture in captures:
+            if capture['condition'] == 'utility': capture['bound_s'] = None
+        self.assertIsNone(analysis.m1({'captures': captures})['incomplete_reason'])
 
     def test_m13_many_meter_edges_cannot_hide_failed_sampler_captures(self):
         edges = [{'capture': f'capture-{i//118}', 'command_s': i,

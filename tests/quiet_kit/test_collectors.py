@@ -71,6 +71,12 @@ class CollectorChainTests(unittest.TestCase):
             argv=read_json(root/'m4-contention-watts/attempts/1/collection.json')['segments'][1]['argv'][0]
             self.assertEqual(argv[:2],['/usr/sbin/taskpolicy','-b'])
             self.assertTrue(m4['measured']['bursts'][0]['accounting_intervals'])
+            # At this desk scale the fixed -.5/+1 s integration window also
+            # includes the earlier .05-duty core arm: .10 J burst + .05 J arm.
+            self.assertAlmostEqual(m4['measured']['bursts'][0]['added_energy']['value'],
+                                   5*2*.01+5*.05*20*.01, delta=.01)
+            burst = read_json(root/'m4-contention-watts/attempts/1/collection.json')['segments'][3]
+            self.assertAlmostEqual(burst['burst_on']['epoch_s']-burst['start']['epoch_s'], 9.4*.01, places=5)
             m2=read_json(root/'m2-long-wait/attempts/1/analysis.result.json')
             self.assertEqual(len(m2['measured']['run_table']),4)
             self.assertFalse(hw.sample_active)

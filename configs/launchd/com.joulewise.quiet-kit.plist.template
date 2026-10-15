@@ -6,6 +6,7 @@
 <key>RunAtLoad</key><true/>
 <key>KeepAlive</key><false/>
 <key>AbandonProcessGroup</key><true/>
+<key>ExitTimeOut</key><integer>90</integer>
 <key>ProgramArguments</key><array>
 <string>/opt/homebrew/bin/python3.13</string><string>{{REPO}}/scripts/quiet_kit.py</string>
 <string>--run</string><string>--model-python</string><string>{{MODEL_PYTHON}}</string>

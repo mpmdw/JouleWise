@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import plistlib
@@ -9,7 +10,7 @@ import subprocess
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from .paths import ARCHIVE, atomic, executable, fence, mkdir, read_bytes, read_json
+from .paths import ARCHIVE, atomic, create_once, executable, fence, fsync_dir, mkdir, read_bytes, read_json
 from .schedule import BY_ID, PLANS, TOTAL_SECONDS
 
 MODEL_PYTHON = '/Users/edr/code/JouleWise/.venv/bin/python'
@@ -72,7 +73,32 @@ def arm(repo: Path, root: Path, model_python: str, command=subprocess.run, emit=
             if result.returncode not in (3, 113) and not any(
                     s in (result.stderr or '').lower() for s in ('not loaded', 'could not find service', 'no such process')):
                 return result.returncode
+        if argv[1] == 'bootout':
+            archive_handoff(root)
     return 0
+
+
+def archive_handoff(root):
+    """A successful bootout starts a new arm; retain prior one-shot receipts."""
+    markers = [fence(root/name) for name in ('DONE', 'WAKE_DONE') if fence(root/name).is_file()]
+    if not markers:
+        return None
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')
+    parent = mkdir(root/'handoffs')
+    index = 0
+    while True:
+        target = fence(parent/(stamp if index == 0 else f'{stamp}-{index}'))
+        try:
+            target.mkdir()
+            break
+        except FileExistsError:
+            index += 1
+    for marker in markers:
+        if not create_once(target/marker.name, read_bytes(marker)):
+            raise FileExistsError(target/marker.name)
+        marker.unlink()
+    fsync_dir(root)
+    return target
 
 
 def main(argv=None, *, seams=None, emit=print) -> int:

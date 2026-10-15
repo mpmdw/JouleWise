@@ -264,16 +264,32 @@ def read_attempt(directory):
             window = reading.get('interval', {}).get('wall_ns', [])
             if len(window) == 2:
                 t = sum(window)/2e9
-                near = [r['total'] for r in rs if r['start_s'] <= t < r['end_s']]
+                start_s, end_s = (v/1e9 for v in window)
+                interval_s = (window[1]-window[0])/1e9
+                overlaps = [(r['total'], min(r['end_s'], end_s)-max(r['start_s'], start_s))
+                            for r in records if r.get('total') is not None and
+                            min(r['end_s'], end_s) > max(r['start_s'], start_s)]
+                coverage = math.fsum(seconds for _, seconds in overlaps)
+                reason = ('rail power covers under 90% of accounting interval'
+                          if interval_s <= 0 or coverage < .9*interval_s else None)
                 tick_values.append({'outside_cpu_rate': reading.get('outside_total_cpu_s_per_s'),
-                                    'rail_power_w': statistics.mean(near) if near else None,
+                                    'rail_power_w': math.fsum(power*seconds for power, seconds in overlaps)/coverage
+                                        if reason is None else None,
+                                    'rail_power_coverage_s': coverage, 'interval_s': interval_s,
+                                    'rail_power_undefined': reason,
                                     'epoch_s': t, 'interval': reading})
         data['segments'].append({**s, 'records': combined, 'cpu_seconds': cpu,
             'elapsed_s': end-start, 'battery_current_ma': current,
             'burst_on_s': s.get('burst_on', {}).get('epoch_s'), 'burst_off_s': s.get('burst_off', {}).get('epoch_s'),
-            'accounting_intervals': accounting, 'outside_cpu_rate': interval.get('outside_total_cpu_s_per_s') if interval else None,
+            'accounting_intervals': accounting, 'outside_interval': interval,
+            'outside_cpu_rate': interval.get('outside_total_cpu_s_per_s') if interval else None,
             'ticks': tick_values})
-    data['runs'] = [run_bundle(directory, r) for r in document.get('runs', [])]
+    for r in document.get('runs', []):
+        row = run_bundle(directory, r)
+        if len(r.get('snapshots', [])) == 2:
+            outside = ps_interval(*r['snapshots'], roots=document.get('tree_roots', []))
+            row.update(outside_interval=outside, outside_cpu_rate=outside.get('outside_total_cpu_s_per_s'))
+        data['runs'].append(row)
     data['captures'] = [capture(directory, c) for c in document.get('captures', [])]
     for row in data['runs']+data['captures']:
         data['flags'] += row.get('flags', [])
@@ -353,4 +369,15 @@ def flag_segments(data, watch):
             segment['thermal_levels'] = thermals
             if collection == 'segments' and any(abs(v) > 200 for v in segment.get('battery_current_ma', [])):
                 segment['hazard_flags'].append('meter battery current over 200 mA')
+            intervals = [segment.get('outside_interval'), *segment.get('accounting_intervals', [])]
+            dirty = [r for r in intervals if r is not None and not r.get('clean')]
+            if dirty and collection in ('segments', 'runs'):
+                reason = 'outside contention during '+('segment' if collection == 'segments' else 'run')
+                segment['hazard_flags'].append(reason)
+                segment['outside_contention'] = dirty
+                data['flags'].append({'reason': reason, 'segment': segment.get('id'), 'readings': dirty})
+            if collection == 'runs' and segment.get('long_wait', {}).get('capped'):
+                reason = 'long wait capped before 20 quiet minutes'
+                segment['hazard_flags'].append(reason)
+                data['flags'].append({'reason': reason, 'run': segment.get('id'), 'reading': segment['long_wait']})
     return data

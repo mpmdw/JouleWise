@@ -57,7 +57,7 @@ class AnalysisTests(unittest.TestCase):
             {'id': 'u', 'condition': 'utility', 'bound_s': .124}]})
         qmax = .030+.014531
         dmin = .124+(.124-.030)
-        self.assertAlmostEqual(out['separation']['value'], (dmin-qmax)*1000)
+        self.assertAlmostEqual(out['separation']['utility']['value'], (dmin-qmax)*1000)
         self.assertEqual(len(out['quiet_ordered_pairs']), 2)
         interval = out['quiet_fraction_above_screen']['uncertainty']['value']
         self.assertEqual(interval[0], 0.)
@@ -86,7 +86,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(len(out['quiet_ordered_pairs']),2)
         self.assertTrue(all(p['operative_bound']['value'] is None for p in out['quiet_ordered_pairs']))
         self.assertIsNone(out['quiet_fraction_above_screen']['value'])
-        self.assertIsNone(out['separation']['value'])
+        self.assertIsNone(out['separation']['utility']['value'])
 
     def test_m3_clock_rate_slope_uncertainty_and_budget(self):
         # Residual vector is orthogonal to 1 and x, giving an independent
@@ -161,7 +161,7 @@ class AnalysisTests(unittest.TestCase):
         out = a.m13(data)
         self.assertAlmostEqual(out['meter_lag_mean']['value'], 12.)
         self.assertAlmostEqual(out['meter_lag_sd']['value'], 2.)
-        self.assertAlmostEqual(out['meter_alignment_precision']['value'], 2/math.sqrt(3))
+        self.assertAlmostEqual(out['meter_mean_lag_pooled_se']['value'], 2/math.sqrt(3))
 
     def test_m15_drift_difference_ratio_and_uncertainty(self):
         runs = []

@@ -68,6 +68,11 @@ class RealModelCLITests(unittest.TestCase):
         cls.addClassCleanup(cls.processes.cleanup)
         cls.hw = SimpleNamespace(repo=REPO, model_python=sys.executable,
             stamp=collectors.stamp, processes=cls.processes)
+        from joulewise.hazards.base import Context, Completed
+        from .fixtures import ps_bytes
+        cls.hw.ctx = lambda directory: Context(raw_dir=directory, run=lambda argv, timeout:
+            Completed(tuple(argv), 0, ps_bytes(0.), b''))
+        cls.hw.host_cpu = lambda: [[0, 0, 1000, 0]]
         cls.control = DeskControl()
         cls.started = time.monotonic()
         cls.attempts = {}

@@ -136,6 +136,7 @@ def model_run(hw, segment, attempt, index, control, *, config_transform=None):
     root = mkdir(attempt / 'runs')
     argv = [hw.model_python, '-m', 'joulewise', 'run', str(path), '--runs-dir', str(root)]
     before = hw.stamp()
+    ps_before = snapshot(hw, mkdir(attempt/'ps'), 2*index)
     child, code, run_error = None, None, None
     try:
         child = hw.processes.spawn(argv, attempt)
@@ -146,11 +147,13 @@ def model_run(hw, segment, attempt, index, control, *, config_transform=None):
     finally:
         if child:
             hw.processes.stop(child)
+    ps_after = snapshot(hw, mkdir(attempt/'ps'), 2*index+1)
     if child and code is None:
         code = child.returncode
     end = hw.stamp()
     row = {**segment, 'id': run_id, 'bundle': str(Path('runs') / run_id), 'start': before,
            'end': end, 'argv': argv, 'returncode': code,
+           'snapshots': [ps_before, ps_after],
            'sampling_idle_seconds': config['sampling']['idle_seconds'],
            'run_path_error': run_error,
            'child_stdout': child.quiet_kit_stdout.name if child else None,
@@ -179,25 +182,38 @@ def long_wait(hw, segment, attempt, scale, control):
     from joulewise.hazards import contention
     # The regular watcher continues; no load, sampler, meter or model is
     # alive. Snapshot once per ten-second accounting interval.
-    quiet_until = hw.now()+segment['duration_s']*scale
+    started = quiet_since = hw.now()
+    required = segment['duration_s']*scale
+    cap = started+2700*scale
+    quiet_until = started+required
+    restarts = 0
     control.runner.state('waiting', current_wait='long_idle', quad=segment['quad'], arm=segment['arm'])
     before = contention.take_snapshot(hw.ctx(), host_reader=None)
     rows = []
-    while hw.now() < quiet_until:
-        control.wait(min(10*scale, max(0., quiet_until-hw.now())))
+    while hw.now() < min(quiet_until, cap):
+        control.wait(min(10*scale, max(0., min(quiet_until, cap)-hw.now())))
         after = contention.take_snapshot(hw.ctx(), host_reader=None)
         reading = contention.interval(before, after, tree_roots=[os.getpid()], include_kernel_task=True, limit=.05)
-        row = {'stamp': hw.stamp(), 'interval': reading, 'quad': segment['quad']}
+        row = {'stamp': hw.stamp(), 'interval': reading, 'quad': segment['quad'],
+               'quad_try': segment.get('quad_try', 0)}
         rows.append(row)
         append(attempt / 'long-wait.jsonl', row)
         if not reading.get('clean'):
-            quiet_until = hw.now()+segment['duration_s']*scale
+            restarts += 1
+            quiet_since = hw.now()
+            quiet_until = quiet_since+required
             control.runner.state('waiting', current_wait='long_idle_after_contender',
                                  quad=segment['quad'], reading=reading)
             append(attempt / 'long-wait.jsonl', {'event': 'restart_20_minutes', 'stamp': hw.stamp(),
-                                                'quad': segment['quad'], 'reason': reading})
+                                                'quad': segment['quad'], 'quad_try': segment.get('quad_try', 0),
+                                                'reason': reading})
         before = after
-    return rows
+    result = {'achieved_continuous_quiet_s': max(0., hw.now()-quiet_since),
+              'restarts': restarts, 'capped': hw.now() < quiet_until,
+              'waited_s': hw.now()-started, 'required_quiet_s': required, 'cap_s': 2700*scale}
+    append(attempt/'long-wait.jsonl', {'event': 'long_wait_finished', 'quad': segment['quad'],
+                                     'quad_try': segment.get('quad_try', 0), **result})
+    return result
 
 
 def collect(hw, plan, attempt, scale, control, kind, *, config_transform=None):
@@ -219,7 +235,11 @@ def collect(hw, plan, attempt, scale, control, kind, *, config_transform=None):
             sampler = hw.sampler(attempt / 'rails', control)
             manifest['sampler_dir'] = 'rails'
         boundary = 0
-        for index, segment in enumerate(plan.segments):
+        quad_plan = plan.test_id in ('m2-long-wait', 'm2b-short-baseline')
+        pending = [(i, {**s, 'quad_try': 0} if quad_plan else s) for i, s in enumerate(plan.segments)]
+        retried_quads = set()
+        last_long_wait = None
+        for position, (index, segment) in enumerate(pending):
             control.check()
             current = {**segment, 'id': f's{index:03d}', 'start': hw.stamp()}
             control.segment = {'id': current['id'], **segment}
@@ -251,12 +271,14 @@ def collect(hw, plan, attempt, scale, control, kind, *, config_transform=None):
             elif segment['kind'] == 'model':
                 if sampler:
                     raise RuntimeError('kit sampler must not overlap model sampler')
-                row = model_run(hw, segment, attempt, index, control, config_transform=config_transform)
+                run_segment = {**segment, 'long_wait': last_long_wait} if last_long_wait is not None else segment
+                last_long_wait = None
+                row = model_run(hw, run_segment, attempt, index, control, config_transform=config_transform)
                 manifest['runs'].append(row)
                 if row.get('sampler_span_s'):
                     manifest['sampler_spans_s'].append(row['sampler_span_s'])
             elif segment['kind'] == 'long_wait':
-                long_wait(hw, segment, attempt, scale, control)
+                last_long_wait = long_wait(hw, segment, attempt, scale, control)
             elif segment['kind'] == 'soak':
                 deadline = hw.now()+segment['duration_s']*scale
                 n = 0
@@ -325,6 +347,15 @@ def collect(hw, plan, attempt, scale, control, kind, *, config_transform=None):
                                load_pids=[child.pid for child in children_running], argv=argvs)
                 manifest['segments'].append(current)
             atomic_json(path, manifest)
+            if quad_plan and segment['kind'] == 'model' and segment.get('quad_try', 0) == 0:
+                quad = segment['quad']
+                rows = [r for r in manifest['runs'] if r.get('quad') == quad and r.get('quad_try', 0) == 0]
+                if len(rows) == 4 and quad not in retried_quads and len(retried_quads) < 5:
+                    from .readers import run_bundle
+                    if any(run_bundle(attempt, r)['failure_reasons'] for r in rows):
+                        retried_quads.add(quad)
+                        pending[position+1:position+1] = [(len(plan.segments)+i, {**s, 'quad_try': 1})
+                            for i, s in enumerate(plan.segments) if s.get('quad') == quad]
         if sampler:
             metadata = sampler.close()
             sampler = None
