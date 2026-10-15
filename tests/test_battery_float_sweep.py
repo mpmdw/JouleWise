@@ -28,6 +28,9 @@ B_LEXEME = re.compile(r"b_fiducial_s|exact_bound_lexeme_s")
 
 # file -> (classification, gate, and for a refusal the test that proves it).
 READERS = {
+    "joulewise/quiet_kit/fiducial.py": (
+        "non-claim calibration kit", "reads only its own fenced captures; no ledger or block-5 input; "
+        "tests.quiet_kit.test_readers.FiducialParityTests proves library rederivation parity"),
     "scripts/issue_calibration_acceptance_generation.py": (
         "gated", "check dry run and prepare-candidate, both through authenticate_battery_epoch "
         "(authenticate_committed_verdict); proved by test_battery_float_consumers and the "

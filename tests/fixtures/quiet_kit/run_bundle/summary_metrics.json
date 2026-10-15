@@ -1,0 +1,10 @@
+{
+  "status": "ok",
+  "phase_energy_j": {
+    "prefill": 0.3,
+    "decode": 1.2
+  },
+  "ttft_s": 0.62,
+  "decode_latency_s": 2.0,
+  "throughput_tokens_s": 24.0
+}
