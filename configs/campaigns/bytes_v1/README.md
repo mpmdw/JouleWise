@@ -109,3 +109,40 @@ actual manifest or invent Mac KV observations.
 Registries touched: none required by the passing census/inventory checks.
 The existing Block-6 pack discovery automatically sees `*/registration.json`
 and keeps these six packs closed because their status is `draft`.
+
+## Validation on the cloud host
+
+All unittest invocations used Python 3.13, `JW_B5_SYNTHETIC_ONLY=1` and
+`PYTHONDONTWRITEBYTECODE=1`. No MLX model was loaded. The Mac KV orchestration
+and generation/cache arithmetic ran only against fakes.
+
+- Touched modules plus `tests.test_b6_registration` and `tests.test_b6_queue`:
+  **40 tests, OK** (18 new tests, 22 existing registration/queue tests).
+- `tests.test_single_count_discipline_census`, `tests.test_digest_pin_census`,
+  `tests.test_custody_mode_inventory`, `tests.test_d165_rationale_census` and
+  `tests.hazards.test_refusal_allowlist`: **65 tests, OK, one skipped**. Tracked
+  new files were included. No registry changes were needed.
+- Standard `unittest discover -s tests/b6 -t .`: **211 tests run, 19 failures,
+  four errors**. Existing fixtures could not execute the hard-coded Homebrew
+  Python path; `/tmp` also ran out of space, and a restore fixture could not
+  satisfy its existing 20 GiB reserve there. Creating the user-permitted
+  `/opt/homebrew/bin/python3.13` symlink failed on OS directory permissions;
+  this host has no `sudo` executable.
+- A portability diagnostic on `/workspace` (larger temporary filesystem) passed
+  the existing alpha-smoke/session/rotation test after changing only fixture
+  interpreter paths in memory. A later full portability rerun passed the full
+  synthetic ALPHA session through `counting`, then was stopped during the slow
+  re-harvest scenarios. **No complete portable-suite pass is claimed.** These
+  diagnostics did not edit repository source or reduce validation thresholds.
+- The fixture-orphan checks in the combined 101-test existing-suite invocation
+  had one unrelated cleanup failure: the host retains an exited orphan as a
+  zombie, so `os.kill(pid, 0)` does not raise `ProcessLookupError`. The same
+  assertion failed in a separate one-test reproduction. The combined run had
+  one failure and one skip; its other modules passed as detailed above.
+- Both generators' `--check` paths pass, all 12 fixed trees round-trip through
+  compose, chain stage/argument readers pass, stored config/manifest/plan hashes
+  match, and `git diff --check` passes.
+
+The full repository suite was not run: this task adds desk tooling/configs and
+runs the requested focused, Block-6 and registration tests instead. Existing
+cloud-fixture failures are reported rather than repaired outside the write list.
