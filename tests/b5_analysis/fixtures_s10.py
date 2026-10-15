@@ -644,9 +644,17 @@ def build_export(pack,destination):
                     if runs==w.claim else [('s10.json',provenance_rows)])
             for filename,campaign_rows in groups:
                 if campaign_rows:
+                    # run_campaign records the identity its own resolver finds
+                    # for a stage's config directory: a contrast pack's science
+                    # stages carry the pack's prospective manifest id, reference
+                    # stages and floor packs none (run_campaign.py near 10241;
+                    # the writer's hazard-window grouping comment near 7752).
+                    identities={getattr(rc.resolve_prospective_analysis_manifest_v3(Path(row['config']).parent),
+                                        'manifest_id',None) for row in campaign_rows}
+                    if len(identities)!=1:raise ValueError('one campaign manifest spans two analysis identities')
                     rc.write_campaign_provenance(runs/'campaign_manifests'/filename,{
                         'schema_version':'joulewise.campaign_provenance.v2','session_id':'s10-'+pack,
-                        'analysis_manifest_id':None,'campaign_policy':policy,'members':campaign_rows})
+                        'analysis_manifest_id':identities.pop(),'campaign_policy':policy,'members':campaign_rows})
         finally:rc.release_campaign_lock(token)
     # A physically invalid corpus member forces the real survivor re-screen.
     # The driver records the collected subset before the real mint.

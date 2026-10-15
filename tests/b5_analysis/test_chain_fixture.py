@@ -525,6 +525,20 @@ class ChainTests(unittest.TestCase):
         self.assertEqual((w.claim/w.truncated/'summary_metrics.json').read_bytes(),b'{"status":')
         self.assertIn(w.truncated,context.removed_bundle_ids)
         self.assertEqual(bracket.evaluation['status'],'passed')
+    def test_38_gamma_science_campaigns_carry_the_pack_manifest_identity(self):
+        # As run_campaign records them: the contrast pack's science stages carry
+        # its prospective manifest id, the reference stages none; the claim
+        # gate's cooldown join (selected by that id) covers every kept quad member.
+        w=self.window('gamma')
+        from joulewise.analysis_engine.inputs import campaign_cooldown_evidence
+        manifest_id=json.loads((ROOT/'configs/campaigns'/PACK_IDS['gamma']/'analysis_manifest_v3.json').read_bytes())['manifest_id']
+        identities={json.loads(p.read_bytes())['analysis_manifest_id'] for p in (w.claim/'campaign_manifests').glob('*.json')}
+        self.assertEqual(identities,{manifest_id,None})
+        kept=self.kept_composition('gamma')[1]
+        cooldowns=campaign_cooldown_evidence(w.claim,manifest_id)
+        for cid in kept.cells:
+            for run in kept.kept_run_ids(cid):
+                self.assertTrue((cooldowns.get(run) or {}).get('manifest'),run)
     def test_40_c4_alpha(self):self.check_c4('alpha')
     def test_34_relocated_allowance_artifact_authenticates(self):
         w=self.window('alpha')
