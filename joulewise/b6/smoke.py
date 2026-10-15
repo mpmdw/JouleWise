@@ -433,7 +433,8 @@ def desk(prepared, *, driver_exit=None, run=subprocess.run, acceptance=None,
             prepared_a = acceptance.prepare(ledger_path=prepared.measurement / plan.DEFAULT_LEDGER_RELATIVE,
                                             plan_tree=json.loads((prepared.measurement / "configs/campaigns" /
                                                                   prepared.pack_id / "plan_tree.json").read_text()),
-                                            registration_dir=prepared.registration_dir, code_identity=prepared.fingerprint)
+                                            registration_dir=prepared.registration_dir, code_identity=prepared.fingerprint,
+                                            pack_root=prepared.measurement / "configs/campaigns" / prepared.pack_id)
             a_result = acceptance.evaluate(prepared_a, evidence)
     except Exception as exc:
         errors.append(f"acceptance: {type(exc).__name__}: {exc}")

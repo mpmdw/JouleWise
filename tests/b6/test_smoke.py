@@ -17,6 +17,7 @@ from joulewise.b6 import acceptance_interface as ai
 from joulewise.b6.acceptance_interface import AcceptanceResult, SessionEvidence, StubAcceptance
 from tests.b6.support import DeskCase, ROOT, PACKS, tree, fp, synthetic_checkout
 from tests.b6.test_precheck import FakeAcceptance
+from tests.b6 import support
 from tests.git_fixture import init_git_fixture
 from tests.fixtures.b5_plan import fake_window
 
@@ -318,3 +319,41 @@ def main():
                 self.assertEqual(len(index.read_text().splitlines()), 1)
             if driver == 6:
                 self.assertEqual(report['driver_reason'], 'courier_failed_but_collected')
+
+    def test_desk_acceptance_uses_session_pack_roster_with_alpha_registration(self):
+        from joulewise.b5.harvest import build_roster, l4_exclusion_inputs
+        from joulewise.b6.acceptance import ACCEPTANCE
+        from joulewise.b6.precheck import synthetic_session
+
+        registration = support.registration_dir(self.root / 'cross-pack')
+        document = support.document()
+        document['pack_id'] = PACKS['alpha']
+        support.write_json(registration / 'acceptance.json', document)
+        rows = [{'sequence': i, 'disposition': 'valid', 'exact_bound_lexeme_s': '0.028'}
+                for i in range(1, 25)]
+        for pack in ('beta', 'gamma'):
+            with self.subTest(pack=pack):
+                base = self.root / pack
+                night = base / 'custody/night'
+                night.mkdir(parents=True)
+                journal = [{'stage_id': stage.stage_id, 'rc': 0}
+                           for stage in chain.stage_plan(tree(pack)) if stage.in_chain]
+                (night / chain.STAGE_JOURNAL).write_text(''.join(json.dumps(row) + '\n' for row in journal))
+                pack_root = ROOT / 'configs/campaigns' / PACKS[pack]
+                prepared = s.SmokePrepared(base, ROOT, base / 'plan.json', base / 'custody',
+                    base / 'state', PACKS[pack], 'SMOKE-test-calibration',
+                    {**fp(PACKS[pack]), 'repo_root': str(ROOT)}, {}, registration)
+                evidence = synthetic_session(pack_root, ROOT, rows, {})
+                acceptance = mock.Mock(wraps=ACCEPTANCE)
+                report = s.desk(prepared, driver_exit=0,
+                    run=lambda *args, **kwargs: SimpleNamespace(returncode=0),
+                    advance_pin=lambda *args, **kwargs: None, acceptance=acceptance,
+                    evidence_loader=lambda archive: evidence)
+                self.assertEqual(report['acceptance']['verdict'], 'ACCEPT')
+                self.assertEqual(report['status'], 'pass')
+                acceptance.prepare.assert_called_once()
+                self.assertEqual(acceptance.prepare.call_args.kwargs['pack_root'], pack_root)
+                prepared_a = acceptance.evaluate.call_args.args[0]
+                expected, _ = l4_exclusion_inputs(build_roster(pack_root, ROOT), {}, plan_id=None, attempt=None)
+                self.assertEqual(prepared_a.roster, expected)
+                self.assertTrue(prepared_a.roster['cells'])
