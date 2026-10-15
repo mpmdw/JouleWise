@@ -272,3 +272,31 @@ Addendum 5 items 1-4 are applied, and the reviewer's probes now pass: the campai
 There was one conflict with existing code: block 6's validator requires minimum_sessions ≥ 1. `minimum_sessions` is read only by precision stopping (loop.py:549, queue.py:69), and BYTES has precision null, so for BYTES it has no effect.
 
 Ruling: both passes register 1/1. "Minimum one pass" is a rule of the analysis: the paper prints pass 2 where it exists and states the per-model pass count. No validator change. Applied by the lead on the config lane.
+
+## Addendum 7 (16:04 PDT): the agreement test (Opus comparer, JouleWise-data claude/bytes-agreement @ 3db4f02)
+
+Rails gross and flagged-inclusive cells agree to 1e-9 in every campaign and stage, including the blinded one. So do all 84 H1 words in the four main campaigns, k, the VIF and the active-or-resident answer. Every difference is attributed.
+
+The rulings below bind both implementations. The comparer then re-runs on the new pins.
+
+1. **D1 (twin).** HC3 primary for H2 coefficients and for the tier-deviation prediction term (Addendum 4 items 3 and 5). OLS is printed beside it, labelled.
+2. **D2 (analysis reading adopted).** DC input carries its own NEG-8 drift allowance (DC family, from the released references' meter energies) with its own scale, plus u. u is added to B, not substituted for it.
+3. **D3 (analysis reading adopted).** Rest carries the rest-family allowance (references' DC − rails) with its own scale, plus the rails anchor term and u.
+4. **D4 (twin).** At each phase edge, use the larger power of the two adjacent samples (Addendum 4 item 10).
+5. **D5 (twin).** Flagged-inclusive restores NUMBER-class exclusions of runs with a valid energy record (Addendum 4 item 6).
+6. **D6 (twin).** The idle-subtracted secondary uses the idle family's own allowance (Addendum 4 item 7).
+7. **D7 (twin).** Release is read only from the key directory, never from an export's non_claim column (Addendum 4 item 8(b)). Refusals are printed as "refused: <reason>" with exit 1, not as a traceback.
+8. **D8 (analysis reading adopted).** The NEG-8 bound uses block 5's tabulated t (`aggregate.student_t_critical_95`, 3 decimals). That table is the registered arithmetic. The twin reproduces the table's values without importing it.
+9. **D9: a model with one pass refused.** One stratum of one pass must not remove H2 for all ten models. The fallback is decided now, before any data, so it is not a post-hoc selection.
+   - (a) If one pass of a model refuses and the other computes, the model's primary point is the surviving pass. It takes that pass's e with half-width (h + B) and is labelled `one_pass` in every table where it appears. H1 and H2 use it.
+   - (b) If both passes refuse, the model has no point and no H1 word, and the refusal is printed. H2 is fitted on the models that have points and labelled with n. The primary result is printed only if n − p ≥ 2 for every fit; otherwise that fit is printed as refused.
+   - (c) Wherever (a) or (b) applies, H2 is also printed over the models with two passes as a labelled sensitivity line.
+   - k stays as Addendum 3 item 6, counted from what is printed as primary.
+10. **D10 (analysis).** Print block 5's registered without-assisted line for every cell that holds an assist member, as the twin does.
+11. **N1.** Map decode-span ends to integer nanoseconds by rounding to nearest (the analysis's rule). The twin adopts it.
+12. **Read from code, not exercised:**
+    - P̄ of the pass mean is mean E / mean T, with half-width (mean h + mean B) / mean T (the analysis's form; R3's P̄ = E_dec / T_dec).
+    - r_max is the largest absolute recorded excess latency, since an edge can move either way (the analysis's form).
+    - Before the next run, the synthetic generator gains unequal pass durations and non-zero clock latency, so both forms are exercised.
+13. **The 512 decode passes** (Addendum 5 item 4) apply to both implementations in this round.
+14. The stage-1 commit schemas may differ. Only the analysis's commit is the registered one.
