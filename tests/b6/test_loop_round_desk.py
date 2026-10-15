@@ -78,8 +78,11 @@ class RoundTests(DeskCase):
         self.assertEqual((line['chain_rc'], line['physics_stop']), (1, None))
         self.assertFalse(line['structure_ok'])
         self.assertIn('chain_crashed', line['structure_defects'])
-        self.assertIn('records.pin_ledger', line['window_flags'])
-        self.assertTrue(plan.ledger_head_status(r.measurement)['blocking'])
+        # The lost chain's open bracket session is aborted at the desk, so the
+        # pin advances and the next session's plan can reserve the ledger.
+        self.assertIn('records.terminal_record_absent', line['window_flags'])
+        self.assertNotIn('records.pin_ledger', line['window_flags'])
+        self.assertFalse(plan.ledger_head_status(r.measurement)['blocking'])
         self.assertNotEqual(line['harvest_rc'], 3)
         self.assertEqual(state['session']['packs'], ['alpha'])
 

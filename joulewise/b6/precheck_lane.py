@@ -76,7 +76,9 @@ class PrecheckLane:
             result = self.check(campaign, self.measurement, self.root, out=out,
                                 registration_dir=self.measurement / precheck.REGISTRATION_RELATIVE,
                                 disk_targets=session_paths.disk_targets(paths, stat=seams.stat),
-                                ctx=ctx, seams=seams, reap=False)
+                                ctx=ctx, seams=seams)
+            # Design 3.3: orphaned registered fixtures (parent pid 1, this uid)
+            # are reaped by the pre-check, after a fresh census (precheck F6).
             fingerprints[pack] = result["fingerprint"]
             thin |= (result.get("margin") or {}).get("status") == "thin"
             flags.update(row if isinstance(row, str) else row["code"] for row in result["predicted_flags"])

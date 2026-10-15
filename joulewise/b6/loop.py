@@ -170,7 +170,23 @@ class Loop:
         s = self.state["session"]
         layout = compose.layout(queue.Selection(tuple(s["packs"]), s["round"]), self.regs, self.repo)
         attempt = s.get("launch_attempt", 0)
-        return replace(layout, session_id=s["id"] + f"-a{attempt}") if attempt else layout
+        return replace(layout, session_id=s["id"] + (f"-a{attempt}" if attempt else ""))
+
+    def _fresh_id(self, base):
+        """A collection id never used before by this loop.
+
+        The driver keys its staging, plan and terminal records by this id, so a
+        reused id (a pack held and resumed in the same round, or a new smoke
+        after a failed one) would re-desk the old collection instead of running
+        a new one. The first use keeps the plain id.
+        """
+        used = self.state.setdefault("used_ids", [])
+        candidate, n = base, 1
+        while candidate in used:
+            n += 1
+            candidate = f"{base}-n{n}"
+        used.append(candidate)
+        return candidate
 
     def _prepared(self, smoke=False):
         return Prepared(**self.state["session"]["smoke_prepared" if smoke else "prepared"])
@@ -191,6 +207,7 @@ class Loop:
             return
         self.state.pop("idle_reasons", None)
         layout = compose.layout(selection, self.regs, self.repo)
+        layout = replace(layout, session_id=self._fresh_id(layout.session_id))
         self.state["session"] = {"id": layout.session_id, "packs": list(selection.packs), "round": selection.round,
                                  "registrations": {p: {"data": dict(self.regs[p].data), "commit_time": self.regs[p].commit_time}
                                                    for p in selection.packs}}
@@ -331,7 +348,8 @@ class Loop:
         prefix = "smoke_" if smoke else ""
         if smoke and "smoke_prepared" not in session:
             layout = self._layout()
-            layout = replace(layout, session_id=layout.session_id + f"-smoke-{session.get('smoke_attempt', 0)}")
+            layout = replace(layout, session_id=self._fresh_id(
+                layout.session_id + f"-smoke-{session.get('smoke_attempt', 0)}"))
             prepared = self.lanes.driver.prepare_session(layout, compose.render(layout), smoke=True,
                 keep=compose.smoke_keep(layout), staging_root=self.root / "staging" / layout.session_id)
             if self._missing(prepared):

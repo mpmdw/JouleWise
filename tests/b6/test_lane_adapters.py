@@ -52,7 +52,7 @@ class AdapterTests(DeskCase):
         calls = []
         def check(campaign, measurement, state_root, **kwargs):
             calls.append((campaign, kwargs))
-            self.assertFalse(kwargs['reap'])
+            self.assertNotIn('reap', kwargs)  # production reaps registered orphans (design 3.3)
             self.assertEqual(kwargs['registration_dir'], self.measurement / 'configs/b6/registration')
             self.assertEqual(sum(row['copies'] for row in kwargs['disk_targets']), 1)
             return {'fingerprint': {'campaign': campaign}, 'predicted_flags': [{'code': 'meter.absent'}],
@@ -98,8 +98,9 @@ class AdapterTests(DeskCase):
         self.assertEqual(result.certain_exclusion, ())
         self.assertIn('precheck.acceptance_unavailable', result.predicted_flags)
         record = json.loads(next((case / 'loop/staging/s/precheck').rglob('precheck.json')).read_text())
-        self.assertIn('orphans_observed', record['readings'])
-        self.assertNotIn('orphans_killed', record['readings'])
+        # The production pre-check reaps registered orphans (design 3.3); the
+        # fake census has none, and the fake kill would fail the test if called.
+        self.assertEqual(record['readings']['orphans_killed'], {'rows': [], 'error': None})
 
     def test_resolver_binds_every_real_adapter(self):
         from joulewise.b6.lanes import resolve, LaneMissing
@@ -235,13 +236,36 @@ class DriverStatusTests(DeskCase):
         self.assertEqual(self.driver.status(handle), Done(1, None))
 
     def test_existing_plan_is_a_no_second_install_key(self):
+        from joulewise.b6.driver_lane import write
         from joulewise.b6.lanes import Running
         path = Path(self.prepared.plan_path)
         path.parent.mkdir()
-        path.write_text('{}')
+        write(path, {'t0_epoch_s': 1800000480})
+        write(self.meta, {**self.metadata, 'install_rc': 0})
         for _ in range(2):
             self.assertEqual(self.driver.launch(self.prepared), Running(str(self.meta)))
         self.assertEqual(self.calls, [])
+
+    def test_plan_without_a_completed_install_installs_once_or_stops_after_t0(self):
+        # A crash between the plan write and the install, or a failed install,
+        # must not be read as a launched session (which status would then
+        # report as lost and the desk as a structural crash).
+        from joulewise.b6.driver_lane import read, write
+        from joulewise.b6.lanes import Running
+        path = Path(self.prepared.plan_path)
+        path.parent.mkdir()
+        write(path, {'t0_epoch_s': 1800000480})
+        Path(self.metadata['paths']['staging']).mkdir()
+        self.driver.clock = lambda: 1800000480 - 301
+        self.assertEqual(self.driver.launch(self.prepared), Running(str(self.meta)))
+        self.assertEqual(len([argv for argv in self.calls if argv[0].endswith('install_night_agent.sh')]), 1)
+        self.assertEqual(read(self.meta)['install_rc'], 0)
+        self.driver.launch(self.prepared)
+        self.assertEqual(len([argv for argv in self.calls if argv[0].endswith('install_night_agent.sh')]), 1)
+        write(self.meta, self.metadata)
+        self.driver.clock = lambda: 1800000480 - 299
+        with self.assertRaisesRegex(RuntimeError, 'never installed'):
+            self.driver.launch(self.prepared)
 
     def test_t0_is_bound_at_launch_with_installer_margin(self):
         from joulewise.b6.driver_lane import read, write

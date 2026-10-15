@@ -124,9 +124,19 @@ class DriverLane:
         path = metadata_path(prepared)
         metadata = read(path)
         if Path(prepared.plan_path).exists():
-            # A durable plan is the launch idempotency key, even across a crash
-            # between installer completion and publication of loop state.
-            return Running(str(path))
+            # A durable plan plus a completed install (or a job launchd holds,
+            # or a terminal record) is the launch idempotency key, even across
+            # a crash between installer completion and publication of loop
+            # state. A plan whose install never completed was never launched:
+            # install it now while its t0 still leaves the installer its 300 s,
+            # else stop and say so (the loop holds; a resume gets a new id).
+            terminal = Path(prepared.terminal_path).exists()
+            if metadata.get("install_rc") == 0 or terminal or self._job(LABELS[0]):
+                return Running(str(path))
+            t0 = read(prepared.plan_path).get("t0_epoch_s")
+            if type(t0) not in (int, float) or t0 - self.clock() < 300:
+                raise RuntimeError("plan written but its night job was never installed; t0 has passed")
+            return self._install_and_record(path, metadata)
         inputs = dict(metadata["inputs"])
         lead = self.config.get("launch_lead_s", 420)
         if type(lead) not in (int, float) or lead < 300:
@@ -141,6 +151,9 @@ class DriverLane:
             raise ValueError("prepared and written window_max_s disagree")
         metadata.update(inputs=inputs, runs_roots=list(record["runs_roots"].values()), install_attempted=True)
         write(path, metadata)
+        return self._install_and_record(path, metadata)
+
+    def _install_and_record(self, path, metadata):
         installed = self._installer(metadata)
         metadata["install_rc"] = installed.returncode
         (Path(metadata["paths"]["staging"]) / "install.stdout").write_text(installed.stdout or "")

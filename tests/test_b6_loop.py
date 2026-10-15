@@ -480,6 +480,20 @@ class LoopTests(unittest.TestCase):
         self.tick_to("HOLD_LOOP")
         self.assertEqual(len(self.messages("smoke_hold")), 2)
 
+    def test_resumed_pack_in_same_round_gets_fresh_session_and_smoke_ids(self):
+        # The driver keys staging, plan and terminal records by these ids; a
+        # reused id would re-desk the failed smoke instead of running a new one.
+        self.desk.smokes = [SmokeResult("fail", ("stage_failed:x",)), SmokeResult("pass")]
+        self.tick_to("SMOKE_DESK")
+        self.loop.tick()
+        self.assertEqual(self.state()["packs"]["alpha"]["status"], "held")
+        self.loop.control("resume", pack="alpha")
+        self.tick_to("SMOKE_DESK")
+        self.assertEqual(self.desk.smoke_calls, ["r1-alpha-smoke-0-smoke"])
+        self.loop.tick()
+        self.assertEqual(self.desk.smoke_calls, ["r1-alpha-smoke-0-smoke", "r1-alpha-n2-smoke-0-smoke"])
+        self.assertEqual(self.state()["session"]["id"], "r1-alpha-n2")
+
     def test_certain_exclusion_next_pack_same_code_hold_and_thin_margin(self):
         self.precheck.results = [PrecheckResult(certain_exclusion=(Exclusion("model.identity_mismatch"),))] * 2
         self.loop.tick()

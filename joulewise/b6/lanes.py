@@ -222,8 +222,11 @@ class Waker:
             label = f"com.joulewise.b6wake.{seq}"
             path = self.root / f"{label}.plist"
             argv = [arg.replace("{wake_record}", str(record_path.resolve())) for arg in self.argv]
+            # The woken session's output stays beside its wake record.
             path.write_bytes(plistlib.dumps({"Label": label, "ProgramArguments": argv,
-                                             "RunAtLoad": True, "ProcessType": "Background"}))
+                                             "RunAtLoad": True, "ProcessType": "Background",
+                                             "StandardOutPath": str(self.root / f"{label}.out"),
+                                             "StandardErrorPath": str(self.root / f"{label}.err")}))
             record.update(bootstrap_attempted=True, job_deferred=False)
             record_path.write_text(json.dumps(record) + "\n")
             self.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(path)])

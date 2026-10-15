@@ -14,33 +14,75 @@ from joulewise.b6.lanes import SessionLine, SmokeResult
 from joulewise.flags.catalog import load_catalog
 
 
+# The loop's production runner (scripts/b6_loop.py live_run) gives every call
+# without its own timeout 120 s, which would kill a session harvest (about 45
+# minutes for a block-5-sized session) and record it as a program fault.
+HARVEST_TIMEOUT_S = 4 * 3600
+
+
 class DeskLane:
     def __init__(self, measurement, loop_root, run=subprocess.run, *, env=None):
         self.measurement, self.root, self.run = Path(measurement), Path(loop_root), run
         self.env = env
 
     def _advance(self, metadata):
+        measurement = Path(metadata["paths"]["measurement"])
+        session_id = metadata["inputs"]["bracket_session_id"]
+        flags = []
+        if metadata.get("lost") and not metadata.get("bracket_aborted"):
+            # The job is gone with no terminal record (driver_lane.status), so
+            # nothing will ever close this session's bracket. Close it as an
+            # abort (the ledger keeps every partial receipt), so the pin can
+            # advance and the next session's plan can reserve the ledger.
+            from joulewise import calibration_ledger
+            try:
+                calibration_ledger.abort_bracket_session(measurement / plan.DEFAULT_LEDGER_RELATIVE,
+                    session_id=session_id, reason="b6_chain_lost_no_terminal")
+                metadata["bracket_aborted"] = True
+                flags.append("records.terminal_record_absent")
+            except Exception as exc:
+                metadata["bracket_abort"] = {"status": "FAILED", "error": type(exc).__name__}
         try:
-            record = plan.advance_ledger_pin(Path(metadata["paths"]["measurement"]),
-                session_id=metadata["inputs"]["bracket_session_id"], operator_identity="b6-session-desk",
-                attestation_reason="chain exit before session harvest")
+            record = plan.advance_ledger_pin(measurement,
+                session_id=session_id, operator_identity="b6-session-desk",
+                attestation_reason="chain exit before session harvest" if not metadata.get("lost")
+                else "chain lost without a terminal record; bracket session aborted before harvest")
             metadata["pin_advance"] = record
-            return []
+            return flags
         except Exception as exc:
             metadata["pin_advance"] = {"status": "FAILED", "error": type(exc).__name__}
-            return ["records.pin_ledger"]
+            return flags + ["records.pin_ledger"]
 
     def evaluate_smoke(self, prepared, done):
         metadata = read(metadata_path(prepared))
         def run(argv, **kwargs):
-            return self.run(argv, **{**kwargs, "env": self.env, "capture_output": True, "text": True})
+            return self.run(argv, **{"timeout": HARVEST_TIMEOUT_S, **kwargs, "env": self.env,
+                                     "capture_output": True, "text": True})
         report = smoke.desk(smoke.SmokePrepared.from_json(metadata["smoke"]),
                             driver_exit=done.chain_rc, run=run)
         # smoke.desk advances the smoke clone's pin before the shared harvest.
-        codes = set(report["flags"])
-        if report["errors"]:
-            codes.add("records.collector_failed")
-        return SmokeResult(report["status"], tuple(sorted(codes)))
+        # The loop holds on these codes and compares them across packs (the
+        # same failure on two packs holds the loop), so they name the causes
+        # of the status, not every recorded flag of the smoke.
+        status, codes = report["status"], set()
+        if status == "physics":
+            _, physical = smoke._harvest_hooks()
+            codes = {code for code in report["flags"] if physical(code)} or {"smoke.physics"}
+        elif status == "fail":
+            for row in report["stages"]:
+                if row["rc"] not in row["success_exit_codes"]:
+                    codes.add("stage_failed:" + str(row["stage_id"]))
+            if report["driver_exit"] not in (0, 6):
+                codes.add(f"driver_exit:{report['driver_exit']}")
+            if report["harvest_exit"] not in (0, 6):
+                codes.add(f"harvest_exit:{report['harvest_exit']}")
+            acceptance = report.get("acceptance") or {}
+            if acceptance.get("structural"):
+                codes.update(acceptance.get("reasons") or ("acceptance.structural",))
+            if report["errors"]:
+                codes.add("records.collector_failed")
+            codes = codes or {"smoke.failed"}
+        return SmokeResult(status, tuple(sorted(codes)))
 
     def session_desk(self, prepared, done):
         started = time.monotonic()
@@ -58,12 +100,13 @@ class DeskLane:
             argv.append("--allow-missing-terminal")
         harvest_started = time.monotonic()
         try:
-            result = self.run(argv, check=False, capture_output=True, text=True, env=self.env)
+            result = self.run(argv, check=False, capture_output=True, text=True, env=self.env,
+                              timeout=HARVEST_TIMEOUT_S)
             harvest_rc = result.returncode
             # Keep program diagnostics local; only structure reaches SessionLine.
             (paths["staging"] / "harvest.stdout").write_text(result.stdout or "")
             (paths["staging"] / "harvest.stderr").write_text(result.stderr or "")
-        except OSError:
+        except (OSError, subprocess.TimeoutExpired):
             harvest_rc = 3
         harvest_seconds = time.monotonic() - harvest_started
         reg = read(self.measurement / f'configs/b6/packs/{metadata["packs"][0]}/registration.json')
