@@ -539,6 +539,25 @@ class ChainTests(unittest.TestCase):
         for cid in kept.cells:
             for run in kept.kept_run_ids(cid):
                 self.assertTrue((cooldowns.get(run) or {}).get('manifest'),run)
+    def test_39_lineage_pack_digest_is_the_committed_pack_tree(self):
+        # Production publishes the measurement clone's committed pack-tree digest;
+        # the claim gate recomputes it at the lineage's pack root to authenticate
+        # the frozen consumer identities of each contrast arm.
+        from types import SimpleNamespace
+        from joulewise.analysis_engine import inputs as ai
+        from joulewise.bundle_read import BundleReader
+        for pack in PACK_IDS:
+            w=self.window(pack);kept=self.kept_composition(pack)[1]
+            run=sorted(kept.kept_run_ids(sorted(kept.cells)[0]))[0]
+            reader=BundleReader(w.claim/run)
+            lineage=ai.authenticate_bundle_launch_lineage(w.claim/run,config=reader.raw_config(),
+                metadata=reader.raw_metadata(),require_completion=False)
+            self.assertEqual(lineage['pack_sha256'],ai.committed_pack_tree_sha256(Path(lineage['pack_root'])),pack)
+            if pack=='gamma':
+                manifest=json.loads((ROOT/'configs/campaigns'/PACK_IDS[pack]/'analysis_manifest_v3.json').read_bytes())
+                for contrast in manifest['contrasts']:
+                    for family in (contrast['condition_a_id'],contrast['condition_b_id']):
+                        self.assertTrue(ai._frozen_consumer_identity_set([SimpleNamespace(launch_lineage=lineage)],family),family)
     def test_40_c4_alpha(self):self.check_c4('alpha')
     def test_34_relocated_allowance_artifact_authenticates(self):
         w=self.window('alpha')

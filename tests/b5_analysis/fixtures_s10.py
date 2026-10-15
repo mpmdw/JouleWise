@@ -142,6 +142,23 @@ def conditional_aggregate_lineage_seam():
         yield
 
 
+def commit_checkout(root):
+    """Make a synthetic measurement checkout a Git clone with its files committed.
+
+    The measurement clone is a Git checkout with the sealed packs committed at
+    HEAD: lineage publication records the committed pack-tree digest (D-134,
+    window_lineage.committed_pack_sha256), and the claim gate recomputes it at
+    the lineage's pack root (inputs._frozen_consumer_identity_set). One
+    synthetic commit of the checkout's own bytes, at build and at restore.
+    """
+    git=lambda *a:subprocess.run(['git','-C',str(root),*a],check=True,capture_output=True,text=True).stdout
+    if not (Path(root)/'.git').exists():git('init','-q')
+    git('add','--all')
+    if git('status','--porcelain'):
+        git('-c','user.name=S10 synthetic measurement clone','-c','user.email=s10@example.invalid',
+            '-c','commit.gpgsign=false','commit','-q','-m','S10 synthetic measurement clone')
+
+
 def sha(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 def put(path,value):s0.put(path,value)
 
@@ -334,6 +351,9 @@ def chain_fixture() -> ChainFixture:
                               ('calibration_ledger_head.json','configs/calibration/calibration_ledger_head.json')]:
             ledger_target=Path(descriptor['measurement_root'])/relative;ledger_target.parent.mkdir(parents=True,exist_ok=True)
             shutil.copyfile(archive/'sources/ledger'/name,ledger_target)
+        # The restored measurement checkout is again a Git clone with the
+        # archived sealed pack committed (see commit_checkout).
+        commit_checkout(Path(descriptor['measurement_root']))
         descriptor['harvest_record_sha256']=sha(archive/'harvest.json')
         structure=json.loads((directory/'STRUCTURE.json').read_bytes())
         claim=Path(descriptor['claim_runs_root'])
@@ -507,9 +527,13 @@ def build_export(pack,destination):
                'ledger_schema':ledger.LEDGER_SCHEMA})
     # Completion records are published only after every synthetic launch.
     for name in ('chain.exited','result.json'):(w.custody/'night'/name).unlink()
+    # Production publishes the committed pack-tree digest of the measurement
+    # clone's pack (the driver's pack_sha256), not the plan tree's file digest.
+    commit_checkout(w.measurement)
     published=lineage.publish_window_lineage(pack_root=w.pack,pack_id=PACK_IDS[pack],plan_id=plan['plan_id'],
         window_id=identity['window_id'],bracket_session_id=session_id,pre_attempt_id=pre.name,post_attempt_id=post.name,
-        claim_runs_root=w.claim,bound_runs_root=w.bound,custody_root=w.custody,pack_sha256=sha(w.pack/'plan_tree.json'),
+        claim_runs_root=w.claim,bound_runs_root=w.bound,custody_root=w.custody,
+        pack_sha256=lineage.committed_pack_sha256(w.pack),
         arm_decision_path=w.custody/'hazards/arm.json',boot_session_id=SYNTHETIC_BOOT)
     roster=h.build_roster(w.pack,w.measurement)
     members=ordered_members(roster,tree,w.measurement,w.pack)
