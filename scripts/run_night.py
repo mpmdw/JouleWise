@@ -1544,8 +1544,15 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
 
 
 def _resolve_courier_bin(
-    requested: Path | None,
+    requested: Path | None, *, plan: NightPlan | None = None,
 ) -> tuple[Path | None, str | None, dict[str, str] | None]:
+    # Block six (design 3.1, 6.4) sends no mail through an agent: its courier is
+    # a program, never `claude`, and a missing courier is never substituted.
+    if plan is not None:
+        from joulewise.b6 import courier as b6_courier
+        if b6_courier.block_six_plan(plan):
+            found, error = b6_courier.resolve(requested, plan.measurement_root)
+            return found, error, None
     substitution: dict[str, str] | None = None
     if requested is not None:
         candidate = requested

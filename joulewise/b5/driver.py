@@ -2115,7 +2115,11 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
                           started_monotonic_ns: int, courier_bin: Path | None, seams: Seams,
                           window: _Window, keep: Any) -> int:
     custody, night = window.custody, window.night
-    courier, courier_error, substitution = rt._resolve_courier_bin(courier_bin)
+    from joulewise.b6 import courier as b6_courier
+    if b6_courier.block_six_plan(plan):
+        courier, courier_error, substitution = rt._resolve_courier_bin(courier_bin, plan=plan)
+    else:
+        courier, courier_error, substitution = rt._resolve_courier_bin(courier_bin)
     rt._record_courier_substitution(custody, substitution)
     if courier is None:
         window.note(f"courier unavailable ({courier_error}); collection proceeds, reporting is durable-record only")
