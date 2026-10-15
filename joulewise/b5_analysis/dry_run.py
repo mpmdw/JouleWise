@@ -432,7 +432,11 @@ class RunState:
         if not path.absolute().is_relative_to(self.restricted.absolute()) or path.resolve() != path.absolute():
             raise AnalysisRefusal('custody_path_invalid')
         digest=_sha(path)
-        fixed=(role in ('pinset','final_pinset','mint_inputs','plan_alpha','plan_beta','finalized_manifest','rendered_fills','closeout','ratio_table')
+        # A file another program names by its path keeps its name: the finalized
+        # manifest records its exclusions attachment by the name the finalizer
+        # gave it, and the close-out and claim gate replay that path.
+        fixed=(role in ('pinset','final_pinset','mint_inputs','plan_alpha','plan_beta','finalized_manifest',
+                        'finalized_exclusions','rendered_fills','closeout','ratio_table')
                or role.startswith('role_census_')
                or role.startswith(('rereduced_','gamma_pack_')) or path.parent.name=='disclosures')
         if not fixed and not path.name.startswith(digest):

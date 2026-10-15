@@ -1059,6 +1059,22 @@ class CustodyPathWriteTests(unittest.TestCase):
             self.assertFalse((root/'escaped.json').exists())
             self.assertFalse((root/'absolute.json').exists())
 
+    def test_finalization_exclusions_attachment_keeps_the_name_the_manifest_records(self):
+        # S10 joined run: registering the finalizer's exclusions attachment
+        # renamed it with a digest prefix, so the finalized manifest's recorded
+        # path no longer existed and the close-out refused
+        # d165_closeout_driver_manifest_invalid (exclusions digest mismatch).
+        with tempfile.TemporaryDirectory(prefix='s10-exclusions-name-') as tmp:
+            root=Path(tmp);restricted=root/'restricted'
+            s=d.RunState('blind-dry-run',root/'index.json',restricted,'a'*40)
+            attachment=restricted/d.FINALIZATION/('analysed-attempt-exclusions-'+'c'*64+'.json')
+            attachment.parent.mkdir(parents=True);attachment.write_bytes(b'{"structure":true}\n')
+            item=s.register('finalized_exclusions',attachment)
+            self.assertTrue(attachment.is_file())
+            self.assertEqual(item['name'],attachment.relative_to(restricted).as_posix())
+            other=restricted/'outputs/other.json';other.parent.mkdir();other.write_bytes(b'{}\n')
+            self.assertTrue(s.register('other',other)['name'].startswith('outputs/'+hashlib.sha256(b'{}\n').hexdigest()))
+
 
 class CustodyDocumentSchemaTests(unittest.TestCase):
     def test_generated_documents_use_owning_binding_and_role_schemas(self):
