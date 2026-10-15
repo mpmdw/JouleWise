@@ -1240,7 +1240,15 @@ def validate_install(args, repo):
             raise Refused(3, "unable to read {} from {} checkout".format(name, checkout))
         if result.stdout.strip() != expected:
             raise Refused(3, "plan {} does not match {} checkout HEAD".format(name, checkout))
-    courier = shutil.which("claude")
+    if getattr(args, "courier_bin", None):
+        # Block 6 (design 3.1 and 6.4): the smoke and the loop's sessions send no
+        # mail through an agent, so their night job names a program courier.
+        candidate = Path(args.courier_bin)
+        if not candidate.is_absolute() or not candidate.is_file() or not os.access(candidate, os.X_OK):
+            raise Refused(2, "courier unavailable: --courier-bin must name an absolute executable file")
+        courier = str(candidate)
+    else:
+        courier = shutil.which("claude")
     if not courier:
         raise Refused(2, "courier unavailable: command -v claude found no executable")
     courier_path = str(Path(courier).parent) + ":/usr/bin:/bin:/usr/sbin:/sbin"
@@ -1403,7 +1411,7 @@ def main(argv=None):
         usage="%(prog)s --plan PLAN.json [--python ABS_PATH] "
               "[--launchd-probe] [--probe-timeout-s S] [--probe-max-age-s S] "
               "[--hour H] [--minute M] [--uninstall] "
-              "[--render-only DIR] [--launchctl-bin PATH]")
+              "[--render-only DIR] [--launchctl-bin PATH] [--courier-bin ABS_PATH]")
     parser.add_argument("--plan", required=True, type=Path)
     parser.add_argument("--python")
     parser.add_argument("--launchd-probe", action="store_true")
@@ -1414,6 +1422,7 @@ def main(argv=None):
     parser.add_argument("--uninstall", action="store_true")
     parser.add_argument("--render-only", type=render_directory)
     parser.add_argument("--launchctl-bin", default="launchctl")
+    parser.add_argument("--courier-bin")
     try:
         args = parser.parse_args(argv)
         import math
