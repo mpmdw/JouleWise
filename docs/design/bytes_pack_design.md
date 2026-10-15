@@ -264,3 +264,11 @@ W and R match the pilot's accounting to the byte on four models. The configs and
    - 8B-8bit's revision is pending and its group_size of 64 is assumed and recorded unverified;
    - in single-model sub-packs (s5, s6) the midpoint falls between the quad halves, and the analysis must not assume it splits models;
    - fixed packs bypass the 265-minute science cap, and s4's planned 254 min leaves 11 min.
+
+## Addendum 6 (15:58 PDT): the config fix round (Sol, lane/2026-10-15-bytes-config 114f94256)
+
+Addendum 5 items 1-4 are applied, and the reviewer's probes now pass: the campaign ids resolve, pass 2 selects the reversed tree, the 122B vision probe exits 0, and the cache has 512 passes / 2,560 positions. 22 targeted tests pass.
+
+There was one conflict with existing code: block 6's validator requires minimum_sessions ≥ 1. `minimum_sessions` is read only by precision stopping (loop.py:549, queue.py:69), and BYTES has precision null, so for BYTES it has no effect.
+
+Ruling: both passes register 1/1. "Minimum one pass" is a rule of the analysis: the paper prints pass 2 where it exists and states the per-model pass count. No validator change. Applied by the lead on the config lane.
