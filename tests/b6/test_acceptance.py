@@ -305,7 +305,7 @@ class ArchiveAndCliTests(unittest.TestCase):
         self.assertNotIn("bound_j", evidence.runtime["_b6"]["neg8"])
         night = self.archive / "sources/night-custody/night"
         night.mkdir(parents=True)
-        (night / "chain-stages.jsonl").write_text(json.dumps({"stage_id": "chain.stop", "kind": "operative_bound_above_stop", "rc": 12}) + "\n")
+        (night / "chain-stages.jsonl").write_text(json.dumps({"stage_id": "chain.stop", "kind": "operative_bound_above_stop", "rc": 13}) + "\n")
         self.assertEqual(self.read().stop_reason, "operative_bound_above_stop")
         write_json(self.archive / "sources/claim-runs/s0/status.json", {"status": "failed"})
         self.assertEqual(self.read().stages[0].members[0].status, "failed")

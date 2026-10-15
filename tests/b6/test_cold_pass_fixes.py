@@ -248,14 +248,21 @@ class FullRoundTests(DeskCase):
 
     def test_physical_and_opening_no_bound_stops_rotate(self):
         for stop, status, cause in [('night_aborted_agent_present', 'physics_stopped', 'agent'),
+                ('night_stopped_disk_low', 'physics_stopped', 'disk'),
+                ('night_stopped_monitor_outage', 'physics_stopped', 'sampler'),
+                ('night_window_exceeded', 'physics_stopped', 'time_limit'),
+                ('non_observer_process_busy', 'physics_stopped', 'contention'),
                 ('operative_bound_above_stop', 'physics_stopped', 'calibration.operative_bound_above_stop'),
-                ('pre_calibration_screen_failed', 'not_counting', 'CALIBRATION,NEG8,ROSTER')]:
+                ('pre_calibration_screen_failed', 'not_counting', 'CALIBRATION,NEG8,ROSTER'),
+                ('pre_calibration_capture_failed', 'not_counting', 'CALIBRATION,NEG8,ROSTER')]:
             with self.subTest(stop=stop):
                 r, attempt = self.run_round(stop=stop)
                 self.assertEqual(attempt['outcomes']['alpha'], {'status': status, 'cause': cause}, attempt['line'])
                 self.assertTrue(attempt['line']['structure_ok'])
-                r.loop.tick()
-                r.loop.tick()
+                from joulewise.b5 import plan
+                self.assertFalse(plan.ledger_head_status(r.measurement)['open_sessions'])
+                write(r.control, {**read(r.control), 'stop': None})
+                r.until('SMOKE_DESK')
                 self.assertEqual(r.state()['session']['packs'], ['beta'])
 
     def test_exit4_and_acceptance_unavailable_reharvest_into_new_archive(self):

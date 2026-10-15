@@ -349,8 +349,7 @@ class Loop:
         if not smoke and "started" not in session and any(
                 queue.done_reason(self.state, self.regs[p], self.clock(), next_t0=self._next_t0())
                 for p in session["packs"]):
-            self.state["session"] = None
-            self._transition("NEXT")
+            self._drop_unarmed_session()
             return
         prefix = "smoke_" if smoke else ""
         if smoke and "smoke_prepared" not in session:
@@ -450,14 +449,24 @@ class Loop:
         self._transition("HOLD_LOOP")
         self._event("owner_no_ack", "owner_no", wake=False)
 
+    def _drop_unarmed_session(self):
+        session = self.state["session"]
+        if session.get("notice_key"):
+            self.mailer.close_notice(session["notice_key"])
+        self.state.setdefault("unarmed_sessions", []).append({
+            "session_id": session["id"], "packs": session["packs"],
+            "notice_key": session.get("notice_key"), "status": "never_armed",
+            "reason": "pack_closed", "epoch_s": self.clock()})
+        self.state["session"] = None
+        self._transition("NEXT")
+
     def _arm_wait(self):
         s = self.state["session"]
         if self.clock() < s["notice_sent"] + 1800:
             return
         if any(queue.done_reason(self.state, self.regs[p], self.clock(), next_t0=self._next_t0())
                for p in s["packs"]):
-            self.state["session"] = None
-            self._transition("NEXT")
+            self._drop_unarmed_session()
             return
         stop = self._stop()
         if self.state.get("stop_probe_unavailable"):

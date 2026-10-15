@@ -303,6 +303,23 @@ class ReviewRegressionTests(DeskCase):
         return prepared, DriverLane(root / 'm', root / 'loop', run, launchctl_bin='/synthetic/launchctl',
                                     group_alive=lambda pgid: False)
 
+    def test_screen_exit_classification_with_and_without_stop_journal(self):
+        from joulewise.b6.driver_lane import metadata_path, write
+        from joulewise.b6.lanes import Done, Running
+        for rc, kind, physical in ((13, 'operative_bound_above_stop', 'calibration.operative_bound_above_stop'),
+                                   (12, 'pre_calibration_screen_failed', None)):
+            for journal in (True, False):
+                with self.subTest(rc=rc, journal=journal):
+                    prepared, driver = self.driver(f'exit-{rc}-{journal}', '')
+                    night = Path(prepared.terminal_path).parent
+                    night.mkdir(parents=True)
+                    rows = [{'stage_id': 'reservation', 'kind': 'bracket_reservation', 'rc': 0}]
+                    if journal:
+                        rows.append({'stage_id': 'chain.stop', 'kind': kind, 'rc': rc})
+                    (night / 'chain-stages.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in rows))
+                    write(night / 'result.json', {'verdict': 'CHAIN_STOPPED', 'chain_exit_code': rc})
+                    self.assertEqual(driver.status(Running(str(metadata_path(prepared)))), Done(rc, physical))
+
     def test_arm_census_and_blocking_unmeasured_instrument_are_physics_refusals(self):
         from joulewise.b6.driver_lane import metadata_path, write
         from joulewise.b6.lanes import Done, Refused, Running

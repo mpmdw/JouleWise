@@ -570,6 +570,8 @@ class LoopTests(unittest.TestCase):
                 if self.state().get('state') != 'NEXT':
                     self.loop.control('resume')
                 self.tick_to(target)
+                notice_key = self.state()['session']['notice_key']
+                self.assertTrue(self.mailer.entry(notice_key)['delivered'])
                 end = self.clock() + 300
                 state = self.state()
                 for reg in state['session']['registrations'].values():
@@ -580,6 +582,11 @@ class LoopTests(unittest.TestCase):
                 self.assertEqual(self.state()['state'], 'NEXT')
                 self.assertEqual(self.state()['attempts'], [])
                 self.assertEqual(self.state()['packs']['alpha']['attempts_since_resume'], 0)
+                self.assertTrue(self.mailer.entry(notice_key).get('close_pending') or
+                                self.mailer.entry(notice_key)['receipt'] in self.transport.closed)
+                dropped = self.state()['unarmed_sessions'][-1]
+                self.assertEqual(dropped['notice_key'], notice_key)
+                self.assertEqual(dropped['status'], 'never_armed')
 
     def test_registration_pending_rejudges_without_forcing_a_smoke(self):
         self.desk.lines = [SessionLine("r1-alpha", ("alpha",), harvest_rc=6)]

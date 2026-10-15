@@ -14,7 +14,7 @@ import time
 from joulewise.b5 import plan
 from joulewise.b6 import desk_identity, plan_inputs, registration, session_paths, smoke as smoke_module
 from joulewise.b6.lanes import Done, LaneMissing, Prepared, Refused, Running
-from joulewise.session_structure import PHYSICAL_STOP_CODES, _physical
+from joulewise.session_structure import CHAIN_STOP_EXITS, PHYSICAL_STOP_CODES, _physical
 
 LABELS = ("com.joulewise.night", "com.joulewise.night.deadman")
 ARM_UNMEASURED_REFUSES = frozenset({"instrument"})  # joulewise.b5.driver, not imported at the desk
@@ -278,7 +278,8 @@ class DriverLane:
                 reason = None  # the generic arm record does not identify physics
             if reason is None:
                 stop = next((row for row in reversed(journal) if row.get("stage_id") == "chain.stop"), {})
-                reason = PHYSICAL_STOPS.get(stop.get("reason", stop.get("kind")))
+                stop_kind = stop.get("reason", stop.get("kind")) if stop else CHAIN_STOP_EXITS.get(rc)
+                reason = PHYSICAL_STOPS.get(stop_kind)
             return Done(rc if type(rc) is int else (0 if result.get("verdict") == "GO" else 1), reason)
         if self._job_pending_or_running(LABELS[0], metadata):
             return handle

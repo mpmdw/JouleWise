@@ -7,7 +7,7 @@ import subprocess
 import time
 
 from joulewise import desk_compress, session_structure
-from joulewise.b5 import plan
+from joulewise.b5 import chain, plan
 from joulewise.b6 import smoke
 from joulewise.b6.driver_lane import metadata_path, read, write
 from joulewise.b6.lanes import SessionLine, SmokeResult
@@ -42,6 +42,57 @@ class DeskLane:
                 flags.append("records.terminal_record_absent")
             except Exception as exc:
                 metadata["bracket_abort"] = {"status": "FAILED", "error": type(exc).__name__}
+        elif not metadata.get("lost"):
+            # A stopped chain may leave either slot open. Complete custody
+            # must use the recovery CLI's authenticated refit and screen;
+            # every remaining partial receipt is retained by the abort.
+            from joulewise import calibration_ledger
+            try:
+                status = plan.ledger_head_status(measurement)
+                resumed = set()
+                while session_id in status["open_sessions"]:
+                    slot = (status.get("open_session_next_slots") or {}).get(session_id) or {}
+                    name = slot.get("next_slot")
+                    if slot.get("custody_state") != "complete" or name in resumed:
+                        break
+                    resumed.add(name)
+                    try:
+                        night_plan = read(metadata["prepared"]["plan_path"])
+                        hazard = night_plan["hazard_window"]
+                        tree = read(Path(hazard["pack"]["pack_root"]) / "plan_tree.json")
+                        reservation = next(s for s in chain.stage_plan(tree) if s.kind == "bracket_reservation")
+                        argv = chain.stage_argv(reservation, hazard["bindings"], tree, measurement)
+                        frozen_plan = argv[argv.index("--plan") + 1]
+                        result = self.run([str(measurement / ".venv/bin/python"),
+                            str(measurement / "scripts/recover_calibration_ledger.py"),
+                            "--ledger", str(measurement / plan.DEFAULT_LEDGER_RELATIVE),
+                            "--head-pin", str(measurement / plan.HEAD_PIN_RELATIVE),
+                            "resume-finalize", "--session-id", session_id, "--slot", name,
+                            "--plan", frozen_plan], check=False, capture_output=True, text=True,
+                            timeout=120, env=self.env)
+                        record = {"slot": name, "rc": result.returncode,
+                                  "status": "FINALIZED" if result.returncode == 0 else "FAILED"}
+                        if result.returncode:
+                            flags.append("records.pin_ledger")
+                    except Exception as exc:
+                        record = {"slot": name, "status": "FAILED", "error": type(exc).__name__}
+                        flags.append("records.pin_ledger")
+                    metadata.setdefault("bracket_resume", []).append(record)
+                    status = plan.ledger_head_status(measurement)
+                if session_id in status["open_sessions"]:
+                    night = Path(metadata["paths"].get("custody", measurement)) / "night"
+                    stop = next((r.get("reason", r.get("kind")) for r in reversed(chain.stage_journal(night))
+                                 if r.get("stage_id") == "chain.stop"), None)
+                    stop = stop or read(night / "result.json").get("aborted_reason") or read(
+                        night / "hazard_result.json").get("aborted_reason")
+                    reason = stop or f"chain_exit:{metadata.get('chain_exit_code', 'unknown')}"
+                    calibration_ledger.abort_bracket_session(measurement / plan.DEFAULT_LEDGER_RELATIVE,
+                        session_id=session_id, reason=reason)
+                    metadata["bracket_aborted"] = True
+                    metadata["bracket_abort"] = {"status": "ABORTED", "reason": reason}
+            except Exception as exc:
+                metadata["bracket_abort"] = {"status": "FAILED", "error": type(exc).__name__}
+                flags.append("records.pin_ledger")
         try:
             record = plan.advance_ledger_pin(measurement,
                 session_id=session_id, operator_identity="b6-session-desk",
@@ -89,6 +140,7 @@ class DeskLane:
         path = metadata_path(prepared)
         metadata = read(path)
         paths = {key: Path(value) for key, value in metadata["paths"].items()}
+        metadata["chain_exit_code"] = done.chain_rc
         flags = self._advance(metadata)
         write(path, metadata)
         argv = [str(paths["measurement"] / ".venv/bin/python"),
@@ -122,14 +174,11 @@ class DeskLane:
         physical = done.physics_stop or structure["physical_stop"]
         if acceptance.get("physics_stop"):
             physical = physical or acceptance.get("physical_stop_kind") or "physics"
-        if physical and not metadata.get("lost"):
-            defects = []
         if metadata.get("lost") or (done.chain_rc != 0 and not physical and not structure["chain_stopped"]):
             defects.append("chain_crashed")
         # The acceptance function's own structural failures (design 13.1: for
         # example a whole stage absent while later stages ran) hold the loop too.
-        if not physical:
-            defects.extend(str(code) for code in acceptance.get("structural_failures") or ())
+        defects.extend(str(code) for code in acceptance.get("structural_failures") or ())
         structure.update(adapter_structure_defects=sorted(set(defects)))
         structure_path = paths["staging"] / "structure.json"
         write(structure_path, structure)
