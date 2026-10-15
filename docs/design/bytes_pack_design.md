@@ -207,3 +207,37 @@ The twin was written from the ruling text before Addenda 1 and 2. These rulings 
    - The twin's narrower restore (CHOICES 14) is replaced.
 9. **Rest fit near-collinearity** (twin note 5): print the VIF of BW and P̄_rails beside λ and ε_rest. Their intervals stay in H2's k. No word is drawn from λ.
 10. **Twin limits accepted:** no hazard-journal fallback for the meter offset (a stream without pairs gives no DC-input number, flagged), and the manifest reader is narrowed once `scripts/bytes_manifest.py` fixes the schema.
+
+## Addendum 4 (15:12 PDT): the executing review of the analysis (Opus cloud, JouleWise-data claude/bytes-analysis-review-opus @ 6039fff)
+
+Every finding is accepted. Fix round: Sol 6.1 xhigh on lane/2026-10-15-bytes-analysis.
+
+1. **W1, wrong.** A member the harvest excluded, or one without a usable record (missing bundle, token count not 512, non-finite or missing decode energy, re-reduction not succeeded, no decode envelope), removes its unit.
+   - It never stops the stage. Only a stratum below 5 kept units refuses that cell.
+   - Applies at every stage and in non-synthetic mode.
+2. **S2.** H2 follows item 6 exactly:
+   - k per boundary is 9, 9 and 11.
+   - The extended ε is primary.
+   - The tier fit is the two-term fit (BW and R/τ), and the deviations are measured from it.
+3. **S3.** The deviation interval adds (h + B)/T (item 7).
+4. **S4.** The two-pass half-width is the mean over passes of (h + B), not a pooled h (item 5). Per-pass words are printed as description in h1.json, with a pass dimension.
+5. **N5: H2 standard errors.** Errors in P̄ scale with P̄ (2 to 29 W across models), so homoscedastic OLS understates the spread; plain-95% coverage was 0.80 in the resident world.
+   - Primary H2 intervals use HC3 heteroscedasticity-robust standard errors with t at n − p df and the Bonferroni k. The OLS SE is printed beside them, labelled.
+   - The builder re-runs the reviewer's coverage harness (p03) in all three worlds and reports plain-95% and ruled-k coverage for HC3 and OLS.
+   - If HC3's plain-95% coverage is below 0.93 in any world, report NEEDS_RULING with the table. Do not pick another method.
+6. **S6.** Flagged-inclusive restores every catalog exclusion of a run with a valid energy record, NUMBER class included (item 8). Only status, bundle and validity failures stay out.
+7. **S7: drift allowance.**
+   - Computed from the session's NEG-8 reference rows (items 1 and 2), not from the manifest.
+   - E_ref and T_ref are the means of the kept start, midpoint and end references over the whole request.
+   - The idle-subtracted secondary uses the block-5 plan's idle-subtracted family allowance, as block 5 does.
+   - The synthetic campaign gains start, midpoint and end references, so this is tested.
+8. **S8: blinding.**
+   - (a) A `--stage blinded` path computes rails from the blinded export, so the twin agreement can run.
+   - (b) The meter join refuses a configuration whose key has not been released. Release is read from the key directory, never from the manifest's `synthetic` field.
+   - (c) At stage 1 only samples inside fit-model spans are parsed. A held-out configuration's raw meter samples are not loaded before stage 2.
+   - (d) The stage-1 commit adds the NEG-8 inputs and the SHA-256 of bytes_analysis.py.
+   - (e) The tier inputs committed at stage 1 are the fit models' only. The registration says so.
+9. **S9.** Print the VIF of BW and P̄_rails beside the rest fit.
+10. **F10.** Each phase edge uses the larger power of the two samples adjacent to the edge.
+11. **N11 battery.** The analysis relies on the harvest's `battery.assist` flag. The registration states that dependency.
+12. **N12.** Keep integers exact as the library does, and add ints, constant cells and zeros to the equivalence test. Alternatively, narrow the claim to floats and say so. The builder chooses and records it.
