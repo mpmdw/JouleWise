@@ -1260,6 +1260,20 @@
       "klass": "REPRESENTATION",
       "note": "Output of the network-time OFF action at the arm; recorded only, never read for wording."
     },
+    "notice.no_unreadable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Loop F6: the owner's NO reply or the remote STOP could not be read at arm; the session still armed."
+    },
+    "notice.undelivered": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Design 6.4 / pruning 7a decision 7: the arm notice was not delivered; the session still armed."
+    },
     "pack.identity_mismatch": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -1448,6 +1462,13 @@
       "family": "RECORDS",
       "klass": "REPRESENTATION",
       "note": "A NULL window (no chain launched): why, from the arm decision and the hazard result records as found (each read, absent or unreadable): go, the arm error and its type, the refusal reasons, the modules not passing, the verdict and the stage reached, with digits masked. Mock rehearsal round 3, R3-4. Disclosure only; a window that never launched holds no members."
+    },
+    "registration.after_first_session": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Design 16 item 2: the pack registration's commit is later than this session's start."
     },
     "registration.default_used": {
       "blinding": "STRUCTURE",

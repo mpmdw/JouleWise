@@ -131,6 +131,20 @@ COLLECTION_CODES = {
     }.items()
 }
 NEW_CODES.update(COLLECTION_CODES)
+# The unattended loop's own session-record codes (loop lane F5 and F6, deferred
+# to the merge). Records about records: they disclose and never remove data.
+LOOP_CODES = {
+    "registration.after_first_session": _entry(
+        "RECORDS", "REPRESENTATION", "DISCLOSE",
+        "Design 16 item 2: the pack registration's commit is later than this session's start."),
+    "notice.undelivered": _entry(
+        "RECORDS", "REPRESENTATION", "DISCLOSE",
+        "Design 6.4 / pruning 7a decision 7: the arm notice was not delivered; the session still armed."),
+    "notice.no_unreadable": _entry(
+        "RECORDS", "REPRESENTATION", "DISCLOSE",
+        "Loop F6: the owner's NO reply or the remote STOP could not be read at arm; the session still armed."),
+}
+NEW_CODES.update(LOOP_CODES)
 
 
 def build() -> bytes:

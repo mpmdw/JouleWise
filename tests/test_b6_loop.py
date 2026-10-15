@@ -766,7 +766,8 @@ class LoopTests(unittest.TestCase):
 
     def test_cli_live_runner_draft_reasons_github_delivery_and_stop_probe(self):
         repo, loop_root = self.root / "repo", self.root / "loop"
-        for relative in ("configs/b6/loop.json", "configs/campaigns/v5_claim_25g83/flag_catalog.json",
+        loop_catalog = json.loads((ROOT / "configs/b6/loop.json").read_text())["flag_catalog"]
+        for relative in ("configs/b6/loop.json", "configs/campaigns/v5_claim_25g83/flag_catalog.json", loop_catalog,
                          *(f"configs/b6/packs/{p}/registration.json" for p in ("alpha", "beta", "gamma"))):
             target = repo / relative
             target.parent.mkdir(parents=True, exist_ok=True)
