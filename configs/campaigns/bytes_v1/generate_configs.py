@@ -61,14 +61,16 @@ def assembly(model_id):
 def model_config(spec):
     model_id, name, family, pilot = spec
     revision = None
+    source = f"/Users/edr/jw_models/mlx-community/{name}"
     if pilot:
         p = json.loads((ROOT / "docs/design/bytes_pilot" / pilot).read_bytes())
-        snapshot = Path(p["snapshot"])
+        source = p["snapshot"]
+        snapshot = Path(source)
         if snapshot.parent.name == "snapshots":
             revision = snapshot.name
     if model_id == "qwen35-122b":
         revision = json.loads((ROOT / "configs/examples/mac_mlx_qwen35_122b.json").read_bytes())["model"]["revision"]
-    return {"name": name, "family": family, "source": f"/Users/edr/jw_models/mlx-community/{name}",
+    return {"name": name, "family": family, "source": source,
             "revision": revision, "weight_format": "mlx"}
 
 

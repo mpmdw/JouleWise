@@ -14,7 +14,7 @@
     "family": "qwen3_moe",
     "name": "Qwen3-30B-A3B-4bit",
     "revision": "d388dead1515f5e085ef7a0431dd8fadf0886c57",
-    "source": "/Users/edr/jw_models/mlx-community/Qwen3-30B-A3B-4bit",
+    "source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead1515f5e085ef7a0431dd8fadf0886c57",
     "weight_format": "mlx"
   },
   "quantization": {

@@ -59,7 +59,8 @@ actual manifest or invent Mac KV observations.
   accounting. Record backing array bytes/capacity independently; recurrent
   state has null sequence capacity/offset when its cache exposes none. Do not
   approximate hybrid state with the all-attention formula or pilot end scaling.
-- Preserve available pilot/model-panel revisions; use the existing pinned
+- Use the nine model locations actually recorded by the pilot; do not assume
+  new local directories exist. Preserve their available revisions; use the existing pinned
   example for Qwen3.5-122B. Leave the new 8B-8bit revision null pending R8 item 5.
   All C4 tokenizer/artifact/runtime identity issuance remains deferred.
 - Generate one primary tree and one pass-two tree per sub-pack through

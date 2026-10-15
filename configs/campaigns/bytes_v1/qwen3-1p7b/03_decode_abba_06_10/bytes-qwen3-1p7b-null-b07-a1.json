@@ -14,7 +14,7 @@
     "family": "qwen3",
     "name": "Qwen3-1.7B-4bit",
     "revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
-    "source": "/Users/edr/jw_models/mlx-community/Qwen3-1.7B-4bit",
+    "source": "/Users/edr/.cache/huggingface/hub/models--mlx-community--Qwen3-1.7B-4bit/snapshots/3b1b1768f8f8cf8351c712464f906e86c2b8269e",
     "weight_format": "mlx"
   },
   "quantization": {
