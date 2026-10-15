@@ -432,8 +432,12 @@ def stage_plan(tree: Mapping[str, Any]) -> list[Stage]:
              "the pre and post calibration captures must bracket every collection")
     _require(post[0] == len(chain) - 1, "post-calibration must be the last chain stage")
     derivations = [i for i, stage in enumerate(chain) if stage.kind == "bound_derivation"]
-    _require(len(derivations) == 1 and derivations[0] > min(collections),
-             "exactly one bound derivation, after the corpus collection")
+    if (tree.get("smoke_reduction") or {}).get("schema") == "joulewise.b6_smoke_reduction.v1":
+        _require(len(derivations) <= 1 and (not derivations or derivations[0] > min(collections)),
+                 "at most one bound derivation, after a collection")
+    else:
+        _require(len(derivations) == 1 and derivations[0] > min(collections),
+                 "exactly one bound derivation, after the corpus collection")
     return stages
 
 
@@ -1046,12 +1050,12 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
     head_pin = value_after(reservation_argv, "--head-pin")
     # The NEG-8 corpus stage (row 13): the last collection before the bound
     # derivation that collects into the derivation's --runs-dir.
-    derivation = next(stage for stage in chain if stage.kind == "bound_derivation")
-    derivation_argv = stage_argv(derivation, bindings, tree, root)
+    derivation = next((stage for stage in chain if stage.kind == "bound_derivation"), None)
+    derivation_argv = stage_argv(derivation, bindings, tree, root) if derivation is not None else []
     corpus_manifest = value_after(derivation_argv, "--derive-neg8-drift-bound")
     corpus_runs_dir = value_after(derivation_argv, "--runs-dir")
     corpus_stage = None
-    for stage in chain[:chain.index(derivation)]:
+    for stage in chain[:chain.index(derivation)] if derivation is not None else []:
         if stage.kind == "campaign_collection" and corpus_runs_dir is not None \
                 and value_after(stage_argv(stage, bindings, tree, root), "--runs-dir") == corpus_runs_dir:
             corpus_stage = stage

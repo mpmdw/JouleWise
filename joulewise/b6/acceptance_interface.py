@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Protocol, Sequence
@@ -76,8 +78,8 @@ class StubAcceptance:
 
 
 def load_acceptance() -> Acceptance:
-    try:
-        from joulewise.b6.acceptance import ACCEPTANCE
-    except ImportError:
+    # Precheck lane F3: the stub stands in only when the module does not exist;
+    # a module that exists but fails to import raises here.
+    if importlib.util.find_spec("joulewise.b6.acceptance") is None:
         return StubAcceptance()
-    return ACCEPTANCE
+    return importlib.import_module("joulewise.b6.acceptance").ACCEPTANCE

@@ -18,5 +18,15 @@
     "id": "b5-fake-hazard-monitor",
     "command_regex": "\\s-c\\s(?:\\\\012| )?import json, os, pathlib, sys, time(?:\\\\012| )custody, life, code = ",
     "source": "tests/test_b5_driver.py: FAKE_MONITOR via fake_monitor_argv (python -c, a stand-in for the hazard monitor); its source has newlines, which macOS ps prints as the four characters \\012 and Linux procps ps prints as one space"
+  },
+  {
+    "id": "b6-fake-powermetrics-process",
+    "command_regex": "(?:^|\\s)\\S*/tests/fixtures/fake_powermetrics_process\\.py(?:\\s|$)",
+    "source": "tests/fixtures/fake_powermetrics_process.py"
+  },
+  {
+    "id": "b6-fake-powermetrics-instrument",
+    "command_regex": "(?:^|\\s)\\S*/tests/fixtures/hazards/instrument/fake_powermetrics\\.py(?:\\s|$)",
+    "source": "tests/fixtures/hazards/instrument/fake_powermetrics.py"
   }
 ]

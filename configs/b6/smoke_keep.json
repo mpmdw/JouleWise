@@ -1,0 +1,20 @@
+{
+  "d117_floor_qwen3-1p7b_v5": {
+    "alpha-reference-start": 1,
+    "alpha-science-absolute": 1,
+    "alpha-science-prefill-p2048-absolute": 1,
+    "alpha-reference-end": 1
+  },
+  "d117_floor_qwen3-8b_v5": {
+    "beta-reference-start": 1,
+    "beta-science-absolute": 1,
+    "beta-science-prefill-p2048-absolute": 1,
+    "beta-reference-end": 1
+  },
+  "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5": {
+    "gamma-reference-start": 1,
+    "gamma-science-01-decode-contrast-blocks-01-05": 2,
+    "gamma-science-03-prefill-p2048-contrast-blocks-01-05": 2,
+    "gamma-reference-end": 1
+  }
+}
