@@ -17,6 +17,7 @@ from pathlib import Path
 import plistlib
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -284,7 +285,16 @@ def inject(state_path, *, seams=None):
     phase, agent, saw_pause, agent_end_ns, busy_end_ns = "first_run", None, False, None, None
     busy = []
     rc = 0
+    previous_handlers = {}
+
+    def interrupted(signum, _frame):
+        # SIGTERM's default action would end the process without the finally
+        # below, leaving the agent and busy children running (stage-3 review F2).
+        raise InterruptedError(f"injector received signal {signum}")
+
     try:
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            previous_handlers[signum] = signal.signal(signum, interrupted)
         record("waiting_first_run")
         while True:
             if (custody / "night/result.json").exists():
@@ -361,6 +371,10 @@ def inject(state_path, *, seams=None):
         except BaseException:
             pass  # Failure of the clock or journal cannot stop child cleanup.
     finally:
+        # A repeated TERM/INT (launchd bootout, an impatient operator) must not
+        # interrupt the reaping of another child; handlers come back afterwards.
+        for signum in previous_handlers:
+            signal.signal(signum, signal.SIG_IGN)
         for child in list(children):
             try:
                 reap(child)
@@ -376,6 +390,8 @@ def inject(state_path, *, seams=None):
                     record("child_reaped", pid=child.pid)
                 except BaseException:
                     rc = 1
+        for signum, handler in previous_handlers.items():
+            signal.signal(signum, handler)
     return rc
 
 

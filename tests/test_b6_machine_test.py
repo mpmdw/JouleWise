@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import plistlib
 import shutil
+import signal
 import subprocess
 import tempfile
 from types import SimpleNamespace
@@ -457,6 +458,41 @@ class InjectTests(Case):
                 self.assertTrue(children)
                 self.assertTrue(all(c.terminated and c.waits for c in children))
                 self.assertIn("exception", [r["event"] for r in mt.read_rows(state.parent / "injections.jsonl")])
+                self.root = base
+
+    def test_sigterm_stops_injection_and_reaps_every_child(self):
+        # Stage-3 review F2: SIGTERM (launchd bootout) left the agent and busy
+        # children running. A recording handler stands in for the default action
+        # so the old code cannot end the test process; it must be restored after.
+        received = []
+
+        def outer(signum, _frame):
+            received.append(signum)
+
+        previous = signal.signal(signal.SIGTERM, outer)
+        self.addCleanup(signal.signal, signal.SIGTERM, previous)
+        for second in (4, 9):  # mid-agent, mid-busy
+            with self.subTest(second=second):
+                base = self.root
+                self.root = base / f"term-{second}"
+                self.root.mkdir()
+                state, seams, clock, children, _ = self.environment()
+                tick = clock.tick
+
+                def signalled(now, tick=tick, second=second):
+                    tick(now)
+                    if now == second:
+                        os.kill(os.getpid(), signal.SIGTERM)
+
+                clock.tick = signalled
+                self.assertEqual(mt.inject(state, seams=seams), 1)
+                self.assertEqual(clock.second, second)
+                self.assertTrue(children)
+                self.assertTrue(all(c.terminated and c.waits for c in children))
+                events = mt.read_rows(state.parent / "injections.jsonl")
+                self.assertIn("exception", [e["event"] for e in events])
+                self.assertIs(signal.getsignal(signal.SIGTERM), outer)
+                self.assertEqual(received, [])
                 self.root = base
 
     def test_census_failure_reaps_agent_and_never_starts_busy(self):
