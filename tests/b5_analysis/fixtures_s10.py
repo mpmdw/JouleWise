@@ -97,8 +97,35 @@ def conditional_exact_stack_seam():
                 aliases.append(alias)
         view={**floor,'cells':[*floor.get('cells',[]),*aliases]}
         return original(prospective,view,bundle_paths=bundle_paths)
+    # The same reading at the close-out's recheck of each finalized arm against
+    # its floor cell (dominance_closeout._contrast_floor_binding_error): an arm is
+    # compared with its bound cell's key when that cell's single-source transport
+    # group admits the arm's family; eligibility, stack identity and the
+    # common-mode replay are still checked. Extension recorded in PROVENANCE.md.
+    from joulewise import dominance_closeout as closeout
+    original_recheck=closeout._contrast_floor_binding_error
+    def recheck(finalized_manifest,floor_artifact,replay_sidecar):
+        try:
+            cells={c['cell_id']:c for c in floor_artifact['cells']}
+            admitted={}
+            for group in floor_artifact.get('transport_groups',[]):
+                sources=group.get('source_cell_ids')
+                if isinstance(sources,list) and len(sources)==1:
+                    admitted[sources[0]]={(r.get('condition_family_id'),r.get('condition_family_sha256'))
+                                          for r in group.get('allowed_consumer_condition_families') or []}
+            view=copy.deepcopy(finalized_manifest)
+            for arm in view['arms']:
+                cell=cells.get(arm.get('floor_cell_id'))
+                family=(arm.get('condition_family_id'),arm.get('condition_family_sha256'))
+                if cell is not None and family in admitted.get(cell['cell_id'],()):
+                    arm['condition_family_id']=cell['key']['condition_family_id']
+                    arm['condition_family_sha256']=cell['key']['condition_family_sha256']
+        except (KeyError,TypeError,AttributeError):
+            view=finalized_manifest
+        return original_recheck(view,floor_artifact,replay_sidecar)
     with mock.patch.object(v3,'_authenticate_floor_dependencies',authenticate), \
-         mock.patch.object(finalize,'_authenticate_floor_dependencies',authenticate):
+         mock.patch.object(finalize,'_authenticate_floor_dependencies',authenticate), \
+         mock.patch.object(closeout,'_contrast_floor_binding_error',recheck):
         yield
 
 

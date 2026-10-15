@@ -807,13 +807,22 @@ class WindowIndexHandoffTests(unittest.TestCase):
 
     def test_P2_index_reaches_both_finalized_validator_sites(self):
         index = self.fixture['root']/'synthetic-window-index.json'
+        # S10: on the block-5 path the paper-source replay authenticates the floor
+        # against the pinset beside it, as the claim gate does; this fixture's
+        # legacy floor has none, so that loader is observed and answered here.
+        from types import SimpleNamespace
+        sibling = mock.Mock(side_effect=lambda path, *, require_sibling_pinset=False:
+                            SimpleNamespace(file_sha256=hashlib.sha256(Path(path).read_bytes()).hexdigest()))
         with mock.patch.object(driver,'block5_claim_gate_inputs',return_value=self.built) as builder, \
              mock.patch.object(manifests,'validate_finalized_analysis_manifest_v3',return_value=()) as first, \
-             mock.patch.object(core,'validate_finalized_analysis_manifest_v3',return_value=()) as second:
+             mock.patch.object(core,'validate_finalized_analysis_manifest_v3',return_value=()) as second, \
+             mock.patch.object(core,'load_floor_artifact',sibling):
             status, record, out = self.invoke(self.block5_manifest(), window_index=index)
         self.assertEqual((status, record['status']),(0,'ok'), record)
         self.assertTrue(out.exists())
         first.assert_called_once(); second.assert_called_once()
+        sibling.assert_called_once()
+        self.assertIs(sibling.call_args.kwargs.get('require_sibling_pinset'),True)
         self.assertEqual(first.call_args.kwargs.get('window_index'),index)
         self.assertIs(first.call_args.kwargs.get('_block5_inputs'),self.built)
         builder.assert_called_once()

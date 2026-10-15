@@ -32,6 +32,7 @@ from joulewise.identity_pins import stack_identity_sha256
 from joulewise.analysis_engine.inputs import (
     AnalysisInputError,
     authenticate_floor_artifact_bytes,
+    load_floor_artifact,
 )
 from joulewise.analysis_manifest_v3 import validate_finalized_analysis_manifest_v3
 
@@ -462,8 +463,17 @@ def validate_d165_paper_sources(
     ):
         codes.append("d165_paper_finalized_manifest_invalid")
     try:
-        authenticate_floor_artifact_bytes(floor_artifact_bytes)
-    except (AnalysisInputError, TypeError, ValueError):
+        if window_index is not None:
+            # Block 5: the aggregate floor authenticates against the pinset beside
+            # it, exactly as the claim gate loads it (inputs.load_floor_artifact);
+            # no registered pinset names a block-5 floor.
+            attachment = manifest["evidence"]["aggregate_floor_artifact"]["path"]
+            authenticated = load_floor_artifact(Path(custody_root) / attachment, require_sibling_pinset=True)
+            if authenticated.file_sha256 != _raw_sha256(floor_artifact_bytes):
+                raise ValueError("floor attachment bytes differ")
+        else:
+            authenticate_floor_artifact_bytes(floor_artifact_bytes)
+    except (AnalysisInputError, KeyError, OSError, TypeError, ValueError):
         codes.append("d165_paper_floor_artifact_invalid")
     sidecar = _paper_json_object(replay_sidecar_bytes)
     if sidecar is None or validate_d165_replay_sidecar(sidecar):

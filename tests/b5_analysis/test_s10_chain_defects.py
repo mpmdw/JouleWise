@@ -205,5 +205,58 @@ class QLineageConditionalSeamTests(unittest.TestCase):
                  {"provenance": {"launch_lineage": _window_lineage(1)}}], label="producer 'p' cells")
 
 
+class PaperSourcesBlockFiveFloorTests(unittest.TestCase):
+    """Joined run, step 6: the close-out's paper-source replay authenticated the block-5
+    aggregate floor against the registered pinsets only, which name no block-5 floor, and
+    refused d165_closeout_driver_paper_sources_invalid (d165_paper_floor_artifact_invalid)."""
+
+    def check(self, *, floor_bytes=None, window_index=True):
+        import hashlib
+        import json
+        from types import SimpleNamespace
+        from joulewise import dominance_closeout as dc
+        with tempfile.TemporaryDirectory(prefix="s10-paper-floor-") as tmp:
+            root = Path(tmp)
+            floor = root / "mint" / "x-aggregate-floor.json"
+            floor.parent.mkdir()
+            floor.write_bytes(b'{"floor": "synthetic"}\n')
+            manifest = {"evidence": {"aggregate_floor_artifact": {"path": "mint/x-aggregate-floor.json"}}}
+            seen = []
+
+            def load(path, *, require_sibling_pinset=False):
+                seen.append(("sibling", Path(path), require_sibling_pinset))
+                return SimpleNamespace(file_sha256=hashlib.sha256(floor.read_bytes()).hexdigest())
+
+            def registered_only(raw):
+                seen.append(("registered",))
+                raise dc.AnalysisInputError("invalid floor artifact: artifact.pinset: no pinset matches artifact family identity")
+
+            with mock.patch.object(dc, "load_floor_artifact", load), \
+                 mock.patch.object(dc, "authenticate_floor_artifact_bytes", registered_only), \
+                 mock.patch.object(dc, "validate_finalized_analysis_manifest_v3", return_value=()), \
+                 mock.patch.object(dc, "validate_d165_replay_sidecar", return_value=()), \
+                 mock.patch.object(dc, "validate_d165_closeout", return_value=()):
+                codes = dc.validate_d165_paper_sources(
+                    closeout={}, finalized_manifest_bytes=json.dumps(manifest).encode(),
+                    finalized_manifest_path=root / "am.finalized.json", custody_root=root,
+                    floor_artifact_bytes=floor.read_bytes() if floor_bytes is None else floor_bytes,
+                    replay_sidecar_bytes=b"{}", window_index=root / "index.json" if window_index else None)
+            return codes, seen, floor
+
+    def test_block5_floor_authenticates_against_its_sibling_pinset(self):
+        codes, seen, floor = self.check()
+        self.assertEqual(codes, ())
+        self.assertEqual(seen, [("sibling", floor, True)])
+
+    def test_block5_other_bytes_than_the_attachment_refuse(self):
+        codes, _seen, _floor = self.check(floor_bytes=b'{"floor": "other"}\n')
+        self.assertIn("d165_paper_floor_artifact_invalid", codes)
+
+    def test_without_a_window_index_the_registered_pinset_path_is_unchanged(self):
+        codes, seen, _floor = self.check(window_index=False)
+        self.assertEqual(seen, [("registered",)])
+        self.assertIn("d165_paper_floor_artifact_invalid", codes)
+
+
 if __name__ == "__main__":
     unittest.main()
