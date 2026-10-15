@@ -30,7 +30,7 @@ for p in points:
     q = dict(p)
     if q.get("status") == "computed" and q["role"] == "heldout":
         half = statistics.fmean(spec_half[key(p)])
-        q["lower"], q["upper"] = (q["mean_j"] - half) / 511, (q["mean_j"] + half) / 511
+        q["lower"], q["upper"] = (q["mean_j"] - half) / 512, (q["mean_j"] + half) / 512
     spec_points.append(q)
 code_eval = ba.evaluate(points, frozen)
 spec_eval = ba.evaluate(spec_points, frozen)

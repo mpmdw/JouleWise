@@ -18,8 +18,8 @@ from joulewise.analysis_engine.distributions import student_t_quantile
 
 BOUNDARIES = ("rails", "DC input", "rest")
 HYPOTHESES = ("bytes", "resident", "time")
-DECODE_STEPS = 511
-OUTPUT_LABEL = "512 output tokens, 511 generated in the decode phase"
+DECODE_STEPS = 512
+OUTPUT_LABEL = "512 decode forward passes, one of which yields no returned token"
 H1_CHECKS = 21
 # Addendum 4: separate primary families on each boundary.
 H2_INTERVALS = {"rails": 9, "DC input": 9, "rest": 11}
@@ -197,46 +197,85 @@ def deviation(fit, predictors, observed, measured_half_w=0.0):
             "prediction_half_w": prediction_half, "measured_half_w": own, "predicted_w": fitted}
 
 
-def h2(points, rails_power):
-    family = 5 + sum(not p["tier"] for p in points) + (2 if points[0]["boundary"] == "rest" else 0)
-    xs, ys = [[p["BW"]] for p in points], [p["power"] for p in points]
-    two = ols(xs, ys, family_size=family)
-    extended = ols([[p["BW"], p["resident"] / p["time"]] for p in points], ys, family_size=family)
-    rho = extended["coefficients"][2]
-    lo, hi = extended["intervals"][2]
+def _point_label(point):
+    return {k: point[k] for k in ("model", "pass_status", "n_passes") if k in point}
+
+
+def h2(points, rails_power, *, boundary=None, family_size=None):
+    """Fit each available design separately; refused fits contribute no primary interval."""
+    boundary = boundary or points[0]["boundary"]
+
+    def attempt(rows, predictors):
+        n, p = len(rows), len(predictors) + 1
+        refused = {"status": "refused", "n": n, "p": p, "df": n - p,
+                   "point_labels": [_point_label(row) for row in rows]}
+        if n - p < 2:
+            return {**refused, "reason": "n - p < 2"}
+        try:
+            fit = ols([[f(row) for f in predictors] for row in rows],
+                      [row["power"] for row in rows], family_size=1)
+        except AnalysisError as exc:
+            return {**refused, "reason": str(exc)}
+        return {**fit, "status": "computed", "p": p, "point_labels": refused["point_labels"]}
+
+    bw, resident_rate = lambda p: p["BW"], lambda p: p["resident"] / p["time"]
+    two = attempt(points, [bw])
+    extended = attempt(points, [bw, resident_rate])
     tier_points = [p for p in points if p["tier"]]
-    tier = ols([[p["BW"], p["resident"] / p["time"]] for p in tier_points],
-               [p["power"] for p in tier_points], family_size=family)
-    outside = [{"model": p["model"], **deviation(tier, [p["BW"], p["resident"] / p["time"]],
-                p["power"], p.get("power_half_w", (p.get("h_j", 0.0) + p.get("B_j", 0.0)) /
-                p.get("duration_s", 1.0)))} for p in points if not p["tier"]]
-    rest = None
-    if points[0]["boundary"] == "rest":
-        rest = ols([[p["BW"], rails_power[p["model"]]] for p in points], ys, family_size=family)
-        corr = statistics.correlation([p["BW"] for p in points], [rails_power[p["model"]] for p in points])
+    tier = attempt(tier_points, [bw, resident_rate])
+    rest_points = [p for p in points if p["model"] in rails_power]
+    rest = attempt(rest_points, [bw, lambda p: rails_power[p["model"]]]) if boundary == "rest" else None
+    specs = [("epsilon", two, 1), ("extended_epsilon", extended, 1),
+             ("rho", extended, 2), ("tier_epsilon", tier, 1), ("tier_rho", tier, 2)]
+    if rest is not None:
+        specs += [("rest_epsilon", rest, 1), ("lambda", rest, 2)]
+    outside_points = [p for p in points if not p["tier"]]
+    tier_ok = tier["status"] == "computed"
+    k = sum(fit["status"] == "computed" for _, fit, _ in specs) + (len(outside_points) if tier_ok else 0)
+    family = k if family_size is None else family_size
+    for fit in (two, extended, tier, rest):
+        if fit is None or fit["status"] != "computed":
+            continue
+        critical = student_t_quantile(1 - .05 / (2 * max(1, family)), fit["df"])
+        fit.update(critical=critical, family_size=family)
+        for key, errors in (("intervals", "standard_errors"), ("ols_intervals", "ols_standard_errors")):
+            fit[key] = [[v - critical * e, v + critical * e]
+                        for v, e in zip(fit["coefficients"], fit[errors])]
+    outside = [{**_point_label(p), "status": "computed", **deviation(tier,
+                [bw(p), resident_rate(p)], p["power"], p.get("power_half_w",
+                (p.get("h_j", 0.0) + p.get("B_j", 0.0)) / p.get("duration_s", 1.0)))}
+               if tier_ok else {**_point_label(p), "status": "refused", "reason": "tier fit refused"}
+               for p in outside_points]
+    if rest is not None and rest["status"] == "computed":
+        corr = statistics.correlation([bw(p) for p in rest_points], [rails_power[p["model"]] for p in rest_points])
         rest.update(vif=1 / (1 - corr * corr) if abs(corr) < 1 else None,
                     vif_status="computed" if abs(corr) < 1 else "infinite", correlation=corr)
     loo = []
-    for i, p in enumerate(points):
-        f = ols(xs[:i] + xs[i + 1:], ys[:i] + ys[i + 1:], family_size=family)
-        loo.append({"model": p["model"], "predicted_w": predict(f["coefficients"], p["BW"]),
-                    "observed_w": p["power"]})
-    primary = [
-        {"term": name, "estimate": fit["coefficients"][index],
-         "lower": fit["intervals"][index][0], "upper": fit["intervals"][index][1],
-         "HC3_se": fit["standard_errors"][index], "OLS_se": fit["ols_standard_errors"][index]}
-        for name, fit, index in (("epsilon", two, 1), ("extended_epsilon", extended, 1),
-                                ("rho", extended, 2), ("tier_epsilon", tier, 1), ("tier_rho", tier, 2))]
-    primary += [{"term": "tier_deviation:" + row["model"], "estimate": row["deviation_w"],
-                 "lower": row["lower_w"], "upper": row["upper_w"]} for row in outside]
-    if rest is not None:
-        primary += [{"term": name, "estimate": rest["coefficients"][index],
-                     "lower": rest["intervals"][index][0], "upper": rest["intervals"][index][1],
-                     "HC3_se": rest["standard_errors"][index], "OLS_se": rest["ols_standard_errors"][index]}
-                    for name, index in (("rest_epsilon", 1), ("lambda", 2))]
-    return {"primary_intervals": primary, "two_term": two, "resident_extended": extended,
-            "resident_adds_nothing": lo <= 0 <= hi or rho <= 0,
-            "tier": tier, "tier_deviations": outside, "rest": rest, "loo_description": loo}
+    for i, point in enumerate(points):
+        fit = attempt(points[:i] + points[i + 1:], [bw])
+        loo.append({**_point_label(point), "observed_w": point["power"], "status": fit["status"],
+                    **({"predicted_w": predict(fit["coefficients"], bw(point))} if fit["status"] == "computed"
+                       else {"reason": fit["reason"]})})
+    primary = [{"term": name, "estimate": fit["coefficients"][index],
+                "lower": fit["intervals"][index][0], "upper": fit["intervals"][index][1],
+                "HC3_se": fit["standard_errors"][index], "OLS_se": fit["ols_standard_errors"][index]}
+               for name, fit, index in specs[:5] if fit["status"] == "computed"]
+    primary += [{"term": "tier_deviation:" + row["model"], **_point_label(row),
+                 "estimate": row["deviation_w"], "lower": row["lower_w"], "upper": row["upper_w"]}
+                for row in outside if row["status"] == "computed"]
+    primary += [{"term": name, "estimate": fit["coefficients"][index],
+                 "lower": fit["intervals"][index][0], "upper": fit["intervals"][index][1],
+                 "HC3_se": fit["standard_errors"][index], "OLS_se": fit["ols_standard_errors"][index]}
+                for name, fit, index in specs[5:] if fit["status"] == "computed"]
+    adds_nothing = None
+    if extended["status"] == "computed":
+        rho = extended["coefficients"][2]
+        lo, hi = extended["intervals"][2]
+        adds_nothing = lo <= 0 <= hi or rho <= 0
+    return {"n": len(points), "k": family, "point_labels": [_point_label(p) for p in points],
+            "primary_intervals": primary, "two_term": two, "resident_extended": extended,
+            "resident_adds_nothing": adds_nothing, "tier": tier, "tier_deviations": outside,
+            "rest": rest, "loo_description": loo}
 
 
 def validate_manifest(manifest):
@@ -775,14 +814,14 @@ def _kept(records, inclusive):
     return kept, [r["run_id"] for r in removed]
 
 
-def estimate_phase_energy(repeats, quads, repeat_bounds, quad_bounds):
+def estimate_phase_energy(repeats, quads, repeat_bounds, quad_bounds, *, minimum_units=5):
     """Block-5 analysis_plan_block5.md §4 steps 1–5, generalized only in shape.
 
     No model identity, custody issuance, or inference dependency. Equivalence
     tests exercise every registered cell shape against the unchanged kernel.
     """
     n_r, n_b = len(repeats), len(quads)
-    if min(n_r, n_b) < 5 or len(repeat_bounds) != n_r or len(quad_bounds) != n_b:
+    if min(n_r, n_b) < minimum_units or len(repeat_bounds) != n_r or len(quad_bounds) != n_b:
         raise AnalysisError("phase estimator requires five kept units per stratum and matching bounds")
     if any(len(q) != 4 for q in quads) or any(len(q) != 4 for q in quad_bounds):
         raise AnalysisError("phase estimator requires complete four-member quads")
@@ -820,7 +859,7 @@ def estimate_phase_energy(repeats, quads, repeat_bounds, quad_bounds):
     return result
 
 
-def _registered_estimate(records, energies, bounds):
+def _registered_estimate(records, energies, bounds, *, minimum_units=5):
     if not len(records) == len(energies) == len(bounds):
         raise AnalysisError("mismatched phase records")
     repeats, quads, repeat_bounds, quad_bounds = [], {}, [], {}
@@ -833,7 +872,58 @@ def _registered_estimate(records, energies, bounds):
             quad_bounds.setdefault(row["unit_id"], []).append(bound)
         else:
             raise AnalysisError("unexpected floor stratum")
-    return estimate_phase_energy(repeats, list(quads.values()), repeat_bounds, list(quad_bounds.values()))
+    return estimate_phase_energy(repeats, list(quads.values()), repeat_bounds, list(quad_bounds.values()),
+                                 minimum_units=minimum_units)
+
+
+def _phase_cell(kept, removed, module, boundary, secondary, *, minimum_units=5):
+    """Identical estimator for the reported cell and its without-assisted diagnostic."""
+    duration = _weighted(kept, [r["duration_s"] for r in kept])
+    drift_inputs = module[0].get("neg8_inputs", {})
+    reference = drift_inputs.get("boundaries", {}).get(boundary)
+    if reference is None:
+        raise AnalysisError("NEG-8 export references unavailable")
+    rails = [r["rails_secondary_j"] if secondary else r["rails_j"] for r in kept]
+    dc = [r["meter"]["secondary_j" if secondary else "gross_j"] for r in kept] if boundary != "rails" else []
+    energies = rails if boundary == "rails" else dc if boundary == "DC input" else [d-r for d,r in zip(dc, rails)]
+    gross_values = [r["rails_j"] if boundary == "rails" else r["meter"]["gross_j"]
+                    if boundary == "DC input" else r["meter"]["gross_j"] - r["rails_j"] for r in kept]
+    scale = 1.0 if drift_inputs["test7_passed"] else max(1.0,
+        _weighted(kept, gross_values) / number(reference["energy_j"], "E_ref", positive=True),
+        duration / number(reference["duration_s"], "T_ref", positive=True))
+    family = "idle_subtracted" if secondary else "gross"
+    drift = number(reference["families"][family]["allowance_j"], "NEG-8 allowance", nonnegative=True) * .5 * scale
+    edge = [(r["rails_anchor_j"] if boundary != "DC input" else 0.0) +
+            (r["meter"]["phase_edge_j"] if boundary != "rails" else 0.0) for r in kept]
+    bounds = [dict(zip(BOUND_KINDS, (u, r.get("rails_interpolation_j", 0.0)
+                 if boundary != "DC input" else 0.0, drift))) for u, r in zip(edge, kept)]
+    n_r = sum(r["stratum"] == "repeat" for r in kept)
+    n_b = len({r["unit_id"] for r in kept if r["stratum"] == "quad"})
+    if min(n_r, n_b) < 2:
+        return {"status": "undefined_interval", "n_r": n_r, "n_b": n_b,
+                "mean_j": _weighted(kept, energies), "h_j": None, "B_j": math.fsum(_weighted(kept, [b[kind] for b in bounds]) for kind in BOUND_KINDS),
+                "duration_s": duration, "lower_j": None, "upper_j": None,
+                "reason": "sample variance requires at least two units per stratum"}
+    estimate = _registered_estimate(kept, energies, bounds, minimum_units=minimum_units)
+    interval = estimate["interval"]
+    # R5 multiplicity widens h only; registered B is unchanged.
+    h = student_t_quantile(1 - .05 / (2 * H1_CHECKS), interval["df"]) * math.sqrt(interval["variance"])
+    bound, mean = interval["B_j"], estimate["mean_j"]
+    return {"status": "computed", "mean_j": mean,
+                 "lower_j": mean - h - bound, "upper_j": mean + h + bound,
+                 "h_j": h, "B_j": bound, "kind_averages_j": interval["kind_averages_j"],
+                 "meter_phase_edge_mean_j": _weighted(kept, [r["meter"]["phase_edge_j"] for r in kept]) if boundary != "rails" else 0.0,
+                 "variance": interval["variance"], "df": interval["df"],
+                 "duration_s": duration, "drift_scale": scale, "drift_family": family,
+                 "neg8_inputs": drift_inputs, "n_r": interval["n_r"], "n_b": interval["n_b"],
+                 "removed_runs": removed, "kept_runs": [r["run_id"] for r in kept],
+                 "meter_unavailable": [{"run_id": r["run_id"], "reason": r.get("meter_unavailable_reason")}
+                                       for r in module if r["meter"] is None],
+                 "flags": sorted({f for r in kept for f in r["flags"]}),
+                 "attribution_floor_j": max(edge),
+                 "meter_attribution_floor_j": max(r["meter"]["phase_edge_j"] for r in kept) if boundary != "rails" else None,
+                 "rails_attribution_floor_j": max(r["rails_anchor_j"] for r in kept) if boundary != "DC input" else None,
+                 "operative": list({digest(r["operative"]): r["operative"] for r in kept}.values())}
 
 
 def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
@@ -852,7 +942,7 @@ def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
                     "bytes": (spec["W_bytes"] + spec["KV_bytes"]) / 1e9,
                     "resident": spec["R_bytes"] / 1e9, "role": spec["role"], "moe": spec["moe"], "tier": spec["tier"]}
             # §2.2: loss of one member removes its whole unit. Missing DC never
-            # changes rails selection. Inclusive restores physics, not absent data.
+            # changes rails selection. Inclusive restores catalog exclusions, not invalid records.
             candidate = [dict(r, status="meter_unavailable") if boundary != "rails" and r["meter"] is None
                          else r for r in module]
             try:
@@ -862,47 +952,33 @@ def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
                              "unavailable_runs": [r["run_id"] for r in module if r["meter"] is None],
                              "flags": sorted({f for r in module for f in r["flags"]})})
                 continue
-            duration = _weighted(kept, [r["duration_s"] for r in kept])
-            drift_inputs = module[0].get("neg8_inputs", {})
-            reference = drift_inputs.get("boundaries", {}).get(boundary)
-            if reference is None:
+            if module[0].get("neg8_inputs", {}).get("boundaries", {}).get(boundary) is None:
                 rows.append({**base, "status": "unavailable", "reason": "NEG-8 export references unavailable",
                              "flags": sorted({f for r in module for f in r["flags"]})})
                 continue
-            rails = [r["rails_secondary_j"] if secondary else r["rails_j"] for r in kept]
-            dc = [r["meter"]["secondary_j" if secondary else "gross_j"] for r in kept] if boundary != "rails" else []
-            energies = rails if boundary == "rails" else dc if boundary == "DC input" else [d-r for d,r in zip(dc, rails)]
-            gross_values = [r["rails_j"] if boundary == "rails" else r["meter"]["gross_j"]
-                            if boundary == "DC input" else r["meter"]["gross_j"] - r["rails_j"] for r in kept]
-            scale = 1.0 if drift_inputs["test7_passed"] else max(1.0,
-                _weighted(kept, gross_values) / number(reference["energy_j"], "E_ref", positive=True),
-                duration / number(reference["duration_s"], "T_ref", positive=True))
-            family = "idle_subtracted" if secondary else "gross"
-            drift = number(reference["families"][family]["allowance_j"], "NEG-8 allowance", nonnegative=True) * .5 * scale
-            edge = [(r["rails_anchor_j"] if boundary != "DC input" else 0.0) +
-                    (r["meter"]["phase_edge_j"] if boundary != "rails" else 0.0) for r in kept]
-            bounds = [dict(zip(BOUND_KINDS, (u, r.get("rails_interpolation_j", 0.0)
-                         if boundary != "DC input" else 0.0, drift))) for u, r in zip(edge, kept)]
-            estimate = _registered_estimate(kept, energies, bounds)
-            interval = estimate["interval"]
-            # R5 multiplicity widens h only; registered B is unchanged.
-            h = student_t_quantile(1 - .05 / (2 * H1_CHECKS), interval["df"]) * math.sqrt(interval["variance"])
-            bound, mean = interval["B_j"], estimate["mean_j"]
-            rows.append({**base, "status": "computed", "mean_j": mean,
-                         "lower_j": mean - h - bound, "upper_j": mean + h + bound,
-                         "h_j": h, "B_j": bound, "kind_averages_j": interval["kind_averages_j"],
-                         "meter_phase_edge_mean_j": _weighted(kept, [r["meter"]["phase_edge_j"] for r in kept]) if boundary != "rails" else 0.0,
-                         "variance": interval["variance"], "df": interval["df"],
-                         "duration_s": duration, "drift_scale": scale, "drift_family": family,
-                         "neg8_inputs": drift_inputs, "n_r": interval["n_r"], "n_b": interval["n_b"],
-                         "removed_runs": removed, "kept_runs": [r["run_id"] for r in kept],
-                         "meter_unavailable": [{"run_id": r["run_id"], "reason": r.get("meter_unavailable_reason")}
-                                               for r in module if r["meter"] is None],
-                         "flags": sorted({f for r in kept for f in r["flags"]}),
-                         "attribution_floor_j": max(edge),
-                         "meter_attribution_floor_j": max(r["meter"]["phase_edge_j"] for r in kept) if boundary != "rails" else None,
-                         "rails_attribution_floor_j": max(r["rails_anchor_j"] for r in kept) if boundary != "DC input" else None,
-                         "operative": list({digest(r["operative"]): r["operative"] for r in kept}.values())})
+            cell = _phase_cell(kept, removed, module, boundary, secondary)
+            assisted = [r for r in kept if "battery.assist" in r["flags"]]
+            if assisted:
+                units = {(r["stratum"], r["unit_id"]) for r in assisted}
+                without = [r for r in kept if (r["stratum"], r["unit_id"]) not in units]
+                n_r = sum(r["stratum"] == "repeat" for r in without)
+                n_b = len({r["unit_id"] for r in without if r["stratum"] == "quad"})
+                below = min(n_r, n_b) < 5
+                diagnostic = _phase_cell(without, removed + [r["run_id"] for r in kept if r not in without],
+                                         module, boundary, secondary, minimum_units=2) if n_r and n_b else {
+                    "status": "undefined_estimate", "n_r": n_r, "n_b": n_b, "mean_j": None,
+                    "h_j": None, "B_j": None, "lower_j": None, "upper_j": None,
+                    "reason": "fixed stratum weights require both strata"}
+                cell.update(assisted_member_counts={stratum: sum(r["stratum"] == stratum for r in assisted)
+                                                    for stratum in ("repeat", "quad")},
+                            assisted_unit_counts={stratum: sum(u[0] == stratum for u in units)
+                                                  for stratum in ("repeat", "quad")},
+                            with_assisted_label="with assisted members",
+                            without_assisted={**diagnostic, "description_only": True,
+                                "label": f"without assisted members (n_r = {n_r}, n_b = {n_b})" +
+                                         ("; below the registered minimum of 5 units" if below else ""),
+                                "below_minimum": below})
+            rows.append({**base, **cell})
     return rows
 
 
@@ -916,11 +992,15 @@ def combine_passes(rows):
         if len(group) not in (1, 2) or len({r["pass_id"] for r in group}) != len(group):
             raise AnalysisError("one or two distinct passes per model required")
         group.sort(key=lambda r: r["pass_id"])
+        planned = group
+        group = [r for r in planned if r.get("status") != "unavailable"]
         n = len(group)
-        point = {k: group[0][k] for k in ("model", "boundary", "basis", "selection", "bytes", "resident", "role", "moe", "tier")}
-        if any(r.get("status") == "unavailable" for r in group):
-            points.append({**point, "status": "unavailable", "reason": "one or more passes unavailable",
-                           "passes": group})
+        pass_status = "two_pass" if n == 2 else "one_pass" if n == 1 else "no_pass"
+        planned = [dict(r, pass_status=pass_status, n_passes=n) for r in planned]
+        point = {k: planned[0][k] for k in ("model", "boundary", "basis", "selection", "bytes", "resident", "role", "moe", "tier", "pass_status", "n_passes")}
+        if not group:
+            points.append({**point, "status": "unavailable", "reason": "all passes refused",
+                           "passes": planned})
             continue
         mean = statistics.fmean(r["mean_j"] for r in group)
         # Addendum 4.4: average each pass's already adjusted h; no pooling.
@@ -938,9 +1018,24 @@ def combine_passes(rows):
                      e=mean / DECODE_STEPS, lower=(mean - h - bound) / DECODE_STEPS,
                      upper=(mean + h + bound) / DECODE_STEPS,
                      printed_j_per_output_token=mean / 512, output_label=OUTPUT_LABEL,
-                     power_half_w=(h + bound) / duration, passes=group,
+                     power_half_w=(h + bound) / duration, passes=planned,
                      time=duration / DECODE_STEPS, power=mean / duration,
                      BW=point["bytes"] * DECODE_STEPS / duration)
+        if any("without_assisted" in r for r in group):
+            diagnostics = [r.get("without_assisted", r) for r in group]
+            means = [r["mean_j"] for r in diagnostics]
+            diagnostic_mean = statistics.fmean(means) if all(v is not None for v in means) else None
+            diagnostic_h = statistics.fmean(r["h_j"] for r in diagnostics) if all(r["h_j"] is not None for r in diagnostics) else None
+            diagnostic_bound = statistics.fmean(r["B_j"] for r in diagnostics) if all(r["B_j"] is not None for r in diagnostics) else None
+            point["without_assisted"] = {
+                "label": "without assisted members", **_point_label(point), "description_only": True,
+                "below_minimum": any(r.get("below_minimum", False) for r in diagnostics),
+                "mean_j": diagnostic_mean, "h_j": diagnostic_h, "B_j": diagnostic_bound,
+                "lower_j": diagnostic_mean - diagnostic_h - diagnostic_bound if diagnostic_h is not None else None,
+                "upper_j": diagnostic_mean + diagnostic_h + diagnostic_bound if diagnostic_h is not None else None,
+                "printed_j_per_output_token": diagnostic_mean / 512 if diagnostic_mean is not None else None,
+                "output_label": OUTPUT_LABEL,
+                "passes": [{"pass_id": r["pass_id"], **d} for r, d in zip(group, diagnostics)]}
         points.append(point)
     return points
 
@@ -957,10 +1052,10 @@ def frozen_predictions(points, manifest, neg8_inputs=None):
         lines.append({"selection": selection, "basis": basis, "boundary": boundary,
                       "lines": freeze_lines(subset) if all(p.get("status") != "unavailable" for p in subset) else None})
     return {"schema": SCHEMA, "manifest_sha256": digest(manifest), "H1_checks": H1_CHECKS,
-            "H2_intervals": H2_INTERVALS,
+            "H2_intervals": H2_INTERVALS,  # full-roster expectation; actual k is printed with each fit
             "bytes_analysis_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "neg8_inputs": neg8_inputs or {}, "fit_points": points, "rival_lines": lines,
-            "tier_fit_inputs": [{k: p[k] for k in ("model", "boundary", "basis", "selection", "BW", "power", "resident", "time")}
+            "tier_fit_inputs": [{**_point_label(p), **{k: p[k] for k in ("model", "boundary", "basis", "selection", "BW", "power", "resident", "time")}}
                                 for p in points if p["tier"] and p.get("status") != "unavailable"],
             "note": "Dense held-out models test linearity over the format-derived bytes range; their small rival splits do not identify the hypothesis."}
 
@@ -969,22 +1064,21 @@ def evaluate(points, frozen):
     h1_rows, moe_rows, h2_rows, unavailable = [], [], [], []
     for group in frozen["rival_lines"]:
         key = tuple(group[k] for k in ("selection", "basis", "boundary"))
-        subset = [p for p in points if tuple(p[k] for k in ("selection", "basis", "boundary")) == key]
+        labels = dict(zip(("selection", "basis", "boundary"), key))
+        subset = [p for p in points if tuple(p[k] for k in labels) == key]
         if len(subset) != 10:
-            raise AnalysisError("held-out analysis requires all ten models")
-        missing = [p["model"] for p in subset if p.get("status") == "unavailable"]
+            raise AnalysisError("held-out analysis requires all ten model records, including refusals")
+        missing = [p for p in subset if p.get("status") == "unavailable"]
         if group["lines"] is None or missing:
-            unavailable.append({**dict(zip(("selection", "basis", "boundary"), key)),
-                                "models": missing, "reason": "H2 requires ten-model cells; H1 needs complete fit cells"})
-        if group["lines"] is None:
-            continue
+            unavailable.append({**labels, "models": [p["model"] for p in missing],
+                "reason": "H1 requires complete fit cells" if group["lines"] is None else "models without a primary point",
+                "refusals": [{**_point_label(p), "reason": p["reason"], "passes": p.get("passes", [])} for p in missing]})
         results = []
         for point in subset:
-            if point.get("status") == "unavailable":
+            if point.get("status") == "unavailable" or group["lines"] is None:
                 continue
             result = h1_point(group["lines"], point)
-            h1_rows.append({"model": point["model"], "role": point["role"],
-                            **dict(zip(("selection", "basis", "boundary"), key)),
+            h1_rows.append({**_point_label(point), "role": point["role"], **labels,
                             "pass_id": "mean", "description_only": False, **result})
             if point["moe"]:
                 results.append((point["model"], result))
@@ -998,15 +1092,24 @@ def evaluate(points, frozen):
             pass_lines = freeze_lines(fit)
             for point in pass_points:
                 if point["status"] == "computed":
-                    h1_rows.append({"model": point["model"], "role": point["role"],
-                        **dict(zip(("selection", "basis", "boundary"), key)),
+                    primary_point = next(p for p in subset if p["model"] == point["model"])
+                    h1_rows.append({**_point_label(primary_point), "role": point["role"], **labels,
                         "pass_id": pass_id, "description_only": True, **h1_point(pass_lines, point)})
         if len(results) == 3:
-            moe_rows.append({**dict(zip(("selection", "basis", "boundary"), key)), **active_or_resident(results)})
-        if missing:
-            continue
-        rails = {p["model"]: p["power"] for p in points if (p["selection"], p["basis"], p["boundary"]) == (*key[:2], "rails")}
-        h2_rows.append({**dict(zip(("selection", "basis", "boundary"), key)), **h2(subset, rails)})
+            result = active_or_resident(results)
+            for row in result["misses"]:
+                row.update(_point_label(next(p for p in subset if p["model"] == row["model"])))
+            moe_rows.append({**labels, **result})
+        available = [p for p in subset if p.get("status") != "unavailable"]
+        rails = {p["model"]: p["power"] for p in points if p.get("status") != "unavailable"
+                 and (p["selection"], p["basis"], p["boundary"]) == (*key[:2], "rails")}
+        result = h2(available, rails, boundary=key[2])
+        h2_rows.append({**labels, "analysis": "primary", "description_only": False, **result})
+        if missing or any(p.get("n_passes") == 1 for p in available):
+            two_pass = [p for p in available if p["n_passes"] == 2]
+            sensitivity = h2(two_pass, rails, boundary=key[2], family_size=result["k"])
+            sensitivity["sensitivity_intervals"] = sensitivity.pop("primary_intervals")
+            h2_rows.append({**labels, "analysis": "two_pass_sensitivity", "description_only": True, **sensitivity})
     return {"h1": h1_rows, "moe": moe_rows, "h2": h2_rows, "unavailable": unavailable}
 
 

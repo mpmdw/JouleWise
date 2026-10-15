@@ -14,13 +14,18 @@ def _write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value) + "\n")
 
-def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release="all"):
+def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release="all",
+                     pass_duration_scales=(1.0, 1.0), clock_latency_ms=None):
     """1000 on-disk runs: real mock trace reducer -> harvest layout -> B6 export.
 
     No calibration hardware is claimed: the zero phase envelope is explicitly
     synthetic, with missing operative evidence disclosed. Each energy passes
     through reduce_bundle and the full CLI, not a summary oracle.
     """
+    if len(pass_duration_scales) != 2 or any(v <= 0 for v in pass_duration_scales):
+        raise ValueError("two positive pass duration scales required")
+    if clock_latency_ms is not None and not clock_latency_ms[0] < 0 < clock_latency_ms[1]:
+        raise ValueError("clock latency extremes must straddle zero")
     from types import SimpleNamespace
     from joulewise.b6 import export_runs, calibration, blinding
     import shutil
@@ -42,7 +47,7 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         archive = root / session_id
         bundles = archive / "sources/claim-runs"
         roster, evidence_members, meter_samples = [], [], []
-        # Native meter samples at 10 Hz; zero-latency synthetic clock, no wrap shortcut.
+        # Native 10 Hz meter, with optional unequal passes and signed clock-fit excess latency.
         tick = 1000
         meter_samples.extend([(.2, tick - 2), (.2, tick - 1)])
         jobs = []
@@ -58,14 +63,14 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         for model, members in jobs:
             b = (model["W_bytes"] + model["KV_bytes"]) / 1e9
             resident = model["R_bytes"] / 1e9
-            duration = model["synthetic_duration_s"]
-            tau = duration / 511
+            duration = model["synthetic_duration_s"] * pass_duration_scales[pass_id - 1]
+            tau = duration / 512
             truth = .01 * b if world == "bytes" else 3 * tau if world == "time" else .01 * resident
             for ordinal, ref in enumerate(members):
                 run_id = sanitize_id_component(ref["run_id"] if ref else model["model"] + "-" + str(ordinal))
-                duration = 2.0 if ref else model["synthetic_duration_s"]
+                duration = 2.0 if ref else model["synthetic_duration_s"] * pass_duration_scales[pass_id - 1]
                 own_idle = ref["idle_power_w"] if ref else 5.0
-                energy = ref["gross_j"] * duration / (duration + 1) if ref else truth * 511 * (1 + rng.gauss(0, .002))
+                energy = ref["gross_j"] * duration / (duration + 1) if ref else truth * 512 * (1 + rng.gauss(0, .002))
                 power = energy / duration
                 start = tick / 10
                 decode_start, end = start + 2, start + 2 + duration
@@ -125,7 +130,12 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
             payload = b"".join(kp.SAMPLE.pack((t * 100) % kp.WRAP, 0, 1_000_000,
                 round(w * 1e6), 0, 0, 0, 0) for w, t in part)
             stamp = part[-1][1] * 100_000_000
-            batches.append({"k": "b", "tx": stamp, "rx": stamp, "n": len(part), "p": payload.hex(), "smc": {"B0AC": 0}})
+            # One rare early receive and recurring late receives give the native
+            # envelope fit both signs, with the negative extreme dominant.
+            latency = 0 if clock_latency_ms is None else (clock_latency_ms[0]
+                if i // 10 == (len(meter_samples) + 9) // 20 else clock_latency_ms[1] if i // 10 % 7 == 3 else 0)
+            rx = stamp + round(latency * 1e6)
+            batches.append({"k": "b", "tx": rx, "rx": rx, "n": len(part), "p": payload.hex(), "smc": {"B0AC": 0}})
         stream = archive / "sources/night-custody/hazards/meter/stream-001.jsonl"
         stream.parent.mkdir(parents=True)
         trailer = {"k": "t", "end_raw_ns": tick * 100_000_000, "end_mono_ns": tick * 100_000_000}

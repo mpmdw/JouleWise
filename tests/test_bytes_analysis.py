@@ -533,9 +533,9 @@ class CampaignWordRates(unittest.TestCase):
             held_models = [m["model"] for m in design["models"] if m["role"]=="heldout"]
             # Population OLS slope for the fixed ten-model design; resident
             # world also reports the structural epsilon of the extended fit.
-            xs = [(m["W_bytes"]+m["KV_bytes"])/1e9*511/m["synthetic_duration_s"] for m in design["models"]]
+            xs = [(m["W_bytes"]+m["KV_bytes"])/1e9*512/m["synthetic_duration_s"] for m in design["models"]]
             ys = [.01*x if world=="bytes" else 3 if world=="time" else
-                  .01*m["R_bytes"]/1e9*511/m["synthetic_duration_s"] for x,m in zip(xs,design["models"])]
+                  .01*m["R_bytes"]/1e9*512/m["synthetic_duration_s"] for x,m in zip(xs,design["models"])]
             mx,my = statistics.fmean(xs),statistics.fmean(ys)
             epsilon = math.fsum((x-mx)*(y-my) for x,y in zip(xs,ys))/math.fsum((x-mx)**2 for x in xs)
             for seed in seeds:
@@ -684,9 +684,9 @@ class Addendum4RegressionTests(unittest.TestCase):
         frozen = ba.frozen_predictions([p for p in points if p["role"] == "fit"], self.manifest)
         evaluated = ba.evaluate(points, frozen)
         means = [r for r in evaluated["h1"] if r["pass_id"] == "mean"]
-        self.assertEqual(len(means), 54)
-        self.assertFalse(any(r["model"] == "Qwen3-32B-4bit" for r in means))
-        self.assertEqual(evaluated["h2"], [])
+        self.assertEqual(len(means), 60)
+        self.assertTrue(all(r["pass_status"] == "one_pass" for r in means if r["model"] == "Qwen3-32B-4bit"))
+        self.assertEqual(len(evaluated["h2"]), 12)  # primary plus two-pass sensitivities
 
     def test_a4_02_p02_primary_family_and_two_regressor_tier(self):
         for boundary in ba.BOUNDARIES:
@@ -934,6 +934,273 @@ class Addendum4RegressionTests(unittest.TestCase):
                                 self.assertEqual(actual["interval"][key],expected["interval"][key])
                             comparisons += 1
         self.assertEqual(comparisons,144)
+
+
+class Addendum7RegressionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temporary = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.temporary.name)
+        cls.manifest = archive_campaign(cls.root)
+        cls.records = ba.load_records(cls.root / "export", cls.manifest, stage="all")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temporary.cleanup()
+
+    def assess(self, records):
+        passes = ba.reduce_models(records, self.manifest) + ba.reduce_models(records, self.manifest, inclusive=True)
+        points = ba.combine_passes(passes)
+        frozen = ba.frozen_predictions([p for p in points if p["role"] == "fit"], self.manifest)
+        return passes, points, frozen, ba.evaluate(points, frozen)
+
+    def refuse(self, records, models, pass_ids=(1, 2)):
+        for row in records:
+            if row["model"] in models and row["pass_id"] in pass_ids and row["stratum"] == "repeat" and int(row["unit_id"]) < 6:
+                row.update(status="unusable", invalid_energy_record=True, meter=None)
+
+    def test_a7_09_one_pass_primary_all_tables_and_two_pass_sensitivity(self):
+        target = "Qwen3-30B-A3B-4bit"
+        records = copy.deepcopy(self.records)
+        self.refuse(records, [target], (1,))
+        passes, points, frozen, result = self.assess(records)
+        for point in [p for p in points if p["model"] == target]:
+            self.assertEqual((point["status"], point["pass_status"], point["n_passes"]), ("computed", "one_pass", 1))
+            survivor = next(r for r in point["passes"] if r["pass_id"] == 2)
+            self.assertEqual(point["mean_j"], survivor["mean_j"])
+            self.assertEqual(point["h_j"] + point["B_j"], survivor["h_j"] + survivor["B_j"])
+            self.assertIsNone(point["pass_difference_j"])
+            self.assertEqual([r["pass_status"] for r in point["passes"]], ["one_pass", "one_pass"])
+        words = [r for r in result["h1"] if r["model"] == target and not r["description_only"]]
+        self.assertEqual(len(words), 12)
+        self.assertTrue(all(r["pass_status"] == "one_pass" for r in words))
+        for row in result["h2"]:
+            primary = row["analysis"] == "primary"
+            self.assertEqual(row["n"], 10 if primary else 9)
+            self.assertEqual(row["k"], 11 if row["boundary"] == "rest" else 9)
+            self.assertEqual(row["description_only"], not primary)
+            labels = {p["model"]: p for p in row["point_labels"]}
+            if primary:
+                self.assertEqual(labels[target]["pass_status"], "one_pass")
+                self.assertEqual(next(p for p in row["tier"]["point_labels"] if p["model"] == target)["pass_status"], "one_pass")
+                self.assertEqual(next(p for p in row["loo_description"] if p["model"] == target)["pass_status"], "one_pass")
+            else:
+                self.assertNotIn(target, labels)
+                self.assertNotIn("primary_intervals", row)
+        for row in result["moe"]:
+            self.assertEqual(next(p for p in row["misses"] if p["model"] == target)["pass_status"], "one_pass")
+        # Fit-stage commitments and emitted pass tables carry the same label.
+        fit_target = "Qwen3-4B-4bit"
+        self.refuse(records, [fit_target], (1,))
+        def released(source, manifest, *, stage, **kw):
+            return [r for r in records if (r["role"] == "fit") == (stage == "fit")]
+        # Native records do not carry role; look it up from the frozen roster.
+        roles = {m["model"]: m["role"] for m in self.manifest["models"]}
+        for r in records:
+            r["role"] = roles[r["model"]]
+        with tempfile.TemporaryDirectory() as directory, patch.object(ba, "load_records", side_effect=released), contextlib.redirect_stdout(io.StringIO()):
+            root = Path(directory)
+            _write_json(root / "manifest.json", self.manifest)
+            self.assertEqual(bytes_analyze.main(["--export", str(self.root / "export"), "--manifest", str(root / "manifest.json"),
+                "--stage", "all", "--out", str(root / "out")]), 0)
+            for row in ba.read_json(root / "out/fit_pass_estimates.json"):
+                if row["model"] == fit_target:
+                    self.assertEqual(row["pass_status"], "one_pass")
+            commit = ba.read_json(root / "out/predictions.json")
+            self.assertTrue(all(p["pass_status"] == "one_pass" for p in commit["tier_fit_inputs"] if p["model"] == fit_target))
+            self.assertEqual(len(ba.read_json(root / "out/analysis_record.json")["H2_intervals"]), 12)
+
+    def test_a7_09_both_refused_no_point_no_word_h2_n_and_k(self):
+        target = "Qwen3-8B-8bit"  # one fewer primary non-tier deviation
+        records = copy.deepcopy(self.records)
+        self.refuse(records, [target])
+        _, points, _, result = self.assess(records)
+        self.assertTrue(all(p["status"] == "unavailable" and p["pass_status"] == "no_pass"
+                            for p in points if p["model"] == target))
+        self.assertFalse(any(r["model"] == target for r in result["h1"]))
+        self.assertEqual(len(result["unavailable"]), 12)
+        self.assertTrue(all(r["refusals"][0]["model"] == target for r in result["unavailable"]))
+        for row in result["h2"]:
+            self.assertEqual(row["n"], 9)
+            self.assertEqual(row["k"], 10 if row["boundary"] == "rest" else 8)
+            if not row["description_only"]:
+                self.assertEqual(len(row["primary_intervals"]), row["k"])
+                for fit in (row["two_term"], row["resident_extended"], row["tier"]):
+                    self.assertEqual(fit["family_size"], row["k"])
+
+    def test_a7_09_each_fit_refused_below_two_df_h2_survives_missing_fit_model(self):
+        # Missing fit models prevent H1, while H2 still fits the remaining points.
+        records = copy.deepcopy(self.records)
+        self.refuse(records, ["Qwen3-4B-4bit", "Qwen3-14B-4bit"])
+        _, _, _, result = self.assess(records)
+        self.assertEqual(result["h1"], [])
+        self.assertEqual(len(result["h2"]), 24)
+        for row in result["h2"]:
+            self.assertEqual(row["n"], 8)
+            self.assertEqual((row["tier"]["status"], row["tier"]["n"], row["tier"]["df"]), ("refused", 4, 1))
+            self.assertTrue(all(d["status"] == "refused" for d in row["tier_deviations"]))
+            self.assertEqual(row["k"], 5 if row["boundary"] == "rest" else 3)
+            self.assertEqual(row["two_term"]["status"], "computed")
+        # Four points admit only the intercept+BW fit (df=2).
+        points = ba.combine_passes(ba.reduce_models(self.records, self.manifest))
+        points = [p for p in points if p["boundary"] == "rails" and p["basis"] == "gross primary"][:4]
+        out = ba.h2(points, {}, boundary="rails")
+        self.assertEqual((out["n"], out["k"]), (4, 1))
+        self.assertEqual(out["two_term"]["df"], 2)
+        self.assertEqual(out["resident_extended"]["status"], "refused")
+        self.assertTrue(all(r["status"] == "refused" for r in out["loo_description"]))
+        empty = ba.h2([], {}, boundary="rest")
+        self.assertEqual((empty["n"], empty["k"], empty["primary_intervals"]), (0, 0, []))
+        self.assertEqual(empty["rest"]["status"], "refused")
+
+    def battery_records(self, assist_ordinals):
+        records = copy.deepcopy(self.records)
+        module = [r for r in records if r["model"] == "Qwen3-30B-A3B-4bit" and r["pass_id"] == 1]
+        repeats = [10,10.2,9.9,10.1,10,10.3,9.8,10.1,10,9.6]
+        blocks = [10.4,10.1,10.3,10.2,10.5,10,10.2,10.3,10.1,9.9]
+        for i, row in enumerate(module):
+            energy = repeats[i] if i < 10 else blocks[(i - 10) // 4]
+            row.update(rails_j=energy, rails_secondary_j=energy - 1)
+            row["meter"].update(gross_j=2 * energy, secondary_j=2 * energy - 2)
+            row["flags"] = ["battery.assist"] if i in assist_ordinals else ["battery.assist_outside_request"]
+        return module
+
+    def test_a7_10_without_assisted_registered_example_all_cells_atomic_quad(self):
+        records = self.battery_records({2, 34})
+        for inclusive in (False, True):
+            for cell in ba.reduce_models(records, self.manifest, inclusive=inclusive):
+                factor = 2 if cell["boundary"] == "DC input" else 1
+                offset = factor if cell["basis"] == "idle-subtracted secondary" else 0
+                diagnostic = cell["without_assisted"]
+                self.assertAlmostEqual(cell["mean_j"], 10.16 * factor - offset)
+                self.assertAlmostEqual(diagnostic["mean_j"], (0.2 * (100.0 - 9.9) / 9 + 0.8 * (102.0 - 10.2) / 9) * factor - offset)
+                self.assertEqual((diagnostic["n_r"], diagnostic["n_b"]), (9, 9))
+                self.assertEqual(cell["assisted_member_counts"], {"repeat": 1, "quad": 1})
+                self.assertEqual(cell["assisted_unit_counts"], {"repeat": 1, "quad": 1})
+                self.assertEqual(len(diagnostic["removed_runs"]), 5)
+                self.assertTrue(diagnostic["description_only"])
+                self.assertFalse(diagnostic["below_minimum"])
+                self.assertNotIn("battery.assist", diagnostic["flags"])
+                self.assertEqual(cell["with_assisted_label"], "with assisted members")
+        plain = self.battery_records(set())
+        self.assertTrue(all("without_assisted" not in p for p in ba.reduce_models(plain, self.manifest)))
+        # A second member in the same assisted quad changes member count only.
+        records = self.battery_records({2, 34, 35})
+        for cell in ba.reduce_models(records, self.manifest):
+            self.assertEqual(cell["assisted_member_counts"], {"repeat": 1, "quad": 2})
+            self.assertEqual(cell["assisted_unit_counts"], {"repeat": 1, "quad": 1})
+            point = ba.combine_passes([cell])[0]
+            self.assertEqual(point["without_assisted"]["mean_j"], cell["without_assisted"]["mean_j"])
+            self.assertEqual(point["without_assisted"]["pass_status"], "one_pass")
+            self.assertEqual(point["without_assisted"]["h_j"], cell["without_assisted"]["h_j"])
+            self.assertTrue(point["without_assisted"]["description_only"])
+
+    def test_a7_10_below_minimum_prints_value_counts_and_no_decision(self):
+        for survivors in (4, 1, 0):
+            with self.subTest(survivors=survivors):
+                records = self.battery_records(set(range(10 - survivors)))
+                for cell in ba.reduce_models(records, self.manifest):
+                    diagnostic = cell["without_assisted"]
+                    self.assertEqual((cell["n_r"], cell["n_b"]), (10, 10))
+                    self.assertEqual((diagnostic["n_r"], diagnostic["n_b"]), (survivors, 10))
+                    self.assertIn("below the registered minimum of 5 units", diagnostic["label"])
+                    self.assertTrue(diagnostic["description_only"])
+                    if survivors >= 2:
+                        self.assertEqual(diagnostic["df"], survivors - 1)
+                        self.assertIsNotNone(diagnostic["lower_j"])
+                    elif survivors == 1:
+                        self.assertIsNotNone(diagnostic["mean_j"])
+                        self.assertIsNone(diagnostic["h_j"])
+                    else:
+                        self.assertIsNone(diagnostic["mean_j"])
+
+    def test_a7_12_unequal_pass_duration_power_is_ratio_of_means(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = archive_campaign(root, pass_duration_scales=(1, 2))
+            records = ba.load_records(root / "export", manifest, stage="all")
+            passes = ba.reduce_models(records, manifest)
+            for point in ba.combine_passes(passes):
+                a, b = point["passes"]
+                self.assertAlmostEqual(b["duration_s"], 2 * a["duration_s"])
+                expected = (a["mean_j"] + b["mean_j"]) / (a["duration_s"] + b["duration_s"])
+                self.assertEqual(point["power"], expected)
+                self.assertAlmostEqual(point["power_half_w"], (a["h_j"] + a["B_j"] + b["h_j"] + b["B_j"]) /
+                                       (a["duration_s"] + b["duration_s"]))
+                self.assertNotAlmostEqual(point["power"], .5 * (a["mean_j"] / a["duration_s"] + b["mean_j"] / b["duration_s"]), places=5)
+
+    def test_a7_12_generated_signed_clock_latency_uses_largest_absolute_extreme(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = archive_campaign(root, clock_latency_ms=(-8, 3))
+            for session in manifest["sessions"]:
+                stream = kp.parse(Path(session["archive"]) / "sources/night-custody/hazards/meter/stream-001.jsonl")
+                stats = stream.fit.stats
+                self.assertLess(stats["excess_latency_ms_min"], 0)
+                self.assertGreater(stats["excess_latency_ms_max"], 0)
+                self.assertGreater(abs(stats["excess_latency_ms_min"]), stats["excess_latency_ms_max"])
+            records = ba.load_records(root / "export", manifest, stage="all")
+            for record in records:
+                meter = record["meter"]
+                extrema = [meter["clock_fit"]["excess_latency_ms_" + suffix] for suffix in ("min", "max")]
+                self.assertEqual(meter["r_max_s"], max(map(abs, extrema)) / 1000)
+                self.assertAlmostEqual(meter["phase_edge_j"], sum(meter["edge_powers_w"]) * (meter["r_max_s"] + .1))
+
+    def test_a7_13_exact_512_decode_denominators_and_printed_label(self):
+        self.assertEqual(ba.DECODE_STEPS, 512)
+        label = "512 decode forward passes, one of which yields no returned token"
+        self.assertEqual(ba.OUTPUT_LABEL, label)
+        for point in ba.combine_passes(ba.reduce_models(self.records, self.manifest)):
+            self.assertEqual(point["e"], point["mean_j"] / 512)
+            self.assertEqual(point["printed_j_per_output_token"], point["e"])
+            self.assertEqual(point["time"], point["duration_s"] / 512)
+            self.assertEqual(point["BW"], point["bytes"] / point["time"])
+            self.assertEqual(point["output_label"], label)
+
+    def test_a7_02_03_08_allowances_and_registered_tabulated_t_still_hold(self):
+        from joulewise.aggregate import student_t_critical_95
+        self.assertEqual(student_t_critical_95(5), 2.571)
+        for cell in ba.reduce_models(self.records, self.manifest):
+            boundary = cell["boundary"]
+            reference = cell["neg8_inputs"]["boundaries"][boundary]
+            expected_drift = reference["families"][cell["drift_family"]]["allowance_j"] * .5 * cell["drift_scale"]
+            self.assertAlmostEqual(cell["kind_averages_j"][ba.BOUND_KINDS[2]], expected_drift, places=13)
+            if boundary != "rails":
+                self.assertGreater(expected_drift, 0)
+                self.assertGreaterEqual(cell["B_j"], cell["meter_phase_edge_mean_j"] + expected_drift - 1e-12)
+            bound = reference["families"][cell["drift_family"]]["bound_terms"]
+            corpus = [r[boundary][cell["drift_family"]] for r in cell["neg8_inputs"]["references"] if r["role"] == "corpus"]
+            self.assertEqual(bound["prediction_j"], 2.571 * statistics.stdev(corpus) *
+                             math.sqrt(1 / bound["n_start"] + 1 / bound["n_end"]))
+
+        # Deliberately non-proportional boundary references distinguish each
+        # family's own allowance/scale from copying rails into DC or rest.
+        records = copy.deepcopy(self.records[:50])
+        energies = {"rails": 10, "DC input": 25, "rest": 4}
+        durations = {"rails": 3, "DC input": 5, "rest": 2}
+        allowances = {"rails": .12, "DC input": .45, "rest": .91}
+        for record in records:
+            record.update(rails_anchor_j=.3, rails_interpolation_j=.1)
+            record["meter"]["phase_edge_j"] = .7
+            for boundary in ba.BOUNDARIES:
+                reference = record["neg8_inputs"]["boundaries"][boundary]
+                reference.update(energy_j=energies[boundary], duration_s=durations[boundary])
+                for family in ("gross", "idle_subtracted"):
+                    reference["families"][family]["allowance_j"] = allowances[boundary] * (2 if family == "idle_subtracted" else 1)
+        cells = ba.reduce_models(records, self.manifest)
+        for cell in cells:
+            boundary = cell["boundary"]
+            gross = next(c for c in cells if c["boundary"] == boundary and c["basis"] == "gross primary")
+            scale = max(1, gross["mean_j"] / energies[boundary], cell["duration_s"] / durations[boundary])
+            drift = .5 * allowances[boundary] * scale * (2 if cell["drift_family"] == "idle_subtracted" else 1)
+            self.assertAlmostEqual(cell["B_j"], {"rails": .4, "DC input": .7, "rest": 1.1}[boundary] + drift)
+
+    def test_a7_11_phase_ends_round_to_nearest_nanosecond_still_holds(self):
+        metadata = {"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {
+            "sampling_started": {"epoch_s": 0, "monotonic_before_s": 0}}}}}
+        events = [{"phase": "decode", "event_type": event, "timestamp_s": stamp}
+                  for event, stamp in (("phase_start", 1.2e-9), ("phase_end", 10.8e-9))]
+        self.assertEqual(ba._event_span(events, "decode", metadata), [1, 11])
 
 
 class ReviewerProbeTests(unittest.TestCase):

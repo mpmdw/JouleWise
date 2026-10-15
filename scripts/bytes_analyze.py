@@ -25,7 +25,12 @@ def _reduce(source, manifest, stage, key_dir=None):
     boundaries = ("rails",) if stage == "blinded" else ba.BOUNDARIES
     passes = ba.reduce_models(records, manifest, boundaries=boundaries) + ba.reduce_models(
         records, manifest, inclusive=True, boundaries=boundaries)
-    return passes, ba.combine_passes(passes)
+    points = ba.combine_passes(passes)
+    labels = {tuple(p[k] for k in ("model", "boundary", "basis", "selection")): p for p in points}
+    for row in passes:
+        point = labels[tuple(row[k] for k in ("model", "boundary", "basis", "selection"))]
+        row.update(pass_status=point["pass_status"], n_passes=point["n_passes"])
+    return passes, points
 
 
 def main(argv=None):
@@ -85,7 +90,9 @@ def main(argv=None):
             _write(args.out, name, rows)
         _write(args.out, "analysis_record", {"stage": args.stage, "predictions_sha256": sha,
                 "manifest_sha256": ba.digest(manifest), "H1_checks": ba.H1_CHECKS,
-                "H2_intervals": ba.H2_INTERVALS, "output_label": ba.OUTPUT_LABEL,
+                "H2_intervals": [{k: row[k] for k in ("selection", "basis", "boundary", "n", "k")}
+                                 for row in result["h2"] if not row["description_only"]],
+                "output_label": ba.OUTPUT_LABEL,
                 "note": frozen["note"], "synthetic": manifest.get("synthetic", False)})
         print(json.dumps({"stage": args.stage, "predictions_sha256": sha, "out": str(args.out)}))
         return 0

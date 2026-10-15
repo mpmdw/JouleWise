@@ -23,13 +23,13 @@ def run(base, R=400):
     report = []
     def truth_e(world, m):
         b = (m["W_bytes"] + m["KV_bytes"]) / 1e9
-        tau = m["synthetic_duration_s"] / 511
+        tau = m["synthetic_duration_s"] / 512
         return .01 * b if world == "bytes" else 3 * tau if world == "time" else .01 * m["R_bytes"] / 1e9
 
 
     def population_eps(world, factor):
-        xs = [(m["W_bytes"] + m["KV_bytes"]) / 1e9 * 511 / m["synthetic_duration_s"] for m in manifest["models"]]
-        ys = [truth_e(world, m) * 511 / m["synthetic_duration_s"] for m in manifest["models"]]
+        xs = [(m["W_bytes"] + m["KV_bytes"]) / 1e9 * 512 / m["synthetic_duration_s"] for m in manifest["models"]]
+        ys = [truth_e(world, m) * 512 / m["synthetic_duration_s"] for m in manifest["models"]]
         mx, my = statistics.fmean(xs), statistics.fmean(ys)
         return factor * math.fsum((x - mx) * (y - my) for x, y in zip(xs, ys)) / math.fsum((x - mx) ** 2 for x in xs)
 
@@ -38,7 +38,7 @@ def run(base, R=400):
         out = []
         for r in records:
             m = spec[r["model"]]
-            e = truth_e(world, m) * 511 * (1 + rng.gauss(0, .002))
+            e = truth_e(world, m) * 512 * (1 + rng.gauss(0, .002))
             idle_rails = r["rails_j"] - r["rails_secondary_j"]
             meter = dict(r["meter"])
             meter["gross_j"] = 2 * e

@@ -29,11 +29,11 @@ pts = {b: [] for b in ba.BOUNDARIES}
 for m in design["models"]:
     b = (m["W_bytes"] + m["KV_bytes"]) / 1e9
     T = m["synthetic_duration_s"]
-    rails = 0.01 * b * 511 / T * (1 + rng.gauss(0, .01)) + 3
+    rails = 0.01 * b * 512 / T * (1 + rng.gauss(0, .01)) + 3
     dc = 2 * rails + 5 + rng.gauss(0, .1)
     for boundary, p in (("rails", rails), ("DC input", dc), ("rest", dc - rails)):
-        pts[boundary].append({"model": m["model"], "boundary": boundary, "BW": b * 511 / T, "power": p,
-                              "resident": m["R_bytes"] / 1e9, "time": T / 511, "tier": m["tier"]})
+        pts[boundary].append({"model": m["model"], "boundary": boundary, "BW": b * 512 / T, "power": p,
+                              "resident": m["R_bytes"] / 1e9, "time": T / 512, "tier": m["tier"]})
 rails_power = {p["model"]: p["power"] for p in pts["rails"]}
 for boundary in ba.BOUNDARIES:
     out = ba.h2(pts[boundary], rails_power)
