@@ -3828,7 +3828,9 @@ raise SystemExit(run_night.main(sys.argv[3:]))
             "com.joulewise.night.plist.template": {"PATH"},
             "com.joulewise.night-probe.plist.template": {"PATH", "JOULEWISE_LAUNCHD_LABEL"},
             "com.joulewise.magistrate.plist.template": {
-                "PATH", "MAGISTRATE_SESSION_BIN", "MAGISTRATE_WATCHDOG_CUSTODY_ROOT"}}
+                "PATH", "MAGISTRATE_SESSION_BIN", "MAGISTRATE_WATCHDOG_CUSTODY_ROOT"},
+            # Block 6's loop tick (never runs the night driver; it installs night jobs by this template's sibling).
+            "com.joulewise.b6loop.plist.template": {"PATH", "JW_B6_LOOP_ROOT"}}
         templates = sorted((repo / "configs/launchd").glob("*.plist.template"))
         self.assertEqual({t.name for t in templates}, set(expected_environment))
         for template in templates:

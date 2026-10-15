@@ -1090,7 +1090,8 @@ class TransactionTests(unittest.TestCase):
                     result.stderr, r"\Ausage: [^\n]+ --plan PLAN\.json \[--python ABS_PATH\] "
                     r"\[--launchd-probe\] \[--probe-timeout-s S\] \[--probe-max-age-s S\] "
                     r"\[--hour H\] \[--minute M\] "
-                    r"\[--uninstall\] \[--render-only DIR\] \[--launchctl-bin PATH\]\n\Z")
+                    r"\[--uninstall\] \[--render-only DIR\] \[--launchctl-bin PATH\] "
+                    r"\[--courier-bin ABS_PATH\]\n\Z")
                 self.assertEqual([], fixture.fake.calls())
                 self.assertEqual(before, snapshot())
 

@@ -817,6 +817,8 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(plist["ProcessType"], "Background")
         self.assertTrue(plist["RunAtLoad"])
         self.assertTrue(plist["ProgramArguments"][1].endswith("b6_loop_guard.zsh"))
+        # launchd's default PATH lacks /opt/homebrew/bin, where gh (the mail transport) lives.
+        self.assertTrue(plist["EnvironmentVariables"]["PATH"].startswith("/opt/homebrew/bin:"))
         active, terminal, marker = self.root / "collection.active", self.root / "terminal", self.root / "passed"
         # Sole non-Git subprocess exception: the guard execs harmless printf.
         environment = {**os.environ, "JW_B6_LOOP_ROOT": str(self.root),
