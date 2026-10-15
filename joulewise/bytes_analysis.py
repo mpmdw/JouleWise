@@ -5,10 +5,12 @@ Artifacts are analysis records, not Block-5 paper-custody capabilities.
 from __future__ import annotations
 
 import bisect
+import csv
 import hashlib
 import itertools
 import json
 import math
+import re
 import statistics
 from pathlib import Path
 
@@ -19,15 +21,15 @@ HYPOTHESES = ("bytes", "resident", "time")
 DECODE_STEPS = 511
 OUTPUT_LABEL = "512 output tokens, 511 generated in the decode phase"
 H1_CHECKS = 21
-# epsilon (all and tier), rho, four tier deviations per boundary; rest epsilon/lambda.
-H2_INTERVALS = 3 * (1 + 1 + 1 + 4) + 2
+# Addendum 4: separate primary families on each boundary.
+H2_INTERVALS = {"rails": 9, "DC input": 9, "rest": 11}
 SCHEMA = "joulewise.bytes_predictions.v1"
 BOUND_KINDS = ("E_clock_anchor_shift_bound_j", "E_interpolation_joint_edge_bound_j",
                "E_whole_window_drift_allowance_j")
 
 
 class AnalysisError(ValueError):
-    """Input cannot support the requested analysis; no partial result is issued."""
+    """A member, cell or stage cannot support the requested calculation."""
 
 
 def number(value, label="number", *, positive=False, nonnegative=False):
@@ -35,7 +37,7 @@ def number(value, label="number", *, positive=False, nonnegative=False):
         raise AnalysisError(f"{label}: finite number required")
     if (positive and value <= 0) or (nonnegative and value < 0):
         raise AnalysisError(f"{label}: invalid sign")
-    return float(value)
+    return value
 
 
 def digest(value):
@@ -131,8 +133,8 @@ def _inverse(matrix):
     return [row[n:] for row in a]
 
 
-def ols(predictors, response, *, family_size=H2_INTERVALS):
-    """OLS with centered/scaled columns and Student-t coefficient intervals."""
+def ols(predictors, response, *, family_size=9):
+    """OLS point estimates; primary HC3 and labelled OLS Student-t intervals."""
     n, p = len(response), len(predictors[0]) + 1
     if n <= p or len(predictors) != n or any(len(row) != p - 1 for row in predictors):
         raise AnalysisError("H2 insufficient or ragged design")
@@ -154,52 +156,83 @@ def ols(predictors, response, *, family_size=H2_INTERVALS):
     transform += [[0.0] + [1 / scales[i] if i == j else 0.0 for j in range(p - 1)]
                   for i in range(p - 1)]
     coefficients = [math.fsum(a * b for a, b in zip(row, beta)) for row in transform]
-    covariance = [[mse * math.fsum(transform[i][k] * inv[k][l] * transform[j][l]
-                                  for k in range(p) for l in range(p))
+    ols_scaled = [[mse * v for v in row] for row in inv]
+    # HC3 sandwich: sum_i (X'X)^-1 x_i x_i' (X'X)^-1 * (r_i/(1-h_ii))^2.
+    influence = [[math.fsum(a * b for a, b in zip(row, x)) for row in inv]
+                 for x in design]
+    leverage = [math.fsum(a * b for a, b in zip(x, v)) for x, v in zip(design, influence)]
+    if any(1 - h <= 1e-12 for h in leverage):
+        raise AnalysisError("HC3 undefined at unit leverage")
+    hc3_scaled = [[math.fsum(v[i] * v[j] * (r / (1 - h)) ** 2
+                              for v, r, h in zip(influence, residual, leverage))
                    for j in range(p)] for i in range(p)]
+
+    def transformed(cov):
+        return [[math.fsum(transform[i][k] * cov[k][l] * transform[j][l]
+                           for k in range(p) for l in range(p))
+                 for j in range(p)] for i in range(p)]
+
+    covariance, ols_covariance = transformed(hc3_scaled), transformed(ols_scaled)
     critical = student_t_quantile(1 - .05 / (2 * family_size), n - p)
-    half = [critical * math.sqrt(max(0.0, covariance[i][i])) for i in range(p)]
+    se = [math.sqrt(max(0.0, covariance[i][i])) for i in range(p)]
+    ols_se = [math.sqrt(max(0.0, ols_covariance[i][i])) for i in range(p)]
     return {"n": n, "df": n - p, "coefficients": coefficients, "covariance": covariance,
+            "se_method": "HC3", "standard_errors": se,
+            "ols_covariance": ols_covariance, "ols_standard_errors": ols_se,
+            "ols_intervals": [[v - critical * e, v + critical * e] for v, e in zip(coefficients, ols_se)],
             "mse": mse, "critical": critical, "family_size": family_size,
-            "intervals": [[v - h, v + h] for v, h in zip(coefficients, half)]}
+            "intervals": [[v - critical * e, v + critical * e] for v, e in zip(coefficients, se)]}
 
 
-def deviation(fit, predictors, observed):
+def deviation(fit, predictors, observed, measured_half_w=0.0):
     x = [1.0, *predictors]
     fitted = math.fsum(a * b for a, b in zip(x, fit["coefficients"]))
     variance = fit["mse"] + math.fsum(x[i] * fit["covariance"][i][j] * x[j]
                                       for i in range(len(x)) for j in range(len(x)))
-    half = fit["critical"] * math.sqrt(max(0.0, variance))
+    prediction_half = fit["critical"] * math.sqrt(max(0.0, variance))
+    own = number(measured_half_w, "measured power half-width", nonnegative=True)
+    half = prediction_half + own
     delta = observed - fitted
     return {"deviation_w": delta, "lower_w": delta - half, "upper_w": delta + half,
-            "predicted_w": fitted}
+            "prediction_half_w": prediction_half, "measured_half_w": own, "predicted_w": fitted}
 
 
 def h2(points, rails_power):
+    family = 5 + sum(not p["tier"] for p in points) + (2 if points[0]["boundary"] == "rest" else 0)
     xs, ys = [[p["BW"]] for p in points], [p["power"] for p in points]
-    two = ols(xs, ys)
-    extended = ols([[p["BW"], p["resident"] / p["time"]] for p in points], ys)
+    two = ols(xs, ys, family_size=family)
+    extended = ols([[p["BW"], p["resident"] / p["time"]] for p in points], ys, family_size=family)
     rho = extended["coefficients"][2]
     lo, hi = extended["intervals"][2]
     tier_points = [p for p in points if p["tier"]]
-    tier = ols([[p["BW"]] for p in tier_points], [p["power"] for p in tier_points])
-    outside = [{"model": p["model"], **deviation(tier, [p["BW"]], p["power"])}
-               for p in points if not p["tier"]]
-    rest = ols([[p["BW"], rails_power[p["model"]]] for p in points], ys) if points[0]["boundary"] == "rest" else None
+    tier = ols([[p["BW"], p["resident"] / p["time"]] for p in tier_points],
+               [p["power"] for p in tier_points], family_size=family)
+    outside = [{"model": p["model"], **deviation(tier, [p["BW"], p["resident"] / p["time"]],
+                p["power"], p.get("power_half_w", (p.get("h_j", 0.0) + p.get("B_j", 0.0)) /
+                p.get("duration_s", 1.0)))} for p in points if not p["tier"]]
+    rest = None
+    if points[0]["boundary"] == "rest":
+        rest = ols([[p["BW"], rails_power[p["model"]]] for p in points], ys, family_size=family)
+        corr = statistics.correlation([p["BW"] for p in points], [rails_power[p["model"]] for p in points])
+        rest.update(vif=1 / (1 - corr * corr) if abs(corr) < 1 else None,
+                    vif_status="computed" if abs(corr) < 1 else "infinite", correlation=corr)
     loo = []
     for i, p in enumerate(points):
-        f = ols(xs[:i] + xs[i + 1:], ys[:i] + ys[i + 1:])
+        f = ols(xs[:i] + xs[i + 1:], ys[:i] + ys[i + 1:], family_size=family)
         loo.append({"model": p["model"], "predicted_w": predict(f["coefficients"], p["BW"]),
                     "observed_w": p["power"]})
     primary = [
         {"term": name, "estimate": fit["coefficients"][index],
-         "lower": fit["intervals"][index][0], "upper": fit["intervals"][index][1]}
-        for name, fit, index in (("epsilon", two, 1), ("rho", extended, 2), ("tier_epsilon", tier, 1))]
+         "lower": fit["intervals"][index][0], "upper": fit["intervals"][index][1],
+         "HC3_se": fit["standard_errors"][index], "OLS_se": fit["ols_standard_errors"][index]}
+        for name, fit, index in (("epsilon", two, 1), ("extended_epsilon", extended, 1),
+                                ("rho", extended, 2), ("tier_epsilon", tier, 1), ("tier_rho", tier, 2))]
     primary += [{"term": "tier_deviation:" + row["model"], "estimate": row["deviation_w"],
                  "lower": row["lower_w"], "upper": row["upper_w"]} for row in outside]
     if rest is not None:
         primary += [{"term": name, "estimate": rest["coefficients"][index],
-                     "lower": rest["intervals"][index][0], "upper": rest["intervals"][index][1]}
+                     "lower": rest["intervals"][index][0], "upper": rest["intervals"][index][1],
+                     "HC3_se": rest["standard_errors"][index], "OLS_se": rest["ols_standard_errors"][index]}
                     for name, index in (("rest_epsilon", 1), ("lambda", 2))]
     return {"primary_intervals": primary, "two_term": two, "resident_extended": extended,
             "resident_adds_nothing": lo <= 0 <= hi or rho <= 0,
@@ -249,8 +282,8 @@ def _event_span(events, phase, metadata):
 def meter_decode(stream, decode_span, idle_span):
     """R3 DC input integration and the 2026-10-15 phase-edge ruling.
 
-    Samples contain [sample time, next sample time); an exact edge uses the
-    sample starting there. The ruled bound applies to decode, for both bases.
+    Each edge takes the larger of its two adjacent sample powers, including
+    the in-phase sample at an exactly aligned end. The bound covers both bases.
     It is an attribution bound, not a physical-energy confidence statement.
     """
     from joulewise.external import km003c_parse as kp
@@ -272,8 +305,11 @@ def meter_decode(stream, decode_span, idle_span):
     residual = max(abs(number(stats[key], key)) for key in
                    ("excess_latency_ms_min", "excess_latency_ms_max")) / 1000
     interval = number(stream.samples.step_ms, "meter sample interval", positive=True) / 1000
-    powers = [number(stream.watts[bisect.bisect_right(stream.host_ns, edge) - 1],
-                     "meter edge power", nonnegative=True) for edge in spans[0]]
+    powers = []
+    for edge in spans[0]:
+        right = bisect.bisect_left(stream.host_ns, edge)
+        adjacent = [i for i in (right - 1, right) if 0 <= i < len(stream.host_ns)]
+        powers.append(max(number(stream.watts[i], "meter edge power", nonnegative=True) for i in adjacent))
     u = math.fsum(powers) * (residual + interval)
     return {"gross_j": gross, "secondary_j": gross - base / idle_duration * duration,
             "idle_power_w": base / idle_duration, "phase_edge_j": u,
@@ -312,19 +348,229 @@ def operative_summary(bundle, acceptance, *, synthetic=False, stored=None, physi
     return summary, {"operative_bound_s": bound, "status": "rereduced"}
 
 
-def _session_streams(root):
+def _filtered_stream(path, spans):
+    """Fit the clock from timing only; decode power only in selected run spans.
+
+    The JSONL transport must be scanned, but payloads outside these spans are
+    never unpacked into power samples or retained. Batch endpoint *sequence
+    numbers* alone provide the same clock-fit points as the native parser.
+    One sample on either side is retained for the ruled edge bound.
+    """
+    from joulewise.external import km003c_parse as kp
+    header = trailer = None
+    batches, newest, positions = [], [], []
+    previous_seq = previous_rx = None
+    current = 0
+    payload_re = re.compile(r'"p"\s*:\s*"([0-9a-fA-F]*)"')
+    with Path(path).open() as handle:
+        for raw in handle:
+            match = payload_re.search(raw)
+            # Parse transport/timing without materializing the payload as JSON.
+            item = json.loads(raw[:match.start(1)] + raw[match.end(1):] if match else raw)
+            if item.get("k") == "h":
+                header = item
+            elif item.get("k") == "t":
+                trailer = item
+            elif item.get("k") == "b" and item.get("n") and match:
+                payload = match.group(1)
+                seq = int.from_bytes(bytes.fromhex(payload[-kp.SAMPLE.size * 2:][:4]), "little")
+                if previous_seq is None:
+                    first = int.from_bytes(bytes.fromhex(payload[:4]), "little")
+                    current = (seq - first) % kp.WRAP
+                else:
+                    delta = ((seq - previous_seq + kp.WRAP // 2) % kp.WRAP) - kp.WRAP // 2
+                    elapsed = (item["rx"] - previous_rx) / 1e6
+                    if elapsed > kp.WRAP // 2:
+                        delta += round((elapsed - delta) / kp.WRAP) * kp.WRAP
+                    current += delta
+                previous_seq, previous_rx = seq, item["rx"]
+                newest.append(current)
+                positions.append((seq, current))
+                batches.append(item)
+    if header is None or header.get("status", "streaming") != "streaming" or not batches:
+        return kp.Stream(header, trailer, [], [], None, None, [], [], [], [])
+    step = kp.STEP_MS[header["rate_idx"]]
+    clock_samples = kp.Samples(newest, [], [], list(range(len(batches))), 0, step)
+    try:
+        fit = kp.clock_fit(clock_samples, batches)
+    except ValueError as exc:
+        return kp.Stream(header, trailer, [], [], None, None, [], [], [], [], str(exc))
+    shell = kp.Stream(header, trailer, [], [], None, fit, [], [], [], [])
+    offset = kp.raw_offset_ns(shell)
+    if offset is None:
+        return shell
+    # Sorted disjoint time ranges permit O(log n) selection per sample.
+    ranges = sorted((a + offset - step * 1_000_000, b + offset + step * 1_000_000) for a, b in spans)
+    merged = []
+    for a, b in ranges:
+        if merged and a <= merged[-1][1]:
+            merged[-1][1] = max(b, merged[-1][1])
+        else:
+            merged.append([a, b])
+    starts = [a for a, _ in merged]
+    def selected(t):
+        i = bisect.bisect_right(starts, t) - 1
+        return i >= 0 and t <= merged[i][1]
+    host, watts, devs = [], [], []
+    index = 0
+    with Path(path).open() as handle:
+        for raw in handle:
+            match = payload_re.search(raw)
+            if not match:
+                continue
+            # First pass already established batch metadata and clock position.
+            if index >= len(batches):
+                break
+            meta = json.loads(raw[:match.start(1)] + raw[match.end(1):])
+            if meta.get("k") != "b" or not meta.get("n"):
+                continue
+            seq_last, dev_last = positions[index]
+            index += 1
+            payload = match.group(1)
+            for pos in range(0, len(payload), kp.SAMPLE.size * 2):
+                word = payload[pos:pos + kp.SAMPLE.size * 2]
+                seq = int.from_bytes(bytes.fromhex(word[:4]), "little")
+                dev = dev_last + ((seq - seq_last + kp.WRAP // 2) % kp.WRAP) - kp.WRAP // 2
+                stamp = fit.host_ns(dev)
+                if not selected(stamp) or (host and stamp <= host[-1]):
+                    continue
+                fields = kp.SAMPLE.unpack(bytes.fromhex(word))
+                host.append(stamp)
+                watts.append(fields[2] / 1e6 * fields[3] / 1e6)
+                devs.append(dev)
+    samples = kp.Samples(devs, [], [], [], 0, step)
+    return kp.Stream(header, trailer, [], [], samples, fit, host, watts, [], [])
+
+
+def _session_streams(root, spans):
     from joulewise.external import km003c_parse as kp
     directory = root / "sources/night-custody/hazards/meter"
-    paths = sorted(directory.glob("stream-*.jsonl"))
-    return [(path.name, kp.parse(path)) for path in paths]
+    streams = []
+    for path in sorted(directory.glob("stream-*.jsonl")):
+        try:
+            stream = _filtered_stream(path, spans)
+        except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
+            stream = kp.Stream(None, None, [], [], None, None, [], [], [], [], str(exc))
+        streams.append((path.name, stream))
+    return streams
 
 
-def archive_records(root, manifest, session, *, stage):
-    """Read harvest's roster, assessments, reductions and original bundle events.
+# These exclusions establish absence or invalidity of the energy record.
+# Other catalog exclusions, including NUMBER cooldown/idle/envelope flags,
+# can be restored if the record itself passes the checks below.
+INVALID_RECORD_CODES = frozenset({"member.bytes_missing", "member.bytes_ambiguous", "member.unreadable",
+    "member.status_not_succeeded", "member.strict_validation_failed", "member.token_count_mismatch"})
+REFERENCE_ROLES = ("corpus", "start", "midpoint", "end")
 
-    Selection uses only roster cell identities before opening any model's
-    configuration, summary, metadata, or events. Streams are opened lazily.
+
+def _export_rows(path):
+    with Path(path).open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _released_rows(rows, key_dir, *, blinded):
+    from joulewise.b6 import blinding
+    result = []
+    for row in rows:
+        if blinded:
+            result.append(row)
+            continue
+        if (row.get("status") != "succeeded" or not row.get("model_name") or
+                set(row.get("exclusion_codes", "").split(";")) & INVALID_RECORD_CODES):
+            result.append(row)
+            continue
+        if key_dir is None:
+            raise AnalysisError("released key directory required before meter join")
+        # Presence of both files in the supplied release directory is authority.
+        # Never draw keys, inspect the export's private key_dir, or trust synthetic.
+        try:
+            factor = blinding.stored_factor(key_dir, row["config_key"])
+        except ValueError as exc:
+            raise AnalysisError("configuration still blinded: " + row["config_key"]) from exc
+        result.append(row if row.get("non_claim", "").lower() == "true" else blinding.unblind(row, factor))
+    return result
+
+
+def neg8_inputs(rows, *, streams=(), spans=None, test7_passed=False, blinded=False):
+    """Recompute the two NEG-8 family allowances from native export rows.
+
+    Block-5's owning count-adjusted bound supplies repeatability; allowance is
+    max(bound, spread of start/midpoint/end means), separately for each family.
+    Rails reference energies come from the export, never withheld summaries.
+    DC/rest whole-request references use the authorized meter join.
     """
+    from joulewise.whole_window import neg8_count_adjusted_bound
+    kept = [r for r in rows if r["role"] in REFERENCE_ROLES and r.get("config_key") == "neg8_reference"
+            and r.get("status") == "succeeded"
+            and str(r.get("excluded", "")).lower() != "true"]
+    values = []
+    for row in kept:
+        try:
+            gross = number(float(row["gross_energy_j"]), "NEG-8 gross")
+            secondary = number(float(row["idle_subtracted_energy_j"]), "NEG-8 secondary")
+            duration = math.fsum(float(row.get("dur_" + phase + "_s") or 0)
+                                 for phase in ("tokenize", "generation_setup", "prefill", "decode"))
+            number(duration, "NEG-8 whole-request duration", positive=True)
+        except (ValueError, TypeError, KeyError):
+            continue
+        item = {"run_id": row["run_id"], "role": row["role"], "duration_s": duration,
+                "rails": {"gross": gross, "idle_subtracted": secondary}}
+        if not blinded and spans and row["run_id"] in spans:
+            request, idle = spans[row["run_id"]]
+            # Events give the complete request duration, including phase gaps.
+            item["duration_s"] = (request[1] - request[0]) / 1e9
+            for _, stream in streams:
+                try:
+                    dc = meter_decode(stream, request, idle)
+                except AnalysisError:
+                    continue
+                item["DC input"] = {"gross": dc["gross_j"], "idle_subtracted": dc["secondary_j"]}
+                item["rest"] = {family: item["DC input"][family] - item["rails"][family]
+                                for family in ("gross", "idle_subtracted")}
+                break
+        values.append(item)
+    result = {"test7_passed": test7_passed, "references": values, "boundaries": {}}
+    for boundary in (("rails",) if blinded else BOUNDARIES):
+        available = [r for r in values if boundary in r]
+        slots = {slot: [r for r in available if r["role"] == slot] for slot in REFERENCE_ROLES}
+        # B6's registered corpus minimum/cap and survivor endpoint minimum.
+        corpus = slots["corpus"][:12]
+        if len(corpus) < 6 or min(len(slots["start"]), len(slots["end"])) < 2:
+            continue
+        references = slots["start"] + slots["midpoint"] + slots["end"]
+        families = {}
+        for family in ("gross", "idle_subtracted"):
+            bound = neg8_count_adjusted_bound([r[boundary][family] for r in corpus],
+                                            len(slots["start"]), len(slots["end"]))
+            means = {slot: statistics.fmean(r[boundary][family] for r in slots[slot])
+                     for slot in ("start", "midpoint", "end") if slots[slot]}
+            if bound is None:
+                continue
+            families[family] = {"means_j": means, "bound_terms": bound,
+                "allowance_j": max(bound["bound_j"], max(means.values()) - min(means.values()))}
+        result["boundaries"][boundary] = {"families": families,
+            "energy_j": statistics.fmean(r[boundary]["gross"] for r in references),
+            "duration_s": statistics.fmean(r["duration_s"] for r in references),
+            "reference_run_ids": [r["run_id"] for r in references],
+            "corpus_run_ids": [r["run_id"] for r in corpus]}
+    return result
+
+
+def _record_base(model, session, session_id, member, exclusions, flags, window_flags):
+    unit = next(u for u in member["units"] if u["cell_id"] in model["cell_ids"])
+    codes = exclusions.get(member["run_id"], set())
+    return {"model": model["model"], "pass_id": session["pass_id"], "session_id": session_id,
+        "run_id": member["run_id"], "stratum": unit["stratum"], "unit_id": str(unit["unit_id"]),
+        "excluded": bool(codes), "harvest_excluded": bool(codes),
+        "invalid_energy_record": bool(codes & INVALID_RECORD_CODES),
+        "flags": sorted(flags.get(member["run_id"], set()) | window_flags | codes),
+        "status": "unusable", "meter": None}
+
+
+def archive_records(root, manifest, session, *, stage, export_path=None, key_dir=None):
+    """A bad member yields an unusable record; only its whole unit is removed."""
+    if stage == "blinded":
+        raise AnalysisError("blinded stage requires export ingress")
     from joulewise.b6.archive import bundle_of
     root = Path(root)
     roster = read_json(root / "derived/roster.json")
@@ -332,91 +578,111 @@ def archive_records(root, manifest, session, *, stage):
     if acceptance.get("counting") is not True:
         raise AnalysisError("session is not a counting accepted attempt")
     selected = {cell: m for m in manifest["models"] for cell in m["cell_ids"]
-                if stage == "all" or m["role"] == stage}
-    member_exclusions = [e for e in acceptance.get("excluding", []) if e.get("scope") == "member"]
-    exclusions = {e["run_id"] for e in member_exclusions}
-    catalog = read_json(Path(__file__).resolve().parents[1] / "configs/b6/flag_catalog_b6.json")["codes"]
-    nonphysical = {e["run_id"] for e in member_exclusions
-                   if catalog.get(e["code"], {}).get("klass") != "PHYSICS"}
-    flags, window_flags = {}, set()
+                if stage in ("all", "blinded") or m["role"] == stage}
+    exclusions, flags, window_flags = {}, {}, set()
+    for e in acceptance.get("excluding", []):
+        if e.get("scope") == "member":
+            exclusions.setdefault(e["run_id"], set()).add(e["code"])
     flag_rows = [json.loads(raw) for raw in (root / "derived/flags.jsonl").read_text().splitlines() if raw.strip()]
-    flag_rows += acceptance.get("emitted_flags", [])
-    for flag in flag_rows:
+    for flag in flag_rows + acceptance.get("emitted_flags", []):
         scope = flag.get("scope") or {}
         if scope.get("run_id"):
             flags.setdefault(scope["run_id"], set()).add(flag["code"])
         else:
             window_flags.add(flag["code"])
-    streams = None
-    physics_cache = {}
-    seen = set()
+    export_path = export_path or root.parent / "export" / "bytes" / (acceptance["session_id"] + ".runs.csv")
+    exports = _export_rows(export_path)
+    wanted_ids = {m["run_id"] for m in roster["members"]
+                  if any(u["cell_id"] in selected for u in m.get("units", []))}
+    selected_exports = [r for r in exports if r["run_id"] in wanted_ids or r["role"] in REFERENCE_ROLES]
+    locator = key_dir or session.get("released_key_dir")
+    release_dir = Path(locator) if locator is not None else None
+    if release_dir is not None and not release_dir.is_absolute():
+        release_dir = root / release_dir
+    released = _released_rows(selected_exports, release_dir, blinded=stage == "blinded")
+    by_id = {r["run_id"]: r for r in released}
+    records, spans, physics_cache, seen = [], {}, {}, set()
     for member in roster["members"]:
         units = [u for u in member.get("units", []) if u["cell_id"] in selected]
         if not units:
             continue
-        if len(units) != 1:
-            raise AnalysisError("member belongs to multiple BYTES units")
-        unit = units[0]
-        model = selected[unit["cell_id"]]
-        run_id = member["run_id"]
-        if run_id in seen:
-            raise AnalysisError("duplicate run id")
-        seen.add(run_id)
-        bundle = bundle_of(root, {}, run_id)
-        if bundle is None:
-            raise AnalysisError("selected bundle missing")
-        config = read_json(bundle / "config.json")
-        if config["model"]["name"] != model["model"]:
-            raise AnalysisError("roster/config model mismatch")
-        metadata = read_json(bundle / "metadata.json")
-        events = [json.loads(s) for s in (bundle / "events.jsonl").read_text().splitlines() if s.strip()]
-        stored = read_json(root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json"))
-        summary, operative = operative_summary(bundle, acceptance,
-            synthetic=manifest.get("synthetic") is True, stored=stored, physics_cache=physics_cache)
-        counts = metadata.get("workload_observed", {})
-        if counts.get("output_token_count") != 512:
-            raise AnalysisError("runtime-observed output count must be 512")
-        decode = _event_span(events, "decode", metadata)
-        idle = _event_span(events, "idle_baseline", metadata)
-        duration = (decode[1] - decode[0]) / 1e9
-        if streams is None:
-            streams = _session_streams(root)
-        meter = None
-        errors = []
-        for name, stream in streams:
+        if len(units) != 1 or member["run_id"] in seen:
+            raise AnalysisError("ambiguous BYTES member identity")
+        seen.add(member["run_id"])
+        model = selected[units[0]["cell_id"]]
+        row = _record_base(model, session, acceptance["session_id"], member, exclusions, flags, window_flags)
+        run_id = row["run_id"]
+        try:
+            if run_id not in by_id:
+                raise AnalysisError("planned run absent from export")
+            if row["invalid_energy_record"]:
+                raise AnalysisError("harvest status, bundle or validity failure")
+            bundle = bundle_of(root, {}, run_id)
+            if bundle is None:
+                raise AnalysisError("selected bundle missing")
+            config = read_json(bundle / "config.json")
+            if config["model"]["name"] != model["model"]:
+                raise AnalysisError("roster/config model mismatch")
+            metadata = read_json(bundle / "metadata.json")
+            if metadata.get("workload_observed", {}).get("output_token_count") != 512:
+                raise AnalysisError("runtime-observed output count must be 512")
+            events = [json.loads(t) for t in (bundle / "events.jsonl").read_text().splitlines() if t.strip()]
+            stored = read_json(root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json"))
+            summary, operative = operative_summary(bundle, acceptance,
+                synthetic=manifest.get("synthetic") is True, stored=stored, physics_cache=physics_cache)
+            if summary.get("status") != "succeeded":
+                raise AnalysisError("re-reduction not succeeded")
+            energy = number(summary["phase_energy_j"]["decode"], "phase energy", nonnegative=True)
+            envelope = summary["energy_anchor_shift_envelopes"]["/phase_energy_j/decode"]
+            anchor = number(envelope["max_abs_delta_j"], "decode anchor bound", nonnegative=True)
+            if summary.get("energy_bound_terms_j", {}).get("E_interpolation_joint_edge_bound_j") != 0:
+                raise AnalysisError("phase joint interpolation bound unavailable for non-interval trace")
+            decode = _event_span(events, "decode", metadata)
+            idle = _event_span(events, "idle_baseline", metadata)
+            duration = (decode[1] - decode[0]) / 1e9
+            own_idle = number(summary["idle_baseline"]["power_w_mean"], "own rails idle", nonnegative=True)
+            row.update(status="succeeded", duration_s=duration, rails_j=energy,
+                rails_secondary_j=energy - own_idle * duration, rails_anchor_j=anchor,
+                rails_interpolation_j=0.0, operative=operative)
+            spans[run_id] = (decode, idle)
+        except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
+            row.update(status="unusable", invalid_energy_record=True, unusable_reason=str(exc))
+        records.append(row)
+    if stage != "blinded":
+        for ref in released:
+            if ref["role"] not in REFERENCE_ROLES or ref["status"] != "succeeded" or ref["excluded"].lower() == "true":
+                continue
             try:
-                meter = meter_decode(stream, decode, idle)
-                meter["stream"] = name
-                break
-            except AnalysisError as exc:
-                errors.append(str(exc))
-        energy = number(summary["phase_energy_j"]["decode"], "phase energy", nonnegative=True)
-        envelope = summary["energy_anchor_shift_envelopes"]["/phase_energy_j/decode"]
-        anchor_bound = number(envelope["max_abs_delta_j"], "decode anchor bound", nonnegative=True)
-        # Joint interpolation bounds are identically zero only for interval support.
-        if summary.get("energy_bound_terms_j", {}).get("E_interpolation_joint_edge_bound_j") != 0:
-            raise AnalysisError("phase joint interpolation bound unavailable for non-interval trace")
-        own_idle = number(summary["idle_baseline"]["power_w_mean"], "own rails idle", nonnegative=True)
-        run_flags = sorted(flags.get(run_id, set()) | window_flags |
-                           ({"bytes.meter_decode_unavailable"} if meter is None else set()))
-        yield {"model": model["model"], "pass_id": session["pass_id"], "session_id": acceptance["session_id"],
-               "run_id": run_id, "stratum": unit["stratum"], "unit_id": str(unit["unit_id"]),
-               "duration_s": duration, "rails_j": energy, "rails_secondary_j": energy - own_idle * duration,
-               "rails_anchor_j": anchor_bound, "meter": meter, "operative": operative,
-               "meter_unavailable_reason": "; ".join(errors) or "no raw KM003C streams" if meter is None else None,
-               "excluded": run_id in exclusions, "nonphysical_excluded": run_id in nonphysical,
-               "harvest_excluded": run_id in exclusions, "flags": run_flags,
-               "status": summary["status"]}
+                bundle = bundle_of(root, {}, ref["run_id"])
+                metadata = read_json(bundle / "metadata.json")
+                events = [json.loads(t) for t in (bundle / "events.jsonl").read_text().splitlines() if t.strip()]
+                spans[ref["run_id"]] = (_event_span(events, "measured_run", metadata),
+                                         _event_span(events, "idle_baseline", metadata))
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+    streams = _session_streams(root, [span for pair in spans.values() for span in pair]) if spans else []
+    refs = neg8_inputs(released, streams=streams, spans=spans,
+                       test7_passed=session.get("test7_passed", False), blinded=stage == "blinded")
+    for row in records:
+        errors = []
+        if row["status"] == "succeeded" and stage != "blinded":
+            for name, stream in streams:
+                try:
+                    row["meter"] = {**meter_decode(stream, *spans[row["run_id"]]), "stream": name}
+                    break
+                except AnalysisError as exc:
+                    errors.append(str(exc))
+            if row["meter"] is None:
+                row["flags"] = sorted(set(row["flags"]) | {"bytes.meter_decode_unavailable"})
+        row["meter_unavailable_reason"] = "; ".join(errors) or "no raw KM003C streams" if row["meter"] is None else None
+        row["neg8_inputs"] = refs
+        yield row
 
 
-def load_records(source, manifest, *, stage):
-    """Archive directory, harvest member-assessments path, or export directory.
-
-    Exports need the matching archive locator in manifest.sessions: the stage-1
-    CSV alone cannot recover decode meter energy or phase-specific bounds.
-    """
+def load_records(source, manifest, *, stage, key_dir=None):
+    """Read the export (including references); archive joins require released keys."""
     if isinstance(source, (list, tuple)):
-        records = [r for item in source for r in load_records(item, manifest, stage=stage)]
+        records = [r for item in source for r in load_records(item, manifest, stage=stage, key_dir=key_dir)]
         identities = [(r["session_id"], r["run_id"]) for r in records]
         if len(identities) != len(set(identities)):
             raise AnalysisError("duplicate records across inputs")
@@ -424,23 +690,54 @@ def load_records(source, manifest, *, stage):
     source = Path(source)
     if source.name == "member-assessments.json":
         source = source.parent.parent
-    roots = [source] if (source / "derived/roster.json").is_file() else []
-    if not roots:
-        # The export's filenames locate sessions without opening mixed/blinded CSVs.
-        ids = {p.name.removesuffix(".runs.csv") for p in source.rglob("*.runs.csv")}
-        if not ids:
-            raise AnalysisError("expected harvest archive or Block-6 export directory")
-        by_session = {s["session_id"]: s for s in manifest["sessions"]}
-        if not ids <= by_session.keys():
-            raise AnalysisError("export session lacks archive locator")
-        roots = [Path(by_session[i]["archive"]) for i in sorted(ids)]
     by_session = {s["session_id"]: s for s in manifest["sessions"]}
+    if (source / "derived/roster.json").is_file():
+        session_id = read_json(source / "derived/b6-acceptance.json")["session_id"]
+        return list(archive_records(source, manifest, by_session[session_id], stage=stage, key_dir=key_dir))
+    paths = sorted(source.rglob("*.runs.csv"))
+    if not paths:
+        raise AnalysisError("expected harvest archive or Block-6 export directory")
     records = []
-    for root in roots:
-        session_id = read_json(root / "derived/b6-acceptance.json")["session_id"]
+    for path in paths:
+        session_id = path.name.removesuffix(".runs.csv")
         if session_id not in by_session:
-            raise AnalysisError("archive session missing from manifest")
-        records.extend(archive_records(root, manifest, by_session[session_id], stage=stage))
+            raise AnalysisError("export session lacks archive locator")
+        session = by_session[session_id]
+        if stage == "blinded":
+            # No archive reads whatsoever; roles, units and blinded rails are CSV inputs.
+            exports = _export_rows(path)
+            refs = neg8_inputs(exports, blinded=True, test7_passed=session.get("test7_passed", False))
+            specs = {cell: m for m in manifest["models"] for cell in m["cell_ids"]}
+            for exported in exports:
+                cells = exported["cell_ids"].split(";")
+                if not any(c in specs for c in cells):
+                    continue
+                if len(cells) != 1:
+                    raise AnalysisError("ambiguous export unit")
+                model = specs[cells[0]]
+                member = {"run_id": exported["run_id"], "units": [{"cell_id": cells[0],
+                    "stratum": exported["strata"], "unit_id": exported["unit_ids"]}]}
+                codes = set(filter(None, exported["exclusion_codes"].split(";")))
+                row = _record_base(model, session, session_id, member, {member["run_id"]: codes},
+                    {member["run_id"]: set(filter(None, exported["flag_codes"].split(";")))}, set())
+                try:
+                    if row["invalid_energy_record"] or exported["status"] != "succeeded" or int(exported["emitted_tokens"]) != 512:
+                        raise AnalysisError("export status, validity or token count invalid")
+                    duration = number(float(exported["dur_decode_s"]), positive=True)
+                    energy = number(float(exported["phase_decode_j"]), nonnegative=True)
+                    idle = number(float(exported["idle_power_w"]), nonnegative=True)
+                    anchor = number(float(exported["bound_E_clock_anchor_shift_bound_j"]), nonnegative=True)
+                    joint = number(float(exported["bound_E_interpolation_joint_edge_bound_j"]), nonnegative=True)
+                    row.update(status="succeeded", duration_s=duration, rails_j=energy,
+                        rails_secondary_j=energy - idle * duration, rails_anchor_j=anchor,
+                        rails_interpolation_j=joint, operative={"status": "blinded_export_bounds"})
+                except (ValueError, KeyError, TypeError):
+                    row.update(status="unusable", invalid_energy_record=True)
+                row["neg8_inputs"] = refs
+                records.append(row)
+        else:
+            records.extend(archive_records(Path(session["archive"]), manifest, session, stage=stage,
+                                           export_path=path, key_dir=key_dir))
     return records
 
 
@@ -470,7 +767,7 @@ def _kept(records, inclusive):
     for (stratum, unit), rows in units.items():
         if len(rows) != (1 if stratum == "repeat" else 4):
             raise AnalysisError("floor unit census invalid")
-        invalid = any(r["status"] != "succeeded" or r.get("nonphysical_excluded", False)
+        invalid = any(r["status"] != "succeeded" or r.get("invalid_energy_record", False)
                       or (r["excluded"] and not inclusive) for r in rows)
         (removed if invalid else kept).extend(rows)
     if sum(r["stratum"] == "repeat" for r in kept) < 5 or len({r["unit_id"] for r in kept if r["stratum"] == "quad"}) < 5:
@@ -539,7 +836,7 @@ def _registered_estimate(records, energies, bounds):
     return estimate_phase_energy(repeats, list(quads.values()), repeat_bounds, list(quad_bounds.values()))
 
 
-def reduce_models(records, manifest, *, inclusive=False):
+def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
     grouped = {}
     for row in records:
         grouped.setdefault((row["model"], row["pass_id"], row["session_id"]), []).append(row)
@@ -548,7 +845,7 @@ def reduce_models(records, manifest, *, inclusive=False):
     rows = []
     for (model, pass_id, session_id), module in sorted(grouped.items()):
         spec, session = model_specs[model], session_specs[session_id]
-        for secondary, boundary in itertools.product((False, True), BOUNDARIES):
+        for secondary, boundary in itertools.product((False, True), boundaries):
             base = {"model": model, "pass_id": pass_id, "session_id": session_id, "boundary": boundary,
                     "basis": "idle-subtracted secondary" if secondary else "gross primary",
                     "selection": "flagged-inclusive" if inclusive else "primary",
@@ -561,26 +858,31 @@ def reduce_models(records, manifest, *, inclusive=False):
             try:
                 kept, removed = _kept(candidate, inclusive)
             except AnalysisError as exc:
-                if boundary == "rails":
-                    raise
                 rows.append({**base, "status": "unavailable", "reason": str(exc),
                              "unavailable_runs": [r["run_id"] for r in module if r["meter"] is None],
                              "flags": sorted({f for r in module for f in r["flags"]})})
                 continue
             duration = _weighted(kept, [r["duration_s"] for r in kept])
-            reference = session["drift_reference"]
+            drift_inputs = module[0].get("neg8_inputs", {})
+            reference = drift_inputs.get("boundaries", {}).get(boundary)
+            if reference is None:
+                rows.append({**base, "status": "unavailable", "reason": "NEG-8 export references unavailable",
+                             "flags": sorted({f for r in module for f in r["flags"]})})
+                continue
             rails = [r["rails_secondary_j"] if secondary else r["rails_j"] for r in kept]
             dc = [r["meter"]["secondary_j" if secondary else "gross_j"] for r in kept] if boundary != "rails" else []
             energies = rails if boundary == "rails" else dc if boundary == "DC input" else [d-r for d,r in zip(dc, rails)]
             gross_values = [r["rails_j"] if boundary == "rails" else r["meter"]["gross_j"]
                             if boundary == "DC input" else r["meter"]["gross_j"] - r["rails_j"] for r in kept]
-            scale = 1.0 if reference["test7_passed"] else max(1.0,
-                _weighted(kept, gross_values) / number(reference["energy_j"][boundary], "E_ref", positive=True),
+            scale = 1.0 if drift_inputs["test7_passed"] else max(1.0,
+                _weighted(kept, gross_values) / number(reference["energy_j"], "E_ref", positive=True),
                 duration / number(reference["duration_s"], "T_ref", positive=True))
-            drift = number(session["drift_allowance_j"][boundary], "drift allowance", nonnegative=True) * .5 * scale
+            family = "idle_subtracted" if secondary else "gross"
+            drift = number(reference["families"][family]["allowance_j"], "NEG-8 allowance", nonnegative=True) * .5 * scale
             edge = [(r["rails_anchor_j"] if boundary != "DC input" else 0.0) +
                     (r["meter"]["phase_edge_j"] if boundary != "rails" else 0.0) for r in kept]
-            bounds = [dict(zip(BOUND_KINDS, (u, 0.0, drift))) for u in edge]
+            bounds = [dict(zip(BOUND_KINDS, (u, r.get("rails_interpolation_j", 0.0)
+                         if boundary != "DC input" else 0.0, drift))) for u, r in zip(edge, kept)]
             estimate = _registered_estimate(kept, energies, bounds)
             interval = estimate["interval"]
             # R5 multiplicity widens h only; registered B is unchanged.
@@ -591,7 +893,8 @@ def reduce_models(records, manifest, *, inclusive=False):
                          "h_j": h, "B_j": bound, "kind_averages_j": interval["kind_averages_j"],
                          "meter_phase_edge_mean_j": _weighted(kept, [r["meter"]["phase_edge_j"] for r in kept]) if boundary != "rails" else 0.0,
                          "variance": interval["variance"], "df": interval["df"],
-                         "duration_s": duration, "drift_scale": scale, "n_r": interval["n_r"], "n_b": interval["n_b"],
+                         "duration_s": duration, "drift_scale": scale, "drift_family": family,
+                         "neg8_inputs": drift_inputs, "n_r": interval["n_r"], "n_b": interval["n_b"],
                          "removed_runs": removed, "kept_runs": [r["run_id"] for r in kept],
                          "meter_unavailable": [{"run_id": r["run_id"], "reason": r.get("meter_unavailable_reason")}
                                                for r in module if r["meter"] is None],
@@ -620,10 +923,8 @@ def combine_passes(rows):
                            "passes": group})
             continue
         mean = statistics.fmean(r["mean_j"] for r in group)
-        # Independent sessions' sampling variances add; systematic allowances do not shrink.
-        variance = math.fsum(r["variance"] for r in group) / n ** 2
-        df = min(r["df"] for r in group)
-        h = student_t_quantile(1 - .05 / (2 * H1_CHECKS), df) * math.sqrt(variance)
+        # Addendum 4.4: average each pass's already adjusted h; no pooling.
+        h = statistics.fmean(r["h_j"] for r in group)
         bound = statistics.fmean(r["B_j"] for r in group)
         meter_edge = statistics.fmean(r["meter_phase_edge_mean_j"] for r in group)
         duration = statistics.fmean(r["duration_s"] for r in group)
@@ -637,24 +938,29 @@ def combine_passes(rows):
                      e=mean / DECODE_STEPS, lower=(mean - h - bound) / DECODE_STEPS,
                      upper=(mean + h + bound) / DECODE_STEPS,
                      printed_j_per_output_token=mean / 512, output_label=OUTPUT_LABEL,
+                     power_half_w=(h + bound) / duration, passes=group,
                      time=duration / DECODE_STEPS, power=mean / duration,
                      BW=point["bytes"] * DECODE_STEPS / duration)
         points.append(point)
     return points
 
 
-def frozen_predictions(points, manifest):
+def frozen_predictions(points, manifest, neg8_inputs=None):
     if any(p["role"] != "fit" for p in points):
         raise AnalysisError("held-out point passed into freeze")
     lines = []
     for selection, basis, boundary in itertools.product(("primary", "flagged-inclusive"),
             ("gross primary", "idle-subtracted secondary"), BOUNDARIES):
         subset = [p for p in points if (p["selection"], p["basis"], p["boundary"]) == (selection, basis, boundary)]
+        if not subset:
+            continue
         lines.append({"selection": selection, "basis": basis, "boundary": boundary,
                       "lines": freeze_lines(subset) if all(p.get("status") != "unavailable" for p in subset) else None})
     return {"schema": SCHEMA, "manifest_sha256": digest(manifest), "H1_checks": H1_CHECKS,
-            "H2_intervals": H2_INTERVALS, "fit_points": points, "rival_lines": lines,
-            "tier_fit_inputs": [{k: p[k] for k in ("model", "boundary", "basis", "selection", "BW", "power")}
+            "H2_intervals": H2_INTERVALS,
+            "bytes_analysis_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "neg8_inputs": neg8_inputs or {}, "fit_points": points, "rival_lines": lines,
+            "tier_fit_inputs": [{k: p[k] for k in ("model", "boundary", "basis", "selection", "BW", "power", "resident", "time")}
                                 for p in points if p["tier"] and p.get("status") != "unavailable"],
             "note": "Dense held-out models test linearity over the format-derived bytes range; their small rival splits do not identify the hypothesis."}
 
@@ -669,16 +975,36 @@ def evaluate(points, frozen):
         missing = [p["model"] for p in subset if p.get("status") == "unavailable"]
         if group["lines"] is None or missing:
             unavailable.append({**dict(zip(("selection", "basis", "boundary"), key)),
-                                "models": missing, "reason": "H1/H2 require complete fit and ten-model cells"})
+                                "models": missing, "reason": "H2 requires ten-model cells; H1 needs complete fit cells"})
+        if group["lines"] is None:
             continue
         results = []
         for point in subset:
+            if point.get("status") == "unavailable":
+                continue
             result = h1_point(group["lines"], point)
             h1_rows.append({"model": point["model"], "role": point["role"],
-                            **dict(zip(("selection", "basis", "boundary"), key)), **result})
+                            **dict(zip(("selection", "basis", "boundary"), key)),
+                            "pass_id": "mean", "description_only": False, **result})
             if point["moe"]:
                 results.append((point["model"], result))
-        moe_rows.append({**dict(zip(("selection", "basis", "boundary"), key)), **active_or_resident(results)})
+        pass_ids = sorted({r["pass_id"] for p in subset for r in p.get("passes", [])})
+        for pass_id in pass_ids:
+            pass_rows = [r for p in subset for r in p.get("passes", []) if r["pass_id"] == pass_id]
+            pass_points = combine_passes(pass_rows)
+            fit = [p for p in pass_points if p["role"] == "fit"]
+            if len(fit) != 3 or any(p["status"] != "computed" for p in fit):
+                continue
+            pass_lines = freeze_lines(fit)
+            for point in pass_points:
+                if point["status"] == "computed":
+                    h1_rows.append({"model": point["model"], "role": point["role"],
+                        **dict(zip(("selection", "basis", "boundary"), key)),
+                        "pass_id": pass_id, "description_only": True, **h1_point(pass_lines, point)})
+        if len(results) == 3:
+            moe_rows.append({**dict(zip(("selection", "basis", "boundary"), key)), **active_or_resident(results)})
+        if missing:
+            continue
         rails = {p["model"]: p["power"] for p in points if (p["selection"], p["basis"], p["boundary"]) == (*key[:2], "rails")}
         h2_rows.append({**dict(zip(("selection", "basis", "boundary"), key)), **h2(subset, rails)})
     return {"h1": h1_rows, "moe": moe_rows, "h2": h2_rows, "unavailable": unavailable}

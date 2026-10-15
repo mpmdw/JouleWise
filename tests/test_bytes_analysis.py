@@ -96,14 +96,14 @@ class H2WorkedExamples(unittest.TestCase):
         self.assertAlmostEqual(fit["coefficients"][0], 3)
         self.assertAlmostEqual(fit["coefficients"][1], 2)
         self.assertAlmostEqual(fit["mse"], 14 / 3)
-        self.assertAlmostEqual(fit["covariance"][1][1], 7 / 15)
+        self.assertAlmostEqual(fit["ols_covariance"][1][1], 7 / 15)
         self.assertAlmostEqual(fit["critical"], 3.182446305, places=8)
-        half = fit["critical"] * math.sqrt(7 / 15)
+        half = fit["critical"] * math.sqrt(fit["covariance"][1][1])
         self.assertAlmostEqual(fit["intervals"][1][0], 2 - half)
         self.assertAlmostEqual(fit["intervals"][1][1], 2 + half)
         delta = ba.deviation(fit, [2], 8)
         self.assertAlmostEqual(delta["deviation_w"], 1)
-        self.assertAlmostEqual(delta["upper_w"] - 1, fit["critical"] * math.sqrt(14 / 3 * 1.2))
+        self.assertAlmostEqual(delta["upper_w"] - 1, fit["critical"] * math.sqrt(14 / 3 + (2*(1/.4)**2 + 2*(2/.7)**2 + (2/.8)**2)/25))
 
     def test_extended_and_rest_coefficients_by_orthogonal_design(self):
         # All eight corners of a cube; x1,x2 and noise x3 are orthogonal.
@@ -113,8 +113,8 @@ class H2WorkedExamples(unittest.TestCase):
             self.assertAlmostEqual(actual, expected)
         self.assertAlmostEqual(fit["mse"], 8 / 5)
         for i in range(3):
-            self.assertAlmostEqual(fit["covariance"][i][i], 1 / 5)
-        self.assertEqual(fit["family_size"], 23)
+            self.assertAlmostEqual(fit["ols_covariance"][i][i], 1 / 5)
+        self.assertEqual(fit["family_size"], 9)
         self.assertGreater(fit["critical"], ba.student_t_quantile(.975, 5))
 
     def test_scale_invariance_and_singular_refusal(self):
@@ -289,9 +289,9 @@ class BoundaryAndStagingTests(unittest.TestCase):
         self.assertEqual(len(kept), 46)
         self.assertEqual(removed, ["10", "11", "12", "13"])
         self.assertEqual(len(ba._kept(records, True)[0]), 50)
-        records[10]["nonphysical_excluded"] = True
+        records[10]["invalid_energy_record"] = True
         self.assertEqual(len(ba._kept(records, True)[0]), 46)
-        records[10]["nonphysical_excluded"] = False
+        records[10]["invalid_energy_record"] = False
         for r in records[:6]:
             r["excluded"] = True
         with self.assertRaisesRegex(ba.AnalysisError, "five"):
@@ -326,7 +326,7 @@ class BoundaryAndStagingTests(unittest.TestCase):
             primary += result["primary_intervals"]
             if boundary == "rest":
                 self.assertAlmostEqual(result["rest"]["coefficients"][2], .4, delta=.03)
-        self.assertEqual(len(primary), 23)
+        self.assertEqual(len(primary), 29)
 
     def test_resident_adds_nothing_rule_positive_negative_and_zero(self):
         for rho, expected in ((3, False), (-3, True), (0, True)):
@@ -396,114 +396,13 @@ def _write_json(path, value):
     path.write_text(json.dumps(value) + "\n")
 
 
-def archive_campaign(root, *, world="bytes", seed=1100):
-    """1000 on-disk runs: real mock trace reducer -> harvest layout -> B6 export.
-
-    No calibration hardware is claimed: the zero phase envelope is explicitly
-    synthetic, with missing operative evidence disclosed. Each energy passes
-    through reduce_bundle and the full CLI, not a summary oracle.
-    """
-    from types import SimpleNamespace
-    from joulewise.b6 import export_runs, calibration
-    from decimal import Decimal
-    from tests.b6.support import document
-    from joulewise.clock import FakeClock
-    from joulewise.bundle import sanitize_id_component, _capture_source_state
-    from joulewise.reduce import reduce_bundle
-    from tests.test_reduce import BundleBuilder, load_config
-    from joulewise.interfaces import PowerSample
-    design = ba.read_json(FIXTURES / "campaign_design.json")
-    manifest = {"synthetic": True, "models": design["models"], "sessions": []}
-    rng = random.Random(seed)
-    source_state = _capture_source_state()
-    for pass_id in (1, 2):
-        session_id = "bytes-p" + str(pass_id)
-        archive = root / session_id
-        bundles = archive / "sources/claim-runs"
-        roster, evidence_members, meter_samples = [], [], []
-        # Native meter samples at 10 Hz; zero-latency synthetic clock, no wrap shortcut.
-        tick = 1000
-        meter_samples.extend([(.2, tick - 2), (.2, tick - 1)])
-        for model in manifest["models"]:
-            b = (model["W_bytes"] + model["KV_bytes"]) / 1e9
-            resident = model["R_bytes"] / 1e9
-            duration = model["synthetic_duration_s"]
-            tau = duration / 511
-            truth = .01 * b if world == "bytes" else 3 * tau if world == "time" else .01 * resident
-            for ordinal in range(50):
-                run_id = sanitize_id_component(model["model"] + "-" + str(ordinal))
-                energy = truth * 511 * (1 + rng.gauss(0, .002))
-                power = energy / duration
-                start = tick / 10
-                decode_start, end = start + 2, start + 2 + duration
-                config = load_config(run_id=run_id, model={"name": model["model"], "family": "mock",
-                    "weight_format": "mock", "context_window": 4096}, workload_profile={"name": "bytes-synthetic",
-                    "prompt_tokens": 2048, "output_tokens": 512, "repetitions": 1, "warmup_runs": 1})
-                with patch("joulewise.bundle._capture_source_state", return_value=source_state):
-                    builder = BundleBuilder(bundles, config, FakeClock(start=1000))
-                builder.measured_window(start + 1, end)
-                builder.add_event("stage_started", "idle_baseline", start)
-                builder.add_event("stage_completed", "idle_baseline", start + 1)
-                builder.add_phase("prefill", start + 1, decode_start)
-                builder.add_phase("decode", decode_start, end,
-                    metadata={"output_tokens": 512, "requested_output_tokens": 512})
-                # Compact constant-power point trace: all phase edges and at least
-                # three records per phase, retaining the full pilot-scale span.
-                stamps = [start+1, start+1.25, start+1.5, start+1.75,
-                          decode_start, decode_start+duration/3,
-                          decode_start+2*duration/3, end, end+.1]
-                builder.write_trace([PowerSample(timestamp_s=t, power_w=power,
-                    source="mock", rail="mock") for t in stamps])
-                with patch("joulewise.bundle._capture_source_state", return_value=source_state):
-                    bundle = builder.write_metadata(rail_manifest=["mock"], workload_observed={"output_token_count": 512})
-                # Real desk reducer under the repository's mock telemetry path.
-                summary = reduce_bundle(bundle).to_dict()
-                actual = summary["phase_energy_j"]["decode"]
-                if not math.isclose(actual, energy, rel_tol=1e-7):
-                    raise AssertionError((actual, energy))
-                summary.update(status="succeeded", bytes_synthetic_timing_fixture=True, energy_anchor_shift_envelopes={"/phase_energy_j/decode": {
-                    "point_j": actual, "lower_j": actual, "upper_j": actual, "max_abs_delta_j": 0}},
-                    energy_bound_terms_j={"E_interpolation_joint_edge_bound_j": 0})
-                _write_json(archive / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json"), summary)
-                metadata = ba.read_json(bundle / "metadata.json")
-                metadata["uncertainty_evidence"] = {"clock_anchor": {"clock_stamps": {
-                    "sampling_started": {"epoch_s": start, "monotonic_before_s": start}}}}
-                _write_json(bundle / "metadata.json", metadata)
-                unit = {"cell_id": model["cell_ids"][0], "stratum": "repeat" if ordinal < 10 else "quad",
-                        "unit_id": str(ordinal if ordinal < 10 else (ordinal - 10) // 4)}
-                roster.append({"run_id": run_id, "stage_id": "decode", "role": "science", "units": [unit]})
-                evidence_members.append(SimpleNamespace(run_id=run_id, stage_id="decode", role="science",
-                                                       status="succeeded", config_key=model["model"]))
-                end_tick = tick + 20 + round(duration * 10)
-                meter_samples.extend((.2 if t < tick + 20 else 2 * power, t) for t in range(tick, end_tick))
-                meter_samples.extend([(.2, end_tick), (.2, end_tick + 1)])
-                tick = end_tick + 2
-        header = {"k": "h", "status": "streaming", "rate_idx": 1, "start_raw_ns": 0, "start_mono_ns": 0}
-        batches = []
-        for i in range(0, len(meter_samples), 10):
-            part = meter_samples[i:i + 10]
-            payload = b"".join(kp.SAMPLE.pack((t * 100) % kp.WRAP, 0, 1_000_000,
-                round(w * 1e6), 0, 0, 0, 0) for w, t in part)
-            stamp = part[-1][1] * 100_000_000
-            batches.append({"k": "b", "tx": stamp, "rx": stamp, "n": len(part), "p": payload.hex(), "smc": {"B0AC": 0}})
-        stream = archive / "sources/night-custody/hazards/meter/stream-001.jsonl"
-        stream.parent.mkdir(parents=True)
-        trailer = {"k": "t", "end_raw_ns": tick * 100_000_000, "end_mono_ns": tick * 100_000_000}
-        stream.write_text("".join(json.dumps(item) + "\n" for item in (header, *batches, trailer)))
-        _write_json(archive / "derived/roster.json", {"pack_id": "bytes", "attempt": 1, "members": roster})
-        acceptance = {"pack_id": "bytes", "session_id": session_id, "verdict": "PASS", "counting": True,
-                      "excluding": [], "flag_counts": {}, "emitted_flags": [],
-                      "calibration": calibration.evaluate(calibration.Capture(Decimal(".040"), "valid"),
-                          calibration.Capture(Decimal(".030"), "valid"), document(), [], [session_id], False)}
-        _write_json(archive / "derived/b6-acceptance.json", acceptance)
-        (archive / "derived/flags.jsonl").write_text("")
-        evidence = SimpleNamespace(stages=[SimpleNamespace(members=evidence_members)], runtime={}, session_id=session_id)
-        export_runs.export(archive, {}, root / "registration", root / "keys", root / "export", non_claim=True,
-                           evidence=evidence, acceptance_record=acceptance)
-        manifest["sessions"].append({"session_id": session_id, "archive": str(archive), "pass_id": pass_id,
-            "drift_allowance_j": dict.fromkeys(ba.BOUNDARIES, .01),
-            "drift_reference": {"energy_j": dict.fromkeys(ba.BOUNDARIES, 10), "duration_s": 3, "test7_passed": False}})
-    return manifest
+# Keep this importable name for the reviewer's independent probes.
+import importlib.util
+_campaign_spec = importlib.util.spec_from_file_location("bytes_campaign", FIXTURES / "campaign.py")
+_campaign = importlib.util.module_from_spec(_campaign_spec)
+_campaign_spec.loader.exec_module(_campaign)
+archive_campaign = _campaign.archive_campaign
+release_keys = _campaign.release_keys
 
 
 class ProductionArchiveTests(unittest.TestCase):
@@ -527,7 +426,7 @@ class ProductionArchiveTests(unittest.TestCase):
                 self.assertEqual(bytes_analyze.main(["--export",str(root/"export"),"--manifest",str(root/"manifest.json"),
                     "--stage","heldout","--predictions",str(root/"fit/predictions.json"),"--out",str(root/"heldout")]),0)
             self.assertEqual((root/"fit/predictions.json").read_bytes(),prediction_bytes)
-            self.assertEqual(len(ba.read_json(root/"heldout/h1.json")),120)
+            self.assertEqual(len(ba.read_json(root/"heldout/h1.json")),360)
             self.assertEqual(len(ba.read_json(root/"heldout/h2.json")),12)
             self.assertEqual(ba.read_json(root/"heldout/unavailable.json"),[])
             with patch.object(ba, "_session_streams", return_value=[]):
@@ -591,6 +490,10 @@ class ProductionArchiveTests(unittest.TestCase):
                 "operative":{"operative_bound_s":.05,"status":"rereduced"}})
         manifest = {"models":[spec], "sessions":[{"session_id":"s", "drift_allowance_j":dict.fromkeys(ba.BOUNDARIES,.2),
             "drift_reference":{"test7_passed":True}}]}
+        for row in rows:
+            row["neg8_inputs"] = {"test7_passed": True, "references": [], "boundaries": {
+                b: {"families": {f: {"allowance_j": .2} for f in ("gross", "idle_subtracted")}}
+                for b in ba.BOUNDARIES}}
         primary = ba.reduce_models(rows, manifest)
         inclusive = ba.reduce_models(rows, manifest, inclusive=True)
         self.assertTrue(all((r["n_r"],r["n_b"])==(9,9) for r in primary))
@@ -646,7 +549,7 @@ class CampaignWordRates(unittest.TestCase):
                     self.assertEqual(code,0)
                     self.assertEqual(ba.read_json(root/"out/unavailable.json"),[])
                     for row in ba.read_json(root/"out/h1.json"):
-                        if row["selection"]=="primary" and row["basis"]=="gross primary" and row["role"]=="heldout":
+                        if row["selection"]=="primary" and row["basis"]=="gross primary" and row["role"]=="heldout" and row["pass_id"]=="mean":
                             words[row["boundary"],row["model"],row["word"]] += 1
                     for row in ba.read_json(root/"out/h2.json"):
                         if row["selection"]=="primary" and row["basis"]=="gross primary":
@@ -670,6 +573,395 @@ class CampaignWordRates(unittest.TestCase):
                 "word_rates":word_rows,"H2_coverage":[{"boundary":b,"fit":f,**rate(coverage[b,f])}
                     for b in ba.BOUNDARIES for f in ("two_term","resident_extended")]})
         print("BYTES_SIMULATION_REPORT="+json.dumps(report,sort_keys=True),flush=True)
+
+
+class Addendum4RegressionTests(unittest.TestCase):
+    """Each numbered test reproduces an accepted review finding on 82c014c55."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temporary = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.temporary.name)
+        cls.manifest = archive_campaign(cls.root)
+        _write_json(cls.root / "manifest.json", cls.manifest)
+        cls.records = ba.load_records(cls.root / "export", cls.manifest, stage="all")
+        cls.passes = ba.reduce_models(cls.records, cls.manifest) + ba.reduce_models(
+            cls.records, cls.manifest, inclusive=True)
+        cls.points = ba.combine_passes(cls.passes)
+        cls.frozen = ba.frozen_predictions([p for p in cls.points if p["role"] == "fit"], cls.manifest)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temporary.cleanup()
+
+    def target(self, model="Qwen3-4B-4bit", ordinal=3, pass_id=1):
+        spec = next(m for m in self.manifest["models"] if m["model"] == model)
+        session = next(s for s in self.manifest["sessions"] if s["pass_id"] == pass_id)
+        root = Path(session["archive"])
+        roster = ba.read_json(root / "derived/roster.json")
+        ids = [m["run_id"] for m in roster["members"]
+               if any(u["cell_id"] in spec["cell_ids"] for u in m.get("units", []))]
+        return root, session, ids[ordinal]
+
+    @contextlib.contextmanager
+    def changed_json(self, path, change):
+        raw = path.read_bytes()
+        value = json.loads(raw)
+        change(value)
+        _write_json(path, value)
+        try:
+            yield
+        finally:
+            path.write_bytes(raw)
+
+    def test_a4_01_unusable_member_all_stages_and_nonsynthetic(self):
+        # Exercise the real archive reader, with the native re-reducer faked;
+        # the synthetic escape hatch is disabled in every case.
+        from joulewise.b6.archive import bundle_of
+        manifest = dict(self.manifest, synthetic=False)
+        for stage, model in (("fit", "Qwen3-4B-4bit"), ("heldout", "Qwen3-32B-4bit"),
+                             ("all", "Qwen3-4B-4bit")):
+            root, session, rid = self.target(model)
+            for defect in ("missing_bundle", "missing_export", "tokens", "failed_null", "failed_present", "nonfinite",
+                           "missing_energy", "no_envelope", "interpolation", "validity"):
+                with self.subTest(stage=stage, defect=defect), contextlib.ExitStack() as stack:
+                    def summary(bundle, **kwargs):
+                        value = ba.read_json(root / "withheld/reductions" / (bundle.name + ".summary_metrics.rereduced.json"))
+                        if bundle.name == rid:
+                            if defect.startswith("failed"):
+                                value["status"] = "failed"
+                            if defect == "failed_null":
+                                value["phase_energy_j"]["decode"] = None
+                            if defect == "nonfinite":
+                                value["phase_energy_j"]["decode"] = float("nan")
+                            if defect == "missing_energy":
+                                value["phase_energy_j"].pop("decode")
+                            if defect == "no_envelope":
+                                value["energy_anchor_shift_envelopes"] = {}
+                            if defect == "interpolation":
+                                value["energy_bound_terms_j"]["E_interpolation_joint_edge_bound_j"] = 1
+                        return value
+                    stack.enter_context(patch("joulewise.reduce._rederive_summary_for_authenticated_fiducial_bound", side_effect=summary))
+                    if defect == "missing_bundle":
+                        stack.enter_context(patch("joulewise.b6.archive.bundle_of",
+                            side_effect=lambda r, p, run_id: None if run_id == rid else bundle_of(r, p, run_id)))
+                    elif defect == "missing_export":
+                        import csv
+                        path = root.parent/"export/bytes"/(session["session_id"]+".runs.csv")
+                        original = path.read_bytes()
+                        stack.callback(path.write_bytes,original)
+                        reader = csv.DictReader(io.StringIO(original.decode()))
+                        exported = [r for r in reader if r["run_id"] != rid]
+                        with path.open("w",newline="") as handle:
+                            writer = csv.DictWriter(handle,fieldnames=reader.fieldnames)
+                            writer.writeheader(); writer.writerows(exported)
+                    elif defect == "tokens":
+                        stack.enter_context(self.changed_json(root / "sources/claim-runs" / rid / "metadata.json",
+                            lambda x: x["workload_observed"].update(output_token_count=511)))
+                    elif defect == "validity":
+                        stack.enter_context(self.changed_json(root / "derived/b6-acceptance.json",
+                            lambda x: x["excluding"].append({"scope":"member", "run_id":rid,
+                                                           "code":"member.strict_validation_failed"})))
+                    rows = list(ba.archive_records(root, manifest, session, stage=stage))
+                    bad = next(r for r in rows if r["run_id"] == rid)
+                    self.assertNotEqual(bad["status"], "succeeded")
+                    self.assertIsNone(bad["meter"])
+                    for inclusive in (False, True):
+                        reduced = ba.reduce_models(rows, manifest, inclusive=inclusive)
+                        cells = [r for r in reduced if r["model"] == model]
+                        self.assertTrue(all((r["n_r"], r["n_b"]) == (9,10) for r in cells))
+                        self.assertTrue(all(rid in r["removed_runs"] for r in cells))
+
+    def test_a4_01_below_minimum_refuses_only_affected_cell(self):
+        rows = copy.deepcopy(self.records)
+        for row in rows:
+            if row["model"] == "Qwen3-32B-4bit" and row["pass_id"] == 1 and row["stratum"] == "repeat" and int(row["unit_id"]) < 6:
+                row.update(status="unusable", meter=None)
+        passes = ba.reduce_models(rows, self.manifest)
+        bad = [r for r in passes if r["model"] == "Qwen3-32B-4bit" and r["pass_id"] == 1]
+        self.assertTrue(all(r["status"] == "unavailable" for r in bad))
+        points = ba.combine_passes(passes)
+        frozen = ba.frozen_predictions([p for p in points if p["role"] == "fit"], self.manifest)
+        evaluated = ba.evaluate(points, frozen)
+        means = [r for r in evaluated["h1"] if r["pass_id"] == "mean"]
+        self.assertEqual(len(means), 54)
+        self.assertFalse(any(r["model"] == "Qwen3-32B-4bit" for r in means))
+        self.assertEqual(evaluated["h2"], [])
+
+    def test_a4_02_p02_primary_family_and_two_regressor_tier(self):
+        for boundary in ba.BOUNDARIES:
+            pts = [p for p in self.points if (p["boundary"],p["basis"],p["selection"]) ==
+                   (boundary,"gross primary","primary")]
+            rails = {p["model"]:p["power"] for p in self.points if (p["boundary"],p["basis"],p["selection"]) ==
+                     ("rails","gross primary","primary")}
+            out = ba.h2(pts, rails)
+            k = 11 if boundary == "rest" else 9
+            self.assertEqual(len(out["primary_intervals"]), k)
+            self.assertIn("extended_epsilon", [r["term"] for r in out["primary_intervals"]])
+            self.assertIn("tier_rho", [r["term"] for r in out["primary_intervals"]])
+            for fit in (out["two_term"],out["resident_extended"],out["tier"]):
+                self.assertEqual(fit["family_size"],k)
+                self.assertEqual(fit["critical"],ba.student_t_quantile(1-.05/(2*k),fit["df"]))
+            self.assertEqual(len(out["tier"]["coefficients"]),3)
+            self.assertEqual(out["tier"]["df"],3)
+            for d in out["tier_deviations"]:
+                p = next(p for p in pts if p["model"] == d["model"])
+                c = out["tier"]["coefficients"]
+                self.assertAlmostEqual(d["predicted_w"],c[0]+c[1]*p["BW"]+c[2]*p["resident"]/p["time"])
+
+    def test_a4_03_p06_deviation_adds_own_halfwidth(self):
+        fit = ba.ols([[x] for x in range(5)], [4,3,9,7,12])
+        bare = ba.deviation(fit,[2],8)
+        full = ba.deviation(fit,[2],8,.125)
+        self.assertAlmostEqual(full["lower_w"],bare["lower_w"]-.125)
+        self.assertAlmostEqual(full["upper_w"],bare["upper_w"]+.125)
+        p = next(p for p in self.points if (p["model"],p["boundary"],p["basis"],p["selection"]) ==
+                 ("Qwen3-8B-8bit","DC input","gross primary","primary"))
+        out = ba.h2([q for q in self.points if (q["boundary"],q["basis"],q["selection"]) ==
+                    ("DC input","gross primary","primary")],{})
+        d = next(r for r in out["tier_deviations"] if r["model"] == p["model"])
+        self.assertEqual(d["measured_half_w"],(p["h_j"]+p["B_j"])/p["duration_s"])
+        self.assertAlmostEqual((d["upper_w"]-d["lower_w"])/2,d["prediction_half_w"]+d["measured_half_w"])
+
+    def test_a4_04_p05_mean_halfwidth_and_per_pass_words(self):
+        for p in self.points:
+            rows = [r for r in self.passes if all(r[k] == p[k] for k in ("model","boundary","basis","selection"))]
+            half = statistics.fmean(r["h_j"]+r["B_j"] for r in rows)
+            self.assertAlmostEqual(p["upper_j"]-p["mean_j"],half)
+            self.assertAlmostEqual(p["mean_j"]-p["lower_j"],half)
+        result = ba.evaluate(self.points,self.frozen)
+        self.assertEqual(len(result["h1"]),360)
+        self.assertEqual({r["pass_id"] for r in result["h1"]},{"mean",1,2})
+        for row in result["h1"]:
+            self.assertEqual(row["description_only"],row["pass_id"]!="mean")
+            if row["pass_id"] == "mean":
+                continue
+            subset = [r for r in self.passes if r["pass_id"] == row["pass_id"] and
+                      all(r[k] == row[k] for k in ("boundary","basis","selection"))]
+            pts = ba.combine_passes(subset)
+            lines = ba.freeze_lines([p for p in pts if p["role"] == "fit"])
+            point = next(p for p in pts if p["model"] == row["model"])
+            self.assertEqual(row["word"],ba.h1_point(lines,point)["word"])
+
+    def test_a4_05_hc3_independent_sandwich_and_ols_label(self):
+        # Closed-form simple-regression influence weights, independent of ba.ols.
+        xs, residuals = list(range(5)), [1,-2,2,-2,1]
+        leverages = [1/5 + (x-2)**2/10 for x in xs]
+        slope_var = math.fsum(((x-2)/10)**2*(r/(1-h))**2 for x,r,h in zip(xs,residuals,leverages))
+        fit = ba.ols([[x] for x in xs],[4,3,9,7,12],family_size=9)
+        self.assertEqual(fit["se_method"],"HC3")
+        self.assertAlmostEqual(fit["covariance"][1][1],slope_var)
+        self.assertAlmostEqual(fit["standard_errors"][1],math.sqrt(slope_var))
+        self.assertAlmostEqual(fit["ols_covariance"][1][1],7/15)
+        self.assertAlmostEqual(fit["ols_standard_errors"][1],math.sqrt(7/15))
+        self.assertAlmostEqual(fit["intervals"][1][0],2-fit["critical"]*math.sqrt(slope_var))
+
+    def test_a4_05_p03_coverage(self):
+        spec = importlib.util.spec_from_file_location("bytes_coverage",FIXTURES/"coverage.py")
+        coverage = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(coverage)
+        report = coverage.run(self.root,400)
+        self.assertEqual(len(report),36)
+        self.assertEqual({r["method"] for r in report},{"HC3","OLS"})
+        self.assertTrue(all(r["draws"] == 400 for r in report))
+        print("BYTES_P03_COVERAGE="+json.dumps(report,sort_keys=True),flush=True)
+
+    def test_a4_06_p08_number_exclusion_restored_validity_stays_out(self):
+        root, session, rid = self.target("Qwen3-8B-4bit",20)
+        _, _, bad = self.target("Qwen3-8B-4bit",24)
+        def exclude(x):
+            x["excluding"] += [{"scope":"member","run_id":run,"code":code} for run,code in
+                ((rid,"member.cooldown_cap_hit"),(bad,"member.strict_validation_failed"))]
+        with self.changed_json(root/"derived/b6-acceptance.json",exclude):
+            records = list(ba.archive_records(root,self.manifest,session,stage="fit"))
+        for inclusive,expected in ((False,(10,8)),(True,(10,9))):
+            cells = [r for r in ba.reduce_models(records,self.manifest,inclusive=inclusive)
+                     if r["model"] == "Qwen3-8B-4bit"]
+            self.assertTrue(all((r["n_r"],r["n_b"])==expected for r in cells))
+            if inclusive:
+                self.assertTrue(all("member.cooldown_cap_hit" in r["flags"] for r in cells))
+                self.assertTrue(all(rid in r["kept_runs"] and bad in r["removed_runs"] for r in cells))
+
+    def test_a4_07_neg8_export_inputs_whole_request_and_two_families(self):
+        p = next(r for r in self.passes if (r["model"],r["pass_id"],r["boundary"],r["basis"],r["selection"]) ==
+                 ("Qwen3-4B-4bit",1,"rails","gross primary","primary"))
+        ref = p["neg8_inputs"]["boundaries"]["rails"]
+        self.assertEqual(ref["duration_s"],3)
+        self.assertAlmostEqual(ref["energy_j"],(3*10+10.004+3*10.01)/7)
+        self.assertEqual(len(ref["reference_run_ids"]),7)
+        self.assertEqual(len(ref["corpus_run_ids"]),6)
+        self.assertAlmostEqual(ref["families"]["gross"]["allowance_j"],.01)
+        self.assertAlmostEqual(ref["families"]["idle_subtracted"]["allowance_j"],.0075)
+        scale = max(1,p["mean_j"]/ref["energy_j"],p["duration_s"]/3)
+        self.assertEqual(p["drift_scale"],scale)
+        self.assertAlmostEqual(p["kind_averages_j"][ba.BOUND_KINDS[2]],.005*scale)
+        secondary = next(r for r in self.passes if all(r[k]==p[k] for k in
+            ("model","pass_id","boundary","selection")) and r["basis"]=="idle-subtracted secondary")
+        self.assertAlmostEqual(secondary["kind_averages_j"][ba.BOUND_KINDS[2]],.00375*scale)
+        # The reference's whole-request energy must come from the export even
+        # when a conflicting withheld summary is present.
+        root, session, _ = self.target()
+        summary = root/"withheld/reductions/neg8-start-0.summary_metrics.rereduced.json"
+        with self.changed_json(summary,lambda x:x.update(gross_energy_j=123456)):
+            rows = list(ba.archive_records(root,self.manifest,session,stage="fit"))
+        self.assertEqual(rows[0]["neg8_inputs"]["boundaries"]["rails"],ref)
+
+    def test_a4_08_blinded_release_and_commitment_end_to_end(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = archive_campaign(root,non_claim=False,release="none")
+            _write_json(root/"manifest.json",manifest)
+            args = ["--export",str(root/"export"),"--manifest",str(root/"manifest.json")]
+            with contextlib.redirect_stdout(io.StringIO()), patch.object(ba,"archive_records",side_effect=AssertionError("blinded opened archive")), \
+                    patch.object(ba,"_session_streams",side_effect=AssertionError("blinded opened meter")):
+                self.assertEqual(bytes_analyze.main(args+["--stage","blinded","--out",str(root/"blind")]),0)
+            blind = ba.read_json(root/"blind/model_estimates.json")
+            self.assertTrue(blind)
+            self.assertTrue(all(p["boundary"]=="rails" and p["status"]=="computed" for p in blind))
+            with contextlib.redirect_stderr(io.StringIO()), patch.object(ba,"_session_streams",side_effect=AssertionError("unreleased meter")):
+                self.assertEqual(bytes_analyze.main(args+["--stage","fit","--out",str(root/"unreleased")]),1)
+            release_keys(root,manifest,"fit")
+            # Native full parsing is forbidden at fit. Instrument the actual
+            # sample unpacker, so no held-out power may even be decoded.
+            original_streams = ba._session_streams
+            def filtered(root,spans):
+                full = kp.parse(root/"sources/night-custody/hazards/meter/stream-001.jsonl")
+                offset = kp.raw_offset_ns(full)
+                margin = full.samples.step_ms*1_000_000
+                allowed = lambda t:any(a+offset-margin<=t<=b+offset+margin for a,b in spans)
+                allowed_currents = {round(w*1e6) for t,w in zip(full.host_ns,full.watts) if allowed(t)}
+                forbidden = {round(w*1e6) for t,w in zip(full.host_ns,full.watts) if not allowed(t)} - allowed_currents
+                self.assertTrue(forbidden)
+                native_sample = kp.SAMPLE
+                case = self
+                class GuardSample:
+                    size = native_sample.size
+                    def unpack(self,raw):
+                        values = native_sample.unpack(raw)
+                        case.assertNotIn(values[3],forbidden,"held-out power sample decoded at fit")
+                        return values
+                    def iter_unpack(self,raw):
+                        for pos in range(0,len(raw),self.size):
+                            yield self.unpack(raw[pos:pos+self.size])
+                with patch.object(kp,"SAMPLE",GuardSample()):
+                    streams = original_streams(root,spans)
+                for _,stream in streams:
+                    self.assertTrue(all(allowed(t) for t in stream.host_ns))
+                    self.assertLess(len(stream.host_ns),len(full.host_ns)/2)
+                    self.assertEqual(stream.fit.stats,full.fit.stats)
+                return streams
+            with contextlib.redirect_stdout(io.StringIO()), patch.object(ba,"_session_streams",side_effect=filtered):
+                self.assertEqual(bytes_analyze.main(args+["--stage","fit","--out",str(root/"fit")]),0)
+            frozen = ba.read_json(root/"fit/predictions.json")
+            self.assertEqual(frozen["bytes_analysis_sha256"],hashlib.sha256(Path(ba.__file__).read_bytes()).hexdigest())
+            self.assertEqual(len(frozen["neg8_inputs"]),2)
+            self.assertTrue(all(p["role"]=="fit" for p in frozen["fit_points"]))
+            fit_names = {m["model"] for m in manifest["models"] if m["role"]=="fit"}
+            self.assertEqual({r["model"] for r in frozen["tier_fit_inputs"]},fit_names)
+            predict = ["--predictions",str(root/"fit/predictions.json")]
+            with contextlib.redirect_stderr(io.StringIO()), patch.object(ba,"_session_streams",side_effect=AssertionError("heldout meter before release")):
+                self.assertEqual(bytes_analyze.main(args+predict+["--stage","heldout","--out",str(root/"blocked")]),1)
+            commitment = (root/"fit/predictions.json").read_bytes()
+            release_keys(root,manifest,"all")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(bytes_analyze.main(args+predict+["--stage","heldout","--out",str(root/"held")]),0)
+            self.assertEqual((root/"fit/predictions.json").read_bytes(),commitment)
+            self.assertEqual(ba.read_json(root/"held/unavailable.json"),[])
+            self.assertEqual(len(ba.read_json(root/"held/h1.json")),360)
+            # Blinding factors cancel only after release; NEG-8 rails must match
+            # the non-claim fixture despite random configuration offsets.
+            for session_id,refs in frozen["neg8_inputs"].items():
+                self.assertAlmostEqual(refs["boundaries"]["rails"]["energy_j"],(3*10+10.004+3*10.01)/7)
+
+    def test_a4_09_p05_rest_vif(self):
+        pts = [p for p in self.points if (p["boundary"],p["basis"],p["selection"]) ==
+               ("rest","gross primary","primary")]
+        rails = {p["model"]:p["power"] for p in self.points if (p["boundary"],p["basis"],p["selection"]) ==
+                 ("rails","gross primary","primary")}
+        fit = ba.h2(pts,rails)["rest"]
+        corr = statistics.correlation([p["BW"] for p in pts],[rails[p["model"]] for p in pts])
+        self.assertAlmostEqual(fit["vif"],1/(1-corr*corr))
+        self.assertGreater(fit["vif"],1e6)
+
+    def test_a4_10_p05_both_adjacent_edge_samples(self):
+        stream = MeterWorkedExamples().stream([20]*40+[10]*20+[30]*41)
+        result = ba.meter_decode(stream,[4_000_000_000,6_000_000_000],[1_000_000_000,3_000_000_000])
+        self.assertEqual(result["edge_powers_w"],[20,30])
+        self.assertAlmostEqual(result["phase_edge_j"],5)
+        stream = MeterWorkedExamples().stream([.2]*40+[10]*20+[.2]*41)
+        result = ba.meter_decode(stream,[4_000_000_000,6_000_000_000],[1_000_000_000,3_000_000_000])
+        self.assertEqual(result["edge_powers_w"],[10,10])
+        self.assertAlmostEqual(result["phase_edge_j"],2)
+
+    def test_malformed_meter_is_unavailable_without_losing_rails(self):
+        root,session,_ = self.target()
+        path = root/"sources/night-custody/hazards/meter/stream-001.jsonl"
+        original = path.read_bytes()
+        try:
+            path.write_text("{broken transport\n")
+            records = list(ba.archive_records(root,self.manifest,session,stage="fit"))
+        finally:
+            path.write_bytes(original)
+        self.assertTrue(all(r["status"]=="succeeded" and r["meter"] is None for r in records))
+        reduced = ba.reduce_models(records,self.manifest)
+        self.assertTrue(all(r["status"]=="computed" for r in reduced if r["boundary"]=="rails"))
+        self.assertTrue(all(r["status"]=="unavailable" for r in reduced if r["boundary"]!="rails"))
+
+    def test_a4_12_exact_integer_constant_zero_equivalence(self):
+        from joulewise import paper_reported_energy as registered
+        from tests.test_paper_reported_energy import synthetic_input
+        families = {"small_ints":lambda i:i, "above_2p53":lambda i:2**53+i,
+                    "large_ints":lambda i:10**17+i, "constant":lambda i:7,
+                    "zero":lambda i:0, "subnormal":lambda i:(i+1)*5e-324}
+        comparisons = 0
+        for model in registered.MODELS:
+            for length in registered.PREFILL_LADDER_PROMPT_TOKENS:
+                fixture = synthetic_input(model,length)
+                for cell,data in zip(fixture["spec"]["reported_energy_cells"],fixture["cells"]):
+                    for name,values in families.items():
+                        with self.subTest(model=model,length=length,cell=cell["cell_id"],family=name):
+                            rows = copy.deepcopy(data["rows"])
+                            for i,row in enumerate(rows):
+                                row.update(energy_j=values(i),bounds_j=dict.fromkeys(ba.BOUND_KINDS,i%3))
+                            expected = registered._project_cell(cell,rows,data["binding"])
+                            actual = ba.estimate_phase_energy([r["energy_j"] for r in rows[:10]],
+                                [[r["energy_j"] for r in rows[i:i+4]] for i in range(10,50,4)],
+                                [r["bounds_j"] for r in rows[:10]],
+                                [[r["bounds_j"] for r in rows[i:i+4]] for i in range(10,50,4)])
+                            for key in ("mean_j","lower_j","upper_j"):
+                                self.assertEqual(actual[key],expected[key])
+                            for key in ("s_r","s_b","variance","h_j","B_j","kind_averages_j"):
+                                self.assertEqual(actual["interval"][key],expected["interval"][key])
+                            comparisons += 1
+        self.assertEqual(comparisons,144)
+
+
+class ReviewerProbeTests(unittest.TestCase):
+    def test_p02_p05_p06_p08_p10_fixed_tree(self):
+        import runpy
+        import sys
+        probes = FIXTURES / "repro"
+        with tempfile.TemporaryDirectory() as directory, patch.object(sys,"path",[str(probes),*sys.path]):
+            work = Path(directory)/"p08"
+            for script,args in (("p08_e2e_defects.py",[str(work)]),
+                                ("p10_failed_member.py",[str(work)]),
+                                ("p02_bonferroni_h2_family.py",[]),
+                                ("p05_join_drift_passes.py",[str(work/"base")]),
+                                ("p06_word_sensitivity.py",[str(work/"base")])):
+                with self.subTest(probe=script), patch.object(sys,"argv",[str(probes/script),*args]):
+                    output = io.StringIO()
+                    with contextlib.redirect_stdout(output):
+                        runpy.run_path(str(probes/script),run_name="__main__")
+                    report = output.getvalue()
+                    self.assertTrue(report)
+                    self.assertNotIn("exit codes [0, 1]",report)
+                    self.assertNotIn("exit codes [1]",report)
+                    if script == "p10_failed_member.py":
+                        self.assertEqual(report.count("exit [0, 0]"),2)
+                        self.assertEqual(report.count("n_r/n_b=10/9 removed=True"),12)
+                    if script == "p06_word_sensitivity.py":
+                        self.assertIn("differ: 0 of 801",report)
+                    print("BYTES_REVIEW_PROBE="+script+"\n"+report,flush=True)
 
 
 if __name__ == "__main__":

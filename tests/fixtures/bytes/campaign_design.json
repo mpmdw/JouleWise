@@ -200,5 +200,85 @@
       3118,
       3119
     ]
-  }
+  },
+  "neg8_references": [
+    {
+      "role": "corpus",
+      "run_id": "neg8-corpus-0",
+      "gross_j": 9.999,
+      "idle_power_w": 0.9999166666666667
+    },
+    {
+      "role": "corpus",
+      "run_id": "neg8-corpus-1",
+      "gross_j": 9.9994,
+      "idle_power_w": 0.99995
+    },
+    {
+      "role": "corpus",
+      "run_id": "neg8-corpus-2",
+      "gross_j": 9.9998,
+      "idle_power_w": 0.9999833333333333
+    },
+    {
+      "role": "corpus",
+      "run_id": "neg8-corpus-3",
+      "gross_j": 10.0002,
+      "idle_power_w": 1.0000166666666668
+    },
+    {
+      "role": "corpus",
+      "run_id": "neg8-corpus-4",
+      "gross_j": 10.0006,
+      "idle_power_w": 1.00005
+    },
+    {
+      "role": "corpus",
+      "run_id": "neg8-corpus-5",
+      "gross_j": 10.001,
+      "idle_power_w": 1.0000833333333334
+    },
+    {
+      "role": "start",
+      "run_id": "neg8-start-0",
+      "gross_j": 10,
+      "idle_power_w": 1.0
+    },
+    {
+      "role": "start",
+      "run_id": "neg8-start-1",
+      "gross_j": 10,
+      "idle_power_w": 1.0
+    },
+    {
+      "role": "start",
+      "run_id": "neg8-start-2",
+      "gross_j": 10,
+      "idle_power_w": 1.0
+    },
+    {
+      "role": "midpoint",
+      "run_id": "neg8-midpoint-0",
+      "gross_j": 10.004,
+      "idle_power_w": 1.0003333333333333
+    },
+    {
+      "role": "end",
+      "run_id": "neg8-end-0",
+      "gross_j": 10.01,
+      "idle_power_w": 1.0008333333333332
+    },
+    {
+      "role": "end",
+      "run_id": "neg8-end-1",
+      "gross_j": 10.01,
+      "idle_power_w": 1.0008333333333332
+    },
+    {
+      "role": "end",
+      "run_id": "neg8-end-2",
+      "gross_j": 10.01,
+      "idle_power_w": 1.0008333333333332
+    }
+  ]
 }
