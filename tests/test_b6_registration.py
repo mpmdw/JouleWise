@@ -152,7 +152,7 @@ class RegistrationTests(unittest.TestCase):
                 for code in ("code.executed_differs_from_sealed", "contention.request_overlap",
                              "diagnostic.s1_structural"):
                     self.assertIsNone(reg.flag_effects[code], code)
-                self.assertEqual(reg.flag_effects["model.identity_mismatch"], "EXCLUDE_WINDOW")
+                self.assertIsNone(reg.flag_effects["model.identity_mismatch"])
                 self.assertEqual(len(reg.draft_notes), 3)
                 self.assertTrue(all(isinstance(note, str) and note for note in reg.draft_notes))
 

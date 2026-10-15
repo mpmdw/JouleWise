@@ -138,7 +138,7 @@ class SessionStructureTests(unittest.TestCase):
 
     def test_physical_code_map_tracks_registered_vocabulary(self):
         from joulewise.night_gate import NIGHT_DRIVER_REASON_CODES, HAZARD_DRIVER_REASON_CODES, NIGHT_GATE_REASON_CODES
-        registered = NIGHT_DRIVER_REASON_CODES | HAZARD_DRIVER_REASON_CODES | NIGHT_GATE_REASON_CODES
+        registered = NIGHT_DRIVER_REASON_CODES | HAZARD_DRIVER_REASON_CODES | NIGHT_GATE_REASON_CODES | {"operative_bound_above_stop"}
         self.assertLessEqual(set(structure.PHYSICAL_STOP_CODES), registered)
         self.assertIsNone(structure._physical('night_stopped_census_unmeasured'))
         for code, kind in structure.PHYSICAL_STOP_CODES.items():
@@ -159,6 +159,21 @@ class SessionStructureTests(unittest.TestCase):
                 self.assertEqual((record['verdict'], record['action'], record['counting']),
                                  ('STRUCTURE_OK', 'CONTINUE', False))
                 self.assertIn('physical_stop:' + kind, record['counting_reasons'])
+
+    def test_b6_acceptance_owns_counting_with_b5_claim_labelled(self):
+        self.put(self.archive / 'harvest.json', {'verdict': 'COLLECTED', 'claim_usable': False})
+        self.put(self.archive / 'derived/b6-acceptance.json', {'verdict': 'ACCEPT', 'counting': True})
+        record = self.check()
+        self.assertTrue(record['counting'], record)
+        self.assertIs(record['b5_harvest_claim_usable'], False)
+        self.assertEqual(record['counting_source'], 'b6_acceptance')
+        self.put(self.custody / 'night/chain-stages.jsonl', '{"stage_id":"chain.stop","kind":"operative_bound_above_stop","rc":12}\n')
+        self.put(self.custody / 'night/chain.exited', {'exit_code': 12})
+        self.put(self.archive / 'derived/b6-acceptance.json', {'verdict': 'EXCLUDE', 'counting': False})
+        record = self.check()
+        self.assertEqual(record['chain_stopped'], 'operative_bound_above_stop')
+        self.assertEqual(record['physical_stop'], 'calibration.operative_bound_above_stop')
+        self.assertFalse(record['counting'])
 
     def test_review_s5_terminal_missing_and_nonphysical_abort(self):
         (self.custody / 'night/result.json').unlink()

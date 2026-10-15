@@ -28,5 +28,10 @@
     "id": "b6-fake-powermetrics-instrument",
     "command_regex": "(?:^|\\s)\\S*/tests/fixtures/hazards/instrument/fake_powermetrics\\.py(?:\\s|$)",
     "source": "tests/fixtures/hazards/instrument/fake_powermetrics.py"
+  },
+  {
+    "id": "b6-synthetic-acceptance-fault",
+    "command_regex": "\\s-c\\simport sys; sys\\.path\\.insert\\(0, [\\s\\S]*from scripts import harvest_b6_session as w[\\s\\S]*synthetic acceptance program fault",
+    "source": "tests/b6/round_support.py: Round.run's one-shot acceptance-fault child; actual harvest, synthetic acceptance exception"
   }
 ]

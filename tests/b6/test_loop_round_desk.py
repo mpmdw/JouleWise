@@ -13,6 +13,7 @@ from tests import test_harvest_b5_window as windows
 
 def tearDownModule():
     windows.tearDownModule()
+    windows._TEMPLATE = None
 
 
 class RoundTests(DeskCase):
@@ -28,12 +29,12 @@ class RoundTests(DeskCase):
         line = state['attempts'][0]['line']
         self.assertEqual(line['harvest_rc'], 6)
         self.assertTrue(line['structure_ok'], line)
-        self.assertTrue(line['compressed'], line)
+        self.assertFalse(line['compressed'], line)
         metadata = read(metadata_path(prepared))
         self.assertEqual(metadata['pin_advance']['status'], 'ADVANCED')
         self.assertFalse(plan.ledger_head_status(r.measurement)['blocking'])
         self.assertTrue(list(Path(metadata['paths']['export']).rglob('*.runs.csv')))
-        self.assertTrue(Path(metadata['paths']['custody'], 'raw-transcript.txt.zst').is_file())
+        self.assertTrue(Path(metadata['paths']['custody'], 'raw-transcript.txt').is_file())
         before = len(r.calls)
         self.assertIsInstance(r.lanes.driver.launch(prepared), Running)
         r.lanes.driver.status(Running(str(metadata_path(prepared))))

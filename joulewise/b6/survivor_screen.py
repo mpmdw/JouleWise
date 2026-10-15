@@ -31,7 +31,7 @@ class ScreenResult:
 
 
 def screen(roster: Mapping, member_effects: Mapping,
-           energy_of: Callable[[Mapping], Mapping], reg: Mapping) -> ScreenResult:
+           energy_of: Callable[[Mapping], Mapping] | None, reg: Mapping, *, counts_only=False) -> ScreenResult:
     """Select in committed roster order; use the one registered bound function.
 
     energy_of returns {gross, idle_subtracted, source?}, produced by the
@@ -78,9 +78,15 @@ def screen(roster: Mapping, member_effects: Mapping,
 
     def finish(verdict: str, reason: str | None = None) -> ScreenResult:
         record.update(verdict=verdict, reason=reason)
-        flags.add("neg8.survivor_screen_" + verdict)
+        if verdict != "pending":
+            flags.add("neg8.survivor_screen_" + verdict)
         record["flags"] = sorted(flags)
         return ScreenResult(verdict, counts, len(kept_corpus), reason, tuple(sorted(flags)), record)
+
+    if counts_only:
+        if len(kept_corpus) < settings["corpus_minimum"] or counts["start"] < 2 or counts["end"] < 2:
+            return finish("undefined", "references_insufficient")
+        return finish("pending")
 
     energies = {}
     unreadable = []

@@ -118,12 +118,18 @@ class DeskLane:
         structure = session_structure.check(archive=paths["archive"], custody=paths["custody"],
             registration=reg, harvest_rc=harvest_rc, runs_roots=metadata["runs_roots"], session_id=prepared.session_id)
         defects = list(structure["reasons"]) if structure["verdict"] in ("STRUCTURE_DEFECT", "NOT_READY") else []
-        if metadata.get("lost") or (done.chain_rc != 0 and not done.physics_stop and not structure["chain_stopped"]):
-            defects.append("chain_crashed")
         acceptance = read(paths["archive"] / "derived/b6-acceptance.json") if harvest_rc in (0, 6) else {}
+        physical = done.physics_stop or structure["physical_stop"]
+        if acceptance.get("physics_stop"):
+            physical = physical or acceptance.get("physical_stop_kind") or "physics"
+        if physical and not metadata.get("lost"):
+            defects = []
+        if metadata.get("lost") or (done.chain_rc != 0 and not physical and not structure["chain_stopped"]):
+            defects.append("chain_crashed")
         # The acceptance function's own structural failures (design 13.1: for
         # example a whole stage absent while later stages ran) hold the loop too.
-        defects.extend(str(code) for code in acceptance.get("structural_failures") or ())
+        if not physical:
+            defects.extend(str(code) for code in acceptance.get("structural_failures") or ())
         structure.update(adapter_structure_defects=sorted(set(defects)))
         structure_path = paths["staging"] / "structure.json"
         write(structure_path, structure)
@@ -137,14 +143,19 @@ class DeskLane:
         pack_flags = {}
         for pack, codes in acceptance.get("pack_flags", {}).items():
             pack_flags[pack] = tuple(code for code in codes if catalog.entry(code).get("blinding") == "STRUCTURE")
-        compressed_rc, compressed = desk_compress.compress(archive=paths["archive"], custody=paths["custody"],
-            runs_roots=metadata["runs_roots"], ledgers=[paths["measurement"] / plan.DEFAULT_LEDGER_RELATIVE],
-            after=[structure_path])
+        compressed_rc, compressed = 4, {"reason": "harvest_pending"}
+        if harvest_rc == 0 and acceptance.get("verdict") in ("ACCEPT", "EXCLUDE"):
+            compressed_rc, compressed = desk_compress.compress(archive=paths["archive"], custody=paths["custody"],
+                runs_roots=metadata["runs_roots"], ledgers=[paths["measurement"] / plan.DEFAULT_LEDGER_RELATIVE],
+                after=[structure_path])
         write(paths["staging"] / "compression.json", {"rc": compressed_rc, **compressed})
         counts = {row["stage_id"]: {key: row[key] for key in session_structure.COUNT_FIELDS}
                   for row in structure["per_roster_stage"]}
         return SessionLine(prepared.session_id, tuple(metadata["packs"]), chain_rc=done.chain_rc,
-            harvest_rc=harvest_rc, verdict=structure["harvest_verdict"], physics_stop=done.physics_stop or structure["physical_stop"],
+            harvest_rc=harvest_rc, verdict=structure["harvest_verdict"], physics_stop=physical,
+            acceptance_verdict=acceptance.get("verdict", "UNAVAILABLE"), counting=acceptance.get("counting") is True,
+            excluding_reasons=tuple(sorted({row["code"] for row in acceptance.get("excluding", ())
+                if row.get("scope") == "window" and catalog.entry(row["code"]).get("blinding") == "STRUCTURE"})),
             # Only codes the block-6 catalog classes STRUCTURE reach the loop's
             # records and mail, whatever blinding a flag record carried.
             window_flags=tuple(sorted({code for code in flags if catalog.entry(code).get("blinding") == "STRUCTURE"})),
@@ -152,3 +163,26 @@ class DeskLane:
             structure_ok=not defects, structure_defects=tuple(sorted(set(defects))),
             minutes={"chain": (structure["chain_seconds"] or 0) / 60, "harvest": harvest_seconds / 60,
                      "desk": (time.monotonic() - started) / 60}, compressed=compressed_rc == 0)
+
+    def reharvest(self, prepared, done):
+        """Restore identical source bytes and retain every previous harvest."""
+        path = metadata_path(prepared)
+        metadata = read(path)
+        old = Path(metadata["paths"]["archive"])
+        record_dir = Path(str(old) + ".desk")
+        if record_dir.exists():
+            rc, restored = desk_compress.restore(record_dir=record_dir)
+            write(Path(metadata["paths"]["staging"]) / "restore.json", {"rc": rc, **restored})
+            if rc:
+                raise ValueError("reharvest source restore failed")
+        history = metadata.setdefault("harvest_history", [])
+        history.append({"archive": str(old), "export": metadata["paths"]["export"]})
+        archive_base = Path(history[0]["archive"])
+        export_base = Path(history[0]["export"])
+        sequence = len(history)
+        while Path(str(archive_base) + f".reharvest-{sequence}").exists() or Path(str(export_base) + f".reharvest-{sequence}").exists():
+            sequence += 1
+        metadata["paths"].update(archive=str(archive_base) + f".reharvest-{sequence}",
+                                 export=str(export_base) + f".reharvest-{sequence}")
+        write(path, metadata)
+        return self.session_desk(prepared, done)

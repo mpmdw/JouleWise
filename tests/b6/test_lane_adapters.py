@@ -305,7 +305,7 @@ class ReviewRegressionTests(DeskCase):
 
     def test_arm_census_and_blocking_unmeasured_instrument_are_physics_refusals(self):
         from joulewise.b6.driver_lane import metadata_path, write
-        from joulewise.b6.lanes import Refused, Running
+        from joulewise.b6.lanes import Done, Refused, Running
         passing = dict.fromkeys(('clock', 'battery', 'thermal', 'contention', 'disk', 'instrument'), 'PASS')
         for name, arm, expected in (
                 ('census', {'go': False, 'verdicts': passing,
@@ -316,6 +316,12 @@ class ReviewRegressionTests(DeskCase):
             write(night / 'result.json', {'verdict': 'REFUSED', 'aborted_reason': 'night_refused_hazard'})
             write(night / 'hazard_result.json', {'verdict': 'REFUSED', 'stage_reached': 'arm', 'arm': arm})
             self.assertEqual(driver.status(Running(str(metadata_path(prepared)))), Refused((expected,)))
+            write(night / 'chain.started', {'pgid': 999999})
+            self.assertEqual(driver.status(Running(str(metadata_path(prepared)))), Refused((expected,)))
+            (night / 'chain-stages.jsonl').write_text('{"stage_id":"reservation","kind":"bracket_reservation","rc":0}\n')
+            write(night / 'result.json', {'verdict': 'ABORTED', 'aborted_reason': 'night_aborted_agent_present',
+                                         'chain_exit_code': -15})
+            self.assertEqual(driver.status(Running(str(metadata_path(prepared)))), Done(-15, 'agent'))
 
     def test_loaded_calendar_job_whose_run_ended_without_terminal_is_lost(self):
         from joulewise.b6.driver_lane import metadata_path, read

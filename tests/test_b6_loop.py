@@ -76,7 +76,11 @@ class Desk:
         if self.lines:
             return self.lines.pop(0)
         pack = prepared.session_id.split("-")[1]
-        return SessionLine(prepared.session_id, (pack,), minutes={"chain": 6, "harvest": 1, "desk": 1})
+        return SessionLine(prepared.session_id, (pack,), acceptance_verdict="ACCEPT", counting=True,
+                           minutes={"chain": 6, "harvest": 1, "desk": 1})
+
+    def reharvest(self, prepared, done):
+        return self.session_desk(prepared, done)
 
 
 class Analysis:
@@ -363,8 +367,8 @@ class LoopTests(unittest.TestCase):
         with patch.object(queue, "outcome", wraps=queue.outcome) as outcome:
             self.loop.control("reharvested", session_id="r1-alpha")
         self.assertEqual(set(outcome.call_args.args[1].window_flags), set(codes))
-        self.assertEqual(self.state()["reharvested"]["r1-alpha"]["alpha"]["status"], "not_counting")
-        self.assertEqual(queue.counting_ids(self.state(), "alpha"), [])
+        self.assertEqual(self.state()["reharvested"]["r1-alpha"]["alpha"]["status"], "counting")
+        self.assertEqual(queue.counting_ids(self.state(), "alpha"), ["r1-alpha"])
         self.assertEqual((self.root / "attempts.jsonl").read_bytes(), original)
 
     def test_no_probe_exception_flags_attempt_and_still_runs(self):
@@ -549,6 +553,33 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(queue.counting_ids(self.state(), "alpha"), ["r1-alpha"])
         self.assertEqual((self.root / "attempts.jsonl").read_bytes(), original)
         self.tick_to("SMOKE_RUN")
+
+    def test_acceptance_harvest_rerun_stays_pending_until_reharvest(self):
+        self.desk.lines = [SessionLine('r1-alpha', ('alpha',), acceptance_verdict='HARVEST_RERUN')]
+        self.tick_to('ROTATE')
+        self.assertEqual(self.state()['attempts'][0]['outcomes']['alpha']['status'], 'pending_harvest')
+        self.assertIn('r1-alpha', self.state()['pending_sessions'])
+        self.loop.control('reharvested', session_id='r1-alpha')
+        self.assertEqual(queue.counting_ids(self.state(), 'alpha'), ['r1-alpha'])
+
+    def test_next_launch_cutoff_prevents_arm_wait_and_session_start_spends(self):
+        from datetime import datetime, timezone
+        for target in ('ARM_WAIT', 'SESSION_RUN'):
+            with self.subTest(target=target):
+                # Each iteration is a fresh selection, before any start intent.
+                if self.state().get('state') != 'NEXT':
+                    self.loop.control('resume')
+                self.tick_to(target)
+                end = self.clock() + 300
+                state = self.state()
+                for reg in state['session']['registrations'].values():
+                    reg['data']['stopping']['end_t0_before'] = datetime.fromtimestamp(end, timezone.utc).isoformat()
+                loop_module.atomic_state(self.root / 'state.json', state)
+                self.clock.advance(1801 if target == 'ARM_WAIT' else 0)
+                self.loop.tick()
+                self.assertEqual(self.state()['state'], 'NEXT')
+                self.assertEqual(self.state()['attempts'], [])
+                self.assertEqual(self.state()['packs']['alpha']['attempts_since_resume'], 0)
 
     def test_registration_pending_rejudges_without_forcing_a_smoke(self):
         self.desk.lines = [SessionLine("r1-alpha", ("alpha",), harvest_rc=6)]

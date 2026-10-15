@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import math
 import os
 import time
 from dataclasses import asdict, replace
@@ -192,7 +193,7 @@ class Loop:
         return Prepared(**self.state["session"]["smoke_prepared" if smoke else "prepared"])
 
     def _next(self):
-        selection = queue.next_session(self.state, self.regs, self.clock())
+        selection = queue.next_session(self.state, self.regs, self.clock(), next_t0=self._next_t0())
         if isinstance(selection, queue.Close):
             self.state["session"] = None
             self._transition("DONE")
@@ -345,6 +346,12 @@ class Loop:
 
     def _run_collection(self, smoke):
         session = self.state["session"]
+        if not smoke and "started" not in session and any(
+                queue.done_reason(self.state, self.regs[p], self.clock(), next_t0=self._next_t0())
+                for p in session["packs"]):
+            self.state["session"] = None
+            self._transition("NEXT")
+            return
         prefix = "smoke_" if smoke else ""
         if smoke and "smoke_prepared" not in session:
             layout = self._layout()
@@ -447,6 +454,11 @@ class Loop:
         s = self.state["session"]
         if self.clock() < s["notice_sent"] + 1800:
             return
+        if any(queue.done_reason(self.state, self.regs[p], self.clock(), next_t0=self._next_t0())
+               for p in s["packs"]):
+            self.state["session"] = None
+            self._transition("NEXT")
+            return
         stop = self._stop()
         if self.state.get("stop_probe_unavailable"):
             s["no_unreadable"] = True
@@ -482,6 +494,9 @@ class Loop:
 
     def _session_run(self):
         self._run_collection(False)
+
+    def _next_t0(self):
+        return 60 * math.ceil((self.clock() + self.config.get("launch_lead_s", 420)) / 60)
 
     def _append_attempt(self, line):
         s = self.state["session"]
@@ -531,7 +546,8 @@ class Loop:
 
     def _session_desk(self):
         s = self.state["session"]
-        line = self.lanes.desk.session_desk(self._prepared(), Done(**s["done"]))
+        existing = next((a for a in self.state["attempts"] if a["session_id"] == s["id"]), None)
+        line = SessionLine(**existing["line"]) if existing else self.lanes.desk.session_desk(self._prepared(), Done(**s["done"]))
         if self._missing(line):
             return
         line = self._append_attempt(line)
@@ -541,7 +557,7 @@ class Loop:
             self._event("structure_defect", fields={"flags": line.window_flags})
             return
         self._transition("ROTATE")
-        if line.harvest_rc not in (0, 6):
+        if line.harvest_rc not in (0, 6) or line.acceptance_verdict == "HARVEST_RERUN":
             self.state["harvest_fault"] = True
             self.state.setdefault("pending_sessions", {})[s["id"]] = s
             self._event("harvest_fault")
@@ -599,11 +615,11 @@ class Loop:
                 pending = self.state.get("pending_sessions", {}).get(session_id)
                 if pending is None:
                     raise ValueError("session is not pending harvest")
-                line = self.lanes.desk.session_desk(Prepared(**pending["prepared"]), Done(**pending["done"]))
+                line = self.lanes.desk.reharvest(Prepared(**pending["prepared"]), Done(**pending["done"]))
                 if self._missing(line):
                     atomic_state(self.root / "state.json", self.state)
                     return 0
-                if not line.structure_ok or line.harvest_rc != 0:
+                if not line.structure_ok or line.harvest_rc != 0 or line.acceptance_verdict not in ("ACCEPT", "EXCLUDE"):
                     raise ValueError("reharvest is not structurally complete")
                 original = next(a for a in self.state["attempts"] if a["session_id"] == session_id)
                 flags = set(line.window_flags) | (set(original["line"]["window_flags"]) & LOOP_WINDOW_FLAGS)

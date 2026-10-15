@@ -182,7 +182,11 @@ def prepared(root: Path, *, rows=(), tree=None):
 def session(n: int = 5, *, synthetic: bool = True) -> SessionEvidence:
     members = tuple(MemberEvidence("science", f"s{i}", "succeeded", (),
                                    (("decode", "repeat", str(i)),), runtime=IDENTITY) for i in range(n))
-    return SessionEvidence("desk-pack", (StageEvidence("science", "campaign_collection", n, members),),
+    references = tuple(MemberEvidence("references", f"{role}{i}", "succeeded", role=role, runtime=IDENTITY)
+                       for role, count in (("corpus", 12), ("start", 3), ("midpoint", 1), ("end", 3))
+                       for i in range(count))
+    return SessionEvidence("desk-pack", (StageEvidence("science", "campaign_collection", n, members),
+                           StageEvidence("references", "campaign_collection", len(references), references)),
                            (CaptureEvidence("pre", 28.0, "valid", synthetic),
                             CaptureEvidence("post", 28.0, "valid", synthetic)),
                            IDENTITY, synthetic, ("closing_capture", "actual_losses"), "desk-session", "completed")

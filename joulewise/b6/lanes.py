@@ -81,6 +81,9 @@ class SessionLine:
     structure_defects: tuple[str, ...] = ()
     minutes: dict = field(default_factory=dict)
     compressed: bool = False
+    acceptance_verdict: str = "UNAVAILABLE"
+    counting: bool = False
+    excluding_reasons: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -114,6 +117,7 @@ class S1(Protocol):
 
 class K1(Protocol):
     def session_desk(self, prepared: Prepared, done: Done) -> SessionLine | LaneMissing: ...
+    def reharvest(self, prepared: Prepared, done: Done) -> SessionLine | LaneMissing: ...
 
 
 class H3(Protocol):
@@ -138,6 +142,7 @@ class DriverStub:
 class DeskStub:
     def evaluate_smoke(self, prepared, done): return LaneMissing("smoke")
     def session_desk(self, prepared, done): return LaneMissing("desk")
+    def reharvest(self, prepared, done): return LaneMissing("desk")
 
 
 class HarvestStub:

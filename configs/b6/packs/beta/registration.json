@@ -18,7 +18,7 @@
   "minimum_sessions": 2,
   "stopping": {
     "count": 3,
-    "end_t0_before": null,
+    "end_t0_before": "2026-11-02T00:00:00-08:00",
     "precision": null
   },
   "attempts_before_pause": 5,
@@ -148,7 +148,7 @@
     "meter.supervision_fault": null,
     "meter.vbus_out_of_contract": null,
     "model.identity_inconsistent_in_window": null,
-    "model.identity_mismatch": "EXCLUDE_WINDOW",
+    "model.identity_mismatch": null,
     "model.identity_underivable": null,
     "model.identity_unmeasured": null,
     "model.identity_unpinned": null,
