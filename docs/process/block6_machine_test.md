@@ -18,6 +18,7 @@ The four stage-1 lanes of design section 17, merged one at a time in its order, 
 | 4 | `lane/2026-10-14-b6-desk` | `8c69dff71` | compression, the session structure check, pack stopping |
 | 5 | `lane/2026-10-14-b6-loop` | `7bd443286` | the unattended loop under launchd (precheck, smoke, session, desk, rotate), program mail |
 | 6 | `lane/2026-10-14-b6-adapters` | `165b1972f` (merge `b2837ba38`) | the loop's lane adapters (P1/P2, D1/D2, S1/K1, H3, A1), block-6 plan inputs, one harvest path for smoke and session, the registration loaders and copies of block 5's pins and sizing, `plan.resolve_stage_dispatch`, the program courier, the wake job |
+| 7 | `lane/2026-10-15-b6-cold-chain`, `lane/2026-10-15-b6-cold-acceptance` | `2b2bea4cc`, `f67854d41` (merges `90d9222de`, `dd9a9be35`) | the cold passes' fixes: every block-6 chain renders the block-6 opening screen (flag above the alignment reference, stop only on b_pre + s_bracket above the registered line, null values while `acceptance.json` is absent) and no spare retries; a driver's physical stop is a physical stop (rotate), an opening capture with no bound is N1; the loop counts from the acceptance verdict; compression waits for a judged harvest and a re-harvest uses a fresh archive root; GAMMA's interior references have their own role; the pack registrations close at 2026-11-02T00:00:00-08:00 |
 
 The loop is in stage 1 because stage 1 cannot run without it: the pre-session check waits while any `claude` or
 `codex` process is alive or the keyboard was used in the last 600 s (`joulewise/b6/precheck.py`), so no agent can
@@ -242,7 +243,8 @@ is gone.
    the one and flips the other.
 3. **Effects of the driver's codes** are set in the block-6 catalog from the design texts (agent overlap and a
    sleep inside a run exclude the run; a run skipped at the wait cap or budget is excluded; the rest disclose;
-   `idle.waited` discloses until test M2). The registration may set others through `flag_effects`.
+   `idle.waited` discloses until test M2). Since `dd9a9be35` the pack registrations' `flag_effects` no longer
+   decide counting; the loop counts from the acceptance verdict, which reads the catalog.
 4. **Ledger seed.** This page seeds block 6 from block 3's terminal ledger (row 402, the pin committed here).
    Carrying block 5's later captures would mean reading the block-5 clone's `runs/` directory, which the block-5
    blinding rule of the integration brief names; the orchestrator decides whether that read is allowed.
@@ -252,5 +254,9 @@ is gone.
    brief `/Users/edr/night-archive/b6-build/stage2/BRIEF-sol-rev1.md`) stopped without a report; its partial
    evidence is in the review worktree's `.scratch-review/`. Commits 7cfcd73d0, ca65937e1, 7c545adc7, 459575bbb,
    ff0d63f04, 00e640909 and e9fc63757 still need an executing review before the machine test's pin.
-7. **Cold passes** (Fable and Opus, blind, executing) on the measurement, calibration and claim-path code of this
-   branch are not run; the list is in `/Users/edr/night-archive/b6-build/stage2/OPEN-ISSUES.md`.
+7. **Closed at `dd9a9be35`: cold passes.** Fable 5.1 and Opus 5.5 ran blind executing passes on `850265137`; their
+   three refusal-class findings survived re-execution and are fixed (row 7), with an executing re-check by Opus 5.5.
+   Dispositions: `/Users/edr/night-archive/b6-build/stage2/DISPOSITIONS-cold.md`.
+8. **The pin must register its reviews.** `configs/b6/executing_reviews.json` is `[]`; until the pin either lists the
+   executing reviews of every number-bearing change since `registered_commit` or sets `registered_commit` to the pin,
+   the harvest marks those paths `code.number_bearing_unreviewed` (session-excluding, W3).
