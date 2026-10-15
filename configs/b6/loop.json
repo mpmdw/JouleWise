@@ -1,7 +1,7 @@
 {
   "schema_version": "joulewise.b6_loop.v1",
   "loop_root": "/Users/edr/night-b6/loop",
-  "base_order": ["alpha", "beta", "gamma"],
+  "base_order": ["alpha", "beta", "gamma", "bytes-s1-p1", "bytes-s2-p1", "bytes-s3-p1", "bytes-s4-p1", "bytes-s5-p1", "bytes-s6-p1", "bytes-s6-p2", "bytes-s5-p2", "bytes-s4-p2", "bytes-s3-p2", "bytes-s2-p2", "bytes-s1-p2"],
   "science_minutes_max": 265,
   "owner_login": "mpmdw",
   "github_repo": "mpmdw/JouleWise",

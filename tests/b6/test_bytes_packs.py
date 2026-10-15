@@ -1,6 +1,5 @@
 """BYTES drafts: actual schema readers, whole floor modules and fixed-tree replay."""
 from copy import deepcopy
-from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
@@ -65,6 +64,7 @@ class BytesConfigTests(unittest.TestCase):
         roster = read(ROOT / configs.PACK / 'roster.json')
         self.assertEqual([r['model_id'] for r in roster['models'] if r['role'] == 'fit'],
                          ['qwen3-1p7b', 'qwen3-4b', 'qwen3-8b'])
+        self.assertEqual(roster['workload']['decode_forward_passes'], 512)
         self.assertIsNone(next(r for r in roster['models'] if r['model_id'] == 'qwen3-8b-8bit')['model']['revision'])
 
     def test_generators_reproduce_committed_bytes_and_write_only_allowed_paths(self):
@@ -73,7 +73,9 @@ class BytesConfigTests(unittest.TestCase):
         for path in first:
             self.assertTrue(path.is_relative_to(configs.PACK))
         for path in second:
-            self.assertTrue(path.is_relative_to(Path('configs/b6/packs')) or path == configs.PACK / 'pass_order.json')
+            self.assertTrue(path.is_relative_to(Path('configs/b6/packs'))
+                            or path.is_relative_to(Path('configs/campaigns'))
+                            or path.as_posix() in ('configs/b6/smoke_keep.json', 'configs/b6/loop.json'))
         with tempfile.TemporaryDirectory() as tmp:
             configs.generate(tmp)
             plans.generate(tmp)
@@ -86,32 +88,37 @@ class BytesPackTests(unittest.TestCase):
     def setUpClass(cls):
         cls.catalog = load_catalog(ROOT / 'configs/b6/flag_catalog_b6.json')
 
-    def test_six_drafts_validate_with_fixed_shape_stopping_and_blinding_group(self):
+    def test_twelve_drafts_preserve_ruled_stopping_and_expose_validator_gap(self):
         for n in range(1, 7):
-            with self.subTest(subpack=n):
-                reg = load(ROOT / f'configs/b6/packs/bytes-s{n}/registration.json')
-                self.assertEqual(validate(reg, self.catalog, root=ROOT), [])
-                self.assertEqual((reg.status, reg.kind, reg.session_shape), ('draft', 'new', 'fixed'))
-                self.assertEqual((reg.target_sessions, reg.minimum_sessions), (2, 1))
-                self.assertEqual(reg.corpus, {'planned': 18, 'stop_after_valid': 12})
-                self.assertEqual(reg.stopping, {'count': 2, 'end_t0_before': '2026-11-02T00:00:00-08:00', 'precision': None})
-                self.assertEqual(reg.blinding_group, 'bytes')
-                self.assertEqual(reg.blinding, {'hidden_offset': True})
-                self.assertEqual(reg.interleave, 'none')
-                self.assertEqual([m['module_id'] for m in reg.modules], ['bytes-' + m for m in plans.GROUPS[n - 1]])
-                for code in self.catalog.codes:
-                    self.assertEqual(reg.flag_effects[code], self.catalog.entry(code)['effect'])
-                self.assertEqual(reg.flag_effects['thermal.os_level_nonzero'], 'EXCLUDE_MEMBER')
-                self.assertEqual(reg.flag_effects['thermal.powermetrics_pressure_elevated'], 'EXCLUDE_MEMBER')
+            for pass_number in (1, 2):
+                with self.subTest(subpack=n, pass_number=pass_number):
+                    reg = load(ROOT / f'configs/b6/packs/bytes-s{n}-p{pass_number}/registration.json')
+                    self.assertEqual(validate(reg, self.catalog, root=ROOT),
+                                     [] if pass_number == 1 else ['minimum_sessions'])
+                    self.assertEqual((reg.status, reg.kind, reg.session_shape), ('draft', 'new', 'fixed'))
+                    self.assertEqual((reg.target_sessions, reg.minimum_sessions), (1, 1 if pass_number == 1 else 0))
+                    self.assertEqual(reg.corpus, {'planned': 18, 'stop_after_valid': 12})
+                    self.assertEqual(reg.stopping, {'count': 1, 'end_t0_before': '2026-11-02T00:00:00-08:00', 'precision': None})
+                    self.assertEqual(reg.blinding_group, 'bytes')
+                    self.assertEqual(reg.blinding, {'hidden_offset': True})
+                    self.assertEqual(reg.interleave, 'none')
+                    expected = ['bytes-' + m for m in plans.GROUPS[n - 1]]
+                    self.assertEqual([m['module_id'] for m in reg.modules], expected if pass_number == 1 else expected[::-1])
+                    self.assertNotIn('pass_plan_tree_refs', reg.data)
+                    for code in self.catalog.codes:
+                        self.assertEqual(reg.flag_effects[code], self.catalog.entry(code)['effect'])
+                    self.assertEqual(reg.flag_effects['thermal.os_level_nonzero'], 'EXCLUDE_MEMBER')
+                    self.assertEqual(reg.flag_effects['thermal.powermetrics_pressure_elevated'], 'EXCLUDE_MEMBER')
+
 
     def test_both_pass_trees_read_round_trip_and_keep_whole_modules_at_midpoint(self):
         for n in range(1, 7):
-            reg = load(ROOT / f'configs/b6/packs/bytes-s{n}/registration.json')
             for pass_number in (1, 2):
                 with self.subTest(subpack=n, pass_number=pass_number):
-                    path = reg.pass_plan_tree_refs[str(pass_number)]
-                    fixed = replace(reg, data={**reg.data, 'plan_tree_ref': path})
-                    layout = compose.layout(queue.Selection((reg.pack_id,), pass_number), {reg.pack_id: fixed}, ROOT)
+                    reg = load(ROOT / f'configs/b6/packs/bytes-s{n}-p{pass_number}/registration.json')
+                    path = reg.plan_tree_ref
+                    layout = compose.layout(queue.Selection((reg.pack_id,), pass_number), {reg.pack_id: reg}, ROOT)
+                    self.assertEqual(layout.campaign_id, reg.pack_id)
                     tree, files = compose.render(layout)
                     self.assertEqual(files['plan_tree.json'], (ROOT / path).read_bytes())
                     self.assertEqual(len(chain.stage_plan(tree)), len(tree['stage_graph']))
@@ -141,7 +148,7 @@ class BytesPackTests(unittest.TestCase):
                             self.assertTrue(config.is_file())
                             self.assertEqual(hashlib.sha256(config.read_bytes()).hexdigest(), entry['config_sha256'])
                     collection = read(ROOT / Path(path).parent / tree['plan']['path'])
-                    self.assertEqual(collection['plan_id'], f'{reg.pack_id}-pass{pass_number}')
+                    self.assertEqual(collection['plan_id'], reg.pack_id)
                     self.assertEqual(collection['science'], tree['science'])
                     self.assertEqual(tree['plan']['actual_sha256'], hashlib.sha256(
                         (ROOT / Path(path).parent / tree['plan']['path']).read_bytes()).hexdigest())
@@ -155,7 +162,53 @@ class BytesPackTests(unittest.TestCase):
 
     def test_pass_two_reverses_subpack_order_without_changing_replication_order(self):
         order = read(ROOT / configs.PACK / 'pass_order.json')
-        self.assertEqual(order['passes']['1'], [f'bytes-s{n}' for n in range(1, 7)])
-        self.assertEqual(order['passes']['2'], list(reversed(order['passes']['1'])))
+        self.assertEqual(order['passes']['1'], [f'bytes-s{n}-p1' for n in range(1, 7)])
+        self.assertEqual(order['passes']['2'], [f'bytes-s{n}-p2' for n in range(6, 0, -1)])
         self.assertEqual(order['blinding_group'], 'bytes')
         self.assertIn('replication and GAMMA order unchanged', order['interleaving'])
+
+    def test_loop_selects_each_pass_tree_once_in_registered_order(self):
+        # Adapt the executing review's second-session probe: use the actual
+        # queue and fixed-layout reader with structure-only counting outcomes.
+        loop = read(ROOT / 'configs/b6/loop.json')
+        ids = [f'bytes-s{n}-p1' for n in range(1, 7)] + [f'bytes-s{n}-p2' for n in range(6, 0, -1)]
+        self.assertEqual(loop['base_order'], ['alpha', 'beta', 'gamma'] + ids)
+        regs = {p: load(ROOT / f'configs/b6/packs/{p}/registration.json') for p in ids}
+        state = {'round': 1, 'slots': {}, 'base_order': loop['base_order'], 'attempts': []}
+        now = 1_792_000_000  # before the registered deadline
+        for p in ids:
+            selection = queue.next_session(state, regs, now)
+            self.assertIsInstance(selection, queue.Selection)
+            self.assertEqual(selection.packs, (p,))
+            layout = compose.layout(selection, regs, ROOT)
+            tree = compose.render(layout)[0]
+            self.assertEqual(tree['bytes_pass'], regs[p].bytes_pass)
+            self.assertEqual(tree['module_order'], [m['module_id'] for m in regs[p].modules])
+            self.assertEqual(layout.campaign_id, p)
+            state = queue.consume(state, selection)
+            state['attempts'].append({'session_id': layout.session_id, 'packs': [p],
+                                      'outcomes': {p: {'status': 'counting', 'cause': None}}})
+            self.assertEqual(queue.done_reason(state, regs[p], now), 'target')
+        self.assertIsInstance(queue.next_session(state, regs, now), queue.Close)
+
+    def test_fixed_driver_campaign_paths_and_smoke_keep_reach_sizing(self):
+        from joulewise.b6 import plan_inputs
+        for n in range(1, 7):
+            for pass_number in (1, 2):
+                p = f'bytes-s{n}-p{pass_number}'
+                with self.subTest(pack=p):
+                    reg = load(ROOT / f'configs/b6/packs/{p}/registration.json')
+                    layout = compose.layout(queue.Selection((p,), pass_number), {p: reg}, ROOT)
+                    campaign = ROOT / 'configs/campaigns' / layout.campaign_id
+                    self.assertEqual(campaign / 'plan_tree.json', ROOT / reg.plan_tree_ref)
+                    self.assertTrue((campaign / 'plan_tree.json').is_file())
+                    expected = {f'{p}-reference-start': 1,
+                                **{m['module_id'] + '-absolute': 1 for m in reg.modules},
+                                f'{p}-reference-end': 1}
+                    self.assertEqual(compose.smoke_keep(layout), expected)
+                    # C5 sizing is intentionally pending; campaign identity and
+                    # smoke lookup must already work without a driver change.
+                    with self.assertRaisesRegex(ValueError, f'pack has no registered sizing: {p}'):
+                        plan_inputs.build(ROOT, ROOT / 'configs/b6/registration', p, layout.session_id, {},
+                                          custody_root='/x', runs_parent='/x', claim_backup='/x',
+                                          bound_backup='/x', head='deadbeef')

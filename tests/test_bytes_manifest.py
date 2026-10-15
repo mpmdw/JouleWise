@@ -111,6 +111,34 @@ class HeaderTests(unittest.TestCase):
         self.fixture('qwen3_5_moe_text', prefix='model.language_model.', moe=True, hybrid=True, shared=True)
         self.assertEqual((b.headers(self.root)['W_bytes'], b.headers(self.root)['R_bytes']), (212, 392))
 
+    def test_sanitize_dropped_tensors_are_recorded_but_never_loaded(self):
+        tensors = self.fixture('qwen3_5_moe_text', prefix='model.language_model.',
+                               moe=True, hybrid=True, shared=True)
+        baseline = b.headers(self.root)
+        dropped = ('vision_tower.blocks.0.attn.qkv.weight',
+                   'model.visual.blocks.0.attn.qkv.weight',
+                   'mtp.layers.0.weight', 'model.mtp.layers.0.weight',
+                   'model.language_model.mtp.layers.0.weight')
+        for name in dropped:
+            tensors[name] = ('BF16', [2, 3])
+        safetensors(self.root / 'model.safetensors', tensors)
+        row = b.headers(self.root)
+        self.assertEqual(row['categories']['not_loaded'], 12 * len(dropped))
+        self.assertEqual((row['W_bytes'], row['R_bytes']), (212, 392))
+        self.assertEqual((row['W_bytes'], row['R_bytes']),
+                         (baseline['W_bytes'], baseline['R_bytes']))
+        for name in dropped:
+            self.assertEqual(row['tensors'][name]['category'], 'not_loaded')
+            self.assertEqual(row['tensors'][name]['stored_bytes'], 12)
+
+    def test_sanitize_namespace_near_misses_still_refuse(self):
+        for name in ('model.visualizer.weight', 'vision_tower_extra.weight',
+                     'model.vision_tower.weight', 'model.notmtp.weight',
+                     'model.mtp_extra.weight', 'model.mtp', 'visual.blocks.0.weight'):
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(ValueError, 'unclassified tensor'):
+                    b.classify(name)
+
     def test_individual_expert_names_shards_and_index(self):
         tensors = self.fixture('qwen3_moe', moe=True)
         tensors = {k: v for k, v in tensors.items() if '.switch_mlp.' not in k}
@@ -219,19 +247,20 @@ class ArraysCache:
 class KVTests(unittest.TestCase):
     def test_snapshot_counts_occupied_and_backing_separately(self):
         start = b.cache_snapshot([KVCache(2048, 2304), ArraysCache()])
-        end = b.cache_snapshot([KVCache(2559, 2560), ArraysCache()])
+        end = b.cache_snapshot([KVCache(2560, 2560), ArraysCache()])
         record = b.kv_record(start, end)
         # KV is 32 bytes/context token and recurrent state stays at 28 bytes.
-        self.assertEqual(record['KV_bytes'], (2048 * 32 + 28 + 2559 * 32 + 28) / 2)
+        self.assertEqual(record['decode_forward_passes'], 512)
+        self.assertEqual(record['KV_bytes'], (2048 * 32 + 28 + 2560 * 32 + 28) / 2)
         self.assertEqual(start['layers'][0]['allocated_bytes'], 2304 * 32)
-        self.assertEqual(end['layers'][0]['occupied_length'], 2559)
+        self.assertEqual(end['layers'][0]['occupied_length'], 2560)
         self.assertEqual(end['layers'][0]['allocated_capacity'], 2560)
         self.assertEqual(end['layers'][1]['cache_class'], 'ArraysCache')
         self.assertIsNone(end['layers'][1]['allocated_capacity'])
         with self.assertRaisesRegex(ValueError, 'layer count'):
             b.kv_record(start, {'layers': []})
 
-    def test_explicit_generation_has_exactly_511_decode_forwards(self):
+    def test_explicit_generation_has_exactly_512_decode_forwards(self):
         calls = []
         def model(prompt, cache):
             n = 2048 if not calls else 1
@@ -240,9 +269,9 @@ class KVTests(unittest.TestCase):
             return Array((1, n, 4))
         mx = SimpleNamespace(argmax=lambda *a, **k: Array((1,)), eval=lambda *a: None)
         start, end = b.generate_cache(model, Array((2048,)), mx, lambda model: [KVCache(0, 2560)])
-        self.assertEqual(calls, [2048] + [1] * 511)
+        self.assertEqual(calls, [2048] + [1] * 512)
         self.assertEqual(start['layers'][0]['occupied_length'], 2048)
-        self.assertEqual(end['layers'][0]['occupied_length'], 2559)
+        self.assertEqual(end['layers'][0]['occupied_length'], 2560)
 
     def test_mac_kv_orchestration_with_fake_mlx_and_tokenizer(self):
         from joulewise.adapters import mlx_runtime
@@ -254,7 +283,7 @@ class KVTests(unittest.TestCase):
                    'mlx_lm.models': SimpleNamespace(),
                    'mlx_lm.models.cache': SimpleNamespace(make_prompt_cache=lambda model: [])}
         warm = b.cache_snapshot([KVCache(2048, 2304)])
-        end = b.cache_snapshot([KVCache(2559, 2560)])
+        end = b.cache_snapshot([KVCache(2560, 2560)])
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
             (directory / 'config.json').write_text('{"model_type":"qwen3"}')
@@ -268,7 +297,7 @@ class KVTests(unittest.TestCase):
             self.assertEqual(generate.call_args_list[0].kwargs, {'output_tokens': 4})
             self.assertEqual(generate.call_count, 2)
             settle.assert_called_once_with(5.0)
-            self.assertEqual(row['KV_bytes'], (2048 + 2559) * 16)
+            self.assertEqual(row['KV_bytes'], (2048 + 2560) * 16)
             self.assertEqual(row['revision'], 'fake-revision')
 
     def test_linux_kv_gate_does_not_import_mlx(self):

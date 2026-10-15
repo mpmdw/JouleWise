@@ -102,6 +102,9 @@ def read_headers(directory):
 
 def classify(name):
     """Closed language-model naming vocabulary; unknown tensors require review."""
+    # Match the discarded namespaces before stripping language-model prefixes.
+    if name.startswith(("vision_tower.", "model.visual.")) or re.search(r"(?:^|\.)mtp\.", name):
+        return "not_loaded"
     n = name
     for prefix in ("model.language_model.", "language_model.model.", "language_model.", "model."):
         if n.startswith(prefix):
@@ -142,7 +145,7 @@ def headers(model_dir, revision=None):
     if type(vocab) is not int or vocab <= 0:
         raise ValueError("positive vocab_size required")
     tensors = read_headers(directory)
-    cats = dict.fromkeys(("embed", "lm_head", "always_active", "routed_experts", "shared_experts"), 0)
+    cats = dict.fromkeys(("embed", "lm_head", "always_active", "routed_experts", "shared_experts", "not_loaded"), 0)
     for name, tensor in tensors.items():
         cat = classify(name)
         if cat == "embed" and (not tensor["shape"] or tensor["shape"][0] != vocab):
@@ -166,7 +169,7 @@ def headers(model_dir, revision=None):
             "routed_fraction": fraction, "shared_experts": {"stored_bytes": cats["shared_experts"],
                 "intermediate_size": cfg.get("shared_expert_intermediate_size")},
             "tied_embeddings": tied, "categories": cats, "tensors": tensors,
-            "W_bytes": w, "R_bytes": sum(cats.values())}
+            "W_bytes": w, "R_bytes": sum(cats.values()) - cats["not_loaded"]}
 
 
 def arrays(state):
@@ -202,14 +205,15 @@ def kv_record(start, end):
         raise ValueError("cache layer count changed")
     return {"after_prefill": start, "after_last_token": end,
             "KV_bytes": (start["cache_bytes"] + end["cache_bytes"]) / 2,
-            "prompt_tokens": 2048, "output_tokens": 512, "decode_forward_passes": 511}
+            "prompt_tokens": 2048, "output_tokens": 512, "decode_forward_passes": 512}
 
 
 def generate_cache(model, prompt, mx, make_prompt_cache, output_tokens=512):
-    """One explicit prefill and N-1 decode forwards, with no look-ahead step.
+    """Match the pinned runtime's prefill and N decode forwards, look-ahead included.
 
-    A streaming generator may compute the next token before yielding the first;
-    explicit steps keep the two snapshots at exactly the R2 phase boundaries.
+    stream_generate(max_tokens=512) dispatches 512 decode forward passes, one
+    of which yields no returned token. Addendum 5 requires that measured work:
+    snapshots at 2,048 and 2,560 occupied positions, not 2,559.
     Greedy argmax never terminates early at an EOS id.
     """
     cache = make_prompt_cache(model)
@@ -217,7 +221,7 @@ def generate_cache(model, prompt, mx, make_prompt_cache, output_tokens=512):
     token = mx.argmax(logits[:, -1, :], axis=-1)
     mx.eval(token, [a for c in cache for a in arrays(c.state)])
     start = cache_snapshot(cache)
-    for _ in range(output_tokens - 1):
+    for _ in range(output_tokens):
         logits = model(token[:, None], cache=cache)
         token = mx.argmax(logits[:, -1, :], axis=-1)
         mx.eval(token, [a for c in cache for a in arrays(c.state)])

@@ -105,7 +105,7 @@ def build_files():
                 "schema_version": "joulewise.order_manifest.v1", "manifest_id": "bytes-" + model_id + "-" + Path(directory).name,
                 "planned_n_bundles": len(entries), "executed_order": entries})
     files[PACK / "roster.json"] = raw_json({"status": "draft", "models": roster,
-        "workload": {"prompt_tokens": 2048, "output_tokens": 512, "decode_forward_passes": 511,
+        "workload": {"prompt_tokens": 2048, "output_tokens": 512, "decode_forward_passes": 512,
                      "temperature": 0, "eos_suppressed": True, "warmup_tokens": 4, "settle_seconds": template["sampling"]["warmup_seconds"],
                      "phase_boundary_method": "first_token"},
         "source_run_config": TEMPLATE.as_posix(), "minimum_kept_units_per_stratum": 5})

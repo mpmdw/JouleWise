@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Freeze compose.layout output as BYTES draft fixed trees for both passes.
 
-Pass one lives in each sub-pack's plan_tree.json; pass two in pass2/plan_tree.json.
-The pass map is data for the future driver: stage 1 selects only plan_tree_ref
-and does not yet consume pass_plan_tree_refs or reverse the BYTES slots.
+Each pass has its own fixed pack and campaign directory. The stage-1 driver
+reads plan_tree_ref directly; loop base_order puts all pass-one packs before
+pass two, reversing the sub-pack order for the second pass.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from copy import deepcopy
 from dataclasses import replace
 import importlib.util
 import json
+import re
 from pathlib import Path
 import sys
 
@@ -41,41 +42,50 @@ def estimate_minutes(model_id):
     return round((seconds + 57.6 + 5.0) * 50 * 1.2 / 60, 3)
 
 
-def registration(number):
-    pack_id = f"bytes-s{number}"
-    path = Path("configs/b6/packs") / pack_id
+def registration(number, pass_number):
+    pack_id = f"bytes-s{number}-p{pass_number}"
+    path = Path("configs/campaigns") / pack_id
     value = json.loads((ROOT / "configs/b6/registration_template.json").read_bytes())
-    value.update(pack_id=pack_id, title=f"BYTES sub-pack s{number}",
+    value.update(pack_id=pack_id, title=f"BYTES sub-pack s{number}, pass {pass_number}",
                  question="Does decode energy follow format-derived bytes per token, resident size, or decode time?",
                  status="draft", kind="new", session_shape="fixed", plan_tree_ref=(path / "plan_tree.json").as_posix(),
-                 target_sessions=2, minimum_sessions=1, estimators=[], flag_catalog="configs/b6/flag_catalog_b6.json",
-                 stopping={"count": 2, "end_t0_before": "2026-11-02T00:00:00-08:00", "precision": None},
+                 target_sessions=1, minimum_sessions=1 if pass_number == 1 else 0, estimators=[], flag_catalog="configs/b6/flag_catalog_b6.json",
+                 stopping={"count": 1, "end_t0_before": "2026-11-02T00:00:00-08:00", "precision": None},
                  blinding_group="bytes", interleave="none", reference_cadence="session_half")
     value["modules"] = [{"module_id": "bytes-" + model_id, "kind": "floor", "phase": "decode",
                          "config_dirs": configs.config_dirs(model_id), "run_count": 50,
                          "est_minutes": estimate_minutes(model_id)} for model_id in GROUPS[number - 1]]
+    if pass_number == 2:
+        value["modules"].reverse()
     value["pack_unit"] = [m["module_id"] for m in value["modules"]]
-    value["pass_plan_tree_refs"] = {"1": value["plan_tree_ref"], "2": (path / "pass2/plan_tree.json").as_posix()}
+    value["bytes_pass"] = pass_number
     catalog = load_catalog(ROOT / value["flag_catalog"])
     value["flag_effects"] = {code: catalog.entry(code)["effect"] for code in sorted(catalog.codes)}
     value["draft_notes"] = [
-        "Ruling: docs/design/bytes_pack_design.md R1-R6; not registered or armable.",
+        "Ruling: docs/design/bytes_pack_design.md R1-R6 and Addendum 5 at 6b2007220; not registered or armable.",
         "One blinding_group=bytes is preserved as top-level data; stage-1 validator permits it but current blinding code does not consume it. C6/C7 remain R8 item 7.",
-        "Stage 1 uses only plan_tree_ref: selecting pass_plan_tree_refs[2] and reversing BYTES slot order require the later driver before pass 2; do not collect pass 2 using pass 1's tree.",
+        "Stage 1 reads this pass's plan_tree_ref directly. Pass 1 has target/minimum 1/1, pass 2 has 1/0. loop.json base_order places all pass-1 packs before pass-2 packs, with reversed sub-pack order in pass 2.",
+        "Addendum 5: 512 decode forward passes, one of which yields no returned token. The pinned stream_generate(max_tokens=512) includes look-ahead inside the measured request: e=E_dec/512, tau=T_dec/512, BW=b/tau; KV averages snapshots at 2048 and 2560 positions.",
         "R8 C4/C5 identity pins, runtime budget, contention, clock and disk gates await Mac desk checks; 8B-8bit revision is pending R8 item 5.",
         "R8 analysis, independent twin, estimator registration, cold gate and smoke fingerprints remain before first t0.",
-        "R6 disagreement requiring an inclusion ruling before registration: 'catalog unchanged' retains 43 EXCLUDE_MEMBER and 19 EXCLUDE_WINDOW codes (including nonthermal), whereas 'the rest are flags' can mean nonthermal disclosure only. Drafts preserve the existing catalog pending that ruling.",
+        "Addendum 2 resolves R6: the Block-6 flag catalog is unchanged, including nonthermal exclusions. The flagged-inclusive line restores every catalog-excluded unit with valid energy records (Addenda 1 and 3).",
+        "Model sources include HF cache snapshot directories; C4 identity pins must hash through their symlinks. model.context_window is unused by the runtime; tokenizer and chat-template pins remain C4.",
+        "Qwen3-8B-8bit revision is pending; group_size=64 is assumed and unverified against the eventual checkpoint.",
+        "For single-model sub-packs s5 and s6, compose places the midpoint between the quad halves after 30 runs; analysis must not assume it splits models.",
+        "Fixed packs bypass the 265-minute science cap. Sub-pack s4 is planned at 254 minutes, leaving 11 minutes on planning numbers only.",
         "Planning minutes use pilot maximum request seconds plus inherited idle/settle, 50 runs and 20% margin; 8B-8bit uses R1's 150 minutes. These are not measured session footprints.",
     ]
+    if pass_number == 2:
+        value["draft_notes"].append(
+            "Existing-code disagreement: pack_registration.validate requires minimum_sessions>=1 for new packs and reports minimum_sessions for this ruled optional pass (0). That validator must support Addendum 5 before pass-2 registration; this config lane changes no joulewise/b6 code.")
     return value
 
 
-def tree_files(value, pass_number, repo_root):
+def tree_files(value, repo_root):
     pack_id = value["pack_id"]
+    pass_number = value["bytes_pass"]
     working = deepcopy(value)
     working["session_shape"] = "modular"
-    if pass_number == 2:
-        working["modules"].reverse()
     reg = Registration(working)
     layout = compose.layout(queue.Selection((pack_id,), pass_number), {pack_id: reg}, repo_root)
     # compose decides whole-module placement and the shared midpoint. Give every
@@ -86,8 +96,9 @@ def tree_files(value, pass_number, repo_root):
         s["stage_id"] = s["stage_id"].replace("beta-", pack_id + "-")
         stages.append(s)
     layout = replace(layout, stages=tuple(stages))
+    keep = compose.smoke_keep(layout)
     tree, files = compose.render(layout)
-    directory = Path(value["pass_plan_tree_refs"][str(pass_number)]).parent
+    directory = Path(value["plan_tree_ref"]).parent
     # The fixed reader forbids '..' in config locators. Each compose floor
     # piece is already one whole committed manifest, as are the references.
     # Reuse those source manifests instead of render's relocated copies.
@@ -110,10 +121,10 @@ def tree_files(value, pass_number, repo_root):
     # Keep its common reference/launch scaffold, remove its asserted authority.
     for key in ("plan", "condition_families", "downstream_contract", "decode_workload", "runtime_budget"):
         tree.pop(key, None)
-    tree.update(draft_status="draft", window_identity={"window_id": f"{pack_id}-pass{pass_number}",
-                "evidence_root_id": f"evidence-{pack_id}-pass{pass_number}"},
-                roots={"claim_root_leaf": f"runs_{pack_id}_pass{pass_number}",
-                       "bound_root_leaf": f"runs_{pack_id}_pass{pass_number}_bound"},
+    tree.update(draft_status="draft", window_identity={"window_id": pack_id,
+                "evidence_root_id": f"evidence-{pack_id}"},
+                roots={"claim_root_leaf": f"runs_{pack_id}",
+                       "bound_root_leaf": f"runs_{pack_id}_bound"},
                 generator={"path": "scripts/bytes_plan_trees.py", "sha256": configs.sha(Path(__file__).read_bytes())},
                 arm_attachments={}, bytes_pass=pass_number, blinding_group="bytes",
                 module_order=[m["module_id"] for m in working["modules"]],
@@ -123,7 +134,7 @@ def tree_files(value, pass_number, repo_root):
     # The bracket reservation authenticates plan id/digest, without requiring
     # the old floor-plan schema. Bind BYTES membership, never BETA's plan.
     collection = {"schema_version": "joulewise.bytes_collection_plan.v1", "status": "draft",
-                  "plan_id": f"{pack_id}-pass{pass_number}", "pack_id": pack_id,
+                  "plan_id": pack_id, "pack_id": pack_id,
                   "pass": pass_number, "modules": working["modules"], "corpus": value["corpus"],
                   "minimum_kept_units_per_stratum": 5, "science": tree["science"],
                   "draft_notes": ["Draft collection membership; analysis/estimator contracts remain R8 items 3-4 and registration remains item 8."]}
@@ -140,30 +151,58 @@ def tree_files(value, pass_number, repo_root):
                     arg["value"] = collection_path.as_posix()
     files["collection_plan.json"] = collection_raw
     files["plan_tree.json"] = configs.raw_json(tree)
-    return {directory / path: raw for path, raw in files.items()}
+    return {directory / path: raw for path, raw in files.items()}, keep
 
 
 def build_files(repo_root=ROOT):
     files = {}
     catalog = load_catalog(ROOT / "configs/b6/flag_catalog_b6.json")
+    smoke_path = Path("configs/b6/smoke_keep.json")
+    smoke = json.loads((Path(repo_root) / smoke_path).read_bytes())
+    passes = {"1": [f"bytes-s{n}-p1" for n in range(1, 7)],
+              "2": [f"bytes-s{n}-p2" for n in range(6, 0, -1)]}
     for number in range(1, 7):
-        value = registration(number)
-        errors = validate(Registration(value), catalog, root=repo_root)
-        if errors:
-            raise ValueError(f"{value['pack_id']}: {errors}")
-        path = Path("configs/b6/packs") / value["pack_id"] / "registration.json"
-        files[path] = configs.raw_json(value)
         for pass_number in (1, 2):
-            files.update(tree_files(value, pass_number, repo_root))
+            value = registration(number, pass_number)
+            errors = validate(Registration(value), catalog, root=repo_root)
+            # Addendum 5 mandates minimum=0 for optional pass 2. The existing
+            # validator requires >=1 for all new packs; b6 changes are outside
+            # this config lane. Preserve the ruled draft value and expose the
+            # exact compatibility gap, while refusing every other error.
+            allowed = ["minimum_sessions"] if pass_number == 2 else []
+            if any(error not in allowed for error in errors):
+                raise ValueError(f"{value['pack_id']}: {errors}")
+            path = Path("configs/b6/packs") / value["pack_id"] / "registration.json"
+            files[path] = configs.raw_json(value)
+            trees, keep = tree_files(value, repo_root)
+            files.update(trees)
+            smoke[value["pack_id"]] = keep
+    files[smoke_path] = configs.raw_json(smoke)
+    loop_path = Path("configs/b6/loop.json")
+    loop_raw = (Path(repo_root) / loop_path).read_text()
+    loop = json.loads(loop_raw)
+    bytes_ids = set(passes["1"] + passes["2"] + [f"bytes-s{n}" for n in range(1, 7)])
+    loop["base_order"] = [p for p in loop["base_order"] if p not in bytes_ids] + passes["1"] + passes["2"]
+    files[loop_path] = re.sub(r'("base_order"\s*:\s*)\[[^\]]*\]',
+                              lambda m: m[1] + json.dumps(loop["base_order"]), loop_raw).encode()
     files[configs.PACK / "pass_order.json"] = configs.raw_json({
-        "status": "draft", "blinding_group": "bytes",
-        "passes": {"1": [f"bytes-s{n}" for n in range(1, 7)], "2": [f"bytes-s{n}" for n in range(6, 0, -1)]},
+        "status": "draft", "blinding_group": "bytes", "passes": passes,
         "interleaving": "After replication round 1, then next BYTES slots after each replication round; replication and GAMMA order unchanged; lost attempts retry in the next BYTES slot."})
     return files
 
 
 def generate(output_root=ROOT, check=False, source_root=ROOT):
     files = build_files(source_root)
+    # Remove only the five obsolete generated files in each old pack. Preserve
+    # any unrelated files; pass-specific packs replace the unreachable pass map.
+    for n in range(1, 7):
+        for leaf in ("registration.json", "plan_tree.json", "collection_plan.json",
+                     "pass2/plan_tree.json", "pass2/collection_plan.json"):
+            old = Path(output_root) / f"configs/b6/packs/bytes-s{n}" / leaf
+            if old.exists():
+                if check:
+                    raise ValueError(f"obsolete BYTES pack file: {old}")
+                old.unlink()
     for path, raw in files.items():
         target = Path(output_root) / path
         if check:
@@ -181,7 +220,7 @@ def main(argv=None):
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args(argv)
     generate(args.output_root, args.check)
-    print(("verified" if args.check else "generated") + " 6 BYTES draft registrations and 12 fixed pass trees")
+    print(("verified" if args.check else "generated") + " 12 BYTES draft registrations and 12 fixed pass trees")
     return 0
 
 
