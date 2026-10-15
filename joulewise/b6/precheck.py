@@ -517,7 +517,7 @@ def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None
         code_identity = {**fp, "repo_root": str(measurement), "executed_head": fp.get("code_commit")}
         try:
             prepared = acceptance.prepare(ledger_path=ledger, plan_tree=tree, registration_dir=registration,
-                                          code_identity=code_identity)
+                                          code_identity=code_identity, pack_root=pack_root)
         except Exception as exc:  # noqa: BLE001 - recorded; the precheck never stops on a record
             result["acceptance"] = {"status": "unavailable",
                                     "reason": f"acceptance registration unreadable: {type(exc).__name__}"}

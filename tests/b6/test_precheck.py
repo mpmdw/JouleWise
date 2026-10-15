@@ -17,6 +17,7 @@ from joulewise.hazards.base import Context, PASS
 from scripts import fixture_orphan_census as census
 from tests.hazards.fakes import FakeClocks, Runner, completed, FAKE_POWERMETRICS
 from tests.b6.support import DeskCase, ROOT, PACKS, fp, synthetic_checkout, fake_environment
+from tests.b6 import support
 
 
 class FakeAcceptance(StubAcceptance):
@@ -248,6 +249,38 @@ class PrecheckTests(DeskCase):
             parsed.assert_called_once()
             observed.assert_called_once_with(['receipt'])
         self.assertEqual(p.ledger_rows(self.root / 'missing'), [])
+
+    def test_acceptance_uses_session_pack_roster_with_alpha_registration(self):
+        from joulewise.b5.harvest import build_roster, l4_exclusion_inputs
+        from joulewise.b6.acceptance import ACCEPTANCE
+
+        registration = support.registration_dir(self.root / 'cross-pack')
+        document = support.document()
+        document.update(pack_id=PACKS['alpha'], registered_commit=fp()['code_commit'])
+        support.write_json(registration / 'acceptance.json', document)
+        ledger = self.root / 'capture-list.jsonl'
+        ledger.write_text('')
+        rows = [{'sequence': i, 'disposition': 'valid', 'exact_bound_lexeme_s': '0.028'}
+                for i in range(1, 25)]
+        for pack in ('beta', 'gamma'):
+            with self.subTest(pack=pack):
+                ctx, seams, _ = fake_environment(ROOT)
+                acceptance = mock.Mock(wraps=ACCEPTANCE)
+                with mock.patch.object(p, 'model_files', return_value=({'measured': {}}, [])), \
+                        mock.patch.object(p, 'runtime_versions', return_value={}), \
+                        mock.patch.object(p, 'ledger_rows', return_value=rows):
+                    result = p.run_precheck(PACKS[pack], ROOT, self.state, ctx=ctx, seams=seams,
+                                            registration_dir=registration, ledger=ledger, acceptance=acceptance)
+                self.assertEqual(result['acceptance']['nominal']['verdict'], 'ACCEPT')
+                self.assertIsNone(result['certain_exclusion'])
+                self.assertEqual(result['decision'], 'START')
+                pack_root = ROOT / 'configs/campaigns' / PACKS[pack]
+                acceptance.prepare.assert_called_once()
+                self.assertEqual(acceptance.prepare.call_args.kwargs['pack_root'], pack_root)
+                prepared = acceptance.evaluate.call_args_list[0].args[0]
+                expected, _ = l4_exclusion_inputs(build_roster(pack_root, ROOT), {}, plan_id=None, attempt=None)
+                self.assertEqual(prepared.roster, expected)
+                self.assertTrue(prepared.roster['cells'])
 
     def test_13_precedence_exit_codes_and_create_once(self):
         out = self.root / 'precheck.json'
