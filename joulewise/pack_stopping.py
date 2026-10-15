@@ -12,12 +12,12 @@ import statistics
 
 from joulewise.aggregate import student_t_critical_95
 
-try:
-    from joulewise.b6.blinding import PACK_FACTOR_RANGE, CONFIG_FACTOR_RANGE
-except ImportError:
-    # Design 16 item 3; merge item: repoint this import/key reader to b6.blinding.
-    PACK_FACTOR_RANGE = (0.8, 1.25)
-    CONFIG_FACTOR_RANGE = (0.97, 1.03)
+# Design 16 item 3: the hidden-offset ranges have one home, joulewise.b6.blinding
+# (stage-1 integration repointed this; the lane imported names the blinding module
+# does not define, so the ImportError fallback always ran). read_factor below
+# reads the same two key files blinding writes (pack.json and
+# config-<sha256(key)[:16]>.json) and never draws one.
+from joulewise.b6.blinding import CONFIG_RANGE as CONFIG_FACTOR_RANGE, PACK_RANGE as PACK_FACTOR_RANGE
 
 PRECISION_SCHEMA = "joulewise.b6_precision_input.v1"
 
