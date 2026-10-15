@@ -265,7 +265,7 @@ W and R match the pilot's accounting to the byte on four models. The configs and
    - in single-model sub-packs (s5, s6) the midpoint falls between the quad halves, and the analysis must not assume it splits models;
    - fixed packs bypass the 265-minute science cap, and s4's planned 254 min leaves 11 min.
 
-## Addendum 6 (15:58 PDT): the config fix round (Sol, lane/2026-10-15-bytes-config 114f94256)
+## Addendum 6 (15:55 PDT): the config fix round (Sol, lane/2026-10-15-bytes-config 114f94256)
 
 Addendum 5 items 1-4 are applied, and the reviewer's probes now pass: the campaign ids resolve, pass 2 selects the reversed tree, the 122B vision probe exits 0, and the cache has 512 passes / 2,560 positions. 22 targeted tests pass.
 
