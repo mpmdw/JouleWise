@@ -103,12 +103,15 @@ def load_report(child):
         return {'error': 'load child supplied no CPU time report', 'cpu_seconds': None}
 
 
-def model_config(repo, workload, run_id):
+def model_config(repo, workload, run_id, *, short_baseline=False):
     config = read_json(fence(repo / WORKLOADS[workload]))
     if config is None:
         raise ValueError(f'missing workload {workload}')
-    # The only mutations permitted by the brief are run_id and tags. Claim
-    # launch tags are replaced by an explicit non-claim kit tag.
+    # M2b's S arm has exactly one additional ruled sampling change.
+    if short_baseline:
+        if workload != 'R':
+            raise ValueError('short-baseline arm requires the reference workload')
+        config['sampling']['idle_seconds'] = 50.0
     config['run_id'] = run_id
     tags = config['run_metadata']['tags']
     config['run_metadata']['tags'] = [t for t in tags if t != 'launch_lineage_required'] + ['quiet-kit', 'non-claim']
@@ -122,20 +125,40 @@ def model_config(repo, workload, run_id):
 def model_run(hw, segment, attempt, index, control):
     workload = segment['workload']
     run_id = f'qk-{attempt.parent.parent.name}-a{attempt.name}-{index:04d}-{workload.lower()}'
-    config = model_config(hw.repo, workload, run_id)
+    short_baseline = segment.get('arm') == 'S' and segment.get('sampling_idle_seconds') == 50.0
+    config = model_config(hw.repo, workload, run_id, short_baseline=short_baseline)
     path = fence(attempt / 'configs' / (run_id+'.json'))
     atomic_json(path, config)
     root = mkdir(attempt / 'runs')
     argv = [hw.model_python, '-m', 'joulewise', 'run', str(path), '--runs-dir', str(root)]
     before = hw.stamp()
-    child = hw.processes.spawn(argv, attempt)
-    code = hw.processes.wait(child, control, timeout=1800)
+    child, code, run_error = None, None, None
+    try:
+        child = hw.processes.spawn(argv, attempt)
+        code = hw.processes.wait(child, control, timeout=1800)
+    except (OSError, TimeoutError) as exc:
+        run_error = f'{type(exc).__name__}: {exc}'
+        code = child.returncode if child else None
+    finally:
+        if child:
+            hw.processes.stop(child)
+    if child and code is None:
+        code = child.returncode
     end = hw.stamp()
-    hw.processes.stop(child)
     row = {**segment, 'id': run_id, 'bundle': str(Path('runs') / run_id), 'start': before,
            'end': end, 'argv': argv, 'returncode': code,
+           'sampling_idle_seconds': config['sampling']['idle_seconds'],
+           'run_path_error': run_error,
+           'child_stdout': child.quiet_kit_stdout.name if child else None,
+           'child_stderr': child.quiet_kit_stderr.name if child else None,
            'source_config': WORKLOADS[workload], 'config_sha256': hashlib.sha256(read_bytes(path)).hexdigest(),
            'stage_choice': 'decode absolute; longest configured output (512 tokens); no measured energies used'}
+    if code or run_error:
+        if child:
+            row['exit_diagnostics'] = {'stdout': read_bytes(child.quiet_kit_stdout)[-4000:].decode(errors='replace'),
+                                       'stderr': read_bytes(child.quiet_kit_stderr)[-4000:].decode(errors='replace')}
+        else:
+            row['exit_diagnostics'] = {'stdout': '', 'stderr': run_error}
     stream = fence(root / run_id / 'raw/powermetrics.plist')
     if stream.is_file():
         from joulewise.adapters.powermetrics import parse_powermetrics_records
@@ -208,6 +231,8 @@ def collect(hw, plan, attempt, scale, control, kind):
                 child = hw.processes.spawn(argv, directory)
                 code = hw.processes.wait(child, control, timeout=1200)
                 hw.processes.stop(child)
+                from .processes import check_capture_teardown
+                check_capture_teardown(directory)
                 if cpu:
                     hw.processes.stop(cpu)
                 manifest['captures'].append({**current, 'end': hw.stamp(), 'directory': directory.name,
@@ -298,7 +323,7 @@ def collect(hw, plan, attempt, scale, control, kind):
         if meter:
             create_once(meter_stop, b'stop\n')
             hw.processes.wait(meter, control, timeout=15)
-            hw.processes.stop(meter, graceful=True)
+            hw.processes.stop(meter)
             meter = None
         atomic_json(path, manifest)
     finally:
@@ -311,7 +336,7 @@ def collect(hw, plan, attempt, scale, control, kind):
                 hw.cleanup()
         if meter:
             create_once(meter_stop, b'stop\n')
-            hw.processes.stop(meter, graceful=True)
+            hw.processes.stop(meter)
 
 
 def time_queries(hw, plan, attempt, scale, control, kind):

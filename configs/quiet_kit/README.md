@@ -56,34 +56,56 @@ fresh analysis attempt while the job-wide logger continues. M3 distinguishes the
 kit sampler stream from the waiting-proper stream that must come from the fault
 rehearsal. No timing stop line or block-6 exclusion threshold is chosen here.
 
-## Pending specification
+## Ruled schedules and analysis
 
-M10's collection order needs a lead ruling: the brief says ABBA twice but names
-three load levels (CPU, GPU, GPU+CPU). Its analysis and generic collectors exist;
-the runner records `needs_ruling` instead of choosing an order. The plan's current
-9.662-hour subtotal excludes M10, and the default deadline uses that subtotal.
-The two proposed orders are CPU/GPU/mixed/mixed/GPU/CPU twice, or two pairwise ABBA
-blocks (CPU/GPU and GPU/mixed), twice. The choice changes collection time and the
-observations entering the fit.
+M10 runs two 1,140-second palindromes: idle, CPU, idle, GPU, idle, mixed,
+idle, mixed, idle, GPU, idle, CPU, idle. Idle segments last 60 seconds;
+load segments last 120 seconds at full duty (mixed adds one full CPU core).
+Analysis retains the segment fits and adds per-repeat level means and fits:
+two segments per load level, all seven symmetric idle segments for the idle
+level. A charger-supplied level mean requires every constituent segment to
+have battery readings within 200 mA; the labelled second fit retains all levels.
+Missing constituents make that level mean undefined, including in the analysis
+that omits flagged segments.
 
-Draft §13.2 also requires a short-baseline M2 arm without specifying its setting or
-order. This kit implements the brief's exact five N/L/L/N quads; the short arm
-needs a specification and is flagged in M2 results. Source configs are copied with only run_id/tags changed.
-The nominal `idle_seconds=57.6` setting is preserved; delivered sampler cadence,
-not that nominal setting alone, determines the actual baseline duration.
+M2b (`m2b-short-baseline`) follows M2. It runs five N/S/S/N quads with no
+long waits. N preserves the reference config's 57.6-second nominal idle
+setting; S changes only `sampling.idle_seconds` to 50.0, besides run_id/tags.
+Both arms use the unchanged controller. The run table records the config
+setting, child exit status, bundle refusal reason, and delivered idle duration
+summed from the canonical raw idle plist records; retry captures are listed too.
+Failed S runs remain in the table and make the test incomplete with
+`short_baseline_refused_by_run_path`. They never enter a complete-quad estimate.
+The plan includes both ruled tests; the default deadline remains twice its
+total plus six hours.
+
+Owned process groups receive SIGTERM, with a direct leader TERM if group
+signalling lacks permission. The kit polls for absence and retries the leader
+halfway through a minimum 10-second sampler, 30-second capture, or 60-second
+model grace. KILL requires a fresh census proving all remaining members are
+the kit user. A surviving root member blocks escalation and later tests;
+`root_sampler_orphan` records its PID, argv, and group in the attempt,
+journal, STATUS, and DONE before the wake-up. Plumbing prints the action and
+exits nonzero. Unreadable UIDs also forbid KILL and require director action.
+
+Display endpoints use CoreGraphics in the GUI session (main display,
+asleep, active); unavailable reads carry a reason. IODisplayWrangler output
+is retained only as a diagnostic. The deliberate display-sleep request precedes
+the measurement's start observation.
 
 ## Desk verification
 
 ```
 export TMPDIR="$PWD/.scratch-qk/tmp" PYTHONDONTWRITEBYTECODE=1
 mkdir -p "$TMPDIR"
-/opt/homebrew/bin/python3.13 -m unittest discover -s tests/quiet_kit -t .
+/opt/homebrew/bin/python3.13 -m unittest tests.quiet_kit
+/opt/homebrew/bin/python3.13 -m unittest tests.test_battery_float_sweep tests.hazards.test_refusal_allowlist
 ```
 
 Tests include independently computed uncertainty arithmetic, production plist,
 KM003C byte encoding, CLI bundle summaries, ps and sntp formats, a synthetic
 known-offset capture, the existing `controller_g2b/block3-pre` fixture, and both
-runner-level and real-segment-executor hardware fakes. They start no fixture
-processes. The director must verify live launch context, sudoers, model execution,
+runner-level and real-segment-executor hardware fakes. The bounded fake sudo and sampler children are registered in
+`tests/fixture_signatures.json`; tests reap both processes, including on failure. The director must verify live launch context, sudoers, model execution,
 SMC/thermal/display diagnostics, sampler cadence and ownership, meter presence and
 edges, network-time OFF, and the detached wake path before unattended use.

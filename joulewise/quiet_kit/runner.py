@@ -17,6 +17,7 @@ from . import analysis
 from .cli import complete
 from .paths import append, atomic, atomic_json, children, create_once, executable, fence, inventory, mkdir, read_bytes, read_json
 from .schedule import BY_ID, PLANS
+from .processes import TeardownBlocked
 
 
 def utc():
@@ -71,8 +72,11 @@ class Control:
         self._stop = threading.Event()
         self._thread = None
         self.segment = None
+        self.teardown_error = None
 
     def check(self, *, watch=True):
+        if self.teardown_error:
+            raise self.teardown_error
         if self.runner.stop:
             raise Interrupted(self.runner.stop)
         if self.reason:
@@ -81,6 +85,8 @@ class Control:
             raise Deadline('deadline')
         if watch:
             self.tick()
+        if self.teardown_error:
+            raise self.teardown_error
         if self.reason:
             raise Interrupted(self.reason)
 
@@ -88,7 +94,7 @@ class Control:
         until = self.runner.seams.now()+max(0., seconds)
         while self.runner.seams.now() < until:
             self.check(watch=watch)
-            self.runner.seams.sleep(min(.25, until-self.runner.seams.now()))
+            self.runner.seams.sleep(min(.25, max(0., until-self.runner.seams.now())))
         self.check(watch=watch)
 
     def tick(self):
@@ -97,6 +103,9 @@ class Control:
             if now >= self._next_physics:
                 try:
                     reading = self.runner.seams.watch(self.attempt)
+                except TeardownBlocked as exc:
+                    self.teardown_error = exc
+                    return
                 except Exception as e:
                     reading = {'error': f'{type(e).__name__}: {e}'}
                 row = {'kind': self.runner.kind, 'stamp': self.runner.stamp(), 'physics': reading,
@@ -107,6 +116,9 @@ class Control:
             if now >= self._next_agents:
                 try:
                     reading = self.runner.seams.census(self.attempt)
+                except TeardownBlocked as exc:
+                    self.teardown_error = exc
+                    return
                 except Exception as e:
                     reading = {'clean': False, 'error': str(e)}
                 row = {'kind': self.runner.kind, 'stamp': self.runner.stamp(), 'agents': reading,
@@ -124,7 +136,10 @@ class Control:
             while not self._stop.wait(min(1., max(.01, self.runner.scale))):
                 self.tick()
                 if self.reason or self.runner.stop:
-                    self.runner.seams.cleanup()
+                    try:
+                        self.runner.seams.cleanup()
+                    except TeardownBlocked as exc:
+                        self.teardown_error = exc
                     return
         self._thread = threading.Thread(target=loop, name='quiet-kit-watcher', daemon=True)
         self._thread.start()
@@ -161,6 +176,7 @@ class Runner:
         self._last_status = None
         self.job_id = uuid.uuid4().hex
         self.recovery = []
+        self.director_actions = []
         self.seams.bind_cancel(lambda: bool(self.stop) or self.seams.now() >= self.deadline)
 
     def stamp(self):
@@ -170,6 +186,11 @@ class Runner:
         row = {'schema': 'joulewise.quiet_kit.status.v1', 'kind': self.kind,
                'state': state, 'current_test': self.current, 'current_wait': None,
                'since': self.stamp(), 'updated_at': self.stamp(), **fields}
+        if self.director_actions:
+            row['director_actions'] = self.director_actions
+            row['director_action'] = ('root_sampler_orphan' if any(
+                a['director_action'] == 'root_sampler_orphan' for a in self.director_actions)
+                else self.director_actions[0]['director_action'])
         keys = ('state', 'current_test', 'current_wait')
         if self._last_status and all(row.get(k) == self._last_status.get(k) for k in keys):
             row['since'] = self._last_status['since']
@@ -177,6 +198,33 @@ class Runner:
         if self.kind == 'measurement':
             atomic_json(self.root / 'STATUS.json', row)
         self.emit(f'{row["since"]["utc"]} {state} {self.current or ""}')
+
+    def record_teardown_block(self, exc):
+        fresh = [a for a in exc.actions if a not in self.director_actions]
+        if not fresh:
+            return
+        self.director_actions.extend(fresh)
+        reason = ('root_sampler_orphan' if any(a['director_action'] == 'root_sampler_orphan'
+                                              for a in self.director_actions)
+                  else 'owned_process_group_unverifiable')
+        row = {'kind': self.kind, 'event': 'director_action', 'job_id': self.job_id,
+               'stamp': self.stamp(), 'reason': reason, 'director_action': reason, 'director_actions': fresh,
+               'process_groups': exc.groups}
+        append(self.root/'journal.jsonl', row)
+        if self.active_attempt:
+            info = read_json(self.active_attempt/'attempt.json', {})
+            atomic_json(self.active_attempt/'attempt.json', {**info, 'state': 'incomplete',
+                'reason': reason, 'director_action': reason, 'director_actions': self.director_actions,
+                'process_groups': exc.groups, 'end': self.stamp()})
+        self.state('director_action_required', reason=reason, process_groups=exc.groups)
+        self.emit('DIRECTOR ACTION REQUIRED: '+reason+' '+str(fresh))
+
+    def cleanup_test(self):
+        try:
+            return self.seams.cleanup()
+        except TeardownBlocked as exc:
+            self.record_teardown_block(exc)
+            return exc.groups
 
     def new_attempt(self, test_id, root=None):
         directory = fence((root or self.root / test_id) / 'attempts')
@@ -270,6 +318,8 @@ class Runner:
                             'tree_roots': [os.getpid()], 'planned_bytes': plan.planned_bytes,
                             'archive': str(self.root), 'deadline': self.deadline,
                             'cancel': lambda: bool(self.stop) or self.seams.now() >= self.deadline})
+                    except TeardownBlocked:
+                        raise
                     except (Interrupted, Deadline) as exc:
                         if self.stop:
                             # Instrument callbacks share a cancellation seam;
@@ -319,8 +369,12 @@ class Runner:
                 flags.append({'reason': 'watch probe unmeasured', 'stamp': row['stamp'], 'reading': values})
         if before.get('hid_idle_ns') is not None and after.get('hid_idle_ns') is not None and after['hid_idle_ns'] < before['hid_idle_ns']:
             flags.append({'reason': 'HID idle decreased; input during test'})
-        if after.get('display_state') != before.get('display_state'):
+        if before.get('display_state') is not None and after.get('display_state') is not None and after.get('display_state') != before.get('display_state'):
             flags.append({'reason': 'display power state changed during test'})
+        for endpoint, observed in (('start', before), ('end', after)):
+            if observed.get('display_state') is None:
+                flags.append({'reason': 'display power state unmeasured', 'endpoint': endpoint,
+                              'detail': observed.get('display_state_reason')})
         return flags
 
     def publish(self, plan, attempt, *, target=None):
@@ -342,6 +396,8 @@ class Runner:
         attempt_info = read_json(attempt / 'attempt.json', {})
         collection = read_json(attempt / 'collection.json', {})
         reason = collection.get('incomplete_reason')
+        if plan.test_id == 'm2b-short-baseline' and measured.get('incomplete_reason'):
+            reason = measured['incomplete_reason']
         if not conditions.get('end_stamp'):
             reason = 'collection_not_finished'
         if attempt_info.get('failure_stage') == 'collection':
@@ -361,9 +417,6 @@ class Runner:
                                if a.get('identities') == b.get('identities') else None,
                            'identity_continuous': a.get('identities') == b.get('identities')}
         flags = self._flags(preflight, watch, before, after) + data.get('flags', [])
-        if plan.test_id == 'm2-long-wait':
-            flags.append({'reason': 'draft section 13.2 also requires a short idle-baseline arm; '
-                          'its setting and order await a lead ruling; these observations follow only the brief N/L/L/N plan'})
         for name, reading in (('network-time OFF action', self.network or conditions.get('network_time_setter')),
                               ('no-sleep assertion', self.caffeinate or conditions.get('caffeinate')),
                               ('clock logger', self.clock_info or conditions.get('clock_logger'))):
@@ -426,6 +479,9 @@ class Runner:
     def test(self, plan, *, attempt=None, target=None, record_only=False):
         try:
             return self._test(plan, attempt=attempt, target=target, record_only=record_only)
+        except TeardownBlocked as exc:
+            self.record_teardown_block(exc)
+            raise
         except (Interrupted, Deadline) as exc:
             if self.active_attempt:
                 info = read_json(self.active_attempt/'attempt.json', {})
@@ -455,6 +511,10 @@ class Runner:
         display = None
         if not record_only:
             display = self.seams.action('display_sleep', attempt)
+            if plan.test_id != 'm3-clock-rate':
+                # The deliberate sleep request is outside the test endpoints;
+                # a later wake is a change in the measured conditions.
+                before = self.seams.observe(attempt)
         control = Control(self, attempt, plumbing=record_only)
         conditions = {'kind': self.kind, 'start': before, 'network_time_setter': self.network,
                       'caffeinate': self.caffeinate, 'clock_logger': self.clock_info, 'display_sleep': display}
@@ -503,6 +563,8 @@ class Runner:
             self.state('interrupted', reason=str(exc), process_groups=gone)
             raise
         except Exception as exc:
+            if isinstance(exc, TeardownBlocked):
+                raise
             if control.reason or self.stop:
                 raise Interrupted(control.reason or self.stop) from exc
             if self.seams.now() >= self.deadline:
@@ -605,7 +667,12 @@ class Runner:
             self.publish(plan, self.clock_attempt)
 
     def finish(self):
-        self._final_clock()
+        self.cleanup_test()
+        if not self.director_actions:
+            try:
+                self._final_clock()
+            except TeardownBlocked as exc:
+                self.record_teardown_block(exc)
         done, incomplete = [], []
         for p in self.plans:
             if complete(self.root, p.test_id):
@@ -614,10 +681,12 @@ class Runner:
                 attempts = [a for a in children(self.root / p.test_id / 'attempts') if a.name.isdigit()]
                 last = read_json(max(attempts, key=lambda a: int(a.name)) / 'attempt.json', {}) if attempts else {}
                 incomplete.append({'test_id': p.test_id, 'last_reason': last.get('reason',
+                    'root_sampler_orphan' if any(a['director_action'] == 'root_sampler_orphan' for a in self.director_actions) else
                     'recovery_needs_director' if any(r.get('blocking') for r in self.recovery) else
                     'deadline before test' if self.seams.now() >= self.deadline else 'not started')})
         record = {'kind': self.kind, 'complete_tests': done, 'incomplete_tests': incomplete,
-                  'wall_time_s': self.seams.now()-self.started, 'end_time': self.stamp(), 'recovery': self.recovery}
+                  'wall_time_s': self.seams.now()-self.started, 'end_time': self.stamp(), 'recovery': self.recovery,
+                  'director_actions': self.director_actions}
         atomic_json(self.root / 'DONE', record)
         self.current = None
         self.state('done', **record)
@@ -645,6 +714,9 @@ class Runner:
             except Exception as exc:
                 recovered = [{'blocking': True, 'reason': 'restart recovery failed', 'error': str(exc)}]
             self.recovery = recovered
+            for row in recovered:
+                if row.get('director_actions'):
+                    self.record_teardown_block(TeardownBlocked(row.get('groups', [row])))
             if self.stop:
                 self.state('stopped', reason=self.stop)
                 self._restore_signals()
@@ -698,6 +770,9 @@ class Runner:
                                 continue
                             break  # incomplete non-agent result gets later pass
                 return self.finish()
+            except TeardownBlocked as exc:
+                self.record_teardown_block(exc)
+                return self.finish()
             except Deadline:
                 return self.finish()
             except Interrupted as exc:
@@ -705,10 +780,16 @@ class Runner:
                 return 128+int(getattr(signal, self.stop, signal.SIGTERM)) if self.stop else 130
             finally:
                 if self.clock_handle is not None:
-                    self.seams.clock_stop(self.clock_handle)
+                    try:
+                        self.seams.clock_stop(self.clock_handle)
+                    except TeardownBlocked as exc:
+                        self.record_teardown_block(exc)
                     self.clock_handle = None
-                self.seams.cleanup()
-                self.seams.action('stop_caffeinate', self.root)
+                self.cleanup_test()
+                try:
+                    self.seams.action('stop_caffeinate', self.root)
+                except TeardownBlocked as exc:
+                    self.record_teardown_block(exc)
                 self._restore_signals()
 
     def reanalyze(self, test_id):
@@ -741,7 +822,13 @@ class Runner:
         self._signals()
         try:
             result = self.test(plan, target=parent, record_only=True)
+            self.cleanup_test()
+            if self.director_actions:
+                return 1
             return 0 if result['complete'] else 1
+        except TeardownBlocked as exc:
+            self.record_teardown_block(exc)
+            return 1
         except (Deadline, Interrupted) as exc:
             if self.active_attempt:
                 attempt = self.active_attempt
@@ -754,7 +841,7 @@ class Runner:
                 self.publish(plan, attempt, target=parent)
             return 1
         finally:
-            self.seams.cleanup()
+            self.cleanup_test()
             self._restore_signals()
 
 
@@ -810,6 +897,8 @@ def summary(result):
     walk(measured)
     methods = {'m1': 'the frozen pulse protocol and the shared interval detector',
                'm2': 'five ordinary, long, long, ordinary quads through the unchanged single-run path',
+               'm2b': 'five ordinary, short, short, ordinary quads through the single-run path; '
+                      'the short arm changes only sampling.idle_seconds to 50.0',
                'm3': 'a job-wide bracketed real-time and raw-monotonic clock series',
                'm4': 'bracketed processor loads and phase-length bursts, with true child CPU time',
                'm5': 'processor-only and graphics loads bracketed by idle power',

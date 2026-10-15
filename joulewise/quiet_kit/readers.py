@@ -8,7 +8,7 @@ import statistics
 import struct
 from pathlib import Path
 
-from .paths import fence, read_bytes, read_json
+from .paths import children, fence, read_bytes, read_json
 
 
 def json_lines(path):
@@ -117,12 +117,46 @@ def run_bundle(directory, row):
     if row.get('returncode') not in (0, None) or doc.get('status') not in ('ok', None):
         flags.append({'reason': 'model child or bundle reported a non-success status',
                       'returncode': row.get('returncode'), 'bundle_status': doc.get('status')})
+    failures = []
+    if row.get('run_path_error'):
+        failures.append({'reason': 'run_path_error', 'detail': row['run_path_error']})
+    if row.get('returncode') not in (0, None):
+        failures.append({'reason': 'nonzero_exit', 'returncode': row['returncode'],
+                         'diagnostics': row.get('exit_diagnostics')})
+    if not doc:
+        failures.append({'reason': 'run_summary_missing'})
+    elif doc.get('status') != 'ok' or doc.get('failure_reason'):
+        failures.append({'reason': doc.get('failure_reason') or 'run_status_not_ok',
+                         'status': doc.get('status'), 'message': doc.get('message')})
+    if not doc.get('phase_energy_j'):
+        failures.append({'reason': 'phase_energies_missing'})
+    baseline = {'idle_baseline_delivered_s': None, 'idle_baseline_record_count': None,
+                'idle_baseline_undefined': 'canonical raw idle baseline missing', 'idle_baseline_attempts': []}
+    from joulewise.adapters.powermetrics import parse_powermetrics_records
+    raw_dir = relative(directory, row['bundle']+'/raw')
+    for path in children(raw_dir):
+        if path.name != 'powermetrics_idle.plist' and not re.fullmatch(r'powermetrics_idle_attempt_\d+\.plist', path.name):
+            continue
+        entry = {'path': str(path.relative_to(directory))}
+        try:
+            records = parse_powermetrics_records(read_bytes(path))
+            entry.update(delivered_s=math.fsum(r.elapsed_ns/1e9 for r in records), records=len(records))
+            if not records:
+                entry['undefined'] = 'empty idle capture'
+            if path.name == 'powermetrics_idle.plist':
+                baseline.update(idle_baseline_delivered_s=entry['delivered_s'], idle_baseline_record_count=len(records),
+                                idle_baseline_undefined=entry.get('undefined'))
+        except (ValueError, OSError) as exc:
+            entry['undefined'] = str(exc)
+            if path.name == 'powermetrics_idle.plist':
+                baseline['idle_baseline_undefined'] = str(exc)
+        baseline['idle_baseline_attempts'].append(entry)
     return {**row, 'phase_energy_j': doc.get('phase_energy_j') or {},
             'duration_s': ttft+decode if ttft is not None and decode is not None else None,
             'phase_duration_s': {'prefill': ttft, 'decode': decode},
             'token_rate': doc.get('throughput_tokens_s'),
             'decode_token_rate': doc.get('inter_token_throughput_tokens_s'),
-            'summary_metrics': doc, 'flags': flags}
+            'summary_metrics': doc, 'flags': flags, 'failure_reasons': failures, **baseline}
 
 
 def capture(directory, row):

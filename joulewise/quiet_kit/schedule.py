@@ -67,6 +67,16 @@ def schedule() -> tuple[TestPlan, ...]:
                for s in ([{'kind': 'long_wait', 'duration_s': 1200, 'quad': q, 'arm': arm}]
                          if arm == 'L' else []) +
                [{'kind': 'model', 'workload': 'R', 'quad': q, 'arm': arm}])
+    m2b = tuple({'kind': 'model', 'workload': 'R', 'quad': q, 'arm': arm,
+                 **({'sampling_idle_seconds': 50.0} if arm == 'S' else {})}
+                for q in range(5) for arm in ('N', 'S', 'S', 'N'))
+    m10 = tuple(s for repeat in range(2) for s in (
+        idle(60, repeat=repeat), load('cpu', 1., 120, repeat=repeat),
+        idle(60, repeat=repeat), load('gpu', 1., 120, repeat=repeat),
+        idle(60, repeat=repeat), load('mixed', 1., 120, repeat=repeat),
+        idle(60, repeat=repeat), load('mixed', 1., 120, repeat=repeat),
+        idle(60, repeat=repeat), load('gpu', 1., 120, repeat=repeat),
+        idle(60, repeat=repeat), load('cpu', 1., 120, repeat=repeat), idle(60, repeat=repeat)))
     m14 = tuple(s for r in range(2) for s in (
         idle(75), load('gpu', .05, 75), idle(75), load('gpu', .20, 75), idle(75),
         load('cpu', 1., 75), idle(75), load('cpu', .20, 75), idle(75)))
@@ -79,13 +89,13 @@ def schedule() -> tuple[TestPlan, ...]:
         TestPlan('m5-gpu-rail', tuple(m5), planned_bytes=gib),
         TestPlan('m1-capture-stop-line', m1, captures=18, planned_bytes=2*gib),
         TestPlan('m2-long-wait', m2, model_runs=('R',)*20, planned_bytes=8*gib),
+        TestPlan('m2b-short-baseline', m2b, model_runs=('R',)*20, planned_bytes=8*gib),
         TestPlan('m3-clock-rate', (), planned_bytes=gib),
         TestPlan('m9-time-server', ({'kind': 'sntp', 'duration_s': 600, 'queries': 10},), planned_bytes=gib),
         TestPlan('m14-meter-idle-power', m14, meter=True, planned_bytes=gib),
         TestPlan('m13-meter-edges', tuple({'kind': 'capture', 'condition': 'quiet'} for _ in range(3)),
                  captures=3, meter=True, planned_bytes=gib),
-        TestPlan('m10-rails-vs-wall', (), meter=True, planned_bytes=gib,
-                 ruling_required='ABBA names two arms; CPU, GPU and GPU+CPU name three levels; exact order needed'),
+        TestPlan('m10-rails-vs-wall', m10, meter=True, planned_bytes=gib),
         TestPlan('m15-drift-transfer', m15, model_runs=tuple('RABBAR'*2), planned_bytes=16*gib),
     )
 

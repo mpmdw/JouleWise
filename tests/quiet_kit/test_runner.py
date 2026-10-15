@@ -235,8 +235,8 @@ class RunnerTests(unittest.TestCase):
         self.hw.wake=lambda *_:self.fail('wake was repeated')
         self.assertEqual(self.runner(SHORT[:1]).run(),0)
 
-    def test_unresolved_m10_order_is_recorded_without_collecting(self):
-        plan=TestPlan('m10-rails-vs-wall',(),meter=True,ruling_required='synthetic missing order')
+    def test_explicit_missing_spec_is_recorded_without_collecting(self):
+        plan=TestPlan('m4-contention-watts',(),ruling_required='synthetic missing order')
         self.assertTrue(plan.ruling_required)
         self.assertEqual(self.runner((plan,)).run(),0)
         self.assertFalse(self.hw.collected)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import dataclasses
+import ctypes
 import json
 import os
 import re
@@ -11,7 +12,27 @@ import time
 from pathlib import Path
 
 from .paths import append, atomic_json, executable, fence, mkdir, read_bytes
-from .processes import Processes
+from .processes import Processes, TeardownBlocked
+
+
+def coregraphics_display_state(*, load=None):
+    """GUI-session display facts; no display setting is changed by this read."""
+    try:
+        library = str(fence('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics'))
+        cg = (load or ctypes.CDLL)(library)
+        cg.CGMainDisplayID.argtypes = []
+        cg.CGMainDisplayID.restype = ctypes.c_uint32
+        for name in ('CGDisplayIsAsleep', 'CGDisplayIsActive'):
+            function = getattr(cg, name)
+            function.argtypes = [ctypes.c_uint32]
+            function.restype = ctypes.c_uint32
+        display_id = int(cg.CGMainDisplayID())
+        if not display_id:
+            return None, 'CoreGraphics reported no main display'
+        return {'display_id': display_id, 'asleep': bool(cg.CGDisplayIsAsleep(display_id)),
+                'active': bool(cg.CGDisplayIsActive(display_id))}, None
+    except (OSError, AttributeError, TypeError, ValueError) as exc:
+        return None, f'CoreGraphics unavailable: {type(exc).__name__}: {exc}'
 
 
 class Hardware:
@@ -77,15 +98,15 @@ class Hardware:
                 if self.root_cancel_hook() or self.cancel_hook() or self.now() >= deadline:
                     timed_out = self.now() >= deadline
                     error = 'probe cancelled' if not timed_out else None
-                    self.processes.stop(child, graceful=True)
+                    self.processes.stop(child)
                     break
                 time.sleep(.05)
             stdout = read_bytes(child.quiet_kit_stdout)
             stderr = read_bytes(child.quiet_kit_stderr)
-            self.processes.stop(child, graceful=True)
+            self.processes.stop(child)
             return Completed(argv, child.returncode, stdout, stderr, timed_out=timed_out, error=error)
         except BaseException:
-            self.processes.stop(child, graceful=True)
+            self.processes.stop(child)
             raise
 
     def census(self, directory):
@@ -127,6 +148,9 @@ class Hardware:
                     privilege_prefix=('/usr/bin/sudo', '-n'))
             else:
                 measurement, thresholds = self.short_sampler(ctx, duration, thresholds)
+            if measurement.values.get('group_gone') is False and measurement.values.get('pgid'):
+                from .processes import require_group_absent
+                require_group_absent(measurement.values['pgid'])
         else:
             started = ctx.stamp()
             boot = clock.read_boot_session(ctx)
@@ -197,14 +221,17 @@ class Hardware:
         usb = probe(['/usr/sbin/ioreg', '-p', 'IOUSB', '-l'])
         osbuild = probe(['/usr/sbin/sysctl', '-n', 'kern.osversion'])
         match = re.search(r'"HIDIdleTime"\s*=\s*(\d+)', hid['stdout'])
-        state = re.search(r'"CurrentPowerState"\s*=\s*(\d+)', display['stdout'])
+        display_state, display_reason = coregraphics_display_state()
         try:
             boot = clock.read_boot_session(ctx)
+        except TeardownBlocked:
+            raise
         except Exception:
             boot = None
         return {'analysis_agents': agents, 'screensaver_present': any('ScreenSaverEngin' in r.get('command', '')
                    for r in snapshot.rows.values()), 'hid_idle_ns': int(match[1]) if match else None,
-                'display_state': int(state[1]) if state else None,
+                'display_state': display_state, 'display_state_reason': display_reason,
+                'display_state_source': 'CoreGraphics',
                 'meter_present': bool(re.search('KM003C|POWER.?Z', usb['stdout'], re.I)),
                 'os_build': osbuild['stdout'].strip() or None, 'boot_session_uuid': boot,
                 'diagnostics': {'hid': hid, 'display': display, 'usb': usb, 'os_build': osbuild},
@@ -222,7 +249,7 @@ class Hardware:
             return {'argv': argv, 'pid': self.caffeine.pid}
         if name == 'stop_caffeinate':
             if self.caffeine:
-                return self.processes.stop(self.caffeine, graceful=True)
+                return self.processes.stop(self.caffeine)
             return []
         argv = list(NETWORK_TIME_OFF_ARGV) if name == 'network_time_off' else ['/usr/bin/pmset', 'displaysleepnow']
         completed = self.run_probe(argv, 30.)
@@ -256,7 +283,7 @@ class Hardware:
             '--parent-pid', str(os.getpid())], attempt, role='job')
 
     def clock_stop(self, process):
-        return self.processes.stop(process, graceful=True)
+        return self.processes.stop(process)
 
     def collect(self, plan, attempt, scale, control, kind):
         from .collectors import collect

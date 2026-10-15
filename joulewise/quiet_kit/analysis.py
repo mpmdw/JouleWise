@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import statistics
+from functools import lru_cache
 
 
 def undefined(reason, unit='', sources=()):
@@ -236,16 +237,17 @@ def m1(data):
                'note': 'reports separation only; chooses no stop line'}}
 
 
-def m2(data):
+def m2(data, arm='L'):
     runs = data.get('runs', [])
     phases = sorted({phase for r in runs for phase in r.get('phase_energy_j', {})})
     measured = {}
     for phase in phases:
         quads, ordinary = [], []
         for q in range(5):
-            rows = [r for r in runs if r.get('quad') == q]
+            rows = [r for r in runs if r.get('quad') == q and not r.get('failure_reasons')
+                    and r.get('returncode') in (0, None)]
             ns = [r['phase_energy_j'][phase] for r in rows if r.get('arm') == 'N' and phase in r.get('phase_energy_j', {})]
-            ls = [r['phase_energy_j'][phase] for r in rows if r.get('arm') == 'L' and phase in r.get('phase_energy_j', {})]
+            ls = [r['phase_energy_j'][phase] for r in rows if r.get('arm') == arm and phase in r.get('phase_energy_j', {})]
             if len(ns) == len(ls) == 2:
                 quads.append((sum(ls)-sum(ns))/2)
                 ordinary.extend(ns)
@@ -266,9 +268,23 @@ def m2(data):
                   undefined('five complete quads and positive ordinary mean required', '%'))
         measured[phase] = {'quad_differences_j': quads, 'complete_quad_count': len(quads),
                           'available_quad_mean_diagnostic': available_mean if len(quads) != 5 else None,
-                          'long_minus_ordinary': qmean, 'percent': percent}
+                          'short_minus_ordinary' if arm == 'S' else 'long_minus_ordinary': qmean, 'percent': percent}
     return {'phases': measured, 'run_table': runs, 'long_waits': data.get('long_waits', []),
             'undefined': 'no measured phase energies' if not phases else None}
+
+
+def m2b(data):
+    result = m2(data, arm='S')
+    failures = [{'run': r.get('id'), 'returncode': r.get('returncode'),
+                 'reasons': r.get('failure_reasons') or [{'reason': 'nonzero_exit'}]}
+                for r in data.get('runs', []) if r.get('arm') == 'S' and
+                (r.get('failure_reasons') or r.get('returncode') not in (0, None))]
+    result['short_baseline_refusals'] = failures
+    if failures:
+        result['incomplete_reason'] = 'short_baseline_refused_by_run_path'
+    elif len(data.get('runs', [])) != 20 or any(r.get('failure_reasons') for r in data.get('runs', [])):
+        result['incomplete_reason'] = 'short_baseline_run_table_incomplete'
+    return result
 
 
 def m3(data):
@@ -421,6 +437,7 @@ def _student_cdf(x, df):
     return .5+dx/3*(density(0)+density(x)+sum((4 if i%2 else 2)*density(i*dx) for i in range(1, n)))
 
 
+@lru_cache(maxsize=64)
 def t975(df):
     lo, hi = 0., 100.
     for _ in range(50):
@@ -437,7 +454,8 @@ def m10(data):
     for s in data.get('segments', []):
         meter, rails = mean(_segment(s, 'meter'), 'W'), mean(_segment(s), 'W')
         battery = s.get('battery_current_ma', [])
-        rows.append({'segment': s.get('id'), 'level': s.get('kind'), 'meter': meter, 'rails': rails,
+        rows.append({'segment': s.get('id'), 'level': s.get('kind'), 'repeat': s.get('repeat'),
+                     'meter': meter, 'rails': rails,
                      'battery_current_ma': battery, 'thermal_levels': s.get('thermal_levels', []),
                      'charger_supplied': bool(battery) and all(abs(v) <= 200 for v in battery)})
     def fit_rows(rows):
@@ -449,9 +467,37 @@ def m10(data):
         return {'slope': quantity(fit['slope'], 'W/W', {'kind': '95% interval',
                    'value': [fit['slope']-error, fit['slope']+error], 'n': len(good),
                    'method': 'OLS slope, t interval with n-2 degrees of freedom'}),
-                'intercept': quantity(fit['intercept'], 'W'), 'residuals_W': fit['residuals']}
+                'intercept': quantity(fit['intercept'], 'W'), 'residuals_W': fit['residuals'],
+                'sources': [r.get('segments', r.get('segment')) for r in good]}
+    level_means = []
+    for repeat in sorted({r['repeat'] for r in rows if r['repeat'] is not None}):
+        for level in ('idle', 'cpu', 'gpu', 'mixed'):
+            members = [r for r in rows if r['repeat'] == repeat and r['level'] == level]
+            expected = 7 if level == 'idle' else 2
+            sources = [r['segment'] for r in members]
+            def average(field):
+                if len(members) != expected or any(r[field]['value'] is None for r in members):
+                    return undefined('incomplete palindrome level; all scheduled segments required', 'W', sources)
+                return mean([r[field]['value'] for r in members], 'W', sources)
+            level_means.append({'repeat': repeat, 'level': level, 'segments': sources,
+                'segment_count': len(members), 'expected_segment_count': expected,
+                'meter': average('meter'), 'rails': average('rails'),
+                'battery_current_ma': [v for r in members for v in r['battery_current_ma']],
+                'thermal_levels': [v for r in members for v in r['thermal_levels']],
+                'charger_supplied': len(members) == expected and all(r['charger_supplied'] for r in members)})
+    repeat_fits = []
+    for repeat in sorted({r['repeat'] for r in level_means}):
+        levels = [r for r in level_means if r['repeat'] == repeat]
+        repeat_fits.append({'repeat': repeat,
+            'charger_supplied_fit': fit_rows([r for r in levels if r['charger_supplied']]),
+            'all_levels_fit': fit_rows(levels)})
     return {'levels': rows, 'charger_supplied_fit': fit_rows([r for r in rows if r['charger_supplied']]),
-            'all_levels_fit': fit_rows(rows), 'all_levels_label': 'includes battery assist/charging and missing battery reads'}
+            'all_levels_fit': fit_rows(rows), 'all_levels_label': 'includes battery assist/charging and missing battery reads',
+            'palindrome_level_means': level_means,
+            'palindrome_charger_supplied_fit': fit_rows([r for r in level_means if r['charger_supplied']]),
+            'palindrome_all_levels_fit': fit_rows(level_means), 'palindrome_repeat_fits': repeat_fits,
+            'palindrome_method': 'equal mean of the two segments per load level and repeat; '
+                                 'idle uses all seven symmetrically placed segments per repeat'}
 
 
 def m13(data):
@@ -518,7 +564,7 @@ def m15(data):
             'run_table': runs, 'scaling_formula': 'max(1, E/E_ref, T/T_ref) until transfer passes for regime'}
 
 
-FUNCTIONS = {'m1-capture-stop-line': m1, 'm2-long-wait': m2, 'm3-clock-rate': m3,
+FUNCTIONS = {'m1-capture-stop-line': m1, 'm2-long-wait': m2, 'm2b-short-baseline': m2b, 'm3-clock-rate': m3,
              'm4-contention-watts': m4, 'm5-gpu-rail': m5, 'm9-time-server': m9,
              'm10-rails-vs-wall': m10, 'm13-meter-edges': m13,
              'm14-meter-idle-power': m14, 'm15-drift-transfer': m15}

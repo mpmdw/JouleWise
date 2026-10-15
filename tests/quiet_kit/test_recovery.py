@@ -106,3 +106,16 @@ class RestartRecoveryTests(unittest.TestCase):
             append(root/'children.jsonl',{'event':'spawn','pid':4242,'pgid':4242,'identity':{'start_time':'other'}})
             def forbidden(pid):raise AssertionError('unowned journal was inspected')
             self.assertEqual(Processes(root,identity_reader=forbidden).recover(root),[])
+
+    def test_dead_leader_with_root_member_is_recorded_without_signalling(self):
+        with tempfile.TemporaryDirectory(prefix='quiet-kit-recovery-root-') as tmp:
+            root = Path(tmp)
+            append(root/'children.jsonl',{'schema':CHILD_SCHEMA,'event':'spawn','pid':4242,'pgid':4242,'identity':{}})
+            member = {'pid':4243,'uid':0,'argv':'fixture sampler','pgid':4242}
+            manager = Processes(root,identity_reader=lambda pid:None,member_reader=lambda pgid:[member])
+            with (patch('joulewise.hazards.instrument.group_absent',return_value=(False,['4243 fixture sampler'])),
+                  patch('os.killpg',side_effect=AssertionError('dead leader is not signal authority')),
+                  patch('os.kill',side_effect=AssertionError('unverified root was signalled'))):
+                rows = manager.recover(root)
+            self.assertTrue(rows[0]['blocking'])
+            self.assertEqual(rows[0]['director_actions'],[{'director_action':'root_sampler_orphan',**member,'group':4242}])
