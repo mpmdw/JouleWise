@@ -9,10 +9,10 @@ screen_b6_calibration() {
     flag calibration.bracket_incomplete window "" '{"slot":"pre","reason":"bound_absent"}' "$CLAIM_RUNS_ROOT" "opening capture has no bound"
     return 1
   fi
-  if (( b > B6_ALIGNMENT_REFERENCE_S )); then
+  if [[ "$B6_ALIGNMENT_REFERENCE_S" != "null" ]] && (( b > B6_ALIGNMENT_REFERENCE_S )); then
     flag calibration.alignment_above_reference window "" "{\"b_fiducial_s\":$b}" "$CLAIM_RUNS_ROOT" "opening alignment above reference; bound carried"
   fi
-  if [[ "$B6_OPERATIVE_BOUND_STOP_S" != "null" ]] && (( b + B6_BRACKET_SCREEN_S > B6_OPERATIVE_BOUND_STOP_S )); then
+  if [[ "$B6_OPERATIVE_BOUND_STOP_S" != "null" && "$B6_BRACKET_SCREEN_S" != "null" ]] && (( b + B6_BRACKET_SCREEN_S > B6_OPERATIVE_BOUND_STOP_S )); then
     stop_chain operative_bound_above_stop 12
   fi
   return 0

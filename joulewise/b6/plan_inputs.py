@@ -53,6 +53,18 @@ def window_max_s(inputs):
     return 60 * math.ceil((span + plan.T0_STAGE_CAP_S + plan.PAUSE_LIMIT_S + plan.SESSION_WAIT_BUDGET_S) / 60)
 
 
+def capture_screen(registration_dir):
+    """Use only block-six acceptance values; open measurement slots stay null."""
+    try:
+        calibration = registration.load(registration_dir)["calibration"]
+    except (FileNotFoundError, ValueError):
+        # A not-yet-issued or incomplete acceptance supplies no registered
+        # values. In particular, never substitute block five's acceptance.
+        calibration = {}
+    return {key: None if calibration.get(key) is None else str(registration.decimal_s(calibration[key]))
+            for key in ("alignment_reference_s", "bracket_screen_s", "operative_bound_stop_s")}
+
+
 def build(measurement_root, registration_dir, pack_id, session_id, identities, *, custody_root,
           runs_parent, claim_backup, bound_backup, head=None, attempt=1, run=subprocess.run):
     measurement, reg = Path(measurement_root), Path(registration_dir)
@@ -88,6 +100,7 @@ def build(measurement_root, registration_dir, pack_id, session_id, identities, *
               "post_attempt_id": session_id + "-cal-post", "g10": False,
               "programmed_span_s": allowance("programmed_span_s"),
               "T_stream_max_s": allowance("T_stream_max_s"), "bytes_per_member": BYTES_PER_MEMBER,
+              "capture_screen": capture_screen(reg), "spare_retries": False,
               "thresholds": thresholds(measurement, reg),
               "registration": {"path": REGISTRATION, "sha256": sha256(registration_raw)}}
     for key, name in (("identity_epoch_json", "identity-epoch.json"), ("t1_bindings_json", "t1-bindings.json")):
