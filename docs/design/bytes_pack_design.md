@@ -158,3 +158,52 @@ computed and committed (hash in the record), and only then are the held-out conf
 7. C4 identity pins, C5 sizing and the clock-gate derivation; C6 one blinding group and C7 subset unblind once stage 2's
    hidden offsets are merged.
 8. Registration prose and its cold gate; smoke by fingerprint for each new sub-pack's first session.
+
+## Addendum 1 (12:58 PDT): rulings on the analysis builder's stop (Codex Cloud thread of 12:17, branch lane/2026-10-15-bytes-analysis f9c24dce6)
+
+1. `joulewise/paper_reported_energy.py` is not edited (block 5's arithmetic, L9's file). BYTES implements the per-phase
+   estimate generally in `joulewise/bytes_analysis.py` with an equivalence test against the block-5 library on every
+   input the library accepts; that test is what "registered arithmetic unchanged" means for BYTES.
+2. DC-input phase-edge term per member u = (P_start + P_end)(r_max + Δt_meter); stratified mean of u in B for DC input;
+   largest u printed as the meter attribution floor; rest carries both terms; no clock fit means no DC-input value
+   (flag). If the block-5 whole-machine-per-phase definition is registered differently before the BYTES registration,
+   BYTES adopts that one.
+3. Flagged-inclusive restores every physically excluded unit, thermal included, labelled.
+4. The operative bound comes from the block-6 harvest's existing code path (`joulewise/b6/calibration.py`).
+Note: the BYTES lanes branch from integration 220166913 and merge lane/2026-10-15-bytes-build, which is on main; they
+therefore carry main's docs commits since integration's base (DIFFICULTY registrations, RUN_STATE). Docs only; recorded
+so the eventual integration merge is not surprised.
+
+## Addendum 2 (13:05 PDT): config builder (lane/2026-10-15-bytes-config ba0072e69)
+
+- NEEDS_RULING answered: block 6's flag catalog is used unchanged, including its non-thermal exclusions; R6's "the rest
+  are flags" describes the catalog, it does not change it. The flagged-inclusive line restores them (Addendum 1 item 3).
+- Its block-6 suite run in the cloud had 19 failures and 4 errors from the environment (no Homebrew Python, temp disk);
+  the whole suite is run on the Mac before any BYTES lane merges.
+- Launcher defect found and fixed (~/.local/bin/codex-cloud-run.mjs, backup .bak-20261015): the account's websocket
+  carries every thread's events; the launcher acted on another thread's turn/completed and agent text, so the config
+  run's first report was cut short and the analysis continuation's launcher exited after 20 s (both tasks ran on in the
+  cloud). Events are now filtered by threadId; --attach sets it.
+
+## Addendum 3 (14:46 PDT): the twin's open choices (Fable twin, JouleWise-data claude/bytes-twin-tptjkk @ 07e032d), and the analysis lane's state
+
+The analysis lane (lane/2026-10-15-bytes-analysis 82c014c55) finished with NEEDS_RULING none:
+- 28 tests and 1,224 exact equivalence comparisons with the block-5 library.
+- 60 synthetic campaigns with no wrong word.
+- H2 coverage 1.00 in every world. That suggests the intervals are wide (B dominates); the executing review checks it.
+
+The twin was written from the ruling text before Addenda 1 and 2. These rulings bind both implementations. The agreement test judges each side against them.
+
+1. **Drift allowance:** computed from the export's NEG-8 reference rows (twin CHOICES 11), not read from `withheld/`. Stage 1 unblinds the `neg8_reference` key with the fit set.
+2. **Allowance scale:** max(1, E/E_ref, T/T_ref) per cell. E is the cell's decode-phase m; E_ref is the mean gross energy of the session's kept start, midpoint and end references over the whole request. T and T_ref are the same with durations. The allowance was measured on whole requests, so the comparison is with the whole request (twin CHOICES 12, adopted).
+3. **DC-input edge term:** Addendum 1 item 2 governs. Per member, u = (P_start + P_end)(r_max + Δt_meter). The twin's 2·p95·P̄ (CHOICES 18) is replaced.
+4. **No DC-input or rest number at the blinded stage.** The raw meter stream carries no hidden offset. DC input and rest are computed only for configurations already unblinded (stage 1 fit set, stage 2 all). The blinded agreement therefore covers rails. DC input and rest agree on synthetic stage-1/2 inputs. Both implementations must refuse the meter join for a configuration that is still blinded (twin CHOICES 20).
+5. **Two passes:** H1 and H2 use the mean of the passes' e, with half-width equal to the mean of the passes' (h + B). B does not shrink with passes, and h is about 0.1%. Per-pass words are printed as description (twin CHOICES 26).
+6. **H2 multiplicity:** the primary intervals per boundary are: the simple ε; the extended ε and ρ; the tier ε and ρ; one deviation per non-tier model present (up to 4); and, for rest, ε_rest and λ. That gives k = 9 for rails and DC input and k = 11 for rest with all ten models (twin CHOICES 27). P₀ and c are printed, not counted.
+7. **Tier deviation interval:** t·se_pred(new observation) plus the model's own measured half-width of P̄, (h + B)/T, added (twin CHOICES 28). The deviation is a comparison of two uncertain quantities.
+8. **Flagged-inclusive line** (clarifies Addendum 1 item 3 and Addendum 2):
+   - It restores every unit excluded by a flag-catalog code whose run has a valid energy record: thermal, contention, battery, clock and the rest.
+   - It never restores a run without a valid energy record (status not succeeded, bundle or validity failure).
+   - The twin's narrower restore (CHOICES 14) is replaced.
+9. **Rest fit near-collinearity** (twin note 5): print the VIF of BW and P̄_rails beside λ and ε_rest. Their intervals stay in H2's k. No word is drawn from λ.
+10. **Twin limits accepted:** no hazard-journal fallback for the meter offset (a stream without pairs gives no DC-input number, flagged), and the manifest reader is narrowed once `scripts/bytes_manifest.py` fixes the schema.
