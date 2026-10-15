@@ -242,13 +242,13 @@ Every finding is accepted. Fix round: Sol 6.1 xhigh on lane/2026-10-15-bytes-ana
 11. **N11 battery.** The analysis relies on the harvest's `battery.assist` flag. The registration states that dependency.
 12. **N12.** Keep integers exact as the library does, and add ints, constant cells and zeros to the equivalence test. Alternatively, narrow the claim to floats and say so. The builder chooses and records it.
 
-## Addendum 5 (15:52 PDT): the executing review of the config lane (Fable cloud, JouleWise-data claude/bytes-config-review-fable-7yog69 @ d008764)
+## Addendum 5 (15:41 PDT): the executing review of the config lane (Fable cloud, JouleWise-data claude/bytes-config-review-fable-7yog69 @ d008764)
 
 W and R match the pilot's accounting to the byte on four models. The configs and trees regenerate byte-identically. Every finding is accepted.
 
 1. **Finding 1, fix.** Each pass tree lives in its own campaign directory that the fixed-shape reader already understands: `configs/campaigns/bytes-sN-p1/plan_tree.json` and `configs/campaigns/bytes-sN-p2/plan_tree.json`. Each gets a `configs/b6/smoke_keep.json` row. No change to `joulewise/b6`. Sizing rows stay C5 (R8 item 7).
 2. **Finding 2, fix.** Pass 2 is its own fixed pack, `bytes-sN-p2`, with target 1 and minimum 0. Pass 1 is `bytes-sN-p1`, with target 1 and minimum 1. The pass-2 packs are ordered after every pass-1 pack, and in reverse sub-pack order, through `base_order` in `configs/b6/loop.json`. A test shows the loop selects the pass-2 tree for the pass-2 session.
-3. **Finding 3, confirmed on the Mac (15:50).** The local `Qwen3.5-122B-A10B-4bit` headers hold 333 vision-tower tensors, 0.9026 GB, besides 2,107 language-model tensors totalling 68.6907 GB, which equals the pilot's loaded bytes. No MTP tensors.
+3. **Finding 3, confirmed on the Mac (15:40).** The local `Qwen3.5-122B-A10B-4bit` headers hold 333 vision-tower tensors, 0.9026 GB, besides 2,107 language-model tensors totalling 68.6907 GB, which equals the pilot's loaded bytes. No MTP tensors.
    - Add a `not_loaded` category for exactly the names mlx-lm's sanitize drops (`vision_tower.`, `model.visual.`, any `mtp.` segment). Record its bytes and keep them out of W and R.
    - Any other unknown name still refuses.
 4. **Finding 4, spec: 512 decode forward passes, not 511.** The pinned runtime's `stream_generate(max_tokens=512)` dispatches 512 decode passes inside the measured request; the pilot's caches end at 2,560 positions for all six attention-only models. The arithmetic follows what the machine executes:
