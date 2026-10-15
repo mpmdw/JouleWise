@@ -1295,6 +1295,20 @@
       "klass": "REPRESENTATION",
       "note": "Design 13.7: block-six plan should omit reference spares."
     },
+    "precheck.acceptance_unavailable": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "Stage-2 issue 2: missing or malformed acceptance values flag collection; counting remains pending."
+    },
+    "precheck.certain_exclusion": {
+      "blinding": "STRUCTURE",
+      "effect": "EXCLUDE_WINDOW",
+      "family": "RECORDS",
+      "klass": "NUMBER",
+      "note": "Design 3.3: the registered acceptance excludes the nominal synthetic session; hold before collecting."
+    },
     "records.arm_record_absent": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",

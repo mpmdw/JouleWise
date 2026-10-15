@@ -7,7 +7,6 @@ separate launchd job after the arm and owns only its own fault children.
 from __future__ import annotations
 
 import argparse
-import base64
 import dataclasses
 import datetime as dt
 import hashlib
@@ -25,36 +24,15 @@ from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from joulewise.b6 import agent_pause, fingerprint, precheck, smoke
-from joulewise.b6 import registration
+from joulewise.b6 import registration, desk_identity, plan_inputs
+from joulewise.b6.desk_identity import EXPECTED, IDENTITY_SOURCE
+from joulewise.b6.plan_inputs import PACK_LABELS, SEALED_DIR, REGISTRATION, SIZING, registered_thresholds
 from joulewise.hazards.arm import AGENT_CENSUS_ARGV
 from joulewise.hazards.base import Completed, Context
 
 PYTHON = "/opt/homebrew/bin/python3.13"
 PACK = "d117_floor_qwen3-1p7b_v5"
 INJECT_LABEL = "com.joulewise.b6mt.inject"
-SEALED_DIR = "configs/campaigns/v5_claim_25g83"
-REGISTRATION = SEALED_DIR + "/registration_block5.md"
-SIZING = SEALED_DIR + "/sizing_b5.json"
-# Ported from the block-5 bench desk helper; differences are notes, not refusals.
-EXPECTED = {
-    "identity-epoch.json": "b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607",
-    "t1-bindings.json": "8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98",
-}
-PACK_LABELS = {PACK: "ALPHA", "d117_floor_qwen3-8b_v5": "BETA",
-               "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5": "GAMMA"}
-
-IDENTITY_SOURCE = '''import base64, importlib.util, json, sys
-from pathlib import Path
-source = Path(sys.argv[1])
-sys.path.insert(0, str(source.parent.parent))
-spec = importlib.util.spec_from_file_location("write_derivation_night_inputs", source)
-module = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = module
-spec.loader.exec_module(module)
-epoch, t1 = module._derive_planned_vectors("ac_high_power")
-print(json.dumps({name: base64.b64encode(module._json_bytes(value)).decode("ascii")
-    for name, value in (("identity-epoch.json", epoch), ("t1-bindings.json", t1))}))
-'''
 
 
 def sha256(raw):
@@ -76,20 +54,6 @@ def guard_path(path):
     if any(word in str(p).lower() for p in (path, resolved) for word in ("claude", "codex")):
         raise ValueError(f"agent-census substring in path: {path}")
     return resolved
-
-
-def registered_thresholds(text):
-    # Ported from b5_plan_inputs.py: one source, the sealed threshold block.
-    start = text.index("### 4.3 Registered thresholds")
-    end = text.find("\n### ", start + 1)
-    section = text[start:end if end > 0 else len(text)]
-    opening = section.index("```json") + len("```json")
-    value = json.loads(section[opening:section.index("```", opening)])
-    if set(value) != {"clock", "battery", "thermal", "contention", "disk", "instrument"}:
-        raise ValueError("registration must name the six hazard modules")
-    if value["contention"].get("clean_s") != 180:
-        raise ValueError("registration contention.clean_s must be the sealed 180")
-    return value
 
 
 @dataclasses.dataclass
@@ -165,45 +129,12 @@ def prepare(measurement_root, out, *, pack=PACK, lead_s=900, busy_cores=1,
                         "operative_bound_stop_s": None, "acceptance_corpus": []}})
     for name in ("identity_pins.json", "sizing_b5.json"):
         shutil.copyfile(measurement / SEALED_DIR / name, reg / name)
-    identity = seams.run([str(measurement / ".venv/bin/python"), "-B", "-c", IDENTITY_SOURCE,
-                          str(measurement / "scripts/write_derivation_night_inputs.py")],
-                         check=True, capture_output=True, text=True, timeout=120)
-    payloads = json.loads(identity.stdout)
-    identities = {}
-    for name, expected in EXPECTED.items():
-        raw = base64.b64decode(payloads[name], validate=True)
-        json.loads(raw)  # refuse a broken producer, preserve its exact bytes
-        target = out / "inputs" / name
-        target.parent.mkdir(exist_ok=True)
-        target.write_bytes(raw)
-        digest = sha256(raw)
-        identities[name] = {"path": str(target), "sha256": digest, "block3_sha256": expected,
-                            "matches_block3": digest == expected}
-        if digest != expected:
-            notes.append({"kind": "identity_differs_from_block3", "file": name,
-                          "sha256": digest, "block3_sha256": expected})
-    sizing_raw = (measurement / SIZING).read_bytes()
-    sizing = json.loads(sizing_raw)["packs"][PACK_LABELS[pack]]
-
-    def allowance(key):
-        return {"seconds": sizing[key], "source": {"path": SIZING, "sha256": sha256(sizing_raw)},
-                "source_pointer": f"/packs/{PACK_LABELS[pack]}/{key}"}
-
-    registration_raw = (measurement / REGISTRATION).read_bytes()
-    inputs = {"schema": "joulewise.b5_window_plan_inputs.v2", "plan_id": plan_id, "attempt": 1,
-              "pack_root": str(measurement / "configs/campaigns" / pack),
-              "measurement_root": str(measurement), "measurement_head": head, "repo_head": head,
-              "custody_root": str(out / "custody"), "runs_parent": str(out / "runs-parent"),
-              "claim_backup_destination": str(out / "backup-claim"),
-              "bound_backup_destination": str(out / "backup-bound"),
-              "bracket_session_id": plan_id + "-calibration", "pre_attempt_id": plan_id + "-cal-pre",
-              "post_attempt_id": plan_id + "-cal-post", "t0_epoch_s": t0,
-              "programmed_span_s": allowance("programmed_span_s"),
-              "T_stream_max_s": allowance("T_stream_max_s"), "bytes_per_member": 182 * 1024 * 1024,
-              "g10": False, "thresholds": registered_thresholds(registration_raw.decode("utf-8")),
-              "registration": {"path": REGISTRATION, "sha256": sha256(registration_raw)}}
-    for key, name in (("identity_epoch_json", "identity-epoch.json"), ("t1_bindings_json", "t1-bindings.json")):
-        inputs[key] = {k: identities[name][k] for k in ("path", "sha256")}
+    identities, identity_notes = desk_identity.collect(measurement, out / "inputs", run=seams.run)
+    notes.extend(identity_notes)
+    inputs = plan_inputs.build(measurement, reg, pack, plan_id, identities,
+                               custody_root=out / "custody", runs_parent=out / "runs-parent",
+                               claim_backup=out / "backup-claim", bound_backup=out / "backup-bound", head=head)
+    inputs["t0_epoch_s"] = t0
     write_json(out / "plan-inputs.json", inputs)
     pins = json.loads((reg / "identity_pins.json").read_text())
     tree = json.loads((measurement / "configs/campaigns" / pack / "plan_tree.json").read_text())

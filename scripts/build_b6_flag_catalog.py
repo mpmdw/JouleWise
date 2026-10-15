@@ -134,6 +134,12 @@ NEW_CODES.update(COLLECTION_CODES)
 # The unattended loop's own session-record codes (loop lane F5 and F6, deferred
 # to the merge). Records about records: they disclose and never remove data.
 LOOP_CODES = {
+    "precheck.certain_exclusion": _entry(
+        "RECORDS", "NUMBER", "EXCLUDE_WINDOW",
+        "Design 3.3: the registered acceptance excludes the nominal synthetic session; hold before collecting."),
+    "precheck.acceptance_unavailable": _entry(
+        "RECORDS", "REPRESENTATION", "DISCLOSE",
+        "Stage-2 issue 2: missing or malformed acceptance values flag collection; counting remains pending."),
     "registration.after_first_session": _entry(
         "RECORDS", "REPRESENTATION", "DISCLOSE",
         "Design 16 item 2: the pack registration's commit is later than this session's start."),

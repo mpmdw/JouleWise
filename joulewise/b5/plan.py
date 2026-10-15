@@ -218,6 +218,23 @@ def _dispatch_of(row: Any, repo_root: Path, bindings: Mapping[str, str] | None) 
                          config, _sha256(raw), run_ids, None)
 
 
+def resolve_stage_dispatch(stage: Mapping[str, Any], *, pack_root: Path | str,
+                           repo_root: Path | str | None) -> tuple[str | None, tuple[str, ...]] | None:
+    """J3 harvest interface, using the writer's same argv-based resolution.
+
+    Non-collection stages are declined. Malformed collection stages raise so
+    the harvest records them as unresolved rather than silently substituting.
+    """
+    _require(isinstance(stage, Mapping) and isinstance(stage.get("kind"), str),
+             "stage must be an object with a kind")
+    if stage["kind"] != "campaign_collection":
+        return None
+    root = Path(repo_root) if repo_root is not None else Path(pack_root).parents[2]
+    dispatch = _dispatch_of(stage, root, None)
+    _require(dispatch.error is None, dispatch.error or "stage dispatch unresolved")
+    return dispatch.runs_root_binding, dispatch.run_ids
+
+
 def resolve_stage_dispatches(tree: Mapping[str, Any], repo_root: Path | str, *,
                              bindings: Mapping[str, str] | None = None) -> list[StageDispatch]:
     """Every ``campaign_collection`` stage of the plan tree, in ordinal order, resolved from its own argv.

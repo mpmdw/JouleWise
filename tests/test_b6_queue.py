@@ -19,6 +19,15 @@ def started(state, selection, status="counting", cause=None):
 
 
 class QueueTests(unittest.TestCase):
+    def test_unavailable_acceptance_is_pending_without_a_harvest_fault(self):
+        reg = registrations()['alpha']
+        line = SessionLine('s', ('alpha',), harvest_rc=6, verdict='COLLECTED')
+        self.assertEqual(queue.outcome(reg, line, CATALOG),
+                         {'status': 'pending_registration', 'cause': 'precheck.acceptance_unavailable'})
+        for rc in (2, 3, 4, 5):
+            self.assertEqual(queue.outcome(reg, SessionLine('s', ('alpha',), harvest_rc=rc), CATALOG),
+                             {'status': 'pending_harvest', 'cause': None})
+
     def setUp(self):
         self.regs = registrations()
         self.state = {"round": 1, "packs": {}, "attempts": [], "base_order": ["alpha", "beta", "gamma"]}

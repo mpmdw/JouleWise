@@ -21,7 +21,7 @@ import subprocess
 import sys
 
 from joulewise.b5 import chain, plan
-from joulewise.b6 import fingerprint
+from joulewise.b6 import fingerprint, compose
 from joulewise.b6.acceptance_interface import AcceptanceResult, SessionEvidence, load_acceptance
 from joulewise.hazards.base import canonical_json, write_create_once
 
@@ -30,7 +30,7 @@ KEEP_PATH = Path(__file__).resolve().parents[2] / "configs/b6/smoke_keep.json"
 # Block 6 classifies its own codes (the driver's agent.*, sleep.*, idle.*) in its
 # own catalog; the sealed block-5 catalog does not list them (stage-1 integration).
 CATALOG_PATH = Path(__file__).resolve().parents[2] / "configs/b6/flag_catalog_b6.json"
-HARVEST_ARGV = ("scripts/harvest_b5_window.py",)
+HARVEST_ARGV = ("scripts/harvest_b6_session.py",)
 PHYSICAL_PREFIXES = ("battery.", "thermal.", "clock.", "contention.", "disk.", "instrument.",
                      "sleep.", "member.idle_")
 
@@ -238,7 +238,7 @@ class SmokePrepared:
 
 def prepare(pack_id, code_commit, claim_measurement_root, smoke_root, *, plan_inputs=None,
             fp=None, state_root=None, now=None, run=subprocess.run, plan_writer=plan.write_window_plan,
-            wrapper_writer=write_wrapper, registration_dir=None):
+            wrapper_writer=write_wrapper, registration_dir=None, defer_plan=False, keep=None):
     """Plan inputs carry the session's registered sizing, thresholds and identities.
 
     They may be supplied by the loop or read from the checkout's
@@ -260,7 +260,7 @@ def prepare(pack_id, code_commit, claim_measurement_root, smoke_root, *, plan_in
     _git(measurement, "add", plan.HEAD_PIN_RELATIVE, run=run)
     _git(measurement, "-c", "user.name=B6 Smoke", "-c", "user.email=smoke@invalid",
          "commit", "--quiet", "--allow-empty", "-m", "SMOKE ledger pin copy", run=run)
-    keep = json.loads(KEEP_PATH.read_text())[pack_id]
+    keep = dict(keep) if keep is not None else compose.registered_smoke_keep(pack_id, path=KEEP_PATH)
     pack_root = measurement / "configs/campaigns" / pack_id
     tree = json.loads((pack_root / "plan_tree.json").read_text())
     keeps = config_keeps(tree, keep)
@@ -285,7 +285,7 @@ def prepare(pack_id, code_commit, claim_measurement_root, smoke_root, *, plan_in
                   bound_backup_destination=str(smoke_dir / "backup-bound"),
                   ledger_path=str(measurement / plan.DEFAULT_LEDGER_RELATIVE))
     Path(inputs["runs_parent"]).mkdir()
-    record = plan_writer(inputs)
+    record = {"plan": {"path": str(Path(inputs["custody_root"]) / plan.PLAN_BASENAME)}} if defer_plan else plan_writer(inputs)
     # The block-6 registration directory of the smoke's own clone (stage-1
     # integration), unless the caller names one (a non-claim machine test).
     from joulewise.b6.registration import DEFAULT_DIR_RELATIVE
@@ -300,7 +300,8 @@ def prepare(pack_id, code_commit, claim_measurement_root, smoke_root, *, plan_in
     courier.write_text('#!/bin/sh\n{ printf "%s\\n" "$@"; cat; } > ' + request + '; exit 0\n')
     courier.chmod(0o755)
     write_create_once(smoke_dir / "smoke-state.json", canonical_json(
-        {**prepared.to_json(), "driver_argv": driver_argv(prepared), "config_keep": keeps}) + b"\n")
+        {**prepared.to_json(), "driver_argv": driver_argv(prepared), "config_keep": keeps,
+         "plan_inputs": inputs}) + b"\n")
     return prepared
 
 
@@ -356,7 +357,7 @@ def classify(*, stages_ok, driver_exit, harvest_exit, acceptance_result, flags, 
     physical = is_physical or _is_physical
     if physical_arm_refusal or any(physical(code) for code in flags):
         return "physics"
-    if stages_ok and driver_exit in (0, 6) and harvest_exit == 0 and not acceptance_result.structural:
+    if stages_ok and driver_exit in (0, 6) and harvest_exit in (0, 6) and not acceptance_result.structural:
         return "pass"
     return "fail"
 
@@ -391,35 +392,36 @@ def desk(prepared, *, driver_exit=None, run=subprocess.run, acceptance=None,
                   and result_record.get("chain_exit_code") == 0):
                 driver_exit = 0
     errors = []
+    record_flags = []
     try:
         advance_pin(prepared.measurement, session_id=prepared.bracket_session_id,
                     operator_identity="b6-smoke-desk", attestation_reason="non-claim smoke chain exited")
     except Exception as exc:
-        errors.append(f"ledger pin advance: {type(exc).__name__}: {exc}")
+        record_flags.append("records.pin_ledger")
     archive = prepared.smoke_dir / "archive"
     argv = [str(prepared.measurement / ".venv/bin/python"),
             *(str(prepared.measurement / item) if index == 0 else item for index, item in enumerate(HARVEST_ARGV)),
-            "--plan", str(prepared.plan_path), "--archive-root", str(archive), "--prepare-desk"]
+            "--plan", str(prepared.plan_path), "--archive-root", str(archive),
+            "--registration-dir", str(prepared.registration_dir),
+            "--pack-records-root", str(prepared.state_root / "packs"),
+            "--export-dir", str(prepared.smoke_dir / "export"), "--smoke"]
     harvest_exit = None
-    if not errors:
-        try:
-            harvest_exit = run(argv, check=False).returncode
-        except OSError as exc:
-            errors.append(f"harvest: {exc}")
+    try:
+        harvest_exit = run(argv, check=False).returncode
+    except OSError as exc:
+        errors.append(f"harvest: {exc}")
     loader, physical = _harvest_hooks()
     physical = is_physical or physical
-    session_desk = _session_desk() if acceptance is None and evidence_loader is None else None
     try:
-        if session_desk is not None and harvest_exit == 0:
-            # Stage-1 integration: the smoke runs the session's own acceptance
-            # path (design 13), the harvest lane's accept_archive, in smoke
-            # mode: flags folded through the block-6 catalog, the survivor
-            # screen, and the count-only exclusions a four-run smoke must show
-            # reported as expected rather than excluding.
-            a_result, _ = session_desk(archive, json.loads(Path(prepared.plan_path).read_text()),
-                                       prepared.registration_dir,
-                                       ledger_path=prepared.measurement / plan.DEFAULT_LEDGER_RELATIVE,
-                                       plan_path=Path(prepared.plan_path), smoke=True)
+        if acceptance is None and evidence_loader is None:
+            record = json.loads((archive / "derived/b6-acceptance.json").read_text())
+            window_exclusions = [item["code"] for item in record.get("excluding", [])
+                                 if item.get("scope") == "window"]
+            structural = bool(record.get("structural_failures")) or any(
+                not physical(code) for code in window_exclusions)
+            a_result = AcceptanceResult(record["verdict"],
+                tuple(sorted(set(window_exclusions))), tuple(record["flag_counts"]), structural,
+                record.get("counting", False), record)
         else:
             loader = evidence_loader or loader
             acceptance = acceptance or load_acceptance()
@@ -436,7 +438,7 @@ def desk(prepared, *, driver_exit=None, run=subprocess.run, acceptance=None,
     except Exception as exc:
         errors.append(f"acceptance: {type(exc).__name__}: {exc}")
         a_result = AcceptanceResult("UNAVAILABLE", ("acceptance failed",), (), True)
-    flags = list(_flag_codes(hazard)) + list(a_result.flags)
+    flags = record_flags + list(_flag_codes(hazard)) + list(a_result.flags)
     arm_record = hazard.get("arm") or {}
     physical_arm_refusal = arm_record.get("go") is False and any(
         str(reason).startswith("agent census") for reason in arm_record.get("reasons", []))
@@ -465,7 +467,10 @@ def desk(prepared, *, driver_exit=None, run=subprocess.run, acceptance=None,
               "acceptance": dataclasses.asdict(a_result), "flags": flags, "errors": errors,
               "driver_reason": "courier_failed_but_collected" if driver_exit == 6 else "driver_exit",
               "archive": str(archive)}
-    write_create_once(prepared.smoke_dir / "smoke-result.json", canonical_json(report) + b"\n")
+    target = prepared.smoke_dir / "smoke-result.json"
+    temporary = target.with_suffix(".json.tmp")
+    temporary.write_bytes(canonical_json(report) + b"\n")
+    temporary.replace(target)
     if status == "pass":
         fingerprint.record_pass(prepared.fingerprint, prepared.smoke_dir, prepared.state_root / "smoke-passes.jsonl")
     return report

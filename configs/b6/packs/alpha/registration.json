@@ -22,7 +22,7 @@
     "precision": null
   },
   "attempts_before_pause": 5,
-  "flag_catalog": "configs/campaigns/v5_claim_25g83/flag_catalog.json",
+  "flag_catalog": "configs/b6/flag_catalog_b6.json",
   "flag_effects": {
     "battery.accumulator_activity": null,
     "battery.accumulator_diagnostic": null,

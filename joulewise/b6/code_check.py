@@ -36,13 +36,32 @@ def check(repo: Path | str, registered: str, executed: str | None,
         return subprocess.run(["git", "-C", str(repo), *args], check=True,
                               capture_output=True, text=True).stdout
 
-    committed = set(filter(None, git("diff", "--no-renames", "--name-only", "-z",
-                                    registered, executed, "--").split("\0"))) if executed and registered != executed else set()
+    try:
+        committed = set(filter(None, git("diff", "--no-renames", "--name-only", "-z",
+                                        registered, executed, "--").split("\0"))) if executed and registered != executed else set()
+    except (OSError, subprocess.SubprocessError, TypeError, ValueError):
+        committed = set()
+        result["flags"].append("code.identity_unmeasured")
     changed = sorted(committed | tracked)
     numbers = [path for path in changed if path in paths]
-    commits = {row["commit"] if isinstance(row, Mapping) else row for row in reviewed}
-    unreviewed = [path for path in numbers if path in tracked or
-                  git("log", "-1", "--format=%H", executed, "--", path).strip() not in commits]
+    commits = set()
+    if not isinstance(reviewed, (list, tuple)):
+        reviewed = []
+        result["flags"].append("code.identity_unmeasured")
+    for row in reviewed:
+        commit = row.get("commit") if isinstance(row, Mapping) else row
+        if isinstance(commit, str):
+            commits.add(commit)
+        elif "code.identity_unmeasured" not in result["flags"]:
+            result["flags"].append("code.identity_unmeasured")
+    unreviewed = []
+    for path in numbers:
+        try:
+            if path in tracked or git("log", "-1", "--format=%H", executed, "--", path).strip() not in commits:
+                unreviewed.append(path)
+        except (OSError, subprocess.SubprocessError, TypeError, ValueError):
+            if "code.identity_unmeasured" not in result["flags"]:
+                result["flags"].append("code.identity_unmeasured")
     result.update(changed=changed, number_bearing_changed=numbers, unreviewed=unreviewed)
     if changed:
         result["flags"].append("code.changed_since_registration")

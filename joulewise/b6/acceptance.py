@@ -102,16 +102,23 @@ class BlockSixAcceptance:
                 registration_dir: Path, code_identity: Mapping,
                 pack_root: Path | None = None, ledger_rows: Sequence | None = None) -> Prepared:
         reg = registration.load(registration_dir)
-        pins = json.loads((Path(registration_dir) / "identity_pins.json").read_text(encoding="utf-8"))
+        problems = []
+        try:
+            pins = registration.load_identity_pins(registration_dir)
+        except (OSError, ValueError, TypeError):
+            pins = {}
+            problems.append("model.identity_unpinned")
         repo = Path(code_identity.get("repo_root", code_identity.get("repo", ROOT)))
         catalog = load_catalog(repo / reg["catalog"])
         if reg["cell_unit_minimum"] != catalog.cell_unit_minimum:
             catalog = Catalog(catalog.codes, catalog.sha256, catalog.path,
                               {**catalog.rules, "cell_unit_minimum": reg["cell_unit_minimum"]})
-        reviewed = json.loads((repo / reg["reviewed_commits_path"]).read_text(encoding="utf-8"))
+        reviewed = _json(repo / reg["reviewed_commits_path"])
+        if not isinstance(reviewed, list):
+            reviewed = []
+            problems.append("code.identity_unmeasured")
         code = code_check.check(repo, reg["registered_commit"], code_identity.get("executed_head"),
                                 reg["number_bearing_paths"], reviewed, code_identity.get("status_porcelain"))
-        problems = []
         if ledger_rows is not None:
             rows = list(ledger_rows)
         else:
@@ -469,7 +476,11 @@ def evidence_from_archive(archive_root: Path | str, plan: Mapping | Path | str,
             stop = "chain_crashed"
     screen = _json(root / "withheld/b6-neg8.json", {})
     neg8 = {key: screen[key] for key in ("verdict", "survivors", "corpus_clean_n", "reason", "flags") if key in screen}
-    reg_cal = registration.load(registration_dir)["calibration"]
+    try:
+        reg_cal = registration.load(registration_dir)["calibration"]
+    except (OSError, ValueError):
+        # Evidence and exports do not depend on quiet-machine acceptance values.
+        reg_cal = {}
     estimator_changed = any(reg_cal.get(key) is not None and meta.get(key) != reg_cal[key]
                             for meta in capture_meta for key in ("protocol_sha256", "estimator_sha256"))
     runtime = {"_b6": {"flags": flags, "cells": roster.get("cells", []), "spans": spans, "smoke": smoke_tree,

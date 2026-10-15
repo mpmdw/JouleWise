@@ -57,6 +57,12 @@ class CodeCheckTests(unittest.TestCase):
         self.assertEqual(result["changed"], [])
         self.assertEqual(result["flags"], [])
 
+    def test_malformed_or_unresolvable_identity_is_a_flag(self):
+        result = check(self.repo, 'missing-registered-object', 'missing-executed-object',
+                       ['reduce.py'], [{'commit': []}], '')
+        self.assertEqual(result['changed'], [])
+        self.assertEqual(result['flags'], ['code.identity_unmeasured'])
+
     def test_equal_commits_with_tracked_number_edit_are_unreviewed(self):
         path = "joulewise/adapters/mlx_runtime.py"
         result = check(self.repo / "absent", self.base, self.base, [path], [self.base], " M " + path + "\n")

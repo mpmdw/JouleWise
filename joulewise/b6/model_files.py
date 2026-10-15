@@ -6,7 +6,7 @@ from typing import Any, Mapping
 
 from joulewise.identity_pins import _path_independent_identifier
 
-PACKAGES = ("mlx", "mlx-lm", "transformers", "mlx-metal")
+PACKAGES = ("mlx", "mlx-lm", "transformers", "mlx-metal", "tokenizers")
 
 
 def _tokenizer(value: Mapping) -> dict:
@@ -16,6 +16,14 @@ def _tokenizer(value: Mapping) -> dict:
 
 
 def run_identity(metadata: Mapping) -> dict[str, Any]:
+    try:
+        return _run_identity(metadata)
+    except (AttributeError, KeyError, TypeError, ValueError):
+        # Malformed identity records disclose an unavailable comparison.
+        return {"status": "malformed"}
+
+
+def _run_identity(metadata: Mapping) -> dict[str, Any]:
     runtime = (metadata.get("adapters") or {}).get("runtime") or {}
     prepare = runtime.get("prepare_metadata") or {}
     artifact = prepare.get("model_artifact_identity") or {}
@@ -30,7 +38,8 @@ def run_identity(metadata: Mapping) -> dict[str, Any]:
     environment = (metadata.get("environment") or {}).get("python_packages") or {}
     versions = {"mlx": prepare.get("mlx_version"), "mlx-lm": prepare.get("mlx_lm_version"),
                 "transformers": prepare.get("transformers_version"),
-                "mlx-metal": prepare.get("mlx_metal_version", prepare.get("mlx-metal_version"))}
+                "mlx-metal": prepare.get("mlx_metal_version", prepare.get("mlx-metal_version")),
+                "tokenizers": prepare.get("tokenizers_version")}
     for key in PACKAGES:
         entry = environment.get(key)
         if versions[key] is None:
@@ -87,7 +96,7 @@ def compare(expected: Mapping, observed: Mapping) -> list[dict]:
     versions = expected.get("runtime_versions", {}).get("packages", {})
     for key in PACKAGES:
         value = (observed.get("packages") or {}).get(key)
-        if value is not None and value != versions.get(key):
+        if value is not None and versions.get(key) is not None and value != versions[key]:
             fields.append(key)
     if pin:
         candidate = {key: observed[key] for key in ("runtime", "runtime_version", "quantization", "kernel_library")
@@ -95,11 +104,12 @@ def compare(expected: Mapping, observed: Mapping) -> list[dict]:
         tokenizer = _tokenizer(observed.get("tokenizer") or {})
 
         def differs(stack: Mapping) -> list[str]:
-            fields = [key for key, value in candidate.items() if value != stack.get(key) and not
+            fields = [key for key, value in candidate.items() if stack.get(key) is not None and value != stack[key] and not
                       (key == "quantization" and isinstance(value, str) and isinstance(stack.get(key), Mapping)
                        and value == stack[key].get("name"))]
             fields.extend("tokenizer." + key for key, value in tokenizer.items()
-                          if value != (stack.get("tokenizer") or {}).get(key))
+                          if (stack.get("tokenizer") or {}).get(key) is not None
+                          and value != stack["tokenizer"][key])
             return fields
         # Prepare records sometimes name quantization only; metadata normally
         # supplies its complete registered object.

@@ -21,6 +21,7 @@ class SessionLayout:
     template: dict
     fixed_bytes: bytes | None = None
     schema_version: str = SCHEMA
+    campaign_id: str | None = None
 
 
 def _repo_path(root, relative):
@@ -77,7 +78,8 @@ def layout(selection, regs, repo_root) -> SessionLayout:
         raw = _repo_path(root, reg.plan_tree_ref).read_bytes()
         tree = json.loads(raw)
         stages = tuple(_stage(root, s, tree, reg.plan_tree_ref, reg.pack_id) for s in tree["stage_graph"])
-        return SessionLayout(session_id, selection.packs, stages, reg.corpus, tree, raw)
+        return SessionLayout(session_id, selection.packs, stages, reg.corpus, tree, raw,
+                             campaign_id=Path(reg.plan_tree_ref).parent.name)
     cadences = {r.reference_cadence for r in selected}
     if len(cadences) != 1:
         raise ValueError("co-located packs need one registered reference cadence")
@@ -212,7 +214,15 @@ def render(layout: SessionLayout, template_tree=None):
     return tree, files
 
 
+def registered_smoke_keep(campaign_id, *, path=None):
+    """Fixed replications and the machine smoke share one campaign-keyed map."""
+    target = Path(path) if path is not None else Path(__file__).resolve().parents[2] / "configs/b6/smoke_keep.json"
+    return dict(json.loads(target.read_text())[campaign_id])
+
+
 def smoke_keep(layout):
+    if layout.fixed_bytes is not None and layout.campaign_id is not None:
+        return registered_smoke_keep(layout.campaign_id)
     keep, seen = {}, set()
     for s in layout.stages:
         sid = s["stage_id"]

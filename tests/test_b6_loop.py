@@ -101,7 +101,9 @@ class LoopTests(unittest.TestCase):
         self.mailer = Mailer(self.root, CATALOG, clock=self.clock, transport=self.transport)
         self.run_calls, self.remote = [], ""
         self.regs = registrations()
-        self.loop = loop_module.Loop(ROOT, self.root, regs=self.regs, clock=self.clock, run=self.runner,
+        config = json.loads((ROOT / 'configs/b6/loop.json').read_text())
+        config['wake_argv'] = []
+        self.loop = loop_module.Loop(ROOT, self.root, config=config, regs=self.regs, clock=self.clock, run=self.runner,
             lanes=Lanes(self.precheck, self.driver, self.desk, Harvest(), self.analysis), mailer=self.mailer, catalog=CATALOG)
         self.addCleanup(self.assert_messages_not_withheld)
 
@@ -478,6 +480,20 @@ class LoopTests(unittest.TestCase):
         self.tick_to("HOLD_LOOP")
         self.assertEqual(len(self.messages("smoke_hold")), 2)
 
+    def test_resumed_pack_in_same_round_gets_fresh_session_and_smoke_ids(self):
+        # The driver keys staging, plan and terminal records by these ids; a
+        # reused id would re-desk the failed smoke instead of running a new one.
+        self.desk.smokes = [SmokeResult("fail", ("stage_failed:x",)), SmokeResult("pass")]
+        self.tick_to("SMOKE_DESK")
+        self.loop.tick()
+        self.assertEqual(self.state()["packs"]["alpha"]["status"], "held")
+        self.loop.control("resume", pack="alpha")
+        self.tick_to("SMOKE_DESK")
+        self.assertEqual(self.desk.smoke_calls, ["r1-alpha-smoke-0-smoke"])
+        self.loop.tick()
+        self.assertEqual(self.desk.smoke_calls, ["r1-alpha-smoke-0-smoke", "r1-alpha-n2-smoke-0-smoke"])
+        self.assertEqual(self.state()["session"]["id"], "r1-alpha-n2")
+
     def test_certain_exclusion_next_pack_same_code_hold_and_thin_margin(self):
         self.precheck.results = [PrecheckResult(certain_exclusion=(Exclusion("model.identity_mismatch"),))] * 2
         self.loop.tick()
@@ -533,6 +549,17 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(queue.counting_ids(self.state(), "alpha"), ["r1-alpha"])
         self.assertEqual((self.root / "attempts.jsonl").read_bytes(), original)
         self.tick_to("SMOKE_RUN")
+
+    def test_registration_pending_rejudges_without_forcing_a_smoke(self):
+        self.desk.lines = [SessionLine("r1-alpha", ("alpha",), harvest_rc=6)]
+        self.tick_to("ROTATE")
+        state = self.state()
+        self.assertEqual(state["attempts"][0]["outcomes"]["alpha"]["status"], "pending_registration")
+        self.assertFalse(state.get("harvest_fault", False))
+        original = (self.root / "attempts.jsonl").read_bytes()
+        self.loop.control("reharvested", session_id="r1-alpha")
+        self.assertEqual(queue.counting_ids(self.state(), "alpha"), ["r1-alpha"])
+        self.assertEqual((self.root / "attempts.jsonl").read_bytes(), original)
 
     def test_overrun_delivers_once_while_active_defers_wake_never_kills(self):
         self.loop.waker = Waker(self.root, wake_argv=["/usr/bin/true"], run=self.runner)
@@ -798,7 +825,8 @@ class LoopTests(unittest.TestCase):
             f"configs/b6/packs/{p}/registration.json": ["draft"] for p in ("alpha", "beta", "gamma")})
         self.assertTrue(mailer.entry(key)["delivered"])
         self.assertEqual(loop.mailer.transport.repo, config["github_repo"])
-        self.assertIsInstance(loop.lanes.driver, type(resolve().driver))
+        from joulewise.b6.driver_lane import DriverLane
+        self.assertIsInstance(loop.lanes.driver, DriverLane)
         self.assertTrue(any(argv[0] == "gh" for argv in calls))
         self.assertTrue(any("ls-remote" in argv for argv in calls))
 

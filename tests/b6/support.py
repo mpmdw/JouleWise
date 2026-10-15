@@ -71,7 +71,8 @@ def synthetic_checkout(root):
     model.write_bytes(b'synthetic weights')
     from joulewise.provenance import model_artifact_identity
     digest = model_artifact_identity(str(model))['sha256']
-    pins = {'units': {'test': {'model_source': str(model), 'model_artifact_sha256': digest}},
+    pins = {'schema': 'joulewise.b5_identity_pins.v1',
+            'units': {'test': {'model_source': str(model), 'model_artifact_sha256': digest, 'stack_identity': {}}},
             'runtime_versions': {'python': '3.13.1', 'packages': {'mlx': 'test'}}}
     (registration / 'identity_pins.json').write_text(json.dumps(pins))
     for dispatch in plan.resolve_stage_dispatches(t, ROOT):
@@ -165,7 +166,8 @@ def registration_dir(root: Path) -> Path:
     target = root / "registration"
     write_json(target / "acceptance.json", document())
     write_json(target / "identity_pins.json", {
-        "runtime_versions": {"packages": IDENTITY["packages"]}, "units": {"desk": {
+        "schema": "joulewise.b5_identity_pins.v1",
+        "runtime_versions": {"python": "3.13", "packages": IDENTITY["packages"]}, "units": {"desk": {
             "model_source": IDENTITY["model_source"], "model_artifact_sha256": IDENTITY["model_artifact_sha256"],
             "stack_identity": {"runtime_version": {"name": "mlx"}, "quantization": IDENTITY["quantization"]}}}})
     return target

@@ -25,6 +25,46 @@ from tests.fixtures.b5_plan import fake_window
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+class StageDispatchTests(unittest.TestCase):
+    def test_harvest_resolves_every_committed_v5_collection_like_the_writer(self):
+        from joulewise.b5 import harvest
+        for campaign in ("d117_floor_qwen3-1p7b_v5", "d117_floor_qwen3-8b_v5",
+                         "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"):
+            pack = REPO_ROOT / "configs/campaigns" / campaign
+            tree = json.loads((pack / "plan_tree.json").read_text())
+            expected = b5_plan.resolve_stage_dispatches(tree, REPO_ROOT)
+            self.assertTrue(expected)
+            self.assertTrue(all(d.error is None and d.run_ids for d in expected))
+            for repo in (REPO_ROOT, None):
+                with self.subTest(campaign=campaign, repo=repo):
+                    report = {}
+                    actual, unresolved = harvest.stage_dispatches(tree, pack, repo, report=report)
+                    self.assertEqual([], unresolved)
+                    self.assertEqual({}, report["j3_failures"])
+                    self.assertEqual(len(expected), len(report["stages"]))
+                    for dispatch in expected:
+                        ids = [run_id for run_id, rows in actual.items()
+                               for row in rows if row["stage_id"] == dispatch.stage_id]
+                        self.assertEqual(list(dispatch.run_ids), ids)
+                        self.assertTrue(all(row["runs_root"] == dispatch.runs_root_binding
+                                            for rows in actual.values() for row in rows
+                                            if row["stage_id"] == dispatch.stage_id))
+
+    def test_noncollection_declines_but_malformed_collection_is_unresolved(self):
+        from joulewise.b5 import harvest
+        pack = REPO_ROOT / "configs/campaigns/d117_floor_qwen3-1p7b_v5"
+        self.assertIsNone(b5_plan.resolve_stage_dispatch({"kind": "calibration_capture"},
+                                                       pack_root=pack, repo_root=None))
+        stage = {"stage_id": "broken", "kind": "campaign_collection", "launch": {}}
+        with self.assertRaises(b5_plan.WindowPlanError):
+            b5_plan.resolve_stage_dispatch(stage, pack_root=pack, repo_root=None)
+        report = {}
+        actual, unresolved = harvest.stage_dispatches({"stage_graph": [stage]}, pack, report=report)
+        self.assertEqual({}, actual)
+        self.assertEqual(["broken"], unresolved)
+        self.assertIn("broken", report["j3_failures"])
+
+
 class WindowPlanFixture(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="b5-plan-")

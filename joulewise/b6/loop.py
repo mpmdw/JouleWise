@@ -37,10 +37,12 @@ class Loop:
         self.repo, self.root = Path(repo_root), Path(loop_root)
         self.config = config or json.loads((self.repo / "configs/b6/loop.json").read_text())
         self.regs_source, self.clock, self.run = regs, clock, run
-        self.lanes = lanes or resolve()
+        self.lanes = lanes or resolve(self.repo, self.root, run=run, config=self.config, clock=clock)
         self.catalog = catalog or load_catalog(self.repo / self.config["flag_catalog"])
         self.mailer = mailer or Mailer(self.root, self.catalog, clock=clock)
-        self.waker = waker or Waker(self.root, wake_argv=self.config.get("wake_argv", []), run=run)
+        wake_argv = [arg.replace("{repo_root}", str(self.repo.resolve())).replace("{loop_root}", str(self.root.resolve()))
+                     for arg in self.config.get("wake_argv", [])]
+        self.waker = waker or Waker(self.root, wake_argv=wake_argv, run=run)
         self.state = None
         self.regs = {}
 
@@ -168,7 +170,23 @@ class Loop:
         s = self.state["session"]
         layout = compose.layout(queue.Selection(tuple(s["packs"]), s["round"]), self.regs, self.repo)
         attempt = s.get("launch_attempt", 0)
-        return replace(layout, session_id=s["id"] + f"-a{attempt}") if attempt else layout
+        return replace(layout, session_id=s["id"] + (f"-a{attempt}" if attempt else ""))
+
+    def _fresh_id(self, base):
+        """A collection id never used before by this loop.
+
+        The driver keys its staging, plan and terminal records by this id, so a
+        reused id (a pack held and resumed in the same round, or a new smoke
+        after a failed one) would re-desk the old collection instead of running
+        a new one. The first use keeps the plain id.
+        """
+        used = self.state.setdefault("used_ids", [])
+        candidate, n = base, 1
+        while candidate in used:
+            n += 1
+            candidate = f"{base}-n{n}"
+        used.append(candidate)
+        return candidate
 
     def _prepared(self, smoke=False):
         return Prepared(**self.state["session"]["smoke_prepared" if smoke else "prepared"])
@@ -189,6 +207,7 @@ class Loop:
             return
         self.state.pop("idle_reasons", None)
         layout = compose.layout(selection, self.regs, self.repo)
+        layout = replace(layout, session_id=self._fresh_id(layout.session_id))
         self.state["session"] = {"id": layout.session_id, "packs": list(selection.packs), "round": selection.round,
                                  "registrations": {p: {"data": dict(self.regs[p].data), "commit_time": self.regs[p].commit_time}
                                                    for p in selection.packs}}
@@ -329,7 +348,8 @@ class Loop:
         prefix = "smoke_" if smoke else ""
         if smoke and "smoke_prepared" not in session:
             layout = self._layout()
-            layout = replace(layout, session_id=layout.session_id + f"-smoke-{session.get('smoke_attempt', 0)}")
+            layout = replace(layout, session_id=self._fresh_id(
+                layout.session_id + f"-smoke-{session.get('smoke_attempt', 0)}"))
             prepared = self.lanes.driver.prepare_session(layout, compose.render(layout), smoke=True,
                 keep=compose.smoke_keep(layout), staging_root=self.root / "staging" / layout.session_id)
             if self._missing(prepared):
@@ -521,10 +541,12 @@ class Loop:
             self._event("structure_defect", fields={"flags": line.window_flags})
             return
         self._transition("ROTATE")
-        if line.harvest_rc in (2, 3):
+        if line.harvest_rc not in (0, 6):
             self.state["harvest_fault"] = True
             self.state.setdefault("pending_sessions", {})[s["id"]] = s
             self._event("harvest_fault")
+        elif line.harvest_rc == 6:
+            self.state.setdefault("pending_sessions", {})[s["id"]] = s
         if line.physics_stop:
             self._event("physics_ended_session", line.physics_stop, wake=False)
         self._precision([p for p in s["packs"] if queue.counting_ids(self.state, p)[-1:] == [s["id"]]])
@@ -581,7 +603,7 @@ class Loop:
                 if self._missing(line):
                     atomic_state(self.root / "state.json", self.state)
                     return 0
-                if not line.structure_ok or line.harvest_rc in (2, 3):
+                if not line.structure_ok or line.harvest_rc != 0:
                     raise ValueError("reharvest is not structurally complete")
                 original = next(a for a in self.state["attempts"] if a["session_id"] == session_id)
                 flags = set(line.window_flags) | (set(original["line"]["window_flags"]) & LOOP_WINDOW_FLAGS)
