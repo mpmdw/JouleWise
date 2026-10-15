@@ -6,5 +6,6 @@
   "owner_login": "mpmdw",
   "github_repo": "mpmdw/JouleWise",
   "flag_catalog": "configs/b6/flag_catalog_b6.json",
-  "wake_argv": []
+  "launch_lead_s": 420,
+  "wake_argv": ["{repo_root}/scripts/b6_wake.zsh", "{loop_root}", "{wake_record}"]
 }

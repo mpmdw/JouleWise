@@ -37,10 +37,12 @@ class Loop:
         self.repo, self.root = Path(repo_root), Path(loop_root)
         self.config = config or json.loads((self.repo / "configs/b6/loop.json").read_text())
         self.regs_source, self.clock, self.run = regs, clock, run
-        self.lanes = lanes or resolve()
+        self.lanes = lanes or resolve(self.repo, self.root, run=run, config=self.config, clock=clock)
         self.catalog = catalog or load_catalog(self.repo / self.config["flag_catalog"])
         self.mailer = mailer or Mailer(self.root, self.catalog, clock=clock)
-        self.waker = waker or Waker(self.root, wake_argv=self.config.get("wake_argv", []), run=run)
+        wake_argv = [arg.replace("{repo_root}", str(self.repo.resolve())).replace("{loop_root}", str(self.root.resolve()))
+                     for arg in self.config.get("wake_argv", [])]
+        self.waker = waker or Waker(self.root, wake_argv=wake_argv, run=run)
         self.state = None
         self.regs = {}
 
@@ -521,10 +523,12 @@ class Loop:
             self._event("structure_defect", fields={"flags": line.window_flags})
             return
         self._transition("ROTATE")
-        if line.harvest_rc in (2, 3):
+        if line.harvest_rc in (2, 3, 4, 5):
             self.state["harvest_fault"] = True
             self.state.setdefault("pending_sessions", {})[s["id"]] = s
             self._event("harvest_fault")
+        elif line.harvest_rc == 6:
+            self.state.setdefault("pending_sessions", {})[s["id"]] = s
         if line.physics_stop:
             self._event("physics_ended_session", line.physics_stop, wake=False)
         self._precision([p for p in s["packs"] if queue.counting_ids(self.state, p)[-1:] == [s["id"]]])
@@ -581,7 +585,7 @@ class Loop:
                 if self._missing(line):
                     atomic_state(self.root / "state.json", self.state)
                     return 0
-                if not line.structure_ok or line.harvest_rc in (2, 3):
+                if not line.structure_ok or line.harvest_rc in (2, 3, 4, 5, 6):
                     raise ValueError("reharvest is not structurally complete")
                 original = next(a for a in self.state["attempts"] if a["session_id"] == session_id)
                 flags = set(line.window_flags) | (set(original["line"]["window_flags"]) & LOOP_WINDOW_FLAGS)

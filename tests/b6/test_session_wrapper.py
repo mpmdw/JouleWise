@@ -42,18 +42,49 @@ class WrapperTests(unittest.TestCase):
         self.assertEqual(result["export"]["rows"], 9)
         self.assertTrue((self.archive / "withheld/b6-neg8.json").is_file())
         self.assertTrue((self.archive / "derived/b6-flags.jsonl").is_file())
+        self.assertTrue(wrapper.harvest is not None)
+
+    def test_smoke_and_reentry_use_one_harvest_and_one_acceptance(self):
+        (self.archive / "derived/b6-acceptance.json").unlink()
+        with patch.object(wrapper, "resolve_inputs"), \
+             patch.object(wrapper, "harvest", return_value={"verdict": "COLLECTED"}) as harvester, \
+             patch.object(wrapper, "accept_archive", wraps=wrapper.accept_archive) as acceptance, \
+             patch.object(wrapper, "export", wraps=wrapper.export) as exporter, \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(wrapper.main([*self.argv, "--smoke"]), 0)
+            self.assertEqual(wrapper.main([*self.argv, "--smoke"]), 0)
+        self.assertTrue(harvester.call_args.kwargs["prepare_desk"])
+        self.assertTrue(acceptance.call_args.kwargs["smoke"])
+        self.assertTrue(exporter.call_args.kwargs["non_claim"])
+
+    def test_missing_registration_archives_numbers_then_remains_pending(self):
+        (self.reg / "acceptance.json").unlink()
+        reductions = self.archive / "withheld/reductions"
+        before = {p.name: p.read_bytes() for p in reductions.glob('*')}
+        with patch.object(wrapper, "resolve_inputs"), \
+             patch.object(wrapper, "harvest", return_value={"verdict": "COLLECTED"}) as harvester, \
+             patch.object(wrapper, "export", wraps=wrapper.export) as exporter, contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(wrapper.main(self.argv), wrapper.PENDING_REGISTRATION)
+        harvester.assert_called_once()
+        exporter.assert_called_once()
+        self.assertEqual(json.loads(output.getvalue())["export"]["rows"], 9)
+        self.assertEqual(json.loads(output.getvalue())["verdict"], "UNAVAILABLE")
+        record = json.loads((self.archive / 'derived/b6-acceptance.json').read_text())
+        self.assertEqual(record['pending'], ['acceptance_registration'])
+        self.assertEqual(record['flags'], ['precheck.acceptance_unavailable'])
+        self.assertEqual(before, {p.name: p.read_bytes() for p in reductions.glob('*')})
 
     def test_acceptance_and_export_faults_have_distinct_exit_codes(self):
         for code in (4, 5):
             with patch.object(wrapper, "resolve_inputs"), patch.object(wrapper, "harvest", return_value={"verdict": "COLLECTED"}), \
                  patch.object(wrapper, "accept_archive", **({"side_effect": RuntimeError()} if code == 4 else
-                     {"return_value": (type("Result", (), {"record": self.record})(), object())})), \
+                     {"return_value": (type("Result", (), {"record": self.record, "verdict": "ACCEPT"})(), object())})), \
                  patch.object(wrapper, "export", side_effect=RuntimeError()), contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(wrapper.main(self.argv), code)
 
     def test_export_key_fault_preserves_filename_without_factor(self):
         with patch.object(wrapper, "resolve_inputs"), patch.object(wrapper, "harvest", return_value={"verdict": "COLLECTED"}), \
-             patch.object(wrapper, "accept_archive", return_value=(type("Result", (), {"record": self.record})(), object())), \
+             patch.object(wrapper, "accept_archive", return_value=(type("Result", (), {"record": self.record, "verdict": "ACCEPT"})(), object())), \
              patch.object(wrapper, "export", side_effect=ValueError("blinding key unreadable: /synthetic/pack.json")), \
              contextlib.redirect_stderr(io.StringIO()) as stderr, contextlib.redirect_stdout(io.StringIO()) as stdout:
             self.assertEqual(wrapper.main(self.argv), 5)

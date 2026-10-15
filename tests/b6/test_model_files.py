@@ -7,11 +7,22 @@ from tests.b6.support import IDENTITY, ROOT
 
 
 class ModelFileTests(unittest.TestCase):
+    def test_malformed_runtime_record_is_unrecorded_identity(self):
+        for value in ({'adapters': []}, {'environment': {'python_packages': []}},
+                      {'adapters': {'runtime': {'prepare_metadata': ['bad']}}}):
+            self.assertEqual(model_files.compare({}, model_files.run_identity(value)),
+                             [{'code': 'model.identity_unrecorded', 'fields': []}])
+
     def setUp(self):
-        self.pins = {"runtime_versions": {"packages": IDENTITY["packages"]}, "units": {"one": {
+        self.pins = {"runtime_versions": {"packages": {**IDENTITY["packages"],
+            "mlx-metal": "metal-1", "tokenizers": "tok-1"}}, "units": {"one": {
             "model_source": IDENTITY["model_source"], "model_artifact_sha256": IDENTITY["model_artifact_sha256"],
             "stack_identity": {"runtime_version": {"name": "mlx"}, "quantization": IDENTITY["quantization"]}}}}
         self.expected = model_files.expected(self.pins)
+
+    def test_absent_pins_do_not_invent_a_stack_difference(self):
+        self.assertEqual(model_files.compare(model_files.expected({}), IDENTITY),
+                         [{'code': 'model.source_unpinned', 'fields': ['model_source']}])
 
     def test_clean_and_multiple_units_for_one_source(self):
         self.pins["units"]["two"] = copy.deepcopy(self.pins["units"]["one"])
@@ -87,6 +98,25 @@ class ModelFileTests(unittest.TestCase):
         self.pins["units"]["two"] = two
         rows = model_files.compare(model_files.expected(self.pins), {**IDENTITY, "tokenizer": {"revision": "second"}})
         self.assertEqual(rows, [{"code": "model.stack_differs_from_registered", "fields": ["tokenizer.revision"]}])
+
+    def test_per_run_distribution_versions_come_from_environment(self):
+        self.pins["runtime_versions"]["packages"].update({"mlx-metal": "metal-1", "tokenizers": "tok-1"})
+        metadata = {"adapters": {"runtime": {"name": "mlx", "prepare_metadata": {
+            "model_source": IDENTITY["model_source"],
+            "model_artifact_identity": {"status": "ok", "folded_sha256": "a" * 64}}}},
+            "environment": {"python_packages": {
+                "mlx-metal": {"present": True, "version": "metal-1"},
+                "tokenizers": {"present": True, "version": "tok-1"}}}}
+        expected = model_files.expected(self.pins)
+        observed = model_files.run_identity(metadata)
+        self.assertEqual(model_files.compare(expected, observed), [])
+        for package in ("mlx-metal", "tokenizers"):
+            changed = copy.deepcopy(metadata)
+            changed["environment"]["python_packages"][package]["version"] = "different"
+            self.assertEqual(model_files.compare(expected, model_files.run_identity(changed)),
+                             [{"code": "model.stack_differs_from_registered", "fields": [package]}])
+        metadata["environment"]["python_packages"]["tokenizers"] = {"present": False, "version": None}
+        self.assertEqual(model_files.compare(expected, model_files.run_identity(metadata)), [])
 
     def test_os_sampler_output_policy_not_compared(self):
         self.assertEqual(model_files.compare(self.expected, {**IDENTITY, "platform": "other", "sampler": "other",

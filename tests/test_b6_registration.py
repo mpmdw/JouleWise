@@ -10,9 +10,36 @@ from pathlib import Path
 from joulewise.b6.pack_registration import Registration, load, open_packs, validate
 from joulewise.flags.catalog import load_catalog
 from tests.git_fixture import init_git_fixture
+from joulewise.b6 import registration as acceptance_registration
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = load_catalog(ROOT / "configs/campaigns/v5_claim_25g83/flag_catalog.json")
+
+
+class AcceptanceDirectoryTests(unittest.TestCase):
+    def test_copies_parse_and_are_exact_without_following_source_paths(self):
+        target = ROOT / acceptance_registration.DEFAULT_DIR_RELATIVE
+        for name, loader in (("identity_pins.json", acceptance_registration.load_identity_pins),
+                             ("sizing_b5.json", acceptance_registration.load_sizing)):
+            with self.subTest(name=name):
+                self.assertEqual((target / name).read_bytes(),
+                                 (ROOT / 'configs/campaigns/v5_claim_25g83' / name).read_bytes())
+                self.assertIsInstance(loader(target), dict)
+        self.assertEqual(acceptance_registration.load_precheck_thresholds(target), {})
+        self.assertFalse((target / 'acceptance.json').exists())
+
+    def test_malformed_inputs_fail_the_loader_without_filling_measurements(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name, loader, value in (
+                ('identity_pins.json', acceptance_registration.load_identity_pins, {'schema': acceptance_registration.IDENTITY_SCHEMA}),
+                ('sizing_b5.json', acceptance_registration.load_sizing, {'schema_version': acceptance_registration.SIZING_SCHEMA}),
+                ('precheck_thresholds.json', acceptance_registration.load_precheck_thresholds, {'clock': {'typo': 1}}),
+                ('acceptance.json', acceptance_registration.load, {'schema': acceptance_registration.SCHEMA,
+                    'pack_id': 'test', 'registered_commit': 'a' * 40})):
+                (root / name).write_text(json.dumps(value))
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    loader(root)
 
 
 def registrations(*, target=3):

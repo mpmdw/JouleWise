@@ -18,10 +18,13 @@ from joulewise.b6.mailer import GitHubTransport, Mailer
 from joulewise.flags.catalog import load_catalog
 
 
-def live_run(argv):
+def live_run(argv, **kwargs):
     try:
-        return subprocess.run(argv, capture_output=True, text=True, timeout=120, check=False)
+        return subprocess.run(argv, **{"capture_output": True, "text": True, "timeout": 120,
+                                       "check": False, **kwargs})
     except subprocess.TimeoutExpired:
+        if kwargs.get("check"):
+            raise
         return subprocess.CompletedProcess(argv, 1, stdout="", stderr="command_timeout")
 
 

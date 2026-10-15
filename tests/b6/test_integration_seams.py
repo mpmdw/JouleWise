@@ -105,19 +105,19 @@ class SmokeDeskRoutingTests(DeskCase):
         prepared = self.prepared()
         calls = []
 
-        def accept_archive(archive, plan, registration_dir, **kwargs):
-            calls.append((archive, plan, registration_dir, kwargs))
-            return AcceptanceResult('ACCEPT', (), (), False), None
+        def harvest(argv, **kwargs):
+            calls.append(argv)
+            write_json(prepared.smoke_dir / 'archive/derived/b6-acceptance.json', {
+                'verdict': 'ACCEPT', 'counting': True, 'flag_counts': {}, 'excluding': []})
+            return mock.Mock(returncode=0)
 
-        with mock.patch.object(smoke, '_session_desk', return_value=accept_archive):
-            report = smoke.desk(prepared, driver_exit=0, run=lambda argv, check: mock.Mock(returncode=0),
-                                advance_pin=lambda *a, **k: None)
+        report = smoke.desk(prepared, driver_exit=0, run=harvest, advance_pin=lambda *a, **k: None)
         self.assertEqual(len(calls), 1)
-        archive, plan, registration_dir, kwargs = calls[0]
-        self.assertEqual(archive, prepared.smoke_dir / 'archive')
-        self.assertEqual(plan, {'plan_id': 'SMOKE-test'})
-        self.assertEqual(registration_dir, prepared.registration_dir)
-        self.assertTrue(kwargs['smoke'])
+        argv = calls[0]
+        self.assertTrue(argv[1].endswith('scripts/harvest_b6_session.py'))
+        self.assertIn('--smoke', argv)
+        self.assertNotIn('--prepare-desk', argv)
+        self.assertEqual(argv[argv.index('--registration-dir') + 1], str(prepared.registration_dir))
         self.assertEqual(report['acceptance']['verdict'], 'ACCEPT')
         self.assertEqual(report['errors'], [])
 
@@ -127,3 +127,25 @@ class SmokeDeskRoutingTests(DeskCase):
         for code in ('agent.presence', 'idle.wait_cap_skip', 'sleep.in_run'):
             self.assertTrue(smoke._is_physical(code), code)
         self.assertFalse(smoke._is_physical('idle.waited'))
+
+    def test_stored_smoke_judgment_keeps_number_exclusions_physics_and_pending_distinct(self):
+        from joulewise.b5 import chain
+        prepared = self.prepared()
+        path = prepared.measurement / 'configs/campaigns' / PACKS['alpha'] / 'plan_tree.json'
+        reduced = smoke.reduce_tree(json.loads(path.read_text()), smoke.compose.registered_smoke_keep(PACKS['alpha']))
+        path.write_text(json.dumps(reduced))
+        journal = prepared.custody / 'night' / chain.STAGE_JOURNAL
+        journal.write_text(''.join(json.dumps({'stage_id': stage.stage_id, 'rc': 0}) + '\n'
+                                   for stage in chain.stage_plan(reduced) if stage.in_chain))
+        for rc, code, expected in ((0, None, 'pass'), (0, 'model.stack_differs_from_registered', 'fail'),
+                                    (0, 'calibration.operative_bound_above_stop', 'physics'),
+                                    (6, 'precheck.acceptance_unavailable', 'pass')):
+            def harvest(argv, **kwargs):
+                write_json(prepared.smoke_dir / 'archive/derived/b6-acceptance.json', {
+                    'mode': 'smoke', 'verdict': 'UNAVAILABLE' if rc == 6 else 'EXCLUDE' if code else 'ACCEPT',
+                    'counting': code is None, 'flag_counts': {code: 1} if code else {},
+                    'excluding': [{'code': code, 'scope': 'window'}] if code and rc == 0 else []})
+                return mock.Mock(returncode=rc)
+            with self.subTest(code=code):
+                report = smoke.desk(prepared, driver_exit=0, run=harvest, advance_pin=lambda *a, **k: None)
+                self.assertEqual(report['status'], expected)

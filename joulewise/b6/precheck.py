@@ -216,7 +216,11 @@ def model_files(tree, measurement_root, pins, *, identity=None) -> tuple[dict, l
             measured[source] = artifact.get("folded_sha256") or artifact.get("sha256")
         except Exception:
             measured[source] = None
-        if measured[source] is None or measured[source] != expected.get(source):
+        if measured[source] is None:
+            errors.append(f"model.identity_unmeasured: {source}")
+        elif not expected.get(source):
+            errors.append(f"model.source_unpinned: {source}")
+        elif measured[source] != expected[source]:
             errors.append(f"model.hash_mismatch: {source}")
     return {"expected": expected, "measured": measured}, errors
 
@@ -401,7 +405,7 @@ def _default_disk_measurement(ctx, measurement, state_root, seams):
 
 def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None,
                  registration_dir=None, thresholds=None, ctx=None, seams=None, acceptance=None,
-                 disk_targets=None):
+                 disk_targets=None, reap=True):
     measurement = Path(measurement_root)
     registration = Path(registration_dir or measurement / REGISTRATION_RELATIVE)
     ledger = Path(ledger or measurement / plan.DEFAULT_LEDGER_RELATIVE)
@@ -428,7 +432,12 @@ def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None
     limits = thresholds_for(measurement, pack_id, registration, thresholds)
     started = ctx.stamp()
     tree = json.loads((pack_root / "plan_tree.json").read_text())
-    pins = json.loads((registration / "identity_pins.json").read_text())
+    pin_error = None
+    try:
+        from joulewise.b6.registration import load_identity_pins
+        pins = load_identity_pins(registration)
+    except (OSError, ValueError) as exc:
+        pins, pin_error = {}, type(exc).__name__
     # These values feed the fingerprint and disk smoke budget, so obtain them
     # before that decision; all slow work remains ahead of the physics dwell.
     models, model_errors = model_files(tree, measurement, pins, identity=seams.model_identity)
@@ -441,6 +450,8 @@ def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None
               "fingerprint_sha256": fingerprint.digest(fp), "smoke_required": smoke,
               "smoke_reason": reason, "readings": {"model_files": models}}
     flags, readings = result["predicted_flags"], result["readings"]
+    if pin_error:
+        flags.append({"code": "model.identity_unpinned", "source": "identity_pins", "observed": pin_error})
 
     def wait(code, hazard, observed, limit, remedy="wait_and_remeasure", retry=None):
         result["would_refuse"].append({"code": code, "hazard": hazard, "observed": observed,
@@ -468,10 +479,24 @@ def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None
                     if disk_targets is not None else _default_disk_measurement(ctx, measurement, state_root, seams))
     judged(disk, disk_reading,
            disk_limits, "disk.low", "wake_orchestrator")
-    readings["orphans_killed"] = reap_orphans(ctx, collect=seams.orphan_collect, kill=seams.kill,
-                                            process_uid=seams.process_uid)
-    if model_errors:
-        result["certain_exclusion"] = {"source": "model_hash", "reasons": model_errors}
+    if reap:
+        readings["orphans_killed"] = reap_orphans(ctx, collect=seams.orphan_collect, kill=seams.kill,
+                                                process_uid=seams.process_uid)
+    else:
+        try:
+            readings["orphans_observed"] = {"rows": seams.orphan_collect(), "error": None}
+        except Exception as exc:
+            readings["orphans_observed"] = {"rows": [], "error": type(exc).__name__}
+    mismatches = [reason for reason in model_errors if reason.startswith(
+        ("model.hash_mismatch:", "plan.dispatch_unresolved:"))]
+    if mismatches:
+        result["certain_exclusion"] = {"source": "plan" if any(reason.startswith("plan.")
+            for reason in mismatches) else "model_hash", "reasons": mismatches}
+    for reason in model_errors:
+        if reason not in mismatches:
+            code = reason.split(":", 1)[0]
+            flags.append({"code": "roster.dispatch_unresolved" if code == "plan.dispatch_unresolved" else code,
+                          "source": "model_files", "observed": reason})
     try:
         evidence = synthetic_session(pack_root, measurement, rows,
                                      {"model_hashes": models["measured"], "runtime_versions": runtime},
@@ -479,7 +504,6 @@ def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None
     except ValueError as exc:
         if not str(exc).startswith("plan.dispatch_unresolved:"):
             raise
-        result["certain_exclusion"] = result["certain_exclusion"] or {"source": "model_hash", "reasons": [str(exc)]}
         result["acceptance"] = {"status": "skipped", "reason": str(exc)}
     else:
         if evidence.captures[0].bound_ms is None:

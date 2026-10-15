@@ -1,4 +1,4 @@
-"""Small merge contracts. Production resolves to missing lanes until merge."""
+"""Small lane contracts and their production adapters."""
 from __future__ import annotations
 
 import json
@@ -157,8 +157,20 @@ class Lanes:
     analysis: A1
 
 
-def resolve() -> Lanes:
-    return Lanes(PrecheckStub(), DriverStub(), DeskStub(), HarvestStub(), AnalysisStub())
+def resolve(repo_root=None, loop_root=None, *, run=None, config=None, clock=None) -> Lanes:
+    if repo_root is None or loop_root is None:
+        return Lanes(PrecheckStub(), DriverStub(), DeskStub(), HarvestStub(), AnalysisStub())
+    import subprocess
+    from joulewise.b6.analysis_lane import AnalysisLane, HarvestLane
+    from joulewise.b6.precheck_lane import PrecheckLane
+    from joulewise.b6.driver_lane import DriverLane
+    from joulewise.b6.desk_lane import DeskLane
+    options = {"config": config}
+    if clock is not None:
+        options["clock"] = clock
+    return Lanes(PrecheckLane(repo_root, loop_root, run or subprocess.run),
+                 DriverLane(repo_root, loop_root, run or subprocess.run, **options),
+                 DeskLane(repo_root, loop_root, run or subprocess.run), HarvestLane(), AnalysisLane())
 
 
 def collection_live(loop_root) -> bool:
@@ -209,7 +221,8 @@ class Waker:
             seq = record["seq"]
             label = f"com.joulewise.b6wake.{seq}"
             path = self.root / f"{label}.plist"
-            path.write_bytes(plistlib.dumps({"Label": label, "ProgramArguments": self.argv,
+            argv = [arg.replace("{wake_record}", str(record_path.resolve())) for arg in self.argv]
+            path.write_bytes(plistlib.dumps({"Label": label, "ProgramArguments": argv,
                                              "RunAtLoad": True, "ProcessType": "Background"}))
             record.update(bootstrap_attempted=True, job_deferred=False)
             record_path.write_text(json.dumps(record) + "\n")

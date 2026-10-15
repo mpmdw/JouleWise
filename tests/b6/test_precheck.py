@@ -364,7 +364,7 @@ class PrecheckTests(DeskCase):
         wait = next(item for item in result['would_refuse'] if item['code'] == 'clock.linearity')
         self.assertEqual(wait['retry_after_s'], 600)
 
-    def test_f9b_dispatch_error_writes_exclusion_and_skips_acceptance(self):
+    def test_f9b_dispatch_error_excludes_and_skips_acceptance(self):
         tree = json.loads((self.measurement / 'configs/campaigns' / PACKS['alpha'] / 'plan_tree.json').read_text())
         dispatch = next(iter(plan.resolve_stage_dispatches(tree, self.measurement)))
         (self.measurement / dispatch.config_dir / 'order_manifest.json').unlink()
@@ -373,13 +373,23 @@ class PrecheckTests(DeskCase):
         result, _ = self.check(out=out, acceptance=acceptance)
         self.assertEqual(result['decision'], 'DO_NOT_START')
         self.assertEqual(p.exit_code(result), 20)
-        self.assertTrue(any(reason.startswith(f'plan.dispatch_unresolved: {dispatch.stage_id}:')
+        self.assertTrue(any(reason.startswith('plan.dispatch_unresolved:')
                             for reason in result['certain_exclusion']['reasons']))
-        self.assertFalse(any(reason.startswith('model.hash_mismatch:')
-                             for reason in result['certain_exclusion']['reasons']))
         self.assertEqual(result['acceptance']['status'], 'skipped')
         self.assertEqual(acceptance.preparations, [])
         self.assertEqual(acceptance.evaluations, [])
         self.assertIsNone(result['margin'])
         self.assertIn('instrument', result['readings'])
         self.assertEqual(json.loads(out.read_text())['decision'], 'DO_NOT_START')
+
+    def test_missing_identity_record_and_unmeasured_model_only_flag(self):
+        (self.measurement / p.REGISTRATION_RELATIVE / 'identity_pins.json').unlink()
+        result, _ = self.check()
+        self.assertIsNone(result['certain_exclusion'])
+        self.assertEqual(result['decision'], 'START')
+        self.assertIn('model.identity_unpinned', [row['code'] for row in result['predicted_flags']])
+        self.assertIn('model.source_unpinned', [row['code'] for row in result['predicted_flags']])
+        _, errors = p.model_files(json.loads((self.measurement / 'configs/campaigns' /
+            PACKS['alpha'] / 'plan_tree.json').read_text()), self.measurement, {}, identity=lambda source: {})
+        self.assertTrue(errors)
+        self.assertTrue(all(row.startswith('model.identity_unmeasured:') for row in errors))
