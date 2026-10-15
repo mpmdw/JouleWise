@@ -175,13 +175,14 @@ is gone.
 ## Decisions made at the integration (the texts determine them)
 
 - **The loop joins stage 1**, inert until its adapters exist (above).
-- **Driver M2 needs no change for the replications.** The driver lane asked that `window_max_s` add the pause
-  limit and the session wait budget (7,200 + 7,200 s). `joulewise/b5/plan.py` sets `window_max_s` to the pack's
-  programmed span plus the 3,300 s arm cap, rounded up to a minute: 110,220 s (30.6 h) for ALPHA, 112,620 s for
-  BETA, 99,060 s for GAMMA (`configs/campaigns/v5_claim_25g83/sizing_b5.json`, whose member allowance is about
-  595 s against a measured 135 to 150 s per run). A 125-run session takes about 6 h; with both budgets spent it
-  takes about 10 h, 20 h inside the deadline and inside the chain's 24 h calibration horizon. A pack whose
-  sizing lacks that slack must add the budgets in its own sizing.
+- **Driver M2: the session's kill deadline covers both budgets.** The driver lane asked that `window_max_s` add
+  the pause limit and the session wait budget (7,200 + 7,200 s), and the registration draft (section 7 item 2)
+  registers it. `joulewise/b5/plan.py` now writes `window_max_s` = the pack's programmed span + the 3,300 s arm
+  cap + 7,200 + 7,200, rounded up to a minute: 124,620 s (34.6 h) for ALPHA, 127,020 s for BETA, 113,460 s for
+  GAMMA (spans from `configs/campaigns/v5_claim_25g83/sizing_b5.json`). The replications had the room already
+  (a 125-run session takes about 6 h, about 10 h with both budgets spent, against 30.6 h before), so this changes
+  no replication outcome; it makes the code say what the registration says, and it holds for a pack whose sizing
+  has less slack. The dead-man time moves with it (the installer derives it from `window_max_s`).
 - **One block-6 registration directory**, `configs/b6/registration/`, for the pre-check, the smoke desk and the
   session harvest (open issue 2); a registration the pre-check cannot read is the flag
   `precheck.acceptance_unavailable`, not a stop.
