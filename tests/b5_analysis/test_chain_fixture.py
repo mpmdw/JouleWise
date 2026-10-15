@@ -555,9 +555,15 @@ class ChainTests(unittest.TestCase):
             self.assertEqual(lineage['pack_sha256'],ai.committed_pack_tree_sha256(Path(lineage['pack_root'])),pack)
             if pack=='gamma':
                 manifest=json.loads((ROOT/'configs/campaigns'/PACK_IDS[pack]/'analysis_manifest_v3.json').read_bytes())
+                rows=[SimpleNamespace(launch_lineage=lineage)]
                 for contrast in manifest['contrasts']:
                     for family in (contrast['condition_a_id'],contrast['condition_b_id']):
-                        self.assertTrue(ai._frozen_consumer_identity_set([SimpleNamespace(launch_lineage=lineage)],family),family)
+                        # Open question Q-CONSUMERID: unchanged, the sealed
+                        # (unprojected) pack authenticates no declared set ...
+                        self.assertEqual(ai._frozen_consumer_identity_set(rows,family),frozenset(),family)
+                        # ... and the conditional fixture option reads the sealed unit.
+                        with self.fixture.seams():
+                            self.assertTrue(ai._frozen_consumer_identity_set(rows,family),family)
     def test_40_c4_alpha(self):self.check_c4('alpha')
     def test_34_relocated_allowance_artifact_authenticates(self):
         w=self.window('alpha')

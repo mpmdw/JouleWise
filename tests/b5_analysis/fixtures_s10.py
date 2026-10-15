@@ -102,10 +102,68 @@ def conditional_exact_stack_seam():
         yield
 
 
+CONDITIONAL_SEAMS+=(
+    ('consumer','analysis_engine.inputs._frozen_consumer_identity_set (hazard lineage over an unprojected sealed pack only)',
+     'CONDITIONAL on open question Q-CONSUMERID (stage S10 resumed director, 2026-10-15): the claim gate authenticates '
+     'a contrast arm\'s declared consumer identities only from the pack\'s U8 freeze receipt and identity-projection '
+     'receipt, arm-time artifacts of the ARM route. The block-5 sealed packs are unprojected (state "unprojected", '
+     'freeze_receipt null; the hazard route pins identities through identity_pins.json), so on a block-5 window every '
+     'arm refuses consumer_identity_set_unauthenticated and every contrast floor is refused. The fixture proceeds on '
+     'the recommended reading: on a hazard lineage whose pack projection is unprojected with no freeze receipt, the '
+     'declared set is the scientific identities of the config files that the sealed pack\'s one identity unit for '
+     'that family inventories, read under the committed pack tree the lineage digest authenticates (pack digest, one '
+     'unit per family and each file\'s sha256 still checked); only the two arm-time receipts and the unit\'s null '
+     'config-set pin are not required. Results from C9 on, and the joined run from step 9 on, are conditional on the '
+     'ruling.'),
+)
+
+
+@contextlib.contextmanager
+def conditional_consumer_identity_seam():
+    """Apply Q-CONSUMERID's fixture-only option; see CONDITIONAL_SEAMS."""
+    from joulewise.analysis_engine import inputs
+    from joulewise import window_lineage
+    original=inputs._frozen_consumer_identity_set
+    def declared(evidence,condition_family_id):
+        result=original(evidence,condition_family_id)
+        if result is None or result:
+            return result
+        rows=[row.launch_lineage for row in evidence if isinstance(row.launch_lineage,dict)]
+        if not rows or len(rows)!=len(evidence) or not all(window_lineage.is_hazard_lineage(r.get('launch_lineage')) for r in rows):
+            return result
+        roots={r.get('pack_root') for r in rows};digests={r.get('pack_sha256') for r in rows}
+        if len(roots)!=1 or len(digests)!=1:
+            return result
+        try:
+            pack_root=Path(next(iter(roots))).resolve(strict=True)
+            if inputs.committed_pack_tree_sha256(pack_root)!=next(iter(digests)):
+                return result
+            tree,_raw=inputs._load_json_object(pack_root/'plan_tree.json','consumer identity plan tree')
+            attachments=tree['arm_attachments'];projection=attachments['identity_pin_projection']
+            if projection.get('state')!='unprojected' or attachments['arm_readiness'].get('freeze_receipt') is not None:
+                return result
+            units=[u for u in projection['identity_units']
+                   if any(isinstance(b,dict) and b.get('family')==condition_family_id for b in u['consumer_bindings'])]
+            if len(units)!=1:
+                return result
+            identities=set()
+            for row in units[0]['config_inventory']:
+                path=inputs._lexical_child_path(pack_root,row['path'],label='sealed identity config',require_directory=False)
+                raw=inputs._read_analysis_input(path,label='sealed identity config')
+                if hashlib.sha256(raw).hexdigest()!=row['sha256']:
+                    return result
+                identities.add(inputs.scientific_config_identity_sha256(inputs.parse_json_bytes(raw,require_canonical=False)))
+            return frozenset(identities) or result
+        except (inputs.AnalysisInputError,KeyError,OSError,TypeError,ValueError,AttributeError):
+            return result
+    with mock.patch.object(inputs,'_frozen_consumer_identity_set',declared):
+        yield
+
+
 @contextlib.contextmanager
 def conditional_seams():
     """Every conditional seam of CONDITIONAL_SEAMS, as one context."""
-    with conditional_aggregate_lineage_seam(),conditional_exact_stack_seam():
+    with conditional_aggregate_lineage_seam(),conditional_exact_stack_seam(),conditional_consumer_identity_seam():
         yield
 
 

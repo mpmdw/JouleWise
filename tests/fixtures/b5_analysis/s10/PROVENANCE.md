@@ -16,6 +16,16 @@
 > producer-side seam listed below. ChainTests C1 asserts the claim gate's own source-state admission on every
 > kept member.
 >
+> Two more fixture inconsistencies were then cured the same way (each window rebuilt by the pinned
+> programs): the builder wrote every campaign manifest with a null analysis-manifest identity, while
+> run_campaign records the contrast pack's prospective manifest id on GAMMA's science stages (the claim gate
+> selects GAMMA's cooldown evidence by it; ChainTests test_38); and the lineage recorded the plan tree's file
+> digest while production records the measurement clone's committed pack-tree digest, which the claim gate
+> recomputes at the lineage's pack root, so the synthetic measurement checkout is now a Git clone with its files
+> committed, at build and again at restore (`fixtures_s10.commit_checkout`; ChainTests test_39). The scripts that
+> built the windows (`build_clean.py`, `prepare_exports.py`) are archived with the director's logs in
+> `/Users/edr/night-archive/b5-consults/l9-rulings/s10/director-k2/`.
+>
 > **State (stage S10 continuation, 2026-10-14):** ALPHA, BETA and GAMMA are built by the pinned programs and committed. C0 to C4, C-B1 and C-F1 pass on the real programs. The mint passes the per-cell runtime identity check (round K2) and, under the conditional Q-LINEAGE seam below, reaches artifact rebinding; C5 onward and the joined driver from step 5 are conditional on that question. Exact evidence: `/Users/edr/night-archive/b5-consults/l9-rulings/s10/`.
 
 K1 built BETA (125 members, 1,821,172 archive bytes, 575.399521 s wrapper)
@@ -140,6 +150,7 @@ raw build trees before retrying, and publish successful archives atomically.
 | consumer | `windows.sealed_pack_table (partial builds only)` | Pinned S0 peers satisfy the full-block selection fence until every S10 window exists; only the built sealed S10 target is opened |
 | consumer | `mint_floor_artifact_generalized._actual_v2_git_state` | The task forbids commits and intentionally leaves an uncommitted fixture; supply the actual base HEAD as the synthetic clean checkout observation |
 | consumer, **conditional** | `mint_floor_artifact_generalized._common_minted_artifact_launch_lineage` (aggregate only; `fixtures_s10.CONDITIONAL_SEAMS`) | Open question Q-LINEAGE: the aggregate floor joins producers from two windows, so its component lineages differ and the unchanged rule refuses. The fixture omits the aggregate carrier only when every component carries one and they differ; per-producer equality and component authentication are unchanged. Every result from C5 on is conditional on the ruling. |
+| consumer, **conditional** | `analysis_engine.inputs._frozen_consumer_identity_set` (hazard lineage over an unprojected sealed pack only; `fixtures_s10.CONDITIONAL_SEAMS`) | Open question Q-CONSUMERID: the claim gate authenticates a contrast arm's declared consumer identities only from the U8 freeze and identity-projection receipts, which the unprojected block-5 sealed packs never carry, so every block-5 contrast floor refuses `consumer_identity_set_unauthenticated`. The fixture reads the declared set from the sealed pack's one identity unit for the family (its config inventory under the committed pack tree the lineage digest authenticates; file digests checked). Results from C9 on, and the joined run from step 9 on, are conditional on the ruling. |
 | consumer, **conditional** | `analysis_manifest_v3._authenticate_floor_dependencies` (exact_stack_only lookup only; `fixtures_s10.CONDITIONAL_SEAMS`) | Open question Q-EXACTSTACK: the sealed GAMMA manifest declares exact_stack_only transport, and the finalizer then looks for a floor cell keyed on the consumer family itself, while every block-5 floor is measured on its floor-pack family and names the consumers in its same-stack transport group. The fixture serves the consumer by its transport group's single source cell (group admission and stack identity still checked). Results from C8 on are conditional on the ruling. |
 
 With three windows the pack-table seam is inactive (the ordinary index is
