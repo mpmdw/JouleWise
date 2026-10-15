@@ -273,7 +273,7 @@ There was one conflict with existing code: block 6's validator requires minimum_
 
 Ruling: both passes register 1/1. "Minimum one pass" is a rule of the analysis: the paper prints pass 2 where it exists and states the per-model pass count. No validator change. Applied by the lead on the config lane.
 
-## Addendum 7 (16:04 PDT): the agreement test (Opus comparer, JouleWise-data claude/bytes-agreement @ 3db4f02)
+## Addendum 7 (16:00 PDT): the agreement test (Opus comparer, JouleWise-data claude/bytes-agreement @ 3db4f02)
 
 Rails gross and flagged-inclusive cells agree to 1e-9 in every campaign and stage, including the blinded one. So do all 84 H1 words in the four main campaigns, k, the VIF and the active-or-resident answer. Every difference is attributed.
 
