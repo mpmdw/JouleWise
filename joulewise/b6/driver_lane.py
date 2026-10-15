@@ -6,6 +6,7 @@ import datetime as dt
 import json
 import math
 import os
+import re
 from pathlib import Path
 import subprocess
 import time
@@ -16,6 +17,20 @@ from joulewise.b6.lanes import Done, LaneMissing, Prepared, Refused, Running
 from joulewise.session_structure import _physical
 
 LABELS = ("com.joulewise.night", "com.joulewise.night.deadman")
+ARM_UNMEASURED_REFUSES = frozenset({"instrument"})  # joulewise.b5.driver, not imported at the desk
+
+
+def process_group_alive(pgid):
+    """A signal-0 probe of the chain's process group; it signals nothing."""
+    if type(pgid) is not int or pgid <= 1:
+        return False
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 PHYSICAL_STOPS = {"sampler_down": "sampler", "disk_exhausted": "disk", "thermal_emergency": "thermal",
                   "session_time_limit": "time_limit", "agent_pause_beyond_2h": "agent-pause-budget",
                   "operative_bound_above_stop": "calibration.operative_bound_above_stop"}
@@ -43,12 +58,13 @@ def metadata_path(prepared):
 
 class DriverLane:
     def __init__(self, measurement, loop_root, run=subprocess.run, *, config=None, clock=time.time,
-                 block_root=None, roots=None, launchctl_bin="launchctl", env=None):
+                 block_root=None, roots=None, launchctl_bin="launchctl", env=None, group_alive=None):
         self.measurement, self.root = Path(measurement).resolve(), Path(loop_root).resolve()
         self.run, self.clock = run, clock
         self.config = config if config is not None else read(self.measurement / "configs/b6/loop.json")
         self.block_root, self.roots, self.launchctl_bin = block_root, roots, str(launchctl_bin)
         self.env = env
+        self.group_alive = group_alive or process_group_alive
 
     def prepare_session(self, layout, rendered, *, smoke, keep, staging_root):
         if layout.fixed_bytes is None or len(layout.packs) != 1 or not layout.campaign_id:
@@ -110,6 +126,27 @@ class DriverLane:
         # A failed census is not proof the job has gone.
         raise RuntimeError("launchd job state unavailable")
 
+    def _job_pending_or_running(self, label, metadata):
+        """True while the night job may still produce a terminal record.
+
+        The night job is a calendar job: launchd keeps it loaded after its one
+        run ends, so "loaded" alone is not "running". It counts as ended when
+        launchd reports at least one run, no running process, and the chain's
+        process group (night/chain.started pgid) is gone.
+        """
+        result = self.run([self.launchctl_bin, "print", f"gui/{os.getuid()}/{label}"],
+                          check=False, capture_output=True, text=True, timeout=10, env=self.env)
+        started = read(Path(metadata["paths"]["custody"]) / "night/chain.started")
+        if result.returncode != 0:
+            # _job raises unless launchd says the job is absent.
+            return self._job(label) or self.group_alive(started.get("pgid"))
+        text = result.stdout or ""
+        runs = re.search(r"^\s*runs = (\d+)\s*$", text, re.M)
+        running = re.search(r"^\s*state = running\s*$", text, re.M) or re.search(r"^\s*pid = \d+\s*$", text, re.M)
+        if running or runs is None or int(runs.group(1)) == 0:
+            return True
+        return self.group_alive(started.get("pgid"))
+
     def _installer(self, metadata, *, uninstall=False):
         paths = metadata["paths"]
         measurement = Path(paths["measurement"])
@@ -130,6 +167,7 @@ class DriverLane:
             # state. A plan whose install never completed was never launched:
             # install it now while its t0 still leaves the installer its 300 s,
             # else stop and say so (the loop holds; a resume gets a new id).
+            metadata = self._adopt_plan(path, metadata, prepared)
             terminal = Path(prepared.terminal_path).exists()
             if metadata.get("install_rc") == 0 or terminal or self._job(LABELS[0]):
                 return Running(str(path))
@@ -152,6 +190,25 @@ class DriverLane:
         metadata.update(inputs=inputs, runs_roots=list(record["runs_roots"].values()), install_attempted=True)
         write(path, metadata)
         return self._install_and_record(path, metadata)
+
+    def _adopt_plan(self, path, metadata, prepared):
+        """Recover what a crash between the plan write and the metadata write lost.
+
+        The plan records t0 and both runs roots; the desk compresses the roots
+        named here, and the installer reads t0 from the plan itself.
+        """
+        plan_record = read(prepared.plan_path)
+        bindings = (plan_record.get("hazard_window") or {}).get("bindings") or {}
+        roots = [bindings[key] for key in ("claim_runs_root", "bound_runs_root") if isinstance(bindings.get(key), str)]
+        changed = False
+        if roots and set(metadata.get("runs_roots") or ()) != set(roots):
+            metadata["runs_roots"], changed = roots, True
+        if "t0_epoch_s" not in metadata.get("inputs", {}) and "t0_epoch_s" in plan_record:
+            metadata.setdefault("inputs", {})["t0_epoch_s"] = plan_record["t0_epoch_s"]
+            changed = True
+        if changed:
+            write(path, metadata)
+        return metadata
 
     def _install_and_record(self, path, metadata):
         installed = self._installer(metadata)
@@ -194,9 +251,22 @@ class DriverLane:
                     hazards.append(reason)
                 if arm.get("go") is False or arm.get("decision") in ("REFUSE", "REFUSED", "NO_GO"):
                     for module, verdict in (arm.get("verdicts") or {}).items():
-                        if (verdict.get("status") if isinstance(verdict, dict) else verdict) == "REFUSE":
+                        status = verdict.get("status") if isinstance(verdict, dict) else verdict
+                        # The driver also refuses an UNMEASURED instrument
+                        # (b5.driver.ARM_UNMEASURED_REFUSES): the sampler.
+                        if status == "REFUSE" or (status == "UNMEASURED" and module in ARM_UNMEASURED_REFUSES):
                             if module in ("clock", "battery", "thermal", "contention", "disk", "instrument", "agents"):
                                 hazards.append(module)
+                    # The arm's own agent censuses (before the dwell and at GO)
+                    # refuse with every module PASS; their record names them.
+                    record = read(Path(metadata["paths"]["custody"]) / "hazards/arm.json")
+                    censuses = (record.get("census"), record.get("census_at_go"),
+                                arm.get("census"), arm.get("census_at_go"))
+                    if (any(isinstance(c, dict) and c.get("clean") is False for c in censuses)
+                            or record.get("refused_at") in ("census", "census_at_go")
+                            or any(str(r).startswith("agent census") or "agent process present" in str(r)
+                                   for r in arm.get("reasons") or ())):
+                        hazards.append("agent")
                     for module, readings in (arm.get("hazards") or {}).items():
                         if module in ("clock", "battery", "thermal", "contention", "disk", "instrument") and any(
                                 (row.get("verdict") or {}).get("status") == "REFUSE" for row in readings):
@@ -211,10 +281,12 @@ class DriverLane:
                 stop = next((row for row in reversed(journal) if row.get("stage_id") == "chain.stop"), {})
                 reason = PHYSICAL_STOPS.get(stop.get("reason", stop.get("kind")))
             return Done(rc if type(rc) is int else (0 if result.get("verdict") == "GO" else 1), reason)
-        if self._job(LABELS[0]):
+        if self._job_pending_or_running(LABELS[0], metadata):
             return handle
-        # No job and no terminal: retain all bytes, desk with a structural
-        # crash (design 13.1), then hold before another pack can arm.
+        # No terminal, and either launchd no longer holds the job or the job's
+        # one run has ended, and the chain's process group is gone: retain all
+        # bytes, desk with a structural crash (design 13.1), then hold before
+        # another pack can arm.
         self._uninstall(path, metadata)
         metadata["lost"] = True
         write(path, metadata)

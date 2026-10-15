@@ -42,7 +42,7 @@ def counting_ids(state, pack):
 def outcome(reg, line, catalog):
     if not line.structure_ok:
         return {"status": "not_counting", "cause": "collection.structure_failed"}
-    if line.harvest_rc in (2, 3, 4, 5):
+    if line.harvest_rc not in (0, 6):  # 2-5 and any other exit: a harvest fault
         return {"status": "pending_harvest", "cause": None}
     if line.harvest_rc == 6:
         return {"status": "pending_registration", "cause": "precheck.acceptance_unavailable"}

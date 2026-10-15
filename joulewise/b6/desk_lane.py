@@ -108,6 +108,11 @@ class DeskLane:
             (paths["staging"] / "harvest.stderr").write_text(result.stderr or "")
         except (OSError, subprocess.TimeoutExpired):
             harvest_rc = 3
+        if harvest_rc not in (0, 2, 3, 4, 5, 6):
+            # Any other exit (1 from the live runner's timeout, a signal) is a
+            # harvest program fault: pending re-harvest, never a judged session.
+            (paths["staging"] / "harvest.exit").write_text(f"{harvest_rc}\n")
+            harvest_rc = 3
         harvest_seconds = time.monotonic() - harvest_started
         reg = read(self.measurement / f'configs/b6/packs/{metadata["packs"][0]}/registration.json')
         structure = session_structure.check(archive=paths["archive"], custody=paths["custody"],
@@ -115,10 +120,13 @@ class DeskLane:
         defects = list(structure["reasons"]) if structure["verdict"] in ("STRUCTURE_DEFECT", "NOT_READY") else []
         if metadata.get("lost") or (done.chain_rc != 0 and not done.physics_stop and not structure["chain_stopped"]):
             defects.append("chain_crashed")
+        acceptance = read(paths["archive"] / "derived/b6-acceptance.json") if harvest_rc in (0, 6) else {}
+        # The acceptance function's own structural failures (design 13.1: for
+        # example a whole stage absent while later stages ran) hold the loop too.
+        defects.extend(str(code) for code in acceptance.get("structural_failures") or ())
         structure.update(adapter_structure_defects=sorted(set(defects)))
         structure_path = paths["staging"] / "structure.json"
         write(structure_path, structure)
-        acceptance = read(paths["archive"] / "derived/b6-acceptance.json")
         catalog = load_catalog(self.measurement / "configs/b6/flag_catalog_b6.json")
         # Never put an energy-derived or otherwise restricted flag code in the
         # loop's public line, including through its pack-level projection.
@@ -137,7 +145,10 @@ class DeskLane:
                   for row in structure["per_roster_stage"]}
         return SessionLine(prepared.session_id, tuple(metadata["packs"]), chain_rc=done.chain_rc,
             harvest_rc=harvest_rc, verdict=structure["harvest_verdict"], physics_stop=done.physics_stop or structure["physical_stop"],
-            window_flags=tuple(sorted(set(flags))), pack_flags=pack_flags, counts=counts,
+            # Only codes the block-6 catalog classes STRUCTURE reach the loop's
+            # records and mail, whatever blinding a flag record carried.
+            window_flags=tuple(sorted({code for code in flags if catalog.entry(code).get("blinding") == "STRUCTURE"})),
+            pack_flags=pack_flags, counts=counts,
             structure_ok=not defects, structure_defects=tuple(sorted(set(defects))),
             minutes={"chain": (structure["chain_seconds"] or 0) / 60, "harvest": harvest_seconds / 60,
                      "desk": (time.monotonic() - started) / 60}, compressed=compressed_rc == 0)

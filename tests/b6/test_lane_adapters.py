@@ -285,3 +285,94 @@ class DriverStatusTests(DeskCase):
             self.assertIsInstance(self.driver.launch(self.prepared), Running)
         self.assertEqual(read(self.meta)['inputs']['t0_epoch_s'], 1800000480)
         self.assertTrue(read(self.meta)['install_attempted'])
+
+
+class ReviewRegressionTests(DeskCase):
+    """Defects the executing review reproduced (stage 2, DISPOSITIONS-adapters.md)."""
+
+    def driver(self, name, stdout):
+        from joulewise.b6.driver_lane import DriverLane, metadata_path, write
+        from joulewise.b6.lanes import Prepared
+        root = self.root / name
+        prepared = Prepared(name, str(root / 'session/custody/night_plan.json'),
+                            str(root / 'session/custody/night/result.json'), 18000)
+        write(metadata_path(prepared), {'prepared': vars(prepared), 'inputs': {}, 'smoke': None,
+              'paths': {'measurement': str(root / 'm'), 'staging': str(root / 'staging'),
+                        'custody': str(root / 'session/custody')}})
+        run = lambda argv, **kwargs: SimpleNamespace(returncode=0, stdout=stdout, stderr='')
+        return prepared, DriverLane(root / 'm', root / 'loop', run, launchctl_bin='/synthetic/launchctl',
+                                    group_alive=lambda pgid: False)
+
+    def test_arm_census_and_blocking_unmeasured_instrument_are_physics_refusals(self):
+        from joulewise.b6.driver_lane import metadata_path, write
+        from joulewise.b6.lanes import Refused, Running
+        passing = dict.fromkeys(('clock', 'battery', 'thermal', 'contention', 'disk', 'instrument'), 'PASS')
+        for name, arm, expected in (
+                ('census', {'go': False, 'verdicts': passing,
+                            'reasons': ['agent census exit 0; agent process present: 1 x']}, 'agent'),
+                ('instrument', {'go': False, 'verdicts': {**passing, 'instrument': 'UNMEASURED'}}, 'instrument')):
+            prepared, driver = self.driver(name, '')
+            night = Path(prepared.terminal_path).parent
+            write(night / 'result.json', {'verdict': 'REFUSED', 'aborted_reason': 'night_refused_hazard'})
+            write(night / 'hazard_result.json', {'verdict': 'REFUSED', 'stage_reached': 'arm', 'arm': arm})
+            self.assertEqual(driver.status(Running(str(metadata_path(prepared)))), Refused((expected,)))
+
+    def test_loaded_calendar_job_whose_run_ended_without_terminal_is_lost(self):
+        from joulewise.b6.driver_lane import metadata_path, read
+        from joulewise.b6.lanes import Done, Running
+        prepared, driver = self.driver('ended', 'state = not running\nruns = 1\nlast exit code = 1\n')
+        handle = Running(str(metadata_path(prepared)))
+        self.assertEqual(driver.status(handle), Done(1, None))
+        self.assertTrue(read(metadata_path(prepared))['lost'])
+        prepared, driver = self.driver('waiting', 'state = not running\nruns = 0\n')
+        self.assertEqual(driver.status(Running(str(metadata_path(prepared)))), Running(str(metadata_path(prepared))))
+        prepared, driver = self.driver('orphaned', 'state = not running\nruns = 1\n')
+        driver.group_alive = lambda pgid: True
+        self.assertIsInstance(driver.status(Running(str(metadata_path(prepared)))), Running)
+
+    def test_k1_holds_on_acceptance_structure_filters_codes_and_faults_unexpected_exits(self):
+        from dataclasses import asdict
+        from unittest.mock import patch
+        from joulewise.b6.desk_lane import DeskLane
+        from joulewise.b6.driver_lane import metadata_path, write
+        from joulewise.b6.lanes import Done, Prepared
+        from joulewise.b6 import queue
+        from joulewise.flags.catalog import load_catalog
+        root = self.root / 'desk'
+        measurement = root / 'measurement'
+        for relative in ('configs/b6/flag_catalog_b6.json', 'configs/b6/packs/alpha/registration.json'):
+            (measurement / relative).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / relative, measurement / relative)
+        prepared = Prepared('desk', str(root / 'custody/night_plan.json'), str(root / 'custody/night/result.json'), 1)
+        paths = {key: root / key for key in ('archive', 'export', 'staging', 'custody')}
+        paths['measurement'] = measurement
+        paths['staging'].mkdir(parents=True)
+        write(metadata_path(prepared), {'prepared': asdict(prepared), 'packs': ['alpha'], 'runs_roots': [],
+              'paths': {k: str(v) for k, v in paths.items()}, 'inputs': {'bracket_session_id': 'b'}})
+        catalog = load_catalog(ROOT / 'configs/b6/flag_catalog_b6.json')
+        restricted = next(code for code in catalog.codes if catalog.entry(code)['blinding'] == 'RESTRICTED')
+        archive, custody = paths['archive'], paths['custody']
+        write(archive / 'harvest.json', {'verdict': 'COLLECTED'})
+        write(archive / 'derived/yield.json', {'per_roster_stage': []})
+        write(archive / 'derived/roster.json', {'members': []})
+        write(archive / 'derived/exclusions.json', {'members_excluded': []})
+        # A restricted code recorded with the default STRUCTURE blinding.
+        (archive / 'derived/flags.jsonl').write_text(json.dumps(
+            {'code': restricted, 'blinding': 'STRUCTURE', 'scope': {'level': 'window'}}) + '\n')
+        write(archive / 'derived/b6-acceptance.json', {'structural_failures': ['structure.missing_stage_bundles'],
+                                                       'flag_counts': {restricted: 1}})
+        write(custody / 'night/result.json', {'verdict': 'GO', 'chain_exit_code': 0})
+        write(custody / 'night/chain.exited', {'exit_code': 0})
+        (custody / 'night/chain-stages.jsonl').write_text('')
+        for rc, ok in ((0, False), (1, None)):
+            desk = DeskLane(measurement, root / 'loop', lambda *a, **k: SimpleNamespace(returncode=rc, stdout='', stderr=''))
+            with patch.object(desk, '_advance', return_value=[]), \
+                 patch('joulewise.b6.desk_lane.desk_compress.compress', return_value=(4, {})):
+                line = desk.session_desk(prepared, Done())
+            self.assertNotIn(restricted, line.window_flags)
+            if rc == 0:
+                self.assertFalse(line.structure_ok)
+                self.assertIn('structure.missing_stage_bundles', line.structure_defects)
+            else:
+                self.assertEqual(line.harvest_rc, 3)
+                self.assertEqual(queue.outcome(registrations()['alpha'], line, catalog)['status'], 'pending_harvest')

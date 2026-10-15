@@ -541,7 +541,7 @@ class Loop:
             self._event("structure_defect", fields={"flags": line.window_flags})
             return
         self._transition("ROTATE")
-        if line.harvest_rc in (2, 3, 4, 5):
+        if line.harvest_rc not in (0, 6):
             self.state["harvest_fault"] = True
             self.state.setdefault("pending_sessions", {})[s["id"]] = s
             self._event("harvest_fault")
@@ -603,7 +603,7 @@ class Loop:
                 if self._missing(line):
                     atomic_state(self.root / "state.json", self.state)
                     return 0
-                if not line.structure_ok or line.harvest_rc in (2, 3, 4, 5, 6):
+                if not line.structure_ok or line.harvest_rc != 0:
                     raise ValueError("reharvest is not structurally complete")
                 original = next(a for a in self.state["attempts"] if a["session_id"] == session_id)
                 flags = set(line.window_flags) | (set(original["line"]["window_flags"]) & LOOP_WINDOW_FLAGS)
