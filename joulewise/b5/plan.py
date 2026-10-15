@@ -58,6 +58,13 @@ RECORD_SCHEMA = "joulewise.b5_window_plan_record.v1"
 # 600-2700 s dwell and the final reads (gate-prune plan section 2.2).
 T0_STAGE_CAP_S = 3300
 DWELL_CAP_S = 2700
+# Block 6 (design 6.2; driver lane M2; registration draft section 7 item 2): the
+# driver's kill deadline also covers a session that spends its whole agent-pause
+# limit and its whole idle-wait budget, so neither can end a session by timeout.
+# Literals of joulewise.b6.agent_pause.PAUSE_LIMIT_S and
+# joulewise.b6.idle_wait.SESSION_WAIT_BUDGET_S (tests.test_b5_plan checks both).
+PAUSE_LIMIT_S = 7200
+SESSION_WAIT_BUDGET_S = 7200
 DEFAULT_LEDGER_RELATIVE = "runs/calibration_observation_ledger.jsonl"
 HEAD_PIN_RELATIVE = "configs/calibration/calibration_ledger_head.json"
 PLAN_BASENAME = "night_plan.json"
@@ -878,7 +885,8 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         "SETTLE_S": str(int(settle_s)) if float(settle_s).is_integer() else repr(float(settle_s)),
     }
     env_raw = window_env_bytes(env_values)
-    window_max_s = 60 * math.ceil((programmed_span_s + T0_STAGE_CAP_S) / 60)
+    window_max_s = 60 * math.ceil(
+        (programmed_span_s + T0_STAGE_CAP_S + PAUSE_LIMIT_S + SESSION_WAIT_BUDGET_S) / 60)
     pack_sha256, pack_digest_error = None, None
     try:
         if pack_digest is None:

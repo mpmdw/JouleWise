@@ -78,9 +78,13 @@ class WindowPlanTests(WindowPlanFixture):
                 self.assertEqual(list(b5_chain.DEVIATIONS), window["chain_deviations"])
                 self.assertEqual(Path(window["bindings"]["claim_runs_root"]) / "instrument_validation" /
                                  inputs["pre_attempt_id"], Path(window["bindings"]["pre_calibration_dir"]))
-                # The window maximum carries the 3300 s T-0 stage cap (dwell cap 2700 s inside it).
+                # The window maximum carries the 3300 s T-0 stage cap (dwell cap 2700 s inside it),
+                # plus block 6's 7,200 s agent-pause limit and 7,200 s idle-wait budget.
                 span = inputs["programmed_span_s"]["seconds"]
-                self.assertEqual(60 * math.ceil((span + 3300) / 60), plan.window_max_s)
+                self.assertEqual(60 * math.ceil((span + 3300 + 7200 + 7200) / 60), plan.window_max_s)
+                from joulewise.b6 import agent_pause, idle_wait
+                self.assertEqual((agent_pause.PAUSE_LIMIT_S, idle_wait.SESSION_WAIT_BUDGET_S),
+                                 (b5_plan.PAUSE_LIMIT_S, b5_plan.SESSION_WAIT_BUDGET_S))
                 self.assertGreaterEqual(plan.window_max_s - span, b5_plan.DWELL_CAP_S)
                 # Fresh runs roots exist and are empty; the chain and its sidecar agree.
                 for name in ("claim", "bound"):
