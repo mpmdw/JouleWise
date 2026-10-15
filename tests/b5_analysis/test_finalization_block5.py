@@ -92,6 +92,32 @@ class FinalizationBlock5Tests(unittest.TestCase):
             self.assertEqual(mv3.analysis_semantics_sha256_v1(bare),mv3.analysis_semantics_sha256_v1(enriched))
             self.assertEqual(mv3.analysis_semantics_sha256_v1(enriched),mv3.analysis_semantics_sha256_v1(f['prospective']))
 
+    def test_rendered_manifest_bytes_do_not_follow_the_hash_seed(self):
+        # S10 joined run: two dry runs into two custody roots wrote finalized
+        # manifests with the same id and different bytes, because the block-5 roles
+        # were inserted in frozenset iteration order (the per-process hash seed).
+        class Ordered(frozenset):
+            order = ()
+            def __iter__(self):
+                return iter(self.order)
+        with fx.finalization_case() as f:
+            removed=f['units'].removed_run_ids()
+            paths={m['run_id']:f['runs_root']/m['run_id'] for c in f['prospective']['contrasts'] for m in c['members']
+                   if m['run_id'] not in removed}
+            arms,entries,blocks=mv3._derive_arms_and_entries(f['prospective'],manifest_dir=f['prospective_path'].parent,
+                runs_root=f['runs_root'],bundle_paths=paths,removed_run_ids=removed)
+            attachments={'arms':arms,'entries':entries,'blocks':blocks,**{role:{} for role in mv3._REQUIRED_ATTACHMENT_ROLES},
+                         **{role:{'synthetic_role_digest':'3'*64} for role in mv3._BLOCK5_ROLES}}
+            kwargs=dict(prospective_relative=f['prospective_path'].relative_to(f['root']).as_posix(),prospective_sha256='1'*64,
+                plan_tree_relative=f['plan_tree_path'].relative_to(f['root']).as_posix(),plan_tree_sha256='2'*64)
+            rendered=[]
+            for order in (sorted(mv3._BLOCK5_ROLES),sorted(mv3._BLOCK5_ROLES,reverse=True)):
+                roles=Ordered(mv3._BLOCK5_ROLES);roles.order=tuple(order)
+                with mock.patch.object(mv3,'_BLOCK5_ROLES',roles):
+                    rendered.append(mv3.render_manifest(mv3._build_finalized_manifest(f['prospective'],attachments=attachments,**kwargs)))
+            self.assertEqual(rendered[0],rendered[1])
+
+
 class ClaimCommandTests(unittest.TestCase):
     def args(self,**changes):
         value=dict(analysis_manifest='manifest',runs_root='runs',floor_artifact='floor',evidence_roots=None,output='output.json',

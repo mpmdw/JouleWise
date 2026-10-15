@@ -4126,7 +4126,9 @@ def _build_finalized_manifest(
         manifest["evidence"][_DOMINANCE_REPLAY_SIDECAR_ROLE] = json.loads(
             json.dumps(attachments[_DOMINANCE_REPLAY_SIDECAR_ROLE])
         )
-    for role in _BLOCK5_ROLES:
+    # Sorted: iterating the frozenset follows the per-process string hash seed, and
+    # the rendered manifest (insertion-ordered keys) would differ between runs.
+    for role in sorted(_BLOCK5_ROLES):
         if role in attachments:
             manifest["evidence"][role] = json.loads(json.dumps(attachments[role]))
     finalized_semantics_sha = analysis_semantics_sha256_v1(manifest)
