@@ -518,14 +518,39 @@ def report(state_path, *, uninstall=False, desk=smoke.desk, run=subprocess.run):
                    and (r.get("code") == "sleep.in_run" or r.get("scope", {}).get("run_id") in excluded)]
     sleep_exclusions = any(str(code).startswith("sleep.") for r in exclusions.get("members_excluded", [])
                            for code in r.get("codes", []))
-    readings = bool(pairs) and all(end and all(isinstance(row.get("clock", {}).get("sleep_offset_ns"), int)
-                                             for row in (start, end)) for start, end in pairs)
+    expected_run_ids, roster_error = set(), None
+    try:
+        from joulewise.b5 import plan as window_plan
+        pack_root = prepared.measurement / "configs/campaigns" / prepared.pack_id
+        tree = json.loads((pack_root / "plan_tree.json").read_text())
+        dispatches = window_plan.resolve_stage_dispatches(tree, prepared.measurement)
+        counts = {row["stage_id"]: row["expected_count"] for row in tree["stage_graph"]
+                  if row["kind"] == "campaign_collection"}
+        if not dispatches or any(d.error or d.run_ids is None for d in dispatches):
+            raise ValueError("smoke plan collection roster is unresolved")
+        for dispatch in dispatches:
+            count = counts[dispatch.stage_id]
+            if type(count) is not int or count <= 0 or len(dispatch.run_ids) < count:
+                raise ValueError("smoke plan collection count is invalid")
+            expected_run_ids.update(dispatch.run_ids[:count])
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        roster_error = f"{type(exc).__name__}: {exc}"
+    complete_ids = {start["run_id"] for start, end in pairs if end and all(
+        isinstance(row.get("clock", {}).get("sleep_offset_ns"), int) for row in (start, end))}
+    missing_ids = sorted(expected_run_ids - complete_ids)
+    # M-2 (stage-3 review): every run the reduced smoke plan dispatches needs its
+    # start and end reading; a run with no clock row at all is not observed.
+    readings = (bool(expected_run_ids) and roster_error is None and not missing_ids and bool(pairs)
+                and all(end and all(isinstance(row.get("clock", {}).get("sleep_offset_ns"), int)
+                                    for row in (start, end)) for start, end in pairs))
     no_run_sleep = readings and all(end["clock"]["sleep_offset_ns"] - start["clock"]["sleep_offset_ns"] <= 1_000_000
                                     for start, end in pairs)
     item("keep-awake", awake.get("verified_start") is True and awake.get("verified_end") is True
          and not sleep_flags and not sleep_exclusions and not hazard.get("sleep", {}).get("runs_excluded") and no_run_sleep,
          ["night/hazard_result.json:keep_awake", "collection/run_clock.jsonl", "derived/exclusions.json"])
-    item("per-run sleep readings", readings, ["collection/run_clock.jsonl:clock.sleep_offset_ns"])
+    item("per-run sleep readings", readings, ["collection/run_clock.jsonl:clock.sleep_offset_ns",
+         "measurement:plan_tree.json and order_manifest.json"],
+         {"missing_or_incomplete_run_ids": missing_ids, "roster_error": roster_error})
     item("chain exit", chain_ok, ["night/result.json:chain_exit_code", "night/hazard_result.json:chain.exit_code"])
     item("smoke desk", result.get("status") == "physics", ["smoke-result.json:status"], result.get("status"))
     item("smoke errors absent", result.get("errors") == [], ["smoke-result.json:errors"])

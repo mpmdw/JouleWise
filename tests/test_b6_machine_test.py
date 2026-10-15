@@ -575,6 +575,15 @@ class ReportTests(Case):
         put(archive / "sources/claim-runs/end-reference/summary_metrics.json", {"status": "succeeded"})
         result = {"status": "physics", "errors": [], "harvest_exit": 0, "archive": str(archive),
                   "flags": ["agent.presence", "agent.presence_overlap", "idle.wait_cap_skip", "meter.absent"]}
+        # The report checks every kept run against the reduced plan roster.
+        tree = smoke.reduce_tree(json.loads((ROOT / "configs/campaigns" / mt.PACK / "plan_tree.json").read_text()),
+                                 json.loads(smoke.KEEP_PATH.read_text())[mt.PACK])
+        dispatches = plan.resolve_stage_dispatches(tree, ROOT)
+        names = ("reference", "decode", "prefill", "end-reference")
+        for dispatch, run_id in zip(dispatches, names):
+            put(prepared.measurement / dispatch.config_dir / "order_manifest.json",
+                {"executed_order": [{"run_id": run_id}]})
+        put(prepared.measurement / "configs/campaigns" / mt.PACK / "plan_tree.json", tree)
         return out / "machine-test.json", custody, archive, result
 
     def run_report(self, state, result, **kwargs):
@@ -596,6 +605,25 @@ class ReportTests(Case):
         self.assertNotRegex(output.getvalue(), r"\b\d+(?:\.\d+)?\s*(?:J|W|s|seconds|minutes)\b")
         self.assertNotIn("1425", output.getvalue())
         self.assertNotIn("1500", output.getvalue())
+
+    def test_every_planned_run_requires_start_and_end_sleep_readings(self):
+        for run_id in ("reference", "decode", "prefill", "end-reference"):
+            for event in ("both", "start", "end"):
+                with self.subTest(run_id=run_id, event=event):
+                    base = self.root
+                    self.root = base / (run_id + "-" + event)
+                    self.root.mkdir()
+                    try:
+                        state, custody, archive, result = self.custody_fixture()
+                        path = custody / "collection/run_clock.jsonl"
+                        rows = [row for row in mt.read_rows(path)
+                                if not (row["run_id"] == run_id and (event == "both" or row["event"] == event))]
+                        path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+                        item = self.run_report(state, result)["per-run sleep readings"]
+                        self.assertFalse(item["observed"])
+                        self.assertIn(run_id, item["detail"]["missing_or_incomplete_run_ids"])
+                    finally:
+                        self.root = base
 
     def test_each_item_missing_or_bad_is_not_observed(self):
         for name in ("agent pause", "agent census", "runner pause", "fresh idle admission", "idle cap", "sampler restarts", "sampler startup readings",
