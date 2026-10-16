@@ -14,7 +14,7 @@ if __package__ in (None,''):sys.path.insert(0,str(REPO_ROOT))
 from joulewise.authentication_io import read_authentication_input_nofollow
 from joulewise.b5_analysis.windows import AnalysisRefusal, SealPins, load_window_index, select_analysed_attempts
 from joulewise.b5_analysis.archive import open_attempt_record
-from joulewise.analysis_engine.inputs import block5_claim_gate_inputs
+from joulewise.analysis_engine.inputs import block5_claim_gate_inputs, sibling_floor_pinset
 from joulewise.results_fill_adapter import ResultsFillAdapterError, adapt_claim_verdicts, render_results_fill_input, _object, _nonfinite
 
 CHECK_CODES=frozenset({'results_fill_manifest_mismatch','results_fill_floor_mismatch',
@@ -41,6 +41,13 @@ def _registered_contrast_ids(pack_id):
     return tuple(row['contrast_id'] for row in json.loads(raw)['contrasts'])
 
 
+def _sibling_pinset_or_none(floor_path):
+    """A block-5 floor's pinset beside it; without one, the registered pinsets authenticate as before."""
+    from joulewise.analysis_engine.inputs import AnalysisInputError
+    try:return sibling_floor_pinset(floor_path)
+    except AnalysisInputError:return None
+
+
 def build(window_index,custody_root,finalized_manifest,claim_verdicts):
     root=Path(custody_root).absolute()
     if '..' in Path(custody_root).parts or root.resolve(strict=True)!=root or not root.is_dir():
@@ -53,7 +60,9 @@ def build(window_index,custody_root,finalized_manifest,claim_verdicts):
     if (type(relative) is not str or Path(relative).is_absolute() or
         any(p in ('','.','..') for p in relative.split('/'))):
         raise ResultsFillAdapterError('results_fill_path_refused')
-    floor_path=root/relative;floor_raw=_read_under(root,floor_path)
+    # The manifest names its attachments relative to its own custody root (the
+    # finalizer's output directory); the block-5 floor sits beside its pinset there.
+    floor_path=Path(finalized_manifest).absolute().parent/relative;floor_raw=_read_under(root,floor_path)
     if hashlib.sha256(floor_raw).hexdigest()!=record['sha256']:
         raise ResultsFillAdapterError('results_fill_floor_mismatch')
     pins=SealPins.load()
@@ -76,7 +85,8 @@ def build(window_index,custody_root,finalized_manifest,claim_verdicts):
             'harvest_record_sha256':window.harvest_record_sha256}
     return adapt_claim_verdicts(verdicts_raw,campaigns=campaigns,finalized_manifest_raw=manifest_raw,
         floor_artifact_raw=floor_raw,exclusions_sha256=units.exclusions_sha256,
-        kept_quads={cid:units.for_contrast(cid) for cid in expected},expected_contrast_ids=expected)
+        kept_quads={cid:units.for_contrast(cid) for cid in expected},expected_contrast_ids=expected,
+        floor_pinset_path=_sibling_pinset_or_none(floor_path))
 
 
 def main(argv=None):

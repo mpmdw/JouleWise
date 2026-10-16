@@ -480,5 +480,38 @@ class PaperSourcesBlockFiveFloorTests(unittest.TestCase):
         self.assertIn("d165_paper_floor_artifact_invalid", codes)
 
 
+class FillInputBlockFiveFloorTests(unittest.TestCase):
+    """Joined run, step 11, after the disclosures: the fill input refused
+    results_fill_manifest_mismatch because the adapter re-validated the verdicts'
+    embedded block-5 floor against the registered pinsets only."""
+
+    def test_adapter_validates_the_embedded_floor_with_the_given_pinset(self):
+        import json
+        from joulewise import results_fill_adapter as a
+        seen = []
+
+        def validate(artifact, **kwargs):
+            seen.append(kwargs.get("floor_pinset_path"))
+            return ["stop here"]
+
+        pinset = Path("/synthetic/mint/floor-mint-pinset.json")
+        with mock.patch.object(a, "validate_claim_verdicts", validate), self.assertRaises(a.ResultsFillAdapterError):
+            a.adapt_claim_verdicts(json.dumps({"contrasts": []}).encode(), campaigns={}, finalized_manifest_raw=b"{}",
+                                   floor_pinset_path=pinset)
+        self.assertEqual(seen, [pinset])
+
+    def test_builder_finds_the_sibling_pinset_and_keeps_the_legacy_path(self):
+        import json
+        from scripts import build_results_fill_input as b
+        with tempfile.TemporaryDirectory(prefix="s10-fill-pinset-") as tmp:
+            mint = Path(tmp) / "mint"
+            mint.mkdir()
+            floor = mint / "d-aggregate-floor.json"
+            floor.write_text(json.dumps({"provenance": {"calibration_plan": {"relative_path": "floor-mint-pinset.json"}}}))
+            self.assertIsNone(b._sibling_pinset_or_none(floor))
+            (mint / "floor-mint-pinset.json").write_text("{}")
+            self.assertEqual(b._sibling_pinset_or_none(floor), mint / "floor-mint-pinset.json")
+
+
 if __name__ == "__main__":
     unittest.main()

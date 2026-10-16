@@ -48,6 +48,7 @@ def adapt_claim_verdicts(
     exclusions_sha256: str | None = None,
     kept_quads: Mapping[str, CellKeptUnits] | None = None,
     expected_contrast_ids=None,
+    floor_pinset_path=None,
 ) -> dict[str, Any]:
     """Return a detached v1 manifest with all five issued outcomes preserved.
 
@@ -60,6 +61,9 @@ def adapt_claim_verdicts(
             raise ResultsFillAdapterError("raw UTF-8 claim-verdict bytes required")
         artifact = json.loads(claim_verdicts_raw.decode("utf-8"),
                               object_pairs_hook=_object, parse_constant=_nonfinite)
+        # A block-5 floor embedded in the verdicts authenticates against the
+        # pinset beside the floor (the engine validated it that way).
+        verdict_kwargs = {"floor_pinset_path": floor_pinset_path} if floor_pinset_path is not None else {}
         extended = any(value is not None for value in (finalized_manifest_raw, floor_artifact_raw,
                        exclusions_sha256, kept_quads, expected_contrast_ids))
         manifest = None
@@ -75,7 +79,7 @@ def adapt_claim_verdicts(
             try:
                 manifest = json.loads(finalized_manifest_raw.decode("utf-8"),
                                       object_pairs_hook=_object, parse_constant=_nonfinite)
-                if (validate_claim_verdicts(artifact, frozen_manifest=manifest)
+                if (validate_claim_verdicts(artifact, frozen_manifest=manifest, **verdict_kwargs)
                     or hashlib.sha256(finalized_manifest_raw).hexdigest() != artifact["inputs"]["analysis_manifest"]["file_sha256"]):
                     raise ValueError()
             except (KeyError, TypeError, ValueError, AttributeError):
@@ -107,7 +111,7 @@ def adapt_claim_verdicts(
                         raise ValueError()
             except (KeyError, TypeError, ValueError, AttributeError):
                 raise ResultsFillAdapterError("results_fill_kept_quads_mismatch") from None
-        errors = validate_claim_verdicts(artifact)
+        errors = validate_claim_verdicts(artifact, **verdict_kwargs)
         if errors:
             raise ResultsFillAdapterError("invalid claim verdicts: " + "; ".join(errors))
         if not isinstance(campaigns, Mapping) or set(campaigns) != {"alpha", "beta"}:
