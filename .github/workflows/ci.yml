@@ -141,7 +141,11 @@ jobs:
       # ordinary shard. Each selected interpreter runs the full suite across
       # ordinary and exclusive jobs.
       SHARD_COUNT: "12"
+      # The Mac sets this safety switch for every test run during a blinded block; the block-6 Round fixture requires it.
+      JW_B5_SYNTHETIC_ONLY: "1"
     strategy:
+      # Every shard reports, so one failing shard does not hide the others' results.
+      fail-fast: false
       matrix:
         # 3.13: production nights (the measurement venv).
         # PRs and main pushes use production 3.13 only. 3.14 is
@@ -168,6 +172,11 @@ jobs:
             sudo apt-get install -y -q zsh
           fi
           test -x /bin/zsh
+      - name: Provide the Mac's interpreter path (production scripts and fixtures name /opt/homebrew/bin/python3.13)
+        run: |
+          sudo mkdir -p /opt/homebrew/bin
+          sudo ln -sf "$(command -v python)" /opt/homebrew/bin/python3.13
+          /opt/homebrew/bin/python3.13 --version
       - name: Unit tests (stdlib core only, per D-009/D-017)
         # test_calibration_exits AND test_calibration_writer_crash_matrix
         # are intentionally absent here (both carry exclusive_modules
