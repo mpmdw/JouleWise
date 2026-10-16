@@ -403,6 +403,14 @@ class PrecheckTests(DeskCase):
         wait = next(item for item in result['would_refuse'] if item['code'] == 'clock.linearity')
         self.assertEqual(wait['retry_after_s'], 600)
 
+    def test_rate_hold_records_its_flag_and_requests_wake_without_remedy(self):
+        ctx, seams, _ = fake_environment(self.measurement)
+        ctx.clocks.drift_word = 15 * clock.FREQUENCY_SCALE
+        result = p.run_precheck(PACKS['alpha'], self.measurement, self.state, ctx=ctx, seams=seams)
+        hold = next(row for row in result['would_refuse'] if row['code'] == 'clock.rate_hold')
+        self.assertEqual((hold['retry_after_s'], hold['remedy']), (0, 'wake_orchestrator'))
+        self.assertIn('clock.rate_hold', [row['code'] for row in result['predicted_flags']])
+
     def test_f9b_dispatch_error_excludes_and_skips_acceptance(self):
         tree = json.loads((self.measurement / 'configs/campaigns' / PACKS['alpha'] / 'plan_tree.json').read_text())
         dispatch = next(iter(plan.resolve_stage_dispatches(tree, self.measurement)))

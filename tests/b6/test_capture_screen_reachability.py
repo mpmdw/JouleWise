@@ -11,6 +11,7 @@ from joulewise import calibration_ledger as ledger, window_lineage
 from joulewise.b5 import chain, plan
 from joulewise.b6.driver_lane import metadata_path, read, write
 from joulewise.b6.lanes import Prepared
+from joulewise.b6.capture_screen import operative_bound_stop_s
 from tests import test_validate_powermetrics_fiducial_derivation_only as capture_fixtures
 from tests.b6 import round_support
 from tests.b6.support import DeskCase, document
@@ -139,6 +140,7 @@ class RenderedRound(round_support.Round):
         md = read(metadata_path(prepared))
         md['inputs']['capture_screen'] = {key: document()['calibration'][key] for key in
             ('alignment_reference_s', 'bracket_screen_s', 'operative_bound_stop_s')}
+        md['inputs']['capture_screen']['operative_bound_stop_s'] = str(operative_bound_stop_s({}, md['packs'][0]))
         write(metadata_path(prepared), md)
 
     def opening_chain(self, bound):
@@ -219,14 +221,14 @@ class ChainReachabilityTests(DeskCase):
         r.loop.tick()
         self.assertEqual(r.state()['state'], 'ROTATE')
 
-    def test_opening_80ms_stops_at_13_and_full_pack_outcome_is_physics(self):
+    def test_opening_150ms_stops_at_13_and_full_pack_outcome_is_physics(self):
         r = RenderedRound(self.root, full_pack='alpha')
         r.until('SESSION_RUN')
         r.register_acceptance()
         r.registered_screen()
         write(r.control, {**read(r.control), 'stop': 'operative_bound_above_stop'})
         r.loop.tick()
-        result = r.opening_chain('0.080')
+        result = r.opening_chain('0.150')
         self.assertEqual((r.screen_disposition, result.returncode), ('valid', 13), r.chain_output)
         r.until('SESSION_DESK')
         r.loop.tick()

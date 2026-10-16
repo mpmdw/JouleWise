@@ -584,10 +584,12 @@ def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None
     for code in clock_codes:
         if code == "clock.rate_above_budget":
             flags.append({"code": code, "source": "clock", "observed": readings["clock"]})
+        elif code == "clock.rate":
+            flags.append({"code": "clock.rate_hold", "source": "clock", "observed": readings["clock"]})
+            wait("clock.rate_hold", "clock", readings["clock"], limits["clock"],
+                 remedy="wake_orchestrator", retry=0)
         else:
-            wait(code, "clock", readings["clock"], limits["clock"],
-                 remedy="redraw_frequency_then_wake" if code == "clock.rate" else "wait_and_remeasure",
-                 retry=0 if code == "clock.rate" else limits["clock"]["retry_after_s"])
+            wait(code, "clock", readings["clock"], limits["clock"], retry=limits["clock"]["retry_after_s"])
     final = arm.agent_census(ctx)
     readings["agents"]["final"] = final
     if not final["clean"]:

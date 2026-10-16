@@ -34,17 +34,20 @@ class RoundTwoReviewTests(DeskCase):
             self.assertEqual(run_night._resolve_courier_bin(None, plan=fallback), (None, 'fixture_missing', None))
         resolve.assert_called_once_with(None, str(self.root))
 
-    def test_clock_rate_hold_attempts_one_remedy_and_wakes_without_wait_loop(self):
+    def test_clock_rate_hold_wakes_without_a_remedy_or_wait_loop(self):
         loop = object.__new__(Loop)
         loop.state = {'state': 'PRECHECK', 'wait': None}
         loop.clock = lambda: 10
         loop.lanes = SimpleNamespace(precheck=SimpleNamespace(remedy=Mock(return_value=False)))
         loop._transition = lambda state: loop.state.update(state=state)
         loop._event, loop._missing = Mock(), Mock(return_value=False)
-        loop._wait_for(PrecheckResult(would_refuse=(Hazard('clock'),), remedies=('clock',)), 'PRECHECK')
+        loop._wait_for(PrecheckResult(would_refuse=(Hazard('clock'),),
+                                     predicted_flags=('clock.rate_hold',)), 'PRECHECK')
         self.assertEqual(loop.state['state'], 'HOLD_LOOP')
-        loop.lanes.precheck.remedy.assert_called_once_with('clock')
-        loop._event.assert_called_once_with('loop_hold', 'clock_rate_after_remedy')
+        self.assertEqual(loop.state['hold_reason'], 'clock.rate_hold')
+        self.assertIsNone(loop.state['wait'])
+        loop.lanes.precheck.remedy.assert_not_called()
+        loop._event.assert_called_once_with('loop_hold', 'clock.rate_hold', fields={'flags': ['clock.rate_hold']})
 
     def test_failed_resume_retries_once_then_aborts_and_names_slot(self):
         metadata = {'paths': {'measurement': str(self.root), 'custody': str(self.root / 'custody')},

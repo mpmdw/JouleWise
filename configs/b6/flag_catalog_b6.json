@@ -371,6 +371,13 @@
       "klass": "REPRESENTATION",
       "note": "T1: null stop line has no refusal."
     },
+    "calibration.stop_line_unsized": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "CALIBRATION",
+      "klass": "REPRESENTATION",
+      "note": "Lead ruling 2026-10-16: no registered per-pack T10 stop; carry the bound and let the run's own phase checks decide."
+    },
     "calibration.writer_record_flagged": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
@@ -440,6 +447,13 @@
       "family": "DIAGNOSTIC",
       "klass": "PHYSICS",
       "note": "Registration 8.6: above the old h-inclusive budget, below the 5 ms / T_stream_max - 0.25 ppm hold."
+    },
+    "clock.rate_hold": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "DIAGNOSTIC",
+      "klass": "PHYSICS",
+      "note": "Lead ruling 2026-10-16: the registered rate hold wakes the orchestrator without a redraw attempt or timed retry."
     },
     "clock.sntp_offset": {
       "blinding": "STRUCTURE",
@@ -1322,6 +1336,13 @@
       "family": "ROSTER",
       "klass": "REPRESENTATION",
       "note": "Design 13.7: block-six plan should omit reference spares."
+    },
+    "power.pstar_unsized": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "No registered T_phase for this pack/phase: no P* exclusion. Once sized, P* = F_min/(4*T_phase); never use a science duration or another pack's size."
     },
     "precheck.acceptance_unavailable": {
       "blinding": "STRUCTURE",

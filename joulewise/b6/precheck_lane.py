@@ -85,7 +85,7 @@ class PrecheckLane:
             for row in result["would_refuse"]:
                 hazard = row["hazard"]
                 hazards.append(Hazard(hazard, json.dumps(row, sort_keys=True)))
-                if hazard in ("disk", "instrument", "sampler") or row.get("code") == "clock.rate":
+                if hazard in ("disk", "instrument", "sampler"):
                     remedies.add(hazard)
             certain = result.get("certain_exclusion") or {}
             for reason in certain.get("reasons", []):

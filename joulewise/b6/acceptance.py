@@ -235,9 +235,15 @@ class BlockSixAcceptance:
 
         own_ids = tuple(internal.get("own_session_ids", ())) + ((evidence.session_id,) if evidence.session_id else ())
         cal = calibration.evaluate(capture("pre"), capture("post"), reg, prepared.capture_rows, own_ids,
-                                   bool(internal.get("estimator_changed")))
+                                   bool(internal.get("estimator_changed")), pack_id=evidence.pack_id)
         for item in cal["flags"]:
             emit(item["code"], observed={k: v for k, v in item.items() if k != "code"})
+        # S-11 has no issued per-pack/phase T_phase in this branch's
+        # acceptance registration. Do not substitute a science duration or
+        # another pack's rehearsal: P* = F_min/(4*T_phase) is unsized.
+        emit("power.pstar_unsized", observed={"pack_id": evidence.pack_id,
+                                              "phases": ["prefill", "decode"],
+                                              "reason": "registered_T_phase_absent"})
         excluding.extend({"code": code, "scope": "window", "why": code} for code in cal.pop("excluding"))
         if calibration_stop:
             excluding.append({"code": "calibration.bracket_incomplete", "scope": "window",

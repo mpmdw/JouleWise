@@ -103,21 +103,26 @@ class Block4ClockTests(unittest.TestCase):
         live["realtime_ns"] += 2
         self.assertFalse(arm._clock_probe_predicate_passes(receipt, value, live))
 
-    def test_twelve_ppm_fails_registered_stream_gate_at_author(self):
+    def test_twelve_ppm_starts_above_the_old_budget_and_sixteen_ppm_holds(self):
+        value, receipt = self.derive(1000, word=12 * 65536)
+        self.assertTrue(arm._clock_probe_predicate_passes(
+            receipt, value, arm._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE))
         with self.assertRaisesRegex(author.T0EvidenceAuthoringError, "stream clock budget"):
-            self.derive(1000, word=12 * 65536)
+            self.derive(1000, word=16 * 65536)
 
-    def test_twelve_ppm_fails_the_repository_sizing_input_in_both_directions(self):
+    def test_repository_sizing_uses_the_registered_hold_in_both_directions(self):
         import json
         from pathlib import Path
         source = Path(__file__).resolve().parents[1] / "configs/campaigns/v5_qualification_25g83/sizing_allowances.json"
         sizing = json.loads(source.read_bytes())["sizing"]
         stream_max = max(item["seconds"] for item in sizing["streams"].values())
-        for word in (-12 * 65536, 12 * 65536):
-            with self.subTest(word=word):
-                gate = kernel_clock.frequency_gate(frequency_probe(word), stream_max)
-                self.assertFalse(gate["passes"])
-                self.assertLess(gate["margin_ms"], 0)
+        for ppm, passes in ((12, True), (16, False)):
+            for sign in (-1, 1):
+                with self.subTest(ppm=sign * ppm):
+                    gate = kernel_clock.frequency_gate(frequency_probe(sign * ppm * 65536), stream_max)
+                    self.assertEqual(gate["passes"], passes)
+                    self.assertEqual(gate["margin_ms"] >= 0, passes)
+                    self.assertTrue(gate["rate_above_budget"])
 
     def test_idle_75_sizing_clears_current_frequency_and_checks_inclusive_limit(self):
         import json
@@ -130,11 +135,16 @@ class Block4ClockTests(unittest.TestCase):
         self.assertEqual(maximum, 335)
         gate = kernel_clock.frequency_gate(frequency_probe(-207749), maximum)
         self.assertTrue(gate["passes"])
-        self.assertAlmostEqual(gate["bound_ms"], 4.84570, places=5)
-        self.assertFalse(kernel_clock.frequency_gate(frequency_probe(-207749), 613)["passes"])
+        # 0.001 ms resolves 1 us, below the 125 us clock-anchor reads. The
+        # hold carries rate plus 0.25 ppm over T, without the former 3.7 ms h.
+        expected_ms = (207749 / 65536 + 0.25) * maximum / 1000
+        self.assertAlmostEqual(gate["bound_ms"], expected_ms, delta=0.001)
+        self.assertFalse(kernel_clock.frequency_gate(frequency_probe(-207749), 1500)["passes"])
         # The raw frequency word is quantized at 1/65536 ppm: last passing
         # word and its immediate successor exercise the actual gate boundary.
-        last_word = math.floor((1300 / maximum - 0.25) * 65536)
+        # Registered hold: the run's retained 5 ms limit, less the 0.25 ppm
+        # rate margin; integer-word adjacency is exact, not a measured bar.
+        last_word = math.floor((5000 / maximum - 0.25) * 65536)
         for sign in (-1, 1):
             self.assertTrue(kernel_clock.frequency_gate(frequency_probe(sign * last_word), maximum)["passes"])
             self.assertFalse(kernel_clock.frequency_gate(frequency_probe(sign * (last_word + 1)), maximum)["passes"])

@@ -236,6 +236,14 @@ class Loop:
         return True
 
     def _wait_for(self, result, return_state):
+        if "clock.rate_hold" in result.predicted_flags:
+            # Lead ruling 2026-10-16: there is no redraw entry point. A fixed
+            # rate cannot improve by waiting with time synchronization off.
+            self.state["wait"] = None
+            self.state["hold_reason"] = "clock.rate_hold"
+            self._transition("HOLD_LOOP")
+            self._event("loop_hold", "clock.rate_hold", fields={"flags": ["clock.rate_hold"]})
+            return
         hazard = result.would_refuse[0].hazard
         episode = self.state.get("wait")
         if episode is None or self.state["state"] != "WAIT_PHYSICS":
@@ -251,13 +259,6 @@ class Loop:
             episode["remedied_hazards"] = sorted(remedied)
             remedy = self.lanes.precheck.remedy(hazard)
             self._missing(remedy)
-        if hazard == "clock" and "clock" in result.remedies:
-            # A fixed frequency cannot improve in repeated WAITs with time
-            # synchronization off. One remedy attempt, then wake the lead.
-            self.state["hold_reason"] = "clock_rate_after_remedy"
-            self._transition("HOLD_LOOP")
-            self._event("loop_hold", "clock_rate_after_remedy")
-            return
         if self.clock() - episode["since"] >= 7200 and not episode["mailed"]:
             episode["mailed"] = True
             self._event("physics_wait_2h", hazard, wake=False)
