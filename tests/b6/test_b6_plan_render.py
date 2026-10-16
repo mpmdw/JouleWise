@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 from types import SimpleNamespace
 from unittest import mock
 
@@ -116,7 +117,7 @@ class ProductionPlanRenderTests(DeskCase):
             if "preflight" not in argv and Path(argv[0]).name != "git":
                 raise AssertionError("unexpected installer subprocess: " + repr(argv))
             kwargs["env"] = {**os.environ, **kwargs.get("env", {}), "JW_B5_SYNTHETIC_ONLY": "1",
-                             "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": os.environ["TMPDIR"]}
+                             "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": tempfile.gettempdir()}
             return real_run(argv, **kwargs)
 
         # Admission's wall-clock install span is independent of binding shape.
