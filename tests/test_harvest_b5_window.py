@@ -2314,9 +2314,10 @@ class EmittedCodeTests(unittest.TestCase):
         not_codes = {"g3.txt", "roster.json",  # file names
                      "chain.started", "monitor.capture_battery",  # a night record and a collector name
                      "yield.json"}  # a file name
-        # Block-6 arm diagnostics use explicit specs and the block-6 catalog,
-        # rather than extending block 5's immutable catalog vocabulary.
-        self.assertEqual((literals | built) - not_codes - set(h.CODES) - B6_COLLECTION_CODES, set())
+        # The two block-6 arm diagnostics use explicit specs and the block-6 catalog, rather than extending block 5's
+        # immutable catalog vocabulary. Name only them, so any other new literal still needs a catalog entry.
+        b6_arm_diagnostics = {"clock.rate_above_budget", "instrument.single_interval_above_screen"}
+        self.assertEqual((literals | built) - not_codes - set(h.CODES) - b6_arm_diagnostics, set())
 
     def test_every_lineage_finding_code_is_listed_with_l3s_family(self):
         from joulewise import window_lineage
