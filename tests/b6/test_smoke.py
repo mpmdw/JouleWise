@@ -197,6 +197,8 @@ class SmokeTests(DeskCase):
         self.assertEqual(record['hazard_window']['settle_s'], chain.SETTLE_S)
         self.assertEqual(s._git(prepared.measurement, 'remote'), '')
         self.assertEqual(s.driver_argv(prepared)[2:4], ['run', '--plan'])
+        self.assertIn(str(prepared.measurement / 'scripts/b6_courier.sh'),
+                      (prepared.smoke_dir / 'bin/smoke-courier').read_text())
         with self.assertRaises(s.SmokePrepareError):
             s.copy_ledger(claim, self.root / 'outside', prepared.smoke_dir)
         with self.assertRaises(s.SmokePrepareError):
@@ -211,6 +213,68 @@ class SmokeTests(DeskCase):
             return copied
         with mock.patch.object(s.shutil, 'copy2', side_effect=changed_source), self.assertRaises(s.SmokePrepareError):
             s.copy_ledger(claim, clone, inside)
+
+    def test_prepare_authenticates_production_tree_and_controller_pre_slot(self):
+        from joulewise import arm_readiness, controller
+        import shutil
+        seed, state, _, inputs = self.claim()
+        # A full checkout retains every production script, sidecar and pack
+        # inventory. Only the synthetic ledger/pin and sizing inputs are seeded.
+        claim = self.root / 'production-checkout'
+        s.clone_checkout(ROOT, s._git(ROOT, 'rev-parse', 'HEAD'), claim)
+        for relative in (plan.DEFAULT_LEDGER_RELATIVE, plan.HEAD_PIN_RELATIVE,
+                         'configs/sizing/synthetic.json'):
+            destination = claim / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(seed / relative, destination)
+        s._git(claim, 'add', plan.HEAD_PIN_RELATIVE, 'configs/sizing/synthetic.json')
+        s._git(claim, 'commit', '-qm', 'synthetic ledger and sizing')
+        commit = s._git(claim, 'rev-parse', 'HEAD')
+        (claim / '.venv/lib/python3.13/site-packages').mkdir(parents=True)
+        prepared = s.prepare(PACKS['alpha'], commit, claim, self.root / 'smokes',
+            plan_inputs=inputs, fp=fp(), state_root=state,
+            plan_writer=lambda value: plan.write_window_plan(value,
+                threshold_defaults=fake_window.threshold_defaults),
+            wrapper_writer=lambda *a, **kw: s.write_wrapper(*a, **kw, python=sys.executable))
+        self.assertTrue((prepared.measurement / '.venv/bin/python3.13').exists())
+        pack = prepared.measurement / 'configs/campaigns' / PACKS['alpha']
+        reduced, raw = arm_readiness._plan_tree(pack)
+        self.assertEqual(sum(r['expected_count'] for r in reduced['stage_graph']
+                             if r['kind'] == 'campaign_collection'), 4)
+        self.assertEqual(s._git(prepared.measurement, 'status', '--porcelain', '--',
+                                str(pack.relative_to(prepared.measurement))), '')
+        for sidecar in pack.glob('*.sha256'):
+            digest, name = sidecar.read_text().strip().split('  ')
+            self.assertEqual(digest, s._sha256(pack / name))
+        record = json.loads(prepared.plan_path.read_text())
+        self.assertEqual(record['hazard_window']['pack']['plan_tree_sha256'],
+                         hashlib.sha256(raw).hexdigest())
+        self.assertEqual(record['hazard_window']['pack']['pack_sha256'],
+                         arm_readiness.committed_pack_tree_sha256(pack))
+        # Only the earlier launch-locator seam is supplied. The controller must
+        # authenticate the real reduced bytes before reaching the hardware's
+        # finalized calibration slot (which this Linux fixture cannot collect).
+        context = {'pack_root': str(pack), 'launch_lineage': {'bracket_session_id': 'synthetic'}}
+        class ReachedLedger(Exception):
+            pass
+        with (mock.patch.object(arm_readiness, 'authenticate_campaign_launch_lineage', return_value=context),
+              mock.patch.object(controller, '_writer_launch_lineage', return_value={}),
+              mock.patch('joulewise.calibration_ledger.calibration_session_status', side_effect=ReachedLedger)):
+            with self.assertRaises(ReachedLedger):
+                controller._authenticate_g2b_pre_slot_attachment(self.root, {}, None, self.root,
+                                                                object(), hazard=object())
+
+    def test_stage_crash_without_bundles_dominates_injected_physics(self):
+        # Smoke acceptance also calls an incidental member exclusion a
+        # physics_stop. Only physical_stop_kind identifies an actual stop.
+        for record in ({}, {'physics_stop': True, 'physical_stop_kind': None}):
+            with self.subTest(record=record):
+                self.assertEqual(s.classify(stages_ok=False, driver_exit=1, harvest_exit=0,
+                    acceptance_result=AcceptanceResult('EXCLUDE', (), (), False, record=record),
+                    flags=['agent.presence']), 'fail')
+        self.assertEqual(s.classify(stages_ok=False, driver_exit=1, harvest_exit=0,
+            acceptance_result=AcceptanceResult('EXCLUDE', (), (), False,
+                record={'physics_stop': True, 'physical_stop_kind': 'disk'}), flags=[]), 'physics')
 
     def test_20_wrapper_and_executable_member_interposition(self):
         wrapper = s.wrapper_text('/synthetic/.venv/bin/python3.13', self.root / 'runner.py', {'configs/stage': 2},
@@ -285,7 +349,9 @@ def main():
                 ('harvest', 0, 1, FakeAcceptance(), [], 'fail'),
                 ('structural', 0, 0, FakeAcceptance(structural=True), [], 'fail'),
                 ('arm', 1, 0, FakeAcceptance(), [{'code': 'battery.float'}], 'physics'),
-                ('stage', 1, 0, FakeAcceptance(), [], 'fail')):
+                ('arm-battery', 1, 0, FakeAcceptance(), [], 'physics'),
+                ('stage', 1, 0, FakeAcceptance(), [], 'fail'),
+                ('stage-physics', 1, 0, FakeAcceptance(), [{'code': 'agent.presence'}], 'fail')):
             base = self.root / name
             measurement = base / 'measurement'
             pack = measurement / 'configs/campaigns' / PACKS['alpha']
@@ -294,10 +360,12 @@ def main():
             (pack / 'plan_tree.json').write_text(json.dumps(reduced))
             night = base / 'custody/night'
             night.mkdir(parents=True)
-            journal = [{'stage_id': st.stage_id, 'rc': 0 if name != 'stage' else 99}
+            journal = [{'stage_id': st.stage_id, 'rc': 99 if name in ('stage', 'stage-physics', 'arm-battery') else 0}
                        for st in chain.stage_plan(reduced) if st.in_chain]
             (night / chain.STAGE_JOURNAL).write_text(''.join(json.dumps(row)+'\n' for row in journal))
-            (night / 'hazard_result.json').write_text(json.dumps({'flags': flags}))
+            (night / 'hazard_result.json').write_text(json.dumps({'flags': flags,
+                **({'arm': {'go': False, 'verdicts': {'battery': {'status': 'REFUSE'}}}}
+                   if name == 'arm-battery' else {})}))
             if name == 'implicit':
                 (night / 'result.json').write_text(json.dumps({'verdict': 'GO', 'chain_exit_code': 0}))
                 (night / 'courier.json').write_text(json.dumps({'sent': True}))

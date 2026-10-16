@@ -4,7 +4,9 @@ Branch `integration/2026-10-14-b6-stage1`, not merged to main (orchestrator deci
 item 39: block 6 is collected from a measurement checkout at a pinned commit of this branch and merges to main
 after the block-5 release). This page gives the two commands the design's stage 1 ends with
 (`docs/design/block6_collection_draft.md` section 17): the one machine test of about 40 minutes, then the arm of
-round 1. Neither has been run. Run nothing here while a block-5 analysis job or any agent is using the Mac.
+round 1. The first machine test, MT-20261016T2114Z, found a stale smoke plan-tree sidecar and an unwritten
+agent-presence flag; the fixes are on `fix/2026-10-16-b6-mt-fixes` and need a fresh pin and Mac run. Run nothing
+here while a block-5 analysis job or any agent is using the Mac.
 
 ## What is on this branch
 
@@ -93,11 +95,13 @@ Every argument:
   (`joulewise/b6/desk_identity.py`), the plan inputs (`joulewise/b6/plan_inputs.py`, the same code the loop's D1
   uses: the sealed block-5 threshold block, ALPHA's sizing), the fingerprint, then `joulewise.b6.smoke.prepare`: a fresh
   clone of `$M` at its head inside `--out`, a copy of the ledger and pin, the plan tree reduced to the smoke's
-  4 runs by `configs/b6/smoke_keep.json`, the plan. Then the night-job plists (the installer in render-only
+  4 runs by `configs/b6/smoke_keep.json`, its updated and committed `plan_tree.sha256`, and the plan. The plan
+  binds the reduced tree and committed pack digests. Then the night-job plists (the installer in render-only
   mode) and the injector plist, and `install.zsh`.
 - `--install`: run `install.zsh` at the end: the real installer on the smoke plan (two labels,
   `com.joulewise.night` and `com.joulewise.night.deadman`, with `--courier-bin` naming the smoke's file-writing
-  courier stub, so no `claude` session runs after the chain) and `launchctl bootstrap gui/<uid>` of the injector
+  wrapper around the clone's production `scripts/b6_courier.sh`, so no `claude` session runs after the chain)
+  and `launchctl bootstrap gui/<uid>` of the injector
   `com.joulewise.b6mt.inject` (ProcessType Standard, so its busy core is a real core, not an efficiency core at
   background priority). Without `--install`, `prepare` stops after writing, for a dry look.
 - `--measurement-root "$M"`: the checkout above.
@@ -114,9 +118,13 @@ Every argument:
   margin), started when the agent pause has ended, so the next run's waiting idle admission reaches its cap and
   that run is skipped with `idle.wait_cap_skip`. One core is design 3.4's disturbance.
 
-**What happens, and how long.** The injector waits for the start reference to end (so the arm, census and dwell
-are over), starts the agent, waits for the pause to end (resume 10 minutes after the last sighting, with a fresh
-idle admission), starts the disturbance, and exits when the chain's terminal record exists. Roughly: 15 min to
+**What happens, and how long.** The injector waits for a run start row without an end row in
+`collection/run_clock.jsonl` (so the arm, census and dwell are over), starts the agent while that run is in
+flight, waits for the pause to end (resume 10 minutes after the last sighting, with a fresh idle admission),
+starts the disturbance, and exits when the chain's terminal record exists. It reaps the busy children and writes
+`busy_ended` even
+when that terminal record arrives before a cap skip. The courier records the request locally and creates
+`night/courier.sent`, just as it does for a session. Roughly: 15 min to
 t0, about 5 min of arm, 4 min opening capture, 2.5 min start reference, about 11 min of agent pause (the run in
 flight excluded), 25 min of waiting to the cap (that run skipped), 2.5 min for the last run, 4 min closing
 capture: about 55 minutes of chain after t0, plus the desk report. Design 13's "about 40 minutes" did not count
@@ -132,10 +140,15 @@ It runs the smoke desk (since lane 6 the session's own harvest, `scripts/harvest
 block-6 catalog and the test's registration directory, then reads its `derived/b6-acceptance.json`), uninstalls the night
 job and the injector, writes `<out>/report.json`, and prints, structure only, for each item whether the records
 show it: the agent pause (an episode, resume no sooner than 600 s after the last sighting, the overlapping run
-excluded, the chain not stopped); the idle cap (exactly one `idle.wait_cap_skip`, later runs measured); the meter
+excluded, the chain not stopped, both `agent.presence` and `agent.presence_overlap` written in the archived
+flags); collection ran (all planned runs have successful summaries except the cap run, whose failed summary
+has `environment_admission.skip_reason` equal to `wait_cap_reached`, with only the expected agent-overlap and
+cap exclusions); the idle cap (exactly one `idle.wait_cap_skip`, later runs measured); the meter
 (connected here, so this item reads "not observed; meter present: not exercised", which is expected); the keep-awake hold verified at start and end, a sleep
 reading at every run; chain exit 0, harvest exit 0, the smoke desk's status `physics` (the injected faults are
-physical, so a real smoke would wait and run again) and no desk errors.
+physical, so a real smoke would wait and run again) and no desk errors. A failed stage with no run bundle
+reports `fail` even when an unrelated physical flag is present; an explicit physical arm refusal or physical
+chain stop keeps its physical outcome.
 
 **Pass.** Every item observed except the meter item (expected, above) and no desk error. A missing item is a defect in the code it names: fix it on this
 branch, re-pin, run the test again. A physical refusal at the arm (clock, battery, thermal, contention, disk,

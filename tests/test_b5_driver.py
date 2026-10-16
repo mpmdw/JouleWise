@@ -247,7 +247,8 @@ class Harness:
         return {"claim": str(request.claim_runs_root), "bound": str(request.bound_runs_root)}
 
     def emit_flag(self, custody, fields):
-        flag = b5_driver.build_flag(fields, boot_session_uuid="BOOT")
+        from joulewise.flags.schema import make_flag
+        flag = make_flag(**fields)
         self.flags.append(flag)
         path = Path(custody) / "flags" / b5_driver.DRIVER_FLAGS
         path.parent.mkdir(parents=True, exist_ok=True)
