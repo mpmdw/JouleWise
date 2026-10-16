@@ -316,6 +316,41 @@ class ClaimCustodyManifestRootTests(unittest.TestCase):
         self.assertEqual(seen["floor"], runs / "mint" / "d-aggregate-floor.json")
         self.assertEqual(seen["floor_pinset_path"], sibling)
 
+    def test_block5_manifest_replay_runs_outside_the_custody_read_session(self):
+        # Joined run, step 9b, next refusal (paper_custody_binding_mismatch): the
+        # window-index replay of the finalized manifest read about 3,000 archive and
+        # bundle files inside the custody session, outside the census. Like the claim
+        # replay, it now runs in a fresh context; the owner's own reads stay bound.
+        import json
+        from joulewise import paper_custody as c, authentication_io as aio
+        from joulewise import analysis_manifest_v3 as v3
+        from joulewise.analysis_engine import artifact, claim_side_bound, inputs
+        observed = []
+        with tempfile.TemporaryDirectory(prefix="s10-claim-session-") as tmp:
+            runs = Path(tmp) / "restricted"
+            manifest = c._BoundFile("runs_root", Path("finalized/am-x.finalized.json"), "0" * 64,
+                                    c.InputRole.FINALIZED_MANIFEST, "generated")
+            floor = c._BoundFile("runs_root", Path("mint/d-aggregate-floor.json"), "0" * 64,
+                                 c.InputRole.FLOOR_ARTIFACT, "generated")
+            raws = {c.InputRole.FINALIZED_MANIFEST: b"{}", c.InputRole.CLAIM_VERDICTS: json.dumps({"inputs": {}}).encode(),
+                    c.InputRole.FLOOR_ARTIFACT: b"{}", c.InputRole.CLAIM_SIDE_BOUND: b"{}",
+                    c.InputRole.CLAIM_REPLAY_REQUEST: b"{}"}
+            session = aio.V2AuthenticationReadSession()
+            ctx = c._GateContext("claim_evidence", "production.claim_evidence.gamma.v5", "production", "claim-evidence.v1",
+                                 ("ctr",), Path(tmp) / "repository", runs, "a" * 40, (manifest, floor), (), raws, session)
+
+            def validate(value, **kwargs):
+                observed.append(aio._ACTIVE_SESSION.get())
+                return ()
+
+            with mock.patch.object(v3, "validate_finalized_analysis_manifest_v3", validate), \
+                 mock.patch.object(inputs, "sibling_floor_pinset", return_value=runs / "mint" / "floor-mint-pinset.json"), \
+                 mock.patch.object(artifact, "validate_claim_verdicts", return_value=[]), \
+                 mock.patch.object(claim_side_bound, "validate_claim_side_bound", return_value=()), session:
+                self.assertIs(aio._ACTIVE_SESSION.get(), session)
+                c._claim_issuance_gate(ctx)
+        self.assertEqual(observed, [None])
+
     def test_claim_replay_loads_the_block5_floor_with_its_sibling_pinset(self):
         # Joined run, step 9b, next refusal (claim_verdicts_replay_refused): the replay
         # read the floor's evidence roots through the registered pinsets only.

@@ -569,6 +569,16 @@ def _validate_floor_acceptance(ctx: _GateContext) -> None:
                                   input_role=InputRole.FLOOR_ACCEPTANCE)
 
 
+def _indexed_replay(call):
+    """Run a block-5 indexed replay outside the custody read session.
+
+    Like the claim replay (_replay_claim_verdicts), it authenticates the archives
+    and bundles it reads through the tracked window index and the bound manifest's
+    digests, not through census rows; the census binds what the owner itself reads.
+    """
+    return contextvars.Context().run(call)
+
+
 def _d165_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     from joulewise.dominance_closeout import validate_d165_paper_sources, _expected_global_fields
     from joulewise.analysis_manifest_v3 import _BLOCK5_ROLES
@@ -576,16 +586,18 @@ def _d165_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     manifest = next(binding for binding in ctx.sources if binding.role is InputRole.FINALIZED_MANIFEST)
     closeout = _json_object(ctx.raws[InputRole.D165_CLOSEOUT])
     manifest_path = _binding_root(manifest, ctx.repository, ctx.runs_root) / manifest.path
-    codes = validate_d165_paper_sources(
-        closeout=closeout, finalized_manifest_bytes=ctx.raws[InputRole.FINALIZED_MANIFEST],
-        finalized_manifest_path=manifest_path,
-        # The finalizer writes a manifest into its own custody root (its output
-        # directory), whose attachments it names relative to that root.
-        custody_root=manifest_path.parent, floor_artifact_bytes=ctx.raws[InputRole.FLOOR_ARTIFACT],
-        replay_sidecar_bytes=ctx.raws[InputRole.REPLAY_SIDECAR],
-        **({"window_index": _tracked_window_index(ctx)}
-           if _BLOCK5_ROLES & set(_json_object(ctx.raws[InputRole.FINALIZED_MANIFEST]).get("evidence", {})) else {}),
-    )
+    block5 = bool(_BLOCK5_ROLES & set(_json_object(ctx.raws[InputRole.FINALIZED_MANIFEST]).get("evidence", {})))
+    def sources():
+        return validate_d165_paper_sources(
+            closeout=closeout, finalized_manifest_bytes=ctx.raws[InputRole.FINALIZED_MANIFEST],
+            finalized_manifest_path=manifest_path,
+            # The finalizer writes a manifest into its own custody root (its output
+            # directory), whose attachments it names relative to that root.
+            custody_root=manifest_path.parent, floor_artifact_bytes=ctx.raws[InputRole.FLOOR_ARTIFACT],
+            replay_sidecar_bytes=ctx.raws[InputRole.REPLAY_SIDECAR],
+            **({"window_index": _tracked_window_index(ctx)} if block5 else {}),
+        )
+    codes = _indexed_replay(sources) if block5 else sources()
     if codes:
         return _FamilyReplay(False, False, (), tuple(codes))
     _validate_floor_acceptance(ctx)
@@ -712,11 +724,14 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     # The finalizer writes a manifest into its own custody root (its output
     # directory), whose attachments it names relative to that root. Its refusals
     # are records; the replay reports their reason codes.
-    codes = [getattr(refusal, "reason_code", refusal) for refusal in validate_finalized_analysis_manifest_v3(
-        manifest, manifest_path=manifest_path,
-        custody_root=manifest_path.parent,
-        **({"window_index": ctx.repository / _B5_WINDOW_INDEX_PATH}
-           if InputRole.CLAIM_REPLAY_REQUEST in ctx.raws else {}))]
+    block5 = InputRole.CLAIM_REPLAY_REQUEST in ctx.raws
+    def manifest_refusals():
+        return validate_finalized_analysis_manifest_v3(
+            manifest, manifest_path=manifest_path,
+            custody_root=manifest_path.parent,
+            **({"window_index": ctx.repository / _B5_WINDOW_INDEX_PATH} if block5 else {}))
+    codes = [getattr(refusal, "reason_code", refusal)
+             for refusal in (_indexed_replay(manifest_refusals) if block5 else manifest_refusals())]
     verdict_kwargs = {}
     if InputRole.CLAIM_REPLAY_REQUEST in ctx.raws:
         # Block 5: the embedded floor authenticates against the pinset beside the
