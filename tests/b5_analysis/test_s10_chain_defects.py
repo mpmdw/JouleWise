@@ -513,5 +513,59 @@ class FillInputBlockFiveFloorTests(unittest.TestCase):
             self.assertEqual(b._sibling_pinset_or_none(floor), mint / "floor-mint-pinset.json")
 
 
+class QRendererConditionalSeamTests(unittest.TestCase):
+    """Q-RENDERER: the Window-A Results renderer cannot render a block-5 fill input."""
+
+    BLOCK5_INPUT = {
+        "schema_version": "joulewise.results_fill_input.v1",
+        "campaigns": {"alpha": {"plan_id": "a", "attempt": 1}, "beta": {"plan_id": "b", "attempt": 1}},
+        "gamma": {"contrasts": []},
+        "characterization": {"funded": False, "run": False, "verdict": None},
+    }
+
+    def _run(self, main, argv):
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = main(argv)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_real_renderer_stops_on_the_block5_fill_input_shape(self):
+        import json
+        from scripts import render_results_fills as render
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "fill.json"
+            path.write_text(json.dumps(self.BLOCK5_INPUT))
+            code, out, err = self._run(render.main, [str(path)])
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("REFUSAL_REASON_1p5B_floor_window", err)
+
+    def test_seam_records_only_the_block5_stop_and_validates_only_that_line(self):
+        import json
+        from scripts import render_results_fills as render
+        from tests.b5_analysis.fixtures_s10 import conditional_renderer_stop_seam
+        with tempfile.TemporaryDirectory() as tmp:
+            block5 = Path(tmp) / "fill.json"
+            block5.write_text(json.dumps(self.BLOCK5_INPUT))
+            window_a = Path(tmp) / "window-a.json"
+            window_a.write_text(json.dumps({**self.BLOCK5_INPUT, "campaigns": {
+                "alpha": {"verdict": "missing.json"}, "beta": {"verdict": "missing.json"}}}))
+            with conditional_renderer_stop_seam():
+                code, out, _ = self._run(render.main, [str(block5)])
+                self.assertEqual(code, 0)
+                value = json.loads(out)
+                self.assertEqual(value["conditional"], "Q-RENDERER")
+                self.assertIn("REFUSAL_REASON_1p5B_floor_window", value["renderer_stop"])
+                rendered = Path(tmp) / "rendered.md"
+                rendered.write_text(out)
+                self.assertEqual(self._run(render.main, ["--validate-rendered", str(rendered)])[0], 0)
+                rendered.write_text(out.replace("Q-RENDERER", "OTHER"))
+                self.assertEqual(self._run(render.main, ["--validate-rendered", str(rendered)])[0], 2)
+                # Any input that is not the block-5 shape reaches the real renderer unchanged.
+                self.assertEqual(self._run(render.main, [str(window_a)])[:2], (2, ""))
+            self.assertEqual(self._run(render.main, [str(block5)])[0], 2)
+
+
 if __name__ == "__main__":
     unittest.main()

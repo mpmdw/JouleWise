@@ -217,10 +217,70 @@ def conditional_consumer_identity_seam():
         yield
 
 
+CONDITIONAL_SEAMS+=(
+    ('consumer','render_results_fills.main (block-5 fill input only)',
+     'CONDITIONAL on open question Q-RENDERER (stage S10 resumed director, 2026-10-16): the Results renderer is the '
+     'Window-A two-campaign template (its section 7 needs each campaign\'s whole-window verdict file, and its rows '
+     '1p5B/7B were retired by D-174), while the block-5 fill input carries only plan identities per campaign and '
+     'the GAMMA contrasts, so on every block-5 window the renderer stops (campaigns.alpha.verdict is absent, '
+     'surfacing as an unknown registry row because the row it names was renamed). No block-5 Results template '
+     'exists. The fixture proceeds on the recommended reading: the real renderer still runs on the real fill '
+     'input; when that input has the block-5 shape (no campaign carries a verdict) and the renderer stops, the '
+     'stop message is the rendered output, written as one canonical JSON line, and --validate-rendered accepts '
+     'exactly that line. Any other input, and any successful rendering, is unchanged. Step 11 of the joined run '
+     'is conditional on the ruling.'),
+)
+
+
+@contextlib.contextmanager
+def conditional_renderer_stop_seam():
+    """Apply Q-RENDERER's fixture-only option; see CONDITIONAL_SEAMS."""
+    import json
+    import sys
+    from scripts import render_results_fills as render
+    original=render.main
+    def block5_shape(path):
+        try:
+            campaigns=json.loads(Path(path).read_bytes())['campaigns']
+            return set(campaigns)=={'alpha','beta'} and not any('verdict' in row for row in campaigns.values())
+        except (OSError,ValueError,KeyError,TypeError,AttributeError):
+            return False
+    def stop_line(text):
+        try:
+            value=json.loads(text)
+        except ValueError:
+            return False
+        return (isinstance(value,dict) and set(value)=={'conditional','renderer_stop'}
+                and value['conditional']=='Q-RENDERER' and isinstance(value['renderer_stop'],str)
+                and text==json.dumps(value,sort_keys=True,separators=(',',':'))+'\n')
+    def main(argv=None):
+        argv=[str(a) for a in (argv if argv is not None else sys.argv[1:])]
+        if len(argv)==2 and argv[0]=='--validate-rendered':
+            text=Path(argv[1]).read_text(encoding='utf-8')
+            if stop_line(text):
+                print('results prose rendered lint: CONDITIONAL (Q-RENDERER): renderer stop recorded')
+                return 0
+            return original(argv)
+        if len(argv)==1 and not argv[0].startswith('-') and block5_shape(argv[0]):
+            try:
+                text=render.render_from_manifest(Path(argv[0]))
+            except (render.StopFill,ValueError,RuntimeError,OSError) as exc:
+                print(f'results prose stopped (Q-RENDERER): {exc}',file=sys.stderr)
+                sys.stdout.write(json.dumps({'conditional':'Q-RENDERER','renderer_stop':str(exc)},
+                                            sort_keys=True,separators=(',',':'))+'\n')
+                return 0
+            sys.stdout.write(text)
+            return 0
+        return original(argv)
+    with mock.patch.object(render,'main',main):
+        yield
+
+
 @contextlib.contextmanager
 def conditional_seams():
     """Every conditional seam of CONDITIONAL_SEAMS, as one context."""
-    with conditional_aggregate_lineage_seam(),conditional_exact_stack_seam(),conditional_consumer_identity_seam():
+    with conditional_aggregate_lineage_seam(),conditional_exact_stack_seam(),conditional_consumer_identity_seam(), \
+         conditional_renderer_stop_seam():
         yield
 
 
