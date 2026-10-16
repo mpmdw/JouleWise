@@ -179,6 +179,8 @@ jobs:
         # declared split test id still exists).
         env:
           SHARD_INDEX: ${{ matrix.shard }}
+          # The Mac always sets TMPDIR and the block-6 tests use it; set it here the same way.
+          TMPDIR: ${{ runner.temp }}
         run: |
           python - <<'PY'
           import json
@@ -235,6 +237,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      # Every shard reports, so one failing shard does not hide the others' results.
+      fail-fast: false
       matrix:
         python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
     steps:
