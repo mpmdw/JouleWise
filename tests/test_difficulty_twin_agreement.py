@@ -24,6 +24,8 @@ TWIN = ROOT / "scripts" / "difficulty_twin.py"
 REFERENCE = ROOT / "scripts" / "difficulty_estimate.py"
 
 # §10, kept independently of the twin's constants.
+AGREEMENT_TOL = 1e-6
+
 SCHEMAS = {
     "cells.csv": "variant boundary model mode level cell_status n_bench_target n_bench k_correct accuracy acc_lo acc_hi mean_generated_tokens_bench cap_hit_rate_bench loop_rate_bench n_holdout_target n_holdout k_holdout holdout_accuracy mean_prompt_tokens_holdout mean_generated_tokens_holdout m_energy_target m_energy mean_energy_j energy_lo_j energy_hi_j model_energy_j epc_model_j epc_model_lo_j epc_model_hi_j epc_model_status epc_direct_j epc_direct_lo_j epc_direct_hi_j epc_direct_status epc_j epc_lo_j epc_hi_j epc_status primary_source primary_reason j_per_token jpt_lo jpt_hi token_mismatch_count rows_not_used replaced_rows".split(),
     "decomposition.csv": "variant boundary model mode N a_j a_se a_lo_j a_hi_j b_prompt_j_per_tok b_prompt_se b_prompt_lo b_prompt_hi b_gen_j_per_tok b_gen_se b_gen_lo b_gen_hi r2 r2_gen_only gen_share status".split(),
@@ -311,7 +313,11 @@ class TwinAgreementTests(unittest.TestCase):
             t = {self.row_key(name, row): row for row in twin[name]}
             if set(r) != set(t):
                 differences.append(f"{name} row keys: main-only={sorted(set(r)-set(t))}, twin-only={sorted(set(t)-set(r))}")
-            tolerance = 1e-8 if name == "decomposition.csv" else 1e-9
+            # Registration revision 2.3 (orchestrator, 2026-10-15): one bar for every float, 1e-6 relative
+            # or absolute in the column's own unit. It sits about 1e9 above the float differences two
+            # independent programs leave (1.8e-15 seen) and far below any printed digit; words, verdicts,
+            # integers and strings stay exact.
+            tolerance = AGREEMENT_TOL
             for key in sorted(set(r) & set(t)):
                 for column in schema:
                     actual, expected = t[key][column], r[key][column]
@@ -319,12 +325,12 @@ class TwinAgreementTests(unittest.TestCase):
                         matches = actual == expected
                     else:
                         x, y = float(actual), float(expected)
-                        matches = x == y if math.isinf(x) or math.isinf(y) else math.isclose(x, y, rel_tol=tolerance, abs_tol=1e-12)
+                        matches = x == y if math.isinf(x) or math.isinf(y) else math.isclose(x, y, rel_tol=tolerance, abs_tol=tolerance)
                     if not matches:
                         differences.append(f"{name} {key} {column}: twin={actual!r}, main={expected!r}")
         # §11: identical summary.json apart from method_note. Orchestrator ruling (2026-10-14): every
         # structure, key, string, integer and verdict must be equal; a float is the same number as the
-        # CSV columns it repeats, so it takes the CSV tolerance (relative 1e-9, absolute 1e-12), since
+        # CSV columns it repeats, so it takes the CSV tolerance (AGREEMENT_TOL, revision 2.3), since
         # two independent programs need not round the last binary digit alike.
         ms = {k: v for k, v in main["summary.json"].items() if k != "method_note"}
         ts = {k: v for k, v in twin["summary.json"].items() if k != "method_note"}
@@ -337,7 +343,7 @@ class TwinAgreementTests(unittest.TestCase):
                 for i, (a, b) in enumerate(zip(x, y)):
                     walk(a, b, f"{path}[{i}]")
             elif isinstance(x, float) and isinstance(y, float) and type(x) is type(y):
-                same = x == y if math.isinf(x) or math.isinf(y) else math.isclose(x, y, rel_tol=1e-9, abs_tol=1e-12)
+                same = x == y if math.isinf(x) or math.isinf(y) else math.isclose(x, y, rel_tol=AGREEMENT_TOL, abs_tol=AGREEMENT_TOL)
                 if not same:
                     differences.append(f"{path}: twin={y!r}, main={x!r}")
             elif type(x) is not type(y) or x != y:
