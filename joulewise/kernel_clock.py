@@ -94,7 +94,7 @@ def anchor_residual_ns(delta_ns, span_ns, frequency):
 
 
 def frequency_gate(frequency, t_stream_max_s):
-    """Block-6 §8.6: hold only above 5 ms / T_stream_max minus 0.25 ppm."""
+    """Ruling 76 B.2, with exact arithmetic at the inclusive 5 ms limit."""
     validate_probe(frequency)
     if isinstance(t_stream_max_s, bool):
         raise ValueError("maximum sampler stream is invalid")
@@ -102,16 +102,13 @@ def frequency_gate(frequency, t_stream_max_s):
     if span <= 0:
         raise ValueError("maximum sampler stream must be positive")
     rate_ppm = Fraction(abs(frequency["raw_word"]), FREQUENCY_SCALE)
-    # The run's retained 5 ms clock limit sets this hold. The old 3.7 ms
-    # largest-value placement allowance is diagnostic, not an arm refusal.
-    bound_s = (rate_ppm + Fraction(1, 4)) * span / 1_000_000
+    bound_s = Fraction(37, 10_000) + (rate_ppm + Fraction(1, 4)) * span / 1_000_000
     margin_s = Fraction(5, 1000) - bound_s
     return {"schema_version": GATE_SCHEMA, "kernel_frequency": dict(frequency),
             "t_stream_max_s": float(span), "h_max_ms": 3.60,
             "placement_margin_ms": 0.10, "frequency_margin_ppm": 0.25,
             "limit_ms": 5.0, "bound_ms": float(bound_s * 1000),
-            "margin_ms": float(margin_s * 1000), "passes": margin_s >= 0,
-            "rate_above_budget": bound_s + Fraction(37, 10_000) > Fraction(5, 1000)}
+            "margin_ms": float(margin_s * 1000), "passes": margin_s >= 0}
 
 
 def validate_gate(gate):

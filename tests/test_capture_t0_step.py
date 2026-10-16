@@ -108,9 +108,7 @@ class CaptureT0StepTests(unittest.TestCase):
             (root / "kernel-frequency-gate.json").write_bytes(readiness.render_json(
                 kernel_clock.frequency_gate(frequency_probe(-207749), 320)))
             completed = subprocess.CompletedProcess(["/fixture/reference"], 0, b"{}\n", b"")
-            # At 320 s the hold is 5000 / 320 - 0.25 = 15.375 ppm;
-            # (16 + 0.25) * 320 / 1000 = 5.2 ms exceeds the 5 ms limit.
-            completed.kernel_frequency = frequency_probe(16 * 65536)
+            completed.kernel_frequency = frequency_probe(12 * 65536)
             with (mock.patch.object(capture, "_load_context", return_value=context),
                   mock.patch.object(capture, "_prepare_derived_inputs", return_value=[]),
                   mock.patch.object(capture, "_require_sequence"),

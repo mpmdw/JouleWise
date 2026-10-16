@@ -17,9 +17,9 @@ Measured directly, never parsed from a settings string:
 
 Arm (plan §2.3; thresholds from the window plan, defaults below):
 
-(i)   frequency hold: (|f| + 0.25 ppm) x T_stream_max <= 5 ms,
-      i.e. |f| <= 14.6754 ppm at 335 s (registration §8.6, 2026-10-15).
-      The old h = 3.7 ms budget line only records clock.rate_above_budget;
+(i)   frequency hold: h + (|f| + 0.25 ppm) x T_stream_max <= 5 ms.
+      Block 5 uses h = 3.7 ms (3.6306 ppm at 335 s). Block-6 plans use
+      h = 0 (14.6754 ppm) and flag the band above block 5's budget;
 (ii)  over the dwell, sampled at 1 Hz, the signed residual stays within
       +-1 ms of its start value;
 (iii) every anchor read pair has skew <= 1 ms;
@@ -252,26 +252,29 @@ def series(samples: Sequence[Mapping[str, Any]], *, boot_start: str | None,
 
 
 def frequency_bound(raw_word: int, thresholds: Mapping[str, Any]) -> dict[str, Any]:
-    """The run's 5 ms limit over T_stream_max, without the old placement h."""
+    """Registered h + drift budget; h = 0 selects block 6's hold and flag band."""
 
     rate_ppm = Fraction(abs(int(raw_word)), FREQUENCY_SCALE)
     span_s = Fraction(str(thresholds["t_stream_max_s"]))
     h_s = Fraction(str(thresholds["h_ms"])) / 1000
     margin = Fraction(str(thresholds["frequency_margin_ppm"]))
     limit_s = Fraction(str(thresholds["limit_ms"])) / 1000
-    # The 0.25 ppm fit margin stays; h was a largest-value allowance and
-    # leaves the hold under registration §8.6. Preserve its diagnostic line.
-    bound_s = (rate_ppm + margin) * span_s / 1_000_000
-    max_ppm = limit_s * 1_000_000 / span_s - margin
-    return {"frequency_ppm": float(Fraction(int(raw_word), FREQUENCY_SCALE)),
+    bound_s = h_s + (rate_ppm + margin) * span_s / 1_000_000
+    max_ppm = (limit_s - h_s) * 1_000_000 / span_s - margin
+    gate = {"frequency_ppm": float(Fraction(int(raw_word), FREQUENCY_SCALE)),
             "bound_ms": float(bound_s * 1000), "limit_ms": float(limit_s * 1000),
-            "max_abs_frequency_ppm": float(max_ppm), "passes": bound_s <= limit_s,
-            "rate_above_budget": bound_s + h_s > limit_s}
+            "max_abs_frequency_ppm": float(max_ppm), "passes": bound_s <= limit_s}
+    if h_s == 0:
+        # Only block-6 plans select h = 0. The original block-5 allowance
+        # remains the diagnostic line, never a second arm refusal.
+        budget_h_s = Fraction(str(DEFAULT_THRESHOLDS["h_ms"])) / 1000
+        gate["rate_above_budget"] = gate["passes"] and bound_s + budget_h_s > limit_s
+    return gate
 
 
 def rate_flags(gate: Mapping[str, Any]) -> list[dict[str, Any]]:
     return ([{"code": "clock.rate_above_budget", "frequency_gate": dict(gate)}]
-            if gate["rate_above_budget"] else [])
+            if gate.get("rate_above_budget", False) else [])
 
 
 def expected_anchor_movement_ns(raw_word: int, elapsed_raw_ns: int) -> Fraction:

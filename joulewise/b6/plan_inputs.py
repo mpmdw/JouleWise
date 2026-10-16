@@ -18,6 +18,9 @@ SIZING = SEALED_DIR + "/sizing_b5.json"
 PACK_LABELS = {"d117_floor_qwen3-1p7b_v5": "ALPHA", "d117_floor_qwen3-8b_v5": "BETA",
                "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5": "GAMMA"}
 BYTES_PER_MEMBER = 182 * 1024 * 1024
+# Block-6 registration §8.6: retain the 5 ms limit and 0.25 ppm margin,
+# but remove the block-5 placement allowance from the HOLD.
+CLOCK_THRESHOLDS = {"h_ms": 0, "frequency_margin_ppm": 0.25, "limit_ms": 5.0}
 
 
 def sha256(raw):
@@ -39,6 +42,7 @@ def registered_thresholds(text):
 
 def thresholds(measurement, registration_dir):
     result = registered_thresholds((Path(measurement) / REGISTRATION).read_text())
+    result["clock"].update(CLOCK_THRESHOLDS)
     overrides = registration.load_precheck_thresholds(registration_dir)
     contract = plan.hazard_threshold_defaults()
     # The precheck also has non-driver fields (agents, margins, probe timing).

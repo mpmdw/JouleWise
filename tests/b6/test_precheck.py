@@ -66,6 +66,7 @@ class PrecheckTests(DeskCase):
         for rate, expected in ((2, []), (4, ['clock.rate_above_budget']), (3.63059, []),
                                (3.6306, ['clock.rate_above_budget']), (3.6307, ['clock.rate_above_budget']),
                                (Fraction(5000, 335) - Fraction(1, 4), ['clock.rate_above_budget']),
+                               (Fraction(5000, 335) - Fraction(1, 4) + Fraction(1, 10**6), ['clock.rate']),
                                (15, ['clock.rate'])):
             reading, codes = p.clock_rate(series(rate), 'boot', 'boot', limits)
             self.assertEqual(codes, expected)
@@ -402,6 +403,14 @@ class PrecheckTests(DeskCase):
             result = p.run_precheck(PACKS['alpha'], self.measurement, self.state, ctx=ctx, seams=seams)
         wait = next(item for item in result['would_refuse'] if item['code'] == 'clock.linearity')
         self.assertEqual(wait['retry_after_s'], 600)
+
+    def test_rate_above_block5_budget_only_flags_on_block6_precheck(self):
+        ctx, seams, _ = fake_environment(self.measurement)
+        ctx.clocks.drift_word = 4 * clock.FREQUENCY_SCALE
+        result = p.run_precheck(PACKS['alpha'], self.measurement, self.state, ctx=ctx, seams=seams)
+        self.assertIn('clock.rate_above_budget', [row['code'] for row in result['predicted_flags']])
+        self.assertFalse(any(row['code'].startswith('clock.') for row in result['would_refuse']))
+        self.assertEqual(p.thresholds_for(self.measurement, PACKS['alpha'], self.measurement / p.REGISTRATION_RELATIVE)['clock']['h_ms'], 0)
 
     def test_rate_hold_records_its_flag_and_requests_wake_without_remedy(self):
         ctx, seams, _ = fake_environment(self.measurement)

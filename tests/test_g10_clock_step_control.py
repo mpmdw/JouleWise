@@ -127,7 +127,7 @@ _REAL_SUBPROCESS_RUN = subprocess.run
 _REAL_SLEEP = time.sleep
 NS = 1_000_000_000
 WORD_TODAY = -207_749      # -3.17 ppm in the kernel's 2**-16 ppm units
-WORD_FAILS_GATE = 15 * kernel_clock.FREQUENCY_SCALE  # (15 + 0.25) * 335 / 1000 = 5.10875 ms
+WORD_FAILS_GATE = 239_862  # 3.66 ppm: above the 3.63 ppm the next arm's gate allows at 335 s
 STEP_NS = 1_300_000_000     # one night of accumulated wall-clock error
 
 
@@ -589,8 +589,7 @@ def test_off_at_the_first_read_where_the_next_arm_gate_passes(tmp_path):
 def test_todays_frequency_switches_off_at_sixty_seconds_not_fifteen_minutes(tmp_path):
     # PLAN2 S7: this machine's f (about -3.17 ppm) misses the old 3.0 ppm
     # target, so G10 used to run its full 900 s. It passes the next arm's gate
-    # ((207749 / 65536 + 0.25) * 335 / 1000 = 1.14570 ms <= 5 ms),
-    # so OFF now comes at the first read, 60 s after ON.
+    # (4.846 ms <= 5 ms), so OFF now comes at the first read, 60 s after ON.
     mac = FakeMac()
     record, _, _ = run(mac, tmp_path)
     settling = record["settling"]
@@ -600,24 +599,7 @@ def test_todays_frequency_switches_off_at_sixty_seconds_not_fifteen_minutes(tmp_
     off_call = [c for c in mac.calls if c["argv"] == g10.OFF_ARGV][0]
     assert off_call["since_on"] == approx(60.0)
     gate = record["next_arm_frequency_gate"]
-    assert gate["passes"] is True and gate["bound_ms"] == approx(1.14570, abs=1e-5)
-
-
-def test_rate_above_old_budget_switches_off_at_sixty_seconds(tmp_path):
-    word = 239_862  # 3.660003662 ppm: above the old 3.63 ppm line, below the hold.
-    gate = kernel_clock.frequency_gate(probe(word), 335.0)
-    # (239862 / 65536 + 0.25) * 335 / 1000 = 1.309851227 ms;
-    # adding the old 3.7 ms placement term crosses 5 ms only for the flag.
-    assert gate["passes"] is True and gate["rate_above_budget"] is True
-    assert gate["bound_ms"] == approx(1.309851227, abs=1e-9)
-    mac = FakeMac(f_after_on=lambda since: word)
-    record, code, _ = run(mac, tmp_path)
-    assert code == g10.EXIT_OK
-    assert record["settling"]["stop_reason"] == "frequency_gate"
-    assert [r["elapsed_since_on_s"] for r in record["settling"]["reads"]] == [60.0]
-    off_call = [c for c in mac.calls if c["argv"] == g10.OFF_ARGV][0]
-    assert off_call["since_on"] == approx(60.0)
-    assert record["next_arm_frequency_gate"]["passes"] is True
+    assert gate["passes"] is True and gate["bound_ms"] == approx(4.8457, abs=1e-3)
 
 
 def test_off_is_never_earlier_than_the_minimum_after_on(tmp_path):
@@ -675,10 +657,9 @@ def test_frequency_target_is_inclusive_and_exact():
 
 
 def test_the_stop_rule_is_the_next_arm_gate_exactly(tmp_path):
-    # The registered hold is 5000 / 335 - 0.25 ppm. Kernel words are
-    # integral 2**-16 ppm: word 961765 gives 4.999998703 ms, and the
-    # next word gives 5.000003815 ms, straddling the inclusive 5 ms gate.
-    edge = math.floor((Fraction(5000, 335) - Fraction(1, 4)) * kernel_clock.FREQUENCY_SCALE)
+    passing = [word for word in range(237_000, 239_000)
+               if kernel_clock.frequency_gate(probe(-word), 335.0)["passes"]]
+    edge = max(passing)
     mac = FakeMac(f_after_on=lambda since: -(edge + 1))
     record, _, _ = run(mac, tmp_path)
     assert record["settling"]["stop_reason"] == "timeout"
@@ -691,7 +672,7 @@ def test_the_stop_rule_is_the_next_arm_gate_exactly(tmp_path):
 
 
 def test_high_frequency_after_off_is_reported_for_the_next_arm(tmp_path):
-    mac = FakeMac(f_after_on=lambda since: WORD_FAILS_GATE)  # 15 ppm > 14.675373 ppm hold
+    mac = FakeMac(f_after_on=lambda since: 239_862)  # 3.66 ppm > 3.63 ppm allowed
     record, code, _ = run(mac, tmp_path)
     assert record["next_arm_frequency_gate"]["passes"] is False
     assert code == g10.EXIT_OK  # a diagnostic, never a stop

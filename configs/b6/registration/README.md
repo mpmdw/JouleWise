@@ -13,3 +13,10 @@ values are recorded as `precheck.acceptance_unavailable`.
 
 Copies retain their original status fields and all recorded source paths.
 Loading these files reads their bytes only and never follows their source paths.
+
+Block-6 clock policy (§8.6) is supplied by `b6.plan_inputs.CLOCK_THRESHOLDS`
+to both precheck and driver plans: `h_ms = 0`, `frequency_margin_ppm = 0.25`,
+`limit_ms = 5`. The hold is therefore 5000 / T_stream_max_s - 0.25 ppm;
+at 335 s it is 14.675373 ppm. The band above block 5's `h_ms = 3.7` budget
+(3.630597 ppm at 335 s) emits `clock.rate_above_budget` without a hold.
+The copied `sizing_b5.json` retains block 5's registered values verbatim.

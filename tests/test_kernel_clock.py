@@ -54,10 +54,10 @@ class KernelClockTests(unittest.TestCase):
     def test_frequency_gate_budget_and_inclusive_boundary(self):
         gate = clock.frequency_gate(frequency_probe(-207749), 320)
         self.assertTrue(gate["passes"])
-        self.assertAlmostEqual(gate["margin_ms"], 5 - (207749 / 65536 + .25) * 320 / 1000)
-        self.assertFalse(clock.frequency_gate(frequency_probe(16 * 65536), 320)["passes"])
-        self.assertTrue(clock.frequency_gate(frequency_probe(0), 20000)["passes"])
-        self.assertFalse(clock.frequency_gate(frequency_probe(0), 20000.000001)["passes"])
+        self.assertAlmostEqual(gate["margin_ms"], 5 - 3.6 - .1 - (207749 / 65536 + .25) * 320 / 1000)
+        self.assertFalse(clock.frequency_gate(frequency_probe(12 * 65536), 320)["passes"])
+        self.assertTrue(clock.frequency_gate(frequency_probe(0), 5200)["passes"])
+        self.assertFalse(clock.frequency_gate(frequency_probe(0), 5200.000001)["passes"])
         for span in (None, True, 0, -1, float("nan"), float("inf")):
             with self.subTest(span=span), self.assertRaises((ValueError, TypeError)):
                 clock.frequency_gate(frequency_probe(), span)

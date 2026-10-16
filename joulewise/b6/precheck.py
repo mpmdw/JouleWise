@@ -17,7 +17,7 @@ import statistics
 from typing import Any, Callable
 
 from joulewise.b5 import chain, plan
-from joulewise.b6 import fingerprint
+from joulewise.b6 import fingerprint, plan_inputs
 from joulewise.b6.acceptance_interface import (
     CaptureEvidence, MemberEvidence, StageEvidence, SessionEvidence, load_acceptance,
 )
@@ -36,7 +36,8 @@ POWER_CUSTOM_ARGV = ("/usr/bin/pmset", "-g", "custom")
 ANALYSIS_ARGV = ("/bin/ps", "-Ao", "pid,ppid,%cpu,comm")
 ANALYSIS_NAMES = {"mediaanalysisd", "photoanalysisd", "corespotlightd", "mds_stores", "mdworker", "photolibraryd"}
 PRECHECK_DEFAULTS = {
-    "clock": {**clock.DEFAULT_THRESHOLDS, "series_min_s": 60, "retry_after_s": 600},
+    "clock": {**clock.DEFAULT_THRESHOLDS, **plan_inputs.CLOCK_THRESHOLDS,
+              "series_min_s": 60, "retry_after_s": 600},
     "battery": {**battery.DEFAULT_THRESHOLDS, "limit_ma": 200},
     "thermal": {**thermal.DEFAULT_THRESHOLDS, "max_level": 0},
     "contention": {**contention.DEFAULT_THRESHOLDS, "cpu_limit_s_per_s": 0.05,
@@ -321,11 +322,12 @@ def clock_rate(samples, boot_start, boot_end, thresholds):
     residuals = [y - ym - slope * (x - xm) for x, y in zip(xs, ys)]
     # Registration §8.6: 5 ms / T_stream_max - 0.25 ppm, using the
     # same exact hold arithmetic as hazards.clock.frequency_bound.
-    bound = (abs(rate) + Fraction(
+    bound = Fraction(str(thresholds["h_ms"])) + (abs(rate) + Fraction(
         str(thresholds["frequency_margin_ppm"]))) * Fraction(str(thresholds["t_stream_max_s"])) / 1000
     if bound > Fraction(str(thresholds["limit_ms"])):
         codes.append("clock.rate")
-    elif bound + Fraction(str(thresholds["h_ms"])) > Fraction(str(thresholds["limit_ms"])):
+    elif thresholds["h_ms"] == 0 and (bound + Fraction(str(clock.DEFAULT_THRESHOLDS["h_ms"]))
+                                        > Fraction(str(thresholds["limit_ms"]))):
         codes.append("clock.rate_above_budget")
     if max(map(abs, residuals)) > thresholds["residual_max_ns"]:
         codes.append("clock.linearity")
