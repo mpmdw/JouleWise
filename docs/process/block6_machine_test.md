@@ -61,7 +61,7 @@ Built once, by the block-5 post-seal runbook's steps 3 to 5
 disturbance up to the 1,500 s cap, meter unplugged" (the last at the desk, below). It is a non-claim smoke of pack ALPHA (4 runs: start
 reference, one decode repeat, one prefill repeat, end reference, between an opening and a closing capture),
 launched exactly as a session is (the night job through `scripts/install_night_agent.sh`, ProcessType
-Interactive), with two faults injected by a second launchd job and the meter's data link unplugged. Its numbers
+Interactive), with two faults injected by a second launchd job and the meter connected. Its numbers
 are never claim data; its ledger is a copy.
 
 **Nobody needs to be at the machine** (orchestrator, 2026-10-16). The test runs with the KM003C meter connected
@@ -133,11 +133,11 @@ block-6 catalog and the test's registration directory, then reads its `derived/b
 job and the injector, writes `<out>/report.json`, and prints, structure only, for each item whether the records
 show it: the agent pause (an episode, resume no sooner than 600 s after the last sighting, the overlapping run
 excluded, the chain not stopped); the idle cap (exactly one `idle.wait_cap_skip`, later runs measured); the meter
-(stream header `absent`, harvest flag `meter.absent`); the keep-awake hold verified at start and end, a sleep
+(connected here, so this item reads "not observed; meter present: not exercised", which is expected); the keep-awake hold verified at start and end, a sleep
 reading at every run; chain exit 0, harvest exit 0, the smoke desk's status `physics` (the injected faults are
-physical, so a real smoke would wait and run again) and no desk errors. Reconnect the meter afterwards.
+physical, so a real smoke would wait and run again) and no desk errors.
 
-**Pass.** Every item observed and no desk error. A missing item is a defect in the code it names: fix it on this
+**Pass.** Every item observed except the meter item (expected, above) and no desk error. A missing item is a defect in the code it names: fix it on this
 branch, re-pin, run the test again. A physical refusal at the arm (clock, battery, thermal, contention, disk,
 instrument) is not a failure of the test: run it again later.
 
