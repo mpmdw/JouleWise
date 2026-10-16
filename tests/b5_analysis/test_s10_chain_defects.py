@@ -398,6 +398,35 @@ class ClaimCustodyManifestRootTests(unittest.TestCase):
         self.assertTrue(all(type(code) is str for code in replay.validator_codes))
 
 
+class CustodyGovernedExtractionSpecTests(unittest.TestCase):
+    """Joined run, step 10: the reported-energy custody read the registered copy of the
+    sealed floor pack's extraction spec with the strict grammar that forbids
+    estimator_registration, and refused paper_custody_parse_invalid:extraction_spec."""
+
+    def read(self, role):
+        import hashlib, json
+        from joulewise import paper_custody as c
+        from joulewise.authentication_io import V2AuthenticationReadSession
+        raw = json.dumps({"cells": [{"cell_id": "x", "estimator_registration": {"id": "synthetic"}}]}).encode()
+        with tempfile.TemporaryDirectory(prefix="s10-governed-spec-") as tmp:
+            runs = Path(tmp)
+            (runs / "spec.json").write_bytes(raw)
+            binding = c._BoundFile("runs_root", Path("spec.json"), hashlib.sha256(raw).hexdigest(), role, "generated")
+            with V2AuthenticationReadSession() as session:
+                return c._read_once(session, Path(tmp) / "repository", runs, binding, head="a" * 40, bindings=(binding,)), raw
+
+    def test_extraction_spec_role_admits_the_governed_vocabulary(self):
+        from joulewise import paper_custody as c
+        value, raw = self.read(c.InputRole.EXTRACTION_SPEC)
+        self.assertEqual(value, raw)
+
+    def test_other_roles_still_refuse_the_vocabulary(self):
+        from joulewise import paper_custody as c
+        with self.assertRaises(c.PaperCustodyRefusal) as caught:
+            self.read(c.InputRole.EXTRACTION_REPORT)
+        self.assertEqual(caught.exception.code, "paper_custody_parse_invalid")
+
+
 class PaperSourcesBlockFiveFloorTests(unittest.TestCase):
     """Joined run, step 6: the close-out's paper-source replay authenticated the block-5
     aggregate floor against the registered pinsets only, which name no block-5 floor, and

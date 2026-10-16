@@ -1316,6 +1316,11 @@ def _read_once(
                 raise PaperCustodyRefusal("paper_custody_digest_mismatch", input_role=binding.role)
             session.ingest(f"git:{head}:{relative}", blob, grammar=grammar,
                            label=f"paper custody {binding.role.value} Git blob")
+        if binding.role is InputRole.EXTRACTION_SPEC:
+            # A sealed floor pack's extraction spec is the one governed document
+            # that declares estimator registration (as the mint's and the claim
+            # gate's readers already admit it).
+            session.allow_governed_extraction_spec(root / relative)
         return session.read_nofollow_pinned(
             root, relative, expected_sha256=binding.expected_sha256,
             grammar=grammar, label=f"paper custody {binding.role.value}",
