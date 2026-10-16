@@ -259,7 +259,7 @@ class PrepareTests(Case):
         bindings = plan_json["hazard_window"]["bindings"]
         self.assertEqual(bindings["capture_screen"], {
             "alignment_reference_s": "0.036462861644980", "bracket_screen_s": "0.014531",
-            "operative_bound_stop_s": None})
+            "operative_bound_stop_s": "0.139"})
         self.assertIs(bindings["spare_retries"], False)
         rendered = Path(plan_json["chain_path"]).read_text()
         self.assertIn("screen_b6_calibration()", rendered)

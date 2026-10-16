@@ -217,7 +217,7 @@ class Harness:
         self.driver._durable_record = mock.Mock(return_value=None)
         self.sent = {"attempted": 1, "sent": True, "heartbeat_seen": True, "last_error": None}
         self.driver.run_courier = mock.Mock(return_value=self.sent)
-        self.driver._resolve_courier_bin = lambda _bin: (self.courier, None, None)
+        self.driver._resolve_courier_bin = lambda _bin, *, plan=None: (self.courier, None, None)
         self.driver._hazard_seams = lambda: self.seams()
         patcher = mock.patch.dict(os.environ, {"HOME": str(self.home)})
         patcher.start()
