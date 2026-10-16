@@ -86,7 +86,9 @@ class StageAndStreamSizingTests(unittest.TestCase):
         self.assertEqual(sized['t0_stage_cap_s'], 3300)
         gate = kernel_clock.frequency_gate(frequency_probe(-207749), sized['longest_sampler_stream_s'])
         self.assertTrue(gate['passes'])
-        self.assertAlmostEqual(gate['bound_ms'], 4.84570, places=5)
+        # (207749 / 65536 + 0.25) * 335 / 1000 = 1.1456993866 ms;
+        # the 3.7 ms placement term is no longer part of the hold.
+        self.assertAlmostEqual(gate['bound_ms'], 1.14570, places=5)
 
     def test_source_authenticated_334_second_maximum_is_refused(self):
         adapter = json.loads((writer.REPO_ROOT /
