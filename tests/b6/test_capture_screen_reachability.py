@@ -32,6 +32,36 @@ def window_binding(runs, custody, *, block6):
 
 
 class PolicyReadTests(unittest.TestCase):
+    def test_root_without_hazard_locator_keeps_block5_without_records_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            flags = []
+            self.assertFalse(ledger.uses_block6_capture_screen(Path(tmp), records_flags=flags))
+            self.assertEqual(flags, [])
+
+    def test_hazard_root_with_unreadable_plan_keeps_block6_with_records_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs, custody = Path(tmp) / 'runs', Path(tmp) / 'custody'
+            window_binding(runs, custody, block6=True)
+            policy = custody / 'night_plan.json'
+            for payload in (None, '{broken', '{}', '{"hazard_window":{"bindings":null}}'):
+                with self.subTest(payload=payload):
+                    if payload is None:
+                        policy.unlink()
+                    else:
+                        policy.write_text(payload)
+                    flags = []
+                    self.assertTrue(ledger.uses_block6_capture_screen(runs, records_flags=flags))
+                    self.assertEqual(flags, ['records.window_plan_unreadable'])
+
+    def test_hazard_locator_with_unresolved_custody_keeps_block6_with_records_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp)
+            write(runs / window_lineage.LOCATOR_BASENAME, {
+                'schema_version': window_lineage.HAZARD_LOCATOR_SCHEMA})
+            flags = []
+            self.assertTrue(ledger.uses_block6_capture_screen(runs, records_flags=flags))
+            self.assertEqual(flags, ['records.window_plan_unreadable'])
+
     def test_window_policy_joins_the_existing_authentication_read_session(self):
         from joulewise.authentication_io import V2AuthenticationReadSession
 

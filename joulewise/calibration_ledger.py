@@ -6071,14 +6071,17 @@ def uses_block6_capture_screen(
     Reservation plans name reused block-5 packs. The desk supplies its window
     plan directly; capture reaches it through the runs-root lineage. Its
     capture_screen binding selects the same policy as the chain and courier.
-    Only a readable block-5 record selects the historical refusing policy.
-    Missing/malformed records disclose and leave the level screen diagnostic.
+    A root without HAZARD lineage keeps the historical block-5 policy.
+    Under HAZARD lineage, missing/malformed plans disclose and leave the level
+    screen diagnostic; a readable block-5 plan keeps its refusing policy.
     """
     from joulewise.b6.courier import block_six_plan
     from joulewise.flags.core import WINDOW_PLAN_BASENAME, hazard_flag_context
 
     if window_plan_path is None:
         context = hazard_flag_context(runs_root, writer="calibration-screen-policy")
+        if context is None:
+            return False
         custody = getattr(context, "custody_root", None)
         if custody is None:
             if records_flags is not None:

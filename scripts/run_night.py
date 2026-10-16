@@ -1543,6 +1543,14 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
     return None
 
 
+class _FallbackPlan(night_gate.HazardNightPlan):
+    """A malformed record's reporting plan; its courier must be a program.
+
+    Surviving bindings cannot establish which block the original plan used.
+    Keep them for reporting, but never use their shape to authorize an agent.
+    """
+
+
 def _resolve_courier_bin(
     requested: Path | None, *, plan: NightPlan | None = None,
 ) -> tuple[Path | None, str | None, dict[str, str] | None]:
@@ -1550,7 +1558,7 @@ def _resolve_courier_bin(
     # a program, never `claude`, and a missing courier is never substituted.
     if plan is not None:
         from joulewise.b6 import courier as b6_courier
-        if b6_courier.block_six_plan(plan):
+        if isinstance(plan, _FallbackPlan) or b6_courier.block_six_plan(plan):
             found, error = b6_courier.resolve(requested, plan.measurement_root)
             return found, error, None
     substitution: dict[str, str] | None = None
@@ -2093,10 +2101,8 @@ def _fallback_plan(plan_path: Path) -> NightPlan:
     receipt_class = raw.get("receipt_class")
     if receipt_class not in set(night_gate.PLAN_RECEIPT_CLASSES):
         receipt_class = "DIAGNOSTIC_NO_PACK"
-    from joulewise.night_gate import HazardNightPlan
     hazard = raw.get("hazard_window")
-    fallback_type = HazardNightPlan if isinstance(hazard, dict) else NightPlan
-    return fallback_type(
+    return _FallbackPlan(
         plan_id=plan_id,
         receipt_class=receipt_class,
         t0_epoch_s=now,
@@ -2109,8 +2115,7 @@ def _fallback_plan(plan_path: Path) -> NightPlan:
         chain_sha256_path="",
         custody_root=custody,
         registration_path=None,
-        # A malformed block-6 record still must never select an agent courier.
-        **({"hazard_window": hazard} if isinstance(hazard, dict) else {}),
+        hazard_window=hazard if isinstance(hazard, dict) else {},
     )
 
 

@@ -88,9 +88,7 @@ class DeskLane:
                         record = {"slot": name, "rc": result.returncode,
                                   "status": "FINALIZED" if result.returncode == 0 else "FAILED",
                                   "attempts": attempts}
-                        if result.returncode:
-                            flags.append("records.pin_ledger")
-                        else:
+                        if result.returncode == 0:
                             try:
                                 recovered = json.loads(result.stdout)
                             except (ValueError, TypeError):
@@ -102,7 +100,17 @@ class DeskLane:
                     except Exception as exc:
                         record = {"slot": name, "status": "FAILED", "error": type(exc).__name__,
                                   "attempts": attempts}
-                        flags.append("records.pin_ledger")
+                    # A timeout can follow the final ledger commit. The retry
+                    # then refuses the already-finalized slot; judge custody
+                    # from the ledger before recording a desk failure.
+                    status = plan.ledger_head_status(measurement)
+                    if record["status"] == "FAILED":
+                        current = (status.get("open_session_next_slots") or {}).get(session_id) or {}
+                        if ("open_session_next_slots" in status and not current.get("error")
+                                and current.get("next_slot") != name):
+                            record["status"] = "FINALIZED"
+                        else:
+                            flags.append("records.pin_ledger")
                     metadata.setdefault("bracket_resume", []).append(record)
                     if record["status"] == "FAILED":
                         flags.append("records.resume_finalize_failed")
@@ -117,7 +125,6 @@ class DeskLane:
                                                 detail="resume-finalize failed twice; bracket aborted")
                         except Exception:
                             pass  # A desk records failure cannot hold the session loop.
-                    status = plan.ledger_head_status(measurement)
                 if session_id in status["open_sessions"]:
                     night = Path(metadata["paths"].get("custody", measurement)) / "night"
                     stop = next((r.get("reason", r.get("kind")) for r in reversed(chain.stage_journal(night))
