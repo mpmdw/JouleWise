@@ -196,7 +196,7 @@ def prepare(measurement_root, out, *, pack=PACK, lead_s=900, busy_cores=1,
     script.write_text("#!/bin/zsh\nset -euo pipefail\n" + shlex.join(installer) + "\n"
                       + "/bin/launchctl bootstrap gui/$(id -u) " + shlex.quote(str(injector)) + "\n"
                       + "print -r -- " + shlex.quote(
-                          "Meter data link must be unplugged before launch. Exit all agents before the arm. "
+                          "Leave the meter connected (its absent path is desk-tested). Exit all agents before the arm. "
                           "After the chain ends, check injections.jsonl and run report --state " + str(state_path))
                       + "\n", encoding="utf-8")
     script.chmod(0o755)

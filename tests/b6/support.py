@@ -40,7 +40,7 @@ def fp(pack=PACKS['alpha']):
 
 class DeskCase(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(dir=os.environ['TMPDIR'], prefix='b6-desk-')
+        self.tmp = tempfile.TemporaryDirectory(dir=tempfile.gettempdir(), prefix='b6-desk-')
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.processes = []
