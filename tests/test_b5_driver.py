@@ -856,7 +856,10 @@ class MockRuntimeDryRenderTests(unittest.TestCase):
         self.assertTrue(hazard["lineage"]["published"])
         self.assertTrue(hazard["monitor"]["stop"]["proven_stopped"])
         self.assertEqual("DISCHARGED", hazard["g10"]["result"])
-        self.assertEqual(["network_time.off_output"], hazard["flags_emitted"])
+        # The sleep reading needs CLOCK_UPTIME_RAW (macOS); where it is missing the driver rightly records the reading as
+        # unmeasured (Linux CI).
+        unmeasured = [] if hasattr(time, "CLOCK_UPTIME_RAW") else ["sleep.reading_unmeasured"]
+        self.assertEqual(["network_time.off_output"] + unmeasured, hazard["flags_emitted"])
         self.assertTrue(hazard["chain"]["matches_sidecar"])
         inventory = json.loads((harness.night / b5_driver.INVENTORY_RECORD).read_text())
         checkout = inventory["measurement_checkout"]
