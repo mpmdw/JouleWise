@@ -93,7 +93,7 @@ class Harness:
         self.floor={"cells":[]}; self.closeout={}; self.verdicts={"contrasts":[]}
         self.sens=deepcopy(sensitivity()); self.steps={"no_analysed_window_harvested_twice":True,
             "windows":{p:{"stored_verdict":{"status":"failed","conditions":[]},"member_reasons":[],
-                "adapter_continuity":"passed","tripwires":{"excluded_reference_in_screen":"passed",
+                "adapter_continuity":"stable","tripwires":{"excluded_reference_in_screen":"passed",
                 "kept_member_outside_verdict_membership":"passed"},"deciding_references":7,"deciding_spares":0,
                 "writer_excluded_count":0,"reference_parity":"passed","ledger_prefix_test":"passed"} for p in d.PACK_ORDER}}
         for r in self.steps["windows"].values():r.update(writer_excluded_by_family={},writer_excluded_all_removed=True)
@@ -626,7 +626,7 @@ class PartDTests(unittest.TestCase):
         text=h.text();self.assertIn("stored verdict status: failed",text)
         self.assertIn("stored condition whole_window_bundle_invalid; answered by exclusions",text)
         self.assertIn("2 members; every one removed: yes",text)
-        self.assertIn("adapter-continuity decision: passed",text)
+        self.assertIn("adapter-continuity decision: stable",text)
         self.assertIn("deciding screen used 7 references and 0 spares",text)
         self.assertIn("no analysed window was harvested twice",text)
         self.assertIn("terminal sequence 500; prefix test passed",text)
@@ -1205,3 +1205,18 @@ class FlagBlindingTests(unittest.TestCase):
             d._flags(archive([row(restricted,'STRUCTURE')]),catalog)
         with self.assertRaisesRegex(AnalysisRefusal,'^flag_blinding_differs_from_catalog$'):
             d._code(restricted,catalog,[row(restricted,'STRUCTURE')])
+
+
+class AdapterContinuityWordTests(unittest.TestCase):
+    """S10 joined run, step 11: the driver copies the writer's continuity decision
+    (stable, flagged or failed; idle_admission), which the producer refused as a
+    step word, so every disclosure record refused disclosure_input_invalid."""
+
+    def test_writer_continuity_decisions_are_printed_and_others_refuse(self):
+        for word in ("stable","flagged","failed","not_applicable"):
+            h=Harness()
+            for row in h.steps["windows"].values():row["adapter_continuity"]=word
+            rows=[r for r in h.produce()["window_lines"]["alpha"] if r["line"]=="adapter_continuity"]
+            self.assertEqual([r["decision"] for r in rows],[word])
+        h=Harness();h.steps["windows"]["alpha"]["adapter_continuity"]="passed"
+        with self.assertRaisesRegex(AnalysisRefusal,"^disclosure_input_invalid$"):h.produce()

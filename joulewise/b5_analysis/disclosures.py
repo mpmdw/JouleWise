@@ -1114,6 +1114,17 @@ def _step_word(value):
     return value
 
 
+# The writer's own adapter wattage continuity decisions
+# (idle_admission.adapter_wattage_continuity), which the driver copies.
+_CONTINUITY_WORDS = ("stable", "flagged", "failed", "not_applicable")
+
+
+def _continuity_word(value):
+    if value not in _CONTINUITY_WORDS:
+        raise AnalysisRefusal("disclosure_input_invalid")
+    return value
+
+
 def _step_count(value):
     if type(value) is not int or value<0:raise AnalysisRefusal("disclosure_input_invalid")
     return value
@@ -1174,7 +1185,7 @@ def _ruling_lines(result,windows,brackets,sensitivity,steps,catalog,flags):
             codes=[_code(c,catalog,flags[pack]) for c in values.pop("codes")]
             result["window_lines"][pack].append({"line":"stored_member_reason","restricted":False,
                 "label":"stored member reason","pack":pack,"codes":codes,**_plain(values)})
-        continuity=_step_word(_required(row,"adapter_continuity",path))
+        continuity=_continuity_word(_required(row,"adapter_continuity",path))
         result["window_lines"][pack].append(_item("adapter_continuity",False,
             f"{pack}: adapter-continuity decision: {continuity}",decision=continuity))
         result["window_lines"][pack].append(_item("stored_verdict_boundary",False,
