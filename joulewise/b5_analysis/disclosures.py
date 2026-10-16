@@ -210,6 +210,16 @@ def _catalog():
     return catalog_from_bytes(raw)
 
 
+def _blinding_admitted(word, entry):
+    """A flag may tighten its code's catalog blinding, never loosen it.
+
+    The sealed catalog sets blinding per flag where it says so (for example
+    diagnostic.s1_structural: precheck_counts is always written RESTRICTED over
+    the STRUCTURE default); a STRUCTURE word on a RESTRICTED code still refuses.
+    """
+    return word == entry["blinding"] or (word == "RESTRICTED" and entry["blinding"] == "STRUCTURE")
+
+
 def _flags(archive, catalog):
     rows = []
     for raw in archive.output_bytes("derived/flags.jsonl").splitlines():
@@ -217,7 +227,7 @@ def _flags(archive, catalog):
             continue
         row = _strict_json(raw, "disclosure_input_invalid")
         entry = catalog.codes.get(row.get("code"))
-        if entry is None or row.get("blinding") != entry["blinding"]:
+        if entry is None or not _blinding_admitted(row.get("blinding"), entry):
             raise AnalysisRefusal("flag_blinding_differs_from_catalog")
         if row.get("family")!=entry["family"]:
             raise AnalysisRefusal("disclosure_input_invalid")
@@ -684,11 +694,12 @@ def _code(code, catalog, flags):
     # The flag's own word was checked in _flags; preserve it beside the code.
     words = {r["blinding"] for r in flags if r["code"] == code}
     entry = catalog.codes.get(code)
-    if entry is None or (words and words != {entry["blinding"]}):
+    if entry is None or any(not _blinding_admitted(word, entry) for word in words):
         raise AnalysisRefusal("flag_blinding_differs_from_catalog")
     if not words:
         raise AnalysisRefusal("disclosure_input_missing:flag_blinding")
-    return {"code": code, "blinding": next(iter(words))}
+    # Where flags of one code carry two words, the code is shown as the stricter.
+    return {"code": code, "blinding": "RESTRICTED" if "RESTRICTED" in words else entry["blinding"]}
 
 
 def _kept_lines(result, kept, projections, reports, catalog, flags, archives):

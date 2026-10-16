@@ -201,9 +201,14 @@ class PartATests(unittest.TestCase):
             self.assertEqual(cm.exception.code,"sensitivity_record_invalid")
 
     def test_R10_flag_blinding(self):
-        h=Harness(); h.flag("alpha","battery.assist",h.rows[0]["member"]["bundle_id"])
+        # A flag that loosens its code's catalog blinding refuses. (S10: a flag may
+        # tighten it, as the sealed catalog sets for diagnostic.s1_structural; see
+        # FlagBlindingTests.)
+        catalog=d._catalog()
+        code=next(c for c,entry in sorted(catalog.codes.items()) if entry["blinding"]=="RESTRICTED")
+        h=Harness(); h.flag("alpha",code)
         a=h.archives["alpha"]; row=json.loads(a.outputs["derived/flags.jsonl"])
-        row["blinding"]="RESTRICTED"; a.outputs["derived/flags.jsonl"]=d.canonical_json_bytes(row)
+        row["blinding"]="STRUCTURE"; a.outputs["derived/flags.jsonl"]=d.canonical_json_bytes(row)
         with self.assertRaises(AnalysisRefusal) as cm:h.produce()
         self.assertEqual(cm.exception.code,"flag_blinding_differs_from_catalog")
 
@@ -1176,3 +1181,27 @@ class FixRegressionTests(unittest.TestCase):
 
 
 if __name__ == "__main__": unittest.main()
+
+
+class FlagBlindingTests(unittest.TestCase):
+    """S10 joined run, step 11: the pinned harvest writes diagnostic.s1_structural's
+    precheck_counts flag RESTRICTED over the code's STRUCTURE default, as the sealed
+    catalog says; the producer refused every window flag_blinding_differs_from_catalog."""
+
+    def test_a_flag_may_tighten_its_code_blinding_never_loosen_it(self):
+        catalog=d._catalog()
+        structure=next(code for code,entry in sorted(catalog.codes.items()) if entry['blinding']=='STRUCTURE')
+        restricted=next(code for code,entry in sorted(catalog.codes.items()) if entry['blinding']=='RESTRICTED')
+        def archive(rows):
+            value=FakeArchive();value.outputs['derived/flags.jsonl']=b''.join(d.canonical_json_bytes(r)+b'\n' for r in rows)
+            return value
+        def row(code,word):
+            return {'code':code,'family':catalog.codes[code]['family'],'blinding':word,'scope':{'level':'window','run_id':None}}
+        rows=d._flags(archive([row(structure,'STRUCTURE'),row(structure,'RESTRICTED')]),catalog)
+        self.assertEqual(len(rows),2)
+        self.assertEqual(d._code(structure,catalog,rows)['blinding'],'RESTRICTED')
+        self.assertEqual(d._code(structure,catalog,rows[:1])['blinding'],'STRUCTURE')
+        with self.assertRaisesRegex(AnalysisRefusal,'^flag_blinding_differs_from_catalog$'):
+            d._flags(archive([row(restricted,'STRUCTURE')]),catalog)
+        with self.assertRaisesRegex(AnalysisRefusal,'^flag_blinding_differs_from_catalog$'):
+            d._code(restricted,catalog,[row(restricted,'STRUCTURE')])
