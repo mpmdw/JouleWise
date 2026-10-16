@@ -286,6 +286,7 @@ class ClaimCustodyManifestRootTests(unittest.TestCase):
         import json
         from joulewise import paper_custody as c
         from joulewise import analysis_manifest_v3 as v3
+        from joulewise import analysis_engine as engine
         from joulewise.analysis_engine import artifact, claim_side_bound, inputs
         from joulewise.authentication_io import V2AuthenticationReadSession
         seen = {}
@@ -309,7 +310,7 @@ class ClaimCustodyManifestRootTests(unittest.TestCase):
                 return []
 
             with mock.patch.object(v3, "validate_finalized_analysis_manifest_v3", return_value=()), \
-                 mock.patch.object(inputs, "sibling_floor_pinset", side_effect=lambda path: (seen.setdefault("floor", path), sibling)[1]), \
+                 mock.patch.object(engine, "sibling_floor_pinset", side_effect=lambda path: (seen.setdefault("floor", path), sibling)[1]), \
                  mock.patch.object(artifact, "validate_claim_verdicts", verdicts), \
                  mock.patch.object(claim_side_bound, "validate_claim_side_bound", return_value=()):
                 c._claim_issuance_gate(ctx)
@@ -324,6 +325,7 @@ class ClaimCustodyManifestRootTests(unittest.TestCase):
         import json
         from joulewise import paper_custody as c, authentication_io as aio
         from joulewise import analysis_manifest_v3 as v3
+        from joulewise import analysis_engine as engine
         from joulewise.analysis_engine import artifact, claim_side_bound, inputs
         observed = []
         with tempfile.TemporaryDirectory(prefix="s10-claim-session-") as tmp:
@@ -344,7 +346,7 @@ class ClaimCustodyManifestRootTests(unittest.TestCase):
                 return ()
 
             with mock.patch.object(v3, "validate_finalized_analysis_manifest_v3", validate), \
-                 mock.patch.object(inputs, "sibling_floor_pinset", return_value=runs / "mint" / "floor-mint-pinset.json"), \
+                 mock.patch.object(engine, "sibling_floor_pinset", return_value=runs / "mint" / "floor-mint-pinset.json"), \
                  mock.patch.object(artifact, "validate_claim_verdicts", return_value=[]), \
                  mock.patch.object(claim_side_bound, "validate_claim_side_bound", return_value=()), session:
                 self.assertIs(aio._ACTIVE_SESSION.get(), session)
@@ -356,7 +358,7 @@ class ClaimCustodyManifestRootTests(unittest.TestCase):
         # read the floor's evidence roots through the registered pinsets only.
         import hashlib
         from types import SimpleNamespace
-        from joulewise import paper_custody as c
+        from joulewise import paper_custody as c, analysis_engine as engine
         from joulewise.analysis_engine import inputs
         from joulewise.b5_analysis import windows, archive
         from joulewise.authentication_io import V2AuthenticationReadSession
@@ -385,6 +387,7 @@ class ClaimCustodyManifestRootTests(unittest.TestCase):
                  mock.patch.object(windows, "load_window_index", return_value=SimpleNamespace(entries=())), \
                  mock.patch.object(archive, "open_attempt_record"), \
                  mock.patch.object(windows, "select_analysed_attempts", return_value={}), \
+                 mock.patch.object(engine, "sibling_floor_pinset", return_value=runs / "mint" / "floor-mint-pinset.json"), \
                  mock.patch.object(inputs, "load_floor_artifact", side_effect=load), \
                  self.assertRaises(c._ClaimReplayRefused):
                 c._replay_claim_verdicts(ctx, request)

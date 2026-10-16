@@ -658,12 +658,28 @@ def _check_claim_replay_request(value):
         raise _ClaimReplayRefused() from None
 
 
+def _block5_floor_pinset(floor_path):
+    """The pinset beside a block-5 floor, by the engine's own lookup.
+
+    The engine finds it with ``analysis_engine.sibling_floor_pinset`` when it
+    validates the verdicts it writes; the custody gate and replay use the same
+    name, so they cannot authenticate the floor differently from the engine.
+    """
+    from joulewise import analysis_engine as engine
+    return engine.sibling_floor_pinset(Path(floor_path))
+
+
+def _authenticated_block5_floor(floor_path):
+    from joulewise.analysis_engine.inputs import load_floor_artifact
+    return load_floor_artifact(floor_path, require_sibling_pinset=_block5_floor_pinset(floor_path) is not None)
+
+
 def _replay_claim_verdicts(ctx, request) -> bytes:
     """Replay the engine in a fresh context, preserving the custody read census."""
     def replay():
         from joulewise.analysis_engine import analyze_claims
         from joulewise.analysis_engine.artifact import render_claim_verdicts
-        from joulewise.analysis_engine.inputs import block5_claim_gate_inputs, load_floor_artifact
+        from joulewise.analysis_engine.inputs import block5_claim_gate_inputs
         from joulewise.b5_analysis.windows import SealPins, load_window_index, select_analysed_attempts
         from joulewise.b5_analysis.archive import open_attempt_record
         from joulewise.cli import validate_bundle
@@ -686,9 +702,10 @@ def _replay_claim_verdicts(ctx, request) -> bytes:
         if manifest_binding.base != "runs_root" or floor_binding.base != "runs_root":
             raise _ClaimReplayRefused()
         manifest_path, floor_path = ctx.runs_root / manifest_binding.path, ctx.runs_root / floor_binding.path
-        # A block-5 floor authenticates against the pinset beside it (the claim
-        # gate's own load); the bytes must be the bound floor's.
-        authenticated = load_floor_artifact(floor_path, require_sibling_pinset=True)
+        # A block-5 floor authenticates against the pinset beside it, found by the
+        # engine's own lookup (the one the engine used when it wrote the verdicts);
+        # the bytes must be the bound floor's.
+        authenticated = _authenticated_block5_floor(floor_path)
         if authenticated.file_sha256 != _sha256(ctx.raws[InputRole.FLOOR_ARTIFACT]):
             raise _ClaimReplayRefused()
         declared = authenticated.root_ids
@@ -736,11 +753,13 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     if InputRole.CLAIM_REPLAY_REQUEST in ctx.raws:
         # Block 5: the embedded floor authenticates against the pinset beside the
         # floor, as the engine validated it when it wrote the verdicts.
-        from joulewise.analysis_engine.inputs import AnalysisInputError, sibling_floor_pinset
+        from joulewise.analysis_engine.inputs import AnalysisInputError
         floor_binding = next(binding for binding in ctx.sources if binding.role is InputRole.FLOOR_ARTIFACT)
         try:
-            verdict_kwargs["floor_pinset_path"] = sibling_floor_pinset(
+            pinset = _block5_floor_pinset(
                 _binding_root(floor_binding, ctx.repository, ctx.runs_root) / floor_binding.path)
+            if pinset is not None:
+                verdict_kwargs["floor_pinset_path"] = pinset
         except AnalysisInputError as exc:
             codes.append(str(exc).split(":", 1)[0])
     codes.extend(validate_claim_verdicts(artifact, frozen_manifest=manifest, **verdict_kwargs))
