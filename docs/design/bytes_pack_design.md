@@ -300,3 +300,12 @@ The rulings below bind both implementations. The comparer then re-runs on the ne
     - Before the next run, the synthetic generator gains unequal pass durations and non-zero clock latency, so both forms are exercised.
 13. **The 512 decode passes** (Addendum 5 item 4) apply to both implementations in this round.
 14. The stage-1 commit schemas may differ. Only the analysis's commit is the registered one.
+
+## Addendum 8 (19:30 PDT): what "agree" means between the two implementations
+
+Ed asked whether the 1e-9 bar in Addendum 7 was the excessive correctness he warned about on 09-10 (the 1e-15 tolerance). In part it was. The comparer's bar, |a − t| ≤ 1e-9 relative, sits about ten orders of magnitude below anything the instrument resolves (attribution limit about 1 J; smallest printed half-width 0.013 J, 1.7B rails). Items D1 to D10 would have shown up under any sensible bar, since they are percent-level and three of them change words. N1 would not: it is a 1 ns floor-versus-round difference (at most 1.7e-10 relative), and it cost a ruling item plus about 750 cells per campaign that someone had to attribute.
+
+1. **The bar.** The two implementations agree when every word, k, df, refusal and label matches, and every number matches to within 1% of its cell's half-width (h + B). A quantity with no half-width (VIF, a count, a hash) must match at its printed precision. A difference under the bar is printed as one count per campaign and is not classified.
+2. **N1 is withdrawn as a ruling item.** Either rounding rule is fine. The twin keeps round-to-nearest only because it has already been done.
+3. **The agreement test ported to the suite uses this bar, not 1e-9.** A 1e-9 assertion would fail on a harmless change of summation order (fsum against sum) and send a round after nothing.
+4. One thing the tight comparison did show: with VIF 3.4e6, input noise of 3e-10 moves the rest model's c by 6%. So c is not identified, and no word may be drawn from it. Addendum 3 item 9 already says so. Nothing changes.
