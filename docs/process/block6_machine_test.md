@@ -56,16 +56,19 @@ Built once, by the block-5 post-seal runbook's steps 3 to 5
 ## The machine test
 
 **What it checks, on the real machine, with no agent alive.** Design section 13: "agent pause, an idle
-disturbance up to the 1,500 s cap, meter unplugged". It is a non-claim smoke of pack ALPHA (4 runs: start
+disturbance up to the 1,500 s cap, meter unplugged" (the last at the desk, below). It is a non-claim smoke of pack ALPHA (4 runs: start
 reference, one decode repeat, one prefill repeat, end reference, between an opening and a closing capture),
 launched exactly as a session is (the night job through `scripts/install_night_agent.sh`, ProcessType
 Interactive), with two faults injected by a second launchd job and the meter's data link unplugged. Its numbers
 are never claim data; its ledger is a copy.
 
-**Before it, Ed does one thing:** disconnect the KM003C meter's data link to the Mac (the USB cable the Mac reads
-it over). The Mac must stay on its charger: if the meter sits in the charger's path and cannot be disconnected
-without cutting power, take it out of the path and plug the charger straight into the Mac. On battery the arm
-refuses. This is the "meter unplugged" item: the session must go on, with the meter recorded as absent.
+**Nobody needs to be at the machine** (orchestrator, 2026-10-16). The test runs with the KM003C meter connected
+as it will be in sessions, so its report shows "meter unplugged: not observed; meter present: not exercised", and
+that is the expected line. The meter-absent path (`meter.absent`, the session goes on) is exercised at the desk by
+`tests/b6/test_smoke.py` and `tests/test_harvest_b5_p3harv.py`. Unplugging the meter would re-stage a handled
+failure on machine time and need Ed at the Mac twice (out, then back in), against Ed's 2026-10-14 rule that a
+failure path is exercised once, at the cheapest level that runs it. The Mac stays on its charger; on battery the
+arm refuses.
 
 **The command** (from a terminal or an activation that then exits at once; it bootstraps two launchd jobs):
 
