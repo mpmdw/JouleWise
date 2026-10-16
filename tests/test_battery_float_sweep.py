@@ -60,6 +60,15 @@ READERS = {
     "joulewise/reduce.py": ("issued acceptance (pinned)", "measurement reduction"),
     "joulewise/whole_window.py": ("issued acceptance and bracket rows", "outside the derivation scope"),
     "joulewise/detection_floor.py": ("bracket rows", "outside the derivation scope"),
+    "joulewise/analysis_engine/inputs.py": (
+        "bracket rows (block-5 archive context)", "outside the derivation scope: the claim gate reads the "
+        "authenticated archive context's window_bracket b_fiducial_s (lane L9 S5)"),
+    "joulewise/b5_analysis/sensitivity.py": (
+        "bracket rows (b5_analysis.bracket)", "outside the derivation scope: compares each window's "
+        "authenticated WindowBracket and archive-context bound with the sensitivity bound (lane L9 S9)"),
+    "joulewise/b5_analysis/disclosures.py": (
+        "bracket rows (b5_analysis.bracket)", "outside the derivation scope: prints each window's operative "
+        "bound from its authenticated WindowBracket in the restricted disclosure (lane L9 S9)"),
     "scripts/mint_floor_artifact_generalized.py": ("bracket rows", "outside the derivation scope"),
     "scripts/b5_window_calibration_verdict.py": (
         "bracket rows (block-5 window pre slot)", "outside the derivation scope: reads only the block-5 window's "
