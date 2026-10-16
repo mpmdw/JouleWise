@@ -1,0 +1,44 @@
+{
+  "agent_pause": {
+    "episodes": [],
+    "stopped_by_limit": false,
+    "total_pause_s": 0.0
+  },
+  "attempt": 1,
+  "census": {
+    "clean": false,
+    "exit_code": 0
+  },
+  "diagnostics": [],
+  "ended": {
+    "monotonic_ns": 141499280898458,
+    "monotonic_raw_ns": 141499280898291,
+    "wall_s": 1792157162.2971148
+  },
+  "flags_emitted": [],
+  "keep_awake": {
+    "pid": 63937,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "pack_id": "d117_floor_qwen3-1p7b_v5",
+  "plan_id": "SMOKE-d117_floor_qwen3-1p7b_v5-20261016T1310Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal": {
+    "detail": "pgrep exit 0; forbidden process output: 1060 claude\n1086 npm exec @openai/codex@0.153.3 mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false HOME=/Users/edr LOGNAME=edr PATH=/Users/edr/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/usr/local/MacGPG2/bin SHELL=/bin/zsh TERM=xterm-256color USER=edr TERM_PROGRAM=Apple_Terminal TMPDIR=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/ TERM_PROGRAM_VERSION=470.2 TERM_SESSION_ID=7D242C47-FD67-4478-938F-442601A2E6CB\n1112 node /Users/edr/.npm/_npx/d3e0db43a6e4314a/node_modules/.bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n1113 /Users/edr/.npm/_npx/d3e0db43a6e4314a/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false",
+    "reason": "night_refused_agent_present"
+  },
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": null,
+    "runs_excluded": []
+  },
+  "stage_reached": "census",
+  "started": {
+    "monotonic_ns": 141499258260333,
+    "monotonic_raw_ns": 141499258259708,
+    "wall_s": 1792157162.274477
+  },
+  "verdict": "REFUSED"
+}

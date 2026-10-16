@@ -1,0 +1,41 @@
+{
+  "plan_id": "SMOKE-d117_floor_qwen3-1p7b_v5-20261016T1310Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal": {
+    "detail": "pgrep exit 0; forbidden process output: 1060 claude\n1086 npm exec @openai/codex@0.153.3 mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false HOME=/Users/edr LOGNAME=edr PATH=/Users/edr/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/usr/local/MacGPG2/bin SHELL=/bin/zsh TERM=xterm-256color USER=edr TERM_PROGRAM=Apple_Terminal TMPDIR=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/ TERM_PROGRAM_VERSION=470.2 TERM_SESSION_ID=7D242C47-FD67-4478-938F-442601A2E6CB\n1112 node /Users/edr/.npm/_npx/d3e0db43a6e4314a/node_modules/.bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n1113 /Users/edr/.npm/_npx/d3e0db43a6e4314a/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false",
+    "evidence": {
+      "argv": [
+        "/usr/bin/pgrep",
+        "-a",
+        "-lf",
+        "[c]odex|[c]laude"
+      ],
+      "clean": false,
+      "exit_code": 0,
+      "monotonic_ns": 141499230953708,
+      "refusal": {
+        "detail": "pgrep exit 0; forbidden process output: 1060 claude\n1086 npm exec @openai/codex@0.153.3 mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false HOME=/Users/edr LOGNAME=edr PATH=/Users/edr/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/usr/local/MacGPG2/bin SHELL=/bin/zsh TERM=xterm-256color USER=edr TERM_PROGRAM=Apple_Terminal TMPDIR=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/ TERM_PROGRAM_VERSION=470.2 TERM_SESSION_ID=7D242C47-FD67-4478-938F-442601A2E6CB\n1112 node /Users/edr/.npm/_npx/d3e0db43a6e4314a/node_modules/.bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n1113 /Users/edr/.npm/_npx/d3e0db43a6e4314a/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false",
+        "evidence": [
+          {
+            "argv": [
+              "/usr/bin/pgrep",
+              "-a",
+              "-lf",
+              "[c]odex|[c]laude"
+            ],
+            "exit_code": 0,
+            "monotonic_ns": 141499230953708,
+            "stderr": "",
+            "stdout": "1060 claude\n1086 npm exec @openai/codex@0.153.3 mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false HOME=/Users/edr LOGNAME=edr PATH=/Users/edr/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/usr/local/MacGPG2/bin SHELL=/bin/zsh TERM=xterm-256color USER=edr TERM_PROGRAM=Apple_Terminal TMPDIR=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/ TERM_PROGRAM_VERSION=470.2 TERM_SESSION_ID=7D242C47-FD67-4478-938F-442601A2E6CB\n1112 node /Users/edr/.npm/_npx/d3e0db43a6e4314a/node_modules/.bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n1113 /Users/edr/.npm/_npx/d3e0db43a6e4314a/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n"
+          }
+        ],
+        "reason": "night_refused_agent_present"
+      },
+      "stderr": "",
+      "stdout": "1060 claude\n1086 npm exec @openai/codex@0.153.3 mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false HOME=/Users/edr LOGNAME=edr PATH=/Users/edr/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/usr/local/MacGPG2/bin SHELL=/bin/zsh TERM=xterm-256color USER=edr TERM_PROGRAM=Apple_Terminal TMPDIR=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/ TERM_PROGRAM_VERSION=470.2 TERM_SESSION_ID=7D242C47-FD67-4478-938F-442601A2E6CB\n1112 node /Users/edr/.npm/_npx/d3e0db43a6e4314a/node_modules/.bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n1113 /Users/edr/.npm/_npx/d3e0db43a6e4314a/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n"
+    },
+    "reason": "night_refused_agent_present"
+  },
+  "schema": "joulewise.night_refusal.v1",
+  "verdict": "REFUSED"
+}

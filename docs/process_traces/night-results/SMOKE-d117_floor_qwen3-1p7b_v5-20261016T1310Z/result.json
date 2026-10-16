@@ -1,0 +1,41 @@
+{
+  "aborted_reason": "night_refused_agent_present",
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "76faef9a5021c473014778ca858cb5400a6fd017793ffc83f35ba8c9e5b8a439"
+    },
+    {
+      "path": "night/refusal.json",
+      "sha256": "9965be84380ceaaef785a7b81f66457b69781c86561f87bd3e42d01d61561a67"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "4bdde4449599d53bf9c6c8971fe7d2f286af4a1d62559ff957880efe6ba4d4c0"
+    },
+    {
+      "path": "night/hazard_result.json",
+      "sha256": "86b70edf09172caa7a2392f7a77d62b5306a174c678f8b21d9b15294e90172c0"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 0,
+  "census_hits": [],
+  "chain_exit_code": null,
+  "chain_sha256": null,
+  "ended_epoch_s": 1792157162.2973871,
+  "ended_monotonic_ns": 141499281170416,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "plan_id": "SMOKE-d117_floor_qwen3-1p7b_v5-20261016T1310Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal_documents": [
+    "night/refusal.json"
+  ],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1792157162.249088,
+  "started_monotonic_ns": 141499232871708,
+  "verdict": "REFUSED"
+}
