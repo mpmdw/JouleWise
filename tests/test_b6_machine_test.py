@@ -249,7 +249,11 @@ class PrepareTests(Case):
         self.assertTrue(inputs["plan_id"].startswith("MT-ALPHA-"))
         self.assertFalse(inputs["g10"])
         self.assertEqual(inputs["bytes_per_member"], 182 * 1024 * 1024)
-        self.assertEqual(inputs["thresholds"], mt.registered_thresholds((measurement / mt.REGISTRATION).read_text()))
+        expected = mt.registered_thresholds((measurement / mt.REGISTRATION).read_text())
+        # Block-6 registration §8.6: the clock HOLD drops block 5's placement term (plan_inputs.CLOCK_THRESHOLDS).
+        from joulewise.b6 import plan_inputs
+        expected["clock"].update(plan_inputs.CLOCK_THRESHOLDS)
+        self.assertEqual(inputs["thresholds"], expected)
         sizing = json.loads((measurement / mt.SIZING).read_text())["packs"]["ALPHA"]
         for key in ("programmed_span_s", "T_stream_max_s"):
             self.assertEqual(inputs[key]["seconds"], sizing[key])
