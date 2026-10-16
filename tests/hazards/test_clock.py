@@ -36,22 +36,29 @@ def dwell(clocks: FakeClocks, seconds: int, *, reader=None, boot_end: str = BOOT
 
 
 class FrequencyGateTests(unittest.TestCase):
-    def test_today_minus_3p17_ppm_passes_at_4p846_ms(self):
+    def test_frequency_3p7_ppm_at_335_s_refuses(self):
+        """Keep the coverage map's historical ID: 3.7 ppm now flags, 15 ppm holds."""
+        gate = clock.frequency_bound(ppm_word(3.7), LIMITS)
+        self.assertTrue(gate['passes'])
+        self.assertTrue(gate['rate_above_budget'])
+        self.assertFalse(clock.frequency_bound(ppm_word(15), LIMITS)['passes'])
+
+    def test_today_minus_3p17_ppm_passes_at_1p146_ms(self):
         gate = clock.frequency_bound(ppm_word(-3.17), LIMITS)
         self.assertTrue(gate["passes"])
-        self.assertAlmostEqual(gate["bound_ms"], 4.8457, places=3)
+        self.assertAlmostEqual(gate["bound_ms"], 1.1457, delta=0.001)
 
-    def test_frequency_3p7_ppm_at_335_s_refuses(self):
-        clocks = FakeClocks(drift_word=ppm_word(3.7))
+    def test_frequency_15_ppm_at_335_s_refuses(self):
+        clocks = FakeClocks(drift_word=ppm_word(15))
         ctx = base.Context(run=boot_runner(), clocks=clocks)
         verdict = clock.judge(clock.measure(ctx, frequency_reader=FrequencyReader(clocks)), LIMITS)
         self.assertEqual(verdict.status, base.REFUSE)
         self.assertIn("frequency gate", verdict.reasons[0])
         self.assertGreater(verdict.observed["frequency_gate"]["bound_ms"], 5.0)
 
-    def test_limit_is_3p63_ppm_and_matches_kernel_clock(self):
+    def test_limit_is_14p675_ppm_and_matches_kernel_clock(self):
         gate = clock.frequency_bound(ppm_word(-3.17), LIMITS)
-        self.assertAlmostEqual(gate["max_abs_frequency_ppm"], 3.6306, places=4)
+        self.assertAlmostEqual(gate["max_abs_frequency_ppm"], 14.6754, delta=0.001)
         for ppm in (-3.17, 3.6, 3.63, 3.64, 3.7, 0.0):
             word = ppm_word(ppm)
             ours = clock.frequency_bound(word, LIMITS)

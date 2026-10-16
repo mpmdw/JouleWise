@@ -21,14 +21,20 @@ class ChainScreenTests(unittest.TestCase):
     def test_rendered_screen_under_zsh_on_fake_captures(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            raw, *_ = corpus18_render.render_pack("alpha", root, bindings_overrides={"capture_screen": {
+            # S-5's 1.7B T10 line: 6.5 J / (0.047 J/ms), rounded up to 139 ms.
+            registered = {
                 "alignment_reference_s": "0.036462861644980", "bracket_screen_s": "0.014531",
-                "operative_bound_stop_s": "0.092"}})
+                "operative_bound_stop_s": "0.139"}
+            stop_s, screen_s = (float(registered[key]) for key in ('operative_bound_stop_s', 'bracket_screen_s'))
+            raw, *_ = corpus18_render.render_pack("alpha", root, bindings_overrides={"capture_screen": registered})
             rendered = raw.decode()
             self.assertIn("screen_b6_calibration", rendered)
             self.assertNotIn("screen_pre_calibration()", rendered)
             source = rendered[rendered.index("B6_ALIGNMENT_REFERENCE_S="):rendered.index('cd "$REPO"')]
-            for value, rc, flagged in ((.030, 0, False), (.040, 0, True), (.100, 13, True), (.077469, 0, True)):
+            # ±1 us is 0.8% of 125 us anchor-read resolution and avoids an
+            # accidental one-ulp boundary assertion on printed microseconds.
+            for value, rc, flagged in ((.030, 0, False), (.040, 0, True), (.100, 0, True), (.150, 13, True),
+                    (stop_s - screen_s - 1e-6, 0, True), (stop_s - screen_s + 1e-6, 13, True)):
                 (root / "instrument_evidence.json").write_text(json.dumps({"b_fiducial_s": value}))
                 shell = "CLAIM_RUNS_ROOT=fixture\nflag() { print -r -- \"flag $1\"; }\nstop_chain() { print -r -- \"chain.stop $1 $2\"; exit $2; }\n"
                 script = root / "screen.zsh"

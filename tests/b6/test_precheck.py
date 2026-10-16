@@ -63,11 +63,14 @@ class PrecheckTests(DeskCase):
                                         + (step if i >= count // 2 else 0), 'read_skew_ns': 100},
                              'frequency': {'raw_word': 0}, 'error': None})
             return rows
-        for rate, expected in ((2, []), (4, ['clock.rate']), (3.63059, []),
-                               (3.6306, ['clock.rate']), (3.6307, ['clock.rate'])):
+        for rate, expected in ((2, []), (4, ['clock.rate_above_budget']), (3.63059, []),
+                               (3.6306, ['clock.rate_above_budget']), (3.6307, ['clock.rate_above_budget']),
+                               (Fraction(5000, 335) - Fraction(1, 4), ['clock.rate_above_budget']),
+                               (15, ['clock.rate'])):
             reading, codes = p.clock_rate(series(rate), 'boot', 'boot', limits)
             self.assertEqual(codes, expected)
-            self.assertAlmostEqual(reading['rate_ppm'], rate, delta=1e-6)
+            # 0.001 ppm resolves 0.335 us over 335 s, below the 125 us anchor reads.
+            self.assertAlmostEqual(reading['rate_ppm'], float(rate), delta=1e-3)
         self.assertIn('clock.step', p.clock_rate(series(2, step=2_000_000), 'boot', 'boot', limits)[1])
         self.assertIn('clock.boot_changed', p.clock_rate(series(2), 'boot', 'other', limits)[1])
         self.assertIn('clock.unmeasured', p.clock_rate(series(2, count=41, spacing=1), 'boot', 'boot', limits)[1])
@@ -97,11 +100,14 @@ class PrecheckTests(DeskCase):
         # the live kernel for our deliberately synthetic pid.
         with mock.patch('joulewise.hazards.arm.agent_identity.filter_census',
                         side_effect=lambda text, **kwargs: SimpleNamespace(ignored=[], kept_text=text)):
-            for kwargs in ({'initial_agent': True}, {'final_agent': True}, {'idle_s': 120}):
+            for kwargs in ({'initial_agent': True}, {'final_agent': True}):
                 result, _ = self.check(**kwargs)
                 self.assertEqual(result['decision'], 'WAIT')
                 self.assertTrue(any(item['hazard'] == 'agents' for item in result['would_refuse']))
         self.assertEqual(self.check(idle_s=900)[0]['decision'], 'START')
+        recent, _ = self.check(idle_s=120)
+        self.assertEqual(recent['decision'], 'START')
+        self.assertIn('agents.hid_recent', [row['code'] for row in recent['predicted_flags']])
 
     def test_05_contention_dwell_no_wall_sleep(self):
         result, ctx = self.check(busy=True)

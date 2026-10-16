@@ -57,13 +57,15 @@ class CaptureDispositionTests(unittest.TestCase):
     def tearDownClass(cls):
         capture_fixtures.DerivationOnlyLiveCaptureTests.tearDownClass()
 
-    def capture(self, token, bound, block6, *, status='valid'):
+    def capture(self, token, bound, block6, *, status='valid', unreadable_plan=False):
         f = self.fixture
         acceptance = f._rekey_acceptance()
         epoch, t1 = f._epoch(acceptance['identity_epoch']['os_build'])
         path, pin, session, custody = f._session(token, slots=('pre', 'post'),
             session_kind=None, epoch=epoch, t1=t1)
         window_binding(custody['pre'].parent.parent, path.parent / 'custody', block6=block6)
+        if unreadable_plan:
+            (path.parent / 'custody/night_plan.json').write_text('{broken')
         # Only the estimator's returned value is fixed. The public main, its
         # acceptance preflight, classification, hashed artifacts, ledger and
         # exit all run. MLX and sampler are the existing synthetic fixtures.
@@ -89,6 +91,13 @@ class CaptureDispositionTests(unittest.TestCase):
         self.assertEqual(manifest['artifacts']['instrument_evidence.json'],
             hashlib.sha256((custody['pre'] / 'instrument_evidence.json').read_bytes()).hexdigest())
         return result, evidence, manifest, final
+
+    def test_40ms_unreadable_block6_plan_finalizes_valid_with_records_flag(self):
+        result, evidence, manifest, final = self.capture('unreadable-b6', '0.040', True, unreadable_plan=True)
+        self.assertEqual((final['disposition'], result.returncode), ('valid', 0))
+        for record in (evidence, manifest):
+            self.assertTrue(record['exceeds_prior_level_screen'])
+            self.assertIn('records.window_plan_unreadable', record['records_flags'])
 
     def test_block6_and_block5_capture_disposition_and_exit_matrix(self):
         for block6 in (False, True):

@@ -207,7 +207,7 @@ class ArmTests(unittest.TestCase):
             "battery": lambda rig: setattr(rig, "battery_file", "charging-1716ma-synthetic-from-real.ioreg"),
             "thermal": lambda rig: setattr(rig, "thermal_level", 1),
             "disk": lambda rig: setattr(rig, "free_bytes", 30 * GIB),
-            "clock": lambda rig: setattr(rig.clocks, "drift_word", ppm_word(3.7)),
+            "clock": lambda rig: setattr(rig.clocks, "drift_word", ppm_word(15)),
         }
         for module, inject in cases.items():
             with self.subTest(module=module):

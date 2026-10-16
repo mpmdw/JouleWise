@@ -251,6 +251,13 @@ class Loop:
             episode["remedied_hazards"] = sorted(remedied)
             remedy = self.lanes.precheck.remedy(hazard)
             self._missing(remedy)
+        if hazard == "clock" and "clock" in result.remedies:
+            # A fixed frequency cannot improve in repeated WAITs with time
+            # synchronization off. One remedy attempt, then wake the lead.
+            self.state["hold_reason"] = "clock_rate_after_remedy"
+            self._transition("HOLD_LOOP")
+            self._event("loop_hold", "clock_rate_after_remedy")
+            return
         if self.clock() - episode["since"] >= 7200 and not episode["mailed"]:
             episode["mailed"] = True
             self._event("physics_wait_2h", hazard, wake=False)

@@ -167,7 +167,9 @@ class Mailer:
 
     def close_notice(self, key):
         entry = self.entry(key)
-        entry["close_pending"] = not entry["delivered"] or entry["receipt"] is not None
+        if not entry["delivered"]:
+            entry["withdrawn"] = True
+        entry["close_pending"] = entry["delivered"] and entry["receipt"] is not None
         self._write(self.outbox / (key + ".json"), entry)
 
     def flush(self, *, state=None, deferred_overrun=False):
@@ -176,6 +178,8 @@ class Mailer:
             return
         for path in sorted(self.outbox.glob("*.json")):
             entry = json.loads(path.read_text())
+            if entry.get("withdrawn"):
+                continue
             if entry["delivered"] and not entry.get("close_pending"):
                 continue
             now = self.clock()

@@ -6064,13 +6064,15 @@ def advance_calibration_head_pin(
 
 def uses_block6_capture_screen(
     runs_root: Path | str, *, window_plan_path: Path | None = None,
+    records_flags: list[str] | None = None,
 ) -> bool:
     """The existing HAZARD plan binding selects block 6's calibration policy.
 
     Reservation plans name reused block-5 packs. The desk supplies its window
     plan directly; capture reaches it through the runs-root lineage. Its
     capture_screen binding selects the same policy as the chain and courier.
-    Missing/unreadable plans keep the historical policy and add no gate.
+    Only a readable block-5 record selects the historical refusing policy.
+    Missing/malformed records disclose and leave the level screen diagnostic.
     """
     from joulewise.b6.courier import block_six_plan
     from joulewise.flags.core import WINDOW_PLAN_BASENAME, hazard_flag_context
@@ -6079,15 +6081,22 @@ def uses_block6_capture_screen(
         context = hazard_flag_context(runs_root, writer="calibration-screen-policy")
         custody = getattr(context, "custody_root", None)
         if custody is None:
-            return False
+            if records_flags is not None:
+                records_flags.append("records.window_plan_unreadable")
+            return True
         window_plan_path = custody / WINDOW_PLAN_BASENAME
     try:
         window = json.loads(read_authentication_input(
             window_plan_path, grammar="json", label="calibration capture window policy",
         ))
+        if not isinstance(window, Mapping) or not isinstance(window.get("hazard_window"), Mapping) \
+                or not isinstance(window["hazard_window"].get("bindings"), Mapping):
+            raise ValueError("window policy bindings absent")
         return block_six_plan(window)
     except (OSError, ValueError, KeyError, TypeError, V2AuthenticationInputError):
-        return False
+        if records_flags is not None:
+            records_flags.append("records.window_plan_unreadable")
+        return True
 
 
 def resume_finalize_bracket_session(
@@ -6151,7 +6160,9 @@ def resume_finalize_bracket_session(
                     "session_kind": session.session_kind,
                 },
             )
-        block6 = uses_block6_capture_screen(session.runs_root, window_plan_path=window_plan_path)
+        records_flags: list[str] = []
+        block6 = uses_block6_capture_screen(session.runs_root, window_plan_path=window_plan_path,
+                                           records_flags=records_flags)
         diagnostic_screen_s = systematic_screen_s if block6 else None
         if block6:
             # Block-6 registration §5.5: the chain judges b_op; capture level
@@ -6283,6 +6294,7 @@ def resume_finalize_bracket_session(
                 "receipt": receipt,
                 "head_pin_candidate": candidate,
                 "needs_pin_commit": candidate is not None,
+                **({"records_flags": records_flags} if records_flags else {}),
                 **({
                     "screen_basis": {"preflight_level_screen_s": str(diagnostic_screen_s)},
                     "exceeds_prior_level_screen": bool(

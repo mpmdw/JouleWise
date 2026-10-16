@@ -319,10 +319,14 @@ def clock_rate(samples, boot_start, boot_end, thresholds):
     slope = sum((x - xm) * (y - ym) for x, y in zip(xs, ys)) / sum((x - xm)**2 for x in xs)
     rate = slope * 10**6
     residuals = [y - ym - slope * (x - xm) for x, y in zip(xs, ys)]
-    bound = Fraction(str(thresholds["h_ms"])) + (abs(rate) + Fraction(
+    # Registration §8.6: 5 ms / T_stream_max - 0.25 ppm, using the
+    # same exact hold arithmetic as hazards.clock.frequency_bound.
+    bound = (abs(rate) + Fraction(
         str(thresholds["frequency_margin_ppm"]))) * Fraction(str(thresholds["t_stream_max_s"])) / 1000
     if bound > Fraction(str(thresholds["limit_ms"])):
         codes.append("clock.rate")
+    elif bound + Fraction(str(thresholds["h_ms"])) > Fraction(str(thresholds["limit_ms"])):
+        codes.append("clock.rate_above_budget")
     if max(map(abs, residuals)) > thresholds["residual_max_ns"]:
         codes.append("clock.linearity")
     if any(abs(b - a) > thresholds["step_ns"] for a, b in zip(residuals, residuals[1:])):
@@ -537,7 +541,8 @@ def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None
     readings["power"] = power_and_idle(ctx)
     power = readings["power"]
     if power["hid_idle_s"] is None or power["hid_idle_s"] < limits["agents"]["hid_idle_min_s"]:
-        wait("agents.hid_recent", "agents", power["hid_idle_s"], limits["agents"]["hid_idle_min_s"])
+        # HID inactivity has no joule derivation; measured idle admission judges the hazard.
+        flags.append({"code": "agents.hid_recent", "source": "agents", "observed": power["hid_idle_s"]})
     if not power["assertion_held"]:
         wait("power.no_sleep_assertion_absent", "power", power["assertions"], "assertion held")
     readings["time_server"] = []
@@ -577,7 +582,12 @@ def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None
     readings["clock"], clock_codes = clock_rate(samples, boot_start, boot(), limits["clock"])
     ctx.keep_raw("clock-series.json", canonical_json(readings["clock"]))
     for code in clock_codes:
-        wait(code, "clock", readings["clock"], limits["clock"], retry=limits["clock"]["retry_after_s"])
+        if code == "clock.rate_above_budget":
+            flags.append({"code": code, "source": "clock", "observed": readings["clock"]})
+        else:
+            wait(code, "clock", readings["clock"], limits["clock"],
+                 remedy="redraw_frequency_then_wake" if code == "clock.rate" else "wait_and_remeasure",
+                 retry=0 if code == "clock.rate" else limits["clock"]["retry_after_s"])
     final = arm.agent_census(ctx)
     readings["agents"]["final"] = final
     if not final["clean"]:

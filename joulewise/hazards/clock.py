@@ -17,9 +17,9 @@ Measured directly, never parsed from a settings string:
 
 Arm (plan §2.3; thresholds from the window plan, defaults below):
 
-(i)   frequency gate: h + (|f| + 0.25 ppm) x T_stream_max <= 5 ms with
-      h = 3.7 ms and T_stream_max = 335 s, i.e. |f| <= 3.6306 ppm.  The live
-      word on 10-05 (-207591 = -3.1676 ppm) gives 4.8449 ms;
+(i)   frequency hold: (|f| + 0.25 ppm) x T_stream_max <= 5 ms,
+      i.e. |f| <= 14.6754 ppm at 335 s (registration §8.6, 2026-10-15).
+      The old h = 3.7 ms budget line only records clock.rate_above_budget;
 (ii)  over the dwell, sampled at 1 Hz, the signed residual stays within
       +-1 ms of its start value;
 (iii) every anchor read pair has skew <= 1 ms;
@@ -252,18 +252,26 @@ def series(samples: Sequence[Mapping[str, Any]], *, boot_start: str | None,
 
 
 def frequency_bound(raw_word: int, thresholds: Mapping[str, Any]) -> dict[str, Any]:
-    """h + (|f| + margin) x T_stream_max against the limit, in exact arithmetic."""
+    """The run's 5 ms limit over T_stream_max, without the old placement h."""
 
     rate_ppm = Fraction(abs(int(raw_word)), FREQUENCY_SCALE)
     span_s = Fraction(str(thresholds["t_stream_max_s"]))
     h_s = Fraction(str(thresholds["h_ms"])) / 1000
     margin = Fraction(str(thresholds["frequency_margin_ppm"]))
     limit_s = Fraction(str(thresholds["limit_ms"])) / 1000
-    bound_s = h_s + (rate_ppm + margin) * span_s / 1_000_000
-    max_ppm = (limit_s - h_s) * 1_000_000 / span_s - margin
+    # The 0.25 ppm fit margin stays; h was a largest-value allowance and
+    # leaves the hold under registration §8.6. Preserve its diagnostic line.
+    bound_s = (rate_ppm + margin) * span_s / 1_000_000
+    max_ppm = limit_s * 1_000_000 / span_s - margin
     return {"frequency_ppm": float(Fraction(int(raw_word), FREQUENCY_SCALE)),
             "bound_ms": float(bound_s * 1000), "limit_ms": float(limit_s * 1000),
-            "max_abs_frequency_ppm": float(max_ppm), "passes": bound_s <= limit_s}
+            "max_abs_frequency_ppm": float(max_ppm), "passes": bound_s <= limit_s,
+            "rate_above_budget": bound_s + h_s > limit_s}
+
+
+def rate_flags(gate: Mapping[str, Any]) -> list[dict[str, Any]]:
+    return ([{"code": "clock.rate_above_budget", "frequency_gate": dict(gate)}]
+            if gate["rate_above_budget"] else [])
 
 
 def expected_anchor_movement_ns(raw_word: int, elapsed_raw_ns: int) -> Fraction:
@@ -312,7 +320,7 @@ def _judge_instant(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verd
         reasons.append(f"anchor read skew {anchor['read_skew_ns']} ns exceeds "
                        f"{limits['skew_max_ns']} ns")
     observed = {"frequency_gate": gate, "read_skew_ns": anchor["read_skew_ns"],
-                "raw_word": frequency["raw_word"]}
+                "raw_word": frequency["raw_word"], "flags": rate_flags(gate)}
     return Verdict(MODULE, REFUSE if reasons else PASS, tuple(reasons), limits, observed)
 
 
@@ -345,6 +353,7 @@ def _judge_series(values: Mapping[str, Any], limits: Mapping[str, Any]) -> Verdi
                        f"+-{limits['residual_max_ns'] / 1e6} ms of its start value")
     raw_span = samples[-1]["anchor"]["monotonic_raw_ns"] - first["monotonic_raw_ns"]
     observed = {"frequency_gate": gate, "samples": len(samples), "raw_span_ns": raw_span,
+                "flags": rate_flags(gate),
                 "max_abs_residual_ns": float(abs(worst)), "max_read_skew_ns": worst_skew,
                 "anchor_movement_ns": samples[-1]["anchor"]["anchor_ns"] - first["anchor_ns"]}
     return Verdict(MODULE, REFUSE if reasons else PASS, tuple(reasons), limits, observed)

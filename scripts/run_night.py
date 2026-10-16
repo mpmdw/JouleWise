@@ -2093,19 +2093,24 @@ def _fallback_plan(plan_path: Path) -> NightPlan:
     receipt_class = raw.get("receipt_class")
     if receipt_class not in set(night_gate.PLAN_RECEIPT_CLASSES):
         receipt_class = "DIAGNOSTIC_NO_PACK"
-    return NightPlan(
+    from joulewise.night_gate import HazardNightPlan
+    hazard = raw.get("hazard_window")
+    fallback_type = HazardNightPlan if isinstance(hazard, dict) else NightPlan
+    return fallback_type(
         plan_id=plan_id,
         receipt_class=receipt_class,
         t0_epoch_s=now,
         window_max_s=1,
         authored_epoch_s=now,
         repo_head="0" * 40,
-        measurement_root="/",
+        measurement_root=raw.get("measurement_root") if isinstance(raw.get("measurement_root"), str) else "/",
         measurement_head="0" * 40,
         chain_path="",
         chain_sha256_path="",
         custody_root=custody,
         registration_path=None,
+        # A malformed block-6 record still must never select an agent courier.
+        **({"hazard_window": hazard} if isinstance(hazard, dict) else {}),
     )
 
 
@@ -2391,7 +2396,7 @@ def _malformed_plan_exit(plan_path: Path, error: Exception, courier_bin: Path | 
         started_epoch_s,
         started_monotonic_ns,
     )
-    resolved, resolution_error, substitution = _resolve_courier_bin(courier_bin)
+    resolved, resolution_error, substitution = _resolve_courier_bin(courier_bin, plan=plan)
     _record_courier_substitution(custody_root, substitution)
     return _finish_reporting(
         custody_root,
@@ -4036,7 +4041,7 @@ def run_night(
             started_epoch_s=started_epoch_s, started_monotonic_ns=started_monotonic_ns,
             courier_bin=courier_bin, seams=_hazard_seams())
     resolved_courier, courier_error, courier_substitution = _resolve_courier_bin(
-        courier_bin
+        courier_bin, plan=plan
     )
     _record_courier_substitution(custody_root, courier_substitution)
     if resolved_courier is None:
@@ -4513,7 +4518,7 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
         return EXIT_GO
 
     resolved_courier, courier_error, courier_substitution = _resolve_courier_bin(
-        courier_bin
+        courier_bin, plan=plan
     )
     _record_courier_substitution(custody_root, courier_substitution)
     if _courier_lock_is_live(night_dir):

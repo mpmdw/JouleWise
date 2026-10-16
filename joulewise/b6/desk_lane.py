@@ -19,6 +19,7 @@ from joulewise.flags.catalog import load_catalog
 # without its own timeout 120 s, which would kill a session harvest (about 45
 # minutes for a block-5-sized session) and record it as a program fault.
 HARVEST_TIMEOUT_S = 4 * 3600
+RESUME_TIMEOUTS_S = (120, 600)  # One longer desk retry; never hold collection on a failed refit.
 
 
 class DeskLane:
@@ -57,6 +58,7 @@ class DeskLane:
                     if slot.get("custody_state") != "complete" or name in resumed:
                         break
                     resumed.add(name)
+                    attempts = []
                     try:
                         night_plan = read(metadata["prepared"]["plan_path"])
                         hazard = night_plan["hazard_window"]
@@ -64,18 +66,28 @@ class DeskLane:
                         reservation = next(s for s in chain.stage_plan(tree) if s.kind == "bracket_reservation")
                         argv = chain.stage_argv(reservation, hazard["bindings"], tree, measurement)
                         frozen_plan = argv[argv.index("--plan") + 1]
-                        result = self.run([str(measurement / ".venv/bin/python"),
+                        argv = [str(measurement / ".venv/bin/python"),
                             str(measurement / "scripts/recover_calibration_ledger.py"),
                             "--ledger", str(measurement / plan.DEFAULT_LEDGER_RELATIVE),
                             "--head-pin", str(measurement / plan.HEAD_PIN_RELATIVE),
                             "resume-finalize", "--session-id", session_id, "--slot", name,
                             "--plan", frozen_plan,
                             *(["--window-plan", metadata["prepared"]["plan_path"]]
-                              if block_six_plan(night_plan) else [])],
-                            check=False, capture_output=True, text=True,
-                            timeout=120, env=self.env)
+                              if block_six_plan(night_plan) else [])]
+                        for timeout in RESUME_TIMEOUTS_S:
+                            try:
+                                result = self.run(argv, check=False, capture_output=True, text=True,
+                                                  timeout=timeout, env=self.env)
+                                attempts.append({"timeout_s": timeout, "rc": result.returncode})
+                                if result.returncode == 0:
+                                    break
+                            except (OSError, subprocess.TimeoutExpired) as exc:
+                                attempts.append({"timeout_s": timeout, "error": type(exc).__name__})
+                        if "error" in attempts[-1]:
+                            raise RuntimeError(attempts[-1]["error"])
                         record = {"slot": name, "rc": result.returncode,
-                                  "status": "FINALIZED" if result.returncode == 0 else "FAILED"}
+                                  "status": "FINALIZED" if result.returncode == 0 else "FAILED",
+                                  "attempts": attempts}
                         if result.returncode:
                             flags.append("records.pin_ledger")
                         else:
@@ -83,13 +95,28 @@ class DeskLane:
                                 recovered = json.loads(result.stdout)
                             except (ValueError, TypeError):
                                 recovered = {}
-                            for key in ("screen_basis", "exceeds_prior_level_screen"):
+                            flags.extend(recovered.get("records_flags", []))
+                            for key in ("screen_basis", "exceeds_prior_level_screen", "records_flags"):
                                 if key in recovered:
                                     record[key] = recovered[key]
                     except Exception as exc:
-                        record = {"slot": name, "status": "FAILED", "error": type(exc).__name__}
+                        record = {"slot": name, "status": "FAILED", "error": type(exc).__name__,
+                                  "attempts": attempts}
                         flags.append("records.pin_ledger")
                     metadata.setdefault("bracket_resume", []).append(record)
+                    if record["status"] == "FAILED":
+                        flags.append("records.resume_finalize_failed")
+                        # Keep the slot in both the desk record and the window flag.
+                        from joulewise.flags import core as flags_core
+                        try:
+                            context = flags_core.hazard_flag_context(
+                                metadata["runs_roots"][0], writer="b6-desk-resume")
+                            if context is not None:
+                                flags_core.emit(context, "records.resume_finalize_failed", level="window",
+                                                observed={"slot": name, "session_id": session_id},
+                                                detail="resume-finalize failed twice; bracket aborted")
+                        except Exception:
+                            pass  # A desk records failure cannot hold the session loop.
                     status = plan.ledger_head_status(measurement)
                 if session_id in status["open_sessions"]:
                     night = Path(metadata["paths"].get("custody", measurement)) / "night"
