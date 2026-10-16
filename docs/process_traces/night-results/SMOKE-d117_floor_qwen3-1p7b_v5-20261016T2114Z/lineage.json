@@ -1,0 +1,90 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "published": true
+    }
+  ],
+  "boot_changed": [],
+  "ended": {
+    "monotonic_ns": 172262849189666,
+    "monotonic_raw_ns": 172262849189416,
+    "wall_s": 1792187925.865406
+  },
+  "locators": {
+    "bound": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "recorded_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "root": "/Users/edr/night-b6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/runs-parent/runs_d117_floor_qwen3-1p7b_v5_bound",
+      "sha256": "33617b130bdb2128cb5937dd7802611869b2e598a9fef7d3bf4a8242fb54dffa",
+      "valid": true
+    },
+    "claim": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "recorded_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "root": "/Users/edr/night-b6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/runs-parent/runs_d117_floor_qwen3-1p7b_v5",
+      "sha256": "956b38898e5f3dc2557c8269489fc2bd151169a095a81fc1f5fc4c6e2ff988b9",
+      "valid": true
+    }
+  },
+  "locators_valid": true,
+  "published": true,
+  "requested": {
+    "monotonic_ns": 172262838615125,
+    "monotonic_raw_ns": 172262838614791,
+    "wall_s": 1792187925.8548322
+  },
+  "result": {
+    "launch_lineage": {
+      "bracket_session_id": "SMOKE-d117_floor_qwen3-1p7b_v5-20261016T2114Z-calibration",
+      "collection_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "launch_record": {
+        "path": "/Users/edr/night-b6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/custody/window_lineage/launch.json",
+        "sha256": "aacf6c29422d79f16e46986740b514374ed32294c1d67f8177f09d96bea603e0"
+      },
+      "pack_id": "d117_floor_qwen3-1p7b_v5",
+      "pack_root": "/Users/edr/night-b6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/measurement/configs/campaigns/d117_floor_qwen3-1p7b_v5",
+      "pack_sha256": "9a80266fe480e715a2274644b84717aba46f0867ec3299dd585c36228396e630",
+      "plan_id": "plan-d117-floor-qwen3-1p7b-decode-prefill-p2048-v5",
+      "plan_tree_sha256": "ba6b671060f1ce9697922ae863b9928abe5428e30d85f4948d51ae6137b441f4",
+      "schema_version": "joulewise.hazard_window_lineage.v1",
+      "window_context": {
+        "bound_runs_root": "/Users/edr/night-b6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/runs-parent/runs_d117_floor_qwen3-1p7b_v5_bound",
+        "claim_runs_root": "/Users/edr/night-b6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/runs-parent/runs_d117_floor_qwen3-1p7b_v5",
+        "custody_root": "/Users/edr/night-b6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/custody",
+        "night_dir": "/Users/edr/night-b6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/custody/night",
+        "post_attempt_id": "SMOKE-d117_floor_qwen3-1p7b_v5-20261016T2114Z-post",
+        "pre_attempt_id": "SMOKE-d117_floor_qwen3-1p7b_v5-20261016T2114Z-pre"
+      },
+      "window_id": "plan-d117-floor-qwen3-1p7b-decode-prefill-p2048-v5"
+    },
+    "locators": {
+      "bound_runs_root": {
+        "path": "/Users/edr/night-b6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/runs-parent/runs_d117_floor_qwen3-1p7b_v5_bound/.joulewise-launch-lineage.json",
+        "sha256": "33617b130bdb2128cb5937dd7802611869b2e598a9fef7d3bf4a8242fb54dffa"
+      },
+      "claim_runs_root": {
+        "path": "/Users/edr/night-b6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/runs-parent/runs_d117_floor_qwen3-1p7b_v5/.joulewise-launch-lineage.json",
+        "sha256": "956b38898e5f3dc2557c8269489fc2bd151169a095a81fc1f5fc4c6e2ff988b9"
+      }
+    },
+    "records": {
+      "authorization": {
+        "path": "/Users/edr/night-b6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/custody/window_lineage/authorization.json",
+        "sha256": "52158ffdc0cdcd9429192f35eda4e20afc41f0c8c93d31d6003699edcf21606f"
+      },
+      "go": {
+        "path": "/Users/edr/night-b6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/custody/window_lineage/go.json",
+        "sha256": "3dbfc79d09c3984ac2cee38abf142007b15c861a717f8a0164e9d970d3b584a1"
+      },
+      "launch": {
+        "path": "/Users/edr/night-b6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/custody/window_lineage/launch.json",
+        "sha256": "aacf6c29422d79f16e46986740b514374ed32294c1d67f8177f09d96bea603e0"
+      }
+    },
+    "unrecorded": []
+  },
+  "schema": "joulewise.b5_lineage_publication.v1"
+}

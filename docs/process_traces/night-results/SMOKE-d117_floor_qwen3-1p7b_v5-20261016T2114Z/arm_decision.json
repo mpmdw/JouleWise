@@ -1,0 +1,50 @@
+{
+  "arm_deadline_epoch_s": 1792190400.0,
+  "arm_error": null,
+  "arm_record": {
+    "path": "/Users/edr/night-b6/machine-test/MT-20261016T2114Z/smoke/d117_floor_qwen3-1p7b_v5-20261016T2114Z/custody/hazards/arm.json",
+    "sha256": "374b69925777aae56862e751a3e372db683af1b9a79f29624a42ac9e5e511abc"
+  },
+  "census": {
+    "argv": [
+      "/usr/bin/pgrep",
+      "-a",
+      "-lf",
+      "[c]odex|[c]laude"
+    ],
+    "clean": true,
+    "exit_code": 1,
+    "monotonic_ns": 171437166376416,
+    "refusal": null,
+    "stderr": "",
+    "stdout": ""
+  },
+  "collector_calls": 1,
+  "dry_arm": false,
+  "ended": {
+    "monotonic_ns": 172262813989625,
+    "monotonic_raw_ns": 172262813988958,
+    "wall_s": 1792187925.830206
+  },
+  "go": true,
+  "go_after_t0_stage_cap": false,
+  "network_time_off_calls": 1,
+  "not_pass": [],
+  "plan_id": "SMOKE-d117_floor_qwen3-1p7b_v5-20261016T2114Z",
+  "reasons": [],
+  "schema": "joulewise.b5_arm_decision.v1",
+  "started": {
+    "monotonic_ns": 171437205353333,
+    "monotonic_raw_ns": 171437205353083,
+    "wall_s": 1792187100.22157
+  },
+  "unmeasured": [],
+  "verdicts": {
+    "battery": "PASS",
+    "clock": "PASS",
+    "contention": "PASS",
+    "disk": "PASS",
+    "instrument": "PASS",
+    "thermal": "PASS"
+  }
+}
