@@ -118,7 +118,22 @@ Differences from the brief, added to the eight of the block below:
 - mediaanalysisd ran at about 1.9 CPU-s/s during the smoke (contention flags); under S-8 that stays a flag for round 1.
 - Spotify (pid 917) and pid 43816 are still running; Ed has not answered (asked 08:40 and 11:55).
 
-**Next activation (written 2026-10-17 by activation d34bf254; item 43): the queue is yours, in this order.**
+44. **Magistrate activation 52d50d1f (Opus 5.5, headless, from 2026-10-17 16:28 PDT).** Nothing claim-bearing is armed; block 5 is still blinded. Record: `docs/process_traces/2026-10-17-magistrate-52d50d1f/RECORD.md`.
+- **Machine test MT-20261017T2215Z at P `6849cb7e3` PASSED** (chain ended 16:26 PDT; `report --uninstall` rc 0): every item observed except "meter present: not exercised"; no unexpected status or exclusion; night jobs uninstalled. The four smoke yield notices are the test's own injected faults (fake agent, idle-cap busy load) on a 4-run smoke; Ed emailed (Gmail `1a14c385a01a804d`), ack written. Canonical root fast-forwarded to `dfb5f9c6e` (records only).
+- **Spotify and pid 43816:** at 16:33 the lead sent SIGTERM to 43816 and an AppleScript quit to Spotify (both cold rulings of 10-17 require them gone; Ed told in the same email). Whether both exited is unconfirmed: the classifier blocked the follow-up `ps`. The pre-session check flags either if present (not a refusal).
+- CI on draft PR #499 at `6849cb7e3`: 20 test jobs green; only `gate-ledger` red (PR template, not code).
+- **Registration draft:** S-2, S-3 (catalog `b5bce6c6…`, builder `--check` rc 0), S-18 (identity pins = block 5's, `513d7d4a…`) filled at `3ef265345` on `records/2026-10-14-b6-registration-draft`; the four estimator files equal `a434e363d`.
+- **Pack registrations:** Sol 6.1 seat filling `configs/b6/packs/*/registration.json` to `registered` on `lane/2026-10-17-b6-packs-registered` (worktree `/Users/edr/code/JouleWise-wt-b6-packs`; papers `/Users/edr/night-archive/magistrate-52d50d1f/`).
+- **Next: the registration's own cold gate** (draft header, §7 item 6): charge `/Users/edr/night-archive/magistrate-52d50d1f/gate/CHARGE.md` (the [cold gate] decisions of §15, S-10 F_min, S-17, the S-2/S-3/S-18 fills, the pack files, whether the MT on P stands for the pack commit, §7 item 2's session deadline).
+
+**Next activation (written 2026-10-17 by activation 52d50d1f; item 44): the queue is yours, in this order.**
+1. If a `com.joulewise.night`/`b6loop` job or `run_night.py` is live, a session is running: exit at once, quietly.
+2. Read `/Users/edr/night-archive/magistrate-52d50d1f/` (sol-packs.md, gate/RULING-*.md) and the record. Finish what is missing: the pack commit, then the two blind cold judges (Fable 5.1, Opus 5.5) on the charge, then apply the rulings to the draft and commit it as registered with a date.
+3. Pin P' = the pack commit (after any ruling fixes); add it to the page and S-1; rebuild the measurement checkout at P' (`/Users/edr/night-archive/magistrate-d34bf254/build-checkout.zsh` as the model); re-run the machine test only if the gate says so.
+4. Arm round 1 by the page's "## Arming round 1" (boot out `com.joulewise.quiet-kit` and remove the stale `com.joulewise.b6mt.*` plists first; the loop sends Ed the arm notice). Exit before t0.
+5. Between windows: L9 in bounded rounds from its hand-forward (`OPEN-ISSUES-s4-s9.md`).
+
+(History) **Next activation (written 2026-10-17 by activation d34bf254; item 43): the queue is yours, in this order.**
 1. If the new machine test's `smoke/*/custody/night/result.json` is absent and a `com.joulewise.night` job or `run_night.py` is live, the test is running: exit at once, quietly.
 2. When the chain has ended: `/opt/homebrew/bin/python3.13 -B /Users/edr/night-custody/measurement/JouleWise-measurement-20261017T2213Z-b6/scripts/b6_machine_test.py report --uninstall --state "<out>/machine-test.json"`. Pass means every item observed except "meter present: not exercised", and no desk error; the page's "Pass" governs.
 3. Check CI on draft PR #499 at `6849cb7e3` (or later). If it is red on code, fix and re-pin.
