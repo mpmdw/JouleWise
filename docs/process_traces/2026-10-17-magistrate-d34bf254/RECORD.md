@@ -54,3 +54,23 @@ outside-processor CPU stays a flag for round 1, printed as a labelled alternativ
 - Root cause: Sol 6.1 xhigh, codex-run-v3, `/Users/edr/night-archive/b6-mt2-rootcause/` (done 12:01).
 - Fix: Sol 6.1 xhigh, codex-run-v3, brief `/Users/edr/night-archive/b6-mt2-fix/BRIEF.md`, report
   `/Users/edr/night-archive/b6-mt2-fix/sol-fix.md` and `.codex-report/b6-mt2-fixes.md` in the worktree (running from 12:05).
+
+## Fixes merged, re-pin, machine test re-run
+- Fix round 1 `0276a3327`: lead's focused runs 125 OK and 252 block-6 OK. Blind cold passes Fable and Opus: both
+  MERGE-WITH-FIXES. CI quick tier failed on a stale test expectation.
+- Fix round 2 `021f935c8` (Sol 6.1 xhigh): Fable F1 (the writer veto), F2, Opus F1 (wait-budget skip) and the stale test.
+  The lead checked that the writer's new `core_passed` is at least as strict as the old one (the shared barrier
+  checks bracket, continuity and members). Opus delta review: MERGE. CI: 20 of 20 green. PR #501 merged into the lane
+  as `5b58cfa06`. Gate record: `pr501-gates.md`.
+- P = `6849cb7e3` (executing_reviews rows for 0276a3327 and 021f935c8, and the page sentence). Checkout
+  `JouleWise-measurement-20261017T2213Z-b6`, all checks pass.
+- Machine test installed 15:15 PDT: out `/Users/edr/night-b6/machine-test/MT-20261017T2215Z`, t0 15:31:00 PDT
+  (epoch 1792276260). The activation exits before t0. No email for the install (a test, not a window); the next
+  activation reports the result.
+- Gmail checked at 11:5x, 14:0x and 15:1x: no message from Ed.
+
+## Pruning list (this session)
+- Machine test (live): caught three number-touching desk defects (busy-only runs and references silently excluded).
+- Blind executing cold passes: each caught one MAJOR the other missed (Fable the writer veto, Opus the wait-budget
+  skip). Both touch which data count.
+- CI quick tier: caught a stale test asserting the old veto.
