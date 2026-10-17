@@ -5,7 +5,8 @@ item 39: block 6 is collected from a measurement checkout at a pinned commit of 
 after the block-5 release). This page gives the two commands the design's stage 1 ends with
 (`docs/design/block6_collection_draft.md` section 17): the one machine test of about 40 minutes, then the arm of
 round 1. The first machine test, MT-20261016T2114Z, found a stale smoke plan-tree sidecar and an unwritten
-agent-presence flag; the fixes are on `fix/2026-10-16-b6-mt-fixes` and need a fresh pin and Mac run. Run nothing
+agent-presence flag; the fixes (`fix/2026-10-16-b6-mt-fixes`, `fix/2026-10-17-b6-mt-delta`) are merged here and
+the test runs again at the 2026-10-17 pin below. Run nothing
 here while a block-5 analysis job or any agent is using the Mac.
 
 ## What is on this branch
@@ -37,9 +38,10 @@ Built once, by the block-5 post-seal runbook's steps 3 to 5
 (`docs/process_traces/2026-10-07-block5-seal/30-post-seal-runbook.md`), with these values:
 
 - **Commit:** a pinned commit of this branch, `P` below (the head after the open issues that matter for the test
-  are closed). Candidate `P` (round 2, 2026-10-16, on `lane/2026-10-16-b6-round2`): the commit that adds this sentence;
-  its hash is in `/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md`. (Stage 3's candidate
-  220166913 was superseded by round 2.) The checkout is never pulled, fetched or edited afterwards; its only later commits are the ledger
+  are closed). Candidate `P` (2026-10-17, on `lane/2026-10-16-b6-round2`): the commit that adds this sentence,
+  after the machine-test fixes and `acceptance.json`; its hash is in RUN_STATE item 42 and
+  `docs/process_traces/2026-10-17-magistrate-1a1261a5/`. (Round 2's candidate b9de23a2c and stage 3's 220166913
+  were superseded.) The checkout is never pulled, fetched or edited afterwards; its only later commits are the ledger
   pin advances the chain's desk step makes.
 - **Path:** `/Users/edr/night-custody/measurement/JouleWise-measurement-<UTC stamp>-b6`. No path may contain
   `claude` or `codex`: the agent census matches those strings anywhere in a process's arguments.
@@ -53,9 +55,8 @@ Built once, by the block-5 post-seal runbook's steps 3 to 5
   block 6's acceptance judges each session by its own captures and only discloses other sessions' captures, so
   this changes flags, not which sessions count (open issue 4).
 - **Registration directory:** `configs/b6/registration/` holds, since lane 6, the loaders' README, copies of block
-  5's `identity_pins.json` and `sizing_b5.json`, and their schemas. `acceptance.json` (registration draft S-4 to
-  S-9) is absent until the registration seat writes it from quiet-machine numbers (open issue 2). The machine test
-  does not need it: it writes its own non-claim one.
+  5's `identity_pins.json` and `sizing_b5.json`, and their schemas. `acceptance.json` holds S-4, filled from the quiet-machine kit and passed by the cold gate of 2026-10-17
+  (registration draft §15 D31 to D38). The machine test does not use it: it writes its own non-claim one.
 
 ## The machine test
 

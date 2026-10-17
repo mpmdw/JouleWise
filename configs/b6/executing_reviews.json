@@ -270,5 +270,34 @@
     "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (delta cold passes: JouleWise-data claude/b6-r2-delta-fable @ a8213b4 and claude/b6-r2-delta-opus-rmmapr @ 11a63d5, cold/REPORT.md with cold/probes)"
    }
   ]
+ },
+ {
+  "commit": "8c42d38a6f58a8e0db37419171b61f51f622a719",
+  "number_bearing_paths": [
+   "joulewise/b5/driver.py"
+  ],
+  "change": "machine-test fixes: agent.presence interval carries monotonic_raw_ns null so make_flag accepts it (Sol 6.1)",
+  "executing_reviews": [
+   {
+    "reviewer": "Sol 6.1 xhigh, executing review (non-author)",
+    "covered": "fix/2026-10-16-b6-mt-fixes at 3359719ea (contains 8c42d38a6)",
+    "paper": "/Users/edr/night-archive/b6-mt-fix/review/SOL-REVIEW.md"
+   },
+   {
+    "reviewer": "Fable 5.1, cold, blind, executing",
+    "covered": "729449fa0..3359719ea",
+    "paper": "/Users/edr/night-archive/b6-mt-fix/review/COLD-fable.md"
+   },
+   {
+    "reviewer": "Opus 5.5, cold, blind, executing",
+    "covered": "729449fa0..3359719ea",
+    "paper": "/Users/edr/night-archive/b6-mt-fix/review/COLD-opus.md"
+   },
+   {
+    "reviewer": "Opus 5.5, delta executing review (non-author)",
+    "covered": "bc099c85b and afd6d865d",
+    "paper": "/Users/edr/night-archive/b6-mt-fix/review/DELTA-REVIEW-bc099c85b.md"
+   }
+  ]
  }
 ]
