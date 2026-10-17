@@ -26,7 +26,9 @@ class AcceptanceDirectoryTests(unittest.TestCase):
                                  (ROOT / 'configs/campaigns/v5_claim_25g83' / name).read_bytes())
                 self.assertIsInstance(loader(target), dict)
         self.assertEqual(acceptance_registration.load_precheck_thresholds(target), {})
-        self.assertFalse((target / 'acceptance.json').exists())
+        loaded = acceptance_registration.load(target)
+        self.assertEqual(acceptance_registration.SCHEMA, loaded["schema"])
+        self.assertEqual([], loaded["defaults_used"], "the registered file states every value")
 
     def test_malformed_inputs_fail_the_loader_without_filling_measurements(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -6,7 +6,7 @@ values are recorded as `precheck.acceptance_unavailable`.
 
 | File | Schema | Contents and owner |
 |---|---|---|
-| `acceptance.json` (absent) | `joulewise.b6_acceptance_registration.v1` | Registration seat: fresh quiet-machine acceptance, stop line and registered code identity. S-4 through S-9 remain open; no calibration constants are supplied here. |
+| `acceptance.json` | `joulewise.b6_acceptance_registration.v1` | Registration seat (2026-10-17, draft until the cold gate): slot S-4, the fresh calibration acceptance derived from the 13 quiet-machine captures of 2026-10-16/17 by block 5's derivation (alignment reference 0.037054941476587 s, bracket screen 0.010818 s, drift budget 0.01550217418713139 s), and the registered code identity (`registered_commit` main `3bb305d7a`, the base of `executing_reviews.json`). One file serves all three packs (`pack_id` names the family); each pack's stop line stays in `capture_screen.REGISTERED_T10_STOP_S`, so `operative_bound_stop_s` is null. S-6 to S-9 are registration text, not fields here. Derivation: `/Users/edr/night-archive/b6-acceptance/DERIVATION.md`. |
 | `identity_pins.json` | `joulewise.b5_identity_pins.v1`, `schema_identity_pins.json` | Exact copy of block 5's committed pins for S-18; registration seat confirms the copy at S-1. |
 | `sizing_b5.json` | `joulewise.b5_sizing.v1`, `schema_sizing_b5.json` | Exact copy of block 5's committed sizing, used for the replication plan allowances. |
 | `precheck_thresholds.json` (optional, absent) | Sparse object matching `precheck.PRECHECK_DEFAULTS`, checked by `load_precheck_thresholds` | Registration seat supplies only measured overrides; otherwise the existing precheck defaults apply. |
