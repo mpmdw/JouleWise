@@ -54,14 +54,34 @@ below carries its source, its arithmetic and its replay count; the full arithmet
   from the 13 quiet captures of the kit; 0 of the 4 rehearsal sessions stopped.
 - **S-6, waiting:** d = +0.180 J on the reference prefill (+0.009 J on its decode), below 0.475 J, so `idle.waited` is
   disclosed only; no waited run exists in any replay.
-- **S-7, clock:** r = −4.7 × 10⁻⁷ ppm over 14.3 hours with network time off; T_stream_max stays block 5's 335 s
+- **S-7, clock:** r = −4.67 × 10⁻⁷ ppm over 14.3 hours with network time off; T_stream_max stays block 5's 335 s
   (the machine test that was to measure run spans produced no runs); hold 14.675 ppm; 0 sessions held.
-- **S-8, outside processor work:** w = 5.432 J per outside CPU-second (the largest of M4's 20 bursts), c_q = 0.73
-  CPU-s per 10 s interval. **This rule, as registered, excludes 12 of the 53 quiet rehearsal runs of 2026-10-09 and
-  36 of all 77 rehearsal runs**, which §8.7 item 1 does not allow for known-good data. The registered value is written
-  with a labelled alternative and sent to the cold gate (§8.5, §15 D27).
+- **S-8, outside processor work:** w = 5.432 J per outside CPU-second (the largest of M4's 20 bursts), c_q = 0.54
+  CPU-s per 10 s interval (§8.5). As registered, the exclusion would remove 12 to 14 of the 53 quiet rehearsal runs of
+  2026-10-09, which §8.7 item 1 does not allow, so for round 1 `contention.request_overlap` stays a recorded flag and
+  the registered rule's result is printed beside each cell as a labelled alternative.
 - S-5, S-9 and S-11 stay open: the kit ran no pack smoke and no 2,048-token prefill. S-10 (F_min) stays with the cold
   gate; every line below is written as F_min / 4 = 0.475 J at the proposed 1.9 J.
+
+**Cold gate of 2026-10-17 on the quiet-machine values.** Two blind cold judges, Fable 5.1 and Opus 5.5, each
+re-derived the fill from the kit's raw files: `docs/process_traces/2026-10-17-magistrate-1a1261a5/b6-accept-ruling-fable.md`
+and `docs/process_traces/2026-10-17-magistrate-1a1261a5/b6-accept-ruling-opus.md` (written "the Fable ruling" and "the
+Opus ruling" below). Both reproduced S-4, d, r, the 20 burst values and the replay counts. The lead's decisions,
+which govern where the judges differ (§15 D31 to D38):
+
+- S-4 registered as filled (§3.3).
+- S-6 registered: d = +0.180 J, `idle.waited` disclosed only; the text now describes M2's two arms as measured
+  (ordinary baselines of about 75 s, not 85 s; 8 of 10 long waits ended at the kit's 2,700 s cap) and says why d
+  still qualifies (§8.5).
+- S-7 registered: r = −4.67 × 10⁻⁷ ppm; T_stream_max = 335 s, carried from block 5, replaced by the machine test's
+  longest run-level stamp span if that is longer.
+- S-8: w = 5.432 J per CPU-s registered as measured; the exclusion is not adopted for round 1 (above; §8.3 item 3,
+  §8.5).
+- c_q = 0.54 CPU-s per interval governs (every quiet-machine interval, Spotify and an orphaned test process removed);
+  0.72 with them is printed beside it; 2026-10-09's 0.52 is the check.
+- Before round 1: Spotify not running and the orphaned hazard monitor stopped (§7 item 6), a recorded condition and a
+  pre-check flag, not a refusal.
+- S-5, S-9, S-11 held until each pack's smoke; S-12 registered (printed cross-check, excludes nothing).
 
 ## 0. Why block 6 exists
 
@@ -368,6 +388,16 @@ restart and before round 1 (S-4):
   51.0 ms (was 45.0, 45.1 and 54.7) and, for the session stopped at its opening capture, b_pre + s_bracket = 58.8 ms
   (was 62.5) against the 139 ms line: 0 of 4 stopped. The reference and the budget only flag: 2 of 7 rehearsal
   captures exceed the reference, 0 of 3 rehearsal brackets exceed the budget.
+- *Cold gate, 2026-10-17: registered as filled* (§15 D31). Both judges recomputed every value above through block 5's
+  issuer functions and the file's SHA-256 from `5ffbe15c4`, to the last digit. On the corpus (13 captures from one
+  kit job): the one constant that enters a number, s_bracket, is set by the D-125 floor, not by the corpus. A
+  24-capture corpus of the same spread (standard deviation 2.808 ms) would have an expected range of 3.895 × 2.808 =
+  10.94 ms, 0.12 ms above the floor, 0.006 J at 0.047 J per ms; if the spread across days grew to block 5's 3.80 ms, a
+  13-capture range would be about 3.336 × 3.80 = 12.7 ms, 1.9 ms above the floor, 0.09 J (Opus ruling e). Both are far
+  inside the 1 J attribution limit. The reference and the budget only flag. The corpus coming from one job is
+  disclosed. The reference is the corpus maximum quantized half-even to 10⁻¹⁵ s, so its own source capture (M1
+  capture-011) sits 2.8 × 10⁻¹⁶ s above it and would flag itself; block 5's reference is built the same way, and it is a
+  flag (Fable ruling e).
 
 Each block prints its own s_bracket beside its bounds. Captures are kept
 in a plain **capture list**; a session's b_op uses only its own two captures. Other sessions' captures are read
@@ -502,7 +532,11 @@ main (item 39). Block 6 therefore runs from its own code line:
 6. **Before round 1** (each a precondition, recorded with its date): the quiet-machine measurements of §14 have run
    with no agent alive (the Apple media daemons came back after the restart, item 39, so each result carries their
    processor time beside it); the fresh acceptance (§3.3); the pin and the machine test; this registration through
-   its cold gate and committed. No session arms while a slot marked "before round 1" in §14 is open.
+   its cold gate and committed; and Spotify (with its helpers) not running and the orphaned test `hazard_monitor.py`
+   (pid 43816, §8.5) stopped, so that the machine in the windows is the machine c_q was measured on (§15 D36). The
+   last condition is recorded with its date, and the pre-session check records a flag when either program is present;
+   it is not a refusal (physics refuses, everything else is a flag; their outside processor time is what
+   `contention.request_overlap` already records). No session arms while a slot marked "before round 1" in §14 is open.
 
 ## 8. Which flags exclude a run or a session: the clause that protects the science
 
@@ -560,9 +594,10 @@ prints B5-PLAN §8.1's fixed sentence for a lost midpoint.
 A run removed by any of these is removed from every cell it feeds; a removed repeat removes that repeat; a removed
 quad run removes its whole quad.
 
-1. **Every run-excluding code of block 5's catalog keeps its effect** (36 of its 40), with four exceptions that
+1. **Every run-excluding code of block 5's catalog keeps its effect** (35 of its 40), with five exceptions that
    become flags (`member.cooldown_evidence_unverified`, `instrument.binary_identity_unmeasured`,
-   `records.malformed_flag_member_exclusion_possible`, and `member.cooldown_cap_hit`, below). The 36 are defined in
+   `records.malformed_flag_member_exclusion_possible`, `member.cooldown_cap_hit`, below, and, for round 1,
+   `contention.request_overlap`, item 3). The 35 are defined in
    B5-REG §6.3, §6.4 and §6.7. In words, a
    run is removed when: its status is not succeeded; it fails strict validation (every raw file re-checked and its
    summary recomputed from them), its recomputed summary differs from the stored one, or a required file is missing,
@@ -575,7 +610,8 @@ quad run removes its whole quad.
    woke, the screensaver ran or Low Power Mode was on during it; or a physical hazard fell in its span: charging or
    AC lost (`battery.member_span`), a charging excursion of the battery's accumulator, battery state unmeasured, OS
    thermal level nonzero, thermal pressure in its own records, a clock step, too few or too slow records for its
-   target phase, outside processor work (now sized by item 3), contention unmeasured, its span unknown. Battery
+   target phase, contention unmeasured (part of the request covered by no processor-time interval), its span
+   unknown. Battery
    discharge alone (`battery.assist`) is disclosed, as in block 5.
 
    The 5 ms clock bound is kept (§15 D8). *Derivation:* it removes 1 of the 53 quiet rehearsal runs of 2026-10-09
@@ -597,17 +633,21 @@ quad run removes its whole quad.
    - the run was skipped at the 1,500 s wait cap or by the exhausted wait budget (`idle.wait_cap_skip`,
      `idle.wait_budget_skip`).
 3. **Contamination by outside power, at levels set by §8.5:**
-   - outside processor work in the run's request (`contention.request_overlap`, its line moved from block 5's 0.05
-     CPU-s/s per process): excluded at the §8.5 level once M4 has measured w, and until then a recorded flag only.
-     M4 has measured it (S-8: w = 5.432 J per CPU-s, c_q = 0.73 CPU-s, so a run is excluded when its excess C − k ×
-     0.73 reaches 0.0874 CPU-s); as registered this excludes 12 of 53 quiet rehearsal runs, so its adoption is a
-     question for the cold gate with a labelled alternative beside it (§8.5, §15 D27). At this branch's catalog the
-     code is still disclosed only and no lane computes E_add;
+   - outside processor work in the run's request (`contention.request_overlap`): **a recorded flag for round 1, not
+     an exclusion** (cold gate of 2026-10-17, §15 D34). M4 measured w = 5.432 J per CPU-s and c_q is 0.54 CPU-s per
+     interval (S-8), so the registered rule would exclude a run when its excess C − k × 0.54 reaches 0.475 / 5.432 =
+     0.0874 CPU-s. That line is about a fifth of the bottom decile of the quiet machine's own outside time per 10 s
+     interval (10th to 90th percentile 0.41 to 1.60 CPU-s), and on replay it removes 14 of the 53 known-good quiet
+     runs of 2026-10-09 (12 at c_q = 0.72), which §8.7 item 1 forbids. Each cell prints the registered rule's result
+     beside it as a labelled alternative, with the flagged runs' C, k, C − k × c_q and E_add (§8.5). The catalog
+     already has the code as DISCLOSE; the code that computes E_add is owed before the analysis release (S-14), not
+     before round 1;
    - outside graphics-processor or neural-engine power that processor time does not show (a new code, not yet
      built): excluded at the §8.5 level P*, set per pack and phase (S-9);
    - a run admitted after waiting (`idle.waited`): excluded only when M2's measured shift reaches the §8.5 level,
      otherwise disclosed; the cells are printed with and without waited runs either way (§9.5 item 8). M2 measured
-     d = +0.180 J (S-6), below 0.475 J, so `idle.waited` is disclosed only.
+     d = +0.180 J (S-6), 38% of 0.475 J, so `idle.waited` is disclosed only (registered by the cold gate of
+     2026-10-17, §15 D32; why M2's capped long arm qualifies is in §8.5).
 
 ### 8.4 Everything else is a flag
 
@@ -651,16 +691,17 @@ energy, whose variation is the scatter the estimators measure; a duration outlie
 
 | Kind | Measured quantity | E_add | Conversion, and the slot that fills it |
 |---|---|---|---|
-| Outside processor work | C, the outside processes' CPU-seconds in the k 10 s monitor intervals that overlap the run's request: the monitor's `outside_total`, summed from its per-process (ps) listing over every process except the measurement's own and `kernel_task` (not the host's total CPU-tick count, which reads about 2.7 times larger) | w × max(0, C − k × c_q), where c_q is the median outside CPU-seconds per interval on the quiet machine, assuming the worst placement for the excess: all of it inside the phase | w, joules per outside CPU-second, the largest over M4's burst placements and priorities: **w = 5.432 J per CPU-s** (S-8); c_q was 0.52 CPU-s on the 2026-10-09 rehearsal (its agent processes left out, §8.7 item 1) and is replaced by the median over the quiet-machine measurement sessions: **c_q = 0.73 CPU-s**; excluded when C − k × c_q ≥ F_min / (4w) = 0.475 / 5.432 = **0.0874 CPU-s**; until M4 measures w, C is a recorded flag only. Adoption of the exclusion is a cold-gate question: as registered it removes 12 of 53 quiet rehearsal runs (derivation below) |
+| Outside processor work | C, the outside processes' CPU-seconds in the k 10 s monitor intervals that overlap the run's request: the monitor's `outside_total`, summed from its per-process (ps) listing over every process except the measurement's own and `kernel_task` (not the host's total CPU-tick count, which reads about 2.7 times larger) | w × max(0, C − k × c_q), where c_q is the median outside CPU-seconds per interval on the quiet machine, assuming the worst placement for the excess: all of it inside the phase | w, joules per outside CPU-second, the largest over M4's burst placements and priorities: **w = 5.432 J per CPU-s** (S-8); c_q was 0.52 CPU-s on the 2026-10-09 rehearsal (its agent processes left out, §8.7 item 1) and is replaced by the median over the quiet-machine measurement sessions, with Spotify and the orphaned test process removed: **c_q = 0.54 CPU-s** (derivation below). The registered line, C − k × c_q ≥ F_min / (4w) = 0.475 / 5.432 = 0.0874 CPU-s, **is not adopted for round 1**: it removes 14 of 53 known-good quiet runs (derivation below), so `contention.request_overlap` stays a recorded flag and the line's result is printed beside each cell as a labelled alternative |
 | Outside GPU or ANE power | P_x, GPU plus ANE rail power in the run's idle baseline | P_x × T_phase, where T_phase is the length of the run's own target phase for its pack in the pack's non-claim smoke runs (the longest, if they differ) | T_phase per pack and phase: `OPEN[S-11]`, from each pack's first smoke; the line is P* = F_min / (4 T_phase) (S-9); M5 confirms the rail sees the contender: a graphics contender adds 1.25 to 7.58 W on the GPU rail, a CPU-only one adds 5.10 to 5.38 W on the CPU rail and at most 0.14 mW on the GPU rail, and the idle GPU rail reads 0.19 mW (standard deviation 1.59 mW) |
-| Waiting before the run | Whether the run was admitted after a wait | d, M2's point estimate of the shift: the mean of 10 reference runs after a 20-minute wait minus the mean of 10 after the ordinary 85 s, alternated | S-6: when \|d\| ≥ F_min / 4 every waited run is excluded; otherwise `idle.waited` is disclosed only; either way the cells are printed with and without waited runs (§9.5 item 8). **Measured: d = +0.180 J** on the reference workload's prefill and +0.009 J on its decode (+0.193 J over the whole request), each below 0.475 J: `idle.waited` is disclosed only |
+| Waiting before the run | Whether the run was admitted after a wait | d, M2's point estimate of the shift: the mean of 10 reference runs after a long, disturbed wait minus the mean of 10 after an ordinary idle baseline, alternated (the arms as M2 ran them are described below) | S-6: when \|d\| ≥ F_min / 4 every waited run is excluded; otherwise `idle.waited` is disclosed only; either way the cells are printed with and without waited runs (§9.5 item 8). **Measured: d = +0.180 J** on the reference workload's prefill and +0.009 J on its decode (+0.193 J summed over all phases of the request; the bundles' recorded request energy, `energy_request_j`, gives +0.195 J), each below 0.475 J: `idle.waited` is disclosed only |
 
 *Derivation of each row* (replays on the non-claim rehearsals of 2026-10-06 and 2026-10-09, §8.7 item 1):
 
 - *Outside processor work:* the drafted form w × C charged the quiet machine's own background (median 0.52 CPU-s per
   interval) 1.04 J at w = 2 and excluded 46 of the 53 quiet 2026-10-09 runs (77 of 77 rehearsal runs in the second
   seat's replay), while outside processor time measurably added at most 0.03 J per CPU-second to 25 identical
-  reference runs (two of which overlapped about 20 CPU-s each and stayed within one standard deviation of the
+  reference runs (the 2026-10-17 fits, with their uncertainties, are under "Why the exclusion is not adopted"
+  below; two of which overlapped about 20 CPU-s each and stayed within one standard deviation of the
   others), so only the excess over the quiet level is charged, which excludes 12 of the 53 at w = 2 and 3 at
   w = 0.17 and is exactly 0.475 J at the line.
 - *Outside GPU or ANE power:* contender power adds energy only during the run's own phase, and the rails' quiet GPU
@@ -683,33 +724,85 @@ energy, whose variation is the scatter the estimators measure; a duration outlie
   low-duty arms are either unresolved (background 5% and 20%: 1.29 ± 2.30 and 2.02 ± 1.47) or flagged because
   `mediaanalysisd` or `photoanalysisd` ran during them (interactive 5% and 20%: 19.33 ± 3.66 and 1.50 ± 0.29; in the
   5% arm the outside processes' CPU rose by 0.154 CPU-s/s, 30 times the load's own 0.0052), so neither sets w. The
-  line on the excess is 0.475 / 5.432 = 0.0874 CPU-s, and E_add is exactly 0.475 J at it.
-- **c_q = 0.73 CPU-s per 10 s interval**: the median of the ps-listed outside total over the 2,477 accounting
-  intervals of 9 to 11 s that the kit recorded (2,391 in M2's long waits, median 0.72; 86 in M4, median 0.765). The
-  kit's outside total excludes the kit's own processes as the monitor excludes the measurement's own, and `ps` does
-  not list `kernel_task`, so it is the quantity C is. It includes two user programs left running on the machine,
-  Spotify (0.135 CPU-s per interval where listed) and an orphaned test `hazard_monitor.py` (pid 43816, started
-  2026-10-15 09:41 from a scratch directory of the `JouleWise-wt-b6-s3cold-fix` worktree, still alive on 2026-10-17;
-  0.056); without them the median is 0.55, close to 2026-10-09's 0.52.
-- **Replay of the outside-processor rule at the measured values** (same 77 rehearsal runs and monitor journals as
-  above, agent processes left out of C): **12 of the 53 quiet 2026-10-09 runs excluded, 13 of 13 and 11 of 11 in
-  the two 2026-10-06 sessions (which had an agent and a busy `fseventsd`, median 4.2 and 5.9 outside CPU-s per
-  interval), 36 of 77 in all.** The same 10-09 data show outside processor time adding at most 0.03 J per CPU-second
-  to reference runs, and the two runs with about 20 outside CPU-s within one standard deviation of their siblings;
-  so the registered value would remove known-good runs, which §8.7 item 1 does not allow. Registered result:
-  w = 5.432, c_q = 0.73, excluding. **Labelled alternative** (for the cold gate, §15 D27): w at the priority the
-  background daemons run at, M4's one resolved background arm, 0.0862 J per CPU-s, line 5.51 CPU-s of excess: 2 of 53
-  quiet runs (the two ~20 CPU-s runs above), 14 of 77 in all; or the code stays a flag (0 of 77), as it is at this
-  branch's catalog, where no lane computes E_add.
-- **d (S-6) = +0.180 J.** M2 ran five quads of the reference workload in the order ordinary, long, long, ordinary
-  (ordinary: the usual 85 s; long: a wait of at least 20 minutes before the run). d = mean of the 10 long runs −
-  mean of the 10 ordinary runs: prefill 7.8460 − 7.6657 = +0.1803 J (95% interval −0.008 to +0.368 J, t(0.975, 4) =
-  2.776 on the five quad differences), decode 15.9661 − 15.9572 = +0.0089 J (−0.156 to +0.174), whole request
-  +0.193 J. Each |d| is below 0.475 J (the largest, prefill, is 38% of it), so waited runs are disclosed only. No
-  waited run exists in any replay, so 0 runs are removed either way. In 8 of the 10 long runs the kit's wait reached
-  its 2,700 s cap before 20 continuous quiet minutes (7 to 24 restarts on outside processes above 0.05 CPU-s/s; the
-  longest quiet stretch was 149 to 993 s); each long run still waited 2,700 s, longer than block 6's 1,500 s cap,
-  and block-6 waits are themselves caused by such disturbances (a cold-gate note, §15 D26).
+  line on the excess is 0.475 / 5.432 = 0.0874 CPU-s, and E_add is exactly 0.475 J at it. *Cold gate, 2026-10-17:*
+  w = 5.432 registered as the measured value (both rulings). The interactive 5% arm's 19.33 is not a candidate: it is
+  a steady arm, not a burst, and its power step belongs to the outside daemons, not to the load; M14's one-core loads
+  read 5.21 and 5.42 W on the rails for a full core, the scale of 5.432, not of 19.33.
+- **c_q = 0.54 CPU-s per 10 s interval, governing** (cold gate, 2026-10-17; §15 D35). The registered definition is
+  the median of the ps-listed outside total over the quiet-machine measurement sessions' accounting intervals of 9 to
+  11 s. The pool is every such interval the kit recorded, 2,965 (M2's long waits 2,391, M4 122, M5 98, M10 228, M14
+  126), rebuilt from the raw ps snapshot pairs and M2's interval records (Opus ruling, "c_q"). The kit's outside total
+  excludes the kit's own processes as the monitor excludes the measurement's own, and `ps` does not list
+  `kernel_task`, so it is the quantity C is. Counting every listed process, the median is **0.72 CPU-s, printed beside
+  0.54 as the as-measured value**. It includes two programs that will not be in a window: Spotify (its GPU helper
+  alone drew 0.128 CPU-s in every interval) and an orphaned test `hazard_monitor.py` (pid 43816, started 2026-10-15
+  09:41 from a scratch directory of the `JouleWise-wt-b6-s3cold-fix` worktree, parent 1, still alive on 2026-10-17;
+  0.056 CPU-s per interval). c_q is the quiet machine's own background, a user program in a window is outside work the
+  flag exists to show, and both programs are stopped before round 1 (§7 item 6); removing Spotify, Spotify Helper and
+  pid 43816 from every interval gives **0.54**. *Check:* the 2026-10-09 rehearsal's journals list Spotify in 0 of 852
+  intervals and give 0.52, 0.02 CPU-s (0.11 J at w = 5.432) from 0.54. *Size:* 0.72 − 0.54 = 0.18 CPU-s per
+  interval, 0.98 J at w = 5.432 on a flag-only quantity; it removes no run under the governing flag and moves the
+  labelled alternative's count from 36 to 38 of 77. The draft's earlier 0.73 pooled only the 2,477 intervals stored
+  in M2's and M4's result files; the Fable ruling's 0.55 removed the same programs from that narrower pool; 0.55
+  against 0.54 is 0.01 CPU-s, 0.05 J at w = 5.432.
+- **Replay of the registered outside-processor rule** (same 77 rehearsal runs and monitor journals as above, agent
+  processes left out of C; both rulings reproduced every count; the two 2026-10-06 sessions had an agent and a busy
+  `fseventsd`, median 4.2 and 5.9 outside CPU-s per interval):
+
+  | w (J per CPU-s) | c_q (CPU-s) | 2026-10-09, 53 quiet | 2026-10-06 alpha-1, 13 | 2026-10-06 gamma-2, 11 | all 77 |
+  |---|---|---|---|---|---|
+  | 5.432 | 0.72 | 12 | 13 | 11 | 36 |
+  | 5.432 | 0.54 | 14 | 13 | 11 | 38 |
+  | 0.0862 | 0.72 or 0.54 | 2 | 4 | 8 | 14 |
+  | flag only (governs for round 1) | — | 0 | 0 | 0 | 0 |
+
+- **Why the exclusion is not adopted for round 1** (cold gate, 2026-10-17, both rulings, ruling a; §15 D34). (1) The
+  line, 0.0874 CPU-s of excess, is about a fifth of the 10th percentile of the quiet machine's own outside time per
+  interval (10th to 90th percentile 0.41 to 1.60 CPU-s over the 2,965 kit intervals, Opus ruling; 0.44 to 1.82 over
+  2,496, Fable ruling §4.4), so it fires on the interval-to-interval scatter of C, not on contamination. (2) The
+  known-good data show no dependence of energy on outside CPU: on the 33 reference runs of 2026-10-09, phase energy
+  regressed on C gives −0.09 ± 0.09 J per CPU-s at prefill and −0.29 ± 0.31 at decode (Fable ruling §4.5; on the session's
+  25 reference-corpus runs, −0.0006 ± 0.014 and +0.0057 ± 0.0083, Opus ruling). The two runs with about 20 outside CPU-s (refcorpus r01,
+  k = 2, and r03, k = 1) read 11.11 and 11.44 J at prefill and 25.70 and 25.58 J at decode against their 23 siblings'
+  11.26 ± 0.38 and 25.50 ± 0.22 J, where w = 5.432 predicts 104 and 107 J added (5.432 × (C − k × 0.54)). w = 5.432 is
+  the cost of a performance core at full clock and interactive priority; the quiet machine's daemons run on efficiency
+  cores at background priority (M4's in-situ daemon fit, 0.17 ± 0.06 J per CPU-s). (3) The rule would remove 12 to 14
+  of 53 known-good quiet runs, which §8.7 item 1 forbids.
+- **Background-priority w rejected as the governing value.** M4's one resolved background arm, w = 0.0862 ± 0.0106 J
+  per CPU-s (line 0.475 / 0.0862 = 5.51 CPU-s of excess), is not an upper bound for interactive outside work, which
+  costs 5.432 / 0.0862 = 63 times more, and it still removes 2 of the 53 known-good quiet runs (r01 and r03, where it
+  predicts 1.65 and 1.69 J added and the runs show none). It may be printed beside the registered alternative as a
+  second labelled line (Fable ruling a).
+- **What is printed.** Beside every cell, a labelled line "registered outside-processor rule (w = 5.432 J per CPU-s,
+  c_q = 0.54 CPU-s)" with that rule's exclusions applied and its exclusion count, and for each flagged run C, k,
+  C − k × c_q and E_add = 5.432 × max(0, C − k × 0.54). The monitor's contention journals are collected in every
+  session whatever the disposition, so the code that computes E_add is owed before the analysis release (S-14), not
+  before round 1. What would qualify an exclusion later (both rulings): a conversion measured for outside work as it
+  occurs on the quiet machine (for example an in-situ fit on quiet reference runs) whose replay removes 0 of the 53
+  known-good quiet runs; such a change follows §12.4.
+- **d (S-6) = +0.180 J, registered** (cold gate, 2026-10-17; §15 D32). *What M2 measured.* Five quads of the
+  reference workload in the order ordinary, long, long, ordinary, every run through the same code path. Ordinary arm:
+  the run's usual idle baseline, delivered as 74.9 to 75.2 s (the bundles' `idle_baseline_delivered_s`), not the 85 s
+  the plan named. Long arm: the kit waited for 20 continuous quiet minutes, restarting the count whenever an outside
+  process exceeded 0.05 CPU-s/s, up to a 2,700 s cap, then took a 75 s baseline and ran; in 8 of the 10 long runs the
+  cap came first (7 to 24 restarts, longest quiet stretch 149 to 993 s), so those runs waited 2,700 s through
+  intermittent outside work, and the other 2 reached 20 quiet minutes. All 20 bundles' clock anchors read `unknown`
+  (`clock_fit_span_insufficient`), so both arms were placed on the same fallback timeline. d = mean of the 10 long
+  runs − mean of the 10 ordinary runs: prefill 7.8460 − 7.6657 = +0.1803 J (95% interval −0.008 to +0.368 J,
+  t(0.975, 4) = 2.776 on the five quad differences, standard error 0.068 J), decode 15.9661 − 15.9572 = +0.0089 J
+  (−0.156 to +0.174), +0.193 J summed over all phases of the request (the bundles' recorded `energy_request_j`
+  gives +0.195 J). Each |d| is below 0.475 J (prefill is 38% of it, and the upper end of its interval, 0.368 J, is
+  78%), so waited runs are disclosed only. No waited run exists in any replay, so 0 runs are removed either way.
+  *Why d qualifies* (both rulings, ruling c). A block-6 waited run is a run admitted after up to 1,500 s of
+  intermittent disturbance and one passing baseline (§3.2 item 1). A capped, interrupted wait followed by a passing
+  baseline is the closest measured analogue of that run; an arm with 20 continuous quiet minutes would have measured a
+  cleaner machine than block 6 will deliver. The fallback timeline and the caps act on both arms of every quad alike,
+  and the paired differences carry the placement scatter they add. The proportional carry of D26 (+2.35% of the 1.7B
+  prefill-p2048's 26.1 J = 0.61 J) is not the rule's reading: the rule reads d in joules on the reference workload,
+  the transfer is unmeasured (a constant power offset, 0.180 J over the reference prefill's 0.30 s = 0.6 W, gives
+  0.6 W × 0.62 s = 0.37 J on the 1.7B prefill; a fixed cost gives 0.18 J), and the carry's own interval,
+  26.1 J × (−0.10% to +4.81%) = −0.03 to +1.25 J, includes zero. The cells with and without waited runs (§9.5 item 8)
+  are printed either way.
 
 The wall meter excludes nothing. The printed number is the sum of the rails, so power the rails do not see cannot
 bias it, and power they do see is judged by the two rows above; where the meter's idle-power step (M14) shows outside
@@ -732,17 +825,19 @@ pre-session contention hazard (no outside process above 5% of one core for 180 s
 adds 8 × 0.62 = 4.96 J, ten times 0.475 J: excluded, which is why §8.3 removes the whole unit an agent overlaps. A
 10 W graphics contender adds 6.2 J to the same prefill and 19.9 J to a 1.99 s decode: excluded. For the 1.7B pack
 the graphics lines are P* = 0.475 / 0.62 = 0.77 W for prefill runs and 0.475 / 1.99 = 0.24 W for decode runs. A run
-whose request overlaps two monitor intervals holding C = 1.54 outside CPU-s has an excess of 1.54 − 2 × 0.52 =
-0.50 CPU-s: at w = 2 J per CPU-second it adds 1.0 J and is excluded; at w = 0.03 it adds 0.015 J and is kept.
+whose request overlaps two monitor intervals holding C = 1.54 outside CPU-s has an excess of 1.54 − 2 × 0.54 =
+0.46 CPU-s: at the registered w = 5.432 J per CPU-second, E_add = 2.50 J, above 0.475 J, so the labelled alternative
+removes it; under the governing flag (round 1) it is kept, flagged, and printed with C = 1.54, k = 2, excess 0.46
+and E_add 2.50 J (0.040 J at w = 0.0862).
 
 ### 8.6 Refusal and stop lines set by the quiet-machine measurements
 
 | Slot | Line | What sets it | Rule for reading the measurement |
 |---|---|---|---|
 | `S-5`, decided 2026-10-15 | The one stop on b_op (§8.2 P3; at the opening capture, b_pre + s_bracket above it stops the chain) | The pack's smallest target-phase energy and the energy per ms of timing bound at its edges, from the pack's non-claim smoke sizes (filled with S-11) | The line is the b_op at which the attribution bound of the pack's smallest target phase reaches a quarter of its energy, the phase check of §8.3 item 1: for ALPHA and GAMMA, whose smallest target phase is the Qwen3-1.7B prefill, 0.25 × 26.1 J = 6.5 J at 0.047 J per ms, 139 ms at the rehearsal sizes. Captures in the faulty launch context of September (records of 244 to 250 ms where 130.5 ms is normal) do not set it: the pre-check's sampler-median line (at most 150 ms, below) refuses that context directly. This replaces the threshold note's 60 ms capture line (about 92 ms on b_op, its §8). *Derivation:* every ms of b_op below the line is carried into the floor at 0.047 J per ms, and above it every run of that phase fails its phase check, so the session could not count (§8.2 N3) and the stop only saves its hours; 0 of the 4 rehearsal sessions are stopped (b_op 45.0 to 62.5 ms with block 5's s_bracket, 41.3 to 58.8 ms with block 6's, §3.3) |
-| `S-6` (M2), measured 2026-10-17 | Whether a waited run is excluded; the 1,500 s cap | §8.5, waiting row: M2's point estimate d | Every waited run is excluded when \|d\| ≥ F_min / 4 = 0.475 J, otherwise `idle.waited` is disclosed only; the cells are printed with and without waited runs either way (§9.5 item 8). **Measured: d = +0.180 J** (reference prefill; decode +0.009 J, request +0.193 J), below 0.475 J, so `idle.waited` is disclosed only, as the block-6 catalog already has it; replay: no waited run exists, 0 removed; derivation in §8.5. The cap stays 1,500 s either way: it is sized by the longest disturbance, not by the energy effect |
-| `S-7` (M3), measured 2026-10-17 | The clock-rate hold of the pre-check and of the arm | T_stream_max, the longest **run-level stamp span** any run can have under waiting admission: the time between the first and last paired readings of the wall clock against the hardware counter (both named below) that one run's own clock fit uses, over which a rate error accumulates into its effective clock bound m (§1.7). M3 reports it from the machine test; block 5's sizing value is 335 s, and the rehearsal runs had spans of 88.6 s median and 103 s at most. And r, the rate at which the wall clock (CLOCK_REALTIME) runs against a hardware counter nothing adjusts (CLOCK_MONOTONIC_RAW), in parts per million (ppm), over hours with automatic network time setting off | The start is held only when \|r\| > 5 ms / T_stream_max − 0.25 ppm, 14.7 ppm at 335 s: at that rate a run of the longest span exceeds the unchanged 5 ms run clock bound (§8.3 item 1) with no placement error at all, so the session would certainly be excluded (§8.7 item 3). Between block 5's line, \|r\| ≤ 1.3 ms / T_stream_max − 0.25 ppm (3.63 ppm at 335 s), and the hold, the session starts and the pre-check records `clock.rate_above_budget`; each run's own fit then decides. Block 5's 3.7 ms placement term (block 3's largest fitted placement half-width, 3.6 ms, plus 0.1 ms; a largest-value line that 2 of the 77 rehearsal runs exceed) is no longer part of the hold. The 0.25 ppm allows for a stream's rate differing from the one measured. At the hold there is one remedy, block 5's desk redraw of the clock's frequency correction (recorded, changing no energy), and then the loop wakes the orchestrator; it does not wait and retry, because with network time off the rate does not change by waiting. **Measured:** r = −4.67 × 10⁻⁷ ppm (standard error 5.19 × 10⁻⁷ ppm), the slope of CLOCK_REALTIME − CLOCK_MONOTONIC_RAW over 5,147 readings 10 s apart across 51,514 s (14.3 h) in one boot with network time off (M3; largest residual 0.028 ms): the two clocks run at the same rate. **T_stream_max = 335 s**, block 5's sizing value, carried: the machine test of 2026-10-16 that was to report run-level spans under waiting produced no runs (every member crashed on a smoke defect), the kit's longest sampler stream (2,292.6 s) is a kit stream and not one run's, and each waiting try starts a fresh stream (§3.2 item 1); the machine test on the pin reports the spans, and a longest span above 335 s replaces it. Hold: 5 ms / 335 s − 0.25 ppm = **14.675 ppm**; block 5's line 3.631 ppm; |r| is below both by more than 3.6 ppm, and stays below the hold for any T_stream_max under 5 ms / 0.25 ppm = 20,000 s, so the value of T_stream_max changes no decision. Over 335 s the measured rate moves a run's clock by 1.6 × 10⁻¹⁰ s, no energy. Replay: 0 of the 4 rehearsal sessions held; at 0 ppm, 1 of the 77 rehearsal runs exceeds the 5 ms run bound, by its placement alone (unchanged rule). *Derivation:* with each rehearsal run's own span, 1 of the 77 runs exceeds 5 ms at 0 ppm and at 3.17 ppm (by its 5.39 ms placement alone) and 2 do at 10 and at 20 ppm, while the machine sits at −3.17 ppm (2026-10-06) or +2.72 ppm (2026-10-09) and 0 of the 4 rehearsal sessions are held under either line; 0.1 ms over block 5's line was worth 0.004 J, and the hold's 5 ms is 0.21 J at one edge of a 42 W prefill. *Derivation of the 0.25 ppm, kept:* 306 real 60 s fits on the monitor's clock journals over 4 sessions scatter by 0.004 to 0.011 ppm, and even a worst-case ±125 µs read skew on every reading (a 6.15 ppm fit error, so 3.17 + 6.15 = 9.3 ppm) stays below the 14.7 ppm hold; 0.25 ppm × 335 s is 0.08 ms, 0.004 J |
-| `S-8` (M4), measured 2026-10-17 | w, for the outside-processor exclusion line | §8.5 | Excluded when w × max(0, C − k × c_q) ≥ F_min / 4 (§8.5, with its derivation); until M4 measures w, C is a recorded flag only. **Measured: w = 5.432 J per CPU-s** (the largest of M4's 20 bursts), with **c_q = 0.73 CPU-s** per 10 s interval (the kit's median): excluded when C − k × 0.73 ≥ 0.0874 CPU-s. Replay: 12 of 53 quiet 2026-10-09 runs, 36 of 77 rehearsal runs, so adoption goes to the cold gate with the labelled alternative of §8.5 (background-priority w = 0.0862: 2 of 53, 14 of 77) |
+| `S-6` (M2), measured 2026-10-17 | Whether a waited run is excluded; the 1,500 s cap | §8.5, waiting row: M2's point estimate d | Every waited run is excluded when \|d\| ≥ F_min / 4 = 0.475 J, otherwise `idle.waited` is disclosed only; the cells are printed with and without waited runs either way (§9.5 item 8). **Measured and registered (cold gate 2026-10-17, §15 D32): d = +0.180 J** (reference prefill, 38% of 0.475 J; decode +0.009 J; +0.193 J summed over the request's phases), so `idle.waited` is disclosed only, as the block-6 catalog already has it; replay: no waited run exists, 0 removed. M2's ordinary arm delivered baselines of about 75 s (74.9 to 75.2 s), not 85 s, and 8 of its 10 long waits reached the kit's 2,700 s cap before 20 continuous quiet minutes; such a capped, interrupted wait is the closest measured analogue of a block-6 waited run, and the proportional carry (0.61 J) is not the rule's reading and its interval includes zero (derivation in §8.5). The cap stays 1,500 s either way: it is sized by the longest disturbance, not by the energy effect |
+| `S-7` (M3), measured 2026-10-17 | The clock-rate hold of the pre-check and of the arm | T_stream_max, the longest **run-level stamp span** any run can have under waiting admission: the time between the first and last paired readings of the wall clock against the hardware counter (both named below) that one run's own clock fit uses, over which a rate error accumulates into its effective clock bound m (§1.7). M3 reports it from the machine test; block 5's sizing value is 335 s, and the rehearsal runs had spans of 88.6 s median and 103 s at most. And r, the rate at which the wall clock (CLOCK_REALTIME) runs against a hardware counter nothing adjusts (CLOCK_MONOTONIC_RAW), in parts per million (ppm), over hours with automatic network time setting off | The start is held only when \|r\| > 5 ms / T_stream_max − 0.25 ppm, 14.7 ppm at 335 s: at that rate a run of the longest span exceeds the unchanged 5 ms run clock bound (§8.3 item 1) with no placement error at all, so the session would certainly be excluded (§8.7 item 3). Between block 5's line, \|r\| ≤ 1.3 ms / T_stream_max − 0.25 ppm (3.63 ppm at 335 s), and the hold, the session starts and the pre-check records `clock.rate_above_budget`; each run's own fit then decides. Block 5's 3.7 ms placement term (block 3's largest fitted placement half-width, 3.6 ms, plus 0.1 ms; a largest-value line that 2 of the 77 rehearsal runs exceed) is no longer part of the hold. The 0.25 ppm allows for a stream's rate differing from the one measured. At the hold there is one remedy, block 5's desk redraw of the clock's frequency correction (recorded, changing no energy), and then the loop wakes the orchestrator; it does not wait and retry, because with network time off the rate does not change by waiting. **Measured:** r = −4.67 × 10⁻⁷ ppm (standard error 5.19 × 10⁻⁷ ppm), the slope of CLOCK_REALTIME − CLOCK_MONOTONIC_RAW over 5,147 readings 10 s apart across 51,514 s (14.3 h) in one boot with network time off (M3; largest residual 0.028 ms): the two clocks run at the same rate. Registered by the cold gate of 2026-10-17 (§15 D33). **T_stream_max = 335 s**, carried from block 5, where it is the longest stream any `_v5` member is programmed to have (`sizing_b5.json`), which block 6 replicates unchanged; it is labelled carried, not measured: the machine test of 2026-10-16 that was to report run-level spans under waiting produced no runs (every member crashed on a smoke defect), the kit's longest sampler stream (2,292.6 s) is a kit stream and not one run's, and each waiting try starts a fresh stream (§3.2 item 1); the machine test on the pin reports the spans, and a longest span above 335 s replaces it. Hold: 5 ms / 335 s − 0.25 ppm = **14.675 ppm**; block 5's line 3.631 ppm; |r| is below both by more than 3.6 ppm, and stays below the hold for any T_stream_max under 5 ms / 0.25 ppm = 20,000 s, so the value of T_stream_max changes no decision. Over 335 s the measured rate moves a run's clock by 1.6 × 10⁻¹⁰ s, no energy. Replay: 0 of the 4 rehearsal sessions held; at 0 ppm, 1 of the 77 rehearsal runs exceeds the 5 ms run bound, by its placement alone (unchanged rule). *Derivation:* with each rehearsal run's own span, 1 of the 77 runs exceeds 5 ms at 0 ppm and at 3.17 ppm (by its 5.39 ms placement alone) and 2 do at 10 and at 20 ppm, while the machine sits at −3.17 ppm (2026-10-06) or +2.72 ppm (2026-10-09) and 0 of the 4 rehearsal sessions are held under either line; 0.1 ms over block 5's line was worth 0.004 J, and the hold's 5 ms is 0.21 J at one edge of a 42 W prefill. *Derivation of the 0.25 ppm, kept:* 306 real 60 s fits on the monitor's clock journals over 4 sessions scatter by 0.004 to 0.011 ppm, and even a worst-case ±125 µs read skew on every reading (a 6.15 ppm fit error, so 3.17 + 6.15 = 9.3 ppm) stays below the 14.7 ppm hold; 0.25 ppm × 335 s is 0.08 ms, 0.004 J |
+| `S-8` (M4), measured 2026-10-17 | w, for the outside-processor exclusion line | §8.5 | The registered rule: excluded when w × max(0, C − k × c_q) ≥ F_min / 4 (§8.5). **Measured and registered (cold gate 2026-10-17, §15 D34): w = 5.432 J per CPU-s** (the largest of M4's 20 bursts), with **c_q = 0.54 CPU-s** per 10 s interval (every quiet-machine interval, Spotify and the orphaned test process removed; 0.72 with them, printed beside; §15 D35): line C − k × 0.54 ≥ 0.0874 CPU-s. **The exclusion is not adopted for round 1**: `contention.request_overlap` stays a recorded flag (0 of 77 removed), and each cell prints the registered rule's result as a labelled alternative (14 of 53 quiet 2026-10-09 runs, 38 of 77 rehearsal runs removed), with C, k, C − k × c_q and E_add per flagged run. *Reason:* the line is about a fifth of the quiet machine's own 10th-percentile outside time per interval (0.41 CPU-s); on the 2026-10-09 reference runs energy shows no dependence on outside CPU (−0.09 ± 0.09 J per CPU-s at prefill); and removing 12 to 14 of 53 known-good runs is what §8.7 item 1 forbids. Background-priority w = 0.0862 is rejected as the governing value (not an upper bound for interactive work; still removes 2 of 53) and may be printed beside. Derivation in §8.5 |
 | `S-9`, decided 2026-10-15 | The graphics and neural-engine exclusion line | §8.5 | P* = F_min / (4 T_phase), per pack and phase, with T_phase from S-11: for Qwen3-1.7B at the rehearsal sizes, 0.77 W at prefill and 0.24 W at decode; the quiet-level clause is dropped (derivation in §8.5) |
 
 The other physical lines are fixed now and are block 5's or the design's: before t0, AC attached with battery current
@@ -1075,15 +1170,15 @@ dry run's.
 | S-1 | Pinned commit of `integration/2026-10-14-b6-stage1`, its date, the machine-test record | the stage-1 merges, whole suite on the merged tree, cold passes, the 40-minute machine test | round 1 |
 | S-2 | Measurement checkout path; block-6 runs, custody and archive roots; capture list path; the custody map applied to them | the session loop's layout at S-1 | round 1 |
 | S-3 | Digest of `configs/b6/flag_catalog_b6.json` at S-1, checked against §8 | `scripts/build_b6_flag_catalog.py --check` at S-1 | round 1 |
-| S-4 | Fresh calibration acceptance: file, digest, alignment reference, s_bracket, drift budget. **Filled 2026-10-17 (§3.3):** `configs/b6/registration/acceptance.json`, SHA-256 `ea130c87…539ce2a8`; alignment reference 37.054941476587 ms; s_bracket 10.818 ms; drift budget 15.50217418713139 ms; 13 quiet captures; 0 of 4 rehearsal sessions stopped | quiet-machine captures, block 5's derivation | round 1 |
-| S-5 | Stop line on b_op. Decided 2026-10-15 (§8.6): the b_op at which the pack's smallest target phase reaches 25% attribution, 139 ms for ALPHA and GAMMA at the rehearsal sizes. Still open per pack: the kit ran no pack smoke and no 2,048-token prefill; BETA has no line yet (the code holds none for it) | each pack's value from its non-claim smoke sizes, with S-11 | that pack's first session |
-| S-6 | M2's measured shift d; the rule is fixed (every waited run excluded when \|d\| ≥ F_min / 4, cells printed with and without waited runs). **Filled 2026-10-17:** d = +0.180 J (prefill; decode +0.009 J), below 0.475 J: `idle.waited` disclosed only; 0 runs removed on replay | **M2** (threshold-note test 8: 10 reference runs after 85 s idle, 10 after 20 min, alternated) | round 1 |
-| S-7 | T_stream_max (the longest run-level stamp span) and the measured clock rate; the hold rule is fixed (\|r\| > 5 ms / T_stream_max − 0.25 ppm). **Filled 2026-10-17:** r = −4.67 × 10⁻⁷ ppm over 14.3 h; T_stream_max 335 s carried from block 5 (no machine-test runs yet; the machine test on the pin confirms it); hold 14.675 ppm; 0 sessions held | **M3** (machine-test run-level stamp spans; hours of CLOCK_REALTIME minus CLOCK_MONOTONIC_RAW with network time off) | round 1 |
-| S-8 | w, joules per outside CPU-second; the rule is fixed (excluded when w × max(0, C − k × c_q) ≥ F_min / 4; C a flag only until w exists). **Filled 2026-10-17:** w = 5.432 J per CPU-s, c_q = 0.73 CPU-s; as registered it excludes 12 of 53 quiet rehearsal runs: adoption is a cold-gate question with a labelled alternative (§8.5, §15 D27) | **M4** (threshold-note test 1 with burst placements) | round 1 |
-| S-9 | Line P* = F_min / (4 T_phase), per pack and phase. Decided 2026-10-15 (§8.6); the M5 quiet level is dropped. M5 (2026-10-17) confirms the GPU rail sees a graphics contender | the values follow from S-11 (1.7B at the rehearsal sizes: 0.77 W prefill, 0.24 W decode) | that pack's first session |
+| S-4 | Fresh calibration acceptance: file, digest, alignment reference, s_bracket, drift budget. **Filled 2026-10-17 (§3.3):** `configs/b6/registration/acceptance.json`, SHA-256 `ea130c87…539ce2a8`; alignment reference 37.054941476587 ms; s_bracket 10.818 ms; drift budget 15.50217418713139 ms; 13 quiet captures; 0 of 4 rehearsal sessions stopped. **Registered by the cold gate of 2026-10-17** (§15 D31) | quiet-machine captures, block 5's derivation | round 1 |
+| S-5 | Stop line on b_op. Decided 2026-10-15 (§8.6): the b_op at which the pack's smallest target phase reaches 25% attribution, 139 ms for ALPHA and GAMMA at the rehearsal sizes. Still open per pack: the kit ran no pack smoke and no 2,048-token prefill; BETA has no line yet (the code holds none for it). Held by the cold gate of 2026-10-17 until each pack's smoke (§15 D37) | each pack's value from its non-claim smoke sizes, with S-11 | that pack's first session |
+| S-6 | M2's measured shift d; the rule is fixed (every waited run excluded when \|d\| ≥ F_min / 4, cells printed with and without waited runs). **Filled 2026-10-17 and registered by the cold gate** (§15 D32): d = +0.180 J (prefill, 38% of 0.475 J; decode +0.009 J): `idle.waited` disclosed only; 0 runs removed on replay. The proportional carry (0.61 J) is not the rule's reading (§8.5) | **M2** (threshold-note test 8, as run: 10 reference runs after the ordinary baseline, delivered as about 75 s, and 10 after a wait aimed at 20 continuous quiet minutes, 8 of which reached the kit's 2,700 s cap first; alternated in five quads) | round 1 |
+| S-7 | T_stream_max (the longest run-level stamp span) and the measured clock rate; the hold rule is fixed (\|r\| > 5 ms / T_stream_max − 0.25 ppm). **Filled 2026-10-17 and registered by the cold gate** (§15 D33): r = −4.67 × 10⁻⁷ ppm over 14.3 h; T_stream_max 335 s carried from block 5 (the programmed longest stream), replaced by the machine test's longest run-level stamp span if that is longer; hold 14.675 ppm; 0 sessions held; no decision depends on T_stream_max below 20,000 s at the measured r | **M3** (machine-test run-level stamp spans; hours of CLOCK_REALTIME minus CLOCK_MONOTONIC_RAW with network time off) | round 1 |
+| S-8 | w, joules per outside CPU-second; the rule is fixed (excluded when w × max(0, C − k × c_q) ≥ F_min / 4; C a flag only until w exists). **Filled 2026-10-17; cold gate:** w = 5.432 J per CPU-s registered as measured; c_q = 0.54 CPU-s (0.72 as measured with Spotify and the orphaned test process, printed beside; 2026-10-09's 0.52 the check). The exclusion is not adopted for round 1: `contention.request_overlap` stays a recorded flag, and each cell prints the registered rule's result (14 of 53 quiet rehearsal runs, 38 of 77 removed) as a labelled alternative with C, k, C − k × c_q and E_add per flagged run; the code that computes E_add is owed before the analysis release (S-14) (§8.5, §15 D34, D35) | **M4** (threshold-note test 1 with burst placements) | round 1 |
+| S-9 | Line P* = F_min / (4 T_phase), per pack and phase. Decided 2026-10-15 (§8.6); the M5 quiet level is dropped. M5 (2026-10-17) confirms the GPU rail sees a graphics contender. Held by the cold gate of 2026-10-17 until each pack's smoke (§15 D37) | the values follow from S-11 (1.7B at the rehearsal sizes: 0.77 W prefill, 0.24 W decode) | that pack's first session |
 | S-10 | F_min (proposed 1.9 J) | the cold gate, from non-claim data (§15 D9) | round 1 |
-| S-11 | T_phase per pack and target phase, the phase's length in non-claim smoke runs (the longest, if they differ). Still open: no pack smoke has run. Not the registered source, for comparison only: M15 ran the packs' decode configurations, longest decode 1.9935 s for Qwen3-1.7B (30 runs) and 6.6009 s for Qwen3-8B (29 runs), which would give P* = 0.238 W and 0.0720 W; it ran no 2,048-token prefill | each pack's first smoke | that pack's first session |
-| S-12 | Meter cross-check of the S-8 and S-9 conversions. Decided 2026-10-15 (§8.5): the meter excludes nothing; `meter.unexplained_idle_step` is recorded and the cross-check printed. **M14 values (2026-10-17, §8.5):** rails / meter step 0.353 (graphics 5%), 0.380 to 0.384 (graphics 20%), 0.576 to 0.587 (one core); meter idle scatter 0.97 to 1.31 W | closed; **M14** (meter idle-power step with known GPU and CPU loads) supplies the printed cross-check | — |
+| S-11 | T_phase per pack and target phase, the phase's length in non-claim smoke runs (the longest, if they differ). Still open: no pack smoke has run. Not the registered source, for comparison only: M15 ran the packs' decode configurations, longest decode 1.9935 s for Qwen3-1.7B (30 runs) and 6.6009 s for Qwen3-8B (29 runs), which would give P* = 0.238 W and 0.0720 W; it ran no 2,048-token prefill. Held by the cold gate of 2026-10-17 until each pack's smoke (§15 D37) | each pack's first smoke | that pack's first session |
+| S-12 | Meter cross-check of the S-8 and S-9 conversions. Decided 2026-10-15 (§8.5): the meter excludes nothing; `meter.unexplained_idle_step` is recorded and the cross-check printed. **M14 values (2026-10-17, §8.5):** rails / meter step 0.353 (graphics 5%), 0.380 to 0.384 (graphics 20%), 0.576 to 0.587 (one core); meter idle scatter 0.97 to 1.31 W. Registered by the cold gate of 2026-10-17 as a printed cross-check that excludes nothing (§15 D38) | closed; **M14** (meter idle-power step with known GPU and CPU loads) supplies the printed cross-check | — |
 | S-13 | Recompute agreement tolerance for the release, the analysis-library version and per-pack release. Decided 2026-10-15 (§12.3 item 4): 1 mJ per run phase energy, and half a unit of its last printed digit for every printed quantity | closed | — |
 | S-14 | Analysis commit | block 5's L9 release tag plus the block-6 additions, reviewed and cold-passed | the blind dry run |
 | S-15 | Definition of whole-machine energy per phase | the commit that fixes it for block 5 | the blind dry run |
@@ -1179,14 +1274,14 @@ Added 2026-10-17 with the quiet-machine values (registration seat, Opus 5.5):
   proportion the prefill shift is +2.35% (95% interval −0.10% to +4.81%); carried in proportion to the 1.7B
   prefill-p2048 phase (26.1 J at rehearsal sizes) it would be 0.61 J, above 0.475 J, which would exclude waited 1.7B
   prefill runs. The registered rule reads d in joules; the labelled cells without waited runs (§9.5 item 8) are
-  printed either way.
+  printed either way. *Ruled 2026-10-17: registered with the reading of D32; the proportional carry is not adopted.*
 - **D27.** w is the largest of M4's 20 burst values, 5.432 J per CPU-s; the bursts were all run at interactive
   priority, and the priority arms are reported beside it but set nothing (the low-duty arms are unresolved or flagged).
   c_q is the median over every 9 to 11 s accounting interval the kit recorded, 0.73 CPU-s, including the user programs
   that were running (without them, 0.55). The rule then excludes 12 of 53 quiet rehearsal runs (36 of 77), which
   §8.7 item 1 forbids for known-good data; the registered result is written, with the labelled alternative of w at
   background priority (0.0862 J per CPU-s: 2 of 53, 14 of 77) and the option of keeping the code a flag (0 of 77).
-  The choice is the cold gate's. **[cold gate]**
+  The choice is the cold gate's. **[cold gate]** *Superseded 2026-10-17 by D34 (w, the flag) and D35 (c_q = 0.54).*
 - **D28.** T_stream_max stays block 5's 335 s until the machine test on the pin reports run-level spans; with the
   measured r no decision depends on it below 20,000 s.
 - **D29.** S-5, S-9 and S-11 stay open: their registered source is each pack's non-claim smoke, and the kit ran
@@ -1195,6 +1290,47 @@ Added 2026-10-17 with the quiet-machine values (registration seat, Opus 5.5):
   `pack_id` is the family name `b6-replication`, its `operative_bound_stop_s` is null because the packs' stop lines
   live in `joulewise.b6.capture_screen.REGISTERED_T10_STOP_S`, and its `registered_commit` is main's `3bb305d7a`, the
   base of `configs/b6/executing_reviews.json`; moving it to the pinned commit is a choice at S-1.
+
+Added 2026-10-17 from the cold gate on the quiet-machine values. Two blind cold judges ruled:
+`docs/process_traces/2026-10-17-magistrate-1a1261a5/b6-accept-ruling-fable.md` (Fable 5.1) and
+`docs/process_traces/2026-10-17-magistrate-1a1261a5/b6-accept-ruling-opus.md` (Opus 5.5). Where they differ, the lead
+(orchestrator, Opus 5.5) decided as follows; both judges registered D25, D28, D29 and D30 as written.
+
+- **D31. S-4 registered as filled** (both rulings). `configs/b6/registration/acceptance.json` at `5ffbe15c4`, no
+  change; the corpus of 13 captures from one job is adequate because s_bracket, the only constant that enters a
+  number, is set by the D-125 floor, and the sizing of a larger or more spread corpus is 0.006 to 0.09 J (§3.3).
+- **D32. S-6 registered with a change of text** (both rulings, ruling c). d = +0.180 J (prefill), 38% of 0.475 J;
+  `idle.waited` disclosed only. The text now describes M2's arms as measured: the ordinary arm's baselines were about
+  75 s (74.9 to 75.2 s), not 85 s, and 8 of the 10 long waits reached the kit's 2,700 s cap before 20 continuous quiet
+  minutes. d still qualifies: a capped, interrupted wait followed by a passing baseline is the closest measured
+  analogue of a block-6 waited run (up to 1,500 s of intermittent disturbance, §3.2 item 1), and both arms share the
+  fallback timeline. The proportional carry (+2.35% × 26.1 J = 0.61 J) is not the rule's reading, and its interval
+  (−0.03 to +1.25 J) includes zero (§8.5). **[cold gate, ruled]**
+- **D33. S-7 registered** (both rulings, ruling d). r = −4.67 × 10⁻⁷ ppm (standard error 5.19 × 10⁻⁷). T_stream_max
+  = 335 s, labelled as carried from block 5 (the longest programmed `_v5` stream), replaced by the machine test's
+  longest run-level stamp span if that is longer; hold 14.675 ppm. At the measured r no decision depends on
+  T_stream_max below 5 ms / 0.25 ppm = 20,000 s.
+- **D34. S-8: w registered, exclusion not adopted for round 1** (both rulings, ruling a). w = 5.432 J per CPU-s is
+  registered as measured. `contention.request_overlap` stays a recorded flag (DISCLOSE, as the catalog at
+  `5ffbe15c4` has it). Each cell prints, as a labelled alternative, the registered rule's result (w = 5.432,
+  c_q = 0.54) with its exclusions, and per flagged run C, k, C − k × c_q and E_add. Reason: the line, 0.087 CPU-s of
+  excess, is a fraction of the quiet machine's own 10 s interval scatter (10th percentile 0.41 CPU-s); on the 33
+  reference runs of 2026-10-09 energy shows no dependence on outside CPU (Fable's fit −0.09 ± 0.09 J per CPU-s at
+  prefill); the rule would remove 12 to 14 of 53 known-good quiet runs, which §8.7 item 1 forbids. The
+  background-priority w = 0.0862 is rejected as the governing value (not an upper bound for interactive work, which
+  costs 63 times more; still removes 2 of 53) and may be printed beside, as the Fable ruling suggests. The code that
+  computes E_add is owed before the analysis release, not before round 1. **[cold gate, ruled]**
+- **D35. c_q = 0.54 CPU-s per interval governs.** It is the registered definition applied to the full pool: the
+  median over every quiet-machine measurement session's 9 to 11 s intervals (2,965, the Opus ruling's raw pooling),
+  with Spotify, Spotify Helper and the orphaned test hazard monitor (pid 43816) removed. 0.72 (with them) is printed
+  beside it as measured; 2026-10-09's 0.52 (Spotify absent there) is the check. The Fable ruling's 0.55 came from a
+  narrower pooling (the result-file intervals of M2 and M4); the 0.01 CPU-s difference is 0.05 J at w = 5.432 on a
+  flag-only quantity. The draft's 0.73 is withdrawn. **[cold gate, ruled]**
+- **D36. Before round 1, Spotify is not running and the orphaned hazard monitor (pid 43816) is stopped** (both
+  rulings), so the windows match the c_q baseline. A recorded condition (§7 item 6) and a pre-check flag, not a new
+  refusal: physics refuses, everything else is a flag.
+- **D37. S-5, S-9 and S-11 held** until each pack's smoke run (both rulings).
+- **D38. S-12 registered**: M14's values are a printed cross-check and exclude nothing (both rulings).
 
 ## 16. What the author read and did not read
 
@@ -1229,3 +1365,9 @@ nothing under the block-5 restricted paths listed above.
   S-8 (w) with c_q, M14's cross-check for S-12, and the other measurements' values; S-8's exclusion and the reading
   of d marked for the cold gate (D25 to D30). Derivation: `/Users/edr/night-archive/b6-acceptance/DERIVATION.md`
   (Opus 5.5, registration seat). Not cold-gated.
+- 2026-10-17: cold gate on the quiet-machine values applied (two blind judges, Fable 5.1 and Opus 5.5; rulings copied
+  to `docs/process_traces/2026-10-17-magistrate-1a1261a5/b6-accept-ruling-fable.md` and `b6-accept-ruling-opus.md`;
+  the lead's decisions D31 to D38). S-4, S-7, S-12 registered; S-6 registered with M2's arms described as measured;
+  S-8's w registered and its exclusion not adopted for round 1 (`contention.request_overlap` a flag, the registered
+  rule printed as a labelled alternative); c_q 0.54 (was 0.73); Spotify and the orphaned hazard monitor stopped before
+  round 1; S-5, S-9, S-11 held until each pack's smoke. S-10, S-17 and the rest of this file are not yet cold-gated.
