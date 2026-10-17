@@ -361,13 +361,15 @@ def _flag_codes(value):
 
 def classify(*, stages_ok, driver_exit, harvest_exit, acceptance_result, flags, is_physical=None,
              physical_arm_refusal=False, bundles_produced=False):
+    # Retain the keyword for callers; bundle existence cannot explain a crash.
     physical = is_physical or _is_physical
-    # A chance physical flag cannot explain a stage crash before any bundle.
+    # A chance member flag cannot explain a failed stage or harvest, even
+    # after earlier bundles. Only a named stop or arm refusal explains it.
     # Smoke acceptance uses physics_stop for incidental member exclusions too;
     # physical_stop_kind identifies an actual physical chain stop.
-    if (not stages_ok and not bundles_produced and not physical_arm_refusal
-            and not acceptance_result.record.get("physical_stop_kind")):
-        return "fail"
+    # Harvest exit 6 is "registration pending" (queue.outcome), not a fault.
+    if not stages_ok or harvest_exit not in (0, 6):
+        return "physics" if physical_arm_refusal or acceptance_result.record.get("physical_stop_kind") else "fail"
     if physical_arm_refusal or acceptance_result.record.get("physics_stop") or any(physical(code) for code in flags):
         return "physics"
     if stages_ok and driver_exit in (0, 6) and harvest_exit in (0, 6) and not acceptance_result.structural:
@@ -476,10 +478,7 @@ def desk(prepared, *, driver_exit=None, run=subprocess.run, acceptance=None,
         pass
     status = classify(stages_ok=stages_ok and not errors, driver_exit=driver_exit,
                       harvest_exit=harvest_exit, acceptance_result=a_result, flags=flags, is_physical=physical,
-                      physical_arm_refusal=physical_arm_refusal,
-                      bundles_produced=any(
-                          path.is_file() for root in ("claim-runs", "bound-runs")
-                          for path in (archive / "sources" / root).glob("*/metadata.json")))
+                      physical_arm_refusal=physical_arm_refusal)
     report = {"schema": "joulewise.b6_smoke_result.v1", "status": status, "pack_id": prepared.pack_id,
               "stages": stage_results, "driver_exit": driver_exit, "harvest_exit": harvest_exit,
               "acceptance": dataclasses.asdict(a_result), "flags": flags, "errors": errors,

@@ -34,8 +34,9 @@ from joulewise.hazards.base import Completed, Context
 PYTHON = "/opt/homebrew/bin/python3.13"
 PACK = "d117_floor_qwen3-1p7b_v5"
 INJECT_LABEL = "com.joulewise.b6mt.inject"
-# The page's 45 s agent survives the 30 s census period with half a period
-# of slack; a 30 s lifetime can end between two completed censuses.
+# run_night.CENSUS_INTERVAL_S fixes the census cadence at 30 s. A 45 s
+# lifetime contains a snapshot if jitter is < 15 s; hazards.arm's 10 s
+# CENSUS_TIMEOUT_S is inside that slack (45 - 30 = 15 s).
 AGENT_LIFETIME_S = 45
 
 
@@ -569,14 +570,27 @@ def report(state_path, *, uninstall=False, desk=smoke.desk, run=subprocess.run):
             "environment_admission", {}).get("skip_reason") == "wait_cap_reached"}
     expected_exceptions = expected_overlap | skips
     collection_problems = {run_id: status for run_id, status in statuses.items()
-                           if status != "succeeded" and not (run_id in cap_failures and status == "failed")}
+                           if not ((status == "failed" and run_id in cap_failures)
+                                   if run_id in skips else status == "succeeded")}
+    # Harvest retains the full campaign roster, including unselected members
+    # without spans. Only the members dispatched by the reduced plan ran.
+    smoke_excluded = excluded & expected_run_ids
+    unexpected_exclusions = {row["run_id"]: row.get("codes", [])
+                             for row in exclusions.get("members_excluded", [])
+                             if row["run_id"] in smoke_excluded - expected_exceptions}
+    physical_exclusions = bool(unexpected_exclusions) and all(
+        codes and all(smoke._is_physical(code) for code in codes)
+        for codes in unexpected_exclusions.values())
     item("collection ran", bool(expected_run_ids) and roster_error is None
          and expected_exceptions <= expected_run_ids and not collection_problems
-         and excluded == expected_exceptions,
+         and smoke_excluded == expected_exceptions,
          ["measurement:plan_tree.json and order_manifest.json", "sources/claim-runs/*/summary_metrics.json",
           "sources/claim-runs/*/metadata.json:environment_admission", "derived/exclusions.json"],
          {"member_status": statuses, "unexpected_status": collection_problems,
           "expected_exclusions": sorted(expected_exceptions), "actual_exclusions": sorted(excluded),
+          "exclusion_detail": exclusions.get("members_excluded", []),
+          "unexpected_exclusions": unexpected_exclusions,
+          "guidance": "physical exclusion: rerun the test" if physical_exclusions else None,
           "roster_error": roster_error})
     complete_ids = {start["run_id"] for start, end in pairs if end and all(
         isinstance(row.get("clock", {}).get("sleep_offset_ns"), int) for row in (start, end))}
@@ -644,7 +658,7 @@ def main(argv=None):
         for item in value["items"]:
             status = "observed" if item["observed"] else "not observed"
             detail = item["detail"] if isinstance(item["detail"], str) else None
-            if item["item"] == "agent pause" and isinstance(item["detail"], dict):
+            if item["item"] in {"agent pause", "collection ran"} and isinstance(item["detail"], dict):
                 detail = ", ".join(f"{key}={value}" for key, value in item["detail"].items())
             print(f"{item['item']}: {status}" + (f"; {detail}" if detail else "")
                   + (" [" + ", ".join(item["evidence"]) + "]" if item["evidence"] else ""))

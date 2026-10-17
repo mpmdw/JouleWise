@@ -146,11 +146,13 @@ has `environment_admission.skip_reason` equal to `wait_cap_reached`, with only t
 cap exclusions); the idle cap (exactly one `idle.wait_cap_skip`, later runs measured); the meter
 (connected here, so this item reads "not observed; meter present: not exercised", which is expected); the keep-awake hold verified at start and end, a sleep
 reading at every run; chain exit 0, harvest exit 0, the smoke desk's status `physics` (the injected faults are
-physical, so a real smoke would wait and run again) and no desk errors. A failed stage with no run bundle
-reports `fail` even when an unrelated physical flag is present; an explicit physical arm refusal or physical
-chain stop keeps its physical outcome.
+physical, so a real smoke would wait and run again) and no desk errors. A failed stage or a harvest fault (any harvest exit
+other than 0, or 6, which means the registration is pending) reports `fail` even after earlier bundles when only incidental physical flags are present; an explicit physical
+arm refusal or physical chain stop keeps its physical outcome.
 
-**Pass.** Every item observed except the meter item (expected, above) and no desk error. A missing item is a defect in the code it names: fix it on this
+**Pass.** Every item observed except the meter item (expected, above) and no desk error.
+An unexpected physical exclusion of a dispatched member means rerun the test, not a code defect.
+A missing item otherwise is a defect in the code it names: fix it on this
 branch, re-pin, run the test again. A physical refusal at the arm (clock, battery, thermal, contention, disk,
 instrument) is not a failure of the test: run it again later.
 

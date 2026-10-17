@@ -691,6 +691,51 @@ class ReportTests(Case):
         put(archive / 'sources/claim-runs/decode/metadata.json', {})
         self.assertFalse(self.run_report(state, result)['collection ran']['observed'])
 
+    def test_collection_cap_skip_requires_failed_status_and_cap_reason(self):
+        state, custody, archive, result = self.custody_fixture()
+        put(archive / 'sources/claim-runs/decode/summary_metrics.json', {'status': 'succeeded'})
+        item = self.run_report(state, result)['collection ran']
+        self.assertFalse(item['observed'])
+        self.assertEqual(item['detail']['unexpected_status'], {'decode': 'succeeded'})
+
+    def test_collection_discloses_unexpected_exclusion_codes_and_rerun_guidance(self):
+        from joulewise.flags.catalog import load_catalog
+        from joulewise.flags.exclusions import compute
+        from joulewise.flags.schema import make_flag, make_scope, make_source
+        state, custody, archive, result = self.custody_fixture()
+        catalog = load_catalog(smoke.CATALOG_PATH)
+        original = mt.read_rows(archive / 'derived/flags.jsonl')
+        roster = {'members': [{'run_id': name, 'units': []} for name in
+                              ('reference', 'decode', 'prefill', 'end-reference')], 'cells': []}
+        spans = {start['run_id']: {'monotonic_ns': [start['clock']['monotonic_ns'], end['clock']['monotonic_ns']]}
+                 for start, end in mt.agent_pause.paired_run_clocks(mt.read_rows(custody / 'collection/run_clock.jsonl'))}
+        # Exercise both physical causes and mixed codes; rerun advice
+        # requires every unexpected exclusion's codes to be known physics.
+        for codes, physical in ((['battery.member_span'], True),
+                                (['thermal.os_level_nonzero'], True),
+                                (['battery.member_span', 'member.bytes_missing'], False)):
+            with self.subTest(codes=codes):
+                flags = list(original)
+                for code in codes:
+                    spec = catalog.entry(code)
+                    flags.append(make_flag(code=code, family=spec['family'], klass=spec['klass'],
+                        scope=make_scope('member', run_id='prefill'),
+                        source=make_source('window', 'b6-machine-test')))
+                effects = compute(flags, roster, spans, catalog)
+                put(archive / 'derived/exclusions.json', effects)
+                item = self.run_report(state, result)['collection ran']
+                self.assertFalse(item['observed'])
+                self.assertEqual(item['detail'].get('unexpected_exclusions'), {'prefill': sorted(codes)})
+                self.assertEqual(item['detail']['exclusion_detail'], effects['members_excluded'])
+                guidance = 'physical exclusion: rerun the test'
+                self.assertEqual(item['detail']['guidance'], guidance if physical else None)
+                with mock.patch.object(mt, 'report', return_value={'items': [item]}), redirect_stdout(io.StringIO()) as output:
+                    self.assertEqual(mt.main(['report', '--state', str(state)]), 0)
+                self.assertIn('collection ran: not observed;', output.getvalue())
+                for code in codes:
+                    self.assertIn(code, output.getvalue())
+                self.assertEqual(guidance in output.getvalue(), physical)
+
     def test_agent_detail_names_missing_presence_flag(self):
         state, custody, archive, result = self.custody_fixture()
         path = archive / 'derived/flags.jsonl'
