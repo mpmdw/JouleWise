@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import csv
+import hashlib
 import io
 import json
 import os
@@ -384,6 +385,7 @@ class Round:
                    (Path(argv[0]).name.startswith('python') and
                     (argv[1:4] == ['-m', 'venv', '--without-pip'] or
                      any(arg.endswith('/scripts/harvest_b6_session.py') for arg in argv) or
+                     any(arg.endswith('/scripts/recover_calibration_ledger.py') for arg in argv) or
                      (argv[1:2] == ['-c'] and 'synthetic acceptance program fault' in argv[2]))))
         if not allowed:
             raise AssertionError('unexpected round subprocess: ' + str(argv))
@@ -479,6 +481,25 @@ else:
 '''
 
 
+def complete_unfinalized_custody(capture, *, attempt_id, t1, bound="0.040"):
+    """Complete synthetic custody authenticated by the real resume-finalize."""
+    (capture / 'raw').mkdir(parents=True)
+    files = {'raw/powermetrics.plist': b'raw-capture-bytes\n',
+             'events.jsonl': b'{"timestamp_s":99.0}\n',
+             'power_trace.csv': b'rail,power_w\ncpu_power,1.0\n'}
+    for name, raw in files.items():
+        (capture / name).write_bytes(raw)
+    hashes = {name: hashlib.sha256(raw).hexdigest() for name, raw in files.items()}
+    evidence = {'validation_id': attempt_id, 'status': 'valid', 'artifact_sha256': hashes,
+                'bindings': t1, 'capture_wall_time_s': 99.0, 'b_fiducial_s': float(bound)}
+    raw = (json.dumps(evidence, sort_keys=True) + '\n').encode()
+    raw = raw.replace(b'"b_fiducial_s": ' + str(float(bound)).encode(),
+                      b'"b_fiducial_s": ' + bound.encode())
+    (capture / 'instrument_evidence.json').write_bytes(raw)
+    write(capture / 'manifest.json', {'validation_id': attempt_id, 'artifacts': {
+        **hashes, 'instrument_evidence.json': hashlib.sha256(raw).hexdigest()}})
+
+
 def synthesize(plan_path, state):
     p = read(plan_path)
     custody = Path(p['custody_root'])
@@ -497,7 +518,9 @@ def synthesize(plan_path, state):
     claim = Path(b['claim_runs_root'])
     dispatches = plan.resolve_stage_dispatches(t, measurement)
     opening_stop = state.get('stop') in ('operative_bound_above_stop', 'pre_calibration_screen_failed', 'pre_calibration_capture_failed')
-    selected = [] if opening_stop else dispatches[:2] if state.get('lost') or state.get('stop') else dispatches
+    unfinalized = state.get('unfinalized')
+    selected = ([] if opening_stop else dispatches if unfinalized == 'post' else
+                dispatches[:2] if state.get('lost') or state.get('stop') else dispatches)
     for dispatch in selected:
         for run_id in dispatch.run_ids[:next(s['expected_count'] for s in t['stage_graph'] if s['stage_id'] == dispatch.stage_id)]:
             if run_id in state.get('missing', ()):
@@ -519,7 +542,11 @@ def synthesize(plan_path, state):
         capture = Path(b[slot + '_calibration_dir'])
         slots[slot] = {'attempt_id': b[slot + '_attempt_id'], 'custody_locator': str(capture),
                        'identity_epoch': epoch, 't1_bindings': t1}
-        if (state.get('lost') or state.get('stop')) and slot == 'post':
+        if (state.get('lost') or state.get('stop')) and slot == 'post' and unfinalized != 'post':
+            continue
+        if slot == unfinalized:
+            complete_unfinalized_custody(capture, attempt_id=b[slot + '_attempt_id'], t1=t1,
+                                         bound=state.get('b_fiducial', '0.040'))
             continue
         (capture / 'raw').mkdir(parents=True)
         if state.get('full') and not t.get('smoke_reduction'):
@@ -542,7 +569,11 @@ def synthesize(plan_path, state):
         plan_sha256=windows.sha(pack / t['plan']['path']), evidence_root_id=t['window_identity']['evidence_root_id'],
         runs_root=claim, slots=slots, head_pin_path=measurement / plan.HEAD_PIN_RELATIVE, require_committed_pin=True,
         repo_root=measurement)
-    for slot in ('pre',) if state.get('lost') or state.get('stop') else ('pre', 'post'):
+    for slot in ('pre',) if (state.get('lost') or state.get('stop')) and unfinalized != 'post' else ('pre', 'post'):
+        if slot == unfinalized:
+            ledger.claim_bracket_session_slot(ledger_path, session_id=b['bracket_session_id'],
+                slot=slot, attempt_id=b[slot + '_attempt_id'])
+            continue
         capture = Path(slots[slot]['custody_locator'])
         ledger.finalize_bracket_session_slot(ledger_path, session_id=b['bracket_session_id'], slot=slot,
             disposition='valid', custody_locator=str(capture), artifact_sha256=ledger.artifact_hashes(capture),
@@ -552,6 +583,8 @@ def synthesize(plan_path, state):
     if state.get('lost'):
         cutoff = next(i for i, row in enumerate(rows) if row['stage_id'] == dispatches[1].stage_id)
         rows = rows[:cutoff + 1]
+    elif unfinalized == 'post':
+        rows = [row for row in rows if row['kind'] != 'calibration_capture' or row is rows[1]]
     elif state.get('stop'):
         cutoff = next(i for i, row in enumerate(rows) if row['kind'] == 'calibration_capture')
         rows = rows[:cutoff + 1] if opening_stop else [row for row in rows if row['stage_id'] in

@@ -64,6 +64,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # Proposed block-6 collection vocabulary belongs to its future pack catalog,
 # never to the immutable block-5 seal. Shared block-5 entries still match exactly.
 B6_COLLECTION_CODES = frozenset({
+    "clock.rate_above_budget", "instrument.single_interval_above_screen",
     "agent.presence", "agent.presence_overlap", "agent.capture_overlap", "agent.pause_marker_stale",
     "sleep.in_run", "sleep.between_runs", "sleep.in_chain", "sleep.reading_unmeasured",
     "sleep.assertion_lost", "sleep.assertion_unverified", "idle.waited", "idle.wait_cap_skip",
@@ -2313,7 +2314,10 @@ class EmittedCodeTests(unittest.TestCase):
         not_codes = {"g3.txt", "roster.json",  # file names
                      "chain.started", "monitor.capture_battery",  # a night record and a collector name
                      "yield.json"}  # a file name
-        self.assertEqual((literals | built) - not_codes - set(h.CODES), set())
+        # The two block-6 arm diagnostics use explicit specs and the block-6 catalog, rather than extending block 5's
+        # immutable catalog vocabulary. Name only them, so any other new literal still needs a catalog entry.
+        b6_arm_diagnostics = {"clock.rate_above_budget", "instrument.single_interval_above_screen"}
+        self.assertEqual((literals | built) - not_codes - set(h.CODES) - b6_arm_diagnostics, set())
 
     def test_every_lineage_finding_code_is_listed_with_l3s_family(self):
         from joulewise import window_lineage

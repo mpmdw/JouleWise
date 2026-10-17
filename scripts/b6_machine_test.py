@@ -34,6 +34,14 @@ from joulewise.hazards.base import Completed, Context
 PYTHON = "/opt/homebrew/bin/python3.13"
 PACK = "d117_floor_qwen3-1p7b_v5"
 INJECT_LABEL = "com.joulewise.b6mt.inject"
+# The in-chain census runs every run_night.CENSUS_INTERVAL_S = 30 s, scheduled
+# from the time read before each census (run_night.py ~1281), with the loop
+# waking at least once a second (~1311): snapshots are at most 31 s apart plus
+# pgrep's start-latency variation (milliseconds). A 45 s lifetime contains one
+# whenever that variation is under about 14 s. A probe that hangs to its
+# PROBE_TIMEOUT_S (30 s) can miss the agent; the agent items then read "not
+# observed" and the test is rerun.
+AGENT_LIFETIME_S = 45
 
 
 def sha256(raw):
@@ -85,7 +93,7 @@ def probe_runner(run):
 
 
 def installer_argv(measurement, plan_path, courier):
-    # --courier-bin: the smoke's file-writing courier stub. Without it the installer
+    # --courier-bin: the smoke's production program courier wrapper. Without it the installer
     # renders `claude` (block 5's courier, an agent session) into the night job,
     # which design 3.1 forbids for a smoke.
     return [str(Path(measurement) / "scripts/install_night_agent.sh"), "--plan", str(plan_path),
@@ -93,7 +101,7 @@ def installer_argv(measurement, plan_path, courier):
 
 
 def prepare(measurement_root, out, *, pack=PACK, lead_s=900, busy_cores=1,
-            agent_s=30, busy_s=1620, install=False, seams=None):
+            agent_s=AGENT_LIFETIME_S, busy_s=1620, install=False, seams=None):
     seams = seams or PrepareSeams()
     if os.path.lexists(Path(out).expanduser()):
         raise FileExistsError(out)
@@ -158,7 +166,7 @@ def prepare(measurement_root, out, *, pack=PACK, lead_s=900, busy_cores=1,
     courier_index = night_argv.index("--courier-bin") + 1
     if night_argv[courier_index] != smoke.driver_argv(prepared)[-1]:
         # An agent courier would be an agent process inside the smoke's night job.
-        raise ValueError("rendered night job does not name the smoke's courier stub: "
+        raise ValueError("rendered night job does not name the smoke's courier wrapper: "
                          + night_argv[courier_index])
     state_path = out / "machine-test.json"
     injector = plists / (INJECT_LABEL + ".plist")
@@ -298,6 +306,10 @@ def inject(state_path, *, seams=None):
         record("waiting_first_run")
         while True:
             if (custody / "night/result.json").exists():
+                if phase == "busy":
+                    for child in busy:
+                        reap(child)
+                    record("busy_ended", reason="night_result", run_ids=[])
                 record("exit", reason="night_result")
                 break
             if seams.now() >= deadline or seams.monotonic_ns() >= mono_deadline:
@@ -310,8 +322,9 @@ def inject(state_path, *, seams=None):
             hazard_terminal = (custody / "night/hazard_result.json").exists()
             if phase == "first_run":
                 pairs = agent_pause.paired_run_clocks(rows)
-                if pairs and pairs[0][1] is not None and not hazard_terminal:
-                    record("first_run_ended", run_id=pairs[0][0]["run_id"],
+                active = next((start for start, end in pairs if end is None), None)
+                if active is not None and not hazard_terminal:
+                    record("first_run_started", run_id=active["run_id"],
                            record="collection/run_clock.jsonl")
                     # arm.agent_census filters substring hits by executable
                     # identity OR argv[0]. A Python argument suffix is ignored.
@@ -426,7 +439,6 @@ def report(state_path, *, uninstall=False, desk=smoke.desk, run=subprocess.run):
         result = desk(prepared, driver_exit=driver_exit, run=run)
     archive = Path(result["archive"])
     flags = read_rows(archive / "derived/flags.jsonl")
-    codes = set(smoke._flag_codes(hazard)) | set(result.get("flags", [])) | {r.get("code") for r in flags}
     exclusions = read_json(archive / "derived/exclusions.json", {})
     excluded = {r["run_id"] for r in exclusions.get("members_excluded", [])}
     clocks = read_rows(custody / "collection/run_clock.jsonl")
@@ -451,12 +463,12 @@ def report(state_path, *, uninstall=False, desk=smoke.desk, run=subprocess.run):
         any(r.get("event") == "sighting" and r.get("at") == ep.get("last_sighting") for r in presence_rows)
         and any(r.get("event") == "resume" and r.get("at") == ep.get("pause_end") for r in presence_rows)
         for ep in episodes)
-    item("agent pause", pause_ok and overlap_ok and chain_kept and journal_ok
-         and {"agent.presence", "agent.presence_overlap"} <= codes,
+    flags_written = {"agent.presence", "agent.presence_overlap"} <= {r.get("code") for r in flags}
+    item("agent pause", pause_ok and overlap_ok and chain_kept and journal_ok and flags_written,
          ["night/hazard_result.json:agent_pause", "collection/agent_presence.jsonl",
           "derived/flags.jsonl", "derived/exclusions.json"],
          {"episode": bool(episodes), "settle": pause_ok, "overlapping_unit_excluded": overlap_ok,
-          "chain_continued": chain_kept})
+          "chain_continued": chain_kept, "journal": journal_ok, "flags_written": flags_written})
     item("agent census", any(r.get("event") == "agent_census" and r.get("listed") is True
                              for r in read_rows(out / "injections.jsonl")), ["injections.jsonl:agent_census"])
     runner_paused = pause_ok and journal_ok and all(
@@ -551,6 +563,41 @@ def report(state_path, *, uninstall=False, desk=smoke.desk, run=subprocess.run):
             expected_run_ids.update(dispatch.run_ids[:count])
     except (OSError, ValueError, KeyError, TypeError) as exc:
         roster_error = f"{type(exc).__name__}: {exc}"
+    summaries = {run_id: read_json(archive / "sources/claim-runs" / run_id / "summary_metrics.json")
+                 for run_id in sorted(expected_run_ids)}
+    statuses = {run_id: value.get("status") if isinstance(value, dict) else None
+                for run_id, value in summaries.items()}
+    # The controller records an idle cap as a FAILED bundle, with the reason
+    # in environment_admission; "skipped" belongs to idle_wait.jsonl only.
+    cap_failures = {run_id for run_id in skips if read_json(
+        archive / "sources/claim-runs" / run_id / "metadata.json", {}).get(
+            "environment_admission", {}).get("skip_reason") == "wait_cap_reached"}
+    expected_exceptions = expected_overlap | skips
+    collection_problems = {run_id: status for run_id, status in statuses.items()
+                           if not ((status == "failed" and run_id in cap_failures)
+                                   if run_id in skips else status == "succeeded")}
+    # Harvest retains the full campaign roster, including unselected members
+    # without spans. Only the members dispatched by the reduced plan ran.
+    smoke_excluded = excluded & expected_run_ids
+    unexpected_exclusions = {row["run_id"]: row.get("codes", [])
+                             for row in exclusions.get("members_excluded", [])
+                             if row["run_id"] in smoke_excluded - expected_exceptions}
+    # Rerun advice only when a physical exclusion is the sole problem.
+    physical_exclusions = (bool(unexpected_exclusions) and not collection_problems and roster_error is None
+                           and expected_exceptions <= smoke_excluded) and all(
+        codes and all(smoke._is_physical(code) for code in codes)
+        for codes in unexpected_exclusions.values())
+    item("collection ran", bool(expected_run_ids) and roster_error is None
+         and expected_exceptions <= expected_run_ids and not collection_problems
+         and smoke_excluded == expected_exceptions,
+         ["measurement:plan_tree.json and order_manifest.json", "sources/claim-runs/*/summary_metrics.json",
+          "sources/claim-runs/*/metadata.json:environment_admission", "derived/exclusions.json"],
+         {"member_status": statuses, "unexpected_status": collection_problems,
+          "expected_exclusions": sorted(expected_exceptions), "actual_exclusions": sorted(excluded),
+          "exclusion_detail": exclusions.get("members_excluded", []),
+          "unexpected_exclusions": unexpected_exclusions,
+          "guidance": "physical exclusion: rerun the test" if physical_exclusions else None,
+          "roster_error": roster_error})
     complete_ids = {start["run_id"] for start, end in pairs if end and all(
         isinstance(row.get("clock", {}).get("sleep_offset_ns"), int) for row in (start, end))}
     missing_ids = sorted(expected_run_ids - complete_ids)
@@ -593,7 +640,7 @@ def main(argv=None):
     p.add_argument("--pack", default=PACK, choices=sorted(PACK_LABELS))
     p.add_argument("--lead-s", type=float, default=900)
     p.add_argument("--busy-cores", type=int, default=1)
-    p.add_argument("--agent-s", type=float, default=30)
+    p.add_argument("--agent-s", type=float, default=AGENT_LIFETIME_S)
     p.add_argument("--busy-s", type=float, default=1620)
     p.add_argument("--install", action="store_true")
     i = commands.add_parser("inject")
@@ -617,6 +664,8 @@ def main(argv=None):
         for item in value["items"]:
             status = "observed" if item["observed"] else "not observed"
             detail = item["detail"] if isinstance(item["detail"], str) else None
+            if item["item"] in {"agent pause", "collection ran"} and isinstance(item["detail"], dict):
+                detail = ", ".join(f"{key}={value}" for key, value in item["detail"].items())
             print(f"{item['item']}: {status}" + (f"; {detail}" if detail else "")
                   + (" [" + ", ".join(item["evidence"]) + "]" if item["evidence"] else ""))
         return 0

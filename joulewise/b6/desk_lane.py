@@ -9,6 +9,7 @@ import time
 from joulewise import desk_compress, session_structure
 from joulewise.b5 import chain, plan
 from joulewise.b6 import smoke
+from joulewise.b6.courier import block_six_plan
 from joulewise.b6.driver_lane import metadata_path, read, write
 from joulewise.b6.lanes import SessionLine, SmokeResult
 from joulewise.flags.catalog import load_catalog
@@ -18,6 +19,7 @@ from joulewise.flags.catalog import load_catalog
 # without its own timeout 120 s, which would kill a session harvest (about 45
 # minutes for a block-5-sized session) and record it as a program fault.
 HARVEST_TIMEOUT_S = 4 * 3600
+RESUME_TIMEOUTS_S = (120, 600)  # One longer desk retry; never hold collection on a failed refit.
 
 
 class DeskLane:
@@ -56,6 +58,7 @@ class DeskLane:
                     if slot.get("custody_state") != "complete" or name in resumed:
                         break
                     resumed.add(name)
+                    attempts = []
                     try:
                         night_plan = read(metadata["prepared"]["plan_path"])
                         hazard = night_plan["hazard_window"]
@@ -63,29 +66,73 @@ class DeskLane:
                         reservation = next(s for s in chain.stage_plan(tree) if s.kind == "bracket_reservation")
                         argv = chain.stage_argv(reservation, hazard["bindings"], tree, measurement)
                         frozen_plan = argv[argv.index("--plan") + 1]
-                        result = self.run([str(measurement / ".venv/bin/python"),
+                        argv = [str(measurement / ".venv/bin/python"),
                             str(measurement / "scripts/recover_calibration_ledger.py"),
                             "--ledger", str(measurement / plan.DEFAULT_LEDGER_RELATIVE),
                             "--head-pin", str(measurement / plan.HEAD_PIN_RELATIVE),
                             "resume-finalize", "--session-id", session_id, "--slot", name,
-                            "--plan", frozen_plan], check=False, capture_output=True, text=True,
-                            timeout=120, env=self.env)
+                            "--plan", frozen_plan,
+                            *(["--window-plan", metadata["prepared"]["plan_path"]]
+                              if block_six_plan(night_plan) else [])]
+                        for timeout in RESUME_TIMEOUTS_S:
+                            try:
+                                result = self.run(argv, check=False, capture_output=True, text=True,
+                                                  timeout=timeout, env=self.env)
+                                attempts.append({"timeout_s": timeout, "rc": result.returncode})
+                                if result.returncode == 0:
+                                    break
+                            except (OSError, subprocess.TimeoutExpired) as exc:
+                                attempts.append({"timeout_s": timeout, "error": type(exc).__name__})
+                        if "error" in attempts[-1]:
+                            raise RuntimeError(attempts[-1]["error"])
                         record = {"slot": name, "rc": result.returncode,
-                                  "status": "FINALIZED" if result.returncode == 0 else "FAILED"}
-                        if result.returncode:
-                            flags.append("records.pin_ledger")
+                                  "status": "FINALIZED" if result.returncode == 0 else "FAILED",
+                                  "attempts": attempts}
+                        if result.returncode == 0:
+                            try:
+                                recovered = json.loads(result.stdout)
+                            except (ValueError, TypeError):
+                                recovered = {}
+                            flags.extend(recovered.get("records_flags", []))
+                            for key in ("screen_basis", "exceeds_prior_level_screen", "records_flags"):
+                                if key in recovered:
+                                    record[key] = recovered[key]
                     except Exception as exc:
-                        record = {"slot": name, "status": "FAILED", "error": type(exc).__name__}
-                        flags.append("records.pin_ledger")
-                    metadata.setdefault("bracket_resume", []).append(record)
+                        record = {"slot": name, "status": "FAILED", "error": type(exc).__name__,
+                                  "attempts": attempts}
+                    # A timeout can follow the final ledger commit. The retry
+                    # then refuses the already-finalized slot; judge custody
+                    # from the ledger before recording a desk failure.
                     status = plan.ledger_head_status(measurement)
+                    if record["status"] == "FAILED":
+                        current = (status.get("open_session_next_slots") or {}).get(session_id) or {}
+                        if ("open_session_next_slots" in status and not current.get("error")
+                                and current.get("next_slot") != name):
+                            record["status"] = "FINALIZED"
+                        else:
+                            flags.append("records.pin_ledger")
+                    metadata.setdefault("bracket_resume", []).append(record)
+                    if record["status"] == "FAILED":
+                        flags.append("records.resume_finalize_failed")
+                        # Keep the slot in both the desk record and the window flag.
+                        from joulewise.flags import core as flags_core
+                        try:
+                            context = flags_core.hazard_flag_context(
+                                metadata["runs_roots"][0], writer="b6-desk-resume")
+                            if context is not None:
+                                flags_core.emit(context, "records.resume_finalize_failed", level="window",
+                                                observed={"slot": name, "session_id": session_id},
+                                                detail="resume-finalize failed twice; bracket aborted")
+                        except Exception:
+                            pass  # A desk records failure cannot hold the session loop.
                 if session_id in status["open_sessions"]:
                     night = Path(metadata["paths"].get("custody", measurement)) / "night"
                     stop = next((r.get("reason", r.get("kind")) for r in reversed(chain.stage_journal(night))
                                  if r.get("stage_id") == "chain.stop"), None)
                     stop = stop or read(night / "result.json").get("aborted_reason") or read(
                         night / "hazard_result.json").get("aborted_reason")
-                    reason = stop or f"chain_exit:{metadata.get('chain_exit_code', 'unknown')}"
+                    exit_code = metadata.get("chain_exit_code", "unknown")
+                    reason = stop or session_structure.CHAIN_STOP_EXITS.get(exit_code) or f"chain_exit:{exit_code}"
                     calibration_ledger.abort_bracket_session(measurement / plan.DEFAULT_LEDGER_RELATIVE,
                         session_id=session_id, reason=reason)
                     metadata["bracket_aborted"] = True

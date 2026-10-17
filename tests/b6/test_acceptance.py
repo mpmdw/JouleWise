@@ -61,11 +61,29 @@ class AcceptanceTests(unittest.TestCase):
         self.assertTrue(set(codes) <= set(result.flags))
         self.assertEqual(result.reasons, ())
 
+    def test_ruling_disclosures_keep_members_and_legacy_neg8_failures_do_not_carry(self):
+        base = session()
+        member = dataclasses.replace(base.stages[0].members[0], flags=(
+            'member.cooldown_cap_hit', 'contention.request_overlap', 'meter.unexplained_idle_step'))
+        stage = dataclasses.replace(base.stages[0], members=(member, *base.stages[0].members[1:]))
+        result = self.evaluate(dataclasses.replace(base, stages=(stage, *base.stages[1:]),
+                                                  window_flags=('neg8.screen_failed', 'neg8.bound_not_derived')))
+        self.assertEqual(result.verdict, 'ACCEPT')
+        self.assertEqual(result.record['cells'], self.evaluate(base).record['cells'])
+        self.assertEqual(result.reasons, ())
+
     def test_unknown_code_discloses(self):
         result = self.evaluate(dataclasses.replace(session(), window_flags=("unknown.desk_condition",)))
         self.assertEqual(result.verdict, "ACCEPT")
         self.assertIn("catalog.code_unclassified", result.flags)
         self.assertIn("unknown.desk_condition", result.flags)
+
+    def test_unsized_power_screen_is_a_per_pack_phase_disclosure(self):
+        result = self.evaluate()
+        flag = next(row for row in result.record['emitted_flags'] if row['code'] == 'power.pstar_unsized')
+        self.assertEqual(flag['observed'], {'pack_id': 'desk-pack', 'phases': ['prefill', 'decode'],
+                                            'reason': 'registered_T_phase_absent'})
+        self.assertEqual(result.verdict, 'ACCEPT')
 
     def test_foreign_unclassified_flag_is_still_recorded(self):
         flag = acceptance._flag("unknown.other_attempt", self.prepared.catalog)

@@ -26,8 +26,11 @@ SOURCE_ARTIFACT = "raw/powermetrics_idle.plist"
 BANDWIDTH_S = 10.0
 CADENCE_P95_P05_MAX = 1.25
 CORRELATION_SCOPE = "independent_run"
-METADATA_REL_TOL = 1e-9
-METADATA_ABS_TOL = 1e-12
+# 1 uW over a 30 s idle is 30 uJ, far below the 0.013 J printed
+# half-width; 1 us is 1/100,000 of a 100 ms sampler interval. Both exceed
+# binary64 re-derivation noise without admitting instrument-scale changes.
+METADATA_REL_TOL = 0
+METADATA_ABS_TOL = 1e-6
 
 REASON_CODES = (
     "raw_idle_trace_unavailable",

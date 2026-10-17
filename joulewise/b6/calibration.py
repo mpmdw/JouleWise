@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from joulewise.b6.registration import decimal_s
+from joulewise.b6.capture_screen import operative_bound_stop_s
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,7 @@ def read_own_capture(directory: Path | str) -> Capture:
 
 def evaluate(pre: Capture, post: Capture, reg: Mapping,
              other_rows: Sequence[Mapping], own_session_ids: Sequence[str],
-             estimator_changed: bool) -> dict[str, Any]:
+             estimator_changed: bool, *, pack_id: str | None = None) -> dict[str, Any]:
     """Times only; other sessions cannot contribute to the operative bound."""
     cal = reg.get("calibration", reg)
     reference = decimal_s(cal["alignment_reference_s"])
@@ -83,9 +84,9 @@ def evaluate(pre: Capture, post: Capture, reg: Mapping,
     count = sum(row.get("disposition") == "valid" for row in other_rows)
     if threshold and count >= threshold:
         flag("calibration.corpus_doubling_reached", count=count, threshold=threshold)
-    stop = cal.get("operative_bound_stop_s")
+    stop = operative_bound_stop_s(reg, pack_id)
     if stop is None:
-        flag("calibration.stop_line_unregistered")
+        flag("calibration.stop_line_unsized", pack_id=pack_id or reg.get("pack_id"))
     drift = allowance = bound = None
     if any(c.value_s is None or c.status != "valid" for c in (pre, post)):
         excluding.append("calibration.bracket_incomplete")

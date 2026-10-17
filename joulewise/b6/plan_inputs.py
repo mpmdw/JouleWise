@@ -10,6 +10,7 @@ import subprocess
 
 from joulewise.b5 import plan
 from joulewise.b6 import registration
+from joulewise.b6.capture_screen import operative_bound_stop_s
 
 SEALED_DIR = "configs/campaigns/v5_claim_25g83"
 REGISTRATION = SEALED_DIR + "/registration_block5.md"
@@ -17,6 +18,9 @@ SIZING = SEALED_DIR + "/sizing_b5.json"
 PACK_LABELS = {"d117_floor_qwen3-1p7b_v5": "ALPHA", "d117_floor_qwen3-8b_v5": "BETA",
                "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5": "GAMMA"}
 BYTES_PER_MEMBER = 182 * 1024 * 1024
+# Block-6 registration §8.6: retain the 5 ms limit and 0.25 ppm margin,
+# but remove the block-5 placement allowance from the HOLD.
+CLOCK_THRESHOLDS = {"h_ms": 0, "frequency_margin_ppm": 0.25, "limit_ms": 5.0}
 
 
 def sha256(raw):
@@ -38,6 +42,7 @@ def registered_thresholds(text):
 
 def thresholds(measurement, registration_dir):
     result = registered_thresholds((Path(measurement) / REGISTRATION).read_text())
+    result["clock"].update(CLOCK_THRESHOLDS)
     overrides = registration.load_precheck_thresholds(registration_dir)
     contract = plan.hazard_threshold_defaults()
     # The precheck also has non-driver fields (agents, margins, probe timing).
@@ -53,16 +58,21 @@ def window_max_s(inputs):
     return 60 * math.ceil((span + plan.T0_STAGE_CAP_S + plan.PAUSE_LIMIT_S + plan.SESSION_WAIT_BUDGET_S) / 60)
 
 
-def capture_screen(registration_dir):
-    """Use only block-six acceptance values; open measurement slots stay null."""
+def capture_screen(registration_dir, pack_id=None):
+    """Acceptance supplies alignment/bracket values; T10 belongs to the pack."""
     try:
-        calibration = registration.load(registration_dir)["calibration"]
+        registered = registration.load(registration_dir)
+        calibration = registered["calibration"]
     except (FileNotFoundError, ValueError):
-        # A not-yet-issued or incomplete acceptance supplies no registered
-        # values. In particular, never substitute block five's acceptance.
+        # A missing acceptance supplies no alignment/bracket values. The
+        # separately decided per-pack T10 never borrows block-five values.
         calibration = {}
-    return {key: None if calibration.get(key) is None else str(registration.decimal_s(calibration[key]))
-            for key in ("alignment_reference_s", "bracket_screen_s", "operative_bound_stop_s")}
+        registered = {"calibration": calibration}
+    result = {key: None if calibration.get(key) is None else str(registration.decimal_s(calibration[key]))
+              for key in ("alignment_reference_s", "bracket_screen_s", "operative_bound_stop_s")}
+    stop = operative_bound_stop_s(registered, pack_id)
+    result["operative_bound_stop_s"] = None if stop is None else str(stop)
+    return result
 
 
 def build(measurement_root, registration_dir, pack_id, session_id, identities, *, custody_root,
@@ -100,7 +110,7 @@ def build(measurement_root, registration_dir, pack_id, session_id, identities, *
               "post_attempt_id": session_id + "-cal-post", "g10": False,
               "programmed_span_s": allowance("programmed_span_s"),
               "T_stream_max_s": allowance("T_stream_max_s"), "bytes_per_member": BYTES_PER_MEMBER,
-              "capture_screen": capture_screen(reg), "spare_retries": False,
+              "capture_screen": capture_screen(reg, pack_id), "spare_retries": False,
               "thresholds": thresholds(measurement, reg),
               "registration": {"path": REGISTRATION, "sha256": sha256(registration_raw)}}
     for key, name in (("identity_epoch_json", "identity-epoch.json"), ("t1_bindings_json", "t1-bindings.json")):

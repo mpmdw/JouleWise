@@ -17,7 +17,7 @@ import statistics
 from typing import Any, Callable
 
 from joulewise.b5 import chain, plan
-from joulewise.b6 import fingerprint
+from joulewise.b6 import fingerprint, plan_inputs
 from joulewise.b6.acceptance_interface import (
     CaptureEvidence, MemberEvidence, StageEvidence, SessionEvidence, load_acceptance,
 )
@@ -36,7 +36,8 @@ POWER_CUSTOM_ARGV = ("/usr/bin/pmset", "-g", "custom")
 ANALYSIS_ARGV = ("/bin/ps", "-Ao", "pid,ppid,%cpu,comm")
 ANALYSIS_NAMES = {"mediaanalysisd", "photoanalysisd", "corespotlightd", "mds_stores", "mdworker", "photolibraryd"}
 PRECHECK_DEFAULTS = {
-    "clock": {**clock.DEFAULT_THRESHOLDS, "series_min_s": 60, "retry_after_s": 600},
+    "clock": {**clock.DEFAULT_THRESHOLDS, **plan_inputs.CLOCK_THRESHOLDS,
+              "series_min_s": 60, "retry_after_s": 600},
     "battery": {**battery.DEFAULT_THRESHOLDS, "limit_ma": 200},
     "thermal": {**thermal.DEFAULT_THRESHOLDS, "max_level": 0},
     "contention": {**contention.DEFAULT_THRESHOLDS, "cpu_limit_s_per_s": 0.05,
@@ -319,10 +320,15 @@ def clock_rate(samples, boot_start, boot_end, thresholds):
     slope = sum((x - xm) * (y - ym) for x, y in zip(xs, ys)) / sum((x - xm)**2 for x in xs)
     rate = slope * 10**6
     residuals = [y - ym - slope * (x - xm) for x, y in zip(xs, ys)]
+    # Registration §8.6: 5 ms / T_stream_max - 0.25 ppm, using the
+    # same exact hold arithmetic as hazards.clock.frequency_bound.
     bound = Fraction(str(thresholds["h_ms"])) + (abs(rate) + Fraction(
         str(thresholds["frequency_margin_ppm"]))) * Fraction(str(thresholds["t_stream_max_s"])) / 1000
     if bound > Fraction(str(thresholds["limit_ms"])):
         codes.append("clock.rate")
+    elif thresholds["h_ms"] == 0 and (bound + Fraction(str(clock.DEFAULT_THRESHOLDS["h_ms"]))
+                                        > Fraction(str(thresholds["limit_ms"]))):
+        codes.append("clock.rate_above_budget")
     if max(map(abs, residuals)) > thresholds["residual_max_ns"]:
         codes.append("clock.linearity")
     if any(abs(b - a) > thresholds["step_ns"] for a, b in zip(residuals, residuals[1:])):
@@ -537,7 +543,8 @@ def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None
     readings["power"] = power_and_idle(ctx)
     power = readings["power"]
     if power["hid_idle_s"] is None or power["hid_idle_s"] < limits["agents"]["hid_idle_min_s"]:
-        wait("agents.hid_recent", "agents", power["hid_idle_s"], limits["agents"]["hid_idle_min_s"])
+        # HID inactivity has no joule derivation; measured idle admission judges the hazard.
+        flags.append({"code": "agents.hid_recent", "source": "agents", "observed": power["hid_idle_s"]})
     if not power["assertion_held"]:
         wait("power.no_sleep_assertion_absent", "power", power["assertions"], "assertion held")
     readings["time_server"] = []
@@ -577,7 +584,14 @@ def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None
     readings["clock"], clock_codes = clock_rate(samples, boot_start, boot(), limits["clock"])
     ctx.keep_raw("clock-series.json", canonical_json(readings["clock"]))
     for code in clock_codes:
-        wait(code, "clock", readings["clock"], limits["clock"], retry=limits["clock"]["retry_after_s"])
+        if code == "clock.rate_above_budget":
+            flags.append({"code": code, "source": "clock", "observed": readings["clock"]})
+        elif code == "clock.rate":
+            flags.append({"code": "clock.rate_hold", "source": "clock", "observed": readings["clock"]})
+            wait("clock.rate_hold", "clock", readings["clock"], limits["clock"],
+                 remedy="wake_orchestrator", retry=0)
+        else:
+            wait(code, "clock", readings["clock"], limits["clock"], retry=limits["clock"]["retry_after_s"])
     final = arm.agent_census(ctx)
     readings["agents"]["final"] = final
     if not final["clean"]:

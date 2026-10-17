@@ -266,7 +266,13 @@ def prepare(pack_id, code_commit, claim_measurement_root, smoke_root, *, plan_in
     keeps = config_keeps(tree, keep)
     reduced = reduce_tree(tree, keep)
     (pack_root / "plan_tree.json").write_text(json.dumps(reduced, indent=2) + "\n")
-    _git(measurement, "add", str(pack_root.relative_to(measurement) / "plan_tree.json"), run=run)
+    # Readiness authenticates exact bytes, not the parsed tree. Commit its
+    # authenticator in the same clone commit before the plan writer binds both
+    # the tree digest and the committed pack digest.
+    (pack_root / "plan_tree.sha256").write_text(_sha256(pack_root / "plan_tree.json")
+                                               + "  plan_tree.json\n")
+    _git(measurement, "add", *(str(pack_root.relative_to(measurement) / name)
+                              for name in ("plan_tree.json", "plan_tree.sha256")), run=run)
     _git(measurement, "-c", "user.name=B6 Smoke", "-c", "user.email=smoke@invalid",
          "commit", "--quiet", "-m", "SMOKE reduced stage tree", run=run)
     wrapper_writer(measurement, claim, smoke_dir, keeps, run=run)
@@ -296,8 +302,9 @@ def prepare(pack_id, code_commit, claim_measurement_root, smoke_root, *, plan_in
     bin_dir = smoke_dir / "bin"
     bin_dir.mkdir()
     courier = bin_dir / "smoke-courier"
-    request = shlex.quote(str(smoke_dir / "courier-request.txt"))
-    courier.write_text('#!/bin/sh\n{ printf "%s\\n" "$@"; cat; } > ' + request + '; exit 0\n')
+    # Exercise the session's mail-free program and its courier.sent protocol.
+    courier.write_text('#!/bin/sh\nexec /bin/sh '
+                       + shlex.quote(str(measurement / "scripts/b6_courier.sh")) + ' "$@"\n')
     courier.chmod(0o755)
     write_create_once(smoke_dir / "smoke-state.json", canonical_json(
         {**prepared.to_json(), "driver_argv": driver_argv(prepared), "config_keep": keeps,
@@ -353,8 +360,16 @@ def _flag_codes(value):
 
 
 def classify(*, stages_ok, driver_exit, harvest_exit, acceptance_result, flags, is_physical=None,
-             physical_arm_refusal=False):
+             physical_arm_refusal=False, bundles_produced=False):
+    # Retain the keyword for callers; bundle existence cannot explain a crash.
     physical = is_physical or _is_physical
+    # A chance member flag cannot explain a failed stage or harvest, even
+    # after earlier bundles. Only a named stop or arm refusal explains it.
+    # Smoke acceptance uses physics_stop for incidental member exclusions too;
+    # physical_stop_kind identifies an actual physical chain stop.
+    # Harvest exit 6 is "registration pending" (queue.outcome), not a fault.
+    if not stages_ok or harvest_exit not in (0, 6):
+        return "physics" if physical_arm_refusal or acceptance_result.record.get("physical_stop_kind") else "fail"
     if physical_arm_refusal or acceptance_result.record.get("physics_stop") or any(physical(code) for code in flags):
         return "physics"
     if stages_ok and driver_exit in (0, 6) and harvest_exit in (0, 6) and not acceptance_result.structural:
@@ -449,6 +464,7 @@ def desk(prepared, *, driver_exit=None, run=subprocess.run, acceptance=None,
             str(reason).startswith(module + " ") for reason in arm_record.get("reasons", [])))
         if arm_record.get("go") is False and measured_refusal:
             flags.append(f"{module}.arm_refusal")
+            physical_arm_refusal |= physical(f"{module}.arm_refusal")
     for report_path in (archive / "harvest-report.json", archive / "harvest.json",
                         archive / "derived/window_flags.json"):
         try:

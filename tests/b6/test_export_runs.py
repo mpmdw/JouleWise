@@ -9,6 +9,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+# At 10 J, rel 1e-6 is 10 uJ: above float noise and below 1% of
+# the smallest printed half-width (0.013 J). Variance scales quadratically.
 from joulewise.b6 import blinding, export_runs
 from scripts import b6_export_runs, b6_unblind
 from tests.b6.support import registration_dir, write_json
@@ -100,8 +102,8 @@ class ExportTests(unittest.TestCase):
                 self.assertTrue(all(row[key] == "" for key in export_runs.ENERGIES))
                 self.assertEqual(row["excluded"], "True")
             else:
-                self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10 * 1.1 * .99))
-                self.assertTrue(math.isclose(float(row["idle_variance_of_mean_w2"]), 2 * (1.1 * .99) ** 2))
+                self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10 * 1.1 * .99, rel_tol=1e-6))
+                self.assertTrue(math.isclose(float(row["idle_variance_of_mean_w2"]), 2 * (1.1 * .99) ** 2, rel_tol=1e-6))
 
     def test_null_quads_and_references_share_offsets_gamma_models_do_not(self):
         draws = iter([1.1, .99, .98, 1.02, 1.01])
@@ -179,8 +181,8 @@ class ExportTests(unittest.TestCase):
         with unblinded.open() as stream:
             for row in csv.DictReader(stream):
                 if row["status"] == "succeeded":
-                    self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10, rel_tol=1e-12))
-                    self.assertTrue(math.isclose(float(row["idle_variance_of_mean_w2"]), 2, rel_tol=1e-12))
+                    self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10, rel_tol=1e-6))
+                    self.assertTrue(math.isclose(float(row["idle_variance_of_mean_w2"]), 2, rel_tol=1e-6))
         sidecar = json.loads(Path(result["session"]).read_text())
         self.assertEqual(sidecar["blinding"]["applied"], True)
         self.assertFalse(Path(sidecar["blinding"]["key_dir"]).is_absolute())

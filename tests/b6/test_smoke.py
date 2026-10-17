@@ -197,6 +197,8 @@ class SmokeTests(DeskCase):
         self.assertEqual(record['hazard_window']['settle_s'], chain.SETTLE_S)
         self.assertEqual(s._git(prepared.measurement, 'remote'), '')
         self.assertEqual(s.driver_argv(prepared)[2:4], ['run', '--plan'])
+        self.assertIn(str(prepared.measurement / 'scripts/b6_courier.sh'),
+                      (prepared.smoke_dir / 'bin/smoke-courier').read_text())
         with self.assertRaises(s.SmokePrepareError):
             s.copy_ledger(claim, self.root / 'outside', prepared.smoke_dir)
         with self.assertRaises(s.SmokePrepareError):
@@ -211,6 +213,245 @@ class SmokeTests(DeskCase):
             return copied
         with mock.patch.object(s.shutil, 'copy2', side_effect=changed_source), self.assertRaises(s.SmokePrepareError):
             s.copy_ledger(claim, clone, inside)
+
+    def production_prepared(self):
+        import shutil
+        seed, state, _, inputs = self.claim()
+        # A full checkout retains every production script, sidecar and pack
+        # inventory. Only the synthetic ledger/pin and sizing inputs are seeded.
+        claim = self.root / 'production-checkout'
+        s.clone_checkout(ROOT, s._git(ROOT, 'rev-parse', 'HEAD'), claim)
+        for relative in (plan.DEFAULT_LEDGER_RELATIVE, plan.HEAD_PIN_RELATIVE,
+                         'configs/sizing/synthetic.json'):
+            destination = claim / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(seed / relative, destination)
+        s._git(claim, 'add', plan.HEAD_PIN_RELATIVE, 'configs/sizing/synthetic.json')
+        s._git(claim, 'commit', '-qm', 'synthetic ledger and sizing')
+        commit = s._git(claim, 'rev-parse', 'HEAD')
+        (claim / '.venv/lib/python3.13/site-packages').mkdir(parents=True)
+        return s.prepare(PACKS['alpha'], commit, claim, self.root / 'smokes',
+            plan_inputs=inputs, fp=fp(), state_root=state,
+            plan_writer=lambda value: plan.write_window_plan(value,
+                threshold_defaults=fake_window.threshold_defaults),
+            wrapper_writer=lambda *a, **kw: s.write_wrapper(*a, **kw, python=sys.executable))
+
+    def test_prepare_authenticates_production_tree_and_controller_pre_slot(self):
+        from joulewise import arm_readiness, controller
+        prepared = self.production_prepared()
+        self.assertTrue((prepared.measurement / '.venv/bin/python3.13').exists())
+        pack = prepared.measurement / 'configs/campaigns' / PACKS['alpha']
+        reduced, raw = arm_readiness._plan_tree(pack)
+        self.assertEqual(sum(r['expected_count'] for r in reduced['stage_graph']
+                             if r['kind'] == 'campaign_collection'), 4)
+        self.assertEqual(s._git(prepared.measurement, 'status', '--porcelain', '--',
+                                str(pack.relative_to(prepared.measurement))), '')
+        for sidecar in pack.glob('*.sha256'):
+            digest, name = sidecar.read_text().strip().split('  ')
+            self.assertEqual(digest, s._sha256(pack / name))
+        record = json.loads(prepared.plan_path.read_text())
+        self.assertEqual(record['hazard_window']['pack']['plan_tree_sha256'],
+                         hashlib.sha256(raw).hexdigest())
+        self.assertEqual(record['hazard_window']['pack']['pack_sha256'],
+                         arm_readiness.committed_pack_tree_sha256(pack))
+        # Only the earlier launch-locator seam is supplied. The controller must
+        # authenticate the real reduced bytes before reaching the hardware's
+        # finalized calibration slot (which this Linux fixture cannot collect).
+        context = {'pack_root': str(pack), 'launch_lineage': {'bracket_session_id': 'synthetic'}}
+        class ReachedLedger(Exception):
+            pass
+        with (mock.patch.object(arm_readiness, 'authenticate_campaign_launch_lineage', return_value=context),
+              mock.patch.object(controller, '_writer_launch_lineage', return_value={}),
+              mock.patch('joulewise.calibration_ledger.calibration_session_status', side_effect=ReachedLedger)):
+            with self.assertRaises(ReachedLedger):
+                controller._authenticate_g2b_pre_slot_attachment(self.root, {}, None, self.root,
+                                                                object(), hazard=object())
+
+    def test_stage_crash_dominates_injected_physics_with_or_without_bundles(self):
+        # Smoke acceptance also calls an incidental member exclusion a
+        # physics_stop. Only physical_stop_kind identifies an actual stop.
+        for produced in (False, True):
+            for record in ({}, {'physics_stop': True, 'physical_stop_kind': None}):
+                with self.subTest(record=record, bundles_produced=produced):
+                    self.assertEqual(s.classify(stages_ok=False, driver_exit=1, harvest_exit=0,
+                        acceptance_result=AcceptanceResult('EXCLUDE', (), (), False, record=record),
+                        flags=['agent.presence'], bundles_produced=produced), 'fail')
+        self.assertEqual(s.classify(stages_ok=False, driver_exit=1, harvest_exit=0,
+            acceptance_result=AcceptanceResult('EXCLUDE', (), (), False,
+                record={'physics_stop': True, 'physical_stop_kind': 'disk'}), flags=[]), 'physics')
+
+    def test_report_collection_uses_production_smoke_dispatch_not_full_harvest_roster(self):
+        # Adapted from the review's production_roster_report.py replay: keep
+        # smoke.prepare's real reduced plan and all real order manifests.
+        from joulewise.b5 import harvest
+        from joulewise.flags.catalog import load_catalog
+        from joulewise.flags.exclusions import compute
+        from joulewise.flags.schema import make_flag, make_scope, make_source
+        from scripts import b6_machine_test as mt
+        from tests.test_b6_machine_test import put, append, clock_row
+        prepared = self.production_prepared()
+        pack = prepared.measurement / 'configs/campaigns' / prepared.pack_id
+        reduced = json.loads((pack / 'plan_tree.json').read_text())
+        counts = {row['stage_id']: row['expected_count'] for row in reduced['stage_graph']
+                  if row['kind'] == 'campaign_collection'}
+        ids = [run_id for dispatch in plan.resolve_stage_dispatches(reduced, prepared.measurement)
+               for run_id in dispatch.run_ids[:counts[dispatch.stage_id]]]
+        self.assertEqual(len(ids), 4)
+        reference, cap, prefill, last = ids
+        archive = prepared.smoke_dir / 'archive'
+        at = lambda second: {'monotonic_ns': second * 10**9, 'wall_s': 1800000000 + second}
+        episode = {'start': at(1), 'end': at(40), 'since': at(20), 'last_sighting': at(20),
+                   'pause_end': at(620), 'pause_s': 600}
+        put(prepared.custody / 'night/result.json', {'verdict': 'GO', 'chain_exit_code': 0})
+        put(prepared.custody / 'night/hazard_result.json', {'chain': {'exit_code': 0},
+            'agent_pause': {'episodes': [episode], 'stopped_by_limit': False}})
+        # Replay's fixture clocks: the pause ends before the cap run; later
+        # stages use the same fixture member spans plus the real settle gap.
+        for run_id, start, end in ((reference, 1, 50), (cap, 621, 2121),
+                                  (prefill, 2121 + chain.SETTLE_S, 2199 + chain.SETTLE_S),
+                                  (last, 2199 + 2 * chain.SETTLE_S, 2248 + 2 * chain.SETTLE_S)):
+            for event, second in (('start', start), ('end', end)):
+                append(prepared.custody / 'collection/run_clock.jsonl', clock_row(event, run_id, second))
+        catalog = load_catalog(s.CATALOG_PATH)
+        flags = []
+        for code, run_id in (('agent.presence', None), ('agent.presence_overlap', reference),
+                             ('idle.wait_cap_skip', cap)):
+            entry = catalog.entry(code)
+            flags.append(make_flag(code=code, family=entry['family'], klass=entry['klass'],
+                scope=make_scope('member' if run_id else 'window', run_id=run_id),
+                source=make_source('window', 'b6-machine-test'),
+                interval={'monotonic_ns': [10**9, 40 * 10**9], 'monotonic_raw_ns': None,
+                          'wall_s': [1800000001, 1800000040]} if run_id is None else None))
+            append(archive / 'derived/flags.jsonl', flags[-1])
+        for run_id in ids:
+            put(archive / 'sources/claim-runs' / run_id / 'summary_metrics.json',
+                {'status': 'failed' if run_id == cap else 'succeeded'})
+        put(archive / 'sources/claim-runs' / cap / 'metadata.json',
+            {'environment_admission': {'skip_reason': 'wait_cap_reached'}})
+        put(prepared.smoke_dir / 'smoke-result.json',
+            {'status': 'physics', 'errors': [], 'harvest_exit': 0, 'archive': str(archive)})
+        state_path = prepared.smoke_dir / 'machine-test.json'
+        put(state_path, {'smoke_state': str(prepared.smoke_dir / 'smoke-state.json'),
+                         'out': str(prepared.smoke_dir)})
+        spans = {start['run_id']: {'member': [start['clock']['monotonic_ns'], end['clock']['monotonic_ns']]}
+                 for start, end in mt.agent_pause.paired_run_clocks(
+                     mt.read_rows(prepared.custody / 'collection/run_clock.jsonl'))}
+        roster, l4spans = harvest.l4_exclusion_inputs(harvest.build_roster(pack, prepared.measurement),
+                                                    spans, plan_id=None, attempt=None)
+        self.assertEqual(len(roster['members']), 125)
+        for full in (False, True):
+            with self.subTest(full_harvest_roster=full):
+                selected = roster if full else {**roster, 'members': [
+                    member for member in roster['members'] if member['run_id'] in ids]}
+                effects = compute(flags, selected, l4spans, catalog)
+                put(archive / 'derived/exclusions.json', effects)
+                item = next(item for item in mt.report(state_path)['items'] if item['item'] == 'collection ran')
+                excluded = {row['run_id'] for row in effects['members_excluded']}
+                self.assertEqual(len(excluded - set(ids)), 121 if full else 0)
+                self.assertEqual(item['detail']['actual_exclusions'], sorted(excluded))
+                self.assertTrue(item['observed'], 'unselected harvest members must not fail the smoke collection check')
+                if full:
+                    self.assertEqual(item['detail']['exclusion_detail'], effects['members_excluded'])
+
+    def desk_exit_case(self, name, *, stage_crash=False, harvest=0, code='agent.presence',
+                       bundles=True, stop=None, arm=False, acceptance_record=True):
+        # Real desk/journal/archive path from desk_crash.py; only harvest and
+        # pin advancement are injected. No process or physical probe is run.
+        from tests.test_b6_machine_test import put, append
+        base = self.root / name
+        measurement = base / 'measurement'
+        reduced = s.reduce_tree(tree('alpha'), json.loads(s.KEEP_PATH.read_text())[PACKS['alpha']])
+        put(measurement / 'configs/campaigns' / PACKS['alpha'] / 'plan_tree.json', reduced)
+        night = base / 'custody/night'
+        stages = [stage for stage in chain.stage_plan(reduced) if stage.in_chain]
+        for stage in stages:
+            if arm:
+                break  # An arm refusal never launches the chain.
+            # Two prior bundles remain when the next collection crashes.
+            crash = stage_crash and (not bundles or stage.stage_id == 'alpha-science-prefill-p2048-absolute')
+            append(night / chain.STAGE_JOURNAL, {'stage_id': stage.stage_id, 'rc': 1 if crash else 0})
+            if crash:
+                break
+        put(night / 'hazard_result.json', {'flags': [{'code': code}],
+            **({'chain': {'exit_code': 1, 'stop_reason': 'night_stopped_disk_low'}} if stop else {}),
+            **({'arm': {'go': False, 'verdicts': {'battery': {'status': 'REFUSE'}}}} if arm else {})})
+        archive = base / 'archive'
+        append(archive / 'derived/flags.jsonl', {'code': code})
+        if acceptance_record:
+            record = {'verdict': 'EXCLUDE', 'flag_counts': {code: 1},
+                'physics_stop': True, 'physical_stop_kind': None, 'excluding': [{'code': code, 'scope': 'member'}]}
+            if stop:
+                # Derive the named disk stop using the real acceptance rule,
+                # with no captures or members, rather than inventing a label.
+                from joulewise.b6.acceptance import ACCEPTANCE
+                evidence = SessionEvidence(PACKS['alpha'], (), (), {'_b6': {'smoke': True}}, False, (),
+                                           stop_reason='night_stopped_disk_low')
+                record = ACCEPTANCE.evaluate(support.prepared(base / 'acceptance'), evidence).record
+                self.assertEqual(record['physical_stop_kind'], stop)
+            put(archive / 'derived/b6-acceptance.json', record)
+        if bundles:
+            for run_id in ('earlier-reference', 'earlier-science'):
+                put(archive / 'sources/claim-runs' / run_id / 'metadata.json',
+                    {'run_id': run_id, 'status': 'succeeded'})
+        self.assertEqual(len(list((archive / 'sources/claim-runs').glob('*/metadata.json'))),
+                         2 if bundles else 0)
+        prepared = s.SmokePrepared(base, measurement, base / 'plan.json', base / 'custody',
+            base / 'state', PACKS['alpha'], 'SMOKE-test-calibration', fp(), {}, base / 'registration')
+        return s.desk(prepared, driver_exit=1 if stage_crash or arm else 0,
+            advance_pin=lambda *a, **kw: None, run=lambda *a, **kw: SimpleNamespace(returncode=harvest))
+
+    def test_desk_crash_after_two_bundles_is_not_explained_by_incidental_physics(self):
+        for code in ('agent.presence', 'thermal.os_level_nonzero'):
+            with self.subTest(code=code):
+                result = self.desk_exit_case(code, stage_crash=True, code=code)
+                self.assertEqual(result['errors'], [])
+                self.assertIsNone(result['acceptance']['record']['physical_stop_kind'])
+                self.assertEqual(result['status'], 'fail')
+
+    def test_desk_nonzero_harvest_is_not_explained_by_incidental_physics(self):
+        # Harvest faults (queue.outcome: any exit but 0 and 6); 6 is registration pending.
+        for harvest in (1, 2):
+            with self.subTest(harvest=harvest):
+                result = self.desk_exit_case(str(harvest), harvest=harvest)
+                self.assertTrue(all(row['rc'] in row['success_exit_codes'] for row in result['stages']))
+                self.assertEqual(result['status'], 'fail')
+
+    def test_harvest_exit_six_is_registration_pending_not_a_fault(self):
+        # Delta review N3: exit 6 passes clean stages and does not rescue a failed stage.
+        clean = AcceptanceResult('UNAVAILABLE', ('precheck.acceptance_unavailable',),
+                                 ('precheck.acceptance_unavailable',), False, record={})
+        self.assertEqual(s.classify(stages_ok=True, driver_exit=0, harvest_exit=6,
+                                    acceptance_result=clean, flags=[]), 'pass')
+        self.assertEqual(s.classify(stages_ok=False, driver_exit=1, harvest_exit=6,
+                                    acceptance_result=clean, flags=['agent.presence']), 'fail')
+
+    def test_pending_registration_record_keeps_a_physical_chain_stop(self):
+        # Delta review M2: with no acceptance.json the UNAVAILABLE record still names
+        # the chain's physical stop, so classify keeps it physics.
+        from joulewise.b6 import session
+        base = self.root / 'pending-stop'
+        (base / 'registration').mkdir(parents=True)
+        evidence = SimpleNamespace(pack_id=PACKS['alpha'], stop_reason='night_stopped_disk_low')
+        with mock.patch.object(session, 'bindings', return_value={}), \
+                mock.patch.object(session, 'evidence_from_archive', return_value=evidence), \
+                mock.patch.object(session, '_write_result'):
+            result, _ = session.accept_archive(base / 'archive', {'plan_id': 'p'}, base / 'registration',
+                                               smoke=True)
+        self.assertEqual(result.verdict, 'UNAVAILABLE')
+        self.assertEqual(result.record['physical_stop_kind'], 'disk')
+        self.assertEqual(s.classify(stages_ok=False, driver_exit=1, harvest_exit=6, acceptance_result=result,
+                                    flags=['disk.low']), 'physics')
+
+    def test_desk_named_physical_failures_and_missing_acceptance_controls(self):
+        for name, options, expected in (
+                ('disk', {'stop': 'disk', 'code': 'disk.low', 'bundles': False, 'stage_crash': True}, 'physics'),
+                ('battery', {'arm': True, 'code': 'battery.float', 'stage_crash': True, 'bundles': False}, 'physics'),
+                ('missing-acceptance', {'stop': 'disk', 'code': 'disk.low', 'bundles': False, 'stage_crash': True,
+                                        'acceptance_record': False}, 'fail')):
+            with self.subTest(name=name):
+                result = self.desk_exit_case(name, **options)
+                self.assertEqual(result['status'], expected)
+                self.assertEqual(bool(result['errors']), name == 'missing-acceptance')
 
     def test_20_wrapper_and_executable_member_interposition(self):
         wrapper = s.wrapper_text('/synthetic/.venv/bin/python3.13', self.root / 'runner.py', {'configs/stage': 2},
@@ -285,7 +526,9 @@ def main():
                 ('harvest', 0, 1, FakeAcceptance(), [], 'fail'),
                 ('structural', 0, 0, FakeAcceptance(structural=True), [], 'fail'),
                 ('arm', 1, 0, FakeAcceptance(), [{'code': 'battery.float'}], 'physics'),
-                ('stage', 1, 0, FakeAcceptance(), [], 'fail')):
+                ('arm-battery', 1, 0, FakeAcceptance(), [], 'physics'),
+                ('stage', 1, 0, FakeAcceptance(), [], 'fail'),
+                ('stage-physics', 1, 0, FakeAcceptance(), [{'code': 'agent.presence'}], 'fail')):
             base = self.root / name
             measurement = base / 'measurement'
             pack = measurement / 'configs/campaigns' / PACKS['alpha']
@@ -294,10 +537,12 @@ def main():
             (pack / 'plan_tree.json').write_text(json.dumps(reduced))
             night = base / 'custody/night'
             night.mkdir(parents=True)
-            journal = [{'stage_id': st.stage_id, 'rc': 0 if name != 'stage' else 99}
+            journal = [{'stage_id': st.stage_id, 'rc': 99 if name in ('stage', 'stage-physics', 'arm-battery') else 0}
                        for st in chain.stage_plan(reduced) if st.in_chain]
             (night / chain.STAGE_JOURNAL).write_text(''.join(json.dumps(row)+'\n' for row in journal))
-            (night / 'hazard_result.json').write_text(json.dumps({'flags': flags}))
+            (night / 'hazard_result.json').write_text(json.dumps({'flags': flags,
+                **({'arm': {'go': False, 'verdicts': {'battery': {'status': 'REFUSE'}}}}
+                   if name == 'arm-battery' else {})}))
             if name == 'implicit':
                 (night / 'result.json').write_text(json.dumps({'verdict': 'GO', 'chain_exit_code': 0}))
                 (night / 'courier.json').write_text(json.dumps({'sent': True}))

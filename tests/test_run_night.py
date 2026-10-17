@@ -5567,7 +5567,7 @@ class QuietDriverIntegrationTests(unittest.TestCase):
     def test_early_v4_driver_refusal_has_receipt_and_unavailable_attribution(self):
         fixture, plan = self.fixture()
         driver = fixture.driver
-        driver._resolve_courier_bin = lambda _bin: (None, 'fixture unavailable', None)
+        driver._resolve_courier_bin = lambda _bin, *, plan=None: (None, 'fixture unavailable', None)
         self.assertEqual(driver.run_night(fixture.plan_path), driver.EXIT_COURIER_FAILED)
         receipt = json.loads((fixture.custody/'night/receipt.json').read_bytes())
         refusal = json.loads((fixture.custody/'night/refusal.json').read_bytes())
@@ -7028,7 +7028,7 @@ class HazardPackPrimitiveTests(unittest.TestCase):
         (night / hazard_driver.MONITOR_JOURNAL).write_text(json.dumps(
             {"event": "start", "pid": monitor.pid, "pgid": monitor.pid, "start_time": identity.start_time}) + "\n")
         self.driver.make_probes = self.probes
-        self.driver._resolve_courier_bin = lambda _bin: (Path("/fixture/courier"), None, None)
+        self.driver._resolve_courier_bin = lambda _bin, *, plan=None: (Path("/fixture/courier"), None, None)
         self.driver._durable_record = mock.Mock(return_value=None)
         self.driver.run_courier = mock.Mock(return_value={"attempted": 1, "sent": True, "heartbeat_seen": True,
                                                           "last_error": None})

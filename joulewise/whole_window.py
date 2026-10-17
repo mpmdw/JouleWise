@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
+from joulewise.tolerances import CALIBRATION_TIME_ABS_TOL_S, NEG8_ENERGY_ABS_TOL_J
 from joulewise.aggregate import student_t_critical_95
 from joulewise.authentication_io import (
     read_authentication_input,
@@ -821,7 +822,7 @@ class AuthenticatedConsumptionSession:
                 isinstance(metadata_scalar, bool)
                 or not isinstance(metadata_scalar, int | float)
                 or not math.isfinite(float(metadata_scalar))
-                or abs(float(metadata_scalar) - authenticated) > 1e-9
+                or abs(float(metadata_scalar) - authenticated) > CALIBRATION_TIME_ABS_TOL_S
             ):
                 # Preserve the existing provenance taxonomy: widening never
                 # cures a stored scalar that disagrees with primary evidence.
@@ -4130,7 +4131,7 @@ def _reference_energy_evidence_detail(
         return None, None, "provenance", cause
     if stored_gross is None or any(
         not math.isclose(
-            stored_gross[field], fresh_gross[field], rel_tol=1e-9, abs_tol=1e-9
+            stored_gross[field], fresh_gross[field], rel_tol=0, abs_tol=NEG8_ENERGY_ABS_TOL_J
         )
         for field in ("point_j", "lower_j", "upper_j")
     ) or (
@@ -4139,7 +4140,7 @@ def _reference_energy_evidence_detail(
             stored_idle is None
             or fresh_idle is None
             or not math.isclose(
-                stored_idle, fresh_idle, rel_tol=1e-9, abs_tol=1e-9
+                stored_idle, fresh_idle, rel_tol=0, abs_tol=NEG8_ENERGY_ABS_TOL_J
             )
         )
     ):
@@ -5506,7 +5507,7 @@ def _current_core_rederivation_reasons(
                     isinstance(metadata_scalar, bool)
                     or not isinstance(metadata_scalar, int | float)
                     or not math.isfinite(float(metadata_scalar))
-                    or abs(float(metadata_scalar) - authenticated) > 1e-9
+                    or abs(float(metadata_scalar) - authenticated) > CALIBRATION_TIME_ABS_TOL_S
                 ):
                     reasons.add("whole_window_verdict_provenance_invalid")
                 if float(bracket_bound) > authenticated + 1e-12:
