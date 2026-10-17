@@ -179,6 +179,7 @@ class NightPlanWriterTests(unittest.TestCase):
         original = path.read_bytes()
         storage = mock.Mock(spec=magistrate_watchdog.Storage)
         storage.glob_plans.return_value = [path]
+        storage.list_directory.return_value = []
         storage.read_text.side_effect = lambda candidate: candidate.read_text(encoding="utf-8")
         snapshot = magistrate_watchdog.load_plans(storage, now_epoch_s=1000.0)
         self.assertEqual((self.plan,), snapshot.plans)

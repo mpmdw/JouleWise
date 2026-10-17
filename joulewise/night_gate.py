@@ -753,10 +753,23 @@ def validate_hazard_window(value: object) -> dict[str, object]:
     digest(pack["plan_tree_sha256"], "pack.plan_tree_sha256")
     text(value["bracket_session_id"], "bracket_session_id")
     bindings = value["bindings"]
-    if not isinstance(bindings, Mapping) or set(bindings) != set(HAZARD_LAUNCH_BINDINGS):
+    optional_bindings = {"capture_screen", "spare_retries"}
+    if (not isinstance(bindings, Mapping)
+            or set(bindings) - optional_bindings != set(HAZARD_LAUNCH_BINDINGS)):
         raise ValueError("bindings must name exactly the fourteen launch bindings")
     for name in HAZARD_LAUNCH_BINDINGS:
         text(bindings[name], "bindings." + name)
+    if "capture_screen" in bindings:
+        screen = bindings["capture_screen"]
+        if not isinstance(screen, Mapping) or set(screen) != {
+                "alignment_reference_s", "bracket_screen_s", "operative_bound_stop_s"}:
+            raise ValueError("bindings.capture_screen must name exactly the three block-six calibration values")
+        for name, item in screen.items():
+            if item is not None and (not isinstance(item, str) or re.fullmatch(
+                    r"\+?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?", item) is None):
+                raise ValueError(f"bindings.capture_screen.{name} must be a non-negative decimal string or null")
+    if "spare_retries" in bindings and type(bindings["spare_retries"]) is not bool:
+        raise ValueError("bindings.spare_retries must be a boolean")
     if bindings["bracket_session_id"] != value["bracket_session_id"]:
         raise ValueError("bindings.bracket_session_id must equal bracket_session_id")
     roots = value["runs_roots"]
