@@ -47,6 +47,7 @@ from joulewise.idle_admission import (
 from joulewise.bundle import sanitize_id_component
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.environment_admission import (
+    busy_fraction_admission_admitted,
     current_environment_refusals,
     environment_admission_refusals,
 )
@@ -6945,13 +6946,20 @@ def _validate_row_uncached(
                 reasons.add("whole_window_verdict_provenance_invalid")
             if not referenced.issubset(member_ids):
                 reasons.add("whole_window_verdict_coverage_incomplete")
-            if any(
-                not isinstance(member, Mapping)
-                or not isinstance(member.get("cpu_admission"), Mapping)
-                or member["cpu_admission"].get("decision") != "admitted"
-                for member in members
-            ):
-                reasons.add("cpu_admission_core_failed")
+            paths: dict[str, Path] | None = None
+            for member in members:
+                cpu = member.get("cpu_admission") if isinstance(member, Mapping) else None
+                if isinstance(cpu, Mapping) and cpu.get("decision") == "admitted":
+                    continue
+                if paths is None:
+                    paths = _manifest_bundle_paths(verified_source_manifests, runs_root) or {}
+                path = paths.get(member.get("bundle_id")) if isinstance(member, Mapping) else None
+                metadata = _read_json_object(path / "metadata.json") if path is not None else None
+                admission = metadata.get("environment_admission") if isinstance(metadata, Mapping) else None
+                attempts = admission.get("attempts") if isinstance(admission, Mapping) else None
+                final = attempts[-1] if isinstance(attempts, list) and attempts else None
+                if not isinstance(cpu, Mapping) or not busy_fraction_admission_admitted(final, cpu):
+                    reasons.add("cpu_admission_core_failed")
     return not reasons, tuple(sorted(reasons))
 
 
