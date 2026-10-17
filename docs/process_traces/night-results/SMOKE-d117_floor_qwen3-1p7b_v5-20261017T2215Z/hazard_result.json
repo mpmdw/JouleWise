@@ -1,0 +1,424 @@
+{
+  "aborted_reason": null,
+  "agent_pause": {
+    "episodes": [
+      {
+        "basenames": [
+          "claude-b6-machine-test"
+        ],
+        "end": {
+          "exit_code": 1,
+          "monotonic_ns": 261243830731166,
+          "stdout": "",
+          "wall_s": 1792276906.846948
+        },
+        "last_sighting": {
+          "monotonic_ns": 261213827978291,
+          "monotonic_raw_ns": 261213827977583,
+          "wall_s": 1792276876.8441951
+        },
+        "pause_end": {
+          "monotonic_ns": 261813978390166,
+          "monotonic_raw_ns": 261813978389500,
+          "wall_s": 1792277476.994606
+        },
+        "pause_s": 630.19483675,
+        "since": {
+          "monotonic_ns": 261183783553416,
+          "monotonic_raw_ns": 261183783553083,
+          "wall_s": 1792276846.79977
+        },
+        "start": {
+          "exit_code": 1,
+          "monotonic_ns": 261153810529583,
+          "stdout": "",
+          "wall_s": 1792276816.8267462
+        }
+      }
+    ],
+    "stopped_by_limit": false,
+    "total_pause_s": 630.19483675
+  },
+  "arm": {
+    "go": true,
+    "reasons": [],
+    "record_path": "/Users/edr/night-b6/machine-test/MT-20261017T2215Z/smoke/d117_floor_qwen3-1p7b_v5-20261017T2215Z/custody/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "PASS",
+      "contention": "PASS",
+      "disk": "PASS",
+      "instrument": "PASS",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "census_supervision": {
+    "consecutive_unmeasured": 0,
+    "journal_failures": 0,
+    "retried_probes": 0,
+    "unmeasured_censuses": 0
+  },
+  "chain": {
+    "exit_code": 0,
+    "matches_sidecar": true,
+    "sha256": "f032a298ee20373e8f76c975a89abb0710f689f0bd6b36e131a8d5ecde335b7f",
+    "sidecar_sha256": "f032a298ee20373e8f76c975a89abb0710f689f0bd6b36e131a8d5ecde335b7f",
+    "stages": [
+      {
+        "kind": "bracket_reservation",
+        "rc": 0,
+        "stage_id": "alpha-bracket-reservation"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "alpha-pre-calibration"
+      },
+      {
+        "kind": "pre_calibration_screen",
+        "rc": 0,
+        "stage_id": "alpha-pre-calibration.screen"
+      },
+      {
+        "kind": "window_calibration_verdict",
+        "rc": 0,
+        "stage_id": "alpha-pre-calibration.window-calibration-verdict"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-reference-start"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 1,
+        "stage_id": "alpha-science-absolute"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-science-prefill-p2048-absolute"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-reference-end"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "alpha-post-calibration"
+      },
+      {
+        "kind": "session_status_record",
+        "rc": 0,
+        "stage_id": "alpha-post-calibration.session-status"
+      }
+    ],
+    "started": true,
+    "termination_proven": true
+  },
+  "diagnostics": [],
+  "disk_floor": {
+    "errors": [],
+    "low_bytes": 10737418240,
+    "stops": []
+  },
+  "ended": {
+    "monotonic_ns": 263898381402333,
+    "monotonic_raw_ns": 263898381402083,
+    "wall_s": 1792279561.397619
+  },
+  "faults": {
+    "bound_derivation_failed": "not_run",
+    "post_bracket_failed": false,
+    "reasons": [
+      "yield_low"
+    ]
+  },
+  "final_census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "flags_emitted": [
+    "network_time.off_output",
+    "yield.stage_low",
+    "yield.stage_low",
+    "yield.stage_low",
+    "agent.presence_overlap",
+    "agent.presence",
+    "yield.stage_low"
+  ],
+  "g10": {
+    "ran": false,
+    "reason": "not requested",
+    "requested": false
+  },
+  "inventory": {
+    "errors": [],
+    "file_count": 492,
+    "head": "0ce3b58ffa542c653b9392b926d01aa3d028ee0d",
+    "path": "/Users/edr/night-b6/machine-test/MT-20261017T2215Z/smoke/d117_floor_qwen3-1p7b_v5-20261017T2215Z/custody/night/executed_inventory.json",
+    "sha256": "23a0a67206b0dc5160e64daa2d2457987deee3ca3b5ef7e71d0cb0bf70a1899a",
+    "status_clean": true
+  },
+  "keep_awake": {
+    "pid": 66634,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "lineage": {
+    "boot_changed": [],
+    "error": null,
+    "locators_valid": true,
+    "published": true
+  },
+  "meter": {
+    "argv": [
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261017T2213Z-b6/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261017T2213Z-b6/scripts/km003c_monitor.py",
+      "--out",
+      "/Users/edr/night-b6/machine-test/MT-20261017T2215Z/smoke/d117_floor_qwen3-1p7b_v5-20261017T2215Z/custody/hazards/meter/stream-001.jsonl"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "final_exit": null,
+    "gaps": [],
+    "journal": "meter_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 263898104195166,
+        "monotonic_raw_ns": 263898104195041,
+        "wall_s": 1792279561.1204119
+      },
+      "returncode": 0,
+      "was_running": true
+    },
+    "streams": [
+      {
+        "path": "hazards/meter/stream-001.jsonl",
+        "sha256": "a052dfa9d83c44efc13d77afd1db49da25160b69d41fe00b1408280cec72414e",
+        "status": "streaming"
+      }
+    ]
+  },
+  "monitor": {
+    "argv": [
+      "/usr/sbin/taskpolicy",
+      "-b",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261017T2213Z-b6/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261017T2213Z-b6/scripts/hazard_monitor.py",
+      "--config",
+      "/Users/edr/night-b6/machine-test/MT-20261017T2215Z/smoke/d117_floor_qwen3-1p7b_v5-20261017T2215Z/custody/hazards/monitor/config.json"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "gaps": [],
+    "journal": "monitor_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 263897589723666,
+        "monotonic_raw_ns": 263897589723083,
+        "wall_s": 1792279560.6059399
+      },
+      "returncode": 0,
+      "was_running": true
+    }
+  },
+  "monitor_readiness": {
+    "attempts": [
+      {
+        "at": {
+          "monotonic_ns": 260822575672458,
+          "monotonic_raw_ns": 260822575672250,
+          "wall_s": 1792276485.591889
+        },
+        "attempt": 1,
+        "ready": true,
+        "started": true,
+        "status": {
+          "battery": true,
+          "contention": true,
+          "ready": true,
+          "session_start": true
+        },
+        "waited_s": 1.03
+      }
+    ],
+    "ready": true
+  },
+  "monitor_stop": {
+    "chain_returned": {
+      "monotonic_ns": 263892588105333,
+      "monotonic_raw_ns": 263892588104875,
+      "wall_s": 1792279555.604322
+    },
+    "hold_s": 5.0,
+    "monitor_stop_requested": {
+      "monotonic_ns": 263897589723666,
+      "monotonic_raw_ns": 263897589723083,
+      "wall_s": 1792279560.6059399
+    },
+    "released": {
+      "monotonic_ns": 263897589612750,
+      "monotonic_raw_ns": 263897589610916,
+      "wall_s": 1792279560.6058292
+    },
+    "released_after_chain_s": 5.002
+  },
+  "neg8_corpus": {
+    "collected_manifest": null,
+    "committed_manifest": null,
+    "errors": [
+      "summary: FileNotFoundError: [Errno 2] No such file or directory: '/Users/edr/night-b6/machine-test/MT-20261017T2215Z/smoke/d117_floor_qwen3-1p7b_v5-20261017T2215Z/custody/night/transcript/neg8-settled-corpus.collected.summary.json'",
+      "collected manifest: FileNotFoundError: [Errno 2] No such file or directory: '/Users/edr/night-b6/machine-test/MT-20261017T2215Z/smoke/d117_floor_qwen3-1p7b_v5-20261017T2215Z/custody/night/transcript/neg8-settled-corpus.collected.json'"
+    ],
+    "members_kept": null,
+    "members_listed": null,
+    "pruned": null,
+    "summary": null
+  },
+  "pack_id": "d117_floor_qwen3-1p7b_v5",
+  "plan_id": "SMOKE-d117_floor_qwen3-1p7b_v5-20261017T2215Z",
+  "receipt_class": "HAZARD_PACK",
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": -105,
+    "end": {
+      "monotonic_ns": 263892588119625,
+      "monotonic_raw_ns": 263892588112833,
+      "read_skew_ns": 208,
+      "sleep_offset_ns": 21,
+      "uptime_raw_ns": 263892588112812,
+      "wall_s": 1792279555.604336
+    },
+    "runs_excluded": [],
+    "start": {
+      "monotonic_ns": 260823652925208,
+      "monotonic_raw_ns": 260823652920500,
+      "read_skew_ns": 583,
+      "sleep_offset_ns": 126,
+      "uptime_raw_ns": 260823652920374,
+      "wall_s": 1792276486.669142
+    }
+  },
+  "stage_reached": "chain",
+  "started": {
+    "monotonic_ns": 260597347904833,
+    "monotonic_raw_ns": 260597347904333,
+    "wall_s": 1792276260.3641212
+  },
+  "supervision_faults": {},
+  "verdict": "GO",
+  "yield": {
+    "bundles_present": 4,
+    "failed": 1,
+    "logged": 4,
+    "ok": 0,
+    "per_stage": [
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 3,
+        "planned": 3,
+        "present": 1,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "alpha-reference-start",
+        "status": "LOW",
+        "succeeded": 1
+      },
+      {
+        "failed": 1,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 8,
+        "ok": 0,
+        "ordinal": 4,
+        "planned": 10,
+        "present": 1,
+        "rc": 1,
+        "role": "science",
+        "stage_id": "alpha-science-absolute",
+        "status": "LOW",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 8,
+        "ok": 0,
+        "ordinal": 5,
+        "planned": 10,
+        "present": 1,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "alpha-science-prefill-p2048-absolute",
+        "status": "LOW",
+        "succeeded": 1
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 6,
+        "planned": 3,
+        "present": 1,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "alpha-reference-end",
+        "status": "LOW",
+        "succeeded": 1
+      }
+    ],
+    "planned": 26,
+    "schema": "joulewise.b5_window_yield.v1",
+    "succeeded": 3,
+    "yield_status": "LOW"
+  },
+  "yield_plan": {
+    "planned": 26,
+    "source": [
+      "driver"
+    ],
+    "stages": 4
+  },
+  "yield_tripwire": {
+    "attempted_seen": 4,
+    "counted_in_settle": 3,
+    "errors": [],
+    "pre_bundle_runs_flagged": 0,
+    "stages_counted": 4,
+    "stalled": false
+  }
+}
