@@ -141,14 +141,14 @@ block-6 catalog and the test's registration directory, then reads its `derived/b
 job and the injector, writes `<out>/report.json`, and prints, structure only, for each item whether the records
 show it: the agent pause (an episode, resume no sooner than 600 s after the last sighting, the overlapping run
 excluded, the chain not stopped, both `agent.presence` and `agent.presence_overlap` written in the archived
-flags); collection ran (all planned runs have successful summaries except the cap run, whose failed summary
+flags); collection ran (every run the reduced smoke plan dispatched has a successful summary except the cap run, whose failed summary
 has `environment_admission.skip_reason` equal to `wait_cap_reached`, with only the expected agent-overlap and
 cap exclusions); the idle cap (exactly one `idle.wait_cap_skip`, later runs measured); the meter
 (connected here, so this item reads "not observed; meter present: not exercised", which is expected); the keep-awake hold verified at start and end, a sleep
 reading at every run; chain exit 0, harvest exit 0, the smoke desk's status `physics` (the injected faults are
 physical, so a real smoke would wait and run again) and no desk errors. A failed stage or a harvest fault (any harvest exit
 other than 0, or 6, which means the registration is pending) reports `fail` even after earlier bundles when only incidental physical flags are present; an explicit physical
-arm refusal or physical chain stop keeps its physical outcome.
+arm refusal or physical chain stop keeps its physical outcome, also while the registration is pending.
 
 **Pass.** Every item observed except the meter item (expected, above) and no desk error.
 An unexpected physical exclusion of a dispatched member means rerun the test, not a code defect.

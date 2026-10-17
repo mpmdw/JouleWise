@@ -736,6 +736,30 @@ class ReportTests(Case):
                     self.assertIn(code, output.getvalue())
                 self.assertEqual(guidance in output.getvalue(), physical)
 
+    def test_collection_rerun_guidance_withheld_when_a_code_problem_is_beside_it(self):
+        # Delta review M1: a physical exclusion beside a failed member is not a rerun.
+        from joulewise.flags.catalog import load_catalog
+        from joulewise.flags.exclusions import compute
+        from joulewise.flags.schema import make_flag, make_scope, make_source
+        state, custody, archive, result = self.custody_fixture()
+        catalog = load_catalog(smoke.CATALOG_PATH)
+        roster = {'members': [{'run_id': name, 'units': []} for name in
+                              ('reference', 'decode', 'prefill', 'end-reference')], 'cells': []}
+        spans = {start['run_id']: {'monotonic_ns': [start['clock']['monotonic_ns'], end['clock']['monotonic_ns']]}
+                 for start, end in mt.agent_pause.paired_run_clocks(mt.read_rows(custody / 'collection/run_clock.jsonl'))}
+        flags = list(mt.read_rows(archive / 'derived/flags.jsonl'))
+        spec = catalog.entry('thermal.os_level_nonzero')
+        flags.append(make_flag(code='thermal.os_level_nonzero', family=spec['family'], klass=spec['klass'],
+            scope=make_scope('member', run_id='prefill'), source=make_source('window', 'b6-machine-test')))
+        put(archive / 'derived/exclusions.json', compute(flags, roster, spans, catalog))
+        summary = archive / 'sources/claim-runs/end-reference/summary_metrics.json'
+        put(summary, {**json.loads(summary.read_text()), 'status': 'failed'})
+        item = self.run_report(state, result)['collection ran']
+        self.assertFalse(item['observed'])
+        self.assertEqual(item['detail']['unexpected_exclusions'], {'prefill': ['thermal.os_level_nonzero']})
+        self.assertEqual(item['detail']['unexpected_status'], {'end-reference': 'failed'})
+        self.assertIsNone(item['detail']['guidance'])
+
     def test_agent_detail_names_missing_presence_flag(self):
         state, custody, archive, result = self.custody_fixture()
         path = archive / 'derived/flags.jsonl'

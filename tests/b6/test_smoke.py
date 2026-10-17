@@ -416,6 +416,32 @@ class SmokeTests(DeskCase):
                 self.assertTrue(all(row['rc'] in row['success_exit_codes'] for row in result['stages']))
                 self.assertEqual(result['status'], 'fail')
 
+    def test_harvest_exit_six_is_registration_pending_not_a_fault(self):
+        # Delta review N3: exit 6 passes clean stages and does not rescue a failed stage.
+        clean = AcceptanceResult('UNAVAILABLE', ('precheck.acceptance_unavailable',),
+                                 ('precheck.acceptance_unavailable',), False, record={})
+        self.assertEqual(s.classify(stages_ok=True, driver_exit=0, harvest_exit=6,
+                                    acceptance_result=clean, flags=[]), 'pass')
+        self.assertEqual(s.classify(stages_ok=False, driver_exit=1, harvest_exit=6,
+                                    acceptance_result=clean, flags=['agent.presence']), 'fail')
+
+    def test_pending_registration_record_keeps_a_physical_chain_stop(self):
+        # Delta review M2: with no acceptance.json the UNAVAILABLE record still names
+        # the chain's physical stop, so classify keeps it physics.
+        from joulewise.b6 import session
+        base = self.root / 'pending-stop'
+        (base / 'registration').mkdir(parents=True)
+        evidence = SimpleNamespace(pack_id=PACKS['alpha'], stop_reason='night_stopped_disk_low')
+        with mock.patch.object(session, 'bindings', return_value={}), \
+                mock.patch.object(session, 'evidence_from_archive', return_value=evidence), \
+                mock.patch.object(session, '_write_result'):
+            result, _ = session.accept_archive(base / 'archive', {'plan_id': 'p'}, base / 'registration',
+                                               smoke=True)
+        self.assertEqual(result.verdict, 'UNAVAILABLE')
+        self.assertEqual(result.record['physical_stop_kind'], 'disk')
+        self.assertEqual(s.classify(stages_ok=False, driver_exit=1, harvest_exit=6, acceptance_result=result,
+                                    flags=['disk.low']), 'physics')
+
     def test_desk_named_physical_failures_and_missing_acceptance_controls(self):
         for name, options, expected in (
                 ('disk', {'stop': 'disk', 'code': 'disk.low', 'bundles': False, 'stage_crash': True}, 'physics'),

@@ -16,6 +16,7 @@ from joulewise.b6.acceptance_interface import AcceptanceResult
 from joulewise.flags.catalog import load_catalog
 from joulewise.flags.exclusions import compute
 from joulewise.flags.schema import make_flag, make_scope, make_source
+from joulewise.session_structure import PHYSICAL_STOP_CODES
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -40,7 +41,10 @@ def accept_archive(archive: Path, plan: dict, registration_dir: Path, *, ledger_
                   "structural": False, "session_id": bound.get("bracket_session_id", plan.get("plan_id")),
                   "pack_id": evidence.pack_id, "mode": "smoke" if smoke else "archive",
                   "flag_counts": {code: 1}, "emitted_flags": [flag],
-                  "flags": [code], "excluding": [], "pending": ["acceptance_registration"]}
+                  "flags": [code], "excluding": [], "pending": ["acceptance_registration"],
+                  # A chain's physical stop stays named while registration is pending.
+                  "physical_stop_kind": PHYSICAL_STOP_CODES.get(evidence.stop_reason),
+                  "stop_reason": evidence.stop_reason}
         result = AcceptanceResult("UNAVAILABLE", (code,), (code,), False, False, record)
         _write_result(output, result, replace_existing=replace_existing)
         return result, evidence

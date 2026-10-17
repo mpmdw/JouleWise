@@ -34,9 +34,13 @@ from joulewise.hazards.base import Completed, Context
 PYTHON = "/opt/homebrew/bin/python3.13"
 PACK = "d117_floor_qwen3-1p7b_v5"
 INJECT_LABEL = "com.joulewise.b6mt.inject"
-# run_night.CENSUS_INTERVAL_S fixes the census cadence at 30 s. A 45 s
-# lifetime contains a snapshot if jitter is < 15 s; hazards.arm's 10 s
-# CENSUS_TIMEOUT_S is inside that slack (45 - 30 = 15 s).
+# The in-chain census runs every run_night.CENSUS_INTERVAL_S = 30 s, scheduled
+# from the time read before each census (run_night.py ~1281), with the loop
+# waking at least once a second (~1311): snapshots are at most 31 s apart plus
+# pgrep's start-latency variation (milliseconds). A 45 s lifetime contains one
+# whenever that variation is under about 14 s. A probe that hangs to its
+# PROBE_TIMEOUT_S (30 s) can miss the agent; the agent items then read "not
+# observed" and the test is rerun.
 AGENT_LIFETIME_S = 45
 
 
@@ -578,7 +582,9 @@ def report(state_path, *, uninstall=False, desk=smoke.desk, run=subprocess.run):
     unexpected_exclusions = {row["run_id"]: row.get("codes", [])
                              for row in exclusions.get("members_excluded", [])
                              if row["run_id"] in smoke_excluded - expected_exceptions}
-    physical_exclusions = bool(unexpected_exclusions) and all(
+    # Rerun advice only when a physical exclusion is the sole problem.
+    physical_exclusions = (bool(unexpected_exclusions) and not collection_problems and roster_error is None
+                           and expected_exceptions <= smoke_excluded) and all(
         codes and all(smoke._is_physical(code) for code in codes)
         for codes in unexpected_exclusions.values())
     item("collection ran", bool(expected_run_ids) and roster_error is None
