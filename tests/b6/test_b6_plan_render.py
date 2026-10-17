@@ -166,7 +166,8 @@ class ProductionPlanRenderTests(DeskCase):
                     bindings = archive.bindings(written)
                     expected = {key: value if registered else None for key, value in (
                         ("alignment_reference_s", "0.036462861644980"),
-                        ("bracket_screen_s", "0.014531"), ("operative_bound_stop_s", "0.092"))}
+                        ("bracket_screen_s", "0.014531"))}
+                    expected["operative_bound_stop_s"] = None if pack == 'beta' else '0.139'
                     self.assertEqual(bindings["capture_screen"], expected)
                     self.assertIs(bindings["spare_retries"], False)
                     self.assertEqual((written["window_max_s"], prepared.max_s), (maximum, maximum))
@@ -180,15 +181,28 @@ class ProductionPlanRenderTests(DeskCase):
                     self.assertEqual(missing.returncode, 1, missing.stderr)
                     self.assertIn("flag calibration.bracket_incomplete", missing.stdout)
                     if registered:
-                        stopped = self.screen(rendered, .080)
-                        self.assertEqual(stopped.returncode, 13, stopped.stderr)
-                        self.assertIn("chain.stop operative_bound_above_stop 13", stopped.stdout)
+                        # The 1.7B T10 is 139 ms; BETA has no sized line and
+                        # carries even this bound to the run phase checks.
+                        stopped = self.screen(rendered, .150)
+                        self.assertEqual(stopped.returncode, 0 if pack == 'beta' else 13, stopped.stderr)
+                        self.assertIn('flag calibration.stop_line_unsized' if pack == 'beta'
+                                      else "chain.stop operative_bound_above_stop 13", stopped.stdout)
                     checked = self.check_plan(prepared)
                     self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
                     self.check_readers(prepared, written)
 
 
 class ScreenInputsTests(DeskCase):
+    def test_replication_t10_is_139ms_only_for_the_sized_packs(self):
+        reg = self.root / 'registration'
+        reg.mkdir()
+        write_json(reg / 'acceptance.json', document())
+        for pack in ('alpha', 'gamma', 'd117_floor_qwen3-1p7b_v5',
+                     'd117_contrast_qwen3-1p7b_vs_qwen3-8b_v5'):
+            self.assertEqual(plan_inputs.capture_screen(reg, pack)['operative_bound_stop_s'], '0.139')
+        for pack in ('beta', 'd117_floor_qwen3-8b_v5', 'unsized-pack'):
+            self.assertIsNone(plan_inputs.capture_screen(reg, pack)['operative_bound_stop_s'])
+
     def test_acceptance_values_preserve_decimals_and_open_slots(self):
         reg = self.root / "registration"
         reg.mkdir()

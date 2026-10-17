@@ -4,7 +4,12 @@ Branch `integration/2026-10-14-b6-stage1`, not merged to main (orchestrator deci
 item 39: block 6 is collected from a measurement checkout at a pinned commit of this branch and merges to main
 after the block-5 release). This page gives the two commands the design's stage 1 ends with
 (`docs/design/block6_collection_draft.md` section 17): the one machine test of about 40 minutes, then the arm of
-round 1. Neither has been run. Run nothing here while a block-5 analysis job or any agent is using the Mac.
+round 1. The first machine test, MT-20261016T2114Z, found a stale smoke plan-tree sidecar and an unwritten
+agent-presence flag; the fixes (`fix/2026-10-16-b6-mt-fixes`, `fix/2026-10-17-b6-mt-delta`) are merged here and
+the second, MT-20261017T1735Z, failed on three desk defects (block 5's busy-fraction veto in the shared
+environment validator, and a recorded idle-cap skip read as a missing stage and as a stage crash), fixed by PR #501;
+the test runs again at the pin below. Run nothing
+here while a block-5 analysis job or any agent is using the Mac.
 
 ## What is on this branch
 
@@ -20,6 +25,7 @@ The four stage-1 lanes of design section 17, merged one at a time in its order, 
 | 6 | `lane/2026-10-14-b6-adapters` | `165b1972f` (merge `b2837ba38`) | the loop's lane adapters (P1/P2, D1/D2, S1/K1, H3, A1), block-6 plan inputs, one harvest path for smoke and session, the registration loaders and copies of block 5's pins and sizing, `plan.resolve_stage_dispatch`, the program courier, the wake job |
 | 7 | `lane/2026-10-15-b6-cold-chain`, `lane/2026-10-15-b6-cold-acceptance`, `lane/2026-10-15-b6-cold-packroot` | `2b2bea4cc`, `f67854d41`, `76aa47884` (merges `90d9222de`, `dd9a9be35`, `3827f63de`) | the cold passes' fixes: every block-6 chain renders the block-6 opening screen (flag above the alignment reference, stop only on b_pre + s_bracket above the registered line, null values while `acceptance.json` is absent) and no spare retries; a driver's physical stop is a physical stop (rotate), an opening capture with no bound is N1; the loop counts from the acceptance verdict; compression waits for a judged harvest and a re-harvest uses a fresh archive root; GAMMA's interior references have their own role; the pack registrations close at 2026-11-02T00:00:00-08:00; the pre-check and smoke desk judge each pack with its own roster (one `acceptance.json` serves all three packs) |
 | 8 | `fix/2026-10-15-b6-s3-review`, `lane/2026-10-15-b6-s3-cold` | `9409c83b2`, `d9ce14fcb` (merges `e81e60530`, `91e37e7c6`) | stage 3: the review of the integration's own commits and the second pair of cold passes. A block-6 night job's courier is a program (default `scripts/b6_courier.sh`; an agent courier is refused and a missing one is never replaced by `claude`) and the job's PATH is `/usr/bin:/bin:/usr/sbin:/sbin`; the machine-test injector reaps its children on SIGTERM; the machine-test report needs a start and an end sleep reading for every run of the reduced plan; after any chain stop the desk finalizes or aborts the open calibration bracket and advances the pin, so a stop no longer holds the loop; a physical stop keeps the structural defects it cannot explain; the operative-bound stop exits 13 (12 stays the opening-screen failure); a session dropped at the pack close closes its arm notice and is recorded `never_armed`; `configs/b6/executing_reviews.json` lists the executing reviews of every number-bearing commit |
+| 9 | `lane/2026-10-16-b6-round2` (from `lane/2026-10-15-b6-capture-screen`) | this lane | round 2: a block-6 opening capture's level is a flag on every path with a lineage locator (no exit 11 for 36.5-124 ms); the b_op stop is 139 ms for ALPHA and GAMMA and absent (flagged) for unsized packs; a failed resume retries once at 600 s, then aborts with a window flag; `plan=` on every courier path; a closed undelivered arm notice is withdrawn; the block-6 clock hold is 5 ms / T - 0.25 ppm (14.675 ppm at 335 s) with block 5's line as a flag; HID idle, single sampler intervals over 200 ms, the cooldown cap, per-process contention, the meter and the NEG-8 bracket are flags; tolerances sized to the instrument (`joulewise/tolerances.py`). Two blind cold passes and two delta passes, all executing, no refusal (`DISPOSITIONS-r2-cold.md`); CI 20/20 |
 
 The loop is in stage 1 because stage 1 cannot run without it: the pre-session check waits while any `claude` or
 `codex` process is alive or the keyboard was used in the last 600 s (`joulewise/b6/precheck.py`), so no agent can
@@ -34,8 +40,10 @@ Built once, by the block-5 post-seal runbook's steps 3 to 5
 (`docs/process_traces/2026-10-07-block5-seal/30-post-seal-runbook.md`), with these values:
 
 - **Commit:** a pinned commit of this branch, `P` below (the head after the open issues that matter for the test
-  are closed). Candidate `P` (stage 3, 2026-10-15): the commit that adds this sentence; its hash is in
-  `/Users/edr/night-archive/b6-build/stage3/DISPOSITIONS-cold.md`. The checkout is never pulled, fetched or edited afterwards; its only later commits are the ledger
+  are closed). Candidate `P` (2026-10-17 afternoon, on `lane/2026-10-16-b6-round2`): the commit that adds this
+  sentence, after the second machine test's desk fixes (PR #501, merge `5b58cfa06`); its hash is in RUN_STATE item
+  43 and `docs/process_traces/2026-10-17-magistrate-d34bf254/`. (The morning's candidate 33816e4aa, round 2's
+  b9de23a2c and stage 3's 220166913 were superseded.) The checkout is never pulled, fetched or edited afterwards; its only later commits are the ledger
   pin advances the chain's desk step makes.
 - **Path:** `/Users/edr/night-custody/measurement/JouleWise-measurement-<UTC stamp>-b6`. No path may contain
   `claude` or `codex`: the agent census matches those strings anywhere in a process's arguments.
@@ -49,9 +57,8 @@ Built once, by the block-5 post-seal runbook's steps 3 to 5
   block 6's acceptance judges each session by its own captures and only discloses other sessions' captures, so
   this changes flags, not which sessions count (open issue 4).
 - **Registration directory:** `configs/b6/registration/` holds, since lane 6, the loaders' README, copies of block
-  5's `identity_pins.json` and `sizing_b5.json`, and their schemas. `acceptance.json` (registration draft S-4 to
-  S-9) is absent until the registration seat writes it from quiet-machine numbers (open issue 2). The machine test
-  does not need it: it writes its own non-claim one.
+  5's `identity_pins.json` and `sizing_b5.json`, and their schemas. `acceptance.json` holds S-4, filled from the quiet-machine kit and passed by the cold gate of 2026-10-17
+  (registration draft §15 D31 to D38). The machine test does not use it: it writes its own non-claim one.
 
 ## The machine test
 
@@ -59,7 +66,7 @@ Built once, by the block-5 post-seal runbook's steps 3 to 5
 disturbance up to the 1,500 s cap, meter unplugged" (the last at the desk, below). It is a non-claim smoke of pack ALPHA (4 runs: start
 reference, one decode repeat, one prefill repeat, end reference, between an opening and a closing capture),
 launched exactly as a session is (the night job through `scripts/install_night_agent.sh`, ProcessType
-Interactive), with two faults injected by a second launchd job and the meter's data link unplugged. Its numbers
+Interactive), with two faults injected by a second launchd job and the meter connected. Its numbers
 are never claim data; its ledger is a copy.
 
 **Nobody needs to be at the machine** (orchestrator, 2026-10-16). The test runs with the KM003C meter connected
@@ -91,11 +98,13 @@ Every argument:
   (`joulewise/b6/desk_identity.py`), the plan inputs (`joulewise/b6/plan_inputs.py`, the same code the loop's D1
   uses: the sealed block-5 threshold block, ALPHA's sizing), the fingerprint, then `joulewise.b6.smoke.prepare`: a fresh
   clone of `$M` at its head inside `--out`, a copy of the ledger and pin, the plan tree reduced to the smoke's
-  4 runs by `configs/b6/smoke_keep.json`, the plan. Then the night-job plists (the installer in render-only
+  4 runs by `configs/b6/smoke_keep.json`, its updated and committed `plan_tree.sha256`, and the plan. The plan
+  binds the reduced tree and committed pack digests. Then the night-job plists (the installer in render-only
   mode) and the injector plist, and `install.zsh`.
 - `--install`: run `install.zsh` at the end: the real installer on the smoke plan (two labels,
   `com.joulewise.night` and `com.joulewise.night.deadman`, with `--courier-bin` naming the smoke's file-writing
-  courier stub, so no `claude` session runs after the chain) and `launchctl bootstrap gui/<uid>` of the injector
+  wrapper around the clone's production `scripts/b6_courier.sh`, so no `claude` session runs after the chain)
+  and `launchctl bootstrap gui/<uid>` of the injector
   `com.joulewise.b6mt.inject` (ProcessType Standard, so its busy core is a real core, not an efficiency core at
   background priority). Without `--install`, `prepare` stops after writing, for a dry look.
 - `--measurement-root "$M"`: the checkout above.
@@ -112,9 +121,13 @@ Every argument:
   margin), started when the agent pause has ended, so the next run's waiting idle admission reaches its cap and
   that run is skipped with `idle.wait_cap_skip`. One core is design 3.4's disturbance.
 
-**What happens, and how long.** The injector waits for the start reference to end (so the arm, census and dwell
-are over), starts the agent, waits for the pause to end (resume 10 minutes after the last sighting, with a fresh
-idle admission), starts the disturbance, and exits when the chain's terminal record exists. Roughly: 15 min to
+**What happens, and how long.** The injector waits for a run start row without an end row in
+`collection/run_clock.jsonl` (so the arm, census and dwell are over), starts the agent while that run is in
+flight, waits for the pause to end (resume 10 minutes after the last sighting, with a fresh idle admission),
+starts the disturbance, and exits when the chain's terminal record exists. It reaps the busy children and writes
+`busy_ended` even
+when that terminal record arrives before a cap skip. The courier records the request locally and creates
+`night/courier.sent`, just as it does for a session. Roughly: 15 min to
 t0, about 5 min of arm, 4 min opening capture, 2.5 min start reference, about 11 min of agent pause (the run in
 flight excluded), 25 min of waiting to the cap (that run skipped), 2.5 min for the last run, 4 min closing
 capture: about 55 minutes of chain after t0, plus the desk report. Design 13's "about 40 minutes" did not count
@@ -130,12 +143,19 @@ It runs the smoke desk (since lane 6 the session's own harvest, `scripts/harvest
 block-6 catalog and the test's registration directory, then reads its `derived/b6-acceptance.json`), uninstalls the night
 job and the injector, writes `<out>/report.json`, and prints, structure only, for each item whether the records
 show it: the agent pause (an episode, resume no sooner than 600 s after the last sighting, the overlapping run
-excluded, the chain not stopped); the idle cap (exactly one `idle.wait_cap_skip`, later runs measured); the meter
-(stream header `absent`, harvest flag `meter.absent`); the keep-awake hold verified at start and end, a sleep
+excluded, the chain not stopped, both `agent.presence` and `agent.presence_overlap` written in the archived
+flags); collection ran (every run the reduced smoke plan dispatched has a successful summary except the cap run, whose failed summary
+has `environment_admission.skip_reason` equal to `wait_cap_reached`, with only the expected agent-overlap and
+cap exclusions); the idle cap (exactly one `idle.wait_cap_skip`, later runs measured); the meter
+(connected here, so this item reads "not observed; meter present: not exercised", which is expected); the keep-awake hold verified at start and end, a sleep
 reading at every run; chain exit 0, harvest exit 0, the smoke desk's status `physics` (the injected faults are
-physical, so a real smoke would wait and run again) and no desk errors. Reconnect the meter afterwards.
+physical, so a real smoke would wait and run again) and no desk errors. A failed stage or a harvest fault (any harvest exit
+other than 0, or 6, which means the registration is pending) reports `fail` even after earlier bundles when only incidental physical flags are present; an explicit physical
+arm refusal or physical chain stop keeps its physical outcome, also while the registration is pending.
 
-**Pass.** Every item observed and no desk error. A missing item is a defect in the code it names: fix it on this
+**Pass.** Every item observed except the meter item (expected, above) and no desk error.
+An unexpected physical exclusion of a dispatched member means rerun the test, not a code defect.
+A missing item otherwise is a defect in the code it names: fix it on this
 branch, re-pin, run the test again. A physical refusal at the arm (clock, battery, thermal, contention, disk,
 instrument) is not a failure of the test: run it again later.
 

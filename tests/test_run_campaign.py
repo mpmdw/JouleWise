@@ -10932,6 +10932,88 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         )
         self.assertEqual(verdict["evaluation_basis"]["launch_lineage"], lineage)
 
+    def test_busy_only_member_passes_writer_status_and_producer_exit(self) -> None:
+        lineage = {"schema_version": "test-lineage", "plan_id": "plan-1"}
+        base = self.root
+        # Derive the core from member bytes, then exercise both producers. AXI's
+        # synthetic child bundles isolate its writer from hardware collection.
+        state = run_campaign_module.load_analysis_manifest(ROOT / "tests/fixtures/axi_ap_spec")
+        real_subprocess_run = subprocess.run
+
+        def fixture_child(command, *, check, env):
+            clean_env = dict(env or {})
+            for name in (run_campaign_module.CAMPAIGN_POLICY_PATH_ENV,
+                         run_campaign_module.CAMPAIGN_POLICY_SHA256_ENV,
+                         run_campaign_module.CAMPAIGN_PREFLIGHT_JSON_ENV):
+                clean_env.pop(name, None)
+            clean_env["PYTHONDONTWRITEBYTECODE"] = "1"
+            return real_subprocess_run(command, check=check, env=clean_env)
+
+        for marker in (True, False):
+            with self.subTest(marker=marker):
+                self.root = base / ("block6" if marker else "block5")
+                self.root.mkdir()
+                binding, args = self._install_passing_whole_window_verdict_fixture(bound_lineage=lineage)
+                bundle = self.root / "p2-neg8-reference-start__r1"
+                records = _busy_idle_records()
+                (bundle / "rich_telemetry_idle.jsonl").write_text(
+                    "".join(json.dumps(record) + "\n" for record in records))
+                metadata = json.loads((bundle / "metadata.json").read_text())
+                final = metadata["environment_admission"]["attempts"][-1]
+                raw_cpu = run_campaign_module.evaluate_cpu_idle_admission(
+                    records, binding.idle_admission_extension.cpu_criteria, gpu_admitted=True)
+                self.assertEqual(raw_cpu["conditions"], ["cpu_busy_ratio_p95_exceeded"])
+                final["cpu_admission"] = raw_cpu
+                if marker:
+                    final["busy_fraction_admitted"] = True
+                (bundle / "metadata.json").write_text(json.dumps(metadata) + "\n")
+                calibration_bracket = {"schema_version": "joulewise.instrument_calibration_bracket.v1",
+                    "status": "passed", "b_fiducial_s": 0.02,
+                    "pre": {"bracket_runs_root": str(self.root)}, "post": {}}
+                with (
+                    patch.object(run_campaign_module, "validate_bundle", return_value=[]),
+                    patch.object(run_campaign_module, "calibration_bracket_for_bundles",
+                                 return_value=(calibration_bracket, ())),
+                    patch("joulewise.whole_window.authenticate_launch_lineage",
+                          side_effect=lambda value, **_kwargs: {"launch_lineage": dict(value)}),
+                    patch("joulewise.whole_window._authenticated_bundle_launch_lineage_set", return_value=lineage),
+                    patch("joulewise.whole_window._calibration_launch_lineages", return_value=(lineage, lineage)),
+                    redirect_stdout(io.StringIO()),
+                ):
+                    exit_code = run_campaign_module.run_whole_window_verdict(args)
+                row = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
+                core = row["idle_admission_core"]
+                reasons = run_campaign_module._idle_admission_claim_barrier_reasons(core)
+                self.assertEqual(row["status"], "passed" if marker else "failed")
+                self.assertEqual(exit_code, 0 if marker else 1)
+                self.assertEqual("cpu_admission_core_failed" in reasons, not marker)
+                self.assertEqual(core["neg8_bracket"]["decision"], "passed")
+                self.assertEqual(core["adapter_wattage_continuity"]["decision"], "stable")
+                stored = next(member for member in core["members"] if member["bundle_id"] == bundle.name)
+                self.assertEqual(stored["cpu_admission"], raw_cpu)
+                self.assertFalse(raw_cpu["admitted"])
+                self.assertEqual(json.loads((bundle / "metadata.json").read_text()), metadata)
+                axi_runs = self.root / "axi"
+                with (
+                    patch.object(run_campaign_module, "campaign_environment_preflight", return_value={"admitted": True}),
+                    patch.object(run_campaign_module.subprocess, "run", side_effect=fixture_child),
+                    patch.object(run_campaign_module, "campaign_cooldown_before_member", return_value={"result": "recovered"}),
+                    patch.object(run_campaign_module, "_load_calibration_snapshot_for_evaluation", return_value=None),
+                    patch.object(run_campaign_module, "_idle_admission_core_evaluation", return_value=
+                        run_campaign_module._IdleAdmissionCoreEvaluation(core=core, member_failures=())),
+                    patch.object(run_campaign_module, "build_evaluation_basis", return_value={}),
+                    redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()),
+                ):
+                    axi_exit = run_campaign_module.run_axi_spec_campaign(
+                        run_campaign_module.argparse.Namespace(dry_run=False, cli_cmd=None,
+                            arm_quiet_mode=False, arm_countdown_s=0, environment_override=None),
+                        state, runs_dir=axi_runs, policy_binding=binding,
+                        log_path=axi_runs / "campaign_log.jsonl")
+                whole_row = next(row for row in read_all_jsonl(axi_runs / "campaign_log.jsonl")
+                                 if row.get("record_type") == "idle_admission_whole_window_verdict")
+                self.assertEqual(whole_row["status"], "passed" if marker else "failed")
+                self.assertEqual(axi_exit, 0 if marker else 1)
+
     def test_existing_verdict_output_refuses_after_one_log_append(self) -> None:
         lineage = {"schema_version": "test-lineage", "plan_id": "plan-1"}
         _binding, args = self._install_passing_whole_window_verdict_fixture(

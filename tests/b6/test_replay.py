@@ -55,6 +55,8 @@ class ReplayTests(unittest.TestCase):
             self.assertEqual(stdout.getvalue(), out_path.read_text())
             self.assertIn('"verdict": "EXCLUDE"', stdout.getvalue())
             self.assertIn('"neg8.survivor_screen_undefined"', stdout.getvalue())
-            self.assertNotIn("_j", stdout.getvalue())
+            # No energy-valued key (``*_j``); a bare substring check also matched
+            # random temp paths such as /tmp/tmp5yu_jzwh (CI run 39048830904).
+            self.assertNotRegex(stdout.getvalue(), r'"\w*_j"\s*:')
             self.assertNotIn("operative_bound_s", stdout.getvalue())
             self.assertFalse((archive / "withheld/b6-neg8.json").exists())

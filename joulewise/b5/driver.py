@@ -2651,6 +2651,7 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
     for episode in intervals:
         window.flag("agent.presence", "PHYSICS_IN_SPAN", "PHYSICS", stage="window", observed=episode,
                     interval={"monotonic_ns": [episode["start"]["monotonic_ns"], episode["end"]["monotonic_ns"]],
+                              "monotonic_raw_ns": None,
                               "wall_s": [episode["start"]["wall_s"], episode["end"]["wall_s"]]})
     for overlap in agent_pause.capture_overlaps(intervals, journal):
         window.flag("agent.capture_overlap", "DIAGNOSTIC", "PHYSICS", stage="window", observed=overlap)

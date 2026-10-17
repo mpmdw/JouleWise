@@ -53,6 +53,8 @@ own monitor, and the tests run L4's real ``exclusions.compute`` and
 """
 from __future__ import annotations
 
+from joulewise.tolerances import NEG8_ENERGY_ABS_TOL_J
+
 import concurrent.futures
 import dataclasses
 import hashlib
@@ -895,7 +897,7 @@ def _close(fresh: Any, recorded: Any) -> bool:
     if any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
            for value in numbers):
         return False
-    return math.isclose(float(fresh), float(recorded), rel_tol=1e-9, abs_tol=1e-9)
+    return math.isclose(float(fresh), float(recorded), rel_tol=0, abs_tol=NEG8_ENERGY_ABS_TOL_J)
 
 
 # Fields of one NEG-8 claim-family record that depend on the bound (or, for
@@ -6536,6 +6538,12 @@ class _Harvest:
             arm_value = read_json(path)
             for module, phases in _arm_modules(arm_value).items():
                 self.hazards.setdefault(module, {})["arm"] = phases
+                for phase in phases:
+                    for flag in phase.get("flags") or []:
+                        if flag.get("code") in {"clock.rate_above_budget", "instrument.single_interval_above_screen"}:
+                            self.emit(flag["code"], level="window", collector="arm",
+                                      observed={"phase": phase["phase"], **flag},
+                                      spec=_spec("DIAGNOSTIC", "PHYSICS"))
         elif (self.inputs.night_dir / "chain.started").is_file():
             self.emit("records.arm_record_absent", level="window", collector="arm", observed={"arm_record": None})
         # Every flag file written before harvest: L4's desk and arm collectors,
@@ -7516,6 +7524,8 @@ def _arm_modules(value: Any) -> dict[str, list[dict[str, Any]]]:
                 continue
             verdict = entry.get("verdict") if isinstance(entry.get("verdict"), Mapping) else {}
             phases.append({"phase": entry.get("phase"), "verdict": verdict.get("status"),
+                           **({"flags": verdict["observed"]["flags"]}
+                              if (verdict.get("observed") or {}).get("flags") else {}),
                            "reasons": verdict.get("reasons"), "thresholds": verdict.get("thresholds"),
                            "measurement": entry.get("measurement")})
         out[str(module)] = phases

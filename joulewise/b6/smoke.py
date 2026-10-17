@@ -266,7 +266,13 @@ def prepare(pack_id, code_commit, claim_measurement_root, smoke_root, *, plan_in
     keeps = config_keeps(tree, keep)
     reduced = reduce_tree(tree, keep)
     (pack_root / "plan_tree.json").write_text(json.dumps(reduced, indent=2) + "\n")
-    _git(measurement, "add", str(pack_root.relative_to(measurement) / "plan_tree.json"), run=run)
+    # Readiness authenticates exact bytes, not the parsed tree. Commit its
+    # authenticator in the same clone commit before the plan writer binds both
+    # the tree digest and the committed pack digest.
+    (pack_root / "plan_tree.sha256").write_text(_sha256(pack_root / "plan_tree.json")
+                                               + "  plan_tree.json\n")
+    _git(measurement, "add", *(str(pack_root.relative_to(measurement) / name)
+                              for name in ("plan_tree.json", "plan_tree.sha256")), run=run)
     _git(measurement, "-c", "user.name=B6 Smoke", "-c", "user.email=smoke@invalid",
          "commit", "--quiet", "-m", "SMOKE reduced stage tree", run=run)
     wrapper_writer(measurement, claim, smoke_dir, keeps, run=run)
@@ -296,8 +302,9 @@ def prepare(pack_id, code_commit, claim_measurement_root, smoke_root, *, plan_in
     bin_dir = smoke_dir / "bin"
     bin_dir.mkdir()
     courier = bin_dir / "smoke-courier"
-    request = shlex.quote(str(smoke_dir / "courier-request.txt"))
-    courier.write_text('#!/bin/sh\n{ printf "%s\\n" "$@"; cat; } > ' + request + '; exit 0\n')
+    # Exercise the session's mail-free program and its courier.sent protocol.
+    courier.write_text('#!/bin/sh\nexec /bin/sh '
+                       + shlex.quote(str(measurement / "scripts/b6_courier.sh")) + ' "$@"\n')
     courier.chmod(0o755)
     write_create_once(smoke_dir / "smoke-state.json", canonical_json(
         {**prepared.to_json(), "driver_argv": driver_argv(prepared), "config_keep": keeps,
@@ -352,9 +359,55 @@ def _flag_codes(value):
         yield value
 
 
+def stages_succeeded(stage_results, *, tree, repo_root, evidence):
+    """Explain campaign exit 1 only from the exact dispatched members' losses.
+
+    The campaign returns 1 for unsuccessful members. Other exits, unresolved
+    dispatches, missing records and any other failed member remain stage faults.
+    """
+    from joulewise.b6.acceptance import recorded_idle_skip
+
+    dispatches = {row.stage_id: row for row in plan.resolve_stage_dispatches(tree, repo_root)}
+    stages = {stage.stage_id: stage for stage in evidence.stages}
+    graph = {stage["stage_id"]: stage for stage in tree["stage_graph"]}
+    for result in stage_results:
+        if result["rc"] in result["success_exit_codes"]:
+            continue
+        stage_id = result["stage_id"]
+        dispatch, stage = dispatches.get(stage_id), stages.get(stage_id)
+        run_ids = dispatch.run_ids if dispatch is not None else None
+        expected = graph.get(stage_id, {}).get("expected_count")
+        # The smoke runner applies this registered prefix after ordering; its
+        # copied order manifests deliberately retain the full campaign order.
+        reduction = tree.get("smoke_reduction") or {}
+        if (run_ids and reduction.get("schema") == REDUCTION_SCHEMA
+                and reduction.get("keep", {}).get(stage_id) == expected):
+            run_ids = run_ids[:expected]
+        if (result["rc"] != 1 or dispatch is None or dispatch.error or stage is None
+                or not run_ids or len(run_ids) != expected
+                or len(set(run_ids)) != len(run_ids)
+                or len(stage.members) != len(run_ids)
+                or {m.run_id for m in stage.members} != set(run_ids)):
+            return False
+        skipped = [m for m in stage.members if m.status != "succeeded"]
+        if not skipped or not all(m.status == "failed" and recorded_idle_skip(m) for m in skipped):
+            return False
+    return True
+
+
 def classify(*, stages_ok, driver_exit, harvest_exit, acceptance_result, flags, is_physical=None,
-             physical_arm_refusal=False):
+             physical_arm_refusal=False, bundles_produced=False):
+    # Retain the keyword for callers; bundle existence cannot explain a crash.
     physical = is_physical or _is_physical
+    # A chance member flag cannot explain a failed stage or harvest, even
+    # after earlier bundles. Only a named stop or arm refusal explains it.
+    # Smoke acceptance uses physics_stop for incidental member exclusions too;
+    # physical_stop_kind identifies an actual physical chain stop.
+    # Harvest exit 6 is "registration pending" (queue.outcome), not a fault.
+    if not stages_ok or harvest_exit not in (0, 6):
+        return "physics" if physical_arm_refusal or acceptance_result.record.get("physical_stop_kind") else "fail"
+    if acceptance_result.structural:
+        return "fail"
     if physical_arm_refusal or acceptance_result.record.get("physics_stop") or any(physical(code) for code in flags):
         return "physics"
     if stages_ok and driver_exit in (0, 6) and harvest_exit in (0, 6) and not acceptance_result.structural:
@@ -365,8 +418,9 @@ def classify(*, stages_ok, driver_exit, harvest_exit, acceptance_result, flags, 
 def desk(prepared, *, driver_exit=None, run=subprocess.run, acceptance=None,
          advance_pin=plan.advance_ledger_pin, evidence_loader=None, is_physical=None):
     night = prepared.custody / "night"
-    stages = chain.stage_plan(json.loads((prepared.measurement / "configs/campaigns" /
-                                          prepared.pack_id / "plan_tree.json").read_text()))
+    tree = json.loads((prepared.measurement / "configs/campaigns" /
+                       prepared.pack_id / "plan_tree.json").read_text())
+    stages = chain.stage_plan(tree)
     journal = {row["stage_id"]: row for row in chain.stage_journal(night)}
     stage_results = [{"stage_id": stage.stage_id, "rc": journal.get(stage.stage_id, {}).get("rc"),
                       "success_exit_codes": list(stage.commands[0].success_exit_codes)}
@@ -436,6 +490,12 @@ def desk(prepared, *, driver_exit=None, run=subprocess.run, acceptance=None,
                                             registration_dir=prepared.registration_dir, code_identity=prepared.fingerprint,
                                             pack_root=prepared.measurement / "configs/campaigns" / prepared.pack_id)
             a_result = acceptance.evaluate(prepared_a, evidence)
+        if (not stages_ok and {"idle.wait_cap_skip", "idle.wait_budget_skip"}.intersection(a_result.flags)
+                and loader and harvest_exit in (0, 6)):
+            stage_evidence = loader(archive) if evidence_loader else loader(
+                archive, Path(prepared.plan_path), prepared.registration_dir)
+            stages_ok = stages_succeeded(stage_results, tree=tree, repo_root=prepared.measurement,
+                                         evidence=stage_evidence)
     except Exception as exc:
         errors.append(f"acceptance: {type(exc).__name__}: {exc}")
         a_result = AcceptanceResult("UNAVAILABLE", ("acceptance failed",), (), True)
@@ -449,6 +509,7 @@ def desk(prepared, *, driver_exit=None, run=subprocess.run, acceptance=None,
             str(reason).startswith(module + " ") for reason in arm_record.get("reasons", [])))
         if arm_record.get("go") is False and measured_refusal:
             flags.append(f"{module}.arm_refusal")
+            physical_arm_refusal |= physical(f"{module}.arm_refusal")
     for report_path in (archive / "harvest-report.json", archive / "harvest.json",
                         archive / "derived/window_flags.json"):
         try:

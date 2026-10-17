@@ -37,6 +37,8 @@ RECLASSIFY = {
     "instrument.precal_screen_failed": "CA-16: alignment above reference discloses and is carried.",
     "records.malformed_flag_member_exclusion_possible": "HV-22: record grammar discloses.",
     "member.cooldown_evidence_unverified": "HV-5: measured idle admission decides.",
+    "member.cooldown_cap_hit": "Registration 8.3: the 300 s cap sets wait time; the next run's idle admission decides.",
+    "contention.request_overlap": "Registration 8.5: per-process 0.05 CPU-s/s discloses; exclusion needs M4's w times max(0, C - k*c_q) >= F_min/4.",
     "instrument.binary_identity_unmeasured": "X: an unmeasured identity discloses.",
 }
 
@@ -46,6 +48,14 @@ def _entry(family: str, klass: str, effect: str, note: str) -> dict:
 
 
 NEW_CODES = {
+    "records.window_plan_unreadable": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "Registration 8.4: missing records never refuse a capture; its level screen is diagnostic."),
+    "records.resume_finalize_failed": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "Desk refit failed twice; the named slot is retained in the aborted bracket and collection continues."),
+    "agents.hid_recent": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "HID inactivity has no energy derivation; idle admission measures the hazard."),
+    "clock.rate_above_budget": _entry("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "Registration 8.6: above the old h-inclusive budget, below the 5 ms / T_stream_max - 0.25 ppm hold."),
+    "clock.rate_hold": _entry("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "Lead ruling 2026-10-16: the registered rate hold wakes the orchestrator without a redraw attempt or timed retry."),
+    "power.pstar_unsized": _entry("RECORDS", "REPRESENTATION", "DISCLOSE", "No registered T_phase for this pack/phase: no P* exclusion. Once sized, P* = F_min/(4*T_phase); never use a science duration or another pack's size."),
+    "instrument.single_interval_above_screen": _entry("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "A single interval above twice the 100 ms sampling period discloses; median <= 150 ms remains the refusal."),
+    "meter.unexplained_idle_step": _entry("DIAGNOSTIC", "PHYSICS", "DISCLOSE", "Registration 8.5 D24: print the meter cross-check; power outside the measured rails excludes nothing."),
     **{f"calibration.{suffix}": _entry("CALIBRATION", "NUMBER" if suffix in {
            "alignment_above_reference", "drift_above_budget", "capture_outside_acceptance_range",
            "other_session_systematic", "other_session_range_expansion", "corpus_doubling_reached",
@@ -59,6 +69,7 @@ NEW_CODES = {
            "other_session_range_expansion": "CA-40/Erratum 3: another session's range expansion discloses.",
            "corpus_doubling_reached": "CA-40/Erratum 3: valid capture count reaches twice the corpus.",
            "stop_line_unregistered": "T1: null stop line has no refusal.",
+           "stop_line_unsized": "Lead ruling 2026-10-16: no registered per-pack T10 stop; carry the bound and let the run's own phase checks decide.",
            "acceptance_preflight_unverified": "CA-15/S-068: preflight record shape discloses in HAZARD mode.",
            "capture_list_write_failed": "CA-38: list write failure discloses; capture stays.",
            "capture_list_line_unreadable": "CA-38: malformed list line is skipped and disclosed.",

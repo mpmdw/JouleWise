@@ -66,7 +66,25 @@ class CalibrationTests(unittest.TestCase):
         result = calibration.evaluate(calibration.Capture(Decimal("1"), "valid"),
                                       calibration.Capture(Decimal("1"), "valid"), reg, [], (), False)
         self.assertEqual(result["excluding"], [])
-        self.assertIn("calibration.stop_line_unregistered", [x["code"] for x in result["flags"]])
+        self.assertIn("calibration.stop_line_unsized", [x["code"] for x in result["flags"]])
+
+    def test_t10_is_per_pack_and_unsized_beta_carries_its_bound(self):
+        for pack in ('alpha', 'gamma', 'd117_floor_qwen3-1p7b_v5',
+                     'd117_contrast_qwen3-1p7b_vs_qwen3-8b_v5'):
+            with self.subTest(pack=pack):
+                result = calibration.evaluate(calibration.Capture(Decimal('.100'), 'valid'),
+                    calibration.Capture(Decimal('.100'), 'valid'), document(), [], (), False, pack_id=pack)
+                self.assertEqual(result['excluding'], [])
+                result = calibration.evaluate(calibration.Capture(Decimal('.150'), 'valid'),
+                    calibration.Capture(Decimal('.150'), 'valid'), document(), [], (), False, pack_id=pack)
+                self.assertIn('calibration.operative_bound_above_stop', result['excluding'])
+        for pack in ('beta', 'd117_floor_qwen3-8b_v5', 'unregistered-pack'):
+            with self.subTest(pack=pack):
+                result = calibration.evaluate(calibration.Capture(Decimal('1'), 'valid'),
+                    calibration.Capture(Decimal('1'), 'valid'), document(), [], (), False, pack_id=pack)
+                self.assertEqual(result['operative_bound_s'], '1.014531')
+                self.assertEqual(result['excluding'], [])
+                self.assertIn('calibration.stop_line_unsized', [f['code'] for f in result['flags']])
 
     def test_read_own_capture_exact_lexeme_and_refit(self):
         with tempfile.TemporaryDirectory() as tmp:

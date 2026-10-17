@@ -181,7 +181,7 @@ class Case(unittest.TestCase):
         runbook.parent.mkdir(parents=True)
         shutil.copyfile(ROOT / chain.RUNBOOK_RELATIVE, runbook)
         (measurement / "scripts").mkdir()
-        for name in ("b6_machine_test.py", "install_night_agent.sh", "write_derivation_night_inputs.py", "run_night.py"):
+        for name in ("b6_machine_test.py", "b6_courier.sh", "install_night_agent.sh", "write_derivation_night_inputs.py", "run_night.py"):
             shutil.copyfile(ROOT / "scripts" / name, measurement / "scripts" / name)
         venv = measurement / ".venv"
         (venv / "bin").mkdir(parents=True)
@@ -249,7 +249,11 @@ class PrepareTests(Case):
         self.assertTrue(inputs["plan_id"].startswith("MT-ALPHA-"))
         self.assertFalse(inputs["g10"])
         self.assertEqual(inputs["bytes_per_member"], 182 * 1024 * 1024)
-        self.assertEqual(inputs["thresholds"], mt.registered_thresholds((measurement / mt.REGISTRATION).read_text()))
+        expected = mt.registered_thresholds((measurement / mt.REGISTRATION).read_text())
+        # Block-6 registration §8.6: the clock HOLD drops block 5's placement term (plan_inputs.CLOCK_THRESHOLDS).
+        from joulewise.b6 import plan_inputs
+        expected["clock"].update(plan_inputs.CLOCK_THRESHOLDS)
+        self.assertEqual(inputs["thresholds"], expected)
         sizing = json.loads((measurement / mt.SIZING).read_text())["packs"]["ALPHA"]
         for key in ("programmed_span_s", "T_stream_max_s"):
             self.assertEqual(inputs[key]["seconds"], sizing[key])
@@ -259,7 +263,7 @@ class PrepareTests(Case):
         bindings = plan_json["hazard_window"]["bindings"]
         self.assertEqual(bindings["capture_screen"], {
             "alignment_reference_s": "0.036462861644980", "bracket_screen_s": "0.014531",
-            "operative_bound_stop_s": None})
+            "operative_bound_stop_s": "0.139"})
         self.assertIs(bindings["spare_retries"], False)
         rendered = Path(plan_json["chain_path"]).read_text()
         self.assertIn("screen_b6_calibration()", rendered)
@@ -302,7 +306,7 @@ class PrepareTests(Case):
 
     def test_an_agent_courier_in_the_rendered_job_refuses(self):
         # Design 3.1: the smoke sends no mail through an agent.
-        with self.assertRaisesRegex(ValueError, "courier stub"):
+        with self.assertRaisesRegex(ValueError, "courier wrapper"):
             self.prepared(courier_override="/synthetic/claude")
 
     def test_install_is_last_and_uses_complete_script(self):
@@ -426,14 +430,14 @@ class InjectTests(Case):
     def test_sequence_no_children_during_arm_and_reap_on_cap_then_terminal(self):
         state, seams, clock, children, starts = self.environment()
         self.assertEqual(mt.inject(state, seams=seams), 0)
-        self.assertEqual([t for t, _, _ in starts], [3, 8, 8])
+        self.assertEqual([t for t, _, _ in starts], [2, 8, 8])
         self.assertIn("claude-b6-machine-test", starts[0][1])
         self.assertEqual(starts[0][2]["executable"], "/bin/sleep")
         self.assertEqual(agent_identity.identify("/bin/sleep", tuple(starts[0][1])), "agent")
         self.assertEqual(agent_identity.identify(mt.PYTHON, (mt.PYTHON, "-c", "pass", "claude-b6-machine-test")), "not_agent")
         self.assertTrue(all(child.waits == 1 and child.terminated for child in children))
         events = mt.read_rows(state.parent / "injections.jsonl")
-        self.assertEqual([e["event"] for e in events], ["waiting_first_run", "first_run_ended", "agent_started",
+        self.assertEqual([e["event"] for e in events], ["waiting_first_run", "first_run_started", "agent_started",
             "agent_census", "agent_ended", "pause_ended", "busy_started", "busy_ended", "exit"])
         self.assertEqual(next(e for e in events if e["event"] == "busy_ended")["reason"], "idle_cap_skip")
         self.assertEqual(next(e for e in events if e["event"] == "busy_ended")["monotonic_ns"], 10 * 10**9)
@@ -444,7 +448,7 @@ class InjectTests(Case):
     def test_later_run_start_is_resume_fallback(self):
         state, seams, _, children, starts = self.environment(later_start=True)
         self.assertEqual(mt.inject(state, seams=seams), 0)
-        self.assertEqual([t for t, _, _ in starts], [3, 8, 8])
+        self.assertEqual([t for t, _, _ in starts], [2, 8, 8])
         self.assertTrue(all(c.waits for c in children))
 
     def test_exception_reaps_every_child(self):
@@ -531,18 +535,21 @@ class InjectTests(Case):
                 self.assertTrue(all(c.waits for c in children))
                 rows = mt.read_rows(state.parent / "injections.jsonl")
                 self.assertEqual(next(r for r in rows if r["event"] == "exit")["reason"], reason)
+                if name == "terminal":
+                    self.assertEqual(next(r for r in rows if r["event"] == "busy_ended")["reason"], "night_result")
                 if name == "duration":
                     self.assertEqual(next(r for r in rows if r["event"] == "busy_ended")["reason"], "duration")
                 self.root = base
 
-    def test_pair_first_start_in_file_order_not_any_completed_run(self):
+    def test_injects_into_first_open_run_without_waiting_for_an_end(self):
         state, seams, _, children, _ = self.environment()
         custody = Path(json.loads(state.read_text())["custody_root"])
         append(custody / "collection/run_clock.jsonl", clock_row("start", "first", 0))
         append(custody / "collection/run_clock.jsonl", clock_row("start", "later", 1))
         append(custody / "collection/run_clock.jsonl", clock_row("end", "later", 2))
         self.assertEqual(mt.inject(state, seams=seams), 0)
-        self.assertEqual(children, [])
+        self.assertTrue(children)
+        self.assertEqual(mt.read_rows(state.parent / "injections.jsonl")[1]["run_id"], "first")
 
     def test_budget_skip_is_not_a_cap_skip(self):
         rows = [{"run_id": "earlier", "wait_s": 6001, "outcome": "admitted"},
@@ -579,7 +586,7 @@ class ReportTests(Case):
             "installer_argv": mt.installer_argv(out / "measurement", out / "plan.json", out / "bin/smoke-courier"),
             "injector_plist": str(out / "inject.plist")})
         at = lambda s: {"monotonic_ns": s * 10**9, "wall_s": 1800000000 + s}
-        episode = {"start": at(11), "end": at(40), "since": at(20), "last_sighting": at(20),
+        episode = {"start": at(1), "end": at(40), "since": at(20), "last_sighting": at(20),
                    "pause_end": at(620), "basenames": ["Python"], "pause_s": 600}
         # Production night results carry chain_exit_code, not driver exit_code;
         # smoke.desk resolves the driver's courier outcome from its own records.
@@ -587,28 +594,52 @@ class ReportTests(Case):
         put(custody / "night/hazard_result.json", {"chain": {"exit_code": 0},
             "agent_pause": {"episodes": [episode], "stopped_by_limit": False},
             "keep_awake": {"verified_start": True, "verified_end": True}, "sleep": {"runs_excluded": []}})
-        for event, second, run_id in (("start", 1, "reference"), ("end", 10, "reference"),
-                ("start", 12, "decode"), ("end", 50, "decode"), ("start", 621, "prefill"),
-                ("end", 2121, "prefill"), ("start", 2122, "end-reference"), ("end", 2200, "end-reference")):
+        # Reuse the fixture's successful-member duration and the production
+        # 60 s stage gap; the final reference has the first reference's span.
+        prefill_start = 2121 + chain.SETTLE_S
+        prefill_end = prefill_start + (2200 - 2122)
+        reference_start = prefill_end + chain.SETTLE_S
+        reference_end = reference_start + (50 - 1)
+        for event, second, run_id in (("start", 1, "reference"), ("end", 50, "reference"),
+                ("start", 621, "decode"), ("end", 2121, "decode"), ("start", prefill_start, "prefill"),
+                ("end", prefill_end, "prefill"), ("start", reference_start, "end-reference"),
+                ("end", reference_end, "end-reference")):
             append(custody / "collection/run_clock.jsonl", clock_row(event, run_id, second))
         append(custody / "collection/agent_presence.jsonl", {"event": "sighting", "at": at(20)})
         append(custody / "collection/agent_presence.jsonl", {"event": "resume", "at": at(620)})
         append(out / "injections.jsonl", {"event": "agent_census", "listed": True})
-        append(custody / "collection/idle_wait.jsonl", {"run_id": "prefill", "outcome": "skipped", "wait_s": 1425})
+        append(custody / "collection/idle_wait.jsonl", {"run_id": "decode", "outcome": "skipped", "wait_s": 1425})
         append(custody / "collection/idle_wait.jsonl", {"run_id": "end-reference", "outcome": "admitted", "wait_s": 0})
         append(custody / "hazards/meter/stream-000.jsonl", {"k": "h", "status": "absent"})
-        for code, run_id in (("agent.presence", None), ("agent.presence_overlap", "decode"), ("idle.wait_cap_skip", "prefill"),
+        from joulewise.flags.schema import make_flag, make_scope, make_source
+        from joulewise.flags.catalog import load_catalog
+        from joulewise.flags.exclusions import compute
+        catalog = load_catalog(smoke.CATALOG_PATH)
+        produced_flags = []
+        for code, run_id in (("agent.presence", None), ("agent.presence_overlap", "reference"), ("idle.wait_cap_skip", "decode"),
                              ("meter.absent", None)):
-            append(archive / "derived/flags.jsonl", {"code": code, "scope": {"level": "member" if run_id else "window", "run_id": run_id}})
-        put(archive / "derived/exclusions.json", {"members_excluded": [{"run_id": "decode", "codes": ["agent.presence_overlap"]},
-                                                                      {"run_id": "prefill", "codes": ["idle.wait_cap_skip"]}]})
+            spec = catalog.entry(code)
+            flag = make_flag(code=code, family=spec["family"], klass=spec["klass"],
+                scope=make_scope(level="member" if run_id else "window", run_id=run_id),
+                source=make_source(stage="window", collector="b6-machine-test"),
+                interval={"monotonic_ns": [1 * 10**9, 40 * 10**9], "monotonic_raw_ns": None,
+                          "wall_s": [1800000001, 1800000040]} if code == "agent.presence" else None)
+            produced_flags.append(flag)
+            append(archive / "derived/flags.jsonl", flag)
+        roster = {"members": [{"run_id": name, "units": []} for name in
+                              ("reference", "decode", "prefill", "end-reference")], "cells": []}
+        spans = {start["run_id"]: {"monotonic_ns": [start["clock"]["monotonic_ns"], end["clock"]["monotonic_ns"]]}
+                 for start, end in mt.agent_pause.paired_run_clocks(mt.read_rows(custody / "collection/run_clock.jsonl"))}
+        put(archive / "derived/exclusions.json", compute(produced_flags, roster, spans, catalog))
         proof = {"status": "clean", "spawn_observed": True, "leader_reaped": True, "census_completed": True,
                  "group_survivors": [], "escaped_candidates": []}
-        put(archive / "sources/claim-runs/prefill/metadata.json", {"environment_admission": {
+        put(archive / "sources/claim-runs/decode/metadata.json", {"environment_admission": {
             "skip_reason": "wait_cap_reached", "effective_wait_cap_s": 1500, "wait_s": 1425,
             "attempts": [{"sampler_start_s": 1800000621 + 75 * k, "start_s": 1800000622 + 75 * k,
                           "end_s": 1800000696 + 75 * k, "sampler_teardown": proof} for k in range(20)]}})
-        put(archive / "sources/claim-runs/end-reference/summary_metrics.json", {"status": "succeeded"})
+        for name in ("reference", "decode", "prefill", "end-reference"):
+            put(archive / "sources/claim-runs" / name / "summary_metrics.json",
+                {"status": "failed" if name == "decode" else "succeeded"})
         result = {"status": "physics", "errors": [], "harvest_exit": 0, "archive": str(archive),
                   "flags": ["agent.presence", "agent.presence_overlap", "idle.wait_cap_skip", "meter.absent"]}
         # The report checks every kept run against the reduced plan roster.
@@ -634,13 +665,110 @@ class ReportTests(Case):
         items = self.run_report(state, result)
         self.assertTrue(all(i["observed"] for i in items.values()), items)
         self.assertTrue(all(i["evidence"] for i in items.values()))
+        self.assertTrue(items["collection ran"]["observed"])
+        self.assertTrue(items["agent pause"]["detail"]["flags_written"])
         self.assertTrue((state.parent / "report.json").exists())
         with mock.patch.object(mt, "report", return_value={"items": list(items.values())}), redirect_stdout(io.StringIO()) as output:
             self.assertEqual(mt.main(["report", "--state", str(state)]), 0)
         self.assertIn("agent pause: observed", output.getvalue())
+        self.assertIn("flags_written=True", output.getvalue())
         self.assertNotRegex(output.getvalue(), r"\b\d+(?:\.\d+)?\s*(?:J|W|s|seconds|minutes)\b")
         self.assertNotIn("1425", output.getvalue())
         self.assertNotIn("1500", output.getvalue())
+
+    def test_collection_rejects_missing_failed_or_unexpected_skip(self):
+        state, custody, archive, result = self.custody_fixture()
+        path = archive / 'sources/claim-runs/reference/summary_metrics.json'
+        for status in (None, 'failed', 'skipped'):
+            if status is None:
+                path.unlink(missing_ok=True)
+            else:
+                put(path, {'status': status})
+            self.assertFalse(self.run_report(state, result)['collection ran']['observed'])
+
+    def test_collection_does_not_excuse_a_crash_with_only_a_cap_flag(self):
+        state, custody, archive, result = self.custody_fixture()
+        put(archive / 'sources/claim-runs/decode/metadata.json', {})
+        self.assertFalse(self.run_report(state, result)['collection ran']['observed'])
+
+    def test_collection_cap_skip_requires_failed_status_and_cap_reason(self):
+        state, custody, archive, result = self.custody_fixture()
+        put(archive / 'sources/claim-runs/decode/summary_metrics.json', {'status': 'succeeded'})
+        item = self.run_report(state, result)['collection ran']
+        self.assertFalse(item['observed'])
+        self.assertEqual(item['detail']['unexpected_status'], {'decode': 'succeeded'})
+
+    def test_collection_discloses_unexpected_exclusion_codes_and_rerun_guidance(self):
+        from joulewise.flags.catalog import load_catalog
+        from joulewise.flags.exclusions import compute
+        from joulewise.flags.schema import make_flag, make_scope, make_source
+        state, custody, archive, result = self.custody_fixture()
+        catalog = load_catalog(smoke.CATALOG_PATH)
+        original = mt.read_rows(archive / 'derived/flags.jsonl')
+        roster = {'members': [{'run_id': name, 'units': []} for name in
+                              ('reference', 'decode', 'prefill', 'end-reference')], 'cells': []}
+        spans = {start['run_id']: {'monotonic_ns': [start['clock']['monotonic_ns'], end['clock']['monotonic_ns']]}
+                 for start, end in mt.agent_pause.paired_run_clocks(mt.read_rows(custody / 'collection/run_clock.jsonl'))}
+        # Exercise both physical causes and mixed codes; rerun advice
+        # requires every unexpected exclusion's codes to be known physics.
+        for codes, physical in ((['battery.member_span'], True),
+                                (['thermal.os_level_nonzero'], True),
+                                (['battery.member_span', 'member.bytes_missing'], False)):
+            with self.subTest(codes=codes):
+                flags = list(original)
+                for code in codes:
+                    spec = catalog.entry(code)
+                    flags.append(make_flag(code=code, family=spec['family'], klass=spec['klass'],
+                        scope=make_scope('member', run_id='prefill'),
+                        source=make_source('window', 'b6-machine-test')))
+                effects = compute(flags, roster, spans, catalog)
+                put(archive / 'derived/exclusions.json', effects)
+                item = self.run_report(state, result)['collection ran']
+                self.assertFalse(item['observed'])
+                self.assertEqual(item['detail'].get('unexpected_exclusions'), {'prefill': sorted(codes)})
+                self.assertEqual(item['detail']['exclusion_detail'], effects['members_excluded'])
+                guidance = 'physical exclusion: rerun the test'
+                self.assertEqual(item['detail']['guidance'], guidance if physical else None)
+                with mock.patch.object(mt, 'report', return_value={'items': [item]}), redirect_stdout(io.StringIO()) as output:
+                    self.assertEqual(mt.main(['report', '--state', str(state)]), 0)
+                self.assertIn('collection ran: not observed;', output.getvalue())
+                for code in codes:
+                    self.assertIn(code, output.getvalue())
+                self.assertEqual(guidance in output.getvalue(), physical)
+
+    def test_collection_rerun_guidance_withheld_when_a_code_problem_is_beside_it(self):
+        # Delta review M1: a physical exclusion beside a failed member is not a rerun.
+        from joulewise.flags.catalog import load_catalog
+        from joulewise.flags.exclusions import compute
+        from joulewise.flags.schema import make_flag, make_scope, make_source
+        state, custody, archive, result = self.custody_fixture()
+        catalog = load_catalog(smoke.CATALOG_PATH)
+        roster = {'members': [{'run_id': name, 'units': []} for name in
+                              ('reference', 'decode', 'prefill', 'end-reference')], 'cells': []}
+        spans = {start['run_id']: {'monotonic_ns': [start['clock']['monotonic_ns'], end['clock']['monotonic_ns']]}
+                 for start, end in mt.agent_pause.paired_run_clocks(mt.read_rows(custody / 'collection/run_clock.jsonl'))}
+        flags = list(mt.read_rows(archive / 'derived/flags.jsonl'))
+        spec = catalog.entry('thermal.os_level_nonzero')
+        flags.append(make_flag(code='thermal.os_level_nonzero', family=spec['family'], klass=spec['klass'],
+            scope=make_scope('member', run_id='prefill'), source=make_source('window', 'b6-machine-test')))
+        put(archive / 'derived/exclusions.json', compute(flags, roster, spans, catalog))
+        summary = archive / 'sources/claim-runs/end-reference/summary_metrics.json'
+        put(summary, {**json.loads(summary.read_text()), 'status': 'failed'})
+        item = self.run_report(state, result)['collection ran']
+        self.assertFalse(item['observed'])
+        self.assertEqual(item['detail']['unexpected_exclusions'], {'prefill': ['thermal.os_level_nonzero']})
+        self.assertEqual(item['detail']['unexpected_status'], {'end-reference': 'failed'})
+        self.assertIsNone(item['detail']['guidance'])
+
+    def test_agent_detail_names_missing_presence_flag(self):
+        state, custody, archive, result = self.custody_fixture()
+        path = archive / 'derived/flags.jsonl'
+        rows = [r for r in mt.read_rows(path) if r['code'] != 'agent.presence']
+        path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+        result['flags'].remove('agent.presence')
+        item = self.run_report(state, result)['agent pause']
+        self.assertFalse(item['observed'])
+        self.assertFalse(item['detail']['flags_written'])
 
     def test_every_planned_run_requires_start_and_end_sleep_readings(self):
         for run_id in ("reference", "decode", "prefill", "end-reference"):
@@ -671,7 +799,7 @@ class ReportTests(Case):
                 self.root.mkdir()
                 state, custody, archive, result = self.custody_fixture()
                 hazard = json.loads((custody / "night/hazard_result.json").read_text())
-                metadata_path = archive / "sources/claim-runs/prefill/metadata.json"
+                metadata_path = archive / "sources/claim-runs/decode/metadata.json"
                 metadata = json.loads(metadata_path.read_text())
                 if name == "agent pause":
                     hazard["agent_pause"]["episodes"][0]["pause_end"]["monotonic_ns"] -= 10**9

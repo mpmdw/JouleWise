@@ -217,7 +217,7 @@ class Harness:
         self.driver._durable_record = mock.Mock(return_value=None)
         self.sent = {"attempted": 1, "sent": True, "heartbeat_seen": True, "last_error": None}
         self.driver.run_courier = mock.Mock(return_value=self.sent)
-        self.driver._resolve_courier_bin = lambda _bin: (self.courier, None, None)
+        self.driver._resolve_courier_bin = lambda _bin, *, plan=None: (self.courier, None, None)
         self.driver._hazard_seams = lambda: self.seams()
         patcher = mock.patch.dict(os.environ, {"HOME": str(self.home)})
         patcher.start()
@@ -247,7 +247,8 @@ class Harness:
         return {"claim": str(request.claim_runs_root), "bound": str(request.bound_runs_root)}
 
     def emit_flag(self, custody, fields):
-        flag = b5_driver.build_flag(fields, boot_session_uuid="BOOT")
+        from joulewise.flags.schema import make_flag
+        flag = make_flag(**fields)
         self.flags.append(flag)
         path = Path(custody) / "flags" / b5_driver.DRIVER_FLAGS
         path.parent.mkdir(parents=True, exist_ok=True)

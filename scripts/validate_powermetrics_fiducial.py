@@ -2425,6 +2425,23 @@ def main(argv: list[str] | None = None) -> int:
                        "acceptance's prospective_rederivation digests",
             )
 
+    from joulewise.calibration_ledger import uses_block6_capture_screen  # noqa: PLC0415
+
+    screen_records_flags: list[str] = []
+    if not args.derivation_only and uses_block6_capture_screen(
+            Path(args.output_root).parent, records_flags=screen_records_flags):
+        # Block-6 registration §5.5: retain the acceptance comparison inside
+        # hashed custody, but leave level decisions to screen_b6_calibration.
+        if preflight_systematic_screen_s is not None:
+            screen_basis = {
+                "acceptance_id": acceptance_preflight["acceptance_id"],
+                "preflight_level_screen_s": str(preflight_systematic_screen_s),
+            }
+        preflight_systematic_screen_s = None
+    for code in screen_records_flags:
+        flags_core.emit(hazard, code, level="window", observed={"slot": args.slot},
+                        detail="window plan unreadable; capture level screen is diagnostic")
+
     import mlx.core as mx  # noqa: PLC0415
 
     logical_test_clock = (
@@ -2986,6 +3003,8 @@ def main(argv: list[str] | None = None) -> int:
     # Adding sibling keys below cannot change the b_fiducial_s lexeme, so the
     # disposition this returns is the one the ledger receives further down.
     bound_lexeme = _exact_bound_lexeme_s(evidence_payload)
+    if screen_records_flags:
+        evidence_payload["records_flags"] = screen_records_flags
     disposition, exceeds_prior_level_screen = _classify_capture(
         evidence_status=evidence_payload["status"],
         bound_lexeme=bound_lexeme,
@@ -2993,7 +3012,10 @@ def main(argv: list[str] | None = None) -> int:
         screen_basis=screen_basis,
     )
     if screen_basis is not None:
-        evidence_payload["derivation_only"] = True
+        if args.derivation_only:
+            evidence_payload["derivation_only"] = True
+        else:
+            evidence_payload["acceptance_preflight"] = acceptance_preflight
         evidence_payload["screen_basis"] = screen_basis
         evidence_payload["exceeds_prior_level_screen"] = (
             exceeds_prior_level_screen
@@ -3020,8 +3042,13 @@ def main(argv: list[str] | None = None) -> int:
         }
         | {"raw/powermetrics.plist": sha256_path(capture_path)},
     }
+    if screen_records_flags:
+        manifest["records_flags"] = screen_records_flags
     if screen_basis is not None:
-        manifest["derivation_only"] = True
+        if args.derivation_only:
+            manifest["derivation_only"] = True
+        else:
+            manifest["acceptance_preflight"] = acceptance_preflight
         manifest["screen_basis"] = screen_basis
         manifest["exceeds_prior_level_screen"] = evidence_payload[
             "exceeds_prior_level_screen"
