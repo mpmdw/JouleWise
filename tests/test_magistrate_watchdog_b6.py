@@ -215,6 +215,27 @@ class InstalledBlockSixTests(WatchdogTestCase):
         self.assertIn("unreadable installed agent", supervisor.state["resident_hold_drain"]["reason"])
         self.assertTrue((self.harness.storage.root / "standdown.request").exists())
 
+    def test_installed_plist_content_faults_hold_and_drain(self) -> None:
+        # Contents whose parse raises outside the plist/JSON error classes (review r2 MINOR-1).
+        deep = b"<array>" * 5000 + b"</array>" * 5000
+        bodies = {
+            "bad_date": b'<?xml version="1.0"?><plist version="1.0"><dict><key>d</key>'
+                        b'<date>not-a-date</date></dict></plist>',
+            "deep": b'<?xml version="1.0"?><plist version="1.0">' + deep + b"</plist>",
+        }
+        plan = self.block_six_plan()
+        for name, body in bodies.items():
+            with self.subTest(body=name):
+                self.install(plan).write_bytes(body)
+                self.assertEqual("HOLD_UNSAFE",
+                                 wd.decide(self.harness.storage, self.harness.deps, wd.initial_state()).state)
+                supervisor = self.supervisor(plan)
+                self.assertTrue(supervisor.step())
+                self.assertEqual("HOLD_UNSAFE", supervisor.state["state"])
+                self.assertIn("unreadable installed agent", supervisor.state["resident_hold_drain"]["reason"])
+                self.assertTrue((self.harness.storage.root / "standdown.request").exists())
+                (self.harness.storage.root / "standdown.request").unlink()
+
     def test_readable_installed_sibling_keeps_deadlines_when_other_plist_is_torn(self) -> None:
         plan = self.block_six_plan()
         for torn_label in ("com.joulewise.night", "com.joulewise.night.deadman"):

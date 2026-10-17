@@ -831,8 +831,8 @@ def _installed_agent_plans(
             if key not in seen:
                 seen.add(key)
                 plans.append(plan)
-        except (OSError, ValueError, OverflowError, TypeError, KeyError, IndexError, PlanError,
-                plistlib.InvalidFileException, ExpatError) as exc:
+        except Exception as exc:  # any content fault (e.g. a malformed <date> raises
+            # AttributeError, deep nesting RecursionError) must hold and drain, never escape.
             if errors is None:
                 raise ValueError(f"unreadable installed agent {plist}: {exc}") from exc
             # Keep readable siblings for their absolute drain deadlines, while
