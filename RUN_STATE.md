@@ -110,7 +110,18 @@ Differences from the brief, added to the eight of the block below:
 - **Machine test re-run installed:** out `/Users/edr/night-b6/machine-test/MT-20261017T1735Z`, t0 10:51:00 PDT 2026-10-17 (epoch 1792259460). This activation exited before t0.
 - Deferred to the block-6 follow-up lane: watchdog fallback drain when t0 is unknown (PR #500 review NIT-1); the 21,676-character "collection ran" CLI line; the test that leaked pid 43816.
 
-**Next activation (written 2026-10-17 by activation 1a1261a5; item 42): the queue is yours, in this order.**
+43. **Magistrate activation d34bf254 (Opus 5.5, headless, from 2026-10-17 11:47 PDT).** Nothing is armed; block 5 is still blinded. Record: `docs/process_traces/2026-10-17-magistrate-d34bf254/RECORD.md`.
+- **Machine test MT-20261017T1735Z ended and did NOT pass.** "collection ran" and "smoke desk" were not observed; every collection-side item was observed. `report --uninstall` done; no night job loaded. Ed was emailed with the four smoke yield notices (Gmail `1a14b36841cd2927`, ack written).
+- **Three desk defects** (root cause `/Users/edr/night-archive/b6-mt2-rootcause/sol-rootcause.md`, re-checked by the lead): (1) `environment_admission_refusals` keeps block 5's busy-fraction veto, so busy-only runs that the block-6 controller admits by council Q3 are excluded as `environment_admission_failed`. Two succeeded members were lost, and round 1 would lose every such run. (2) acceptance reads a cap-skipped stage as `structure.missing_stage_bundles`. (3) `smoke.classify` fails a stage whose rc 1 comes from a cap skip. No collection fault.
+- **Fix seat** (Sol 6.1 xhigh, local) on `fix/2026-10-17-b6-mt2-fixes`, worktree `/Users/edr/code/JouleWise-wt-b6-mt2fix`, brief `/Users/edr/night-archive/b6-mt2-fix/BRIEF.md`.
+- Spotify (pid 917) and pid 43816 are still running; Ed has not answered.
+
+**Next activation (written 2026-10-17 by activation d34bf254; item 43): the queue is yours, in this order.**
+1. If `fix/2026-10-17-b6-mt2-fixes` has no fix commit: read `/Users/edr/night-archive/b6-mt2-fix/sol-fix.md` and the worktree's `.codex-report/b6-mt2-fixes.md`; if the worktree has the seat's changes, run the modules it names and commit; if not, relaunch the seat with the same brief.
+2. Gates on the fix (it changes which data count): one executing review, then the two blind cold passes (Fable 5.1, Opus 5.5), each running the fixed deciding functions on the archived smoke inputs (`/Users/edr/night-b6/machine-test/MT-20261017T1735Z/smoke/.../archive`). Fix round if needed. Merge into `lane/2026-10-16-b6-round2`, CI on draft PR #499, re-pin, rebuild the measurement checkout, and re-run the machine test (page "The machine test"). Pass = every item observed except the meter item.
+3. Then item 42's steps 3-6 (Ed's Spotify / pid 43816 answer; arm round 1 by the page; L9 between windows).
+
+(History) **Next activation (written 2026-10-17 by activation 1a1261a5; item 42): the queue is yours, in this order.**
 1. If `/Users/edr/night-b6/machine-test/MT-20261017T1735Z/custody/night/result.json` is absent and a `com.joulewise.night` job or `run_night.py` is live, the machine test is running: exit at once, quietly.
 2. When the chain has ended: `/opt/homebrew/bin/python3.13 -B /Users/edr/night-custody/measurement/JouleWise-measurement-20261017T1619Z-b6/scripts/b6_machine_test.py report --uninstall --state "/Users/edr/night-b6/machine-test/MT-20261017T1735Z/machine-test.json"`. Pass means every item observed except "meter present: not exercised", and no desk error. An unexpected physical exclusion means rerun. Any other missing item is a defect in the code it names: fix it on the lane, re-pin, rebuild the checkout and re-run.
 3. Search Gmail for Ed's answer about Spotify and pid 43816 (`from:claude2.glaring610@passmail.net is:unread`). Do not arm round 1 while either is running, unless Ed says to keep Spotify; in that case register c_q 0.72 by one erratum line in the draft.
