@@ -26,13 +26,14 @@ SCHEMA = "joulewise.b6_acceptance.v1"
 COUNT_REASONS = frozenset({"cell.below_minimum", "neg8.survivor_screen_undefined"})
 
 
-def recorded_wait_cap_skip(member: MemberEvidence) -> bool:
+def recorded_idle_skip(member: MemberEvidence) -> bool:
     """A physical pre-measurement loss needs both the flag and admission record."""
     admission = member.runtime.get("environment_admission")
     return (member.runtime.get("bundle_present", True) is not False
-            and "idle.wait_cap_skip" in member.flags
             and isinstance(admission, Mapping)
-            and admission.get("skip_reason") == "wait_cap_reached")
+            and any(flag in member.flags and admission.get("skip_reason") == reason
+                    for flag, reason in (("idle.wait_cap_skip", "wait_cap_reached"),
+                                         ("idle.wait_budget_skip", "wait_budget_exhausted"))))
 
 
 @dataclass(frozen=True)
@@ -186,13 +187,11 @@ class BlockSixAcceptance:
         if not members:
             structural_failures.append("structure.no_roster")
         for i, stage in enumerate(evidence.stages):
-            # Missing arbitrary bundle bytes is not proof that a stage left no
-            # measurement records. A recorded cap skip deliberately has no plist.
             absent = not stage.members or all(
                 m.runtime.get("bundle_present", True) is False
-                or "raw/powermetrics.plist" in m.runtime.get("files_missing", ()) for m in stage.members)
-            cap_skipped = (bool(stage.members) and len(stage.members) == stage.expected_count
-                           and all(recorded_wait_cap_skip(m) for m in stage.members))
+                or "member.bytes_missing" in m.flags for m in stage.members)
+            idle_skipped = (bool(stage.members) and len(stage.members) == stage.expected_count
+                            and all(recorded_idle_skip(m) for m in stage.members))
             later_ran = any(m.runtime.get("bundle_present", True) and m.status == "succeeded"
                             for later in evidence.stages[i + 1:] for m in later.members)
             # §1.8/§8.2 govern reference losses, including a wholly absent
@@ -200,7 +199,7 @@ class BlockSixAcceptance:
             references_only = bool(stage.members) and all(m.role in {
                 "corpus", "start", "midpoint", "end", "diagnostic_reference"} for m in stage.members)
             if (stage.expected_count and stage.kind == "campaign_collection" and absent and later_ran
-                    and not references_only and not cap_skipped):
+                    and not references_only and not idle_skipped):
                 structural_failures.append("structure.missing_stage_bundles")
         for code in sorted(set(structural_failures)):
             emit(code)

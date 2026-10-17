@@ -244,6 +244,36 @@ class AcceptanceTests(unittest.TestCase):
         result = self.evaluate(dataclasses.replace(base, stages=(incomplete, *base.stages)))
         self.assertIn("structure.missing_stage_bundles", result.reasons)
 
+    def test_mixed_cap_and_budget_skips_explain_complete_stage_only(self):
+        base = session()
+        members = tuple(MemberEvidence("lost", run_id, "failed", (flag, "member.bytes_missing"),
+            runtime={"bundle_present": True, "files_missing": ("raw/powermetrics.plist",),
+                     "environment_admission": {"skip_reason": reason}})
+            for run_id, flag, reason in (("cap", "idle.wait_cap_skip", "wait_cap_reached"),
+                                        ("budget", "idle.wait_budget_skip", "wait_budget_exhausted")))
+        stage = StageEvidence("lost", "campaign_collection", 2, members)
+        result = self.evaluate(dataclasses.replace(base, stages=(stage, *base.stages)))
+        self.assertFalse(result.structural)
+        for member in members:
+            with self.subTest(run_id=member.run_id):
+                incomplete = dataclasses.replace(stage, members=(member,))
+                result = self.evaluate(dataclasses.replace(base, stages=(incomplete, *base.stages)))
+                self.assertIn("structure.missing_stage_bundles", result.reasons)
+
+    def test_clean_capture_stage_losing_every_summary_is_structural(self):
+        base = session()
+        members = tuple(MemberEvidence("lost", run_id, "succeeded", ("member.bytes_missing",),
+            runtime={"bundle_present": True, "files_missing": ("summary_metrics.json",)})
+            for run_id in ("first", "second"))
+        stage = StageEvidence("lost", "campaign_collection", 2, members)
+        for smoke in (False, True):
+            with self.subTest(smoke=smoke):
+                evidence = dataclasses.replace(base, stages=(stage, *base.stages),
+                    runtime={"_b6": {**base.runtime.get("_b6", {}), "smoke": smoke}})
+                result = self.evaluate(evidence)
+                self.assertIn("structure.missing_stage_bundles", result.reasons)
+                self.assertTrue(result.structural)
+
     def test_loss_excludes_unit_and_duplicate_positions_have_no_unit(self):
         base = session()
         member = dataclasses.replace(base.stages[0].members[0], flags=("agent.unit_overlap",))
@@ -347,7 +377,7 @@ class ArchiveAndCliTests(unittest.TestCase):
         statuses = {m.run_id: m.status for stage in self.read().stages for m in stage.members}
         self.assertEqual(statuses, {"s0": "failed", "s1": "aborted", "s2": "succeeded", "s3": "succeeded", "s4": "succeeded"})
 
-    def test_cap_skipped_reduced_stage_is_physical_loss_and_minimum_still_applies(self):
+    def test_idle_skipped_reduced_stage_requires_matching_records_and_keeps_minimum(self):
         tree = {"stage_graph": [
             {"stage_id": "cap", "kind": "campaign_collection", "expected_count": 1},
             {"stage_id": "later", "kind": "campaign_collection", "expected_count": 1}],
@@ -363,21 +393,30 @@ class ArchiveAndCliTests(unittest.TestCase):
         self.assertFalse((bundle / "raw/powermetrics.plist").exists())
         missing = acceptance._flag("member.bytes_missing", prepared(self.root / "prep").catalog,
                                    run_id="s0", observed={"files_missing": ["raw/powermetrics.plist"]})
-        cap = acceptance._flag("idle.wait_cap_skip", prepared(self.root / "prep").catalog, run_id="s0")
         flags_path = self.archive / "derived/flags.jsonl"
-        for case in ("explained", "flag_absent", "reason_absent", "generic_missing"):
-            with self.subTest(case=case):
-                rows = [missing, cap] if case in ("explained", "reason_absent") else [missing]
+        for code, reason, case in (
+                (code, reason, case)
+                for code, reason in (("idle.wait_cap_skip", "wait_cap_reached"),
+                                     ("idle.wait_budget_skip", "wait_budget_exhausted"))
+                for case in ("explained", "flag_absent", "reason_absent", "reason_mismatched", "generic_missing")):
+            with self.subTest(code=code, case=case):
+                skip = acceptance._flag(code, prepared(self.root / "prep").catalog, run_id="s0")
+                rows = [missing, skip] if case not in ("flag_absent", "generic_missing") else [missing]
+                skip_reason = reason
+                if case == "reason_absent":
+                    skip_reason = None
+                elif case == "reason_mismatched":
+                    skip_reason = "wait_budget_exhausted" if reason == "wait_cap_reached" else "wait_cap_reached"
                 if case == "generic_missing":
-                    rows = [{**missing, "observed": {"files_missing": ["unrelated.json"]}}]
+                    rows = [{**missing, "observed": {"files_missing": ["summary_metrics.json"]}}]
                 flags_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
                 write_json(bundle / "metadata.json", {**IDENTITY, "environment_admission": {
-                    "skip_reason": None if case == "reason_absent" else "wait_cap_reached"}})
+                    "skip_reason": skip_reason}})
                 with patch.object(acceptance, "read_plan_tree", return_value=(tree, self.root)):
                     evidence = self.read()
                 result = acceptance.ACCEPTANCE.evaluate(prepared(self.root / "prep"), evidence)
                 self.assertEqual("structure.missing_stage_bundles" in result.flags,
-                                 case in ("flag_absent", "reason_absent"))
+                                 case != "explained")
                 self.assertIn("cell.below_minimum", result.reasons)
                 self.assertFalse(result.counting)
                 if case == "explained":

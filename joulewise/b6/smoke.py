@@ -365,7 +365,7 @@ def stages_succeeded(stage_results, *, tree, repo_root, evidence):
     The campaign returns 1 for unsuccessful members. Other exits, unresolved
     dispatches, missing records and any other failed member remain stage faults.
     """
-    from joulewise.b6.acceptance import recorded_wait_cap_skip
+    from joulewise.b6.acceptance import recorded_idle_skip
 
     dispatches = {row.stage_id: row for row in plan.resolve_stage_dispatches(tree, repo_root)}
     stages = {stage.stage_id: stage for stage in evidence.stages}
@@ -390,7 +390,7 @@ def stages_succeeded(stage_results, *, tree, repo_root, evidence):
                 or {m.run_id for m in stage.members} != set(run_ids)):
             return False
         skipped = [m for m in stage.members if m.status != "succeeded"]
-        if not skipped or not all(m.status == "failed" and recorded_wait_cap_skip(m) for m in skipped):
+        if not skipped or not all(m.status == "failed" and recorded_idle_skip(m) for m in skipped):
             return False
     return True
 
@@ -490,7 +490,8 @@ def desk(prepared, *, driver_exit=None, run=subprocess.run, acceptance=None,
                                             registration_dir=prepared.registration_dir, code_identity=prepared.fingerprint,
                                             pack_root=prepared.measurement / "configs/campaigns" / prepared.pack_id)
             a_result = acceptance.evaluate(prepared_a, evidence)
-        if not stages_ok and "idle.wait_cap_skip" in a_result.flags and loader and harvest_exit in (0, 6):
+        if (not stages_ok and {"idle.wait_cap_skip", "idle.wait_budget_skip"}.intersection(a_result.flags)
+                and loader and harvest_exit in (0, 6)):
             stage_evidence = loader(archive) if evidence_loader else loader(
                 archive, Path(prepared.plan_path), prepared.registration_dir)
             stages_ok = stages_succeeded(stage_results, tree=tree, repo_root=prepared.measurement,

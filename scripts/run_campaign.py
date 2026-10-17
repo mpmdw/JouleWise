@@ -202,6 +202,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
 )
 from joulewise.cooldown import cooldown_disposition_from_raw  # noqa: E402
 from joulewise.environment_admission import (  # noqa: E402
+    busy_fraction_admission_admitted,
     current_environment_refusals,
     post_run_environment_refusals,
 )
@@ -7233,6 +7234,7 @@ def _idle_admission_core_evaluation(
         # Q3 is disclosure-only for an explicit controller busy-only admission.
         # Preserve the evaluator output for the whole-window stored/derived replay.
         cpu_conditions = cpu_admission["conditions"]
+        final = {}
         if attempt is not None:
             # Read defensively (stage-1 integration): callers that bind the attempt
             # number without an environment_admission ledger must not raise here.
@@ -7259,6 +7261,10 @@ def _idle_admission_core_evaluation(
             {
                 "bundle_id": evaluation.bundle_id,
                 "cpu_admission": cpu_admission,
+                # Carry the explicit controller exception to every core consumer.
+                # Ordinary/block-5 members retain their existing wire shape.
+                **({"final_admission_attempt": dict(final)}
+                   if final.get("busy_fraction_admitted") is True else {}),
                 "adapter_observation_count": len(member_observations),
             }
         )
@@ -8600,19 +8606,8 @@ def _run_whole_window_verdict_locked(
     bracket_decision = (
         bracket.get("decision") if isinstance(bracket, dict) else None
     )
-    continuity = core.get("adapter_wattage_continuity")
-    members = core.get("members")
-    cpu_passed = bool(members) and all(
-        isinstance(member, dict)
-        and isinstance(member.get("cpu_admission"), dict)
-        and member["cpu_admission"].get("decision") == "admitted"
-        for member in members
-    )
     core_passed = bool(
-        bracket_decision == "passed"
-        and isinstance(continuity, dict)
-        and continuity.get("decision") == "stable"
-        and cpu_passed
+        not _idle_admission_claim_barrier_reasons(core)
         and not core["conditions"]
     )
     if policy_binding.idle_admission_extension is None:
@@ -9048,7 +9043,9 @@ def _idle_admission_claim_barrier_reasons(core: Mapping[str, Any]) -> list[str]:
     elif any(
         not isinstance(member, Mapping)
         or not isinstance(member.get("cpu_admission"), Mapping)
-        or member["cpu_admission"].get("decision") != "admitted"
+        or (member["cpu_admission"].get("decision") != "admitted"
+            and not busy_fraction_admission_admitted(
+                member.get("final_admission_attempt"), member["cpu_admission"]))
         for member in members
     ):
         reasons.add("cpu_admission_core_failed")
