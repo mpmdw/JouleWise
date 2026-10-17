@@ -301,19 +301,55 @@
   ]
  },
  {
-  "commit": "pending",
+  "commit": "0276a3327cbe11627d905ed3f728423b6280f129",
   "number_bearing_paths": [
    "joulewise/environment_admission.py",
    "joulewise/whole_window.py",
    "joulewise/b6/acceptance.py",
    "joulewise/b6/smoke.py"
   ],
-  "change": "block-6 MT-20261017T1735Z desk fixes: explicit busy-only admissions and recorded wait-cap losses (Sol 6.1)",
+  "change": "block-6 MT-20261017T1735Z desk fixes, round 1: explicit busy-only admissions honoured by the shared environment validator and whole-window core check (council Q3); recorded wait-cap losses are not structural (Sol 6.1)",
   "executing_reviews": [
    {
-    "reviewer": "pending",
-    "covered": "fix/2026-10-17-b6-mt2-fixes working tree from f3ef7804b",
-    "paper": ".codex-report/b6-mt2-fixes.md"
+    "reviewer": "Fable 5.1, cold, blind, executing (non-author)",
+    "covered": "f3ef7804b..0276a3327",
+    "paper": "docs/process_traces/2026-10-17-magistrate-d34bf254/pr501-cold-fable.md (main fc3306137)"
+   },
+   {
+    "reviewer": "Opus 5.5, cold, blind, executing (non-author)",
+    "covered": "f3ef7804b..0276a3327",
+    "paper": "docs/process_traces/2026-10-17-magistrate-d34bf254/pr501-cold-opus.md (main fc3306137)"
+   },
+   {
+    "reviewer": "Opus 5.5, executing delta review (non-author)",
+    "covered": "0276a3327..021f935c8",
+    "paper": "docs/process_traces/2026-10-17-magistrate-d34bf254/pr501-delta-opus.md (main fc3306137)"
+   }
+  ]
+ },
+ {
+  "commit": "021f935c8ae5ad821771014d5009f21ddc677d17",
+  "number_bearing_paths": [
+   "scripts/run_campaign.py",
+   "joulewise/b6/acceptance.py",
+   "joulewise/b6/smoke.py"
+  ],
+  "change": "block-6 MT r2 fixes, round 2: verdict writer uses the shared claim barrier (busy-only member no longer fails the whole-window core); acceptance keeps the base absence predicate with only the recorded idle-skip exemption; wait-budget skips covered (Sol 6.1). PR #501, merged 5b58cfa06",
+  "executing_reviews": [
+   {
+    "reviewer": "Fable 5.1, cold, blind, executing (non-author)",
+    "covered": "f3ef7804b..0276a3327",
+    "paper": "docs/process_traces/2026-10-17-magistrate-d34bf254/pr501-cold-fable.md (main fc3306137)"
+   },
+   {
+    "reviewer": "Opus 5.5, cold, blind, executing (non-author)",
+    "covered": "f3ef7804b..0276a3327",
+    "paper": "docs/process_traces/2026-10-17-magistrate-d34bf254/pr501-cold-opus.md (main fc3306137)"
+   },
+   {
+    "reviewer": "Opus 5.5, executing delta review (non-author)",
+    "covered": "0276a3327..021f935c8",
+    "paper": "docs/process_traces/2026-10-17-magistrate-d34bf254/pr501-delta-opus.md (main fc3306137)"
    }
   ]
  }

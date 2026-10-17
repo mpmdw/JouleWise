@@ -6,7 +6,9 @@ after the block-5 release). This page gives the two commands the design's stage 
 (`docs/design/block6_collection_draft.md` section 17): the one machine test of about 40 minutes, then the arm of
 round 1. The first machine test, MT-20261016T2114Z, found a stale smoke plan-tree sidecar and an unwritten
 agent-presence flag; the fixes (`fix/2026-10-16-b6-mt-fixes`, `fix/2026-10-17-b6-mt-delta`) are merged here and
-the test runs again at the 2026-10-17 pin below. Run nothing
+the second, MT-20261017T1735Z, failed on three desk defects (block 5's busy-fraction veto in the shared
+environment validator, and a recorded idle-cap skip read as a missing stage and as a stage crash), fixed by PR #501;
+the test runs again at the pin below. Run nothing
 here while a block-5 analysis job or any agent is using the Mac.
 
 ## What is on this branch
@@ -38,10 +40,10 @@ Built once, by the block-5 post-seal runbook's steps 3 to 5
 (`docs/process_traces/2026-10-07-block5-seal/30-post-seal-runbook.md`), with these values:
 
 - **Commit:** a pinned commit of this branch, `P` below (the head after the open issues that matter for the test
-  are closed). Candidate `P` (2026-10-17, on `lane/2026-10-16-b6-round2`): the commit that adds this sentence,
-  after the machine-test fixes and `acceptance.json`; its hash is in RUN_STATE item 42 and
-  `docs/process_traces/2026-10-17-magistrate-1a1261a5/`. (Round 2's candidate b9de23a2c and stage 3's 220166913
-  were superseded.) The checkout is never pulled, fetched or edited afterwards; its only later commits are the ledger
+  are closed). Candidate `P` (2026-10-17 afternoon, on `lane/2026-10-16-b6-round2`): the commit that adds this
+  sentence, after the second machine test's desk fixes (PR #501, merge `5b58cfa06`); its hash is in RUN_STATE item
+  43 and `docs/process_traces/2026-10-17-magistrate-d34bf254/`. (The morning's candidate 33816e4aa, round 2's
+  b9de23a2c and stage 3's 220166913 were superseded.) The checkout is never pulled, fetched or edited afterwards; its only later commits are the ledger
   pin advances the chain's desk step makes.
 - **Path:** `/Users/edr/night-custody/measurement/JouleWise-measurement-<UTC stamp>-b6`. No path may contain
   `claude` or `codex`: the agent census matches those strings anywhere in a process's arguments.
