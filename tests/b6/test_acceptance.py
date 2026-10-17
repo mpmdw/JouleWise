@@ -231,6 +231,19 @@ class AcceptanceTests(unittest.TestCase):
         self.assertEqual(result.verdict, "HARVEST_RERUN")
         self.assertFalse(result.counting)
 
+    def test_one_cap_skip_does_not_explain_another_missing_member(self):
+        base = session()
+        cap = MemberEvidence("lost", "cap", "failed", ("idle.wait_cap_skip", "member.bytes_missing"),
+            runtime={"bundle_present": True, "files_missing": ("raw/powermetrics.plist",),
+                     "environment_admission": {"skip_reason": "wait_cap_reached"}})
+        missing = MemberEvidence("lost", "missing", "failed", runtime={"bundle_present": False})
+        stage = StageEvidence("lost", "campaign_collection", 2, (cap, missing))
+        result = self.evaluate(dataclasses.replace(base, stages=(stage, *base.stages)))
+        self.assertIn("structure.missing_stage_bundles", result.reasons)
+        incomplete = dataclasses.replace(stage, members=(cap,))
+        result = self.evaluate(dataclasses.replace(base, stages=(incomplete, *base.stages)))
+        self.assertIn("structure.missing_stage_bundles", result.reasons)
+
     def test_loss_excludes_unit_and_duplicate_positions_have_no_unit(self):
         base = session()
         member = dataclasses.replace(base.stages[0].members[0], flags=("agent.unit_overlap",))
@@ -333,6 +346,48 @@ class ArchiveAndCliTests(unittest.TestCase):
                    "members": {"s0": {"status": "failed"}, "s1": {"status": "aborted"}}})
         statuses = {m.run_id: m.status for stage in self.read().stages for m in stage.members}
         self.assertEqual(statuses, {"s0": "failed", "s1": "aborted", "s2": "succeeded", "s3": "succeeded", "s4": "succeeded"})
+
+    def test_cap_skipped_reduced_stage_is_physical_loss_and_minimum_still_applies(self):
+        tree = {"stage_graph": [
+            {"stage_id": "cap", "kind": "campaign_collection", "expected_count": 1},
+            {"stage_id": "later", "kind": "campaign_collection", "expected_count": 1}],
+            "science": [{"run_id": "s0", "stage_id": "cap"}, {"run_id": "s1", "stage_id": "later"}]}
+        roster_path = self.archive / "derived/roster.json"
+        roster = json.loads(roster_path.read_text())
+        roster["members"] = roster["members"][:2]
+        write_json(roster_path, roster)
+        bundle = self.archive / "sources/claim-runs/s0"
+        write_json(bundle / "metadata.json", {**IDENTITY, "environment_admission": {"skip_reason": "wait_cap_reached"}})
+        write_json(bundle / "summary_metrics.json", {"status": "failed"})
+        write_json(bundle / "status.json", {"status": "failed"})
+        self.assertFalse((bundle / "raw/powermetrics.plist").exists())
+        missing = acceptance._flag("member.bytes_missing", prepared(self.root / "prep").catalog,
+                                   run_id="s0", observed={"files_missing": ["raw/powermetrics.plist"]})
+        cap = acceptance._flag("idle.wait_cap_skip", prepared(self.root / "prep").catalog, run_id="s0")
+        flags_path = self.archive / "derived/flags.jsonl"
+        for case in ("explained", "flag_absent", "reason_absent", "generic_missing"):
+            with self.subTest(case=case):
+                rows = [missing, cap] if case in ("explained", "reason_absent") else [missing]
+                if case == "generic_missing":
+                    rows = [{**missing, "observed": {"files_missing": ["unrelated.json"]}}]
+                flags_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+                write_json(bundle / "metadata.json", {**IDENTITY, "environment_admission": {
+                    "skip_reason": None if case == "reason_absent" else "wait_cap_reached"}})
+                with patch.object(acceptance, "read_plan_tree", return_value=(tree, self.root)):
+                    evidence = self.read()
+                result = acceptance.ACCEPTANCE.evaluate(prepared(self.root / "prep"), evidence)
+                self.assertEqual("structure.missing_stage_bundles" in result.flags,
+                                 case in ("flag_absent", "reason_absent"))
+                self.assertIn("cell.below_minimum", result.reasons)
+                self.assertFalse(result.counting)
+                if case == "explained":
+                    self.assertFalse(result.structural)
+                    smoke = dataclasses.replace(evidence, runtime={"_b6": {**evidence.runtime["_b6"], "smoke": True}})
+                    smoke_result = acceptance.ACCEPTANCE.evaluate(prepared(self.root / "prep"), smoke)
+                    self.assertFalse(smoke_result.structural)
+                    from joulewise.b6.smoke import classify
+                    self.assertEqual(classify(stages_ok=True, driver_exit=0, harvest_exit=0,
+                        acceptance_result=smoke_result, flags=smoke_result.flags), "physics")
 
     def test_harvest_identity_flag_preserves_bytes_while_os_only_counts(self):
         for digest, verdict in (("a", "ACCEPT"), ("b", "EXCLUDE")):
