@@ -688,8 +688,9 @@ energy, whose variation is the scatter the estimators measure; a duration outlie
   intervals of 9 to 11 s that the kit recorded (2,391 in M2's long waits, median 0.72; 86 in M4, median 0.765). The
   kit's outside total excludes the kit's own processes as the monitor excludes the measurement's own, and `ps` does
   not list `kernel_task`, so it is the quantity C is. It includes two user programs left running on the machine,
-  Spotify (0.135 CPU-s per interval where listed) and a Python process started 2026-10-15 09:41 (0.056); without
-  them the median is 0.55, close to 2026-10-09's 0.52.
+  Spotify (0.135 CPU-s per interval where listed) and an orphaned test `hazard_monitor.py` (pid 43816, started
+  2026-10-15 09:41 from a scratch directory of the `JouleWise-wt-b6-s3cold-fix` worktree, still alive on 2026-10-17;
+  0.056); without them the median is 0.55, close to 2026-10-09's 0.52.
 - **Replay of the outside-processor rule at the measured values** (same 77 rehearsal runs and monitor journals as
   above, agent processes left out of C): **12 of the 53 quiet 2026-10-09 runs excluded, 13 of 13 and 11 of 11 in
   the two 2026-10-06 sessions (which had an agent and a busy `fseventsd`, median 4.2 and 5.9 outside CPU-s per
