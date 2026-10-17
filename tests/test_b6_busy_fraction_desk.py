@@ -49,12 +49,14 @@ class BusyFractionDeskTests(unittest.TestCase):
         self.assertEqual(result.core["conditions"], [])
         self.assertEqual(result.core["members"][0]["cpu_admission"], expected)
         self.assertFalse(expected["admitted"])
+        self.assertNotIn("cpu_admission_core_failed", runner._idle_admission_claim_barrier_reasons(result.core))
 
     def test_block5_shape_without_signal_keeps_busy_member_failure(self):
         member = self.member(signal=False, decision="abort")
         result = runner._idle_admission_core_evaluation([member], self.binding)
         self.assertIn("cpu_busy_ratio_p95_exceeded", result.core["conditions"])
         self.assertIn("cpu_busy_ratio_p95_exceeded", {r["reason_code"] for r in result.member_failures})
+        self.assertIn("cpu_admission_core_failed", runner._idle_admission_claim_barrier_reasons(result.core))
 
     def test_admitted_bit_alone_does_not_opt_in(self):
         result = runner._idle_admission_core_evaluation([self.member(signal=False)], self.binding)
@@ -65,6 +67,23 @@ class BusyFractionDeskTests(unittest.TestCase):
         self.assertIn("processor_combined_power_w_p95_exceeded", result.core["conditions"])
         self.assertIn("processor_combined_power_w_p95_exceeded", {r["reason_code"] for r in result.member_failures})
         self.assertNotIn("cpu_busy_ratio_p95_exceeded", result.core["conditions"])
+        self.assertIn("cpu_admission_core_failed", runner._idle_admission_claim_barrier_reasons(result.core))
+
+    def test_core_barrier_requires_final_marker_and_both_cpu_results_busy_only(self):
+        core = runner._idle_admission_core_evaluation([self.member()], self.binding).core
+        for case in ("not_admitted", "marker_absent", "metadata_power_failure", "core_power_failure"):
+            with self.subTest(case=case):
+                mutated = copy.deepcopy(core)
+                member = mutated["members"][0]
+                final = member["final_admission_attempt"]
+                if case == "not_admitted":
+                    final["admitted"] = False
+                elif case == "marker_absent":
+                    final.pop("busy_fraction_admitted")
+                else:
+                    cpu = final["cpu_admission"] if case == "metadata_power_failure" else member["cpu_admission"]
+                    cpu["conditions"].append("processor_combined_power_w_p95_exceeded")
+                self.assertIn("cpu_admission_core_failed", runner._idle_admission_claim_barrier_reasons(mutated))
 
     def test_other_derived_conditions_with_signal_still_fail(self):
         member = self.member()
@@ -76,13 +95,14 @@ class BusyFractionDeskTests(unittest.TestCase):
                 self.assertIn(condition, result.core["conditions"])
                 self.assertIn(condition, {r["reason_code"] for r in result.member_failures})
 
-    def test_attempt_validators_accept_extra_signal_without_changing_evidence_result(self):
+    def test_attempt_validators_accept_extra_signal_and_clear_busy_only_refusal(self):
         member = self.member(signal=False)
         admission = member.metadata["environment_admission"]
         before = environment_admission_refusals(admission)
+        self.assertEqual(before, ("environment_admission_failed",))
         self.assertNotIn("environment_admission_missing", before)
         admission["attempts"][-1]["busy_fraction_admitted"] = True
-        self.assertEqual(environment_admission_refusals(admission), before)
+        self.assertEqual(environment_admission_refusals(admission), ())
         self.assertEqual(runner._final_idle_admission_attempt(member), 1)
 
 

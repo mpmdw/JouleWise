@@ -299,5 +299,22 @@
     "paper": "/Users/edr/night-archive/b6-mt-fix/review/DELTA-REVIEW-bc099c85b.md"
    }
   ]
+ },
+ {
+  "commit": "pending",
+  "number_bearing_paths": [
+   "joulewise/environment_admission.py",
+   "joulewise/whole_window.py",
+   "joulewise/b6/acceptance.py",
+   "joulewise/b6/smoke.py"
+  ],
+  "change": "block-6 MT-20261017T1735Z desk fixes: explicit busy-only admissions and recorded wait-cap losses (Sol 6.1)",
+  "executing_reviews": [
+   {
+    "reviewer": "pending",
+    "covered": "fix/2026-10-17-b6-mt2-fixes working tree from f3ef7804b",
+    "paper": ".codex-report/b6-mt2-fixes.md"
+   }
+  ]
  }
 ]
