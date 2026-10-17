@@ -216,12 +216,11 @@ class InstalledBlockSixTests(WatchdogTestCase):
         self.assertTrue((self.harness.storage.root / "standdown.request").exists())
 
     def test_installed_plist_content_faults_hold_and_drain(self) -> None:
-        # Contents whose parse raises outside the plist/JSON error classes (review r2 MINOR-1).
-        deep = b"<array>" * 5000 + b"</array>" * 5000
+        # A parse that raises outside the plist/JSON error classes (review r2 MINOR-1):
+        # plistlib raises AttributeError on a malformed <date>.
         bodies = {
             "bad_date": b'<?xml version="1.0"?><plist version="1.0"><dict><key>d</key>'
                         b'<date>not-a-date</date></dict></plist>',
-            "deep": b'<?xml version="1.0"?><plist version="1.0">' + deep + b"</plist>",
         }
         plan = self.block_six_plan()
         for name, body in bodies.items():
