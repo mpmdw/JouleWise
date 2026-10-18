@@ -1,0 +1,90 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "published": true
+    }
+  ],
+  "boot_changed": [],
+  "ended": {
+    "monotonic_ns": 311524142236041,
+    "monotonic_raw_ns": 311524142235750,
+    "wall_s": 1792327187.158452
+  },
+  "locators": {
+    "bound": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "recorded_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "root": "/Users/edr/night-b6/sessions/r1-beta/runs-parent/runs_d117_floor_qwen3-8b_v5_bound",
+      "sha256": "a2f86b84f2ceecffb8d2685f4f2b2f6bd566b047f434fc2f8ba755028ad9022d",
+      "valid": true
+    },
+    "claim": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "recorded_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "root": "/Users/edr/night-b6/sessions/r1-beta/runs-parent/runs_d117_floor_qwen3-8b_v5",
+      "sha256": "feb99d3974aaa2150b59ecb83483fe4ae256d8678c7fd34bb252097e82b25989",
+      "valid": true
+    }
+  },
+  "locators_valid": true,
+  "published": true,
+  "requested": {
+    "monotonic_ns": 311524131810708,
+    "monotonic_raw_ns": 311524131810625,
+    "wall_s": 1792327187.148027
+  },
+  "result": {
+    "launch_lineage": {
+      "bracket_session_id": "r1-beta-calibration",
+      "collection_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "launch_record": {
+        "path": "/Users/edr/night-b6/sessions/r1-beta/custody/window_lineage/launch.json",
+        "sha256": "45d95d8d6c0cde3c342568f6a88c3837fd60dc0e4d79d20be7f6ebe091e39d11"
+      },
+      "pack_id": "d117_floor_qwen3-8b_v5",
+      "pack_root": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/configs/campaigns/d117_floor_qwen3-8b_v5",
+      "pack_sha256": "6bfbecc731107238539ab76890b4fa32bd5937eb4ebe5bbe06c3f3ec79bc78dd",
+      "plan_id": "plan-d117-floor-qwen3-8b-decode-prefill-p2048-v5",
+      "plan_tree_sha256": "e77e4f6e74f663190d1acfe95c3e2499ec69c1b27ba9e3564c531affee980707",
+      "schema_version": "joulewise.hazard_window_lineage.v1",
+      "window_context": {
+        "bound_runs_root": "/Users/edr/night-b6/sessions/r1-beta/runs-parent/runs_d117_floor_qwen3-8b_v5_bound",
+        "claim_runs_root": "/Users/edr/night-b6/sessions/r1-beta/runs-parent/runs_d117_floor_qwen3-8b_v5",
+        "custody_root": "/Users/edr/night-b6/sessions/r1-beta/custody",
+        "night_dir": "/Users/edr/night-b6/sessions/r1-beta/custody/night",
+        "post_attempt_id": "r1-beta-cal-post",
+        "pre_attempt_id": "r1-beta-cal-pre"
+      },
+      "window_id": "plan-d117-floor-qwen3-8b-decode-prefill-p2048-v5"
+    },
+    "locators": {
+      "bound_runs_root": {
+        "path": "/Users/edr/night-b6/sessions/r1-beta/runs-parent/runs_d117_floor_qwen3-8b_v5_bound/.joulewise-launch-lineage.json",
+        "sha256": "a2f86b84f2ceecffb8d2685f4f2b2f6bd566b047f434fc2f8ba755028ad9022d"
+      },
+      "claim_runs_root": {
+        "path": "/Users/edr/night-b6/sessions/r1-beta/runs-parent/runs_d117_floor_qwen3-8b_v5/.joulewise-launch-lineage.json",
+        "sha256": "feb99d3974aaa2150b59ecb83483fe4ae256d8678c7fd34bb252097e82b25989"
+      }
+    },
+    "records": {
+      "authorization": {
+        "path": "/Users/edr/night-b6/sessions/r1-beta/custody/window_lineage/authorization.json",
+        "sha256": "9136ab01cfcffec4931270193b10d383dd467867676b6c7e3d4d95cbe8f98081"
+      },
+      "go": {
+        "path": "/Users/edr/night-b6/sessions/r1-beta/custody/window_lineage/go.json",
+        "sha256": "5b40915a096c41d0a669b084b7fc6eb102340f58f9b4dc9aee8abd3379f1b25a"
+      },
+      "launch": {
+        "path": "/Users/edr/night-b6/sessions/r1-beta/custody/window_lineage/launch.json",
+        "sha256": "45d95d8d6c0cde3c342568f6a88c3837fd60dc0e4d79d20be7f6ebe091e39d11"
+      }
+    },
+    "unrecorded": []
+  },
+  "schema": "joulewise.b5_lineage_publication.v1"
+}

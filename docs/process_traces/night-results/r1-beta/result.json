@@ -1,0 +1,87 @@
+{
+  "aborted_reason": null,
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "53de4d1118ea98ca03ebc7b7eb2a88671420a786dbf42553e0f99876dba6b2ad"
+    },
+    {
+      "path": "night/chain.started",
+      "sha256": "fad7b7c1a0e92efb0c635d6893c249a75c4d8efaf9415a10a2b2a4795a490286"
+    },
+    {
+      "path": "night/chain.exited",
+      "sha256": "11e325ff16b9fada7620f818987b7405858701fdd480f23ed6c385f3ca47864e"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "1c03996435205aaf0d938c31aa9293e13c6822b1a99ea23a812e470319ba16cb"
+    },
+    {
+      "path": "night/chain.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "night/chain.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "night/hazard_result.json",
+      "sha256": "39c8623fd559996c526963b7322e2e72db4231e3fcec19960362103619b786fa"
+    },
+    {
+      "path": "night/arm_decision.json",
+      "sha256": "4b2380b78d6165f1e40a1be4dd7e5dadc5ee1681defd36f8175b17bae703ba79"
+    },
+    {
+      "path": "night/network_time_off.action.json",
+      "sha256": "a0b05007ad59b7e7d36677c1d8d1359870f376d7377b0ff99c4f5973c3b40c33"
+    },
+    {
+      "path": "night/arm_collectors.json",
+      "sha256": "040dfec7762e1c9837590c00376a773b1899fab42930858116e1f908b7d83c84"
+    },
+    {
+      "path": "night/executed_inventory.json",
+      "sha256": "25426ff68e2085bbca695f41a817e0a2dd0d0c322475775d60e5a723f446f1df"
+    },
+    {
+      "path": "night/lineage.json",
+      "sha256": "6659de9b519726d8a396ff739d30f649158f67a83da6d1e875be0d615dd7b4e0"
+    },
+    {
+      "path": "night/monitor_supervision.jsonl",
+      "sha256": "dc294b1ba50643cc719998e01fa0271fb70fb0dd5dee4f38c3481e0968e1bae7"
+    },
+    {
+      "path": "night/meter_supervision.jsonl",
+      "sha256": "cba05d01bd3beb542d676e4082442cacd18bcea0e36c62349fe549e4c4095a00"
+    },
+    {
+      "path": "night/chain.exit-census.json",
+      "sha256": "c26eaa1db060f595c907f6e8e915fa33618c2aba2951e211ecae004d10f98fdb"
+    },
+    {
+      "path": "night/stage_yield.jsonl",
+      "sha256": "a57ac2618ce3a059fe3cca56fff8508f163911ec113e974dab79461e59f0e3da"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 665,
+  "census_hits": [],
+  "chain_exit_code": 0,
+  "chain_sha256": "dfa20a2c74031b2bcb360206a7f86aa5015fed4bf07934be633493b0e1d6a0bf",
+  "ended_epoch_s": 1792347145.128153,
+  "ended_monotonic_ns": 331482111936750,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "plan_id": "r1-beta",
+  "receipt_class": "HAZARD_PACK",
+  "refusal_documents": [],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1792326960.190329,
+  "started_monotonic_ns": 311297174113166,
+  "verdict": "GO"
+}
