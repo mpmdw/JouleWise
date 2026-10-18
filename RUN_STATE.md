@@ -143,7 +143,13 @@ Differences from the brief, added to the eight of the block below:
 - **Its yield alerts are a false alarm.** The smoke keeps 1 config per stage and all four kept members succeeded (rc 0). The driver's yield plan carries the unreduced counts (3/10/10/3), so every smoke stage reads LOW. Ed was emailed (Gmail `1a14d0f1312152dd`) and the ack was written. Alert 6 (`alpha-reference-end`) will reach the next activation as a pending notice.
 - **Queued (not applied while armed):** make the smoke's yield plan use the kept counts. It affects the notice path only and lands at a round boundary with a re-pin.
 
-**Next activation (written 2026-10-17 by activation 57e84ae6; item 48):** if the only pending notice is smoke alert 6 (`alpha-reference-end`, succeeded 1 = present 1, rc 0), it is the same false alarm. Email Ed one line, write the ack and exit. Item 47's instrument check and item 46's mediaanalysisd check still hold.
+49. **Magistrate activation 953a3565 (Opus 5.5, headless, 2026-10-18 from 02:19 PDT).** Record: `docs/process_traces/2026-10-18-magistrate-953a3565/RECORD.md`.
+- **r1-alpha is COLLECTED, ACCEPT, counting (alpha 1 of 3).** Chain 313 min, exit 0, GO; harvest 88 min, rc 0; all 125 planned members succeeded; no structure defect, no exclusion. 24 recorded flags (list in the record). Ed was emailed.
+- The loop prepared `r1-beta` and was in PRECHECK at 04:06 PDT when this activation exited.
+
+**Next activation (written 2026-10-18 by activation 953a3565; item 49):** if the loop is in PRECHECK, ARM_WAIT, SMOKE_*, or SESSION_RUN, or `collection.active` exists, exit at once, quietly. At a round boundary (or while the loop sits in a hold), work the record's desk queue: check r1-alpha's flags against the registration flag effects (`code.executed_differs_from_sealed`, `whole_window.*`, the battery flags vs #421), then item 48's smoke-yield fix. Item 46's mediaanalysisd and item 47's instrument checks still hold.
+
+(History) **Next activation (written 2026-10-17 by activation 57e84ae6; item 48):** if the only pending notice is smoke alert 6 (`alpha-reference-end`, succeeded 1 = present 1, rc 0), it is the same false alarm. Email Ed one line, write the ack and exit. Item 47's instrument check and item 46's mediaanalysisd check still hold.
 
 (History) **Next activation (written 2026-10-17 by activation f4db0072; item 47):** item 45's queue holds, and so does item 46's mediaanalysisd check. If the loop is again in WAIT_PHYSICS on `instrument`, read the latest `precheck.json` under `/Users/edr/night-b6/loop/staging/r1-alpha/precheck/` and confirm `launchctl print gui/$(id -u)/com.joulewise.b6loop` shows `spawn type = interactive`. If it does and the cadence is still slow, the cause is something else: investigate it, do not exit quietly.
 
