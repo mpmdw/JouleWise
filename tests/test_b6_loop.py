@@ -829,7 +829,7 @@ class LoopTests(unittest.TestCase):
         records = [json.loads(p.read_text()) for p in (self.root / "wake").glob("*.json")]
         self.assertTrue(all(r["bootstrap_attempted"] and not r["job_deferred"] for r in records))
 
-    def test_cli_live_runner_draft_reasons_github_delivery_and_stop_probe(self):
+    def test_cli_live_runner_missing_plan_reasons_github_delivery_and_stop_probe(self):
         repo, loop_root = self.root / "repo", self.root / "loop"
         loop_catalog = json.loads((ROOT / "configs/b6/loop.json").read_text())["flag_catalog"]
         for relative in ("configs/b6/loop.json", "configs/campaigns/v5_claim_25g83/flag_catalog.json", loop_catalog,
@@ -838,6 +838,7 @@ class LoopTests(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, target)
         config = json.loads((repo / "configs/b6/loop.json").read_text())
+        # The registered packs require their plan trees, absent from this fixture.
         mailer = Mailer(loop_root, CATALOG, clock=lambda: 0)
         key = mailer.enqueue("loop_hold", "prior", None, {"state": "HOLD_LOOP"})
         loops, calls = [], []
@@ -860,7 +861,7 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(state["packs"], {})
         self.assertIsNone(state["session"])
         self.assertEqual(state["pack_not_open"], {
-            f"configs/b6/packs/{p}/registration.json": ["draft"] for p in ("alpha", "beta", "gamma")})
+            f"configs/b6/packs/{p}/registration.json": ["plan_tree_ref"] for p in ("alpha", "beta", "gamma")})
         self.assertTrue(mailer.entry(key)["delivered"])
         self.assertEqual(loop.mailer.transport.repo, config["github_repo"])
         from joulewise.b6.driver_lane import DriverLane
