@@ -147,7 +147,14 @@ Differences from the brief, added to the eight of the block below:
 - **r1-alpha is COLLECTED, ACCEPT, counting (alpha 1 of 3).** Chain 313 min, exit 0, GO; harvest 88 min, rc 0; all 125 planned members succeeded; no structure defect, no exclusion. 24 recorded flags (list in the record). Ed was emailed.
 - The loop prepared `r1-beta` and was in PRECHECK at 04:06 PDT when this activation exited.
 
-**Next activation (written 2026-10-18 by activation 953a3565; item 49):** if the loop is in PRECHECK, ARM_WAIT, SMOKE_*, or SESSION_RUN, or `collection.active` exists, exit at once, quietly. At a round boundary (or while the loop sits in a hold), work the record's desk queue: check r1-alpha's flags against the registration flag effects (`code.executed_differs_from_sealed`, `whole_window.*`, the battery flags vs #421), then item 48's smoke-yield fix. Item 46's mediaanalysisd and item 47's instrument checks still hold.
+50. **Magistrate activation 6e0b27ca (Opus 5.5, headless, 2026-10-18 from 11:14 PDT).** Record: `docs/process_traces/2026-10-18-magistrate-6e0b27ca/RECORD.md`.
+- **r1-beta ran (chain exit 0, no physics stop); its harvest started 11:18 PDT.** This ends round 1. Ed was not emailed: no notice was pending and nothing changed state before the harvest.
+- **Desk queue item 1 is done.** All 24 r1-alpha flags are registered. Three members were excluded (`EXCLUDE_MEMBER`; item 49's "no exclusion" means at the window level only), and the acceptance stays ACCEPT. The battery flags meet #421 (lowest SMC reads -22 and -20 mA). `code.executed_differs_from_sealed` and `whole_window.*` compare against block-5 references and are representation only. Proposed for the pruning list.
+- Item 48's smoke-yield fix is still queued (notice path only; it waits for a loop hold or a re-pin).
+
+**Next activation (written 2026-10-18 by activation 6e0b27ca; item 50):** if the loop is in PRECHECK, ARM_WAIT, SMOKE_*, SESSION_RUN or SESSION_DESK, or `collection.active` exists, exit at once, quietly. If an activation launches with r1-beta's attempt line in `attempts.jsonl` and no email has gone out for it, email Ed one summary (verdict, counting, member exclusions) and exit. Item 48's fix waits for a loop hold. Item 46's mediaanalysisd and item 47's instrument checks still hold.
+
+(History) **Next activation (written 2026-10-18 by activation 953a3565; item 49):** if the loop is in PRECHECK, ARM_WAIT, SMOKE_*, or SESSION_RUN, or `collection.active` exists, exit at once, quietly. At a round boundary (or while the loop sits in a hold), work the record's desk queue: check r1-alpha's flags against the registration flag effects (`code.executed_differs_from_sealed`, `whole_window.*`, the battery flags vs #421), then item 48's smoke-yield fix. Item 46's mediaanalysisd and item 47's instrument checks still hold.
 
 (History) **Next activation (written 2026-10-17 by activation 57e84ae6; item 48):** if the only pending notice is smoke alert 6 (`alpha-reference-end`, succeeded 1 = present 1, rc 0), it is the same false alarm. Email Ed one line, write the ack and exit. Item 47's instrument check and item 46's mediaanalysisd check still hold.
 
