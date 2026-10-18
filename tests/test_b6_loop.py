@@ -881,7 +881,7 @@ class LoopTests(unittest.TestCase):
         template = (ROOT / "configs/launchd/com.joulewise.b6loop.plist.template").read_text()
         plist = plistlib.loads(template.replace("__REPO_ROOT__", str(ROOT)).replace("__LOOP_ROOT__", str(self.root)).encode())
         self.assertEqual(plist["StartInterval"], 300)
-        self.assertEqual(plist["ProcessType"], "Background")
+        self.assertEqual(plist["ProcessType"], "Interactive")
         self.assertTrue(plist["RunAtLoad"])
         self.assertTrue(plist["ProgramArguments"][1].endswith("b6_loop_guard.zsh"))
         # launchd's default PATH lacks /opt/homebrew/bin, where gh (the mail transport) lives.
