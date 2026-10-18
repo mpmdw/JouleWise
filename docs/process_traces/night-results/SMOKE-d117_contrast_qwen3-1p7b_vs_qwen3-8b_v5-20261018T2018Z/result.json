@@ -1,0 +1,87 @@
+{
+  "aborted_reason": null,
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "3da584f804cef4a2a89b778c68868233444b0c319534332c5ac47442958b70bf"
+    },
+    {
+      "path": "night/chain.started",
+      "sha256": "522956a53ebc1175d223e8ebea6aa24f3aa2ff59840f004ae94bec1bd2d96429"
+    },
+    {
+      "path": "night/chain.exited",
+      "sha256": "e6a53307bb32045febdf15dd4e28a8b59d23bf85c86abf0d0d8d8e16cad38e4b"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "c278f533180169b8221c692bc7a6e3e56e51e3561cc95a7fd4f9dadc8437d05c"
+    },
+    {
+      "path": "night/chain.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "night/chain.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "night/hazard_result.json",
+      "sha256": "1bdb662e98b63d5be67b616ad4c63c1a9d31e76473f2fd7fac0185643d963fcc"
+    },
+    {
+      "path": "night/arm_decision.json",
+      "sha256": "1467ec00ad3cd5617d38dbe4a03c2051c8ac1160a514d614c32f87607315ba9b"
+    },
+    {
+      "path": "night/network_time_off.action.json",
+      "sha256": "a0b05007ad59b7e7d36677c1d8d1359870f376d7377b0ff99c4f5973c3b40c33"
+    },
+    {
+      "path": "night/arm_collectors.json",
+      "sha256": "f65adb6498cb7c59f0d09350d8d73fde3fb7ef83c0e298daff773accce170854"
+    },
+    {
+      "path": "night/executed_inventory.json",
+      "sha256": "949a8e680e3914f15f91abaad5703ee71cdad4d27626e8857f5186203c3d9ed1"
+    },
+    {
+      "path": "night/lineage.json",
+      "sha256": "7a925e07669f494167086ecc517964a78a1a7a6f5d2445b830c3da12d17a7e29"
+    },
+    {
+      "path": "night/monitor_supervision.jsonl",
+      "sha256": "d5e538eb10c7ee34ff53d9f6d022e0c661ba32661447bfacc8ef394935d47e46"
+    },
+    {
+      "path": "night/meter_supervision.jsonl",
+      "sha256": "f2549ce39607e1a3b4258085776e73fecfb749874cca476cd68757b2cd723ed9"
+    },
+    {
+      "path": "night/chain.exit-census.json",
+      "sha256": "6490ae2be17eb019592c7d5ea47f781bc68b9fa79d6181b50f288c2e282922c7"
+    },
+    {
+      "path": "night/stage_yield.jsonl",
+      "sha256": "045ce1b84cec54aa7d1ac75a7c204b7918a76f6ab98ca13bb3b85d600524b9b3"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 53,
+  "census_hits": [],
+  "chain_exit_code": 0,
+  "chain_sha256": "2b7f07d67affae32289b338a83bccccb58605a73e12b55725b2ddacc78d0a4a5",
+  "ended_epoch_s": 1792357215.396081,
+  "ended_monotonic_ns": 341552379864875,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "plan_id": "SMOKE-d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261018T2018Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal_documents": [],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1792355223.286109,
+  "started_monotonic_ns": 339560269892666,
+  "verdict": "GO"
+}
