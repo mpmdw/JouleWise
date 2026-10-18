@@ -73,11 +73,13 @@ class MailerTests(unittest.TestCase):
                 self.assertFalse(body({"state": "HOLD_LOOP", "cause": cause, "flags": ["disk.low"]}, CATALOG)[1])
 
     def test_previous_flags_drop_unknown_codes_without_null_entries(self):
-        previous = {"verdict": "COLLECTED", "flags": ["notice.undelivered", "registration.after_first_session",
+        # The loop's window flags are STRUCTURE codes of the block-6 catalog and pass; a code the catalog lacks drops.
+        previous = {"verdict": "COLLECTED", "flags": ["notice.undelivered", "loop.not_a_catalog_code",
                                                      "notice.no_unreadable", "battery.accumulator_activity"]}
         text, blocked = body({"state": "ARM_WAIT", "previous": previous}, CATALOG)
         self.assertFalse(blocked)
-        self.assertEqual(json.loads(text)["previous"]["flags"], ["battery.accumulator_activity"])
+        self.assertEqual(json.loads(text)["previous"]["flags"],
+                         ["notice.undelivered", "notice.no_unreadable", "battery.accumulator_activity"])
 
     def test_backoff_failure_recorded_retried_and_no_transport_default(self):
         key = self.mailer.enqueue("loop_hold", "s", "x", {"state": "HOLD_LOOP"})

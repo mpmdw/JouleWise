@@ -1,5 +1,7 @@
 """Pack-schema desk checks and disposable Git observations."""
 import json
+import importlib
+import inspect
 import subprocess
 import tempfile
 import unittest
@@ -13,7 +15,7 @@ from tests.git_fixture import init_git_fixture
 from joulewise.b6 import registration as acceptance_registration
 
 ROOT = Path(__file__).resolve().parents[1]
-CATALOG = load_catalog(ROOT / "configs/campaigns/v5_claim_25g83/flag_catalog.json")
+CATALOG = load_catalog(ROOT / "configs/b6/flag_catalog_b6.json")
 
 
 class AcceptanceDirectoryTests(unittest.TestCase):
@@ -105,13 +107,18 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual(validate(reg, CATALOG), ["estimators"])
         self.assertEqual(validate(replace(reg, data={**reg.data, "status": "draft"}), CATALOG), [])
 
-    def test_template_and_drafts_validate(self):
+    def test_template_and_registered_packs_validate(self):
         template = load(ROOT / "configs/b6/registration_template.json")
         self.assertEqual(validate(template, CATALOG), [])
         for p in ("alpha", "beta", "gamma"):
             reg = load(ROOT / f"configs/b6/packs/{p}/registration.json")
-            self.assertEqual(validate(reg, CATALOG), [])
-            self.assertEqual(reg.status, "draft")
+            self.assertEqual(validate(reg, CATALOG, root=ROOT), [])
+            self.assertEqual(reg.status, "registered")
+            self.assertEqual(len(reg.estimators), 4 if p == "gamma" else 3)
+            for estimator in reg.estimators:
+                module = importlib.import_module(estimator["library"])
+                self.assertTrue(inspect.isfunction(getattr(module, estimator["function"])))
+                self.assertEqual(estimator["version"], "6849cb7e3")
         with self.assertRaises(FrozenInstanceError):
             template.path = "changed"
 
@@ -144,19 +151,17 @@ class RegistrationTests(unittest.TestCase):
             with self.subTest(kind=kind, minimum=minimum, target=target):
                 self.assertEqual(validate(Registration(d), CATALOG), [] if valid else ["minimum_sessions"])
 
-    def test_draft_effects_do_not_turn_disclosures_into_window_exclusions(self):
+    def test_registered_effects_match_catalog_and_have_no_draft_notes(self):
         for p in ("alpha", "beta", "gamma"):
             reg = load(ROOT / f"configs/b6/packs/{p}/registration.json")
             with self.subTest(pack=p):
                 for code, effect in reg.flag_effects.items():
-                    if CATALOG.effect(code) == "DISCLOSE":
-                        self.assertNotEqual(effect, "EXCLUDE_WINDOW", code)
+                    self.assertEqual(effect, CATALOG.effect(code), code)
                 for code in ("code.executed_differs_from_sealed", "contention.request_overlap",
                              "diagnostic.s1_structural"):
-                    self.assertIsNone(reg.flag_effects[code], code)
-                self.assertIsNone(reg.flag_effects["model.identity_mismatch"])
-                self.assertEqual(len(reg.draft_notes), 3)
-                self.assertTrue(all(isinstance(note, str) and note for note in reg.draft_notes))
+                    self.assertEqual(reg.flag_effects[code], "DISCLOSE", code)
+                self.assertEqual(reg.flag_effects["model.identity_mismatch"], "DISCLOSE")
+                self.assertNotIn("draft_notes", reg.data)
 
     def test_draft_notes_ignored_for_drafts_and_refused_when_registered(self):
         d = deepcopy(registrations()["alpha"].data)

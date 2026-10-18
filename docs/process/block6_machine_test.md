@@ -182,8 +182,10 @@ Every argument:
 - The rendered file goes to `~/Library/LaunchAgents/com.joulewise.b6loop.plist`; `launchctl bootstrap gui/<uid>`
   loads it in Ed's login session, where the night jobs also run.
 - What it then does on its own: a tick every 300 s (`StartInterval`) and once at load (`RunAtLoad`), as a
-  Background process. The guard exits in milliseconds while a collection is live, so the loop costs nothing
-  inside measured runs. Each tick takes one locked step: pick the session (ALPHA), pre-check (wait on physics,
+  Interactive process. Not Background: the pre-check's instrument probe runs inside this job, and a
+  Background job's powermetrics sampled at 260-300 ms medians against the 150 ms bound (round 1, 2026-10-17,
+  pre-checks 000001-000004 of r1-alpha), the 09-19 slow-cadence defect again. The guard exits in milliseconds
+  while a collection is live, so the loop costs nothing inside measured runs. Each tick takes one locked step: pick the session (ALPHA), pre-check (wait on physics,
   hold on a certain exclusion), arm notice to GitHub issue mail with Ed's 30-minute NO, smoke if the fingerprint
   changed, install the session by the night-job route, desk it (harvest, structure check, compression), rotate.
 

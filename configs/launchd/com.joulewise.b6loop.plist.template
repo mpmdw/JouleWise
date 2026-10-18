@@ -6,5 +6,5 @@
   <key>EnvironmentVariables</key><dict><key>JW_B6_LOOP_ROOT</key><string>__LOOP_ROOT__</string><key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
   <key>StartInterval</key><integer>300</integer>
   <key>RunAtLoad</key><true/>
-  <key>ProcessType</key><string>Background</string>
+  <key>ProcessType</key><string>Interactive</string>
 </dict></plist>
