@@ -53,3 +53,9 @@ The draft is "DRAFT, not cold-gated" and §15 still marks many author decisions 
 - The lead added those 67 codes with the catalog's effects (none of the 192 existing values differed from the catalog) and committed `f31aca19f` on `lane/2026-10-17-b6-packs-registered` (pushed). Diff from `6849cb7e3`: the three pack files and `tests/test_b6_loop.py`, `tests/test_b6_registration.py`. CI-only draft PR #502 (base `lane/2026-10-16-b6-round2`).
 - Measurement checkout at `f31aca19f`: `/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6` (lock equal, interpreter digest `9033a699…`, ledger head 402, clone clean; log `/Users/edr/night-archive/magistrate-52d50d1f/build-checkout.log`). `open_packs` there opens alpha, beta and gamma with no rejection.
 - Cold judges convened 17:23 (Fable 5.1, Opus 5.5, `claude -p`, worktrees `/Users/edr/code/JouleWise-wt-gate-reg-{fable,opus}` at `3ef265345`); rulings to `/Users/edr/night-archive/magistrate-52d50d1f/gate/RULING-{fable,opus}.md`.
+
+## Owner instruction (Ed, Gmail `1a14c3ae7fea8c0e`, 2026-10-17 16:38 PDT, reply on thread `1a14c385a01a804d`)
+
+Verbatim: "yes obviously full permission to close spotify and whatever bs i left open. will be back at the physical machine shortly but obviously, fucking obviously i do not want you to be prevented from doing science by the presence of fucking spotify"
+
+Applied: closing Spotify and stopping the orphaned pid 43816 are authorized by Ed. c_q stays 0.54 (measured without them). The lead checks that both are gone and stops what remains.
