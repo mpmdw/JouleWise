@@ -1,0 +1,523 @@
+{
+  "aborted_reason": null,
+  "agent_pause": {
+    "episodes": [],
+    "stopped_by_limit": false,
+    "total_pause_s": 0.0
+  },
+  "arm": {
+    "go": true,
+    "reasons": [],
+    "record_path": "/Users/edr/night-b6/sessions/r1-alpha/custody/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "PASS",
+      "contention": "PASS",
+      "disk": "PASS",
+      "instrument": "PASS",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "census_supervision": {
+    "consecutive_unmeasured": 0,
+    "journal_failures": 0,
+    "retried_probes": 0,
+    "unmeasured_censuses": 0
+  },
+  "chain": {
+    "exit_code": 0,
+    "matches_sidecar": true,
+    "sha256": "696e4d95efafe678208a76cf9bc7773a23b76ceeb7cb86001232b87cd27d08ba",
+    "sidecar_sha256": "696e4d95efafe678208a76cf9bc7773a23b76ceeb7cb86001232b87cd27d08ba",
+    "stages": [
+      {
+        "kind": "bracket_reservation",
+        "rc": 0,
+        "stage_id": "alpha-bracket-reservation"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "alpha-pre-calibration"
+      },
+      {
+        "kind": "pre_calibration_screen",
+        "rc": 0,
+        "stage_id": "alpha-pre-calibration.screen"
+      },
+      {
+        "kind": "window_calibration_verdict",
+        "rc": 0,
+        "stage_id": "alpha-pre-calibration.window-calibration-verdict"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-bound-collection"
+      },
+      {
+        "kind": "neg8_corpus_retry_decision",
+        "rc": 0,
+        "stage_id": "alpha-bound-collection.retry-decision"
+      },
+      {
+        "kind": "neg8_corpus_collected",
+        "rc": 0,
+        "stage_id": "alpha-bound-derivation.corpus"
+      },
+      {
+        "kind": "bound_derivation",
+        "rc": 0,
+        "stage_id": "alpha-bound-derivation"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-reference-start"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-science-absolute"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-science-abba-01-05"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-science-abba-06-10"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-reference-midpoint"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 1,
+        "stage_id": "alpha-science-prefill-p2048-absolute"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-science-prefill-p2048-abba-01-05"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 1,
+        "stage_id": "alpha-science-prefill-p2048-abba-06-10"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "alpha-reference-end"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "alpha-post-calibration"
+      },
+      {
+        "kind": "session_status_record",
+        "rc": 0,
+        "stage_id": "alpha-post-calibration.session-status"
+      }
+    ],
+    "started": true,
+    "termination_proven": true
+  },
+  "diagnostics": [],
+  "disk_floor": {
+    "errors": [],
+    "low_bytes": 10737418240,
+    "stops": []
+  },
+  "ended": {
+    "monotonic_ns": 299296356138916,
+    "monotonic_raw_ns": 299296356138583,
+    "wall_s": 1792314959.372355
+  },
+  "faults": {
+    "bound_derivation_failed": false,
+    "post_bracket_failed": false,
+    "reasons": []
+  },
+  "final_census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "flags_emitted": [
+    "network_time.off_output"
+  ],
+  "g10": {
+    "ran": false,
+    "reason": "not requested",
+    "requested": false
+  },
+  "inventory": {
+    "errors": [],
+    "file_count": 492,
+    "head": "f31aca19f90473231c41cb31643afb0d6c85d355",
+    "path": "/Users/edr/night-b6/sessions/r1-alpha/custody/night/executed_inventory.json",
+    "sha256": "8f209182728f9298e04eaae1d19226633cf1b1060a5db938f3972123e9cf6a7e",
+    "status_clean": true
+  },
+  "keep_awake": {
+    "pid": 27128,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "lineage": {
+    "boot_changed": [],
+    "error": null,
+    "locators_valid": true,
+    "published": true
+  },
+  "meter": {
+    "argv": [
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/scripts/km003c_monitor.py",
+      "--out",
+      "/Users/edr/night-b6/sessions/r1-alpha/custody/hazards/meter/stream-001.jsonl"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "final_exit": null,
+    "gaps": [],
+    "journal": "meter_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 299296054958166,
+        "monotonic_raw_ns": 299296054957916,
+        "wall_s": 1792314959.0711749
+      },
+      "returncode": 0,
+      "was_running": true
+    },
+    "streams": [
+      {
+        "path": "hazards/meter/stream-001.jsonl",
+        "sha256": "7d6c2da6617e74df5e0f1ed99573121c272039cec64a68e61ec53aa0216b515b",
+        "status": "streaming"
+      }
+    ]
+  },
+  "monitor": {
+    "argv": [
+      "/usr/sbin/taskpolicy",
+      "-b",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/scripts/hazard_monitor.py",
+      "--config",
+      "/Users/edr/night-b6/sessions/r1-alpha/custody/hazards/monitor/config.json"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "gaps": [],
+    "journal": "monitor_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 299295623925791,
+        "monotonic_raw_ns": 299295623925291,
+        "wall_s": 1792314958.640142
+      },
+      "returncode": 0,
+      "was_running": true
+    }
+  },
+  "monitor_readiness": {
+    "attempts": [
+      {
+        "at": {
+          "monotonic_ns": 280501518997791,
+          "monotonic_raw_ns": 280501518997625,
+          "wall_s": 1792296164.5352142
+        },
+        "attempt": 1,
+        "ready": true,
+        "started": true,
+        "status": {
+          "battery": true,
+          "contention": true,
+          "ready": true,
+          "session_start": true
+        },
+        "waited_s": 1.033
+      }
+    ],
+    "ready": true
+  },
+  "monitor_stop": {
+    "chain_returned": {
+      "monotonic_ns": 299290620484333,
+      "monotonic_raw_ns": 299290620483875,
+      "wall_s": 1792314953.6367009
+    },
+    "hold_s": 5.0,
+    "monitor_stop_requested": {
+      "monotonic_ns": 299295623925791,
+      "monotonic_raw_ns": 299295623925291,
+      "wall_s": 1792314958.640142
+    },
+    "released": {
+      "monotonic_ns": 299295623838833,
+      "monotonic_raw_ns": 299295623837250,
+      "wall_s": 1792314958.640055
+    },
+    "released_after_chain_s": 5.003
+  },
+  "neg8_corpus": {
+    "collected_manifest": {
+      "path": "/Users/edr/night-b6/sessions/r1-alpha/custody/night/transcript/neg8-settled-corpus.collected.json",
+      "sha256": "c2737814ce0a6b8cc7b0960ff5fddda314e0c4716136749d76f0c0e5a876912e"
+    },
+    "committed_manifest": {
+      "path": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+      "sha256": "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
+    },
+    "errors": [],
+    "members_kept": 17,
+    "members_listed": 18,
+    "pruned": true,
+    "summary": {
+      "path": "/Users/edr/night-b6/sessions/r1-alpha/custody/night/transcript/neg8-settled-corpus.collected.summary.json",
+      "sha256": "76810b85de1fa939986e44fb7ab94212333712fc2a088cb5bed594cac46858b3"
+    }
+  },
+  "pack_id": "d117_floor_qwen3-1p7b_v5",
+  "plan_id": "r1-alpha",
+  "receipt_class": "HAZARD_PACK",
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": -84,
+    "end": {
+      "monotonic_ns": 299290620498416,
+      "monotonic_raw_ns": 299290620496458,
+      "read_skew_ns": 334,
+      "sleep_offset_ns": 0,
+      "uptime_raw_ns": 299290620496458,
+      "wall_s": 1792314953.636715
+    },
+    "runs_excluded": [],
+    "start": {
+      "monotonic_ns": 280502602863125,
+      "monotonic_raw_ns": 280502602861333,
+      "read_skew_ns": 417,
+      "sleep_offset_ns": 84,
+      "uptime_raw_ns": 280502602861249,
+      "wall_s": 1792296165.6190798
+    }
+  },
+  "stage_reached": "chain",
+  "started": {
+    "monotonic_ns": 280277198413375,
+    "monotonic_raw_ns": 280277198412916,
+    "wall_s": 1792295940.21463
+  },
+  "supervision_faults": {},
+  "verdict": "GO",
+  "yield": {
+    "bundles_present": 125,
+    "failed": 2,
+    "logged": 125,
+    "ok": 0,
+    "per_stage": [
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 18,
+        "min_valid": 10,
+        "ok": 0,
+        "ordinal": 3,
+        "planned": 18,
+        "present": 18,
+        "rc": 0,
+        "role": "corpus",
+        "stage_id": "alpha-bound-collection",
+        "status": "OK",
+        "succeeded": 18
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 3,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 5,
+        "planned": 3,
+        "present": 3,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "alpha-reference-start",
+        "status": "OK",
+        "succeeded": 3
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 10,
+        "min_valid": 8,
+        "ok": 0,
+        "ordinal": 6,
+        "planned": 10,
+        "present": 10,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "alpha-science-absolute",
+        "status": "OK",
+        "succeeded": 10
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 7,
+        "planned": 20,
+        "present": 20,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "alpha-science-abba-01-05",
+        "status": "OK",
+        "succeeded": 20
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 8,
+        "planned": 20,
+        "present": 20,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "alpha-science-abba-06-10",
+        "status": "OK",
+        "succeeded": 20
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 0,
+        "ok": 0,
+        "ordinal": 9,
+        "planned": 1,
+        "present": 1,
+        "rc": 0,
+        "role": "reference_midpoint",
+        "stage_id": "alpha-reference-midpoint",
+        "status": "OK",
+        "succeeded": 1
+      },
+      {
+        "failed": 1,
+        "journaled": true,
+        "logged": 10,
+        "min_valid": 8,
+        "ok": 0,
+        "ordinal": 10,
+        "planned": 10,
+        "present": 10,
+        "rc": 1,
+        "role": "science",
+        "stage_id": "alpha-science-prefill-p2048-absolute",
+        "status": "OK",
+        "succeeded": 10
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 11,
+        "planned": 20,
+        "present": 20,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "alpha-science-prefill-p2048-abba-01-05",
+        "status": "OK",
+        "succeeded": 20
+      },
+      {
+        "failed": 1,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 12,
+        "planned": 20,
+        "present": 20,
+        "rc": 1,
+        "role": "science",
+        "stage_id": "alpha-science-prefill-p2048-abba-06-10",
+        "status": "OK",
+        "succeeded": 20
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 3,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 13,
+        "planned": 3,
+        "present": 3,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "alpha-reference-end",
+        "status": "OK",
+        "succeeded": 3
+      }
+    ],
+    "planned": 125,
+    "schema": "joulewise.b5_window_yield.v1",
+    "succeeded": 125,
+    "yield_status": "FULL"
+  },
+  "yield_plan": {
+    "planned": 125,
+    "source": [
+      "driver"
+    ],
+    "stages": 10
+  },
+  "yield_tripwire": {
+    "attempted_seen": 125,
+    "counted_in_settle": 9,
+    "errors": [],
+    "pre_bundle_runs_flagged": 0,
+    "stages_counted": 10,
+    "stalled": false
+  }
+}
