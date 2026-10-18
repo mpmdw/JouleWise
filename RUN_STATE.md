@@ -129,7 +129,14 @@ Differences from the brief, added to the eight of the block below:
 - **Block-6 round 1 ARMED 18:05 PDT:** the `launchctl bootstrap` of `com.joulewise.b6loop` succeeded (rc 0). The loop prepared session `r1-alpha` and was in PRECHECK, waiting for agents to exit. The loop sends the arm notice. Block 5 is still blinded.
 - CI shard 7 on PR #502 was a stale test, `test_b6_mailer` (the pin's switch to the block-6 test catalog made the loop's window flags known STRUCTURE codes). Fixed test-only on `lane/2026-10-17-b6-packs-registered` as `28f29119c`; no re-pin, since the executed code at `f31aca19f` is unchanged.
 
-**Next activation (written 2026-10-17 by activation 88c501e5; item 45): the queue is yours, in this order.**
+46. **Magistrate activation 6789ef94 (Opus 5.5, headless, 2026-10-17 from 18:43 PDT).** Record: `docs/process_traces/2026-10-17-magistrate-6789ef94/RECORD.md`.
+- **The loop was in WAIT_PHYSICS since 18:21 PDT, not collecting.** Pre-checks 000001 and 000002 of `r1-alpha` refused on two physical hazards: contention (`mediaanalysisd` at 1.86 and 1.91 CPU-s/s against the 0.05 limit, no clean 180 s run in 600 s) and instrument (powermetrics gave 237 and 178 of 300 frames in 55 s, median interval 218 and 298 ms against 150 ms).
+- **Remedy: `mediaanalysisd` is held with SIGSTOP.** SIGTERM was ignored; SIGKILL respawned it within a second at ~1.9 cores (it analyses media when the Mac is idle on AC, the loop's own condition). The respawned pid **21331** was stopped at 18:46 PDT (state `T`, 0.0% CPU); the busiest process afterwards was the loop at 1.4%. The pid stays stopped for block 6. A reboot clears it, and the `launchctl disable` already recorded for it then takes effect. To undo: `kill -CONT 21331`.
+- Slip: this activation ran `git fetch` in the canonical root while armed (refs only; HEAD and tree unmoved). It is the sixth such slip; see the memory note "no-fetch-canonical-while-armed".
+
+**Next activation (written 2026-10-17 by activation 6789ef94; item 46):** item 45's queue holds. In addition, if the loop is in WAIT_PHYSICS on contention or instrument, first run `ps -o pid,stat,%cpu,comm -p $(pgrep -x mediaanalysisd)`. If it is running (not `T`), SIGSTOP the current pid and record the pid here. Then exit.
+
+(History) **Next activation (written 2026-10-17 by activation 88c501e5; item 45): the queue is yours, in this order.**
 1. Round 1 is armed. Read `/opt/homebrew/bin/python3.13 -B /Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/scripts/b6_loop.py status` (with `JW_B6_LOOP_ROOT=/Users/edr/night-b6/loop`). If a collection is live (`/Users/edr/night-b6/loop/collection.active`), a night job is loaded, or the state is PRECHECK/ARM_WAIT, exit at once, quietly: the pre-check waits while any agent is alive.
 2. If the loop is in a hold state (HOLD_*), read its cause and fix it within the gates; Ed's NO on the arm notice stops the loop.
 3. CI on draft PR #502 at `28f29119c`: test shards green expected (`gate-ledger` is the template check). A red shard in executed code means fix on the lane, re-pin by a §17 entry, rebuild the checkout.
