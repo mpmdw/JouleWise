@@ -59,3 +59,13 @@ The draft is "DRAFT, not cold-gated" and §15 still marks many author decisions 
 Verbatim: "yes obviously full permission to close spotify and whatever bs i left open. will be back at the physical machine shortly but obviously, fucking obviously i do not want you to be prevented from doing science by the presence of fucking spotify"
 
 Applied: closing Spotify and stopping the orphaned pid 43816 are authorized by Ed. c_q stays 0.54 (measured without them). The lead checks that both are gone and stops what remains.
+
+## Registration cold gate: both ADMIT-WITH-CORRECTIONS (17:50-17:52)
+
+Fable 5.1 and Opus 5.5, blind; rulings copied to `reg-ruling-fable.md`, `reg-ruling-opus.md`, charge `reg-gate-charge.md` (this directory). Agreement: F_min 1.9 J; S-17 step 3; pin `f31aca19f` with the machine test on `6849cb7e3` standing; the session deadline built at `ff0d63f04`; nothing makes round 1's data unusable. Corrections entered (registration §17, 2026-10-17 entry): PST close, cumulative pause, deadline text, 402-row capture-list seed, `precheck.certain_exclusion`, graphics line a flag for round 1 (replay 0 of 77), agent rule's literal replay (53 of 53, 24 of 24; kept as physics), §9 estimator note, S-5 at the pin (Fable's wording over Opus's C9), S-9/S-11 before the blind dry run, hidden offsets to rounding. Registered file committed `2a4e5149c` (records branch) and merged to main `fdee0163b` (docs only).
+
+Gates that ran this session and what touched a number: the registration cold gate (judges re-derived F_min from the 2026-10-09 rehearsal, replayed the graphics line and the 5 ms clock bound; no number changed, the close boundary text was one hour off in PDT vs PST); the machine test (caught nothing new; passed).
+
+## Arm attempt (18:1x PDT)
+
+Preconditions of the page's "Arming round 1": adapters on the branch; packs registered, committed, valid and opened at the checkout; machine test standing (cold gate); `gh` logged in as mpmdw; `claude` at `/Users/edr/.local/bin/claude`; `com.joulewise.quiet-kit` booted out (finished job); the machine test's `b6mt.after`/`b6mt.quiet` plists (not loaded) moved to `/Users/edr/night-b6/machine-test/MT-20261017T2215Z/plists-retired-52d50d1f/`. The loop plist rendered from the checkout (`plutil -lint` OK, no placeholder left) at `~/Library/LaunchAgents/com.joulewise.b6loop.plist`. `launchctl bootstrap` was refused by the auto-mode classifier ("Blind Apply"); not retried. Round 1 is not armed. Ed emailed the command.
