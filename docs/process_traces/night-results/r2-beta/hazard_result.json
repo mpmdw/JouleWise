@@ -1,0 +1,523 @@
+{
+  "aborted_reason": null,
+  "agent_pause": {
+    "episodes": [],
+    "stopped_by_limit": false,
+    "total_pause_s": 0.0
+  },
+  "arm": {
+    "go": true,
+    "reasons": [],
+    "record_path": "/Users/edr/night-b6/sessions/r2-beta/custody/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "PASS",
+      "contention": "PASS",
+      "disk": "PASS",
+      "instrument": "PASS",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "census_supervision": {
+    "consecutive_unmeasured": 0,
+    "journal_failures": 0,
+    "retried_probes": 0,
+    "unmeasured_censuses": 0
+  },
+  "chain": {
+    "exit_code": 0,
+    "matches_sidecar": true,
+    "sha256": "656347564fd30642037f6589bb6c0f5accc09e6e655003e3f49ce63181d5a845",
+    "sidecar_sha256": "656347564fd30642037f6589bb6c0f5accc09e6e655003e3f49ce63181d5a845",
+    "stages": [
+      {
+        "kind": "bracket_reservation",
+        "rc": 0,
+        "stage_id": "beta-bracket-reservation"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "beta-pre-calibration"
+      },
+      {
+        "kind": "pre_calibration_screen",
+        "rc": 0,
+        "stage_id": "beta-pre-calibration.screen"
+      },
+      {
+        "kind": "window_calibration_verdict",
+        "rc": 0,
+        "stage_id": "beta-pre-calibration.window-calibration-verdict"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "beta-bound-collection"
+      },
+      {
+        "kind": "neg8_corpus_retry_decision",
+        "rc": 0,
+        "stage_id": "beta-bound-collection.retry-decision"
+      },
+      {
+        "kind": "neg8_corpus_collected",
+        "rc": 0,
+        "stage_id": "beta-bound-derivation.corpus"
+      },
+      {
+        "kind": "bound_derivation",
+        "rc": 0,
+        "stage_id": "beta-bound-derivation"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "beta-reference-start"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 1,
+        "stage_id": "beta-science-absolute"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 1,
+        "stage_id": "beta-science-abba-01-05"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "beta-science-abba-06-10"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "beta-reference-midpoint"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "beta-science-prefill-p2048-absolute"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 1,
+        "stage_id": "beta-science-prefill-p2048-abba-01-05"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "beta-science-prefill-p2048-abba-06-10"
+      },
+      {
+        "kind": "campaign_collection",
+        "rc": 0,
+        "stage_id": "beta-reference-end"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 0,
+        "stage_id": "beta-post-calibration"
+      },
+      {
+        "kind": "session_status_record",
+        "rc": 0,
+        "stage_id": "beta-post-calibration.session-status"
+      }
+    ],
+    "started": true,
+    "termination_proven": true
+  },
+  "diagnostics": [],
+  "disk_floor": {
+    "errors": [],
+    "low_bytes": 10737418240,
+    "stops": []
+  },
+  "ended": {
+    "monotonic_ns": 392462994770833,
+    "monotonic_raw_ns": 392462994770458,
+    "wall_s": 1792408126.010987
+  },
+  "faults": {
+    "bound_derivation_failed": false,
+    "post_bracket_failed": false,
+    "reasons": []
+  },
+  "final_census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "flags_emitted": [
+    "network_time.off_output"
+  ],
+  "g10": {
+    "ran": false,
+    "reason": "not requested",
+    "requested": false
+  },
+  "inventory": {
+    "errors": [],
+    "file_count": 492,
+    "head": "c66bb1ba9618a8ed7aed7d114badd31ea15ef0aa",
+    "path": "/Users/edr/night-b6/sessions/r2-beta/custody/night/executed_inventory.json",
+    "sha256": "b9fc4fc4330b3a14ad5945bc180790703910c1dd543413cc8e954af2d2500131",
+    "status_clean": true
+  },
+  "keep_awake": {
+    "pid": 1020,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "lineage": {
+    "boot_changed": [],
+    "error": null,
+    "locators_valid": true,
+    "published": true
+  },
+  "meter": {
+    "argv": [
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/scripts/km003c_monitor.py",
+      "--out",
+      "/Users/edr/night-b6/sessions/r2-beta/custody/hazards/meter/stream-001.jsonl"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "final_exit": null,
+    "gaps": [],
+    "journal": "meter_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 392462749191000,
+        "monotonic_raw_ns": 392462749190916,
+        "wall_s": 1792408125.765407
+      },
+      "returncode": 0,
+      "was_running": true
+    },
+    "streams": [
+      {
+        "path": "hazards/meter/stream-001.jsonl",
+        "sha256": "d52e6f1556ea89ccc179d2d62fa9eec7a0f5acd74dda1c636ad6b80709afece2",
+        "status": "streaming"
+      }
+    ]
+  },
+  "monitor": {
+    "argv": [
+      "/usr/sbin/taskpolicy",
+      "-b",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/scripts/hazard_monitor.py",
+      "--config",
+      "/Users/edr/night-b6/sessions/r2-beta/custody/hazards/monitor/config.json"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "gaps": [],
+    "journal": "monitor_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 392462253960416,
+        "monotonic_raw_ns": 392462253959833,
+        "wall_s": 1792408125.2701771
+      },
+      "returncode": 0,
+      "was_running": true
+    }
+  },
+  "monitor_readiness": {
+    "attempts": [
+      {
+        "at": {
+          "monotonic_ns": 372423994619750,
+          "monotonic_raw_ns": 372423994619541,
+          "wall_s": 1792388087.010836
+        },
+        "attempt": 1,
+        "ready": true,
+        "started": true,
+        "status": {
+          "battery": true,
+          "contention": true,
+          "ready": true,
+          "session_start": true
+        },
+        "waited_s": 1.045
+      }
+    ],
+    "ready": true
+  },
+  "monitor_stop": {
+    "chain_returned": {
+      "monotonic_ns": 392457252430041,
+      "monotonic_raw_ns": 392457252429625,
+      "wall_s": 1792408120.268646
+    },
+    "hold_s": 5.0,
+    "monitor_stop_requested": {
+      "monotonic_ns": 392462253960416,
+      "monotonic_raw_ns": 392462253959833,
+      "wall_s": 1792408125.2701771
+    },
+    "released": {
+      "monotonic_ns": 392462253871875,
+      "monotonic_raw_ns": 392462253870375,
+      "wall_s": 1792408125.270088
+    },
+    "released_after_chain_s": 5.001
+  },
+  "neg8_corpus": {
+    "collected_manifest": {
+      "path": "/Users/edr/night-b6/sessions/r2-beta/custody/night/transcript/neg8-settled-corpus.collected.json",
+      "sha256": "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
+    },
+    "committed_manifest": {
+      "path": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/configs/campaigns/neg8_reference_corpus_v5/derivation/settled_corpus.json",
+      "sha256": "c957880aef0d3b99f82cc917eb3f3e8a24a5aca2665134b19430b89e0f553304"
+    },
+    "errors": [],
+    "members_kept": 18,
+    "members_listed": 18,
+    "pruned": false,
+    "summary": {
+      "path": "/Users/edr/night-b6/sessions/r2-beta/custody/night/transcript/neg8-settled-corpus.collected.summary.json",
+      "sha256": "9cbddbeb6338819db303bf5bd717e8b81e8be9d72fed6ae375ef739fe250bc77"
+    }
+  },
+  "pack_id": "d117_floor_qwen3-8b_v5",
+  "plan_id": "r2-beta",
+  "receipt_class": "HAZARD_PACK",
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": 0,
+    "end": {
+      "monotonic_ns": 392457252441833,
+      "monotonic_raw_ns": 392457252440000,
+      "read_skew_ns": 334,
+      "sleep_offset_ns": 42,
+      "uptime_raw_ns": 392457252439958,
+      "wall_s": 1792408120.268658
+    },
+    "runs_excluded": [],
+    "start": {
+      "monotonic_ns": 372425090927791,
+      "monotonic_raw_ns": 372425090926208,
+      "read_skew_ns": 333,
+      "sleep_offset_ns": 42,
+      "uptime_raw_ns": 372425090926166,
+      "wall_s": 1792388088.1071439
+    }
+  },
+  "stage_reached": "chain",
+  "started": {
+    "monotonic_ns": 372197201148625,
+    "monotonic_raw_ns": 372197201148083,
+    "wall_s": 1792387860.217365
+  },
+  "supervision_faults": {},
+  "verdict": "GO",
+  "yield": {
+    "bundles_present": 125,
+    "failed": 5,
+    "logged": 125,
+    "ok": 0,
+    "per_stage": [
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 18,
+        "min_valid": 10,
+        "ok": 0,
+        "ordinal": 3,
+        "planned": 18,
+        "present": 18,
+        "rc": 0,
+        "role": "corpus",
+        "stage_id": "beta-bound-collection",
+        "status": "OK",
+        "succeeded": 18
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 3,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 5,
+        "planned": 3,
+        "present": 3,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "beta-reference-start",
+        "status": "OK",
+        "succeeded": 3
+      },
+      {
+        "failed": 1,
+        "journaled": true,
+        "logged": 10,
+        "min_valid": 8,
+        "ok": 0,
+        "ordinal": 6,
+        "planned": 10,
+        "present": 10,
+        "rc": 1,
+        "role": "science",
+        "stage_id": "beta-science-absolute",
+        "status": "OK",
+        "succeeded": 10
+      },
+      {
+        "failed": 2,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 7,
+        "planned": 20,
+        "present": 20,
+        "rc": 1,
+        "role": "science",
+        "stage_id": "beta-science-abba-01-05",
+        "status": "OK",
+        "succeeded": 20
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 8,
+        "planned": 20,
+        "present": 20,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "beta-science-abba-06-10",
+        "status": "OK",
+        "succeeded": 20
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 1,
+        "min_valid": 0,
+        "ok": 0,
+        "ordinal": 9,
+        "planned": 1,
+        "present": 1,
+        "rc": 0,
+        "role": "reference_midpoint",
+        "stage_id": "beta-reference-midpoint",
+        "status": "OK",
+        "succeeded": 1
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 10,
+        "min_valid": 8,
+        "ok": 0,
+        "ordinal": 10,
+        "planned": 10,
+        "present": 10,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "beta-science-prefill-p2048-absolute",
+        "status": "OK",
+        "succeeded": 10
+      },
+      {
+        "failed": 2,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 11,
+        "planned": 20,
+        "present": 20,
+        "rc": 1,
+        "role": "science",
+        "stage_id": "beta-science-prefill-p2048-abba-01-05",
+        "status": "OK",
+        "succeeded": 20
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 20,
+        "min_valid": 16,
+        "ok": 0,
+        "ordinal": 12,
+        "planned": 20,
+        "present": 20,
+        "rc": 0,
+        "role": "science",
+        "stage_id": "beta-science-prefill-p2048-abba-06-10",
+        "status": "OK",
+        "succeeded": 20
+      },
+      {
+        "failed": 0,
+        "journaled": true,
+        "logged": 3,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 13,
+        "planned": 3,
+        "present": 3,
+        "rc": 0,
+        "role": "reference",
+        "stage_id": "beta-reference-end",
+        "status": "OK",
+        "succeeded": 3
+      }
+    ],
+    "planned": 125,
+    "schema": "joulewise.b5_window_yield.v1",
+    "succeeded": 125,
+    "yield_status": "FULL"
+  },
+  "yield_plan": {
+    "planned": 125,
+    "source": [
+      "driver"
+    ],
+    "stages": 10
+  },
+  "yield_tripwire": {
+    "attempted_seen": 125,
+    "counted_in_settle": 9,
+    "errors": [],
+    "pre_bundle_runs_flagged": 0,
+    "stages_counted": 10,
+    "stalled": false
+  }
+}
