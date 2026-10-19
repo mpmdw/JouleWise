@@ -1,0 +1,50 @@
+{
+  "arm_deadline_epoch_s": 1792362720.0,
+  "arm_error": null,
+  "arm_record": {
+    "path": "/Users/edr/night-b6/sessions/r1-gamma/custody/hazards/arm.json",
+    "sha256": "59a107528d60b8444b9c2a7fcd205ea2222f7293e71e03a14b3a0d72d91220ca"
+  },
+  "census": {
+    "argv": [
+      "/usr/bin/pgrep",
+      "-a",
+      "-lf",
+      "[c]odex|[c]laude"
+    ],
+    "clean": true,
+    "exit_code": 1,
+    "monotonic_ns": 343759280320083,
+    "refusal": null,
+    "stderr": "",
+    "stdout": ""
+  },
+  "collector_calls": 1,
+  "dry_arm": false,
+  "ended": {
+    "monotonic_ns": 343986647347666,
+    "monotonic_raw_ns": 343986647347166,
+    "wall_s": 1792359649.663564
+  },
+  "go": true,
+  "go_after_t0_stage_cap": false,
+  "network_time_off_calls": 1,
+  "not_pass": [],
+  "plan_id": "r1-gamma",
+  "reasons": [],
+  "schema": "joulewise.b5_arm_decision.v1",
+  "started": {
+    "monotonic_ns": 343759318190458,
+    "monotonic_raw_ns": 343759318190166,
+    "wall_s": 1792359422.3344069
+  },
+  "unmeasured": [],
+  "verdicts": {
+    "battery": "PASS",
+    "clock": "PASS",
+    "contention": "PASS",
+    "disk": "PASS",
+    "instrument": "PASS",
+    "thermal": "PASS"
+  }
+}
