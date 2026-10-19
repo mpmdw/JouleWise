@@ -1,0 +1,70 @@
+{
+  "call": 1,
+  "ran_by": "arm",
+  "results": [
+    {
+      "argv": [
+        "/Users/edr/night-b6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/measurement/.venv/bin/python3.13",
+        "-B",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/scripts/collect_window_flags.py",
+        "--stage",
+        "arm",
+        "--custody",
+        "/Users/edr/night-b6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/custody",
+        "--repo",
+        "/Users/edr/night-b6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/measurement",
+        "--pack",
+        "/Users/edr/night-b6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/measurement/configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
+        "--plan-id",
+        "SMOKE-d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z",
+        "--attempt",
+        "1",
+        "--h-claim",
+        "f81057053d9cae8518089bd0b38e7ae31e30f1b6",
+        "--chain",
+        "/Users/edr/night-b6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/custody/chain.zsh",
+        "--chain-sidecar",
+        "/Users/edr/night-b6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/custody/chain.zsh.sha256",
+        "--ledger",
+        "/Users/edr/night-b6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/measurement/runs/calibration_observation_ledger.jsonl",
+        "--head-pin",
+        "/Users/edr/night-b6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/measurement/configs/calibration/calibration_ledger_head.json",
+        "--session-id",
+        "SMOKE-d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z-calibration",
+        "--expected-pack-tree-sha256",
+        "e94d0e3cc8fdddf046dde9b40e0aecd10afbf40de4fe219aec4edacf74013751",
+        "--calibration-plan",
+        "/Users/edr/night-b6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/measurement/configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/calibration_plan.json",
+        "--catalog",
+        "/Users/edr/night-b6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/measurement/configs/campaigns/v5_claim_25g83/flag_catalog.json",
+        "--sealed-inventory",
+        "/Users/edr/night-b6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/measurement/configs/campaigns/v5_claim_25g83/sealed_inventory.json",
+        "--identity-pins",
+        "/Users/edr/night-b6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/measurement/configs/campaigns/v5_claim_25g83/identity_pins.json"
+      ],
+      "elapsed_s": 6.421692708,
+      "error": null,
+      "finished": {
+        "monotonic_ns": 434007191795208,
+        "monotonic_raw_ns": 434007191795000,
+        "wall_ns": 1792449670208012000
+      },
+      "name": "flags.arm",
+      "returncode": 0,
+      "started": {
+        "monotonic_ns": 434000770102500,
+        "monotonic_raw_ns": 434000770102333,
+        "wall_ns": 1792449663786319000
+      },
+      "stderr": "",
+      "stdout": {
+        "name": "collector-flags.arm.stdout",
+        "path": "hazards/arm-raw/collector-flags.arm.stdout",
+        "sha256": "91196804c142c351b25978dac277d474a9b6ca4bc088321bdfb0cf5342a1895b",
+        "size": 526
+      },
+      "timed_out": false
+    }
+  ],
+  "schema": "joulewise.b5_arm_collectors.v1"
+}

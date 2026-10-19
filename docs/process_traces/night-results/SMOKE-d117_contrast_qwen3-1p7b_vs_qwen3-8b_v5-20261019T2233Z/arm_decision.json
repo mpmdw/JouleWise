@@ -1,0 +1,50 @@
+{
+  "arm_deadline_epoch_s": 1792452960.0,
+  "arm_error": null,
+  "arm_record": {
+    "path": "/Users/edr/night-b6/loop/staging/r3-gamma-smoke-0/smoke/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z/custody/hazards/arm.json",
+    "sha256": "5e236e71c1b47005e6a20789dce73a2c50569100cfc0608556ba91fe5030d2f1"
+  },
+  "census": {
+    "argv": [
+      "/usr/bin/pgrep",
+      "-a",
+      "-lf",
+      "[c]odex|[c]laude"
+    ],
+    "clean": true,
+    "exit_code": 1,
+    "monotonic_ns": 434000268787208,
+    "refusal": null,
+    "stderr": "",
+    "stdout": ""
+  },
+  "collector_calls": 1,
+  "dry_arm": false,
+  "ended": {
+    "monotonic_ns": 434257812527833,
+    "monotonic_raw_ns": 434257812527208,
+    "wall_s": 1792449920.828744
+  },
+  "go": true,
+  "go_after_t0_stage_cap": false,
+  "network_time_off_calls": 1,
+  "not_pass": [],
+  "plan_id": "SMOKE-d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261019T2233Z",
+  "reasons": [],
+  "schema": "joulewise.b5_arm_decision.v1",
+  "started": {
+    "monotonic_ns": 434000306709583,
+    "monotonic_raw_ns": 434000306709375,
+    "wall_s": 1792449663.322926
+  },
+  "unmeasured": [],
+  "verdicts": {
+    "battery": "PASS",
+    "clock": "PASS",
+    "contention": "PASS",
+    "disk": "PASS",
+    "instrument": "PASS",
+    "thermal": "PASS"
+  }
+}
