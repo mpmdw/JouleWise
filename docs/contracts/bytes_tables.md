@@ -532,3 +532,126 @@ These failures were preserved, not repaired outside the write list. The final
 standalone fixture census returned `[]`, count 0, exit 0. No registry, raw run,
 state/queue, registration, runtime, Block-5 or Block-6 file was edited.
 NEEDS_RULING: **none**.
+
+
+## Round-4: Addendum 8 / B2 (2026-10-20)
+
+The synthetic reference request energies are now E_rails = 10 + delta and E_rest = 10 + 100*delta joules, where delta is the existing reference's deviation from 10 J. The 0.01 J endpoint rails drift therefore accompanies 1 J rest drift, at the approximate per-run attribution limit. DC is their sum; the native 10 Hz meter carries these energies through the real join. Science DC remains twice rails. These are stress parameters, not measured noise estimates.
+
+The main campaigns keep pass durations 1/2 and signed receive latencies -8/+3 ms enabled. The duration-aware p03 redraw uses each member's own duration for time-world truth; population projections use mean E / mean T, as R3 requires. RNG seeds and the inherited 0.2% member CV are retained. The CV is not validated against a measured Block-5 or pilot spread by this brief.
+
+D3 is tested by rerunning the reducer after substituting the rails reference family and its scaling inputs for rest. Every model's two passes and mean, both bases and both selections are checked: 10 * 3 * 2 * 2 = 120 rest cells per campaign, 7,200 over 60 campaigns. Each gap must exceed 0.10*B and ten actual energy agreement bars, 10*0.01*(h+B). No per-cell bar was tightened.
+
+D8 is pinned directly against `aggregate.student_t_critical_95(len(corpus)-1)` for every NEG-8 prediction term. Exact equality there tests identical registered arithmetic on identical inputs. The native timing world exposes the H2 coverage finding below. The sole runtime edit remains the explicitly requested F7 guard repair; the ruled statistical method is unchanged.
+
+| Flag | Final bar and derivation |
+| --- | --- |
+| F1 | 1% of the cell's (h+B), including the B-composition slack; Addendum 8 energy agreement replaces 13 places and 1e-12 J. |
+| F2 | Lambda recovery uses its own ruled HC3 coefficient half-width instead of 0.03. |
+| F3 | 0.00005 J is half the last digit of the registered worked endpoints printed to four decimals; it lies inside the brief's [2.2e-6, 1.3e-4] J window. |
+| F4 | Meter-vs-rails recovery uses the native (P_start+P_end)*(r_max+0.1 s) integration envelope, plus 0.5 microW times duration for integer-microW quantization. |
+| F5 | The constant-power reducer oracle has no half-width: 1e-6 relative or absolute J, the prescribed no-half-width bar. |
+| F6 | Default assertAlmostEqual now uses the prescribed 1e-6 relative or absolute unit bar instead of seven absolute decimal places. Explicit half-width/precision checks retain their derived bars. |
+| F7 | Pivots use matrix dimension * epsilon * max(abs(matrix)); leverage uses observation count * epsilon * max(1,abs(h)). Comments derive these from scaled-matrix/dot-product roundoff. A regression checks scale invariance and exact unit-leverage refusal. |
+
+D3 exercise results:
+
+| World | Campaigns | Rest cells checked | Minimum gap / B | Minimum agreement bars |
+| --- | ---: | ---: | ---: | ---: |
+| bytes | 20 | 2400 | 0.418963 | 41.545 |
+| time | 20 | 2400 | 0.388547 | 38.433 |
+| resident | 20 | 2400 | 0.475775 | 47.221 |
+
+400-draw p03 coverage:
+
+| World | Boundary | Fit | HC3 95% | OLS 95% | HC3 ruled-k | OLS ruled-k | k |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| bytes | rails | simple | 0.9700 | 0.9675 | 0.9925 | 0.9875 | 9 |
+| bytes | rails | extended | 0.9850 | 0.9925 | 1.0000 | 0.9975 | 9 |
+| bytes | DC input | simple | 0.9700 | 0.9675 | 0.9925 | 0.9875 | 9 |
+| bytes | DC input | extended | 0.9850 | 0.9925 | 1.0000 | 0.9975 | 9 |
+| bytes | rest | simple | 0.9700 | 0.9675 | 0.9925 | 0.9925 | 11 |
+| bytes | rest | extended | 0.9850 | 0.9925 | 1.0000 | 0.9975 | 11 |
+| time | rails | simple | 0.9425 | 0.9500 | 0.9925 | 0.9925 | 9 |
+| time | rails | extended | 0.9725 | 0.9525 | 0.9950 | 0.9975 | 9 |
+| time | DC input | simple | 0.9425 | 0.9500 | 0.9925 | 0.9925 | 9 |
+| time | DC input | extended | 0.9725 | 0.9525 | 0.9950 | 0.9975 | 9 |
+| time | rest | simple | 0.9425 | 0.9500 | 0.9950 | 0.9925 | 11 |
+| time | rest | extended | 0.9725 | 0.9525 | 0.9950 | 0.9975 | 11 |
+| resident | rails | simple | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 9 |
+| resident | rails | extended | 0.9975 | 0.8025 | 1.0000 | 0.9875 | 9 |
+| resident | DC input | simple | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 9 |
+| resident | DC input | extended | 0.9975 | 0.8025 | 1.0000 | 0.9875 | 9 |
+| resident | rest | simple | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 11 |
+| resident | rest | extended | 0.9975 | 0.8025 | 1.0000 | 0.9900 | 11 |
+
+The p03 table uses 400 member redraws per world and reports the epsilon coefficient in each fit. Simple resident-world truth is the fixed-design population projection, not a structural bytes slope. The 0.93 decision floor is the prescribed rounded two-SE floor: 0.95 - 2*sqrt(0.95*0.05/400) = 0.9282, rounded to two decimals. It is not applied as a per-cell recovery tolerance or to the 20-campaign descriptive rates. Minimum p03 HC3 plain-95% coverage is **0.9425**, so its automatic Addendum 4.5 threshold does not fire. The native production-shaped campaign has the separate failure in NR1 below; its 20-campaign rates are descriptive and are not presented as a 400-draw calibration.
+
+60-campaign native coverage (20 campaigns per world):
+
+| World | Boundary | Fit | HC3 95% | OLS 95% | HC3 ruled-k | OLS ruled-k | k |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| bytes | rails | simple | 1.0000 | 0.9500 | 1.0000 | 1.0000 | 9 |
+| bytes | rails | extended | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 9 |
+| bytes | DC input | simple | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 9 |
+| bytes | DC input | extended | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 9 |
+| bytes | rest | simple | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 11 |
+| bytes | rest | extended | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 11 |
+| time | rails | simple | 0.9500 | 0.9500 | 1.0000 | 1.0000 | 9 |
+| time | rails | extended | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 9 |
+| time | DC input | simple | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 9 |
+| time | DC input | extended | 1.0000 | 0.0000 | 1.0000 | 1.0000 | 9 |
+| time | rest | simple | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 11 |
+| time | rest | extended | 1.0000 | 0.0000 | 1.0000 | 1.0000 | 11 |
+| resident | rails | simple | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 9 |
+| resident | rails | extended | 1.0000 | 0.8500 | 1.0000 | 0.9500 | 9 |
+| resident | DC input | simple | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 9 |
+| resident | DC input | extended | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 9 |
+| resident | rest | simple | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 11 |
+| resident | rest | extended | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 11 |
+
+Resident-world CLI timing counterexample:
+
+| Resident seed 3100 | Boundary | Epsilon (J/GB) | HC3 ruled interval | OLS ruled interval |
+| --- | --- | ---: | --- | --- |
+| signed_latency | DC input | 0.0019170703 | [0.00058414515, 0.0032499954] | [0.0012586502, 0.0025754903] |
+| signed_latency | rest | 0.0018973809 | [0.00055599801, 0.0032387638] | [0.0012270137, 0.0025677481] |
+| zero_latency | DC input | 3.9379038e-05 | [-9.8006124e-05, 0.0001767642] | [-2.8550115e-05, 0.00010730819] |
+| zero_latency | rest | 1.9689668e-05 | [-5.175489e-05, 9.1134226e-05] | [-1.5635626e-05, 5.5014962e-05] |
+
+**NR1 — native H2 coefficient coverage under meter timing systematics.** Resident-world structural epsilon is zero. Native signed-latency campaigns miss it at DC input and rest even at ruled k; the complete HC3/OLS plain/ruled table above gives the counts. This is separate from p03's passing 400-draw check. Its redraw explicitly sets meter gross energy to 2*e and removes the native timing shift.
+
+The two separate-process resident-world chains use the same seed 3100 and the same doubled second pass. With signed -8/+3 ms latency, both HC3 and OLS plain/ruled DC/rest intervals exclude zero; with latency disabled, all include it. Maximum absolute meter-minus-twice-rails error is 5.868698 J with signed latency and 0.000058085 J without. Both prediction commitment files and hashes remain unchanged through stage 2. These are counterexamples, not two-draw coverage estimates.
+
+The existing h2 function forms coefficient intervals as coefficient +/- t*HC3_SE (and labelled OLS_SE); it carries no phase-energy B term into those coefficient intervals. The native meter edge allowance is present in cell B, and tier deviations already add their own measured power half-width. This diagnosis does not authorize replacing the ruled coefficient method.
+
+Question: should native clock/phase-edge systematics be propagated into H2 coefficient intervals, or should the registered intervals be explicitly conditional on the mapped meter energies with this limitation disclosed? The first changes printed intervals; the second changes the interpretation of a claim-bearing result. Recommendation: leave the ruled HC3/OLS method unchanged until the lead rules. Blocked work: accepting native DC/rest H2 coefficient coverage as validated. Independent B2 implementation and tests are complete. Potential lead-owned follow-up paths are docs/design/bytes_pack_design.md for a ruling, docs/registrations/bytes_pack_v1.md for the registered claim wording, and the independent twin. They are outside this B2 edit scope and were not edited.
+
+Held-out mean-view H1 counts (7 models * 3 boundaries * 20 campaigns = 420 per world):
+
+| World | bytes | resident | time | unresolved | neither |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| bytes | 240 | 0 | 0 | 180 | 0 |
+| time | 0 | 0 | 259 | 161 | 0 |
+| resident | 0 | 240 | 0 | 180 | 0 |
+
+Verification:
+
+| Check | Result |
+| --- | --- |
+| Full `python3.13 -m pytest tests/test_bytes_analysis.py -q -s -p no:cacheprovider` | 56 passed, 187 subtests passed in 872.96s (0:14:32) |
+| Final 60-campaign test after expanded HC3/OLS reporting | 1 passed in 538.50s (0:08:58) |
+| Resident-world signed/zero-latency CLI probes | Two complete blinded/fit/heldout chains; unchanged prediction commitments; isolates NR1. |
+| Focused analysis, excluding the 60-campaign and p03 tests | 53 passed, 2 deselected, 187 subtests passed; 194.47 s. This preceded addition of the guard test. |
+| New inverse/leverage guard regression | 1 passed; 1.07 s. |
+| First-commit separate-process synthetic stage chain | 1 passed; 11.51 s. Repeated successfully inside the full module. |
+| All five required registry modules | 103 passed, 1 skipped, 1 environmental failure, 435 subtests passed; 39.18 s. |
+| Refusal census | Exit 0; unlisted, stale, miscounted, guard_changed and scope_gaps all empty. |
+| Collection | 56 tests. |
+| Diff, ancestry and protected-path checks | Passed; no protected number-bearing path or Block-6/registered Block-5 file changed. |
+
+The registry failure is the already-known container orphan case, `FixtureOrphanCensusTests.test_live_an_orphaned_fake_meter_is_reported`: the census finds the fake meter and the reaper returns its PID, but the final ProcessLookupError assertion fails because PID 1 retains killed children as zombies. Observed Python children have PPID 1 and state Z. This was listed, not chased; no census or reaper was edited. The one skip is the absent historical Block-5 design branch.
+
+All completed runs use Python 3.13.5, JW_B5_SYNTHETIC_ONLY=1, PYTHONDONTWRITEBYTECODE=1, a fresh TMPDIR=/tmp/jw-b2.EZWXVe and isolated uv-installed pytest 9.1.1 on PYTHONPATH=/tmp/jw-b2.EZWXVe/venv/lib/python3.13/site-packages. zsh and Python were already available; no tested path needed the unavailable Homebrew symlink. A detached launcher ended before completion and was restarted in a persistent tool session; that incomplete attempt is not counted. A read-only collection attempt could not create pytest capture files and was rerun successfully with write access.
+
+No real archive or key directory was opened. No whole suite was run: Addendum 2 reserves the merge gate for the Mac. No twin/agreement claim or live-hardware validation is made. The end-to-end test uses the existing B1 stage chain with separate `blinded`, `fit` and `heldout` CLI processes, actual release files, commitment hashes and unreleased-key refusals. The 60-campaign diagnostic separately uses the inherited all-stage analysis entry point; it does not replace the process-level chain test.
