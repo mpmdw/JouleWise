@@ -6,7 +6,7 @@ Interpreter for `kv`: `/Users/edr/code/JouleWise/.venv/bin/python` (Python 3.13)
 
 Model directories: the BYTES configs (`configs/campaigns/bytes-s*-p1`, `bytes_v1/roster.json`) name HF snapshot paths for Qwen3-1.7B-4bit, Qwen3-4B-4bit and Qwen3-8B-4bit that DO NOT EXIST on this Mac (the `models--mlx-community--Qwen3-4B-4bit` cache holds only `refs/main`, no snapshots). The same-named copies under `/Users/edr/jw_models/mlx-community/` exist and their `.cache/huggingface/trees/<hash>.json` file names equal the roster revisions, so those were used with `--revision` set to the roster revision. For the other six the configs' own paths exist and were used. `--revision` for each came from `roster.json` (the snapshot hash).
 
-Not done: Qwen3-8B-8bit. The configs name `/Users/edr/jw_models/mlx-community/Qwen3-8B-8bit`; that directory does not exist on this Mac and no copy was found in `~/.cache/huggingface/hub`. Nothing was downloaded (not authorised by the brief). Consequently only nine of ten kv records exist, `merge` was NOT run to write `configs/bytes/bytes_manifest.json`, and no manifest is committed.
+Superseded below (16:17 addendum). Not done at 16:10: Qwen3-8B-8bit. The configs name `/Users/edr/jw_models/mlx-community/Qwen3-8B-8bit`; that directory does not exist on this Mac and no copy was found in `~/.cache/huggingface/hub`. Nothing was downloaded (not authorised by the brief). Consequently only nine of ten kv records exist, `merge` was NOT run to write `configs/bytes/bytes_manifest.json`, and no manifest is committed.
 
 ## Qwen3-8B-8bit findings
 - Revision: not determinable locally (no local copy, no refs). Remote metadata read-only (HF API, `https://huggingface.co/api/models/mlx-community/Qwen3-8B-8bit`, 2026-10-20 ~16:06): sha `48a0b75b1ae72503e21e1558d040bc227510ff06`, lastModified 2025-04-28T22:26:57Z. This is the current main, not a pinned download; it is not a locally verified revision.
@@ -141,3 +141,18 @@ Notes on the table: `(None, None)` in the per-layer occupied/allocated pair belo
 
 ## Tests
 `tests/test_bytes_manifest.py` (the only test module naming bytes_manifest): `python3.13 -m unittest tests.test_bytes_manifest` with PYTHONPATH set to the worktree, JW_B5_SYNTHETIC_ONLY=1, TMPDIR=/tmp/af419-kv-tmp/t: Ran 15 tests, OK. (An earlier mis-specified `discover -s tests -p test_bytes_manifest.py` command also ran a broader set of 342 tests in the worktree by accident, errors=2 from `tests.flags` import of `test_b6_emitters`; this is not a result of record.)
+
+## Addendum 16:17 PDT (lead, activation af419b16): Qwen3-8B-8bit and the merge
+- Downloaded by the lead: `hf download mlx-community/Qwen3-8B-8bit --revision 48a0b75b1ae72503e21e1558d040bc227510ff06
+  --local-dir /Users/edr/jw_models/mlx-community/Qwen3-8B-8bit` (8.1 GB; the directory the BYTES configs name). This pins
+  8B-8bit's revision at 48a0b75b1ae72503e21e1558d040bc227510ff06 (Addendum 5 item 5: "revision pending").
+- Local `config.json`: `quantization = {'group_size': 64, 'bits': 8}` and the same `quantization_config`. Addendum 5 item 5's
+  assumed group_size 64 is verified on the local copy.
+- `headers` then `kv` with the same interpreter: rc 0, 25 s. `KV_bytes` 339738624 (`Qwen3-8B-8bit.kv.json`), equal to
+  Qwen3-8B-4bit's, as expected: the KV cache dtype does not depend on the weight quantization.
+- `merge` over all ten header and kv records wrote `configs/bytes/bytes_manifest.json`, exit 0; its printed differences
+  from the pilot column are in `merge_log.txt` (0 bytes for eight models; 4.77e-7 bytes for Qwen3-8B-4bit, which is
+  the float rounding of a 4.26e9-byte value printed in GB; no pilot row for 8B-8bit).
+- Finding for the BYTES configs and C4 pins: the configs name HF snapshot paths for Qwen3-1.7B-4bit, Qwen3-4B-4bit and
+  Qwen3-8B-4bit that do not exist on this Mac (see the top of this file). A BYTES session would fail to load them.
+  The configs, or the identity pins, must point at the `/Users/edr/jw_models/mlx-community/` copies before item H.
