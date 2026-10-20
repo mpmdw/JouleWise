@@ -2,7 +2,7 @@ gpt-6.1-sol
 
 Implementation DONE; joined end-to-end verification NOT DONE.
 
-Branch: `lane/2026-10-20-l9-ruling-build`. Required continuation base verified as `00ccb8c7caf9474d17fb83e6e029c9cfe180c3bd`. Tested implementation head: `d79ce01e5bb0b4da01ee33f67c69026059514150`; subsequent commits change this report only. Branch head before this report commit: `5eaa09f4d205ad70f386533436eeeee7c01d7cb7`. Draft PR: https://github.com/mpmdw/JouleWise/pull/513. Report checkpoint UTC: 2026-10-20 23:21:53.
+Branch: `lane/2026-10-20-l9-ruling-build`. Required continuation base verified as `00ccb8c7caf9474d17fb83e6e029c9cfe180c3bd`. Tested implementation head: `f7449327702f1061f333bb907bf54a9d3bccc6e6`; subsequent commits change this report only. Branch head before this report commit: `f7449327702f1061f333bb907bf54a9d3bccc6e6`. Draft PR: https://github.com/mpmdw/JouleWise/pull/513. Report checkpoint UTC: 2026-10-20 23:29:27.
 
 Authority, read in full: origin/main at intake (`bcd70a273`), L9-RULING-ADDENDUM.md (6cff3515), then L9-RULING.md (4b350f47). Read the named cold, council and silly-number reports and consumer probes on JouleWise-data. Only synthetic fixture archives and tracked sealed config were read; no real archive or key directory was opened. Python 3.13.5 unittest, JW_B5_SYNTHETIC_ONLY=1 on every run, fresh TMPDIR per module. No whole-suite cloud run; only WRITE_SCOPE modules and searched dependencies. No sub-agents.
 
@@ -14,22 +14,24 @@ Number rule: every added/changed tolerance on measured or derived values carries
 |---|---|---|---|
 | Q-LINEAGE | DONE (inherited, rechecked) | Ordered producer inventory and per-producer rebuild: scripts/mint_floor_artifact_generalized.py:3484, :3695; authentication limitations: joulewise/analysis_engine/inputs.py:1094; verdict revalidation: joulewise/analysis_engine/artifact.py:1099. Split/mixed producers still refuse. | a8f3d5566 |
 | Q-EXACTSTACK | DONE (inherited, rechecked) | Shared exact_stack_serving_cell: joulewise/detection_floor.py:3078; finalizer :3427, closeout :1862, inputs request/resolution; scoped no-envelope note follows the actual source cell. | 00ccb8c7c |
-| Q-CONSUMERID | DONE | joulewise/analysis_engine/inputs.py:4411, :4445, :4675; engine :375; tests/test_analysis_inputs.py:1229; tests/b5_analysis/test_chain_fixture.py:542; docs/contracts/identity_pin_projection.md:646. Step-1 result below selected the limitation branch. Frozen ARM route unchanged. | 994478b28 |
+| Q-CONSUMERID | DONE | joulewise/analysis_engine/inputs.py:4411, :4455, :4685; engine :375; tests/test_analysis_inputs.py:1229; tests/b5_analysis/test_chain_fixture.py:542; docs/contracts/identity_pin_projection.md:646. Step-1 result below selected the limitation branch. Frozen ARM route unchanged. | 994478b28; recording-only ambiguity correction `f74493277` |
 | Q-RENDERER | DONE | joulewise/b5_analysis/dry_run.py:203, :1034; T20 and argv census; release R3 uses fill input; S10 production renderer test; only §S text appended verbatim to SEAL_RECORD.md. | b83eed5dc |
 | Common §C | DONE | joulewise/results_fill_adapter.py:44, :56 and scripts/build_results_fill_input.py:85 copy/compare limitations and actual source IDs with existing mismatch codes. Tests/test_results_fill_adapter.py covers omissions, text/order/source changes. | 4da5e65a2 |
 | Addendum §Z | DONE | joulewise/detection_floor.py:1218; schema_v2.json sixDecimal; test oracle/adversarial sampling updated; N5 derivations beside every changed bar. No change for N2/N3/N4. | 5ca9202c9 |
 | Four seams and PROVENANCE | DONE | CONDITIONAL_SEAMS and all four patch contexts deleted from fixtures_s10.py and joined_s10.py; four PROVENANCE rows replaced by installed production behavior. Joined test asserts the ruled endpoints. | bb0c53101 |
-| Refusal/limitation replay | DONE | S10 defects 32 tests; hazard declaration 6 tests; explicit 21-case replay; all five new limitation codes reach validated fill input. | d79ce01e5 |
+| Refusal/limitation replay | DONE | S10 defects 32 tests; hazard declaration 7 tests; explicit 21-case replay; all five new limitation codes reach validated fill input. | d79ce01e5 |
 
 All round-2 checkpoints pushed with Git CLI to this lane only. Unlike the previous seat, this seat needed no GitHub API push fallback. No push blocker, main/integration push, merge, rebase, sealed-config edit or out-of-scope tracked write. Only 27 round-2 paths changed, all authorized. number_rows.json and hazard_refusals.json remain unchanged because coverage and census pass.
 
 ## Retained prior-seat Q-LINEAGE and Q-EXACTSTACK sections
 
-These two implementation sections are retained verbatim as requested. Their historical progress/count wording is superseded by this report's current tables.
+These implementation sections and the prior seat's mint/push note are retained verbatim as requested. Their historical progress/count wording is superseded by this report's current tables.
 
 Q-LINEAGE: DONE. Aggregate producer inventory, ordered schema validation, per-producer reconstruction and digest checking, scoped absent/unauthenticated limitations, and verdict revalidation. Single-lineage provenance remains the original shape; per-producer split/mixed provenance still refuses. Focused detection-floor, claim-artifact, input and S10 defect tests pass; the full mint checks are in progress.
 
 Q-EXACTSTACK: DONE. `detection_floor.exact_stack_serving_cell` selects the unique claim-usable source using family admission, backend/metric/window class, stack digest, and authenticated family phase/token lengths. Finalizer, close-out, request construction and exact resolution use it. Group-served requests use empty stress, retain the actual source id, and check the singleton gate by operand identity. Verdicts carry the scoped no-envelope limitation. The 31-test S10 defect module (including nine refusal variants), 131 detection-floor tests, 20 input tests, 65 claim tests, 19 manifest tests, 59 close-out tests and 18 finalizer tests pass. Number coverage passes (6 tests, 1 skip), so `number_rows.json` is unchanged.
+
+Q-LINEAGE full mint verification completed: generalized mint 84 tests (2 skips), kept-unit mint 85 tests (2 skips), all pass. The Git CLI has no working push credential; after checking explicit per-file/branch authorization, the connected GitHub API published the identical Git tree as commit `a8f3d5566c7e171293a4fd930b092bda94e2e21d`. Automatic review initially rejected one blob for purported incomplete authorization; the same upload succeeded after the scope and public-source checks. No approval remains blocked.
 
 ## Addendum §I step 1 (written and run before policy change)
 
@@ -88,7 +90,7 @@ Before is the verified continuation head. Completed checks began in the untouche
 | tests.test_d165_dominance_closeout | 59 OK | 59 OK |
 | tests.test_mint_floor_artifact_generalized | 84 OK (skipped=2) | 84 OK (skipped=2) |
 | tests.b5_analysis.test_mint_kept_units | 85 OK (skipped=2) | 85 OK (skipped=2) |
-| tests.test_analysis_inputs | 20 OK (skipped=1) | 27 OK (skipped=1) |
+| tests.test_analysis_inputs | 20 OK (skipped=1) | 28 OK (skipped=1) |
 | tests.test_analysis_claims | 65 OK | 65 OK |
 | tests.test_analysis_finalizer | 18 OK | 18 OK |
 | tests.test_analysis_manifest_v3 | 19 OK | 19 OK |
@@ -177,7 +179,7 @@ Found by searching changed request, resolution, preparation, analyze_claims, fil
 | tests.test_pipeline_smoke_tail | 4 OK (skipped=1) |
 | tests.test_render_results_fills_live | 4 OK |
 
-All 10 additional modules pass: 291 tests (2 skips).
+All 10 additional modules pass: 291 tests (1 skip).
 
 ### Registries
 
@@ -193,14 +195,14 @@ Refusal census: unlisted=[], stale=[], miscounted=[], guard_changed=[], scope_ga
 
 ## Joined end-to-end status
 
-NOT DONE: the opted-in full joined driver is running. An execution-environment restart killed the first run during ALPHA step-1 validation, without a completion record. Its logs and interruption metadata are preserved outside the repository. Only that interrupted task's synthetic TMPDIR copies were cleaned; the joined run restarted from committed code with a fresh TMPDIR. Completed module evidence survived. No end-to-end success is claimed until the fresh run completes.
+NOT DONE: the opted-in full joined driver is running. An execution-environment restart killed the first run during ALPHA step-1 validation, without a completion record. Its logs and interruption metadata are preserved outside the repository. Only that interrupted task's synthetic TMPDIR copies were cleaned; the joined run restarted from committed code with a fresh TMPDIR. The seat setup warns that long foreground jobs can be cut off, so the fresh run is detached with persistent log and exit-status files. Completed module evidence survived. No end-to-end success is claimed until the fresh run completes.
 
 Separately, opted-in tests.b5_analysis.test_chain_fixture.ChainTests.test_39_lineage_pack_digest_is_the_committed_pack_tree passes against all restored synthetic windows (1 test, 70.5 s). The ordinary after run for that module reports its opt-in class skip; the direct test-39 run is actual execution evidence.
 
 ## Decisions I made
 
 - Follow the addendum's five-variant result exactly; no new admissibility rule or numerical bar was invented.
-- Keep the recording allowlist hazard-specific and closed to hardware_target.notes, run_metadata.project and run_metadata.operator, with reasons beside the code. Every other typed field and tag binds. The existing omission of run_id continues to identify physical repeats. Frozen ARM behavior stays unchanged.
+- Keep the recording allowlist hazard-specific and closed to hardware_target.notes, run_metadata.project and run_metadata.operator, with reasons beside the code. Every other typed field and tag binds. Multiple declared records differing only in those fields identify one measurement; every corresponding original hash may bind its unique direct source. A focused test covers both original source hashes and a third recording-only value. The existing omission of run_id continues to identify physical repeats. Frozen ARM behavior stays unchanged.
 - Use the existing limitation list through request construction and preparation. Source-cell notes are derived when the actual floor resolves; rediscovering source IDs after pure arithmetic test doubles caused the inherited 11/17/1 error classes. No out-of-scope fixture or validator relaxation was needed.
 - Preserve the verdict's entire limitation list in gamma and the relevant family subsequence per contrast. Producer/aggregate notes remain with the embedded floor; compare list order and exact strings. Copy source IDs and numbers without rounding.
 - S remains the validated member-envelope upper bound already used by the three sites. N2/N3/N4 need no change. The actual code has 18 changed mint-kept places=9 assertions, so all 18 receive N5 comments despite the review's count of 17.
