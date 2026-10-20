@@ -15,7 +15,7 @@ def _write_json(path, value):
     path.write_text(json.dumps(value) + "\n")
 
 def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release="all",
-                     pass_duration_scales=(1.0, 1.0), clock_latency_ms=None):
+                     pass_duration_scales=(1.0, 2.0), clock_latency_ms=(-8.0, 3.0)):
     """1000 on-disk runs: real mock trace reducer -> harvest layout -> B6 export.
 
     No calibration hardware is claimed: the zero phase envelope is explicitly
@@ -37,7 +37,10 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
     from tests.test_reduce import BundleBuilder, load_config, DEFAULT_IDLE
     from joulewise.interfaces import PowerSample
     design = ba.read_json(FIXTURES / "campaign_design.json")
-    manifest = {"synthetic": True, "models": design["models"], "sessions": []}
+    manifest = {"synthetic": True, "models": design["models"], "sessions": [],
+                "synthetic_parameters": {"pass_duration_scales": list(pass_duration_scales),
+                    "clock_latency_ms": clock_latency_ms, "reference_drift": design["reference_drift"]}}
+    reference_drift = design["reference_drift"]
     rng = random.Random(seed)
     source_state = _capture_source_state()
     private = root / "private-keys" / "bytes" / "blinding"
@@ -70,7 +73,9 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                 run_id = sanitize_id_component(ref["run_id"] if ref else model["model"] + "-" + str(ordinal))
                 duration = 2.0 if ref else model["synthetic_duration_s"] * pass_duration_scales[pass_id - 1]
                 own_idle = ref["idle_power_w"] if ref else 5.0
-                energy = ref["gross_j"] * duration / (duration + 1) if ref else truth * 512 * (1 + rng.gauss(0, .002))
+                reference_energy = (reference_drift["pivot_j"] + reference_drift["rails_scale"] *
+                    (ref["gross_j"] - reference_drift["pivot_j"])) if ref else None
+                energy = reference_energy * duration / (duration + 1) if ref else truth * 512 * (1 + rng.gauss(0, .002))
                 power = energy / duration
                 start = tick / 10
                 decode_start, end = start + 2, start + 2 + duration
@@ -99,7 +104,9 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                 # Real desk reducer under the repository's mock telemetry path.
                 summary = reduce_bundle(bundle).to_dict()
                 actual = summary["phase_energy_j"]["decode"]
-                if not math.isclose(actual, energy, rel_tol=1e-7):
+                # No half-width is defined for this constant-power reducer oracle:
+                # use the brief's 1e-6 relative or absolute bar in joules.
+                if not math.isclose(actual, energy, rel_tol=1e-6, abs_tol=1e-6):
                     raise AssertionError((actual, energy))
                 summary.update(status="succeeded", bytes_synthetic_timing_fixture=True, energy_anchor_shift_envelopes={"/phase_energy_j/decode": {
                     "point_j": actual, "lower_j": actual, "upper_j": actual, "max_abs_delta_j": 0}},
@@ -120,7 +127,13 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                 end_tick = tick + 20 + round(duration * 10)
                 baseline = 2 * own_idle if ref else .2
                 active_tick = tick + (10 if ref else 20)
-                meter_samples.extend((baseline if t < active_tick else 2 * power, t) for t in range(tick, end_tick))
+                # Whole-request DC = rails + independently drifting rest. At the
+                # endpoints rest changes by 1 J (the attribution scale), while
+                # rails changes by 0.01 J. Science DC remains twice rails.
+                rest_reference = (reference_drift["pivot_j"] + reference_drift["rest_scale"] *
+                    (ref["gross_j"] - reference_drift["pivot_j"])) if ref else None
+                meter_power = power + rest_reference / (duration + 1) if ref else 2 * power
+                meter_samples.extend((baseline if t < active_tick else meter_power, t) for t in range(tick, end_tick))
                 meter_samples.extend([(.2, end_tick), (.2, end_tick + 1)])
                 tick = end_tick + 2
         header = {"k": "h", "status": "streaming", "rate_idx": 1, "start_raw_ns": 0, "start_mono_ns": 0}

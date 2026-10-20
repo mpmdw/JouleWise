@@ -280,5 +280,22 @@
       "gross_j": 10.01,
       "idle_power_w": 1.0008333333333332
     }
-  ]
+  ],
+  "reference_drift": {
+    "pivot_j": 10.0,
+    "rails_scale": 1.0,
+    "rest_scale": 100.0,
+    "derivation": "Synthetic D3 stress: 0.01 J rails endpoint drift versus 1 J DC-minus-rails drift (the approximate per-run attribution limit); checked against 0.10 B in every cell, not a measured spread."
+  },
+  "main_campaign": {
+    "pass_duration_scales": [
+      1.0,
+      2.0
+    ],
+    "clock_latency_ms": [
+      -8.0,
+      3.0
+    ],
+    "derivation": "Retain Addendum 7.12: doubled second-pass duration; signed receive latency with the negative extreme larger in magnitude."
+  }
 }
