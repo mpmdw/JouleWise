@@ -60,6 +60,34 @@ class JoinedRunTests(unittest.TestCase):
         from tests.b5_analysis.joined_s10 import assert_public_bytes
         assert_public_bytes(self, self.result, self.fixture.restricted_floats())
 
+    def test_L9_real_chain_floor_inventory_sources_and_fill_boundary(self):
+        state = self.result.state
+        floor = state.read('floor_artifact')
+        inventory = floor['provenance']['producer_launch_lineages']
+        self.assertEqual(len(inventory), 2)
+        self.assertEqual([r['plan_id'] for r in inventory],
+                         [r['plan_id'] for r in floor['provenance']['producer_calibration_plans']])
+        self.assertNotEqual(inventory[0]['launch_lineage'], inventory[1]['launch_lineage'])
+        verdict = state.read('claim_verdicts')
+        fill = state.read('fill_input')
+        self.assertEqual(fill['gamma']['limitations'], verdict['inputs']['limitations'])
+        cells = {cell['cell_id']: cell for cell in floor['cells']}
+        for issued, copied in zip(verdict['contrasts'], fill['gamma']['contrasts'], strict=True):
+            self.assertEqual(copied['floor_source_cell_ids'], issued['floor']['floor_row_ids'])
+            self.assertTrue(copied['limitations'])
+            families = [issued['conditions']['condition_a_id'], issued['conditions']['condition_b_id']]
+            for family, resolved in zip(families, issued['floor']['resolutions'], strict=True):
+                self.assertEqual(resolved['status'], 'exact')
+                self.assertEqual(len(resolved['source_cell_ids']), 1)
+                source_id = resolved['source_cell_ids'][0]
+                # Singleton max copies this exact operand; no measured tolerance.
+                self.assertEqual(resolved['floor_gate_j'], cells[source_id]['floor_gate_j'])
+                self.assertIn('floor_cell_from_floor_pack:' + family + ':' + source_id + ':no_envelope_comparison',
+                              copied['limitations'])
+        self.assertIn('results_rendering_not_run_no_block5_template', self.rows('11')[0]['flags'])
+        self.assertNotIn('rendered_fills', state.outputs)
+        self.assertFalse((state.restricted/'outputs/results-fills.md').exists())
+
 
 class JoinedHarnessInfrastructureTests(unittest.TestCase):
     def test_outer_capture_keeps_descriptor_writes_in_driver_streams(self):

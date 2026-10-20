@@ -102,3 +102,9 @@ Addendum §Z: DONE. `joulewise/detection_floor.py:1218` uses rel_tol=0.0 and abs
 N2/N3/N4: no production change. S remains the validated member-envelope upper bound; earlier validation/refusal order remains; allowance mismatch is re-derived and recorded at mint as ruled.
 
 Done: Q-LINEAGE, Q-EXACTSTACK, Q-CONSUMERID, Q-RENDERER, common §C, §Z. Not done: seam deletion/PROVENANCE, opted-in joined end-to-end, complete refusal-replay/final after and registry tables. No NEEDS_RULING.
+
+§Z pushed by Git CLI as `5ca9202c9`.
+
+Conditional seam deletion and PROVENANCE: DONE. `tests/b5_analysis/fixtures_s10.py:52` now goes directly from the disclosed hardware/Git seams to commit_checkout; all four conditional patches and CONDITIONAL_SEAMS are deleted. `tests/b5_analysis/joined_s10.py:28` and its Git context no longer import/install them. The four former conditional rows in `tests/fixtures/b5_analysis/s10/PROVENANCE.md` are replaced by a production-ruling account. `tests/b5_analysis/test_dry_run.py:67` adds joined assertions for the two-producer inventory, real single-source GAMMA floors, scoped limitations in fill, and the validated-fill/FLAGS endpoint. Focused seam-free checks: S10 defects 31 OK and release equality 10 OK (1 skip); inputs rerun is finishing.
+
+Done: all implementation questions, common §C, §Z, seam deletion and PROVENANCE. Not done: opted-in end-to-end joined run, complete refusal-replay/final after and registry tables. No NEEDS_RULING. The next command opts in to the real-stage chain over the committed synthetic archives; it does not collect hardware data or read real archives.

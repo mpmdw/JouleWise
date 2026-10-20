@@ -25,7 +25,7 @@ from unittest.mock import patch
 
 from joulewise.b5_analysis import dry_run as d
 from joulewise.b5_analysis.windows import SealPins
-from tests.b5_analysis.fixtures_s10 import chain_fixture, FIXTURES, CONDITIONAL_SEAMS, conditional_seams
+from tests.b5_analysis.fixtures_s10 import chain_fixture, FIXTURES
 
 JOINED_SEAMS = (
     ('dry_run._test_repo_root', 'Scratch Git repository with identical sealed packs, supply map and tracked synthetic index.'),
@@ -36,7 +36,7 @@ JOINED_SEAMS = (
     ('identity_pins._load_mint_module()._actual_v2_git_state', 'The independently loaded mint module observes the same scratch H.'),
     ('identity_pins._load_mint_module().REPO_ROOT', 'Custody reads actual Git blobs from the scratch repository.'),
     ('paper_reported_energy.verify_registration_ordering', 'Replay the existing registered ordering history in the source repository; the one-commit scratch repository has no such history.'),
-) + tuple((name, reason) for _side, name, reason in CONDITIONAL_SEAMS)
+)
 
 
 def require_windows():
@@ -235,7 +235,6 @@ class JoinedHarness:
             seams.enter_context(patch.object(identity_mint, '_actual_v2_git_state', return_value=(self.head, True)))
             seams.enter_context(patch.object(identity_mint, 'REPO_ROOT', self.repo))
             seams.enter_context(patch.object(energy, 'verify_registration_ordering', registered_history))
-            seams.enter_context(conditional_seams())
             yield checkout
 
     def execute(self, name='first', *, mode='blind-dry-run', custody=None):
