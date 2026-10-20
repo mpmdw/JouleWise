@@ -1330,6 +1330,34 @@ class Q1WithheldCensusTests(unittest.TestCase):
             self.assertEqual(read.call_args.kwargs["export_path"], root / "collected.runs.csv")
             self.assertEqual(read.call_args.args[2]["session_id"], "collected")
 
+    def test_blinded_postcommit_keeps_missing_store_and_absent_csv_placeholders(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model = {**ba.read_json(FIXTURES / "campaign_design.json")["models"][3],
+                     "config_key": "registered|workload|512"}
+            session = {"session_id": "collected", "pass_id": 2}
+            manifest = {"models": [model], "sessions": [session]}
+            info = {"path": "absent-store.csv", "row_count": 50, "config_key_sha256": {
+                hashlib.sha256(model["config_key"].encode()).hexdigest(): 50}}
+            _write_json(root / "collected.session.json", {"blinding": {"withheld": info}})
+            public = root / "collected.runs.csv"
+            public.write_text("run_id,cell_ids\n")
+            for csv_present in (True, False):
+                with self.subTest(csv_present=csv_present):
+                    if not csv_present:
+                        public.unlink()
+                    with patch.object(ba, "archive_records", side_effect=AssertionError("archive read")):
+                        self.assertEqual(ba.load_records(root, manifest, stage="blinded"), [])
+                        records = ba.load_records(root, manifest, stage="blinded", stage1_commit="a" * 40)
+                    self.assertEqual(len(records), 50)
+                    passes = ba.reduce_models(records, manifest, boundaries=("rails",))
+                    self.assertEqual({r["status"] for r in passes}, {"missing"})
+                    self.assertTrue(all(r["withheld_row_count"] == 50 for r in passes))
+                    points = ba.combine_passes(passes)
+                    bytes_analyze._missing_labels(points)
+                    self.assertEqual({p["status"] for p in points}, {"missing"})
+                    self.assertEqual({p["pass_status"] for p in points}, {"no_pass"})
+
     def test_missing_file_placeholders_keep_sidecar_counts_and_no_energy(self):
         model = {"model": "heldout", "config_key": "heldout|registered|512"}
         info = {"row_count": 100, "config_key_sha256": {

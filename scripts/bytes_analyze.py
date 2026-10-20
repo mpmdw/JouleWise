@@ -70,6 +70,7 @@ def main(argv=None):
             # estimates and NEG-8 inputs remain reviewable without H1/H2 words.
             result = ba.evaluate(points, frozen) if any(p["role"] == "heldout" for p in points) else {
                 name: [] for name in ("h1", "moe", "h2", "unavailable")}
+            _missing_labels(points)
             args.out.mkdir(parents=True, exist_ok=True)
             _write(args.out, "blinded_pass_estimates", passes)
             _write(args.out, "model_estimates", points)

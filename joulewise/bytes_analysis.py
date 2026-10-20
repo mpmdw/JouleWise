@@ -803,7 +803,8 @@ def load_records(source, manifest, *, stage, key_dir=None, stage1_commit=None):
         session = by_session[session_id]
         if stage == "blinded":
             # No archive reads whatsoever; roles, units and blinded rails are CSV inputs.
-            exports, _ = _stage_export_rows(path, include_withheld=bool(stage1_commit))
+            exports, withheld_missing = _stage_export_rows(path, include_withheld=bool(stage1_commit))
+            records.extend(_missing_withheld_records(withheld_missing, manifest, session))
             refs = neg8_inputs(exports, blinded=True, test7_passed=session.get("test7_passed", False))
             specs = {cell: m for m in manifest["models"] for cell in m["cell_ids"]}
             for exported in exports:
