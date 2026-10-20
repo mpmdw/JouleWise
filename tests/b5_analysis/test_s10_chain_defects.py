@@ -700,3 +700,49 @@ class ExactStackRulingTests(unittest.TestCase):
                     'condition_family_id': family, 'condition_family_sha256': sha, 'floor_stack_identity': stack}
                     for arm in ('A', 'B')], 'contrasts': [contrast]}
                 self.assertEqual(closeout._contrast_floor_binding_error(finalized, artifact, {}), 'floor_cell_unresolved')
+
+
+class RuledLimitationFillReplayTests(unittest.TestCase):
+    def test_all_new_limitation_codes_survive_real_mint_verdict_and_fill_validation(self):
+        import base64
+        import hashlib
+        import json
+        from joulewise.analysis_engine.inputs import authenticate_floor_artifact_bytes
+        from joulewise.analysis_engine.artifact import calculate_claim_verdicts_id, validate_claim_verdicts, render_claim_verdicts
+        from joulewise.results_fill_adapter import adapt_claim_verdicts, validate_results_fill_projection
+        from tests.test_analysis_claims import minimal_artifact
+        # Two actual producer windows; one carrier is unreadable here and the
+        # other producer is legacy. Component bytes and numbers still bind.
+        floor, _components, pinset = _lineage_bearing_artifacts(lambda i: _window_lineage(0) if i == 0 else None)
+        raw = json.dumps(floor).encode()
+        with tempfile.TemporaryDirectory() as td:
+            path, digest = g.write_pinset(Path(td), pinset)
+            authenticated = authenticate_floor_artifact_bytes(raw, pinset_path=path, expected_pinset_sha256=digest)
+            verdict = minimal_artifact()
+            verdict['inputs']['floor_artifact'] = {'artifact_id': floor['artifact_id'],
+                'file_sha256': hashlib.sha256(raw).hexdigest(), 'embedded_bytes_base64': base64.b64encode(raw).decode()}
+            family = verdict['contrasts'][0]['conditions']['condition_a_id']
+            notes = list(authenticated.limitations) + [
+                'consumer_identity_set_unauthenticated:' + family,
+                'consumer_identity_recording_difference:' + family,
+                'floor_cell_from_floor_pack:' + family + ':' + floor['cells'][0]['cell_id'] + ':no_envelope_comparison',
+            ]
+            verdict['inputs']['limitations'] = notes
+            roots = {}
+            for cell in floor['cells']:
+                for kind in ('absolute', 'comparative'):
+                    component = cell['provenance'][kind]
+                    roots.setdefault(component['evidence_root_id'], set()).add(component['campaign_log']['sha256'])
+            verdict['supersession_audit'] = [verdict['supersession_audit'][0]] + [
+                {'scope': 'floor_evidence', 'evidence_root_id': root,
+                 'authenticated_basis': {'kind': 'floor_component_campaign_log_sha256', 'sha256s': sorted(hashes)},
+                 'raw_count': 0, 'validated_count': 0, 'status': 'clean'} for root, hashes in roots.items()]
+            verdict['claim_verdicts_id'] = calculate_claim_verdicts_id(verdict)
+            self.assertEqual(validate_claim_verdicts(verdict, floor_pinset_path=path), [])
+            fill = adapt_claim_verdicts(render_claim_verdicts(verdict), campaigns={'alpha': {}, 'beta': {}}, floor_pinset_path=path)
+            self.assertEqual(fill['gamma']['limitations'], notes)
+            self.assertEqual(fill['gamma']['contrasts'][0]['limitations'], notes)
+            self.assertEqual({note.split(':')[0] for note in notes}, {
+                'floor_launch_lineage_unauthenticated', 'floor_producer_lineage_absent',
+                'consumer_identity_set_unauthenticated', 'consumer_identity_recording_difference', 'floor_cell_from_floor_pack'})
+            validate_results_fill_projection(fill, verdict)
