@@ -1358,6 +1358,18 @@ class Q1WithheldCensusTests(unittest.TestCase):
                     self.assertEqual({p["status"] for p in points}, {"missing"})
                     self.assertEqual({p["pass_status"] for p in points}, {"no_pass"})
 
+    def test_missing_labels_unions_existing_and_pass_flags_on_survivors(self):
+        for status in ("computed", "unavailable"):
+            with self.subTest(status=status):
+                point = {"status": status, "flags": ["existing.disclosure"], "passes": [
+                    {"flags": ["battery.assist"]}, {"flags": ["bytes.withheld_missing"]}]}
+                bytes_analyze._missing_labels([point])
+                self.assertEqual(point["flags"], ["battery.assist", "bytes.withheld_missing", "existing.disclosure"])
+                self.assertEqual(point["status"], "computed" if status == "computed" else "missing")
+        optional = {"status": "computed", "pass_status": "one_pass", "passes": [{"flags": []}]}
+        bytes_analyze._missing_labels([optional])
+        self.assertNotIn("bytes.withheld_missing", optional.get("flags", []))
+
     def test_missing_file_placeholders_keep_sidecar_counts_and_no_energy(self):
         model = {"model": "heldout", "config_key": "heldout|registered|512"}
         info = {"row_count": 100, "config_key_sha256": {

@@ -35,11 +35,14 @@ def _reduce(source, manifest, stage, key_dir=None, stage1_commit=None):
 
 
 def _missing_labels(points):
-    """Render absent withheld models as missing after arithmetic has finished."""
+    """Disclose pass flags on survivors and label models with no point."""
     for point in points:
-        if point.get("status") == "unavailable" and any(
-                "bytes.withheld_missing" in p.get("flags", []) for p in point.get("passes", [])):
-            point.update(status="missing", reason="withheld rows missing", flags=["bytes.withheld_missing"])
+        flags = set(point.get("flags", [])) | {
+            flag for row in point.get("passes", []) for flag in row.get("flags", [])}
+        if "bytes.withheld_missing" in flags:
+            point["flags"] = sorted(flags)
+            if point.get("status") == "unavailable":
+                point.update(status="missing", reason="withheld rows missing")
 
 
 def main(argv=None):
