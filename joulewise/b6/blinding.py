@@ -53,6 +53,18 @@ def _stored_or_draw(directory: Path, name: str, bounds: tuple[float, float],
         return value
 
 
+def key_directory(pack_records_root: Path | str, pack_id: str, registration: Mapping) -> Path:
+    """C6 custody: grouped packs share keys; replication paths stay unchanged."""
+    identity = registration.get("blinding_group") or pack_id
+    if not isinstance(identity, str) or identity in (".", "..") or Path(identity).name != identity:
+        raise ValueError("blinding key directory must be one records-root child")
+    root = Path(pack_records_root).resolve()
+    directory = Path(pack_records_root) / identity / "blinding"
+    if not directory.resolve().is_relative_to(root):
+        raise ValueError("blinding key directory escapes records root")
+    return directory
+
+
 def pack_factor(directory: Path | str, *, session_id: str | None = None) -> float:
     directory = Path(directory)
     return _stored_or_draw(directory, "pack.json", PACK_RANGE,

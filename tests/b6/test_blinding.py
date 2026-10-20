@@ -18,6 +18,20 @@ def factor_child(directory, gate, queue):
 
 
 class BlindingTests(unittest.TestCase):
+    def test_twelve_bytes_drafts_share_custody_replication_paths_unchanged(self):
+        root = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as tmp:
+            records = Path(tmp)
+            paths = {blinding.key_directory(records, doc["pack_id"], doc)
+                     for path in sorted((root / "configs/b6/packs").glob("bytes-*/registration.json"))
+                     for doc in [json.loads(path.read_text())]}
+            self.assertEqual(paths, {records / "bytes/blinding"})
+            for pack in ("alpha", "beta", "gamma"):
+                self.assertEqual(blinding.key_directory(records, pack, {}), records / pack / "blinding")
+            for group in ("../escape", "/outside", ".", ".."):
+                with self.assertRaises(ValueError):
+                    blinding.key_directory(records, "pack", {"blinding_group": group})
+
     def test_ranges_over_ten_thousand_draws(self):
         for bounds in (blinding.PACK_RANGE, blinding.CONFIG_RANGE):
             self.assertTrue(all(bounds[0] <= blinding._draw(bounds) <= bounds[1] for _ in range(10000)),

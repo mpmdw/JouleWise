@@ -91,14 +91,20 @@ def _event_fields(events: list[dict]) -> dict:
 
 def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str,
            pack_records_root: Path | str, export_dir: Path | str, *, non_claim: bool = False,
-           evidence=None, acceptance_record: Mapping | None = None) -> ExportResult:
+           evidence=None, acceptance_record: Mapping | None = None,
+           pack_registration: Mapping | None = None) -> ExportResult:
     root = Path(archive_root)
     evidence = evidence or evidence_from_archive(root, plan, registration_dir)
     record = acceptance_record or read_json(root / "derived/b6-acceptance.json")
     roster = ordered_roster(read_json(root / "derived/roster.json", {}), evidence)
     pack_id = record["pack_id"]
     session_id = record.get("session_id") or evidence.session_id or str(roster.get("plan_id") or root.name)
-    key_dir = Path(pack_records_root) / pack_id / "blinding"
+    if pack_registration is None:
+        pack_registration = read_json(root / "sources/pack/registration.json", None)
+        if pack_registration is None:
+            pack_registration = read_json(Path(__file__).resolve().parents[2] /
+                "configs/b6/packs" / pack_id / "registration.json", {})
+    key_dir = blinding.key_directory(pack_records_root, pack_id, pack_registration)
     excluded, codes = defaultdict(set), defaultdict(set)
     for item in record.get("excluding", []):
         if item.get("scope") == "member":
