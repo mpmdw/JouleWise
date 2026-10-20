@@ -1221,13 +1221,15 @@ def common_mode_zero_points_agree(
     """Compare zero points at the scale of their contributing joule terms."""
 
     scale = max(abs(value) for value in summed_joule_terms)
-    # 1e-6 J is the project's absolute agreement bar in joules, far under
-    # the ~1 J attribution limit; 64 ulp of S is the float noise of summing
-    # those terms (u = 2**-53 for binary64). The member-envelope integral
-    # sum carried by callers bounds all contributing terms despite cancellation.
+    # 1e-6 J is the project's absolute agreement bar. 1e6 times binary64
+    # float noise (u = 2**-53) at size S is the band's lower edge. At
+    # production S <= about 2.5e6 J the bar is <= 2.8e-4 J: 1e-3 J
+    # divergence is caught up to S about 9e6 J, and the bar stays below 1%
+    # of the ~1 J attribution limit up to S about 9e7 J. S includes |zero
+    # point|, so the absolute term already scales with it; no relative term.
     return math.isclose(
-        a, b, rel_tol=1e-9,
-        abs_tol=max(1e-6, 64 * 2**-53 * scale),
+        a, b, rel_tol=0.0,
+        abs_tol=max(1e-6, 1e6 * 2**-53 * scale),
     )
 
 

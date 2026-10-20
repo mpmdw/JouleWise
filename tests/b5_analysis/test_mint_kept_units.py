@@ -175,15 +175,15 @@ class ArithmeticTests(unittest.TestCase):
         for cell in artifact["cells"]:
             self.assertEqual(cell["comparative"]["n_blocks"], 8)
             self.assertEqual(cell["comparative"]["guard_factor"], 1.1338934190276817)
-            self.assertAlmostEqual(cell["comparative"]["unguarded_floor_j"], 1.0895584748159575, places=9)
+            self.assertAlmostEqual(cell["comparative"]["unguarded_floor_j"], 1.0895584748159575, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
             self.assertEqual(cell["comparative"]["t_critical"], 2.365)
-            self.assertAlmostEqual(cell["comparative"]["guarded_floor_j"], 1.2354431842396523, places=9)
-            self.assertAlmostEqual(cell["absolute"]["unguarded_floor_j"], 0.5729903925896154, places=9)
+            self.assertAlmostEqual(cell["comparative"]["guarded_floor_j"], 1.2354431842396523, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
+            self.assertAlmostEqual(cell["absolute"]["unguarded_floor_j"], 0.5729903925896154, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
             self.assertEqual(cell["absolute"]["guard_factor"], 1.0)
             self.assertEqual(cell["absolute"]["t_critical"], 2.262)
-            self.assertAlmostEqual(cell["floor_cmp_j"], 2.0354431842396523, places=9)
-            self.assertAlmostEqual(cell["floor_abs_j"], 1.3729903925896154, places=9)
-            self.assertAlmostEqual(cell["floor_gate_j"], 2.0354431842396523, places=9)
+            self.assertAlmostEqual(cell["floor_cmp_j"], 2.0354431842396523, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
+            self.assertAlmostEqual(cell["floor_abs_j"], 1.3729903925896154, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
+            self.assertAlmostEqual(cell["floor_gate_j"], 2.0354431842396523, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
             self.assertEqual(cell["eligibility"]["minimum_claim_n"], 5)
         for producer in fixture.pins["producer_plans"]:
             for cell in producer["cells"]:
@@ -193,26 +193,26 @@ class ArithmeticTests(unittest.TestCase):
     def test_t2_ten_over_five(self):
         artifact, _ = build(case("t2"))
         for cell in artifact["cells"]:
-            self.assertAlmostEqual(cell["floor_gate_j"], 2.899596205228953, places=9)
-            self.assertAlmostEqual(cell["comparative"]["unguarded_floor_j"], 1.3997308034859683, places=9)
+            self.assertAlmostEqual(cell["floor_gate_j"], 2.899596205228953, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
+            self.assertAlmostEqual(cell["comparative"]["unguarded_floor_j"], 1.3997308034859683, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
             self.assertEqual(cell["comparative"]["guard_factor"], 1.5)
-            self.assertAlmostEqual(cell["comparative"]["guarded_floor_j"], 2.0995962052289525, places=9)
+            self.assertAlmostEqual(cell["comparative"]["guarded_floor_j"], 2.0995962052289525, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
             self.assertEqual(cell["comparative"]["t_critical"], 2.776)
             self.assertEqual(cell["eligibility"]["minimum_claim_n"], 5)
 
     def test_t3_five_over_ten(self):
         artifact, _ = build(case("t3"))
         for cell in artifact["cells"]:
-            self.assertAlmostEqual(cell["floor_abs_j"], 1.5495200000000016, places=9)
-            self.assertAlmostEqual(cell["absolute"]["unguarded_floor_j"], 0.49968000000000096, places=9)
+            self.assertAlmostEqual(cell["floor_abs_j"], 1.5495200000000016, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
+            self.assertAlmostEqual(cell["absolute"]["unguarded_floor_j"], 0.49968000000000096, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
             self.assertEqual(cell["absolute"]["guard_factor"], 1.5)
-            self.assertAlmostEqual(cell["absolute"]["guarded_floor_j"], 0.7495200000000014, places=9)
+            self.assertAlmostEqual(cell["absolute"]["guarded_floor_j"], 0.7495200000000014, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
             self.assertEqual(cell["absolute"]["t_critical"], 2.776)
-            self.assertAlmostEqual(cell["comparative"]["unguarded_floor_j"], 1.0348999613670127, places=9)
+            self.assertAlmostEqual(cell["comparative"]["unguarded_floor_j"], 1.0348999613670127, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
             self.assertEqual(cell["comparative"]["guard_factor"], 1.0)
             self.assertEqual(cell["comparative"]["t_critical"], 2.262)
-            self.assertAlmostEqual(cell["floor_cmp_j"], 1.8348999613670127, places=9)
-            self.assertAlmostEqual(cell["floor_gate_j"], 1.8348999613670127, places=9)
+            self.assertAlmostEqual(cell["floor_cmp_j"], 1.8348999613670127, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
+            self.assertAlmostEqual(cell["floor_gate_j"], 1.8348999613670127, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
             self.assertEqual(cell["eligibility"]["minimum_claim_n"], 5)
 
     def test_nine_repeats_worked_value(self):
@@ -220,10 +220,10 @@ class ArithmeticTests(unittest.TestCase):
         for cell in artifact["cells"]:
             self.assertEqual(cell["absolute"]["n"], 9)
             self.assertEqual(cell["absolute"]["t_critical"], 2.306)
-            self.assertAlmostEqual(cell["absolute"]["unguarded_floor_j"], 0.5435294124720607, places=9)
+            self.assertAlmostEqual(cell["absolute"]["unguarded_floor_j"], 0.5435294124720607, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
             self.assertEqual(cell["absolute"]["guard_factor"], 1.0606601717798212)
-            self.assertAlmostEqual(cell["absolute"]["guarded_floor_j"], 0.5765000000000011, places=9)
-            self.assertAlmostEqual(cell["floor_abs_j"], 1.3765000000000012, places=9)
+            self.assertAlmostEqual(cell["absolute"]["guarded_floor_j"], 0.5765000000000011, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
+            self.assertAlmostEqual(cell["floor_abs_j"], 1.3765000000000012, places=9)  # 5e-10 J >=1e6*~4e-16 J float noise and far below 1e-6 J printed precision.
 
     def test_t4_all_kept_canonical_cell_parity(self):
         fixture = case("all")

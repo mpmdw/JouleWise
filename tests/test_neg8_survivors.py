@@ -72,7 +72,7 @@ class CountAdjustedBoundTests(unittest.TestCase):
         for counts in ((3, 3), (2, 3), (3, 2), (2, 2), (1, 3), (1, 1)):
             with self.subTest(counts=counts):
                 self.assertAlmostEqual(ww.neg8_count_adjusted_bound(RULING_CORPUS, *counts)["envelope_j"],
-                                       brute_force_envelope(RULING_CORPUS, *counts), delta=1e-6)
+                                       brute_force_envelope(RULING_CORPUS, *counts), delta=1e-6)  # 1e-6 J is the absolute agreement bar without a printed half-width, above 1e6*float noise.
 
     def test_planned_and_legacy_shapes_replay_the_stored_bound_bytes(self) -> None:
         artifact = bound_artifact(RULING_CORPUS)
@@ -502,9 +502,9 @@ class WriterEnergyPredicateParityTests(unittest.TestCase):
         references = h._neg8_bracket_references(bracket)
         self.assertIsNone(references["end_gross_j"])
         self.assertIsNone(references["end_admissible_set_j"])
-        self.assertAlmostEqual(references["start_gross_j"], sum(start) / 3, delta=1e-6)
+        self.assertAlmostEqual(references["start_gross_j"], sum(start) / 3, delta=1e-6)  # 1e-6 J is the absolute agreement bar without a printed half-width, above 1e6*float noise.
         # The idle-subtracted energy still reads, so that family's end mean holds all three references.
-        self.assertAlmostEqual(references["idle_subtracted_end_point_j"], sum(end) / 3 - 0.2, delta=1e-6)
+        self.assertAlmostEqual(references["idle_subtracted_end_point_j"], sum(end) / 3 - 0.2, delta=1e-6)  # 1e-6 J is the absolute agreement bar without a printed half-width, above 1e6*float noise.
         # The same bracket from the mirror's entries through the writer's evaluator call.
         entries = {member.bundle_id: ww._neg8_writer_reference_energy(member.summary) for member in members}
         self.assertEqual(entries[lost][0], None)

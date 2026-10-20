@@ -76,3 +76,13 @@ class FloorMintPinsetsSchemaTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SixDecimalRepresentationTests(unittest.TestCase):
+    def test_six_decimal_schema_has_no_retired_numeric_literal_exclusion(self):
+        import re
+        schema = json.loads(SCHEMA_PATH.read_bytes())['$defs']['sixDecimal']
+        self.assertEqual(set(schema), {'type', 'pattern'})
+        self.assertEqual(schema['type'], 'string')
+        self.assertIsNotNone(re.fullmatch(schema['pattern'], '7.377086'))
+        self.assertIsNone(re.fullmatch(schema['pattern'], '7.3770860'))

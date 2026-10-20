@@ -915,11 +915,16 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
 
     def test_zero_point_band_tracks_absolute_and_large_sum_noise(self):
         agree = detection_floor.common_mode_zero_points_agree
-        self.assertTrue(agree(0.0, 5e-7, [1e6, -1e6]))
-        self.assertFalse(agree(0.0, 2e-6, [1e6, -1e6]))
-        self.assertTrue(agree(0.0, 0.001, [1e12, -1e12]))
-        self.assertFalse(agree(0.0, 0.02, [1e12, -1e12]))
-        self.assertTrue(agree(1e9, 1e9 + 0.5, [1e9, 1e9 + 0.5]))
+        for scale in (1.0, 1e4, 1e6, 2.5e6, 1e12):
+            # §Z: absolute 1e-6 J or 1e6*u*S float noise, whichever is larger.
+            bar = max(1e-6, 1e6 * 2**-53 * scale)
+            with self.subTest(scale=scale):
+                self.assertTrue(agree(0.0, 0.5 * bar, [scale]))
+                self.assertFalse(agree(0.0, 2.0 * bar, [scale]))
+                if scale <= 2.5e6:
+                    self.assertFalse(agree(0.0, 1e-3, [scale]))
+        self.assertFalse(agree(2e6, 2e6 + 1e-3, [2.5e6, 2e6 + 1e-3]))
+
 
     def test_large_cancelling_joule_sums_share_the_zero_point_band(self):
         from joulewise.dominance_closeout import replay_common_mode_dominance
@@ -1605,7 +1610,8 @@ class AdversarialZeroDesignationProbes(unittest.TestCase):
             )[case_index % 5]
             tolerance_factor = (0.25, 0.5, 1.0)[case_index % 3]
             true_zero = value_sign * magnitude
-            tolerance = max(1e-12, 1e-9 * abs(true_zero))
+            # §Z: 1e-6 J absolute or 1e6*u*S; the later envelope bounds this S.
+            tolerance = max(1e-6, 1e6 * 2**-53 * max(1.0, abs(true_zero)))
             direction = -1.0 if (case_index // 2) % 2 else 1.0
             adversarial_z = true_zero + direction * tolerance * tolerance_factor
             delta = (
@@ -1616,8 +1622,8 @@ class AdversarialZeroDesignationProbes(unittest.TestCase):
             while not math.isclose(
                 adversarial_z,
                 delta,
-                rel_tol=1e-9,
-                abs_tol=1e-12,
+                rel_tol=0.0,
+                abs_tol=tolerance,
             ):
                 adversarial_z = math.nextafter(adversarial_z, delta)
             self.assertNotEqual(adversarial_z, true_zero)

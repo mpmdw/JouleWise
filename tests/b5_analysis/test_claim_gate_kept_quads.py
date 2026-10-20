@@ -335,8 +335,8 @@ class J8HandHolmS5FixTests(unittest.TestCase):
                 if k in kept[cid]:
                     with self.subTest(contrast=cid, block=k):
                         row = row_maps[cid][k]
-                        self.assertAlmostEqual(row['adjusted_p'], expected[cid], places=6)
-                        self.assertAlmostEqual(row['raw_p'], raw[cid], places=6)
+                        self.assertAlmostEqual(row['adjusted_p'], expected[cid], places=6)  # 5e-7 in p exceeds 1e6*u and is far below 1% of the 0.05 decision level.
+                        self.assertAlmostEqual(row['raw_p'], raw[cid], places=6)  # 5e-7 in p exceeds 1e6*u and is far below 1% of the 0.05 decision level.
                         self.assertEqual(row['n_blocks'], len(kept[cid]) - 1)
         # Each asymmetric row's peer stays at its whole kept n.
         self.assertEqual(len(kept['prefill']), 9)
