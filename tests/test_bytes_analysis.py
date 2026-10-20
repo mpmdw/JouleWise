@@ -486,7 +486,9 @@ class ProductionArchiveTests(unittest.TestCase):
             self.assertEqual(ba.read_json(root / "stage2/unavailable.json"), [])
             self.assertEqual({p["boundary"] for p in ba.read_json(root / "stage2/model_estimates.json")},
                              set(ba.BOUNDARIES))
-            # All H1/H2 rows of the existing ten-model, three-boundary design.
+            # 2 selections x 2 bases x 3 boundaries = 12 H2 groups.
+            # Each H1 group has 10 models x (2 passes + their mean) = 30 rows,
+            # so the registered complete design prints 12 x 30 = 360 H1 rows.
             self.assertEqual(len(ba.read_json(root / "stage2/h1.json")), 360)
             self.assertEqual(len(ba.read_json(root / "stage2/h2.json")), 12)
 
