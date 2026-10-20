@@ -72,9 +72,10 @@ MEASUREMENTS.json uses schema_version `joulewise.bytes_mac_measurements.v1`,
   line exists; never copy another pack's value. C5 reports the R6 candidate
   F_min/(4*longest measured decode phase) separately from a registered line.
 - `clock`: signed `rate_ppm` (measured clock-rate fit), signed
-  `frequency_word_ppm` (live kernel word converted to ppm) and no kit-level stream duration. The hold uses
-  the longest measured run-level paired stamp span, including reference runs, with the
-  registered 5 ms budget, h=0 and 0.25 ppm frequency margin. The registered S-7 hold checks
+  `frequency_word_ppm` (live kernel word converted to ppm). No kit-level stream
+  duration is substituted. The hold uses the longest measured run-level paired
+  stamp span, including reference runs, with the registered 5 ms budget, h=0
+  and 0.25 ppm frequency margin. The registered S-7 hold checks
   the measured rate r. The live word and whether it clears the same gate are
   printed as diagnostics (registration wins over R6 wording); the 15 ms
   illustrative design form is not used.

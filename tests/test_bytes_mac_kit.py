@@ -3,6 +3,7 @@ from collections import Counter
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -76,6 +77,31 @@ class MacKitTests(unittest.TestCase):
         result = subprocess.run([sys.executable, str(ROOT / "scripts/bytes_stream_test.py"), "--help"],
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_stream_cli_runs_with_fake_mlx_and_writes_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "mlx").mkdir()
+            (root / "mlx/__init__.py").write_text("")
+            (root / "mlx/core.py").write_text(
+                "uint8 = 'uint8'\n"
+                "def ones(shape, dtype): return object()\n"
+                "def sum(data): return object()\n"
+                "def eval(value): pass\n"
+                "def synchronize(): pass\n")
+            receipt = root / "stream.json"
+            env = {**os.environ, "PYTHONPATH": str(root)}
+            result = subprocess.run([sys.executable, str(ROOT / "scripts/bytes_stream_test.py"),
+                "--bytes", "1024", "--repeats", "3", "--out", str(receipt)],
+                env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(receipt.read_bytes())
+            self.assertEqual(data["bytes_read"], 1024 * 3)
+            self.assertEqual(data["clock"], "CLOCK_MONOTONIC_RAW")
+            self.assertTrue(data["non_claim"])
+            # A completed kernel must have a positive span, directly from
+            # the ordering of its own monotonic stamps; no timing cutoff.
+            self.assertGreater(data["end_ns"], data["start_ns"])
 
     def test_stream_evaluates_each_read_and_records_own_span(self):
         class FakeMLX:

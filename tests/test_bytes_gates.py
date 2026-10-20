@@ -209,6 +209,29 @@ class GatesTests(unittest.TestCase):
         self.assertTrue(row["would_exclude"])
         self.assertEqual(next(r for r in result["gates"] if r["gate"] == "cpu_contention:llama-70b")["status"], "flag_only")
 
+    def test_cli_failed_gates_are_written_and_missing_receipts_are_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            measured = deepcopy(self.measured)
+            measured["clock"]["rate_ppm"] = 30  # Above 5000/max(run stamp span)-0.25 in this world.
+            write(root / "measurements.json", measured)
+            out = root / "c5.json"
+            args = [sys.executable, str(ROOT / "scripts/bytes_gates.py"),
+                    "--runs", str(self.export.csv_path), "--measurements", str(root / "measurements.json"),
+                    "--out", str(out)]
+            result = subprocess.run(args, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertEqual(gates.read(out)["status"], "fail")
+            self.assertIn("clock:session: fail", result.stdout)
+            self.assertIn("sizing:bytes-s6-p2: pass", result.stdout)
+            measured["runs"].pop(next(iter(measured["runs"])))
+            write(root / "measurements.json", measured)
+            out.unlink()
+            result = subprocess.run(args, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertFalse(out.exists())
+            self.assertIn("membership differs", result.stderr)
+
     def test_claim_missing_duplicate_and_nonfinite_inputs_are_refused(self):
         for mutate in (
             lambda m: m.update(non_claim=False),
