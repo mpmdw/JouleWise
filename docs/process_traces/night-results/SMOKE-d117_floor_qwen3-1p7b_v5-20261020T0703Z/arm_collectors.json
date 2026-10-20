@@ -1,0 +1,70 @@
+{
+  "call": 1,
+  "ran_by": "arm",
+  "results": [
+    {
+      "argv": [
+        "/Users/edr/night-b6/loop/staging/r3-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261020T0703Z/measurement/.venv/bin/python3.13",
+        "-B",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/scripts/collect_window_flags.py",
+        "--stage",
+        "arm",
+        "--custody",
+        "/Users/edr/night-b6/loop/staging/r3-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261020T0703Z/custody",
+        "--repo",
+        "/Users/edr/night-b6/loop/staging/r3-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261020T0703Z/measurement",
+        "--pack",
+        "/Users/edr/night-b6/loop/staging/r3-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261020T0703Z/measurement/configs/campaigns/d117_floor_qwen3-1p7b_v5",
+        "--plan-id",
+        "SMOKE-d117_floor_qwen3-1p7b_v5-20261020T0703Z",
+        "--attempt",
+        "1",
+        "--h-claim",
+        "e4677452d8fe7390ef1df9b47860b755d0120392",
+        "--chain",
+        "/Users/edr/night-b6/loop/staging/r3-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261020T0703Z/custody/chain.zsh",
+        "--chain-sidecar",
+        "/Users/edr/night-b6/loop/staging/r3-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261020T0703Z/custody/chain.zsh.sha256",
+        "--ledger",
+        "/Users/edr/night-b6/loop/staging/r3-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261020T0703Z/measurement/runs/calibration_observation_ledger.jsonl",
+        "--head-pin",
+        "/Users/edr/night-b6/loop/staging/r3-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261020T0703Z/measurement/configs/calibration/calibration_ledger_head.json",
+        "--session-id",
+        "SMOKE-d117_floor_qwen3-1p7b_v5-20261020T0703Z-calibration",
+        "--expected-pack-tree-sha256",
+        "92b17734baafb6479e2b69b88e0e3ac8f8072f96c590587a4f6c01b70a5d96f1",
+        "--calibration-plan",
+        "/Users/edr/night-b6/loop/staging/r3-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261020T0703Z/measurement/configs/campaigns/d117_floor_qwen3-1p7b_v5/calibration_plan.json",
+        "--catalog",
+        "/Users/edr/night-b6/loop/staging/r3-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261020T0703Z/measurement/configs/campaigns/v5_claim_25g83/flag_catalog.json",
+        "--sealed-inventory",
+        "/Users/edr/night-b6/loop/staging/r3-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261020T0703Z/measurement/configs/campaigns/v5_claim_25g83/sealed_inventory.json",
+        "--identity-pins",
+        "/Users/edr/night-b6/loop/staging/r3-alpha-smoke-0/smoke/d117_floor_qwen3-1p7b_v5-20261020T0703Z/measurement/configs/campaigns/v5_claim_25g83/identity_pins.json"
+      ],
+      "elapsed_s": 3.117322333,
+      "error": null,
+      "finished": {
+        "monotonic_ns": 464602905749083,
+        "monotonic_raw_ns": 464602905748791,
+        "wall_ns": 1792480265921966000
+      },
+      "name": "flags.arm",
+      "returncode": 0,
+      "started": {
+        "monotonic_ns": 464599788426750,
+        "monotonic_raw_ns": 464599788426625,
+        "wall_ns": 1792480262804643000
+      },
+      "stderr": "",
+      "stdout": {
+        "name": "collector-flags.arm.stdout",
+        "path": "hazards/arm-raw/collector-flags.arm.stdout",
+        "sha256": "cd95f0d2221078a86a9786fc0383fca160760e8d28d1b660e01aa4062fc082ed",
+        "size": 511
+      },
+      "timed_out": false
+    }
+  ],
+  "schema": "joulewise.b5_arm_collectors.v1"
+}
