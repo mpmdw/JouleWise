@@ -2,6 +2,7 @@
 from collections import Counter
 import hashlib
 import json
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -97,7 +98,9 @@ class MacKitTests(unittest.TestCase):
         stamps = iter((4_000_000_000, 5_000_000_000))
         result = probe.stream(1024, 3, mx=mx, clock_ns=lambda: next(stamps))
         self.assertEqual(result["bytes_read"], 3 * 1024)
-        self.assertEqual(result["duration_s"], 1)
+        # Duration has no half-width: the brief prescribes 1e-6 relative
+        # or absolute in seconds, above amplified floating noise.
+        self.assertTrue(math.isclose(result["duration_s"], 1, rel_tol=1e-6, abs_tol=1e-6))
         self.assertEqual([c[0] for c in mx.calls], ["ones", "eval", "sync", "sum", "eval", "sum", "eval", "sum", "eval", "sync"])
         self.assertEqual(len({id(c[1]) for c in mx.calls if c[0] == "eval"}), 4)
         for args in ((0, 3), (1024, 0), (True, 1)):
