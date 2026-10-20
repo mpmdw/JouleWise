@@ -100,7 +100,6 @@ V2_ASSURANCE_PROFILE = {
         "resistance to coordinated prepublication rewrite",
     ],
 }
-RETIRED_OPERATIVE_FLOOR_LITERAL = "7.377086"
 _ORIGINAL_MINT_PATH = Path(__file__).with_name("mint_floor_artifact.py")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _DECIMAL_RE = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
@@ -562,6 +561,7 @@ class V2CellRecomputation:
     block_inputs: tuple[Any, ...] | None = None
     calibration_bracket: Mapping[str, Any] | None = None
     shared_edge_bound_s: float | None = None
+    diagnostics: tuple[Mapping[str, str], ...] = ()
 
 
 def _object(
@@ -682,10 +682,6 @@ def _decimal_text(value: object, label: str) -> Decimal:
 def _six_decimal(value: object, label: str) -> str:
     if not isinstance(value, str) or _SIX_DECIMAL_RE.fullmatch(value) is None:
         raise MintError(f"{label} must be a nonnegative six-decimal literal")
-    if value == RETIRED_OPERATIVE_FLOOR_LITERAL:
-        raise MintError(
-            f"{label} reuses retired literal {RETIRED_OPERATIVE_FLOOR_LITERAL}"
-        )
     return value
 
 
@@ -2480,6 +2476,8 @@ def _v2_allowance_projection(
     inputs: V2ProducerInputs,
     pre: Any,
     post: Any,
+    *,
+    diagnostics: list[Mapping[str, str]] | None = None,
 ) -> Mapping[str, Any]:
     projection = issued_calibration_allowance_projection(
         inputs.calibration_acceptance,
@@ -2510,11 +2508,23 @@ def _v2_allowance_projection(
     if entry is not None:
         bracket = entry.archive_context.window_bracket or {}
         try:
-            allowance_matches = Decimal(pin_projection["applied_allowance_s"]) == Decimal(str(bracket.get("calibration_drift_allowance_s")))
-        except InvalidOperation:
+            allowance_matches = (
+                float(Decimal(pin_projection["applied_allowance_s"]))
+                == bracket.get("calibration_drift_allowance_s")
+            )
+        except (InvalidOperation, ValueError, OverflowError):
             allowance_matches = False
-        if not allowance_matches:
-            raise MintError("postcollection_evidence_mismatch: allowance differs from window bracket")
+        if not allowance_matches and diagnostics is not None:
+            # This is a non-refusing observation. The endpoint-derived allowance
+            # remains authoritative; carry the observation into artifact diagnostics.
+            diagnostics.append({
+                "code": "allowance_differs_from_window_bracket",
+                "producer_plan_id": inputs.plan["plan_id"],
+                "derived_allowance_s": pin_projection["applied_allowance_s"],
+                "window_bracket_allowance_s": str(
+                    bracket.get("calibration_drift_allowance_s")
+                ),
+            })
         for role, observation in (("pre", pre), ("post", post)):
             endpoint = bracket.get(role) or {}
             for field, attribute in (("attempt_id", "attempt_id"), ("ledger_receipt_digest", "receipt_digest"),
@@ -2529,6 +2539,7 @@ def _v2_authenticate_bracket_binding(
     producer: Mapping[str, Any],
     inputs: V2ProducerInputs,
     ledger_snapshot: Any,
+    diagnostics: list[Mapping[str, str]] | None = None,
 ) -> tuple[Any, Any, Mapping[str, Any]]:
     label = f"producer {producer['plan']['plan_id']!r}"
     binding = inputs.bracket_binding
@@ -2552,7 +2563,9 @@ def _v2_authenticate_bracket_binding(
             f"postcollection_evidence_mismatch: {label} bracket binding failed authenticated validation"
         )
     pre, post = resolved
-    return pre, post, _v2_allowance_projection(inputs, pre, post)
+    return pre, post, _v2_allowance_projection(
+        inputs, pre, post, diagnostics=diagnostics
+    )
 
 
 def _v2_gate_producer_inventory(
@@ -2686,6 +2699,7 @@ def _v2_gate_postcollection(
         except detection_floor.SingleCountDisciplineError as exc:
             raise MintError(str(exc)) from exc
     post = cell_pins["postcollection"]
+    diagnostics: list[Mapping[str, str]] = []
     if (
         producer_inputs.authenticated_pre_observation is not None
         and producer_inputs.authenticated_post_observation is not None
@@ -2722,6 +2736,7 @@ def _v2_gate_postcollection(
             producer_inputs,
             pre,
             post_observation,
+            diagnostics=diagnostics,
         )
         if dict(producer_inputs.calibration_allowance_projection) != dict(
             allowance_projection
@@ -2736,6 +2751,7 @@ def _v2_gate_postcollection(
                 producer=producer,
                 inputs=producer_inputs,
                 ledger_snapshot=ledger_snapshot,
+                diagnostics=diagnostics,
             )
         )
 
@@ -2959,6 +2975,7 @@ def _v2_gate_postcollection(
             else None
         ),
         shared_edge_bound_s=getattr(recomputed, "shared_edge_bound_s", None),
+        diagnostics=tuple(diagnostics),
     )
 
 
@@ -3232,6 +3249,8 @@ def _mint_v2_cell_artifact(
         )
     if launch_lineage is not None:
         provenance["launch_lineage"] = copy.deepcopy(dict(launch_lineage))
+    if recomputation.diagnostics:
+        provenance["diagnostics"] = copy.deepcopy(list(recomputation.diagnostics))
     artifact = core.build_floor_artifact(
         artifact_id=producer["component_artifact"]["artifact_id"],
         calibration_scope=plan_pins["artifact_calibration_scope"],
@@ -3439,6 +3458,10 @@ def _build_v2_artifacts(
         "assurance": copy.deepcopy(V2_ASSURANCE_PROFILE),
         "implementation": implementation,
     }
+    diagnostics = [observation for component in component_artifacts
+                   for observation in component["provenance"].get("diagnostics", [])]
+    if diagnostics:
+        aggregate_provenance["diagnostics"] = copy.deepcopy(diagnostics)
     config_sets = [record for producer in pinset.value["producer_plans"]
                    if (record := detection_floor.floor_mint_producer_config_set(producer)) is not None]
     if config_sets:

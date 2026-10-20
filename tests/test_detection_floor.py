@@ -913,6 +913,57 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             member_envelope_integral_sum_j=1.125,
         )
 
+    def test_zero_point_band_tracks_absolute_and_large_sum_noise(self):
+        agree = detection_floor.common_mode_zero_points_agree
+        self.assertTrue(agree(0.0, 5e-7, [1e6, -1e6]))
+        self.assertFalse(agree(0.0, 2e-6, [1e6, -1e6]))
+        self.assertTrue(agree(0.0, 0.001, [1e12, -1e12]))
+        self.assertFalse(agree(0.0, 0.02, [1e12, -1e12]))
+        self.assertTrue(agree(1e9, 1e9 + 0.5, [1e9, 1e9 + 0.5]))
+
+    def test_large_cancelling_joule_sums_share_the_zero_point_band(self):
+        from joulewise.dominance_closeout import replay_common_mode_dominance
+
+        # The two evaluation orders cancel ~1e5--1e6 J member energies.
+        energies = (
+            [100000.69170971455, 100000.45030370762,
+             100000.02083693854, 99999.7794309316],
+            [1000000.6152024022, 1000000.5967321057,
+             1000000.3014545352, 1000000.2829842386],
+        )
+        for members in energies:
+            delta = (members[1] + members[2]) / 2 - (members[0] + members[3]) / 2 + 1e-4
+            zero = math.fsum([-members[0] / 2, members[1] / 2,
+                              members[2] / 2, -members[3] / 2, 1e-4])
+            scale = math.fsum(abs(value) / 2 for value in members)
+            self.assertGreater(abs(zero - delta), 1e-12)
+            self.assertFalse(math.isclose(zero, delta, rel_tol=1e-9, abs_tol=1e-12))
+            kwargs = dict(
+                onset_sweeps_j=[[zero, zero + 0.1]] * 5,
+                offset_sweeps_j=[[zero, zero + 0.1]] * 5,
+                zero_point_contrasts_j=[zero] * 5,
+                bundle_residual_half_widths_j=[[0.0] * 4] * 5,
+                member_window_bounds_s=[[(0.0, 1.0)] * 4] * 5,
+                member_envelope_integral_sums_j=[scale] * 5,
+                calibration_bracket=self.bracket(),
+                shared_edge_bound_s=self.OPERATIVE_BOUND_S,
+            )
+            for estimator in (two_shared_edge_common_mode_floor,
+                              floor_extraction._common_mode_floor_from_extracted_inputs):
+                with self.subTest(scale=scale, estimator=estimator.__name__):
+                    estimate = estimator([delta] * 5, **kwargs)
+                    self.assertIsNotNone(estimate.guarded_floor_j)
+            blocks = [dict(delta_j=delta, onset_sweep_j=kwargs['onset_sweeps_j'][0],
+                           offset_sweep_j=kwargs['offset_sweeps_j'][0],
+                           zero_point_contrast_j=zero,
+                           bundle_residual_half_widths_j=[0.0] * 4,
+                           member_window_bounds_s=[[0.0, 1.0]] * 4,
+                           member_envelope_integral_sum_j=scale)] * 5
+            replay_common_mode_dominance(
+                blocks, calibration_bracket=self.bracket(),
+                shared_edge_bound_s=self.OPERATIVE_BOUND_S,
+            )
+
     def test_fcm_r4_01_mislabelled_zero_is_structurally_inexpressible(self):
         true_zero = 1.0
         adversarial_z = 1.0000000005

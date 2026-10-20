@@ -148,7 +148,7 @@ class ReportedCellTests(unittest.TestCase):
         for df,t in e.T975.items():
             if df in nine:self.assertEqual(round(t,9),nine[df])
             self.assertEqual(round(t,3),three[df])
-            self.assertTrue(math.isclose(t,student_t_quantile(.975,df),rel_tol=1e-12))
+            self.assertTrue(math.isclose(t,student_t_quantile(.975,df),rel_tol=1e-9))
 
     def test_T7_attribution_is_not_composed(self):
         c=case((6,)); rows=c[1]

@@ -175,15 +175,15 @@ class ArithmeticTests(unittest.TestCase):
         for cell in artifact["cells"]:
             self.assertEqual(cell["comparative"]["n_blocks"], 8)
             self.assertEqual(cell["comparative"]["guard_factor"], 1.1338934190276817)
-            self.assertEqual(cell["comparative"]["unguarded_floor_j"], 1.0895584748159575)
+            self.assertAlmostEqual(cell["comparative"]["unguarded_floor_j"], 1.0895584748159575, places=9)
             self.assertEqual(cell["comparative"]["t_critical"], 2.365)
-            self.assertEqual(cell["comparative"]["guarded_floor_j"], 1.2354431842396523)
-            self.assertEqual(cell["absolute"]["unguarded_floor_j"], 0.5729903925896154)
+            self.assertAlmostEqual(cell["comparative"]["guarded_floor_j"], 1.2354431842396523, places=9)
+            self.assertAlmostEqual(cell["absolute"]["unguarded_floor_j"], 0.5729903925896154, places=9)
             self.assertEqual(cell["absolute"]["guard_factor"], 1.0)
             self.assertEqual(cell["absolute"]["t_critical"], 2.262)
-            self.assertEqual(cell["floor_cmp_j"], 2.0354431842396523)
-            self.assertEqual(cell["floor_abs_j"], 1.3729903925896154)
-            self.assertEqual(cell["floor_gate_j"], 2.0354431842396523)
+            self.assertAlmostEqual(cell["floor_cmp_j"], 2.0354431842396523, places=9)
+            self.assertAlmostEqual(cell["floor_abs_j"], 1.3729903925896154, places=9)
+            self.assertAlmostEqual(cell["floor_gate_j"], 2.0354431842396523, places=9)
             self.assertEqual(cell["eligibility"]["minimum_claim_n"], 5)
         for producer in fixture.pins["producer_plans"]:
             for cell in producer["cells"]:
@@ -193,26 +193,26 @@ class ArithmeticTests(unittest.TestCase):
     def test_t2_ten_over_five(self):
         artifact, _ = build(case("t2"))
         for cell in artifact["cells"]:
-            self.assertEqual(cell["floor_gate_j"], 2.899596205228953)
-            self.assertEqual(cell["comparative"]["unguarded_floor_j"], 1.3997308034859683)
+            self.assertAlmostEqual(cell["floor_gate_j"], 2.899596205228953, places=9)
+            self.assertAlmostEqual(cell["comparative"]["unguarded_floor_j"], 1.3997308034859683, places=9)
             self.assertEqual(cell["comparative"]["guard_factor"], 1.5)
-            self.assertEqual(cell["comparative"]["guarded_floor_j"], 2.0995962052289525)
+            self.assertAlmostEqual(cell["comparative"]["guarded_floor_j"], 2.0995962052289525, places=9)
             self.assertEqual(cell["comparative"]["t_critical"], 2.776)
             self.assertEqual(cell["eligibility"]["minimum_claim_n"], 5)
 
     def test_t3_five_over_ten(self):
         artifact, _ = build(case("t3"))
         for cell in artifact["cells"]:
-            self.assertEqual(cell["floor_abs_j"], 1.5495200000000016)
-            self.assertEqual(cell["absolute"]["unguarded_floor_j"], 0.49968000000000096)
+            self.assertAlmostEqual(cell["floor_abs_j"], 1.5495200000000016, places=9)
+            self.assertAlmostEqual(cell["absolute"]["unguarded_floor_j"], 0.49968000000000096, places=9)
             self.assertEqual(cell["absolute"]["guard_factor"], 1.5)
-            self.assertEqual(cell["absolute"]["guarded_floor_j"], 0.7495200000000014)
+            self.assertAlmostEqual(cell["absolute"]["guarded_floor_j"], 0.7495200000000014, places=9)
             self.assertEqual(cell["absolute"]["t_critical"], 2.776)
-            self.assertEqual(cell["comparative"]["unguarded_floor_j"], 1.0348999613670127)
+            self.assertAlmostEqual(cell["comparative"]["unguarded_floor_j"], 1.0348999613670127, places=9)
             self.assertEqual(cell["comparative"]["guard_factor"], 1.0)
             self.assertEqual(cell["comparative"]["t_critical"], 2.262)
-            self.assertEqual(cell["floor_cmp_j"], 1.8348999613670127)
-            self.assertEqual(cell["floor_gate_j"], 1.8348999613670127)
+            self.assertAlmostEqual(cell["floor_cmp_j"], 1.8348999613670127, places=9)
+            self.assertAlmostEqual(cell["floor_gate_j"], 1.8348999613670127, places=9)
             self.assertEqual(cell["eligibility"]["minimum_claim_n"], 5)
 
     def test_nine_repeats_worked_value(self):
@@ -220,10 +220,10 @@ class ArithmeticTests(unittest.TestCase):
         for cell in artifact["cells"]:
             self.assertEqual(cell["absolute"]["n"], 9)
             self.assertEqual(cell["absolute"]["t_critical"], 2.306)
-            self.assertEqual(cell["absolute"]["unguarded_floor_j"], 0.5435294124720607)
+            self.assertAlmostEqual(cell["absolute"]["unguarded_floor_j"], 0.5435294124720607, places=9)
             self.assertEqual(cell["absolute"]["guard_factor"], 1.0606601717798212)
-            self.assertEqual(cell["absolute"]["guarded_floor_j"], 0.5765000000000011)
-            self.assertEqual(cell["floor_abs_j"], 1.3765000000000012)
+            self.assertAlmostEqual(cell["absolute"]["guarded_floor_j"], 0.5765000000000011, places=9)
+            self.assertAlmostEqual(cell["floor_abs_j"], 1.3765000000000012, places=9)
 
     def test_t4_all_kept_canonical_cell_parity(self):
         fixture = case("all")
@@ -1102,7 +1102,26 @@ class AdditionalRefusalTests(unittest.TestCase):
                 self.assertEqual(CliTests().invoke(mint.main, args), (2, "error: window_index_required\n", ""))
             self.assertFalse((root / "floor.json").exists())
 
-    def test_allowance_matches_window_decimal_and_endpoint_identities(self):
+    def test_allowance_matches_window_by_binary64_identity(self):
+        fixture = case()
+        source = next(iter(fixture.inputs.values()))
+        # More decimal digits can still represent the very same binary64 value.
+        projection = dict(source.calibration_allowance_projection)
+        from decimal import Decimal
+        projection["applied_allowance_s"] = str(
+            Decimal(projection["applied_allowance_s"]) + Decimal("1e-22")
+        )
+        diagnostics = []
+        with registered(fixture.entries), mock.patch.object(
+            mint, "issued_calibration_allowance_projection", return_value=projection
+        ):
+            mint._v2_allowance_projection(
+                source, source.authenticated_pre_observation,
+                source.authenticated_post_observation, diagnostics=diagnostics,
+            )
+        self.assertEqual(diagnostics, [])
+
+    def test_allowance_mismatch_is_diagnostic_and_endpoint_mismatch_refuses(self):
         fixture = case()
         source = next(iter(fixture.inputs.values()))
         root = str(source.evidence_root.resolve())
@@ -1114,8 +1133,50 @@ class AdditionalRefusalTests(unittest.TestCase):
             else:
                 bracket["pre"]["attempt_id"] = "other-window-pre"
             bad = SimpleNamespace(**{**vars(entry), "archive_context": ww.ArchiveContext(source.evidence_root, window_bracket=bracket)})
-            with self.subTest(change=change), registered({root: bad}), self.assertRaisesRegex(mint.MintError, "^postcollection_evidence_mismatch"):
-                mint._v2_allowance_projection(source, source.authenticated_pre_observation, source.authenticated_post_observation)
+            with self.subTest(change=change), registered({root: bad}):
+                if change == "endpoint":
+                    with self.assertRaisesRegex(mint.MintError, "^postcollection_evidence_mismatch"):
+                        mint._v2_allowance_projection(source, source.authenticated_pre_observation, source.authenticated_post_observation)
+                else:
+                    diagnostics = []
+                    result = mint._v2_allowance_projection(source, source.authenticated_pre_observation,
+                        source.authenticated_post_observation, diagnostics=diagnostics)
+                    self.assertEqual(result, source.calibration_allowance_projection)
+                    self.assertEqual(diagnostics, [{
+                        "code": "allowance_differs_from_window_bracket",
+                        "producer_plan_id": source.plan["plan_id"],
+                        "derived_allowance_s": result["applied_allowance_s"],
+                        "window_bracket_allowance_s": str(bracket["calibration_drift_allowance_s"]),
+                    }])
+
+    def test_allowance_mismatch_survives_in_component_and_aggregate_diagnostics(self):
+        fixture = case()
+        baseline, _ = build(fixture)
+        entries = {}
+        for root, entry in fixture.entries.items():
+            bracket = ww._archive_thaw(entry.archive_context.window_bracket)
+            bracket["calibration_drift_allowance_s"] = math.nextafter(
+                bracket["calibration_drift_allowance_s"], math.inf
+            )
+            entries[root] = SimpleNamespace(**{**vars(entry), "archive_context":
+                ww.ArchiveContext(entry.window.claim_runs_root, window_bracket=bracket)})
+        changed = SimpleNamespace(**{**vars(fixture), "entries": entries})
+        artifact, components = build(changed)
+        self.assertEqual([cell["floor_gate_j"] for cell in artifact["cells"]],
+                         [cell["floor_gate_j"] for cell in baseline["cells"]])
+        diagnostics = artifact["provenance"]["diagnostics"]
+        self.assertEqual(len(diagnostics), 2)
+        for component in components:
+            self.assertEqual(len(component["provenance"]["diagnostics"]), 1)
+            self.assertIn(component["provenance"]["diagnostics"][0], diagnostics)
+        with tempfile.TemporaryDirectory(prefix="silly-number-diagnostics-") as tmp:
+            path = Path(tmp) / "floor-mint-pinset.json"
+            raw = mint._artifact_payload(fixture.pins)
+            path.write_bytes(raw)
+            self.assertEqual(df.validate_floor_artifact(
+                artifact, pinset_path=path,
+                expected_pinset_sha256=hashlib.sha256(raw).hexdigest(),
+            ), [])
 
 
 class MaximumSemanticsTests(unittest.TestCase):

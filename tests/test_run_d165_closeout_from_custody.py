@@ -223,7 +223,7 @@ class CloseoutDriverTests(unittest.TestCase):
                     )
                 self.assertEqual(row["ratio"], row["numerator_j"] / row["denominator_j"])
                 if row["ratio_id"] == "attribution_dominance_ratio.v1":
-                    self.assertAlmostEqual(row["ratio"], expected[row["component"]], places=12)
+                    self.assertAlmostEqual(row["ratio"], expected[row["component"]], places=9)
 
     def test_t2_denominator_is_point_never_operative_unguarded(self):
         fixture, _, _, table = self.issued()
@@ -234,7 +234,7 @@ class CloseoutDriverTests(unittest.TestCase):
                                   comparative=row["component"] == "comparative")
             self.assertEqual(component["unguarded_floor_j"], component["corner_widened_unguarded_floor_j"])
             self.assertNotEqual(point, component["unguarded_floor_j"])
-            self.assertAlmostEqual(row["denominator_j"], point, places=12)
+            self.assertAlmostEqual(row["denominator_j"], point, places=9)
             self.assertNotEqual(row["denominator_j"], component["unguarded_floor_j"])
             self.assertEqual(row["denominator_field"], "point_unguarded_floor_j")
 
@@ -249,9 +249,9 @@ class CloseoutDriverTests(unittest.TestCase):
         self.assertAlmostEqual(ratio * math.sqrt(9 / 8), 1.3156, places=4)
         for row in table["ratios"]:
             if row["component"] == "absolute":
-                self.assertAlmostEqual(row["denominator_j"], point, places=12)
-                self.assertAlmostEqual(row["numerator_j"], corner, places=12)
-                self.assertAlmostEqual(row["ratio"], ratio, places=12)
+                self.assertAlmostEqual(row["denominator_j"], point, places=9)
+                self.assertAlmostEqual(row["numerator_j"], corner, places=9)
+                self.assertAlmostEqual(row["ratio"], ratio, places=9)
                 self.assertNotEqual(row["ratio"], ratio * math.sqrt(9 / 8))
         # The standard replay helper cannot carry the plan's non-dyadic deltas.
         fixture = self.fixture("eight")

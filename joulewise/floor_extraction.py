@@ -95,6 +95,7 @@ from joulewise.detection_floor import (
     attribution_single_count_discipline,
     canonical_domain_sha256,
     comparative_false_effect_floor,
+    common_mode_zero_points_agree,
     complete_bundle_sha256,
     registered_common_mode_operative_bound,
     two_shared_edge_common_mode_registration,
@@ -625,23 +626,21 @@ def _common_mode_floor_core(
                     f"block {index} residuals must be finite and nonnegative",
                 )
             residuals.append(residual)
-        if not math.isclose(
-            zero_point,
-            deltas[index],
-            rel_tol=1e-9,
-            abs_tol=1e-12,
-        ):
-            _common_mode_refuse(
-                "common_mode_zero_point_divergence_out_of_domain",
-                f"block {index} zero point diverges from its block delta "
-                "outside the registered provenance band",
-            )
         envelope_sum = _common_mode_finite(raw_envelope_sum)
         if envelope_sum is None or envelope_sum < 0.0:
             _common_mode_refuse(
                 "common_mode_precondition_failed",
                 f"block {index} member envelope integral sum must be finite "
                 "and nonnegative",
+            )
+        if not common_mode_zero_points_agree(
+            zero_point, deltas[index],
+            (envelope_sum, zero_point, deltas[index], *onset, *offset),
+        ):
+            _common_mode_refuse(
+                "common_mode_zero_point_divergence_out_of_domain",
+                f"block {index} zero point diverges from its block delta "
+                "outside the registered provenance band",
             )
         block_widths.append(
             _common_mode_block_half_width(

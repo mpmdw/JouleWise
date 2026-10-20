@@ -26,6 +26,7 @@ from joulewise.detection_floor import (
     _close,
     _point_floor_diagnostic,
     comparative_false_effect_floor,
+    common_mode_zero_points_agree,
     registered_common_mode_operative_bound,
 )
 from joulewise.identity_pins import stack_identity_sha256
@@ -962,7 +963,11 @@ def replay_common_mode_dominance(
             raise ValueError(_COMMON_MODE_INPUT_INVALID) from exc
         if zero_point not in onset or zero_point not in offset:
             raise ValueError(_COMMON_MODE_ZERO_POINT_MEMBERSHIP)
-        if not math.isclose(zero_point, delta, rel_tol=1e-9, abs_tol=1e-12):
+        if not common_mode_zero_points_agree(
+            zero_point, delta,
+            (block["member_envelope_integral_sum_j"], zero_point, delta,
+             *onset, *offset),
+        ):
             raise ValueError(_COMMON_MODE_ZERO_POINT_DIVERGENCE)
         deltas.append(delta)
         splits.append((split["shared_width_j"], split["local_width_j"]))

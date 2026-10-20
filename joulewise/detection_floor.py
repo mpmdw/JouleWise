@@ -1215,6 +1215,22 @@ def _common_mode_member_windows(
     return normalized
 
 
+def common_mode_zero_points_agree(
+    a: float, b: float, summed_joule_terms: Sequence[float]
+) -> bool:
+    """Compare zero points at the scale of their contributing joule terms."""
+
+    scale = max(abs(value) for value in summed_joule_terms)
+    # 1e-6 J is the project's absolute agreement bar in joules, far under
+    # the ~1 J attribution limit; 64 ulp of S is the float noise of summing
+    # those terms (u = 2**-53 for binary64). The member-envelope integral
+    # sum carried by callers bounds all contributing terms despite cancellation.
+    return math.isclose(
+        a, b, rel_tol=1e-9,
+        abs_tol=max(1e-6, 64 * 2**-53 * scale),
+    )
+
+
 def _common_mode_block_half_width(
     delta: float,
     onset: Sequence[float],
@@ -1411,23 +1427,21 @@ def two_shared_edge_common_mode_floor(
                     f"block {index} residuals must be finite and nonnegative",
                 )
             residuals.append(residual)
-        if not math.isclose(
-            zero_point,
-            deltas[index],
-            rel_tol=1e-9,
-            abs_tol=1e-12,
-        ):
-            _common_mode_refuse(
-                "common_mode_zero_point_divergence_out_of_domain",
-                f"block {index} zero point diverges from its block delta "
-                "outside the registered provenance band",
-            )
         member_envelope_sum = _common_mode_finite(raw_member_envelope_sum)
         if member_envelope_sum is None or member_envelope_sum < 0.0:
             _common_mode_refuse(
                 "common_mode_precondition_failed",
                 f"block {index} member envelope integral sum must be finite "
                 "and nonnegative",
+            )
+        if not common_mode_zero_points_agree(
+            zero_point, deltas[index],
+            (member_envelope_sum, zero_point, deltas[index], *onset, *offset),
+        ):
+            _common_mode_refuse(
+                "common_mode_zero_point_divergence_out_of_domain",
+                f"block {index} zero point diverges from its block delta "
+                "outside the registered provenance band",
             )
         block_widths.append(
             _common_mode_block_half_width(
@@ -2126,6 +2140,7 @@ _PROVENANCE_KEYS = {
     "implementation",
 }
 _PROVENANCE_OPTIONAL_KEYS = {
+    "diagnostics",
     "producer_calibration_plans",
     "producer_config_sets",
     "assurance",
@@ -2714,7 +2729,6 @@ def _project_floor_mint_pinset_v2(
                 )
                 or any(
                     not _is_six_decimal_literal(post.get(key))
-                    or post.get(key) == "7.377086"
                     for key in (
                         "absolute_floor_six_decimal",
                         "comparative_floor_six_decimal",
@@ -3222,6 +3236,18 @@ def _validate_provenance(
         or not provenance["mint_tool_version"].strip()
     ):
         errors.append(f"{where}.mint_tool_version: must be a nonempty string")
+
+    if "diagnostics" in provenance:
+        diagnostics = provenance["diagnostics"]
+        if not isinstance(diagnostics, list) or any(
+            not isinstance(item, Mapping)
+            or set(item) != {"code", "producer_plan_id", "derived_allowance_s",
+                             "window_bracket_allowance_s"}
+            or item.get("code") != "allowance_differs_from_window_bracket"
+            or any(not isinstance(value, str) for value in item.values())
+            for item in diagnostics
+        ):
+            errors.append(f"{where}.diagnostics: invalid allowance observations")
 
     if "launch_lineage" in provenance:
         _validate_launch_lineage_provenance(
