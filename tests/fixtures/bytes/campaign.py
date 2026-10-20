@@ -15,12 +15,15 @@ def _write_json(path, value):
     path.write_text(json.dumps(value) + "\n")
 
 def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release="all",
-                     pass_duration_scales=(1.0, 1.0), clock_latency_ms=None):
+                     pass_duration_scales=(1.0, 1.0), clock_latency_ms=None,
+                     subpack_sessions=False, uncollected_sessions=()):
     """1000 on-disk runs: real mock trace reducer -> harvest layout -> B6 export.
 
     No calibration hardware is claimed: the zero phase envelope is explicitly
     synthetic, with missing operative evidence disclosed. Each energy passes
     through reduce_bundle and the full CLI, not a summary oracle.
+    subpack_sessions uses the R6 six sub-packs in both registered pass orders;
+    an uncollected session is never generated or added to the manifest.
     """
     if len(pass_duration_scales) != 2 or any(v <= 0 for v in pass_duration_scales):
         raise ValueError("two positive pass duration scales required")
@@ -45,8 +48,24 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
     source_state = _capture_source_state()
     private = root / "private-keys" / "bytes" / "blinding"
     released = root / "released-keys" / "bytes" / "blinding"
-    for pass_id in (1, 2):
-        session_id = "bytes-p" + str(pass_id)
+    # The fixture JSON is sorted by name; R6 groups use registered identities.
+    subpacks = (("Qwen3-1.7B-4bit", "Qwen3-4B-4bit"),
+                ("Qwen3-8B-4bit", "Qwen3-30B-A3B-4bit"),
+                ("Qwen3-14B-4bit", "Qwen3-Next-80B-A3B-Instruct-4bit"),
+                ("Qwen3-32B-4bit", "Qwen3-8B-8bit"),
+                ("Llama-3.3-70B-Instruct-4bit",), ("Qwen3.5-122B-A10B-4bit",))
+    by_name = {m["model"]: m for m in manifest["models"]}
+    schedule = [(pass_id, index + 1, [by_name[name] for name in (
+                    indices if pass_id == 1 else tuple(reversed(indices)))])
+                for pass_id in (1, 2)
+                for index, indices in (list(enumerate(subpacks)) if pass_id == 1 else
+                                       list(reversed(list(enumerate(subpacks)))))] if subpack_sessions else [
+                    (pass_id, None, manifest["models"]) for pass_id in (1, 2)]
+    for pass_id, subpack_id, models in schedule:
+        pack_id = f"bytes-s{subpack_id}-p{pass_id}" if subpack_sessions else "bytes"
+        session_id = pack_id if subpack_sessions else "bytes-p" + str(pass_id)
+        if session_id in uncollected_sessions:
+            continue
         archive = root / session_id
         bundles = archive / "sources/claim-runs"
         roster, evidence_members, meter_samples = [], [], []
@@ -58,10 +77,15 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         for ref in refs:
             if ref["role"] in ("corpus", "start"):
                 jobs.append((manifest["models"][0], [ref]))
-        for index, model in enumerate(manifest["models"]):
-            jobs.append((model, [None] * 50))
-            if index == 4:
-                jobs += [(manifest["models"][0], [ref]) for ref in refs if ref["role"] == "midpoint"]
+        midpoint = [(manifest["models"][0], [ref]) for ref in refs if ref["role"] == "midpoint"]
+        for index, model in enumerate(models):
+            if subpack_sessions and len(models) == 1:
+                # Production single-model midpoint follows repeat + five quads.
+                jobs += [(model, list(range(30))), *midpoint, (model, list(range(30, 50)))]
+            else:
+                jobs.append((model, [None] * 50))
+                if index == (0 if subpack_sessions else 4):
+                    jobs += midpoint
         jobs += [(manifest["models"][0], [ref]) for ref in refs if ref["role"] == "end"]
         for model, members in jobs:
             b = (model["W_bytes"] + model["KV_bytes"]) / 1e9
@@ -70,6 +94,8 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
             tau = duration / 512
             truth = .01 * b if world == "bytes" else 3 * tau if world == "time" else .01 * resident
             for ordinal, ref in enumerate(members):
+                if isinstance(ref, int):
+                    ordinal, ref = ref, None
                 run_id = sanitize_id_component(ref["run_id"] if ref else model["model"] + "-" + str(ordinal))
                 duration = 2.0 if ref else model["synthetic_duration_s"] * pass_duration_scales[pass_id - 1]
                 own_idle = ref["idle_power_w"] if ref else 5.0
@@ -143,8 +169,8 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         stream.parent.mkdir(parents=True)
         trailer = {"k": "t", "end_raw_ns": tick * 100_000_000, "end_mono_ns": tick * 100_000_000}
         stream.write_text("".join(json.dumps(item) + "\n" for item in (header, *batches, trailer)))
-        _write_json(archive / "derived/roster.json", {"pack_id": "bytes", "attempt": 1, "members": roster})
-        acceptance = {"pack_id": "bytes", "session_id": session_id, "verdict": "PASS", "counting": True,
+        _write_json(archive / "derived/roster.json", {"pack_id": pack_id, "attempt": 1, "members": roster})
+        acceptance = {"pack_id": pack_id, "session_id": session_id, "verdict": "PASS", "counting": True,
                       "excluding": [], "flag_counts": {}, "emitted_flags": [],
                       "calibration": calibration.evaluate(calibration.Capture(Decimal(".040"), "valid"),
                           calibration.Capture(Decimal(".030"), "valid"), document(), [], [session_id], False)}
@@ -152,7 +178,9 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         (archive / "derived/flags.jsonl").write_text("")
         evidence = SimpleNamespace(stages=[SimpleNamespace(members=evidence_members)], runtime={}, session_id=session_id)
         export_runs.export(archive, {}, root / "registration", root / "private-keys", root / "export", non_claim=non_claim,
-                           evidence=evidence, acceptance_record=acceptance)
+                           evidence=evidence, acceptance_record=acceptance,
+                           **({"pack_registration": {"blinding_group": "bytes", "bytes_pass": pass_id}}
+                              if subpack_sessions else {}))
         manifest["sessions"].append({"session_id": session_id, "archive": str(archive), "pass_id": pass_id,
             "released_key_dir": "../released-keys/bytes/blinding", "test7_passed": False,
             # Deliberately false legacy values: the consumer must ignore these.
