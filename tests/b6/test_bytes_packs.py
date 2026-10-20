@@ -109,6 +109,33 @@ class BytesPackTests(unittest.TestCase):
                     self.assertEqual(reg.flag_effects['thermal.os_level_nonzero'], 'EXCLUDE_MEMBER')
                     self.assertEqual(reg.flag_effects['thermal.powermetrics_pressure_elevated'], 'EXCLUDE_MEMBER')
 
+    def test_estimators_name_the_analysis_stage_functions_with_version_slot_while_draft(self):
+        from joulewise import bytes_analysis
+        for n in range(1, 7):
+            for pass_number in (1, 2):
+                with self.subTest(subpack=n, pass_number=pass_number):
+                    reg = load(ROOT / f'configs/b6/packs/bytes-s{n}-p{pass_number}/registration.json')
+                    self.assertEqual(reg.data['estimators'], plans.ESTIMATORS)
+                    for entry in reg.data['estimators']:
+                        self.assertTrue(callable(getattr(bytes_analysis, entry['function'])))
+                        # Registration section 13: the agreeing pin's SHA-256 replaces null.
+                        self.assertIsNone(entry['version'])
+                    self.assertEqual(reg.status, 'draft')
+                    self.assertTrue(any('docs/registrations/bytes_pack_v1.md' in note for note in reg.data['draft_notes']))
+
+    def test_registration_prose_lists_every_slot_and_maps_every_ruling_item(self):
+        import re
+        text = (ROOT / 'docs/registrations/bytes_pack_v1.md').read_text(encoding='utf-8')
+        body, slots = text.split('\n## 18. Marked slots\n')
+        slots, mapping = slots.split('\n## 19. ')[0], slots.split('\n## 20. ')[1]
+        # The header's convention examples read '⟦MAC: …⟧'; every other slot names its value.
+        used = set(re.findall(r'⟦(?:MAC|B2|B4): [^⟧]*⟧', body)) - {'⟦MAC: …⟧', '⟦B2: …⟧', '⟦B4: …⟧'}
+        self.assertTrue(used)
+        self.assertEqual(sorted(s for s in used if s not in slots), [])
+        rows = [line.split('|')[1].strip() for line in mapping.splitlines() if line.startswith('| ')]
+        for item in [f'R{i}' for i in range(1, 9)] + [f'Add. {i}' for i in range(1, 9)]:
+            self.assertTrue(any(re.match(re.escape(item) + r'\b', row) for row in rows), item)
+
 
     def test_both_pass_trees_read_round_trip_and_keep_whole_modules_at_midpoint(self):
         for n in range(1, 7):
