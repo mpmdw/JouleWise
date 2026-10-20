@@ -51,3 +51,28 @@ Cold Fable 5.1 judge launched (Claude cloud `session_01Nh33XtHQTeQ56HHJtYCVBh`, 
 `/Users/edr/night-archive/af419-b6q2-judge/PROMPT.md`, report JouleWise-data `claude/b6-q2-judge*`,
 `reports/b6-q2-judge/fable.md`), asked to replay a comment-only change, a held-out-path defect and a fit-line defect.
 The §11 held-out-agreement slot stays open until the judge reports. Nothing waits on it before BYTES pass 1's arm.
+
+## Q2: RULED by the cold judge, adopted (16:35 PDT)
+
+Judge: Fable 5.1 cold, JouleWise-data `claude/b6-q2-judge` 57ed4c2 (`reports/b6-q2-judge/fable.md`; its last test
+module run was still going at 16:27, ruling and executed facts complete). It replayed a comment-only change, a
+held-out-path defect and fit-line and shared-reduce defects through the CLI chain.
+
+**Ruling.** The registered result is the first commitment's committed content evaluated as data by the fixed module;
+the defective module is never run for the record. A second commitment is always written by `--stage fit` under the fixed
+module from the same inputs, committed in git before the stage-2 release, labelled `post-agreement fix` and marked as
+written after both implementations ran on blinded held-out rows; it is printed beside the registered result as the
+labelled alternative. Under the committing module the rebuild check stays a refusal; under a changed module it is
+reported with two disclose-only flags (`bytes.module_changed_after_commitment`, `bytes.commitment_not_rebuilt`).
+A fix of an implementation defect restores the registered arithmetic (the text), so it does not change it.
+
+**Why the lead adopts it.** It takes Fable's evaluation (Sol's procedure prints, as registered, numbers that violate
+registered rules: the judge's case shows a wrong MoE answer and 84 of 120 wrong held-out intervals) and Sol's
+after-exposure label, and it fixes a gap neither seat closed (a shared-reduce fix changes fit points while the committed
+lines still rebuild, so only the second commitment detects it). No new bar: every added comparison is exact equality of
+files written by identical code.
+
+**Installed:** registration §11 held-out agreement row, §11 commitment row, §13, §15, §18 on
+`docs/2026-10-20-bytes-registration` 2f034fdfb (text verbatim from the judge's section 1, plus the new
+`⟦B4: --stage1-commit⟧` slot listed in §18). **Code** (`judge.patch`, 18 lines in `scripts/bytes_analyze.py`): applied
+to the B4 lane after the Q1 fix round lands, since that round edits the same function.
