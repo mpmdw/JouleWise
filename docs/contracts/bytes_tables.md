@@ -1,7 +1,7 @@
 # BYTES analysis tables and verification
 
 Authority: `docs/design/bytes_pack_design.md` at `db83dbb58`, including Addenda
-1–7. Addendum 7 and Addendum 5 item 4 supersede the affected round-2 choices
+1–8 and B6-RULING.md Q1 (activation af419b16). Addendum 7 and Addendum 5 item 4 supersede the affected round-2 choices
 at `fbd4b3f4f`; the round-2 verification below is historical evidence.
 Implementation: `joulewise/bytes_analysis.py`; CLI: `scripts/bytes_analyze.py`.
 Synthetic evidence only. No model inference or measurement was run.
@@ -11,7 +11,8 @@ Synthetic evidence only. No model inference or measurement was run.
 
 The frozen model manifest has ten distinct `models`, each with `model`, `role`
 (`fit` or `heldout`), `moe`, `tier`, `W_bytes`, `KV_bytes`, `R_bytes`, and native
-`cell_ids`. There are three fit models, three MoEs and six Qwen3 4-bit tier
+`cell_ids`, plus public `config_key` from the registered run configuration
+(Block 6 `configuration_key`). There are three fit models, three MoEs and six Qwen3 4-bit tier
 models. GB means decimal 10^9 bytes. Sessions have `session_id`, `archive`,
 `pass_id`, a `released_key_dir` locator and prospective `test7_passed` status.
 Legacy `drift_allowance_j` and `drift_reference` numbers are ignored.
@@ -45,6 +46,27 @@ Stages:
   keys must now be present. Reuse the frozen fit points.
 - `all`: synthetic-only sequential fit/heldout convenience, subject to the
   same release-key checks. It makes no historical commitment claim.
+
+Grouped exports retain fit/reference rows publicly and put held-out rows in the
+sidecar's `blinding.withheld.path` store. The sidecar gives `row_count` and
+`config_key_sha256` counts; matching uses only the manifest's public identity.
+The collected-session sidecar census retains an absent public CSV. No raw
+archive, reduction or key supplies substitute blinded rows. Before commitment,
+`blinded` prints the fit set and no H1/H2 answers; after `--stage1-commit HASH`,
+it includes the blinded held-out store and emits missing-file placeholders.
+
+A missing withheld pass cell has `status="missing"`, `bytes.withheld_missing`,
+`withheld_row_count` (the sidecar's session total) and
+`withheld_config_row_count` (that model's count in its digest mapping). The flag
+is disclose-only in `configs/b6/flag_catalog_b6.json`. A surviving pass remains
+the `one_pass` primary point with the union of all pass/point disclosures.
+Both missing passes give a `missing` model with no numerical point: H1 emits
+an explicit `status="missing"` row without a `word`; an incomplete MoE answer
+emits `status="missing", answer="missing"`, the missing models, reason and
+flags. H2 still uses the models with points and prints its two-pass sensitivity.
+No stage refuses because a withheld file is missing. A genuinely uncollected
+optional session, absent from the collected manifest and sidecars, creates no
+placeholder or missing-file flag.
 
 The user must commit predictions before releasing held-out keys. A matching
 SHA-256 cannot prove when a historical Git commit happened.

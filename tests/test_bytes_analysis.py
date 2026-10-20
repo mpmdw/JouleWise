@@ -1104,7 +1104,9 @@ class Addendum7RegressionTests(unittest.TestCase):
         _, points, _, result = self.assess(records)
         self.assertTrue(all(p["status"] == "unavailable" and p["pass_status"] == "no_pass"
                             for p in points if p["model"] == target))
-        self.assertFalse(any(r["model"] == target for r in result["h1"]))
+        absent = [r for r in result["h1"] if r["model"] == target]
+        self.assertEqual(len(absent), 12)
+        self.assertTrue(all(r["status"] == "missing" and "word" not in r for r in absent))
         self.assertEqual(len(result["unavailable"]), 12)
         self.assertTrue(all(r["refusals"][0]["model"] == target for r in result["unavailable"]))
         for row in result["h2"]:
@@ -1115,12 +1117,38 @@ class Addendum7RegressionTests(unittest.TestCase):
                 for fit in (row["two_term"], row["resident_extended"], row["tier"]):
                     self.assertEqual(fit["family_size"], row["k"])
 
+    def test_q1_missing_moe_has_explicit_h1_and_active_or_resident_rows(self):
+        target = "Qwen3-30B-A3B-4bit"
+        records = copy.deepcopy(self.records)
+        self.refuse(records, [target])
+        for row in records:
+            if row["model"] == target:
+                row["flags"] = sorted(set(row["flags"]) | {"bytes.withheld_missing"})
+                row.update(withheld_row_count=50, withheld_config_row_count=50)
+        _, points, frozen, _ = self.assess(records)
+        bytes_analyze._missing_labels(points)
+        result = ba.evaluate(points, frozen)
+        absent = [r for r in result["h1"] if r["model"] == target]
+        self.assertEqual(len(absent), 12)
+        for row in absent:
+            self.assertEqual(row["status"], "missing")
+            self.assertNotIn("word", row)
+            self.assertIn("bytes.withheld_missing", row["flags"])
+        self.assertEqual(len(result["moe"]), 12)
+        for row in result["moe"]:
+            self.assertEqual((row["status"], row["answer"]), ("missing", "missing"))
+            self.assertEqual([m["model"] for m in row["missing_models"]], [target])
+            self.assertIn("bytes.withheld_missing", row["flags"])
+        self.assertTrue(all(r["n"] == 9 for r in result["h2"]))
+
     def test_a7_09_each_fit_refused_below_two_df_h2_survives_missing_fit_model(self):
         # Missing fit models prevent H1, while H2 still fits the remaining points.
         records = copy.deepcopy(self.records)
         self.refuse(records, ["Qwen3-4B-4bit", "Qwen3-14B-4bit"])
         _, _, _, result = self.assess(records)
-        self.assertEqual(result["h1"], [])
+        self.assertEqual(len(result["h1"]), 24)
+        self.assertTrue(all(r["status"] == "missing" and "word" not in r for r in result["h1"]))
+        self.assertTrue(all(r["status"] == "missing" and r["answer"] == "missing" for r in result["moe"]))
         self.assertEqual(len(result["h2"]), 24)
         for row in result["h2"]:
             self.assertEqual(row["n"], 8)

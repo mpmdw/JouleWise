@@ -71,9 +71,9 @@ def main(argv=None):
             frozen = ba.frozen_predictions([p for p in points if p["role"] == "fit"], manifest)
             # Pre-commit grouped exports contain only fit configurations. Their
             # estimates and NEG-8 inputs remain reviewable without H1/H2 words.
+            _missing_labels(points)
             result = ba.evaluate(points, frozen) if any(p["role"] == "heldout" for p in points) else {
                 name: [] for name in ("h1", "moe", "h2", "unavailable")}
-            _missing_labels(points)
             args.out.mkdir(parents=True, exist_ok=True)
             _write(args.out, "blinded_pass_estimates", passes)
             _write(args.out, "model_estimates", points)
@@ -101,8 +101,8 @@ def main(argv=None):
                 raise ba.AnalysisError("frozen line/fit-point mismatch")
         held_passes, held_points = _reduce(source, manifest, "heldout", args.key_dir)
         points = fit_points + held_points
-        result = ba.evaluate(points, frozen)
         _missing_labels(points)
+        result = ba.evaluate(points, frozen)
         args.out.mkdir(parents=True, exist_ok=True)
         _write(args.out, "heldout_pass_estimates", held_passes)
         _write(args.out, "model_estimates", points)

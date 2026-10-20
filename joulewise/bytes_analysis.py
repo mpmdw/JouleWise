@@ -198,7 +198,7 @@ def deviation(fit, predictors, observed, measured_half_w=0.0):
 
 
 def _point_label(point):
-    return {k: point[k] for k in ("model", "pass_status", "n_passes") if k in point}
+    return {k: point[k] for k in ("model", "pass_status", "n_passes", "flags") if k in point}
 
 
 def h2(points, rails_power, *, boundary=None, family_size=None):
@@ -1131,14 +1131,20 @@ def evaluate(points, frozen):
         subset = [p for p in points if tuple(p[k] for k in labels) == key]
         if len(subset) != 10:
             raise AnalysisError("held-out analysis requires all ten model records, including refusals")
-        missing = [p for p in subset if p.get("status") == "unavailable"]
+        missing = [p for p in subset if p.get("status") != "computed"]
         if group["lines"] is None or missing:
             unavailable.append({**labels, "models": [p["model"] for p in missing],
                 "reason": "H1 requires complete fit cells" if group["lines"] is None else "models without a primary point",
                 "refusals": [{**_point_label(p), "reason": p["reason"], "passes": p.get("passes", [])} for p in missing]})
         results = []
         for point in subset:
-            if point.get("status") == "unavailable" or group["lines"] is None:
+            if point.get("status") != "computed":
+                h1_rows.append({**_point_label(point), "role": point["role"], **labels,
+                    "pass_id": "mean", "description_only": False, "status": "missing",
+                    "reason": point["reason"], "flags": sorted(set(point.get("flags", [])) | {
+                        flag for row in point.get("passes", []) for flag in row.get("flags", [])})})
+                continue
+            if group["lines"] is None:
                 continue
             result = h1_point(group["lines"], point)
             h1_rows.append({**_point_label(point), "role": point["role"], **labels,
@@ -1163,8 +1169,15 @@ def evaluate(points, frozen):
             for row in result["misses"]:
                 row.update(_point_label(next(p for p in subset if p["model"] == row["model"])))
             moe_rows.append({**labels, **result})
-        available = [p for p in subset if p.get("status") != "unavailable"]
-        rails = {p["model"]: p["power"] for p in points if p.get("status") != "unavailable"
+        else:
+            moe_rows.append({**labels, "status": "missing", "answer": "missing",
+                "reason": "H1 requires complete fit cells" if group["lines"] is None else
+                          "active or resident requires all three MoE points",
+                "missing_models": [_point_label(p) for p in missing if p["moe"] or group["lines"] is None],
+                "flags": sorted({flag for p in missing for row in p.get("passes", [])
+                                 for flag in row.get("flags", [])})})
+        available = [p for p in subset if p.get("status") == "computed"]
+        rails = {p["model"]: p["power"] for p in points if p.get("status") == "computed"
                  and (p["selection"], p["basis"], p["boundary"]) == (*key[:2], "rails")}
         result = h2(available, rails, boundary=key[2])
         h2_rows.append({**labels, "analysis": "primary", "description_only": False, **result})
