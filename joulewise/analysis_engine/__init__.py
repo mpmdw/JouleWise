@@ -483,6 +483,14 @@ def _resolve_contrast_floor(
                 request,
                 evidence_binding=binding,
             )
+            if limitations is not None and resolution.status == "exact":
+                # Source selection is known here. Deriving the note with the
+                # real resolver also leaves pure arithmetic test doubles alone.
+                floor_cells = {cell["cell_id"]: cell for cell in inputs.floor_artifact.get("cells", [])}
+                for cell_id in resolution.source_cell_ids:
+                    if floor_cells[cell_id]["key"]["condition_family_id"] != condition_id:
+                        limitations.append(
+                            f"floor_cell_from_floor_pack:{condition_id}:{cell_id}:no_envelope_comparison")
             resolutions.append(resolution)
     return resolutions
 
@@ -1883,15 +1891,6 @@ def analyze_claims(
         for note in prepared["limitations"]:
             if note not in limitations:
                 limitations.append(note)
-    floor_cells = {cell["cell_id"]: cell for cell in inputs.floor_artifact.get("cells", [])}
-    for contrast, row in zip(inputs.manifest["contrasts"], contrast_rows, strict=True):
-        for family, resolution in zip(contrast["floor_selector"]["condition_family_ids"], row["floor"]["resolutions"], strict=True):
-            if resolution["status"] == "exact":
-                for cell_id in resolution["source_cell_ids"]:
-                    if floor_cells[cell_id]["key"]["condition_family_id"] != family:
-                        note = f"floor_cell_from_floor_pack:{family}:{cell_id}:no_envelope_comparison"
-                        if note not in limitations:
-                            limitations.append(note)
     all_audits = list(inputs.registered.values()) + list(inputs.extra_audits)
     demoted_ids = sorted(
         row["contrast_id"]

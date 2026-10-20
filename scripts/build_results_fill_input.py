@@ -15,7 +15,7 @@ from joulewise.authentication_io import read_authentication_input_nofollow
 from joulewise.b5_analysis.windows import AnalysisRefusal, SealPins, load_window_index, select_analysed_attempts
 from joulewise.b5_analysis.archive import open_attempt_record
 from joulewise.analysis_engine.inputs import block5_claim_gate_inputs, sibling_floor_pinset
-from joulewise.results_fill_adapter import ResultsFillAdapterError, adapt_claim_verdicts, render_results_fill_input, _object, _nonfinite
+from joulewise.results_fill_adapter import ResultsFillAdapterError, adapt_claim_verdicts, render_results_fill_input, validate_results_fill_projection, _object, _nonfinite
 
 CHECK_CODES=frozenset({'results_fill_manifest_mismatch','results_fill_floor_mismatch',
     'results_fill_exclusions_mismatch','results_fill_kept_quads_mismatch','results_fill_contrast_census_mismatch',
@@ -83,10 +83,13 @@ def build(window_index,custody_root,finalized_manifest,claim_verdicts):
         campaigns[pack]={'plan_id':window.plan_id,'attempt':window.attempt,
             'claim_usable':window.record.claim_usable,'exclusions_sha256':hashlib.sha256(exclusions).hexdigest(),
             'harvest_record_sha256':window.harvest_record_sha256}
-    return adapt_claim_verdicts(verdicts_raw,campaigns=campaigns,finalized_manifest_raw=manifest_raw,
+    value=adapt_claim_verdicts(verdicts_raw,campaigns=campaigns,finalized_manifest_raw=manifest_raw,
         floor_artifact_raw=floor_raw,exclusions_sha256=units.exclusions_sha256,
         kept_quads={cid:units.for_contrast(cid) for cid in expected},expected_contrast_ids=expected,
         floor_pinset_path=_sibling_pinset_or_none(floor_path))
+    verdicts=json.loads(verdicts_raw.decode(),object_pairs_hook=_object,parse_constant=_nonfinite)
+    validate_results_fill_projection(value,verdicts)
+    return value
 
 
 def main(argv=None):

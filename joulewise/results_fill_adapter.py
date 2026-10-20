@@ -40,6 +40,38 @@ def _nonfinite(value):
     raise ResultsFillAdapterError(f"nonfinite JSON number: {value}")
 
 
+
+def _contrast_limitations(artifact, row):
+    families = {row["conditions"]["condition_a_id"], row["conditions"]["condition_b_id"]}
+    family_codes = {"consumer_identity_set_unauthenticated", "consumer_identity_recording_difference",
+                    "floor_cell_from_floor_pack"}
+    # Producer/aggregate carrier notes apply to this embedded floor artifact.
+    # Family notes accompany only contrasts that use the named family. Keep
+    # original order, spelling and all legacy limitations unchanged.
+    return [note for note in artifact["inputs"]["limitations"]
+            if note.partition(":")[0] not in family_codes
+            or note.split(":")[1] in families]
+
+
+def validate_results_fill_projection(value, artifact):
+    """Compare copy-only limitations and real source ids with issued verdicts."""
+    try:
+        rows = value["gamma"]["contrasts"]
+        issued = artifact["contrasts"]
+        if ([row["contrast_id"] for row in rows] != [row["contrast_id"] for row in issued]
+            or value["gamma"]["limitations"] != artifact["inputs"]["limitations"]):
+            raise ResultsFillAdapterError("results_fill_contrast_census_mismatch")
+        for row, source in zip(rows, issued, strict=True):
+            if row["limitations"] != _contrast_limitations(artifact, source):
+                raise ResultsFillAdapterError("results_fill_contrast_census_mismatch")
+            if (row.get("floor_source_cell_ids") != source["floor"]["floor_row_ids"]
+                or row.get("floor") != source["floor"]):
+                raise ResultsFillAdapterError("results_fill_floor_mismatch")
+    except ResultsFillAdapterError:
+        raise
+    except (KeyError, TypeError, ValueError, IndexError):
+        raise ResultsFillAdapterError("results_fill_contrast_census_mismatch") from None
+
 def adapt_claim_verdicts(
     claim_verdicts_raw: bytes, *, campaigns: Mapping[str, Any],
     characterization: Mapping[str, Any] | None = None,
@@ -131,6 +163,8 @@ def adapt_claim_verdicts(
             rows.append({
                 "contrast_id": row["contrast_id"], "metric": row["metric"],
                 "conditions": row["conditions"],
+                "limitations": _contrast_limitations(artifact, row),
+                "floor_source_cell_ids": row["floor"]["floor_row_ids"],
                 "estimate": estimator["estimate"],
                 "interval": estimator["metrology_aware_CI95"],
                 "decision_interval": row["deterministic_bounds"]["decision_interval"],
@@ -150,7 +184,8 @@ def adapt_claim_verdicts(
             "schema_version": INPUT_SCHEMA_VERSION, "campaigns": dict(campaigns),
             "gamma": {"claim_verdicts_id": artifact["claim_verdicts_id"],
                       "claim_verdicts_sha256": hashlib.sha256(claim_verdicts_raw).hexdigest(),
-                      "evidence_class": artifact["inputs"]["evidence_class"], "contrasts": rows},
+                      "evidence_class": artifact["inputs"]["evidence_class"],
+                      "limitations": artifact["inputs"]["limitations"], "contrasts": rows},
             "characterization": dict(characterization),
         })
         if extended:
@@ -159,6 +194,7 @@ def adapt_claim_verdicts(
                                                 for key in ("artifact_id", "file_sha256")}
             output["gamma"]["exclusions_sha256"] = (exclusions_sha256 if exclusions_sha256 is not None else
                 manifest.get("evidence", {}).get("analysed_attempt_exclusions", {}).get("sha256") if manifest is not None else None)
+        validate_results_fill_projection(output, artifact)
         # A caller's orchestration fields must also be serializable JSON.
         json.dumps(output, allow_nan=False)
         return output
@@ -173,4 +209,4 @@ def render_results_fill_input(value) -> bytes:
                        allow_nan=False) + "\n").encode("utf-8")
 
 
-__all__ = ["ResultsFillAdapterError", "adapt_claim_verdicts", "render_results_fill_input"]
+__all__ = ["ResultsFillAdapterError", "adapt_claim_verdicts", "render_results_fill_input", "validate_results_fill_projection"]

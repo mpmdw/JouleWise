@@ -84,3 +84,11 @@ Renderer focused checks: QRendererProductionTests 2 OK; T20 1 OK; release equali
 Done: inherited Q-LINEAGE and Q-EXACTSTACK; Q-CONSUMERID; Q-RENDERER. Not done: common §C, §Z, seam deletion/PROVENANCE, opted-in end-to-end, complete refusal replay/final after and registry checks. No NEEDS_RULING.
 
 Dependent baseline observation: test_analysis_integration has 17 errors and test_sensitivity has 1 error from the same inherited source-id lookup on mathematical stubs (the tests are outside the edit scope). The appropriate authorized correction is to derive the source-cell limitation at actual resolution, alongside the new consumer limitations, instead of rediscovering source cells after a stubbed resolver. No out-of-scope test will be edited.
+
+Q-RENDERER pushed by Git CLI as `b83eed5dc`.
+
+Common §C: DONE. `joulewise/results_fill_adapter.py:49` copies the exact verdict limitation list to gamma and each contrast's scoped subsequence to the contrast; `floor_source_cell_ids` copies the issued real source ids. `validate_results_fill_projection` compares ordered lists and exact text/source strings through results_fill_contrast_census_mismatch and results_fill_floor_mismatch. `scripts/build_results_fill_input.py:85` runs that comparison at the builder boundary too. The floor projection itself is also compared unchanged. Tests in `tests/test_results_fill_adapter.py:180` exercise dropped, changed, reordered and unrelated-family limitations and changed source cells. No rounding or arithmetic is added.
+
+`joulewise/analysis_engine/__init__.py:490` now derives floor-pack notes at the actual resolution site and merges them via the same per-contrast limitation carrier. This fixes the 11 inherited kept-quad errors without weakening floor validation or editing mathematical stub fixtures. Authorized checks: results adapter 6 OK, block-5 fill adapter 11 OK, kept quads 31 OK, claims 65 OK, inputs 27 OK (1 skip). Out-of-scope integration/sensitivity dependency reruns are pending.
+
+Done: Q-LINEAGE, Q-EXACTSTACK, Q-CONSUMERID, Q-RENDERER, common §C. Not done: §Z, seam deletion/PROVENANCE, opted-in joined end-to-end, final refusal-replay/after/registry tables. No NEEDS_RULING.
