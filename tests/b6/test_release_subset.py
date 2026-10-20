@@ -97,4 +97,3 @@ class ReleaseSubsetTests(unittest.TestCase):
         self.assertEqual(len(keys), 11)
         self.assertEqual(sum(stage == "fit" for stage in keys.values()), 4)
         self.assertEqual(keys["neg8_reference"], "fit")
-
