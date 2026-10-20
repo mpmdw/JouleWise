@@ -633,12 +633,15 @@ class DriverAcceptanceTests(unittest.TestCase):
         for path in (result.path.parent/'restricted/logs').glob('*'):
             if path.name.split('-')[1] in ('0','3'):self.assertIsNone(d._FLOAT_TOKEN.search(path.read_text()))
 
-    def test_T20_renderer_capture_is_registered_restricted_markdown(self):
+    def test_T20_step11_ends_at_fill_input_without_renderer_capture(self):
         result=self.execute();self.assertEqual(result.code,0,result.stderr)
         row=next(r for r in result.record['steps'] if r['step']=='11')
-        output=next(o for o in row['outputs'] if o['name']=='outputs/results-fills.md')
-        path=result.path.parent/'restricted'/output['name']
-        self.assertEqual(_hash(path),output['sha256']);self.assertIn(MARKER,path.read_text())
+        self.assertIn('results_rendering_not_run_no_block5_template', row['flags'])
+        self.assertTrue(any('results-fill-input' in o['name'] for o in row['outputs']))
+        self.assertFalse(any('results-fills.md' in o['name'] for o in row['outputs']))
+        self.assertFalse((result.path.parent/'restricted/outputs/results-fills.md').exists())
+        self.assertFalse(any('results-fills.md' in str(argv) or '--validate-rendered' in argv
+                             for _, _, argv in DriverDouble.calls))
         self.assertNotIn(MARKER,result.stdout+result.stderr)
 
 
@@ -787,16 +790,12 @@ class JoinedArgumentTests(unittest.TestCase):
                     self.assertTrue(args.claim_verdicts.is_file())
                     self.assertEqual(args.finalized_manifest, state.output('finalized_manifest'))
                     self.assertEqual(args.claim_verdicts, state.output('claim_verdicts'))
-                elif step == '11':
-                    self.assertTrue((args.input or args.validate_rendered).is_file())
-                    self.assertEqual(args.input or args.validate_rendered,
-                                     state.output('fill_input' if args.input else 'rendered_fills'))
         expected = {'joulewise.cli', 'scripts.extract_detection_floors', 'scripts.emit_floor_mint_pinset',
             'scripts.mint_floor_artifact_generalized', 'scripts.finalize_analysis_manifest',
             'scripts.run_d165_closeout_from_custody', 'scripts.issue_reported_energy',
-            'scripts.produce_b5_disclosures', 'scripts.build_results_fill_input', 'scripts.render_results_fills'}
+            'scripts.produce_b5_disclosures', 'scripts.build_results_fill_input'}
         self.assertEqual({module for _, _, module, _ in parsed}, expected)
-        self.assertEqual(len(parsed), 19)
+        self.assertEqual(len(parsed), 17)
 
 
 class JoinedHarnessMockTests(unittest.TestCase):

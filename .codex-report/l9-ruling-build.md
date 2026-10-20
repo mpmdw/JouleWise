@@ -74,3 +74,13 @@ Decisions I made in round 2:
 - Keep the recording allowlist hazard-specific. Compare every typed field and every tag outside its three named fields; preserve run_id's existing omission from scientific identity because it identifies physical repeats.
 - Use the existing optional limitation list through request construction and contrast preparation; do not add a verdict schema, catalog or public record field.
 - Seat setup's /opt/homebrew Python symlink was denied by filesystem ownership, although Python 3.13.5 and zsh 5.9 are available. This is an environment observation; no repository file was changed to hide it.
+
+Q-CONSUMERID checkpoint pushed successfully by Git CLI as `994478b28` (no API fallback needed in this seat). The report's old statement about the prior seat's credential remains historical.
+
+Q-RENDERER: DONE. `joulewise/b5_analysis/dry_run.py:203` registers `results_rendering_not_run_no_block5_template`; `:1034` ends step 11 after the fill builder, with no render invocation or rendered_fills role. `tests/b5_analysis/test_dry_run.py:636` (T20) checks fill input, the flag, no capture and no Markdown; its argv census expects 17 calls. `tests/b5_analysis/test_release_equality.py:113` (R3) now perturbs results-fill-input.json. `tests/b5_analysis/test_s10_chain_defects.py:537` checks the production stop and no renderer call. Only addendum §S's quoted text is appended to `docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md`. Renderer script untouched.
+
+Renderer focused checks: QRendererProductionTests 2 OK; T20 1 OK; release equality 10 OK (1 skip). Complete dry-run module is still running at this checkpoint and will appear in the final after table. The first mocked-state renderer test lacked its disclosure output registry; corrected and the focused test passed.
+
+Done: inherited Q-LINEAGE and Q-EXACTSTACK; Q-CONSUMERID; Q-RENDERER. Not done: common §C, §Z, seam deletion/PROVENANCE, opted-in end-to-end, complete refusal replay/final after and registry checks. No NEEDS_RULING.
+
+Dependent baseline observation: test_analysis_integration has 17 errors and test_sensitivity has 1 error from the same inherited source-id lookup on mathematical stubs (the tests are outside the edit scope). The appropriate authorized correction is to derive the source-cell limitation at actual resolution, alongside the new consumer limitations, instead of rediscovering source cells after a stubbed resolver. No out-of-scope test will be edited.

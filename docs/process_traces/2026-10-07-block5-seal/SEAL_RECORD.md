@@ -626,3 +626,13 @@ Like the earlier harvest lanes, this lane is not merged into main; the branch is
 Nothing is recorded here yet. This section is written when the withheld energies are opened: after the block has
 closed, and after the analysis has been run end to end on the real bytes with every output kept closed (the blind
 dry run of the analysis plan's section 3.2). It will tie the digests of section 4 to the final harvest records.
+
+
+**Declared deviation (2026-10-20, lead activation 6cff3515; L9 ruling Q-RENDERER).** Plan §3 row 11 names
+`render_results_fills.py --validate-rendered` with output "validated Markdown". The block-5 dry run ends step 11 at the
+validated fill input (`results-fill-input.json`); the renderer is not run, because the only renderer is the retired
+Window-A template, and its step record carries `results_rendering_not_run_no_block5_template`. No registered arithmetic
+changes. Obligation fixed now, before release: any block-5 Results renderer written after release prints every row of
+the validated fill input's contrast census with its issued status (unsupported and refused included), selects none, and
+its validator checks row-for-row correspondence with the fill input. It passes the Results cold gate before any number
+it prints is used.

@@ -110,7 +110,7 @@ class ReleaseAcceptanceTests(unittest.TestCase):
         self.assertEqual(before.record['steps'],after.record['steps'])
 
     def test_R3_changed_output_byte_including_each_rendered_view_refuses(self):
-        for name in ('closeout.ratio-table.json','view.unreleased.txt','view.released.txt','results-fills.md'):
+        for name in ('closeout.ratio-table.json','view.unreleased.txt','view.released.txt','results-fill-input.json'):
             with self.subTest(output=name):
                 DriverDouble.release_change=None;before=self.execute()
                 DriverDouble.release_change=name;after=self.execute(mode='release',custody=before.custody)

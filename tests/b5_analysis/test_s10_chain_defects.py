@@ -534,7 +534,7 @@ class FillInputBlockFiveFloorTests(unittest.TestCase):
             self.assertEqual(b._sibling_pinset_or_none(floor), mint / "floor-mint-pinset.json")
 
 
-class QRendererConditionalSeamTests(unittest.TestCase):
+class QRendererProductionTests(unittest.TestCase):
     """Q-RENDERER: the Window-A Results renderer cannot render a block-5 fill input."""
 
     BLOCK5_INPUT = {
@@ -562,30 +562,29 @@ class QRendererConditionalSeamTests(unittest.TestCase):
         self.assertEqual((code, out), (2, ""))
         self.assertIn("REFUSAL_REASON_1p5B_floor_window", err)
 
-    def test_seam_records_only_the_block5_stop_and_validates_only_that_line(self):
-        import json
+    def test_step11_never_calls_renderer_and_records_registered_flag(self):
+        from types import SimpleNamespace
+        from joulewise.b5_analysis import dry_run as dry
         from scripts import render_results_fills as render
-        from tests.b5_analysis.fixtures_s10 import conditional_renderer_stop_seam
-        with tempfile.TemporaryDirectory() as tmp:
-            block5 = Path(tmp) / "fill.json"
-            block5.write_text(json.dumps(self.BLOCK5_INPUT))
-            window_a = Path(tmp) / "window-a.json"
-            window_a.write_text(json.dumps({**self.BLOCK5_INPUT, "campaigns": {
-                "alpha": {"verdict": "missing.json"}, "beta": {"verdict": "missing.json"}}}))
-            with conditional_renderer_stop_seam():
-                code, out, _ = self._run(render.main, [str(block5)])
-                self.assertEqual(code, 0)
-                value = json.loads(out)
-                self.assertEqual(value["conditional"], "Q-RENDERER")
-                self.assertIn("REFUSAL_REASON_1p5B_floor_window", value["renderer_stop"])
-                rendered = Path(tmp) / "rendered.md"
-                rendered.write_text(out)
-                self.assertEqual(self._run(render.main, ["--validate-rendered", str(rendered)])[0], 0)
-                rendered.write_text(out.replace("Q-RENDERER", "OTHER"))
-                self.assertEqual(self._run(render.main, ["--validate-rendered", str(rendered)])[0], 2)
-                # Any input that is not the block-5 shape reaches the real renderer unchanged.
-                self.assertEqual(self._run(render.main, [str(window_a)])[:2], (2, ""))
-            self.assertEqual(self._run(render.main, [str(block5)])[0], 2)
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / 'disclosures').mkdir()
+            for name in ('record.json', 'view.released.txt', 'view.unreleased.txt'):
+                (root / 'disclosures' / name).write_text('{}')
+            from scripts import produce_b5_disclosures as disclosures
+            outputs = {role: {'name': role, 'sha256': 'a'*64} for role in disclosures.ROLES}
+            state = SimpleNamespace(outputs=outputs, restricted=root, index_path=root/'index.json',
+                write=mock.Mock(), register=mock.Mock(), rehash=mock.Mock(),
+                output=lambda role: root/role, path=lambda name: root/name,
+                invoke=mock.Mock(return_value=(None, None, None, 0)),
+                record=lambda step, **kwargs: kwargs)
+            with mock.patch.object(dry, '_internal_step', return_value=[SimpleNamespace(status='ok')]), \
+                 mock.patch.object(render, 'main', side_effect=AssertionError('renderer called')):
+                rows = dry.step_11(state, None)
+            self.assertEqual(state.invoke.call_count, 2)
+            self.assertEqual(rows[0]['flags'], ('results_rendering_not_run_no_block5_template',))
+            self.assertFalse((root/'outputs/results-fills.md').exists())
+
 
 
 if __name__ == "__main__":

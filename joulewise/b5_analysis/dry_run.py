@@ -200,7 +200,8 @@ PACKS = ('alpha', 'beta', 'gamma')
 SEAL_KEYS = ('registration_sha256', 'analysis_plan_sha256', 'flag_catalog_sha256',
              'erratum_2_sha256', 'erratum_3_sha256')
 STATUSES = ('ok', 'tooling_refusal', 'outcome_class', 'unclassified_refusal', 'not_run')
-FLAGS = ('backup_roots_env_ignored', 'runs_root_has_unlisted_file', 'harvest_checkout_status_not_clean')
+FLAGS = ('backup_roots_env_ignored', 'runs_root_has_unlisted_file', 'harvest_checkout_status_not_clean',
+         'results_rendering_not_run_no_block5_template')
 CHECKS = ('input_census', 'window_index', 'harvest_outputs', 'sources_sha256sums', 'withheld_no_harvest_digest', 'withheld',
           'plan_tree_binding:sealed', 'plan_tree_binding:synthetic', 'ledger_prefix_of_live')
 _FLOAT_TOKEN = re.compile(r'(?<![A-Za-z0-9])(?:\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+)(?![A-Za-z0-9])')
@@ -436,7 +437,7 @@ class RunState:
         # manifest records its exclusions attachment by the name the finalizer
         # gave it, and the close-out and claim gate replay that path.
         fixed=(role in ('pinset','final_pinset','mint_inputs','plan_alpha','plan_beta','order_alpha','order_beta','finalized_manifest',
-                        'finalized_exclusions','rendered_fills','closeout','ratio_table')
+                        'finalized_exclusions','closeout','ratio_table')
                or role.startswith('role_census_')
                or role.startswith(('rereduced_','gamma_pack_')) or path.parent.name=='disclosures')
         if not fixed and not path.name.startswith(digest):
@@ -1031,7 +1032,7 @@ def _sensitivity(s,argv):
 
 
 def step_11(s,r):
-    from scripts import produce_b5_disclosures as disclosures, build_results_fill_input as fill, render_results_fills as render
+    from scripts import produce_b5_disclosures as disclosures, build_results_fill_input as fill
     before=set(s.outputs)
     records=_internal_step(s,r,'11',lambda argv:_sensitivity(s,argv))
     if records[0].status!='ok':return records
@@ -1051,14 +1052,8 @@ def step_11(s,r):
         result,_,code,exit_status=s.invoke(r,fill.main,['--window-index',s.index_path,'--custody-root',s.restricted,
             '--finalized-manifest',s.output('finalized_manifest'),'--claim-verdicts',s.output('claim_verdicts'),
             '--out',output],step='11',outputs=[('fill_input',output)])
-    if exit_status==0:
-        s.rehash();output=s.path('outputs/results-fills.md')
-        result,_,code,exit_status=s.invoke(r,render.main,[s.output('fill_input')],step='11',
-            stdout_path=output,outputs=[('rendered_fills',output)])
-    if exit_status==0:
-        s.rehash()
-        result,_,code,exit_status=s.invoke(r,render.main,['--validate-rendered',s.output('rendered_fills')],step='11')
     return [s.record('11',exit_status=exit_status,code=code,
+                     flags=('results_rendering_not_run_no_block5_template',),
                      outputs=[s.outputs[k] for k in s.outputs if k not in before])]
 
 
