@@ -235,7 +235,7 @@ class RegressionTests(unittest.TestCase):
         self.assertAlmostEqual(interval["ols"]["half_width"], bt.t_quantile(0.975, 4) * math.sqrt(fit["cov"][1][1]), places=12)
         pred = bt.ols_predict(fit, [7])
         var = sum([1.0, 7.0][a] * expected[a][b] * [1.0, 7.0][b] for a in range(2) for b in range(2))
-        self.assertAlmostEqual(pred["se_pred_hc3"], math.sqrt(var + fit["s2_hc3"]), places=12)
+        self.assertAlmostEqual(pred["se_pred_hc3"], math.sqrt(var + fit["s2"]), places=12)
         self.assertAlmostEqual(pred["se_mean_hc3"], math.sqrt(var), places=12)
 
     def test_two_regressors(self):
@@ -573,12 +573,15 @@ class SyntheticWorldTests(unittest.TestCase):
         self.assertAlmostEqual(session["rest/gross"]["E_ref_j"] + session["rails/gross"]["E_ref_j"],
                                session["dc_input/gross"]["E_ref_j"], places=6)
         self.assertLess(session["rails/idle"]["E_ref_j"], session["rails/gross"]["E_ref_j"])
-        # D6: the idle-subtracted line carries the idle family's own scaled half allowance
+        # D6: the idle-subtracted line carries the idle family's own allowance, at the cell's one
+        # gross scale (Addendum 3 item 2: E_ref is the mean gross energy of the references)
         for b in bt.BOUNDARIES:
             idle = block[b]["drift_allowance_idle_family"]
             self.assertAlmostEqual(block[b]["idle_subtracted"]["kind_averages_j"]["E_whole_window_drift_allowance_j"],
                                    idle["half_allowance_scaled_j"], places=9)
-            self.assertNotEqual(idle["scale"], block[b]["drift_allowance"]["scale"])
+            self.assertEqual(idle["scale"], block[b]["drift_allowance"]["scale"])
+            self.assertNotEqual(idle["allowance_j"], block[b]["drift_allowance"]["allowance_j"])
+            self.assertAlmostEqual(idle["half_allowance_scaled_j"], idle["allowance_j"] / 2 * idle["scale"], places=12)
         # D2/D3: u is added to B beside the allowance, never substituted
         for b in ("dc_input", "rest"):
             kinds = block[b]["gross"]["kind_averages_j"]

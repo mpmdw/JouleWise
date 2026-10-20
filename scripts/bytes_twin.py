@@ -234,24 +234,29 @@ def ols(rows, y):
     meat = [[math.fsum(design[i][a] * weights[i] * design[i][b] for i in range(n)) for b in range(p)] for a in range(p)]
     half = [[math.fsum(inv[a][c] * meat[c][b] for c in range(p)) for b in range(p)] for a in range(p)]
     cov_hc3 = [[math.fsum(half[a][c] * inv[c][b] for c in range(p)) for b in range(p)] for a in range(p)]
-    s2_hc3 = statistics.fmean(weights) if n else None
-    return {"coef": coef, "cov": cov, "cov_hc3": cov_hc3, "s2_hc3": s2_hc3, "leverages": leverage,
+    return {"coef": coef, "cov": cov, "cov_hc3": cov_hc3, "leverages": leverage,
             "xtx_inv": inv, "s2": s2, "df": df, "n": n, "p": p, "rss": rss, "fitted": fitted, "residuals": resid}
 
 
 def ols_predict(fit, row):
-    """Prediction at row: OLS and HC3 standard errors of the mean and of a new observation."""
+    """Prediction at row: OLS and HC3 standard errors of the mean and of a new observation.
+
+    Under HC3 the coefficient part is x' V_HC3 x; the new observation's own error variance is the
+    residual mean square s2, as in the OLS prediction interval (HC3 is a covariance of the
+    coefficients and defines no other estimate of the error variance; B3 agreement round, replacing
+    the twin's earlier mean of the HC3-weighted squared residuals).
+    """
     x = [1.0, *map(float, row)]
     p = len(x)
     yhat = math.fsum(c * v for c, v in zip(fit["coef"], x))
     lever = math.fsum(x[a] * fit["xtx_inv"][a][b] * x[b] for a in range(p) for b in range(p))
     var_hc3 = math.fsum(x[a] * fit["cov_hc3"][a][b] * x[b] for a in range(p) for b in range(p))
-    s2, s2_hc3 = fit["s2"], fit["s2_hc3"]
+    s2 = fit["s2"]
     return {"yhat": yhat, "leverage": lever,
             "se_mean": math.sqrt(s2 * lever) if s2 is not None else None,
             "se_pred": math.sqrt(s2 * (1.0 + lever)) if s2 is not None else None,
             "se_mean_hc3": math.sqrt(max(var_hc3, 0.0)),
-            "se_pred_hc3": math.sqrt(max(var_hc3, 0.0) + (s2_hc3 or 0.0))}
+            "se_pred_hc3": math.sqrt(max(var_hc3, 0.0) + (s2 or 0.0))}
 
 
 def coef_interval(fit, index, alpha):
@@ -936,7 +941,20 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha):
     gross_allowance = allowances.get((boundary, "gross"), {})
     idle_allowance = allowances.get((boundary, "idle"), {})
     half_gross, gross_record = _scaled_allowance(rows, boundary, dc_by_run, gross_allowance, kinds, alpha, subtract_idle=False)
-    half_idle, idle_record = _scaled_allowance(rows, boundary, dc_by_run, idle_allowance, kinds, alpha, subtract_idle=True)
+    # Addendum 3 item 2: the scale is max(1, E/E_ref, T/T_ref) per cell with E the cell's decode-phase
+    # m and E_ref the mean *gross* energy of the references, so the idle-subtracted secondary carries
+    # the idle family's own allowance (Addendum 7 D6) at the cell's one gross scale (B3 agreement
+    # round, replacing the twin's earlier idle-over-idle ratio, which is not in the text).
+    if idle_allowance.get("status") == "ok" and gross_record.get("status") == "ok":
+        idle_record = {"status": "ok", "family": idle_allowance["family"], "scale": gross_record["scale"],
+                       "scale_source": "the cell's gross scale (Addendum 3 item 2)",
+                       "E_ref_j": idle_allowance["E_ref_j"], "T_ref_s": idle_allowance["T_ref_s"],
+                       "allowance_j": idle_allowance["allowance_j"],
+                       "half_allowance_scaled_j": idle_allowance["allowance_j"] / 2 * gross_record["scale"]}
+        half_idle = idle_record["half_allowance_scaled_j"]
+    else:
+        half_idle, idle_record = None, {"status": idle_allowance.get("status", "absent") if idle_allowance.get("status") != "ok"
+                                        else gross_record.get("status"), "family": idle_allowance.get("family")}
 
     def build(row, scale=None, subtract_idle=False):
         member = _member(row, boundary, dc_by_run.get(row["run_id"]), half_idle if subtract_idle else half_gross)
