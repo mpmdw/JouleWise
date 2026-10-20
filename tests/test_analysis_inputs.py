@@ -1381,6 +1381,33 @@ class HazardConsumerDeclarationTests(unittest.TestCase):
                 self.assertIsInstance(request, FloorRequest)
                 self.assertEqual(notes, ['consumer_identity_recording_difference:' + case[3]])
 
+    def test_multiple_declared_recording_variants_never_add_an_ambiguity_refusal(self):
+        from joulewise.analysis_engine.inputs import FloorRequest
+        case = self.case()
+        tree = json.loads((self.pack / 'plan_tree.json').read_bytes())
+        unit = next(u for u in tree['arm_attachments']['identity_pin_projection']['identity_units']
+                    if u['identity_unit_id'] == 'A/decode')
+        row = unit['config_inventory'][1]
+        second = copy.deepcopy(case[4][0].raw_config)
+        second['run_id'] = json.loads((self.pack / row['path']).read_bytes())['run_id']
+        second['hardware_target']['notes'] = 'second declared recording'
+        raw = (json.dumps(second, indent=2, sort_keys=True) + '\n').encode()
+        (self.pack / row['path']).write_bytes(raw)
+        row['sha256'] = hashlib.sha256(raw).hexdigest()
+        (self.pack / 'plan_tree.json').write_text(json.dumps(tree, indent=2, sort_keys=True) + '\n')
+        self.fixture.commit_fixture(self.root, 'two recording variants of one measurement')
+        case[4][0].launch_lineage['pack_sha256'] = committed_pack_tree_sha256(self.pack)
+        original_hash = case[1].cell_scientific_identity_sha256['source']
+        second_hash = scientific_config_identity_sha256(second)
+        self.assertNotEqual(original_hash, second_hash)
+        case[4][0].raw_config['hardware_target']['notes'] = 'third recording value'
+        for source_hash in (original_hash, second_hash):
+            with self.subTest(source_hash=source_hash):
+                case[1].cell_scientific_identity_sha256['source'] = source_hash
+                request, notes = self.request(case)
+                self.assertIsInstance(request, FloorRequest)
+                self.assertEqual(notes, ['consumer_identity_recording_difference:' + case[3]])
+
     def test_tags_and_all_other_fields_still_refuse(self):
         for field in ('measurement-arm', 'df-condition', 'decode-prompt', 'ordinary-tag',
                       'suite_manifest_sha256', 'output_tokens', 'idle_seconds', 'metadata_notes', 'ambient_temp_c'):

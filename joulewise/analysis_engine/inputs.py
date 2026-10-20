@@ -4437,6 +4437,15 @@ def _consumer_recording_key(config: Mapping[str, Any]) -> str:
     return canonical_json_sha256(identity)
 
 
+def _consumer_measurement_identity(config: Mapping[str, Any]) -> str:
+    identity = copy.deepcopy(dict(scientific_config_identity(config) or {}))
+    for section, field_name in _CONSUMER_RECORDING_FIELDS:
+        value = identity.get(section)
+        if isinstance(value, dict):
+            value.pop(field_name, None)
+    return canonical_json_sha256(identity)
+
+
 def _consumer_recording_values(config: Mapping[str, Any]) -> tuple[Any, ...]:
     return tuple(config.get(section, {}).get(field_name)
                  for section, field_name in _CONSUMER_RECORDING_FIELDS)
@@ -4708,6 +4717,7 @@ def _floor_request_or_refusal(
     declared_consumer_identities = _frozen_consumer_identity_set(
         evidence, condition_family_id
     )
+    exact_consumer_identities = set(consumer_identities)
     hazard_declaration = isinstance(declared_consumer_identities, _HazardConsumerIdentities)
     if hazard_declaration:
         declaration = declared_consumer_identities
@@ -4720,6 +4730,7 @@ def _floor_request_or_refusal(
                 return ("consumer_identity_undeclared",)
         else:
             matched_identities = set()
+            declared_reference_identities = set()
             recording_difference = False
             for row in evidence:
                 matches = [config for config in declaration.configs
@@ -4728,17 +4739,18 @@ def _floor_request_or_refusal(
                     return ("consumer_identity_undeclared",)
                 observed = scientific_config_identity_sha256(row.raw_config)
                 hashes = {scientific_config_identity_sha256(c) for c in matches}
-                if observed in hashes:
-                    matched_identities.add(observed)
-                elif len(hashes) == 1:
-                    matched_identities.update(hashes)
-                else:
-                    return ("consumer_identity_undeclared",)
+                # Several declaration records may differ only in the three
+                # recording fields. They identify one measurement; all their
+                # original hashes can bind a direct source cell, without an
+                # arbitrary choice of which record's hash to keep.
+                matched_identities.add(_consumer_measurement_identity(row.raw_config))
+                declared_reference_identities.update(hashes)
                 recording_difference |= not any(
                     scientific_config_identity_sha256(c) == observed
                     and _consumer_recording_values(c) == _consumer_recording_values(row.raw_config)
                     for c in matches)
             consumer_identities = matched_identities
+            exact_consumer_identities = declared_reference_identities
             if recording_difference and limitations is not None:
                 limitations.append(f"consumer_identity_recording_difference:{condition_family_id}")
         declared_consumer_identities = None
@@ -4790,7 +4802,7 @@ def _floor_request_or_refusal(
             direct = serving["key"]["condition_family_id"] == condition_family_id
             if (cell_id in binding.bound_cell_ids
                 and binding.cell_stack_identity_sha256.get(cell_id) == consumer_stack_hash
-                and (not direct or binding.cell_scientific_identity_sha256.get(cell_id) == consumer_identity)):
+                and (not direct or binding.cell_scientific_identity_sha256.get(cell_id) in exact_consumer_identities)):
                 return FloorRequest(backend=backend, metric=str(selector["metric"]),
                     window_class=str(selector["window_class"]), condition_family_id=condition_family_id,
                     condition_family_sha256=family_sha, stack_identity_sha256=consumer_stack_hash,
@@ -4818,7 +4830,7 @@ def _floor_request_or_refusal(
             or not same_condition
             or cell_id not in binding.bound_cell_ids
             or binding.cell_scientific_identity_sha256.get(cell_id)
-            != consumer_identity
+            not in exact_consumer_identities
             or binding.cell_stack_identity_sha256.get(cell_id)
             != consumer_stack_hash
         ):
