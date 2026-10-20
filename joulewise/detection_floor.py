@@ -3073,6 +3073,63 @@ def _validate_hashed_object(
     return True
 
 
+def exact_stack_serving_cell(
+    artifact: Mapping, *, backend: str, metric: str, window_class: str,
+    condition_family_id: str, condition_family_sha256: str,
+    stack_identity_sha256: str, transport_group_id: str | None = None,
+) -> Mapping | None:
+    """Select the unique exact-stack cell, including a group's sole floor source.
+
+    Family and stack hashes are identity comparisons. Group-served phase and
+    token lengths come from both hash-authenticated family definitions; the
+    eleven-field stack hash includes the model artifact digest. No stress
+    envelope comparison belongs to sealed exact_stack_only.v1.
+    """
+    matches = []
+    for cell in artifact.get("cells", []):
+        if not isinstance(cell, Mapping):
+            continue
+        key = cell.get("key", {})
+        regime = cell.get("source_regime", {})
+        if (not isinstance(key, Mapping) or not isinstance(regime, Mapping)
+            or any(key.get(k) != v for k, v in (("backend", backend), ("metric", metric), ("window_class", window_class)))
+            or regime.get("stack_identity_sha256") != stack_identity_sha256
+            or cell.get("eligibility", {}).get("claim_usable") is not True
+            or (transport_group_id is not None and cell.get("transport_group_id") != transport_group_id)):
+            continue
+        if (key.get("condition_family_id"), key.get("condition_family_sha256")) == (condition_family_id, condition_family_sha256):
+            matches.append(cell)
+            continue
+        source_family = {k: key.get(k) for k in _CONDITION_FAMILY_KEYS}
+        if not _validate_condition_family(source_family, "source family", []):
+            continue
+        for group in artifact.get("transport_groups", []):
+            if (not isinstance(group, Mapping)
+                or group.get("transport_group_id") != cell.get("transport_group_id")
+                or group.get("source_cell_ids") != [cell.get("cell_id")]
+                or any(group.get(k) != v for k, v in (("backend", backend), ("metric", metric),
+                    ("window_class", window_class), ("stack_identity_sha256", stack_identity_sha256)))):
+                continue
+            admitted = [f for f in group.get("allowed_consumer_condition_families", [])
+                        if isinstance(f, Mapping) and f.get("condition_family_id") == condition_family_id
+                        and f.get("condition_family_sha256") == condition_family_sha256]
+            if len(admitted) != 1 or not _validate_condition_family(admitted[0], "consumer family", []):
+                continue
+            source = source_family["condition_family_definition"]
+            consumer = admitted[0]["condition_family_definition"]
+            source_workload = source.get("workload_profile", {})
+            consumer_workload = consumer.get("workload_profile", {})
+            if (not isinstance(source_workload, Mapping) or not isinstance(consumer_workload, Mapping)
+                or source.get("measurement_target", {}).get("metric") != metric
+                or consumer.get("measurement_target", {}).get("metric") != metric
+                or any(type(source_workload.get(k)) is not int or type(consumer_workload.get(k)) is not int
+                       or source_workload[k] != consumer_workload[k] for k in ("prompt_tokens", "output_tokens"))):
+                continue
+            matches.append(cell)
+            break
+    return matches[0] if len(matches) == 1 else None
+
+
 def _validate_condition_family(container, where, errors) -> bool:
     if not _check_keys(container, _CONDITION_FAMILY_KEYS, where, errors):
         return False

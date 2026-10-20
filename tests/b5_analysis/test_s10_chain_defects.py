@@ -590,3 +590,114 @@ class QRendererConditionalSeamTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExactStackRulingTests(unittest.TestCase):
+    @staticmethod
+    def case():
+        import json
+        from joulewise import detection_floor as df
+        from joulewise.analysis_engine import inputs as ai
+        from tests.test_analysis_inputs import _bundle_evidence, _stack_metadata_for
+        from tests.test_detection_floor import make_artifact, make_cell, make_regime
+        root = Path(__file__).resolve().parents[2]
+        pack = root / 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5'
+        tree = json.loads((pack / 'plan_tree.json').read_bytes())
+        unit = tree['arm_attachments']['identity_pin_projection']['identity_units'][0]
+        config = json.loads((pack / unit['config_inventory'][0]['path']).read_bytes())
+        metadata = _stack_metadata_for(config)
+        stack = ai.floor_stack_identity(config, metadata)
+        family = json.loads((pack / 'condition_families/condition_family_sw_decode_a_qwen3-1p7b.json').read_bytes())
+        admitted = {'condition_family_id': family['condition_family_id'],
+                    'condition_family_definition': family,
+                    'condition_family_sha256': df.canonical_domain_sha256(df.CONDITION_FAMILY_DOMAIN, family)}
+        source = copy.deepcopy(family); source['condition_family_id'] = 'df-source'
+        cell = make_cell(cell_id='df-source-cell', regime=make_regime(stack_identity=stack),
+                         condition='df-source', metric='phase_energy_j.decode')
+        artifact = make_artifact([cell]); artifact['calibration_scope'] = 'production_window'
+        cell = artifact['cells'][0]
+        cell['key'].update(condition_family_definition=source,
+            condition_family_sha256=df.canonical_domain_sha256(df.CONDITION_FAMILY_DOMAIN, source), window_class='phase')
+        group = artifact['transport_groups'][0]
+        group.update(window_class='phase', allowed_consumer_condition_families=[admitted])
+        evidence = [_bundle_evidence('synthetic-consumer', config, metadata)]
+        sha = cell['source_regime']['stack_identity_sha256']
+        binding = ai.FloorEvidenceBinding(frozenset({cell['cell_id']}), {cell['cell_id']: 'f'*64},
+                    {cell['cell_id']: sha}, frozenset(), {}, ())
+        contrast = {'contrast_id': 'gamma-shaped', 'measurement_arm': 'decode',
+                    'condition_a_id': family['condition_family_id'], 'condition_b_id': 'unused-B',
+                    'floor_selector': {'backend': 'from_bundle', 'metric': 'phase_energy_j.decode',
+                      'window_class': 'phase', 'floor_field': 'floor_gate_j',
+                      'condition_family_ids': [family['condition_family_id']]}}
+        contrast['floor_dependency'] = {'floor_selector': contrast['floor_selector'], 'transport': {
+            'mode': 'exact_stack_only', 'transport_groups': [{'transport_group_id': group['transport_group_id'],
+             'condition_family_id': family['condition_family_id'], 'condition_domain_sha256': admitted['condition_family_sha256'],
+             'group_rule_id': group['rule_id']}]}}
+        # The close-out contract inventories four floor cells. The other three
+        # have independent group ids and do not serve this consumer family.
+        for index in range(3):
+            peer = copy.deepcopy(cell)
+            peer['cell_id'] = f'other-cell-{index}'
+            peer['transport_group_id'] = f'other-group-{index}'
+            artifact['cells'].append(peer)
+        return ai, artifact, cell, admitted, stack, binding, contrast, evidence
+
+    def test_real_source_resolves_at_request_finalizer_closeout_and_resolver(self):
+        from joulewise import analysis_manifest_v3 as v3, dominance_closeout as closeout
+        ai, artifact, cell, admitted, stack, binding, contrast, evidence = self.case()
+        family = admitted['condition_family_id']
+        request = ai._floor_request_or_refusal(artifact, binding, contrast, family, evidence)
+        self.assertIsInstance(request, ai.FloorRequest)
+        self.assertEqual(request.consumer_stress, {})
+        self.assertNotEqual(binding.cell_scientific_identity_sha256[cell['cell_id']],
+                            ai.canonical_json_sha256(ai.scientific_config_identity(evidence[0].raw_config)))
+        resolution = ai.resolve_floor(artifact, '0'*64, request, evidence_binding=binding)
+        self.assertEqual((resolution.status, resolution.source_cell_ids), ('exact', (cell['cell_id'],)))
+        # Singleton max copies the same operand: identity, no measured tolerance.
+        self.assertEqual(resolution.floor_gate_j, cell['floor_gate_j'])
+        prospective = {'condition_families': [{'condition_family_id': family,
+                       'canonical_domain_sha256': admitted['condition_family_sha256']}], 'contrasts': [contrast]}
+        contexts = {family: ('powermetrics', request.stack_identity_sha256, stack)}
+        with mock.patch.object(v3, '_floor_consumer_contexts', return_value=contexts):
+            arms = v3._authenticate_floor_dependencies(prospective, artifact, bundle_paths={})
+        self.assertEqual(arms['decode:A']['floor_cell_id'], cell['cell_id'])
+        finalized = {'arms': [{'arm_id': 'decode:'+arm, 'floor_cell_id': cell['cell_id'],
+                      'condition_family_id': family, 'condition_family_sha256': admitted['condition_family_sha256'],
+                      'floor_stack_identity': stack} for arm in ('A', 'B')], 'contrasts': [contrast]}
+        sidecar = {'cells': [{'cell_id': cell['cell_id'], 'comparative': {
+                   'estimator': 'common_mode', 'common_mode_replay': {}}}]}
+        self.assertIsNone(closeout._contrast_floor_binding_error(finalized, artifact, sidecar))
+
+    def test_kept_applicability_refusals_at_all_three_sites(self):
+        from joulewise import analysis_manifest_v3 as v3, dominance_closeout as closeout
+        from joulewise.detection_floor import exact_stack_serving_cell, canonical_domain_sha256, CONDITION_FAMILY_DOMAIN
+        for variant in ('other-stack', 'unadmitted-family', 'two-sources', 'zero-sources', 'wrong-family-sha',
+                        'phase', 'prompt-length', 'output-length', 'ineligible'):
+            with self.subTest(variant=variant):
+                ai, artifact, cell, admitted, stack, binding, contrast, evidence = self.case()
+                family = admitted['condition_family_id']; sha = admitted['condition_family_sha256']
+                group = artifact['transport_groups'][0]
+                if variant == 'other-stack': cell['source_regime']['stack_identity_sha256'] = '9'*64
+                elif variant == 'unadmitted-family': group['allowed_consumer_condition_families'] = []
+                elif variant == 'two-sources': group['source_cell_ids'].append('another-cell')
+                elif variant == 'zero-sources': group['source_cell_ids'] = []
+                elif variant == 'wrong-family-sha': group['allowed_consumer_condition_families'][0]['condition_family_sha256'] = '9'*64
+                elif variant == 'ineligible': cell['eligibility']['claim_usable'] = False
+                else:
+                    definition = cell['key']['condition_family_definition']
+                    if variant == 'phase': definition['measurement_target']['metric'] = 'phase_energy_j.prefill'
+                    else: definition['workload_profile']['prompt_tokens' if variant == 'prompt-length' else 'output_tokens'] += 1
+                    cell['key']['condition_family_sha256'] = canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, definition)
+                stack_sha = ai.canonical_domain_sha256(ai.STACK_IDENTITY_DOMAIN, stack)
+                self.assertIsNone(exact_stack_serving_cell(artifact, backend='powermetrics',
+                    metric='phase_energy_j.decode', window_class='phase', condition_family_id=family,
+                    condition_family_sha256=sha, stack_identity_sha256=stack_sha))
+                self.assertNotIsInstance(ai._floor_request_or_refusal(artifact, binding, contrast, family, evidence), ai.FloorRequest)
+                prospective = {'condition_families': [{'condition_family_id': family, 'canonical_domain_sha256': sha}], 'contrasts': [contrast]}
+                with mock.patch.object(v3, '_floor_consumer_contexts', return_value={family: ('powermetrics', stack_sha, stack)}), \
+                     self.assertRaisesRegex(v3.AnalysisManifestFinalizationError, 'analysis_finalization_floor_dependency_unsatisfied'):
+                    v3._authenticate_floor_dependencies(prospective, artifact, bundle_paths={})
+                finalized = {'arms': [{'arm_id': 'decode:'+arm, 'floor_cell_id': cell['cell_id'],
+                    'condition_family_id': family, 'condition_family_sha256': sha, 'floor_stack_identity': stack}
+                    for arm in ('A', 'B')], 'contrasts': [contrast]}
+                self.assertEqual(closeout._contrast_floor_binding_error(finalized, artifact, {}), 'floor_cell_unresolved')

@@ -1871,6 +1871,16 @@ def analyze_claims(
             )
         )
 
+    limitations = list(inputs.limitations)
+    floor_cells = {cell["cell_id"]: cell for cell in inputs.floor_artifact.get("cells", [])}
+    for contrast, row in zip(inputs.manifest["contrasts"], contrast_rows, strict=True):
+        for family, resolution in zip(contrast["floor_selector"]["condition_family_ids"], row["floor"]["resolutions"], strict=True):
+            if resolution["status"] == "exact":
+                for cell_id in resolution["source_cell_ids"]:
+                    if floor_cells[cell_id]["key"]["condition_family_id"] != family:
+                        note = f"floor_cell_from_floor_pack:{family}:{cell_id}:no_envelope_comparison"
+                        if note not in limitations:
+                            limitations.append(note)
     all_audits = list(inputs.registered.values()) + list(inputs.extra_audits)
     demoted_ids = sorted(
         row["contrast_id"]
@@ -1919,7 +1929,7 @@ def analyze_claims(
             },
             "runs_root_label": Path(runs_root).name or "runs",
             "evidence_class": evidence_class,
-            "limitations": (["legacy_l1_mechanics_only"] if legacy_l1_mechanics else []) + list(inputs.limitations),
+            "limitations": (["legacy_l1_mechanics_only"] if legacy_l1_mechanics else []) + limitations,
         },
         "supersession_audit": [
             dict(row) for row in inputs.supersession_audit

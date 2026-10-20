@@ -3513,26 +3513,12 @@ def _authenticate_floor_dependencies(
                     "analysis_finalization_floor_dependency_unsatisfied",
                     f"transport group does not satisfy the complete selector for {condition_id}",
                 )
-            direct = [
-                cell
-                for cell in cells
-                if isinstance(cell.get("key"), Mapping)
-                and cell["key"].get("backend") == expected_backend
-                and cell["key"].get("metric") == selector["metric"]
-                and cell["key"].get("window_class") == selector["window_class"]
-                and cell["key"].get("condition_family_id") == condition_id
-                and cell["key"].get("condition_family_sha256")
-                == condition_shas[condition_id]
-                and cell.get("transport_group_id")
-                == binding["transport_group_id"]
-                and isinstance(cell.get("source_regime"), Mapping)
-                and cell["source_regime"].get("stack_identity_sha256")
-                == expected_stack_sha
-                and isinstance(cell.get("eligibility"), Mapping)
-                and cell["eligibility"].get("claim_usable") is True
-                and not isinstance(cell.get(selector["floor_field"]), bool)
-                and isinstance(cell.get(selector["floor_field"]), (int, float))
-            ]
+            from joulewise.detection_floor import exact_stack_serving_cell
+            serving = exact_stack_serving_cell(floor, backend=expected_backend,
+                metric=selector["metric"], window_class=selector["window_class"],
+                condition_family_id=condition_id, condition_family_sha256=condition_shas[condition_id],
+                stack_identity_sha256=expected_stack_sha, transport_group_id=binding["transport_group_id"])
+            direct = [serving] if serving is not None else []
             if transport["mode"] == "exact_stack_only" and len(direct) != 1:
                 raise AnalysisManifestFinalizationError(
                     "analysis_finalization_floor_dependency_unsatisfied",

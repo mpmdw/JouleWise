@@ -1028,3 +1028,22 @@ digest, retaining refusals for changed numerical content or source membership.
 Reopening a minted carrier that cannot be authenticated produces
 `floor_launch_lineage_unauthenticated:<plan_id|aggregate>` in `inputs.limitations`.
 Claim validation re-derives and compares the complete floor-lineage limitation list.
+
+
+### L9 exact stack service (2026-10-20)
+
+`exact_stack_serving_cell` is shared by finalization, dominance close-out and
+claim request/resolution. It selects exactly one claim-usable cell whose backend,
+metric, window class and full eleven-field stack digest match. The key family
+must match by id and digest, or a matching transport group must admit that family
+by id and digest and name this cell as its sole source. On that group route both
+hash-authenticated family definitions must match in `measurement_target.metric`
+and `workload_profile.prompt_tokens` / `output_tokens`. The request has empty
+consumer stress. The floor-pack scientific config identity need not equal the
+contrast-pack identity; registered family admission and stack identity bind it.
+Resolution is `exact`, keeps the real source cell id, and checks the singleton
+group gate equals the cell gate identically. It adds
+`floor_cell_from_floor_pack:<family>:<cell_id>:no_envelope_comparison`.
+There is no stress-envelope comparison under sealed `exact_stack_only.v1`.
+Other stacks, unadmitted families, and zero or several source cells still refuse;
+v3's ban on cross-stack transport remains.

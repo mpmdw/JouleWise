@@ -27,6 +27,7 @@ from joulewise.detection_floor import (
     _point_floor_diagnostic,
     comparative_false_effect_floor,
     common_mode_zero_points_agree,
+    exact_stack_serving_cell,
     registered_common_mode_operative_bound,
 )
 from joulewise.identity_pins import stack_identity_sha256
@@ -1898,26 +1899,23 @@ def _contrast_floor_binding_error(
             if floor_cell is None:
                 return _FLOOR_CELL_UNRESOLVED
             key = floor_cell.get("key")
-            eligibility = floor_cell.get("eligibility")
-            source_regime = floor_cell.get("source_regime")
+            if not isinstance(key, Mapping):
+                return _FLOOR_CELL_UNRESOLVED
             try:
                 expected_stack_sha = stack_identity_sha256(
                     arm["floor_stack_identity"]
                 )
             except (KeyError, TypeError, ValueError):
                 return _FLOOR_CELL_UNRESOLVED
-            if (
-                not isinstance(key, Mapping)
-                or key.get("condition_family_id")
-                != arm.get("condition_family_id")
-                or key.get("condition_family_sha256")
-                != arm.get("condition_family_sha256")
-                or not isinstance(eligibility, Mapping)
-                or eligibility.get("claim_usable") is not True
-                or not isinstance(source_regime, Mapping)
-                or source_regime.get("stack_identity_sha256")
-                != expected_stack_sha
-            ):
+            selector = contrast.get("floor_selector", {})
+            serving = exact_stack_serving_cell(floor_artifact,
+                backend=selector.get("backend") if selector.get("backend") not in (None, "from_bundle") else key.get("backend"),
+                metric=selector.get("metric", key.get("metric")),
+                window_class=selector.get("window_class", key.get("window_class")),
+                condition_family_id=arm.get("condition_family_id"),
+                condition_family_sha256=arm.get("condition_family_sha256"),
+                stack_identity_sha256=expected_stack_sha)
+            if serving is None or serving.get("cell_id") != floor_cell_id:
                 return _FLOOR_CELL_UNRESOLVED
             sidecar_cell = sidecar_cells.get(floor_cell_id)
             comparative = (

@@ -58,6 +58,7 @@ from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
     TRANSPORT_RULE_ID,
+    exact_stack_serving_cell,
     SingleCountDisciplineError,
     read_single_count_discipline,
     canonical_domain_sha256,
@@ -4665,6 +4666,39 @@ def _floor_request_or_refusal(
     if len(consumer_stack_hashes) != 1:
         return ()
     consumer_stack_hash = next(iter(consumer_stack_hashes))
+    # The sealed dependency supplies the family digest on the v3 route. Legacy
+    # callers discover it from the artifact, retaining their existing API.
+    dependency = contrast.get("floor_dependency", {})
+    transport = dependency.get("transport", {})
+    exact_only = transport.get("mode") == "exact_stack_only"
+    family_hashes = {f.get("condition_family_sha256")
+        for group in artifact.get("transport_groups", []) if isinstance(group, Mapping)
+        for f in group.get("allowed_consumer_condition_families", [])
+        if isinstance(f, Mapping) and f.get("condition_family_id") == condition_family_id}
+    family_hashes.update(c.get("key", {}).get("condition_family_sha256")
+        for c in artifact.get("cells", []) if isinstance(c, Mapping)
+        and c.get("key", {}).get("condition_family_id") == condition_family_id)
+    declared_hashes = {f.get("condition_domain_sha256") for f in transport.get("transport_groups", [])
+                       if isinstance(f, Mapping) and f.get("condition_family_id") == condition_family_id}
+    if declared_hashes:
+        family_hashes = declared_hashes
+    if consumer_identity is not None and len(family_hashes) == 1:
+        family_sha = next(iter(family_hashes))
+        serving = exact_stack_serving_cell(artifact, backend=backend, metric=selector.get("metric"),
+            window_class=selector.get("window_class"), condition_family_id=condition_family_id,
+            condition_family_sha256=family_sha, stack_identity_sha256=consumer_stack_hash)
+        if serving is not None:
+            cell_id = serving["cell_id"]
+            direct = serving["key"]["condition_family_id"] == condition_family_id
+            if (cell_id in binding.bound_cell_ids
+                and binding.cell_stack_identity_sha256.get(cell_id) == consumer_stack_hash
+                and (not direct or binding.cell_scientific_identity_sha256.get(cell_id) == consumer_identity)):
+                return FloorRequest(backend=backend, metric=str(selector["metric"]),
+                    window_class=str(selector["window_class"]), condition_family_id=condition_family_id,
+                    condition_family_sha256=family_sha, stack_identity_sha256=consumer_stack_hash,
+                    consumer_stress={})
+    if exact_only:
+        return ()
     matches: list[Mapping[str, Any]] = []
     same_condition_seen = False
     for cell in artifact.get("cells", []):
@@ -4816,7 +4850,7 @@ def resolve_floor(
         if evidence_binding is not None
         else frozenset(cells)
     )
-    exact = [
+    direct = [
         cell
         for cell in cells.values()
         if isinstance(cell.get("key"), Mapping)
@@ -4828,6 +4862,12 @@ def resolve_floor(
         and cell.get("source_regime", {}).get("stack_identity_sha256")
         == request.stack_identity_sha256
     ]
+    serving = exact_stack_serving_cell(artifact, backend=request.backend, metric=request.metric,
+        window_class=request.window_class, condition_family_id=request.condition_family_id,
+        condition_family_sha256=request.condition_family_sha256,
+        stack_identity_sha256=request.stack_identity_sha256) if not request.consumer_stress else None
+    # Keep the historical direct-cell refusal diagnostics (e.g. not claim ready).
+    exact = [serving] if serving is not None else direct
     if len(exact) == 1:
         cell = exact[0]
         cell_id = str(cell["cell_id"])
@@ -4883,6 +4923,13 @@ def resolve_floor(
             for value in values
         ):
             reasons.append("cell_not_claim_ready")
+        if cell["key"].get("condition_family_id") != request.condition_family_id:
+            group = next(g for g in artifact["transport_groups"]
+                         if g.get("transport_group_id") == cell.get("transport_group_id"))
+            # max(singleton) is the same stored operand; this is identical-code
+            # identity, with no numerical tolerance or envelope calculation.
+            if group.get("composed_floor_gate_j") != cell.get("floor_gate_j"):
+                reasons.append("artifact_schema_invalid")
         limit_class = cell.get("floor_limit_class")
         floor_source = cell.get("floor_source")
         point_diagnostics = cell.get("point_floor_diagnostics")
