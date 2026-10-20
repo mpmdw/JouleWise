@@ -1,14 +1,14 @@
 gpt-6.1-sol
 
 Branch: `lane/2026-10-20-l9-ruling-build`; verified base `090a398bb55916850ad052c1127433a4f0f7b1c4`.
-Work in progress; final assessed head and complete check/replay tables follow after all questions.
+Round 2 status: all implementation questions are complete at `d79ce01e5bb0b4da01ee33f67c69026059514150`; final module checks and the opted-in joined verification are running. Not done yet: joined completion and final evidence tables.
 
 Authority: origin/main's L9-RULING-ADDENDUM.md (activation 6cff3515), then L9-RULING.md (4b350f47), both read in full. Read both council reports, both cold reports and the silly-number executing review; inspected the cold exact-stack and consumer probes. No real archive or key directory opened. All checks use Python 3.13 unittest (pytest absent), `JW_B5_SYNTHETIC_ONLY=1`, and fresh per-module TMPDIRs.
 
 Number rule: every measured/derived tolerance carries its derivation between 1e6 times float noise and 1% of the smallest printed half-width; without a half-width use 1e-6 absolute in the column unit. Equality is reserved for integer/hash/identity/digest comparisons and identical code on identical inputs. §Z supplies the zero-point bar.
 
 Q-LINEAGE: DONE. Aggregate producer inventory, ordered schema validation, per-producer reconstruction and digest checking, scoped absent/unauthenticated limitations, and verdict revalidation. Single-lineage provenance remains the original shape; per-producer split/mixed provenance still refuses. Focused detection-floor, claim-artifact, input and S10 defect tests pass; the full mint checks are in progress.
-Q-EXACTSTACK, Q-CONSUMERID, Q-RENDERER, §C, §Z and seam deletion: NOT DONE yet, in the required order.
+Historical checkpoint above is retained for Q-LINEAGE. The round-2 checkpoints below supersede its unfinished-work status.
 
 §I step 1: not run yet; no consumer-identity policy decision has been taken.
 
@@ -114,3 +114,10 @@ Seam-free checkpoint pushed as `bb0c53101`. Complete §Z reruns: NEG8 89 OK; cus
 Refusal/limitation replay checkpoint: tests.b5_analysis.test_s10_chain_defects 32 OK and HazardConsumerDeclarationTests 6 OK. Added RuledLimitationFillReplayTests: an actual two-producer mint with one legacy producer and one unauthenticatable carrier authenticates the numerical/component bindings, yields both floor-lineage limitation codes, and carries all five new limitation codes through verdict and fill validation. Consumer policy outcomes are separately executed by HazardConsumerDeclarationTests and the five `_read_bundle` pinning variants. The existing ExactStackRulingTests execute all nine applicability refusal variants at request, finalizer and closeout, with real source resolution as the control.
 
 Final after/registry runs and the opted-in joined test are next. All implementation is done; joined end-to-end evidence and the final tables are not done yet.
+
+
+Final verification checkpoint: all five required registry modules pass (23/6/42/19/6 tests, with the refusal-allowlist and number-coverage skips as recorded). The refusal census has empty unlisted, stale, miscounted, guard_changed and scope_gaps arrays. Both conditional registry files remain unchanged. The appended seal text is byte-for-text identical to §S and all prior seal bytes are preserved. No conditional seam identifier remains in either S10 fixture/harness file.
+
+Opted-in test_39 against all restored synthetic windows: 1 OK, no consumer seam (70.5 seconds). The full joined driver is revalidating ALPHA bundles at step 1 and has not yet completed; this is explicitly not end-to-end success evidence. Full final WRITE_SCOPE and dependent modules are running; completed results are green so far. Draft PR https://github.com/mpmdw/JouleWise/pull/513 opened for CI; independent executing review, merged-tree whole suite, final CI and cold merge-code review remain lead gates. The PR is a stacked lane with existing history; no merge/rebase or write to main was performed.
+
+All round-2 checkpoints so far pushed successfully with Git CLI. If interrupted now, done: all four questions, §C, §Z, seam deletion, PROVENANCE, focused refusal and limitation replays, registries, actual test_39. Not done: completion of full joined driver, remaining final module processes, final consolidated before/after/report tables. No NEEDS_RULING.
