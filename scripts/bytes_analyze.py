@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 import sys
 
@@ -20,8 +21,8 @@ def _write(out, name, payload):
     path.write_text(json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n")
 
 
-def _reduce(source, manifest, stage, key_dir=None):
-    records = ba.load_records(source, manifest, stage=stage, key_dir=key_dir)
+def _reduce(source, manifest, stage, key_dir=None, stage1_commit=None):
+    records = ba.load_records(source, manifest, stage=stage, key_dir=key_dir, stage1_commit=stage1_commit)
     boundaries = ("rails",) if stage == "blinded" else ba.BOUNDARIES
     passes = ba.reduce_models(records, manifest, boundaries=boundaries) + ba.reduce_models(
         records, manifest, inclusive=True, boundaries=boundaries)
@@ -33,6 +34,14 @@ def _reduce(source, manifest, stage, key_dir=None):
     return passes, points
 
 
+def _missing_labels(points):
+    """Render absent withheld models as missing after arithmetic has finished."""
+    for point in points:
+        if point.get("status") == "unavailable" and any(
+                "bytes.withheld_missing" in p.get("flags", []) for p in point.get("passes", [])):
+            point.update(status="missing", reason="withheld rows missing", flags=["bytes.withheld_missing"])
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
@@ -41,6 +50,7 @@ def main(argv=None):
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--stage", required=True, choices=("blinded", "fit", "heldout", "all"))
     parser.add_argument("--key-dir", type=Path, help="directory of released pack/config keys (read only)")
+    parser.add_argument("--stage1-commit", help="recorded stage-1 commit; permits blinded held-out agreement")
     parser.add_argument("--predictions", type=Path, help="fit-stage predictions.json, with predictions.sha256 beside it")
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args(argv)
@@ -49,12 +59,17 @@ def main(argv=None):
         source = args.export or args.records
         if args.stage == "heldout" and args.predictions is None:
             raise ba.AnalysisError("heldout requires --predictions and its SHA-256 sidecar")
+        if args.stage1_commit and not re.fullmatch(r"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?", args.stage1_commit):
+            raise ba.AnalysisError("stage-1 commit must be a Git commit hash")
         if args.stage == "blinded":
             if args.export is None:
                 raise ba.AnalysisError("blinded stage requires --export")
-            passes, points = _reduce(source, manifest, "blinded")
+            passes, points = _reduce(source, manifest, "blinded", stage1_commit=args.stage1_commit)
             frozen = ba.frozen_predictions([p for p in points if p["role"] == "fit"], manifest)
-            result = ba.evaluate(points, frozen)
+            # Pre-commit grouped exports contain only fit configurations. Their
+            # estimates and NEG-8 inputs remain reviewable without H1/H2 words.
+            result = ba.evaluate(points, frozen) if any(p["role"] == "heldout" for p in points) else {
+                name: [] for name in ("h1", "moe", "h2", "unavailable")}
             args.out.mkdir(parents=True, exist_ok=True)
             _write(args.out, "blinded_pass_estimates", passes)
             _write(args.out, "model_estimates", points)
@@ -83,6 +98,7 @@ def main(argv=None):
         held_passes, held_points = _reduce(source, manifest, "heldout", args.key_dir)
         points = fit_points + held_points
         result = ba.evaluate(points, frozen)
+        _missing_labels(points)
         args.out.mkdir(parents=True, exist_ok=True)
         _write(args.out, "heldout_pass_estimates", held_passes)
         _write(args.out, "model_estimates", points)

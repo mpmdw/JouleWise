@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import math
+import os
 import random
 import statistics
 import shutil
@@ -1315,6 +1316,141 @@ class ReviewerProbeTests(unittest.TestCase):
                     if script == "p06_word_sensitivity.py":
                         self.assertIn("differ: 0 of 801",report)
                     print("BYTES_REVIEW_PROBE="+script+"\n"+report,flush=True)
+
+
+class SubsetReleaseChainTests(unittest.TestCase):
+    def command(self, *args, expected=0, cwd=ROOT):
+        result = subprocess.run(list(map(str, args)), cwd=cwd, capture_output=True, text=True,
+                                env={**os.environ, "JW_B5_SYNTHETIC_ONLY": "1"}, check=False)
+        self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+        return result.stdout
+
+    def test_three_worlds_full_synthetic_cli_chain_and_clock_removal(self):
+        from joulewise.b6 import blinding
+        # Generate full harvest-shaped campaigns in a separate process. The
+        # fixture calls the real export boundary; every analysis and release is
+        # another CLI process, with native keys and 10 Hz meter streams.
+        for world in ("bytes", "resident", "time"):
+            with self.subTest(world=world), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                generate = '''
+import importlib.util, json, sys
+from pathlib import Path
+from unittest.mock import patch
+from joulewise.b6 import export_runs
+spec = importlib.util.spec_from_file_location("campaign", "tests/fixtures/bytes/campaign.py")
+fixture = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(fixture)
+root = Path(sys.argv[1])
+original = export_runs.export
+def grouped(*args, **kwargs):
+    # Retain an actual pre-change full export using the very same drawn keys.
+    original(*args[:4], root / "legacy-export", **kwargs)
+    return original(*args, **kwargs, pack_registration={"blinding_group": "bytes", "bytes_pass": int(args[0].name[-1])})
+with patch.object(export_runs, "export", side_effect=grouped):
+    manifest = fixture.archive_campaign(root, world=sys.argv[2], non_claim=False, release="none",
+        pass_duration_scales=(1, 2), clock_latency_ms=(-8, 3))
+(root / "manifest.json").write_text(json.dumps(manifest))
+'''
+                self.command(sys.executable, "-B", "-c", generate, root, world)
+                manifest = json.loads((root / "manifest.json").read_text())
+                # Register the synthetic configurations using the native module
+                # schema; the release tool reads these files, not the manifest.
+                archive = Path(manifest["sessions"][0]["archive"])
+                config_dirs = []
+                for model in manifest["models"]:
+                    rid = (model["model"] + "-0").lower().replace(".", "-")
+                    dest = root / "synthetic-configs" / model["model"]
+                    dest.mkdir(parents=True)
+                    shutil.copyfile(archive / "sources/claim-runs" / rid / "config.json", dest / "member.json")
+                    config_dirs.append(str(dest.relative_to(root)))
+                _write_json(root / "registrations/bytes/registration.json", {
+                    "pack_id": "bytes", "blinding_group": "bytes", "modules": [{"config_dirs": config_dirs}]})
+                fit_keys = {"neg8_reference", *(m["model"] + "|bytes-synthetic|512"
+                            for m in manifest["models"] if m["role"] == "fit")}
+                all_keys = {"neg8_reference", *(m["model"] + "|bytes-synthetic|512" for m in manifest["models"])}
+                stores = []
+                for session in manifest["sessions"]:
+                    path = root / "export/bytes" / (session["session_id"] + ".runs.csv")
+                    with path.open() as stream:
+                        rows = list(csv.DictReader(stream))
+                    # R5: 3 fit models x 50 runs; A4.7: 6+3+1+3 references.
+                    self.assertEqual(len(rows), 150 + 13)
+                    self.assertEqual({r["config_key"] for r in rows}, fit_keys)
+                    self.assertNotIn("run_start_utc", rows[0])
+                    self.assertEqual([int(r["order_index"]) for r in rows], sorted(int(r["order_index"]) for r in rows))
+                    info = json.loads(path.with_name(session["session_id"] + ".session.json").read_text())["blinding"]["withheld"]
+                    self.assertEqual(info["row_count"], 7 * 50)  # seven held-out full modules
+                    stores.append(path.parent / info["path"])
+
+                def analyze(stage, out, *, legacy=False, keys=None, predictions=None, commit=None, expected=0):
+                    args = [sys.executable, ROOT / "scripts/bytes_analyze.py", "--export",
+                            root / ("legacy-export" if legacy else "export"), "--manifest", root / "manifest.json",
+                            "--stage", stage, "--out", root / out]
+                    if keys:
+                        args += ["--key-dir", root / keys]
+                    if predictions:
+                        args += ["--predictions", root / predictions]
+                    if commit:
+                        args += ["--stage1-commit", commit]
+                    return self.command(*args, expected=expected)
+
+                def release(stage, keys, out, commit=None, expected=0):
+                    args = [sys.executable, ROOT / "scripts/b6_release_subset.py", "--pack-records-root", root / "private-keys",
+                        "--blinding-group", "bytes", "--registrations-root", root / "registrations", "--project-root", root,
+                        "--stage", stage, "--out", root / out, "--keys", *sorted(keys)]
+                    if commit:
+                        args += ["--stage1-commit", commit]
+                    return self.command(*args, expected=expected)
+
+                analyze("blinded", "blind-fit")
+                points = json.loads((root / "blind-fit/model_estimates.json").read_text())
+                self.assertEqual({p["model"] for p in points}, {m["model"] for m in manifest["models"] if m["role"] == "fit"})
+                self.assertEqual(json.loads((root / "blind-fit/h1.json").read_text()), [])
+                analyze("fit", "before-release", expected=1)
+                release("fit", fit_keys, "stage1-keys")
+                self.assertEqual({p.name for p in (root / "stage1-keys").iterdir()},
+                                 {"pack.json", "release.json", *(blinding._config_filename(k) for k in fit_keys)})
+                analyze("fit", "stage1", keys="stage1-keys")
+                analyze("fit", "legacy-fit", legacy=True, keys="stage1-keys")
+                for name in ("predictions.json", "fit_pass_estimates.json"):
+                    self.assertEqual((root / "stage1" / name).read_bytes(), (root / "legacy-fit" / name).read_bytes())
+                commitment = (root / "stage1/predictions.json").read_bytes()
+                release("heldout", all_keys, "uncommitted-keys", expected=1)
+                self.command("git", "init", "-q", root / "stage1")
+                self.command("git", "add", ".", cwd=root / "stage1")
+                self.command("git", "-c", "user.name=BYTES Synthetic", "-c", "user.email=synthetic@example.invalid",
+                             "commit", "-qm", "Freeze synthetic stage-1 predictions", cwd=root / "stage1")
+                commit = self.command("git", "rev-parse", "HEAD", cwd=root / "stage1").strip()
+                # Before releasing held-out factors, run the blinded held-out
+                # agreement ingress. It reads no raw archives or meter values.
+                analyze("blinded", "blind-postcommit", commit=commit)
+                analyze("blinded", "legacy-blind", legacy=True)
+                for name in ("model_estimates.json", "h1.json", "h2.json", "moe.json"):
+                    # Exact JSON bytes here test identical inputs and arithmetic:
+                    # removing unused clocks must not change a printed number.
+                    self.assertEqual((root / "blind-postcommit" / name).read_bytes(), (root / "legacy-blind" / name).read_bytes())
+                analyze("heldout", "before-heldout-release", keys="stage1-keys", predictions="stage1/predictions.json", expected=1)
+                # Stage 2 explicitly lists all keys so its directory is complete
+                # for unchanged _released_rows, including NEG-8 references.
+                release("heldout", all_keys, "stage2-keys", commit)
+                analyze("heldout", "stage2", keys="stage2-keys", predictions="stage1/predictions.json")
+                analyze("heldout", "legacy-heldout", legacy=True, keys="stage2-keys", predictions="stage1/predictions.json")
+                for name in ("model_estimates.json", "h1.json", "h2.json", "moe.json", "unavailable.json"):
+                    self.assertEqual((root / "stage2" / name).read_bytes(), (root / "legacy-heldout" / name).read_bytes())
+                self.assertEqual((root / "stage1/predictions.json").read_bytes(), commitment)
+                # 2 selections x 2 bases x 3 boundaries = 12 H2 groups;
+                # H1 prints 10 models x (2 passes + mean) x 12 = 360 rows.
+                self.assertEqual(len(json.loads((root / "stage2/h1.json").read_text())), 360)
+                self.assertEqual(len(json.loads((root / "stage2/h2.json").read_text())), 12)
+                for path in stores:
+                    path.unlink()
+                analyze("heldout", "missing-store", keys="stage2-keys", predictions="stage1/predictions.json")
+                missing = json.loads((root / "missing-store/model_estimates.json").read_text())
+                heldout = [p for p in missing if p["role"] == "heldout"]
+                self.assertTrue(heldout)
+                self.assertEqual({p["status"] for p in heldout}, {"missing"})
+                self.assertTrue(all("bytes.withheld_missing" in p["flags"] for p in heldout))
 
 
 if __name__ == "__main__":

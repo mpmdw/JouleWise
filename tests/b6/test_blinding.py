@@ -118,10 +118,12 @@ class BlindingTests(unittest.TestCase):
                "dur_decode_s": 2, "emitted_tokens": 7, "failed_energy_j": "", "absent_energy_j": None}
         scale = 1.117
         applied = blinding.apply(row, scale)
-        self.assertTrue(abs(applied["variance_j2"] / (row["variance_j2"] * scale * scale) - 1) < 1e-12)
-        self.assertTrue(abs(applied["idle_variance_of_mean_w2"] / (row["idle_variance_of_mean_w2"] * scale * scale) - 1) < 1e-12)
+        # P2: 1e-9 relative exceeds 1e6 times degree-2 roundoff (4.4e-10)
+        # and at 1e4 J is 1e-5 J, below 1% of the 0.013 J half-width.
+        self.assertTrue(abs(applied["variance_j2"] / (row["variance_j2"] * scale * scale) - 1) <= 1e-9)
+        self.assertTrue(abs(applied["idle_variance_of_mean_w2"] / (row["idle_variance_of_mean_w2"] * scale * scale) - 1) <= 1e-9)
         recovered = blinding.unblind(applied, scale)
-        self.assertTrue(all(abs(recovered[k] / v - 1) < 1e-12 for k, v in row.items() if isinstance(v, float)),
+        self.assertTrue(all(abs(recovered[k] / v - 1) <= 1e-9 for k, v in row.items() if isinstance(v, float)),
                         "synthetic offset roundtrip failed")
         for key in ("dur_decode_s", "emitted_tokens", "failed_energy_j", "absent_energy_j"):
             self.assertEqual(applied[key], row[key])

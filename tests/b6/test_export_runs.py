@@ -5,6 +5,10 @@ import json
 import math
 import shutil
 import tempfile
+import subprocess
+import sys
+import types
+import hashlib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -83,6 +87,88 @@ class ExportTests(unittest.TestCase):
     def rows(self, result):
         with result.csv_path.open() as stream:
             return list(csv.DictReader(stream))
+
+    def test_replication_csv_and_sidecar_bytes_equal_verified_base(self):
+        # Bit identity is the registered property for alpha/beta/gamma. Execute
+        # B1's actual exporter against the same fixture and stored factors.
+        source = subprocess.run(["git", "show", "d924e7acf:joulewise/b6/export_runs.py"],
+                                capture_output=True, text=True, check=True).stdout
+        legacy = types.ModuleType("_b4_legacy_export")
+        sys.modules[legacy.__name__] = legacy
+        self.addCleanup(sys.modules.pop, legacy.__name__)
+        exec(compile(source, "<B1-export>", "exec"), legacy.__dict__)
+        for pack in ("alpha", "beta", "gamma"):
+            self.record["pack_id"] = self.plan["pack_id"] = pack
+            before = legacy.export(self.archive, self.plan, self.reg, self.root / "packs", self.root / "out",
+                                   acceptance_record=self.record)
+            expected = (before.csv_path.read_bytes(), before.sidecar_path.read_bytes())
+            after = self.export(acceptance_record=self.record)
+            self.assertEqual((after.csv_path.read_bytes(), after.sidecar_path.read_bytes()), expected)
+
+    def test_group_withholds_offset_rows_and_only_publishes_counts_and_key_digests(self):
+        # Four null runs are the registered fit model; gamma configurations
+        # and the absent/failed model are held out by default.
+        for run in ("q0", "q1", "q2", "q3"):
+            path = self.archive / "sources/claim-runs" / run / "config.json"
+            config = json.loads(path.read_text())
+            config["model"]["name"] = "Qwen3-4B-4bit"
+            write_json(path, config)
+        result = self.export(pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
+        rows = self.rows(result)
+        self.assertEqual({r["run_id"] for r in rows}, {"ref", "corpus", "q0", "q1", "q2", "q3"})
+        self.assertNotIn("run_start_utc", rows[0])
+        self.assertEqual({r["pass_id"] for r in rows}, {"1"})
+        sidecar = json.loads(result.sidecar_path.read_text())
+        info = sidecar["blinding"]["withheld"]
+        self.assertEqual(set(info), {"path", "row_count", "config_key_sha256"})
+        self.assertEqual(info["row_count"], 3)
+        store = (result.csv_path.parent / info["path"]).resolve()
+        self.assertTrue(store.is_relative_to(self.root / "packs/bytes"))
+        with store.open() as stream:
+            withheld = list(csv.DictReader(stream))
+        self.assertEqual({r["run_id"] for r in withheld}, {"gamma-a", "gamma-b", "failed"})
+        self.assertEqual(sum(info["config_key_sha256"].values()), len(withheld))
+        for row in withheld:
+            digest = hashlib.sha256(row["config_key"].encode()).hexdigest()
+            self.assertIn(digest, info["config_key_sha256"])
+            self.assertNotIn("run_start_utc", row)
+            if row["status"] == "succeeded":
+                factor = blinding.stored_factor(self.root / "packs/bytes/blinding", row["config_key"])
+                # P2: 1e-9 relative lies above 1e6 x degree-2 float noise and
+                # below 1% of the smallest printed energy half-width (0.013 J).
+                self.assertTrue(math.isclose(float(row["phase_decode_j"]) / factor, 10, rel_tol=1e-9))
+        # Re-export uses the same keys and row bytes, rather than a fresh draw.
+        before = store.read_bytes()
+        self.export(pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
+        self.assertEqual(store.read_bytes(), before)
+
+    def test_group_unblind_uses_registered_order_and_flags_missing_store(self):
+        result = self.export(pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
+        args = ["--export", str(result.csv_path), "--pack-records-root", str(self.root / "packs"),
+                "--blinding-group", "bytes"]
+        precommit = self.root / "precommit.csv"
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(b6_unblind.main(args + ["--out", str(precommit)]), 0)
+        with precommit.open() as stream:
+            self.assertEqual({r["run_id"] for r in csv.DictReader(stream)}, {"ref", "corpus"})
+        released = self.root / "released.csv"
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(b6_unblind.main(args + ["--stage1-commit", "a" * 40, "--out", str(released)]), 0)
+        with released.open() as stream:
+            rows = list(csv.DictReader(stream))
+        # Registered plan: two references, four quads, two gamma rows, one failed.
+        self.assertEqual([r["run_id"] for r in rows], ["corpus", "ref", "q0", "q1", "q2", "q3", "gamma-a", "gamma-b", "failed"])
+        for row in rows:
+            if row["status"] == "succeeded":
+                # P2: 1e-9 relative exceeds 1e6 x degree-2 roundoff and at
+                # 1e4 J remains below 1% of the 0.013 J printed half-width.
+                self.assertTrue(math.isclose(float(row["phase_decode_j"]), 10, rel_tol=1e-9))
+        info = json.loads(result.sidecar_path.read_text())["blinding"]["withheld"]
+        (result.csv_path.parent / info["path"]).unlink()
+        with contextlib.redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(b6_unblind.main(args + ["--stage1-commit", "a" * 40,
+                                                    "--out", str(self.root / "missing.csv")]), 0)
+        self.assertEqual(json.loads(stdout.getvalue())["flags"], ["bytes.withheld_missing"])
 
     def test_rows_energies_tokens_durations_and_failed_run(self):
         with patch.object(blinding, "_draw", side_effect=lambda bounds: 1.1 if bounds == blinding.PACK_RANGE else .99):

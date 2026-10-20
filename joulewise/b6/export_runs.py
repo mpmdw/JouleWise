@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 import tempfile
@@ -114,7 +115,12 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
         run_id = flag["scope"].get("run_id")
         if run_id:
             codes[run_id].add(flag["code"])
-    rows = []
+    rows, withheld = [], []
+    group = pack_registration.get("blinding_group")
+    # Non-claim smoke tables keep their existing offset semantics. Withholding
+    # governs blinded analysis exports, which always have applied offsets.
+    grouped_blind = bool(group) and not non_claim
+    columns = tuple(c for c in COLUMNS if c != "run_start_utc") + ("pass_id",) if grouped_blind else COLUMNS
     for index, member in enumerate(roster.get("members", [])):
         run_id = member["run_id"]
         bundle = bundle_of(root, plan, run_id)
@@ -153,21 +159,46 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
             row["idle_variance_of_mean_w2"] = (summary.get("idle_mean_uncertainty") or {}).get("governed_variance_of_mean_w2")
         if not non_claim:
             row = blinding.apply(row, blinding.factor(key_dir, key, session_id=session_id))
-        rows.append(row)
+        if grouped_blind:
+            # The registered stage walk supplies order_index; no wall/monotonic
+            # clock enters the pre-commit table. Durations remain observables.
+            row.pop("run_start_utc", None)
+            row["pass_id"] = pack_registration.get("bytes_pass")
+            (rows if key == REFERENCE_KEY or blinding.configuration_stage(config) == "fit"
+             else withheld).append(row)
+        else:
+            rows.append(row)
     destination = Path(export_dir) / pack_id
     csv_path = destination / (session_id + ".runs.csv")
     sidecar = destination / (session_id + ".session.json")
 
     def write_csv(stream):
-        writer = csv.DictWriter(stream, fieldnames=COLUMNS)
+        writer = csv.DictWriter(stream, fieldnames=columns)
         writer.writeheader()
         writer.writerows(rows)
 
+    withheld_record = None
+    if grouped_blind:
+        store = blinding.withheld_path(key_dir, pack_id, session_id)
+        def write_withheld(stream):
+            writer = csv.DictWriter(stream, fieldnames=columns)
+            writer.writeheader()
+            writer.writerows(withheld)
+        # Persist already offset rows before publishing their count-only locator.
+        atomic_write(store, write_withheld)
+        counts = defaultdict(int)
+        for row in withheld:
+            counts[hashlib.sha256(row["config_key"].encode("utf-8")).hexdigest()] += 1
+        withheld_record = {"path": os.path.relpath(store, destination), "row_count": len(withheld),
+                           "config_key_sha256": dict(sorted(counts.items()))}
     atomic_write(csv_path, write_csv)
     session = {"schema": "joulewise.b6_export_session.v1", "pack_id": pack_id, "session_id": session_id,
                **{key: record.get(key) for key in ("verdict", "counting", "flag_counts")},
                "operative_bound_s": record.get("calibration", {}).get("operative_bound_s"),
                "neg8": record.get("neg8"), "non_claim": non_claim,
                "blinding": {"applied": not non_claim, "key_dir": os.path.relpath(key_dir, destination)}}
+    if grouped_blind:
+        session["blinding"].update(group=group, pass_id=pack_registration.get("bytes_pass"),
+                                    withheld=withheld_record)
     atomic_write(sidecar, lambda stream: stream.write(json.dumps(session, sort_keys=True, indent=2) + "\n"))
     return ExportResult(csv_path, sidecar, len(rows))

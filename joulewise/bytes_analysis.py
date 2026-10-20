@@ -507,6 +507,28 @@ def _export_rows(path):
         return list(csv.DictReader(handle))
 
 
+def _stage_export_rows(path, *, include_withheld=False):
+    """Only a post-commit stage opens the group's already blinded store.
+
+    A missing store is a recorded flag. Never recover its science rows from
+    reductions or bundles: absence must remain visible to the model reducer.
+    """
+    path = Path(path)
+    rows = _export_rows(path)
+    if not include_withheld:
+        return rows, False
+    sidecar = path.with_name(path.name.removesuffix(".runs.csv") + ".session.json")
+    if not sidecar.is_file():
+        return rows, False  # legacy exports contain all their science rows
+    info = read_json(sidecar).get("blinding", {}).get("withheld")
+    if info is None:
+        return rows, False
+    try:
+        return rows + _export_rows(path.parent / info["path"]), False
+    except FileNotFoundError:
+        return rows, True
+
+
 def _released_rows(rows, key_dir, *, blinded):
     from joulewise.b6 import blinding
     result = []
@@ -630,7 +652,7 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
         else:
             window_flags.add(flag["code"])
     export_path = export_path or root.parent / "export" / "bytes" / (acceptance["session_id"] + ".runs.csv")
-    exports = _export_rows(export_path)
+    exports, withheld_missing = _stage_export_rows(export_path, include_withheld=stage in ("heldout", "all"))
     wanted_ids = {m["run_id"] for m in roster["members"]
                   if any(u["cell_id"] in selected for u in m.get("units", []))}
     selected_exports = [r for r in exports if r["run_id"] in wanted_ids or r["role"] in REFERENCE_ROLES]
@@ -651,6 +673,8 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
         model = selected[units[0]["cell_id"]]
         row = _record_base(model, session, acceptance["session_id"], member, exclusions, flags, window_flags)
         run_id = row["run_id"]
+        if withheld_missing and run_id not in by_id:
+            row["flags"] = sorted(set(row["flags"]) | {"bytes.withheld_missing"})
         try:
             if run_id not in by_id:
                 raise AnalysisError("planned run absent from export")
@@ -718,10 +742,10 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
         yield row
 
 
-def load_records(source, manifest, *, stage, key_dir=None):
+def load_records(source, manifest, *, stage, key_dir=None, stage1_commit=None):
     """Read the export (including references); archive joins require released keys."""
     if isinstance(source, (list, tuple)):
-        records = [r for item in source for r in load_records(item, manifest, stage=stage, key_dir=key_dir)]
+        records = [r for item in source for r in load_records(item, manifest, stage=stage, key_dir=key_dir, stage1_commit=stage1_commit)]
         identities = [(r["session_id"], r["run_id"]) for r in records]
         if len(identities) != len(set(identities)):
             raise AnalysisError("duplicate records across inputs")
@@ -744,7 +768,7 @@ def load_records(source, manifest, *, stage, key_dir=None):
         session = by_session[session_id]
         if stage == "blinded":
             # No archive reads whatsoever; roles, units and blinded rails are CSV inputs.
-            exports = _export_rows(path)
+            exports, _ = _stage_export_rows(path, include_withheld=bool(stage1_commit))
             refs = neg8_inputs(exports, blinded=True, test7_passed=session.get("test7_passed", False))
             specs = {cell: m for m in manifest["models"] for cell in m["cell_ids"]}
             for exported in exports:
