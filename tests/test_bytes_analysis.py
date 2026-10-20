@@ -529,7 +529,13 @@ class ProductionArchiveTests(unittest.TestCase):
             missing_all = ba.combine_passes(missing_passes)
             evaluated = ba.evaluate(missing_all, frozen_missing)
             self.assertEqual(len(evaluated["unavailable"]), 8)
-            self.assertTrue(all(r["boundary"]=="rails" for r in evaluated["h1"]))
+            words = [r for r in evaluated["h1"] if "word" in r]
+            self.assertTrue(words)
+            self.assertTrue(all(r["boundary"] == "rails" for r in words))
+            # Q1 item 4: no-point cells retain a missing row, never an H1 word.
+            missing = [r for r in evaluated["h1"] if r["boundary"] != "rails"]
+            self.assertEqual(len(missing), 8 * 10)  # eight DC/rest groups, ten models
+            self.assertTrue(all(r["status"] == "missing" and "word" not in r for r in missing))
             # Read actual harvest exclusions (thermal and a second physical cause)
             # plus an acceptance-emitted flag, rather than only handmade records.
             session = manifest["sessions"][0]
