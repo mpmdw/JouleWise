@@ -1325,6 +1325,20 @@ class SubsetReleaseChainTests(unittest.TestCase):
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         return result.stdout
 
+    def test_export_traversal_uses_registered_pass_not_clock_named_session(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            # Filename order deliberately disagrees with the registered passes.
+            for name in ("early-clock-pass2", "late-clock-pass1"):
+                (root / (name + ".runs.csv")).write_text("unused")
+            manifest = {"models": [], "sessions": [
+                {"session_id": "early-clock-pass2", "pass_id": 2},
+                {"session_id": "late-clock-pass1", "pass_id": 1}]}
+            with patch.object(ba, "_export_rows", return_value=[]) as read:
+                self.assertEqual(ba.load_records(root, manifest, stage="blinded"), [])
+            self.assertEqual([call.args[0].name for call in read.call_args_list],
+                             ["late-clock-pass1.runs.csv", "early-clock-pass2.runs.csv"])
+
     def test_three_worlds_full_synthetic_cli_chain_and_clock_removal(self):
         from joulewise.b6 import blinding
         # Generate full harvest-shaped campaigns in a separate process. The

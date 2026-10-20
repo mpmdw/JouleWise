@@ -524,7 +524,8 @@ def _stage_export_rows(path, *, include_withheld=False):
     if info is None:
         return rows, False
     try:
-        return rows + _export_rows(path.parent / info["path"]), False
+        merged = rows + _export_rows(path.parent / info["path"])
+        return sorted(merged, key=lambda row: int(row["order_index"])), False
     except FileNotFoundError:
         return rows, True
 
@@ -757,7 +758,12 @@ def load_records(source, manifest, *, stage, key_dir=None, stage1_commit=None):
     if (source / "derived/roster.json").is_file():
         session_id = read_json(source / "derived/b6-acceptance.json")["session_id"]
         return list(archive_records(source, manifest, by_session[session_id], stage=stage, key_dir=key_dir))
-    paths = sorted(source.rglob("*.runs.csv"))
+    # Session names can contain collection clocks. Traversal follows registered
+    # pass identity and the manifest's plan-tree position instead.
+    session_order = {s["session_id"]: index for index, s in enumerate(manifest["sessions"])}
+    paths = sorted(source.rglob("*.runs.csv"), key=lambda p: (
+        by_session.get(p.name.removesuffix(".runs.csv"), {}).get("pass_id", 0),
+        session_order.get(p.name.removesuffix(".runs.csv"), len(session_order))))
     if not paths:
         raise AnalysisError("expected harvest archive or Block-6 export directory")
     records = []

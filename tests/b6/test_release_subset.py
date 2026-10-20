@@ -1,19 +1,14 @@
 """BYTES C7 custody and process-level synthetic release chain; no real inputs."""
 import contextlib
-import csv
 import hashlib
 import io
 import json
-import os
 from pathlib import Path
-import shutil
-import subprocess
-import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from joulewise.b6 import blinding, export_runs
+from joulewise.b6 import blinding
 from scripts import b6_release_subset
 from tests.b6.support import write_json
 

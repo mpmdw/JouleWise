@@ -101,10 +101,14 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
     pack_id = record["pack_id"]
     session_id = record.get("session_id") or evidence.session_id or str(roster.get("plan_id") or root.name)
     if pack_registration is None:
-        pack_registration = read_json(root / "sources/pack/registration.json", None)
-        if pack_registration is None:
-            pack_registration = read_json(Path(__file__).resolve().parents[2] /
-                "configs/b6/packs" / pack_id / "registration.json", {})
+        # Prefer the harvested registration to the desk checkout. The explicit
+        # argument is for synthetic/seam callers; normal harvest needs no flag.
+        candidates = (root / "sources/pack/registration.json",
+                      root / "sources/repo/configs/b6/packs" / pack_id / "registration.json",
+                      Path(registration_dir) / "registration.json",
+                      Path(__file__).resolve().parents[2] / "configs/b6/packs" / pack_id / "registration.json")
+        pack_registration = next((doc for path in candidates
+                                  if (doc := read_json(path)) is not None), {})
     key_dir = blinding.key_directory(pack_records_root, pack_id, pack_registration)
     excluded, codes = defaultdict(set), defaultdict(set)
     for item in record.get("excluding", []):
@@ -117,10 +121,13 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
             codes[run_id].add(flag["code"])
     rows, withheld = [], []
     group = pack_registration.get("blinding_group")
-    # Non-claim smoke tables keep their existing offset semantics. Withholding
-    # governs blinded analysis exports, which always have applied offsets.
-    grouped_blind = bool(group) and not non_claim
-    columns = tuple(c for c in COLUMNS if c != "run_start_utc") + ("pass_id",) if grouped_blind else COLUMNS
+    grouped_blind = bool(group)
+    # Every grouped table is offset, including non-claim smoke sessions. The
+    # legacy row-level non_claim bit means "offsets not applied" to the existing
+    # release reader, so grouped tables keep session provenance in the sidecar
+    # and omit that bit. This lets _released_rows remain unchanged.
+    columns = (tuple(c for c in COLUMNS if c not in ("run_start_utc", "non_claim")) + ("pass_id",)
+               if grouped_blind else COLUMNS)
     for index, member in enumerate(roster.get("members", [])):
         run_id = member["run_id"]
         bundle = bundle_of(root, plan, run_id)
@@ -157,12 +164,13 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
                         for term in BOUND_TERMS})
             row["idle_power_w"] = idle.get("power_w_mean")
             row["idle_variance_of_mean_w2"] = (summary.get("idle_mean_uncertainty") or {}).get("governed_variance_of_mean_w2")
-        if not non_claim:
+        if not non_claim or grouped_blind:
             row = blinding.apply(row, blinding.factor(key_dir, key, session_id=session_id))
         if grouped_blind:
             # The registered stage walk supplies order_index; no wall/monotonic
             # clock enters the pre-commit table. Durations remain observables.
             row.pop("run_start_utc", None)
+            row.pop("non_claim", None)
             row["pass_id"] = pack_registration.get("bytes_pass")
             (rows if key == REFERENCE_KEY or blinding.configuration_stage(config) == "fit"
              else withheld).append(row)
@@ -196,7 +204,7 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
                **{key: record.get(key) for key in ("verdict", "counting", "flag_counts")},
                "operative_bound_s": record.get("calibration", {}).get("operative_bound_s"),
                "neg8": record.get("neg8"), "non_claim": non_claim,
-               "blinding": {"applied": not non_claim, "key_dir": os.path.relpath(key_dir, destination)}}
+               "blinding": {"applied": not non_claim or grouped_blind, "key_dir": os.path.relpath(key_dir, destination)}}
     if grouped_blind:
         session["blinding"].update(group=group, pass_id=pack_registration.get("bytes_pass"),
                                     withheld=withheld_record)

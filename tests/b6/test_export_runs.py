@@ -113,7 +113,8 @@ class ExportTests(unittest.TestCase):
             config = json.loads(path.read_text())
             config["model"]["name"] = "Qwen3-4B-4bit"
             write_json(path, config)
-        result = self.export(pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
+        write_json(self.archive / "sources/pack/registration.json", {"blinding_group": "bytes", "bytes_pass": 1})
+        result = self.export()
         rows = self.rows(result)
         self.assertEqual({r["run_id"] for r in rows}, {"ref", "corpus", "q0", "q1", "q2", "q3"})
         self.assertNotIn("run_start_utc", rows[0])
@@ -141,6 +142,25 @@ class ExportTests(unittest.TestCase):
         before = store.read_bytes()
         self.export(pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
         self.assertEqual(store.read_bytes(), before)
+
+    def test_group_non_claim_smoke_still_withholds_and_blinds(self):
+        result = self.export(non_claim=True, pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
+        rows = self.rows(result)
+        self.assertEqual({r["run_id"] for r in rows}, {"ref", "corpus"})
+        self.assertNotIn("run_start_utc", rows[0])
+        self.assertNotIn("non_claim", rows[0])
+        sidecar = json.loads(result.sidecar_path.read_text())
+        self.assertTrue(sidecar["non_claim"])
+        self.assertTrue(sidecar["blinding"]["applied"])
+        self.assertEqual(sidecar["blinding"]["withheld"]["row_count"], 7)
+        # Unchanged release reader divides the offsets even though the session
+        # is explicitly non-claim in its sidecar.
+        from joulewise.bytes_analysis import _released_rows
+        released = _released_rows(rows, self.root / "packs/bytes/blinding", blinded=False)
+        for row in released:
+            # P2: degree-2 roundoff x 1e6 < 1e-9 relative < 1% of the
+            # smallest printed uncertainty at the campaign's 1e4 J scale.
+            self.assertTrue(math.isclose(row["phase_decode_j"], 10, rel_tol=1e-9))
 
     def test_group_unblind_uses_registered_order_and_flags_missing_store(self):
         result = self.export(pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
