@@ -120,7 +120,7 @@ def __getattr__(name: str) -> Any:
         return getattr(kept_units, name)
     raise AttributeError(name)
 
-from joulewise.window_lineage import is_hazard_runs_root
+from joulewise.window_lineage import is_hazard_runs_root, is_hazard_lineage
 
 
 StrictValidator = Callable[[Path, bool], list[str]]
@@ -4408,14 +4408,48 @@ def deterministic_bounds(
     return result, tuple(ordered_reason_codes(reasons))
 
 
+@dataclass(frozen=True)
+class _HazardConsumerIdentities:
+    # None is the hazard-only authentication failure, distinct from the ARM
+    # empty set and the legacy route's None return.
+    identities: frozenset[str] | None
+    configs: tuple[Mapping[str, Any], ...] = ()
+
+
+# Closed §I.3 allowlist. Notes describe hardware for people; project/operator
+# label the record. None is consulted by workload, phase, runtime or telemetry.
+_CONSUMER_RECORDING_FIELDS = (
+    ("hardware_target", "notes"),
+    ("run_metadata", "project"),
+    ("run_metadata", "operator"),
+)
+
+
+def _consumer_recording_key(config: Mapping[str, Any]) -> str:
+    identity = copy.deepcopy(dict(_typed_config(config) or {}))
+    identity.pop("run_id", None)
+    for section, field_name in _CONSUMER_RECORDING_FIELDS:
+        value = identity.get(section)
+        if isinstance(value, dict):
+            value.pop(field_name, None)
+    # Compare every tag and every other typed field. Only run_id is omitted,
+    # as in the existing scientific identity; it labels the physical repeat.
+    return canonical_json_sha256(identity)
+
+
+def _consumer_recording_values(config: Mapping[str, Any]) -> tuple[Any, ...]:
+    return tuple(config.get(section, {}).get(field_name)
+                 for section, field_name in _CONSUMER_RECORDING_FIELDS)
+
+
 def _frozen_consumer_identity_set(
     evidence: Sequence[BundleEvidence], condition_family_id: str
-) -> frozenset[str] | None:
-    """Read the U8-bound frozen member identities for a successor consumer.
+) -> frozenset[str] | _HazardConsumerIdentities | None:
+    """Read the committed hazard declaration or the unchanged U8 frozen set.
 
-    ``None`` means the legacy, pre-launch-lineage route is in use.  An empty
-    set means successor lineage was present but its frozen declaration could
-    not be authenticated, so the caller must refuse.
+    Legacy None, ARM empty-set refusal, and hazard unauthenticated declaration
+    are distinct. Hazard applicability is already bound by _read_bundle's
+    config_hash_mismatch checks against the sealed plan's source config (§I.1).
     """
 
     authenticated_rows = [
@@ -4425,40 +4459,67 @@ def _frozen_consumer_identity_set(
     ]
     if not authenticated_rows:
         return None
+    hazard = len(authenticated_rows) == len(evidence) and all(
+        is_hazard_lineage(row.get("launch_lineage")) for row in authenticated_rows)
+    failure = _HazardConsumerIdentities(None) if hazard else frozenset()
     if len(authenticated_rows) != len(evidence):
-        return frozenset()
+        return failure
     if any(
         not isinstance(row.get("pack_root"), str) or not row.get("pack_root")
         for row in authenticated_rows
     ):
-        return frozenset()
+        return failure
     pack_roots = {row["pack_root"] for row in authenticated_rows}
     if len(pack_roots) != 1:
-        return frozenset()
+        return failure
     if any(
         not isinstance(row.get("pack_sha256"), str)
         or re.fullmatch(r"[0-9a-f]{64}", row["pack_sha256"]) is None
         for row in authenticated_rows
     ):
-        return frozenset()
+        return failure
     pack_hashes = {row["pack_sha256"] for row in authenticated_rows}
     if len(pack_hashes) != 1:
-        return frozenset()
+        return failure
     try:
         pack_root = Path(next(iter(pack_roots))).resolve(strict=True)
         if committed_pack_tree_sha256(pack_root) != next(iter(pack_hashes)):
-            return frozenset()
+            return failure
         tree, _tree_raw = _load_json_object(
             pack_root / "plan_tree.json", "consumer identity plan tree"
         )
         attachments = tree.get("arm_attachments")
         if not isinstance(attachments, Mapping):
-            return frozenset()
+            return failure
         projection = validate_identity_pin_projection(
             attachments.get("identity_pin_projection")
         )
+        if hazard:
+            readiness = attachments.get("arm_readiness")
+            if (projection["state"] != "unprojected"
+                or not isinstance(readiness, Mapping)
+                or readiness.get("freeze_receipt") is not None):
+                return failure
+            units = [unit for unit in projection["identity_units"]
+                     if any(binding.get("family") == condition_family_id
+                            for binding in unit["consumer_bindings"])]
+            if len(units) != 1:
+                return failure
+            configs = []
+            for row in units[0]["config_inventory"]:
+                path = _lexical_child_path(pack_root, row["path"],
+                    label="sealed consumer identity config", require_directory=False)
+                raw = _read_analysis_input(path, label="sealed consumer identity config")
+                if hashlib.sha256(raw).hexdigest() != row["sha256"]:
+                    return failure
+                config = parse_json_bytes(raw, require_canonical=False)
+                if not isinstance(config, Mapping):
+                    return failure
+                configs.append(config)
+            identities = frozenset(scientific_config_identity_sha256(c) for c in configs)
+            return _HazardConsumerIdentities(identities, tuple(configs)) if identities else failure
         if projection["state"] != "frozen":
-            return frozenset()
+            return failure
         readiness = attachments.get("arm_readiness")
         freeze_reference = (
             readiness.get("freeze_receipt")
@@ -4469,7 +4530,7 @@ def _frozen_consumer_identity_set(
             not isinstance(freeze_reference, Mapping)
             or set(freeze_reference) != {"path", "sha256"}
         ):
-            return frozenset()
+            return failure
         freeze_path = _lexical_child_path(
             pack_root,
             freeze_reference["path"],
@@ -4493,12 +4554,12 @@ def _frozen_consumer_identity_set(
             freeze_sha != freeze_reference["sha256"]
             or freeze_sidecar != gnu_sidecar(freeze_sha, freeze_path.name)
         ):
-            return frozenset()
+            return failure
         freeze_receipt = validate_freeze_receipt(
             parse_json_bytes(freeze_raw, require_canonical=True)
         )
         if freeze_receipt["status"] != "PASS":
-            return frozenset()
+            return failure
         identity_items = [
             item
             for item in freeze_receipt["evidence"]
@@ -4507,7 +4568,7 @@ def _frozen_consumer_identity_set(
             == IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA
         ]
         if len(identity_items) != 1:
-            return frozenset()
+            return failure
         identity_item = identity_items[0]
         if (
             identity_item.get("evidence_id") != "u11-freeze-projection"
@@ -4519,7 +4580,7 @@ def _frozen_consumer_identity_set(
                 "sha256": identity_item.get("sha256"),
             }
         ):
-            return frozenset()
+            return failure
         receipt_path = _lexical_child_path(
             pack_root,
             identity_item["path"],
@@ -4546,12 +4607,12 @@ def _frozen_consumer_identity_set(
             receipt_sha != identity_item["sha256"]
             or receipt_sidecar != gnu_sidecar(receipt_sha, receipt_path.name)
         ):
-            return frozenset()
+            return failure
         receipt = validate_projection_receipt(
             parse_json_bytes(receipt_raw, require_canonical=True)
         )
         if receipt["receipt_kind"] != "freeze_projection" or receipt["status"] != "PASS":
-            return frozenset()
+            return failure
         matching_units = [
             unit
             for unit in receipt["identity_units"]
@@ -4562,7 +4623,7 @@ def _frozen_consumer_identity_set(
             )
         ]
         if len(matching_units) != 1:
-            return frozenset()
+            return failure
         unit = matching_units[0]
         projection_units = [
             candidate
@@ -4574,7 +4635,7 @@ def _frozen_consumer_identity_set(
             or projection_units[0]["model_runtime_config"]["config_set_sha256"]
             != unit["model_runtime_config"]["config_set_sha256"]
         ):
-            return frozenset()
+            return failure
         identities: set[str] = set()
         for row in unit["config_inventory"]:
             config_path = _lexical_child_path(
@@ -4587,17 +4648,17 @@ def _frozen_consumer_identity_set(
                 config_path, label="frozen identity config"
             )
             if hashlib.sha256(raw).hexdigest() != row["sha256"]:
-                return frozenset()
+                return failure
             config = parse_json_bytes(raw, require_canonical=False)
             if not isinstance(config, Mapping):
-                return frozenset()
+                return failure
             identities.add(scientific_config_identity_sha256(config))
         if (
             not identities
             or identity_unit_config_set_sha256(identities)
             != unit["model_runtime_config"]["config_set_sha256"]
         ):
-            return frozenset()
+            return failure
         return frozenset(identities)
     except (
         AnalysisInputError,
@@ -4608,7 +4669,7 @@ def _frozen_consumer_identity_set(
         TypeError,
         ValueError,
     ):
-        return frozenset()
+        return failure
 
 
 def _floor_request_or_refusal(
@@ -4617,6 +4678,8 @@ def _floor_request_or_refusal(
     contrast: Mapping[str, Any],
     condition_family_id: str,
     evidence: Sequence[BundleEvidence],
+    *,
+    limitations: list[str] | None = None,
 ) -> FloorRequest | tuple[str, ...]:
     """Build a production request or return its identity-specific refusal."""
 
@@ -4645,12 +4708,47 @@ def _floor_request_or_refusal(
     declared_consumer_identities = _frozen_consumer_identity_set(
         evidence, condition_family_id
     )
+    hazard_declaration = isinstance(declared_consumer_identities, _HazardConsumerIdentities)
+    if hazard_declaration:
+        declaration = declared_consumer_identities
+        if declaration.identities is None:
+            if limitations is not None:
+                limitations.append(f"consumer_identity_set_unauthenticated:{condition_family_id}")
+            # No authenticated declaration means no multi-identity exact match;
+            # never let this fall through to the transport route (§I.4).
+            if len(consumer_identities) != 1:
+                return ("consumer_identity_undeclared",)
+        else:
+            matched_identities = set()
+            recording_difference = False
+            for row in evidence:
+                matches = [config for config in declaration.configs
+                    if _consumer_recording_key(config) == _consumer_recording_key(row.raw_config)]
+                if not matches:
+                    return ("consumer_identity_undeclared",)
+                observed = scientific_config_identity_sha256(row.raw_config)
+                hashes = {scientific_config_identity_sha256(c) for c in matches}
+                if observed in hashes:
+                    matched_identities.add(observed)
+                elif len(hashes) == 1:
+                    matched_identities.update(hashes)
+                else:
+                    return ("consumer_identity_undeclared",)
+                recording_difference |= not any(
+                    scientific_config_identity_sha256(c) == observed
+                    and _consumer_recording_values(c) == _consumer_recording_values(row.raw_config)
+                    for c in matches)
+            consumer_identities = matched_identities
+            if recording_difference and limitations is not None:
+                limitations.append(f"consumer_identity_recording_difference:{condition_family_id}")
+        declared_consumer_identities = None
     if declared_consumer_identities is not None:
         if not declared_consumer_identities:
             return ("consumer_identity_set_unauthenticated",)
         if not consumer_identities.issubset(declared_consumer_identities):
             return ("consumer_identity_undeclared",)
-    if len(consumer_identities) > 1 and declared_consumer_identities is None:
+    if (len(consumer_identities) > 1 and declared_consumer_identities is None
+        and not hazard_declaration):
         return ("consumer_identity_undeclared",)
     consumer_identity = (
         next(iter(consumer_identities))

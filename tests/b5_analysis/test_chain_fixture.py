@@ -558,12 +558,9 @@ class ChainTests(unittest.TestCase):
                 rows=[SimpleNamespace(launch_lineage=lineage)]
                 for contrast in manifest['contrasts']:
                     for family in (contrast['condition_a_id'],contrast['condition_b_id']):
-                        # Open question Q-CONSUMERID: unchanged, the sealed
-                        # (unprojected) pack authenticates no declared set ...
-                        self.assertEqual(ai._frozen_consumer_identity_set(rows,family),frozenset(),family)
-                        # ... and the conditional fixture option reads the sealed unit.
-                        with self.fixture.seams():
-                            self.assertTrue(ai._frozen_consumer_identity_set(rows,family),family)
+                        declaration = ai._frozen_consumer_identity_set(rows, family)
+                        self.assertIsInstance(declaration, ai._HazardConsumerIdentities)
+                        self.assertTrue(declaration.identities, family)
     def test_40_c4_alpha(self):self.check_c4('alpha')
     def test_34_relocated_allowance_artifact_authenticates(self):
         w=self.window('alpha')

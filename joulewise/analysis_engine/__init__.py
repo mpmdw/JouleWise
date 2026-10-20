@@ -377,6 +377,8 @@ def _resolve_contrast_floor(
     contrast: Mapping[str, Any],
     included: Mapping[str, Sequence[BundleEvidence]],
     request_factory: _FloorRequestFactory | None,
+    *,
+    limitations: list[str] | None = None,
 ) -> list[FloorResolution]:
     resolutions: list[FloorResolution] = []
     is_v3 = is_abba_v3_consumable_schema(
@@ -401,6 +403,7 @@ def _resolve_contrast_floor(
                 contrast,
                 condition_id,
                 evidence,
+                limitations=limitations,
             )
             if isinstance(request_or_refusal, tuple):
                 request = None
@@ -783,8 +786,9 @@ def _prepare_contrast_v3(
         if len(observations) >= 2
         else None
     )
+    limitations: list[str] = []
     resolutions = _resolve_contrast_floor(
-        inputs, contrast, included_by_condition, request_factory
+        inputs, contrast, included_by_condition, request_factory, limitations=limitations
     )
     floor = _decorate_v3_floor(
         inputs.manifest,
@@ -817,6 +821,7 @@ def _prepare_contrast_v3(
         "estimate": estimate,
         "floor": floor,
         "floor_resolutions": tuple(resolutions),
+        "limitations": list(dict.fromkeys(limitations)),
         "global_reason_codes": ordered_reason_codes(global_reasons),
         "confirmatory_status": confirmatory_status,
         "randomization_check": randomization,
@@ -1082,8 +1087,9 @@ def _prepare_contrast(
         else None
     )
 
+    limitations: list[str] = []
     resolutions = _resolve_contrast_floor(
-        inputs, contrast, included_by_condition, request_factory
+        inputs, contrast, included_by_condition, request_factory, limitations=limitations
     )
     floor = _combined_floor(resolutions)
     if ratio_estimand is not None:
@@ -1128,6 +1134,7 @@ def _prepare_contrast(
         "estimate": estimate,
         "floor": floor,
         "floor_resolutions": tuple(resolutions),
+        "limitations": list(dict.fromkeys(limitations)),
         "global_reason_codes": ordered_reason_codes(global_reasons),
         "confirmatory_status": confirmatory_status,
         "randomization_check": randomization,
@@ -1872,6 +1879,10 @@ def analyze_claims(
         )
 
     limitations = list(inputs.limitations)
+    for prepared in prepared_by_id.values():
+        for note in prepared["limitations"]:
+            if note not in limitations:
+                limitations.append(note)
     floor_cells = {cell["cell_id"]: cell for cell in inputs.floor_artifact.get("cells", [])}
     for contrast, row in zip(inputs.manifest["contrasts"], contrast_rows, strict=True):
         for family, resolution in zip(contrast["floor_selector"]["condition_family_ids"], row["floor"]["resolutions"], strict=True):
