@@ -217,6 +217,34 @@ class HeaderTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'duplicate KV'):
             b.merge([h], [k, k], [])
 
+    def test_manifest_config_key_comes_from_registered_identity(self):
+        self.fixture()
+        header = b.headers(self.root)
+        cache = {key: header[key] for key in ('model_dir', 'revision', 'tokenizer', 'config_sha256')}
+        cache['KV_bytes'] = 20
+        # A deliberately different workload proves the key is read, not guessed
+        # from the model name or a duplicated workload/token constant.
+        project = self.root / 'registered-project'
+        configs = project / 'modules/model'
+        configs.mkdir(parents=True)
+        config = {'model': {'name': 'Qwen3-4B-4bit'},
+                  'workload_profile': {'name': 'registered-workload', 'output_tokens': 777}}
+        (configs / 'run.json').write_text(json.dumps(config))
+        registration = project / 'configs/b6/packs/synthetic/registration.json'
+        registration.parent.mkdir(parents=True)
+        registration.write_text(json.dumps({'blinding_group': 'bytes',
+            'modules': [{'config_dirs': ['modules/model']}]}))
+        baseline, _ = b.merge([header], [cache], [])
+        with mock.patch.object(b, 'ROOT', project):
+            result, _ = b.merge([header], [cache], [])
+        self.assertEqual(result['models'][0]['config_key'], 'Qwen3-4B-4bit|registered-workload|777')
+        old = baseline['models'][0].copy()
+        new = result['models'][0].copy()
+        old.pop('config_key')
+        new.pop('config_key')
+        # Identical records through identical arithmetic; every other field stays exact.
+        self.assertEqual(new, old)
+
 
 class Array:
     def __init__(self, shape, itemsize=2):

@@ -1318,6 +1318,37 @@ class ReviewerProbeTests(unittest.TestCase):
                     print("BYTES_REVIEW_PROBE="+script+"\n"+report,flush=True)
 
 
+class Q1WithheldCensusTests(unittest.TestCase):
+    def test_absent_csv_is_censused_from_collected_session_sidecar(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_json(root / "collected.session.json", {})
+            manifest = {"models": [], "sessions": [{"session_id": "collected", "pass_id": 1,
+                                                       "archive": str(root / "archive")}]}
+            with patch.object(ba, "archive_records", return_value=[]) as read:
+                self.assertEqual(ba.load_records(root, manifest, stage="heldout"), [])
+            self.assertEqual(read.call_args.kwargs["export_path"], root / "collected.runs.csv")
+            self.assertEqual(read.call_args.args[2]["session_id"], "collected")
+
+    def test_missing_file_placeholders_keep_sidecar_counts_and_no_energy(self):
+        model = {"model": "heldout", "config_key": "heldout|registered|512"}
+        info = {"row_count": 100, "config_key_sha256": {
+            hashlib.sha256(model["config_key"].encode()).hexdigest(): 50,
+            hashlib.sha256(b"other|registered|512").hexdigest(): 50}}
+        rows = list(ba._missing_withheld_records(info, {"models": [model]},
+                    {"session_id": "s2-p2", "pass_id": 2}))
+        self.assertEqual(len(rows), 50)
+        self.assertEqual(len({r["run_id"] for r in rows}), 50)
+        self.assertEqual(sum(r["stratum"] == "repeat" for r in rows), 10)
+        self.assertEqual(len({r["unit_id"] for r in rows if r["stratum"] == "quad"}), 10)
+        for row in rows:
+            self.assertEqual(row["withheld_row_count"], 100)
+            self.assertEqual(row["withheld_config_row_count"], 50)
+            self.assertEqual(row["flags"], ["bytes.withheld_missing"])
+            self.assertTrue(row["invalid_energy_record"])
+            self.assertNotIn("rails_j", row)
+
+
 class SubsetReleaseChainTests(unittest.TestCase):
     def command(self, *args, expected=0, cwd=ROOT):
         result = subprocess.run(list(map(str, args)), cwd=cwd, capture_output=True, text=True,

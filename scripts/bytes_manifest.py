@@ -18,6 +18,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 DTYPE_BYTES = {"BOOL": 1, "U8": 1, "I8": 1, "F8_E4M3": 1, "F8_E5M2": 1,
                "I16": 2, "U16": 2, "F16": 2, "BF16": 2, "I32": 4, "U32": 4,
                "F32": 4, "I64": 8, "U64": 8, "F64": 8}
@@ -249,6 +252,26 @@ def kv(model_dir, revision=None):
             **kv_record(start, end)}
 
 
+def registered_config_key(model_name):
+    """Public export identity, derived from the registered run configurations."""
+    from joulewise.b6.blinding import configuration_key
+    directories = set()
+    for path in (ROOT / "configs/b6/packs").glob("*/registration.json"):
+        registration = json.loads(path.read_bytes())
+        if registration.get("blinding_group") == "bytes":
+            directories.update(directory for module in registration.get("modules", [])
+                               for directory in module.get("config_dirs", []))
+    keys = set()
+    for directory in sorted(directories):
+        for path in (ROOT / directory).glob("*.json"):
+            config = json.loads(path.read_bytes())
+            if (config.get("model") or {}).get("name") == model_name:
+                keys.add(configuration_key(config))
+    if len(keys) != 1:
+        raise ValueError("manifest requires one registered configuration identity per model")
+    return keys.pop()
+
+
 def merge(header_records, kv_records, pilot_rows):
     by_dir = {r["model_dir"]: r for r in kv_records}
     if len(by_dir) != len(kv_records):
@@ -267,7 +290,8 @@ def merge(header_records, kv_records, pilot_rows):
             if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
                 raise ValueError("nonfinite or negative byte count")
         b = h["W_bytes"] + k["KV_bytes"]
-        row = {**h, "kv": k, "KV_bytes": k["KV_bytes"], "b_bytes": b,
+        row = {**h, "config_key": registered_config_key(
+                   h.get("model_name", Path(h["model_dir"]).name)), "kv": k, "KV_bytes": k["KV_bytes"], "b_bytes": b,
                "W_GB": h["W_bytes"] / 1e9, "KV_GB": k["KV_bytes"] / 1e9,
                "b_GB": b / 1e9, "R_GB": h["R_bytes"] / 1e9}
         name = h.get("model_name", Path(h["model_dir"]).name).lower()

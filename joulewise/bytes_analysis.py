@@ -514,7 +514,7 @@ def _stage_export_rows(path, *, include_withheld=False):
     reductions or bundles: absence must remain visible to the model reducer.
     """
     path = Path(path)
-    rows = _export_rows(path)
+    rows = _export_rows(path) if path.is_file() else []
     if not include_withheld:
         return rows, False
     sidecar = path.with_name(path.name.removesuffix(".runs.csv") + ".session.json")
@@ -523,11 +523,34 @@ def _stage_export_rows(path, *, include_withheld=False):
     info = read_json(sidecar).get("blinding", {}).get("withheld")
     if info is None:
         return rows, False
+    if not path.is_file():
+        return rows, info
     try:
         merged = rows + _export_rows(path.parent / info["path"])
         return sorted(merged, key=lambda row: int(row["order_index"])), False
     except FileNotFoundError:
-        return rows, True
+        return rows, info
+
+
+def _withheld_counts(info, model):
+    key_digest = hashlib.sha256(model.get("config_key", "").encode("utf-8")).hexdigest()
+    count = info["config_key_sha256"].get(key_digest, 0) if info else 0
+    return {"withheld_row_count": info["row_count"], "withheld_config_row_count": count} if count else {}
+
+
+def _missing_withheld_records(info, manifest, session):
+    """Census-only placeholders; no archive, key, energy or substitute reduction."""
+    for model in manifest["models"]:
+        counts = _withheld_counts(info, model)
+        for index in range(counts.get("withheld_config_row_count", 0)):
+            yield {"model": model["model"], "pass_id": session["pass_id"],
+                "session_id": session["session_id"],
+                "run_id": "withheld-missing:" + model["config_key"] + ":" + str(index),
+                "stratum": "repeat" if index < 10 else "quad",
+                "unit_id": str(index if index < 10 else (index - 10) // 4),
+                "status": "unusable", "invalid_energy_record": True,
+                "excluded": False, "harvest_excluded": False, "meter": None,
+                "flags": ["bytes.withheld_missing"], **counts}
 
 
 def _released_rows(rows, key_dir, *, blinded):
@@ -674,7 +697,9 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
         model = selected[units[0]["cell_id"]]
         row = _record_base(model, session, acceptance["session_id"], member, exclusions, flags, window_flags)
         run_id = row["run_id"]
-        if withheld_missing and run_id not in by_id:
+        counts = _withheld_counts(withheld_missing, model)
+        if counts and run_id not in by_id:
+            row.update(counts)
             row["flags"] = sorted(set(row["flags"]) | {"bytes.withheld_missing"})
         try:
             if run_id not in by_id:
@@ -761,7 +786,11 @@ def load_records(source, manifest, *, stage, key_dir=None, stage1_commit=None):
     # Session names can contain collection clocks. Traversal follows registered
     # pass identity and the manifest's plan-tree position instead.
     session_order = {s["session_id"]: index for index, s in enumerate(manifest["sessions"])}
-    paths = sorted(source.rglob("*.runs.csv"), key=lambda p: (
+    # Sidecars retain the collected-session census even if its CSV vanished.
+    expected = set(source.rglob("*.runs.csv")) | {
+        p.with_name(p.name.removesuffix(".session.json") + ".runs.csv")
+        for p in source.rglob("*.session.json")}
+    paths = sorted(expected, key=lambda p: (
         by_session.get(p.name.removesuffix(".runs.csv"), {}).get("pass_id", 0),
         session_order.get(p.name.removesuffix(".runs.csv"), len(session_order))))
     if not paths:
@@ -978,7 +1007,10 @@ def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
             try:
                 kept, removed = _kept(candidate, inclusive)
             except AnalysisError as exc:
-                rows.append({**base, "status": "unavailable", "reason": str(exc),
+                missing = next((r for r in module if "bytes.withheld_missing" in r["flags"]), None)
+                rows.append({**base, "status": "missing" if missing else "unavailable",
+                             "reason": "withheld rows missing" if missing else str(exc),
+                             **({k: missing[k] for k in ("withheld_row_count", "withheld_config_row_count")} if missing else {}),
                              "unavailable_runs": [r["run_id"] for r in module if r["meter"] is None],
                              "flags": sorted({f for r in module for f in r["flags"]})})
                 continue
@@ -1023,7 +1055,7 @@ def combine_passes(rows):
             raise AnalysisError("one or two distinct passes per model required")
         group.sort(key=lambda r: r["pass_id"])
         planned = group
-        group = [r for r in planned if r.get("status") != "unavailable"]
+        group = [r for r in planned if r.get("status") == "computed"]
         n = len(group)
         pass_status = "two_pass" if n == 2 else "one_pass" if n == 1 else "no_pass"
         planned = [dict(r, pass_status=pass_status, n_passes=n) for r in planned]

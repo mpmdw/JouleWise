@@ -37,6 +37,9 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
     from tests.test_reduce import BundleBuilder, load_config, DEFAULT_IDLE
     from joulewise.interfaces import PowerSample
     design = ba.read_json(FIXTURES / "campaign_design.json")
+    for model in design["models"]:
+        model["config_key"] = blinding.configuration_key({"model": {"name": model["model"]},
+            "workload_profile": {"name": "bytes-synthetic", "output_tokens": 512}})
     manifest = {"synthetic": True, "models": design["models"], "sessions": []}
     rng = random.Random(seed)
     source_state = _capture_source_state()

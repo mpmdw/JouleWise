@@ -88,3 +88,11 @@ After-implementation checks: **not run**, because implementation stopped before 
 Grant `scripts/bytes_manifest.py`, then implement and separately commit/push items 1-5 in order, including the allowed fixture's public configuration identities and sub-pack sessions, disclose-only catalog registration, contract text, any census-listed registry changes and all requested after checks. Preserve actual unavailable pass causes and sidecar counts; retain flags on surviving points and explicit missing presentation rows. No arithmetic, exclusion or Q2 commitment-provenance change is proposed.
 
 **NEEDS_RULING:** none. **Scope expansion required:** `scripts/bytes_manifest.py`.
+
+## Continuation after the 16:15 scope grant — item 1
+
+The investigation and scope stop above are retained as historical diagnostic evidence. The grant authorizes `scripts/bytes_manifest.py` and `tests/test_bytes_manifest.py`; verified continuation base is `fd5a3bc7bab12c0f6e657e2ea814e1372575231f`.
+
+Item 1 DONE: production manifest merge derives the public `config_key` through Block 6's `configuration_key` on registered run configurations. The fixture carries its actual synthetic configuration identity. Collected session sidecars are censused even when the public CSV is absent. Missing-file metadata retains sidecar total `withheld_row_count` and per-model `withheld_config_row_count`; missing cells print `missing`, without changing the estimator or using raw data to replace absent rows. `configs/b6/flag_catalog_b6.json` now registers `bytes.withheld_missing` as DISCLOSE / REPRESENTATION / RECORDS. Focused checks: 16 manifest tests and 2 census tests passed. The unchanged-base complete checks run in a separate local clone at the verified base so source changes cannot affect them.
+
+Items 2–5 remain pending at this checkpoint. No `configs/bytes/` path was edited.
