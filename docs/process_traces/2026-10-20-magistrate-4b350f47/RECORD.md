@@ -77,3 +77,28 @@ Council launched (two blind seats): Opus 5.5 session_01UyvkEnDzbV4N8MEiqDPSso (b
   plist change; the loop's measurement root is `f31aca19f` plus pin-only ledger commits), report JouleWise-data
   `codex/bytes-b1-report` `reports/bytes-b1/REPORT.md`. Brief: `/Users/edr/night-archive/bytes-b1-4b35/BRIEF.md`.
   B2-B6 branch from B1's head and are launched after it lands.
+
+## Results in this activation (07:36-07:40)
+
+- **L9 council finished; lead ruling written:** `L9-RULING.md` beside this record (main 0ae81071e). The seats agreed on
+  LINEAGE (inventory, lineage checks become limitations), EXACTSTACK (exact stack served by the group's single source cell,
+  one shared predicate in `detection_floor.py`) and CONSUMERID (sealed identity unit is the declaration; unauthenticated is a
+  limitation; Sol's executed tag-only counterexample adopted: a non-scientific recording difference is a limitation, a
+  scientific mismatch still refuses). They split on RENDERER (Opus: end step 11 at the fill input; Sol: write a block-5
+  renderer); the lead chose the fill input, as layout and Results rendering are paper-lane work after release, not a science
+  question. Sol's proposed new flag module was not adopted (the existing `inputs.limitations` list carries the strings).
+- **Cold passes on the ruling launched** (claim-path ruling: one Fable, one Opus, blind, executing): Fable 5.1
+  session_017inJc6pMvubvCWYnARDpi3 (`claude/l9-ruling-cold-fable*`, `reports/l9-ruling-cold/fable.md`), Opus 5.5
+  session_01D84CfsWJCuYCxiYUiPwota (`claude/l9-ruling-cold-opus*`, `reports/l9-ruling-cold/opus.md`). A refusal from either
+  that survives the lead's re-execution goes to Ed.
+- **L9 silly numbers (Sol):** items 1-4 done at `lane/2026-10-20-l9-silly-numbers` 090a398bb (fix 9f71c3c6e). Scoped modules:
+  no new failures (28 failures and 3 errors in `test_run_d165_closeout_from_custody.py` were already on the base: historical
+  `/Users/edr/...` custody locators absent in the cloud; they need a Mac run). One dependent test,
+  `tests/test_r4_acceptance_oracle.py`, fails 10 subtests because it hard-codes the retired `ABS_TOL = 1e-12`; the lead read
+  it: `just_beyond_tolerance(delta, ...)` places the zero point just past the old band around each delta (0.2 to 137.5 J), so
+  a correct change fails it; the file is granted to the next round. Sol made the allowance mismatch a closed optional
+  `provenance.diagnostics` entry (no flag channel existed in the mint). Six other 1e-12 sites (bound and allowance
+  agreements) are listed for a later round.
+- **BYTES B1:** merges and regeneration pushed (`lane/2026-10-20-bytes-integration` d924e7acf: config lane onto 1706257c4,
+  analysis lane, addenda through 8, drafts regenerated, synthetic stage chain through CLI processes); its report says the full
+  analysis module was still running.
