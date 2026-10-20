@@ -2142,6 +2142,7 @@ _PROVENANCE_KEYS = {
 _PROVENANCE_OPTIONAL_KEYS = {
     "diagnostics",
     "producer_calibration_plans",
+    "producer_launch_lineages",
     "producer_config_sets",
     "assurance",
     "calibration_custody_store",
@@ -3255,6 +3256,25 @@ def _validate_provenance(
             f"{where}.launch_lineage",
             errors,
         )
+
+    if "producer_launch_lineages" in provenance:
+        inventory = provenance["producer_launch_lineages"]
+        plans = provenance.get("producer_calibration_plans")
+        if "launch_lineage" in provenance:
+            errors.append(f"{where}: launch_lineage and producer_launch_lineages are mutually exclusive")
+        if (provenance["mint_tool_version"] != _FLOOR_MINT_TOOL_VERSION_V2
+            or not isinstance(plans, list) or not isinstance(inventory, list)
+            or len(inventory) != len(plans)):
+            errors.append(f"{where}.producer_launch_lineages: must inventory the v2 producer plans in order")
+        else:
+            for index, (entry, plan) in enumerate(zip(inventory, plans, strict=True)):
+                entry_where = f"{where}.producer_launch_lineages[{index}]"
+                if not _check_keys(entry, {"plan_id", "launch_lineage"}, entry_where, errors):
+                    continue
+                if entry["plan_id"] != plan.get("plan_id"):
+                    errors.append(f"{entry_where}.plan_id: must match producer plan order")
+                if entry["launch_lineage"] is not None:
+                    _validate_launch_lineage_provenance(entry["launch_lineage"], entry_where + ".launch_lineage", errors)
 
     mint_tool_version = provenance["mint_tool_version"]
     is_v2 = mint_tool_version == _FLOOR_MINT_TOOL_VERSION_V2

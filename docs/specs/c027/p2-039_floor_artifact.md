@@ -1013,3 +1013,18 @@ P2-039 implementation acceptance is all of:
 - This is a docs-only specification run; no quiet-machine measurement,
   production calibration, or canonical test-suite run was performed.
 ```
+
+
+### L9 producer lineage inventory (2026-10-20)
+
+A v2 aggregate with one common producer lineage retains `provenance.launch_lineage`.
+When producer lineages differ it instead carries `provenance.producer_launch_lineages`,
+ordered exactly as `producer_calibration_plans`, with `{plan_id, launch_lineage}` entries.
+A legacy producer has a null entry and `floor_producer_lineage_absent:<plan_id>`.
+The two carrier shapes are mutually exclusive. Within one producer, split lineages
+and mixed marker/legacy provenance still refuse `launch_lineage_conflict`.
+Component reconstruction uses each producer's own carrier and checks its pinned
+digest, retaining refusals for changed numerical content or source membership.
+Reopening a minted carrier that cannot be authenticated produces
+`floor_launch_lineage_unauthenticated:<plan_id|aggregate>` in `inputs.limitations`.
+Claim validation re-derives and compares the complete floor-lineage limitation list.

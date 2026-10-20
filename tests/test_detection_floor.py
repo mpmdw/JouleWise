@@ -2369,7 +2369,7 @@ class TestArtifactEmitValidate(unittest.TestCase):
             )
         )
 
-    def test_floor_consumer_refuses_forged_self_authored_launch_lineage(self):
+    def test_floor_consumer_limits_unreconfirmable_launch_lineage(self):
         artifact = make_artifact()
         artifact["provenance"]["launch_lineage"] = launch_lineage()
         raw = (
@@ -2377,11 +2377,8 @@ class TestArtifactEmitValidate(unittest.TestCase):
         ).encode("utf-8")
 
         self.assertEqual(validate_floor_artifact(artifact), [])
-        with self.assertRaisesRegex(
-            AnalysisInputError,
-            "launch_consumption_missing",
-        ):
-            authenticate_floor_artifact_bytes(raw)
+        admitted = authenticate_floor_artifact_bytes(raw)
+        self.assertEqual(admitted.limitations, ("floor_launch_lineage_unauthenticated:aggregate",))
 
     def test_floor_consumer_reauthenticates_real_completed_launch_lineage(self):
         launch = arm_readiness_tests.LaunchConsumptionV2Tests()

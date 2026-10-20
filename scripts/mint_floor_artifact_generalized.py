@@ -3473,12 +3473,18 @@ def _build_v2_artifacts(
         aggregate_provenance["calibration_custody_store"] = copy.deepcopy(
             custody_store_provenance
         )
-    aggregate_launch_lineage = _common_minted_artifact_launch_lineage(
-        component_artifacts,
-        label="aggregate components",
-    )
-    if aggregate_launch_lineage is not None:
-        aggregate_provenance["launch_lineage"] = aggregate_launch_lineage
+    # A producer remains one window; the aggregate inventories independently
+    # authenticated producer windows instead of requiring them to be identical.
+    producer_lineages = [component["provenance"].get("launch_lineage")
+                         for component in component_artifacts]
+    if all(lineage == producer_lineages[0] for lineage in producer_lineages):
+        if producer_lineages[0] is not None:
+            aggregate_provenance["launch_lineage"] = copy.deepcopy(producer_lineages[0])
+    else:
+        aggregate_provenance["producer_launch_lineages"] = [
+            {"plan_id": plan["plan_id"], "launch_lineage": copy.deepcopy(lineage)}
+            for plan, lineage in zip(producer_plan_records, producer_lineages, strict=True)
+        ]
     artifact = {
         **copy.deepcopy(component_artifacts[0]),
         "artifact_id": aggregate["artifact_id"],
@@ -3685,12 +3691,19 @@ def _validate_v2_artifact_binding(
                 component["provenance"]["calibration_custody_store"] = (
                     copy.deepcopy(provenance["calibration_custody_store"])
                 )
-            if provenance.get("launch_lineage") is not None:
-                # _build_v2_artifacts gives every component its producer's
-                # lineage and the aggregate carries the one common value.
-                component["provenance"]["launch_lineage"] = copy.deepcopy(
-                    provenance["launch_lineage"]
-                )
+            lineage = provenance.get("launch_lineage")
+            if "producer_launch_lineages" in provenance:
+                inventory = provenance["producer_launch_lineages"]
+                if (not isinstance(inventory, list)
+                    or [row.get("plan_id") for row in inventory if isinstance(row, Mapping)]
+                       != [plan["plan_id"] for plan in expected_producer_plans]):
+                    errors.append("artifact.provenance: producer lineage inventory mismatch")
+                    continue
+                lineage = inventory[value["producer_plans"].index(producer)].get("launch_lineage")
+            if lineage is not None:
+                # Rebuilding the digest-pinned component also binds its carrier;
+                # altered numbers or source membership still fail this digest.
+                component["provenance"]["launch_lineage"] = copy.deepcopy(lineage)
             component["cells"] = [
                 copy.deepcopy(cell_by_id[cell_id])
                 for cell_id in producer_cell_ids

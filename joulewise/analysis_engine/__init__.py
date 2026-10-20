@@ -1919,7 +1919,7 @@ def analyze_claims(
             },
             "runs_root_label": Path(runs_root).name or "runs",
             "evidence_class": evidence_class,
-            "limitations": ["legacy_l1_mechanics_only"] if legacy_l1_mechanics else [],
+            "limitations": (["legacy_l1_mechanics_only"] if legacy_l1_mechanics else []) + list(inputs.limitations),
         },
         "supersession_audit": [
             dict(row) for row in inputs.supersession_audit

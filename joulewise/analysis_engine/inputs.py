@@ -518,6 +518,7 @@ class AuthenticatedFloorArtifact:
     raw_bytes: bytes
     file_sha256: str
     root_ids: frozenset[str]
+    limitations: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -698,6 +699,7 @@ class LoadedAnalysisInputs:
     unregistered_matching: tuple[Mapping[str, Any], ...]
     top_up_entry_ids: frozenset[str]
     floor_artifact_bytes: bytes = b""
+    limitations: tuple[str, ...] = ()
     supersession_audit: tuple[Mapping[str, Any], ...] = ()
     supersession_diverged: bool = False
     kept_quads: Mapping[str, CellKeptUnits] | None = None
@@ -1088,27 +1090,24 @@ def authenticate_floor_artifact_bytes(
             "floor artifact bytes artifact_id does not match bound artifact_id"
         )
     provenance = value.get("provenance")
-    stored_launch_lineage = (
-        provenance.get("launch_lineage")
-        if isinstance(provenance, Mapping)
-        else None
-    )
-    if isinstance(stored_launch_lineage, Mapping):
-        # A minted carrier is metadata, not authority. Claim-bearing admission
-        # independently reopens consumption/start/settle/completion; consumers
-        # without those receipts must refuse rather than trust copied digests.
+    limitations: list[str] = []
+    inventory = provenance.get("producer_launch_lineages") if isinstance(provenance, Mapping) else None
+    carriers = ([(row["plan_id"], row["launch_lineage"]) for row in inventory]
+                if isinstance(inventory, list) else
+                [("aggregate", provenance["launch_lineage"])]
+                if isinstance(provenance, Mapping) and "launch_lineage" in provenance else [])
+    for scope, stored in carriers:
+        if stored is None:
+            limitations.append(f"floor_producer_lineage_absent:{scope}")
+            continue
+        # Mint already authenticated the producer; reopening a record cannot
+        # change the digest-pinned numerical components or source membership.
         try:
-            authenticated_launch = authenticate_launch_lineage(
-                stored_launch_lineage,
-                require_completion=True,
-            )
-        except LaunchLineageError as exc:
-            raise AnalysisInputError(f"{exc.reason_code}: {exc}") from exc
-        if authenticated_launch.get("launch_lineage") != stored_launch_lineage:
-            raise AnalysisInputError(
-                "launch_lineage_conflict: floor artifact lineage differs from "
-                "directly authenticated receipts"
-            )
+            authenticated = authenticate_launch_lineage(stored, require_completion=True)
+            if authenticated.get("launch_lineage") != stored:
+                limitations.append(f"floor_launch_lineage_unauthenticated:{scope}")
+        except LaunchLineageError:
+            limitations.append(f"floor_launch_lineage_unauthenticated:{scope}")
     root_ids = frozenset(
         root_id
         for cell in value.get("cells", [])
@@ -1126,6 +1125,7 @@ def authenticate_floor_artifact_bytes(
         raw_bytes=raw,
         file_sha256=digest,
         root_ids=root_ids,
+        limitations=tuple(limitations),
     )
 
 
@@ -3856,6 +3856,7 @@ def load_analysis_inputs(
         floor_artifact=floor_artifact,
         floor_sha256=floor_sha,
         floor_artifact_bytes=authenticated_floor.raw_bytes,
+        limitations=authenticated_floor.limitations,
         floor_binding=floor_binding,
         registered=registered,
         effective=effective,

@@ -1092,9 +1092,15 @@ def validate_claim_verdicts(
                         f"{exc}"
                     )
                 else:
-                    authenticated_floor_root_ids = set(
-                        authenticated_floor.root_ids
-                    )
+                    authenticated_floor_root_ids = set(authenticated_floor.root_ids)
+                    # Other scoped limitations are derived by the consumer route.
+                    # Compare the complete floor-lineage subsequence exactly so
+                    # neither a missing nor an invented carrier note validates.
+                    floor_notes = [note for note in inputs.get("limitations", [])
+                                   if isinstance(note, str) and note.startswith(
+                                       ("floor_launch_lineage_unauthenticated:", "floor_producer_lineage_absent:"))]
+                    if floor_notes != list(authenticated_floor.limitations):
+                        errors.append("artifact.inputs.limitations: disagrees with authenticated floor lineage limitations")
         if not _relative_label(inputs["runs_root_label"]):
             errors.append("artifact.inputs.runs_root_label: must be a relative label")
         if not isinstance(inputs["evidence_class"], str) or inputs[

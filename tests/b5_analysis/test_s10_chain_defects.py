@@ -24,10 +24,11 @@ def _lineage_bearing_artifacts(lineage_for_index):
         lineage = lineage_for_index(producer_index)
         plan_id = producer["plan"]["plan_id"]
         report = copy.deepcopy(inputs[plan_id].cells["decode"].absolute.report)
-        report["launch_lineage"] = copy.deepcopy(lineage)
-        for report_cell in report["cells"]:
-            for member_row in report_cell["members"]:
-                member_row["launch_lineage"] = copy.deepcopy(lineage)
+        if lineage is not None:
+            report["launch_lineage"] = copy.deepcopy(lineage)
+            for report_cell in report["cells"]:
+                for member_row in report_cell["members"]:
+                    member_row["launch_lineage"] = copy.deepcopy(lineage)
         g._reattach_producer_report(pinset, inputs, producer_index, report)
         producer_input = inputs[plan_id]
         inputs[plan_id] = replace(producer_input, cells={
@@ -57,6 +58,7 @@ def _lineage_bearing_artifacts(lineage_for_index):
         producer["component_artifact"]["sha256"] = generalized._artifact_sha256(component)
         entry["sha256"] = producer["component_artifact"]["sha256"]
     g._repair_v2_pinset_self_hashes(pinset)
+    artifact["provenance"]["calibration_plan"]["sha256"] = pinset["aggregate"]["producer_set_sha256"]
     return artifact, components, pinset
 
 
@@ -178,31 +180,47 @@ def _window_lineage(index):
     return lineage
 
 
-class QLineageConditionalSeamTests(unittest.TestCase):
-    """Q-LINEAGE is open: the unchanged rule refuses two windows; the fixture seam's option is pinned here."""
+class QLineageRulingTests(unittest.TestCase):
+    def test_two_windows_inventory_and_component_hashes(self):
+        artifact, components, pinset = _lineage_bearing_artifacts(_window_lineage)
+        self.assertNotIn("launch_lineage", artifact["provenance"])
+        self.assertEqual(artifact["provenance"]["producer_launch_lineages"], [
+            {"plan_id": p["plan"]["plan_id"], "launch_lineage": c["provenance"]["launch_lineage"]}
+            for p, c in zip(pinset["producer_plans"], components, strict=True)])
+        with tempfile.TemporaryDirectory() as tmp:
+            path, digest = g.write_pinset(Path(tmp), pinset)
+            loaded = generalized.load_pinset(path, digest)
+            self.assertEqual(generalized._validate_v2_artifact_binding(artifact, loaded), [])
+            changed = copy.deepcopy(artifact)
+            changed["provenance"]["producer_launch_lineages"][0]["launch_lineage"]["window_id"] = "other"
+            self.assertTrue(any("component artifact hash mismatch" in e
+                                for e in generalized._validate_v2_artifact_binding(changed, loaded)))
+            changed = copy.deepcopy(artifact)
+            changed["cells"][0]["floor_gate_j"] += 1.0
+            self.assertTrue(any("component artifact hash mismatch" in e
+                                for e in generalized._validate_v2_artifact_binding(changed, loaded)))
 
-    def test_two_window_lineages_refuse_under_the_unchanged_rule(self):
-        with self.assertRaisesRegex(generalized.MintError,
-                                    "launch_lineage_conflict: aggregate components does not carry one"):
-            _lineage_bearing_artifacts(_window_lineage)
+    def test_split_producer_and_mixed_producer_still_refuse(self):
+        for second in (_window_lineage(1), None):
+            with self.subTest(mixed=second is None), self.assertRaisesRegex(generalized.MintError, "launch_lineage_conflict: producer"):
+                generalized._common_minted_artifact_launch_lineage(
+                    [{"provenance": {"launch_lineage": _window_lineage(0)}},
+                     {"provenance": {} if second is None else {"launch_lineage": second}}], label="producer 'p' cells")
 
-    def test_conditional_seam_omits_the_aggregate_carrier_and_rebinds_each_producer(self):
-        from tests.b5_analysis.fixtures_s10 import conditional_aggregate_lineage_seam
-        with conditional_aggregate_lineage_seam():
-            artifact, components, pinset = _lineage_bearing_artifacts(_window_lineage)
-            self.assertNotIn("launch_lineage", artifact["provenance"])
-            self.assertEqual([c["provenance"]["launch_lineage"]["window_id"] for c in components],
-                             ["window-1", "window-2"])
-            with tempfile.TemporaryDirectory() as tmp:
-                path, digest = g.write_pinset(Path(tmp), pinset)
-                errors = generalized._validate_v2_artifact_binding(artifact,
-                                                                   generalized.load_pinset(path, digest))
-        self.assertFalse([e for e in errors if "component artifact hash mismatch" in e], errors)
-        # Within one producer the cells must still share one lineage.
-        with conditional_aggregate_lineage_seam(), self.assertRaisesRegex(generalized.MintError, "producer"):
-            generalized._common_minted_artifact_launch_lineage(
-                [{"provenance": {"launch_lineage": _window_lineage(0)}},
-                 {"provenance": {"launch_lineage": _window_lineage(1)}}], label="producer 'p' cells")
+    def test_mixed_aggregate_records_absent_producer(self):
+        from joulewise.analysis_engine.inputs import authenticate_floor_artifact_bytes
+        import json
+        artifact, components, pinset = _lineage_bearing_artifacts(lambda i: _window_lineage(0) if i == 0 else None)
+        absent = pinset["producer_plans"][1]["plan"]["plan_id"]
+        self.assertIsNone(artifact["provenance"]["producer_launch_lineages"][1]["launch_lineage"])
+        with tempfile.TemporaryDirectory() as tmp:
+            path, digest = g.write_pinset(Path(tmp), pinset)
+            loaded = authenticate_floor_artifact_bytes(json.dumps(artifact).encode(), pinset_path=path,
+                                                       expected_pinset_sha256=digest)
+        self.assertEqual(loaded.limitations, (
+            "floor_launch_lineage_unauthenticated:" + pinset["producer_plans"][0]["plan"]["plan_id"],
+            "floor_producer_lineage_absent:" + absent))
+
 
 
 class OrderManifestBesidePlanCopyTests(unittest.TestCase):
