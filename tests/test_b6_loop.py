@@ -146,6 +146,39 @@ class LoopTests(unittest.TestCase):
         self.loop.tick()
         self.assertEqual(len(self.messages("close")), 1)
 
+    def test_bytes_drafts_never_enter_live_loop_despite_base_order(self):
+        # Exercise the production Git/status gate, not the queue's injectable
+        # registration seam. R8 drafts remain unarmable until registration.
+        ids = {f"bytes-s{n}-p{p}" for n in range(1, 7) for p in (1, 2)}
+        self.assertTrue(ids.issubset(self.loop.config["base_order"]))
+        self.loop.regs_source = None
+
+        def local_git(argv):
+            self.assertEqual(argv[:3], ["git", "-C", str(ROOT)])
+            self.assertIn(argv[3], {"ls-files", "status", "log"})
+            return subprocess.run(argv, capture_output=True, text=True, check=False)
+
+        self.loop.run = local_git
+        self.loop.state = self.loop.read_state()
+        self.loop._registrations()
+        opened = dict(self.loop.regs)
+        self.assertEqual(set(opened), {"alpha", "beta", "gamma"})
+        rejected = self.loop.state["pack_not_open"]
+        self.assertEqual(set(rejected), {f"configs/b6/packs/{p}/registration.json" for p in ids})
+        for reasons in rejected.values():
+            self.assertIn("draft", reasons)
+
+        # Reuse this real gate's result through the synthetic lifecycle. Its
+        # nine slots come from the replication target: three packs x three.
+        self.loop.regs_source, self.loop.run = opened, self.runner
+        self.tick_to("DONE", 200)
+        state = self.state()
+        self.assertEqual([a["packs"][0] for a in state["attempts"]],
+                         ["alpha", "beta", "gamma", "beta", "gamma", "alpha", "gamma", "alpha", "beta"])
+        self.assertTrue(all(ids.isdisjoint(a["packs"]) for a in state["attempts"]))
+        self.assertTrue(ids.isdisjoint(state["packs"]))
+        self.assertTrue(ids.isdisjoint(p for selection in self.precheck.calls for p in selection))
+
     def test_transient_missing_pack_not_close_and_return_resumes(self):
         self.loop.regs_source = registrations(target=1)
         for _ in range(2):
