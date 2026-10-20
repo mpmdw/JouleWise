@@ -1,0 +1,90 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "published": true
+    }
+  ],
+  "boot_changed": [],
+  "ended": {
+    "monotonic_ns": 468667042335166,
+    "monotonic_raw_ns": 468667042334833,
+    "wall_s": 1792484330.058552
+  },
+  "locators": {
+    "bound": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "recorded_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "root": "/Users/edr/night-b6/sessions/r3-alpha/runs-parent/runs_d117_floor_qwen3-1p7b_v5_bound",
+      "sha256": "f33d9efff5f9903406fdcb9fc3cc31c12a97bfa8208bab26c68cf153ace9cd93",
+      "valid": true
+    },
+    "claim": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "recorded_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "root": "/Users/edr/night-b6/sessions/r3-alpha/runs-parent/runs_d117_floor_qwen3-1p7b_v5",
+      "sha256": "242c5b4e2235701b1dc1d0f31b44cd9f817757e851eda21d7a07e377291ce33c",
+      "valid": true
+    }
+  },
+  "locators_valid": true,
+  "published": true,
+  "requested": {
+    "monotonic_ns": 468667031792458,
+    "monotonic_raw_ns": 468667031792250,
+    "wall_s": 1792484330.048009
+  },
+  "result": {
+    "launch_lineage": {
+      "bracket_session_id": "r3-alpha-calibration",
+      "collection_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "launch_record": {
+        "path": "/Users/edr/night-b6/sessions/r3-alpha/custody/window_lineage/launch.json",
+        "sha256": "1338a7fed93f2e5850920f602beda7a6e15140ede2ae9fc2557c2e244ee86f28"
+      },
+      "pack_id": "d117_floor_qwen3-1p7b_v5",
+      "pack_root": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/configs/campaigns/d117_floor_qwen3-1p7b_v5",
+      "pack_sha256": "aba21a588c41c9767bd46eac1ea12a22451fece16f795b197eefbf27b56f031e",
+      "plan_id": "plan-d117-floor-qwen3-1p7b-decode-prefill-p2048-v5",
+      "plan_tree_sha256": "2ec3625a31b796e3fa37e2c39f37508618b649d0d9f61ddbd3fdfe2c5a282809",
+      "schema_version": "joulewise.hazard_window_lineage.v1",
+      "window_context": {
+        "bound_runs_root": "/Users/edr/night-b6/sessions/r3-alpha/runs-parent/runs_d117_floor_qwen3-1p7b_v5_bound",
+        "claim_runs_root": "/Users/edr/night-b6/sessions/r3-alpha/runs-parent/runs_d117_floor_qwen3-1p7b_v5",
+        "custody_root": "/Users/edr/night-b6/sessions/r3-alpha/custody",
+        "night_dir": "/Users/edr/night-b6/sessions/r3-alpha/custody/night",
+        "post_attempt_id": "r3-alpha-cal-post",
+        "pre_attempt_id": "r3-alpha-cal-pre"
+      },
+      "window_id": "plan-d117-floor-qwen3-1p7b-decode-prefill-p2048-v5"
+    },
+    "locators": {
+      "bound_runs_root": {
+        "path": "/Users/edr/night-b6/sessions/r3-alpha/runs-parent/runs_d117_floor_qwen3-1p7b_v5_bound/.joulewise-launch-lineage.json",
+        "sha256": "f33d9efff5f9903406fdcb9fc3cc31c12a97bfa8208bab26c68cf153ace9cd93"
+      },
+      "claim_runs_root": {
+        "path": "/Users/edr/night-b6/sessions/r3-alpha/runs-parent/runs_d117_floor_qwen3-1p7b_v5/.joulewise-launch-lineage.json",
+        "sha256": "242c5b4e2235701b1dc1d0f31b44cd9f817757e851eda21d7a07e377291ce33c"
+      }
+    },
+    "records": {
+      "authorization": {
+        "path": "/Users/edr/night-b6/sessions/r3-alpha/custody/window_lineage/authorization.json",
+        "sha256": "52158ffdc0cdcd9429192f35eda4e20afc41f0c8c93d31d6003699edcf21606f"
+      },
+      "go": {
+        "path": "/Users/edr/night-b6/sessions/r3-alpha/custody/window_lineage/go.json",
+        "sha256": "a5299c67c9515285a9bc7fa3aee989d34a285b71aeca747ae0d03088aebbd7ae"
+      },
+      "launch": {
+        "path": "/Users/edr/night-b6/sessions/r3-alpha/custody/window_lineage/launch.json",
+        "sha256": "1338a7fed93f2e5850920f602beda7a6e15140ede2ae9fc2557c2e244ee86f28"
+      }
+    },
+    "unrecorded": []
+  },
+  "schema": "joulewise.b5_lineage_publication.v1"
+}
