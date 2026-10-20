@@ -1,0 +1,70 @@
+{
+  "call": 1,
+  "ran_by": "arm",
+  "results": [
+    {
+      "argv": [
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/.venv/bin/python",
+        "-B",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/scripts/collect_window_flags.py",
+        "--stage",
+        "arm",
+        "--custody",
+        "/Users/edr/night-b6/sessions/r3-gamma/custody",
+        "--repo",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6",
+        "--pack",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
+        "--plan-id",
+        "r3-gamma",
+        "--attempt",
+        "1",
+        "--h-claim",
+        "ed22b3d3bbda2219e92063b6b7fec861ab522d55",
+        "--chain",
+        "/Users/edr/night-b6/sessions/r3-gamma/custody/chain.zsh",
+        "--chain-sidecar",
+        "/Users/edr/night-b6/sessions/r3-gamma/custody/chain.zsh.sha256",
+        "--ledger",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/runs/calibration_observation_ledger.jsonl",
+        "--head-pin",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/configs/calibration/calibration_ledger_head.json",
+        "--session-id",
+        "r3-gamma-calibration",
+        "--expected-pack-tree-sha256",
+        "1c0448fdb62aa6394f0172d777f6bb33fb435f4b225ad7a1d452253a21e7d4e8",
+        "--calibration-plan",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/calibration_plan.json",
+        "--catalog",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/configs/campaigns/v5_claim_25g83/flag_catalog.json",
+        "--sealed-inventory",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/configs/campaigns/v5_claim_25g83/sealed_inventory.json",
+        "--identity-pins",
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261018T0023Z-b6/configs/campaigns/v5_claim_25g83/identity_pins.json"
+      ],
+      "elapsed_s": 6.408584791,
+      "error": null,
+      "finished": {
+        "monotonic_ns": 439286160401541,
+        "monotonic_raw_ns": 439286160401250,
+        "wall_ns": 1792454949176618000
+      },
+      "name": "flags.arm",
+      "returncode": 0,
+      "started": {
+        "monotonic_ns": 439279751816750,
+        "monotonic_raw_ns": 439279751816416,
+        "wall_ns": 1792454942768033000
+      },
+      "stderr": "",
+      "stdout": {
+        "name": "collector-flags.arm.stdout",
+        "path": "hazards/arm-raw/collector-flags.arm.stdout",
+        "sha256": "17196cecb69f677fa81ad57e61a1b2f887d37007fd4efeff82e3f96a52e092eb",
+        "size": 453
+      },
+      "timed_out": false
+    }
+  ],
+  "schema": "joulewise.b5_arm_collectors.v1"
+}
