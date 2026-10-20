@@ -26,6 +26,48 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests/fixtures/bytes"
 
 
+class NumericTestCase(unittest.TestCase):
+    def assertAlmostEqual(self, first, second, places=None, msg=None, delta=None):
+        # With no printed half-width, the brief specifies 1e-6 relative or
+        # absolute in the quantity's unit. This replaces magnitude-blind seven
+        # decimal places, including in the small hand-worked examples.
+        if delta is None:
+            delta = 1e-6 * max(1.0, abs(first), abs(second))
+        return super().assertAlmostEqual(first, second, msg=msg, delta=delta)
+
+
+def assert_d3_exercised(test, records, manifest):
+    """Run the competing D3 method: substitute rails allowance AND scale."""
+    changed = []
+    for record in records:
+        refs = record["neg8_inputs"]
+        changed.append(dict(record, neg8_inputs={**refs, "boundaries": {
+            **refs["boundaries"], "rest": refs["boundaries"]["rails"]}}))
+    correct, substituted = [], []
+    for inclusive in (False, True):
+        correct += ba.reduce_models(records, manifest, inclusive=inclusive, boundaries=("rest",))
+        substituted += ba.reduce_models(changed, manifest, inclusive=inclusive, boundaries=("rest",))
+    # Check both passes and their primary mean, both idle families and both
+    # selections: ten models * (two passes + mean) * two bases * two selections.
+    pairs = list(zip(correct, substituted)) + list(zip(ba.combine_passes(correct), ba.combine_passes(substituted)))
+    test.assertEqual(len(pairs), len(manifest["models"]) * 3 * 2 * 2)
+    ratios, agreement_bars = [], []
+    for actual, wrong in pairs:
+        test.assertEqual(actual["status"], "computed")
+        test.assertEqual(wrong["status"], "computed")
+        gap = abs(actual["B_j"] - wrong["B_j"])
+        label = (actual["model"], actual.get("pass_id", "mean"), actual["basis"], actual["selection"])
+        # P3/Addendum 8.4: at least 10% of rest B, ten 1%-B bars.
+        test.assertGreaterEqual(gap, .10 * actual["B_j"], label)
+        # The actual energy agreement bar is 1% of (h+B), Addendum 8.1/5.
+        # Ensure this fixture clears ten of those bars too, including h.
+        test.assertGreaterEqual(gap, 10 * .01 * (actual["h_j"] + actual["B_j"]), label)
+        ratios.append(gap / actual["B_j"])
+        agreement_bars.append(gap / (.01 * (actual["h_j"] + actual["B_j"])))
+    return {"rest_cells": len(pairs), "min_gap_over_B": min(ratios),
+            "min_agreement_bars": min(agreement_bars)}
+
+
 def fit_points():
     return [{"bytes": x, "resident": x, "time": x, "e": 2 * x,
              "lower": 2 * x - 1, "upper": 2 * x + 1} for x in (1, 2, 3)]
@@ -36,7 +78,7 @@ def query(b=2, r=10, t=20, e=4, width=0):
             "lower": e - width, "upper": e + width}
 
 
-class H1WorkedExamples(unittest.TestCase):
+class H1WorkedExamples(NumericTestCase):
     def test_line_and_all_eight_corners_by_hand(self):
         frozen = ba.freeze_lines(fit_points())
         self.assertEqual(frozen["bytes"]["line"], [0, 2])
@@ -92,7 +134,7 @@ class H1WorkedExamples(unittest.TestCase):
             ba.active_or_resident([])
 
 
-class H2WorkedExamples(unittest.TestCase):
+class H2WorkedExamples(NumericTestCase):
     def test_two_term_hand_computed(self):
         # Centered x [-2,-1,0,1,2]; residuals [1,-2,2,-2,1] are orthogonal
         # to intercept and x. beta=[3,2], SSE=14, MSE=14/3, Sxx=10.
@@ -101,7 +143,7 @@ class H2WorkedExamples(unittest.TestCase):
         self.assertAlmostEqual(fit["coefficients"][1], 2)
         self.assertAlmostEqual(fit["mse"], 14 / 3)
         self.assertAlmostEqual(fit["ols_covariance"][1][1], 7 / 15)
-        self.assertAlmostEqual(fit["critical"], 3.182446305, places=8)
+        self.assertAlmostEqual(fit["critical"], 3.182446305)
         half = fit["critical"] * math.sqrt(fit["covariance"][1][1])
         self.assertAlmostEqual(fit["intervals"][1][0], 2 - half)
         self.assertAlmostEqual(fit["intervals"][1][1], 2 + half)
@@ -121,6 +163,20 @@ class H2WorkedExamples(unittest.TestCase):
         self.assertEqual(fit["family_size"], 9)
         self.assertGreater(fit["critical"], ba.student_t_quantile(.975, 5))
 
+    def test_inverse_guard_scales_with_matrix_and_leverage_refuses(self):
+        # Scaling the same well-conditioned Gram matrix must not turn it
+        # singular. 1e-14 is below the old absolute 1e-12 cutoff; the
+        # condition number remains one, so no precision is lost.
+        for scale in (1.0, 1e-14, 1e14):
+            inverse = ba._inverse([[scale, 0.0], [0.0, scale]])
+            for i in range(2):
+                for j in range(2):
+                    self.assertAlmostEqual(inverse[i][j] * scale, float(i == j))
+        # A unique nonzero predictor is an exact unit-leverage row: HC3's
+        # divisor 1-h is zero at floating-point resolution.
+        with self.assertRaisesRegex(ba.AnalysisError, "unit leverage"):
+            ba.ols([[0], [0], [0], [0], [1]], [1, 2, 1, 2, 3])
+
     def test_scale_invariance_and_singular_refusal(self):
         fit = ba.ols([[x * 1e9] for x in range(5)], [4, 3, 9, 7, 12])
         self.assertAlmostEqual(fit["coefficients"][1] * 1e9, 2)
@@ -128,7 +184,7 @@ class H2WorkedExamples(unittest.TestCase):
             ba.ols([[x, 2*x] for x in range(5)], list(range(5)))
 
 
-class MeterWorkedExamples(unittest.TestCase):
+class MeterWorkedExamples(NumericTestCase):
     def stream(self, watts=None):
         # Exact host/device clock line, with two batches; parse calls clock_fit.
         samples = kp.Samples([i * 100 for i in range(101)], [1] * 101,
@@ -169,7 +225,7 @@ class MeterWorkedExamples(unittest.TestCase):
             ba.meter_decode(self.stream(), [-1, 6_000_000_000], [1, 2])
 
 
-class RegisteredArithmeticTests(unittest.TestCase):
+class RegisteredArithmeticTests(NumericTestCase):
     def estimate(self, repeats, means):
         bounds = dict(zip(ba.BOUND_KINDS, (.01, 0, .05)))
         return ba.estimate_phase_energy(repeats, [[v] * 4 for v in means],
@@ -187,6 +243,9 @@ class RegisteredArithmeticTests(unittest.TestCase):
             self.assertAlmostEqual(actual["interval"]["variance"], variance)
             self.assertAlmostEqual(actual["interval"]["B_j"], .06)
             self.assertEqual(actual["interval"]["df"], df)
+            # The registered worked endpoints are printed to four decimals:
+            # half a 0.0001 J last digit is 0.00005 J, inside the stated
+            # [2.2e-6, 1.3e-4] J admissible absolute-energy window.
             self.assertAlmostEqual(actual["lower_j"], endpoints[0], delta=.00005)
             self.assertAlmostEqual(actual["upper_j"], endpoints[1], delta=.00005)
 
@@ -238,7 +297,7 @@ class RegisteredArithmeticTests(unittest.TestCase):
             ba._registered_estimate(rows, [-1]*37, bounds)
 
 
-class BoundaryAndStagingTests(unittest.TestCase):
+class BoundaryAndStagingTests(NumericTestCase):
     def points(self):
         points = []
         for selection in ("primary", "flagged-inclusive"):
@@ -329,7 +388,10 @@ class BoundaryAndStagingTests(unittest.TestCase):
             self.assertIsInstance(result["resident_adds_nothing"], bool)
             primary += result["primary_intervals"]
             if boundary == "rest":
-                self.assertAlmostEqual(result["rest"]["coefficients"][2], .4, delta=.03)
+                # Synthetic recovery is judged by this coefficient's own
+                # ruled HC3 half-width, not an invented lambda tolerance.
+                half = (result["rest"]["intervals"][2][1] - result["rest"]["intervals"][2][0]) / 2
+                self.assertAlmostEqual(result["rest"]["coefficients"][2], .4, delta=half)
         self.assertEqual(len(primary), 29)
 
     def test_resident_adds_nothing_rule_positive_negative_and_zero(self):
@@ -409,7 +471,7 @@ archive_campaign = _campaign.archive_campaign
 release_keys = _campaign.release_keys
 
 
-class ProductionArchiveTests(unittest.TestCase):
+class ProductionArchiveTests(NumericTestCase):
     def test_synthetic_harvest_export_release_chain_uses_cli_processes(self):
         from collections import Counter
         from joulewise.b6 import blinding, export_runs
@@ -503,7 +565,12 @@ class ProductionArchiveTests(unittest.TestCase):
             self.assertEqual(len(heldout), 700)
             self.assertEqual(len({(r["model"], r["pass_id"]) for r in fit + heldout}), 20)
             for row in fit + heldout:
-                self.assertAlmostEqual(row["meter"]["gross_j"], 2 * row["rails_j"], delta=1e-3)
+                # The independent native 10 Hz integration can move each
+                # edge by r_max + 0.1 s; phase_edge_j is the resulting
+                # (P_start+P_end)*dt envelope. The meter stores integer uW,
+                # adding at most half a uW times the integrated duration.
+                integration_bar = row["meter"]["phase_edge_j"] + .5e-6 * row["duration_s"]
+                self.assertAlmostEqual(row["meter"]["gross_j"], 2 * row["rails_j"], delta=integration_bar)
             _write_json(root/"manifest.json",manifest)
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(bytes_analyze.main(["--export",str(root/"export"),"--manifest",str(root/"manifest.json"),
@@ -609,25 +676,31 @@ class ProductionArchiveTests(unittest.TestCase):
         self.assertEqual(sum(p["status"]=="computed" for p in points),2)
 
 
-class CampaignWordRates(unittest.TestCase):
+class CampaignWordRates(NumericTestCase):
     def test_twenty_production_shaped_campaigns_per_world(self):
         from collections import Counter
         design = ba.read_json(FIXTURES / "campaign_design.json")
         report = []
         for world, seeds in design["seeds"].items():
             words, coverage = Counter(), Counter()
+            d3 = []
+            duration_scale = statistics.fmean(design["main_campaign"]["pass_duration_scales"])
             held_models = [m["model"] for m in design["models"] if m["role"]=="heldout"]
             # Population OLS slope for the fixed ten-model design; resident
             # world also reports the structural epsilon of the extended fit.
-            xs = [(m["W_bytes"]+m["KV_bytes"])/1e9*512/m["synthetic_duration_s"] for m in design["models"]]
+            xs = [(m["W_bytes"]+m["KV_bytes"])/1e9*512/(m["synthetic_duration_s"] * duration_scale) for m in design["models"]]
             ys = [.01*x if world=="bytes" else 3 if world=="time" else
-                  .01*m["R_bytes"]/1e9*512/m["synthetic_duration_s"] for x,m in zip(xs,design["models"])]
+                  .01*m["R_bytes"]/1e9*512/(m["synthetic_duration_s"] * duration_scale) for x,m in zip(xs,design["models"])]
             mx,my = statistics.fmean(xs),statistics.fmean(ys)
             epsilon = math.fsum((x-mx)*(y-my) for x,y in zip(xs,ys))/math.fsum((x-mx)**2 for x in xs)
             for seed in seeds:
                 with tempfile.TemporaryDirectory() as directory:
                     root = Path(directory)
-                    manifest = archive_campaign(root, world=world, seed=seed)
+                    manifest = archive_campaign(root, world=world, seed=seed,
+                        pass_duration_scales=design["main_campaign"]["pass_duration_scales"],
+                        clock_latency_ms=design["main_campaign"]["clock_latency_ms"])
+                    records = ba.load_records(root / "export", manifest, stage="all")
+                    d3.append(assert_d3_exercised(self, records, manifest))
                     _write_json(root/"manifest.json",manifest)
                     with contextlib.redirect_stdout(io.StringIO()):
                         code = bytes_analyze.main(["--export",str(root/"export"),"--manifest",str(root/"manifest.json"),
@@ -646,6 +719,7 @@ class CampaignWordRates(unittest.TestCase):
                                 coverage[row["boundary"],fit] += lo<=truth<=hi
                 print(f"BYTES synthetic {world} seed {seed} complete",flush=True)
             n = len(seeds)
+            # R8/Addendum 4 prescribe twenty independent campaigns per world.
             self.assertGreaterEqual(n,20)
             rate = lambda count: {"rate":count/n,"MCSE":math.sqrt((count/n)*(1-count/n)/n)}
             word_rows = []
@@ -655,13 +729,16 @@ class CampaignWordRates(unittest.TestCase):
                     self.assertEqual(sum(counts.values()),n)
                     word_rows.append({"boundary":boundary,"model":model,"words":{w:rate(c) for w,c in counts.items()}})
             report.append({"world":world,"campaigns":n,"seeds":seeds,"two_term_population_epsilon":epsilon,
+                "D3": {"rest_cells": sum(r["rest_cells"] for r in d3),
+                    "min_gap_over_B": min(r["min_gap_over_B"] for r in d3),
+                    "min_agreement_bars": min(r["min_agreement_bars"] for r in d3)},
                 "structural_extended_epsilon":.01 if world=="bytes" else 0,
                 "word_rates":word_rows,"H2_coverage":[{"boundary":b,"fit":f,**rate(coverage[b,f])}
                     for b in ba.BOUNDARIES for f in ("two_term","resident_extended")]})
         print("BYTES_SIMULATION_REPORT="+json.dumps(report,sort_keys=True),flush=True)
 
 
-class Addendum4RegressionTests(unittest.TestCase):
+class Addendum4RegressionTests(NumericTestCase):
     """Each numbered test reproduces an accepted review finding on 82c014c55."""
 
     @classmethod
@@ -1022,7 +1099,7 @@ class Addendum4RegressionTests(unittest.TestCase):
         self.assertEqual(comparisons,144)
 
 
-class Addendum7RegressionTests(unittest.TestCase):
+class Addendum7RegressionTests(NumericTestCase):
     @classmethod
     def setUpClass(cls):
         cls.temporary = tempfile.TemporaryDirectory()
@@ -1245,18 +1322,23 @@ class Addendum7RegressionTests(unittest.TestCase):
 
     def test_a7_02_03_08_allowances_and_registered_tabulated_t_still_hold(self):
         from joulewise.aggregate import student_t_critical_95
-        self.assertEqual(student_t_critical_95(5), 2.571)
         for cell in ba.reduce_models(self.records, self.manifest):
             boundary = cell["boundary"]
             reference = cell["neg8_inputs"]["boundaries"][boundary]
             expected_drift = reference["families"][cell["drift_family"]]["allowance_j"] * .5 * cell["drift_scale"]
-            self.assertAlmostEqual(cell["kind_averages_j"][ba.BOUND_KINDS[2]], expected_drift, places=13)
+            # Addendum 8 energy agreement: 1% of this cell's (h+B),
+            # above 1e6*epsilon roundoff at the fixture's energy scale.
+            bar = .01 * (cell["h_j"] + cell["B_j"])
+            self.assertAlmostEqual(cell["kind_averages_j"][ba.BOUND_KINDS[2]], expected_drift, delta=bar)
             if boundary != "rails":
                 self.assertGreater(expected_drift, 0)
-                self.assertGreaterEqual(cell["B_j"], cell["meter_phase_edge_mean_j"] + expected_drift - 1e-12)
+                self.assertGreaterEqual(cell["B_j"], cell["meter_phase_edge_mean_j"] + expected_drift - bar)
             bound = reference["families"][cell["drift_family"]]["bound_terms"]
             corpus = [r[boundary][cell["drift_family"]] for r in cell["neg8_inputs"]["references"] if r["role"] == "corpus"]
-            self.assertEqual(bound["prediction_j"], 2.571 * statistics.stdev(corpus) *
+            # D8 pins the owning block-5 tabulated t, not an independently
+            # chosen quantile. Equality is intentional: identical arithmetic
+            # on identical inputs must retain the registered table value.
+            self.assertEqual(bound["prediction_j"], student_t_critical_95(len(corpus) - 1) * statistics.stdev(corpus) *
                              math.sqrt(1 / bound["n_start"] + 1 / bound["n_end"]))
 
         # Deliberately non-proportional boundary references distinguish each
@@ -1281,6 +1363,9 @@ class Addendum7RegressionTests(unittest.TestCase):
             drift = .5 * allowances[boundary] * scale * (2 if cell["drift_family"] == "idle_subtracted" else 1)
             self.assertAlmostEqual(cell["B_j"], {"rails": .4, "DC input": .7, "rest": 1.1}[boundary] + drift)
 
+    def test_a8_d3_method_gap_exceeds_ten_agreement_bars(self):
+        assert_d3_exercised(self, self.records, self.manifest)
+
     def test_a7_11_phase_ends_round_to_nearest_nanosecond_still_holds(self):
         metadata = {"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {
             "sampling_started": {"epoch_s": 0, "monotonic_before_s": 0}}}}}
@@ -1289,7 +1374,7 @@ class Addendum7RegressionTests(unittest.TestCase):
         self.assertEqual(ba._event_span(events, "decode", metadata), [1, 11])
 
 
-class ReviewerProbeTests(unittest.TestCase):
+class ReviewerProbeTests(NumericTestCase):
     def test_p02_p05_p06_p08_p10_fixed_tree(self):
         import runpy
         import sys

@@ -21,15 +21,20 @@ def run(base, R=400):
     records = ba.load_records(Path(base) / "export", manifest, stage="all")
     spec = {m["model"]: m for m in manifest["models"]}
     report = []
-    def truth_e(world, m):
+    # R3 uses mean E / mean T. Use the fixture's actual two-pass durations
+    # (the main campaign doubles pass 2), not the equal-pass pilot duration.
+    pass_cells = ba.reduce_models(records, manifest, boundaries=("rails",))
+    durations = {p["model"]: p["duration_s"] for p in ba.combine_passes(pass_cells)
+                 if p["basis"] == "gross primary"}
+    def truth_e(world, m, duration=None):
         b = (m["W_bytes"] + m["KV_bytes"]) / 1e9
-        tau = m["synthetic_duration_s"] / 512
+        tau = (durations[m["model"]] if duration is None else duration) / 512
         return .01 * b if world == "bytes" else 3 * tau if world == "time" else .01 * m["R_bytes"] / 1e9
 
 
     def population_eps(world, factor):
-        xs = [(m["W_bytes"] + m["KV_bytes"]) / 1e9 * 512 / m["synthetic_duration_s"] for m in manifest["models"]]
-        ys = [truth_e(world, m) * 512 / m["synthetic_duration_s"] for m in manifest["models"]]
+        xs = [(m["W_bytes"] + m["KV_bytes"]) / 1e9 * 512 / durations[m["model"]] for m in manifest["models"]]
+        ys = [truth_e(world, m) * 512 / durations[m["model"]] for m in manifest["models"]]
         mx, my = statistics.fmean(xs), statistics.fmean(ys)
         return factor * math.fsum((x - mx) * (y - my) for x, y in zip(xs, ys)) / math.fsum((x - mx) ** 2 for x in xs)
 
@@ -38,7 +43,7 @@ def run(base, R=400):
         out = []
         for r in records:
             m = spec[r["model"]]
-            e = truth_e(world, m) * 512 * (1 + rng.gauss(0, .002))
+            e = truth_e(world, m, r["duration_s"]) * 512 * (1 + rng.gauss(0, .002))
             idle_rails = r["rails_j"] - r["rails_secondary_j"]
             meter = dict(r["meter"])
             meter["gross_j"] = 2 * e
@@ -55,14 +60,10 @@ def run(base, R=400):
     for world in ("bytes", "time", "resident"):
         rng = random.Random({"bytes": 11, "time": 22, "resident": 33}[world])
         est = {}
-        hb = {}
         for rep in range(R):
             rec = redraw(world, rng)
             passes = ba.reduce_models(rec, manifest)
             points = sel(ba.combine_passes(passes))
-            if rep == 0:
-                for p in points:
-                    hb[(p["boundary"], p["model"])] = (p["h_j"], p["B_j"], p["mean_j"])
             rails = {p["model"]: p["power"] for p in points if p["boundary"] == "rails"}
             for boundary in ba.BOUNDARIES:
                 sub = [p for p in points if p["boundary"] == boundary]
@@ -80,7 +81,7 @@ def run(base, R=400):
             se = statistics.fmean(r[1] for r in rows)
             df = rows[0][2]
             k_spec = 11 if boundary == "rest" else 9
-            t23, ts, t95 = tq(1 - .05 / 46, df), tq(1 - .05 / (2 * k_spec), df), tq(.975, df)
+            ts, t95 = tq(1 - .05 / (2 * k_spec), df), tq(.975, df)
             cov = lambda t: sum(abs(e - truth) <= t * s for e, s, _ in rows) / len(rows)
             report.append({"world": world, "boundary": boundary, "fit": fit, "method": method,
                 "draws": R, "truth": truth, "sd": sd, "mean_se": se, "se_over_sd": se / sd,

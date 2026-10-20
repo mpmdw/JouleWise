@@ -12,6 +12,7 @@ import json
 import math
 import re
 import statistics
+import sys
 from pathlib import Path
 
 from joulewise.analysis_engine.distributions import student_t_quantile
@@ -118,10 +119,14 @@ def active_or_resident(results):
 
 def _inverse(matrix):
     n = len(matrix)
+    # The centered/unit-variance Gram matrix has scale O(number of runs).
+    # A length-n elimination accumulates O(n*epsilon*max|a|) roundoff;
+    # compare pivots in that matrix's units, never to an absolute joule bar.
+    pivot_noise = n * sys.float_info.epsilon * max(abs(v) for row in matrix for v in row)
     a = [list(row) + [float(i == j) for j in range(n)] for i, row in enumerate(matrix)]
     for j in range(n):
         pivot = max(range(j, n), key=lambda i: abs(a[i][j]))
-        if abs(a[pivot][j]) < 1e-12:
+        if abs(a[pivot][j]) <= pivot_noise:
             raise AnalysisError("singular H2 design")
         a[j], a[pivot] = a[pivot], a[j]
         scale = a[j][j]
@@ -161,7 +166,9 @@ def ols(predictors, response, *, family_size=9):
     influence = [[math.fsum(a * b for a, b in zip(row, x)) for row in inv]
                  for x in design]
     leverage = [math.fsum(a * b for a, b in zip(x, v)) for x, v in zip(design, influence)]
-    if any(1 - h <= 1e-12 for h in leverage):
+    # Leverage is dimensionless. Forming X'X sums n products, so its
+    # resolution is n*epsilon relative; HC3 divides by the unresolved 1-h.
+    if any(1 - h <= n * sys.float_info.epsilon * max(1.0, abs(h)) for h in leverage):
         raise AnalysisError("HC3 undefined at unit leverage")
     hc3_scaled = [[math.fsum(v[i] * v[j] * (r / (1 - h)) ** 2
                               for v, r, h in zip(influence, residual, leverage))
