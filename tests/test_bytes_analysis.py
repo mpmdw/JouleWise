@@ -3,12 +3,16 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import csv
 import hashlib
 import io
 import json
 import math
 import random
 import statistics
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -406,6 +410,86 @@ release_keys = _campaign.release_keys
 
 
 class ProductionArchiveTests(unittest.TestCase):
+    def test_synthetic_harvest_export_release_chain_uses_cli_processes(self):
+        from collections import Counter
+        from joulewise.b6 import blinding, export_runs
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            # R2: ten full modules, 50 science members per model per pass.
+            # Reuse A7.12's counterexamples: doubled pass duration and signed
+            # (-8, +3) ms latency, whose negative extreme is the larger one.
+            with patch.object(export_runs, "export", wraps=export_runs.export) as exported:
+                manifest = archive_campaign(root, non_claim=False, release="none",
+                                            pass_duration_scales=(1, 2), clock_latency_ms=(-8, 3))
+            self.assertEqual(exported.call_count, len(manifest["sessions"]))
+            for session in manifest["sessions"]:
+                prefix = root / "export/bytes" / session["session_id"]
+                sidecar = ba.read_json(prefix.with_suffix(".session.json"))
+                self.assertTrue(sidecar["blinding"]["applied"])
+                with prefix.with_suffix(".runs.csv").open(newline="") as stream:
+                    rows = list(csv.DictReader(stream))
+                self.assertEqual(Counter(r["model_name"] for r in rows if r["role"] == "science"),
+                                 Counter({m["model"]: 50 for m in manifest["models"]}))
+                self.assertEqual(Counter(r["role"] for r in rows if r["role"] != "science"),
+                                 Counter({"corpus": 6, "start": 3, "midpoint": 1, "end": 3}))
+                meter = Path(session["archive"]) / "sources/night-custody/hazards/meter/stream-001.jsonl"
+                with meter.open() as stream:
+                    # Native KM003C rate_idx 1 denotes the required 10 Hz.
+                    self.assertEqual(json.loads(next(stream))["rate_idx"], 1)
+            _write_json(root / "manifest.json", manifest)
+            args = [sys.executable, str(ROOT / "scripts/bytes_analyze.py"),
+                    "--export", str(root / "export"), "--manifest", str(root / "manifest.json")]
+
+            def analyze(stage, out, *, predictions=None, expected=0):
+                command = args + ["--stage", stage, "--out", str(root / out)]
+                if predictions is not None:
+                    command += ["--predictions", str(predictions)]
+                result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+                self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+
+            private = root / "private-keys/bytes/blinding"
+            released = root / "released-keys/bytes/blinding"
+            self.assertEqual(list(released.iterdir()), [])
+            analyze("blinded", "blinded")
+            blinded = ba.read_json(root / "blinded/model_estimates.json")
+            self.assertTrue(blinded)
+            self.assertEqual({p["boundary"] for p in blinded}, {"rails"})
+            analyze("fit", "unreleased-fit", expected=1)
+
+            # The current CLI spells stages 1/2 "fit"/"heldout". Release actual
+            # key files into the authoritative directory; never pass decoded
+            # records or call an analysis-stage function from this test.
+            fit_keys = {"neg8_reference", *(m["model"] + "|bytes-synthetic|512"
+                        for m in manifest["models"] if m["role"] == "fit")}
+            fit_files = {"pack.json", *(blinding._config_filename(k) for k in fit_keys)}
+            for name in sorted(fit_files):
+                shutil.copyfile(private / name, released / name)
+            self.assertEqual({p.name for p in released.iterdir()}, fit_files)
+            analyze("fit", "stage1")
+            predictions = root / "stage1/predictions.json"
+            commitment = predictions.read_bytes()
+            self.assertEqual((root / "stage1/predictions.sha256").read_text().strip(),
+                             hashlib.sha256(commitment).hexdigest())
+            frozen = json.loads(commitment)
+            self.assertEqual(frozen["bytes_analysis_sha256"], hashlib.sha256(Path(ba.__file__).read_bytes()).hexdigest())
+            self.assertEqual({p["model"] for p in frozen["fit_points"]},
+                             {m["model"] for m in manifest["models"] if m["role"] == "fit"})
+            self.assertEqual(set(frozen["neg8_inputs"]), {s["session_id"] for s in manifest["sessions"]})
+            analyze("heldout", "unreleased-heldout", predictions=predictions, expected=1)
+
+            for path in sorted(private.glob("*.json")):
+                shutil.copyfile(path, released / path.name)
+            self.assertEqual({p.name for p in released.iterdir()}, {p.name for p in private.iterdir()})
+            analyze("heldout", "stage2", predictions=predictions)
+            self.assertEqual(predictions.read_bytes(), commitment)
+            self.assertEqual(ba.read_json(root / "stage2/unavailable.json"), [])
+            self.assertEqual({p["boundary"] for p in ba.read_json(root / "stage2/model_estimates.json")},
+                             set(ba.BOUNDARIES))
+            # All H1/H2 rows of the existing ten-model, three-boundary design.
+            self.assertEqual(len(ba.read_json(root / "stage2/h1.json")), 360)
+            self.assertEqual(len(ba.read_json(root / "stage2/h2.json")), 12)
+
     def test_full_size_real_reducer_harvest_and_export_ingress(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
