@@ -683,6 +683,7 @@ class CampaignWordRates(NumericTestCase):
         report = []
         for world, seeds in design["seeds"].items():
             words, coverage = Counter(), Counter()
+            method_coverage, estimates = Counter(), {}
             d3 = []
             duration_scale = statistics.fmean(design["main_campaign"]["pass_duration_scales"])
             held_models = [m["model"] for m in design["models"] if m["role"]=="heldout"]
@@ -715,8 +716,22 @@ class CampaignWordRates(NumericTestCase):
                             factor = 2 if row["boundary"]=="DC input" else 1
                             for fit,truth in (("two_term",epsilon*factor),
                                               ("resident_extended",(.01 if world=="bytes" else 0)*factor)):
-                                lo,hi = row[fit]["intervals"][1]
+                                fitted = row[fit]
+                                lo,hi = fitted["intervals"][1]
                                 coverage[row["boundary"],fit] += lo<=truth<=hi
+                                # The plain interval uses the specified 95%
+                                # t at n-p df; the ruled interval uses the
+                                # fit's existing Bonferroni k. Report both
+                                # HC3 and OLS without selecting a new method.
+                                critical_95 = ba.student_t_quantile(.975, fitted["df"])
+                                for method, se_key, interval_key in (("HC3", "standard_errors", "intervals"),
+                                        ("OLS", "ols_standard_errors", "ols_intervals")):
+                                    coefficient, se = fitted["coefficients"][1], fitted[se_key][1]
+                                    key = (row["boundary"], fit, method)
+                                    method_coverage[*key, "plain_95"] += abs(coefficient - truth) <= critical_95 * se
+                                    lo, hi = fitted[interval_key][1]
+                                    method_coverage[*key, "ruled_k"] += lo <= truth <= hi
+                                    estimates.setdefault(key, []).append((coefficient, se, truth))
                 print(f"BYTES synthetic {world} seed {seed} complete",flush=True)
             n = len(seeds)
             # R8/Addendum 4 prescribe twenty independent campaigns per world.
@@ -732,6 +747,13 @@ class CampaignWordRates(NumericTestCase):
                 "D3": {"rest_cells": sum(r["rest_cells"] for r in d3),
                     "min_gap_over_B": min(r["min_gap_over_B"] for r in d3),
                     "min_agreement_bars": min(r["min_agreement_bars"] for r in d3)},
+                "H2_method_coverage": [{"boundary": b, "fit": f, "method": m,
+                    "plain_95": rate(method_coverage[b, f, m, "plain_95"]),
+                    "ruled_k": rate(method_coverage[b, f, m, "ruled_k"]), "k": ba.H2_INTERVALS[b],
+                    "mean_estimate": statistics.fmean(v[0] for v in estimates[b, f, m]),
+                    "mean_se": statistics.fmean(v[1] for v in estimates[b, f, m]),
+                    "truth": estimates[b, f, m][0][2]}
+                    for b in ba.BOUNDARIES for f in ("two_term", "resident_extended") for m in ("HC3", "OLS")],
                 "structural_extended_epsilon":.01 if world=="bytes" else 0,
                 "word_rates":word_rows,"H2_coverage":[{"boundary":b,"fit":f,**rate(coverage[b,f])}
                     for b in ba.BOUNDARIES for f in ("two_term","resident_extended")]})
