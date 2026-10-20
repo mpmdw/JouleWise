@@ -40,6 +40,28 @@ own clone). Later reads used JouleWise-data and linked worktrees.
 - B5 verified: `tests.test_bytes_mac_kit tests.test_bytes_gates` at 20e6984c9 on the Mac: 11 tests OK.
 - Merge order unchanged: B2 (after NR1) then B4 (after its fix round), each through a draft PR for CI.
 
-## Mac item G (KV manifest)
-- Sonnet 5.5 agent on the Mac (no power capture), worktree `/Users/edr/code/JouleWise-wt-af419-kv`, branch
-  `lane/2026-10-20-bytes-manifest-kv` from d924e7acf; hard stop 16:58 so nothing runs when the loop leaves the desk.
+## Mac item G (KV manifest): done
+- Sonnet 5.5 agent ran `scripts/bytes_manifest.py headers` and `kv` for nine models (16:04-16:10, no power capture,
+  interpreter `/Users/edr/code/JouleWise/.venv/bin/python`, mlx 0.31.2); it then stopped (agent stopped by the lead).
+- Qwen3-8B-8bit was not on the Mac. The lead downloaded it at revision 48a0b75b1ae72503e21e1558d040bc227510ff06 into the
+  directory the configs name (8.1 GB); local config.json gives group_size 64, bits 8 (Addendum 5 item 5's assumption is
+  verified); its KV is 339738624 bytes, equal to 8B-4bit's.
+- `merge` wrote `configs/bytes/bytes_manifest.json` (ten models, exit 0; W equals the pilot to the byte on eight models,
+  4.77e-7 bytes of float rounding on 8B-4bit). Branch `lane/2026-10-20-bytes-manifest-kv` 99c9099d8;
+  `configs/bytes/records/RUN.md` lists every value.
+- Finding: the BYTES configs name HF snapshot paths for Qwen3-1.7B-4bit, 4B-4bit and 8B-4bit that do not exist on this
+  Mac (the `/Users/edr/jw_models/mlx-community/` copies do, at the roster revisions). Fix before item H.
+
+## B6 Q2 and B2 NR1 outcomes (16:20-16:40)
+- B6 Q2: the cold judge ruled (57ed4c2); adopted and installed, see `B6-RULING.md` Q2 (registration 2f034fdfb).
+- B4 Q1 fix round stopped correctly on scope (needs `scripts/bytes_manifest.py` for a public per-model `config_key`);
+  granted, and relaunched from fd5a3bc7b: thread 01a15b96-a83f-7668-b5ba-b1facc120016 (high, read back). Its diagnostic
+  also found the blinded post-commit run refuses when both stores of one model are missing under production sub-pack
+  sessions; folded into item 2.
+- B2 NR1 seats disagree. Opus (cf9c6e1): a fixture defect, every 10 Hz sample sits exactly on a phase edge so a 9 us
+  clock-fit shift moves one whole sample in every run; half-interval sample phase makes latency-on equal latency-off;
+  registered H2 unchanged plus one sentence on an unmeasured constant edge offset. Sol (17fbd04): same mechanism, called a
+  rule-anticipated attribution effect; propose propagating B by |A| weights as a labelled alternative (about 3.5x
+  widths). A science disagreement, so a cold Fable judge: Claude cloud `session_013oP511BycQZNtjYcmg1CFz`, report
+  `claude/b2-nr1-judge*` `reports/b2-nr1-judge/fable.md`, prompt `/Users/edr/night-archive/af419-b2nr1-judge/PROMPT.md`.
+- L9 continuation pushed through 9056d96b9 ("consolidate L9 before after and refusal evidence"); still running at 16:30.
