@@ -311,3 +311,33 @@ Ed asked whether the 1e-9 bar in Addendum 7 was the excessive correctness he war
 4. **Method differences must not hide under the bar.** The fix is to make the synthetic worlds exercise every rule at a size above the bar, not to tighten the bar. The generator gives the references' DC-minus-rails drift a different scale from the rails drift, and makes the difference at least 10% of the rest cell's B (that would have shown D3). Addendum 7 item 12 already does this for unequal pass durations and clock latency. D8's t value stays pinned by the twin's unit test.
 5. **The comparer's own scripts.** compare.py installs item 1 per field. Energies use 1% of (h + B). Power uses 1% of its half-width. Coefficients use 1% of their HC3 half-width. Durations compare to 1 ms. VIF compares to 2 significant figures. Words, k, df, n, labels, refusals and exit codes compare exactly. The N1 noise layer in summarize.py (NOISE_REL, NOISE_ABS) is deleted. Addendum 7's "agree to 1e-9" is superseded.
 6. One thing the tight comparison did show: with VIF 3.4e6, input noise of 3e-10 moves the rest model's c by 6%. So c is not identified, and no word may be drawn from it. Addendum 3 item 9 already says so. Nothing changes.
+
+
+## Addendum 9 (2026-10-21): NR1, meter label offset and the H2 coefficient intervals at DC input and rest
+
+Authority: `docs/process_traces/2026-10-21-magistrate-a017b694/B2-NR1-RULING.md` on `records/2026-10-21-a017`; JouleWise-data `claude/b2-nr1-judge-7n0s7d:reports/b2-nr1-judge/fable.md`, section 1.
+
+> **Addendum 9: NR1, meter label offset and the H2 coefficient intervals at DC input and rest.**
+> 1. *Fixture.* The synthetic meter stamped samples exactly on run edges, so the signed-latency clock fit (a 5 to 9 µs
+>    shift) moved one whole 100 ms sample into every decode window (5.87 J at 58.9 W) with certainty, which no free-running
+>    meter clock can do. The generator now places samples 50 ms into the sample interval, draws each science run's edge
+>    offset uniformly inside the interval, and adds a 10 ms minimum receive latency to every batch (the recorded USB
+>    arrival latency's lower end), so a constant label offset acts with probability δ/Δt per run as on the bench.
+>    Addendum 7.12's −8/+3 ms pattern is kept and still exercises r_max.
+> 2. *Registered H2 intervals unchanged.* Coefficient ± t·SE_HC3 (OLS beside it), k as Addendum 3.6, printed first and
+>    labelled "statistical; conditional on the mapped meter energies".
+> 3. *Labelled alternative, printed beside every H2 coefficient at DC input and rest.* A constant meter-to-host label
+>    offset δ ≥ 0 (the earliest-arrival envelope labels a sample no earlier than its digitisation; the power path adds lag
+>    of the same sign) shifts every decode window earlier by δ and changes each model's DC energy by
+>    δ·(P̄_prefill-tail − P̄_decode-tail), bounded by δ·max(P_start,i, P_end,i) with the Addendum 4.10 edge powers. The
+>    coefficient is linear in the point powers, β = A·y with A = (XᵀX)⁻¹Xᵀ, so the coherent offset term is
+>    C_j = Σ_i |A_ji| · max(P_start,i, P_end,i) · (r_max,i + Δt_meter) / T_i, with the per-pass term averaged over the
+>    available passes as B is (Addendum 3.5; no shrinkage, no t). The time factor is Addendum 1.2's own
+>    (r_max + Δt_meter): no new constant. The alternative interval is β_j ± (t·SE_HC3,j + C_j); zero/sign statements at DC
+>    input and rest, including "resident adds nothing", print both decisions. Rails has no C term. Other B components
+>    (drift allowance, rails anchor, h) are not propagated: no coherence across models is established for them, and the
+>    registration's choice of statistical coefficient intervals stands for rails as before.
+> 4. *Disclosure printed with the H2 DC/rest table.* δ has not been measured (block-6 M13); its structural bound is one
+>    sample period plus the poll round trip, 22 to 25 ms on the recorded 50 SPS streams. The sensitivity of each printed
+>    coefficient to δ, dβ_j/dδ = Σ_i A_ji·(P_adj-before-start,i − P_adj-before-end,i)/T_i, is printed in J/GB per ms so a
+>    later M13 measurement can be applied without a new rule.
