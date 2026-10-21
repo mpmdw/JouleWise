@@ -213,7 +213,25 @@ Differences from the brief, added to the eight of the block below:
 - **L9:** the cloud thread 01a15b81 has been silent since 08:22 UTC, with the joined run unreported. CI-only PR #517 found a lane defect: `tests.b5_analysis.test_sensitivity_guard` fails `exclusions_roster_mismatch`, and it reproduces on c11402cf6.
 - **Disk:** 17 GB of unreferenced archives offloaded to iCloud and evicted. Block-5 harvests and the July run directories stay local, because programs read them.
 
-**Next activation (written 2026-10-21 by activation 283e9802; item 60):** the loop is DONE and the Mac is free. Do these in order, in bounded slices:
+61. **Magistrate activation c5a1d8fd (Opus 5.5, headless, 2026-10-21 08:46 PDT to about 09:35 PDT).** Record: `docs/process_traces/2026-10-21-magistrate-c5a1d8fd/RECORD.md`. No mail from Ed, no notices, no new directives.
+- **BYTES item H armed:** session `bytes-h-20261021T162150175053Z`, t0 09:29:00 PDT 2026-10-21, maximum 45,120 s (ends by 22:01 PDT 2026-10-21). Session root `/Users/edr/night-bytes/h-20261021T162149Z`; measurement checkout `/Users/edr/night-custody/measurement/JouleWise-measurement-20261021T1548Z-bytes-h` at b56eae9fd, ledger at pin 402. PR #516 CI green (all 12 shards). Arm notice emailed to Ed (Gmail 1a15f45602aeea0b).
+- **The b6 loop job was unloaded** (`launchctl bootout`; the plist is kept), because its DONE ticks (0.26 CPU-s every 300 s) would land inside H's runs.
+- **L9:** thread 01a15b81 stalled (no push since 08:22 UTC). A new Codex Cloud Sol xhigh seat, thread `01a15f2e-af3d-738b-83d4-56dc0a84f009`, works the `test_sensitivity_guard` defect and the census cherry-pick on `lane/2026-10-21-l9-sensguard`; its report goes to JouleWise-data `codex/l9-sensguard` `reports/l9-sensguard/REPORT.md`. Brief: `/Users/edr/night-archive/c5a1-l9-sensguard/BRIEF.md`.
+
+**Next activation (written 2026-10-21 by activation c5a1d8fd; item 61):** H is armed. While its night job is loaded (before its terminal record), exit at once, quietly.
+(1) **After H's terminal record:**
+- Run `python3.13 -B scripts/bytes_h_session.py desk --session-root /Users/edr/night-bytes/h-20261021T162149Z` from the measurement checkout.
+- Email Ed the outcome.
+- Do the documented uninstall of the two night plists.
+- Reload the b6 loop only if something still needs it. It is DONE, so probably nothing does.
+(2) **L9:**
+- Read `origin/lane/2026-10-21-l9-sensguard` and the JouleWise-data report.
+- Then, locally on the idle Mac, run the opted-in joined real-program run (`JW_B5_S10_REAL_PROGRAMS=1`, detached, persistent logs).
+- Then CI, the executing review, and the cold Fable and Opus passes.
+- Thread 01a15b81 may still push to `lane/2026-10-20-l9-ruling-build`. Reconcile the two lanes before review.
+(3) Item 60's steps (3) and (4) stand: the #515 merge decision, and taking H-DISK-RULING to the J/C5 disk gate.
+
+(History) **Next activation (written 2026-10-21 by activation 283e9802; item 60):** the loop is DONE and the Mac is free. Do these in order, in bounded slices:
 (1) **Item H to arm.**
 - Read PR #516 CI on f92f560e1.
 - Make a measurement checkout at b56eae9fd under `/Users/edr/night-custody/measurement/` (its own `.venv`, as the b6 checkouts have) and give it the matching calibration ledger (`prepare` prints INPUTS_ONLY without one; never fabricate one).
