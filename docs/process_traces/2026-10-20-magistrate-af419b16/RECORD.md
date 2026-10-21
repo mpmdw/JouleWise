@@ -65,3 +65,9 @@ own clone). Later reads used JouleWise-data and linked worktrees.
   widths). A science disagreement, so a cold Fable judge: Claude cloud `session_013oP511BycQZNtjYcmg1CFz`, report
   `claude/b2-nr1-judge*` `reports/b2-nr1-judge/fable.md`, prompt `/Users/edr/night-archive/af419-b2nr1-judge/PROMPT.md`.
 - L9 continuation pushed through 9056d96b9 ("consolidate L9 before after and refusal evidence"); still running at 16:30.
+
+## r3-beta verdict (emailed Ed 17:22, Gmail 1a15bd55b60184ed on thread 1a159e49c9c8b054)
+COLLECTED / ACCEPT, counting; 125/125 planned present, raw-valid, succeeded; no member excluded; decode, p2048 and p42
+cells 10/10 quads and repeats; NEG-8 passed. Chain 335 min, harvest 89, desk 97. Loop ROTATE 17:20. Tally alpha 2,
+beta 3, gamma 3: r4-alpha is next. No notice ack written (notice_pending was empty). Exit at 17:23, nothing local left
+running (KV agent stopped; cloud seats: L9 continuation, B4 Q1 fix, B2 NR1 judge, and the B6 Q2 judge's last test run).
