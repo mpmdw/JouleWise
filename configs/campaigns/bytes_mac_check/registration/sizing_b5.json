@@ -1,0 +1,224 @@
+{
+  "derivation": "member=(mean pilot request + pilot load + max B6(member_wall-request))*(1+margin); stream=(mean request+max B6(stream-request))*(1+margin); span=sum(count*member)+(collections+1)*SETTLE_S+collections*max observed stage overhead+max observed fixed work",
+  "non_claim": true,
+  "packs": {
+    "bytes-mac-check": {
+      "T_stream_max_s": 190.96428714294734,
+      "breakdown": {
+        "collection_overheads_s": 4125.538551807404,
+        "collection_stage_overhead_s": 187.52447962760925,
+        "fixed_s": 1191,
+        "members_s": 20673.698390060417,
+        "settles_s": 1380
+      },
+      "bytes_per_member": 308543416,
+      "collection_stages": 22,
+      "counts_by_model": {
+        "llama-70b": 21,
+        "neg8_reference": 37,
+        "qwen3-14b": 5,
+        "qwen3-1p7b": 5,
+        "qwen3-30b-a3b": 5,
+        "qwen3-32b": 5,
+        "qwen3-4b": 5,
+        "qwen3-8b": 5,
+        "qwen3-8b-8bit": 5,
+        "qwen3-next-80b": 9,
+        "qwen35-122b": 21
+      },
+      "disk_derivation": {
+        "estimated_per_copy_bytes": 308543416,
+        "extra_wait_peak_bytes": 28082490435,
+        "extra_wait_raw_bytes": 9360830145,
+        "formula": "ceil(max(max_original_allocated_bundle, max_original_bytes/member_wall_s * longest_planned_member_s)); peak 3 copies (raw + archive + disjoint claim/bound backups); fixed = observed original non-bundle session bytes * max(1, window_max/sum observed member wall seconds); WAIT extra = ceil(max original bytes/wall_s * registered session WAIT budget) * 3 copies",
+        "max_observed_bundle_bytes_per_wall_s": 1300115.2977829832,
+        "max_observed_fixed_session_bytes": 1438707712,
+        "max_observed_original_bundle_bytes": 162971648,
+        "observed_member_wall_sum_s": 16042.009888648987,
+        "peak_copies": 3,
+        "reserve_authority": "BYTES R6 / block-6 design section 15",
+        "reserve_bytes": 161061273600,
+        "session_wait_budget_s": 7200,
+        "time_budget_source": "joulewise.b5.plan: T0_STAGE_CAP_S, PAUSE_LIMIT_S, SESSION_WAIT_BUDGET_S; same minute-rounded window formula",
+        "window_max_s": 45120
+      },
+      "estimated_footprint_bytes": 145981542042,
+      "extra_wait_peak_bytes": 28082490435,
+      "fixed_retained_bytes": 4046531103,
+      "measured_margin": 0.08343839553709143,
+      "member_count": 123,
+      "models": {
+        "llama-70b": {
+          "load_s": 3.8129690420173574,
+          "member_allowance_s": 237.32004083968195,
+          "request_s": [
+            84.46654695799225,
+            85.11114854199695,
+            88.98047937499359
+          ],
+          "source": {
+            "path": "docs/design/bytes_pilot/r_Llama-3.3-70B-Instruct-4bit.json",
+            "sha256": "ea71b75731ab1fd54fddfb9737f432437ed8fcfaf3a09b78d3b5d2b59006db3b"
+          },
+          "stream_allowance_s": 190.96428714294734,
+          "weight_bytes": 39688567605
+        },
+        "qwen3-14b": {
+          "load_s": 0.6056196660210844,
+          "member_allowance_s": 159.94076389549522,
+          "request_s": [
+            18.080689957976574,
+            17.951497750007547,
+            17.887739750003675
+          ],
+          "source": {
+            "path": "docs/design/bytes_pilot/r_Qwen3-14B-4bit.json",
+            "sha256": "288c0b1090e077ce9088c2bb126af591b3ffb511e4ccfd131295664e0cf18b9f"
+          },
+          "stream_allowance_s": 117.0599756606169,
+          "weight_bytes": 8307898514
+        },
+        "qwen3-1p7b": {
+          "load_s": 0.3766752500087023,
+          "member_allowance_s": 143.39574436176383,
+          "request_s": [
+            2.946227040985832,
+            2.9134441670030355,
+            2.93455524998717
+          ],
+          "source": {
+            "path": "docs/design/bytes_pilot/r_qwen3-1.7b.json",
+            "sha256": "5f8e7df1a70e3915f28452d9dc8c3cb315c60b9dd89a54017bb8ffcdfd71683b"
+          },
+          "stream_allowance_s": 100.76300329763714,
+          "weight_bytes": 968080210
+        },
+        "qwen3-30b-a3b": {
+          "load_s": 0.9125387500098441,
+          "member_allowance_s": 148.495863021788,
+          "request_s": [
+            7.455010625009891,
+            6.972780332987895,
+            6.880880957993213
+          ],
+          "source": {
+            "path": "docs/design/bytes_pilot/r_Qwen3-30B-A3B-4bit.json",
+            "sha256": "6cbc73e5013bd3ae76f6895285471335b449263998e70c77a4bd1278c0babf41"
+          },
+          "stream_allowance_s": 105.28254686699321,
+          "weight_bytes": 17174780668
+        },
+        "qwen3-32b": {
+          "load_s": 0.8278932500106748,
+          "member_allowance_s": 184.65614588884054,
+          "request_s": [
+            39.83907862499473,
+            41.0174685830134,
+            40.832518834009534
+          ],
+          "source": {
+            "path": "docs/design/bytes_pilot/r_Qwen3-32B-4bit.json",
+            "sha256": "63b076e2f064c17769b114658729caf9523868e6748eb5c85c415bf3e020d368"
+          },
+          "stream_allowance_s": 141.5345379187543,
+          "weight_bytes": 18429850874
+        },
+        "qwen3-4b": {
+          "load_s": 0.4404192910005804,
+          "member_allowance_s": 146.79362454979878,
+          "request_s": [
+            6.008334374986589,
+            6.0102031670103315,
+            5.993058708991157
+          ],
+          "source": {
+            "path": "docs/design/bytes_pilot/r_Qwen3-4B-4bit.json",
+            "sha256": "d10d833a4d0687a476579b0c2fdf9b0894e8d66f3ed44b3373bacbb5e2254f0f"
+          },
+          "stream_allowance_s": 104.09182074417483,
+          "weight_bytes": 2263022529
+        },
+        "qwen3-8b": {
+          "load_s": 0.7948250409972388,
+          "member_allowance_s": 152.32309187894657,
+          "request_s": [
+            10.699517417000607,
+            10.7838255839888,
+            10.775922208005795
+          ],
+          "source": {
+            "path": "docs/design/bytes_pilot/r_Qwen3-8B-4bit.json",
+            "sha256": "29c2dc6efe2ba968fbec67517eae61aed7cb0a89975089d2995ac5ee9dae02f0"
+          },
+          "stream_allowance_s": 109.23731127617711,
+          "weight_bytes": 4607835174
+        },
+        "qwen3-8b-8bit": {
+          "flag": "sizing.planning_bound_interpolated",
+          "interpolation": {
+            "authority": "F2, activation 283e9802, 2026-10-21; memory-bandwidth-bound decode; planning only",
+            "formula": "q = (W_target-W_low)/(W_high-W_low); each repeat total_s and load_s = low+q*(high-low)",
+            "fraction": 0.03903895888322478,
+            "lower_model": "qwen3-14b",
+            "lower_weight_bytes": 8307898514,
+            "sources": [
+              {
+                "path": "docs/design/bytes_pilot/r_Qwen3-14B-4bit.json",
+                "sha256": "288c0b1090e077ce9088c2bb126af591b3ffb511e4ccfd131295664e0cf18b9f"
+              },
+              {
+                "path": "docs/design/bytes_pilot/r_Qwen3-32B-4bit.json",
+                "sha256": "63b076e2f064c17769b114658729caf9523868e6748eb5c85c415bf3e020d368"
+              }
+            ],
+            "upper_model": "qwen3-32b",
+            "upper_weight_bytes": 18429850874
+          },
+          "load_s": 0.614296995327281,
+          "member_allowance_s": 160.9056266769166,
+          "request_s": [
+            18.930114798513518,
+            18.851969236958926,
+            18.783480037248857
+          ],
+          "stream_allowance_s": 118.01543709029725,
+          "weight_bytes": 8703048996
+        },
+        "qwen3-next-80b": {
+          "load_s": 4.183493875025306,
+          "member_allowance_s": 155.05916154806118,
+          "request_s": [
+            9.82393891600077,
+            9.91939804100548,
+            9.925995333003812
+          ],
+          "source": {
+            "path": "docs/design/bytes_pilot/r_Qwen3-Next-80B-A3B-Instruct-4bit.json",
+            "sha256": "3206b6a4622469076c3f12e384af37254e2e77307807e802d0f062430c23d43d"
+          },
+          "stream_allowance_s": 108.30196702074579,
+          "weight_bytes": 44844286500
+        },
+        "qwen35-122b": {
+          "load_s": 11.805896167003084,
+          "member_allowance_s": 170.78676005436927,
+          "request_s": [
+            16.617925333004678,
+            16.82008937498904,
+            16.913237000000663
+          ],
+          "source": {
+            "path": "docs/design/bytes_pilot/r_Qwen3.5-122B-A10B-4bit_pinned.json",
+            "sha256": "5d94e03d0b97fdc0db3a1c0ab0f01d00d59f33feebd367e9939a054807811385"
+          },
+          "stream_allowance_s": 115.77116221769523,
+          "weight_bytes": 69593636939
+        }
+      },
+      "pack_id": "bytes-mac-check",
+      "programmed_span_s": 27370.23694186782,
+      "reference_member_allowance_s": 141.22618421581197
+    }
+  },
+  "schema_version": "joulewise.b5_sizing.v1"
+}

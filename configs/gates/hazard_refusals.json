@@ -37,6 +37,7 @@
  },
  "scan": {
   "modules": [
+   "scripts/bytes_h_session.py",
    "docs/phase_2/window_runbook.md",
    "joulewise/adapters/__init__.py",
    "joulewise/adapters/mlx_runtime.py",
@@ -168,6 +169,11 @@
    "legacy_key": "named only as a legacy refusal key (PROTECTS/SUPERSEDES or a runbook reference); the retired ARM/T0 path runs it, block 5 does not"
   },
   "not_scanned": {
+   "joulewise/b6/desk_identity.py": "desk",
+   "joulewise/b6/plan_inputs.py": "desk",
+   "joulewise/desk_compress.py": "desk",
+   "scripts/bytes_gates.py": "desk",
+   "scripts/install_night_agent.sh": "desk",
    "joulewise/session_structure.py": "desk",
    "joulewise/b6/precheck.py": "desk",
    "joulewise/__init__.py": "data",
@@ -318,6 +324,17 @@
   "agent.unit_overlap": {"category": "PHYSICS", "protects": "CA-7/design 13.6: agent work overlaps this unit; collection-lane placeholder."}
  },
  "sites": [
+  {"file": "scripts/bytes_h_session.py", "function": "<module>", "kind": "raise", "detail": "SystemExit|main()", "count": 1, "guard": "5972e4a22de36d17", "category": "INTERNAL", "protects": "This operator/desk entry point runs before installation or after the terminal record. Its CLI reports input/program faults; it never interrupts a running collection or excludes a member/window."},
+  {"file": "scripts/bytes_h_session.py", "function": "desk", "kind": "raise", "detail": "RuntimeError|harvest program fault", "count": 1, "guard": "ace6e3b9e8615530", "category": "INTERNAL", "protects": "This operator/desk entry point runs before installation or after the terminal record. Its CLI reports input/program faults; it never interrupts a running collection or excludes a member/window."},
+  {"file": "scripts/bytes_h_session.py", "function": "desk", "kind": "raise", "detail": "ValueError|terminal record is", "count": 1, "guard": "e64f63a6b1798e67", "category": "INTERNAL", "protects": "This operator/desk entry point runs before installation or after the terminal record. Its CLI reports input/program faults; it never interrupts a running collection or excludes a member/window."},
+  {"file": "scripts/bytes_h_session.py", "function": "install", "kind": "raise", "detail": "RuntimeError|night job installer", "count": 1, "guard": "4c45a7b3d4bad4ec", "category": "INTERNAL", "protects": "This operator/desk entry point runs before installation or after the terminal record. Its CLI reports input/program faults; it never interrupts a running collection or excludes a member/window."},
+  {"file": "scripts/bytes_h_session.py", "function": "install", "kind": "raise", "detail": "ValueError|prepared plan bytes", "count": 1, "guard": "e34019de84002e2f", "category": "NUMBER_INTEGRITY", "protects": "The plan hash binds the reviewed t0, maximum duration, run roots and allowances at operator handoff; mismatched prepared bytes are never silently installed."},
+  {"file": "scripts/bytes_h_session.py", "function": "main", "kind": "return_code", "detail": "1", "count": 1, "guard": "d7b4d96d51bdfc9c", "category": "INTERNAL", "protects": "This operator/desk entry point runs before installation or after the terminal record. Its CLI reports input/program faults; it never interrupts a running collection or excludes a member/window."},
+  {"file": "scripts/bytes_h_session.py", "function": "measurements", "kind": "raise", "detail": "ValueError|foreign or claim", "count": 1, "guard": "26c16f80cb17b731", "category": "INTERNAL", "protects": "This operator/desk entry point runs before installation or after the terminal record. Its CLI reports input/program faults; it never interrupts a running collection or excludes a member/window."},
+  {"file": "scripts/bytes_h_session.py", "function": "prepare", "kind": "raise", "detail": "PhysicalHazard|models missing", "count": 1, "guard": "9c76830a7e237216", "category": "PHYSICS", "protects": "The required local model payload is absent, so the planned member cannot physically execute; prepare stops before installation or collection."},
+  {"file": "scripts/bytes_h_session.py", "function": "prepare", "kind": "raise", "detail": "PhysicalHazard|not enough disk", "count": 1, "guard": "de387ccd99b77209", "category": "PHYSICS", "protects": "Observed free bytes must cover the pilot/archive-derived peak window footprint plus the BYTES R6 operational reserve of 150 GiB; no disk capacity is guessed."},
+  {"file": "scripts/bytes_h_session.py", "function": "prepare", "kind": "raise", "detail": "ValueError|prepared and written", "count": 1, "guard": "5ca6d18ce6e6378c", "category": "INTERNAL", "protects": "This operator/desk entry point runs before installation or after the terminal record. Its CLI reports input/program faults; it never interrupts a running collection or excludes a member/window."},
+  {"file": "scripts/bytes_h_session.py", "function": "prepare", "kind": "raise", "detail": "ValueError|session root must", "count": 1, "guard": "ae6d0e2f031295a3", "category": "INTERNAL", "protects": "This operator/desk entry point runs before installation or after the terminal record. Its CLI reports input/program faults; it never interrupts a running collection or excludes a member/window."},
   {"file": "joulewise/b6/agent_pause.py", "function": "_pid_alive", "kind": "kill", "detail": "kill|", "count": 1, "guard": "f45dd2ee051df972", "category": "INTERNAL", "protects": "Collection record/read failure is caught by the caller and disclosed; it never refuses or stops collection.", "added": "block-6 driver, 2026-10-14"},
   {"file": "joulewise/b6/idle_wait.py", "function": "WaitLedger.remaining", "kind": "raise", "detail": "ValueError|invalid idle wait", "count": 1, "guard": "b123e5418018099a", "category": "INTERNAL", "protects": "Collection record/read failure is caught by the caller and disclosed; it never refuses or stops collection.", "added": "block-6 driver, 2026-10-14"},
   {"file": "joulewise/b6/sleep_guard.py", "function": "KeepAwake.stop", "kind": "kill", "detail": "kill|", "count": 1, "guard": "b08cafb44243306e", "category": "INTERNAL", "protects": "Collection record/read failure is caught by the caller and disclosed; it never refuses or stops collection.", "added": "block-6 driver, 2026-10-14"},
