@@ -1259,6 +1259,9 @@ class Addendum7RegressionTests(NumericTestCase):
                         fit = row["resident_extended"]
                         self.assertEqual(fit["status"], "computed")
                         self.assertIn(target["run_id"], fit[flag])
+                        primary = next(p for p in row["primary_intervals"]
+                                       if p["term"] == "extended_epsilon")
+                        self.assertEqual(primary[flag], fit[flag])
                         self.assertNotIn("coefficient_C" if field == "bound_j" else
                                          "d_beta_d_delta_per_ms", fit)
                         self.assertIn("d_beta_d_delta_per_ms" if field == "bound_j" else

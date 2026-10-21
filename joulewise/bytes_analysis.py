@@ -350,6 +350,8 @@ def h2(points, rails_power, *, boundary=None, family_size=None):
             if "d_beta_d_delta_per_ms" in fit:
                 item.update(d_beta_d_delta_per_ms=fit["d_beta_d_delta_per_ms"][index],
                             sensitivity_units=fit["sensitivity_units"][index])
+            elif "sensitivity_flag" in fit:
+                item["sensitivity_flag"] = fit["sensitivity_flag"]
     adds_nothing_offset = None
     if extended["status"] == "computed" and "offset_intervals" in extended:
         lo, hi = extended["offset_intervals"][2]
