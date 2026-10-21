@@ -440,7 +440,7 @@ def meter_decode(stream, decode_span, idle_span):
             "edge_powers_w": powers, "r_max_s": residual, "sample_interval_s": interval,
             # One slice is swapped under a coherent offset, hence max, not
             # the sum in u. NR1 adopts the existing (r_max + interval) factor.
-            "offset_bound_w": max(powers) * (residual + interval) / duration,
+            "offset_bound_j": max(powers) * (residual + interval),
             "offset_sensitivity_w": before[0] - before[1],
             "adjacent_before_edge_powers_w": before,
             "n": n, "n_idle": nb, "clock_fit": stats}
@@ -1001,7 +1001,7 @@ def _phase_cell(kept, removed, module, boundary, secondary, *, minimum_units=5):
     bound, mean = interval["B_j"], estimate["mean_j"]
     offset = {}
     if boundary != "rails":
-        for field in ("bound_w", "sensitivity_w"):
+        for field in ("bound_j", "sensitivity_w"):
             values = [r["meter"].get("offset_" + field) for r in kept]
             offset["meter_offset_" + field] = _weighted(kept, values) if all(v is not None for v in values) else None
     return {"status": "computed", **offset, "mean_j": mean,
@@ -1118,9 +1118,13 @@ def combine_passes(rows):
                      BW=point["bytes"] * DECODE_STEPS / duration)
         if point["boundary"] != "rails":
             # Average available per-pass terms just as B; no sqrt(n) or t.
-            for field in ("meter_offset_bound_w", "meter_offset_sensitivity_w"):
+            for field in ("meter_offset_bound_j", "meter_offset_sensitivity_w"):
                 values = [r.get(field) for r in group]
                 point[field] = statistics.fmean(values) if all(v is not None for v in values) else None
+            # Coherent energy support uses the registered ratio of means: the
+            # pass-averaged joules divided by the point's mean decode time.
+            value = point["meter_offset_bound_j"]
+            point["meter_offset_bound_w"] = value / duration if value is not None else None
         if any("without_assisted" in r for r in group):
             diagnostics = [r.get("without_assisted", r) for r in group]
             means = [r["mean_j"] for r in diagnostics]

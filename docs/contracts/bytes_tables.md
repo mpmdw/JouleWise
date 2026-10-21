@@ -665,12 +665,14 @@ on `records/2026-10-21-a017`; JouleWise-data
 Registered H2 coefficients, covariance, k and intervals stay unchanged and print
 first, labelled **statistical; conditional on the mapped meter energies**.
 
-The meter record adds `offset_bound_w = max(edge_powers_w) *
-(r_max_s + sample_interval_s) / duration_s`, `adjacent_before_edge_powers_w`
+The meter record adds `offset_bound_j = max(edge_powers_w) *
+(r_max_s + sample_interval_s)` in joules, `adjacent_before_edge_powers_w`
 and their signed difference `offset_sensitivity_w`. The pass and model tables
-carry `meter_offset_bound_w` and `meter_offset_sensitivity_w`, using the existing
+carry `meter_offset_bound_j` and `meter_offset_sensitivity_w`, using the existing
 repeat/quad weights and then the arithmetic mean over available passes as B
-is averaged. Missing values remain null; they do not change selection.
+is averaged. In `combine_passes`, `meter_offset_bound_w` is the pass-averaged
+joules divided by the point's mean `duration_s`, the same ratio of means as
+the point's power. Missing values remain null; they do not change selection.
 
 Every computed DC-input/rest fit prints `coefficient_C`, where
 C_j = sum_i |A_ji| bound_i and A = (X'X)^(-1)X', plus `offset_intervals` and

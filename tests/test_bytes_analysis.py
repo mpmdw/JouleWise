@@ -1387,6 +1387,13 @@ class Addendum7RegressionTests(NumericTestCase):
                 self.assertAlmostEqual(b["duration_s"], 2 * a["duration_s"])
                 expected = (a["mean_j"] + b["mean_j"]) / (a["duration_s"] + b["duration_s"])
                 self.assertEqual(point["power"], expected)
+                if point["boundary"] != "rails":
+                    # Same ratio of pass-mean joules to pass-mean seconds as
+                    # power and B/T. No half-width for the point bound itself:
+                    # NumericTestCase uses the brief's 1e-6 relative/absolute bar.
+                    support = sum(r["meter_offset_bound_j"] for r in (a, b)) / sum(
+                        r["duration_s"] for r in (a, b))
+                    self.assertAlmostEqual(point["meter_offset_bound_w"], support)
                 self.assertAlmostEqual(point["power_half_w"], (a["h_j"] + a["B_j"] + b["h_j"] + b["B_j"]) /
                                        (a["duration_s"] + b["duration_s"]))
                 self.assertNotAlmostEqual(point["power"], .5 * (a["mean_j"] / a["duration_s"] + b["mean_j"] / b["duration_s"]), places=5)

@@ -54,7 +54,7 @@ def run(base, R=400):
             power = 2 * e / r["duration_s"]
             meter["edge_powers_w"] = [power, power]
             meter["phase_edge_j"] = sum(meter["edge_powers_w"]) * (meter["r_max_s"] + meter["sample_interval_s"])
-            meter["offset_bound_w"] = max(meter["edge_powers_w"]) * (meter["r_max_s"] + meter["sample_interval_s"]) / r["duration_s"]
+            meter["offset_bound_j"] = max(meter["edge_powers_w"]) * (meter["r_max_s"] + meter["sample_interval_s"])
             # The fixture's outside waveform is exactly the encoded 0.2 W.
             # Equality here identifies that payload value, not an agreement bar.
             before = [w if w == .2 else power for w in meter["adjacent_before_edge_powers_w"]]
