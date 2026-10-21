@@ -38,6 +38,8 @@ PACK_ID = 'bytes-mac-check'
 # DriverLane's default lead: 420 s, rounded up to a minute; the installer
 # requires 300 s. Use the measurement checkout's loop.json value verbatim.
 DEFAULT_LEAD_S = 420
+# DriverLane.launch and night_agent_install require this preparation lead.
+MIN_LEAD_S = 300
 # DriverLane/DeskLane's existing harvest budget, not a measured allowance.
 HARVEST_TIMEOUT_S = 4 * 3600
 # BYTES R6 / block-6 design section 15 operational disk reserve.
@@ -186,6 +188,8 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
     session_id = 'bytes-h-' + dt.datetime.fromtimestamp(clock, dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     config = read(measurement / 'configs/b6/loop.json')
     lead = config.get('launch_lead_s', DEFAULT_LEAD_S)
+    if not finite(lead) or lead < MIN_LEAD_S:
+        raise ValueError("launch_lead_s must leave the installer's 300 seconds")
     t0 = 60 * math.ceil((clock + lead) / 60)
     expected_max = plan_inputs.window_max_s({'programmed_span_s': {'seconds': sized['programmed_span_s']}})
     print('session_id: ' + session_id)
@@ -250,29 +254,60 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
     return state
 
 
-def install(session_root, *, run=subprocess.run, home=None):
+def install(session_root, *, run=subprocess.run, home=None, now=time.time):
     session = Path(session_root).resolve()
     state = read(session / 'session.json')
+    installed = state.get('install', {})
+    # Same durable idempotency key as DriverLane.launch. A terminal receipt
+    # or a loaded calendar job also survives a crash before install recording.
+    if installed.get('exit_code') == 0 or (Path(state['inputs']['custody_root']) / 'night/result.json').is_file():
+        print('install already completed or session terminal; installer not called')
+        return installed
+    label = 'com.joulewise.night'
+    job = run(['launchctl', 'print', f'gui/{os.getuid()}/{label}'],
+              check=False, capture_output=True, text=True, timeout=10)  # DriverLane._job census budget.
+    if job.returncode == 0:
+        print('launchd already holds the night job; installer not called')
+        return installed
+    absent = f'Could not find service "{label}" in domain for user gui: {os.getuid()}'
+    if job.returncode != 113 or absent not in (job.stderr or '').splitlines():
+        raise RuntimeError('launchd job state unavailable')
     measurement = Path(state['measurement_root'])
     plan_path = Path(state['plan_path'])
     if locator(plan_path)['sha256'] != state['plan_sha256']:
         raise ValueError('prepared plan bytes changed')
+    t0 = read(plan_path).get('t0_epoch_s')
+    if not finite(t0) or t0 <= now():
+        message = 'plan t0 has passed or is unavailable; prepare again in a new empty session root'
+        print(message)
+        raise ValueError(message)
     argv = [str(measurement / 'scripts/install_night_agent.sh'), '--plan', str(plan_path),
             '--python', str(measurement / '.venv/bin/python'), '--courier-bin',
             str(measurement / 'scripts/b6_courier.sh'), '--launchctl-bin', 'launchctl']
+    attempt = 1
+    # Existing logs reserve their number even if a crash lost session.json.
+    while any((session / f'staging/install-{attempt:03d}.{suffix}').exists() for suffix in ('stdout', 'stderr')):
+        attempt += 1
+    stdout = session / f'staging/install-{attempt:03d}.stdout'
+    stderr = session / f'staging/install-{attempt:03d}.stderr'
+    # Same installer timeout as DriverLane._installer.
     result = run(argv, check=False, capture_output=True, text=True, timeout=180)
-    (session / 'staging/install.stdout').write_text(result.stdout or '')
-    (session / 'staging/install.stderr').write_text(result.stderr or '')
-    state['install'] = {'argv': argv, 'exit_code': result.returncode}
+    with stdout.open('x') as stream:
+        stream.write(result.stdout or '')
+    with stderr.open('x') as stream:
+        stream.write(result.stderr or '')
+    state['install'] = {'argv': argv, 'exit_code': result.returncode, 'attempt': attempt,
+                        'stdout_path': str(stdout), 'stderr_path': str(stderr)}
     # The installer owns publication at Path.home()/Library/LaunchAgents. Both
     # plists contain the absolute --plan path; the watchdog's installed-agent
     # fence reads them. No local or global collection.active is written (F1).
     directory = Path(home or Path.home()) / 'Library/LaunchAgents'
     paths = [str(directory / (name + '.plist')) for name in ('com.joulewise.night', 'com.joulewise.night.deadman')]
     state['install']['plist_paths'] = paths
+    state.setdefault('install_attempts', []).append(state['install'])
     write(session / 'session.json', state)
     if result.returncode:
-        raise RuntimeError('night job installer failed; see staging/install.stderr')
+        raise RuntimeError('night job installer failed; see ' + str(stderr))
     for path in paths:
         print('installed_plist: ' + path)
     print('Lead handoff: exit this agent session now; the chain also checks its agent census.')
@@ -356,7 +391,16 @@ def cpu_overlap(journal, start, end):
     return cpu, quanta
 
 
-def fitted_rate(clock_rows):
+def fitted_clock(clock_rows):
+    """OLS slope plus the review's read-skew noise model, not a new gate.
+
+    Assume independent uniform anchor error over +/- WINDOW_SKEW_MAX_NS:
+    sigma = bound/sqrt(3); SE(slope) = sigma/sqrt(sum((x-x_mean)**2)).
+    At the monitor's 1 s cadence, Sxx is about n*span**2/12, so a
+    150 s / ~150-anchor member has SE ~0.27 ppm at the 250 us limit.
+    Use actual admitted anchors below. This modeled single-fit SE is not
+    an empirical uncertainty or a correction for worst-of-members selection.
+    """
     anchors = [mapping(r.get('values')).get('anchor') for r in clock_rows if not r.get('error')]
     anchors = [r for r in anchors if isinstance(r, dict) and type(r.get('monotonic_raw_ns')) is int
                and type(r.get('anchor_ns')) is int
@@ -368,7 +412,11 @@ def fitted_rate(clock_rows):
     ys = [Fraction(r['anchor_ns']) for r in anchors]
     xm, ym = sum(xs) / len(xs), sum(ys) / len(ys)
     denominator = sum((x - xm)**2 for x in xs)
-    return float(sum((x - xm) * (y - ym) for x, y in zip(xs, ys)) / denominator * 1e6) if denominator else None
+    if not denominator:
+        return None
+    return {'rate_ppm': float(sum((x - xm) * (y - ym) for x, y in zip(xs, ys)) / denominator * 1e6),
+            'span_s': float((max(xs) - min(xs)) / 10**9), 'n': len(anchors),
+            'standard_error_ppm': math.sqrt(float(Fraction(WINDOW_SKEW_MAX_NS**2, 3) / denominator)) * 1e6}
 
 
 def receipt(session, name, session_id, sources, flags):
@@ -493,9 +541,9 @@ def measurements(state, export_csv):
                     levels.append(value)
             level = max(levels) if levels else None
             selected = [r for r in clocks if (span := journal_span(r)) and a <= span[1] and span[0] <= b]
-            rate = fitted_rate(selected)
-            if rate is not None:
-                rate_observations.append({'run_id': rid, 'rate_ppm': rate, 'samples': len(selected)})
+            fit = fitted_clock(selected)
+            if fit is not None:
+                rate_observations.append({'run_id': rid, 'samples': len(selected), **fit})
         result['runs'][rid] = {'request_s': request, 'member_wall_s': wall, 'stream_s': stream,
             'retained_bytes': retained, 'thermal_level': level, 'outside_cpu_s': cpu, 'census_quanta': k}
         if wall is not None:
@@ -503,7 +551,10 @@ def measurements(state, export_csv):
     frequencies = [v['frequency']['raw_word'] / FREQUENCY_SCALE for r in clocks
                    if not r.get('error') and isinstance((v := mapping(r.get('values'))).get('frequency'), dict)
                    and type(v['frequency'].get('raw_word')) is int]
-    result['clock'] = {'rate_ppm': max((v['rate_ppm'] for v in rate_observations), key=abs, default=None),
+    selected_rate = max(rate_observations, key=lambda v: abs(v['rate_ppm']), default={})
+    result['clock'] = {'rate_ppm': selected_rate.get('rate_ppm'),
+        'rate_member_span_s': selected_rate.get('span_s'), 'rate_member_n': selected_rate.get('n'),
+        'rate_standard_error_ppm': selected_rate.get('standard_error_ppm'),
         'frequency_word_ppm': max(frequencies, key=abs, default=None)}
     result['cpu_contention'] = {k: None for k in ('w_j_per_cpu_s', 'c_q_cpu_s')}
     result['cpu_contention'].update({k: v for k, v in receipt(session, 'cpu_contention', session_id, sources, flags).items()
@@ -540,13 +591,19 @@ def measurements(state, export_csv):
         if not (r.get('measurement') or {}).get('error')
         for t in (r.get('measurement') or {}).get('values', {}).get('targets', [])
         if not t.get('error') and type(t.get('free_bytes')) is int]
+    backup_dirs = [session / name for name in ('backup-claim', 'backup-bound')]
     try:
-        fixed_retained = disk_bytes(session, excluded=bundle_dirs, seen=seen)
+        fixed_retained = disk_bytes(session, excluded=[*bundle_dirs, *backup_dirs], seen=seen)
     except OSError:
         fixed_retained = None
         unavailable('fixed session disk usage')
+    try:
+        backup_retained = sum(disk_bytes(p, seen=seen) for p in backup_dirs)
+    except OSError:
+        backup_retained = None
+        unavailable('backup disk usage')
     result['disk'] = {'pre_arm_free_bytes': min(free_readings, default=None),
-                      'fixed_retained_bytes': fixed_retained}
+                      'fixed_retained_bytes': fixed_retained, 'backup_retained_bytes': backup_retained}
     for section in ('runs', 'regimes'):
         for key, value in result[section].items():
             for field, observed in value.items():
@@ -568,9 +625,13 @@ def measurements(state, export_csv):
         'census_quanta': 'number of the same overlapping census intervals used for CPU seconds',
         'thermal_level': 'max observed native OS thermal level overlapping the member',
         'rate_ppm': 'worst signed per-member OLS slope of monitor anchor_ns against monotonic_raw_ns, multiplied by 1e6',
+        'rate_member_span_s': 'last minus first admitted RAW-clock anchor of the member selected by largest absolute rate_ppm',
+        'rate_member_n': 'number of admitted anchors in that same selected member fit',
+        'rate_standard_error_ppm': 'single-fit noise model: independent uniform +/- WINDOW_SKEW_MAX_NS anchor error; SE = (WINDOW_SKEW_MAX_NS/sqrt(3))/sqrt(Sxx)*1e6, Sxx=sum((RAW_ns-mean_RAW_ns)^2). At 1 s monitor cadence Sxx~n*span_ns^2/12: about 0.27 ppm for a 150 s member with n~150 and the admitted 250000 ns skew limit. Actual admitted timestamps/count used; not empirical uncertainty or a multiplicity correction for worst-of-members selection; registered gate unchanged',
         'frequency_word_ppm': 'worst signed observed kernel raw_word / hazards.clock.FREQUENCY_SCALE',
         'retained_bytes': 'POSIX st_blocks*512 for raw and archive bundle trees, inode-deduplicated; disk usage at desk snapshot',
-        'fixed_retained_bytes': 'remaining allocated session bytes, excluding the per-run bundle subtrees',
+        'fixed_retained_bytes': 'remaining allocated session bytes, excluding per-run bundle subtrees and backup-claim/backup-bound',
+        'backup_retained_bytes': 'POSIX st_blocks*512 for backup-claim and backup-bound trees, inode-deduplicated against raw/archive/fixed bytes at desk snapshot',
         'pre_arm_free_bytes': 'minimum observed native arm disk target free_bytes; null when no arm receipt exists; prepare snapshot is not substituted',
         'stage_timestamp_resolution': 'chain shell date +%s records integer seconds; member endpoints can occupy the final second bucket',
         'sizing': 'disjoint journal union for fixed work; mean(stage span - union member wall spans) for collection overhead; registered settles excluded',

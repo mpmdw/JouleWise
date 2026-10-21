@@ -137,6 +137,9 @@ class SessionTests(unittest.TestCase):
         h.write(reg / 'model_artifact_inventory.json', inventory)
 
     def producer(self, argv, **kwargs):
+        if argv[0] == 'launchctl':
+            return SimpleNamespace(returncode=113, stdout='', stderr=
+                f'Could not find service "com.joulewise.night" in domain for user gui: {os.getuid()}\n')
         if '-c' in argv:
             payload = base64.b64encode(b'{"synthetic":true}\n').decode()
             return SimpleNamespace(returncode=0, stdout=json.dumps({k: payload for k in h.desk_identity.EXPECTED}), stderr='')
@@ -188,6 +191,28 @@ class SessionTests(unittest.TestCase):
         self.assertIn('plan.not_written', [f['kind'] for f in state['flags']])
         self.assertFalse(Path(state['plan_path']).exists())
 
+    def test_prepare_refuses_leads_below_installer_minimum_or_not_finite_numbers(self):
+        original_read = h.read
+        config_path = self.measurement / 'configs/b6/loop.json'
+        for lead in (h.MIN_LEAD_S - 1, True, '420', None, float('nan'), float('inf')):
+            with self.subTest(lead=lead):
+                def configured(path, *args):
+                    return {'launch_lead_s': lead} if Path(path) == config_path else original_read(path, *args)
+                with patch.object(h, 'read', side_effect=configured), redirect_stdout(io.StringIO()):
+                    with self.assertRaisesRegex(ValueError, "installer's 300 seconds"):
+                        h.prepare(self.measurement, self.session, run=lambda *a, **kw: self.fail('no producer'),
+                                  now=lambda: 1700000000)
+                self.assertFalse((self.session / 'session.json').exists())
+
+    def test_prepare_accepts_installer_minimum_lead(self):
+        original_read = h.read
+        config_path = self.measurement / 'configs/b6/loop.json'
+        def configured(path, *args):
+            return {'launch_lead_s': h.MIN_LEAD_S} if Path(path) == config_path else original_read(path, *args)
+        with patch.object(h, 'read', side_effect=configured):
+            state = self.prepared()
+        self.assertEqual(state['t0_epoch_s'], 60 * math.ceil((1700000000 + h.MIN_LEAD_S) / 60))
+
     def test_physical_disk_hazard_stops_before_identity_or_plan(self):
         with self.assertRaises(h.PhysicalHazard), redirect_stdout(io.StringIO()):
             h.prepare(self.measurement, self.session, run=lambda *a, **k: self.fail('no producer before disk gate'),
@@ -203,10 +228,12 @@ class SessionTests(unittest.TestCase):
         state = self.prepared()
         calls = []
         def installer(argv, **kwargs):
+            if argv[0] == 'launchctl':
+                return self.producer(argv)
             calls.append(argv)
             return SimpleNamespace(returncode=0, stdout='stub installed\n', stderr='')
         with redirect_stdout(io.StringIO()) as out:
-            installed = h.install(self.session, run=installer, home=self.root / 'home')
+            installed = h.install(self.session, run=installer, home=self.root / 'home', now=lambda: 1700000000)
         self.assertEqual(calls, [[str(self.session / 'measurement/scripts/install_night_agent.sh'), '--plan', state['plan_path'],
             '--python', str(self.session / 'measurement/.venv/bin/python'), '--courier-bin',
             str(self.session / 'measurement/scripts/b6_courier.sh'), '--launchctl-bin', 'launchctl']])
@@ -214,6 +241,79 @@ class SessionTests(unittest.TestCase):
         self.assertIn('com.joulewise.night.deadman.plist', out.getvalue())
         self.assertFalse((self.session / 'collection.active').exists())
         self.assertFalse((self.root / 'home').exists())
+        first_state = (self.session / 'session.json').read_bytes()
+        first_stdout = Path(installed['stdout_path']).read_bytes()
+        first_stderr = Path(installed['stderr_path']).read_bytes()
+        with redirect_stdout(io.StringIO()):
+            repeated = h.install(self.session, run=lambda *a, **kw: self.fail('already installed'),
+                                 now=lambda: state['t0_epoch_s'] + 1)
+        self.assertEqual(repeated, installed)
+        self.assertEqual((self.session / 'session.json').read_bytes(), first_state)
+        self.assertEqual(Path(installed['stdout_path']).read_bytes(), first_stdout)
+        self.assertEqual(Path(installed['stderr_path']).read_bytes(), first_stderr)
+        self.assertEqual(len(list((self.session / 'staging').glob('install-*.stdout'))), 1)
+
+    def test_install_retries_keep_numbered_receipts_even_after_recording_crash(self):
+        self.prepared()
+        codes = iter([3, 0])
+        def installer(argv, **kwargs):
+            if argv[0] == 'launchctl':
+                return self.producer(argv)
+            code = next(codes)
+            return SimpleNamespace(returncode=code, stdout=f'stub attempt exit {code}\n', stderr=f'code {code}\n')
+        with redirect_stdout(io.StringIO()), self.assertRaisesRegex(RuntimeError, 'install-001.stderr'):
+            h.install(self.session, run=installer, now=lambda: 1700000000)
+        first = h.read(self.session / 'session.json')['install']
+        first_bytes = [Path(first[k]).read_bytes() for k in ('stdout_path', 'stderr_path')]
+        # A crash can leave a numbered log without its session.json entry.
+        orphan = self.session / 'staging/install-002.stdout'
+        orphan.write_text('orphan receipt\n')
+        with redirect_stdout(io.StringIO()):
+            installed = h.install(self.session, run=installer, now=lambda: 1700000000)
+        self.assertEqual(installed['attempt'], 3)
+        self.assertEqual([Path(first[k]).read_bytes() for k in ('stdout_path', 'stderr_path')], first_bytes)
+        self.assertEqual(orphan.read_bytes(), b'orphan receipt\n')
+        self.assertEqual([r['exit_code'] for r in h.read(self.session / 'session.json')['install_attempts']], [3, 0])
+
+    def test_install_returns_without_installer_when_terminal_record_exists(self):
+        state = self.prepared()
+        h.write(Path(state['inputs']['custody_root']) / 'night/result.json', {'chain_exit_code': 0})
+        with redirect_stdout(io.StringIO()):
+            h.install(self.session, run=lambda *a, **kw: self.fail('terminal session'),
+                      now=lambda: state['t0_epoch_s'] + 1)
+        self.assertNotIn('install', h.read(self.session / 'session.json'))
+
+    def test_install_returns_without_installer_when_launchd_holds_job(self):
+        state = self.prepared()
+        calls = []
+        def loaded(argv, **kwargs):
+            calls.append(argv)
+            self.assertEqual(argv, ['launchctl', 'print', f'gui/{os.getuid()}/com.joulewise.night'])
+            return SimpleNamespace(returncode=0, stdout='loaded', stderr='')
+        with redirect_stdout(io.StringIO()):
+            h.install(self.session, run=loaded, now=lambda: state['t0_epoch_s'] + 1)
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn('install', h.read(self.session / 'session.json'))
+
+    def test_install_stops_on_unavailable_launchd_census(self):
+        self.prepared()
+        def unavailable(argv, **kwargs):
+            self.assertEqual(argv[0], 'launchctl')
+            return SimpleNamespace(returncode=1, stdout='', stderr='permission denied')
+        with self.assertRaisesRegex(RuntimeError, 'launchd job state unavailable'):
+            h.install(self.session, run=unavailable, now=lambda: 1700000000)
+        self.assertFalse(list((self.session / 'staging').glob('install-*.stdout')))
+
+    def test_install_prints_expired_plan_remedy_before_installer(self):
+        state = self.prepared()
+        def census_only(argv, **kwargs):
+            self.assertEqual(argv[0], 'launchctl')
+            return self.producer(argv)
+        with redirect_stdout(io.StringIO()) as out, self.assertRaisesRegex(ValueError, 'prepare again'):
+            h.install(self.session, run=census_only, now=lambda: state['t0_epoch_s'] + 1)
+        self.assertIn('t0 has passed', out.getvalue())
+        self.assertIn('prepare again in a new empty session root', out.getvalue())
+        self.assertNotIn('install', h.read(self.session / 'session.json'))
 
     def test_desk_requires_terminal_record(self):
         self.prepared()
@@ -304,7 +404,9 @@ class SessionTests(unittest.TestCase):
                 clock.append({'run_id': rid, 'event': event, 'clock': {'wall_s': stamp/1e9,
                     'monotonic_ns': stamp, 'monotonic_raw_ns': stamp}})
                 clock_fits.append({'started': {'monotonic_ns': stamp}, 'finished': {'monotonic_ns': stamp},
-                    'values': {'anchor': {'monotonic_raw_ns': stamp, 'anchor_ns': 10**12, 'read_skew_ns': 0},
+                    'values': {'anchor': {'monotonic_raw_ns': stamp,
+                               'anchor_ns': 10**12 + (stamp-a) * (2 if index == 0 else -3 if index == 1 else 0) // 10**6,
+                               'read_skew_ns': 0},
                                'frequency': {'raw_word': 0}}})
             thermal.append({'started': {'monotonic_ns': a}, 'finished': {'monotonic_ns': b}, 'values': {'level': 0}})
             contention.append({'values': {'interval': {'monotonic_ns': [a,b]}, 'outside_total_cpu_s_per_s': .01, 'elapsed_s': (b-a)/1e9}})
@@ -328,7 +430,28 @@ class SessionTests(unittest.TestCase):
             h.write(self.session/'receipts'/(name+'.json'), {'schema_version': 'joulewise.bytes_h_'+name+'.v1',
                 'non_claim': True, 'session_id': supplied['session_id'], 'values': values,
                 'derivation': 'Controlled synthetic arithmetic from tests.test_bytes_gates.synthetic_harvest; never live evidence.'})
+        # Keep the session directory's own allocation stable for the snapshot
+        # comparison; only membership-dependent backup content is added later.
+        backup_dirs = [self.session / name for name in ('backup-claim', 'backup-bound')]
+        for backup in backup_dirs:
+            backup.mkdir()
         measured = h.measurements(state, exported.csv_path)
+        self.assertEqual(measured['disk']['backup_retained_bytes'], sum(h.disk_bytes(p) for p in backup_dirs))
+        for index, backup in enumerate(backup_dirs):
+            source = self.session / 'archive/sources/claim-runs' / native_rows[index]['run_id']
+            shutil.copytree(source, backup / 'runs' / source.name)
+        with_backup = h.measurements(state, exported.csv_path)
+        self.assertEqual(with_backup['disk']['fixed_retained_bytes'], measured['disk']['fixed_retained_bytes'])
+        self.assertEqual(with_backup['disk']['backup_retained_bytes'], sum(h.disk_bytes(p) for p in backup_dirs))
+        self.assertGreater(with_backup['disk']['backup_retained_bytes'], measured['disk']['backup_retained_bytes'])
+        self.assertEqual({rid: r['retained_bytes'] for rid, r in with_backup['runs'].items()},
+                         {rid: r['retained_bytes'] for rid, r in measured['runs'].items()})
+        selected = max(measured['clock_fit_observations'], key=lambda fit: abs(fit['rate_ppm']))
+        self.assertTrue(math.isclose(measured['clock']['rate_ppm'], -3, rel_tol=1e-6, abs_tol=1e-6))
+        self.assertEqual(measured['clock']['rate_member_n'], selected['n'])
+        for output, fit_key in [('rate_ppm', 'rate_ppm'), ('rate_member_span_s', 'span_s'),
+                                ('rate_standard_error_ppm', 'standard_error_ppm')]:
+            self.assertTrue(math.isclose(measured['clock'][output], selected[fit_key], rel_tol=1e-6, abs_tol=1e-6))
         h.write(self.session/'MEASUREMENTS.json', measured)
         child = subprocess.run([sys.executable, str(ROOT/'scripts/bytes_gates.py'), '--runs', str(exported.csv_path),
             '--measurements', str(self.session/'MEASUREMENTS.json'), '--out', str(self.session/'C5.json')],
@@ -390,6 +513,30 @@ class SessionTests(unittest.TestCase):
 
 
 class ReceiptMathTests(unittest.TestCase):
+    def test_clock_noise_model_uses_admitted_count_and_actual_member_span(self):
+        # Monitor cadence is 1 s. For n equally spaced anchors,
+        # Sxx_s2 = n*(n**2-1)/12; independent uniform +/- admitted skew
+        # has sigma_s = (WINDOW_SKEW_MAX_NS/1e9)/sqrt(3).
+        n = 151  # inclusive endpoints of a 150 s member at 1 s cadence.
+        anchors = [{'values': {'anchor': {'monotonic_raw_ns': i * 10**9,
+                    'anchor_ns': 10**12 - 2*i*1000, 'read_skew_ns': h.WINDOW_SKEW_MAX_NS}}}
+                   for i in range(n)]
+        rejected = deepcopy(anchors[0])
+        rejected['values']['anchor']['read_skew_ns'] += 1
+        errored = deepcopy(anchors[0]); errored['error'] = 'unmeasured'
+        fit = h.fitted_clock([*anchors, rejected, errored, {'values': {}}])
+        expected_se = h.WINDOW_SKEW_MAX_NS / 10**9 / math.sqrt(3) * math.sqrt(12 / (n*(n*n-1))) * 1e6
+        self.assertEqual(fit['n'], n)
+        for observed, expected in [(fit['rate_ppm'], -2), (fit['span_s'], 150),
+                                   (fit['standard_error_ppm'], expected_se)]:
+            self.assertTrue(math.isclose(observed, expected, rel_tol=1e-6, abs_tol=1e-6))
+        # Dropped interior anchors change the noise floor even at the same span.
+        sparse = h.fitted_clock([anchors[0], anchors[-1]])
+        self.assertEqual(sparse['n'], 2)
+        self.assertGreater(sparse['standard_error_ppm'], fit['standard_error_ppm'])
+        self.assertIsNone(h.fitted_clock([anchors[0], anchors[0]]))
+        self.assertIsNone(h.fitted_clock([rejected, errored]))
+
     def test_cpu_counts_whole_native_request_overlap_quanta_without_prorating(self):
         journal = [{'values': {'interval': {'monotonic_ns': [0,10**9]}, 'outside_total_cpu_s_per_s': .2, 'elapsed_s': 1}},
                    {'values': {'interval': {'monotonic_ns': [10**9,2*10**9]}, 'outside_total_cpu_s_per_s': .4, 'elapsed_s': 1}}]
