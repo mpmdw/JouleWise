@@ -655,3 +655,43 @@ The registry failure is the already-known container orphan case, `FixtureOrphanC
 All completed runs use Python 3.13.5, JW_B5_SYNTHETIC_ONLY=1, PYTHONDONTWRITEBYTECODE=1, a fresh TMPDIR=/tmp/jw-b2.EZWXVe and isolated uv-installed pytest 9.1.1 on PYTHONPATH=/tmp/jw-b2.EZWXVe/venv/lib/python3.13/site-packages. zsh and Python were already available; no tested path needed the unavailable Homebrew symlink. A detached launcher ended before completion and was restarted in a persistent tool session; that incomplete attempt is not counted. A read-only collection attempt could not create pytest capture files and was rerun successfully with write access.
 
 No real archive or key directory was opened. No whole suite was run: Addendum 2 reserves the merge gate for the Mac. No twin/agreement claim or live-hardware validation is made. The end-to-end test uses the existing B1 stage chain with separate `blinded`, `fit` and `heldout` CLI processes, actual release files, commitment hashes and unreleased-key refusals. The 60-campaign diagnostic separately uses the inherited all-stage analysis entry point; it does not replace the process-level chain test.
+
+
+## NR1 labelled meter-offset alternative (Addendum 9)
+
+Authority: `docs/process_traces/2026-10-21-magistrate-a017b694/B2-NR1-RULING.md`
+on `records/2026-10-21-a017`; JouleWise-data
+`claude/b2-nr1-judge-7n0s7d:reports/b2-nr1-judge/fable.md`, section 1.
+Registered H2 coefficients, covariance, k and intervals stay unchanged and print
+first, labelled **statistical; conditional on the mapped meter energies**.
+
+The meter record adds `offset_bound_w = max(edge_powers_w) *
+(r_max_s + sample_interval_s) / duration_s`, `adjacent_before_edge_powers_w`
+and their signed difference `offset_sensitivity_w`. The pass and model tables
+carry `meter_offset_bound_w` and `meter_offset_sensitivity_w`, using the existing
+repeat/quad weights and then the arithmetic mean over available passes as B
+is averaged. Missing values remain null; they do not change selection.
+
+Every computed DC-input/rest fit prints `coefficient_C`, where
+C_j = sum_i |A_ji| bound_i and A = (X'X)^(-1)X', plus `offset_intervals` and
+`offset_ols_intervals` (registered endpoints widened by C). No shrinkage, t
+multiplier, drift, rails anchor or h is added to C. All coefficients, including
+intercepts and the separate rest fit, carry the alternative. `primary_intervals`
+repeats these columns for each primary coefficient. `coefficient_decisions` and
+`offset_decisions` print positive/negative/contains-zero for both choices;
+`resident_adds_nothing_offset` applies the registered rho rule to the alternative.
+Rails has no C or offset alternative. Missing/invalid bounds print
+`systematics_flag`, leaving the registered fit available.
+
+Disclosure with every H2 DC/rest row (`offset_disclosure`): **delta has not been
+measured (block-6 M13); its structural bound is one sample period plus the poll
+round trip, 22 to 25 ms on recorded 50 SPS streams.**
+`d_beta_d_delta_per_ms` prints the signed sensitivity
+sum_i A_ji (P_adj-before-start,i - P_adj-before-end,i) / T_i / 1000.
+`sensitivity_units` is J/GB per ms for epsilon/rho, W per ms for intercepts,
+and per ms for lambda. Adjacent powers use the same weights and pass means;
+T is the point's mean duration, as in the registered ratio-of-means power.
+The alternative is conditional on observed regressors and does not resolve
+uncertainty in the separate rest fit's measured rails predictor or its VIF.
+The fixture remains 10 Hz: for a fixed delta the flips are five times larger
+and five times rarer than at 50 SPS, inflating HC3's apparent self-protection.

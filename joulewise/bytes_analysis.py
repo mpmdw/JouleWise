@@ -138,7 +138,7 @@ def _inverse(matrix):
     return [row[n:] for row in a]
 
 
-def ols(predictors, response, *, family_size=9):
+def ols(predictors, response, *, family_size=9, response_bounds=None):
     """OLS point estimates; primary HC3 and labelled OLS Student-t intervals."""
     n, p = len(response), len(predictors[0]) + 1
     if n <= p or len(predictors) != n or any(len(row) != p - 1 for row in predictors):
@@ -183,12 +183,33 @@ def ols(predictors, response, *, family_size=9):
     critical = student_t_quantile(1 - .05 / (2 * family_size), n - p)
     se = [math.sqrt(max(0.0, covariance[i][i])) for i in range(p)]
     ols_se = [math.sqrt(max(0.0, ols_covariance[i][i])) for i in range(p)]
-    return {"n": n, "df": n - p, "coefficients": coefficients, "covariance": covariance,
+    result = {"n": n, "df": n - p, "coefficients": coefficients, "covariance": covariance,
             "se_method": "HC3", "standard_errors": se,
             "ols_covariance": ols_covariance, "ols_standard_errors": ols_se,
             "ols_intervals": [[v - critical * e, v + critical * e] for v, e in zip(coefficients, ols_se)],
             "mse": mse, "critical": critical, "family_size": family_size,
             "intervals": [[v - critical * e, v + critical * e] for v, e in zip(coefficients, se)]}
+
+    if response_bounds is not None:
+        try:
+            bounds = [number(v, "H2 coherent meter-edge power bound", nonnegative=True)
+                      for v in response_bounds]
+        except (AnalysisError, TypeError) as exc:
+            result["systematics_flag"] = "response bounds unavailable: " + str(exc)
+        else:
+            if len(bounds) != n:
+                result["systematics_flag"] = "response bounds unavailable: row count mismatch"
+            else:
+                # beta = A y. Convert the existing normalized influences to
+                # printed coefficient units; C is the exact response-box support.
+                result["coefficient_C"] = [math.fsum(
+                    abs(math.fsum(t * v for t, v in zip(row, unit))) * bound
+                    for unit, bound in zip(influence, bounds)) for row in transform]
+                for target, source in (("offset_intervals", "intervals"),
+                                       ("offset_ols_intervals", "ols_intervals")):
+                    result[target] = [[lo - c, hi + c]
+                                      for (lo, hi), c in zip(result[source], result["coefficient_C"])]
+    return result
 
 
 def deviation(fit, predictors, observed, measured_half_w=0.0):
@@ -220,9 +241,23 @@ def h2(points, rails_power, *, boundary=None, family_size=None):
             return {**refused, "reason": "n - p < 2"}
         try:
             fit = ols([[f(row) for f in predictors] for row in rows],
-                      [row["power"] for row in rows], family_size=1)
+                      [row["power"] for row in rows], family_size=1,
+                      response_bounds=[row.get("meter_offset_bound_w") for row in rows]
+                      if boundary != "rails" else None)
         except AnalysisError as exc:
             return {**refused, "reason": str(exc)}
+        if boundary != "rails":
+            if all(row.get("meter_offset_sensitivity_w") is not None for row in rows):
+                # The response derivative is (P_before_start-P_before_end)/T.
+                # OLS is linear at fixed X. Divide by 1000 for per-ms units.
+                sensitivity = ols([[f(row) for f in predictors] for row in rows],
+                    [row["meter_offset_sensitivity_w"] / row["duration_s"] for row in rows],
+                    family_size=1)
+                fit["d_beta_d_delta_per_ms"] = [v / 1000 for v in sensitivity["coefficients"]]
+                fit["sensitivity_units"] = ["W per ms", "J/GB per ms"] + (
+                    ["J/GB per ms"] if p == 3 else [])
+            else:
+                fit["sensitivity_flag"] = "adjacent-before-edge powers unavailable"
         return {**fit, "status": "computed", "p": p, "point_labels": refused["point_labels"]}
 
     bw, resident_rate = lambda p: p["BW"], lambda p: p["resident"] / p["time"]
@@ -232,6 +267,8 @@ def h2(points, rails_power, *, boundary=None, family_size=None):
     tier = attempt(tier_points, [bw, resident_rate])
     rest_points = [p for p in points if p["model"] in rails_power]
     rest = attempt(rest_points, [bw, lambda p: rails_power[p["model"]]]) if boundary == "rest" else None
+    if rest is not None and "sensitivity_units" in rest:
+        rest["sensitivity_units"][2] = "per ms"
     specs = [("epsilon", two, 1), ("extended_epsilon", extended, 1),
              ("rho", extended, 2), ("tier_epsilon", tier, 1), ("tier_rho", tier, 2)]
     if rest is not None:
@@ -248,6 +285,21 @@ def h2(points, rails_power, *, boundary=None, family_size=None):
         for key, errors in (("intervals", "standard_errors"), ("ols_intervals", "ols_standard_errors")):
             fit[key] = [[v - critical * e, v + critical * e]
                         for v, e in zip(fit["coefficients"], fit[errors])]
+        fit["interval_scope"] = "statistical; conditional on the mapped meter energies"
+        if boundary != "rails":
+            fit["offset_scope"] = "coherent meter label offset; observed regressors fixed"
+            if "coefficient_C" in fit:
+                for target, source in (("offset_intervals", "intervals"),
+                                       ("offset_ols_intervals", "ols_intervals")):
+                    fit[target] = [[lo - c, hi + c]
+                                   for (lo, hi), c in zip(fit[source], fit["coefficient_C"])]
+                # The same zero/sign rule is printed for both interval choices.
+                decision = lambda interval: "positive" if interval[0] > 0 else (
+                    "negative" if interval[1] < 0 else "contains zero")
+                fit["coefficient_decisions"] = [decision(v) for v in fit["intervals"]]
+                fit["offset_decisions"] = [decision(v) for v in fit["offset_intervals"]]
+            else:
+                fit.setdefault("systematics_flag", "missing response bounds; alternative unavailable")
     outside = [{**_point_label(p), "status": "computed", **deviation(tier,
                 [bw(p), resident_rate(p)], p["power"], p.get("power_half_w",
                 (p.get("h_j", 0.0) + p.get("B_j", 0.0)) / p.get("duration_s", 1.0)))}
@@ -274,12 +326,37 @@ def h2(points, rails_power, *, boundary=None, family_size=None):
                  "lower": fit["intervals"][index][0], "upper": fit["intervals"][index][1],
                  "HC3_se": fit["standard_errors"][index], "OLS_se": fit["ols_standard_errors"][index]}
                 for name, fit, index in specs[5:] if fit["status"] == "computed"]
+    for name, fit, index in specs:
+        if fit["status"] == "computed" and boundary != "rails":
+            item = next(row for row in primary if row["term"] == name)
+            if "coefficient_C" in fit:
+                item.update(coefficient_C=fit["coefficient_C"][index],
+                    offset_intervals=fit["offset_intervals"][index],
+                    offset_ols_intervals=fit["offset_ols_intervals"][index],
+                    coefficient_decision=fit["coefficient_decisions"][index],
+                    offset_decision=fit["offset_decisions"][index])
+            else:
+                item["systematics_flag"] = fit["systematics_flag"]
+            if "d_beta_d_delta_per_ms" in fit:
+                item.update(d_beta_d_delta_per_ms=fit["d_beta_d_delta_per_ms"][index],
+                            sensitivity_units=fit["sensitivity_units"][index])
+    adds_nothing_offset = None
+    if extended["status"] == "computed" and "offset_intervals" in extended:
+        lo, hi = extended["offset_intervals"][2]
+        adds_nothing_offset = lo <= 0 <= hi or extended["coefficients"][2] <= 0
     adds_nothing = None
     if extended["status"] == "computed":
         rho = extended["coefficients"][2]
         lo, hi = extended["intervals"][2]
         adds_nothing = lo <= 0 <= hi or rho <= 0
-    return {"n": len(points), "k": family, "point_labels": [_point_label(p) for p in points],
+    offset_output = {} if boundary == "rails" else {
+        "resident_adds_nothing_offset": adds_nothing_offset,
+        "offset_disclosure": "Meter label offset delta is unmeasured (block-6 M13); structural bound "
+            "is one sample period plus the poll round trip, 22 to 25 ms on recorded 50 SPS streams. "
+            "Registered intervals are statistical; conditional on the mapped meter energies. "
+            "d_beta_d_delta_per_ms prints signed fixed-design sensitivity; response bounds do not "
+            "model uncertainty in regressors (including the separate rest fit's measured rails predictor)."}
+    return {"n": len(points), "k": family, **offset_output, "point_labels": [_point_label(p) for p in points],
             "primary_intervals": primary, "two_term": two, "resident_extended": extended,
             "resident_adds_nothing": adds_nothing, "tier": tier, "tier_deviations": outside,
             "rest": rest, "loo_description": loo}
@@ -351,15 +428,21 @@ def meter_decode(stream, decode_span, idle_span):
     residual = max(abs(number(stats[key], key)) for key in
                    ("excess_latency_ms_min", "excess_latency_ms_max")) / 1000
     interval = number(stream.samples.step_ms, "meter sample interval", positive=True) / 1000
-    powers = []
+    powers, before = [], []
     for edge in spans[0]:
         right = bisect.bisect_left(stream.host_ns, edge)
         adjacent = [i for i in (right - 1, right) if 0 <= i < len(stream.host_ns)]
         powers.append(max(number(stream.watts[i], "meter edge power", nonnegative=True) for i in adjacent))
+        before.append(stream.watts[max(0, right - 1)])
     u = math.fsum(powers) * (residual + interval)
     return {"gross_j": gross, "secondary_j": gross - base / idle_duration * duration,
             "idle_power_w": base / idle_duration, "phase_edge_j": u,
             "edge_powers_w": powers, "r_max_s": residual, "sample_interval_s": interval,
+            # One slice is swapped under a coherent offset, hence max, not
+            # the sum in u. NR1 adopts the existing (r_max + interval) factor.
+            "offset_bound_w": max(powers) * (residual + interval) / duration,
+            "offset_sensitivity_w": before[0] - before[1],
+            "adjacent_before_edge_powers_w": before,
             "n": n, "n_idle": nb, "clock_fit": stats}
 
 
@@ -916,7 +999,12 @@ def _phase_cell(kept, removed, module, boundary, secondary, *, minimum_units=5):
     # R5 multiplicity widens h only; registered B is unchanged.
     h = student_t_quantile(1 - .05 / (2 * H1_CHECKS), interval["df"]) * math.sqrt(interval["variance"])
     bound, mean = interval["B_j"], estimate["mean_j"]
-    return {"status": "computed", "mean_j": mean,
+    offset = {}
+    if boundary != "rails":
+        for field in ("bound_w", "sensitivity_w"):
+            values = [r["meter"].get("offset_" + field) for r in kept]
+            offset["meter_offset_" + field] = _weighted(kept, values) if all(v is not None for v in values) else None
+    return {"status": "computed", **offset, "mean_j": mean,
                  "lower_j": mean - h - bound, "upper_j": mean + h + bound,
                  "h_j": h, "B_j": bound, "kind_averages_j": interval["kind_averages_j"],
                  "meter_phase_edge_mean_j": _weighted(kept, [r["meter"]["phase_edge_j"] for r in kept]) if boundary != "rails" else 0.0,
@@ -1028,6 +1116,11 @@ def combine_passes(rows):
                      power_half_w=(h + bound) / duration, passes=planned,
                      time=duration / DECODE_STEPS, power=mean / duration,
                      BW=point["bytes"] * DECODE_STEPS / duration)
+        if point["boundary"] != "rails":
+            # Average available per-pass terms just as B; no sqrt(n) or t.
+            for field in ("meter_offset_bound_w", "meter_offset_sensitivity_w"):
+                values = [r.get(field) for r in group]
+                point[field] = statistics.fmean(values) if all(v is not None for v in values) else None
         if any("without_assisted" in r for r in group):
             diagnostics = [r.get("without_assisted", r) for r in group]
             means = [r["mean_j"] for r in diagnostics]
