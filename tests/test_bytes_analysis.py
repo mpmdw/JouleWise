@@ -68,6 +68,33 @@ def assert_d3_exercised(test, records, manifest):
             "min_agreement_bars": min(agreement_bars)}
 
 
+
+def cli_stage_chain(root, manifest):
+    """Run the real CLI with actual key releases and an immutable commitment."""
+    _write_json(root / "manifest.json", manifest)
+    args = [sys.executable, str(ROOT / "scripts/bytes_analyze.py"),
+            "--export", str(root / "export"), "--manifest", str(root / "manifest.json")]
+    def stage(name, output, predictions=None):
+        command = args + ["--stage", name, "--out", str(output)]
+        if predictions is not None:
+            command += ["--predictions", str(predictions)]
+        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+        if result.returncode:
+            raise AssertionError(result.stdout + result.stderr)
+    stage("blinded", root / "blinded")
+    release_keys(root, manifest, "fit")
+    # The CLI calls stages 1 and 2 fit and heldout; those are the registered stages.
+    stage("fit", root / "stage1")
+    predictions = root / "stage1/predictions.json"
+    commitment = predictions.read_bytes()
+    release_keys(root, manifest, "all")
+    stage("heldout", root / "out", predictions)
+    # Exact identity is the property: stage 2 must never rewrite predictions.
+    assert predictions.read_bytes() == commitment
+    assert predictions.with_suffix(".sha256").read_text().strip() == hashlib.sha256(commitment).hexdigest()
+    return root / "out"
+
+
 def fit_points():
     return [{"bytes": x, "resident": x, "time": x, "e": 2 * x,
              "lower": 2 * x - 1, "upper": 2 * x + 1} for x in (1, 2, 3)]
@@ -472,6 +499,46 @@ release_keys = _campaign.release_keys
 
 
 class ProductionArchiveTests(NumericTestCase):
+    def test_nr1_offset_term_covers_constant_label_offset(self):
+        fits, diagnostics = {}, {}
+        for latency in (0, 10):
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                manifest = archive_campaign(root, world="resident", seed=3100,
+                    non_claim=False, release="none", sample_phase_ms=50, edge_phase=True,
+                    min_receive_latency_ms=latency)
+                output = cli_stage_chain(root, manifest)
+                records = ba.load_records(root / "export", manifest, stage="all")
+                rows = ba.read_json(output / "h2.json")
+                fits[latency] = {row["boundary"]: row["resident_extended"] for row in rows
+                    if row["selection"] == "primary" and row["basis"] == "gross primary"}
+                # Integer microW payload rounding can change integrated energy by
+                # at most 0.5 microW * T. Anything larger is a whole-sample flip.
+                flips = sum(abs(r["meter"]["gross_j"] - 2 * r["rails_j"]) >
+                            .5e-6 * r["duration_s"] for r in records)
+                diagnostics[latency] = {"runs": len(records), "flips": flips,
+                    "max_error_j": max(abs(r["meter"]["gross_j"] - 2 * r["rails_j"]) for r in records)}
+        for boundary in ("DC input", "rest"):
+            shifted, clean = fits[10][boundary], fits[0][boundary]
+            # (a) The ruling's exercise bar is 1% of the HC3 ruled half-width,
+            # Addendum 8. No tighter bar is chosen to expose the effect.
+            bar = .01 * shifted["critical"] * shifted["standard_errors"][1]
+            self.assertGreater(abs(shifted["coefficients"][1] - clean["coefficients"][1]), bar)
+            # (b) Structural epsilon is exactly zero in this resident world.
+            # Containment is the interval's decision rule, with no extra tolerance.
+            for key in ("offset_intervals", "offset_ols_intervals"):
+                lo, hi = shifted[key][1]
+                self.assertLessEqual(lo, 0)
+                self.assertGreaterEqual(hi, 0)
+        # (c) A uniform science-edge phase flips with p=delta/Delta_t.
+        # The ruling specifies three binomial standard errors, not a tuned bar.
+        p = (10 / 1000) / .1
+        n = diagnostics[10]["runs"]
+        self.assertLessEqual(abs(diagnostics[10]["flips"] / n - p),
+                             3 * math.sqrt(p * (1 - p) / n))
+        print("BYTES_NR1_COUNTEREXAMPLE=" + json.dumps({"diagnostics": diagnostics,
+            "fits": fits}, sort_keys=True), flush=True)
+
     def test_synthetic_harvest_export_release_chain_uses_cli_processes(self):
         from collections import Counter
         from joulewise.b6 import blinding, export_runs
