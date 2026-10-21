@@ -40,3 +40,19 @@ exit 0
 
 Program comparison of the fix report's 60-campaign table against the judge's variant A table (`fable.md` lines 210-227):
 18 rows, 72 registered rates compared, 0 differ.
+
+## Delta passes on the fix (19f88e5b7..0743a7b90, registration 9c91e9b8d..91b20d7c2)
+
+Fix: Sol 6.1 high, Codex Cloud thread 01a15dc5; report JouleWise-data `codex/bytes-b2-nr1-coldfix`
+`reports/bytes-b2-nr1-coldfix/REPORT.md`. Both delta passes blind, executing, whole module 58 OK:
+
+- Opus 5.5: `VERDICT: ACCEPT` (`claude/b2-nr1-delta-opus` 1f55497e6, `reports/b2-nr1-delta/opus.md`). One info item
+  (fallback flag text unreachable through the CLI; the old-fit/new-heldout path refuses before any arithmetic).
+- Fable 5.1: `VERDICT: ACCEPT` (`claude/b2-nr1-delta-fable` a2edc54b0, `reports/b2-nr1-delta/fable.md`). Registered
+  arithmetic bit-identical in three worlds; own C (exact rational A, raw streams) equal to the bit or within 1e-11;
+  a per-run sign-check mutant is killed by the new regression.
+
+| Finding | Disposition |
+| --- | --- |
+| Fable F1: the flag names the run id, which repeats across passes | Rejected for now (representation only): the pass row carries the null on the right pass. |
+| Fable F2 / Opus info: a bound that is null with no per-run flag prints no run name | Rejected (representation only): unreachable through the stage chain. |
