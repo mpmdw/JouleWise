@@ -52,3 +52,13 @@ exit 0
 
 The Opus review's P6 probe recomputed the current rule's 145,981,542,042 B footprint exactly (cited at
 JouleWise-data ca761b4 `reports/bytes-h-review/opus.md`, P6 block).
+
+## Addendum 1 (same day): native arm budget
+
+The native driver budgets three target copies as integer `bytes_per_member` × member count, plus headroom. Under
+the H plan as written that comes to 114,038,886,098 B, against prepare's P of 86,236,568,521 B. Ruled: option 1 of
+the implementation report (`.codex-report/bytes-h-disk.md` on `lane/2026-10-21-bytes-h-session`):
+- H's caller encodes P exactly in the existing fields: q = floor(2B / (3 × 123)) = 150,690,066 per member, and
+  headroom = (2B − 3 × 123 × q) + 2·WAIT + fixed = 30,631,934,167 B, so that the native total equals P.
+- The plan's disk record names this as a budget encoding derived from P (flag `disk.budget_encoded_from_p`).
+- No change to the driver or plan writer that alpha/beta/gamma use.

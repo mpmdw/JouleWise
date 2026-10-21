@@ -204,7 +204,31 @@ Differences from the brief, added to the eight of the block below:
 - **Release (§12.3) still needs:** block 5's release event, the blind dry run over all nine block-6 sessions with no tooling refusal, and the independent recompute within S-13. Item 53's `claim_usable` finding (r2-gamma) must be fixed in the consumer before that dry run.
 - Ed emailed the verdict and the close on the block-6 thread.
 
-**Next activation (written 2026-10-21 by loop wake 000002; item 59):** block 6 is closed and the loop is `DONE`, so the Mac is free. Item 58's list stands (B2 NR1 fix, L9 build and PR #513, then the B2, B4, B3, B5, G merge path), and the Mac now goes to L9 and BYTES item H in bounded rounds, local Sol through codex-run-v3. BYTES pass 1 needs t0 before 2026-11-02. Block-6 release work: the item-53 `claim_usable` consumer fix, then the blind dry run once the L9 and block-5 release path allows it.
+60. **Magistrate activation 283e9802 (Opus 5.5, headless, 2026-10-21 01:41 to about 08:50 PDT).** Record: `docs/process_traces/2026-10-21-magistrate-283e9802/RECORD.md`. No mail from Ed, no notices, no new directives. Emailed Ed r4-alpha's verdict and the block-6 close (the loop wake emailed it too; see the record's pruning list).
+- **B2 NR1 done, gates complete, not merged.** Cold passes Fable ACCEPT and Opus ACCEPT WITH CHANGES. M1, the C_j form (pass-averaged joules over the mean decode time), was fixed in 0743a7b90. Delta passes: both ACCEPT. Dispositions are in `B2-NR1-COLD-DISPOSITION.md`. PR #515 is green with its ledger filled. Merging it would land the whole B1 line, including the open block-6 drafts #499 and #502 (123 commits), on main, so that is held for an explicit decision.
+- **BYTES item H runner built:** `lane/2026-10-21-bytes-h-session` at b56eae9fd (`scripts/bytes_h_session.py` prepare/install/desk, kit registration inputs), PR #516 (CI branch f92f560e1).
+  - The executing review (Opus) found no blocker; its fixes are in.
+  - Disk rule ruled after a two-seat blind consult (`H-DISK-RULING.md`): refuse below P = 86,236,568,521 B, with no 150 GiB reserve; the rule refuses 0 of the 9 known-good sessions.
+  - A real dry prepare passed the disk check (112.75 GB free) and stopped at INPUTS_ONLY, because there is no calibration ledger in the worktree.
+- **L9:** the cloud thread 01a15b81 has been silent since 08:22 UTC, with the joined run unreported. CI-only PR #517 found a lane defect: `tests.b5_analysis.test_sensitivity_guard` fails `exclusions_roster_mismatch`, and it reproduces on c11402cf6.
+- **Disk:** 17 GB of unreferenced archives offloaded to iCloud and evicted. Block-5 harvests and the July run directories stay local, because programs read them.
+
+**Next activation (written 2026-10-21 by activation 283e9802; item 60):** the loop is DONE and the Mac is free. Do these in order, in bounded slices:
+(1) **Item H to arm.**
+- Read PR #516 CI on f92f560e1.
+- Make a measurement checkout at b56eae9fd under `/Users/edr/night-custody/measurement/` (its own `.venv`, as the b6 checkouts have) and give it the matching calibration ledger (`prepare` prints INPUTS_ONLY without one; never fabricate one).
+- Run `scripts/bytes_h_session.py prepare` from it into a fresh session root. It must reach STAGED with disk at or above P.
+- Send Ed the arm notice. Ed's NO overrides.
+- Run `install` as the session's last act, then exit. After the terminal record, the next activation runs `desk`.
+(2) **L9.** If the cloud thread 01a15b81 has not pushed, treat it as stalled. Run a bounded local Sol round on `lane/2026-10-20-l9-ruling-build` covering:
+- the `test_sensitivity_guard` `exclusions_roster_mismatch` failure;
+- the census refresh (cherry-pick it from `ci/2026-10-21-l9`);
+- the opted-in joined run (`JW_B5_S10_REAL_PROGRAMS=1`, detached with persistent logs, hours).
+Then CI, the executing review, and the cold Fable and Opus passes.
+(3) **Merge decision for #515.** Its base line carries #499, #502 and B1. Decide whether to land that line first (under its own ledger) or together with B2. Then follow the merge path: B4 rebased on B2, B3 twin, B5 kit, item G.
+(4) For BYTES pass sessions, take `H-DISK-RULING.md` to the J/C5 disk gate as the proposal that replaces R6's reserve.
+
+(History) **Next activation (written 2026-10-21 by loop wake 000002; item 59):** block 6 is closed and the loop is `DONE`, so the Mac is free. Item 58's list stands (B2 NR1 fix, L9 build and PR #513, then the B2, B4, B3, B5, G merge path), and the Mac now goes to L9 and BYTES item H in bounded rounds, local Sol through codex-run-v3. BYTES pass 1 needs t0 before 2026-11-02. Block-6 release work: the item-53 `claim_usable` consumer fix, then the blind dry run once the L9 and block-5 release path allows it.
 
 (History) **Next activation (written 2026-10-21 by activation a017b694; item 58):** if the loop is in PRECHECK, ARM_WAIT, SMOKE_* or SESSION_RUN, or `collection.active` exists, exit at once, quietly. When r4-alpha's attempt line lands, email Ed its verdict; if alpha counts, block 6 is closed (alpha 3, beta 3, gamma 3): hold the loop and give the Mac to L9 and BYTES item H in bounded rounds. During a SESSION_DESK or once the loop holds, read cloud results by `origin/<branch>` and act: (1) **B2 NR1 fix** (JouleWise-data `codex/bytes-b2-nr1-fix` `reports/bytes-b2-nr1-fix/REPORT.md`): verify coverage against the judge's variant A, then B2's draft PR for CI, executing review, cold Fable and Opus passes. (2) **L9 build** (`.codex-report/l9-ruling-build.md`, PR #513): when the joined run reports, refresh `tests/test_authentication_io.py`'s three `_write_append_only` census lines (4147/4165/4171 to 4133/4151/4157) and merge main into the lane (docs fix), then CI, the executing review and the cold Fable and Opus passes. (3) **Merge path:** B2, then B4 (rebased on B2; its review adds a regression for the Q2 changed-module path and fills the registration's catalog-SHA slot), then B3 twin, B5 kit, item G.
 
