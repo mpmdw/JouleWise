@@ -1,0 +1,9 @@
+{
+  "absent": true,
+  "epoch_s": 1792569457.680297,
+  "exit_code": 0,
+  "monotonic_ns": 553794664081041,
+  "pgid": 35327,
+  "schema": "joulewise.chain_exit_census.v1",
+  "survivors": []
+}
