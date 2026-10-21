@@ -46,3 +46,21 @@ nothing) and variant B (knob 1 alone exercises the effect at zero) show why all 
 - The registration draft (`docs/2026-10-20-bytes-registration`, `docs/registrations/bytes_pack_v1.md`) takes items 3
   and 4 at its H2 section and adds Addendum 9 to its authority list and §20 map.
 - Merge path unchanged: B2, then B4, then B3 twin, B5 kit, item G; claim-path merges get cold Fable and Opus passes.
+
+## Executed evidence
+
+The lead re-ran the judge's probe for variant A (knobs 1+2+3, δ = 10 ms) on resident seed 3100, at the B2 lane head
+`1d6f18fbf` in a detached worktree, with the judge's `probe/probe2.py` (JouleWise-data `claude/b2-nr1-judge-7n0s7d`),
+on the Mac, `JW_B5_SYNTHETIC_ONLY=1`, fresh TMPDIR. Output kept at `/Users/edr/night-archive/a017-b2probe/`.
+
+```
+$ python3.13 -I probe2.py /Users/edr/code/JouleWise-wt-a017-b2probe resident 3100 on 50 10 1 resident_3100_on_ph50_L10_r1.json
+wrote /Users/edr/night-archive/a017-b2probe/resident_3100_on_ph50_L10_r1.json
+exit 0
+```
+
+Read back: 1,000 science runs; 119 have |meter − 2·rails| above half of one sample's energy at the edge power (a whole-
+sample flip), fraction 0.119 against the expected δ/Δt = 0.10 (binomial σ = √(0.1 × 0.9 / 1000) = 0.0095, so +2.0σ,
+inside the ruling's 3σ bar); largest error 5.856 J (one 100 ms sample at about 58.6 W); fitted label offset 9.991 and
+9.995 ms on the two passes (the 10 ms knob). This agrees with the judge's variant A (flip fraction 10.1 to 10.5% per
+world over 20 seeds; max error 5.878 J resident).

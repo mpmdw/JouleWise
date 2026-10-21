@@ -101,3 +101,13 @@ First line: your model id. Branch head sha; per question: done / not done, diff 
 result per variant; the refusal replay table; tests before and after (counts and failing names); "decisions I made";
 "left for a later round"; NEEDS_RULING only for a choice that changes which data count or a printed number. Decide
 everything the governing texts determine.
+
+## Executed evidence
+
+Added by lead a017b694 (2026-10-21) so the file meets `tests/test_docs_freshness.py`'s rule for dated rulings. The
+executed evidence behind this text is in the seats' reports it cites, each of which ran the code on synthetic fixtures
+and tracked sealed config only. On main the functions it governs are `joulewise/analysis_engine/inputs.py:4247`
+(`_floor_request_or_refusal`, the floor request and its refusals) and `joulewise/analysis_engine/inputs.py:2906`
+(`_read_bundle`, the source-config pin of addendum §I step 1). The build's own executed results (refusal and
+limitation replay, §I step 1 variant table, module counts) are in `.codex-report/l9-ruling-build.md` on
+`lane/2026-10-20-l9-ruling-build` (draft PR #513).
