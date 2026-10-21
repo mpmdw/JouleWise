@@ -361,6 +361,9 @@ def h2(points, rails_power, *, boundary=None, family_size=None):
         rho = extended["coefficients"][2]
         lo, hi = extended["intervals"][2]
         adds_nothing = lo <= 0 <= hi or rho <= 0
+    # Judge section 2.1 (reports/b2-nr1-judge/fable.md): Delta_t plus the
+    # poll round trip is 21.8 to 24.9 ms on the two committed recordings,
+    # rounded to 22 to 25 ms in the disclosure below (at 50 SPS).
     offset_output = {} if boundary == "rails" else {
         "resident_adds_nothing_offset": adds_nothing_offset,
         "offset_disclosure": "Meter label offset delta is unmeasured (block-6 M13); structural bound "

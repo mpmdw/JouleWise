@@ -170,6 +170,7 @@ class H2WorkedExamples(NumericTestCase):
         self.assertAlmostEqual(fit["coefficients"][1], 2)
         self.assertAlmostEqual(fit["mse"], 14 / 3)
         self.assertAlmostEqual(fit["ols_covariance"][1][1], 7 / 15)
+        # t(0.975) at df 3: family 1, n - p = 5 - 2.
         self.assertAlmostEqual(fit["critical"], 3.182446305)
         half = fit["critical"] * math.sqrt(fit["covariance"][1][1])
         self.assertAlmostEqual(fit["intervals"][1][0], 2 - half)
@@ -517,6 +518,8 @@ class ProductionArchiveTests(NumericTestCase):
                 flips = sum(abs(r["meter"]["gross_j"] - 2 * r["rails_j"]) >
                             .5e-6 * r["duration_s"] for r in records)
                 diagnostics[latency] = {"runs": len(records), "flips": flips,
+                    "label_offset_s": manifest["synthetic_parameters"]["min_receive_latency_ms"] / 1000,
+                    "sample_interval_s": records[0]["meter"]["sample_interval_s"],
                     "max_error_j": max(abs(r["meter"]["gross_j"] - 2 * r["rails_j"]) for r in records)}
         for boundary in ("DC input", "rest"):
             shifted, clean = fits[10][boundary], fits[0][boundary]
@@ -532,7 +535,8 @@ class ProductionArchiveTests(NumericTestCase):
                 self.assertGreaterEqual(hi, 0)
         # (c) A uniform science-edge phase flips with p=delta/Delta_t.
         # The ruling specifies three binomial standard errors, not a tuned bar.
-        p = (10 / 1000) / .1
+        shifted = diagnostics[10]
+        p = shifted["label_offset_s"] / shifted["sample_interval_s"]
         n = diagnostics[10]["runs"]
         self.assertLessEqual(abs(diagnostics[10]["flips"] / n - p),
                              3 * math.sqrt(p * (1 - p) / n))
