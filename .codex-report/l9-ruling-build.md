@@ -2,7 +2,7 @@ gpt-6.1-sol
 
 Implementation DONE; joined end-to-end verification NOT DONE.
 
-Branch: `lane/2026-10-20-l9-ruling-build`. Required continuation base verified as `00ccb8c7caf9474d17fb83e6e029c9cfe180c3bd`. Tested implementation head: `f7449327702f1061f333bb907bf54a9d3bccc6e6`; subsequent commits change this report only. Branch head before this report commit: `2b1c7047b19f62f5af9629d94e7c8e4a0d7b844b`. Draft PR: https://github.com/mpmdw/JouleWise/pull/513. Report checkpoint UTC: 2026-10-21 04:50:23.
+Branch: `lane/2026-10-20-l9-ruling-build`. Required continuation base verified as `00ccb8c7caf9474d17fb83e6e029c9cfe180c3bd`. Tested implementation head: `f7449327702f1061f333bb907bf54a9d3bccc6e6`; subsequent commits change this report only. Branch head before this report commit: `611122c03c9f9677366b597c67be2b9331d1bd34`. Draft PR: https://github.com/mpmdw/JouleWise/pull/513. Report checkpoint UTC: 2026-10-21 04:58:25.
 
 Authority, read in full: origin/main at intake (`bcd70a273`), L9-RULING-ADDENDUM.md (6cff3515), then L9-RULING.md (4b350f47). Read the named cold, council and silly-number reports and consumer probes on JouleWise-data. Only synthetic fixture archives and tracked sealed config were read; no real archive or key directory was opened. Python 3.13.5 unittest, JW_B5_SYNTHETIC_ONLY=1 on every run, fresh TMPDIR per module. No whole-suite cloud run; only WRITE_SCOPE modules and searched dependencies. No sub-agents.
 
@@ -96,7 +96,7 @@ Before is the verified continuation head. Completed checks began in the untouche
 | tests.test_analysis_manifest_v3 | 19 OK | 19 OK |
 | tests.test_results_fill_adapter | 4 OK | 6 OK |
 | tests.b5_analysis.test_fill_adapter | 11 OK | 11 OK |
-| tests.b5_analysis.test_dry_run | 55 OK (skipped=3) | NOT DONE: opted-in joined run running |
+| tests.b5_analysis.test_dry_run | 55 OK (skipped=3) | 62 FAILED (failures=2, errors=1) |
 | tests.b5_analysis.test_release_equality | 10 OK (skipped=1) | 10 OK (skipped=1) |
 | tests.b5_analysis.test_s10_chain_defects | 31 OK | 32 OK |
 | tests.b5_analysis.test_launch_lineage | 4 OK | 4 OK |
@@ -162,7 +162,7 @@ test_t7_deterministic_across_two_output_directories (tests.test_run_d165_closeou
 setUpClass (tests.test_run_d165_closeout_from_custody.WindowIndexHandoffTests)
 ```
 
-Uniform final-source repeat NOT DONE: 13/39 explicitly scoped/importing/registry modules have completed; the remaining modules and fresh refusal census are running. Earlier completed module evidence remains in the table.
+Uniform final-source pass: 39/39 explicitly scoped/importing/registry modules completed at head `2b1c7047b19f62f5af9629d94e7c8e4a0d7b844b` (implementation `f7449327702f1061f333bb907bf54a9d3bccc6e6`). Nonzero modules: tests.test_run_d165_closeout_from_custody. Refusal census exit: 0. Each module used synthetic-only mode and a fresh TMPDIR.
 
 ### Additional importing/dependent modules
 
@@ -215,11 +215,7 @@ The four authoritative documents need their owner's executed-evidence sections; 
 
 ## Joined end-to-end status
 
-NOT DONE: the opted-in full joined driver is running. An execution-environment restart killed the first run during ALPHA step-1 validation, without a completion record. Its logs and interruption metadata are preserved outside the repository. Only that interrupted task's synthetic TMPDIR copies were cleaned; the joined run restarted from committed code with a fresh TMPDIR. The seat setup warns that long foreground jobs can be cut off, so the fresh run is detached with persistent log and exit-status files. Completed module evidence survived. No end-to-end success is claimed until the fresh run completes.
-
-Final detached run started 2026-10-20T23:30:02.007225+00:00 against f7449327702f1061f333bb907bf54a9d3bccc6e6. Most recently dispatched: step 9, scope block; producer extraction reports present: alpha, beta. The full joined result remains pending.
-Mint preparation outputs present: floor-mint-pinset.json, floor-mint-inputs.json.
-Aggregate artifact checkpoint: c5d98a895dadeae15e2f18aadb2a2b198b1e790e7a8b1092ad63696d9898ea1c-aggregate-floor.json; producer inventory entries=2, plan order matches=True, carriers present=True, carriers distinct=True. Later finalization/claim/fill acceptance remains pending.
+NOT DONE: joined test result is non-green: 62 tests, 2 failures, 1 errors, driver code 2. Exact diagnostics remain in scratch /workspace/l9-checks/e2e. No end-to-end success is claimed.
 
 Separately, opted-in tests.b5_analysis.test_chain_fixture.ChainTests.test_39_lineage_pack_digest_is_the_committed_pack_tree passes against all restored synthetic windows (1 test, 70.5 s). The ordinary after run for that module reports its opt-in class skip; the direct test-39 run is actual execution evidence.
 
@@ -241,4 +237,3 @@ The known custody-driver cloud setup needs the owning Mac run; its 29 errors are
 NEEDS_RULING: none. All choices determined by the governing texts are implemented.
 
 Done: all implementation items, focused refusals/limitations, final non-joined modules, registry/census checks and opted-in test 39. Not done: successful completion of the opted-in joined driver and its final result table; lead-owned merge/review/Mac gates listed above.
-Additional not done: completion of the uniform final-source repeat and its census.
