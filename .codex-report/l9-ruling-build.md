@@ -2,7 +2,7 @@ gpt-6.1-sol
 
 Implementation DONE; joined end-to-end verification NOT DONE.
 
-Branch: `lane/2026-10-20-l9-ruling-build`. Required continuation base verified as `00ccb8c7caf9474d17fb83e6e029c9cfe180c3bd`. Tested implementation head: `f7449327702f1061f333bb907bf54a9d3bccc6e6`; subsequent commits change this report only. Branch head before this report commit: `f56709dc587d0a0142241e9b4862a171269f4688`. Draft PR: https://github.com/mpmdw/JouleWise/pull/513. Report checkpoint UTC: 2026-10-21 03:50:31.
+Branch: `lane/2026-10-20-l9-ruling-build`. Required continuation base verified as `00ccb8c7caf9474d17fb83e6e029c9cfe180c3bd`. Tested implementation head: `f7449327702f1061f333bb907bf54a9d3bccc6e6`; subsequent commits change this report only. Branch head before this report commit: `2b1c7047b19f62f5af9629d94e7c8e4a0d7b844b`. Draft PR: https://github.com/mpmdw/JouleWise/pull/513. Report checkpoint UTC: 2026-10-21 04:50:23.
 
 Authority, read in full: origin/main at intake (`bcd70a273`), L9-RULING-ADDENDUM.md (6cff3515), then L9-RULING.md (4b350f47). Read the named cold, council and silly-number reports and consumer probes on JouleWise-data. Only synthetic fixture archives and tracked sealed config were read; no real archive or key directory was opened. Python 3.13.5 unittest, JW_B5_SYNTHETIC_ONLY=1 on every run, fresh TMPDIR per module. No whole-suite cloud run; only WRITE_SCOPE modules and searched dependencies. No sub-agents.
 
@@ -13,10 +13,10 @@ Number rule: every added/changed tolerance on measured or derived values carries
 | Item | Status | Change and evidence pointers | Published checkpoint |
 |---|---|---|---|
 | Q-LINEAGE | DONE (inherited, rechecked) | Ordered producer inventory and per-producer rebuild: scripts/mint_floor_artifact_generalized.py:3484, :3695; authentication limitations: joulewise/analysis_engine/inputs.py:1094; verdict revalidation: joulewise/analysis_engine/artifact.py:1099. Split/mixed producers still refuse. | a8f3d5566 |
-| Q-EXACTSTACK | DONE (inherited, rechecked) | Shared exact_stack_serving_cell: joulewise/detection_floor.py:3078; finalizer :3427, closeout :1862, inputs request/resolution; scoped no-envelope note follows the actual source cell. | 00ccb8c7c |
-| Q-CONSUMERID | DONE | joulewise/analysis_engine/inputs.py:4411, :4454, :4684; engine :375; tests/test_analysis_inputs.py:1229; tests/b5_analysis/test_chain_fixture.py:542; docs/contracts/identity_pin_projection.md:646. Step-1 result below selected the limitation branch. Frozen ARM route unchanged. | 994478b28; recording-only ambiguity correction `f74493277` |
+| Q-EXACTSTACK | DONE (inherited, rechecked) | Shared exact_stack_serving_cell: joulewise/detection_floor.py:3078; joulewise/analysis_manifest_v3.py:3517; joulewise/dominance_closeout.py:1911; joulewise/analysis_engine/inputs.py:4797, :4975; scoped no-envelope note follows the actual source cell. | 00ccb8c7c |
+| Q-CONSUMERID | DONE | joulewise/analysis_engine/inputs.py:4411, :4454, :4684; joulewise/analysis_engine/__init__.py:375; tests/test_analysis_inputs.py:1240; tests/b5_analysis/test_chain_fixture.py:542; docs/contracts/identity_pin_projection.md:646. Step-1 result below selected the limitation branch. Frozen ARM route unchanged. | 994478b28; recording-only ambiguity correction `f74493277` |
 | Q-RENDERER | DONE | joulewise/b5_analysis/dry_run.py:203, :1034; T20 and argv census; release R3 uses fill input; S10 production renderer test; only §S text appended verbatim to SEAL_RECORD.md. | b83eed5dc |
-| Common §C | DONE | joulewise/results_fill_adapter.py:44, :56 and scripts/build_results_fill_input.py:85 copy/compare limitations and actual source IDs with existing mismatch codes. Tests/test_results_fill_adapter.py covers omissions, text/order/source changes. | 4da5e65a2 |
+| Common §C | DONE | joulewise/results_fill_adapter.py:44, :56 and scripts/build_results_fill_input.py:85 copy/compare limitations and actual source IDs with existing mismatch codes. tests/test_results_fill_adapter.py covers omissions, text/order/source changes. | 4da5e65a2 |
 | Addendum §Z | DONE | joulewise/detection_floor.py:1218; schema_v2.json sixDecimal; test oracle/adversarial sampling updated; N5 derivations beside every changed bar. No change for N2/N3/N4. | 5ca9202c9 |
 | Four seams and PROVENANCE | DONE | CONDITIONAL_SEAMS and all four patch contexts deleted from fixtures_s10.py and joined_s10.py; four PROVENANCE rows replaced by installed production behavior. Joined test asserts the ruled endpoints. | bb0c53101 |
 | Refusal/limitation replay | DONE | S10 defects 32 tests; hazard declaration 7 tests; explicit 21-case replay; all five new limitation codes reach validated fill input. | d79ce01e5 |
@@ -162,6 +162,8 @@ test_t7_deterministic_across_two_output_directories (tests.test_run_d165_closeou
 setUpClass (tests.test_run_d165_closeout_from_custody.WindowIndexHandoffTests)
 ```
 
+Uniform final-source repeat NOT DONE: 13/39 explicitly scoped/importing/registry modules have completed; the remaining modules and fresh refusal census are running. Earlier completed module evidence remains in the table.
+
 ### Additional importing/dependent modules
 
 Found by searching changed request, resolution, preparation, analyze_claims, fill-adapter and shared-predicate functions. These modules were run without editing them. The earlier consumer checkpoint observed 17 inherited integration errors and one sensitivity error from the same stub-source lookup; moving limitation derivation to real resolution fixed those too.
@@ -215,7 +217,7 @@ The four authoritative documents need their owner's executed-evidence sections; 
 
 NOT DONE: the opted-in full joined driver is running. An execution-environment restart killed the first run during ALPHA step-1 validation, without a completion record. Its logs and interruption metadata are preserved outside the repository. Only that interrupted task's synthetic TMPDIR copies were cleaned; the joined run restarted from committed code with a fresh TMPDIR. The seat setup warns that long foreground jobs can be cut off, so the fresh run is detached with persistent log and exit-status files. Completed module evidence survived. No end-to-end success is claimed until the fresh run completes.
 
-Final detached run started 2026-10-20T23:30:02.007225+00:00 against f7449327702f1061f333bb907bf54a9d3bccc6e6. Most recently dispatched: step 8, scope block; producer extraction reports present: alpha, beta. The full joined result remains pending.
+Final detached run started 2026-10-20T23:30:02.007225+00:00 against f7449327702f1061f333bb907bf54a9d3bccc6e6. Most recently dispatched: step 9, scope block; producer extraction reports present: alpha, beta. The full joined result remains pending.
 Mint preparation outputs present: floor-mint-pinset.json, floor-mint-inputs.json.
 Aggregate artifact checkpoint: c5d98a895dadeae15e2f18aadb2a2b198b1e790e7a8b1092ad63696d9898ea1c-aggregate-floor.json; producer inventory entries=2, plan order matches=True, carriers present=True, carriers distinct=True. Later finalization/claim/fill acceptance remains pending.
 
@@ -239,3 +241,4 @@ The known custody-driver cloud setup needs the owning Mac run; its 29 errors are
 NEEDS_RULING: none. All choices determined by the governing texts are implemented.
 
 Done: all implementation items, focused refusals/limitations, final non-joined modules, registry/census checks and opted-in test 39. Not done: successful completion of the opted-in joined driver and its final result table; lead-owned merge/review/Mac gates listed above.
+Additional not done: completion of the uniform final-source repeat and its census.
