@@ -2,7 +2,7 @@ gpt-6.1-sol
 
 Implementation DONE; joined end-to-end verification NOT DONE.
 
-Branch: `lane/2026-10-20-l9-ruling-build`. Required continuation base verified as `00ccb8c7caf9474d17fb83e6e029c9cfe180c3bd`. Tested implementation head: `f7449327702f1061f333bb907bf54a9d3bccc6e6`; subsequent commits change this report only. Branch head before this report commit: `39a4de07db1f8231625b54835847ec51d63a9791`. Draft PR: https://github.com/mpmdw/JouleWise/pull/513. Report checkpoint UTC: 2026-10-21 02:08:06.
+Branch: `lane/2026-10-20-l9-ruling-build`. Required continuation base verified as `00ccb8c7caf9474d17fb83e6e029c9cfe180c3bd`. Tested implementation head: `f7449327702f1061f333bb907bf54a9d3bccc6e6`; subsequent commits change this report only. Branch head before this report commit: `9fa0648f0b441259a2c956af1556111d6118e4be`. Draft PR: https://github.com/mpmdw/JouleWise/pull/513. Report checkpoint UTC: 2026-10-21 03:07:33.
 
 Authority, read in full: origin/main at intake (`bcd70a273`), L9-RULING-ADDENDUM.md (6cff3515), then L9-RULING.md (4b350f47). Read the named cold, council and silly-number reports and consumer probes on JouleWise-data. Only synthetic fixture archives and tracked sealed config were read; no real archive or key directory was opened. Python 3.13.5 unittest, JW_B5_SYNTHETIC_ONLY=1 on every run, fresh TMPDIR per module. No whole-suite cloud run; only WRITE_SCOPE modules and searched dependencies. No sub-agents.
 
@@ -216,6 +216,7 @@ The four authoritative documents need their owner's executed-evidence sections; 
 NOT DONE: the opted-in full joined driver is running. An execution-environment restart killed the first run during ALPHA step-1 validation, without a completion record. Its logs and interruption metadata are preserved outside the repository. Only that interrupted task's synthetic TMPDIR copies were cleaned; the joined run restarted from committed code with a fresh TMPDIR. The seat setup warns that long foreground jobs can be cut off, so the fresh run is detached with persistent log and exit-status files. Completed module evidence survived. No end-to-end success is claimed until the fresh run completes.
 
 Final detached run started 2026-10-20T23:30:02.007225+00:00 against f7449327702f1061f333bb907bf54a9d3bccc6e6. Most recently dispatched: step 5, scope block; producer extraction reports present: alpha, beta. The full joined result remains pending.
+Mint preparation outputs present: floor-mint-pinset.json, floor-mint-inputs.json.
 
 Separately, opted-in tests.b5_analysis.test_chain_fixture.ChainTests.test_39_lineage_pack_digest_is_the_committed_pack_tree passes against all restored synthetic windows (1 test, 70.5 s). The ordinary after run for that module reports its opt-in class skip; the direct test-39 run is actual execution evidence.
 
