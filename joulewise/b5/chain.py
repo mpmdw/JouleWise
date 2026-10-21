@@ -115,11 +115,13 @@ EXIT_COMPLETED = 0
 EXIT_RESERVATION_FAILED = 10
 EXIT_PRE_CAPTURE_FAILED = 11
 EXIT_PRE_SCREEN_FAILED = 12
+EXIT_OPERATIVE_BOUND_STOP = 13
 EXIT_INSPECTION_REFUSED = 64
 STOP_EXITS = {
     "reservation_failed": EXIT_RESERVATION_FAILED,
     "pre_calibration_capture_failed": EXIT_PRE_CAPTURE_FAILED,
     "pre_calibration_screen_failed": EXIT_PRE_SCREEN_FAILED,
+    "operative_bound_above_stop": EXIT_OPERATIVE_BOUND_STOP,
 }
 
 STAGE_JOURNAL = "chain-stages.jsonl"
@@ -432,8 +434,12 @@ def stage_plan(tree: Mapping[str, Any]) -> list[Stage]:
              "the pre and post calibration captures must bracket every collection")
     _require(post[0] == len(chain) - 1, "post-calibration must be the last chain stage")
     derivations = [i for i, stage in enumerate(chain) if stage.kind == "bound_derivation"]
-    _require(len(derivations) == 1 and derivations[0] > min(collections),
-             "exactly one bound derivation, after the corpus collection")
+    if (tree.get("smoke_reduction") or {}).get("schema") == "joulewise.b6_smoke_reduction.v1":
+        _require(len(derivations) <= 1 and (not derivations or derivations[0] > min(collections)),
+                 "at most one bound derivation, after a collection")
+    else:
+        _require(len(derivations) == 1 and derivations[0] > min(collections),
+                 "exactly one bound derivation, after the corpus collection")
     return stages
 
 
@@ -999,7 +1005,7 @@ horizon_skip() {
 
 
 def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[Stage],
-                 bindings: Mapping[str, str], measurement_root: Path, pack_root: Path,
+                 bindings: Mapping[str, Any], measurement_root: Path, pack_root: Path,
                  plan_id: str, runbook_text: str, settle_s: int | float = SETTLE_S,
                  horizon_s: int = CALIBRATION_HORIZON_S) -> bytes:
     """Return the chain bytes. Every value is a literal; nothing is written.
@@ -1015,7 +1021,19 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
              "settle_s must be a non-negative number")
     _require(type(horizon_s) is int and horizon_s >= 0, "horizon_s must be a non-negative integer")
     settle_text = str(int(settle_s)) if float(settle_s).is_integer() else repr(float(settle_s))
+    capture_screen = bindings.get("capture_screen")
+    screen_name = "screen_pre_calibration"
     screen = runbook_screen(runbook_text)
+    if capture_screen is not None:
+        from joulewise.b6.capture_screen import SCREEN_SHELL
+        from joulewise.b6.registration import decimal_s
+
+        screen_name = "screen_b6_calibration"
+        screen = "\n".join(
+            "B6_" + key.upper() + "=" + _literal("null" if value is None else str(decimal_s(value)))
+            for key, value in ((key, capture_screen.get(key)) for key in
+                              ("alignment_reference_s", "bracket_screen_s", "operative_bound_stop_s"))
+        ) + "\n" + SCREEN_SHELL
     for name in ("operator_log_root", "claim_runs_root", "bound_runs_root", "pre_calibration_dir",
                  "bracket_session_id", "ledger_path"):
         _require(isinstance(bindings.get(name), str) and bool(bindings[name]), f"binding {name} is required")
@@ -1034,12 +1052,12 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
     head_pin = value_after(reservation_argv, "--head-pin")
     # The NEG-8 corpus stage (row 13): the last collection before the bound
     # derivation that collects into the derivation's --runs-dir.
-    derivation = next(stage for stage in chain if stage.kind == "bound_derivation")
-    derivation_argv = stage_argv(derivation, bindings, tree, root)
+    derivation = next((stage for stage in chain if stage.kind == "bound_derivation"), None)
+    derivation_argv = stage_argv(derivation, bindings, tree, root) if derivation is not None else []
     corpus_manifest = value_after(derivation_argv, "--derive-neg8-drift-bound")
     corpus_runs_dir = value_after(derivation_argv, "--runs-dir")
     corpus_stage = None
-    for stage in chain[:chain.index(derivation)]:
+    for stage in chain[:chain.index(derivation)] if derivation is not None else []:
         if stage.kind == "campaign_collection" and corpus_runs_dir is not None \
                 and value_after(stage_argv(stage, bindings, tree, root), "--runs-dir") == corpus_runs_dir:
             corpus_stage = stage
@@ -1155,7 +1173,7 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
                          f'> "$TRANSCRIPT_ROOT/{COLLECTION_DEADLINE_RECORD}"')
             lines.append(run(stage, budgeted("pre_calibration_capture", argv)))
             lines.append(f"(( $? == 0 )) || stop_chain pre_calibration_capture_failed {EXIT_PRE_CAPTURE_FAILED}")
-            lines.append(run(stage, ["screen_pre_calibration", bindings["pre_calibration_dir"]],
+            lines.append(run(stage, [screen_name, bindings["pre_calibration_dir"]],
                              label=stage.stage_id + ".screen", kind="pre_calibration_screen", suffix=".screen"))
             lines.append(f"(( $? == 0 )) || stop_chain pre_calibration_screen_failed {EXIT_PRE_SCREEN_FAILED}")
             lines.append("# 3b. The window calibration verdict (J1): one refit of the pre slot, synchronously,")
@@ -1185,7 +1203,7 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
             if stage is corpus_stage and corpus_manifest is not None:
                 lines += corpus_retry_lines(stage, argv, corpus_manifest, corpus_runs_dir, python,
                                             log_path, run, budgeted, collection_allowance(stage), remaining(stage))
-            if stage.spare_sets:
+            if stage.spare_sets and bindings.get("spare_retries", True):
                 lines += spare_retry_lines(stage, argv, root, python, log_path, run, budgeted, remaining(stage))
             lines.append(f"else horizon_skip {stage.stage_id}; fi")
         elif stage.kind == "bound_derivation":

@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
@@ -97,6 +98,11 @@ class G2aInspectionTests(unittest.TestCase):
     def setUp(self):
         self.f = G2aFixture()
         self.addCleanup(self.f.close)
+        # install.main() ends by ignoring SIGINT/SIGTERM/SIGHUP for the rest of the CLI process. In a test process that
+        # leaks into every later child (SIG_IGN survives exec): a courier then ignores SIGTERM and its kill waits the full
+        # 30 s group wait (Linux CI, shard 4, 10-16). Restore the handlers after each test.
+        saved = {number: signal.getsignal(number) for number in install.SIGNALS}
+        self.addCleanup(lambda: [signal.signal(number, handler) for number, handler in saved.items()])
 
     def run_chain(self, **flags):
         with self.f.environment():

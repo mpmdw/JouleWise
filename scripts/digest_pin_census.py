@@ -230,6 +230,14 @@ ERA_RECORDS: dict[str, dict[str, str]] = {
         "commit_line": r"^# Revision 6 \(sealed [0-9]{4}-[0-9]{2}-[0-9]{2} at ([0-9a-f]{7,40})\)$",
         "scope_line": r'^\s*"validator_sha256": "[0-9a-f]{64}",?$',
     },
+    # Block 5's sealed inventory records every window input as it was at
+    # H_claim, the top-level "head" (seal record, registration 11). Block 6's
+    # code line changes some of those files; the block-5 seal must not move
+    # with them, so its digests resolve at H_claim (stage-1 integration).
+    "configs/campaigns/v5_claim_25g83/sealed_inventory.json": {
+        "commit_pointer": "/head",
+        "scope_pointer": r"^/files/",
+    },
 }
 
 

@@ -56,6 +56,38 @@ POLICY_SHA = hashlib.sha256(POLICY.read_bytes()).hexdigest()
 GAMMA_ANALYSIS_ID = "am-568cd8f3daee4a73017874bc24b5af1658caa8f5d7aa46a468a40277fb852b37"
 
 
+def busy_only_core_fixture(root: Path, run_id: str = "member"):
+    from tests import test_run_campaign as campaign_tests
+    from tests.test_environment_admission import busy_only_admission
+    from tests.test_idle_admission import synthetic_records
+
+    fixture = campaign_tests.IdleAdmissionCoreVerdictTests()
+    fixture.root = root
+    binding = fixture._binding()
+    records = synthetic_records(40, busy=0.9, power_w=0.2)
+    member = fixture._member(run_id, records=records)
+    member.metadata["environment_admission"] = busy_only_admission()
+    member.metadata["environment_admission"]["attempts"][-1]["cpu_admission"] = (
+        run_campaign.evaluate_cpu_idle_admission(records, binding.idle_admission_extension.cpu_criteria,
+                                               gpu_admitted=True))
+    (member.bundle_path / "metadata.json").write_text(json.dumps(member.metadata))
+    result = run_campaign._idle_admission_core_evaluation([member], binding)
+    return member, result
+
+
+class BusyOnlyVerdictWriterTests(unittest.TestCase):
+    def test_writer_preserves_raw_cpu_and_does_not_name_busy_only_member(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            member, result = busy_only_core_fixture(Path(tmp))
+            cpu = result.core["members"][0]["cpu_admission"]
+            self.assertFalse(cpu["admitted"])
+            self.assertEqual(cpu["conditions"], ["cpu_busy_ratio_p95_exceeded"])
+            self.assertEqual(cpu, member.metadata["environment_admission"]["attempts"][-1]["cpu_admission"])
+            self.assertNotIn("environment_admission_failed", result.core["conditions"])
+            self.assertNotIn("cpu_busy_ratio_p95_exceeded", result.core["conditions"])
+            self.assertEqual(result.member_failures, ())
+
+
 def run_untagged(w, run_id: str) -> Path:
     """An untagged member (a daily reference) in the claim root, no stamp.
 
