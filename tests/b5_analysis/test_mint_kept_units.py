@@ -2440,7 +2440,12 @@ class SensitivityFixtureIsolationTests(unittest.TestCase):
             pack = source.archive / 'sources/repo/configs/campaigns' / source.entry_data['pack_id']
             paths = [pack/'extraction_spec.json', source.archive/'derived/roster.json']
             before = {path: path.read_bytes() for path in paths}
-            SensitivityGuardTests.setUpClass()
+            # The reported-energy fork does not feed the governed roster.
+            # Its real construction is covered by the guard module itself;
+            # keep this cache regression to the S4 -> governed producer path.
+            with mock.patch('tests.b5_analysis.test_sensitivity_guard.s8.indexed_reported_fixture',
+                            return_value=mock.sentinel.reported_fixture):
+                SensitivityGuardTests.setUpClass()
             self.assertIs(floor_tests._CACHE['indexed'], original)
             self.assertIs(s2._CACHE['BETA_STD_S3B_ROSTER'], source)
             self.assertEqual({path: path.read_bytes() for path in paths}, before)
@@ -2456,6 +2461,22 @@ class SensitivityFixtureIsolationTests(unittest.TestCase):
 
 class RosterRefusalBranchReplayTests(unittest.TestCase):
     """One roster defect per production refusal site, plus repaired controls."""
+    @staticmethod
+    def snapshot(name):
+        # This reader needs three structural records, never raw telemetry.
+        # Read their original pinned synthetic bytes without restoring the
+        # hundreds of MB of member bundles that the guards do not consume.
+        import tarfile
+        from joulewise.b5_analysis.windows import IndexEntry
+        from tests.b5_analysis import fixtures_s1 as s1
+        directory = fx.FIXTURES/'pin2'/name
+        entry = IndexEntry.from_mapping(json.loads((directory/'INDEX_ENTRY.json').read_bytes()),
+                                       pack_table=fx.PACK_TABLE)
+        with tarfile.open(directory/'archive.tar.xz') as archive:
+            records = [json.loads(archive.extractfile('archive/'+relative).read()) for relative in
+                       ('harvest.json', 'derived/exclusions.json', 'derived/roster.json')]
+        return s1.Snapshot(entry, *records, s1.s0_planned())
+
     @staticmethod
     def cases():
         return [
@@ -2486,8 +2507,9 @@ class RosterRefusalBranchReplayTests(unittest.TestCase):
                          and node.exc.args[0].value=='exclusions_roster_mismatch'}
         hit = set()
         self.replay = []
+        snapshot = self.snapshot('QUAD_MEMBER_REMOVED')
         for name, guard, mutate, raw in self.cases():
-            with self.subTest(branch=name), contextlib.closing(s1.Case(s1.cached('QUAD_MEMBER_REMOVED'))) as c:
+            with self.subTest(branch=name), contextlib.closing(s1.Case(snapshot)) as c:
                 selected = c.handle()
                 def load():
                     # Keep the selected window; authenticate the exact updated
@@ -2522,7 +2544,7 @@ class RosterRefusalBranchReplayTests(unittest.TestCase):
                 self.assertEqual(load().to_record(), control)
         self.assertEqual(hit, refusal_lines)
         # Accepted additive/defaulted roster fields must not trip any branch.
-        with contextlib.closing(s1.Case(s1.cached())) as c:
+        with contextlib.closing(s1.Case(self.snapshot('STD'))) as c:
             c.roster['cells'][0].pop('strata', None)
             c.roster['cells'][0].pop('target', None)
             c.roster['members'].append({'run_id':'auxiliary-without-units'})
