@@ -2452,3 +2452,80 @@ class SensitivityFixtureIsolationTests(unittest.TestCase):
                 self.assertEqual(len(keys), len(set(keys)), member['run_id'])
             self.assertEqual({cid: (cell.n_r, cell.n_b) for cid, cell in entry.kept_units.cells.items()},
                              {'df-b5t-family': (10, 10), 'df-b5t-p42': (10, 10)})
+
+
+class RosterRefusalBranchReplayTests(unittest.TestCase):
+    """One roster defect per production refusal site, plus repaired controls."""
+    @staticmethod
+    def cases():
+        return [
+            ('strict_json', 'roster = _strict_json', lambda c: None, b'['),
+            ('header', 'if (roster.get("schema")', lambda c: c.roster.update(schema='wrong'), None),
+            ('cell_shape', 'if (not isinstance(spec, dict)', lambda c: c.roster['cells'].append(copy.deepcopy(c.roster['cells'][0])), None),
+            ('cell_inventory', 'if set(specs) != cell_ids:', lambda c: c.roster['cells'].append({'cell_id':'extra','strata':['quad'],'target':True}), None),
+            ('member_shape', 'if (not isinstance(member, dict)', lambda c: c.roster['members'].append(copy.deepcopy(c.roster['members'][0])), None),
+            ('unit_shape', 'if (not isinstance(unit, dict) or any', lambda c: c.roster['members'][0]['units'][0].update(stratum=None), None),
+            ('unit_duplicate', 'if key in seen or', lambda c: c.roster['members'][0]['units'].append(copy.deepcopy(c.roster['members'][0]['units'][0])), None),
+            ('cell_target_strata', 'if (cell["target"] != specs[cid]', lambda c: c.roster['cells'][0].update(target=False), None),
+            ('unit_cardinality', 'if len(members) !=', lambda c: c.roster['members'][10]['units'].clear(), None),
+            ('unit_inventory', 'if listed != set(units):', lambda c: c.exclusions['cells'][0]['kept_units']['quad'].__setitem__(0,'absent-unit'), None),
+            ('dropped_binding', 'if (not _strings(dropped.get("run_ids"))', lambda c: c.exclusions['cells'][0]['dropped_units'][0]['positions'].__setitem__(0,999), None),
+        ]
+
+    def test_each_roster_refusal_site_and_repaired_control(self):
+        import ast
+        from joulewise.b5_analysis import kept_units as ku
+        from tests.b5_analysis import fixtures_s1 as s1
+        source = inspect.getsource(ku)
+        lines = source.splitlines()
+        tree = ast.parse(source)
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name=='load_kept_units')
+        refusal_lines = {node.lineno for node in ast.walk(function) if isinstance(node, ast.Raise)
+                         and isinstance(node.exc, ast.Call) and node.exc.args
+                         and isinstance(node.exc.args[0], ast.Constant)
+                         and node.exc.args[0].value=='exclusions_roster_mismatch'}
+        hit = set()
+        self.replay = []
+        for name, guard, mutate, raw in self.cases():
+            with self.subTest(branch=name), contextlib.closing(s1.Case(s1.cached('QUAD_MEMBER_REMOVED'))) as c:
+                selected = c.handle()
+                def load():
+                    # Keep the selected window; authenticate the exact updated
+                    # output bytes, without an earlier attempt-reader masking S1.
+                    handle = ku.ArchiveHandle(selected.window, c.harvest, {})
+                    return ku.load_kept_units(handle, sealed_catalog_sha256=s1.CATALOG.sha256, planned_units=c.planned)
+                control = load().to_record()
+                original_roster, original_exclusions = copy.deepcopy(c.roster), copy.deepcopy(c.exclusions)
+                mutate(c)
+                c.write(roster_raw=raw)
+                try:
+                    load()
+                except AnalysisRefusal as exc:
+                    self.assertEqual(str(exc), 'exclusions_roster_mismatch')
+                    traceback = exc.__traceback__
+                    reached = []
+                    while traceback is not None:
+                        if traceback.tb_frame.f_code is ku.load_kept_units.__code__:
+                            reached.append(traceback.tb_lineno)
+                        traceback = traceback.tb_next
+                else:
+                    self.fail('roster defect did not refuse: '+name)
+                self.assertEqual(len(reached), 1)
+                index = next(i for i,line in enumerate(lines) if guard in line)
+                expected = index+1 if raw is not None else next(i+1 for i in range(index,len(lines))
+                    if 'raise AnalysisRefusal("exclusions_roster_mismatch")' in lines[i])
+                self.assertEqual(reached[0], expected, name)
+                if raw is None: hit.add(expected)
+                self.replay.append({'branch':name,'line':expected,'refusal':'exclusions_roster_mismatch'})
+                c.roster, c.exclusions = original_roster, original_exclusions
+                c.write()
+                self.assertEqual(load().to_record(), control)
+        self.assertEqual(hit, refusal_lines)
+        # Accepted additive/defaulted roster fields must not trip any branch.
+        with contextlib.closing(s1.Case(s1.cached())) as c:
+            c.roster['cells'][0].pop('strata', None)
+            c.roster['cells'][0].pop('target', None)
+            c.roster['members'].append({'run_id':'auxiliary-without-units'})
+            c.write()
+            units = ku.load_kept_units(c.handle(), sealed_catalog_sha256=s1.CATALOG.sha256, planned_units=c.planned)
+            self.assertEqual((units.cell('df-b5t-family').n_r,units.cell('df-b5t-family').n_b),(10,10))

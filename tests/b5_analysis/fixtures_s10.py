@@ -668,3 +668,16 @@ if __name__=='__main__':
     import argparse
     parser=argparse.ArgumentParser();parser.add_argument('pack',choices=PACK_IDS);parser.add_argument('destination',type=Path)
     args=parser.parse_args();print(build_export(args.pack,args.destination))
+
+
+def synthetic_stage_fixture():
+    """Small synthetic operands for the number-bearing S10 stage join.
+
+    This does not restore the opt-in S10 collection archives. S6 supplies two
+    producers with ten planned repeats/quads and the registered exclusions;
+    S5 supplies two contrasts with one removed quad each. The existing named
+    operand/session seams remain explicit at the joined caller.
+    """
+    from tests.b5_analysis import test_mint_kept_units as mint_tests, fixtures_s5
+    return SimpleNamespace(producers=mint_tests.common_case(),
+        claims=fixtures_s5.arithmetic_inputs(mint_tests.DELTAS))
