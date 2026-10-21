@@ -2,7 +2,7 @@ gpt-6.1-sol
 
 Implementation DONE; joined end-to-end verification NOT DONE.
 
-Branch: `lane/2026-10-20-l9-ruling-build`. Required continuation base verified as `00ccb8c7caf9474d17fb83e6e029c9cfe180c3bd`. Tested implementation head: `f7449327702f1061f333bb907bf54a9d3bccc6e6`; subsequent commits change this report only. Branch head before this report commit: `ba0c02856b401f078093e624e5f9561d874e3eda`. Draft PR: https://github.com/mpmdw/JouleWise/pull/513. Report checkpoint UTC: 2026-10-21 01:54:43.
+Branch: `lane/2026-10-20-l9-ruling-build`. Required continuation base verified as `00ccb8c7caf9474d17fb83e6e029c9cfe180c3bd`. Tested implementation head: `f7449327702f1061f333bb907bf54a9d3bccc6e6`; subsequent commits change this report only. Branch head before this report commit: `39a4de07db1f8231625b54835847ec51d63a9791`. Draft PR: https://github.com/mpmdw/JouleWise/pull/513. Report checkpoint UTC: 2026-10-21 02:08:06.
 
 Authority, read in full: origin/main at intake (`bcd70a273`), L9-RULING-ADDENDUM.md (6cff3515), then L9-RULING.md (4b350f47). Read the named cold, council and silly-number reports and consumer probes on JouleWise-data. Only synthetic fixture archives and tracked sealed config were read; no real archive or key directory was opened. Python 3.13.5 unittest, JW_B5_SYNTHETIC_ONLY=1 on every run, fresh TMPDIR per module. No whole-suite cloud run; only WRITE_SCOPE modules and searched dependencies. No sub-agents.
 
@@ -193,6 +193,24 @@ All 10 additional modules pass: 291 tests (1 skip).
 
 Refusal census: unlisted=[], stale=[], miscounted=[], guard_changed=[], scope_gaps=[]. No registry update is warranted. git diff --check is clean. Seal appendix verified verbatim and prior bytes preserved. Conditional seam identifiers are absent from both fixture and joined harness.
 
+## CI checkpoint and scope requests
+
+GitHub Actions CI run 39530029917 (https://github.com/mpmdw/JouleWise/actions/runs/39530029917) tested head `39a4de07db1f8231625b54835847ec51d63a9791` on merge `502c27f87bd866083f02b715c8220a4931446d92`. Build and installed-wheel jobs passed; fences and quick failed, so the whole-suite job was skipped. Exact quick tail: `QUICK SUMMARY tier=quick modules=212 excluded=214 failures=2 seconds=213.806 result=FAIL`. This is checkpoint evidence; no final-head CI success is claimed.
+
+- tests.test_docs_freshness: 31 tests, four failing subtests in test_dated_magistrate_rulings_carry_executed_evidence, each reporting a missing valid Executed evidence section.
+- tests.test_authentication_io: 22 tests, one failure in AuthenticationSurfaceGuardTests.test_marked_v2_surface_has_no_direct_readable_io. Its three _write_append_only locations are 4133/read_bytes, 4151/read_bytes and 4157/os.open; the characterized census still says 4147, 4165 and 4171. The helper's source SHA-256 is `cf76f832f1a4882db7c276cded473f097c68d21630c9cfaa5225657368af9fb8` on both the required continuation base and final implementation; round 2 never changed analysis_manifest_v3.py.
+- Gate-ledger run 39530042411 fails because rows 1-4 correctly remain NOT-RUN. No evidence was fabricated to clear that gate.
+
+Requested scope for lead-owned follow-up; these files were not edited here:
+
+- `docs/process_traces/2026-10-20-magistrate-4b350f47/L9-RULING.md`
+- `docs/process_traces/2026-10-20-magistrate-6cff3515/BRIEF-L9-RULING-BUILD.md`
+- `docs/process_traces/2026-10-20-magistrate-6cff3515/L9-RULING-ADDENDUM.md`
+- `docs/process_traces/2026-10-20-magistrate-af419b16/B6-RULING.md`
+- `tests/test_authentication_io.py`
+
+The four authoritative documents need their owner's executed-evidence sections; the authentication guard needs its three characterized line locations refreshed after the inherited line shift. These are documentation/census integration tasks and do not require a new numerical ruling.
+
 ## Joined end-to-end status
 
 NOT DONE: the opted-in full joined driver is running. An execution-environment restart killed the first run during ALPHA step-1 validation, without a completion record. Its logs and interruption metadata are preserved outside the repository. Only that interrupted task's synthetic TMPDIR copies were cleaned; the joined run restarted from committed code with a fresh TMPDIR. The seat setup warns that long foreground jobs can be cut off, so the fresh run is detached with persistent log and exit-status files. Completed module evidence survived. No end-to-end success is claimed until the fresh run completes.
@@ -214,7 +232,7 @@ Separately, opted-in tests.b5_analysis.test_chain_fixture.ChainTests.test_39_lin
 
 ## Left for a later round
 
-The known custody-driver cloud setup needs the owning Mac run; its 29 errors are unchanged. Independent executing review, the whole suite on the merged tree, final-head CI, cold merge-code review, and Mac J1-J6/C5-C9 reruns remain lead gates, not claimed by this cloud implementation. PR #513 is a draft stacked lane; current-main integration is lead-owned and no merge/rebase was attempted. The status endpoint has not supplied green CI evidence. A future block-5 Results renderer belongs to the paper lane and must meet §S's census-complete rendering/cold-gate obligation. Existing unrelated tight historical tolerances are unchanged by this bounded §Z disposition.
+The known custody-driver cloud setup needs the owning Mac run; its 29 errors are unchanged. Independent executing review, the whole suite on the merged tree, final-head CI, cold merge-code review, and Mac J1-J6/C5-C9 reruns remain lead gates, not claimed by this cloud implementation. PR #513 is a draft stacked lane; current-main integration is lead-owned and no merge/rebase was attempted. The observed CI checkpoint is non-green for the out-of-scope documentation/census issues listed above; the whole-suite job was skipped. A future block-5 Results renderer belongs to the paper lane and must meet §S's census-complete rendering/cold-gate obligation. Existing unrelated tight historical tolerances are unchanged by this bounded §Z disposition.
 
 NEEDS_RULING: none. All choices determined by the governing texts are implemented.
 
