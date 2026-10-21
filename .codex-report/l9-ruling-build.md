@@ -1,8 +1,8 @@
 gpt-6.1-sol
 
-Implementation DONE; joined end-to-end verification NOT DONE.
+DONE: implementation and requested cloud verification complete; known custody environment errors remain.
 
-Branch: `lane/2026-10-20-l9-ruling-build`. Required continuation base verified as `00ccb8c7caf9474d17fb83e6e029c9cfe180c3bd`. Tested implementation head: `c88aa80cc29ee22227586c16b6779d433efebb12`; subsequent commits change this report only. Branch head before this report commit: `c14dc987ce5a7eac8132a8cf69395d3fe1129bb3`. Draft PR: https://github.com/mpmdw/JouleWise/pull/513. Report checkpoint UTC: 2026-10-21 08:22:01.
+Branch: `lane/2026-10-20-l9-ruling-build`. Required continuation base verified as `00ccb8c7caf9474d17fb83e6e029c9cfe180c3bd`. Tested implementation head: `c88aa80cc29ee22227586c16b6779d433efebb12`; subsequent commits change this report only. Branch head before this report commit: `c11402cf615757ebae22850f13154f2676e5b841`. Draft PR: https://github.com/mpmdw/JouleWise/pull/513. Report checkpoint UTC: 2026-10-21 19:31:38.
 
 Authority, read in full: origin/main at intake (`bcd70a273`), L9-RULING-ADDENDUM.md (6cff3515), then L9-RULING.md (4b350f47). Read the named cold, council and silly-number reports and consumer probes on JouleWise-data. Only synthetic fixture archives and tracked sealed config were read; no real archive or key directory was opened. Python 3.13.5 unittest, JW_B5_SYNTHETIC_ONLY=1 on every run, fresh TMPDIR per module. No whole-suite cloud run; only WRITE_SCOPE modules and searched dependencies. No sub-agents.
 
@@ -96,7 +96,7 @@ Before is the verified continuation head. Completed checks began in the untouche
 | tests.test_analysis_manifest_v3 | 19 OK | 19 OK |
 | tests.test_results_fill_adapter | 4 OK | 6 OK |
 | tests.b5_analysis.test_fill_adapter | 11 OK | 11 OK |
-| tests.b5_analysis.test_dry_run | 55 OK (skipped=3) | NOT DONE: opted-in joined run running |
+| tests.b5_analysis.test_dry_run | 55 OK (skipped=3) | 62 OK (skipped=0) |
 | tests.b5_analysis.test_release_equality | 10 OK (skipped=1) | 10 OK (skipped=1) |
 | tests.b5_analysis.test_s10_chain_defects | 31 OK | 34 OK |
 | tests.b5_analysis.test_launch_lineage | 4 OK | 4 OK |
@@ -227,10 +227,7 @@ The fresh 21-case refusal/limitation replay on `c88aa80cc29ee22227586c16b6779d43
 
 ## Joined end-to-end status
 
-NOT DONE: the opted-in full joined driver is running on the current committed implementation. Earlier interrupted runs and the completed carrier-locator failure are archived outside the repository. The current run uses a fresh TMPDIR, no conditional consumer seam, persistent detached logs and a completion record. No end-to-end success is claimed until it completes.
-
-Final detached run started 2026-10-21T05:15:37.770282+00:00 against c88aa80cc29ee22227586c16b6779d433efebb12. Most recently dispatched: step 5, scope block; producer extraction reports present: alpha, beta. The full joined result remains pending.
-Mint preparation outputs present: floor-mint-pinset.json, floor-mint-inputs.json.
+DONE. Opted-in tests.b5_analysis.test_dry_run: 62 tests, no failures/errors, 0 skips; real driver exit 0, joined elapsed 51070.1 seconds. The joined L9 assertions passed: two producer windows mint an ordered lineage inventory; GAMMA arms resolve their group's single real source cell and copy the exact gate operand; scoped limitations/source IDs reach the validated fill input; step 11 ends there with results_rendering_not_run_no_block5_template and no rendered Markdown. The independent real-mint limitation replay demonstrates every new limitation code in the fill input.
 
 Separately, opted-in tests.b5_analysis.test_chain_fixture.ChainTests.test_39_lineage_pack_digest_is_the_committed_pack_tree passes against all restored synthetic windows (1 test, 70.5 s). The ordinary after run for that module reports its opt-in class skip; the direct test-39 run is actual execution evidence.
 
@@ -253,4 +250,4 @@ The known custody-driver cloud setup needs the owning Mac run; its 29 errors are
 
 NEEDS_RULING: none. All choices determined by the governing texts are implemented.
 
-Done: all implementation items, focused refusals/limitations, final non-joined modules, registry/census checks and opted-in test 39. Not done: successful completion of the opted-in joined driver and its final result table; lead-owned merge/review/Mac gates listed above.
+Done: all implementation items, focused refusals/limitations, the opted-in joined driver and its final result table, final non-joined modules, registry/census checks and opted-in test 39. Not done in this seat: lead-owned merge/review/Mac gates listed above.
