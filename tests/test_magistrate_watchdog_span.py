@@ -133,7 +133,7 @@ class TickSpanTests(WatchdogTestCase):
         self.assertEqual("FENCED", self.network_free_tick().state)
         self.assertEqual(1, self.harness.census_calls)
 
-    def test_installed_only_span_skips_probe_but_local_stop_still_wins(self) -> None:
+    def test_installed_only_span_skips_probe_and_has_same_plan_precedence(self) -> None:
         plan = self.make_plan(t0=self.base.timestamp())
         for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
             with self.subTest(label=label):
@@ -141,14 +141,14 @@ class TickSpanTests(WatchdogTestCase):
                 with mock.patch.object(self.harness.storage, "glob_plans", return_value=[]):
                     decision = self.network_free_tick()
                     self.assertEqual("FENCED", decision.state)
-                    self.assertEqual(f"installed_plan:{plan.plan_id}", decision.reason)
+                    self.assertEqual("plan span active and census empty", decision.reason)
                     (self.harness.storage.root / "STOP").write_text("stop\n", encoding="utf-8")
                     decision = self.network_free_tick()
-                    self.assertEqual("STOPPED", decision.state)
-                    self.assertEqual("local STOP file present", decision.reason)
+                    self.assertEqual("FENCED", decision.state)
+                    self.assertEqual("plan span active and census empty", decision.reason)
                 (self.harness.storage.root / "STOP").unlink()
                 plist.unlink()
-        self.assertEqual(0, self.harness.census_calls)  # Baseline installed-only path.
+        self.assertEqual(4, self.harness.census_calls)  # Both ticks use the common plan census.
         self.assertEqual([], wd.load_state(self.harness.storage)["notice_pending"])
 
     def test_installed_only_resident_skips_refresh_at_normal_cadence(self) -> None:
@@ -173,7 +173,7 @@ class TickSpanTests(WatchdogTestCase):
         with mock.patch.object(self.harness.storage, "glob_plans", return_value=[]), \
              mock.patch.object(wd.subprocess, "run", side_effect=transport):
             state = wd.initial_state()
-            self.assertEqual("FENCED", wd.decide(
+            self.assertEqual("STANDDOWN_KILL", wd.decide(
                 self.harness.storage, self.harness.deps, state).state)
             self.assertEqual("NOT_PROBED", state["remote_stop"]["state"])
             self.assertEqual([], calls)
@@ -181,7 +181,7 @@ class TickSpanTests(WatchdogTestCase):
             self.assertIsNotNone(wd.installed_agent_fence(
                 self.harness.clock.wall, self.harness.storage, state=state))
             try:
-                self.assertTrue(supervisor.step())
+                self.assertFalse(supervisor.step())
             finally:
                 thread = supervisor._remote_probe_thread
                 if thread is not None:
@@ -190,7 +190,8 @@ class TickSpanTests(WatchdogTestCase):
             self.assertEqual([], calls)
             self.assertIsNone(thread, "suppression must prevent starting a refresh")
             self.assertIs(cached, supervisor._remote_stop)
-            self.assertEqual("NOT_PROBED", supervisor.state["remote_stop"]["state"])
+            self.assertEqual("FENCED", supervisor.state["state"])
+            self.assertIn((100, signal.SIGKILL), self.harness.processes.signals)
 
     def test_inflight_refresh_abandons_second_call_at_span_start(self) -> None:
         # Reviewer CONTRACT probe: hold the positive-control transport while
@@ -273,7 +274,7 @@ class TickSpanTests(WatchdogTestCase):
         probe.assert_called_once_with()
 
     def test_unreadable_installed_fence_keeps_normal_unsafe_hold_path(self) -> None:
-        with mock.patch.object(wd, "installed_agent_fence", side_effect=ValueError("torn plist")):
+        with mock.patch.object(wd, "_installed_agent_plans", side_effect=ValueError("torn plist")):
             decision = self.network_free_tick()
         self.assertEqual("HOLD_UNSAFE", decision.state)
         self.assertIn("torn plist", decision.reason)
@@ -438,9 +439,9 @@ class TickSpanTests(WatchdogTestCase):
         transport.assert_not_called()
         fork.assert_not_called()
 
-    def test_unreadable_installed_fence_keeps_resident_state_and_notices(self):
-        # Review F4: a torn installed plist suppresses transport but changes
-        # neither the resident state nor its notices (baseline: ACTIVE, none).
+    def test_unreadable_installed_fence_drains_resident_without_notice(self):
+        # A torn installed plist uses the same unsafe-plan drain as a torn
+        # discovered plan, without adding a remote-network notice.
         plan = self.make_plan()
         self.installed_plan(plan).write_bytes(b"torn plist")
         original = self.supervisor(plan)
@@ -455,7 +456,9 @@ class TickSpanTests(WatchdogTestCase):
         if thread is not None:
             thread.join(5)
             self.assertFalse(thread.is_alive())
-        self.assertEqual("ACTIVE", state["state"])
+        self.assertEqual("HOLD_UNSAFE", state["state"])
+        self.assertIn("unreadable installed agent", state["resident_hold_drain"]["reason"])
+        self.assertTrue((self.harness.storage.root / "standdown.request").exists())
         self.assertEqual([], [notice["kind"] for notice in state["notice_pending"]])
 
     def test_unreadable_installed_fence_keeps_cached_observation_age(self):
