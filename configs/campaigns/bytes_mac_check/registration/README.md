@@ -10,7 +10,10 @@ Run `python3.13 -B scripts/bytes_h_session.py prepare --measurement-root R
 --session-root S` as one command. It reads local model payloads, collects desk
 identity with R's interpreter, and stages the existing window writer in S.
 It prints the candidate t0, maximum duration, derived footprint and free disk.
-The physical disk check includes the R6 150 GiB reserve. Model absence and
+The physical disk check uses statvfs `f_bavail * f_frsize`, purgeable excluded,
+and refuses only below P = 86,236,568,521 B under H-DISK-RULING (283e9802).
+It prints every term, c = 2, free bytes and purgeable bytes (null with
+`disk.purgeable_unreadable` if the volume capacity API is unreadable). Model absence and
 insufficient space refuse; identity/record differences print flags. If a
 calibration ledger or another required record is absent, `INPUTS_ONLY` and
 `plan.not_written` retain the inputs; there is no installable plan. A printed
@@ -93,19 +96,43 @@ PYTHONDONTWRITEBYTECODE=1 python3.13 -B configs/campaigns/bytes_mac_check/regist
 This reads the archived block-6 records and never restores, edits or
 compresses them. The original file sizes come from the compression journal;
 file sizes are rounded upward to each volume's allocation quantum and never
-below their current allocated size. The peak budget covers raw bundles,
-retained archive copies and both backup streams on S's volume. Claim/bound
-backups partition the roster, so their combined payload adds one copy: three
-peak payload copies total. Fixed session
-bytes come from the observed original non-bundle footprint, scaled by the
-ratio of the maximum window (including T0, pause and WAIT) to the observed
-member-time sum (at least one). The registered session-WAIT budget also adds
-`ceil(max observed original bundle bytes/wall_s * SESSION_WAIT_BUDGET_S)` per
-raw/archive/backup copy: WAIT can retain a live member sampler. Pauses occur
-between members; their continuous meter/monitor cost is in the fixed allowance. The
-150 GiB reserve is BYTES R6 / block-6 design section 15. The plan supplies a
-per-copy budget to the existing native arm, which multiplies by actual
-copies per device; the preparation check covers all three peak copies.
+below their current allocated size. To regenerate only the ruled disk terms
+from committed evidence while preserving the fixed allowance, run:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3.13 -B configs/campaigns/bytes_mac_check/registration/derive_sizing.py --disk-only
+```
+
+H-DISK-RULING (activation 283e9802, 2026-10-21) adopts
+`P = c * (B + WAIT) + fixed`, with no reserve. Each model contributes its own
+count times stream allowance and count times member-wall allowance. The
+reference stream allowance uses the mean reference request plus the maximum
+observed non-request stream time, with the same observed-spread margin.
+Multiply the summed stream allowances by maximum observed bytes/stream second,
+and the summed member-wall allowances by maximum observed bytes/member-wall
+second. Round each complete basis up once; B is their maximum. WAIT uses the
+stream rate times the registered 7,200 s, rounded up once. Rates and products
+use exact rational arithmetic from committed JSON decimal values.
+
+For the committed evidence, stream basis = 27,802,317,346 B and wall basis =
+26,878,191,539 B, so B = 27,802,317,346 B. WAIT = 13,292,701,363 B per copy.
+The two physical copies are raw plus the roster-partitioned rsync backups;
+the harvest archive is an APFS `cp -c` clone. Fixed artifacts retain the
+committed 4,046,531,103 B, originally derived from the non-bundle footprint
+scaled by maximum window / observed member-wall sum (at least one).
+Thus P = 2 * (27,802,317,346 + 13,292,701,363) + 4,046,531,103 =
+86,236,568,521 B. This ruling governs H only; BYTES pass R6 goes to J/C5.
+
+H-DISK-RULING addendum 1 encodes P in the native arm's existing caller fields.
+Its three budgeting targets each use the whole roster, while the physical
+backups partition one roster copy. H uses q = floor(2B / (3 * 123)) =
+150,690,066 bytes per member. The remainder is 338 B; headroom =
+338 + 2 * 13,292,701,363 + 4,046,531,103 = 30,631,934,167 B.
+Thus native total = 3 * 123 * q + headroom = P exactly. This is a budget
+encoding derived from P, recorded in `session.json.disk.native_arm_budget`
+and printed with `disk.budget_encoded_from_p`; q is not a physical per-copy
+member estimate. The registered physical estimate and native driver/writer
+remain governed by their existing interfaces.
 
 The sizing evidence preserves all 125 successful observed member receipts,
 the source clock/stage/compression hashes, and request/stream/wall endpoints.
@@ -133,6 +160,13 @@ kit README/generator are deliberately unchanged: changing the generator's
 self-hash would require a plan_tree.json write outside this task's scope.
 
 ## Measured desk receipts
+
+Before harvest, desk prints session-volume `free_at_arm_bytes -
+free_at_desk_start_bytes` beside c = 2, and retains it in `desk.json.disk`.
+The arm value comes only from a matching-device native arm receipt; if absent,
+allocation is null with `disk.arm_free_unavailable`. Desk-start free is sampled
+once before desk outputs; later harvest allocations never replace it. This
+whole-window drawdown includes every writer and does not add a refusal.
 
 The generated kit README defines every v1 measurement field. In addition:
 pre-arm free bytes are read from the native arm's disk targets, never replaced

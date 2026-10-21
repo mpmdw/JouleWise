@@ -11,7 +11,7 @@
         "members_s": 20673.698390060417,
         "settles_s": 1380
       },
-      "bytes_per_member": 308543416,
+      "bytes_per_member": 226035101,
       "collection_stages": 22,
       "counts_by_model": {
         "llama-70b": 21,
@@ -27,23 +27,167 @@
         "qwen35-122b": 21
       },
       "disk_derivation": {
-        "estimated_per_copy_bytes": 308543416,
-        "extra_wait_peak_bytes": 28082490435,
-        "extra_wait_raw_bytes": 9360830145,
-        "formula": "ceil(max(max_original_allocated_bundle, max_original_bytes/member_wall_s * longest_planned_member_s)); peak 3 copies (raw + archive + disjoint claim/bound backups); fixed = observed original non-bundle session bytes * max(1, window_max/sum observed member wall seconds); WAIT extra = ceil(max original bytes/wall_s * registered session WAIT budget) * 3 copies",
-        "max_observed_bundle_bytes_per_wall_s": 1300115.2977829832,
+        "B_bytes": 27802317346,
+        "allowances_by_model": {
+          "llama-70b": {
+            "count": 21,
+            "member_allowance_s": {
+              "denominator": 20000000000000,
+              "numerator": 4746400816793639
+            },
+            "stream_allowance_s": {
+              "denominator": 50000000000000,
+              "numerator": 9548214357147367
+            }
+          },
+          "neg8_reference": {
+            "count": 37,
+            "member_allowance_s": {
+              "denominator": 100000000000000,
+              "numerator": 14122618421581197
+            },
+            "stream_allowance_s": {
+              "denominator": 25000000000000000000000000000000000,
+              "numerator": 2475038689504830954481754541426818773
+            }
+          },
+          "qwen3-14b": {
+            "count": 5,
+            "member_allowance_s": {
+              "denominator": 50000000000000,
+              "numerator": 7997038194774761
+            },
+            "stream_allowance_s": {
+              "denominator": 10000000000000,
+              "numerator": 1170599756606169
+            }
+          },
+          "qwen3-1p7b": {
+            "count": 5,
+            "member_allowance_s": {
+              "denominator": 100000000000000,
+              "numerator": 14339574436176383
+            },
+            "stream_allowance_s": {
+              "denominator": 50000000000000,
+              "numerator": 5038150164881857
+            }
+          },
+          "qwen3-30b-a3b": {
+            "count": 5,
+            "member_allowance_s": {
+              "denominator": 250000000000,
+              "numerator": 37123965755447
+            },
+            "stream_allowance_s": {
+              "denominator": 100000000000000,
+              "numerator": 10528254686699321
+            }
+          },
+          "qwen3-32b": {
+            "count": 5,
+            "member_allowance_s": {
+              "denominator": 50000000000000,
+              "numerator": 9232807294442027
+            },
+            "stream_allowance_s": {
+              "denominator": 10000000000000,
+              "numerator": 1415345379187543
+            }
+          },
+          "qwen3-4b": {
+            "count": 5,
+            "member_allowance_s": {
+              "denominator": 50000000000000,
+              "numerator": 7339681227489939
+            },
+            "stream_allowance_s": {
+              "denominator": 100000000000000,
+              "numerator": 10409182074417483
+            }
+          },
+          "qwen3-8b": {
+            "count": 5,
+            "member_allowance_s": {
+              "denominator": 100000000000000,
+              "numerator": 15232309187894657
+            },
+            "stream_allowance_s": {
+              "denominator": 100000000000000,
+              "numerator": 10923731127617711
+            }
+          },
+          "qwen3-8b-8bit": {
+            "count": 5,
+            "member_allowance_s": {
+              "denominator": 5000000000000,
+              "numerator": 804528133384583
+            },
+            "stream_allowance_s": {
+              "denominator": 4000000000000,
+              "numerator": 472061748361189
+            }
+          },
+          "qwen3-next-80b": {
+            "count": 9,
+            "member_allowance_s": {
+              "denominator": 50000000000000,
+              "numerator": 7752958077403059
+            },
+            "stream_allowance_s": {
+              "denominator": 100000000000000,
+              "numerator": 10830196702074579
+            }
+          },
+          "qwen35-122b": {
+            "count": 21,
+            "member_allowance_s": {
+              "denominator": 100000000000000,
+              "numerator": 17078676005436927
+            },
+            "stream_allowance_s": {
+              "denominator": 100000000000000,
+              "numerator": 11577116221769523
+            }
+          }
+        },
+        "authority": "H-DISK-RULING, activation 283e9802, 2026-10-21; Fable section 1 adopted",
+        "estimated_footprint_bytes": 86236568521,
+        "extra_wait_peak_bytes": 26585402726,
+        "extra_wait_raw_bytes": 13292701363,
+        "fixed_retained_bytes": 4046531103,
+        "formula": "P = c*(B+WAIT)+fixed; B=max(ceil(max bytes/stream_s * sum(count*own stream allowance)), ceil(max bytes/member_wall_s * sum(count*own member allowance))); WAIT=ceil(max bytes/stream_s * 7200); c=2 (raw + partitioned rsync backups; archive cp -c clone); fixed unchanged; no reserve",
+        "max_observed_bundle_bytes_per_stream_s": {
+          "denominator": 8813392312498763,
+          "numerator": 16271360000000000000000
+        },
+        "max_observed_bundle_bytes_per_wall_s": {
+          "denominator": 893951484135219,
+          "numerator": 1162240000000000000000
+        },
         "max_observed_fixed_session_bytes": 1438707712,
-        "max_observed_original_bundle_bytes": 162971648,
         "observed_member_wall_sum_s": 16042.009888648987,
-        "peak_copies": 3,
-        "reserve_authority": "BYTES R6 / block-6 design section 15",
-        "reserve_bytes": 161061273600,
+        "peak_copies": 2,
+        "reference_stream_allowance_s": {
+          "denominator": 25000000000000000000000000000000000,
+          "numerator": 2475038689504830954481754541426818773
+        },
+        "rounding": "exact rational arithmetic from committed decimal lexemes; ceiling each total basis and WAIT once",
         "session_wait_budget_s": 7200,
-        "time_budget_source": "joulewise.b5.plan: T0_STAGE_CAP_S, PAUSE_LIMIT_S, SESSION_WAIT_BUDGET_S; same minute-rounded window formula",
+        "stream_basis_bytes": 27802317346,
+        "stream_seconds": {
+          "denominator": 25000000000000000000000000000000000,
+          "numerator": 376478564112515239815824918032792294601
+        },
+        "wall_basis_bytes": 26878191539,
+        "wall_seconds": {
+          "denominator": 100000000000000,
+          "numerator": 2067369839006041683
+        },
         "window_max_s": 45120
       },
-      "estimated_footprint_bytes": 145981542042,
-      "extra_wait_peak_bytes": 28082490435,
+      "estimated_footprint_bytes": 86236568521,
+      "extra_wait_peak_bytes": 26585402726,
       "fixed_retained_bytes": 4046531103,
       "measured_margin": 0.08343839553709143,
       "member_count": 123,

@@ -5,6 +5,7 @@ import base64
 from contextlib import redirect_stdout, redirect_stderr
 from copy import deepcopy
 import csv
+from fractions import Fraction
 import hashlib
 import io
 import json
@@ -19,7 +20,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from configs.campaigns.bytes_mac_check.registration import derive_identity_pins as inputs
+from configs.campaigns.bytes_mac_check.registration import derive_identity_pins as inputs, derive_sizing as sizing
 from joulewise.b5 import plan
 from joulewise.b6 import registration
 from joulewise.provenance import folded_model_artifact_sha256
@@ -103,7 +104,67 @@ class RegistrationInputTests(unittest.TestCase):
         expected = (sum(row['request_s']) / len(row['request_s']) + row['load_s']
                     + h.read(REG / 'sizing_evidence.json')['max_non_request_s']) * (1 + sized['measured_margin'])
         self.assertTrue(math.isclose(row['member_allowance_s'], expected, rel_tol=1e-6, abs_tol=1e-6))
-        self.assertEqual(sized['disk_derivation']['reserve_bytes'], h.RESERVE_BYTES)
+        self.assertNotIn('reserve_bytes', sized['disk_derivation'])
+
+
+class DiskRulingTests(unittest.TestCase):
+    def test_committed_h_value_rederives_every_term_exactly(self):
+        sized = h.read(REG / 'sizing_b5.json')['packs'][h.PACK_ID]
+        original = deepcopy(sized)
+        sizing.apply_disk_ruling(sized, h.read(REG / 'sizing_evidence.json'))
+        self.assertEqual(sized, original)
+        disk = sized['disk_derivation']
+        self.assertEqual(disk['stream_basis_bytes'], 27_802_317_346)
+        self.assertEqual(disk['wall_basis_bytes'], 26_878_191_539)
+        self.assertEqual(disk['extra_wait_raw_bytes'], 13_292_701_363)
+        self.assertEqual(disk['fixed_retained_bytes'], 4_046_531_103)
+        self.assertEqual(disk['peak_copies'], 2)
+        self.assertEqual(sized['estimated_footprint_bytes'], 86_236_568_521)
+        self.assertLess(sized['estimated_footprint_bytes'], 105_000_000_000)
+        # A per-model change changes only that model's count*allowance term.
+        changed = deepcopy(sized)
+        changed['models']['llama-70b']['stream_allowance_s'] += 1
+        sizing.apply_disk_ruling(changed, h.read(REG / 'sizing_evidence.json'))
+        self.assertEqual(Fraction(**changed['disk_derivation']['stream_seconds'])
+                         - Fraction(**disk['stream_seconds']), 21)
+
+    def test_nine_session_synthetic_replay_refuses_zero(self):
+        # Synthetic table with the nine-session desk-start free-byte column
+        # from H-DISK-RULING section 4. These are lower bounds on arm free.
+        free_bytes = [162_829_508_608, 158_655_823_872, 156_454_031_360,
+                      152_628_854_784, 150_028_029_952, 140_108_296_192,
+                      124_931_256_320, 144_652_926_976, 113_618_456_576]
+        evidence = h.read(REG / 'sizing_evidence.json')
+        observations = evidence['observations']
+        stream_rate = max(Fraction(o['original_allocated_upper_bytes']) / sizing.exact(o['stream_s'])
+                          for o in observations)
+        wall_rate = max(Fraction(o['original_allocated_upper_bytes']) / sizing.exact(o['member_wall_s'])
+                        for o in observations)
+        terms = sizing.disk_terms(stream_rate, wall_rate,
+            sum(sizing.exact(o['stream_s']) for o in observations),
+            sum(sizing.exact(o['member_wall_s']) for o in observations), 1_438_707_712)
+        self.assertEqual(terms['B_bytes'], 20_962_266_546)
+        self.assertEqual(terms['estimated_footprint_bytes'], 69_948_643_530)
+        self.assertEqual(sum(free < terms['estimated_footprint_bytes'] for free in free_bytes), 0)
+        self.assertEqual(len(free_bytes), 9)
+
+    def test_wall_basis_can_dominate_and_wait_uses_stream_rate(self):
+        terms = sizing.disk_terms(Fraction(3, 2), Fraction(9, 2), 2, 10, 7, wait_seconds=3)
+        self.assertEqual(terms['B_bytes'], 45)
+        self.assertEqual(terms['extra_wait_raw_bytes'], 5)
+        self.assertEqual(terms['estimated_footprint_bytes'], 2*(45+5)+7)
+
+    def test_disk_snapshot_excludes_purgeable_and_flags_unreadable_capacity(self):
+        statvfs = lambda _: SimpleNamespace(f_bavail=10, f_frsize=4096)
+        disk = h.disk_snapshot('/', statvfs=statvfs, capacity=lambda _: 100_000)
+        self.assertEqual(disk['free_bytes'], 40_960)
+        self.assertEqual(disk['purgeable_bytes'], 100_000-40_960)
+        self.assertEqual(disk['flags'], [])
+        def unreadable(_):
+            raise OSError('synthetic unreadable volume capacity')
+        disk = h.disk_snapshot('/', statvfs=statvfs, capacity=unreadable)
+        self.assertIsNone(disk['purgeable_bytes'])
+        self.assertIn('disk.purgeable_unreadable', disk['flags'])
 
 
 class SessionTests(unittest.TestCase):
@@ -150,7 +211,7 @@ class SessionTests(unittest.TestCase):
         # Only this fixture boundary is synthetic; write_window_plan is real.
         with patch.object(plan, 'ledger_head_status', return_value={'blocking': []}), redirect_stdout(io.StringIO()):
             return h.prepare(self.measurement, self.session, run=self.producer, now=lambda: 1700000000,
-                disk_usage=lambda _: SimpleNamespace(free=10**12))
+                statvfs=lambda _: SimpleNamespace(f_bavail=10**12, f_frsize=1), capacity=lambda _: None)
 
     def test_prepare_uses_real_writer_without_install_or_loop_registration(self):
         state = self.prepared()
@@ -178,7 +239,24 @@ class SessionTests(unittest.TestCase):
         # Byte counts and native copy multiplicity are integers; exact equality
         # is appropriate for these two independent budget entry points.
         self.assertEqual(required, state['disk']['required_free_bytes'])
+        self.assertEqual(required, 86_236_568_521)
+        budget = state['disk']['native_arm_budget']
+        self.assertEqual(budget['kind'], 'budget encoding derived from P')
+        self.assertIn('disk.budget_encoded_from_p', state['disk']['flags'])
+        self.assertEqual(budget['native_copies'], copies)
+        self.assertEqual(copies, 3)
+        self.assertEqual(state['inputs']['bytes_per_member'], 150_690_066)
+        self.assertEqual(budget['bytes_per_member'], state['inputs']['bytes_per_member'])
+        self.assertEqual(budget['rounding_remainder_bytes'], 338)
+        self.assertEqual(hazard['thresholds']['disk']['headroom_bytes'], 30_631_934_167)
+        self.assertEqual(budget['headroom_bytes'], hazard['thresholds']['disk']['headroom_bytes'])
         sized = registration.load_sizing(self.measurement / h.KIT / 'registration')['packs'][h.PACK_ID]
+        terms = sized['disk_derivation']
+        quotient, remainder = divmod(terms['peak_copies'] * terms['B_bytes'], copies * hazard['member_count'])
+        self.assertEqual(budget['bytes_per_member'], quotient)
+        self.assertEqual(budget['rounding_remainder_bytes'], remainder)
+        self.assertEqual(budget['headroom_bytes'],
+                         remainder + terms['extra_wait_peak_bytes'] + terms['fixed_retained_bytes'])
         self.assertEqual(sized['disk_derivation']['window_max_s'], record['window_max_s'])
         self.assertGreater(sized['extra_wait_peak_bytes'], 0)
 
@@ -186,7 +264,7 @@ class SessionTests(unittest.TestCase):
         (self.measurement / plan.DEFAULT_LEDGER_RELATIVE).unlink()
         with redirect_stdout(io.StringIO()):
             state = h.prepare(self.measurement, self.session, run=self.producer, now=lambda: 1700000000,
-                disk_usage=lambda _: SimpleNamespace(free=10**12))
+                statvfs=lambda _: SimpleNamespace(f_bavail=10**12, f_frsize=1), capacity=lambda _: None)
         self.assertEqual(state['preparation_status'], 'INPUTS_ONLY')
         self.assertIn('plan.not_written', [f['kind'] for f in state['flags']])
         self.assertFalse(Path(state['plan_path']).exists())
@@ -216,8 +294,41 @@ class SessionTests(unittest.TestCase):
     def test_physical_disk_hazard_stops_before_identity_or_plan(self):
         with self.assertRaises(h.PhysicalHazard), redirect_stdout(io.StringIO()):
             h.prepare(self.measurement, self.session, run=lambda *a, **k: self.fail('no producer before disk gate'),
-                      disk_usage=lambda _: SimpleNamespace(free=h.RESERVE_BYTES-1))
+                      statvfs=lambda _: SimpleNamespace(f_bavail=86_236_568_520, f_frsize=1), capacity=lambda _: 10**12)
         self.assertFalse((self.session / 'custody').exists())
+
+    def test_prepare_accepts_exact_p_and_prints_terms_without_reserve(self):
+        with patch.object(plan, 'ledger_head_status', return_value={'blocking': []}), redirect_stdout(io.StringIO()) as out:
+            state = h.prepare(self.measurement, self.session, run=self.producer, now=lambda: 1700000000,
+                statvfs=lambda _: SimpleNamespace(f_bavail=86_236_568_521, f_frsize=1),
+                capacity=lambda _: 100_000_000_000)
+        self.assertEqual(state['disk']['prepare_free_bytes'], state['disk']['required_free_bytes'])
+        self.assertEqual(state['disk']['purgeable_bytes'], 100_000_000_000-86_236_568_521)
+        for field in ('stream_basis_bytes', 'wall_basis_bytes', 'B_bytes', 'extra_wait_raw_bytes',
+                      'fixed_retained_bytes', 'peak_copies', 'purgeable_bytes',
+                      'native_arm_budget', 'disk.budget_encoded_from_p'):
+            self.assertIn(field, out.getvalue())
+        self.assertNotIn('reserve', state['disk'])
+
+    def test_desk_drawdown_uses_session_volume_arm_and_pre_harvest_free(self):
+        state = self.prepared()
+        device = self.session.stat().st_dev
+        arm = self.session / 'custody/hazards/arm.json'
+        h.write(arm, {'hazards': {'disk': [{'measurement': {'values': {'targets': [
+            {'device': device, 'free_bytes': 105_000_000_000},
+            {'device': device+1, 'free_bytes': 1}]}}}]}})
+        observed = h.window_allocation(state, statvfs=lambda _: SimpleNamespace(f_bavail=90_000_000_000, f_frsize=1))
+        self.assertEqual(observed['whole_window_allocation_bytes'], 15_000_000_000)
+        self.assertEqual(observed['peak_copies'], 2)
+        def unreadable(_):
+            raise OSError('synthetic statvfs unavailable')
+        missing_desk = h.window_allocation(state, statvfs=unreadable)
+        self.assertIsNone(missing_desk['whole_window_allocation_bytes'])
+        self.assertIn('disk.desk_free_unavailable', missing_desk['flags'])
+        arm.unlink()
+        absent = h.window_allocation(state, statvfs=lambda _: SimpleNamespace(f_bavail=90_000_000_000, f_frsize=1))
+        self.assertIsNone(absent['whole_window_allocation_bytes'])
+        self.assertIn('disk.arm_free_unavailable', absent['flags'])
 
     def test_missing_model_is_a_physical_hazard(self):
         (self.root / 'models/weight').unlink()
@@ -493,8 +604,12 @@ class SessionTests(unittest.TestCase):
             if 'harvest_b6_session.py' in Path(argv[1]).name:
                 argv = [*argv, '--workers', '4']
             return subprocess.run(argv, **kwargs)
-        with redirect_stdout(io.StringIO()):
-            result = h.desk(self.session, run=real_child)
+        with redirect_stdout(io.StringIO()) as out:
+            result = h.desk(self.session, run=real_child,
+                statvfs=lambda _: SimpleNamespace(f_bavail=90_000_000_000, f_frsize=1))
+        self.assertIn('disk_window_allocation:', out.getvalue())
+        self.assertEqual(result['disk']['free_at_desk_start_bytes'], 90_000_000_000)
+        self.assertIsNone(result['disk']['whole_window_allocation_bytes'])
         self.assertEqual(result['harvest_exit'], 0)
         self.assertEqual(result['gates_exit'], 1)
         measured = h.read(self.session / 'MEASUREMENTS.json')

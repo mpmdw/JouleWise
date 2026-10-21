@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+from fractions import Fraction
 import hashlib
 import json
 import math
@@ -70,7 +71,7 @@ def derive(root, session_roots):
             'sources': [lo['source'], hi['source']],
             'formula': 'q = (W_target-W_low)/(W_high-W_low); each repeat total_s and load_s = low+q*(high-low)',
             'authority': 'F2, activation 283e9802, 2026-10-21; memory-bandwidth-bound decode; planning only'}}
-    observations, fixed, overheads, rates, original_sizes, fixed_sizes = [], [], [], [], [], []
+    observations, fixed, overheads, fixed_sizes = [], [], [], []
     reference_times = []
     for session in map(Path, session_roots):
         clock_path = session / 'custody/collection/run_clock.jsonl'
@@ -95,7 +96,6 @@ def derive(root, session_roots):
                     and stage['started_epoch_s'] <= a <= b < stage['ended_epoch_s'] + 1):
                     by_stage[stage['stage_id']] += b - a
                     break
-        observed_bytes = 0
         for rid, pair in pairs.items():
             if not {'start', 'end'} <= pair.keys():
                 continue
@@ -124,9 +124,6 @@ def derive(root, session_roots):
                 raw_name = str(f).removesuffix('.zst') if f.suffix == '.zst' else str(f)
                 raw_size = original.get(raw_name, info.st_size)
                 size += max(info.st_blocks * 512, math.ceil(raw_size / quantum) * quantum)
-            observed_bytes += size
-            rates.append(size / wall)
-            original_sizes.append(size)
             cfg = read(bundle / 'config.json')
             source = cfg.get('model', {}).get('source')
             if source == pins['neg8_reference']['model_source']:
@@ -190,41 +187,20 @@ def derive(root, session_roots):
     stage_overhead = max(overheads)
     fixed_s = max(fixed)
     span = member_s + settles + len(count) * stage_overhead + fixed_s
-    # Largest observed original bundle AND observed bytes/s scaled to the
-    # longest planned member. Two raw/archive copies; two backups may coexist
-    # on S's volume. Claim/bound backups partition the roster, so their
-    # combined payload is one more copy: three copies at peak. Fixed custody uses
-    # the observed uncompressed non-bundle session footprint, scaled for
-    # growth from the archived session's member-time sum to this planned window.
-    per_copy = math.ceil(max(max(original_sizes), max(rates) * max(reference, *(v['member_allowance_s'] for v in models.values()))))
-    peak_copies = 3  # raw + archive + disjoint claim/bound backups
-    per_member = per_copy
-    # Fixed journals grow with duration; apply the same observed byte-rate
-    # envelope over the maximum window (including T0/pause/WAIT), not a fixed factor.
+    # Fixed custody keeps the committed duration-scaled artifact allowance.
     window_max = 60 * math.ceil((math.ceil(span) + window_plan.T0_STAGE_CAP_S
                                 + window_plan.PAUSE_LIMIT_S + window_plan.SESSION_WAIT_BUDGET_S) / 60)
     fixed_bytes = math.ceil(max(fixed_sizes) * max(1, window_max / sum(o['member_wall_s'] for o in observations)))
-    # WAIT occurs with a live member sampler. Its session-wide budget can
-    # add samples beyond the normal observed member envelope. Agent pauses
-    # are between members; continuous meter/monitor growth is in fixed_bytes.
-    extra_wait_raw_bytes = math.ceil(max(rates) * window_plan.SESSION_WAIT_BUDGET_S)
-    extra_wait_peak_bytes = peak_copies * extra_wait_raw_bytes
     sized = {'pack_id': 'bytes-mac-check', 'programmed_span_s': span,
         'T_stream_max_s': max(reference, *(v['stream_allowance_s'] for v in models.values())),
-        'bytes_per_member': per_member, 'member_count': sum(counts.values()), 'fixed_retained_bytes': fixed_bytes,
-        'estimated_footprint_bytes': peak_copies * per_member * sum(counts.values()) + fixed_bytes + extra_wait_peak_bytes,
-        'extra_wait_peak_bytes': extra_wait_peak_bytes,
+        'member_count': sum(counts.values()), 'fixed_retained_bytes': fixed_bytes,
         'measured_margin': margin, 'models': models, 'reference_member_allowance_s': reference,
         'counts_by_model': counts, 'collection_stages': len(count),
         'breakdown': {'members_s': member_s, 'settles_s': settles, 'fixed_s': fixed_s,
             'collection_stage_overhead_s': stage_overhead, 'collection_overheads_s': len(count) * stage_overhead},
-        'disk_derivation': {'peak_copies': peak_copies, 'window_max_s': window_max,
-            'session_wait_budget_s': window_plan.SESSION_WAIT_BUDGET_S, 'extra_wait_raw_bytes': extra_wait_raw_bytes,
-            'extra_wait_peak_bytes': extra_wait_peak_bytes,
-            'time_budget_source': 'joulewise.b5.plan: T0_STAGE_CAP_S, PAUSE_LIMIT_S, SESSION_WAIT_BUDGET_S; same minute-rounded window formula', 'max_observed_fixed_session_bytes': max(fixed_sizes), 'observed_member_wall_sum_s': sum(o['member_wall_s'] for o in observations), 'max_observed_original_bundle_bytes': max(original_sizes),
-            'max_observed_bundle_bytes_per_wall_s': max(rates), 'estimated_per_copy_bytes': per_copy,
-            'formula': 'ceil(max(max_original_allocated_bundle, max_original_bytes/member_wall_s * longest_planned_member_s)); peak 3 copies (raw + archive + disjoint claim/bound backups); fixed = observed original non-bundle session bytes * max(1, window_max/sum observed member wall seconds); WAIT extra = ceil(max original bytes/wall_s * registered session WAIT budget) * 3 copies',
-            'reserve_bytes': 150 * 1024**3, 'reserve_authority': 'BYTES R6 / block-6 design section 15'}}
+        'disk_derivation': {'window_max_s': window_max,
+            'max_observed_fixed_session_bytes': max(fixed_sizes),
+            'observed_member_wall_sum_s': sum(o['member_wall_s'] for o in observations)}}
     derivation = {'schema_version': 'joulewise.bytes_h_sizing_evidence.v1', 'non_claim': True,
         'sources': sources, 'observations': observations, 'max_non_request_s': non_request,
         'max_stream_non_request_s': stream_extra,
@@ -234,16 +210,81 @@ def derive(root, session_roots):
         'limits': ['Planning allowances only; H measures real timing, bytes and floors.',
             'Prior model load retained in residual as a conservative allowance; no quiet-machine validation claimed.',
             'Observed first-attempt workload envelope; registered WAIT/pause/T0 budgets remain separately in window_max_s.']}
+    apply_disk_ruling(sized, derivation)
     return {'schema_version': 'joulewise.b5_sizing.v1', 'non_claim': True, 'packs': {sized['pack_id']: sized},
             'derivation': derivation['formula']}, derivation
 
 
+def exact(value):
+    """Exact rational arithmetic on committed JSON decimal lexemes."""
+    return Fraction(str(value))
+
+
+def ratio(value):
+    return {'numerator': value.numerator, 'denominator': value.denominator}
+
+
+def disk_terms(stream_rate, wall_rate, stream_seconds, wall_seconds, fixed_bytes,
+               wait_seconds=window_plan.SESSION_WAIT_BUDGET_S):
+    # Round each complete basis up once, before selecting B; do not round
+    # individual model products or rates. Every operation is integer/rational.
+    stream = math.ceil(stream_rate * stream_seconds)
+    wall = math.ceil(wall_rate * wall_seconds)
+    wait = math.ceil(stream_rate * wait_seconds)
+    copies = 2  # raw + roster-partitioned rsync backups; archive is cp -c.
+    return {'stream_basis_bytes': stream, 'wall_basis_bytes': wall,
+            'B_bytes': max(stream, wall), 'extra_wait_raw_bytes': wait,
+            'extra_wait_peak_bytes': copies * wait, 'peak_copies': copies,
+            'fixed_retained_bytes': fixed_bytes,
+            'estimated_footprint_bytes': copies * (max(stream, wall) + wait) + fixed_bytes}
+
+
+def apply_disk_ruling(sized, evidence):
+    observations = evidence['observations']
+    stream_rate = max(Fraction(o['original_allocated_upper_bytes']) / exact(o['stream_s']) for o in observations)
+    wall_rate = max(Fraction(o['original_allocated_upper_bytes']) / exact(o['member_wall_s']) for o in observations)
+    reference_stream = (sum(map(exact, evidence['reference_request_s'])) / len(evidence['reference_request_s'])
+                        + exact(evidence['max_stream_non_request_s'])) * (1 + exact(sized['measured_margin']))
+    counts = sized['counts_by_model']
+    allowances = {k: {'count': counts[k], 'stream_allowance_s': ratio(exact(v['stream_allowance_s'])),
+                      'member_allowance_s': ratio(exact(v['member_allowance_s']))}
+                  for k, v in sized['models'].items()}
+    allowances['neg8_reference'] = {'count': counts['neg8_reference'],
+        'stream_allowance_s': ratio(reference_stream),
+        'member_allowance_s': ratio(exact(sized['reference_member_allowance_s']))}
+    stream_seconds = sum(v['count'] * Fraction(**v['stream_allowance_s']) for v in allowances.values())
+    wall_seconds = sum(v['count'] * Fraction(**v['member_allowance_s']) for v in allowances.values())
+    terms = disk_terms(stream_rate, wall_rate, stream_seconds, wall_seconds, sized['fixed_retained_bytes'])
+    sized['estimated_footprint_bytes'] = terms['estimated_footprint_bytes']
+    sized['extra_wait_peak_bytes'] = terms['extra_wait_peak_bytes']
+    # Per-member interface retained for consumers; average B rounded UP.
+    sized['bytes_per_member'] = math.ceil(Fraction(terms['B_bytes'], sized['member_count']))
+    old = sized['disk_derivation']
+    sized['disk_derivation'] = {
+        **{k: old[k] for k in ('window_max_s', 'max_observed_fixed_session_bytes', 'observed_member_wall_sum_s')},
+        **terms, 'max_observed_bundle_bytes_per_stream_s': ratio(stream_rate),
+        'max_observed_bundle_bytes_per_wall_s': ratio(wall_rate),
+        'allowances_by_model': allowances, 'stream_seconds': ratio(stream_seconds), 'wall_seconds': ratio(wall_seconds),
+        'reference_stream_allowance_s': ratio(reference_stream),
+        'session_wait_budget_s': window_plan.SESSION_WAIT_BUDGET_S,
+        'formula': 'P = c*(B+WAIT)+fixed; B=max(ceil(max bytes/stream_s * sum(count*own stream allowance)), ceil(max bytes/member_wall_s * sum(count*own member allowance))); WAIT=ceil(max bytes/stream_s * 7200); c=2 (raw + partitioned rsync backups; archive cp -c clone); fixed unchanged; no reserve',
+        'authority': 'H-DISK-RULING, activation 283e9802, 2026-10-21; Fable section 1 adopted',
+        'rounding': 'exact rational arithmetic from committed decimal lexemes; ceiling each total basis and WAIT once'}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--session-root', type=Path, action='append', required=True)
+    parser.add_argument('--session-root', type=Path, action='append')
+    parser.add_argument('--disk-only', action='store_true', help='recompute only disk terms from committed sizing/evidence; preserve fixed bytes')
     args = parser.parse_args()
-    sized, evidence = derive(ROOT, args.session_root)
     reg = ROOT / KIT / 'registration'
+    if args.disk_only:
+        sized, evidence = read(reg / 'sizing_b5.json'), read(reg / 'sizing_evidence.json')
+        apply_disk_ruling(sized['packs']['bytes-mac-check'], evidence)
+    else:
+        if not args.session_root:
+            parser.error('--session-root is required unless --disk-only')
+        sized, evidence = derive(ROOT, args.session_root)
     for name, value in (('sizing_b5.json', sized), ('sizing_evidence.json', evidence)):
         (reg / name).write_text(json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + '\n')
     print(json.dumps(sized['packs']['bytes-mac-check'], indent=2))

@@ -42,8 +42,6 @@ DEFAULT_LEAD_S = 420
 MIN_LEAD_S = 300
 # DriverLane/DeskLane's existing harvest budget, not a measured allowance.
 HARVEST_TIMEOUT_S = 4 * 3600
-# BYTES R6 / block-6 design section 15 operational disk reserve.
-RESERVE_BYTES = 150 * 1024**3
 
 
 class PhysicalHazard(ValueError):
@@ -170,8 +168,32 @@ def measurement_view(source, session):
     return view, pack
 
 
+def important_capacity(root, *, run=subprocess.run):
+    """macOS volume available-for-important-usage, queried through Foundation."""
+    script = ('ObjC.import("Foundation"); var e=Ref(); var u=$.NSURL.fileURLWithPath('
+              + json.dumps(str(root)) + '); var v=u.resourceValuesForKeysError('
+              '[$.NSURLVolumeAvailableCapacityForImportantUsageKey],e); '
+              'v.objectForKey($.NSURLVolumeAvailableCapacityForImportantUsageKey).stringValue.js')
+    result = run(['/usr/bin/osascript', '-l', 'JavaScript', '-e', script],
+                 capture_output=True, text=True, check=False, timeout=30)
+    return int(result.stdout.strip()) if result.returncode == 0 else None
+
+
+def disk_snapshot(root, *, statvfs=os.statvfs, capacity=important_capacity):
+    stat = statvfs(root)
+    free = int(stat.f_bavail) * int(stat.f_frsize)
+    try:
+        important = capacity(root)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        important = None
+    return {'free_bytes': free, 'f_bavail': int(stat.f_bavail), 'f_frsize': int(stat.f_frsize),
+            'available_for_important_usage_bytes': important,
+            'purgeable_bytes': important - free if important is not None else None,
+            'flags': [] if important is not None else ['disk.purgeable_unreadable']}
+
+
 def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time,
-            disk_usage=shutil.disk_usage):
+            statvfs=os.statvfs, capacity=important_capacity):
     measurement, session = Path(measurement_root).resolve(), Path(session_root).resolve()
     reg = measurement / KIT / 'registration'
     sized = registration.load_sizing(reg)['packs'][PACK_ID]
@@ -195,14 +217,29 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
     print('session_id: ' + session_id)
     print('candidate_t0: ' + dt.datetime.fromtimestamp(t0, dt.timezone.utc).isoformat())
     print(f"maximum_duration_s: {expected_max}; programmed_span_s: {math.ceil(sized['programmed_span_s'])}")
-    free = disk_usage(session).free
-    required = sized['estimated_footprint_bytes'] + RESERVE_BYTES
-    disk = {'prepare_free_bytes': free, 'estimated_footprint_bytes': sized['estimated_footprint_bytes'],
-            'reserve_bytes': RESERVE_BYTES, 'required_free_bytes': required,
-            'derivation': sized['disk_derivation'], 'member_count': sized['member_count']}
+    snapshot = disk_snapshot(session, statvfs=statvfs, capacity=capacity)
+    required = sized['estimated_footprint_bytes']
+    # H-DISK-RULING addendum 1: the native arm budgets raw plus two
+    # full-roster backup targets, although the physical backups partition
+    # one roster copy. Encode P in its existing integer caller fields.
+    terms = sized['disk_derivation']
+    native_copies = 3
+    per_member, remainder = divmod(terms['peak_copies'] * terms['B_bytes'],
+                                 native_copies * sized['member_count'])
+    native_budget = {
+        'kind': 'budget encoding derived from P',
+        'formula': 'q=floor(c*B/(native_copies*member_count)); headroom=(c*B-native_copies*member_count*q)+c*WAIT+fixed',
+        'native_copies': native_copies, 'bytes_per_member': per_member,
+        'rounding_remainder_bytes': remainder,
+        'headroom_bytes': remainder + terms['extra_wait_peak_bytes'] + terms['fixed_retained_bytes']}
+    disk = {**snapshot, 'prepare_free_bytes': snapshot['free_bytes'],
+            'estimated_footprint_bytes': required, 'required_free_bytes': required,
+            'derivation': terms, 'member_count': sized['member_count'],
+            'native_arm_budget': native_budget,
+            'flags': snapshot['flags'] + ['disk.budget_encoded_from_p']}
     print('disk: ' + json.dumps(disk, sort_keys=True))
-    if free < required:
-        raise PhysicalHazard('not enough disk for the window plus the R6 150 GiB reserve')
+    if snapshot['free_bytes'] < required:
+        raise PhysicalHazard('not enough disk for the planned physical allocation P')
     for name in ('runs-parent', 'staging'):
         (session / name).mkdir()
     identities, notes = desk_identity.collect(measurement, session / 'staging/inputs', run=run)
@@ -213,13 +250,8 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         claim_backup=session / 'backup-claim', bound_backup=session / 'backup-bound', run=run)
     view, pack = measurement_view(measurement, session)
     inputs.update(measurement_root=str(view), pack_root=str(pack),
-                  bytes_per_member=sized['disk_derivation']['estimated_per_copy_bytes'])
-    # Native disk arm multiplies the per-copy budget by copies per device.
-    # The prepare check separately covers all three peak raw/archive/backup
-    # copies. Keep the R6 reserve, fixed artifacts and registered WAIT sampler
-    # growth as headroom; the same sum is used in the prepare disk check.
-    inputs['thresholds']['disk']['headroom_bytes'] = (RESERVE_BYTES + sized['fixed_retained_bytes']
-                                                   + sized['extra_wait_peak_bytes'])
+                  bytes_per_member=per_member)
+    inputs['thresholds']['disk']['headroom_bytes'] = native_budget['headroom_bytes']
     inputs['t0_epoch_s'] = t0
     record = None
     try:
@@ -642,12 +674,47 @@ def measurements(state, export_csv):
     return result
 
 
-def desk(session_root, *, run=subprocess.run):
+def window_allocation(state, *, statvfs=os.statvfs):
+    """Whole session-volume drawdown, before harvest or any desk outputs."""
+    session = Path(state['session_root'])
+    flags = []
+    try:
+        disk = statvfs(session)
+        free_at_desk = int(disk.f_bavail) * int(disk.f_frsize)
+    except OSError:
+        free_at_desk = None
+        flags.append('disk.desk_free_unavailable')
+    device = session.stat().st_dev
+    custody = Path(read(state['plan_path'])['custody_root'])
+    try:
+        arm = read(custody / 'hazards/arm.json')
+        targets = [t for row in arm.get('hazards', {}).get('disk', [])
+                   if not (row.get('measurement') or {}).get('error')
+                   for t in (row.get('measurement') or {}).get('values', {}).get('targets', [])
+                   if not t.get('error') and t.get('device') == device and type(t.get('free_bytes')) is int]
+        free_at_arm = min((t['free_bytes'] for t in targets), default=None)
+    except (OSError, ValueError, AttributeError, TypeError):
+        free_at_arm = None
+    if free_at_arm is None:
+        flags.append('disk.arm_free_unavailable')
+    return {'free_at_arm_bytes': free_at_arm, 'free_at_desk_start_bytes': free_at_desk,
+            'whole_window_allocation_bytes': free_at_arm - free_at_desk
+                if free_at_arm is not None and free_at_desk is not None else None,
+            'peak_copies': state['disk']['derivation']['peak_copies'],
+            'required_free_bytes': state['disk']['required_free_bytes'],
+            'arm_receipt': str(custody / 'hazards/arm.json'), 'device': device,
+            'derivation': 'whole_window_allocation_bytes = free_at_arm_bytes - free_at_desk_start_bytes; session volume statvfs f_bavail*f_frsize; includes every writer; disclosure only',
+            'flags': flags}
+
+
+def desk(session_root, *, run=subprocess.run, statvfs=os.statvfs):
     session = Path(session_root).resolve()
     state = read(session / 'session.json')
     custody = Path(read(state['plan_path'])['custody_root'])
     if not (custody / 'night/result.json').is_file():
         raise ValueError('terminal record is required before desk')
+    allocation = window_allocation(state, statvfs=statvfs)
+    print('disk_window_allocation: ' + json.dumps(allocation, sort_keys=True))
     measurement = Path(state['measurement_root'])
     argv = [str(measurement / '.venv/bin/python'), str(measurement / 'scripts/harvest_b6_session.py'),
         '--plan', state['plan_path'], '--archive-root', str(session / 'archive'),
@@ -680,7 +747,7 @@ def desk(session_root, *, run=subprocess.run):
             'measurements': str(session / 'MEASUREMENTS.json'), 'export': native,
             'status': 'unavailable' if gates.returncode == 1 else 'fail' if gates.returncode == 2
                       else 'pass' if gates.returncode == 0 else 'program_fault',
-            'flags': measured['flags'], 'registration_ready': False}
+            'flags': measured['flags'], 'registration_ready': False, 'disk': allocation}
         write(session / 'desk.json', status)
         refreshed = measurements(state, export_csv)
         if refreshed['disk']['fixed_retained_bytes'] == measured['disk']['fixed_retained_bytes']:
