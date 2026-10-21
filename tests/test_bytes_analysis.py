@@ -766,14 +766,10 @@ class CampaignWordRates(NumericTestCase):
                     root = Path(directory)
                     manifest = archive_campaign(root, world=world, seed=seed,
                         pass_duration_scales=design["main_campaign"]["pass_duration_scales"],
-                        clock_latency_ms=design["main_campaign"]["clock_latency_ms"])
+                        clock_latency_ms=design["main_campaign"]["clock_latency_ms"], release="none")
+                    cli_stage_chain(root, manifest)
                     records = ba.load_records(root / "export", manifest, stage="all")
                     d3.append(assert_d3_exercised(self, records, manifest))
-                    _write_json(root/"manifest.json",manifest)
-                    with contextlib.redirect_stdout(io.StringIO()):
-                        code = bytes_analyze.main(["--export",str(root/"export"),"--manifest",str(root/"manifest.json"),
-                                                   "--stage","all","--out",str(root/"out")])
-                    self.assertEqual(code,0)
                     self.assertEqual(ba.read_json(root/"out/unavailable.json"),[])
                     for row in ba.read_json(root/"out/h1.json"):
                         if row["selection"]=="primary" and row["basis"]=="gross primary" and row["role"]=="heldout" and row["pass_id"]=="mean":
@@ -798,6 +794,12 @@ class CampaignWordRates(NumericTestCase):
                                     method_coverage[*key, "plain_95"] += abs(coefficient - truth) <= critical_95 * se
                                     lo, hi = fitted[interval_key][1]
                                     method_coverage[*key, "ruled_k"] += lo <= truth <= hi
+                                    if row["boundary"] != "rails":
+                                        c = fitted["coefficient_C"][1]
+                                        method_coverage[*key, "offset_plain_95"] += abs(coefficient - truth) <= critical_95 * se + c
+                                        alternative = "offset_intervals" if method == "HC3" else "offset_ols_intervals"
+                                        lo, hi = fitted[alternative][1]
+                                        method_coverage[*key, "offset_ruled_k"] += lo <= truth <= hi
                                     estimates.setdefault(key, []).append((coefficient, se, truth))
                 print(f"BYTES synthetic {world} seed {seed} complete",flush=True)
             n = len(seeds)
@@ -817,6 +819,8 @@ class CampaignWordRates(NumericTestCase):
                 "H2_method_coverage": [{"boundary": b, "fit": f, "method": m,
                     "plain_95": rate(method_coverage[b, f, m, "plain_95"]),
                     "ruled_k": rate(method_coverage[b, f, m, "ruled_k"]), "k": ba.H2_INTERVALS[b],
+                    "offset_plain_95": rate(method_coverage[b, f, m, "offset_plain_95"]) if b != "rails" else None,
+                    "offset_ruled_k": rate(method_coverage[b, f, m, "offset_ruled_k"]) if b != "rails" else None,
                     "mean_estimate": statistics.fmean(v[0] for v in estimates[b, f, m]),
                     "mean_se": statistics.fmean(v[1] for v in estimates[b, f, m]),
                     "truth": estimates[b, f, m][0][2]}
@@ -1012,7 +1016,13 @@ class Addendum4RegressionTests(NumericTestCase):
         spec = importlib.util.spec_from_file_location("bytes_coverage",FIXTURES/"coverage.py")
         coverage = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(coverage)
-        report = coverage.run(self.root,400)
+        # p03 is the conditional member-redraw diagnostic, not a replacement
+        # for native offset coverage. Its source fixture traverses every stage.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = archive_campaign(root, release="none")
+            cli_stage_chain(root, manifest)
+            report = coverage.run(root,400)
         self.assertEqual(len(report),36)
         self.assertEqual({r["method"] for r in report},{"HC3","OLS"})
         self.assertTrue(all(r["draws"] == 400 for r in report))

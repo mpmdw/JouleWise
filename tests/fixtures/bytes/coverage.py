@@ -48,7 +48,18 @@ def run(base, R=400):
             meter = dict(r["meter"])
             meter["gross_j"] = 2 * e
             meter["secondary_j"] = 2 * e - (r["meter"]["gross_j"] - r["meter"]["secondary_j"])
-            meter["phase_edge_j"] = (2 * e / r["duration_s"] + meter["edge_powers_w"][1]) * (meter["r_max_s"] + meter["sample_interval_s"])
+            # p03 deliberately redraws conditional energies, without native
+            # timing flips. Recompute the offset inputs for these new powers;
+            # the 60 CLI campaigns separately exercise the physical offset.
+            power = 2 * e / r["duration_s"]
+            meter["edge_powers_w"] = [power, power]
+            meter["phase_edge_j"] = sum(meter["edge_powers_w"]) * (meter["r_max_s"] + meter["sample_interval_s"])
+            meter["offset_bound_w"] = max(meter["edge_powers_w"]) * (meter["r_max_s"] + meter["sample_interval_s"]) / r["duration_s"]
+            # The fixture's outside waveform is exactly the encoded 0.2 W.
+            # Equality here identifies that payload value, not an agreement bar.
+            before = [w if w == .2 else power for w in meter["adjacent_before_edge_powers_w"]]
+            meter["adjacent_before_edge_powers_w"] = before
+            meter["offset_sensitivity_w"] = before[0] - before[1]
             out.append(dict(r, rails_j=e, rails_secondary_j=e - idle_rails, meter=meter))
         return out
 
@@ -72,7 +83,8 @@ def run(base, R=400):
                     f = out[fit]
                     for method, covariance in (("HC3", "covariance"), ("OLS", "ols_covariance")):
                         se = math.sqrt(f[covariance][1][1])
-                        est.setdefault((boundary, fit, method), []).append((f["coefficients"][1], se, f["df"]))
+                        est.setdefault((boundary, fit, method), []).append((f["coefficients"][1], se, f["df"],
+                            f["coefficient_C"][1] if boundary != "rails" else 0.0))
         for (boundary, fit, method), rows in est.items():
             factor = 2 if boundary == "DC input" else 1
             truth = population_eps(world, factor) if fit == "two_term" else (.01 * factor if world == "bytes" else 0.0)
@@ -82,10 +94,13 @@ def run(base, R=400):
             df = rows[0][2]
             k_spec = 11 if boundary == "rest" else 9
             ts, t95 = tq(1 - .05 / (2 * k_spec), df), tq(.975, df)
-            cov = lambda t: sum(abs(e - truth) <= t * s for e, s, _ in rows) / len(rows)
+            cov = lambda t, offset=False: sum(abs(e - truth) <= t * s + (c if offset else 0)
+                                               for e, s, _, c in rows) / len(rows)
             report.append({"world": world, "boundary": boundary, "fit": fit, "method": method,
                 "draws": R, "truth": truth, "sd": sd, "mean_se": se, "se_over_sd": se / sd,
-                "plain_95": cov(t95), "ruled_k": cov(ts), "k": k_spec})
+                "plain_95": cov(t95), "ruled_k": cov(ts), "k": k_spec,
+                "offset_plain_95": cov(t95, True) if boundary != "rails" else None,
+                "offset_ruled_k": cov(ts, True) if boundary != "rails" else None})
     return report
 
 

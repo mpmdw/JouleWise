@@ -695,3 +695,13 @@ The alternative is conditional on observed regressors and does not resolve
 uncertainty in the separate rest fit's measured rails predictor or its VIF.
 The fixture remains 10 Hz: for a fixed delta the flips are five times larger
 and five times rarer than at 50 SPS, inflating HC3's apparent self-protection.
+
+NR1 cloud verification (2026-10-21): 57 analysis tests and 187 subtests pass.
+All 72 native registered coverage rates match the judge's variant A at their
+printed precision; all 48 DC/rest offset coverage rates are 1.0000. Resident
+extended DC/rest registered HC3 plain-95% is 0.6500, already decided by the
+ruling's printed alternative. p03's minimum HC3 plain-95% is 0.9425. The earlier
+round-4 open NR1 below its historical tables is superseded by Addendum 9.
+Commands, both coverage tables, the killed mutation and the known container
+orphan-registry failure are recorded in JouleWise-data
+`codex/bytes-b2-nr1-fix:reports/bytes-b2-nr1-fix/REPORT.md`.
