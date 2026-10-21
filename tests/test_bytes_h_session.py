@@ -262,13 +262,16 @@ class MeasurementViewLedgerTests(unittest.TestCase):
             (source / plan.DEFAULT_LEDGER_RELATIVE).parent.mkdir(parents=True)
             (source / plan.DEFAULT_LEDGER_RELATIVE).write_text('{"row": 1}\n')
             view, _pack = h.measurement_view(source, session)
-            for relative in ('joulewise', 'scripts', 'runs', 'configs/calibration'):
+            for relative in ('joulewise', 'scripts', 'runs'):
                 self.assertTrue((view / relative).is_symlink(), relative)
                 self.assertEqual(Path(os.readlink(view / relative)), source / relative, relative)
             with (view / plan.DEFAULT_LEDGER_RELATIVE).open('a') as ledger:
                 ledger.write('{"row": 2}\n')
             self.assertEqual((source / plan.DEFAULT_LEDGER_RELATIVE).read_text().count('row'), 2)
-            self.assertEqual((view / plan.HEAD_PIN_RELATIVE).resolve(), (source / plan.HEAD_PIN_RELATIVE).resolve())
+            # The pin is read-only during the chain; git must see a regular file.
+            pin = view / plan.HEAD_PIN_RELATIVE
+            self.assertFalse(pin.is_symlink() or pin.parent.is_symlink())
+            self.assertEqual(pin.read_bytes(), (source / plan.HEAD_PIN_RELATIVE).read_bytes())
 
 
 class SessionTests(unittest.TestCase):
