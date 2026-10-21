@@ -21,3 +21,14 @@ Launch: no pending notices; no unread mail from Ed; directive issues open are th
 - Executing review (Opus, non-author, ran the code): **ACCEPT**. Configs byte-identical (123/123); `run_campaign --dry-run` identical old vs new on all 22 stages after path normalization; projection matches the registration's independent `identity_pins.json`. Mutation kills: old code, no reservation rebind, stage ids as external ids, no sidecar, symlinked configs. Dispositions:
   - L1 (records): with 11 units the arm `model_identity` collector hashes ~205 GB and is killed at its 55 s budget, so the arm record will carry `model.identity_unmeasured` (collector timeout) instead of the runtime-version observation; harvest's per-member identity check still covers it. ~55 s of SSD reads land at arm step 4, before probe, dwell, reservation and the 60 s settle, so no measured number. **Accepted as a flag**, no change.
   - L2 (records): the `external_inputs.artifacts` pins are redundant (bound_derivation already pins settled_corpus.json) and one test mutant survives. **Rejected**: harmless, no number.
+
+## H re-arm
+- Pre-arm: no unread mail from Ed; directives unchanged; no `standdown.request`. AC power, IsCharging No, InstantAmperage 0, 100%; caffeinate pid 885 alive; no thermal warning; 102 GB free (df -g). Measurement checkout at 6ef1ffc86, clean.
+- `prepare` into `/Users/edr/night-bytes/h-20261021T173856Z`: STAGED, session `bytes-h-20261021T173857133683Z`, t0 10:46:00 PDT 2026-10-21 (17:46:00 UTC).
+- Arm notice emailed to Ed before install. The local `codex-cloud-run.mjs` watcher (pid 95090) was stopped before install; the cloud task runs on. `install` was this session's last act.
+
+## Pruning list (this session)
+- Lineage publication at the night driver: caught a real defect (H's pack had no config inventory). It refused on records, not physics; here the record it needs is what checks each config's bytes, so the remedy was to supply it.
+- Refusal census in CI: caught three unregistered prepare-time raise sites (registry only, no number).
+- Opus executing review: confirmed the reservation `--plan` binding would have refused at chain stage 1 (a second H failure avoided). Its two lows touch records only.
+- The arm physical checks ran at the first arm (all PASS) and caught nothing.
