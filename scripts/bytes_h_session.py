@@ -18,6 +18,7 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import time
@@ -105,13 +106,15 @@ def measurement_view(source, session):
     """Disposable launch attachment over the measurement checkout.
 
     Mirrors the sparse measurement setup used for B6's one-off non-claim
-    smoke. Code is linked, so every program's default ledger and head pin
-    (``REPO_ROOT`` from its resolved ``__file__``) are the checkout's. The
-    view therefore links ``runs/`` and ``configs/calibration/`` to the
-    checkout as whole directories: the chain's explicit ``--ledger`` and
-    ``--head-pin`` and every default path name one file. (Private copies
-    split them: H's 10:46 arm reserved in the copy and the capture, reading
-    the checkout's ledger, refused ``calibration_session_not_found``.)
+    smoke. Code is linked, so every program's default ledger (``REPO_ROOT``
+    from its resolved ``__file__``) is the checkout's. The view therefore
+    links ``runs/`` to the checkout as a whole directory: the chain's
+    explicit ``--ledger`` and every default path name one file. (A private
+    copy split them: H's 10:46 arm reserved in the copy and the capture,
+    reading the checkout's ledger, refused ``calibration_session_not_found``.)
+    The head pin stays an identical regular-file copy: no chain stage writes
+    it (only the desk pin advance does), and git, which the plan writer asks
+    whether the pin is committed, does not look through a linked directory.
     Dispatched configs are copied byte-for-byte inside the pack:
     the member lineage reader rejects symlinks and paths outside that pack.
     """
@@ -120,12 +123,14 @@ def measurement_view(source, session):
     for p in source.iterdir():
         if p.name != 'configs':
             (view / p.name).symlink_to(p, target_is_directory=p.is_dir())
-    for relative, omitted in (('configs', {'campaigns'}), ('configs/campaigns', set())):
+    for relative, omitted in (('configs', {'campaigns', 'calibration'}),
+                              ('configs/campaigns', set()), ('configs/calibration', {Path(plan.HEAD_PIN_RELATIVE).name})):
         directory = view / relative
         directory.mkdir(parents=True, exist_ok=True)
         for p in (source / relative).iterdir():
             if p.name not in omitted:
                 (directory / p.name).symlink_to(p, target_is_directory=p.is_dir())
+    shutil.copyfile(source / plan.HEAD_PIN_RELATIVE, view / plan.HEAD_PIN_RELATIVE)
     pack = view / 'configs/campaigns' / PACK_ID
     pack.mkdir()
     for p in (source / KIT).iterdir():
@@ -249,7 +254,7 @@ def measurement_view(source, session):
                     'external_inputs: canonical reference IDs/descriptors and dispatched file pins',
                     'bracket reservation --plan: this pack collection_plan.json',
                     'plan_tree.sha256: exact staged tree bytes'],
-        'ledger': "the checkout's own runs/ ledger and head pin, linked; never fabricate a missing ledger",
+        'ledger': "the checkout's own runs/ ledger, linked; head pin an identical copy; never fabricate a missing ledger",
         'read_only_source': False})
     return view, pack
 
