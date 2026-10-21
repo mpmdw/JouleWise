@@ -555,6 +555,39 @@ class HazardWindowValidationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     night_gate.validate_hazard_window(window)
 
+    def block6_window(self):
+        # The two optional bindings a block-6 plan carries, with the values of
+        # the block-6 machine test's plan (MT-20261016T2114Z). Main's watchdog
+        # parses installed plans with this validator; without these keys it
+        # held every block-6 window HOLD_UNSAFE and skipped its t0-180 fence.
+        window = self.window()
+        window["bindings"].update(
+            capture_screen={"alignment_reference_s": "0.036462861644980",
+                            "bracket_screen_s": "0.014531", "operative_bound_stop_s": "0.139"},
+            spare_retries=False)
+        return window
+
+    def test_block6_optional_bindings_are_accepted(self):
+        self.assertEqual(self.block6_window(), night_gate.validate_hazard_window(self.block6_window()))
+        window = self.block6_window()
+        window["bindings"]["capture_screen"] = dict.fromkeys(window["bindings"]["capture_screen"])
+        night_gate.validate_hazard_window(window)  # null while acceptance.json is absent
+
+    def test_block6_binding_defects_are_refused(self):
+        cases = {
+            "unknown binding": lambda w: w["bindings"].update(extra="x"),
+            "screen key missing": lambda w: w["bindings"]["capture_screen"].pop("bracket_screen_s"),
+            "screen negative": lambda w: w["bindings"]["capture_screen"].update(bracket_screen_s="-0.1"),
+            "screen float": lambda w: w["bindings"]["capture_screen"].update(bracket_screen_s=0.1),
+            "spare retries not boolean": lambda w: w["bindings"].update(spare_retries="false"),
+        }
+        for label, mutate in cases.items():
+            with self.subTest(case=label):
+                window = self.block6_window()
+                mutate(window)
+                with self.assertRaises(ValueError):
+                    night_gate.validate_hazard_window(window)
+
 
 if __name__ == "__main__":
     unittest.main()
