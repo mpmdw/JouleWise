@@ -230,8 +230,15 @@ def chain_fixture() -> ChainFixture:
             if path.is_dir():shutil.rmtree(path)
             else:path.unlink()
     else:
-        temporary=tempfile.TemporaryDirectory(prefix='s10-chain-');atexit.register(temporary.cleanup)
-        root=Path(temporary.name).resolve()
+        # Forked multiprocessing workers clear inherited atexit callbacks.
+        # Dropping the sole TemporaryDirectory reference there ran its finalizer
+        # in the child and removed the parent's still-live input tree.
+        root=Path(tempfile.mkdtemp(prefix='s10-chain-')).resolve()
+        owner_pid=os.getpid()
+        def cleanup_owned_root():
+            if os.getpid()==owner_pid:
+                shutil.rmtree(root,ignore_errors=True)
+        atexit.register(cleanup_owned_root)
     windows={};known_digests={}
     relocations={Path(json.loads((FIXTURES/p/'INDEX_ENTRY.json').read_bytes())['archive_root']).parent:root/p
         for p in PACK_IDS if (FIXTURES/p/'archive.tar.xz').is_file()}

@@ -510,6 +510,15 @@ class ChainTests(unittest.TestCase):
             archives=[open_archive(selected[p],seal_pins=self.pins) for p in PACK_IDS]
             require_ledger_copies_are_prefixes(archives,
                 self.fixture.windows['gamma'].measurement/'runs/calibration_observation_ledger.jsonl')
+    def test_04_fixture_survives_worker_process(self):
+        original_index = self.fixture.index.read_bytes()
+        # One real worker is enough to exercise fork's atexit-registry reset.
+        with ProcessPoolExecutor(max_workers=1) as pool:
+            self.assertNotEqual(pool.submit(os.getpid).result(), os.getpid())
+        self.assertTrue(self.fixture.root.is_dir(),
+                        'worker cleanup removed the parent-owned S10 fixture')
+        self.assertEqual(self.fixture.index.read_bytes(), original_index)
+
     def test_10_c1_alpha(self):self.check_members('C1','alpha')
     def test_11_c1_beta(self):self.check_members('C1','beta')
     def test_12_c1_gamma(self):self.check_members('C1','gamma')
