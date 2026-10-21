@@ -248,6 +248,29 @@ class RealKitStagingTests(unittest.TestCase):
                 window_lineage.authenticate_campaign(roots['bound'], config_paths=[checked[0]])
 
 
+class MeasurementViewLedgerTests(unittest.TestCase):
+    def test_view_ledger_head_pin_and_code_share_one_checkout_root(self):
+        # H's 10:46 arm: the reservation wrote the view's private ledger copy,
+        # the capture read the checkout's ledger through its resolved
+        # __file__, and refused calibration_session_not_found.
+        with tempfile.TemporaryDirectory() as temporary:
+            source, session = Path(temporary) / 'checkout', Path(temporary) / 'session'
+            source.mkdir(); session.mkdir()
+            for entry in ROOT.iterdir():
+                if entry.name not in ('runs', '.git'):
+                    (source / entry.name).symlink_to(entry, target_is_directory=entry.is_dir())
+            (source / plan.DEFAULT_LEDGER_RELATIVE).parent.mkdir(parents=True)
+            (source / plan.DEFAULT_LEDGER_RELATIVE).write_text('{"row": 1}\n')
+            view, _pack = h.measurement_view(source, session)
+            for relative in ('joulewise', 'scripts', 'runs', 'configs/calibration'):
+                self.assertTrue((view / relative).is_symlink(), relative)
+                self.assertEqual(Path(os.readlink(view / relative)), source / relative, relative)
+            with (view / plan.DEFAULT_LEDGER_RELATIVE).open('a') as ledger:
+                ledger.write('{"row": 2}\n')
+            self.assertEqual((source / plan.DEFAULT_LEDGER_RELATIVE).read_text().count('row'), 2)
+            self.assertEqual((view / plan.HEAD_PIN_RELATIVE).resolve(), (source / plan.HEAD_PIN_RELATIVE).resolve())
+
+
 class SessionTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
