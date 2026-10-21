@@ -15,7 +15,8 @@ def _write_json(path, value):
     path.write_text(json.dumps(value) + "\n")
 
 def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release="all",
-                     pass_duration_scales=(1.0, 2.0), clock_latency_ms=(-8.0, 3.0)):
+                     pass_duration_scales=(1.0, 2.0), clock_latency_ms=(-8.0, 3.0), sample_phase_ms=50,
+                     edge_phase=True, min_receive_latency_ms=10.0):
     """1000 on-disk runs: real mock trace reducer -> harvest layout -> B6 export.
 
     No calibration hardware is claimed: the zero phase envelope is explicitly
@@ -26,6 +27,16 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         raise ValueError("two positive pass duration scales required")
     if clock_latency_ms is not None and not clock_latency_ms[0] < 0 < clock_latency_ms[1]:
         raise ValueError("clock latency extremes must straddle zero")
+    # Knob 1 (opus): samples sit strictly inside the 100 ms interval, 50 ms being the point
+    # farthest from both edges. Knob 2: science-run edges sit at a uniform random offset
+    # inside the interval (the device clock is not phase-locked to host events; the recorded
+    # label phase drifts at ~2 ppm and sweeps a period every few hours). Knob 3: every batch
+    # arrives at least 10 ms late (lower end of the recorded 10-17 ms USB arrival latency), so
+    # the envelope fit labels every sample ~10 ms late: the physical form of the NR1 residual.
+    if not 0 < sample_phase_ms < 100:
+        raise ValueError("meter sample phase must lie strictly inside the 100 ms interval")
+    if min_receive_latency_ms < 0:
+        raise ValueError("minimum receive latency must be nonnegative")
     from types import SimpleNamespace
     from joulewise.b6 import export_runs, calibration, blinding
     import shutil
@@ -39,9 +50,12 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
     design = ba.read_json(FIXTURES / "campaign_design.json")
     manifest = {"synthetic": True, "models": design["models"], "sessions": [],
                 "synthetic_parameters": {"pass_duration_scales": list(pass_duration_scales),
-                    "clock_latency_ms": clock_latency_ms, "reference_drift": design["reference_drift"]}}
+                    "clock_latency_ms": clock_latency_ms, "reference_drift": design["reference_drift"],
+                    "sample_phase_ms": sample_phase_ms, "edge_phase": edge_phase,
+                    "min_receive_latency_ms": min_receive_latency_ms}}
     reference_drift = design["reference_drift"]
     rng = random.Random(seed)
+    phase_rng = random.Random(seed * 7919 + 1)   # own stream: energy draws of every seed unchanged
     source_state = _capture_source_state()
     private = root / "private-keys" / "bytes" / "blinding"
     released = root / "released-keys" / "bytes" / "blinding"
@@ -77,7 +91,7 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                     (ref["gross_j"] - reference_drift["pivot_j"])) if ref else None
                 energy = reference_energy * duration / (duration + 1) if ref else truth * 512 * (1 + rng.gauss(0, .002))
                 power = energy / duration
-                start = tick / 10
+                start = tick / 10 + (phase_rng.random() * .1 if edge_phase and not ref else 0)
                 decode_start, end = start + 2, start + 2 + duration
                 config = load_config(run_id=run_id, model={"name": model["model"], "family": "mock",
                     "weight_format": "mock", "context_window": 4096}, workload_profile={"name": "bytes-synthetic",
@@ -133,21 +147,26 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                 rest_reference = (reference_drift["pivot_j"] + reference_drift["rest_scale"] *
                     (ref["gross_j"] - reference_drift["pivot_j"])) if ref else None
                 meter_power = power + rest_reference / (duration + 1) if ref else 2 * power
-                meter_samples.extend((baseline if t < active_tick else meter_power, t) for t in range(tick, end_tick))
-                meter_samples.extend([(.2, end_tick), (.2, end_tick + 1)])
+                if ref or not edge_phase:
+                    meter_samples.extend((baseline if t < active_tick else meter_power, t) for t in range(tick, end_tick))
+                    meter_samples.extend([(.2, end_tick), (.2, end_tick + 1)])
+                else:
+                    # The meter samples the true waveform at its own instants (tick + phase); edges are off-grid.
+                    meter_samples.extend((meter_power if decode_start <= t / 10 + sample_phase_ms / 1000 < end else baseline, t)
+                                         for t in range(tick, end_tick + 2))
                 tick = end_tick + 2
         header = {"k": "h", "status": "streaming", "rate_idx": 1, "start_raw_ns": 0, "start_mono_ns": 0}
         batches = []
         for i in range(0, len(meter_samples), 10):
             part = meter_samples[i:i + 10]
-            payload = b"".join(kp.SAMPLE.pack((t * 100) % kp.WRAP, 0, 1_000_000,
+            payload = b"".join(kp.SAMPLE.pack((t * 100 + sample_phase_ms) % kp.WRAP, 0, 1_000_000,
                 round(w * 1e6), 0, 0, 0, 0) for w, t in part)
-            stamp = part[-1][1] * 100_000_000
+            stamp = part[-1][1] * 100_000_000 + sample_phase_ms * 1_000_000
             # One rare early receive and recurring late receives give the native
             # envelope fit both signs, with the negative extreme dominant.
             latency = 0 if clock_latency_ms is None else (clock_latency_ms[0]
                 if i // 10 == (len(meter_samples) + 9) // 20 else clock_latency_ms[1] if i // 10 % 7 == 3 else 0)
-            rx = stamp + round(latency * 1e6)
+            rx = stamp + round((latency + min_receive_latency_ms) * 1e6)
             batches.append({"k": "b", "tx": rx, "rx": rx, "n": len(part), "p": payload.hex(), "smc": {"B0AC": 0}})
         stream = archive / "sources/night-custody/hazards/meter/stream-001.jsonl"
         stream.parent.mkdir(parents=True)

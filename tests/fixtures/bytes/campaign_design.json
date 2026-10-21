@@ -296,6 +296,9 @@
       -8.0,
       3.0
     ],
-    "derivation": "Retain Addendum 7.12: doubled second-pass duration; signed receive latency with the negative extreme larger in magnitude."
+    "derivation": "Retain Addendum 7.12: doubled second-pass duration; signed receive latency with the negative extreme larger in magnitude. NR1 knobs: 50 ms is farthest from the 100 ms sample edges; uniform science-edge phase models a free-running device clock on its own seed stream; 10 ms minimum receive latency is the recorded 10-17 ms USB arrival latency lower end. The fixture remains 10 Hz (50 SPS bench flips are five times smaller and five times more frequent).",
+    "sample_phase_ms": 50,
+    "edge_phase": true,
+    "min_receive_latency_ms": 10.0
   }
 }
