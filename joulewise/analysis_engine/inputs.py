@@ -1354,6 +1354,17 @@ def _safe_relative_posix(value: object, label: str) -> str:
     return value
 
 
+# L9 preserves each raw handoff carrier. These schema-declared locators are
+# re-authenticated by the lineage reader, with a scoped limitation if absent.
+# Numerical component and producer-plan paths keep their relative-path contract.
+_FLOOR_LINEAGE_LOCATOR_FIELDS = frozenset({
+    "consumption.path", "start.path", "settle.path", "completion.path",
+    "launch_record.path", "pack_root",
+    "window_context.claim_runs_root", "window_context.bound_runs_root",
+    "window_context.custody_root", "window_context.night_dir",
+})
+
+
 def _assert_floor_artifact_path_independent(
     value: object,
     label: str = "artifact",
@@ -1375,6 +1386,12 @@ def _assert_floor_artifact_path_independent(
     if isinstance(value, str) and (
         value.startswith("/") or _WINDOWS_ABSOLUTE_RE.match(value)
     ):
+        carrier_field = re.fullmatch(
+            r"artifact\.provenance\.(?:launch_lineage|"
+            r"producer_launch_lineages\[[0-9]+\]\.launch_lineage)\.(.+)", label,
+        )
+        if carrier_field and carrier_field.group(1) in _FLOOR_LINEAGE_LOCATOR_FIELDS:
+            return
         raise ValueError(f"{label}: absolute paths may not be persisted")
 
 

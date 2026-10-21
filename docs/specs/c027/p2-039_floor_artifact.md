@@ -1023,6 +1023,11 @@ ordered exactly as `producer_calibration_plans`, with `{plan_id, launch_lineage}
 A legacy producer has a null entry and `floor_producer_lineage_absent:<plan_id>`.
 The two carrier shapes are mutually exclusive. Within one producer, split lineages
 and mixed marker/legacy provenance still refuse `launch_lineage_conflict`.
+
+Raw handoff carriers retain their schema-declared receipt, pack and window-context
+locators verbatim, including absolute locators. The lineage reader re-authenticates
+those locators and records the scoped limitation below when they are unavailable.
+Numerical component and producer-plan paths remain safe-relative paths.
 Component reconstruction uses each producer's own carrier and checks its pinned
 digest, retaining refusals for changed numerical content or source membership.
 Reopening a minted carrier that cannot be authenticated produces

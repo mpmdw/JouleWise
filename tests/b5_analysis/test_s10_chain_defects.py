@@ -180,7 +180,49 @@ def _window_lineage(index):
     return lineage
 
 
+def _hazard_window_lineage(index):
+    from joulewise.window_lineage import HAZARD_LINEAGE_SCHEMA, validate_lineage
+    root = f"/synthetic/l9-window-{index + 1}"
+    lineage = {
+        "schema_version": HAZARD_LINEAGE_SCHEMA,
+        "collection_boot_session_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "pack_id": f"pack-{index + 1}", "plan_id": f"plan-{index + 1}",
+        "window_id": f"window-{index + 1}", "bracket_session_id": f"bracket-{index + 1}",
+        "pack_root": root + "/pack", "pack_sha256": "a" * 64,
+        "plan_tree_sha256": "b" * 64,
+        "window_context": {
+            "pre_attempt_id": "pre", "post_attempt_id": "post",
+            "claim_runs_root": root + "/claim", "bound_runs_root": root + "/bound",
+            "custody_root": root + "/custody", "night_dir": root + "/night",
+        },
+        "launch_record": {"path": root + "/launch.json", "sha256": "c" * 64},
+    }
+    validate_lineage(lineage)
+    return lineage
+
+
 class QLineageRulingTests(unittest.TestCase):
+    def test_raw_lineage_locators_preserve_both_carrier_shapes(self):
+        from joulewise.analysis_engine.inputs import _assert_floor_artifact_path_independent
+        for factory in (_window_lineage, _hazard_window_lineage):
+            for common in (False, True):
+                with self.subTest(schema=factory(0)["schema_version"], common=common):
+                    floor, _components, _pinset = _lineage_bearing_artifacts(
+                        lambda index: factory(0 if common else index))
+                    _assert_floor_artifact_path_independent(floor)
+
+    def test_lineage_locator_exception_keeps_other_paths_closed(self):
+        from joulewise.analysis_engine.inputs import _assert_floor_artifact_path_independent
+        floor, _components, _pinset = _lineage_bearing_artifacts(_hazard_window_lineage)
+        changed = copy.deepcopy(floor)
+        changed["cells"][0]["provenance"]["absolute"]["campaign_log"]["relative_path"] = "/synthetic/foreign-log.jsonl"
+        with self.assertRaisesRegex(ValueError, r"cells\[0\].*campaign_log.relative_path"):
+            _assert_floor_artifact_path_independent(changed)
+        changed = copy.deepcopy(floor)
+        changed["provenance"]["producer_launch_lineages"][0]["launch_lineage"]["window_context"]["foreign_root"] = "/synthetic/foreign-root"
+        with self.assertRaisesRegex(ValueError, r"window_context.foreign_root: absolute paths"):
+            _assert_floor_artifact_path_independent(changed)
+
     def test_two_windows_inventory_and_component_hashes(self):
         artifact, components, pinset = _lineage_bearing_artifacts(_window_lineage)
         self.assertNotIn("launch_lineage", artifact["provenance"])
