@@ -1,0 +1,57 @@
+{
+  "aborted_reason": "night_refused_pack_inventory_unusable",
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "99a2914365557165be79bc894fd6c4c0758256983f97492572bbaf573f51bfa8"
+    },
+    {
+      "path": "night/refusal.json",
+      "sha256": "355a0a75aefabf77ffd4674bf1ebc64e293c554f92518a4b5f25b2b52749f05e"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "8e621dee0a2bba6109894ed6ceadce8edf1de8d03be68554c2dbf701468cc032"
+    },
+    {
+      "path": "night/hazard_result.json",
+      "sha256": "5209dcd171136713ffdd9bee7be44c9bd9dbef7d6c1dc65b69adbe9bcb57e527"
+    },
+    {
+      "path": "night/arm_decision.json",
+      "sha256": "4e44234199da0f282a9253645de32c5cbad9bced974bb144f18910f9acf43765"
+    },
+    {
+      "path": "night/network_time_off.action.json",
+      "sha256": "a0b05007ad59b7e7d36677c1d8d1359870f376d7377b0ff99c4f5973c3b40c33"
+    },
+    {
+      "path": "night/arm_collectors.json",
+      "sha256": "3676201e2e1f8666efa861dbaa9a98bc282d7df7742cb010648345816dc28f15"
+    },
+    {
+      "path": "night/lineage.json",
+      "sha256": "1d7a7fea5e2b374a4b8f7237cb25498da9590bcb4cdc54ad1823954d8eb67439"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 0,
+  "census_hits": [],
+  "chain_exit_code": null,
+  "chain_sha256": null,
+  "ended_epoch_s": 1792600367.168948,
+  "ended_monotonic_ns": 584704152731541,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "plan_id": "bytes-h-20261021T162150175053Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal_documents": [
+    "night/refusal.json"
+  ],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1792600140.278539,
+  "started_monotonic_ns": 584477262323125,
+  "verdict": "REFUSED"
+}

@@ -1,0 +1,75 @@
+{
+  "agent_pause": {
+    "episodes": [],
+    "stopped_by_limit": false,
+    "total_pause_s": 0.0
+  },
+  "arm": {
+    "go": true,
+    "reasons": [],
+    "record_path": "/Users/edr/night-bytes/h-20261021T162149Z/custody/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "PASS",
+      "contention": "PASS",
+      "disk": "PASS",
+      "instrument": "PASS",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "chain": {
+    "matches_sidecar": true,
+    "sha256": "8da999730e92e14844b7244826c00601e3eba55ebebc2360346589d79a854475",
+    "sidecar_sha256": "8da999730e92e14844b7244826c00601e3eba55ebebc2360346589d79a854475"
+  },
+  "diagnostics": [],
+  "ended": {
+    "monotonic_ns": 584704151987083,
+    "monotonic_raw_ns": 584704151986833,
+    "wall_s": 1792600367.168203
+  },
+  "final_census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "flags_emitted": [
+    "network_time.off_output",
+    "records.lineage_formality"
+  ],
+  "keep_awake": {
+    "pid": 93635,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "lineage": {
+    "boot_changed": [],
+    "error": "PackInventoryUnusableError: pack inventory is unusable: pack plan tree omits its config inventory: 'identity_pin_projection'",
+    "locators_valid": false,
+    "published": false
+  },
+  "pack_id": "bytes-mac-check",
+  "plan_id": "bytes-h-20261021T162150175053Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal": {
+    "detail": "the launch lineage could not be published because the pack's config inventory is unusable; no member's config bytes can be checked against the sealed inventory, so every tagged member would refuse; the chain was not launched",
+    "reason": "night_refused_pack_inventory_unusable"
+  },
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": null,
+    "runs_excluded": []
+  },
+  "stage_reached": "lineage_pack_inventory",
+  "started": {
+    "monotonic_ns": 584477284637625,
+    "monotonic_raw_ns": 584477284636958,
+    "wall_s": 1792600140.300854
+  },
+  "verdict": "REFUSED"
+}

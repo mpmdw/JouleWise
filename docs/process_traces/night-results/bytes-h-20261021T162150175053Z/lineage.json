@@ -1,0 +1,47 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "error": "PackInventoryUnusableError: pack inventory is unusable: pack plan tree omits its config inventory: 'identity_pin_projection'",
+      "published": false
+    },
+    {
+      "attempt": 2,
+      "error": "PackInventoryUnusableError: pack inventory is unusable: pack plan tree omits its config inventory: 'identity_pin_projection'",
+      "published": false
+    }
+  ],
+  "boot_changed": [],
+  "ended": {
+    "monotonic_ns": 584704116546083,
+    "monotonic_raw_ns": 584704116544583,
+    "wall_s": 1792600367.1327622
+  },
+  "error": "PackInventoryUnusableError: pack inventory is unusable: pack plan tree omits its config inventory: 'identity_pin_projection'",
+  "locators": {
+    "bound": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "error": "HazardLineageError: hazard locator is absent: /Users/edr/night-bytes/h-20261021T162149Z/runs-parent/runs_bytes_mac_check_bound/.joulewise-launch-lineage.json: [Errno 2] No such file or directory: '/Users/edr/night-bytes/h-20261021T162149Z/runs-parent/runs_bytes_mac_check_bound/.joulewise-launch-lineage.json'",
+      "locator_absent": true,
+      "root": "/Users/edr/night-bytes/h-20261021T162149Z/runs-parent/runs_bytes_mac_check_bound",
+      "valid": false
+    },
+    "claim": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "error": "HazardLineageError: hazard locator is absent: /Users/edr/night-bytes/h-20261021T162149Z/runs-parent/runs_bytes_mac_check/.joulewise-launch-lineage.json: [Errno 2] No such file or directory: '/Users/edr/night-bytes/h-20261021T162149Z/runs-parent/runs_bytes_mac_check/.joulewise-launch-lineage.json'",
+      "locator_absent": true,
+      "root": "/Users/edr/night-bytes/h-20261021T162149Z/runs-parent/runs_bytes_mac_check",
+      "valid": false
+    }
+  },
+  "locators_valid": false,
+  "published": false,
+  "requested": {
+    "monotonic_ns": 584699077978916,
+    "monotonic_raw_ns": 584699077978791,
+    "wall_s": 1792600362.094195
+  },
+  "schema": "joulewise.b5_lineage_publication.v1"
+}

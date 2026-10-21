@@ -1,0 +1,15 @@
+{
+  "plan_id": "bytes-h-20261021T162150175053Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal": {
+    "detail": "the launch lineage could not be published because the pack's config inventory is unusable; no member's config bytes can be checked against the sealed inventory, so every tagged member would refuse; the chain was not launched",
+    "evidence": {
+      "attempts": 2,
+      "error": "PackInventoryUnusableError: pack inventory is unusable: pack plan tree omits its config inventory: 'identity_pin_projection'",
+      "lineage_record": "night/lineage.json"
+    },
+    "reason": "night_refused_pack_inventory_unusable"
+  },
+  "schema": "joulewise.night_refusal.v1",
+  "verdict": "REFUSED"
+}
