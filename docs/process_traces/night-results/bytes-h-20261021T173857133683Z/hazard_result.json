@@ -1,0 +1,620 @@
+{
+  "aborted_reason": null,
+  "agent_pause": {
+    "episodes": [],
+    "stopped_by_limit": false,
+    "total_pause_s": 0.0
+  },
+  "arm": {
+    "go": true,
+    "reasons": [],
+    "record_path": "/Users/edr/night-bytes/h-20261021T173856Z/custody/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "PASS",
+      "contention": "PASS",
+      "disk": "PASS",
+      "instrument": "PASS",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "census_supervision": {
+    "consecutive_unmeasured": 0,
+    "journal_failures": 0,
+    "retried_probes": 0,
+    "unmeasured_censuses": 0
+  },
+  "chain": {
+    "exit_code": 11,
+    "matches_sidecar": true,
+    "sha256": "956db361688aee9e82a720214c294a6fe49ab77d9cb7de4ab0be9430b8405185",
+    "sidecar_sha256": "956db361688aee9e82a720214c294a6fe49ab77d9cb7de4ab0be9430b8405185",
+    "stages": [
+      {
+        "kind": "bracket_reservation",
+        "rc": 0,
+        "stage_id": "bytes-mac-check-bracket-reservation"
+      },
+      {
+        "kind": "calibration_capture",
+        "rc": 2,
+        "stage_id": "bytes-mac-check-pre-calibration"
+      },
+      {
+        "kind": "pre_calibration_capture_failed",
+        "rc": 11,
+        "stage_id": "chain.stop"
+      }
+    ],
+    "started": true,
+    "termination_proven": true
+  },
+  "diagnostics": [],
+  "disk_floor": {
+    "errors": [],
+    "low_bytes": 10737418240,
+    "stops": []
+  },
+  "ended": {
+    "monotonic_ns": 589443929167875,
+    "monotonic_raw_ns": 589443929167500,
+    "wall_s": 1792605106.945384
+  },
+  "faults": {
+    "bound_derivation_failed": "not_run",
+    "post_bracket_failed": "not_run",
+    "reasons": [
+      "yield_empty",
+      "chain_stopped:pre_calibration_capture_failed"
+    ]
+  },
+  "final_census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "flags_emitted": [
+    "network_time.off_output"
+  ],
+  "g10": {
+    "ran": false,
+    "reason": "not requested",
+    "requested": false
+  },
+  "inventory": {
+    "errors": [],
+    "file_count": 377,
+    "head": "6ef1ffc8603c1285214884799648914ddeedea30",
+    "path": "/Users/edr/night-bytes/h-20261021T173856Z/custody/night/executed_inventory.json",
+    "sha256": "bb97f875350d52b71d411086953280900546c97fd8e61ebf863ff155177307ca",
+    "status_clean": false
+  },
+  "keep_awake": {
+    "pid": 99137,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "lineage": {
+    "boot_changed": [],
+    "error": null,
+    "locators_valid": true,
+    "published": true
+  },
+  "meter": {
+    "argv": [
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261021T1643Z-bytes-h2/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261021T1643Z-bytes-h2/scripts/km003c_monitor.py",
+      "--out",
+      "/Users/edr/night-bytes/h-20261021T173856Z/custody/hazards/meter/stream-001.jsonl"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "final_exit": null,
+    "gaps": [],
+    "journal": "meter_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 589443802238500,
+        "monotonic_raw_ns": 589443802238166,
+        "wall_s": 1792605106.818455
+      },
+      "returncode": 0,
+      "was_running": true
+    },
+    "streams": [
+      {
+        "path": "hazards/meter/stream-001.jsonl",
+        "sha256": "745f081ece6aed59c0a7ccae66410747873af4a8a3656382a2695ce8eca94a2f",
+        "status": "streaming"
+      }
+    ]
+  },
+  "monitor": {
+    "argv": [
+      "/usr/sbin/taskpolicy",
+      "-b",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261021T1643Z-bytes-h2/.venv/bin/python",
+      "-B",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261021T1643Z-bytes-h2/scripts/hazard_monitor.py",
+      "--config",
+      "/Users/edr/night-bytes/h-20261021T173856Z/custody/hazards/monitor/config.json"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "gaps": [],
+    "journal": "monitor_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 589443432896500,
+        "monotonic_raw_ns": 589443432895916,
+        "wall_s": 1792605106.4491131
+      },
+      "returncode": 0,
+      "was_running": true
+    }
+  },
+  "monitor_readiness": {
+    "attempts": [
+      {
+        "at": {
+          "monotonic_ns": 589374365707708,
+          "monotonic_raw_ns": 589374365707541,
+          "wall_s": 1792605037.3819242
+        },
+        "attempt": 1,
+        "ready": true,
+        "started": true,
+        "status": {
+          "battery": true,
+          "contention": true,
+          "ready": true,
+          "session_start": true
+        },
+        "waited_s": 0.843
+      }
+    ],
+    "ready": true
+  },
+  "monitor_stop": {
+    "chain_returned": {
+      "monotonic_ns": 589438422723000,
+      "monotonic_raw_ns": 589438422722750,
+      "wall_s": 1792605101.4389389
+    },
+    "hold_s": 5.0,
+    "monitor_stop_requested": {
+      "monotonic_ns": 589443432896500,
+      "monotonic_raw_ns": 589443432895916,
+      "wall_s": 1792605106.4491131
+    },
+    "released": {
+      "monotonic_ns": 589443432820541,
+      "monotonic_raw_ns": 589443432818833,
+      "wall_s": 1792605106.449037
+    },
+    "released_after_chain_s": 5.01
+  },
+  "neg8_corpus": {
+    "collected_manifest": null,
+    "committed_manifest": null,
+    "errors": [
+      "summary: FileNotFoundError: [Errno 2] No such file or directory: '/Users/edr/night-bytes/h-20261021T173856Z/custody/night/transcript/neg8-settled-corpus.collected.summary.json'",
+      "collected manifest: FileNotFoundError: [Errno 2] No such file or directory: '/Users/edr/night-bytes/h-20261021T173856Z/custody/night/transcript/neg8-settled-corpus.collected.json'"
+    ],
+    "members_kept": null,
+    "members_listed": null,
+    "pruned": null,
+    "summary": null
+  },
+  "pack_id": "bytes-mac-check",
+  "plan_id": "bytes-h-20261021T173857133683Z",
+  "receipt_class": "HAZARD_PACK",
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": -20,
+    "end": {
+      "monotonic_ns": 589438422741791,
+      "monotonic_raw_ns": 589438422737958,
+      "read_skew_ns": 291,
+      "sleep_offset_ns": 63,
+      "uptime_raw_ns": 589438422737895,
+      "wall_s": 1792605101.4389582
+    },
+    "runs_excluded": [],
+    "start": {
+      "monotonic_ns": 589375260746916,
+      "monotonic_raw_ns": 589375260745666,
+      "read_skew_ns": 334,
+      "sleep_offset_ns": 83,
+      "uptime_raw_ns": 589375260745583,
+      "wall_s": 1792605038.2769642
+    }
+  },
+  "stage_reached": "chain:pre_calibration_capture_failed",
+  "started": {
+    "monotonic_ns": 589097342826583,
+    "monotonic_raw_ns": 589097342825916,
+    "wall_s": 1792604760.3590431
+  },
+  "supervision_faults": {},
+  "verdict": "CHAIN_STOPPED",
+  "yield": {
+    "bundles_present": 0,
+    "failed": 0,
+    "logged": 0,
+    "ok": 0,
+    "per_stage": [
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 10,
+        "ok": 0,
+        "ordinal": 3,
+        "planned": 18,
+        "present": 0,
+        "rc": null,
+        "role": "corpus",
+        "stage_id": "bytes-mac-check-bound-collection",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 5,
+        "planned": 3,
+        "present": 0,
+        "rc": null,
+        "role": "reference",
+        "stage_id": "bytes-mac-check-reference-start",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 6,
+        "planned": 4,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-test7-llama-70b-start",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 7,
+        "planned": 4,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-test7-qwen35-122b-start",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 8,
+        "planned": 4,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-test7-qwen3-next-80b-start",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 9,
+        "planned": 5,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-1p7b",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 10,
+        "planned": 5,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-4b",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 11,
+        "planned": 5,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-8b",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 12,
+        "planned": 5,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-30b-a3b",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 13,
+        "planned": 5,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-14b",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 14,
+        "planned": 5,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-next-80b",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 15,
+        "planned": 5,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-32b",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 16,
+        "planned": 5,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen3-8b-8bit",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 17,
+        "planned": 5,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-llama-70b",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 18,
+        "planned": 5,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-check-qwen35-122b",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 0,
+        "ok": 0,
+        "ordinal": 19,
+        "planned": 1,
+        "present": 0,
+        "rc": null,
+        "role": "reference_midpoint",
+        "stage_id": "bytes-mac-check-reference-midpoint",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 10,
+        "ok": 0,
+        "ordinal": 20,
+        "planned": 12,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-soak-llama-70b",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 10,
+        "ok": 0,
+        "ordinal": 21,
+        "planned": 12,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-soak-qwen35-122b",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 22,
+        "planned": 4,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-test7-llama-70b-end",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 23,
+        "planned": 4,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-test7-qwen35-122b-end",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 4,
+        "ok": 0,
+        "ordinal": 24,
+        "planned": 4,
+        "present": 0,
+        "rc": null,
+        "role": "science",
+        "stage_id": "bytes-mac-check-test7-qwen3-next-80b-end",
+        "status": "ZERO",
+        "succeeded": 0
+      },
+      {
+        "failed": 0,
+        "journaled": false,
+        "logged": 0,
+        "min_valid": 2,
+        "ok": 0,
+        "ordinal": 25,
+        "planned": 3,
+        "present": 0,
+        "rc": null,
+        "role": "reference",
+        "stage_id": "bytes-mac-check-reference-end",
+        "status": "ZERO",
+        "succeeded": 0
+      }
+    ],
+    "planned": 123,
+    "schema": "joulewise.b5_window_yield.v1",
+    "succeeded": 0,
+    "yield_status": "EMPTY"
+  },
+  "yield_plan": {
+    "planned": 123,
+    "source": [
+      "driver"
+    ],
+    "stages": 22
+  },
+  "yield_tripwire": {
+    "attempted_seen": 0,
+    "counted_in_settle": 0,
+    "errors": [],
+    "pre_bundle_runs_flagged": 0,
+    "stages_counted": 0,
+    "stalled": false
+  }
+}

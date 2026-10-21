@@ -1,0 +1,5 @@
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 589097316346166, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 589374073320000, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 589375288552125, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 589405332932208, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-a", "-lf", "[c]odex|[c]laude"], "exit_code": 1, "monotonic_ns": 589435333638208, "refusal": null, "stderr": "", "stdout": ""}

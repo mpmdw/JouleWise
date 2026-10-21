@@ -1,0 +1,95 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "published": true
+    }
+  ],
+  "boot_changed": [],
+  "ended": {
+    "monotonic_ns": 589374125332291,
+    "monotonic_raw_ns": 589374125331916,
+    "wall_s": 1792605037.141549
+  },
+  "locators": {
+    "bound": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "recorded_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "root": "/Users/edr/night-bytes/h-20261021T173856Z/runs-parent/runs_bytes_mac_check_bound",
+      "sha256": "fa8ca21a5298b8f0a7bf0023c1195c8df6fbf570f40598ec2619c611648ddec8",
+      "valid": true
+    },
+    "claim": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "recorded_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "root": "/Users/edr/night-bytes/h-20261021T173856Z/runs-parent/runs_bytes_mac_check",
+      "sha256": "da33673e7923f0d312a6ee55e3dabcb04da855bd40c8caa6d378b807dbc0e25b",
+      "valid": true
+    }
+  },
+  "locators_valid": true,
+  "published": true,
+  "requested": {
+    "monotonic_ns": 589374081322125,
+    "monotonic_raw_ns": 589374081322000,
+    "wall_s": 1792605037.0975392
+  },
+  "result": {
+    "launch_lineage": {
+      "bracket_session_id": "bytes-h-20261021T173857133683Z-calibration",
+      "collection_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "launch_record": {
+        "path": "/Users/edr/night-bytes/h-20261021T173856Z/custody/window_lineage/launch.json",
+        "sha256": "da8cb4c4ab24ba1243a1cc372ee4c289f0b63af4fa4bdf53e8893cf5e987a0a6"
+      },
+      "pack_id": "bytes-mac-check",
+      "pack_root": "/Users/edr/night-bytes/h-20261021T173856Z/measurement/configs/campaigns/bytes-mac-check",
+      "pack_sha256": null,
+      "plan_id": "bytes-mac-check",
+      "plan_tree_sha256": "5127cb691544f6fd272f22576af038a0234aba020f6841df4062598c21d2f1a5",
+      "schema_version": "joulewise.hazard_window_lineage.v1",
+      "window_context": {
+        "bound_runs_root": "/Users/edr/night-bytes/h-20261021T173856Z/runs-parent/runs_bytes_mac_check_bound",
+        "claim_runs_root": "/Users/edr/night-bytes/h-20261021T173856Z/runs-parent/runs_bytes_mac_check",
+        "custody_root": "/Users/edr/night-bytes/h-20261021T173856Z/custody",
+        "night_dir": "/Users/edr/night-bytes/h-20261021T173856Z/custody/night",
+        "post_attempt_id": "bytes-h-20261021T173857133683Z-cal-post",
+        "pre_attempt_id": "bytes-h-20261021T173857133683Z-cal-pre"
+      },
+      "window_id": "bytes-mac-check"
+    },
+    "locators": {
+      "bound_runs_root": {
+        "path": "/Users/edr/night-bytes/h-20261021T173856Z/runs-parent/runs_bytes_mac_check_bound/.joulewise-launch-lineage.json",
+        "sha256": "fa8ca21a5298b8f0a7bf0023c1195c8df6fbf570f40598ec2619c611648ddec8"
+      },
+      "claim_runs_root": {
+        "path": "/Users/edr/night-bytes/h-20261021T173856Z/runs-parent/runs_bytes_mac_check/.joulewise-launch-lineage.json",
+        "sha256": "da33673e7923f0d312a6ee55e3dabcb04da855bd40c8caa6d378b807dbc0e25b"
+      }
+    },
+    "records": {
+      "authorization": {
+        "path": "/Users/edr/night-bytes/h-20261021T173856Z/custody/window_lineage/authorization.json",
+        "sha256": "887caf7c6207a288a5cf63b8b9fb0746de9558724930bdd9a768ec066804f9a3"
+      },
+      "go": {
+        "path": "/Users/edr/night-bytes/h-20261021T173856Z/custody/window_lineage/go.json",
+        "sha256": "4f6d0aeca927258d8a4864c767b00d024488a3ca514989fe9a1420687a58d139"
+      },
+      "launch": {
+        "path": "/Users/edr/night-bytes/h-20261021T173856Z/custody/window_lineage/launch.json",
+        "sha256": "da8cb4c4ab24ba1243a1cc372ee4c289f0b63af4fa4bdf53e8893cf5e987a0a6"
+      }
+    },
+    "unrecorded": [
+      {
+        "error": "ArmReadinessError: pack contains no committed files",
+        "field": "pack_sha256"
+      }
+    ]
+  },
+  "schema": "joulewise.b5_lineage_publication.v1"
+}
