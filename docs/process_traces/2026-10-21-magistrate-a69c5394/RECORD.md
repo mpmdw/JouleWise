@@ -25,7 +25,7 @@ Launch: no pending notices; no unread mail from Ed; directive issues open are th
 ## H re-arm
 - Pre-arm: no unread mail from Ed; directives unchanged; no `standdown.request`. AC power, IsCharging No, InstantAmperage 0, 100%; caffeinate pid 885 alive; no thermal warning; 102 GB free (df -g). Measurement checkout at 6ef1ffc86, clean.
 - `prepare` into `/Users/edr/night-bytes/h-20261021T173856Z`: STAGED, session `bytes-h-20261021T173857133683Z`, t0 10:46:00 PDT 2026-10-21 (17:46:00 UTC).
-- Arm notice emailed to Ed before install. The local `codex-cloud-run.mjs` watcher (pid 95090) was stopped before install; the cloud task runs on. `install` was this session's last act.
+- Arm notice emailed to Ed before install (Gmail 1a15f8ba9ba28df4). The local `codex-cloud-run.mjs` watcher (pid 95090) was stopped before install; the cloud task runs on. `install` was this session's last act.
 
 ## Pruning list (this session)
 - Lineage publication at the night driver: caught a real defect (H's pack had no config inventory). It refused on records, not physics; here the record it needs is what checks each config's bytes, so the remedy was to supply it.
