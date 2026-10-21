@@ -1221,6 +1221,60 @@ class Addendum7RegressionTests(NumericTestCase):
             if row["model"] in models and row["pass_id"] in pass_ids and row["stratum"] == "repeat" and int(row["unit_id"]) < 6:
                 row.update(status="unusable", invalid_energy_record=True, meter=None)
 
+    def test_nr1_bad_per_run_inputs_flag_without_changing_registered_fit(self):
+        _, clean_points, _, clean_result = self.assess(self.records)
+        # Compare every pre-NR1 field exactly on identical registered inputs.
+        # Only disclosure/alternative keys can change under these injections.
+        disclosure = {"meter_offset_bound_j", "meter_offset_bound_w", "meter_offset_sensitivity_w",
+            "systematics_flag", "sensitivity_flag", "coefficient_C", "offset_intervals",
+            "offset_ols_intervals", "coefficient_decisions", "offset_decisions",
+            "coefficient_decision", "offset_decision", "resident_adds_nothing_offset",
+            "d_beta_d_delta_per_ms", "sensitivity_units"}
+        def registered(value):
+            if isinstance(value, dict):
+                return {k: registered(v) for k, v in value.items() if k not in disclosure}
+            if isinstance(value, list):
+                return [registered(v) for v in value]
+            return value
+        expected = registered(clean_result)
+        for field, bad in (("bound_j", None), ("bound_j", -1.0), ("bound_j", math.nan),
+                           ("bound_j", math.inf), ("sensitivity_w", None),
+                           ("sensitivity_w", math.nan), ("sensitivity_w", math.inf)):
+            with self.subTest(field=field, bad=bad):
+                records = copy.deepcopy(self.records)
+                # One bad run among fifty must flag before its contribution can
+                # be diluted in a pass mean (the negative injection's failure).
+                target = records[0]
+                target["meter"]["offset_" + field] = bad
+                passes, points, _, result = self.assess(records)
+                self.assertEqual(registered(result), expected)
+                flag = "systematics_flag" if field == "bound_j" else "sensitivity_flag"
+                for row in passes + points:
+                    if row["model"] == target["model"] and row["boundary"] != "rails" and (
+                            "pass_id" not in row or row["pass_id"] == target["pass_id"]):
+                        self.assertIsNone(row["meter_offset_" + field])
+                        self.assertIn(target["run_id"], row[flag])
+                for row in result["h2"]:
+                    if row["boundary"] != "rails":
+                        fit = row["resident_extended"]
+                        self.assertEqual(fit["status"], "computed")
+                        self.assertIn(target["run_id"], fit[flag])
+                        self.assertNotIn("coefficient_C" if field == "bound_j" else
+                                         "d_beta_d_delta_per_ms", fit)
+                        self.assertIn("d_beta_d_delta_per_ms" if field == "bound_j" else
+                                      "coefficient_C", fit)
+        rows = [p for p in clean_points if p["boundary"] == "DC input" and
+                p["selection"] == "primary" and p["basis"] == "gross primary"]
+        clean = ba.h2(rows, {})
+        for bad in (None, math.nan, math.inf):
+            with self.subTest(point_sensitivity=bad):
+                changed = copy.deepcopy(rows)
+                changed[0]["meter_offset_sensitivity_w"] = bad
+                result = ba.h2(changed, {})
+                self.assertEqual(registered(result), registered(clean))
+                self.assertIn("sensitivity_flag", result["resident_extended"])
+                self.assertNotIn("d_beta_d_delta_per_ms", result["resident_extended"])
+
     def test_a7_09_one_pass_primary_all_tables_and_two_pass_sensitivity(self):
         target = "Qwen3-30B-A3B-4bit"
         records = copy.deepcopy(self.records)

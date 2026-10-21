@@ -247,17 +247,27 @@ def h2(points, rails_power, *, boundary=None, family_size=None):
         except AnalysisError as exc:
             return {**refused, "reason": str(exc)}
         if boundary != "rails":
-            if all(row.get("meter_offset_sensitivity_w") is not None for row in rows):
+            for flag in ("systematics_flag", "sensitivity_flag"):
+                reasons = list(dict.fromkeys(row[flag] for row in rows if flag in row))
+                if reasons:
+                    fit[flag] = "; ".join(reasons)
+            try:
+                if "sensitivity_flag" in fit:
+                    raise AnalysisError(fit["sensitivity_flag"])
                 # The response derivative is (P_before_start-P_before_end)/T.
                 # OLS is linear at fixed X. Divide by 1000 for per-ms units.
                 sensitivity = ols([[f(row) for f in predictors] for row in rows],
-                    [row["meter_offset_sensitivity_w"] / row["duration_s"] for row in rows],
+                    [number(row.get("meter_offset_sensitivity_w"),
+                            "adjacent-before-edge power difference") / row["duration_s"] for row in rows],
                     family_size=1)
-                fit["d_beta_d_delta_per_ms"] = [v / 1000 for v in sensitivity["coefficients"]]
+                coefficients = [number(v / 1000, "coefficient sensitivity")
+                                for v in sensitivity["coefficients"]]
+            except AnalysisError as exc:
+                fit["sensitivity_flag"] = str(exc)
+            else:
+                fit["d_beta_d_delta_per_ms"] = coefficients
                 fit["sensitivity_units"] = ["W per ms", "J/GB per ms"] + (
                     ["J/GB per ms"] if p == 3 else [])
-            else:
-                fit["sensitivity_flag"] = "adjacent-before-edge powers unavailable"
         return {**fit, "status": "computed", "p": p, "point_labels": refused["point_labels"]}
 
     bw, resident_rate = lambda p: p["BW"], lambda p: p["resident"] / p["time"]
@@ -1001,9 +1011,21 @@ def _phase_cell(kept, removed, module, boundary, secondary, *, minimum_units=5):
     bound, mean = interval["B_j"], estimate["mean_j"]
     offset = {}
     if boundary != "rails":
-        for field in ("bound_j", "sensitivity_w"):
-            values = [r["meter"].get("offset_" + field) for r in kept]
-            offset["meter_offset_" + field] = _weighted(kept, values) if all(v is not None for v in values) else None
+        for field, flag in (("bound_j", "systematics_flag"),
+                            ("sensitivity_w", "sensitivity_flag")):
+            values, reasons = [], []
+            for row in kept:
+                try:
+                    # Validate each run before weighting: a negative bound may
+                    # otherwise disappear inside a positive mean. Signed
+                    # sensitivity is valid, but missing/non-finite values are not.
+                    values.append(number(row["meter"].get("offset_" + field),
+                        "meter offset " + field, nonnegative=field == "bound_j"))
+                except AnalysisError as exc:
+                    reasons.append(f"run {row['run_id']}: {exc}")
+            offset["meter_offset_" + field] = None if reasons else _weighted(kept, values)
+            if reasons:
+                offset[flag] = "; ".join(reasons)
     return {"status": "computed", **offset, "mean_j": mean,
                  "lower_j": mean - h - bound, "upper_j": mean + h + bound,
                  "h_j": h, "B_j": bound, "kind_averages_j": interval["kind_averages_j"],
@@ -1118,9 +1140,17 @@ def combine_passes(rows):
                      BW=point["bytes"] * DECODE_STEPS / duration)
         if point["boundary"] != "rails":
             # Average available per-pass terms just as B; no sqrt(n) or t.
-            for field in ("meter_offset_bound_j", "meter_offset_sensitivity_w"):
-                values = [r.get(field) for r in group]
-                point[field] = statistics.fmean(values) if all(v is not None for v in values) else None
+            for field, flag in (("meter_offset_bound_j", "systematics_flag"),
+                                ("meter_offset_sensitivity_w", "sensitivity_flag")):
+                reasons = list(dict.fromkeys(r[flag] for r in group if flag in r))
+                try:
+                    values = [number(r.get(field), field,
+                        nonnegative=field == "meter_offset_bound_j") for r in group]
+                except AnalysisError as exc:
+                    point[field] = None
+                    point[flag] = "; ".join(reasons) if reasons else str(exc)
+                else:
+                    point[field] = statistics.fmean(values)
             # Coherent energy support uses the registered ratio of means: the
             # pass-averaged joules divided by the point's mean decode time.
             value = point["meter_offset_bound_j"]

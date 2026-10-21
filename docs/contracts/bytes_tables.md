@@ -683,7 +683,12 @@ repeats these columns for each primary coefficient. `coefficient_decisions` and
 `offset_decisions` print positive/negative/contains-zero for both choices;
 `resident_adds_nothing_offset` applies the registered rho rule to the alternative.
 Rails has no C or offset alternative. Missing/invalid bounds print
-`systematics_flag`, leaving the registered fit available.
+`systematics_flag`, leaving the registered fit available. Each run's bound is
+checked for a finite, nonnegative value before weighting; one invalid run
+omits only the alternative. Each run's signed sensitivity is checked for
+finiteness before weighting; missing/non-finite sensitivity prints
+`sensitivity_flag` and omits only sensitivity. The reason is retained through
+pass and point averaging into the fit. These flags do not refuse the stage.
 
 Disclosure with every H2 DC/rest row (`offset_disclosure`): **delta has not been
 measured (block-6 M13); its structural bound is one sample period plus the poll
