@@ -89,6 +89,9 @@ def main(argv=None):
             refs = {r["session_id"]: r["neg8_inputs"] for r in fit_passes if "neg8_inputs" in r}
             frozen = ba.frozen_predictions(fit_points, manifest, refs)
             sha = ba.write_predictions(args.out, frozen)
+            digest = frozen["bytes_analysis_sha256"]
+            commitment = {"bytes_analysis_sha256": {"committed": digest, "evaluating": digest},
+                          "flags": [], "fields_not_rebuilt": []}
             _write(args.out, "fit_pass_estimates", fit_passes)
             if args.stage == "fit":
                 print(json.dumps({"stage": "fit", "predictions_sha256": sha, "out": str(args.out)}))
@@ -97,8 +100,21 @@ def main(argv=None):
             # Validate the commitment before opening any held-out archive.
             frozen, sha = ba.read_predictions(args.predictions, manifest)
             fit_points = frozen["fit_points"]
-            if ba.frozen_predictions(fit_points, manifest, frozen["neg8_inputs"]) != frozen:
+            rebuilt = ba.frozen_predictions(fit_points, manifest, frozen["neg8_inputs"])
+            # The committed content (fit points, rival lines, NEG-8 inputs, tier inputs,
+            # sizes, manifest digest) is data; the module digest is provenance. Under the
+            # committing module the content must rebuild exactly. Under a module changed
+            # after the commitment (registration section 11, held-out agreement) the
+            # rebuild is reported and flagged, and the committed content is evaluated as
+            # committed; the corrected lines live in the second commitment.
+            module = {"committed": frozen["bytes_analysis_sha256"], "evaluating": rebuilt["bytes_analysis_sha256"]}
+            not_rebuilt = sorted(k for k in set(frozen) | set(rebuilt)
+                                 if k != "bytes_analysis_sha256" and frozen.get(k) != rebuilt.get(k))
+            if module["committed"] == module["evaluating"] and not_rebuilt:
                 raise ba.AnalysisError("frozen line/fit-point mismatch")
+            flags = [] if module["committed"] == module["evaluating"] else (
+                ["bytes.module_changed_after_commitment"] + (["bytes.commitment_not_rebuilt"] if not_rebuilt else []))
+            commitment = {"bytes_analysis_sha256": module, "flags": flags, "fields_not_rebuilt": not_rebuilt}
         held_passes, held_points = _reduce(source, manifest, "heldout", args.key_dir)
         points = fit_points + held_points
         _missing_labels(points)
@@ -109,6 +125,7 @@ def main(argv=None):
         for name, rows in result.items():
             _write(args.out, name, rows)
         _write(args.out, "analysis_record", {"stage": args.stage, "predictions_sha256": sha,
+                **commitment,
                 "manifest_sha256": ba.digest(manifest), "H1_checks": ba.H1_CHECKS,
                 "H2_intervals": [{k: row[k] for k in ("selection", "basis", "boundary", "n", "k")}
                                  for row in result["h2"] if not row["description_only"]],

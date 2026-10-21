@@ -140,6 +140,20 @@
       "klass": "PHYSICS",
       "note": "The registered missing-evidence predicate, so the charging and AC state over the span is unknown. With SMC B0AC coverage: no registry publication in force at or before the span's start, an in-force publication that lacks IsCharging or ExternalConnected, or a hole of more than 120 s between good registry state reads (any read carrying both fields) over the span, the trailing hole measured to the span's end. Without SMC coverage: no registry publication for more than 120 s overlapping the span, or an in-force publication lacking a needed field. (An SMC gap alone is battery.smc_unavailable: the registry current stands in.)"
     },
+    "bytes.commitment_not_rebuilt": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "B6 Q2: under a module changed after the stage-1 commitment, the committed content does not rebuild; the committed content is evaluated as committed and the differing fields are listed."
+    },
+    "bytes.module_changed_after_commitment": {
+      "blinding": "STRUCTURE",
+      "effect": "DISCLOSE",
+      "family": "RECORDS",
+      "klass": "REPRESENTATION",
+      "note": "B6 Q2: the analysis module evaluating the held-out stage differs from the module that wrote the stage-1 commitment; the second commitment prints beside the registered result as the post-agreement fix."
+    },
     "bytes.withheld_missing": {
       "blinding": "STRUCTURE",
       "effect": "DISCLOSE",
