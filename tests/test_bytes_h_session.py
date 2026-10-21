@@ -167,6 +167,87 @@ class DiskRulingTests(unittest.TestCase):
         self.assertIn('disk.purgeable_unreadable', disk['flags'])
 
 
+class RealKitStagingTests(unittest.TestCase):
+    def test_staged_real_kit_publishes_lineage_and_authenticates_every_dispatched_config(self):
+        from joulewise import arm_readiness, window_lineage
+        from joulewise.analysis_engine.inputs import validate_identity_pin_projection
+        from joulewise.b5 import chain, driver, harvest
+        from joulewise.b6.acceptance import _stage_roles
+        from joulewise.flags.collect import plan_tree_pins
+
+        with tempfile.TemporaryDirectory() as temporary:
+            session = Path(temporary)
+            view, pack = h.measurement_view(ROOT, session)
+            tree = h.read(pack / 'plan_tree.json')
+            projection = validate_identity_pin_projection(tree['arm_attachments']['identity_pin_projection'])
+            # Ten roster sources plus the distinct NEG-8 reference source;
+            # these IDs also let harvest apply the existing file identity pins.
+            self.assertEqual({u['identity_unit_id'] for u in projection['identity_units']},
+                             set(registration.load_identity_pins(REG)['units']))
+            self.assertEqual(projection['state'], 'unprojected')
+            self.assertTrue(all(set(u['model_runtime_config'].values()) == {None}
+                                for u in projection['identity_units']))
+            inventory = arm_readiness._authenticated_pack_config_inventory(pack)
+            roots = {name: session / tree['roots'][name + '_root_leaf'] for name in ('claim', 'bound')}
+            custody = session / 'custody'
+            for directory in (*roots.values(), custody):
+                directory.mkdir()
+            window = {'pack': {'pack_root': str(pack), 'pack_id': h.PACK_ID, 'pack_sha256': None,
+                               'pack_plan_id': tree['plan']['plan_id'],
+                               'window_id': tree['window_identity']['window_id']},
+                      'bracket_session_id': 'real-kit-rehearsal',
+                      'bindings': {'pre_attempt_id': 'real-kit-pre', 'post_attempt_id': 'real-kit-post'}}
+            driver._production_lineage(driver.LineageRequest(
+                plan=None, plan_path=session / 'unused-plan.json', custody_root=custody,
+                night_dir=custody / 'night', hazard_window=window,
+                claim_runs_root=roots['claim'], bound_runs_root=roots['bound'],
+                arm_record_path=None, arm_decision_path=None, boot_session_uuid=None))
+            source_dispatches = {d.stage_id: d for d in plan.resolve_stage_dispatches(
+                h.read(ROOT / h.KIT / 'plan_tree.json'), ROOT)}
+            checked = []
+            for dispatch in plan.resolve_stage_dispatches(tree, view):
+                self.assertIsNone(dispatch.error)
+                original = ROOT / source_dispatches[dispatch.stage_id].config_dir
+                directory = view / dispatch.config_dir
+                manifest = h.read(directory / 'order_manifest.json')
+                selected = roots['bound' if dispatch.runs_root_binding == 'bound_runs_root' else 'claim']
+                for row in manifest['executed_order']:
+                    config = directory / row['config']
+                    self.assertEqual(config.read_bytes(), (original / row['config']).read_bytes())
+                    self.assertEqual(inventory[config.relative_to(pack).as_posix()],
+                                     hashlib.sha256(config.read_bytes()).hexdigest())
+                    arm_readiness.authenticate_campaign_launch_lineage(selected, config_paths=[config])
+                    checked.append(config)
+            self.assertEqual(len(checked), 123)  # R8.6's 98 kit + 25 scaffold members.
+            self.assertEqual(set(inventory), {p.relative_to(pack).as_posix() for p in checked})
+            roster = harvest.build_roster(pack, view)
+            self.assertEqual(len(roster['members']), len(checked))
+            self.assertEqual(roster['duplicate_listings'], {})
+            _, roles = _stage_roles(tree)
+            for external in tree['external_inputs']['manifests']:
+                expected_role = {'neg8_bound': 'corpus', 'start_reference': 'start',
+                                 'midpoint_reference': 'midpoint', 'end_reference': 'end'}[external['external_input_id']]
+                stage = next(s for s in tree['stage_graph'] if s['input'] == external['manifest'])
+                self.assertEqual(stage['expected_count'], len(external['members']))
+                self.assertEqual({roles[m['run_id']] for m in external['members']}, {expected_role})
+            derivation = next(s for s in chain.stage_plan(tree) if s.kind == 'bound_derivation')
+            corpus_path = derivation.commands[0].arguments[1]['value']
+            pins = {(path, digest) for _, path, digest in plan_tree_pins(tree)}
+            self.assertIn((corpus_path, hashlib.sha256((view / corpus_path).read_bytes()).hexdigest()), pins)
+            reservation = next(s for s in chain.stage_plan(tree) if s.kind == 'bracket_reservation')
+            argv = chain.stage_argv(reservation, {'ledger_path': 'ledger', 'bracket_session_id': 'session',
+                    'claim_runs_root': 'claim', 'pre_attempt_id': 'pre', 'post_attempt_id': 'post',
+                    'pre_calibration_dir': 'pre-dir', 'post_calibration_dir': 'post-dir',
+                    'identity_epoch_json': 'epoch', 't1_bindings_json': 't1'}, tree, view)
+            frozen = Path(argv[argv.index('--plan') + 1])
+            self.assertEqual(frozen, pack / tree['plan']['path'])
+            self.assertEqual(hashlib.sha256(frozen.read_bytes()).hexdigest(), tree['plan']['actual_sha256'])
+            # Exercise the unchanged byte guard: an edited config must refuse.
+            checked[0].write_bytes(checked[0].read_bytes() + b'\n')
+            with self.assertRaises(window_lineage.HazardLineageError):
+                window_lineage.authenticate_campaign(roots['bound'], config_paths=[checked[0]])
+
+
 class SessionTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

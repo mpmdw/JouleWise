@@ -32,6 +32,11 @@ from joulewise.b6 import desk_identity, plan_inputs, registration
 from joulewise.b6.archive import bundle_of
 from joulewise.desk_compress import read_bytes
 from joulewise.hazards.clock import FREQUENCY_SCALE, WINDOW_SKEW_MAX_NS
+from joulewise.identity_pins import (
+    IDENTITY_PIN_DERIVATION_CONTRACT, IDENTITY_PIN_PROJECTION_WORK_ORDER,
+    MODEL_RUNTIME_CONFIG_FIELDS, validate_identity_pin_projection,
+)
+from joulewise.schemas import BenchmarkConfig
 
 KIT = Path('configs/campaigns/bytes_mac_check')
 PACK_ID = 'bytes-mac-check'
@@ -101,8 +106,9 @@ def measurement_view(source, session):
     """Disposable launch attachment; original tree/configs/code stay read-only.
 
     Mirrors the sparse measurement setup used for B6's one-off non-claim
-    smoke. Only the session's calibration ledger and pin are independent
-    copies. The fixed roster, manifests and configs are never rewritten.
+    smoke. The session's calibration ledger and pin get independent copies.
+    Dispatched configs are copied byte-for-byte inside the pack:
+    the member lineage reader rejects symlinks and paths outside that pack.
     """
     view = session / 'measurement'
     view.mkdir()
@@ -133,28 +139,105 @@ def measurement_view(source, session):
         if row['name'] == 'claim_runs_root': row['leaf'] = tree['roots']['claim_root_leaf']
         if row['name'] == 'bound_runs_root': row['leaf'] = tree['roots']['bound_root_leaf']
     tree.setdefault('arm_attachments', {})['launch'] = launch
-    # The generated scaffold carries external_inputs as two mapping-key
-    # strings. Reconstruct its manifests from the very same collection
-    # dispatches. Membership comes solely from the fixed tree, not inference.
+    # Resolve the actual campaign argv, not an inferred roster. In particular,
+    # the NEG-8 scaffold and test-7 references need inventory rows too.
     science = {r['run_id'] for r in tree['science']}
-    manifests = []
+    roster = read(source / 'configs/campaigns/bytes_v1/roster.json')['models']
+    model_ids = {m['model']['source']: m['model_id'] for m in roster}
+    # Acceptance assigns corpus/start/midpoint/end roles by these existing
+    # input IDs. Stage IDs are not interchangeable with that interface.
+    external_ids = {m['manifest']['path']: m['external_input_id']
+                    for m in template['external_inputs']['manifests']}
+    units, manifests, relocated = {}, [], {}
+    dispatches = {d.stage_id: d for d in plan.resolve_stage_dispatches(tree, source)}
     for stage in tree['stage_graph']:
         if stage['kind'] != 'campaign_collection':
             continue
-        ref = stage['input']
-        manifest_path = source / ref['path']
+        dispatch = dispatches[stage['stage_id']]
+        if dispatch.error:
+            raise ValueError(dispatch.error)
+        manifest_path = source / dispatch.config_dir / 'order_manifest.json'
+        manifest = read(manifest_path)
+        if len(manifest['executed_order']) != stage['expected_count']:
+            raise ValueError('collection count differs from dispatched manifest: ' + stage['stage_id'])
+        directory = pack / 'members' / stage['stage_id']
+        directory.mkdir(parents=True)
         members = []
-        for row in read(manifest_path)['executed_order'][:stage['expected_count']]:
-            if row['run_id'] in science:
-                continue
+        for row in manifest['executed_order']:
             config = manifest_path.parent / row['config']
-            members.append({'run_id': row['run_id'], 'ordinal': row.get('index'),
-                'path': config.relative_to(source).as_posix(), 'sha256': locator(config)['sha256']})
+            raw = config.read_bytes()
+            target = directory / config.name
+            target.write_bytes(raw)
+            digest = hashlib.sha256(raw).hexdigest()
+            relative = target.relative_to(view).as_posix()
+            relocated[config.relative_to(source).as_posix()] = relative
+            if 'config_path' in row:
+                row['config_path'] = relative
+            row['config'] = target.name
+            row['config_sha256'] = digest
+            typed = BenchmarkConfig.from_mapping(json.loads(raw)).to_dict()
+            model, hardware = typed['model'], typed['hardware_target']
+            unit_id = model_ids.get(model['source'], 'neg8_reference')
+            declared = {
+                'hardware_target': hardware['id'], 'runtime_backend': hardware['runtime_backend'],
+                'telemetry_backend': hardware['telemetry_backend'], 'model_name': model['name'],
+                'model_source': model['source'], 'model_revision': model.get('revision'),
+                'quantization': typed['quantization'], 'workload_profile': typed['workload_profile']}
+            unit = units.setdefault(unit_id, {
+                'identity_unit_id': unit_id,
+                'producer_plan_reference': {'plan_id': tree['plan']['plan_id'], 'path': tree['plan']['path']},
+                'consumer_bindings': [{'arm': unit_id, 'family': unit_id,
+                                       'measurement_arm': typed['workload_profile']['name']}],
+                'declared_identity': declared, 'config_inventory': [],
+                'model_runtime_config': dict.fromkeys(MODEL_RUNTIME_CONFIG_FIELDS)})
+            if unit['declared_identity'] != declared:
+                raise ValueError('dispatched configs disagree on declared identity: ' + unit_id)
+            unit['config_inventory'].append({'path': target.relative_to(pack).as_posix(), 'sha256': digest})
+            if row['run_id'] not in science:
+                members.append({'run_id': row['run_id'], 'ordinal': row.get('index'),
+                                'path': relative, 'sha256': digest})
+        write(directory / 'order_manifest.json', manifest)
+        ref = {'kind': 'manifest', 'path': (directory / 'order_manifest.json').relative_to(view).as_posix(),
+               'manifest_id': manifest['manifest_id'], 'sha256': locator(directory / 'order_manifest.json')['sha256']}
+        stage['input'] = ref
+        stage['launch']['commands'][0]['argv_template']['arguments'][0] = {
+            'kind': 'repo_path', 'value': directory.relative_to(view).as_posix()}
         if members:
-            manifests.append({'external_input_id': stage['stage_id'],
-                'manifest': {'path': ref['path'], 'sha256': locator(manifest_path)['sha256']}, 'members': members})
-    tree['external_inputs'] = {'manifests': manifests, 'artifacts': []}
+            manifests.append({'external_input_id': external_ids[manifest_path.relative_to(source).as_posix()],
+                # The controller compares this descriptor with stage.input
+                # exactly when recognizing auxiliary pre-slot members.
+                'manifest': dict(ref),
+                'expected_count': len(members), 'members': members})
+    for row in tree['science']:
+        row['config_path'] = relocated[row['config_path']]
+    projection = {
+        'work_order': IDENTITY_PIN_PROJECTION_WORK_ORDER, 'mode': 'derive_never_operator_enter',
+        'state': 'unprojected', 'required_before_arm': True,
+        'derivation_contract': IDENTITY_PIN_DERIVATION_CONTRACT,
+        'identity_units': [units[name] for name in sorted(units)],
+        'projection_receipt': None, 'supersedes': []}
+    for unit in projection['identity_units']:
+        unit['config_inventory'].sort(key=lambda row: row['path'])
+    tree['arm_attachments']['identity_pin_projection'] = validate_identity_pin_projection(projection)
+    # The seed composer's reservation still names bytes-s1-p1's plan. Bind
+    # the actual --plan bytes to this tree's plan hash and FROZEN_PLAN instead.
+    reservation = next(s for s in tree['stage_graph'] if s['kind'] == 'bracket_reservation')
+    arguments = reservation['launch']['commands'][0]['argv_template']['arguments']
+    plan_index = next(i for i, arg in enumerate(arguments) if arg['value'] == '--plan') + 1
+    arguments[plan_index] = {'kind': 'repo_path', 'value': (pack / tree['plan']['path']).relative_to(view).as_posix()}
+    # Harvest re-derives NEG-8 only from the pinned settled-corpus bytes named
+    # by the real derivation argv. Include other dispatched file inputs too.
+    artifacts = {}
+    for stage in tree['stage_graph']:
+        for command in stage['launch']['commands']:
+            for argument in command['argv_template']['arguments']:
+                if argument['kind'] == 'repo_path':
+                    path = view / argument['value']
+                    if path.is_file():
+                        artifacts[argument['value']] = {'path': argument['value'], 'sha256': locator(path)['sha256']}
+    tree['external_inputs'] = {'manifests': manifests, 'artifacts': [artifacts[k] for k in sorted(artifacts)]}
     write(pack / 'plan_tree.json', tree)
+    (pack / 'plan_tree.sha256').write_text(locator(pack / 'plan_tree.json')['sha256'] + '  plan_tree.json\n')
     write(session / 'staging/measurement-view.json', {
         'source_measurement_root': str(source), 'measurement_root': str(view),
         'source_tree': locator(source / KIT / 'plan_tree.json'), 'launch_template':
@@ -162,7 +245,11 @@ def measurement_view(source, session):
         'staged_tree': locator(pack / 'plan_tree.json'),
         'changes': ['arm_attachments.launch: existing fourteen-binding interface; kit root leaves',
                     'pack directory spelling: governed b6_layout.packs[0]',
-                    'external_inputs: same scaffold members resolved from collection manifests'],
+                    'dispatched configs: byte-identical pack-local copies; argv/manifests/science relocated together',
+                    'arm_attachments.identity_pin_projection: derived inventory; unprojected runtime pins',
+                    'external_inputs: canonical reference IDs/descriptors and dispatched file pins',
+                    'bracket reservation --plan: this pack collection_plan.json',
+                    'plan_tree.sha256: exact staged tree bytes'],
         'ledger': 'independent copy when present; never fabricate a missing ledger',
         'read_only_source': True})
     return view, pack
