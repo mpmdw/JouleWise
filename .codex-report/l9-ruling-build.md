@@ -2,7 +2,7 @@ gpt-6.1-sol
 
 Implementation DONE; joined end-to-end verification NOT DONE.
 
-Branch: `lane/2026-10-20-l9-ruling-build`. Required continuation base verified as `00ccb8c7caf9474d17fb83e6e029c9cfe180c3bd`. Tested implementation head: `f7449327702f1061f333bb907bf54a9d3bccc6e6`; subsequent commits change this report only. Branch head before this report commit: `611122c03c9f9677366b597c67be2b9331d1bd34`. Draft PR: https://github.com/mpmdw/JouleWise/pull/513. Report checkpoint UTC: 2026-10-21 04:58:25.
+Branch: `lane/2026-10-20-l9-ruling-build`. Required continuation base verified as `00ccb8c7caf9474d17fb83e6e029c9cfe180c3bd`. Tested implementation head: `c88aa80cc29ee22227586c16b6779d433efebb12`; subsequent commits change this report only. Branch head before this report commit: `c88aa80cc29ee22227586c16b6779d433efebb12`. Draft PR: https://github.com/mpmdw/JouleWise/pull/513. Report checkpoint UTC: 2026-10-21 05:15:37.
 
 Authority, read in full: origin/main at intake (`bcd70a273`), L9-RULING-ADDENDUM.md (6cff3515), then L9-RULING.md (4b350f47). Read the named cold, council and silly-number reports and consumer probes on JouleWise-data. Only synthetic fixture archives and tracked sealed config were read; no real archive or key directory was opened. Python 3.13.5 unittest, JW_B5_SYNTHETIC_ONLY=1 on every run, fresh TMPDIR per module. No whole-suite cloud run; only WRITE_SCOPE modules and searched dependencies. No sub-agents.
 
@@ -12,16 +12,16 @@ Number rule: every added/changed tolerance on measured or derived values carries
 
 | Item | Status | Change and evidence pointers | Published checkpoint |
 |---|---|---|---|
-| Q-LINEAGE | DONE (inherited, rechecked) | Ordered producer inventory and per-producer rebuild: scripts/mint_floor_artifact_generalized.py:3484, :3695; authentication limitations: joulewise/analysis_engine/inputs.py:1094; verdict revalidation: joulewise/analysis_engine/artifact.py:1099. Split/mixed producers still refuse. | a8f3d5566 |
-| Q-EXACTSTACK | DONE (inherited, rechecked) | Shared exact_stack_serving_cell: joulewise/detection_floor.py:3078; joulewise/analysis_manifest_v3.py:3517; joulewise/dominance_closeout.py:1911; joulewise/analysis_engine/inputs.py:4797, :4975; scoped no-envelope note follows the actual source cell. | 00ccb8c7c |
-| Q-CONSUMERID | DONE | joulewise/analysis_engine/inputs.py:4411, :4454, :4684; joulewise/analysis_engine/__init__.py:375; tests/test_analysis_inputs.py:1240; tests/b5_analysis/test_chain_fixture.py:542; docs/contracts/identity_pin_projection.md:646. Step-1 result below selected the limitation branch. Frozen ARM route unchanged. | 994478b28; recording-only ambiguity correction `f74493277` |
+| Q-LINEAGE | DONE (inherited, rechecked) | Ordered producer inventory and per-producer rebuild: scripts/mint_floor_artifact_generalized.py:3484, :3695; authentication limitations: joulewise/analysis_engine/inputs.py:1094; verdict revalidation: joulewise/analysis_engine/artifact.py:1099. Split/mixed producers still refuse. Closed carrier-locator handling: joulewise/analysis_engine/inputs.py:1368. | a8f3d5566; locator integration c88aa80cc |
+| Q-EXACTSTACK | DONE (inherited, rechecked) | Shared exact_stack_serving_cell: joulewise/detection_floor.py:3078; joulewise/analysis_manifest_v3.py:3517; joulewise/dominance_closeout.py:1911; joulewise/analysis_engine/inputs.py:4814, :4992; scoped no-envelope note follows the actual source cell. | 00ccb8c7c |
+| Q-CONSUMERID | DONE | joulewise/analysis_engine/inputs.py:4429, :4471, :4701; joulewise/analysis_engine/__init__.py:375; tests/test_analysis_inputs.py:1240; tests/b5_analysis/test_chain_fixture.py:542; docs/contracts/identity_pin_projection.md:646. Step-1 result below selected the limitation branch. Frozen ARM route unchanged. | 994478b28; recording-only ambiguity correction `f74493277` |
 | Q-RENDERER | DONE | joulewise/b5_analysis/dry_run.py:203, :1034; T20 and argv census; release R3 uses fill input; S10 production renderer test; only §S text appended verbatim to SEAL_RECORD.md. | b83eed5dc |
 | Common §C | DONE | joulewise/results_fill_adapter.py:44, :56 and scripts/build_results_fill_input.py:85 copy/compare limitations and actual source IDs with existing mismatch codes. tests/test_results_fill_adapter.py covers omissions, text/order/source changes. | 4da5e65a2 |
 | Addendum §Z | DONE | joulewise/detection_floor.py:1218; schema_v2.json sixDecimal; test oracle/adversarial sampling updated; N5 derivations beside every changed bar. No change for N2/N3/N4. | 5ca9202c9 |
 | Four seams and PROVENANCE | DONE | CONDITIONAL_SEAMS and all four patch contexts deleted from fixtures_s10.py and joined_s10.py; four PROVENANCE rows replaced by installed production behavior. Joined test asserts the ruled endpoints. | bb0c53101 |
-| Refusal/limitation replay | DONE | S10 defects 32 tests; hazard declaration 7 tests; explicit 21-case replay; all five new limitation codes reach validated fill input. | d79ce01e5 |
+| Refusal/limitation replay | DONE | S10 defects 34 tests; hazard declaration 7 tests; explicit 21-case replay; all five new limitation codes reach validated fill input. | d79ce01e5 |
 
-All round-2 checkpoints pushed with Git CLI to this lane only. Unlike the previous seat, this seat needed no GitHub API push fallback. No push blocker, main/integration push, merge, rebase, sealed-config edit or out-of-scope tracked write. Only 27 round-2 paths changed, all authorized. number_rows.json and hazard_refusals.json remain unchanged because coverage and census pass.
+All round-2 checkpoints pushed with Git CLI to this lane only. Unlike the previous seat, this seat needed no GitHub API push fallback. No push blocker, main/integration push, merge, rebase, sealed-config edit or out-of-scope tracked write. Only 28 round-2 paths changed, all authorized. number_rows.json and hazard_refusals.json remain unchanged because coverage and census pass.
 
 ## Retained prior-seat Q-LINEAGE and Q-EXACTSTACK sections
 
@@ -96,9 +96,9 @@ Before is the verified continuation head. Completed checks began in the untouche
 | tests.test_analysis_manifest_v3 | 19 OK | 19 OK |
 | tests.test_results_fill_adapter | 4 OK | 6 OK |
 | tests.b5_analysis.test_fill_adapter | 11 OK | 11 OK |
-| tests.b5_analysis.test_dry_run | 55 OK (skipped=3) | 62 FAILED (failures=2, errors=1) |
+| tests.b5_analysis.test_dry_run | 55 OK (skipped=3) | NOT DONE: opted-in joined run running |
 | tests.b5_analysis.test_release_equality | 10 OK (skipped=1) | 10 OK (skipped=1) |
-| tests.b5_analysis.test_s10_chain_defects | 31 OK | 32 OK |
+| tests.b5_analysis.test_s10_chain_defects | 31 OK | 34 OK |
 | tests.b5_analysis.test_launch_lineage | 4 OK | 4 OK |
 | tests.b5_analysis.test_chain_fixture | 0 OK (skipped=1) | 0 OK (skipped=1) |
 | tests.b5_analysis.test_finalization_block5 | 75 OK | 75 OK |
@@ -162,7 +162,7 @@ test_t7_deterministic_across_two_output_directories (tests.test_run_d165_closeou
 setUpClass (tests.test_run_d165_closeout_from_custody.WindowIndexHandoffTests)
 ```
 
-Uniform final-source pass: 39/39 explicitly scoped/importing/registry modules completed at head `2b1c7047b19f62f5af9629d94e7c8e4a0d7b844b` (implementation `f7449327702f1061f333bb907bf54a9d3bccc6e6`). Nonzero modules: tests.test_run_d165_closeout_from_custody. Refusal census exit: 0. Each module used synthetic-only mode and a fresh TMPDIR.
+Uniform final-source repeat NOT DONE: 0/39 explicitly scoped/importing/registry modules have completed; the remaining modules and fresh refusal census are running. Earlier completed module evidence remains in the table.
 
 ### Additional importing/dependent modules
 
@@ -213,13 +213,25 @@ Requested scope for lead-owned follow-up; these files were not edited here:
 
 The four authoritative documents need their owner's executed-evidence sections; the authentication guard needs its three characterized line locations refreshed after the inherited line shift. These are documentation/census integration tasks and do not require a new numerical ruling.
 
+## Joined carrier-locator defect and correction
+
+The completed run on `f7449327702f1061f333bb907bf54a9d3bccc6e6` executed 62 tests: 2 failures and 1 error; driver exit 2, first stop step 9b. All four GAMMA floor resolutions refused artifact_schema_invalid. The numerical aggregate and finalization had passed; the binding guard then blanket-rejected the absolute launch-record, pack and window-context locators retained by the required producer inventory. These locators are required by the hazard schema. Full logs/artifacts are archived at /workspace/l9-checks/e2e-before-carrier-path-fix. Failing names:
+
+- test_J3_closeout_openers_issuers_and_disclosures_are_ok (tests.b5_analysis.test_dry_run.JoinedRunTests.test_J3_closeout_openers_issuers_and_disclosures_are_ok)
+- test_J4_completed_without_tooling_refusal (tests.b5_analysis.test_dry_run.JoinedRunTests.test_J4_completed_without_tooling_refusal)
+- test_L9_real_chain_floor_inventory_sources_and_fill_boundary (tests.b5_analysis.test_dry_run.JoinedRunTests.test_L9_real_chain_floor_inventory_sources_and_fill_boundary)
+
+Corrected in `c88aa80cc29ee22227586c16b6779d433efebb12`: preserve only the ten schema-declared ARM/hazard carrier locator fields under the two exact provenance carrier shapes. Relative component/producer-plan paths and unknown absolute fields remain rejected; locator authentication and its scoped limitation remain unchanged. No number, member set or tolerance changed. The new regression failed before the fix (two tests, four subtest errors and one failure), then passed (two tests); it covers both schemas and both carrier shapes plus negative path cases. The actual emitted aggregate also passes the corrected guard. Full S10 defects: 34 OK; analysis inputs: 28 OK (one skip). The current fresh joined run is the acceptance check for this corrected implementation.
+
 ## Joined end-to-end status
 
-NOT DONE: joined test result is non-green: 62 tests, 2 failures, 1 errors, driver code 2. Exact diagnostics remain in scratch /workspace/l9-checks/e2e. No end-to-end success is claimed.
+NOT DONE: the opted-in full joined driver is running on the current committed implementation. Earlier interrupted runs and the completed carrier-locator failure are archived outside the repository. The current run uses a fresh TMPDIR, no conditional consumer seam, persistent detached logs and a completion record. No end-to-end success is claimed until it completes.
 
 Separately, opted-in tests.b5_analysis.test_chain_fixture.ChainTests.test_39_lineage_pack_digest_is_the_committed_pack_tree passes against all restored synthetic windows (1 test, 70.5 s). The ordinary after run for that module reports its opt-in class skip; the direct test-39 run is actual execution evidence.
 
 ## Decisions I made
+
+- The required raw lineage carriers retain schema-declared absolute locators. I kept those exact fields intact and narrowed the portable-path guard to distinguish them from numerical evidence paths; normalizing or dropping the carrier would change its authentication identity.
 
 - Follow the addendum's five-variant result exactly; no new admissibility rule or numerical bar was invented.
 - Keep the recording allowlist hazard-specific and closed to hardware_target.notes, run_metadata.project and run_metadata.operator, with reasons beside the code. Every other typed field and tag binds. Multiple declared records differing only in those fields identify one measurement; every corresponding original hash may bind its unique direct source. A focused test covers both original source hashes and a third recording-only value. It produces two expected subtest failures against the prior request function and passes on the corrected head. The existing omission of run_id continues to identify physical repeats. Frozen ARM behavior stays unchanged.
@@ -237,3 +249,4 @@ The known custody-driver cloud setup needs the owning Mac run; its 29 errors are
 NEEDS_RULING: none. All choices determined by the governing texts are implemented.
 
 Done: all implementation items, focused refusals/limitations, final non-joined modules, registry/census checks and opted-in test 39. Not done: successful completion of the opted-in joined driver and its final result table; lead-owned merge/review/Mac gates listed above.
+Additional not done: completion of the uniform final-source repeat and its census.
