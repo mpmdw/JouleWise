@@ -2,6 +2,7 @@
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from dataclasses import replace
 import io
+import sys
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -35,15 +36,21 @@ class SensitivityGuardTests(unittest.TestCase):
         # S6 mutates its cached S4 index to use attempt-shaped plan ids. Keep
         # this module's structural fixture independent of module run order.
         floor_cache, mint_cache = dict(floor_tests._CACHE), dict(mint_tests._CACHE)
+        capture_cache = dict(s2._CACHE)
         try:
             floor_tests._CACHE.pop('indexed', None)
             mint_tests._CACHE.pop('governed', None)
+            # S4 extends this S2 archive in place with p42 aliases. Reusing
+            # that source would append aliases again and duplicate each
+            # member's (cell_id, stratum, unit_id), which S1 must refuse.
+            s2._CACHE.pop('BETA_STD_S3B_ROSTER', None)
             cls.indexed = indexed_fixture()
             cls.reported = s8.indexed_reported_fixture()
             cls.governed, cls.producer = governed_case()
         finally:
             floor_tests._CACHE.clear(); floor_tests._CACHE.update(floor_cache)
             mint_tests._CACHE.clear(); mint_tests._CACHE.update(mint_cache)
+            s2._CACHE.clear(); s2._CACHE.update(capture_cache)
 
     def invoke(self, main, args, output):
         stdout, stderr = io.StringIO(), io.StringIO()
@@ -181,7 +188,7 @@ class SensitivityGuardTests(unittest.TestCase):
 
     def test_helper_import_does_not_load_whole_window(self):
         import subprocess
-        result = subprocess.run(['/opt/homebrew/bin/python3.13','-B','-c',
+        result = subprocess.run([sys.executable,'-B','-c',
             "import sys; import joulewise.b5_analysis.steps; assert 'joulewise.whole_window' not in sys.modules"],
             capture_output=True, text=True)
         self.assertEqual((result.returncode,result.stdout,result.stderr),(0,'',''))

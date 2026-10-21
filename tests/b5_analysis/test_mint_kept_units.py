@@ -2422,3 +2422,33 @@ class S10RelativeReportPathTests(unittest.TestCase):
                 for cell in producer['cells']:
                     self.assertEqual(cell['absolute']['report'],str(root/'synthetic-report.json'))
                     self.assertEqual(cell['comparative']['report'],str(root/'synthetic-report.json'))
+
+
+class SensitivityFixtureIsolationTests(unittest.TestCase):
+    def test_guard_setup_after_s4_preserves_the_cached_source(self):
+        from tests.b5_analysis import test_floor_kept_units as floor_tests
+        from tests.b5_analysis.test_sensitivity_guard import SensitivityGuardTests
+        # Reproduce the warm S4 -> guard order in one process. The original
+        # S2 archive must keep exactly its original bytes and cache identity.
+        with tempfile.TemporaryDirectory(prefix='s6-guard-isolation-') as temporary, \
+             mock.patch.object(tempfile, 'tempdir', temporary), \
+             mock.patch.dict(floor_tests._CACHE, {}, clear=True), \
+             mock.patch.dict(_CACHE, {}, clear=True), \
+             mock.patch.dict(s2._CACHE, {}, clear=True):
+            original = indexed_fixture()
+            source = s2._CACHE['BETA_STD_S3B_ROSTER']
+            pack = source.archive / 'sources/repo/configs/campaigns' / source.entry_data['pack_id']
+            paths = [pack/'extraction_spec.json', source.archive/'derived/roster.json']
+            before = {path: path.read_bytes() for path in paths}
+            SensitivityGuardTests.setUpClass()
+            self.assertIs(floor_tests._CACHE['indexed'], original)
+            self.assertIs(s2._CACHE['BETA_STD_S3B_ROSTER'], source)
+            self.assertEqual({path: path.read_bytes() for path in paths}, before)
+            fixture, entry = SensitivityGuardTests.governed, SensitivityGuardTests.producer
+            self.assertEqual(len(fixture.spec['cells']), 4)
+            roster = json.loads((fixture.window.archive/'derived/roster.json').read_bytes())
+            for member in roster['members']:
+                keys = [(u['cell_id'], u['stratum'], u['unit_id']) for u in member['units']]
+                self.assertEqual(len(keys), len(set(keys)), member['run_id'])
+            self.assertEqual({cid: (cell.n_r, cell.n_b) for cid, cell in entry.kept_units.cells.items()},
+                             {'df-b5t-family': (10, 10), 'df-b5t-p42': (10, 10)})
