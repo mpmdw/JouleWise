@@ -540,8 +540,12 @@ def run_matrix(spec_path: str | Path) -> Path:
                 for configuration in configurations:
                     try:
                         component = _make(kind, configuration, context)
-                        target.append((component, tuple(_component(configuration).get(
-                            "visibilities", ["full"]))) if kind == "monitor" else target.append(component)
+                        if kind == "monitor":
+                            visibilities = tuple(_component(configuration).get(
+                                "visibilities", ["full"]))
+                            target.append((component, visibilities))
+                        else:
+                            target.append(component)
                     except (Exception, KeyboardInterrupt) as exc:
                         construction_flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt)
                                                   else kind + ".factory_error." + type(exc).__name__)
