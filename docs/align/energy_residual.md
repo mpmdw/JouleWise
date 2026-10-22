@@ -65,10 +65,15 @@ When h=0 at the variance boundary, limiting weights use one ULP of the
 variance scale, keeping whitening near 1/sqrt(epsilon) instead of 1/epsilon.
 This numerical device is flagged and is not added to predictive turn noise.
 Unusable fit rows (nonfinite energy or half-width, negative half-width, or token
-counts that are not nonnegative integers) are excluded with excluded_turn_rows=N
+counts that cannot be normalized to nonnegative integers) are excluded with excluded_turn_rows=N
 and explanatory flags. n_turns counts used rows; fewer than six usable rows
 returns insufficient_turns. Invalid diagnostic duration is only flagged.
 A weighted rank failure after subset selection remains flagged and undefined.
+Indexable scalar counts (operator.index, including numpy.int64) and finite whole
+real counts (float(x).is_integer()) normalize to Python int before design
+arithmetic. Bools, negative or non-whole counts, NaN, infinities and strings
+remain excluded and counted. These representations therefore give identical
+designs and bit-identical fits to their plain-int equivalents.
 
 ## Episode scores and calibration
 
@@ -92,7 +97,10 @@ Calibration leaves out each task pair (TurnRow.group), fits on the other pairs'
 benign episodes, and scores every episode of that pair. Across all held-out
 scores use the inverse empirical CDF: ascending one-based rank ceil((1-alpha)*m),
 the Hyndman-Fan type-1 quantile. Flag a score strictly greater than this threshold.
-Ties and small calibration sets can make the actual tail smaller than alpha.
+Ties can make the actual tail smaller than alpha. When rank=m,
+quantile_at_sample_max reports that the threshold is the sample maximum: a
+new iid continuous benign episode exceeds it with probability about 1/(m+1),
+rather than alpha. At alpha=.05 this flag fires for m<20, and stops at m=20.
 Task pairs are indivisible, even when an episode mapping's keys look different.
 If an episode contains multiple groups, hold out the connected component of
 groups together and flag the malformed grouping; no episode is discarded.
@@ -103,6 +111,23 @@ nonfinite_measurement). The type-1 quantile uses only the m finite scores.
 An episode with an unusable total still supplies finite turn rows to other
 pairs' training folds. No finite scores, or fewer than two components, yields
 a flagged NaN.
+
+The result also carries n_scores=m, benign_mean=mu_b (arithmetic mean), and
+benign_sd=s_b (sample standard deviation with denominator m-1).
+benign_score_calibration_departure fires when either
+
+    abs(mu_b) > 4/sqrt(m)
+    abs(s_b-1) > 4/sqrt(2*(m-1))
+
+For m independent unit-normal scores these denominators give the standard
+errors of the sample mean and sample sd. Four standard errors flag a correct
+model about 6e-5 per comparison under independence; at m=600 the smallest
+departures flagged are 0.163 in mean and 0.116 in sd. Scores sharing a fold
+model are positively correlated, so the actual false-flag rate can be higher.
+In the lead's reviewer-world control, fold-cluster mean SE was 0.031 versus
+the independent 0.041, so this bar was not optimistic there. With m<2 the
+sample sd is undefined: insufficient_calibration_scores reports that instead.
+These diagnostics remove no data and change no threshold number.
 
 The public dataclass fields and required call signatures stay as specified.
 Lane-local subclasses of EnergyModel, float, list and tuple attach a flags
@@ -115,10 +140,16 @@ EnergyModel again. That field-only copy also needs diagnostics saved separately.
 
 The additional turn_rows_from_episode adapter takes an Episode and a mapping
 from turn index to (active_energy_j, standard_uncertainty_j). It uses logged
-turns, subtracts hidden_tokens from decode_tokens (the shared record includes
-hidden work in decode_tokens), preserves cached context as logged, and converts
-integer nanoseconds to diagnostic seconds. It does not infer an unseen context
-or invent an attribution method. Missing turn energy stays NaN with a flag.
+turns and by default subtracts hidden_tokens from decode_tokens (the shared
+record includes hidden work in decode_tokens): both content and count are read
+as unlogged. Its new keyword-only hidden_token_counts_logged=False preserves
+that default. Set it True when a server reports the reasoning-token count
+despite stripped content; decode_tokens then keeps the full reported count.
+Choose the same reading in benign calibration and scored episodes.
+The adapter preserves cached context as logged and converts integer nanoseconds
+to diagnostic seconds. It does not infer an unseen context or invent an
+attribution method. Missing turn energy stays NaN with a flag. Its mapping
+values must include the owning turn's tool segments as specified above.
 The caller remains responsible for training on benign complete logs.
 
 ## Detection power
@@ -127,12 +158,33 @@ Let cbar be the unweighted mean logged context and
 e = beta_decode + beta_context_decode*cbar, in J per hidden decode token.
 For hidden work distributed at that mean context and adding no call intercept:
 
-    H_min = max(0, (z_(1-alpha) + z_power) * D/e)
+    H_min (normal-theory) = max(0, (z_(1-alpha) + z_power) * D/e)
     power(H) = Phi(H*e/D - z_(1-alpha))
 
+min_detectable_hidden_decode_tokens returns this normal-theory value, which
+assumes benign scores are unit normal. The new public function
+calibrated_min_detectable_hidden_decode_tokens returns a second, labelled
+number for an empirical grouped threshold t and its benign score spread:
+
+    H_cal (calibrated) = max(0, (t - mu_b + z_power*s_b) * D/e)
+
+The calibrated value is valid when held-out benign scores are close to normal;
+it accounts for their observed location and scale. D and e are exactly those
+used by the normal-theory function. Hidden work is assumed to add energy
+without changing either or adding a call intercept. Both APIs preserve the
+same flags for unidentified decode and context-decode coefficients.
+
+Call with threshold=<grouped result>, power=.8, measured_half_width_j=<J>.
+The function reads benign_mean and benign_sd from the threshold's attributes.
+Alternatively pass threshold=float(t), benign_mean=<number>,
+benign_sd=<number> explicitly: floats lose attributes through arithmetic or
+serialization. Persist n_scores and flags separately with these numbers.
+Missing or invalid summaries give flagged NaN, never a refusal.
+
 The function returns a fractional boundary; ceil it for an integer token budget.
-It uses the normal threshold implied by alpha, not the empirical grouped
-threshold. For an empirical threshold t substitute t for z_(1-alpha).
+The normal-theory function uses the normal threshold implied by alpha. Merely
+substituting an empirical t without its benign location and scale does not
+calibrate power; use H_cal beside it.
 When context and hidden-token energy are identified, requested power at or below
 alpha needs zero hidden tokens. Above that
 false-positive power, zero or negative e gives infinity and a flag. No
@@ -147,7 +199,10 @@ requested for these examples. z_0.95=1.644854 and z_0.8=0.841621 give 2.486475.
 These examples assume a 20-turn episode served by an 8B model, mean cached
 context 4096, and approximately 256 generated tokens per turn. The coefficients
 and residual variation below are explicit planning assumptions, not measurements
-or asserted universal costs of an 8B model.
+or asserted universal costs of an 8B model. For these planning examples only,
+also assume held-out calibration is exactly unit normal with t=z_0.95,
+mu_b=0 and s_b=1. H_cal then equals H_min; without a calibration summary
+a hardware H_cal is unknown and must not be inferred from sensor duty alone.
 
 ### M3 Max instrument
 
@@ -162,11 +217,14 @@ per-turn sd=0.50 J and parameter prediction sd=0.20 J. Scored-turn
 measurement half-widths contribute no term to this prediction variance. Then:
 
     D = sqrt(20*0.50^2 + 0.20^2 + 1.00^2) = 2.457641 J
-    H_min = 2.486475*2.457641/0.50 = 12.221726 tokens
-    integer minimum = 13 hidden decode tokens
+    H_min (normal-theory) = 2.486475*2.457641/0.50 = 12.221726 tokens
+    H_cal (calibrated, assumed unit-normal calibration) = 12.221726 tokens
+    integer minimum: normal-theory 13; calibrated 13 hidden decode tokens
 
-The measurement component alone would imply 4.972950 tokens; it is not the
-episode's power statement because benign turn variation also contributes.
+The measurement component alone gives normal-theory 4.972950 tokens and,
+under the same assumed unit-normal calibration, calibrated 4.972950 tokens;
+these are not episode power statements because benign turn variation also
+contributes.
 The normal approximation to an attribution limit is a planning convention;
 live reporting must keep the instrument's registered attribution bounds.
 
@@ -196,20 +254,81 @@ giving e=2.0 J/token at context 4096 (200 W active at 100 tokens/s).
 With assumed extra per-turn sd=5.0 J and parameter prediction sd=2.0 J:
 
     D = sqrt(20*5.0^2 + 2.0^2 + 2700.000001) = 56.603887 J
-    H_min = 2.486475*56.603887/2.0 = 70.372071 tokens
-    integer minimum = 71 hidden decode tokens
+    H_min (normal-theory) = 2.486475*56.603887/2.0 = 70.372071 tokens
+    H_cal (calibrated, assumed unit-normal calibration) = 70.372071 tokens
+    integer minimum: normal-theory 71; calibrated 71 hidden decode tokens
 
 For R=25 independent sensor-phase repetitions the gap and quantization
 variance would become 2700.000001/R. Conservatively keeping the same benign
-and parameter terms gives D=24.738634 J and H_min=30.755995, or 31 tokens.
+and parameter terms gives D=24.738634 J: normal-theory H_min=30.755995
+and calibrated H_cal=30.755995 under the assumed unit-normal calibration.
+Their integer minima are both 31 hidden decode tokens.
 Repetitions do not repair a phase-locked bias without phase diversity, and
 systematic sensor errors do not shrink by this formula.
 
 All three worked examples are unchanged by the round-1 variance correction:
 they already used n*sigma2 and an episode integral with its own uncertainty.
-Re-derived (D, H_min) are (2.457641, 12.221726), (56.603887, 70.372071), and
-(24.738634, 30.755995); changes are 0 at the printed precision. Arithmetic uses
+Re-derived (D J, normal-theory H_min tokens, calibrated H_cal tokens) under
+that unit-normal assumption are (2.457641, 12.221726, 12.221726),
+(56.603887, 70.372071, 70.372071), and (24.738634, 30.755995, 30.755995).
+Changes are 0 at the printed precision. Arithmetic uses
 unrounded normal quantiles and intermediate values before printing six decimals.
+
+### Assumption-for-scale world: unowned energy and variable noise
+
+The lead's round-2 record-path world assumes an 8B vLLM agent on a whole H100:
+6-30 turns, 0.2-3 s tool waits, 8000 prefill and 90 decode tokens/s. Turn
+coefficients are (2, .0008, .25, 2.5e-6, 1.5e-7), extra turn sd 3 J, turn
+measurement sd sqrt(.4^2+(.02*mean_energy)^2) J, and independent episode sd 2 J.
+These are scale assumptions, not measurements. Twelve pairs with 50 episodes
+each give m=600 calibration episodes; 20 other pairs with 100 each give
+n=2000 evaluation episodes, at conventional alpha=.05 and power=.8.
+
+Suppose each tool call contributes A+B*wait+N(0,C^2) joules to the episode
+total but this energy is omitted from its owner's turn attribution. The lead
+obtained these results; the unchanged normal-theory value misses the location
+and scale departure, while calibrated power uses the held-out summary.
+
+| A J / B W / C J | grouped t | normal-theory median H_min tokens | detection at H_min | calibrated median H_cal tokens | detection at H_cal |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0 / 0 / 0 | 1.607 | 115.7 | .8195 | 113.4 | .8090 |
+| .5 / .5 / .5 | 3.485 | 115.7 | .7205 | 127.8 | .7965 |
+| 2 / 1 / 1 | 7.069 | 115.7 | .4835 | 177.3 | .7835 |
+| 6 / 4 / 2 | 21.8 | 115.7 | .2070 | 449.1 | .7700 |
+| 8% multiplicative turn sd; A=B=C=0 | 1.912 | 278.3 | .6650 | 325.0 | .7845 |
+
+For the first three out-of-turn rows the mean omitted energy is respectively
+0, 21.8 and 60 J/episode. Threshold calibration still gives benign false-positive
+rates .044-.046, but cannot make the unit-normal power assumption true.
+The departure flag is absent in the control and present in every other row,
+including the sd-only 8% case. The 6/4/2 mixture is skewed, so its calibrated
+normal approximation is only approximate; a flag does not repair model shape.
+
+With the same tool energy included in its owning turn and in the total,
+the .5/.5/.5 and 2/1/1 settings instead give held-out mean departures of .13
+and .61 SE and sd departures .39 and .88 SE. No departure flag fires, and
+normal-theory boundary detection is .8170 and .8200. Include owned tool energy
+before interpreting any remaining gap signal. Unowned harness/tail energy can
+still remain even with correct tool ownership.
+
+The lead's four-combined-SE calibrated-power bar is computed from the
+estimated cut mu_b-z_power*s_b: its score SE is
+sqrt(1/m+z_power^2/(2*(m-1)))=.0475. Multiplying by phi(.8416) gives .0133
+probability SE, combined with sqrt(.8*.2/2000)=.0089 evaluation SE for .0160.
+Thus .80 +/- .064 is the specified comparison at these budgets; these are
+statistical approximations, not hardware tolerances.
+
+### Reasoning counts and the unresolved visibility choice
+
+On the lead's benign stripped-scratchpad world (lognormal median 300 reasoning
+tokens/turn), default subtraction gives sigma2=2730.3 J^2, threshold=1.5943
+and decode coefficient .2345 J/token. Keeping reported counts gives
+sigma2=8.725 J^2, threshold=1.7775 and decode coefficient .24996 J/token
+(true .25). No scratchpad gives sigma2=8.618 J^2 and threshold=1.5199.
+The intrinsic-variance ratio alone would inflate a turn-dominated denominator
+by sqrt(2730.3/9), about 17, under default subtraction. Decide which counts
+the monitor truly holds before claiming power for a reasoning model; the
+adapter's default remains False pending that ruling.
 
 ## Synthetic verification
 
@@ -231,6 +350,9 @@ as decode energy. Deleting logged turns also removes their predicted variance,
 while the measured episode still contains their noise; power comparisons must
 account for that variance mismatch. Hidden work that changes contexts, batching,
 clock state or tool/GPU sharing can violate the additive fixed-variance model.
+Unowned gap energy remains in the total and creates benign positive residual.
+A future explicit gap/tool-work design term is proposed in the report's OPEN
+ISSUES; it is not implemented because this public API fixes five design terms.
 Negative fitted costs are diagnostics, not silently clipped coefficients.
 The detector is not a semantic sabotage detector, and within-forward-pass
 sabotage remains invisible.

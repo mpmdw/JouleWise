@@ -10,9 +10,11 @@ Stdlib-only.
 from __future__ import annotations
 
 import math
+import operator
 import sys
 from dataclasses import dataclass
-from statistics import NormalDist
+from numbers import Real
+from statistics import NormalDist, fmean, stdev
 from typing import Mapping, Sequence
 
 from joulewise.align.records import Episode
@@ -76,6 +78,32 @@ class _Number(float):
         return result
 
 
+class _ThresholdResult(_Number):
+    def __new__(
+        cls, value: float, flags: Sequence[str] = (), *,
+        scores: Sequence[float] = (),
+    ) -> _ThresholdResult:
+        m = len(scores)
+        mean = fmean(scores) if m else math.nan
+        sd = stdev(scores) if m > 1 else math.nan
+        diagnostics = list(flags)
+        if m < 2:
+            diagnostics.append("insufficient_calibration_scores")
+        else:
+            # Independent unit-normal scores have mean SE=1/sqrt(m) and
+            # sample-sd SE=1/sqrt(2*(m-1)). Four SE flag a correct model
+            # about 6e-5 per comparison: at m=600, mean 0.163, sd 0.116.
+            # Scores sharing a fold model are positively correlated, so
+            # the real false-flag rate can be higher.
+            if abs(mean) > 4 / math.sqrt(m) or abs(sd - 1) > 4 / math.sqrt(2 * (m - 1)):
+                diagnostics.append("benign_score_calibration_departure")
+        result = super().__new__(cls, value, diagnostics)
+        result.n_scores = m
+        result.benign_mean = mean
+        result.benign_sd = sd
+        return result
+
+
 class _SequenceResult(tuple):
     def __new__(cls, values: Sequence, flags: Sequence[str] = ()) -> _SequenceResult:
         result = super().__new__(cls, values)
@@ -100,13 +128,35 @@ def _finite(value: float) -> bool:
         return False
 
 
+def _token_count(value: object) -> int | None:
+    """Normalize a nonnegative whole real or indexable count before arithmetic."""
+    if isinstance(value, bool):
+        return None
+    try:
+        count = operator.index(value)
+    except (TypeError, ValueError, OverflowError):
+        if not isinstance(value, Real):
+            return None
+        try:
+            real = float(value)
+            if not math.isfinite(real) or not real.is_integer():
+                return None
+            count = int(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+    return int(count) if count >= 0 else None
+
+
 def _row_flags(rows: Sequence[TurnRow], *, use_energy: bool) -> list[str]:
     flags = list(_flags(rows))
     for row in rows:
         counts = (row.context_tokens, row.prefill_tokens, row.decode_tokens)
-        if any(not isinstance(x, int) or isinstance(x, bool) or x < 0 for x in counts):
+        normalized = tuple(_token_count(x) for x in counts)
+        if any(x is None for x in normalized):
             flags.append("invalid_token_count")
-        values = counts
+        # Indexable scalar types need not implement float(); validate the
+        # normalized Python ints instead of rejecting their representation.
+        values = tuple(x if n is None else n for x, n in zip(counts, normalized))
         if use_energy:
             values += (row.energy_j, row.energy_half_width_j)
         if not all(_finite(x) for x in values):
@@ -119,15 +169,22 @@ def _row_flags(rows: Sequence[TurnRow], *, use_energy: bool) -> list[str]:
 
 
 def design_row(r: TurnRow) -> list[float]:
-    """Return [1, prefill, decode, context*decode, context*prefill]."""
-    return _Design([1.0, r.prefill_tokens, r.decode_tokens,
-                    r.context_tokens * r.decode_tokens,
-                    r.context_tokens * r.prefill_tokens],
-                   _row_flags((r,), use_energy=False))
+    """Return [1, prefill, decode, context*decode, context*prefill].
+
+    Normalize indexable counts and finite whole real counts to Python ints
+    before products; bools, negatives, fractions and strings remain flagged.
+    """
+    flags = _row_flags((r,), use_energy=False)
+    context, prefill, decode = map(
+        _token_count, (r.context_tokens, r.prefill_tokens, r.decode_tokens))
+    if context is None or prefill is None or decode is None:
+        return _Design([math.nan] * _P, flags)
+    return _Design([1.0, prefill, decode, context * decode, context * prefill], flags)
 
 
 def turn_rows_from_episode(
-    episode: Episode, turn_energy: Mapping[int, tuple[float, float]],
+    episode: Episode, turn_energy: Mapping[int, tuple[float, float]], *,
+    hidden_token_counts_logged: bool = False,
 ) -> tuple[TurnRow, ...]:
     """Adapt records plus {turn_index: (active J, standard uncertainty J)}.
 
@@ -139,10 +196,14 @@ def turn_rows_from_episode(
     false-positive rate; calibration diagnostics and calibrated power report
     its effect. Modelling gaps requires a design term outside this API.
 
-    Use logged turns and subtract hidden_tokens from decode_tokens, whose
-    shared-record meaning includes hidden work. Context remains as logged;
-    never reconstruct an unseen transcript. Missing energy stays NaN with
-    a flag rather than deleting a visible turn. Episode flags propagate.
+    Use logged turns. By default subtract hidden_tokens from decode_tokens:
+    the count as well as content is treated as absent from the log.
+    Set hidden_token_counts_logged=True when the server logs the reasoning
+    token count even though it strips the content; keep all decode_tokens.
+    Apply the same visibility reading to benign calibration and scored logs.
+    Context remains as logged; never reconstruct an unseen transcript.
+    Missing energy stays NaN with a flag rather than deleting a visible turn.
+    Episode flags propagate.
     """
     flags = list(episode.flags)
     rows = []
@@ -152,7 +213,8 @@ def turn_rows_from_episode(
         energy, half_width = turn_energy.get(turn.index, (math.nan, math.nan))
         rows.append(TurnRow(
             episode.episode_id, episode.task_pair, turn.context_tokens,
-            turn.prefill_tokens, turn.decode_tokens - turn.hidden_tokens,
+            turn.prefill_tokens, (turn.decode_tokens if hidden_token_counts_logged
+                                  else turn.decode_tokens - turn.hidden_tokens),
             (turn.end_ns - turn.start_ns) / 1_000_000_000,
             energy, half_width,
         ))
@@ -437,19 +499,24 @@ def grouped_benign_threshold(
     exclude and count them. Exclude non-finite held-out scores, retain their
     explanatory flags, and take the quantile over the remaining finite scores.
     Unusable episode totals do not remove finite turn energies from training.
+    The numeric result also exposes n_scores, benign_mean and benign_sd
+    (sample sd, denominator m-1). benign_score_calibration_departure flags a
+    departure from unit normal beyond four independent-score standard errors;
+    insufficient_calibration_scores flags undefined sd at m<2.
+    quantile_at_sample_max flags rank=m. No diagnostic changes the quantile.
     """
     flags = []
     if not _finite(alpha) or not 0 < alpha < 1:
-        return _Number(math.nan, ["invalid_alpha"])
+        return _ThresholdResult(math.nan, ["invalid_alpha"])
     if not benign:
-        return _Number(math.nan, ["empty_calibration"])
+        return _ThresholdResult(math.nan, ["empty_calibration"])
     components: list[set[str]] = []
     entries = [entry for entry in benign.values() if entry[0]]
     excluded_empty = len(benign) - len(entries)
     if excluded_empty:
         flags.extend(["missing_group", f"excluded_empty_episodes={excluded_empty}"])
     if not entries:
-        return _Number(math.nan, flags + ["no_finite_calibration_scores"])
+        return _ThresholdResult(math.nan, flags + ["no_finite_calibration_scores"])
     for rows, _, _ in entries:
         groups = {row.group for row in rows}
         if len(groups) > 1:
@@ -460,7 +527,7 @@ def grouped_benign_threshold(
             components.remove(part)
         components.append(groups)
     if len(components) < 2:
-        return _Number(math.nan, flags + ["insufficient_groups"])
+        return _ThresholdResult(math.nan, flags + ["insufficient_groups"])
     scores = []
     excluded_scores = 0
     for component in components:
@@ -479,9 +546,13 @@ def grouped_benign_threshold(
     if excluded_scores:
         flags.extend(["nonfinite_calibration_score", f"excluded_heldout_scores={excluded_scores}"])
     if not scores:
-        return _Number(math.nan, flags + ["no_finite_calibration_scores"])
+        return _ThresholdResult(math.nan, flags + ["no_finite_calibration_scores"])
     rank = math.ceil((1 - alpha) * len(scores))
-    return _Number(sorted(scores)[rank - 1], flags)
+    if rank == len(scores):
+        # At the sample maximum, a new iid continuous benign score exceeds
+        # it with probability about 1/(m+1), rather than the requested alpha.
+        flags.append("quantile_at_sample_max")
+    return _ThresholdResult(sorted(scores)[rank - 1], flags, scores=scores)
 
 
 def min_detectable_hidden_decode_tokens(
@@ -515,7 +586,9 @@ def min_detectable_hidden_decode_tokens(
         return _Number(math.nan, flags)
     if f"unidentified_column:{_NAMES[2]}" in _flags(model):
         return _Number(math.nan, flags + ["hidden_decode_energy_unidentified"])
-    context = math.fsum(row.context_tokens for row in logged_rows) / len(logged_rows)
+    if "invalid_token_count" in flags or "nonfinite_input" in flags:
+        return _Number(math.nan, flags)
+    context = math.fsum(_token_count(row.context_tokens) for row in logged_rows) / len(logged_rows)
     per_token = model.coef[2] + model.coef[3] * context
     if not _finite(per_token):
         return _Number(math.nan, flags + ["nonfinite_hidden_decode_energy"])
@@ -531,8 +604,67 @@ def min_detectable_hidden_decode_tokens(
     return _Number(max(0.0, multiplier) * denominator / per_token, flags)
 
 
+def calibrated_min_detectable_hidden_decode_tokens(
+    model: EnergyModel, logged_rows: Sequence[TurnRow], *, threshold: float,
+    power: float, measured_half_width_j: float,
+    benign_mean: float | None = None, benign_sd: float | None = None,
+) -> float:
+    """Return calibrated H=max(0,(t-mu_b+z_power*s_b)*D/e).
+
+    t is the grouped threshold, mu_b and s_b the held-out benign mean and
+    sample sd. Read them from threshold.benign_mean/benign_sd by default, or
+    pass explicit keyword numbers when threshold attributes were lost (for
+    example after arithmetic or serialization). D and e are exactly the score
+    denominator and mean-context per-token energy used by
+    min_detectable_hidden_decode_tokens. Both functions assume added hidden
+    decode changes neither D nor call count. Ceil H for a token budget.
+
+    This calibrated value is valid when held-out benign scores are close to
+    normal; the existing function's normal-theory value assumes unit normal.
+    Carry threshold.flags separately when using plain numbers. An unidentified
+    decode coefficient gives flagged NaN; an unidentified context-decode
+    coefficient contributes zero with its flag, as in the normal-theory API.
+    """
+    prediction = predict_episode(model, logged_rows)
+    flags = list(_flags(prediction)) + list(_flags(threshold))
+    if not _finite(power) or not 0 < power < 1:
+        return _Number(math.nan, flags + ["invalid_probability"])
+    if not logged_rows:
+        return _Number(math.inf, flags + ["missing_context"])
+    if not _finite(measured_half_width_j):
+        return _Number(math.nan, flags + ["nonfinite_measurement"])
+    if measured_half_width_j < 0:
+        flags.append("negative_half_width")
+    if "invalid_model_shape" in flags:
+        return _Number(math.nan, flags)
+    if f"unidentified_column:{_NAMES[2]}" in _flags(model):
+        return _Number(math.nan, flags + ["hidden_decode_energy_unidentified"])
+    if "invalid_token_count" in flags or "nonfinite_input" in flags:
+        return _Number(math.nan, flags)
+    context = math.fsum(_token_count(row.context_tokens) for row in logged_rows) / len(logged_rows)
+    per_token = model.coef[2] + model.coef[3] * context
+    if not _finite(per_token):
+        return _Number(math.nan, flags + ["nonfinite_hidden_decode_energy"])
+    if benign_mean is None:
+        benign_mean = getattr(threshold, "benign_mean", math.nan)
+    if benign_sd is None:
+        benign_sd = getattr(threshold, "benign_sd", math.nan)
+    if not all(_finite(x) for x in (threshold, benign_mean, benign_sd)) or benign_sd < 0:
+        return _Number(math.nan, flags + ["invalid_calibration_summary"])
+    denominator = math.hypot(prediction[1], measured_half_width_j)
+    if not _finite(denominator):
+        return _Number(math.nan, flags)
+    multiplier = float(threshold) - benign_mean + NormalDist().inv_cdf(power) * benign_sd
+    if multiplier <= 0:
+        return _Number(0.0, flags + ["power_at_or_below_false_positive_rate"])
+    if per_token <= 0:
+        return _Number(math.inf, flags + ["nonpositive_hidden_decode_energy"])
+    return _Number(max(0.0, multiplier * denominator / per_token), flags)
+
+
 __all__ = [
     "TurnRow", "EnergyModel", "design_row", "fit_energy_model", "predict_episode",
     "residual_score", "grouped_benign_threshold",
-    "min_detectable_hidden_decode_tokens", "turn_rows_from_episode",
+    "min_detectable_hidden_decode_tokens", "calibrated_min_detectable_hidden_decode_tokens",
+    "turn_rows_from_episode",
 ]

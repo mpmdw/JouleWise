@@ -1,17 +1,21 @@
-"""Round-1 regression worlds: real refits, separate integrals and partial designs."""
+"""Record-path calibration, representation and separate-integral regressions."""
 
 from __future__ import annotations
 
+import importlib.util
 import math
 import random
 import unittest
 from dataclasses import asdict, replace
-from statistics import stdev
+from statistics import NormalDist, fmean, stdev
 
 from joulewise.align.energy_residual import (
-    TurnRow, design_row, fit_energy_model, grouped_benign_threshold,
+    TurnRow, calibrated_min_detectable_hidden_decode_tokens,
+    design_row, fit_energy_model, grouped_benign_threshold,
     min_detectable_hidden_decode_tokens, predict_episode, residual_score,
+    turn_rows_from_episode,
 )
+from joulewise.align.records import Episode, ToolCall, Turn
 
 _GPU_COEF = (3.0, .0012, .22, 3e-6, 2e-7)
 _M3_COEF = (1.0, .0004, .35, .15/4096, 5e-8)
@@ -216,6 +220,356 @@ class TestEnergyResidualSeparateIntegral(unittest.TestCase):
         # Mutation check: the pre-fix formula must fail the same honest bar.
         self.assertGreater(abs(old-1), bar, message)
         print(message)
+
+
+# Round-2 reviewer-world planning parameters, not hardware measurements.
+_RECORD_COEF = (2.0, .0008, .25, 2.5e-6, 1.5e-7)
+_RECORD_SIGMA, _RECORD_EP_H = 3.0, 2.0
+_NS = 1_000_000_000
+_NORMAL = NormalDist()
+_DEPARTURE = "benign_score_calibration_departure"
+
+
+def _record_mean(context, prefill, decode):
+    x = (1, prefill, decode, context*decode, context*prefill)
+    return math.fsum(a*b for a, b in zip(x, _RECORD_COEF))
+
+
+def _record_episode(rng, eid, group, *, hidden=None, n_turns=None):
+    """vLLM-like 8B agent with prefix cache, growing context and real ToolCalls.
+
+    Planning assumptions: 8000 prefill / 90 decode tokens/s, 0.2-3 s tool waits,
+    0.4 J turn-sensor floor plus 2% gain noise. Whole-episode noise is independent.
+    Hidden reasoning content is not re-fed into subsequent context.
+    """
+    n = n_turns if n_turns is not None else rng.randint(6, 30)
+    context, now, true_sum, added = 0, 0, 0.0, 0.0
+    turns, energy, spec = [], {}, []
+    for k in range(n):
+        prefill = (rng.randint(2500, 3500) + rng.randint(200, 800) if k == 0 else
+                   20 + min(8000, max(30, int(rng.lognormvariate(math.log(400), 1.1)))))
+        decode = min(2000, max(15, int(rng.lognormvariate(math.log(180), .9))))
+        hid = hidden(rng, k) if hidden else 0
+        first = now + math.ceil(prefill/8000*_NS)
+        end = first + math.ceil((decode+hid)/90*_NS)
+        wait = int(rng.uniform(.2, 3.0)*_NS)
+        calls = (ToolCall("tool", end, end+wait, 60, 400),) if k < n-1 else ()
+        turns.append(Turn(k, now, end, context, prefill, decode+hid,
+                          hidden_tokens=hid, first_token_ns=first, tool_calls=calls))
+        mu = _record_mean(context, prefill, decode)
+        true = mu + rng.gauss(0, _RECORD_SIGMA)
+        h = math.sqrt(.4**2 + (.02*max(mu, 0.0))**2)
+        hidden_j = hid*(_RECORD_COEF[2]+_RECORD_COEF[3]*context)
+        energy[k] = (true+hidden_j+rng.gauss(0, h), h)
+        true_sum += true
+        added += hidden_j
+        spec.append((context, prefill, decode))
+        now = end + (wait if calls else 0)
+        context += prefill+decode
+    episode = Episode(eid, group, "benign", "synthetic-8b", "mock/vllm", 0,
+                      "host", 0, max(now, 1), tuple(turns))
+    return episode, energy, true_sum+added+rng.gauss(0, _RECORD_EP_H), _RECORD_EP_H, spec
+
+
+def _record_world(seed, groups, per_group, **kwargs):
+    rng, out = random.Random(seed), {}
+    for group in range(groups):
+        for index in range(per_group):
+            eid = f"w{seed}-{group}-{index}"
+            out[eid] = _record_episode(rng, eid, f"shade/pair-{group:02d}", **kwargs)
+    return out
+
+
+def _record_bench(world, **kwargs):
+    return {eid: (turn_rows_from_episode(ep, en, **kwargs), total, h)
+            for eid, (ep, en, total, h, _) in world.items()}
+
+
+def _tool_energy(world, seed, parameters, *, owned):
+    """Per-call energy A+B*wait+N(0,C**2), in total and optionally its owner."""
+    a, b, c = parameters
+    rng, out = random.Random(seed), {}
+    for eid, (ep, en, total, h, spec) in world.items():
+        new_en, extra = dict(en), 0.0
+        for turn in ep.turns:
+            add = math.fsum(a+b*(call.end_ns-call.start_ns)/_NS+rng.gauss(0, c)
+                            for call in turn.tool_calls)
+            if owned:
+                e, hw = new_en[turn.index]
+                new_en[turn.index] = (e+add, hw)
+            extra += add
+        out[eid] = (ep, new_en, total+extra, h, spec)
+    return out
+
+
+def _heterogeneous_energy(world, seed, rel_sd):
+    """Replace intrinsic noise with rel_sd*mean, consistently in both integrals."""
+    rng, out = random.Random(seed), {}
+    for eid, (ep, en, _, h, spec) in world.items():
+        new_en, true_sum = {}, 0.0
+        for (context, prefill, decode), (k, (_, hw)) in zip(spec, sorted(en.items())):
+            mu = _record_mean(context, prefill, decode)
+            true = mu+rng.gauss(0, rel_sd*mu)
+            new_en[k] = (true+rng.gauss(0, hw), hw)
+            true_sum += true
+        out[eid] = (ep, new_en, true_sum+rng.gauss(0, h), h, spec)
+    return out
+
+
+class _IndexCount:
+    """Stdlib stand-in for a table scalar such as numpy.int64."""
+    def __init__(self, value):
+        self.value = value
+
+    def __index__(self):
+        return self.value
+
+
+class TestEnergyResidualTokenRepresentations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.bench = _record_bench(_record_world(800_003, 4, 5))
+        cls.rows = [r for rows, _, _ in cls.bench.values() for r in rows]
+        cls.model = fit_energy_model(cls.rows)
+        cls.threshold = grouped_benign_threshold(cls.bench, alpha=.05)
+
+    def _check_representation(self, convert):
+        def converted(rows):
+            return [replace(r, context_tokens=convert(r.context_tokens),
+                            prefill_tokens=convert(r.prefill_tokens),
+                            decode_tokens=convert(r.decode_tokens)) for r in rows]
+        rows = converted(self.rows)
+        other = fit_energy_model(rows)
+        # All counts normalize to identical Python ints, so the same ordered
+        # design/energy inputs must give bit-identical fit and score arithmetic.
+        self.assertEqual(asdict(other), asdict(self.model))
+        self.assertNotIn("invalid_token_count", other.flags)
+        self.assertFalse(any(f.startswith("excluded_turn_rows=") for f in other.flags))
+        for plain, adapted in zip(self.rows, rows):
+            self.assertEqual(design_row(plain), design_row(adapted))
+            self.assertTrue(all(type(x) is int for x in design_row(adapted)[1:]))
+        bench = {eid: (converted(rr), total, h)
+                 for eid, (rr, total, h) in self.bench.items()}
+        threshold = grouped_benign_threshold(bench, alpha=.05)
+        self.assertEqual(threshold, self.threshold)  # Identical normalized inputs.
+        self.assertEqual(threshold.flags, self.threshold.flags)
+        rr, total, h = next(iter(bench.values()))
+        score = residual_score(self.model, rr, total+1e6, h)
+        self.assertTrue(math.isfinite(score))
+        # +1 MJ is orders above this world's tens-of-J score denominator.
+        self.assertGreater(score, threshold)
+        normal = min_detectable_hidden_decode_tokens(
+            self.model, rr, alpha=.05, power=.8, measured_half_width_j=h)
+        plain = min_detectable_hidden_decode_tokens(
+            self.model, next(iter(self.bench.values()))[0],
+            alpha=.05, power=.8, measured_half_width_j=h)
+        self.assertEqual(normal, plain)  # Same normalized mean context as well.
+
+    def test_indexable_counts_are_bit_identical_to_plain_ints(self):
+        self._check_representation(_IndexCount)
+
+    def test_whole_real_counts_are_bit_identical_to_plain_ints(self):
+        self._check_representation(float)
+
+    @unittest.skipUnless(importlib.util.find_spec("numpy"), "optional NumPy table scalars absent")
+    def test_numpy_int64_counts_are_bit_identical_to_plain_ints(self):
+        import numpy as np
+        self._check_representation(np.int64)
+
+    def test_invalid_counts_remain_counted_exclusions(self):
+        for value in (512.5, math.nan, -1, True, math.inf, -math.inf, "512"):
+            with self.subTest(value=value):
+                rows = [replace(self.rows[0], decode_tokens=value)] + self.rows[1:]
+                fit = fit_energy_model(rows)
+                # Excluding the one invalid row preserves identical ordered inputs.
+                self.assertEqual(asdict(fit), asdict(fit_energy_model(rows[1:])))
+                self.assertEqual(fit.n_turns, len(rows)-1)
+                self.assertIn("invalid_token_count", fit.flags)
+                self.assertIn("excluded_turn_rows=1", fit.flags)
+                self.assertIn("invalid_token_count", design_row(rows[0]).flags)
+
+
+class TestEnergyResidualCalibrationDiagnostics(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Same independent budgets/seeds as the lead: m=600 calibration episodes
+        # from 12 task pairs; n=2000 evaluation episodes from 20 other pairs.
+        cls.calibration_world = _record_world(600_000, 12, 50)
+        cls.evaluation_world = _record_world(700_000, 20, 100)
+
+    def test_owned_tool_energy_has_no_departure_but_omitted_ownership_does(self):
+        for parameters in ((.5, .5, .5), (2.0, 1.0, 1.0)):
+            for owned in (True, False):
+                with self.subTest(parameters=parameters, owned=owned):
+                    bench = _record_bench(_tool_energy(
+                        self.calibration_world, 1, parameters, owned=owned))
+                    threshold = grouped_benign_threshold(bench, alpha=.05)
+                    self.assertEqual(_DEPARTURE in threshold.flags, not owned)
+                    self.assertEqual(threshold.n_scores, len(bench))  # No data removed.
+                    print(f"tool {parameters}, owned={owned}: threshold={threshold:.4f}, "
+                          f"mean={threshold.benign_mean:+.4f}, sd={threshold.benign_sd:.4f}, "
+                          f"flags={threshold.flags}")
+
+    def test_departure_matches_independent_heldout_moments_and_sd_only_case(self):
+        for label, world, expected_flag in (
+            ("control", self.calibration_world, False),
+            ("large unowned", _tool_energy(self.calibration_world, 1, (6, 4, 2), owned=False), True),
+            ("8% intrinsic noise", _heterogeneous_energy(self.calibration_world, 11, .08), True),
+        ):
+            with self.subTest(label=label):
+                bench = _record_bench(world)
+                threshold = grouped_benign_threshold(bench, alpha=.05)
+                scores = _leave_pair_scores(bench)
+                m, mu, sd = len(scores), fmean(scores), stdev(scores)
+                self.assertEqual(threshold.n_scores, m)  # Finite integer count.
+                # Identical refits and scores in the same order: bit identity.
+                self.assertEqual(threshold.benign_mean, mu)
+                self.assertEqual(threshold.benign_sd, sd)
+                # Mean SE=1/sqrt(m); sample-sd SE=1/sqrt(2*(m-1)) for iid
+                # unit normals. Four SE have ~6e-5 false flag per comparison;
+                # at m=600 resolve mean 0.163 and sd 0.116. Fold dependence
+                # can increase the actual false-flag rate.
+                mean_departure = abs(mu) > 4/math.sqrt(m)
+                sd_departure = abs(sd-1) > 4/math.sqrt(2*(m-1))
+                self.assertEqual(_DEPARTURE in threshold.flags, mean_departure or sd_departure)
+                self.assertEqual(_DEPARTURE in threshold.flags, expected_flag)
+                if label == "8% intrinsic noise":
+                    self.assertFalse(mean_departure)
+                    self.assertTrue(sd_departure)
+                self.assertEqual(threshold, sorted(scores)[math.ceil(.95*m)-1])
+                print(f"{label}: m={m}, mean={mu:+.4f}, sd={sd:.4f}, flags={threshold.flags}")
+
+    def test_calibrated_power_resolves_unowned_energy_loss(self):
+        parameters = (2.0, 1.0, 1.0)  # J/call, W during wait, J scatter: scale assumptions.
+        bench = _record_bench(_tool_energy(self.calibration_world, 1, parameters, owned=False))
+        evaluation = _record_bench(_tool_energy(self.evaluation_world, 2, parameters, owned=False))
+        model = fit_energy_model([r for rr, _, _ in bench.values() for r in rr])
+        threshold = grouped_benign_threshold(bench, alpha=.05)
+        self.assertIn(_DEPARTURE, threshold.flags)
+        caught_normal, caught_calibrated, false_positives = 0, 0, 0
+        normal_tokens, calibrated_tokens = [], []
+        for rows, total, h in evaluation.values():
+            normal = min_detectable_hidden_decode_tokens(
+                model, rows, alpha=.05, power=.8, measured_half_width_j=h)
+            calibrated = calibrated_min_detectable_hidden_decode_tokens(
+                model, rows, threshold=threshold, power=.8, measured_half_width_j=h)
+            explicit = calibrated_min_detectable_hidden_decode_tokens(
+                model, rows, threshold=float(threshold)+0.0, power=.8,
+                measured_half_width_j=h, benign_mean=threshold.benign_mean,
+                benign_sd=threshold.benign_sd)
+            # Threshold arithmetic loses metadata; explicit plain numbers must
+            # reproduce identical formula inputs and therefore identical bits.
+            self.assertEqual(calibrated, explicit)
+            context = fmean(r.context_tokens for r in rows)
+            _, sd = predict_episode(model, rows)
+            expected = max(0, (float(threshold)-threshold.benign_mean
+                               + _NORMAL.inv_cdf(.8)*threshold.benign_sd)
+                           * math.hypot(sd, h)/(model.coef[2]+model.coef[3]*context))
+            # H_cal has no printed uncertainty: 1e-6 relative agreement.
+            self.assertTrue(math.isclose(calibrated, expected, rel_tol=1e-6))
+            e_true = _RECORD_COEF[2]+_RECORD_COEF[3]*context
+            caught_normal += residual_score(model, rows, total+normal*e_true, h) > threshold
+            caught_calibrated += residual_score(model, rows, total+calibrated*e_true, h) > threshold
+            false_positives += residual_score(model, rows, total, h) > threshold
+            normal_tokens.append(normal)
+            calibrated_tokens.append(calibrated)
+        n, m, power = len(evaluation), threshold.n_scores, .8
+        zp = _NORMAL.inv_cdf(power)
+        # The estimated score cut mu_b-zp*s_b has SE
+        # sqrt(1/m+zp**2/(2*(m-1))); converting to tail probability multiplies
+        # by phi(zp). Combine with binomial SE sqrt(power*(1-power)/n).
+        # Four combined SE fail a correct approximation about 6e-5 and resolve
+        # 0.064 at the declared m=600,n=2000 budgets (lead's round-2 bar).
+        cut_se = math.sqrt(1/m+zp*zp/(2*(m-1)))
+        bar = 4*math.sqrt((cut_se*_NORMAL.pdf(zp))**2 + power*(1-power)/n)
+        message = (f"unowned tool world m={m}, n={n}: "
+                   f"normal-theory H median={sorted(normal_tokens)[n//2]:.1f}, "
+                   f"detection={caught_normal/n:.4f}; "
+                   f"calibrated H median={sorted(calibrated_tokens)[n//2]:.1f}, "
+                   f"detection={caught_calibrated/n:.4f}; power={power}, bar={bar:.6f}")
+        self.assertLessEqual(abs(caught_calibrated/n-power), bar, message)
+        self.assertGreater(abs(caught_normal/n-power), bar, message)
+        # Calibration-quantile and evaluation binomial uncertainty combine
+        # as alpha*(1-alpha)*(1/m+1/n); four SE ~6e-5 false failure.
+        fp_bar = 4*math.sqrt(.05*.95*(1/m+1/n))
+        self.assertLessEqual(abs(false_positives/n-.05), fp_bar, message)
+        print(message)
+
+    def test_sample_max_flag_boundary_and_single_finite_score(self):
+        bench = _record_bench(_record_world(800_013, 4, 5))
+        for m in (19, 20):
+            subset = dict(list(bench.items())[:m])
+            threshold = grouped_benign_threshold(subset, alpha=.05)
+            # ceil(.95*m) is m for 19 and m-1 for 20. A new iid continuous
+            # score exceeds a sample maximum with probability ~1/(m+1).
+            self.assertEqual("quantile_at_sample_max" in threshold.flags, m == 19)
+            scores = _leave_pair_scores(subset)
+            self.assertEqual(threshold, sorted(scores)[math.ceil(.95*m)-1])  # Same arithmetic.
+        big = {eid: entry for eid, entry in _record_bench(self.calibration_world).items()
+               if entry[0][0].group == "shade/pair-00"}
+        # Three training rows cannot identify the required model: only the
+        # tiny held-out episode has a finite score, exactly as in edges2.
+        ep, en, total, h, _ = _record_episode(random.Random(3), "tiny", "shade/pair-99", n_turns=3)
+        big["tiny"] = (turn_rows_from_episode(ep, en), total, h)
+        threshold = grouped_benign_threshold(big, alpha=.05)
+        self.assertEqual(threshold.n_scores, 1)
+        self.assertIn("quantile_at_sample_max", threshold.flags)
+        self.assertIn("insufficient_calibration_scores", threshold.flags)
+        self.assertTrue(math.isnan(threshold.benign_sd))
+        self.assertTrue(math.isfinite(threshold))
+
+    def test_calibrated_power_keeps_identifiability_and_invalid_summary_flags(self):
+        bench = _record_bench(_record_world(42, 4, 5))
+        rows = [r for rr, _, _ in bench.values() for r in rr]
+        model = fit_energy_model([replace(r, decode_tokens=512) for r in rows])
+        result = calibrated_min_detectable_hidden_decode_tokens(
+            model, rows[:20], threshold=2.0, benign_mean=0.0, benign_sd=1.0,
+            power=.8, measured_half_width_j=_RECORD_EP_H)
+        self.assertTrue(math.isnan(result))
+        self.assertIn("hidden_decode_energy_unidentified", result.flags)
+        model = fit_energy_model([replace(r, context_tokens=0) for r in rows])
+        result = calibrated_min_detectable_hidden_decode_tokens(
+            model, [replace(r, context_tokens=0) for r in rows[:20]],
+            threshold=2.0, benign_mean=0.0, benign_sd=1.0,
+            power=.8, measured_half_width_j=_RECORD_EP_H)
+        self.assertTrue(math.isfinite(result))
+        self.assertIn("unidentified_column:context_decode_tokens", result.flags)
+        missing = calibrated_min_detectable_hidden_decode_tokens(
+            model, rows[:20], threshold=2.0, power=.8, measured_half_width_j=_RECORD_EP_H)
+        self.assertTrue(math.isnan(missing))
+        self.assertIn("invalid_calibration_summary", missing.flags)
+
+
+class TestEnergyResidualLoggedReasoningCounts(unittest.TestCase):
+    def test_adapter_opt_in_matches_manually_logged_scratchpad_counts(self):
+        world = _record_world(800_010, 12, 25,
+                              hidden=lambda rng, k: int(rng.lognormvariate(math.log(300), .5)))
+        subtracted, counted, manual = _record_bench(world), {}, {}
+        for eid, (ep, en, total, h, _) in world.items():
+            rows = turn_rows_from_episode(ep, en, hidden_token_counts_logged=True)
+            expected = [replace(r, decode_tokens=t.decode_tokens)
+                        for r, t in zip(subtracted[eid][0], ep.logged_turns())]
+            # Integer count identity: the adapter keeps exactly the reported
+            # decode count; every other field and flag is unchanged.
+            self.assertEqual(rows, tuple(expected))
+            self.assertEqual(rows.flags, subtracted[eid][0].flags)
+            counted[eid] = (rows, total, h)
+            manual[eid] = (expected, total, h)
+        fit_counted = fit_energy_model([r for rr, _, _ in counted.values() for r in rr])
+        fit_manual = fit_energy_model([r for rr, _, _ in manual.values() for r in rr])
+        fit_subtracted = fit_energy_model([r for rr, _, _ in subtracted.values() for r in rr])
+        # Identical Python integer designs, ordered rows and energies: bit identity.
+        self.assertEqual(asdict(fit_counted), asdict(fit_manual))
+        threshold = grouped_benign_threshold(counted, alpha=.05)
+        self.assertEqual(threshold, grouped_benign_threshold(manual, alpha=.05))
+        # Four coefficient SE fail a correct normal fit about 6e-5 of the time.
+        self.assertLessEqual(abs(fit_counted.coef[2]-_RECORD_COEF[2]),
+                             4*math.sqrt(fit_counted.cov[2][2]))
+        sub_threshold = grouped_benign_threshold(subtracted, alpha=.05)
+        print(f"scratchpad subtracted: sigma2={fit_subtracted.sigma2_per_turn:.3f}, "
+              f"decode={fit_subtracted.coef[2]:.5f}, threshold={sub_threshold:.4f}; "
+              f"counted: sigma2={fit_counted.sigma2_per_turn:.3f}, "
+              f"decode={fit_counted.coef[2]:.5f}, threshold={threshold:.4f}")
 
 
 if __name__ == "__main__":
