@@ -40,14 +40,14 @@ def _notes(trace: PowerTrace) -> dict:
         return {}
 
 
-def _edge(trace: PowerTrace, t: int) -> tuple[float, float, int]:
-    """Interpolated value, enclosing counter increment, distance to nearest poll."""
+def _edge(trace: PowerTrace, t: int) -> tuple[float, float]:
+    """Interpolated value and enclosing counter increment."""
     i = bisect_left(trace.t_ns, t)
     if i < len(trace.t_ns) and trace.t_ns[i] == t:
-        return trace.values[i], 0.0, 0
+        return trace.values[i], 0.0
     a, b = trace.t_ns[i - 1], trace.t_ns[i]
     x, y = trace.values[i - 1], trace.values[i]
-    return x + (y - x) * ((t - a) / (b - a)), y - x, min(t - a, b - t)
+    return x + (y - x) * ((t - a) / (b - a)), y - x
 
 
 def _interpolate(trace: PowerTrace, t: int) -> float:
@@ -92,9 +92,10 @@ def episode_energy(episode: Episode, *,
 
     gap_factor is an operator parameter: 1.5 is the midpoint between one
     completed sampling cycle and a missed cycle near twice that duration.
-    Estimate the cycle from the trace's median interval, including event.wait
-    and acquisition overhead, with the nominal wait as a lower bound. This
-    diagnostic assumes most cycles completed normally; it never discards energy.
+    Estimate the cycle from the median observed interval (minimum for fewer
+    than three intervals), including event.wait and acquisition overhead, with
+    the nominal wait as a lower bound. This diagnostic assumes normal cycles
+    remain observable; it never discards energy.
     """
     traces = episode.power_traces
     if not traces:
@@ -133,8 +134,8 @@ def episode_energy(episode: Episode, *,
             return Energy(None, flags=("energy_trace_unbracketed",))
         if any(not math.isfinite(v) or v < 0 for v in trace.values):
             return Energy(None, flags=("energy_samples_invalid",))
-        first, delta_a, distance_a = _edge(trace, start)
-        last, delta_b, distance_b = _edge(trace, end)
+        first, delta_a = _edge(trace, start)
+        last, delta_b = _edge(trace, end)
         duration_s = (end - start) / 1_000_000_000
         if trace.unit == "J_cumulative":
             if any(b < a for a, b in zip(trace.values, trace.values[1:])):
@@ -167,10 +168,14 @@ def episode_energy(episode: Episode, *,
                 maximum = None
             if maximum is None:
                 flags.append("energy_power_max_missing")
-            # With a maximum power, each unsynchronised edge contributes
-            # Pmax * distance to the nearest sample. Clock displacement contributes
-            # 2*Pmax*dt, and a trailing averaging window contributes 2*Pmax*window.
-            edge_seconds = (distance_a + distance_b + 2 * uncertainty_ns
+            # An unsynchronised edge segment extends to the poll INSIDE the
+            # episode. With power in [0, Pmax], its error is at most Pmax times
+            # that inward distance, even when the outer poll is much closer.
+            # Clock displacement adds 2*Pmax*dt; averaging adds 2*Pmax*window.
+            ia, ib = bisect_left(trace.t_ns, start), bisect_left(trace.t_ns, end)
+            inward_a = trace.t_ns[ia] - start
+            inward_b = 0 if trace.t_ns[ib] == end else end - trace.t_ns[ib - 1]
+            edge_seconds = (inward_a + inward_b + 2 * uncertainty_ns
                             + 2 * (trace.averaging_window_ns or 0)) / 1_000_000_000
             bound = None if trace.resolution is None else trace.resolution * duration_s / 2
             if bound is not None:
@@ -188,7 +193,13 @@ def episode_energy(episode: Episode, *,
         # event.wait(T) followed by acquisition A has cycle T+A, not T.
         # A missed cycle is near 2*(T+A); 1.5 is their midpoint. The observed
         # median estimates T+A without treating normal acquisition as a gap.
-        cycle_ns = max(trace.nominal_interval_ns, _median_interval_ns(intervals))
+        # After one dropped poll, one of n intervals is doubled. For n >= 3,
+        # the n-1 normal intervals are a strict majority, so both median ranks
+        # are normal. For n=2 the median mixes normal and doubled intervals;
+        # use the minimum instead. A lone interval cannot identify a lost poll.
+        observed_cycle = (min(intervals) if len(intervals) < 3
+                          else _median_interval_ns(intervals))
+        cycle_ns = max(trace.nominal_interval_ns, observed_cycle)
         if any(interval > gap_factor * cycle_ns for interval in intervals):
             flags.append("energy_sample_gap")
         flags.append("energy_piecewise_linear_between_samples")

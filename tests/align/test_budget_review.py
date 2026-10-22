@@ -63,7 +63,8 @@ class BudgetReviewTests(OfflineTest):
                 self.assertNotIn("energy_sample_gap", energy.flags)
                 # Remove an interior poll: the resulting 2*(wait+acquisition)
                 # interval exceeds the midpoint bar of 1.5 observed cycles.
-                # Most intervals remain normal, so the median is unchanged.
+                # At >=3 remaining intervals the median has a normal majority;
+                # at two intervals the minimum retains the one normal cycle.
                 index = len(trace.t_ns) // 2
                 missed = replace(trace, t_ns=trace.t_ns[:index] + trace.t_ns[index + 1:],
                                  values=trace.values[:index] + trace.values[index + 1:])
@@ -135,27 +136,34 @@ class BudgetReviewTests(OfflineTest):
             self.assertIn(flag + ":1", summary_table((row,)))
 
     def test_midinterval_load_edges_are_inside_sensor_half_widths(self):
-        start, end, second = 150_000_000, 20_150_000_000, 1_000_000_000
-        grid = tuple(range(0, end + 200_000_000, 100_000_000))
-        def cumulative(t):
-            return (50 * min(t, start) + 250 * max(0, min(t, end) - start)
-                    + 50 * max(0, t - end)) / second
-        power = PowerTrace("nvml_power", "gpu0", "h", grid,
-                           tuple(250.0 if start <= t < end else 50.0 for t in grid),
-                           "W", 100_000_000, resolution=0.001)
-        counter = PowerTrace("nvml_energy", "gpu0", "h", grid,
-                             tuple(round(cumulative(t), 3) for t in grid),
-                             "J_cumulative", 100_000_000, resolution=0.001)
-        episode = Episode("e", "b", "benign", "m", "mock", 0, "h", start, end,
-                          (Turn(0, start, end, 0, 256, 1000),))
-        for trace in (power, counter):
-            energy = episode_energy(replace(episode, power_traces=(trace,)), power_max_w=250)
-            # Truth = 250 W * 20 s. Error must fit the physical edge enclosure,
-            # rather than merely the much smaller 0.001 W/J sensor quantum.
-            self.assertLessEqual(abs(energy.joules - 5000), energy.uncertainty_j)
-        unknown = episode_energy(replace(episode, power_traces=(power,)))
-        self.assertTrue(math.isinf(unknown.uncertainty_j))
-        self.assertIn("energy_power_max_missing", unknown.flags)
+        second = 1_000_000_000
+        # Both symmetric edges and start 10/end 90 ms after a 100 ms poll.
+        # The latter has 90+90 ms inward distance but only 10+10 ms nearest
+        # distance; the old nearest-poll width misses its 16.2 J step error.
+        for start, end in ((150_000_000, 20_150_000_000),
+                           (110_000_000, 20_190_000_000)):
+            with self.subTest(start=start, end=end):
+                grid = tuple(range(0, end + 200_000_000, 100_000_000))
+                def cumulative(t):
+                    return (50 * min(t, start) + 250 * max(0, min(t, end) - start)
+                            + 50 * max(0, t - end)) / second
+                power = PowerTrace("nvml_power", "gpu0", "h", grid,
+                                   tuple(250.0 if start <= t < end else 50.0 for t in grid),
+                                   "W", 100_000_000, resolution=0.001)
+                counter = PowerTrace("nvml_energy", "gpu0", "h", grid,
+                                     tuple(round(cumulative(t), 3) for t in grid),
+                                     "J_cumulative", 100_000_000, resolution=0.001)
+                episode = Episode("e", "b", "benign", "m", "mock", 0, "h", start, end,
+                                  (Turn(0, start, end, 0, 256, 1000),))
+                for trace in (power, counter):
+                    energy = episode_energy(replace(episode, power_traces=(trace,)), power_max_w=250)
+                    # Truth = 250 W * episode duration. Error must fit the
+                    # physical edge enclosure, not just the 0.001 W/J quantum.
+                    truth = 250 * (end - start) / second
+                    self.assertLessEqual(abs(energy.joules - truth), energy.uncertainty_j)
+                unknown = episode_energy(replace(episode, power_traces=(power,)))
+                self.assertTrue(math.isinf(unknown.uncertainty_j))
+                self.assertIn("energy_power_max_missing", unknown.flags)
 
     def test_deletion_retains_a_whole_disclosure_with_contiguous_spans(self):
         total, removed, trials = 1024, 410, 4000
