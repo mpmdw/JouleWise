@@ -332,7 +332,8 @@ def disk_snapshot(root, *, statvfs=os.statvfs, capacity=important_capacity):
 def remainder_span(measurement, tree, measured_session):
     """H wall-stamp sizing, separate from the registered disk allowances.
 
-    Shell endpoints denote [stamp, stamp+1), as in derive_sizing.py.
+    Each shell stage row contributes ended_epoch_s - started_epoch_s,
+    as derive_sizing.py does for stage time; no endpoint second is added.
     Collection residuals exclude members and registered settles. One shared
     max/min spread over identical model/workload cohorts scales members only.
     An unavailable record returns a flag and no allowance, never a refusal or
@@ -804,8 +805,15 @@ def measurements(state, export_csv):
                               or r['pack_id'] != PACK_ID for r in exported)):
         raise ValueError('foreign or claim export supplied to BYTES H')
     sources[str(sidecar_path)] = locator(sidecar_path)
-    tree = read(measurement / KIT / 'plan_tree.json')
-    kit = read(measurement / KIT / 'collection_plan.json')
+    if state.get('remainder'):
+        pack = Path(state['inputs']['pack_root'])
+        tree = read(pack / 'plan_tree.json')
+        kit = read(pack / 'collection_plan.json')
+        flags.append({'code': 'sizing.c5_remainder_checks_absent',
+            'detail': 'C5 cannot size a candidate from the remainder alone: required check runs are in H; combining sessions is outside this item.'})
+    else:
+        tree = read(measurement / KIT / 'plan_tree.json')
+        kit = read(measurement / KIT / 'collection_plan.json')
     by_model = {m['run_id']: m['model_id'] for m in kit['members']}
     result = {'schema_version': 'joulewise.bytes_mac_measurements.v1', 'non_claim': True,
               'session_id': session_id, 'runs': {}, 'regimes': {},
@@ -1008,6 +1016,11 @@ def desk(session_root, *, run=subprocess.run, statvfs=os.statvfs):
     gate_argv = [str(measurement / '.venv/bin/python'), str(measurement / 'scripts/bytes_gates.py'),
         '--runs', str(export_csv), '--measurements', str(session / 'MEASUREMENTS.json'),
         '--kit-plan', str(measurement / KIT / 'collection_plan.json'), '--out', str(session / 'C5.json')]
+    if state.get('remainder'):
+        gate_argv[gate_argv.index('--kit-plan') + 1] = str(Path(state['inputs']['pack_root']) / 'collection_plan.json')
+        for flag in measured['flags']:
+            if flag['code'] == 'sizing.c5_remainder_checks_absent':
+                print('flag: ' + json.dumps(flag, sort_keys=True))
     # Include the desk's own retained outputs in fixed disk usage. Re-evaluate
     # only when that integer byte count changes; allocation converges once the
     # JSON/log files occupy their final filesystem blocks. The final C5 hashes

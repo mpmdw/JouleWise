@@ -1,12 +1,15 @@
 # BY-H2 — remainder implementation handoff (2026-10-22)
 
 ## PROGRESS
+- SLICE 4 DONE: R1 remainder measurements now read staged pack tree/collection plan; C5 receives that subset plan. Named sizing.c5_remainder_checks_absent flag is retained and printed because C5 requires H's missing check runs. R2 docstring now states integer ended-started stage time, with no added endpoint second.
+- SLICE 4 DONE: extended real-writer remainder prepare/harvest/desk regression passes for both soak choices (1 test, 108.448 s); full session module passes (35 tests, 198.707 s). Gates: 7 pass; refusal census: 23 pass, 1 existing skip. No generated kit, disk/span arithmetic, physical refusal or arm changes. All launched commands completed.
+- DIRECTOR EVIDENCE (supplied at slice-4 intake): both real dry prepares at 16bc5d8f9 were STAGED, ledger SHA-256 unchanged, spans 16817.33/13804.91 s, P 63878576237/56122258559 B, ordered stages and battery thresholds verified. Director independently re-derived all span terms from H journals. R1/R2 executing-review disposition and final CI remain pending.
 - DONE: implementation and local focused verification complete. Slice 3 began clean at f2f9bc72e; added assertions for prepare's printed stage order/counts and completed this report. Director owns commits/pushes because .git is read-only here.
 - DONE: both remainder modes prepare STAGED through the real writer in production-shaped synthetic tests; source ledger hash and full-kit bytes stay unchanged. Full session module: 35 tests pass; strengthened printed-order test rerun passes.
 - DONE: kit tests 4 pass; gates 7 pass; refusal census 23 pass (1 skip); generator --check passes. Import graph: 5 pass, 1 known sandbox process-group environmental failure (NULL rather than GO); no bypass attempted.
 - DONE: read-only H journals yield full span 16817.331989693055 s / maximum 34560 s and r12 span 13804.910209347223 s / maximum 31560 s. P is 63878576237 B full, 56122258559 B r12. No live validation claimed.
-- NEXT: director commits this slice; review final diff, dry-prepare in the fresh measurement clone, verify ledger SHA-256 unchanged, run executing review and CI, then prepare the real arm notice. Do not install/arm until Ed lifts the pause and lead clears the quiet-Mac gates.
-- OPEN: real dry prepare, executing ACCEPT review, CI and PR are director-owned. Standalone probe B/N require quiet-Mac memory observations and rehearsal; procedure below. No agent measurement, install, launchd action or arm was performed. All launched tests completed.
+- NEXT: director commits/pushes this slice, dispositions R1/R2, runs final executing review and CI, and prepares the real arm notice. Do not install/arm until Ed lifts the pause and lead clears the quiet-Mac gates.
+- OPEN: executing ACCEPT review, CI and PR are director-owned. Standalone probe B/N require quiet-Mac memory observations and rehearsal; procedure below. No agent measurement, install, launchd action or arm was performed. No launched process remains running.
 
 ## SUMMARY
 - Added prepare --remainder --soak-70b full|r12 --measured-session H_ROOT.
@@ -17,9 +20,12 @@
 - Span comes from H journals, one measured cohort spread, registered settles and a named B6 closing envelope.
 - Subset P uses the unchanged H-DISK-RULING formula, native arm budget and non-purgeable free-byte line.
 - Desk preserves native per-run flag_codes, including battery.assist, in MEASUREMENTS.json.
-- Required local checks pass except the documented import-graph sandbox census failure; real preparation/review/CI remain pending.
+- Slice 4 fixes the executing review's remainder desk source-path defect and span docstring; C5's absent-check limitation is a printed flag.
+- Director reports both real dry prepares STAGED with unchanged ledger, matching span/P and retained battery thresholds; final executing review and CI remain director-owned.
 
 ## DESIGN
+Slice-4 R1 disposition: only for state['remainder'], measurements reads plan_tree.json and collection_plan.json from state['inputs']['pack_root']; desk sends that same staged collection plan to C5. The underscore-path full kit remains a source symlink and the full-session code paths remain unchanged. C5 requires five checks per model before sizing; those checks live in H, so the remainder prints and retains sizing.c5_remainder_checks_absent. This is a flag, with no new refusal or cross-session merge. R2 disposition: the docstring now describes ended_epoch_s-started_epoch_s per shell stage row, matching the existing arithmetic and derive_sizing's stage-time convention. No extra second or padding is added; the director's verified spans stay unchanged.
+
 CLI: `prepare --measurement-root FRESH --session-root SCRATCH --remainder --soak-70b full|r12 --measured-session H_ROOT`. Existing full prepare/install/desk CLI and generator are unchanged. Selection occurs only inside measurement_view's disposable tree; ordinals, predecessor/successor links, science, collection plan/hash, manifests and identity inventory are rebuilt there. All selected config bytes are copied unchanged. No new committed kit file or member config is generated.
 
 `chain.stage_plan` and real `plan.write_window_plan` accept both trees. Reference-midpoint stays because acceptance._stage_roles uses the midpoint_reference input ID and harvest._neg8_disclose requires the NEG-8 (3,1,3) roles. The selected expected counts below are stage counts, with collection counts denoting members. Prefix every stage ID with `bytes-mac-check-`.
@@ -141,6 +147,28 @@ The staged plan retains its native hazard_window/thresholds and uses driver.prod
 H's supplied observations predict assistance on the large 70B members (soak r01-r12 plus test7 starts/ends r01/r03 =16 full; soak r12 plus four test7 large members =5 r12) and 122B (twelve soaks plus four test7 large members =16 either mode). No expected flag is synthesized on these or reference members. This retains disclosure; it does not remedy hardware delivery limits or implement the separate BYTES battery-energy estimator.
 
 ## TESTS RUN
+### Slice 4
+All commands use the repository root and independent TMPDIRs. No whole suite, live capture, install or arm command ran.
+
+`JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_gates`
+
+7 tests in 0.364s; exit 0, OK.
+
+`JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.hazards.test_refusal_allowlist`
+
+23 tests in 13.299s; exit 0, OK (skipped=1: existing block-5 design branch absent).
+
+`JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_h_session.SessionTests.test_remainder_prepare_real_writer_both_soaks_and_journal_math`
+
+1 test, both full/r12 subtests, in 108.448s; exit 0, OK. Both invoke the real writer, harvest, acceptance, export, measurements and C5 CLI. Remainder overhead is finite and matches the independently derived fixture residual (5*member_count/12 seconds, using 15 s member walls within 20 s slots). Both C5 argv paths name the staged subset; the named missing-check flag is printed/retained and source ledger hash remains unchanged. Before R1 this regression would encounter null overhead (22 full collections expected versus 12 observed) and the full-kit C5 argv. Existing C5 remains unavailable on the intentionally incomplete synthetic calibration/floor evidence.
+
+The first extended remainder regression run exited 1 (1 test, 2 subtest failures in 0.201s) because its new assertion counted 123 collection-plan members. Corrected that fixture assertion to the actual 98 science members; the full tree dispatches 25 additional scaffold members, 123 total. Implementation was unaffected.
+
+`JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_h_session`
+
+35 tests in 198.707s; exit 0, OK. Includes both remainder desk subtests and unchanged full-kit prepare/real harvest/export/desk/C5 coverage. No skips or environmental failures in this module. `git diff --check` passed after all code/test/report edits. Slice-4 intake/completion disk checks remain above the 10 GiB stop line (65/62 GiB available). No import or generator change: prior kit/import checks stand; the director requested session/gates/refusal reruns for this slice. All launched test commands completed; no local process left running.
+
+### Slice 3
 Slice 3 exact commands below ran from repository root, each module with a fresh TMPDIR. All test runs set JW_B5_SYNTHETIC_ONLY=1; no whole-suite invocation. No live campaign was run. Unit install/arm checks use synthetic/hardware seams, not a real install or arm.
 
 `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byh2.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_h_session`
@@ -172,9 +200,11 @@ Slice 3 exact commands below ran from repository root, each module with a fresh 
 `git diff --check`: initial report check found one extra EOF blank line; removed it, then final check exited 0 with no output. Full module loaded before the final assertion-only edit; the focused remainder test then passed on those exact final assertions. No implementation changed in slice 3.
 
 ## END-TO-END
+Director-supplied executing evidence at slice-4 intake: real fresh-checkout dry prepare at 16bc5d8f9 printed STAGED for full and r12, span 16817.33/13804.91 s, P 63878576237/56122258559 B, ordered stages and unchanged ledger SHA-256. Staged battery thresholds were retained. Director independently re-derived all span terms against H's journals. This is attributed director evidence, not an action run by this slice. Final R1/R2 disposition/ACCEPT and CI remain director-owned.
+
 Production-shaped fixture uses the appendix member durations (rounded milliseconds), integer stage seconds, original member/config identities and real tree. Both modes call prepare -> measurement_view -> real plan.write_window_plan -> chain.stage_plan/render path, not a mocked plan result. Only ledger head-status Git lineage inspection is patched to admit the synthetic checkout; the writer, allowance authentication, manifests, chain and budgets are real. Hardware identity producer and disk snapshots are deterministic synthetic boundaries.
 
-Both print bytes-h2- session identity, every span source/term, programmed ceiling/window, complete subset disk derivation, all 18 ordered stage IDs/kinds/counts, then preparation_status: STAGED. Tests independently hand-compute every base/member/margin/span/window term, exact rational P terms, check 73/62 members, stage order/counts, ledger SHA-256 unchanged and source full-kit byte identity. Missing-journal regression prints INPUTS_ONLY and no fabricated plan. Existing full prepare real-writer and desk chain tests pass. This is synthetic execution evidence only. Real dry prepare remains director-owned.
+Both print bytes-h2- session identity, every span source/term, programmed ceiling/window, complete subset disk derivation, all 18 ordered stage IDs/kinds/counts, then preparation_status: STAGED. Tests independently hand-compute every base/member/margin/span/window term, exact rational P terms, check 73/62 members, stage order/counts, ledger SHA-256 unchanged and source full-kit byte identity. Missing-journal regression prints INPUTS_ONLY and no fabricated plan. Existing full prepare real-writer and desk chain tests pass. These tests are synthetic execution evidence only; real dry preparation is attributed to the director above.
 
 ## ARM PACKET DRAFT
 Lead fills FRESH and SCRATCH, choosing the 70B option from BY-0 (default full). FRESH must be the director's new measurement clone with the committed 402-row ledger and reproduced .venv. Do not use the h2 ledger with its two extra reservations. No access to the director's checkout occurred here.
@@ -199,6 +229,8 @@ Notice draft:
 "BY-H2 is a separate non-claim remainder session. It runs fresh reservation/calibration/bound/reference work, all three test7 starts and ends, [full twelve / r12-only] 70B soak and twelve 122B soaks, midpoint/end references, closing calibration, whole-window verdict and backup. No check stages. Start [epoch/UTC/PDT]; programmed [16818 s full / 13805 s r12], maximum [34560 s / 31560 s]. Real free disk [bytes] >= P [63878576237 B / 56122258559 B]. Expect native battery.assist disclosures on 70B/122B large workloads; retain all observed flags and withheld receipts. Other record/identity/lineage observations remain named flags. The known-bytes probe is a separate quiet-Mac step. Nothing is armed until Ed lifts the pause and the lead clears gates."
 
 ## DECISIONS I MADE
+- R1 uses staged subset inputs only for remainder desk; C5's existing check requirement remains unchanged and is disclosed as sizing.c5_remainder_checks_absent. No combining H/remainder data in this item.
+- R2 changes wording only: integer stage endpoint difference, no +1 s per row, preserving director-verified arithmetic.
 - Preserve all full-kit/generator bytes; subset only in the disposable view, with existing r12 bytes/identity.
 - Preserve midpoint because existing acceptance/harvest assigns its protocol role.
 - Keep full 70B soak default; only the lead chooses r12 after BY-0.
@@ -211,7 +243,7 @@ Notice draft:
 - No generated files, hazard registries, smoke_keep or import-graph lists changed because no generator/import/raise-site additions required them. No queue/state/run-report files outside WRITE_SCOPE changed.
 
 ## OPEN ISSUES
-- Director: commit/push slice 3, final review, real fresh-checkout dry prepare and ledger hash proof, executing ACCEPT, CI branch and draft PR. No claim of real STAGED or green CI.
+- Director: commit/push slice 4, final review and R1/R2 disposition, executing ACCEPT, CI branch and draft PR. Real dry prepares/ledger proof were reported by the director at intake; no green CI or final ACCEPT is claimed here.
 - Import-graph synthetic arm environmental failure: process-group census unavailable in sandbox. Rerun in the director's supported CI/environment; no bypass or test weakening.
 - Standalone probe explicit B/N, quiet-Mac capture controller/clock mapping and resulting receipts remain lead-owned. Packet is a draft, not executed hardware evidence.
 - No real measurement, install, arm, launchd load, ops/stop ref change, PR or network push occurred. No local command left running.

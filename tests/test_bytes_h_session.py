@@ -490,6 +490,36 @@ class SessionTests(unittest.TestCase):
                 self.assertLess(output.getvalue().index('stage: '),
                                 output.getvalue().index('preparation_status: STAGED'))
                 self.assertEqual(hashlib.sha256(ledger.read_bytes()).hexdigest(),before)
+                # Exercise the remainder's real harvest/export/desk path. The
+                # underscore kit remains the full source symlink, so reading
+                # it would compare 12 observed collections with 22 expected.
+                view = Path(state['measurement_root'])
+                self.assertTrue((view / h.KIT).is_symlink())
+                # The full plan has 98 science members plus 25 scaffold
+                # members dispatched by the tree, for 123 total.
+                self.assertEqual(len(h.read(view / h.KIT / 'collection_plan.json')['members']), 98)
+                self.seed_collection(state)
+                def real_child(argv, **kwargs):
+                    if 'harvest_b6_session.py' in Path(argv[1]).name:
+                        argv = [*argv, '--workers', '4']
+                    return subprocess.run(argv, **kwargs)
+                with redirect_stdout(io.StringIO()) as desk_output:
+                    result = h.desk(session, run=real_child,
+                        statvfs=lambda _: SimpleNamespace(f_bavail=10**12, f_frsize=1))
+                observed = h.read(session / 'MEASUREMENTS.json')
+                self.assertEqual(len(observed['runs']), count)
+                # seed_collection gives each member a 15 s wall within a
+                # 20 s slot: 5 s residual/member across 12 collections.
+                self.assertTrue(math.isclose(observed['sizing']['collection_stage_overhead_s'],
+                    5*count/12, rel_tol=1e-6, abs_tol=1e-6))
+                gates_argv = result['gates_argv']
+                self.assertEqual(gates_argv[gates_argv.index('--kit-plan')+1],
+                    str(Path(state['inputs']['pack_root']) / 'collection_plan.json'))
+                self.assertEqual(result['harvest_exit'], 0)
+                self.assertEqual(result['gates_exit'], 1)  # Missing synthetic calibration/floor receipts.
+                self.assertIn('sizing.c5_remainder_checks_absent', desk_output.getvalue())
+                self.assertIn('sizing.c5_remainder_checks_absent', {f['code'] for f in observed['flags']})
+                self.assertEqual(hashlib.sha256(ledger.read_bytes()).hexdigest(),before)
 
     def test_remainder_missing_journals_flags_inputs_only_without_pilot_span(self):
         output = io.StringIO()
@@ -708,19 +738,21 @@ class SessionTests(unittest.TestCase):
     def seed_collection(self, state):
         """All production manifests, native seed bundles; no model/collector runs."""
         clock, journal, thermal, contention, clocks = [], [], [], [], []
-        tree = h.read(self.measurement / h.KIT / 'plan_tree.json')
+        measurement = Path(state['measurement_root'])
+        pack = Path(state['inputs']['pack_root'])
+        tree = h.read(pack / 'plan_tree.json')
         seed = ROOT / 'tests/fixtures/d117_v2_production/strict_seed_bundle'
         order = 0
         for stage in tree['stage_graph']:
             start = 1000 + order * 20
             if stage['kind'] == 'campaign_collection':
-                manifest = h.read(self.measurement / stage['input']['path'])
+                manifest = h.read(measurement / stage['input']['path'])
                 for row in manifest['executed_order']:
                     rid = row['run_id']
                     key = 'bound' if 'bound-collection' in stage['stage_id'] else 'claim'
                     bundle = Path(state['runs_roots'][key]) / rid
                     shutil.copytree(seed, bundle)
-                    config = h.read((self.measurement / stage['input']['path']).parent / row['config'])
+                    config = h.read((measurement / stage['input']['path']).parent / row['config'])
                     h.write(bundle / 'config.json', config)
                     meta = h.read(bundle / 'metadata.json'); meta['run_id'] = rid
                     h.write(bundle / 'metadata.json', meta)
@@ -742,7 +774,7 @@ class SessionTests(unittest.TestCase):
                 end = start + 1
             journal.append({'stage_id': stage['stage_id'], 'kind': stage['kind'], 'rc': 0,
                             'started_epoch_s': start, 'ended_epoch_s': end})
-        custody = self.session / 'custody'
+        custody = Path(state['session_root']) / 'custody'
         def jsonl(path, values):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(''.join(json.dumps(v)+'\n' for v in values))
