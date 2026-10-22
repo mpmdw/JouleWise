@@ -42,6 +42,8 @@ KEYS.update({"primary.csv": ["variant", "boundary", "level"],
 
 def _beta_fraction(a: float, b: float, x: float) -> float:
     """Incomplete-beta continued fraction, evaluated by modified Lentz."""
+    # Numerical guard: 1e-300 avoids division by zero with a finite reciprocal;
+    # it is far below the registered 1e-6 agreement scale, not an agreement bar.
     tiny = 1e-300
 
     def nonzero(value):
@@ -60,6 +62,8 @@ def _beta_fraction(a: float, b: float, x: float) -> float:
         c = nonzero(1.0 + odd/c)
         change = d*c
         h *= change
+        # Numerical convergence at about two double-precision epsilons (2.2e-16),
+        # far below the registered 1e-6 bar; this is not an agreement threshold.
         if abs(change-1.0) <= 4e-16:
             return h
     raise ArithmeticError("incomplete-beta continued fraction did not converge")
@@ -98,6 +102,8 @@ def student_t_quantile(probability: float, df: int) -> float:
         right *= 2.0
     for _ in range(200):
         middle = (left+right)/2.0
+        # Numerical stop width: 1e-13 in dimensionless t is seven orders below
+        # the 1e-6 agreement bar; midpoint identity also stops float stagnation.
         if middle == left or middle == right or right-left <= 1e-13:
             return middle
         if survival(middle) > tail:
@@ -422,6 +428,9 @@ def percentile(values, confidence):
     if not values or any(v is None for v in values):
         return None, None
     ordered = sorted(values)
+    # Registered §8.7 rounding guard: 1e-9 of one order-statistic rank prevents
+    # a float just below an integer from selecting the preceding rank. It is
+    # far below one rank and does not round a printed numerical output.
     k = max(1, math.floor(len(values)*(1-confidence)/2 + 1e-9))
     return ordered[k-1], ordered[-k]
 
@@ -625,6 +634,9 @@ def analyze(config, selections, bench, energy):
                 identity = dict(variant=variant, boundary=boundary, model=model, mode=mode)
                 tables["decomposition.csv"].append(identity | {k: v for k, v in fit.items() if not k.startswith("_")})
                 boot = bootstrap(el, hl, config, variant, boundary, model, mode)
+                # Registered §8.8 arithmetic: tau=1e-9*max(1 J, pooled mean J).
+                # No physical/printed-precision derivation is registered; retain
+                # this source-switch threshold for the next registration revision.
                 tol = 1e-9*max(1, average(pooled, "energy_j") or 0)
                 misfit_levels = set()
                 for residual in residuals:
@@ -653,6 +665,8 @@ def analyze(config, selections, bench, energy):
             summary["variants"][variant][boundary] = part_summary | {"misfit_cells": sorted(misfits)}
     summary["method_note"] = (
         "Primary EPC uses a pooled token model per configuration and holdout token means; direct EPC is secondary. "
+        # Description of §8.8's registered threshold above, not an agreement bar;
+        # its physical/printed-precision derivation is owed at the next revision.
         "The descriptive bootstrap residual interval excluding zero beyond 1e-9 times pooled mean energy switches misfit cells to direct: "
         + json.dumps({v: {b: s['misfit_cells'] for b, s in bs.items()} for v, bs in summary['variants'].items()}, sort_keys=True)
         + f". Problem-level bootstrap is stratified by level, B={config['bootstrap']['replicates']}, percentile order statistics. "
