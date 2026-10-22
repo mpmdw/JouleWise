@@ -1,54 +1,42 @@
-# align-gpukit — FIX ROUND 2
+# align-gpukit — FIX ROUND 2b
 
 ## SUMMARY
 
-Continued lane/2026-10-21-align-gpukit from a37655231799dccd0339140f1dabf7d15bb42c8e; retained GK2-1 through GK2-7 fixes.
-Corrected GK2-1's sensor-clock test to supply ClockMapping in the Episode constructor; preserved its world and every assertion.
-No production code, config, numerical input, bar, skip or test count changed in this continuation.
-R5 supported-channel coverage, per-model parsers, failed-session exit 3, shared identities, CUDA ordering and modern power limits remain implemented.
-The lead executed 56 alignment tests at a37655231: one constructor error (corrected here), three skips; jsonschema was not installed.
-The lead's five real-sampler session worlds all had data_complete=true; independent coverage replay agreed, including both incomplete 40 s probes.
-The lead also verified parser argv, missing-matrix failure before hardware calls, identity calibration and round-1 cleanup/MIG regressions.
-This seat could not launch a shell or Python process; the corrected test, jsonschema runs and schema probe were NOT RUN by this seat.
-Pushed the test correction and evidence report through the explicitly authorized GitHub fallback; PR #521 remains draft and unmerged.
-No hardware, rental, spend or scientific result is claimed.
+Continued lane/2026-10-21-align-gpukit from 2e0155dd8; preserved the earlier GK2 fixes.
+Split structural matrix failures from record-only flags throughout session and runner translation.
+Bootstrap now validates before installation and checks the session's complete measured/monitor GPU pool.
+Empty sessions and argument errors exit 3; physical refusals retain exit 2 and precedence.
+Added independent preflight/copy limits, explicit process-stop grace, GPU-release checks and thermal flags.
+Bound served identity to checkpoint, recorded precision/monitor revision, and masked unsourced cost inputs.
+Prices echo exactly; the runbook is procedural and explains repeated MoE coordinates and cost.
+All own Python, shell, stdlib/extra tests and reviewer repros are NOT RUN: no executable environment launched.
+Pushed each implementation step through the authorized GitHub fallback; PR #521 stays draft, with no rental or merge.
 
 ## FILES
 
-Fix2c continuation changes only tests/align/test_gpukit_round2.py (constructor mapping)
-and this report (lead evidence and current handoff). All other entries below describe
-the retained Round-2 implementation, not new production changes.
+Round 2b changed these authorized paths:
 
-Round-2 files (each within WRITE_SCOPE):
+- joulewise/align/gpukit/matrix.py: structural_flags(), full record validation, served checkpoint identity, dated public citations and key-referencing derivations.
+- joulewise/align/gpukit/runner_adapter.py: preserve record flags while translating executable coordinates; safe optional campaign label.
+- joulewise/align/gpukit/session.py: shared validate-only/layout, coordinate counts, no-run failure/exit 3, independent required time limits, group reaping/GPU release, precision/monitor pins and malformed optional flag handling.
+- joulewise/align/gpukit/bootstrap.sh: preserve device argv, environment fallback only without flags, validate/check full pool before venv/pip, exit 2 for isolation and 3 for arguments.
+- joulewise/align/gpukit/cost.py: mask unsourced inputs/decode dependencies while retaining independent figures, exact agent/monitor input prices, tolerant optional calibration label.
+- joulewise/align/gpukit/matrix.schema.json: reserved-host URL pattern and access-date format/range shape.
+- joulewise/align/gpukit/throttle.py: hardware/software thermal reasons and software thermal counter; prior enforced-limit behavior retained.
+- tests/align/test_gpukit.py: 22 added source methods; old fixture sources/policy arguments and fake install interpreter's validate-only response updated; every old assertion retained.
+- tests/align/test_gpukit_round2.py: three newly required policy arguments in CLI/Python calls; no assertion/bar/skip changed.
+- docs/align/gpukit.md: run procedure, codes, timeout derivations, structural/record distinction, identities, prices, thermal flags and MoE duplicate-cost paragraph; seat status removed.
+- .codex-report/align-gpukit.md: current evidence handoff; entire earlier FIX LOG retained verbatim plus Round 2b.
 
-- joulewise/align/gpukit/coverage.py: R5 notes/channel grouping, serial read time, expected/realized spacing, coverage flags and ratios.
-- joulewise/align/gpukit/identity.py: shared delimited model identity matcher.
-- joulewise/align/gpukit/session.py: production coverage integration/metrics, explicit serve parsers, early matrix failure, exit codes and CUDA device order.
-- joulewise/align/gpukit/cost.py: calibration uses the shared model matcher.
-- joulewise/align/gpukit/matrix.py: validates explicit agent/monitor/layout serving fields.
-- joulewise/align/gpukit/matrix.schema.json: requires matching nullable parser fields and explicit monitor_serving.
-- joulewise/align/gpukit/throttle.py: modern current_power_limit fallback for enforced, requested limits and read v12/v13 citations.
-- configs/align/shade.json: agent/monitor serving specs and lead-quoted pinned HF provenance; numerical work/weight inputs unchanged.
-- configs/align/moe_stage_a.json: same serving/provenance changes for the MoE repeat.
-- configs/align/budget.json: hybrid/Next/FP8/monitor parser choices and pinned provenance; 36,000 fresh Episodes/26,400 monitor calls unchanged.
-- tests/align/test_gpukit.py: all 37 old methods retained; child device-order assertions, one R5-mandated mock assertion change and a new real-session v13-limits method (38 source methods).
-- tests/align/test_gpukit_round2.py: 14 Round-2 methods for R5 worlds, per-model argv/schema, failure exits, identity calibration and provenance/limits; fix2c adds an optional clock_mappings helper argument and passes it into Episode construction before record validation.
-- docs/align/gpukit.md: reconciled R5 completeness, parser provenance, exit codes, CUDA ordering and modern-driver limits.
-- .codex-report/align-gpukit.md: current handoff, attributed lead execution at a37655231, this seat's unexecuted checks, retained round-1 FIX LOG and Round 2 correction.
-
-Unchanged lane modules remain bootstrap.sh (preinstall whole-GPU check/pinned
-install), runner_adapter.py (runner translation), throughput.py (decode weights
-and decimal display), and __init__.py. No registry exceptions. No changes to
-PIPELINE.md, records.py, interfaces.py, sibling lanes or any other repository
-path. No .review2 harness/evidence was committed or materialized by this seat; the lead ran its own appendix harness.
+Configs, coverage.py, identity.py and throughput.py are unchanged. No registry
+exception, sibling/protected-contract edit or out-of-scope write. No .review3
+materialization or commit: the executor never launched.
+Implementation/test head before this report: bce45811a23ab8e9d09a76e78bedcae4f7b26d11.
 
 ## PUBLIC API
 
-All modules are under joulewise.align.gpukit; private helpers are omitted except the replay seam below. No public signature changed in fix2c; the test-only episode() helper now accepts clock_mappings=() and supplies it to Episode at construction.
-Existing public signatures below are retained. run_session requires boolean
-measurement_ready=true before serving, and now seals status=failed on invalid
-matrix/session failure. main returns 3 for failed, 2 for refused, 0 for completed
-or completed_with_flags.
+Modules below are under joulewise.align.gpukit. Retained signatures plus the
+required SessionOptions fields and optional monitor price field:
 
 - matrix.Run(model: str, task_pair: str, condition: str, seed: int)
 - matrix.expand(matrix: Mapping[str, Any]) -> tuple[Run, ...]
@@ -63,11 +51,11 @@ or completed_with_flags.
 - cost.estimate(matrix: Mapping[str, Any], gpu_class: str, *, usd_per_gpu_hour: float | None = None, calibration: Path | None = None, monitor_placement: str = "none", monitor_usd_per_gpu_hour: float | None = None) -> Estimate
 - cost.printable(result: Estimate) -> dict[str, Any]
 - cost.main(argv: list[str] | None = None) -> int
-- cost.Estimate(gpu_class, trial_rows, measured_episodes, monitor_calls, lower_bound_wall_seconds, lower_bound_gpu_hours, lower_bound_total_usd, wall_seconds, gpu_hours, usd_per_gpu_hour, total_usd, flags, model_load_count=0, monitor_gpu_hours=None, monitor_total_usd=None, generation_wall_seconds=None, calibration_basis={}, layouts=(), layout_alternatives=())
+- cost.Estimate(gpu_class, trial_rows, measured_episodes, monitor_calls, lower_bound_wall_seconds, lower_bound_gpu_hours, lower_bound_total_usd, wall_seconds, gpu_hours, usd_per_gpu_hour, total_usd, flags, model_load_count=0, monitor_gpu_hours=None, monitor_total_usd=None, generation_wall_seconds=None, calibration_basis={}, layouts=(), layout_alternatives=(), monitor_usd_per_gpu_hour=None)
   (calibration_basis uses dataclasses.field(default_factory=dict), not a shared mutable default.)
 - runner_adapter.runner_matrix(matrix: Mapping[str, Any], *, model: str, endpoint: str, output_dir: Path, settings: Mapping[str, Any], session_id: str | None = None, monitor_endpoint: str | None = None, judge_endpoint: str | None = None, device_indices: Sequence[int] = ()) -> tuple[dict[str, Any], tuple[str, ...]]
 - runner_adapter.write_runner_matrix(path: Path, matrix: Mapping[str, Any], *, model: str, endpoint: str, output_dir: Path, settings: Mapping[str, Any], **bindings: Any) -> tuple[str, ...]
-- session.SessionOptions(matrix, output, runner_command, ready_timeout_s, poll_s, command_timeout_s, runner_timeout_s, monitor_placement, preflight_command=(), ready_command=(), vllm_command=("vllm",), gpu_index=0, port=8000, destination=None, copy_kind="rsync", runner_settings=None, gpu_indices=(), monitor_base_url=None, judge_base_url=None, monitor_gpu_index=None, monitor_port=None, calibration_slice=False)
+- session.SessionOptions(matrix, output, runner_command, ready_timeout_s, poll_s, command_timeout_s, runner_timeout_s, monitor_placement, preflight_timeout_s, copy_timeout_s, stop_grace_s, preflight_command=(), ready_command=(), vllm_command=("vllm",), gpu_index=0, port=8000, destination=None, copy_kind="rsync", runner_settings=None, gpu_indices=(), monitor_base_url=None, judge_base_url=None, monitor_gpu_index=None, monitor_port=None, calibration_slice=False)
 - session.whole_gpu(*, gpu_index: int, timeout_s: float) -> dict[str, Any]
 - session.wait_ready(process: subprocess.Popen, endpoint: str, *, timeout_s: float, poll_s: float, ready_command: Sequence[str], log: Path, probe: Callable[[str, float], bool] = _healthy) -> tuple[str, ...]
 - session.package_results(directory: Path) -> tuple[Path, Path]
@@ -79,63 +67,44 @@ or completed_with_flags.
 - throttle.snapshot(*, gpu_index: int, directory: Path, label: str, timeout_s: float) -> dict[str, Any]
 - throttle.compare(before: Mapping[str, Any], after: Mapping[str, Any]) -> dict[str, Any]
 
-New required session CLI/Python policy: runner_timeout_s / --runner-timeout-s,
-monitor_placement / --monitor-placement. Bootstrap requires probe timeout and
-GPU selection through the documented flags/environment settings. --calibration-slice
-is optional. Default runner remains python -m joulewise.align run --matrix
-{runner_matrix}; budget's default translation remains explicitly unavailable.
 
+Additional public functions/replay seams:
 
-Round-2 additions:
+- matrix.structural_flags(matrix: Mapping[str, Any]) -> tuple[str, ...]
+- session.session_layout(matrix: dict[str, Any], options: SessionOptions) -> dict[str, Any]
+- session.validate_session(options: SessionOptions) -> dict[str, Any]
+- session.SessionParser(argparse.ArgumentParser); error(self, message: str) -> None exits 3.
+- session._stop_group(process: subprocess.Popen, *, grace_s: float) -> None; returns after group disappearance.
+- session._validate_output(path: Path, *, expected_count: int, router: bool, model: str, expected_coordinates: Sequence[tuple[str, str, int]] = (), measured_devices: Sequence[int] = (), power_metrics: dict[str, Any] | None = None) -> tuple[str, ...]; coordinates override declared expected_count.
+- coverage.Coverage(flags: tuple[str, ...], incomplete: bool, lost_reads: bool, max_gap_over_bar: float, max_cycle_over_two_expected: float), unchanged.
+- coverage.power_coverage(episode: Episode, measured_devices: Sequence[int] = ()) -> Coverage, unchanged.
+- identity.model_identity_matches(identity: str, model: str) -> bool, unchanged.
 
-- coverage.Coverage(flags: tuple[str, ...], incomplete: bool, lost_reads: bool, max_gap_over_bar: float, max_cycle_over_two_expected: float)
-- coverage.power_coverage(episode: Episode, measured_devices: Sequence[int] = ()) -> Coverage
-- identity.model_identity_matches(identity: str, model: str) -> bool
-- session.MatrixInputError(ValueError): invalid campaign input, caught into a failed receipt.
-- Private replay seam: session._validate_output(path: Path, *, expected_count: int, router: bool, model: str, expected_coordinates: Sequence[tuple[str, str, int]] = (), measured_devices: Sequence[int] = (), power_metrics: dict[str, Any] | None = None) -> tuple[str, ...]. It fills the optional metrics dictionary used by each model receipt, including zero counts for unexecuted models.
-
-Matrix v2 now requires reasoning_parser (string or null) and a dated
-reasoning_parser_source per served agent/monitor. monitor_serving is the explicit
-monitor spec, with id matching monitor_model. tool_call_parser (string or null),
-tool_call_parser_source and enable_auto_tool_choice are also required, including
-layout alternatives. No new CLI option or reviewer-harness signature change.
+CLI requires --preflight-timeout-s, --copy-timeout-s and --stop-grace-s alongside
+the previous ready/command/runner timeouts, poll cadence and monitor placement.
+--validate-only prints measured_gpu_indices, monitor_gpu_index, flags and
+structural_flags without output creation/hardware calls; exit 0 valid, 3 invalid.
+Normal execution: physical refusal 2; no runner started 3; otherwise 0 with
+data_complete describing collection. copy_timeout is a transfer flag beside the
+retained archive; nvml_preflight_timeout is a distinct instrument-readiness refusal.
 
 ## TESTS RUN
 
-### This seat: no executable runtime
+### This seat: all Python/shell checks NOT RUN
 
-Attempted `pwd` and `python3 --version` first. The execution tool rejected
-the request before launching either process with "No usable execution environment
-is available. Wait for an environment to become available before using this tool."
-A subsequent `pwd` attempt failed identically. The environment wait remained
-pending; cloud-environment-runtime status reported observed_phase=pending,
-connectivity=offline, no runtime capabilities, and network-policy state unknown.
-This is executor unavailability, not an automatic approval rejection.
+Initial and later attempts of `pwd` and `python3 --version` were rejected
+before process launch: "No usable execution environment is available. Wait for an
+environment to become available before using this tool." Runtime status was
+pending/offline, no capabilities, network-policy state unknown. This is executor
+unavailability, not an automatic approval rejection.
 
-Consequently there was no local checkout, git process, /etc/codex/network-policy.json
-read, .review2 materialization/chmod, integration build, pip installation, test,
-repro, compilation, subprocess census or manifest verification by this seat.
-No fallback interpreter or remote test execution is claimed. The explicit
-no-executor branch in fix2c permits GitHub edits and requires this disclosure.
+No shell, Python, local git, installation, compilation, test, manifest verification,
+process census or repro executed here. No local checkout, harness chmod, integrated
+tree or NVML fake extraction was possible. No extra dependency was installed.
+All commands below are **NOT RUN**, counts/failures/actual skips unknown.
 
-Actually performed through GitHub tools/JavaScript (source checks, not Python tests):
-
-- Read the existing report first, then PIPELINE.md, records.py and interfaces.py.
-  Read AGENTS.md, targeted RUN_STATE intake/status/workspace sections, the empty
-  TASK_QUEUE.md, M0, AGENT_PLAN.md and orchestration. ACTIVE_STOP_CARD is NONE.
-  The explicit fix2c user task overrides normal queue selection; write scope
-  overrides repository-wide bookkeeping and test commands.
-- Confirmed the lane started at a37655231799dccd0339140f1dabf7d15bb42c8e.
-- Pushed eb2b446ad7a459973c0fd5b45dee147c01ee217e through update_file on this
-  lane only; read back its diff. Only the test helper signature, Episode keyword
-  arguments, and the failing test's construction call changed. All assertions,
-  numerical constants, gaps, clock domain, offset/uncertainty and skip guards remain.
-- Confirmed PR #521 open, draft=true, merged=false with the corrected test at its head.
-  No PR mutation, merge or rental was performed.
-
-Own required commands below are all **NOT RUN**, counts/skips unknown at the
-corrected head. Intended cwd is /workspace/JouleWise, without PYTHONPATH or package
-installation, with TMPDIR=/tmp/gk-tmp and JW_B5_SYNTHETIC_ONLY=1:
+Requested cwd /workspace/JouleWise, uninstalled package, no PYTHONPATH, with
+TMPDIR=/tmp/gk-tmp JW_B5_SYNTHETIC_ONLY=1:
 
     python3 -m unittest tests.align.test_gpukit -v
     python3 -m unittest tests.align.test_gpukit_round2 -v
@@ -145,340 +114,214 @@ installation, with TMPDIR=/tmp/gk-tmp and JW_B5_SYNTHETIC_ONLY=1:
     /tmp/gpukit-jsonschema/bin/python -m unittest tests.align.test_gpukit -v
     /tmp/gpukit-jsonschema/bin/python -m unittest tests.align.test_gpukit_round2 -v
     /tmp/gpukit-jsonschema/bin/python -m unittest discover -s tests/align -t .
-    /tmp/gpukit-jsonschema/bin/python -I /workspace/JouleWise/.review2/r1/schema_probe.py /workspace/JouleWise
 
-No extra dependency was installed by this seat. Do not infer a post-correction
-pass from the lead's pre-correction run. The whole repository suite was not run,
-as the brief directs. The required final-head stdlib/extra/schema runs remain
-for an executing seat.
+Source inventory: 60 methods in test_gpukit.py, 14 in test_gpukit_round2.py
+(74 source methods, **not an executed count**). All original 38 + 14 remain.
+No original assertion line removed or skip added. Three optional-jsonschema
+guards retain "optional jsonschema is not installed"; the existing SessionTests
+Bash guard retains "bootstrap requires Bash". No new dependency.
 
-### Executed by the lead (local macOS) at a37655231
+Reviewer repros, **all NOT RUN**: materialize the appendix at .review3/h verbatim,
+chmod h/pywrap and h/bin/*, and fetch runner/NVML and nvml_fake_base.py as directed.
+Build /tmp/gk-integ from this lane plus the four runner files and NVML power/.
+No sibling patch or integrated sibling head was used here. Record actual SHAs
+on execution; the supplied prior run used runner ec4a37270 and NVML 432f14c7a.
 
-These results are supplied in the fix2c continuation brief, **not this seat's
-execution**. Lead environment: Python 3.13, no PYTHONPATH, TMPDIR set,
-JW_B5_SYNTHETIC_ONLY=1. Integrated tree used gpukit a37655231,
-runner 52999e6a2 and nvml 95a37eef8, with the appendix harness unchanged and
-no sibling patch. Those are the heads used for the results below; a later NVML
-branch head is not silently substituted.
+    export TMPDIR=/tmp/gk-tmp JW_B5_SYNTHETIC_ONLY=1
+    H=/workspace/JouleWise/.review3/h
+    I=/tmp/gk-integ
+    O=/tmp/gk-out
+    NEW="--preflight-timeout-s 60 --copy-timeout-s 60 --stop-grace-s 5"
+    python3 -I $H/run_world.py $I $O/e2e/nvml-shade -- configs/align/shade.json --runner-settings $H/settings-nvml.json --preflight-command '["preflight"]' --ready-timeout-s 20 --command-timeout-s 120 $NEW --poll-s 0.2 --runner-timeout-s 500 --monitor-placement external --monitor-base-url http://10.9.9.9:8000/v1 --judge-base-url http://10.9.9.9:8000/v1 --port 18431
+    python3 -I $H/run_world.py $I $O/e2e/nvml-noinstant --env GK_UNSUPPORTED_FIELDS=186 -- configs/align/shade.json --runner-settings $H/settings-nvml.json --preflight-command '["preflight"]' --ready-timeout-s 20 --command-timeout-s 120 $NEW --poll-s 0.2 --runner-timeout-s 500 --monitor-placement external --monitor-base-url http://10.9.9.9:8000/v1 --judge-base-url http://10.9.9.9:8000/v1 --port 18433
+    python3 -I $H/run_world.py $I $O/e2e/mock-shade -- configs/align/shade.json --runner-settings $H/settings-mock.json --preflight-command '["preflight"]' --ready-timeout-s 20 --command-timeout-s 120 $NEW --poll-s 0.2 --runner-timeout-s 500 --monitor-placement external --monitor-base-url http://10.9.9.9:8000 --port 18434
+    python3 -I $H/probes.py $I $O/probes
+    python3 -I $H/gate_probe.py $I $O/gates
+    python3 -I $H/boot.py $I $O/boot
+    python3 -I $H/throttle_probe.py $I $O/throttle
+    env -C $I python3 -m joulewise.align.gpukit.cost configs/align/shade.json --gpu-class H100-SXM-80GB --calibration $O/e2e/nvml-shade
+    /tmp/gpukit-jsonschema/bin/python -I $H/schema_probe.py $I
 
-- `python3 -m unittest discover -s tests/align -t .`: 56 tests, 1 error,
-  3 skipped (two require jsonschema, one requires the absent NVML lane).
-  CoverageTests.test_interior_hole_is_not_widened_by_clock_uncertainty errored
-  in Episode.__post_init__: PowerTrace domain 'sensor' has no ClockMapping.
-  The post-construction replace never ran. eb2b446ad fixes that construction
-  order; no assertion or expected answer changed.
-- jsonschema was not installed on the lead's host. Extra-dependent tests and
-  `schema_probe.py` were NOT RUN by the lead; this seat also could not run them.
-  Separate verbose module runs were not supplied by the lead.
-- Session CLI real-sampler runs ideal, noinstant, period100, l40s: 30 episodes
-  per model, two models; brake calibration slice: 10 per model.
-  All ten model runs: data_complete=true, zero incomplete on power, zero
-  episodes with lost reads. Measured ratios and flags are in END-TO-END.
-- `lead_rule.py` versus every receipt's power_coverage: counts equal exactly,
-  both unrounded ratios relative difference 0.0 across all ten model runs
-  (within the mandated 1e-6 relative exact-input arithmetic bar).
-- `coverage.power_coverage` replay on the reviewer's ideal, period100,
-  noinstant and l40s files; lead's one-lost-read noinstant file; period100
-  with sensor facts removed; both 40 s probes: same counts and ratios to
-  supplied printed digits. Exact replay comparison argv/unrounded outputs
-  were not supplied for this older-file comparison; no stronger claim is made.
-  two_samples_40s: all 30 incomplete by cycle. stall_40s: all 30 incomplete
-  by hole, 30 with lost reads. Lead's noinstant lost-read file: 1 episode
-  with lost reads, max gap/B=1.1347, complete.
-- vLLM argv logs: --reasoning-parser qwen3 for Qwen/Qwen3-8B and
-  Qwen/Qwen3-30B-A3B, no --enable-reasoning.
-- Nonexistent matrix: status=failed, exit 3,
-  matrix_read_failed:FileNotFoundError and session_failed:MatrixInputError;
-  no nvidia-smi or vLLM call.
-- GK2-3 identity bundle through the cost CLI: a basis entry for both models,
-  30 observed episodes each, no calibration_model_missing.
-- `session_probe.py`: ok, dup, short, onesample each data_complete=False with
-  its reason flag. Hang finished in 5.5 s, orphan grandchildren alive: 0.
-- `ready_probe.py`: worker orphans: 0; CLI MIG rc 2, status refused,
-  preflight ran: False.
-- noinstant: episode_power_channel_unsupported:gpu0:power_instant present.
-  l40s: episode_power_sensor_period_from_driver_timestamps on power_instant
-  and power_average. brake: throttle_hardware_counter_advanced:hw_power_brake.
-  No world: throttle_power_limit_unavailable:enforced.
+Delete previous output/archive names before replay. Use subprocess cwd for cost
+if env -C is unavailable. The old I+W per-channel lines are information, not R5
+pass conditions. The appendix already supplies all three required new options.
+No appendix file was changed or materialized here. The whole repository suite
+was intentionally not run, as directed.
 
-The lead's command families below are the appendix commands with its local
-paths represented by $W (checkout), $I (integrated tree), $S=$W/.review2,
-$H=$S/h, $R=$S/r1 and $D (local destination). The brief supplies the command
-templates and results, not the lead's raw absolute-path transcript:
+Actually performed through GitHub/JavaScript, **source checking only**:
 
-    for w in ideal period100 noinstant l40s; do
-      GKR2_NVML=$w python3 -I $H/run.py $I $w configs/align/shade.json --runner-settings $H/settings-nvml.json --preflight-command '["preflight-ok"]' --ready-timeout-s 20 --command-timeout-s 120 --poll-s 0.2 --runner-timeout-s 500 --monitor-placement none --port 18761 --copy-kind local --destination $D
-    done
-    GKR2_BRAKE=1 GKR2_NVML=ideal python3 -I $H/run.py $I brake configs/align/shade.json --calibration-slice --runner-settings $H/settings-nvml.json --preflight-command '["preflight-ok"]' --ready-timeout-s 20 --command-timeout-s 120 --poll-s 0.2 --runner-timeout-s 500 --monitor-placement none --port 18762 --copy-kind local --destination $D
-    python3 -I $S/make_probes.py $S/e2e/ideal/model-0/episodes.jsonl $S/probe
-    python3 -I $S/lead_rule.py $S/e2e/*/model-*/episodes.jsonl $S/probe/*.jsonl
-    python3 -I $S/make_ident.py $S/e2e/ideal $S/ident
+- Read report first, shared contracts, AGENTS.md, M0, orchestration, targeted
+  RUN_STATE intake/status/workspace and empty TASK_QUEUE. ACTIVE_STOP_CARD is NONE.
+  User scope overrides repo bookkeeping/full-suite instructions.
+- Confirmed initial head 2e0155dd8 and PR #521 open/draft/unmerged. Each commit
+  parents the prior head; each lane update uses expected_sha and force=false.
+- Read back ten code/test/runbook files at 4a2b91948, exactly matching authored
+  text; later source follow-ups are in FIX LOG and remain unexecuted.
+- Compared prior/current test method names, assertion lines and skip guards:
+  no old method/assertion line removed or skip added.
+- Parsed unchanged configs/schema as JSON. A separate JavaScript source scan
+  found no numeric leaf lacking a citation or key-referencing formula in the
+  three configs. This is not Python validate(), jsonschema or schema_probe.
+- Branch comparison was ahead-only and contained only authorized paths.
 
-Cost command from $I:
+### Executed by the lead's agent (local macOS) at 2e0155dd8
 
-    python3 -m joulewise.align.gpukit.cost configs/align/shade.json --gpu-class H100-SXM-80GB --calibration $S/ident
+Supplied brief results, **not this seat's execution**: Python 3.13, no PYTHONPATH,
+TMPDIR set, JW_B5_SYNTHETIC_ONLY=1. Integrated heads: gpukit 2e0155dd8,
+runner ec4a37270 (code identical to 5a5d2d200), NVML 432f14c7a. Harness was the
+appendix before the new options/portable additions. No new-head pass is inferred.
 
-Round-1 command templates:
-
-    python3 -I $R/session_probe.py $W $R
-    python3 -I $R/ready_probe.py $W $R
-
-No appendix file/signature/CLI adaptation was made. The lead's reported integrated
-runs replace the prior report's blanket NOT RUN status for those worlds, parser
-logs, identity calibration and round-1 probes; they are still not final-head reruns
-by this seat. Child PCI_BUS_ID, forced session_failed and modern/legacy limit
-assertions were among the pre-correction unit tests, not separately reported
-standalone harness repros. The lead supplied no separate cover.py output.
-
-### Earlier evidence retained
-
-At old head 28b9a22f4 the reviewer reported 41 alignment tests passed, two
-jsonschema skips; with jsonschema 4.26, 41 passed with no skips. All round-1
-repros and GK-S passed there. These historical passes do not substitute for
-the required final-head schema tests.
-
-The fix-2 seat actually read telegraf schema_v12 and schema_v13 types.go at
-2156aa5089436522eec36b05fad94d850c728388 via GitHub; modern gpu_power_readings
-uses current/requested limits and legacy power_readings uses enforced_power_limit.
-Its source-only preservation audit retained all 37 original methods, with no
-removed assertion, widened bar or new skip on an old method. Its original
-52 gpukit source-method inventory was not an executed count; the lead's discovery
-count is 56 alignment tests. This continuation changes neither inventory.
+- `python3 -m unittest discover -s tests/align -t .`: 56 tests, OK, 3 skipped.
+  Three source guards require jsonschema; no individual skip transcript supplied.
+  Venv with jsonschema 4.23.0: 56 tests, OK; separate skip count/setup argv/verbose
+  module commands not supplied.
+- nvml-shade completed_with_flags, data_complete true; metrics below.
+  nvml-noinstant complete with unsupported instant channel and no power-missing.
+  MoE noinstant calibration: 10 checked, zero power incomplete, incomplete only
+  for absent router capture.
+- probes gap incomplete with channel hole, complete control true. qwen3 argv for
+  both agents, deepseek_r1 budget unit check and PCI_BUS_ID child checks passed.
+- Cost calibration: both agents 30 observed episodes, no calibration_model_missing,
+  generation_wall_seconds 19.0.
+- Old defects reproduced: record gates failed rc 3/zero models; bootstrap TP2
+  measured GPU 0 only; empty/readiness sessions rc 0; fresh bootstrap installed
+  before argument error; invented sources printed lower bound 1500 s, plan
+  6900 s, USD 4.8 and price echo 2.5. These are defect evidence, not valid estimates.
+- Enforced/current 700 W with no unavailable-enforced flag; modern thermal reason
+  absent before this fix.
+- Round-1 regressions passed: MIG/vGPU/MIG monitor rc 2 before preflight/vLLM,
+  Pass-Through, all listed preflight verdicts, readiness/worker/runner-grandchild
+  cleanup, distinct monitor GPU/port with only measured devices preflighted/
+  sampled, overlap flag, direct TP2 CUDA 0,1 and both preflight devices,
+  10-per-model calibration, copy failures retaining archives.
 
 ## END-TO-END
 
-### Executed by the lead (local macOS) at a37655231
+No Python/shell world ran here. These were **executed by the lead's agent
+(local macOS) at 2e0155dd8**, with the integrated heads above:
 
-Chain: session CLI -> stub nvidia-smi whole-GPU inventory/preflight/vLLM ->
-real runner (52999e6a2) -> real NvmlSampler (95a37eef8) over its ABI-shaped
-fake NVML library -> twelve-turn/tool-call mock agent episodes on the host
-monotonic clock -> production validator -> receipt/coverage metrics ->
-SHA-256 packaging/local copy. This is synthetic execution, not real GPU evidence.
+| World/model | Lead checked | Lead power incomplete | Lead lost reads | Lead max gap/B | Lead max C/2E | Own rerun |
+|---|---:|---:|---:|---:|---:|---|
+| nvml-shade Qwen3-8B | 30 | 0 | 0 | 0.836 | 0.749 | NOT RUN |
+| nvml-shade Qwen3-30B-A3B | 30 | 0 | 0 | 0.761 | 0.749 | NOT RUN |
+| nvml-noinstant each model | per-model count not supplied | complete | not supplied | not supplied | not supplied | NOT RUN |
 
-All five worlds had data_complete=true, no episode_power_coverage_incomplete,
-no episode_power_missing, zero episodes incomplete on power and zero with lost
-reads. Values below are supplied measurements, not new numbers chosen by this seat.
-Each slash separates the two model runs. The lead supplied max(C/2E) only as the
-overall range 0.749–0.750, so no invented per-model decimals are printed.
+Driver-shaped H100 fields advance every 100 ms; real NvmlSampler/runner use a
+real-time endpoint with tools. Unsupported field 186 stays a flag. The 60 s hole
+in each 148 s fixture Episode is incomplete; its complete control passes. R5
+coverage code/factors are unchanged. The supplied mock world has 30 Episodes per
+model, 12–13 turns and 90 verdicts; mock power alone makes all 30 incomplete.
+No new coverage margin or already-fixed-id repro is measured here.
 
-| Lead world at a37655231 | Episodes | Incomplete | With lost reads | max gap/B | max C/2E |
-|---|---|---|---|---|---|
-| ideal | 30/30 | 0/0 | 0/0 | 0.787/0.843 | 0.749–0.750 |
-| noinstant | 30/30 | 0/0 | 0/0 | 0.825/0.808 | 0.749–0.750 |
-| period100 | 30/30 | 0/0 | 0/0 | 0.729/0.809 | 0.749–0.750 |
-| l40s | 30/30 | 0/0 | 0/0 | 0.796/0.764 | 0.749–0.750 |
-| brake calibration slice | 10/10 | 0/0 | 0/0 | 0.737/0.504 | 0.749–0.750 |
+New authored worlds below are **NOT RUN**, expected behavior only:
 
-The independent lead_rule.py replay matched the receipts on all ten model runs:
-integer episode/incomplete/lost-read counts exactly, and both unrounded ratios
-with relative difference 0.0 (mandated agreement bar: 1e-6 relative for identical
-input arithmetic without an uncertainty).
+- Existing production-shaped fixture: 5 pairs x 2 conditions x 3 seeds x 2 models
+  = 60 Episodes, 12 turns, eight 2 s tools, 40,000 prefill/8,000 decode tokens,
+  148 virtual seconds, 100 ms cadence, 1,481 samples/Episode, alternating 1 W
+  fixture noise. Nominal hand energy: 148*280 - 8*2*80 = 40,160 J.
+- Provenance/stale-count/malformed-workload worlds traverse load/validate -> real
+  adapter -> stub vLLM -> fixture runner -> shared Episode JSONL -> coordinate/
+  power validator -> receipt/manifest/archive. Two-seed stale world has 20 rows
+  per model/40 total while old 60/180 declarations stay flagged; data is complete.
+- Condition typo/differing served checkpoint fail before hardware; malformed
+  optional flag metadata remains record-only.
+- Budget uses valid settings, reaches all four actual adapters, then skips with
+  budget_runner_adapter_required; failed/session_ran_no_model, CLI exit 3.
+- TP2 bootstrap checks second-device MIG before install and fails short explicit
+  layout before install, using actual shell/session validation.
+- Preflight sleep 0.2 s vs explicit 0.05 s preflight policy refuses distinctly.
+  Short probes at 0.05 s with preflight allowance 30 s still collect. A sleeping
+  copy expires separate 0.05 s copy policy and retains the archive.
+- SIGTERM-ignoring group must vanish after explicit 0.05 s grace/SIGKILL.
+  Persistent GPU process_info after 1 s fixture cleanup allowance is only a flag.
+- Active hardware/software thermal reasons traverse session/snapshots without
+  changing completeness. Exact categorical fields/counter strings are identities.
+- Invented unsourced inputs suppress dependent figures; unsourced setup alone
+  leaves the independent lower bound. Old synthetic arithmetic inputs/assertions
+  are unchanged and now cited. Operator prices 2.49/3.79 echo exactly.
 
-noinstant retained the unsupported gpu0:power_instant note without marking data
-incomplete; l40s derived periods from driver timestamps on the two field channels;
-brake retained the hardware-power-brake advance. No unavailable-enforced-limit
-flag remained. The argv logs showed qwen3 on both SHADE agents, without
---enable-reasoning. Identity replay produced two calibration basis entries,
-30 observed episodes each, without calibration_model_missing.
-
-The lead also replayed coverage on the reviewer's original worlds, a noinstant
-world with one harmless lost read (max gap/B=1.1347, complete), period100 with
-sensor facts removed, and both 40 s probes. Counts and ratios matched the
-independent rule to supplied printed digits. two_samples_40s: 30/30 incomplete
-by cycle, zero lost-read episodes. stall_40s: 30/30 incomplete by hole and 30
-with lost reads. No new ruling is forced by these supplied results.
-
-For comparison, the older R5 table from the fix-2 brief follows. These are the
-lead/reviewer's independent-rule results on macOS at 28b9a22f4, not the session
-validator's then-buggy completeness or this seat's measurements.
-
-| Earlier supplied world | Episodes | Incomplete | With lost reads | max gap/B | max C/2E |
-|---|---|---|---|---|---|
-| ideal, reviewer | 30/30 | 0/0 | 0/0 | 0.864/0.907 | 0.745/0.748 |
-| ideal, lead | 30/30 | 0/0 | 0/0 | 0.769/0.787 | 0.749/0.749 |
-| period100 | 30/30 | 0/0 | 0/0 | 0.770/0.720 | 0.749/0.749 |
-| noinstant, reviewer | 30/30 | 0/0 | 0/0 | 0.747/0.714 | 0.749/0.749 |
-| noinstant, lead | 30/30 | 0/0 | 1/0 | 1.135/0.806 | 0.749/0.749 |
-| l40s | 30/30 | 0/0 | 0/0 | 0.755/0.788 | 0.748/0.749 |
-| brake | 10/10 | 0/0 | 0/0 | 0.793/0.710 | 0.749/0.748 |
-| period100, facts removed | 30 | 0 | 0 | 0.770 | 0.749 |
-| two_samples_40s | 30 | 30 (cycle) | 0 | 0.5 | 1988 |
-| stall_40s | 30 | 30 (hole) | 30 | 1987.5 | 0.248 |
-
-### Test world preserved by fix2c
-
-The corrected test constructs twelve turns with production-sized token counts
-and tool calls, then writes shared Episode JSONL and calls session._validate_output,
-the same function the receipt uses. A sensor-clock power_instant trace has
-10 ms typical gaps and one 25 ms interior gap, at 10 ms polling with 50 us
-read half-width: D=0.1 ms, E=10.1 ms, median C=10 ms, B=20.2 ms.
-The ClockMapping has offset 0 and uncertainty half-width 100 ms. That uncertainty
-covers the edges but cancels in same-trace differences: 25 ms > 20.2 ms is a hole.
-
-Previously Episode rejected the unmapped trace before the test could reach its
-replace call. The helper now takes clock_mappings=() and the test passes the
-mapping into the initial Episode constructor. Kept all three assertions:
-incomplete, channel-specific hole flag present, edge flag absent. No number,
-bar, gap, skip or assertion changed. The corrected world is **NOT RUN** by this
-seat; the lead's run at a37655231 reached the constructor error, not these checks.
-
-Other retained fixtures exercise clean off-boundary jitter (up to 18 ms on a
-10 ms cadence), 100 ms deduplicated fields, unsupported empty channels, a 25 ms
-covered counter/1 s averaged-power lost read versus an unaveraged-power hole,
-and the two 40 s probe shapes. The round-1 boundary-sample complete world remains
-unchanged: 60 Episodes, twelve turns, eight two-second tools, 40,000 prefill/
-8,000 decode tokens, 148 virtual seconds and 1,481 samples per Episode; hand energy
-148*280 - 8*2*80 = 40,160 J. These are fixture-design quantities, not physical
-measurements or a new execution claim.
-
-No integrated world, test or VM margin was measured by this seat. All own
-end-to-end replays are **NOT RUN** because no executable environment launched.
+Scheduling policies above are test parameters, not sensor/uncertainty bars.
+All own stdlib/extra/reviewer worlds remain NOT RUN; no paid/hardware evidence
+or current-head pass is claimed.
 
 ## DECISIONS I MADE
 
-Fix2c continuation decisions:
-
-- Continue from a37655231 and retain the already-reviewed production fixes.
-  Change only the erroring test construction and this report, since no new run
-  exposed a production defect.
-- Supply the ClockMapping when Episode first validates its trace domains.
-  Keep the 25 ms hole, sensor clock, zero offset, 100 ms uncertainty, every
-  assertion and all skip guards. Do not construct an invalid intermediate record.
-- Use the authorized GitHub fallback when pwd/Python cannot launch. Do not
-  fabricate a local checkout, harness materialization, test pass, installation
-  or completed environment startup.
-- Attribute every supplied result to the lead's local macOS run at a37655231;
-  preserve its 56-test/one-error/three-skip outcome. Record the corrected head
-  as unexecuted, and leave jsonschema/schema_probe and final-head reruns explicit.
-- Keep the existing rental precision question and sibling requests. The lead's
-  independent R5 agreement supplies no reason to change bars or counting policy.
-- Use only the lane branch; no force push, PR merge/draft-state change or spend.
-
-Retained fix-2 implementation decisions (historical seat actions are not new
-claims of this continuation's execution):
-
-- Continue the existing lane from 28b9a22f4, never restart from the spine.
-  Use the brief's explicit GitHub fallback after shell launch failures.
-  Push each requested step in order with expected-head, non-forced updates.
-  Do not rent, merge, change PR draft status, delegate or touch other branches.
-- Follow shared records over prose; never change the three protected files.
-  All round-1 work/count rulings remain: budget has 36,000 fresh Episodes,
-  26,400 monitor calls; forced two-call work is one Episode; deletion reuses
-  generation; generic budget translation remains unavailable.
-- R5's literal supported=false excludes a channel; other/missing notes count
-  as supported. Group by channel prefix before colon, require supported
-  evidence for each measured GPU and samples for every supported trace.
-  power.empty alone no longer determines completeness.
-- D sums twice the maximum recorded call half-width per supported trace/device.
-  Only deduplicated fields use sensor period; absent facts use the driver's
-  median microsecond timestamp step, with a provenance flag. Use notes'
-  output averaging window, not the trace's older physical averaging field.
-- Implement the ruled factors exactly: E=max(I+D,P), C=median(overlapping gaps)
-  or E, cycle failure C>2E, B=2*max(C,E), edges>B+u, watts holes>max(B,A).
-  Cumulative counters span gaps. Offset cancels inside a trace, so u widens
-  edges only. Lost reads without a hole are flags and counts, not incomplete.
-- Receipt metrics aggregate over every supported trace and count Episodes,
-  including lost-read Episodes that are also incomplete on another trace.
-  Models that cannot run carry zero checked counts/maxima, never a coverage
-  success claim. Generic incompleteness and channel/check detail flags coexist.
-- R6 chooses parser values only from each config entry. Hybrid Qwen3 uses qwen3:
-  unlike deepseek_r1, it preserves thinking-off content without closing tags.
-  Next Thinking and FP8 use deepseek_r1 because the template supplies <think>.
-  vLLM 0.10.2 gets no --enable-reasoning. gpt-oss monitor gets null; SHADE/MoE's
-  Qwen3-4B monitor gets qwen3. All monitors call no tools.
-- Keep agent hermes explicitly per model with tool_call_parser_source_not_fetched
-  rather than claiming an unfetched source. Automatic tool choice is explicit
-  and off for monitors. Source attribution says lead-fetched, not seat-fetched.
-- Quote the supplied hybrid serve example exactly from the pinned Qwen3-8B
-  card; retain each hybrid model's supplied pinned card in model_card_url.
-  Do not manufacture model-specific command quotations from an example.
-- Keep serving revisions null. R7's provenance commits pin the supplied config/
-  card evidence without silently selecting checkpoints. Quotes are verbatim,
-  including the cards' "Paramaters" spelling; dimensions and count inputs/formulas
-  are unchanged, as is the independent decode-weight test.
-- Invalid/missing/unreadable matrix is a failed command before hardware probing.
-  Any caught session_failed:* sets failed/data_complete=false. Exit 3 is distinct
-  from refusal 2; completed/completed_with_flags keep 0. This is CLI status,
-  not a new physical refusal or scientific admission rule.
-- Set CUDA_DEVICE_ORDER=PCI_BUS_ID for both serving children; retain the explicit
-  CUDA_VISIBLE_DEVICES pool/monitor separation. NVIDIA's canonical env-var
-  reference is linked without claiming this seat fetched it.
-- Share one delimited identity matcher between validator and calibration; a bare
-  ID or vllm:<ID>@<URL> matches, another model or suffixed checkpoint does not.
-  Preserve the separate declared-all-mock identity exception in validation.
-- Modern current_power_limit supplies enforced limits; explicit legacy
-  enforced_power_limit still wins. requested_power_limit (legacy power_limit
-  fallback) is retained, and module readings cannot overwrite board readings.
-  Telegraf v12/v13 sources were actually read through GitHub.
-- Never weaken an old bar, remove an old test/assertion or add an old-test skip.
-  The R5 slow-cycle expectation in the declared mock world is the only changed
-  old expected result; the complete boundary-sample control is unchanged.
-  New methods/guards do not claim execution.
-- Separate actual GitHub/source checks from supplied old-head execution and
-  unexecuted final-head commands. No synthetic fixture is hardware evidence.
-  No new scientific question is inferred from an unavailable execution world.
+- Continue existing lane at 2e0155dd8; no restart, force push, merge, draft-state
+  change or rental. Use explicit GitHub fallback, retain honest NOT RUN labels.
+- R11 structural check examines executable fields/coordinates only; full validate
+  keeps citations/counts/planning flags. Carry separation through adapter and
+  session skip logic. Optional malformed flag metadata cannot stop collection.
+- Expected counts come from expanded coordinates, including inside validator;
+  record flags never change data_complete. Optional campaign labels have a safe
+  fallback and do not select scientific coordinates.
+- R13 run means a model receipt with runner_returncode. No run fails/3; physical
+  refusal has precedence/2; any run completes/0 with data_complete for data faults.
+  Argument errors and invalid validate-only inputs use 3.
+- Share GPU layout between validation/execution. Preserve GPU flags exactly;
+  environment applies only without either flag. Preinstall checks include every
+  measured/monitor index; argument-free check-only remains a literal index check.
+- Require separate preflight/copy/stop policy values, no invented defaults.
+  Preserve short-probe timeout; distinguish expiry from launch failure. Runbook
+  uses the ruled 22 s plus startup and 44e3*N*T*G copy derivations.
+- R18 stops complete groups with explicit grace. Linux process-local child
+  subreaper (prctl PR_SET_CHILD_SUBREAPER=36) is enabled before spawning so adopted
+  worker zombies can be reaped by group without depending on container PID 1.
+  Poll group disappearance after SIGKILL. GPU-release timeout remains flag-only.
+  Zero sleeps are scheduler yields, not scientific time bars.
+- R15 requires checkpoint=id only for served entries; cost alternatives retain
+  checkpoints. Record precision and monitor revision/unpinned flag. Preserve
+  BF16/4 default; an FP8 rental is its own checkpoint id, already ruled.
+- R16 adds exactly two thermal reasons/software duration counter; retain enforced
+  limits and flag-only throttle semantics.
+- R17 rejects reserved/private/local hosts and invalid ISO dates, and requires
+  real key references in derivations. Mask unsourced inputs/decode dependencies
+  before cost arithmetic; preserve independent figures/calibration observations.
+- R19 echoes input prices exactly; derived display stays two significant digits
+  with downward lower bounds. Remove all seat/run status from the runbook.
+- Keep every old test method/assertion/bar/skip. Only required policy arguments,
+  synthetic citation metadata and installation-stub validate-only protocol change
+  old fixtures. Add stronger no-run assertions; no old expected answer changed.
+- Explain duplicated MoE coordinates/cost; operator selects matrices. No config
+  numeric input/count or R5 bar changes. Earlier parser/HF/identity/CUDA/enforced
+  fixes remain intact and require no replacement.
+- Separate source audits, historical lead evidence and NOT RUN final-head checks.
+  No new measured contradiction is inferred from an unavailable executor.
 
 ## CONTRACT-CHANGE
 
-No change requested to PIPELINE.md, records.py or interfaces.py.
+No change to PIPELINE.md, records.py or interfaces.py.
 
-Request to the NVML lane: take a closing sample in stop() so the episode end has
-a bracketed final reading. R5 is implemented without depending on that change.
-
-Retain the request for per-sample clock-event/throttle reasons and cumulative
-violation durations, using NVML violation/event calls where supported; before/
-after XML cannot place a brake within an Episode. Unsupported telemetry stays
-flagged. No out-of-scope NVML edit was made.
-
-Budget's lane-local adapter must preserve effort, pairing, calibration and reuse
-identity while exporting fresh shared Episodes; shared benign/sabotage condition
-and physical work accounting remain unchanged.
+Retain NVML-lane requests: closing sample in stop(), and per-sample throttle/
+clock-event reasons/cumulative violation durations where supported. R5 coverage
+does not depend on them. Snapshot deltas cannot place events inside an Episode.
+No sibling file was modified.
 
 ## OPEN ISSUES
 
-- Corrected-test/final-head execution is unavailable in this seat. The lead's
-  a37655231 run had 56 tests, one constructor error (fixed in eb2b446ad),
-  three skips; rerun discovery and both verbose gpukit modules at the new head.
-  No post-correction pass is claimed.
-- jsonschema installation, extra-dependent reruns and schema_probe.py remain
-  NOT RUN by this seat and were also absent from the lead's a37655231 run.
-  An executing seat must run them in a throwaway venv. Their old-head pass
-  does not validate the revised schema.
-- The lead already executed the integrated tree with runner 52999e6a2 and
-  nvml 95a37eef8: clean worlds complete, probe worlds incomplete, independent
-  metrics equal, identity calibration and round-1 cleanup/MIG checks passed.
-  These results are attributed in TESTS RUN/END-TO-END; no corrected-head
-  rerun, VM measurements or hardware readiness is established here.
-- Budget driver/session integration remains unavailable (GK2-8): expand() trial
-  counts and coordinates do not match generation Episodes, including calibration
-  and hinted/paired work. A budget-specific translator/validator is required.
-- Budget driver must check content beginning with <think> under qwen3 when
-  max_tokens truncates a hybrid thinking block before </think>; parser output
-  then lands in content. This lane cannot edit budget/run.py.
-- hermes's source was not fetched; retained agent settings carry an explicit flag.
-  Model/tokenizer/data/serving revisions and device/layout fit still need freezing
-  and an actual serving preflight, before paid work.
-- Full rental-time/cost extrapolation still lacks measured setup/load/off-box
-  waits and budget strata. Costs remain unavailable when those inputs are null.
-  Approve only a separately capped calibration slice with provider shutdown.
-- NVML closing/per-sample throttle requests remain sibling-owned. Whole-GPU
-  hardware support, sensor behavior, MoE worker router capture and production
-  factory registration still need integrated offline rehearsal and live preflight.
-- Lead-owned independent review, CI, cold merge review and merge remain pending.
-  PR #521 stays draft. No spend/provider/rental approval was sought or presumed.
+- All final-head Python/shell tests, verbose/discovery runs, jsonschema setup/
+  reruns and reviewer repros are NOT RUN. Executing lead must materialize appendix,
+  build integration, record sibling SHAs and run exact commands before acceptance.
+  Source inspection is not process-cleanup or final-head correctness evidence.
+- Prior 56-test/world results at 2e0155dd8 establish earlier fixes only. The old
+  a37655231 constructor error below is historical; supplied 2e0155dd8 passed after
+  eb2b446ad corrected it.
+- Budget custom driver/translator is sibling-owned. Generic adapter still flags/
+  skips it and now fails honestly when nothing ran. Hybrid truncated thinking
+  output still needs budget content-prefix handling.
+- Factory registration, staged public data/model revisions, router capture and
+  actual serving/layout/headroom need integrated rehearsal/live preflight.
+  Serving pins are operator inputs; hermes provenance stays explicitly not fetched.
+- Rental estimates need sourced setup/load/wait/efficiency or complete receipt
+  calibration including budget strata. Unknowns stay unavailable. Ed must approve
+  provider/spend/cap/layout/precision/matrix choice before any rental.
+- NVML requests, independent final review, CI and merge remain lead-owned;
+  PR #521 stays draft/unmerged. No spend or provider approval was presumed.
 
 ## NEEDS_RULING
 
-Retained configuration question before any budget rental: BF16 on four H100-SXM
-80 GB GPUs (160 GB weights in 320 GB capacity), or the published FP8 checkpoint
-on two (about 80 GB ideal weights in 160 GB capacity before scales/KV/allocator).
-Recommendation: BF16/4 if Ed approves the cost, preserving common precision;
-otherwise record FP8/2 as a distinct configuration. Blocked work is real budget
-allocation/measurement, not code authoring. Explicit headroom/provider/price/spend
-are operator inputs, not invented defaults. No new R5 science ruling is requested:
-the lead's supplied independent replay supports the rule, and this seat has
-no new executed evidence. The retained rental configuration question is not a
-blocker to this test/report correction.
+none. R11–R19 determine this build. Provider/spend and eventual distinct served
+configuration selection are pre-rental operator approvals, not unresolved code/
+count rulings. No new measured numbers force a question.
 
 ## FIX LOG
 
@@ -582,3 +425,33 @@ Round-2 appendix changes: none. No new CLI option or harness-call adaptation.
 The lead used the unchanged appendix with runner 52999e6a2 and nvml 95a37eef8;
 no .review2 files were materialized or committed by this seat. Source inspection
 and GitHub readback are not test execution.
+
+
+### Round 2b
+
+"fixed" means pushed implementation, not an executed pass. All own tests and
+repros below are **NOT RUN** because no executor launched. Earlier lead results
+at 2e0155dd8 are attributed above; every earlier FIX LOG line is retained verbatim.
+
+- GK2B-1: fixed e47d3282ccb60f3e3b49e0cf26ac14263b48fca1 (GK2-1; constructor correction eb2b446ad), repro re-run: NOT RUN; lead controls complete/gap incomplete; R5 unchanged.
+- GK2B-2: fixed 91612a5c334bc170dd2c1690ba38084da1152749; adapter follow-up 4a2b91948d23b3c83a7db070d2a2becddf9205f3; coordinate/record follow-up 55fdd026f6394060985f88ea64ae40ba5c418162; repro re-run: NOT RUN.
+- GK2B-3: fixed d48ecf855b9781286140c2da1d53ad706ad04114 (GK2-2), repro re-run: NOT RUN; lead qwen3/deepseek_r1 checks passed at 2e0155dd8.
+- GK2B-4: fixed af3f48945f6de3aabae67ca7b8b4e66fc44fa666 (GK2-3), repro re-run: NOT RUN; lead 30 observed/model, no identity missing, generation_wall_seconds 19.0.
+- GK2B-5: fixed bf7155b7059af930a1eabbec70e1f196948a339b; layout regression 55fdd026f6394060985f88ea64ae40ba5c418162; repro re-run: NOT RUN.
+- GK2B-6: fixed d8d838475ae350079b8c4825d7c2fc01ac9263af; preinstall wiring bf7155b7059af930a1eabbec70e1f196948a339b; budget CLI regression bce45811a23ab8e9d09a76e78bedcae4f7b26d11; repro re-run: NOT RUN.
+- GK2B-7: fixed 614223ceae52ef88fc8a96c73ae7d208dcf483db; independent preflight/copy limits and flags; repro re-run: NOT RUN.
+- GK2B-8: fixed 1df60966407e4db2f7be12308209fd6491f23f42 (thermal); enforced half fixed b259f5f04fffb822a01616303cf4088608debce6 (GK2-5), repro re-run: NOT RUN; lead enforced 700 W passed.
+- GK2B-9: fixed 67fe51e1980801c753ee5ce048deb2304a3f37a8 (GK2-7), repro re-run: NOT RUN; lead child-environment check passed at 2e0155dd8.
+- GK2B-10: fixed 991ae09e2783a225c06f7bb6c5855a830220af86; checkpoint identity, precision/monitor pins; repro re-run: NOT RUN.
+- GK2B-11: fixed 8e9c3ac375c78b3b7ba724fbf6f5821535824e44; malformed-planning guard 55fdd026f6394060985f88ea64ae40ba5c418162; repro re-run: NOT RUN. JSON/source scan is not validate()/jsonschema.
+- GK2B-12: fixed 1a6b2d91f7136ad09e810ea7098e1373941e2992; remaining-GPU regression 55fdd026f6394060985f88ea64ae40ba5c418162; repro re-run: NOT RUN.
+- GK2B-13: fixed f1850a8a79c121ae4e72d83bbd401b418f29f51e (price/runbook); HF half fixed a33ff4f785206e6be8a57182f355962f721de658 (GK2-4), repro re-run: NOT RUN; HF configs unchanged.
+- GK2B-14: info, runbook paragraph 2b7490533cd58271d49c0c06b299f766e4491392; no code change for overlap.
+
+Old-test changes in Round 2b: no assertion deleted/bar widened/skip added/old
+expected result changed. Both modules supply required options. Fake installation
+interpreter returns validate-only JSON. planning_fixture gets dated synthetic
+sources without numerical changes. Existing readiness failure additionally
+asserts failed/session_ran_no_model under R13. New budget skip world supplies
+valid settings to reach all adapters, then asserts failure and CLI exit 3.
+No .review3 appendix edits/files materialized or committed.
