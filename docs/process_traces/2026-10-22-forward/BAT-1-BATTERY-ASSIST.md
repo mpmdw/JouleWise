@@ -1,4 +1,4 @@
-# BAT-1: battery assist when the workload outruns the MagSafe adapter (2026-10-21, 19:25 PDT)
+# BAT-1: battery assist when the workload outruns the MagSafe adapter (2026-10-21, 19:25 PDT; revised 22:35 PDT)
 
 Item BAT-1 of the forward-work workflow (interactive session 2dc9c377), answering Ed's request of 2026-10-21:
 "also iirc, there was a problem when the workload exceeded the consumption the magsafe power supply is providing
@@ -6,27 +6,43 @@ and you operate off battery, make sure that's remidied, if it was indeed even a 
 
 Seat: one Opus 5.5 agent, local (the block-6 flag files are blinded data). Analysis only; no code changed.
 Scripts and outputs: `/Users/edr/night-archive/forward-20261021/BAT-1/` (untracked). Non-claim per-run tables:
-JouleWise-data branch `analysis/battery-assist-20261022` (0cb3eb6), directory `battery-assist-20261022/`.
+JouleWise-data branch `analysis/battery-assist-20261022` (0cb3eb6 at 19:25; e48774b adds the re-dispatch checks),
+directory `battery-assist-20261022/`.
+
+Revision of 22:35 PDT (same item, re-dispatched): every script was re-run, and every output reproduces (section
+"Re-dispatch checks", which also adds three checks). The paragraph for Ed, the boundary table and the notes
+for the lead now take in the BAT-2 ruling (`BAT-RULING.md` in this directory, 20:45 PDT), which found that the 122B
+battery joules recorded in decode are the prompt's discharge reported late. The 19:25 numbers are unchanged.
 
 ## For Ed
 
-Yes, it was real, it is small, and one piece still needs a fix. The adapter is labelled 140 W, but the battery
-started helping before the Mac reached that: the Mac's own input sensor never read more than 130.8 W and the cable
-meter's highest one-second average was 134.9 W, yet whenever the Mac drew more than the adapter delivered, the
-battery made up the difference for a few seconds at a time. In the five-hour BYTES check session on 2026-10-21 this
-happened only on Llama-3.3-70B and Qwen3.5-122B, plus 0.14 J once on Qwen3-Next-80B; no model up to 32B took
-anything from the battery, and the battery stayed at 100 % and never started charging. On 70B the battery supplied
-49 to 73 J per run, nearly all of it during a warm-up run before measurement (28 to 51 J) and while the measured run
-processed its 2,048-token prompt (9 to 27 J); writing the 512 answer tokens, the stretch BYTES measures, took
-nothing from the battery in 17 of 18 runs and 0.4 J in the other. On 122B it supplied 1.2 to 2.5 J per run, 0.7 to
-1.2 J of it while writing tokens, at most 0.14 % of that stretch's energy at the cable. Whether this matters depends
-on which energy number you read. The processor's own energy counters (CPU, GPU and neural engine), which are the
-main measurements, do not depend on where the power came from, and in the seconds the battery helped the processor
-ran no slower and at no lower power or clock speed. The whole-machine number used in blocks 5 and 6 already adds the
-battery's share back in, and no block-6 run had any battery help in any of its nine sessions. BYTES' whole-machine
-number and its "everything but the processor" number read only the cable meter, so they undercount by about 1 J per
-122B run and by essentially nothing on 70B; adding the battery term there has been decided but not built, so that is
-the one part not yet remedied.
+Yes, it was real, it is small, and the one place where it still biases a number has a fix that is decided but not yet
+built. The adapter is labelled 140 W, but it never delivered that much: the Mac's own input sensor never read more
+than 130.8 W, and a USB-C power meter on the adapter's cable never read more than 136.8 W in any 20 ms sample, or
+134.9 W averaged over a second. Whenever the Mac drew more than the adapter delivered, the battery supplied the rest
+for a few seconds at a time while the adapter stayed connected. In the five-hour BYTES check session of 2026-10-21
+this happened only on the two largest models. On Llama-3.3-70B the battery supplied 49 to 73 J per run: 28 to 51 J in
+the unmeasured warm-up generation that comes before each measured run, and 9 to 27 J while the measured run read its
+prompt. While the run wrote its 512 answer tokens, which is the stretch BYTES measures, the battery supplied nothing
+in 17 of 18 runs, and 0.4 J in one run that was already excluded, partly because an interactive session started
+during it. On Qwen3.5-122B the battery supplied 1.2 to 2.5 J per run, warm-up included. While writing tokens that
+model drew about 80 W and never more than 92 W, far below what the adapter delivers. But the laptop reports its
+battery current only once a second, as an average over the second before, so the end of the prompt's discharge is
+recorded in the first two seconds of the answer stretch: 0.56 to 1.15 J per run, 0.06 to 0.13 % of that stretch's
+energy at the cable. Qwen3-Next-80B took about 0.1 J once. No model up to 32B took anything, and the battery stayed
+at 100 % and never began charging.
+
+Whether any of this matters depends on which energy number you read. The processor's own energy counters (CPU, GPU
+and neural engine) carry the main results, and they do not depend on where the power came from. In the seconds the
+battery helped, the processor ran no slower and at no lower power or clock speed. The whole-machine energy used in
+blocks 5 and 6 already adds the battery's share back, and no block-6 run drew on the battery in any of its nine
+sessions. BYTES has two numbers that read only the cable meter: its whole-machine energy, and its "everything but the
+processor" energy (whole machine minus the processor counters). On 70B they are exact in 17 of 18 runs. On 122B they
+could be up to 1.15 J per run low, if any of the late-reported battery energy really belongs to the answer
+stretch. The fix decided this evening adds the battery's measured energy over the same stretch and prints it as its
+own column. It also adds to the printed uncertainty all the battery energy reported in the first 2.3 s of the stretch
+and in the 2.3 s after it, the longest the reading can lag, so the printed range covers both readings. It is not
+built yet, and it needs to land before BYTES is registered, because the registration pins the analysis code.
 
 ## What was measured, and how
 
@@ -81,6 +97,48 @@ and the gap from warm-up to request read 0 J (`out/pre_request_split.txt`). The 
 The pre-calibration stage discharged 8.9 J, never below −20 mA. H's harvest wrote no capture entries (`captures: {}`;
 H had no calibration bracket, `calibration.no_bracket`), so those joules are recorded only here.
 
+### Re-dispatch checks (22:15 to 22:35 PDT)
+
+- **Re-run.** `batt_by_stage.py` is byte-identical to the lead's scratchpad copy. Its output reproduces the brief's
+  totals: 18,708 SMC lines, 204 below −200 mA, minimum −497 mA, PDTR maximum 130.8 W, check-70b 59 reads and 307.1 J,
+  soak-70b 128 and 651.9 J, test7-70b 17 and 98.4 J. 17,685 of the 18,708 reads fall inside a chain stage; the
+  other 1,023 lie between stages, and none of them is negative. `h_battery_runs.py`, `h_battery_state.py`,
+  `summarise.py`, `h_reopen.py`, `pre_request_split.py`, `per_run_speed.py`, `thermal_vs_assist.py` and
+  `b6_battery_counts.py` reproduce `out/` byte for byte (`tmp/rerun/`). `charge_resume_scan.py` reproduces the same
+  56 distinct journals, 8,334 registry reads and zero charging reads. Only the path it names for a journal with
+  several identical copies differs, because L9-1's test runs have since written new copies under its `tmp/`.
+  `km003c_parse.py` is unchanged on origin/main since 7f3dde5db and byte-identical to the copy used at 19:25.
+- **Registrations.** The six pass-1 sub-pack registrations on `lane/2026-10-22-bytes-pass1` (960c7c163) differ from
+  the `lane/2026-10-22-bytes-c4-pins` copies used here only in notes and estimator fields. Every module's
+  `run_count` is still 50, so the charging projection below stands.
+- **Where the 122B decode joules sit** (`scripts/decode_edge_check.py`, `scripts/prefill_peak_check.py`,
+  `scripts/decode_start_peak.py`). These are a second program for the BAT-2 ruling's per-run table.
+
+| Run | Battery term over decode, 0.2 s path, `integrate` rule (J) | Discharging polls, s after decode start | Meter W, last 1 s of prefill / first 2 s of decode | Largest 20 ms meter sample in decode (W) | Discharging poll in [d0 + τ, d1 + τ) |
+|---|---|---|---|---|---|
+| check-qwen35-122b-r01 | 0.776577 | 0.01 to 1.21 | 117.7 / 79.2 | 92.0 | no |
+| check-qwen35-122b-r02 | 0.957622 | 0.13 to 1.93 | 118.1 / 79.9 | 91.6 | no |
+| check-qwen35-122b-r03 | 0.845411 | 0.20 to 1.00 | 117.4 / 80.0 | 90.1 | no |
+| check-qwen35-122b-r04 | 0.782051 | 0.19 to 1.59 | 118.4 / 79.9 | 90.6 | no |
+| check-qwen35-122b-r05 | 1.151076 | 0.05 to 1.85 | 117.5 / 80.1 | 90.2 | no |
+| test7-qwen35-122b-start-r01 | 0.557419 | 0.07 to 1.67 | 117.5 / 80.1 | 89.4 | no |
+| test7-qwen35-122b-start-r03 | 0.696962 | 0.05 to 1.65 | 116.9 / 79.8 | 89.6 | no |
+| check-qwen3-next-80b-r03 | 0.114733 | 0.19 to 0.79 | 112.5 / 60.4 | – | no |
+| soak-llama-70b-r11 | 0.396120 | 45.72 to 46.52 | 110.5 / 119.6 | – | yes |
+
+τ = 2 × 1.0 s + the stream's largest poll gap (0.302 s) = 2.302 s, as the BAT-2 ruling sets it.
+
+- **Agreement with BAT-2.** Every term matches BAT-2's §9 table to its printed digits. Where BAT-2 prints 6 decimals
+  (check-r01 0.776577, r11 0.396120), the difference is below 1e-6 J, the bar for two programs integrating the same
+  reads. The marker fires on r11 only, as BAT-2 found.
+- **Why the 122B decode joules are the prompt's.** In every 122B prefill the cable meter's 20 ms samples reached
+  136.0 to 136.5 W, the most the adapter delivered. The 0.1 s means reached 125.7 to 127.7 W. The first discharging
+  poll came 3.5 to 4.5 s into a 4.7 s prefill (`out/prefill_peak_check.txt`). In decode no 20 ms sample exceeded
+  92.0 W. The last discharging poll came 1.00 to 1.93 s after decode start, inside τ.
+- **The adapter's ceiling.** The largest 20 ms meter sample of the whole session was 136.8 W. 7,365 of 935,345
+  samples were at or above 135 W (`out/meter_max_sample.txt`). On 70B the 20 ms samples reached 136.3 to 136.5 W in
+  every prefill, and the first discharging poll came 0.7 to 1.7 s into it.
+
 ### Per-run table (BYTES H, full-length runs of the three models that saw any discharge)
 
 These are the full-length runs: a 2,048-token prompt and 512 decoded tokens. The short test-7 runs and every other
@@ -126,7 +184,10 @@ Minimum is from the 1 s path; the 0.2 s path's minimum is the same value in ever
 - That is 0.10 to 0.30 % of the request's DC input and 0 to 0.006 % of its decode DC input.
 
 Full-length 122B: decode discharge is 0.73 to 1.24 J per run, which is 0.08 to 0.14 % of DC-in decode and 0.13 to
-0.21 % of the decode "rest" (DC input minus rails; about 580 J).
+0.21 % of the decode "rest" (DC input minus rails; about 580 J). These are 1 s-path values, each read held forward
+from its own time. On the 0.2 s path, by `km003c_parse.integrate`'s rule, the same decode spans read 0.56 to 1.15 J
+(re-dispatch checks above). On either path the readings sit in the first 2 s of decode and describe the end of the
+prefill.
 
 ## The 2026-10-06 reopen tests, on H's assisted runs
 
@@ -154,6 +215,10 @@ source, and none of the three reopening signals appears.
 
 Limits: the matched cells are few, because assist sits in the first 0 to 8 s of 70B prefill in most runs. The
 one-second bins also cannot resolve sub-second transients. Neither changes the direction of the 70B prefill result.
+Added at 22:35: the 122B decode bins marked assisted are the first 1 to 2 s of decode, where the readings are the
+prefill's discharge reported late (re-dispatch checks). So the 122B decode comparison tests little, and the verdict
+rests on the 70B prefill bins. There a reading up to 2.3 s late can land in a neighbouring 1 s bin, but it stays in
+prefill, because the assisted seconds sit 0 to 8 s into a 26 s prefill.
 
 ## Block 6 (energies blinded; structure only)
 
@@ -188,11 +253,11 @@ printed.
 | Boundary | Does adapter overload change the number? | By how much (H; block 6) | Remedied? |
 |---|---|---|---|
 | Rails (powermetrics CPU + GPU + ANE) | No. The rails are regulated downstream of the supply. The reopen tests show no lower power, frequency or speed in assisted seconds. | 0 J | Nothing to fix (2026-10-06 ruling stands) |
-| Block-5/6 whole machine (`withheld/meter.json` dE_machine) | Yes, by the battery's joules; the code adds them back | H: battery term 0 to 27 J per request, re-derived exactly. Block 6: 0 J (no assisted member, no nonzero poll in any request) | **Yes.** `km003c_parse.delta_machine_energy` adds dE_battery = −B0AC × B0AV / 10⁶ W over the same window. It is called by `joulewise/b5/harvest.py` `_Harvest.meter_joins` (origin/main line 6220; `lane/2026-10-17-b6-packs-registered` line 6252; `lane/2026-10-20-l9-ruling-build` line 6889). L9's `disclosures.MACHINE_BOUNDARY` reads "whole-machine DC input plus the battery term" |
-| BYTES DC input (decode span, `bytes_analysis.meter_decode`) | Yes. It integrates only the meter's samples, and `_filtered_stream` drops the SMC blocks | 70B: 0 J in 17 of 18 runs, 0.39 J in one (≤ 0.006 %). 122B: 0.73 to 1.24 J per run (0.08 to 0.14 %). Next-80B: ≤ 0.14 J. Every other model: 0 | **No.** Backlog item 9 (lead's ruling, 10-21 18:5x): machine input = cable + battery discharge over the same span, with the battery printed as its own column. No branch carries it yet (checked: `lane/2026-10-20-bytes-analysis-a8` 0743a7b90 lines 420 to 460, `lane/2026-10-20-b6-blinding-group`, every other bytes branch) |
-| BYTES rest (DC input − rails, decode span, about line 672) | Yes. All of the missing battery joules land in rest | 122B: 0.13 to 0.21 % of rest (about 580 J). 70B: ≤ 0.009 % | **No** (same item 9) |
-| BYTES "without assisted runs" line (draft registration `bytes_pack_v1.md` §6, on `docs/2026-10-20-bytes-registration`) | It changes which units the line keeps. `battery.assist` is decided over the whole request, prefill included | In H, all 18 full 70B runs and all 7 full 122B runs carry it, so s5's and s6's lines would print "below the registered minimum of 5 units" | **Partly.** Item 9 scopes the marker to the decode span. In H that keeps 17 of 18 70B runs for s5, but 0 of 7 122B runs for s6, which is assisted in decode every time. With the battery term added, s6's primary line is corrected anyway |
-| DIFFICULTY `wall` (`difficulty_pack_v2.md` §2, line 53) | In principle; meter only, flagged `battery_assist` | Models are Qwen3 1.7B, 4B and 8B. H read 0 J for every dense model up to 32B and for 30B-A3B | Not built (no adapter yet). Expected 0 J; can reuse item 9's term |
+| Block-5/6 whole machine (`withheld/meter.json` dE_machine) | Yes, by the battery's joules; the code adds them back | H: battery term 0 to 27 J per request, re-derived exactly. Block 6: 0 J (no assisted member, no nonzero poll in any request) | **Yes.** `km003c_parse.delta_machine_energy` adds dE_battery = −B0AC × B0AV / 10⁶ W over the same window. It is called by `joulewise/b5/harvest.py` `_Harvest.meter_joins`, which block 6's harvest runs to write `withheld/meter.json` (origin/main bfab7c950 line 6220; `lane/2026-10-17-b6-packs-registered` line 6252; `lane/2026-10-20-l9-ruling-build` line 6889). L9's `disclosures.MACHINE_BOUNDARY` reads "whole-machine DC input plus the battery term" |
+| BYTES DC input (decode span, `bytes_analysis.meter_decode`) | Yes, in principle. It integrates only the meter's samples, and `_filtered_stream` drops the SMC blocks | 70B: 0 J in 17 of 18 runs, 0.40 J in r11, which the harvest excludes (≤ 0.006 %). 122B: 0.56 to 1.15 J per run on the 0.2 s path (0.06 to 0.13 %), all in the first 2 s of decode and most likely the prefill's, so meter-only is low by between 0 and that amount. Next-80B: 0.11 J once. Every other model: 0 | **Ruled, not built.** BAT-2 ruling §2 and §3 (20:45 PDT): DC input = meter + signed battery term over the decode span, printed as its own column, with the edge term v (on H, v equals the 122B term, so the printed bound covers both readings). No branch carries it (22:2x PDT: no `battery_watts` or `decode_battery_assist` in `joulewise/bytes_analysis.py` on any of 27 bytes or battery branches). Backlog item 9; claim-path |
+| BYTES rest (DC input − rails, decode span, about line 672) | Yes, in principle. The battery joules belong in rest | 122B: 0.10 to 0.20 % of rest (about 577 J), with the same caveat. 70B: 0 in 17 of 18 runs | **Ruled, not built** (BAT-2 §5; item 9) |
+| BYTES "without assisted runs" line (draft registration `bytes_pack_v1.md` §6, on `docs/2026-10-20-bytes-registration`) | It changes which units the line keeps. `battery.assist` is decided over the whole request, prefill included | In H, all 18 full 70B runs and all 7 full 122B runs carry it, so s5's and s6's lines would print "below the registered minimum of 5 units" | **Ruled, not built.** BAT-2 §4: the line keys on `bytes.decode_battery_assist`, a discharging poll received in [d0 + τ, d1 + τ). On H it marks 1 run of 95 (soak-70b-r11, already excluded), so s5 keeps its 13 kept runs and s6 keeps 7 of 7. The request flag is printed as a count and selects nothing. (Superseded: the 19:25 text said a decode-scoped marker would keep 0 of 7 for s6; that marker had no reporting delay.) |
+| DIFFICULTY `wall` (`difficulty_pack_v2.md` §2, line 53) | In principle; meter only, flagged `battery_assist` | Models are Qwen3 1.7B, 4B and 8B. H read 0 J for every dense model up to 32B and for 30B-A3B | **Ruled, queued, not built.** BAT-2 §6: `wall` = meter + battery over the request. DIFF-1 (`lane/2026-10-22-difficulty-queue` d3a75c046, draft PR #540) queues it for DIFFICULTY's next registration revision. No adapter exists yet. Expected 0 J |
 
 The arm refusal at idle stands: ExternalConnected No, IsCharging Yes, or |B0AC| > 200 mA on an idle machine
 (`joulewise/hazards/battery.py`, module docstring line 48). The discharged energy goes to `withheld/` as ruled.
@@ -245,27 +310,38 @@ proposed: the hazard is already measured and already excludes the right members 
 
 ## The ops:battery branch
 
-`lane/2026-10-21-battery-inrun` is absent on origin and locally (checked 19:24 PDT). The ops:battery brief made the
-branch conditional on the battery not being sampled during runs. It is sampled: the hazard monitor reads B0AC/B0AV
-about once a second, and every 0.2 s KM003C poll carries them. The seat reported that the remedy exists (STATE.md,
-"Results in hand"). There is nothing to disposition.
+`lane/2026-10-21-battery-inrun` is absent on origin and locally (checked 19:24 PDT, and again at 22:2x PDT with
+`git ls-remote`: the only battery branches on origin are three from 09-29 to 10-06 and this lane). The ops:battery
+brief made the branch conditional on the battery not being sampled during runs. It is sampled: the hazard monitor
+reads B0AC/B0AV about once a second, and every 0.2 s KM003C poll carries them. The seat's own report, in workflow
+wf_045f5fdc-e9f's result, says "I made no code change: the in-run sampling and flagging already exist" and "No
+branch, no PR". Its replay of `b5.harvest.battery_join` on H flagged the same 26 runs as check D here. There is
+nothing to disposition.
 
 ## For the lead
 
-1. **BYTES battery term (backlog item 9) is the only unremedied boundary.** It is worth about 1.1 J per 122B decode
-   (0.13 % of DC input, 0.2 % of rest) and nothing measurable on 70B decode. It is claim-path, so it needs a build,
-   a twin and both cold passes. The synthetic worlds need a burst inside and outside decode above the 1 J bar.
-2. **The without-assisted line will be empty for s6** even after the marker is scoped to decode (7 of 7 122B runs).
-   This is a description line, not an exclusion.
-3. **Aside, not battery:** 5 of the 18 full-length 70B runs in H carry `thermal.os_level_nonzero` (EXCLUDE_MEMBER).
+1. **BYTES battery term (backlog item 9) is the only unremedied boundary.** BAT-2 has ruled its form (§2 to §4, §12).
+   No branch carries it. On H it is 0.56 to 1.15 J per 122B decode (0.06 to 0.13 % of DC input, 0.10 to 0.20 % of
+   rest), bounded by v of the same size, and 0 on 70B decode except r11. It is claim-path: a build, a twin and both
+   cold passes. It should land before the BYTES registration pins `bytes_analysis.py`.
+2. **Superseded at 22:35:** the 19:25 note that the without-assisted line would be empty for s6. BAT-2's marker
+   allows for the reporting delay and marks none of H's 122B runs.
+3. **PR #536 CI (head e6595ae13):** `fences` fails one test,
+   `test_docs_freshness.test_dated_magistrate_rulings_carry_executed_evidence`. Any `*RULING*.md` under
+   `docs/process_traces` needs a `## Executed evidence` section with a repo `file.py:line` citation and a fenced
+   `$ command` block with an exit line, and `BAT-RULING.md` has none. That file is outside this item's write scope.
+   This record's name does not match the selector. `gate-ledger` fails because row 3 still reads NOT-RUN. The other
+   checks pass.
+4. **Aside, not battery:** 5 of the 18 full-length 70B runs in H carry `thermal.os_level_nonzero` (EXCLUDE_MEMBER).
    Those are check-r02 and soak r02, r05, r08 and r11; r11 also carries `agent.presence`. All the level-1 reads fall in
    post-request idle sentinels or between runs, never in a request. That is an s5 yield question for BY-0 and C5,
    not this item.
 
 ## Reproduce
 
-These commands run from any directory. `KP` is `joulewise/external/km003c_parse.py` at origin/main ef520743c,
-byte-identical to H's checkout c10b6895f. The registrations come from `lane/2026-10-22-bytes-c4-pins`.
+These commands run from any directory. `KP` is `joulewise/external/km003c_parse.py` at origin/main (ef520743c at
+19:25, bfab7c950 at 22:35; the file is the same), byte-identical to H's checkout c10b6895f. The registrations come
+from `lane/2026-10-22-bytes-c4-pins`. The last four lines are the re-dispatch checks.
 
 ```
 H=/Users/edr/night-bytes/h-20261021T185555Z; B=/Users/edr/night-archive/forward-20261021/BAT-1; export TMPDIR=$B/tmp
@@ -282,4 +358,8 @@ for s in 1 2 3 4 5 6; do mkdir -p $B/tmp/regs/bytes-s$s-p1; git -C $R show origi
 /opt/homebrew/bin/python3.13 -I $B/scripts/thermal_vs_assist.py $H $B/out/h_battery_runs.json
 /opt/homebrew/bin/python3.13 -I $B/scripts/b6_battery_counts.py /Users/edr/night-b6/sessions/r*
 /opt/homebrew/bin/python3.13 -I $B/scripts/charge_resume_scan.py /Users/edr/night-b6 /Users/edr/night-bytes /Users/edr/night-archive /Users/edr/night-custody
+/opt/homebrew/bin/python3.13 -I -B $B/scripts/decode_edge_check.py $H $KP $B/out/h_battery_runs.json
+/opt/homebrew/bin/python3.13 -I -B $B/scripts/prefill_peak_check.py $H $KP $B/out/h_battery_runs.json
+/opt/homebrew/bin/python3.13 -I -B $B/scripts/decode_start_peak.py $H $KP $B/out/h_battery_runs.json
+/opt/homebrew/bin/python3.13 -I -B $B/scripts/meter_max_sample.py $H $KP
 ```
