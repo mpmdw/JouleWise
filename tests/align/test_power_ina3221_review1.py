@@ -183,5 +183,49 @@ class CharacterizationReviewTest(unittest.TestCase):
             self.assertIsNone(json.loads(trace.notes)["health_stop"][key])
 
 
+    def test_present_alarm_read_failure_is_distinct_from_absence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dev = fixtures.Ina3221Test().make_device(
+                Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
+            alarm = dev / "curr1_crit_alarm"
+            alarm.write_text("0")
+            def read(path):
+                if path == alarm:
+                    raise PermissionError("synthetic existing alarm read failure")
+                return path.read_text().strip()
+            sampler = Ina3221Sampler(sysfs_root=tmp, sample_interval_ns=1_000_000,
+                                     read_text=read)
+            sampler.discover()
+            sampler.sample_once()
+            trace, = sampler.stop()
+            flags = json.loads(trace.notes)["flags"]
+            self.assertTrue(any(f.startswith("health_read_error:") and
+                                f.endswith(":PermissionError") for f in flags))
+            self.assertNotIn("alarm_attributes_unavailable", flags)
+
+    def test_driver_refresh_print_bound_and_unknown_period_are_declared(self):
+        for configured in (True, False):
+            with self.subTest(configured=configured), tempfile.TemporaryDirectory() as tmp:
+                dev = fixtures.Ina3221Test().make_device(
+                    Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
+                if not configured:
+                    (dev / "update_interval").unlink()
+                sampler = Ina3221Sampler(sysfs_root=tmp, sample_interval_ns=1_000_000)
+                sampler.discover()
+                sampler.sample_once()
+                trace, = sampler.stop()
+                notes = json.loads(trace.notes)
+                self.assertIn("settling_time_uncharacterized", trace.notes)
+                if configured:
+                    self.assertEqual(notes["register_refresh_period_ns"], 1_000_000)
+                    # Rounded integer ms prints have half of one printed ms
+                    # uncertainty; hold latency uses the upper refresh endpoint.
+                    self.assertEqual(notes["hold_latency_ns"], 1_500_000)
+                    self.assertEqual(notes["register_refresh_source"], "update_interval")
+                else:
+                    self.assertIsNone(notes["register_refresh_period_ns"])
+                    self.assertIn("register_refresh_period_unknown", trace.notes)
+
+
 if __name__ == "__main__":
     unittest.main()

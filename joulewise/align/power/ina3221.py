@@ -244,6 +244,12 @@ class Ina3221Sampler:
         # endpoint is P + (one printed ms)/2. A read can lag that endpoint
         # by a full refresh regardless of whether the value changes.
         print_bound = 500_000 if source == "update_interval" else 0
+        # The characterization's two endpoint poll errors differ by at most
+        # one actual poll; divided by the observed periods this bounds P.
+        cadence_bound = (math.ceil((self.sample_interval_ns +
+                         max(calibration.read_latency_ns, default=0)) /
+                         len(calibration.distinct_periods_ns))
+                         if calibration and calibration.distinct_periods_ns else 0)
         if period is None:
             self._flag(f"register_refresh_period_unknown:{rail.channel}")
         settling = self.settling_time_ns
@@ -257,7 +263,8 @@ class Ina3221Sampler:
             "register_refresh_period_ns": period,
             "register_refresh_source": source,
             "register_refresh_print_half_width_ns": print_bound,
-            "hold_latency_ns": (period + print_bound) if period else 0,
+            "register_refresh_characterization_half_width_ns": cadence_bound,
+            "hold_latency_ns": (period + print_bound + cadence_bound) if period else 0,
             "settling_time_ns": settling,
         }
         if cadence and driver_window and abs(cadence - driver_window) > self.sample_interval_ns:

@@ -1,6 +1,8 @@
 """Production-shaped synthetic episodes and independent averaging checks."""
 
+import json
 import math
+import random
 import unittest
 
 from joulewise.align.records import Episode, ToolCall, Turn
@@ -187,6 +189,62 @@ class SensorSimTest(unittest.TestCase):
         # The analytic token clock must retain all 96 tokens; no uncertainty,
         # so agreement uses the required 1e-6 relative bar.
         self.assertAlmostEqual(cycles, turn.decode_tokens, delta=turn.decode_tokens * 1e-6)
+
+
+    def test_unheld_defaults_preserve_original_seeded_outputs(self):
+        episode = world(7)
+        timeline = timeline_from_episode(episode, model())
+        for sensor in (SensorModel.ina3221(cadence_ns=1_000_000, noise_sd_w=.05,
+                                          quantum_w=.01, seed=7),
+                       SensorModel.nvml(noise_sd_w=.05, quantum_w=.01, seed=7),
+                       SensorModel.powermetrics(noise_sd_w=.05, quantum_w=.01, seed=7)):
+            # Frozen original sampling arithmetic: byte identity is the
+            # compatibility property, so use exact equality, including notes.
+            rng = random.Random(sensor.seed)
+            expected = []
+            for t in range(timeline.start_ns + sensor.sample_interval_ns,
+                           timeline.end_ns + 1, sensor.sample_interval_ns):
+                value = timeline.integral(t - sensor.averaging_window_ns, t) / sensor.averaging_window_ns
+                value += rng.gauss(0, sensor.noise_sd_w)
+                expected.append(round(value / sensor.quantum_w) * sensor.quantum_w)
+            trace = simulate(timeline, sensor)
+            self.assertEqual(trace.values, tuple(expected))
+            self.assertEqual(trace.notes, json.dumps({
+                "flags": list(timeline.flags), "clock_offset_uncertainty_ns": 0,
+                "synthetic": True}, sort_keys=True))
+
+    def test_register_windows_and_seeded_phase_through_episode_chain(self):
+        from dataclasses import replace
+        from joulewise.align.phase_detect import detect_phases, match_tool_calls
+        episode = world(7)
+        timeline = timeline_from_episode(episode, model())
+        # Fastest datasheet sweep scenario: 140 us * bus/shunt * three rails.
+        for period in (840_000, 1_500_000, 4_000_000):
+            sensor = SensorModel.ina3221(cadence_ns=1_000_000,
+                                        register_refresh_period_ns=period,
+                                        noise_sd_w=0, quantum_w=0, seed=7)
+            trace = simulate(timeline, sensor)
+            phase = json.loads(trace.notes)["conversion_phase_ns"]
+            self.assertEqual(phase, random.Random(sensor.seed).randrange(period))
+            self.assertEqual(json.loads(trace.notes)["hold_latency_ns"], period)
+            for t, value in zip(trace.t_ns, trace.values):
+                end = phase + ((t - phase) // period) * period
+                expected = timeline.integral(end - period, end) / period
+                # No printed uncertainty: required 1e-6 relative agreement.
+                self.assertAlmostEqual(value, expected, delta=abs(expected) * 1e-6)
+            result = match_tool_calls(detect_phases(trace), episode)
+            self.assertEqual(result.matched_count, 3)
+            self.assertEqual(len(result.unlogged_candidates), 0)
+            self.assertEqual(trace, simulate(timeline, sensor))
+            # Hide a fully observed 250 ms wait inside a claimed envelope.
+            first = episode.turns[0]
+            call = first.tool_calls[0]
+            hidden = replace(episode, turns=(replace(
+                first, end_ns=call.end_ns, tool_calls=(replace(call, logged=False),)),)
+                + episode.turns[1:])
+            result = match_tool_calls(detect_phases(trace), hidden)
+            self.assertTrue(any(s.start_ns < call.end_ns and s.end_ns > call.start_ns
+                                for s in result.unlogged_candidates))
 
 
 if __name__ == "__main__":

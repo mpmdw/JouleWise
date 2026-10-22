@@ -147,5 +147,71 @@ class PhaseReviewTwoTest(unittest.TestCase):
             self.assertEqual(len(result.unlogged_candidates), 0)
 
 
+    def test_quantizer_dither_cannot_declare_holds_or_change_detection(self):
+        # One physical multi-turn, multi-tool episode at production cadence.
+        # 1e-9 W is 5.6e7 times below the INA 0.056064 W scenario quantum.
+        episode = production_world(5, 5_000_000, turns=12, client_gap_ns=0)
+        first = episode.turns[0]
+        call = first.tool_calls[0]
+        hidden = replace(episode, turns=(replace(
+            first, end_ns=call.end_ns, tool_calls=(replace(call, logged=False),)),)
+            + episode.turns[1:])
+        sensor = production_sensor_models(5)[0][1]
+        trace = simulate(timeline_from_episode(episode, model()), sensor)
+        dithered = replace(trace, values=tuple(v + (i % 2) * 1e-9
+                                             for i, v in enumerate(trace.values)))
+        results = []
+        for observed in (trace, dithered):
+            phases = detect_phases(observed)
+            self.assertTrue(all(s.sample_interval_ns == 1_000_000 for s in phases))
+            self.assertFalse(any("held_values_cadence_inferred" in s.flags for s in phases))
+            full = match_tool_calls(phases, episode)
+            self.assertEqual(full.matched_count, episode.totals()["tool_calls"])
+            self.assertEqual(len(full.unlogged_candidates), 0)
+            result = match_tool_calls(phases, hidden)
+            results.append((result.matched_count, len(result.unlogged_candidates)))
+        self.assertEqual(results[0], results[1])  # Counts cannot depend on sub-LSB dither.
+
+    def test_hold_latency_is_used_without_repeated_readings_and_can_be_overridden(self):
+        episode = world(7)
+        trace = simulate(timeline_from_episode(episode, model()),
+                         SensorModel.ina3221(cadence_ns=1_000_000,
+                                             noise_sd_w=.05, quantum_w=0, seed=7))
+        latency = 840_000  # Datasheet three-channel sweep scenario.
+        declared = replace(trace, notes=json.dumps({
+            "register_refresh_period_ns": latency, "hold_latency_ns": latency}))
+        phases = detect_phases(declared)
+        self.assertTrue(all(s.sample_interval_ns == 1_000_000 for s in phases))
+        self.assertTrue(all(s.hold_latency_ns == latency for s in phases))
+        waits = [s for s in phases if s.label == "tool_wait"]
+        self.assertTrue(waits)
+        self.assertTrue(all(s.observation_uncertainty_ns >= latency for s in waits))
+        result = match_tool_calls(phases, episode)
+        self.assertGreaterEqual(result.tolerance_ns,
+                                trace.nominal_interval_ns + trace.averaging_window_ns + latency)
+        override = detect_phases(declared, hold_latency_ns=0)
+        self.assertTrue(all(s.hold_latency_ns == 0 for s in override))
+
+    def test_wholly_outside_logged_calls_are_reported_and_excluded(self):
+        episode = world(7)
+        trace = simulate(timeline_from_episode(episode, model()),
+                         SensorModel.ina3221(cadence_ns=1_000_000,
+                                             noise_sd_w=.05, quantum_w=.01, seed=7))
+        # Crop in active decode, between call 0 and call 1: exactly one
+        # logged call is wholly unobservable, two remain fully observed.
+        cut = episode.turns[1].first_token_ns + 500_000_000
+        keep = [(t, v) for t, v in zip(trace.t_ns, trace.values) if t > cut]
+        cropped = replace(trace, t_ns=tuple(t for t, _ in keep),
+                          values=tuple(v for _, v in keep))
+        result = match_tool_calls(detect_phases(cropped), episode)
+        self.assertEqual(len(result.outside_trace_logged), 1)
+        self.assertEqual(result.matched_count, 2)
+        self.assertEqual(len(result.unmatched_logged), 0)
+        self.assertEqual(result.recall, 1.0)  # Every observable call matched.
+        self.assertIn("logged_call_outside_trace_coverage", result.flags)
+        self.assertNotIn("logged_call_outside_trace_coverage",
+                         match_tool_calls(detect_phases(trace), episode).flags)
+
+
 if __name__ == '__main__':
     unittest.main()

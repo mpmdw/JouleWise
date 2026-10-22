@@ -1,339 +1,204 @@
-# align-jetson — FIX ROUND 3 (JET3; verification pending)
+# align-jetson — FIX ROUND 3 (JET3)
 
 ## SUMMARY
 
-Continued the pushed lane from b1613dad6; frozen contracts remain unchanged.
-Register cadence now comes from characterization or driver configuration only.
-Sampler trace notes declare per-rail refresh period, source and hold latency.
-Detector propagation includes observation, transition exposure and matching bounds.
-The simulator adds an optional seeded register-hold model; existing defaults are preserved.
-The study appends an 840 us conversion / 1 ms poll INA scenario.
-Wholly out-of-coverage logged calls are reported separately and excluded from recall.
-Missing alarm paths are distinguished from failures reading previously present paths.
-Execution environment is unavailable: this checkpoint is APPLIED_UNVERIFIED.
-No tests, probes or study have run in this round; no pass is claimed.
+Continued the pushed lane from b1613dad6; all code remains stdlib-only.
+Removed episode-value inference from cadence, thinning and noise handling.
+INA notes declare refresh period, provenance, uncertainty and register age per rail.
+The detector carries declared age through exposure, observations and matching.
+Added an optional seeded register simulator and an appended 840 us / 1 ms INA study row.
+Added measured settling as a timing parameter and a first-board step-response protocol.
+Wholly uncovered calls are reported separately and excluded from recall.
+Absent alarm attributes no longer generate read-error flags; present-path failures remain visible.
+Execution remains unavailable: no tests, probes or study ran in this round.
+Source changes are APPLIED_UNVERIFIED; no scientific acceptance or new detection limit is claimed.
 
 ## FILES
 
-- `joulewise/align/power/ina3221.py`: shared robust hold predicate and span cadence; resolved-cadence poll-limit rule; existing rails, alarms, OC counters and voltage extrema retained.
-- `joulewise/align/phase_detect.py`: all visible idle gaps; quantum plus statistical uncertainty; local burst/decode roles; observed exposure support and power-to-time edge uncertainty; decode-level ambiguity flag.
-- `joulewise/align/sensor_sim.py`: common hold/cadence helpers and explicit documentation that prefill/decode coefficients are increments above idle; simulator behavior unchanged.
-- `tests/align/test_phase_detect.py`: covered-call study, same-gap null, 72-seed default and stdlib parallel CLI; original hidden-call test now uses a covered envelope, retaining its assertions.
-- `tests/align/test_phase_detect_review2.py`: six end-to-end regressions, including an observed in-turn omission and bit-identical unsampled-call counterfactual.
-- `tests/align/test_power_ina3221_review1.py`: strengthens the existing cadence test to reject a spurious poll-limit flag when cadence is resolved.
-- `docs/align/jetson_characterization.md`: first-board protocol, current algorithms, measured synthetic study and limits.
-- `.codex-report/align-jetson.md`: this report and retained Round 1 FIX LOG.
+- `joulewise/align/power/ina3221.py`: configuration/characterization timing notes, settling metadata, characterization retention, existing-path alarm discovery.
+- `joulewise/align/phase_detect.py`: declared-timing thinning and latency propagation, settling terms, outside-coverage reporting.
+- `joulewise/align/sensor_sim.py`: optional register period and seeded conversion phase; old default arithmetic and notes preserved.
+- `tests/align/test_phase_detect.py`: appends held-register INA study row; original three rows and index 0 unchanged.
+- `tests/align/test_phase_detect_review1.py`: authorized setup-only hold-period declaration.
+- `tests/align/test_phase_detect_review2.py`: authorized setup-only declaration plus timing/dither/coverage regressions.
+- `tests/align/test_power_ina3221_review1.py`: authorized changing-load characterization setup plus alarm and timing-note regressions.
+- `tests/align/test_sensor_sim.py`: default compatibility oracle and seeded register end-to-end regression.
+- `docs/align/jetson_characterization.md`: updated timing, step response, flags and execution status.
+- `.codex-report/align-jetson.md`: this report, retaining Round 1/2 FIX LOG and open observability ruling.
 
-No registry edit and no `power/__init__.py` edit. PIPELINE.md, records.py and
-interfaces.py are unchanged. `model()`, `production_world()` and
-`production_sensor_models()` retain their original signatures and behavior.
-The untracked `.review2/` scripts and outputs are deliberately not committed.
+No registry or power/__init__.py edit. No frozen contract file changed.
+No scratch probe file is committed. Without an executor the requested
+.review3 files could not yet be materialized in /workspace/JouleWise.
 
 ## PUBLIC API
 
-Unchanged sampler and simulator signatures:
+Existing signatures retain their positional arguments. Appended keyword/default fields:
 
 ```python
 Ina3221Sampler(*, sysfs_root="/sys", sample_interval_ns: int,
     update_interval_ms=None, averaging_window_ns=None, characterization=None,
-    shunt_resistance_ohm=None, clock_domain="host.monotonic",
-    clock=time.monotonic_ns, read_text=None)
+    shunt_resistance_ohm=None, settling_time_ns: int | None = None,
+    clock_domain="host.monotonic", clock=time.monotonic_ns, read_text=None)
 Ina3221Sampler.discover() -> tuple[Rail, ...]
 Ina3221Sampler.start() -> None
 Ina3221Sampler.sample_once() -> None
 Ina3221Sampler.stop() -> tuple[PowerTrace, ...]
 Ina3221Sampler.characterize(*, reads: int, sleep=time.sleep) -> Characterization
-Rail(channel, label, device, voltage, current)
-RailCharacterization(channel, read_latency_ns, distinct_periods_ns, quantum_w,
-    voltage_quantum_mv, current_quantum_ma, flags=())
-RailCharacterization.cadence_ns -> float | None  # mean / endpoint span
-RailCharacterization.median_distinct_period_ns -> float | None
-Characterization(rails, update_intervals_ms, flags)
-TimelineModel(idle_w, prefill_base_w, prefill_token_w, context_token_w,
-    decode_w, ripple_w, prefill_tokens_per_s)
-PowerInterval(start_ns, end_ns, mean_w, label, ripple_w=0,
-    ripple_period_ns=None, ripple_origin_ns=0)
-Timeline(start_ns, end_ns, clock_domain, idle_w, intervals, flags=())
-Timeline.integral(start_ns: int, end_ns: int) -> float  # W ns
-Timeline.power_at(t_ns: int) -> float
 SensorModel(sample_interval_ns, averaging_window_ns, duty_fraction, noise_sd_w,
     quantum_w, clock_offset_ns=0, clock_offset_uncertainty_ns=0, seed=0,
-    source="mock", channel="synthetic", clock_domain=None)
+    source="mock", channel="synthetic", clock_domain=None,
+    register_refresh_period_ns: int = 0, conversion_phase_ns: int | None = None)
 SensorModel.ina3221(*, cadence_ns, noise_sd_w, quantum_w, **kwargs) -> SensorModel
 SensorModel.nvml(*, noise_sd_w, quantum_w, **kwargs) -> SensorModel
 SensorModel.powermetrics(*, noise_sd_w, quantum_w, **kwargs) -> SensorModel
-timeline_from_episode(episode: Episode, model: TimelineModel) -> Timeline
 simulate(timeline: Timeline, sensor: SensorModel) -> PowerTrace
-```
-
-Analysis records retain their original positional fields and append optional
-observed-exposure fields; times are integer nanoseconds and powers are watts:
-
-```python
-Segment(start_ns, end_ns, mean_w, label, clock_domain="", sample_interval_ns=0,
-    averaging_window_ns=0, flags=(), boundary_uncertainty_ns=0,
-    low_observation_windows=(), observation_uncertainty_ns=0,
-    idle_floor_w=None, active_floor_w=None, power_uncertainty_w=0.0)
-# low_observation_windows contains (exposure_start_ns, exposure_end_ns, observed_w).
-ToolCallMatch(recall, precision, unmatched_logged, unlogged_candidates, flags=(),
-    matched_count=0, tolerance_ns=0, indeterminate_candidates=())
-estimate_noise_sd(values: tuple[float, ...]) -> float
-detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list[Segment]
+timeline_from_episode(episode: Episode, model: TimelineModel) -> Timeline
+estimate_noise_sd(values: tuple[float, ...], *, hold_period_ns: int = 0,
+    sample_interval_ns: int = 0) -> float
+detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None,
+    hold_latency_ns: int | None = None,
+    register_refresh_period_ns: int | None = None,
+    settling_time_ns: int | None = None) -> list[Segment]
 match_tool_calls(segments: list[Segment], episode: Episode) -> ToolCallMatch
 ```
 
-Test/study helpers:
+Segment appends `hold_latency_ns=0, settling_time_ns=0` after its existing
+power_uncertainty_w field. ToolCallMatch appends
+`outside_trace_logged: tuple[ToolCall, ...] = ()`. Wholly uncovered calls are
+excluded from unmatched_logged and recall's denominator and retained in that
+new field. Existing recall/matched_count and precision semantics otherwise remain.
 
-```python
-model()
-production_world(seed=0, tool_duration_ns=250_000_000, tools=True, *, turns=30,
-    client_gap_ns=20_000_000, calls_per_turn=(1, 3), bytes_per_result_token=4)
-production_sensor_models(seed, *, ina_cadence_ns=1_000_000,
-    shunt_resistance_ohm=0.005, operating_voltage_v=5.0, operating_current_a=2.0,
-    noise_sd_by_sensor=None)
-clopper_pearson(successes, trials, *, confidence=0.95) -> tuple[float, float]
-run_duration_study(*, seeds=range(72), durations_ns=(1_000_000, 5_000_000,
-    10_000_000, 25_000_000, 50_000_000, 100_000_000, 250_000_000, 500_000_000),
-    turns=30, client_gap_ns=20_000_000, sensors=production_sensor_models) -> dict
-```
+Timing notes are per trace: register_refresh_period_ns, register_refresh_source,
+register_refresh_print_half_width_ns,
+register_refresh_characterization_half_width_ns, hold_latency_ns and
+settling_time_ns. Characterization supplies P preferentially; otherwise driver
+update_interval supplies it; otherwise it is null with a rail-specific flag.
+detect_phases keyword values override the respective JSON values. No declaration
+means zero latency and no thinning, regardless of source or repeated values.
 
-The study's `hidden_call_recall` is the minimum of its covered-mid and
-covered-stretch recalls, whose separate CP intervals are printed. Shortest
-answers use those covered calls. Between-turn omissions are labelled log-only;
-shared-run concealment is reported separately. The two allowed r2 repro key
-ports are `isolated_hidden_call_recall` -> `covered_stretch_hidden_call_recall`
-and `isolated_only_shortest_passing_duration_ms` -> `shortest_passing_duration_ms`.
-The repro's old printed label remains unchanged. No r7 private-name port.
-
-Private helpers `_held_change_indices(values)` and `_mean_period_ns(periods)`
-live in sensor_sim; phase_detect re-exports the former for the supplied probe.
+TimelineModel, PowerInterval, Timeline, Rail, RailCharacterization and
+Characterization signatures are unchanged. characterize() now retains its
+returned calibration on the sampler and clears rehearsal samples before the
+episode. _held_change_indices remains importable only as a legacy diagnostic;
+no acquisition/detection/noise path calls it. Existing study keywords and row
+keys are unchanged, with four production sensors instead of three.
 
 ## TESTS RUN
 
-Round 3 checkpoint: no commands ran; exec_command refuses because no usable
-execution environment is available. The environment wait remains pending.
-All executions and numbers below belong to the preceding seat / Round 2.
-They do not validate the Round 3 source. Required align/probe/study runs remain open.
+**Nothing ran in this round. No pass, count, skip count, Python version or runtime
+is claimed.** Repeated `exec_command({"cmd": "pwd"})` attempts failed before
+launch with "No usable execution environment is available." The supported
+environment wait remains pending; status progressed from pending to starting
+with connectivity offline. No optional dependency was installed.
 
-
-Python 3.12.14. No extra was installed or required; no extra-dependent tests.
-No test used network or real hardware. No whole-repository suite was run.
-No registry was changed, so no registry-reader test was required.
-
-- `python3 --version`: Python 3.12.14.
-- Initial `python3 -m unittest discover -s tests/align -t .` on the VM's default
-  `work` checkout failed collection because that checkout has no tests/align.
-- The same discovery command at the exact review baseline 6fec76606: **40 tests,
-  OK, zero skips**, 5.166 s. This is this seat's execution, not a copied result.
-- The same command on the final source: **46 tests, OK, zero skips**;
-  runtime recorded in END-TO-END below. Original assertions were retained.
-  Intermediate drafts failed and were corrected before the final pass.
-  Later comment/docstring-only changes were checked with ast.parse/ast.dump
-  against 54ce0818d; executable ASTs are unchanged.
-- `python3 -m unittest tests.align.test_phase_detect_review2`: five tests passed
-  before the sixth observed-mid-call regression was added; final discovery
-  includes all six.
-- `python3 -c "print(1-0.025**(1/64))"`: derived 0.056009089386636624.
-- `TIMEFORMAT='study elapsed seconds: %R'; time python3 -m tests.align.test_phase_detect --study > .review2/study-final.json 2> .review2/study-final.err`:
-  exit 0; 24 rows, 72 seeds per row, 1181.322 s. A prior `/usr/bin/time` wrapper failed before Python
-  launched because that executable is absent. Provisional studies interrupted
-  during detector correction supply no reported results.
-
-Every supplied APPENDIX file was written verbatim into `.review2/`. Only r2's
-above two output-key accesses were subsequently ported as authorized. The local
-runner executed all 38 expanded commands before at 6fec76606 and after at the
-final source. Canonical commands from the repository root are:
+The requested commands still to run when execution is available:
 
 ```sh
-TMPDIR=/tmp/jetson-review2 python3 -I /workspace/JouleWise/.review2/r1d_lane_null.py 6
-TMPDIR=/tmp/jetson-review2 python3 -I /workspace/JouleWise/.review2/r1_toolfree_gaps.py 8
-TMPDIR=/tmp/jetson-review2 python3 -I /workspace/JouleWise/.review2/r8b_lane_world.py 32
-TMPDIR=/tmp/jetson-review2 python3 -I /workspace/JouleWise/.review2/r8c_lane_ina.py 8
-TMPDIR=/tmp/jetson-review2 python3 -I /workspace/JouleWise/.review2/r8_lsb_split.py 24
-TMPDIR=/tmp/jetson-review2 python3 -I /workspace/JouleWise/.review2/r1c_diag.py
-TMPDIR=/tmp/jetson-review2 python3 -I /workspace/JouleWise/.review2/r2_gap_confound.py ina 12
-TMPDIR=/tmp/jetson-review2 python3 -I /workspace/JouleWise/.review2/r2_gap_confound.py nvml 16
-TMPDIR=/tmp/jetson-review2 python3 -I /workspace/JouleWise/.review2/r5_covered_hidden.py 6
-TMPDIR=/tmp/jetson-review2 python3 -I /workspace/JouleWise/.review2/r3_labels.py 3
-TMPDIR=/tmp/jetson-review2 python3 -I /workspace/JouleWise/.review2/r3b_flags.py
-TMPDIR=/tmp/jetson-review2 python3 -I /workspace/JouleWise/.review2/r4_ratio.py
-TMPDIR=/tmp/jetson-review2 python3 -I /workspace/JouleWise/.review2/r4b_noripple.py
-TMPDIR=/tmp/jetson-review2 python3 -I /workspace/JouleWise/.review2/e13_cadence.py /tmp/jetson-review2
+python3 -m unittest discover -s tests/align -t .
+python3 -m tests.align.test_phase_detect --study
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r3_sampler.py /tmp/jetson-review3 1100 1000 8 12 12
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r3_sampler.py /tmp/jetson-review3 840 1000 8 12 12
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r3_sampler.py /tmp/jetson-review3 1500 1000 8 8 12
+WINDOW_NS=2200000 TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r3_sampler.py /tmp/jetson-review3 1100 1000 8 12 12
+LANEWORLD=20000000 TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r3_sampler.py /tmp/jetson-review3 1100 1000 8 8 30
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r3_sampler.py /tmp/jetson-review3 1100 1000 8 12 12 none nolatency
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r3_sampler.py /tmp/jetson-review3 1100 500 8 12 12
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r3_sampler.py /tmp/jetson-review3 2000 1000 8 8 12
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r3_sampler.py /tmp/jetson-review3 3000 1000 8 8 12
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r6_study_held.py 5 0 24
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r6_study_held.py 5 24 48
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r6_study_held.py 5 48 72
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r6_study_held.py 2 0 24
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r4_heldfalse.py 5 12
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r4_heldfalse.py 5 12 1000
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/r5_edges.py 3
+TMPDIR=/tmp/jetson-review3 python3 -I /workspace/JouleWise/.review3/e12_thread.py /tmp/jetson-review3
 ```
 
-The remaining 24 commands are `TMPDIR=/tmp/jetson-review2 python3 -I
-/workspace/JouleWise/.review2/r7f_seeds.py skew noise conv poll seed`, expanded
-for each seed 0..5 and configurations `(0,.08,1680,500)`, `(50,.08,1680,500)`,
-`(0,.05,840,250)` and `(15,.05,840,250)`. Each was run beside its control.
-Scratch orchestration commands were `python3 .review2/run_repros.py before`
-and `python3 .review2/run_repros.py verified`; four subprocesses at a time.
-A zero process exit is not claimed to mean every scientific pass condition
-passed: the explicit exceptions are in FIX LOG / NEEDS_RULING.
+Also pending: r9_dither_study.py plain/dither A B 1,2,5 for A/B
+0/18,18/36,36/54,54/72; r1_null.py jetson 6 decay5 ina1.1ms,
+jetson 6 decay10 ina1.1ms, jetson 12 decay50, and jetson 6 decay2 ina1.1ms.
+The settling probes need the authorized argument supplying the measured term;
+no script port has been made yet. All non-exempt probes need both b1613dad6
+and final-source executions; no baseline probe was executed by this seat.
+No whole-repository suite ran. No registry reader is needed: no registry edit.
+
+Historical preceding-seat evidence: the branch report at b1613dad6 records
+46 align tests, zero skips, Python 3.12.14 and a 1181.322 s study. These are
+not executions by this seat and do not validate this source.
 
 ## END-TO-END
 
-Round 3: no executed world or study yet. The following is historical Round 2
-execution, not a current result. All new shortest-duration claims remain pending.
+No new executed world or study numbers. New regression worlds are ready in
+source: four realistic turns with 512 prefill and 96 decode tokens per turn,
+three 250 ms tool calls, ripple, growing context, and register periods 840 us,
+1.5 ms and 4 ms at 1 ms polling. The chain is Episode -> timeline_from_episode
+-> simulate -> detect_phases -> match_tool_calls, with a physically unchanged
+trace and a hidden-call log copy. A separate fake-sysfs chain rehearses a
+4 ms changing conversion under a misreporting 1 ms driver, then samples the
+episode through Ina3221Sampler.sample_once/stop -> detector -> matcher.
+These are test scenarios, not executed results.
 
+The unchanged default study grid is 1,5,10,25,50,100,250,500 ms, now four sensors,
+72 seeds and four physical worlds per row: **9216 traces (derived 8*4*72*4)**.
+The existing INA row remains index 0 and never holds. The appended register
+row uses 840 us conversions, seeded uniform conversion phase and 1 ms polls,
+with the original INA row's quantum/noise. 840 us is a scenario parameter from
+140 us * bus/shunt * three enabled channels, replaced by hardware characterization.
+Unheld defaults keep the original arithmetic and JSON notes.
 
-Executed on this lane's numerical source 54ce0818dad4a3686ee41e78e4e1d6595bc3d5c3
-with Python 3.12.14. `python3 -m unittest discover -s tests/align -t .`
-passed **46 tests, zero skips**, in 26.287 s. The default production study
-completed in **1181.322 s**: seeds 0..71, eight durations, three sensors and
-four physical worlds per row (6912 simulated traces, derived as 72*8*3*4).
-Later comment/docstring corrections preserve executable AST identity.
-
-Shortest tested durations satisfying point recall >=90% in **both** covered
-modes, logged recall >=90%, and all three episode-FA rates <5%:
-**INA 5 ms; NVML 250 ms; powermetrics 250 ms**.
-Using each covered-recall lower 95% CP bound >=90% and all FA upper bounds
-<5% gives **INA 10 ms; NVML 250 ms; powermetrics 250 ms**.
-These are per-column intervals, not simultaneous coverage of the search grid.
-
-Every row has 72 episodes per covered mode and per FA control. All three
-FA counts are 0/72 in every row; each exact equal-tail 95% CP upper bound
-is 0.04994408, below .05. The table rounds that endpoint to .050;
-the strict comparison uses the unrounded bound. Covered client gap is zero,
-so call duration equals trough duration. The main and null worlds retain
-20 ms client latency. Logged recall pools visible calls in the main world.
-Covered FA counts whether either full-log covered world has a false candidate.
-
-| Call ms | Sensor | Covered mid recall [95% CP] | Covered stretch recall [95% CP] | Logged recall | FA episodes: main / null / covered |
-| ---: | --- | --- | --- | ---: | --- |
-| 1 | INA 1 ms | 0.153 [0.079, 0.257] | 0.264 [0.167, 0.381] | 1.000 | 0 / 0 / 0 |
-| 1 | NVML 100/25 ms | 0.000 [0.000, 0.050] | 0.000 [0.000, 0.050] | 0.120 | 0 / 0 / 0 |
-| 1 | powermetrics 100 ms | 0.000 [0.000, 0.050] | 0.000 [0.000, 0.050] | 0.000 | 0 / 0 / 0 |
-| 5 | INA 1 ms | 0.931 [0.845, 0.977] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
-| 5 | NVML 100/25 ms | 0.000 [0.000, 0.050] | 0.000 [0.000, 0.050] | 0.236 | 0 / 0 / 0 |
-| 5 | powermetrics 100 ms | 0.000 [0.000, 0.050] | 0.000 [0.000, 0.050] | 0.000 | 0 / 0 / 0 |
-| 10 | INA 1 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
-| 10 | NVML 100/25 ms | 0.000 [0.000, 0.050] | 0.000 [0.000, 0.050] | 0.328 | 0 / 0 / 0 |
-| 10 | powermetrics 100 ms | 0.000 [0.000, 0.050] | 0.000 [0.000, 0.050] | 0.000 | 0 / 0 / 0 |
-| 25 | INA 1 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
-| 25 | NVML 100/25 ms | 0.264 [0.167, 0.381] | 0.250 [0.155, 0.366] | 0.681 | 0 / 0 / 0 |
-| 25 | powermetrics 100 ms | 0.000 [0.000, 0.050] | 0.000 [0.000, 0.050] | 0.391 | 0 / 0 / 0 |
-| 50 | INA 1 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
-| 50 | NVML 100/25 ms | 0.347 [0.239, 0.469] | 0.333 [0.227, 0.454] | 0.933 | 0 / 0 / 0 |
-| 50 | powermetrics 100 ms | 0.319 [0.214, 0.440] | 0.028 [0.003, 0.097] | 0.846 | 0 / 0 / 0 |
-| 100 | INA 1 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
-| 100 | NVML 100/25 ms | 0.681 [0.560, 0.786] | 0.500 [0.380, 0.620] | 1.000 | 0 / 0 / 0 |
-| 100 | powermetrics 100 ms | 1.000 [0.950, 1.000] | 0.694 [0.575, 0.798] | 0.982 | 0 / 0 / 0 |
-| 250 | INA 1 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
-| 250 | NVML 100/25 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
-| 250 | powermetrics 100 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
-| 500 | INA 1 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
-| 500 | NVML 100/25 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
-| 500 | powermetrics 100 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
-
-True main-world prefills are 2160 per sensor/duration (72*30). INA and
-powermetrics detect all 2160 at every duration. NVML detects 2159 at 100 ms
-and 500 ms and all 2160 elsewhere. Mean episode duration ranges from
-147.868 s to 176.429 s across the grid (rounded to ms).
-
-Shared-run omissions are concealed in every trial where the original logged
-call was detected: INA 72/72 at every duration; NVML 3/3, 12/12, 27/27,
-44/44, 72/72, 72/72, 72/72, 72/72 in duration-grid order; powermetrics has
-no such detected trials at 1/5/10 ms, then 24/24, 67/67, 72/72, 72/72,
-72/72. Concealment is conditional on detecting the original shared run;
-0/0 is undefined, not a zero-concealment result. Between-turn log-only
-isolated and mixed omissions yield zero hidden-call recall throughout.
-
-All 38 expanded reviewer commands exited successfully before and after;
-integer scientific pass conditions are assessed separately in the report.
-B1/B2/B3/M2 and m2–m6 meet their requested checks. M1's strict r5 short-hit
-non-regression and optional m1's universal phase counts remain unmet and
-are disclosed below; a zero process exit is not a scientific pass.
-
-
-Production chain: Episode -> timeline_from_episode -> simulate ->
-detect_phases -> match_tool_calls. Physical traces are fixed before hiding
-calls in log copies. Separate fake sysfs chains use real
-Ina3221Sampler.start/sample_once/stop -> PowerTrace -> detector -> matcher.
-
-The production study uses 30 turns, 1800 initial prefill tokens, 30..400 decode
-tokens at 64 tokens/s, and 150..3000 result tokens per call feeding the next
-prefill at 2000 tokens/s. Cached context grows by real token counts. One to
-three calls share each non-final tool turn. Main and null controls retain
-20 ms client latency; both covered-call worlds have zero client gap. A first
-turn's isolated call is either moved inside decode or covered by a stretched
-logged turn end. Call duration equals trough duration in those two worlds.
-One hidden call per independently seeded episode is a Bernoulli trial;
-pooled visible-call recall is descriptive, since calls within a run correlate.
-
-INA's supplied 1 ms cadence is a scenario, not a measured board result.
-At 5 V, 2 A and the public P3767 DT's 5 milliohm shunt, dV=.008 V and
-dI=40 uV/.005 ohm=.008 A; dP=5*.008+2*.008+.008*.008=.056064 W.
-NVML and selected powermetrics output use .001 W integer-mW resolution.
-Independent read sd=q/sqrt(12) is a scenario in addition to rounding.
-NVML is 100 ms sampling / 25 ms exposure (duty .25); powermetrics is
-100 ms whole-window sampling. Hardware status remains PROVISIONAL.
-
-The 90% recall, under-5% FA and equal-tail 95% CP coverage are reporting
-conventions. Intervals are per column, not simultaneous coverage over the grid.
-The default 72 is derived from n > log(.025)/log(.95)=71.9; zero alarms in 72
-trials gives upper 1-.025**(1/72)<.05. Shortest answers are grid points, not
-interpolated hardware limits. Neither nulls nor flagged episodes are discarded.
+No current point or 95%-bound shortest duration is claimed. Reviewer-measured
+at b1613dad6, dithered counterfactual: INA 1 ms mid 8/72, stretch 59/72;
+2 ms mid 51/72, stretch 72/72; 5 ms mid 72/72. The reviewer predicts a 5 ms
+point and 95%-bound answer, with CP lower about .950 at 72/72. This prediction
+is not a current study run. The prior printed 10 ms bound is superseded as
+a current claim until the configuration-based detector is executed.
+The 90% recall / under-5% FA targets and 95% coverage remain reporting
+conventions; the 72-seed zero-FA bound is derived, not observed this round.
 
 ## DECISIONS I MADE
 
-- Continued only the existing lane, preserving the frozen contracts and all
-  reviewer fixed-world builders. The runtime became usable after initial
-  launch refusals; GitHub checkpoints preceded local execution. The explicit
-  user build brief selects this bounded AGENT task over unrelated queue work.
-- Construct every idle complement of visible generation, including tool-free
-  client gaps. Removing a call outside claimed generation supplies no new
-  power evidence when the log already exposes the gap.
-- Put shared private helpers in the already-authorized sensor_sim module.
-  Both consumers use one majority-of-held-runs predicate and mean/span
-  estimator. Two poll-quantized endpoints motivate the two-bin cadence band;
-  the median/MAD majority breakdown motivates robustness to isolated V/I splits.
-  No sqrt(n) evidence guard, lag cap or all-periods>1 rule remains.
-- Use exposure duration and the available n-1 pairs as the lag cap. The
-  2*variance*log(n) BIC split penalty, q^2/12 variance floor and accumulated
-  ulp floor retain their stated derivations.
-- Add a bounded one-quantum rounding term to statistical level uncertainty
-  by the triangle inequality; it cannot average away without demonstrated
-  dithering. Add the compared means' ulps at the grouping boundary. Local
-  peak/fall roles and observed idle edges prevent one spurious level group
-  from shifting labels everywhere. Decode may rise with context.
-- Preserve an observable quantization floor when first-difference MAD is
-  exactly zero but out-and-back small excursions exist. This is not analog
-  calibration: conditional repeat removal and token ripple can bias it.
-- Distinguish known-call runs from empty visible client gaps. For empty gaps,
-  idle-compatible observed exposures may refute a too-short explanation;
-  mixed exposures remain conservative because unobserved token ripple can
-  vanish in whole windows and survive partial ones. Two power half-widths
-  imply at most 2*bar/contrast active exposure, converted to timing uncertainty.
-- Effective held cadence supplies conversion latency in addition to averaging,
-  clock half-width and read-gap uncertainty. Positive alarms, OC deltas and
-  voltage extrema remain in sampler notes; no protection settings are altered.
-- Use zero-gap covered-call worlds for the deliverable. Keep ordinary-gap
-  and shared-run omissions explicitly log-only controls. Print both point
-  and per-column bound answers; no scientific choice is hidden.
-- Code semantics win over reviewer prose: TimelineModel.decode_w is an
-  increment above idle. w.py's idle=6, decode_w=7 therefore produces 13 W,
-  not 7 W. Its +1 W wait remains separable. A new regression separately
-  exercises a true 7 W decode (increment=1) and its equal-level ambiguity flag.
-- Retain conservative labels where sparse exposure misses a prefill. Do not
-  manufacture a burst count from an unobserved interval to satisfy m1's
-  unconditional 20/20 criterion.
-- Root AGENTS.md handoff item 8 requested a read-only document-consistency
-  agent. That sweep checked API descriptions, Round 1 preservation, repro
-  evidence and final numeric tables; its factual corrections were applied.
-- No hardware, paid service, external message, PR, merge, force push, main
-  push, registry edit or out-of-scope tracked write. Extra packages were unnecessary.
+- Followed the user's explicit Round 3 cadence authority: no episode-value
+  inference feeds sampling, latency, window, noise or labels.
+- Driver P is rounded to integer ms, so its upper endpoint adds 0.5 ms,
+  half one printed unit. Characterized P instead adds one actual poll
+  (requested poll plus maximum measured read latency) divided by observed
+  periods, from the two endpoint poll errors. Characterization is preferred.
+- Observation uncertainty adds register age even when every value differs.
+  Exposure bins include window + hold latency + measured settling, because
+  all three can spread a step. Matching adds those terms, clock half-width
+  and missing-read uncertainty by the triangle bound.
+- Thinning uses declared P against poll interval. A trace declaring nothing
+  follows records.py: exposure ends at t_ns and hold latency is zero.
+- estimate_noise_sd can subsample by explicit timing; it never drops samples
+  by value. detect_phases estimates on its already timing-thinned values.
+  The existing out-and-back rounding floor and plateau-zero test are retained.
+- Unknown settling is flagged per INA rail and defaults to zero. Supplied
+  settling_time_ns is a measured timing input, never a fitted constant.
+- Chose separate reporting plus denominator exclusion for wholly uncovered
+  logged calls. Partial coverage keeps the existing trace-edge path.
+- Existing alarm paths remain cached, so losing one later still records
+  health_read_error. Attributes never present produce only availability flags.
+- Retained all original assertions and scenarios; changed only the three
+  specifically authorized held-fixture setups. Added independent regressions.
+- Appended the held INA study row without changing the three existing rows,
+  index 0, duration grid, keywords or output keys. Did not add 2 ms to the
+  default grid; the required r6/r9 probes independently exercise it.
+- Used connected GitHub to checkpoint while execution is unavailable, with
+  fresh remote-head reads, expected-head checks and force=false. No merge
+  was needed at the first checkpoint; remote was b1613dad6.
+- Explicit bounded user work takes priority over unrelated generated queue
+  entries. No live hardware, external message, paid service or main push.
+  The open observed-evidence ruling remains; elapsed time is not an answer.
 
 ## CONTRACT-CHANGE
 
-Request PowerTrace.register_refresh_period_ns, hold_latency_ns and settling_time_ns.
-Current lane-local adapter uses those documented JSON keys in notes; source is
-register_refresh_source, with register_refresh_print_half_width_ns for driver
-precision. detect_phases keyword arguments override notes. The frozen files
-are unchanged. Historical Round 2 contract statement follows.
-
-none. Segment's appended fields are lane-local. Shared records and protocols
-are unchanged. The decode_w prose disagreement is resolved by preserving the
-existing code; no governing contract change is requested.
+Request explicit PowerTrace.register_refresh_period_ns, hold_latency_ns and
+settling_time_ns (with provenance/uncertainty). Until then the documented
+per-trace JSON notes keys above are the lane-local adapter. Segment and
+ToolCallMatch additions are lane-local. PIPELINE.md, records.py and
+interfaces.py are unchanged. The records statement that windows end at t_ns
+needs this age term for physical INA registers.
 
 ## FIX LOG
 
@@ -377,32 +242,38 @@ Full machine outputs remain in untracked .review2/before and .review2/verified.
 - JET2-m6 — fixed in c19381b858bafe53158ee2555a7031377f92b9fa. Before default 64 could only give derived zero-FA upper `0.056009089386636624`; after default is 72, the smallest integer making `1-.025**(1/n)<.05`. Both point and 95%-bound columns are computed and printed rather than choosing one silently.
 - JET2-m7 — fixed in 22c08424776f928b40e4b76a782b1d50a17d6972. Before report said zero tests and doc had stale FIX1C status; after both contain this seat's 46-test execution, all repro outcomes, full 72-seed production grid and shortest answers. Historical Round 1 FIX LOG is preserved; current non-passes are explicit.
 
+
 ### Round 3 (JET3)
 
-- JET3-B1 — source checkpoint; verification pending. Reviewer-measured at b1613dad6 before: conversion/poll 1100/1000 us FA 11/12, 840/1000 us 8/12, 1500/1000 us 6/8. After: not executed.
-- JET3-M1 — source checkpoint; verification pending. Reviewer-measured before: "held inferred 71/72; mid hidden recall 67/72; with 1e-9 W dither 72/72". After: not executed.
-- JET3-m1 — settling parameter propagated; protocol and repro verification pending. Before reviewer-measured decay5 "FA episodes 2/6"; after not executed.
-- JET3-m2 — source checkpoint excludes wholly unobserved calls and reports them in outside_trace_logged. Before reviewer-measured cropped recalls ".545/.455 flags []"; after not executed.
-- JET3-m3 — source checkpoint adds only existing alarm paths, retaining failures after discovery. Before reviewer: absent alarms yield health_read_error; after not executed.
-- Setup-only ports: test_held_reads_with_estimated_and_supplied_noise and test_held_noninteger_ratio_noise_is_nonzero_and_calls_survive declare P in notes; test_real_sysfs_path_through_detector_with_held_conversions runs a changing-load characterization before sampling. Every scenario and assertion retained, as required by this brief.
+"fixed" below means source implemented, **UNVERIFIED**, not a claimed repro pass.
+Before summaries are reviewer-measured at b1613dad6; no before or after command
+was executable in this seat.
+
+- JET3-B1 — fixed in 530671e6c9c177dfbac6d88cffe2acf9bf73e5ad (source; follow-up regression/uncertainty commit pending). Before: "1100/1000 us FA 11/12; 840/1000 us 8/12; 1500/1000 us 6/8"; after: "NOT RUN — executor unavailable". Every seed's FA, matching and prefill non-regression bar remains unverified, as does the appended study row.
+- JET3-M1 — fixed in 530671e6c9c177dfbac6d88cffe2acf9bf73e5ad (source). Before: "held inferred 71/72; mid hidden recall 67/72; with 1e-9 W dither 72/72"; after: "NOT RUN — executor unavailable". r4/r6/r9 equality and the full study are pending; no replacement scientific figures are asserted.
+- JET3-m1 — fixed in 530671e6c9c177dfbac6d88cffe2acf9bf73e5ad (parameter/propagation source; protocol follow-up pending). Before: decay5 "FA episodes 2/6", recall "162/227"; decay10 "6/6", "79/227"; decay50 "11/12", "259/418"; after: "NOT RUN — executor unavailable". Both source and protocol require executable verification; no r1 script adaptation made yet.
+- JET3-m2 — fixed in 530671e6c9c177dfbac6d88cffe2acf9bf73e5ad (source). Before cropped lines: "recall .545/.455 flags []"; after: "NOT RUN — executor unavailable". outside_trace_logged reports excluded calls; full/clock-control flag checks remain pending.
+- JET3-m3 — fixed in 530671e6c9c177dfbac6d88cffe2acf9bf73e5ad (source; new regression pending commit). Before: "health_read_error ... FileNotFoundError" for absent alarms; after: "NOT RUN — executor unavailable". e12 and present-alarm read-failure checks remain pending.
+- Authorized setup-only change: test_held_reads_with_estimated_and_supplied_noise declares each scenario's P and window; every hold scenario/assertion retained. Value-based inference is intentionally removed.
+- Authorized setup-only change: test_held_noninteger_ratio_noise_is_nonzero_and_calls_survive declares 1.5/1.9 ms P in notes; all assertions retained.
+- Authorized setup-only change: test_real_sysfs_path_through_detector_with_held_conversions runs characterize() under a changing load before episode sampling; driver still says 1 ms and episode converts every 4 ms. All assertions retained.
 
 ## OPEN ISSUES
 
-- No live Orin validation. Shunt, cadence, analog noise, exposure, sampler
-  overhead and supply behavior still require the documented borrowed-board session.
-- Held-value cadence inferred from power is confounded by quantization and
-  steady/periodic loads. It remains flagged and does not replace characterization.
-- Greedy binary segmentation can miss balanced short troughs; the measured
-  covered-call curves state that limit rather than assuming perfect sensitivity.
-- An idle run cannot reveal which remote tool ran, and a hidden call sharing
-  an already logged idle run is generally unidentifiable.
-- The M1 stretch-powermetrics 100 ms drop from 5/6 to 1/6 remains a
-  sensitivity regression; it is not established to be unobservable. Conservative
-  treatment of mixed exposures trades sensitivity for the required clean nulls.
-- Strict M1 short-call non-regression and m1 guaranteed prefill/decode counts
-  are not claimed as passes; see the specific observability ruling below.
-- Infrastructure is available now. No repository file is missing. Tracked
-  changes are confined to WRITE_SCOPE; .review2 remains untracked intentionally.
+- **No execution environment.** No syntax check, align test, baseline/final
+  repro or full study ran. APPLIED_UNVERIFIED; the lead must execute all
+  required commands and assess every seed, including prefill non-regression.
+  No failing lines are available to diagnose because no process could launch.
+- No live Orin validation. Cadence, shunt, read skew, settling, analog noise,
+  clock mapping, power supply and polling overhead remain PROVISIONAL.
+- The optional settling source requires the specified decay probes and a
+  measured protocol value before a pass can be claimed.
+- Value-based hold inference is removed; a wrong or unknown configuration
+  remains a flagged instrumentation limitation, not an inferred substitute.
+- Greedy segmentation and shared-run concealment limits remain. Prior-round
+  short-call/prefill sensitivity findings are preserved in FIX LOG and ruling.
+- No missing repository file. The unavailable capability is execution, which
+  also prevents materializing the supplied scratch scripts and their outputs.
 
 ## NEEDS_RULING
 

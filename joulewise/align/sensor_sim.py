@@ -1,7 +1,8 @@
 """Analytic episode power timelines and stdlib sensor convolution.
 
 All workload power coefficients are caller parameters: these are synthetic
-worlds, not fitted hardware claims. Windows end at the sample timestamp.
+worlds, not fitted hardware claims. Ordinary windows end at the sample timestamp;
+the optional register model declares its conversion age separately in notes.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ def _mean_period_ns(periods: tuple[int, ...] | list[int]) -> float | None:
 
 
 def _held_change_indices(values: tuple[float, ...]) -> list[int]:
-    """Evidence of held conversions, allowing isolated non-atomic read splits.
+    """Legacy repeat-pattern diagnostic; never used to infer sensor timing.
 
     A majority is the breakdown limit of the median/MAD, not a fitted
     percentage. At least half repeated differences can zero the MAD; require
@@ -253,8 +254,13 @@ def simulate(timeline: Timeline, sensor: SensorModel) -> PowerTrace:
     if not isinstance(period, int) or period < 0:
         flags.append("invalid_register_refresh_period")
         valid = False
+        period = 0
     phase = (sensor.conversion_phase_ns if sensor.conversion_phase_ns is not None else
              random.Random(sensor.seed).randrange(period) if period else 0)
+    if not isinstance(phase, int):
+        flags.append("invalid_conversion_phase")
+        valid = False
+        phase = 0
     last_completion, last_watts = None, None
     if valid:
         for t in range(timeline.start_ns + sensor.sample_interval_ns,
