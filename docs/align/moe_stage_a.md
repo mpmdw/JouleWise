@@ -56,3 +56,129 @@ Permutation inference preserves label counts within each task group. Exact
 enumeration applies through 100,000 arrangements; larger spaces require Monte
 Carlo error below 0.005 at p=0.05, a tenth of that conventional significance level.
 Routing, metadata, and combined classifiers must share held-out task groups.
+
+
+## Capture API and coverage
+
+Construction attaches the hooks. Use eager inference on one sequence at a time:
+
+```python
+from dataclasses import replace
+from joulewise.align.moe.hooks import RouterRecorder
+
+with RouterRecorder(model) as recorder:
+    with recorder.phase("prefill"):
+        output = model(input_ids=prompt, use_cache=True)
+    with recorder.phase("decode"):
+        model(input_ids=next_token, past_key_values=output.past_key_values)
+    episode = replace(episode, router_log=recorder.log,
+                      flags=episode.flags + tuple(recorder.flags))
+```
+
+A snapshot never changes when later forwards are recorded. reset() starts another
+episode without reattaching hooks; close() removes this recorder's hooks.
+Inference without an override uses sequence length and the KV cache: a fresh
+one-token prompt is prefill, and a cached one-token forward is decode. Override
+cached one-token tool-response prefill and multi-token speculative decode
+explicitly. Batched episodes, incomplete layers, unsupported topology, training
+mode, padding omission, and inference ambiguity are flags. Incomplete forwards
+are not presented as complete token rows. Propagate recorder.flags to
+Episode.flags: RouterLog itself has no flags field.
+
+Gate hooks synchronize selected IDs to the host. This instrumentation changes
+runtime and potentially energy; Stage A establishes statistical feasibility.
+Do not use its overhead as Stage B evidence. Compiled/fused/distributed HF
+execution needs separate capture-coverage validation.
+
+## Statistics and inference details
+
+- usage_entropy: average of layer entropies, rather than entropy of pooled
+  expert IDs; normalization is log(num_experts). One expert has entropy zero.
+- load_imbalance: population standard deviation of expert counts divided by
+  their mean, including zero-count experts, then averaged over layers.
+- reuse_fraction: mean set intersection / top_k over adjacent tokens and layers.
+- mean_reuse_distance: each recurrent selection contributes its token-index
+  distance from the previous use at that layer; first uses are excluded.
+- episode_stats: twelve keys, <phase>_<metric>, with phases prefill, decode, both.
+  None and both select all rows. Filtering precedes adjacency and distance
+  calculations; distances count positions in the filtered sequence.
+- Empty phases and undefined distances are NaN. routing_flags describes malformed
+  log topology or selections. Stage A keeps those episodes, flags missing data,
+  and prints non-finite values as JSON null.
+
+RouterLog contains no turn/sequence boundary offsets. Sequence statistics use its
+flat token order, including across turn/phase boundaries for the both view.
+The explicit phase filter is a different sequence, so decode reuse distances do
+not count intervening prefill rows.
+
+The two-sided permutation statistic is sabotage mean minus benign mean. The
+number of arrangements is the product of binomial group sizes. Exact p is the
+fraction of all arrangements at least as extreme as observed. Monte Carlo p is
+(extreme+1)/(draws+1); draws are at least floor(.05*.95/.005^2)+1 = 1901, since
+sqrt(.05*.95/1901) < .005. An explicit smaller budget is raised to that minimum.
+Binary-rational integer sums handle equality exactly without a floating tie
+tolerance. Groups with only one condition cannot exchange labels and are flagged.
+
+Holm correction always covers all twelve planned metrics; missing phases cannot
+shrink the correction family. Effects include raw differences and pooled-SD
+standardized differences. Whole task groups are sampled with replacement for
+percentile intervals. Bootstrap count and confidence are parameters; the default
+confidence is the conventional 95%. Undefined replicates are counted and flagged.
+
+## Routing versus metadata comparison
+
+analyze_stage_a uses Episode.task_pair for both permutation groups and
+leave-one-task-group-out classifier folds. The counts baseline uses logged
+prefill tokens, visible decode tokens (decode_tokens minus hidden_tokens),
+logged turns, and logged tool calls. It never uses the condition or side-task
+success as a feature.
+
+Routing uses all twelve statistics. Combined uses routing plus the same count
+features. All three use a standardized nearest-centroid classifier with means,
+population scales, imputation, and centroids fitted on training groups only.
+Constant columns have zero weight. There is no hyperparameter fitting or
+label-informed feature selection. Local Mann-Whitney AUC awards half credit to
+ties; the spine has no metadata_baseline module/AUC to reuse.
+
+The deliverable reports each held-out AUC and the combined-minus-metadata AUC
+gain with a paired group-bootstrap interval. These AUC intervals resample fixed
+out-of-fold predictions and are conditional on the fitted folds; they do not
+include classifier-refitting uncertainty. A positive raw routing test alone does
+not establish added separation. No automatic hardware authorization or scientific
+decision threshold is embedded in the report.
+
+Read shared Episode JSONL and print the analysis:
+
+```sh
+python3 -m joulewise.align.moe.stage_a episodes.jsonl --n-bootstrap 2000 --seed 0
+```
+
+The bootstrap budget is chosen by the analyst; it is not a hidden agreement bar.
+
+## Generative synthetic controls
+
+TopicWorld defaults to six-turn episodes with five tool calls, varying prompt
+and decode counts, four sparse layers, 32 experts, top-4. Set layers=48,
+num_experts=128, top_k=8 to exercise the verified full topology. Timings are an
+explicit configurable serving scenario, with no power trace or hardware claim.
+
+Every expert has equal main-topic affinity. A side topic has affinity one on
+a layer-specific top_k-expert subset and zero elsewhere. A stated fraction f of
+sabotage decode tokens switches topics; prefill is unchanged. Main-topic tokens
+sample top_k distinct experts uniformly. Counts stay matched within task pairs.
+
+For E experts and k selections, the asymptotic decode load CV is
+f sqrt(E/k-1), and expected reuse is k/E + f^2(1-k/E). Entropy follows the
+mixture probabilities: f/k+(1-f)/E on core experts and (1-f)/E elsewhere.
+Finite-token CV-squared also has the multinomial marginal-count variance term;
+the tests compare it to the analytic expectation using independent task groups.
+
+The matched zero-shift control uses common random numbers, producing identical
+paired router logs when f=0. A second control uses independent routing noise
+under f=0. Both pass through real episode_stats, permutation tests, held-out
+classification, and grouped bootstrap. Tiny real model tests construct 2-layer,
+8-expert, top-2, hidden-size-32 HF models locally and generate two prompts. They
+skip explicitly when torch/transformers or Qwen3-MoE support is unavailable.
+
+Implementation and test execution status, with exact commands and observed
+numbers, is tracked in .codex-report/align-moe.md.
