@@ -6,8 +6,8 @@ import hashlib
 import io
 import json
 import os
-import signal
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
@@ -98,12 +98,6 @@ class G2aInspectionTests(unittest.TestCase):
     def setUp(self):
         self.f = G2aFixture()
         self.addCleanup(self.f.close)
-        # install.main quiesces SIGINT/SIGTERM/SIGHUP to SIG_IGN "through CLI
-        # exit". In-process, that leaked into later modules of the same test
-        # process, whose children then inherited an ignored SIGTERM (CI shard 4:
-        # the courier test waited out its 30 s SIGTERM grace).
-        saved = {number: signal.getsignal(number) for number in install.SIGNALS}
-        self.addCleanup(lambda: [signal.signal(number, handler) for number, handler in saved.items()])
 
     def run_chain(self, **flags):
         with self.f.environment():
@@ -195,6 +189,10 @@ class G2aInspectionTests(unittest.TestCase):
         self.assertEqual(text.count(expected), 1)
 
     def test_installer_render_only_succeeds_without_running_reservation(self):
+        # The installer ignores termination signals; those dispositions belong
+        # to this test's caller and must not leak into later courier children.
+        for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            self.addCleanup(signal.signal, signum, signal.getsignal(signum))
         real_run = subprocess.run
         def run(argv, *a, **kw):
             if argv[0] == '/usr/bin/git':
@@ -210,6 +208,30 @@ class G2aInspectionTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertFalse(self.f.reservation.with_suffix('.CALLED').exists())
         self.assertTrue(list((self.f.base/'rendered').glob('*.plist')))
+
+
+class G2aInstallerIsolationTests(unittest.TestCase):
+    def test_render_only_test_preserves_caller_signal_handlers(self):
+        signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+        for signum in signals:
+            self.addCleanup(signal.signal, signum, signal.getsignal(signum))
+
+        def caller_handler(signum, frame):
+            pass
+
+        # Check both default and custom dispositions, so resetting to defaults
+        # cannot masquerade as restoring the caller's actual handlers.
+        for handler in (signal.SIG_DFL, caller_handler):
+            with self.subTest(handler=handler):
+                for signum in signals:
+                    signal.signal(signum, handler)
+                case = G2aInspectionTests(
+                    'test_installer_render_only_succeeds_without_running_reservation')
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+                for signum in signals:
+                    self.assertEqual(signal.getsignal(signum), handler, signum)
 
 
 class G2aAuthoringTests(unittest.TestCase):
