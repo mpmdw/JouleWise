@@ -446,3 +446,12 @@ scratchpad count. Missing information therefore produces a flag, not an estimate
 ## NEEDS_RULING
 
 none for the completed runner lane.
+
+## FIX ROUND 1 CHECKPOINT
+
+Resumed 52999e6a2a7e165901dcfe813cc7ae68157c59ea. Read this report,
+the protected pipeline/records/interfaces, AGENTS.md and repository intake.
+The managed environment is pending/offline and has not exposed an executor.
+The authorized lane is being continued through connected GitHub tools; baseline
+review probes, focused regression tests and CI evidence will be recorded before
+completion. No implementation fix or new test execution is claimed at this checkpoint.
