@@ -269,6 +269,8 @@ class NvmlSampler:
     """Implement PowerSampler with one background worker per device.
 
     interval_ns is a polling choice, not a claim about sensor update rate.
+    Each start/stop cycle owns fresh traces. A timed-out prior worker blocks
+    restart with an explanatory empty trace until deferred cleanup finishes.
     resolution is the NVML integer mW/mJ quantum, not an accuracy guarantee.
     power_bound_w, when provided, is a caller-justified bound on instantaneous
     board power, including transients; an enforced *average* power limit alone
@@ -312,8 +314,30 @@ class NvmlSampler:
             self._flags.append("start_while_running")
             return
         if self._result is not None:
-            self._flags.append("sampler_instance_already_stopped")
-            return
+            active_workers = any(device.thread is not None and device.thread.is_alive()
+                                 for device in self._devices)
+            cleanup_active = (self._cleanup_thread is not None and
+                              self._cleanup_thread.is_alive())
+            if active_workers or cleanup_active:
+                # Keep the old stop event set: replacing it while an old worker
+                # is inside a native call could revive that worker on return.
+                # A new episode receives no stale samples from the old cycle.
+                self._result = (PowerTrace(
+                    "nvml_power", "unavailable", self.clock_domain, (), (), "W",
+                    self.interval_ns, notes=json.dumps({
+                        "flags": ["restart_blocked_by_previous_workers"],
+                        "reason": "previous sampling or deferred shutdown is still active"})),)
+                return
+            previous_cleanup_flags = [
+                flag for flag in self._flags
+                if flag.startswith(("shutdown_failed:", "deferred_shutdown_failed:"))]
+            self._event = threading.Event()
+            self._devices = []
+            self._flags = previous_cleanup_flags
+            self._initialized = False
+            self._started = False
+            self._cleanup_thread = None
+            self._result = None
         self._started = True
         try:
             if not isinstance(self.interval_ns, int) or self.interval_ns <= 0:

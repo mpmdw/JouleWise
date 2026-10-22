@@ -214,6 +214,30 @@ class NvmlSamplerTests(unittest.TestCase):
         self.assertIs(sampler.stop(), traces)  # Cached result identity is the property.
         self.assertEqual(library.shutdown_calls, 1)
 
+    def test_reused_sampler_returns_fresh_episode_traces(self) -> None:
+        library = FakeNvmlLibrary()
+        sampler = NvmlSampler(library=library, interval_ns=1_000_000)
+        sampler.start()
+        first = sampler.stop()
+        first_json = tuple(to_json(trace) for trace in first)
+        with mock.patch.object(library, "_power_mw", return_value=250_000):
+            sampler.start()
+            second = sampler.stop()
+        self.assertIsNot(second, first)
+        self.assertIs(sampler.stop(), second)
+        self.assertEqual(library.init_calls, 2)
+        self.assertEqual(library.shutdown_calls, 2)
+        self.assertEqual(tuple(to_json(trace) for trace in first), first_json)
+        for earlier, later in zip(first, second):
+            self.assertTrue(later.values)
+            self.assertGreater(min(later.t_ns), max(earlier.t_ns))
+            if later.unit == "W":
+                # 1e-6 relative is the specified agreement bar when no
+                # measurement uncertainty is asserted by this exact ABI input.
+                self.assertTrue(all(math.isclose(value, 250.0, rel_tol=1e-6)
+                                    for value in later.values))
+                self.assertNotEqual(earlier.values, later.values)
+
     def test_call_midpoints_and_odd_bracket_rounding(self) -> None:
         lock = threading.Lock()
         ticks = 0
@@ -355,11 +379,25 @@ class NvmlSamplerTests(unittest.TestCase):
             self.assertEqual(library.shutdown_calls, 0)
             self.assertTrue(any("shutdown_deferred_worker_active" in json.loads(trace.notes)["flags"]
                                 for trace in traces))
+            sampler.start()
+            blocked = sampler.stop()
+            self.assertTrue(all(not trace.values for trace in blocked))
+            self.assertTrue(all("restart_blocked_by_previous_workers" in
+                                json.loads(trace.notes)["flags"] for trace in blocked))
+            self.assertIsNot(blocked, traces)
+            self.assertEqual(library.init_calls, 1)
+            self.assertTrue(sampler._event.is_set())
         finally:
             library.release.set()
             if sampler._cleanup_thread is not None:
                 sampler._cleanup_thread.join(timeout=2)
         self.assertEqual(library.shutdown_calls, 1)
+        sampler._stop_timeout_s = 2.0  # Operational join guard, not a measured tolerance.
+        sampler.start()
+        resumed = sampler.stop()
+        self.assertTrue(any(trace.values for trace in resumed))
+        self.assertEqual(library.init_calls, 2)
+        self.assertEqual(library.shutdown_calls, 2)
 
     @unittest.skipUnless(importlib.util.find_spec("pynvml") is not None,
                          "optional nvidia-ml-py is not installed; ctypes path is tested")
