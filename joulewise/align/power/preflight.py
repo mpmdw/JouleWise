@@ -16,6 +16,7 @@ import shlex
 import signal
 import statistics
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -89,8 +90,7 @@ def _hazards(device: dict[str, Any], smi: dict[str, Any]) -> list[str]:
     smi_mode = str(smi.get("virtualization_mode") or "").lower()
     # NVML enum: NONE=0, PASSTHROUGH=1, VGPU=2, HOST_VGPU=3,
     # HOST_VGPU_DEVICE=4. Passthrough is compatible with a whole GPU.
-    if mode in (2, 3, 4) or ("vgpu" in name.lower()) or (
-            smi_mode and smi_mode not in ("none", "pass through", "passthrough", "n/a", "not supported")):
+    if mode in (2, 3, 4) or "vgpu" in name.lower() or "vgpu" in smi_mode:
         hazards.append("virtual_gpu_hides_or_shares_board_power")
     return hazards
 
@@ -100,11 +100,26 @@ def _spaced_values(trace: PowerTrace, start: int, end: int) -> list[float]:
     facts = notes.get("sensor_facts") or {}
     spacing = max(trace.nominal_interval_ns, facts.get("period_ns") or 0,
                   notes.get("output_averaging_window_ns") or 0)
+    timestamps = notes.get("window_end_ns")
+    brackets = notes.get("window_timing_half_width_ns")
+    if timestamps is None:
+        # Synthetic/external traces may state their sensor endpoint directly.
+        # NVML query-only channels explicitly report unresolved sensor age.
+        if any(flag in notes.get("flags", ()) for flag in (
+                "sensor_update_phase_unreported", "driver_field_timestamp_is_wall_clock")):
+            return []
+        timestamps = trace.t_ns
+        brackets = notes.get("timing_half_width_ns", [0]*len(trace.values))
+    if brackets is None or len(timestamps) != len(trace.values) or len(brackets) != len(trace.values):
+        return []
+    width = notes.get("output_averaging_window_ns") or trace.averaging_window_ns or 0
     selected = []
     last: int | None = None
-    for timestamp, value in zip(trace.t_ns, trace.values):
-        if start <= timestamp < end and math.isfinite(value):
-            if last is None or timestamp - last >= spacing:
+    for timestamp, value, bracket in zip(timestamps, trace.values, brackets):
+        # All of a physical observation's support and endpoint uncertainty
+        # must belong to the phase; cached idle means cannot prove load work.
+        if start <= timestamp-width-bracket and timestamp+bracket < end and math.isfinite(value):
+            if last is None or timestamp-last >= spacing:
                 selected.append(value)
                 last = timestamp
     return selected
@@ -170,45 +185,77 @@ def assess_power_movement(traces: Sequence[PowerTrace], idle_interval: tuple[int
     return result
 
 
-def _terminate_load(process: subprocess.Popen[Any], timeout_s: float) -> None:
-    if process.poll() is not None:
-        return
-    # Only terminate the subprocess group created by this preflight. It may
-    # contain a load command's children; never search for unrelated processes.
-    if os.name == "posix":
-        os.killpg(process.pid, signal.SIGTERM)
-    else:
-        process.terminate()
-    try:
+def _terminate_load(process: subprocess.Popen[Any], timeout_s: float) -> dict[str, Any]:
+    receipt: dict[str, Any] = {"group": process.pid, "kill_escalated": False}
+    if os.name != "posix":
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=timeout_s)
+            except subprocess.TimeoutExpired:
+                receipt["kill_escalated"] = True
+                process.kill()
         process.wait(timeout=timeout_s)
-    except subprocess.TimeoutExpired:
-        if os.name == "posix":
+        return receipt
+
+    def present() -> bool:
+        try:
+            os.killpg(process.pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+
+    # The session/group was created by this exact Popen, so its identity is
+    # retained even if the leader exited before a child. Do not use leader
+    # poll() as evidence that all owned GPU work stopped.
+    if present():
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    deadline = time.monotonic()+timeout_s
+    while present() and time.monotonic() < deadline:
+        process.poll()  # Reap an exited leader while waiting for its children.
+        threading.Event().wait(min(0.01, max(0.0, deadline-time.monotonic())))
+    if present():
+        receipt["kill_escalated"] = True
+        try:
             os.killpg(process.pid, signal.SIGKILL)
-        else:
-            process.kill()
-        process.wait(timeout=timeout_s)
+        except ProcessLookupError:
+            pass
+    process.wait(timeout=timeout_s)
+    receipt["group_present_after_kill"] = present()
+    # A surviving group can consist of zombies awaiting the host's reaper;
+    # preserve this diagnostic rather than claiming verified disappearance.
+    return receipt
 
 
-def _torch_load(stop: threading.Event, ready: threading.Event, status: dict[str, Any],
-                device_index: int, matmul_size: int) -> None:
-    try:
-        import torch
-        if not torch.cuda.is_available():
-            status["reason"] = "torch has no available CUDA device"
-            ready.set()
-            return
-        with torch.cuda.device(device_index):
-            a = torch.randn((matmul_size, matmul_size), device="cuda")
-            b = torch.randn((matmul_size, matmul_size), device="cuda")
-            status["available"] = True
-            ready.set()
-            with torch.no_grad():
-                while not stop.is_set():
-                    torch.mm(a, b)
-                    torch.cuda.synchronize()
-    except Exception as exc:
-        status["reason"] = str(exc)
-        ready.set()
+def _torch_command(device_index: int, matmul_size: int, ready_path: Path) -> list[str]:
+    # CUDA initialization and allocations occur in a killable owned process,
+    # never in an unkillable thread in the preflight controller.
+    code = """
+import json, sys
+from pathlib import Path
+ready = Path(sys.argv[1])
+try:
+    import torch
+    if not torch.cuda.is_available():
+        ready.write_text(json.dumps({"available": False, "reason": "torch has no CUDA device"}))
+        raise SystemExit(0)
+    with torch.cuda.device(int(sys.argv[2])):
+        size = int(sys.argv[3])
+        a = torch.randn((size, size), device="cuda")
+        b = torch.randn((size, size), device="cuda")
+        torch.cuda.synchronize()
+        ready.write_text(json.dumps({"available": True}))
+        with torch.no_grad():
+            while True:
+                torch.mm(a, b)
+                torch.cuda.synchronize()
+except Exception as exc:
+    ready.write_text(json.dumps({"available": False, "reason": str(exc)}))
+"""
+    return [sys.executable, "-c", code, str(ready_path), str(device_index), str(matmul_size)]
 
 
 def run_preflight(*, device_indices: Sequence[int] | None = None,
@@ -235,19 +282,22 @@ def run_preflight(*, device_indices: Sequence[int] | None = None,
             "try_lock_clocks": try_lock_clocks, "graphics_clock_mhz": graphics_clock_mhz,
             "command_timeout_s": command_timeout_s},
         "load": {"kind": None, "available": False}, "measurement_ready": False,
+        "clock_restore_policy": "driver_defaults_via_rgc",
     }
     initialized = False
     sampler: NvmlSampler | None = None
     clock_attempts: list[int] = []
     process: subprocess.Popen[Any] | None = None
-    torch_thread: threading.Thread | None = None
-    torch_stop = threading.Event()
+    load_directory: tempfile.TemporaryDirectory[str] | None = None
     traces: tuple[PowerTrace, ...] = ()
     idle_start = idle_end = load_start = load_end = 0
     try:
         if any(not math.isfinite(span) or span < 0
                for span in (idle_seconds, load_seconds, recovery_seconds)):
             report["flags"].append("invalid_sampling_span")
+            return report
+        if interval_ns <= 0 or command_timeout_s <= 0 or matmul_size <= 0:
+            report["flags"].append("invalid_operational_parameter")
             return report
         backend = nvml if nvml is not None else open_nvml(library=library)
         backend.nvmlInit()
@@ -268,6 +318,10 @@ def run_preflight(*, device_indices: Sequence[int] | None = None,
             device = device_inventory(backend, index)
             smi = _smi_inventory(index, command_timeout_s)
             device["nvidia_smi"] = smi
+            smi_mode = str(smi.get("virtualization_mode") or "").lower()
+            if smi_mode and smi_mode not in (
+                    "none", "pass through", "passthrough", "n/a", "not supported") and "vgpu" not in smi_mode:
+                device["flags"].append("virtualization_evidence_unknown")
             hazards = _hazards(device, smi)
             report["hazards"].extend(f"gpu{index}:{hazard}" for hazard in hazards)
             if device.get("mig_mode") and device["mig_mode"][0] == 1:
@@ -280,6 +334,7 @@ def run_preflight(*, device_indices: Sequence[int] | None = None,
             report["flags"].append("no_devices")
             return report
         if try_lock_clocks:
+            report["flags"].append("prior_clock_lock_unobservable_restore_to_driver_defaults")
             for index in indices:
                 clock = graphics_clock_mhz
                 if clock is None:
@@ -307,54 +362,58 @@ def run_preflight(*, device_indices: Sequence[int] | None = None,
         time.sleep(idle_seconds)
         idle_end = time.monotonic_ns()
         load_start = idle_end
-        if load_cmd:
-            report["load"] = {"kind": "command", "available": True, "argv": list(load_cmd)}
-            process = subprocess.Popen(
-                list(load_cmd), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                start_new_session=(os.name == "posix"))
-            try:
-                process.wait(timeout=load_seconds)
-                report["load"]["returncode"] = process.returncode
-                report["flags"].append("load_finished_before_requested_span")
-            except subprocess.TimeoutExpired:
-                report["load"]["span_completed"] = True
-            load_end = time.monotonic_ns()
+        command: list[str] | None = list(load_cmd) if load_cmd else None
+        if command:
+            report["load"] = {"kind": "command", "available": True, "argv": command}
         elif importlib.util.find_spec("torch") is not None:
-            ready = threading.Event()
-            status: dict[str, Any] = {"kind": "torch_cuda_matmul", "available": False}
-            report["load"] = status
-            torch_thread = threading.Thread(target=_torch_load, daemon=True,
-                args=(torch_stop, ready, status, indices[0], matmul_size))
-            torch_thread.start()
-            if ready.wait(timeout=command_timeout_s) and status["available"]:
-                load_start = time.monotonic_ns()
-                time.sleep(load_seconds)
-            else:
-                report["flags"].append("no_load_available")
-            load_end = time.monotonic_ns()
+            load_directory = tempfile.TemporaryDirectory(prefix="joulewise-preflight-load-")
+            ready_path = Path(load_directory.name)/"ready.json"
+            command = _torch_command(indices[0], matmul_size, ready_path)
+            report["load"] = {"kind": "torch_cuda_matmul", "available": False}
         else:
             report["flags"].append("no_load_available")
             report["load"]["reason"] = "no load command and torch is not importable"
-            load_end = time.monotonic_ns()
-        if process is not None:
-            _terminate_load(process, command_timeout_s)
+        if command is not None:
+            process = subprocess.Popen(
+                command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=(os.name == "posix"))
+            if report["load"]["kind"] == "torch_cuda_matmul":
+                ready_deadline = time.monotonic()+command_timeout_s
+                while not ready_path.exists() and process.poll() is None and time.monotonic() < ready_deadline:
+                    threading.Event().wait(interval_ns/1_000_000_000)
+                if ready_path.exists():
+                    report["load"].update(json.loads(ready_path.read_text()))
+                else:
+                    report["load"]["reason"] = "CUDA load did not become ready"
+                if not report["load"]["available"]:
+                    report["flags"].append("no_load_available")
+            if report["load"]["available"]:
+                load_start = time.monotonic_ns()
+                try:
+                    process.wait(timeout=load_seconds)
+                    report["flags"].append("load_finished_before_requested_span")
+                    if process.returncode != 0:
+                        report["flags"].append("load_command_failed")
+                        report["load"]["available"] = False
+                except subprocess.TimeoutExpired:
+                    report["load"]["span_completed"] = True
+                load_end = time.monotonic_ns()
+            report["load"]["cleanup"] = _terminate_load(process, command_timeout_s)
             report["load"]["returncode"] = process.returncode
             process = None
-        torch_stop.set()
-        if torch_thread is not None:
-            torch_thread.join(timeout=command_timeout_s)
-            if torch_thread.is_alive():
-                report["flags"].append("torch_load_stop_timeout")
+        else:
+            load_end = time.monotonic_ns()
         time.sleep(recovery_seconds)
     except Exception as exc:
         report["flags"].append(f"preflight_incomplete: {exc}")
     finally:
-        torch_stop.set()
         if process is not None:
             try:
-                _terminate_load(process, command_timeout_s)
+                report["load"]["cleanup"] = _terminate_load(process, command_timeout_s)
             except Exception as exc:
                 report["flags"].append(f"load_cleanup_failed: {exc}")
+        if load_directory is not None:
+            load_directory.cleanup()
         if sampler is not None:
             traces = sampler.stop()
         for index in clock_attempts:
@@ -379,7 +438,12 @@ def run_preflight(*, device_indices: Sequence[int] | None = None,
         report["movement"] = assess_power_movement(
             traces, (idle_start, idle_end), (load_start, load_end),
             false_alarm_rate=false_alarm_rate)
-        report["measurement_ready"] = report["movement"]["power_moved"]
+        moved = {row["channel"].split(":")[0] for row in report["movement"]["channels"]
+                 if row["power_moved"]}
+        report["measurement_ready"] = all(f"gpu{index}" in moved for index in indices)
+        for index in indices:
+            if f"gpu{index}" not in moved:
+                report["flags"].append(f"gpu{index}_load_power_movement_not_demonstrated")
     return report
 
 
