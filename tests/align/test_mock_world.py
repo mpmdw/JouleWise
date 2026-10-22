@@ -230,7 +230,6 @@ class MockWorldTests(unittest.TestCase):
         # must measure its actual prompt impact, while normal history excludes it.
         messages, correct = captured[7]  # First request after the scripted side turn.
         wrong_history = list(messages)
-        from joulewise.align.interfaces import ChatMessage
         position = next(i for i, m in enumerate(wrong_history)
                         if m.role == "assistant" and "<scratchpad>" in m.content)
         message = wrong_history[position]

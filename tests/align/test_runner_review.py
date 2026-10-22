@@ -86,7 +86,7 @@ class ReviewProbeTests(unittest.TestCase):
         class Bytes(InboxTask):
             def call_tool(self, name, arguments_json):
                 super().call_tool(name, arguments_json)
-                return b"\\x00raw"
+                return b"\x00raw"
         for count, options, flag in (
             (26, {"endpoint_class": Null}, "endpoint.content_missing"),
             (10, {"task_class": Bytes}, "tool.non_text_result"),
