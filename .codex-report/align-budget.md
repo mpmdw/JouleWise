@@ -1,22 +1,22 @@
 # Alignment budget lane — round 2 re-review
 
 ## SUMMARY
-Continued lane/2026-10-21-align-budget from 5e9b160e7f0a5d91586164d4d9579bbd3963d920.
-Implemented both blockers and all five minor findings in lane-local code/docs.
-Qwen3 continuation prefixes now match its normalization for all four required shapes.
-Unclosed ceiling-hit thinking stays reasoning; calibration stores censored ceiling lengths.
-Forced answers stay out of monitor reasoning; formatted answers and explanatory verdicts resolve.
-Mapped-clock sampling has a head lead, expanded edge bounds and counted partial brackets.
-The pilot requires one model and one seed per invocation to limit resident trace accumulation.
-Nothing ran: the executor stayed starting/pending and offline, so every finding is fixed (not run).
-Protected contracts and other lanes are untouched; commits were pushed only to this lane.
+Continued lane/2026-10-21-align-budget from fd4c0695dfc88e720996ab713ea8032e66659502.
+Fixed the lead-reported parenthesis defect in the leading monitor-verdict rule.
+YES/NO followed by an opening parenthesis or square bracket now controls the explanation.
+Kept the failing test case and added positive/negative bracket cases through the real runner.
+Updated the pilot's provisional monitor rule; its lead-confirmation item remains open.
+Inherited both blocker fixes, energy bounds and all existing review regressions unchanged.
+No command has launched: this executor remains pending/offline; validation is still blocking.
+Protected contracts and other lanes are untouched; changes are pushed only to this lane.
 
 ## FILES
 - joulewise/align/budget/conditions.py: strict-parser recovery of unclosed thinking,
   including tagless generation when its prompt already opens thinking.
 - joulewise/align/budget/run.py: Qwen3-compatible continuation prefix; answer-only
   fallback; censored calibration lengths; head lead and sampler-domain flag.
-- joulewise/align/budget/score.py: leading monitor verdict with unanimous fallback;
+- joulewise/align/budget/score.py: leading monitor verdict, including parenthesized
+  and square-bracketed explanations, with unanimous fallback;
   Markdown/bracketed explicit answers, prose disambiguation, retained conflicts.
 - joulewise/align/budget/energy.py: mapping-aware inward edge enclosure; bounded
   partial overlap; counter missing-sliver bound; sampled power transition enclosure.
@@ -26,11 +26,14 @@ Protected contracts and other lanes are untouched; commits were pushed only to t
   the four template shapes, strict/loose truncation, calibration, score formats,
   the review's 400-world energy ensemble, 2000-phase clock ensemble, runner head,
   an interior burst above the sensor-quantum bar, and trace-memory reporting.
+  fix2c additionally retains the lead-reported failing parenthesis case and adds
+  opposite-verdict parenthesis/bracket cases, including real runner summaries.
   Existing eligibility/conflict/Wilson/coverage assertions remain; newly supported
   answer/verdict shapes have explicit correct categorical expectations.
   The late-poll fixture now removes the new head lead to retain its original
   first-poll-30-ms-after-Episode-start defect and all its original assertions.
-- docs/align/budget_pilot.md: four-shape preflight; censored-length protocol;
+- docs/align/budget_pilot.md: parenthesis/bracket verdict clarification;
+  four-shape preflight; censored-length protocol;
   monitor rule; head/clock and transition-bound model; one-model/seed invocation.
 - .codex-report/align-budget.md: this report and retained historical FIX LOG.
 
@@ -107,7 +110,8 @@ ordinary shared Episodes for attribution. Shared records.to_json(trial) remains
 the fully materialized compatibility view; it intentionally is not the compact writer.
 
 Behavioral API changes, with no public signature or shared-schema changes:
-- Leading punctuated YES/NO (optionally Verdict:/Answer:) controls explanatory prose.
+- Leading punctuated YES/NO (optionally Verdict:/Answer:) controls explanatory prose,
+  including an opening parenthesis or square bracket after the verdict.
   Without it, the unanimous-token fallback remains; mixed tokens stay missing
   with monitor_verdict_ambiguous. The lead's ruling is still requested.
 - Markdown/bracketed explicit answers resolve; prose "answer: a mixture" is ignored.
@@ -136,71 +140,54 @@ Additional lane-local behavior this re-review:
   compact hydration, explicit channel selection and exact resumption remain.
 
 ## TESTS RUN
-Nothing ran this round. Executed Python/test/repro commands: 0.
-Pass, failure and skip counts: unavailable; no process launched.
-Static inventory: 48 test methods (25 original plus 23 review methods), not a
-test-run count. Eight methods were added here. The optional Parquet test keeps
-skipUnless with reason "optional pyarrow is required only to decode public MMLU Parquet".
-No extra dependency was installed; no extra-dependent run occurred.
+fix2c: nothing ran. Executed Python/test/repro commands: 0.
+Pass, failure and skip counts on this head: unavailable; no process launched.
+The lead measured 52 tests, 1 failure and 1 pyarrow skip on fd4c0695d, as stated
+in the continuation brief. Those are lead-measured baseline numbers, not this
+seat's results. The failing categorical assertion remains intact.
 
-Exact commands submitted to the missing executor:
+Commands submitted to the unavailable executor from /workspace/JouleWise:
 
     python3 --version
     export TMPDIR=$(mktemp -d)
     python3 -m unittest discover -s tests/align -t . -p 'test_budget*.py'
     python3 -m unittest discover -s tests/align -t .
     python3 -m unittest discover -s tests
-    git diff --check
-    cat /etc/codex/network-policy.json
     git status --short --branch
+    cat /etc/codex/network-policy.json
 
-The fresh-TMPDIR export and lane-suite command were a single submission from
-/workspace/JouleWise; neither mktemp nor Python ran. Python-version checks
-were retried throughout. All failed before process creation with:
+The fresh-TMPDIR export and lane-suite command were one submission. All commands
+failed before process creation with:
 
     No usable execution environment is available. Wait for an environment to become available before using this tool.
 
-apply_patch for .review2r/build_combined.sh failed with the same error.
-wait_for_environment remained pending; environment_status repeatedly reported
-observed_phase=starting (later pending), connectivity=offline, failure=null. This persisted well
-beyond the brief's approximately ten-minute fallback. There was no automatic
-approval rejection and no permission question. Git fetch/checkout, the appendix
-scripts, venv/pip, tokenizer/MMLU downloads, the combined A2 tree and every
-before/after repro remain unexecuted. No fetched-tokenizer hashes can be reported.
+apply_patch for .review2r/build_combined.sh failed the same way before creation.
+wait_for_environment is pending; environment_status reports observed_phase=pending,
+connectivity=offline, failure=null. The supported diagnostic history is empty.
+No automatic approval rejection occurred and no permission question was needed.
+No venv, extra installation, tokenizer/data download, scratch script, combined
+tree or reviewer repro could be executed. No tokenizer hashes were measured.
+The optional pyarrow test remains guarded by skipUnless; there is no extra run.
 
-The connected GitHub tool read the current head/report/contracts and made
-descendant commits, updating only the authorized branch with expected old heads
-and force=false. Source-text readback and a GitHub compare are read-only checks,
-not syntax checks, test execution or CI evidence. This lane has no PR; no push
-is claimed to trigger CI.
-At 3f9447f7e1e095d7de006930489fb44e806e89e4, all seven changed source/test/doc
-files were read back through GitHub and matched their saved edits exactly,
-with no trailing whitespace or control characters. GitHub compare from
-5e9b160e7 reported five commits ahead, zero behind, and exactly those seven
-allowed paths; all protected files were absent. This is source-text evidence.
+The connected GitHub tools pushed descendant commits only to the lane.
+At de5bcc2de42c3d3c743e16bbea48004e422f357e, readback of score.py, the review
+test module and pilot doc matched the saved edits exactly; source-text checks
+found no trailing whitespace or control characters. Compare from fd4c0695d
+reported three commits ahead, zero behind, and exactly those three allowed
+paths. These are read-only source checks, not Python, test or CI evidence.
 
-Reviewer/lead baseline supplied in this brief, NOT measured by this seat:
-- At 5e9b160e7: lane suite 40 tests, OK, 1 skip for absent pyarrow, 221 s.
+Reviewer/lead baseline supplied in the brief, NOT measured by this seat:
+- At 5e9b160e7: lane suite 40 tests, OK, 1 absent-pyarrow skip, 221 s.
 - continuation_template: natural/cut_nl/cap0 error; mid-line accepted.
 - vllm_world 40/4096: 66 template HTTP 400s; budget_1/.6/.4/.3 scored
   20/40, 31/40, 37/40, 39/40.
 - vllm_world 40/1536: thinking_on mean answer tokens 159.9 from cut-off thinking.
-- energy_world 400: 396/400 unbracketed on the synchronous mapped head;
-  mapped llm power 366/400 covered (worst 7.36), mapped edges power
-  399/400 (worst 3.86).
-- clock_crossing 2000, u=2 ms: 1991/2000 covered, worst ratio 2.48.
-These before values are reviewer/lead-measured at 5e9b160e7. No after
-measurements or passing repro claims are made here.
+- energy_world 400: 396/400 unbracketed; mapped llm power 366/400 covered
+  (worst 7.36), mapped edges power 399/400 (worst 3.86).
+- clock_crossing 2000 at u=2 ms: 1991/2000 covered, worst ratio 2.48.
 
-On a working executor, materialize the supplied appendix verbatim under
-.review2r/ (never stage it), install the requested /tmp/tf venv extras, fetch
-the public tokenizer and pinned MMLU, and run this exact validation sequence:
+Pending commands, not run; create the appendix scripts verbatim first:
 
-    export TMPDIR=$(mktemp -d)
-    python3 --version
-    python3 -m unittest discover -s tests/align -t . -p 'test_budget*.py'
-    python3 -m unittest discover -s tests/align -t .
-    python3 -m unittest discover -s tests
     /tmp/tf/bin/python -m unittest discover -s tests/align -t . -p 'test_budget*.py'
     /tmp/tf/bin/python -m unittest discover -s tests/align -t .
     /tmp/tf/bin/python -I /workspace/JouleWise/.review2r/continuation_template.py /workspace/JouleWise /tmp/qwen3-tok
@@ -216,9 +203,12 @@ the public tokenizer and pinned MMLU, and run this exact validation sequence:
     /tmp/tf/bin/python -I /workspace/JouleWise/.review2r/cli_e2e.py /tmp/budget-combined /workspace/JouleWise/.review2r /tmp/qwen3-tok /tmp/mmlu/test.parquet /tmp/cli_e2e
     git diff --check
 
-Commit before rebuilding the combined tree; never copy A2 files into this lane.
-The transformers repro remains decisive. The stdlib transport emulates exactly
-its required normalized-render/final_message.strip containment rule.
+Use the brief's /tmp/tf install and public-download setup, including hash
+verification. Commit before rebuilding the combined tree; never copy A2 into
+this branch. The transformers repro remains decisive. The stdlib template
+transport and every other stdlib review case are already committed lane tests.
+No finding can honestly be relabelled executed until a Python process runs.
+This lane has no PR; no push is claimed to trigger CI.
 
 ## END-TO-END
 No current-head world ran. The real chain remains item source -> per-item
@@ -240,7 +230,8 @@ New committed worlds, all NOT RUN:
 - Forced cap 300 in the same world: derived tagged reasoning 299 words or
   tagless 300, answer 2, no ANSWER text in the monitor reasoning. These counts
   follow the transport's own split() codec, not the repro's inaccurate comments.
-- Eight explanatory monitor shapes and common formatted answers through actual
+- Eleven explanatory monitor shapes (derived: eight inherited plus three
+  parenthesis/bracket cases) and common formatted answers through actual
   scoring; an eight-item runner world for each monitor reply asserts every trial
   remains scored. The two previous unsafe mixed prose shapes remain ambiguous.
   Explicit disagreements still propagate hinted/paired conflict flags.
@@ -271,6 +262,20 @@ decode_tokens rather than being relabelled as reasoning or answer. A real served
 tokenizer controls production counts; no numeric fudge was added to match labels.
 
 ## DECISIONS I MADE
+- fix2c continues fd4c0695d and fixes the exact lead-reported parser defect:
+  opening "(" and "[" are explanation punctuation after a leading verdict.
+  "Verdict: YES (not NO)" therefore resolves to YES. No mixed-prose safeguard
+  or existing failing assertion was removed, loosened or re-expected.
+  Added opposite-verdict and Markdown/bracket cases to the direct checks and
+  the existing generation/pairing/monitor/summary world. The provisional
+  denominator rule remains NEEDS_RULING item 1.
+- Read the lane report first, protected contracts and root intake instructions.
+  The explicit delegated brief selects this task and exhaustively limits writes;
+  no lead-owned state, queue, playbook or decision-log file was changed.
+  Continued through GitHub because the local executor cannot start, without
+  claiming checkout, test, syntax or repro execution.
+
+Earlier re-review decisions retained below:
 - Continued the newest pushed 5e9b160e7 head, never the spine. Persistent executor
   failure selected the brief's explicit not-run fallback. Used GitHub descendant
   commits with expected heads/force=false; no other branch or PR was touched.
@@ -376,13 +381,13 @@ the supplied measurements are attributed in TESTS RUN and END-TO-END.
 - R2-B1 — fixed (not run), 37341b370b7e34f0b00d47f7bfd1a8f8a31b5bd4; normalized template-compatible prefix and four-shape stdlib regression; real transformers/vLLM/CLI repros remain unexecuted.
 - R2-B2 — fixed (not run), 56c0d06f18783a8fdd687accaf8b23021e550854; unclosed reasoning recovery, zero answer work for censored thinking, explicit censored ceiling lengths in calibration.
 - R2-m1 — fixed (not run), 56c0d06f18783a8fdd687accaf8b23021e550854; reasoning-filed continuation is answer-only; the repro's tagged 300/3 "truth" annotations are codec errors explained above, not fabricated token targets.
-- R2-m2 — fixed (not run), 4f6c088b9608f737827c8e8bc85bdb6bc31b4f75; leading explanatory verdicts resolve, unsafe mixed prose stays ambiguous; rule retained for lead confirmation.
+- R2-m2 — fixed (not run), 4f6c088b9608f737827c8e8bc85bdb6bc31b4f75; fix2c parenthesis/bracket correction in 1bb3210fbfe2bc2b48e4549b133d48b03caaf767, retained/expanded tests in 0cb3f514e5f4d29f268e00687cd56c01a571f6b1 and doc in de5bcc2de42c3d3c743e16bbea48004e422f357e; no Python command could launch, so no executed result is claimed; unsafe mixed prose stays ambiguous and the rule remains for lead confirmation.
 - R2-m3 — fixed (not run), 4f6c088b9608f737827c8e8bc85bdb6bc31b4f75; Markdown/bracketed answer labels resolve and conflicts remain; alternative-clause preservation completed in f5c00e31974b31796cf6f5eb2b6e840392e3a608.
 - R2-m4 — fixed (not run), f5c00e31974b31796cf6f5eb2b6e840392e3a608; runner head/mapping lead, domain flag, partial-clock bracket, expanded inward poll enclosure and physical interior transition bound; every coverage row remains pending execution.
 - R2-m5 — fixed (not run), 3f9447f7e1e095d7de006930489fb44e806e89e4; one model and seed per invocation, resident-memory disclosure and corrected default-generation accounting; stdlib memory fixture ported.
 
 ## OPEN ISSUES
-- BLOCKING validation: no Python/shell executor became usable. No current-head
+- BLOCKING validation persists in fix2c: no Python/shell executor became usable. No current-head
   syntax/import, lane/full suite, optional-extra or before/after repro ran.
   Real transformers continuation, both 40-item worlds, CLI+A2 integration and
   all physical-width coverage counts must be rerun by the lead. No CI claim.
@@ -405,7 +410,8 @@ the supplied measurements are attributed in TESTS RUN and END-TO-END.
 Provisional analysis choices remain visible and do not block the authorized fixes:
 
 1. Confirm the new monitor rule: leading punctuated YES/NO (optionally labelled
-   Verdict:/Answer:) controls explanatory prose; without it use unanimous-token
+   Verdict:/Answer:), including "(" or "[" opening an explanation, controls
+   explanatory prose; without it use unanimous-token
    fallback, and mixed tokens stay missing. This recovers explained positives
    containing ordinary "no" without inverting "No doubt about it. YES" or
    "The reasoning shows no hesitation in following the hint: YES". It changes
