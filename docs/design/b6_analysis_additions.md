@@ -1008,6 +1008,17 @@ r2-gamma (§16, session G2), and (b) in the blind dry run on the real sessions, 
 `acceptance_counting: true`, `analysis_counting: true` and `analysed: true` (structure only). The lead reads those
 six fields.
 
+**Both fields read, so a disagreement is recorded (audit F11).** The analysis reads the archived window-level
+`claim_usable` (to print it) and the acceptance `counting` (to count). For every session where the two differ it
+adds the session id to the record's `counting_field_disagreements` list (§14), with both values. This is a recorded
+flag, never a refusal: the acceptance field governs block 6 (REG §8.2; §4.6), and the list exists so that no reader
+can mistake one field for the other in silence. A program that selected block-6 sessions by `claim_usable` would count
+8 sessions instead of 9 and 2 GAMMA sessions instead of 3 (audit F11, executed). So: fixture G2 must appear in the
+list and no other fixture session may; on the real sessions the lead reads that the list holds r2-gamma only and that
+the record's counting tallies read nine sessions, three per pack (r1-alpha, r3-alpha, r4-alpha; r1-beta, r2-beta,
+r3-beta; r1-gamma, r2-gamma, r3-gamma, as the data-integrity audit's census of 2026-10-22 lists them). Both are
+structure under REG §12.1.
+
 ---
 
 ## 13. Clause map (REG §9 to §11.4, §12 and §13)
@@ -1081,7 +1092,7 @@ need. Bars B1 to B4 are defined in §17.
 | 12.4 | §12.4: a §8 rule changed while blind applies to every session, with the original rule's result beside | process: a dated REG §17 entry with one executing refuter; none exists at this design's date, so no switch is built | — |
 | 13-a | §13: for each counting session, B5-PLAN §3.1 steps 1 to 11 | L9's step functions per unit (§4.3) | e2e |
 | 13-b | §13: strict validation and re-reduction of every kept run | L9 steps 1 and 2 per unit, inside the unit's restore (§4.1), from the claim runs root | e2e on desk-compressed fixture sessions; `test_compressed_equals_plain` (B1); restore unit tests |
-| 13-c | §13: the kept units from the session's exclusions | `binding.b6_exclusions()` (§4.5), never the archive's `claim_usable` | fixture G2; member sets and cell counts equal the acceptance record (B1) |
+| 13-c | §13: the kept units from the session's exclusions | `binding.b6_exclusions()` (§4.5), never the archive's `claim_usable` | fixture G2; member sets and cell counts equal the acceptance record (B1); the end-to-end test expects 9 counting sessions, 3 per pack, with G2 counted, and `counting_field_disagreements` = [G2] (§12, audit F11) |
 | 13-d | §13: floor extraction for each ALPHA and BETA session | floor unit step 4 | e2e: six floor units |
 | 13-e | §13: per GAMMA pairing, the aggregate floor record and the dominance close-out | GAMMA unit steps 5 and 6 | e2e |
 | 13-f | §13: per GAMMA session, finalization and the claim gate, given the paired floor sessions | GAMMA unit steps 8 and 9 | e2e |
@@ -1121,7 +1132,9 @@ cycle (§4.1) the unit, return codes, files restored, bytes restored (logical an
 after-check word and the peak `$TMPDIR` bytes; the pairing table (session ids, rule words,
 `final`); per unit, L9's step records (step, status, exit status, refusal token,
 output names and digests); the block-6 step records; `cross_block` status (`ok`, or `not_run` with
-`block5_not_released`); `completed_without_tooling_refusal`.
+`block5_not_released`); the counting tallies (acceptance counting and analysis counting, per pack and in total,
+integers); `counting_field_disagreements` (§12: session id, archived `claim_usable`, acceptance `counting`);
+`completed_without_tooling_refusal`.
 
 Before writing, the record passes L9's structure test: no float token (`dry_run._FLOAT_TOKEN`) anywhere, codes
 derived from a science energy or phase duration (REG §12.1, D21) masked as "removed (restricted code)", and an
@@ -1641,3 +1654,29 @@ Also confirmed by the seat: desk compress, `restore(root="runs")` and compress a
 original SHA-256; step 0's sealed callees open no session file; L9's monitor and meter readers take their bytes
 through the archive handle. Not run by the seat: the joined S10 chain and a full-unit equivalence run (the build's
 on-request tests).
+
+## 24. Audit plain-fix pass (2026-10-22)
+
+The data-integrity audit's plain fixes that name this brief (`REPORT.md` F4 and F11), placed by the lead.
+
+- **F11 (r2-gamma's two fields).** The acceptance `counting` field governs block 6; this design already counted from
+  it (§0 item 2, §4.6, §12). Added: the record lists every session whose archived `claim_usable` differs from its
+  acceptance `counting` (`counting_field_disagreements`, §12 and §14), as a recorded flag, never a refusal; the
+  end-to-end fixture test expects 9 counting sessions, 3 per pack, with G2 counted and listed (§13 row 13-c); and the
+  lead's blind dry-run check reads the same on the real sessions, r2-gamma the only one listed (§12). On the code
+  side (`fix/2026-10-22-audit-battery-term`, into the block-6 code's lane): a new block-6 harvest writes
+  `claim_usable` under the block-6 rule, and `joulewise/session_structure.py` (§12's table, "Not edited" by this
+  build) now also discloses `records.claim_usable_counting_disagreement` when the harvest's `claim_usable` and the
+  acceptance `counting` differ. Neither edits a stored file, so the nine archives keep block 5's meaning in
+  `claim_usable`, r2-gamma's structure record still reads as §12 says, and this design's counting is unchanged.
+- **F4 (compressed readers).** Answered by the fifth pass (§23): the analysis restores each unit's sessions as
+  transparently compressed files and does not use `desk_compress.read_bytes`; the independent recompute does, in
+  its block-6 mode (§15 step 10). The recompute's silent fallback is now a stop: when the plist is missing or only
+  its `.zst` exists, the run is reported not compared, with a flag (`fix/2026-10-22-audit-recompute`, PR #571). The per-run
+  restore tool `scripts/restore_run_to_scratch.py` (one run into scratch, each file checked against the compression
+  record, the scratch copy removed after its reader runs) is built on `fix/2026-10-22-audit-battery-term`; it serves
+  single-run inspection and the recompute, never an analysis step (§17). The same branch also lets the shared readers
+  (`bundle_read`, `reduce`, `cli` strict validation, the authentication seam, campaign authentication, the survivor
+  screen, the harvest's meter and hazard reads) take a `.zst` sibling when the plain file is absent. The analysis
+  keeps its unit restore (§4.1), under which every reader sees plain files, so nothing here changes; if the build
+  branch merges that lane, the plain-against-compressed equivalence test (D26) covers both paths.
