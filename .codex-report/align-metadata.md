@@ -1,25 +1,25 @@
-# Alignment metadata baseline — fix round 1 (fix1e)
+# Alignment metadata baseline — fix round 2
 
 ## SUMMARY
 
-Continued the existing metadata branch without rewriting its history.
-Fixed logged decode features to exclude hidden tokens while retaining logged timing.
-Added within-task-pair permutation inference that refits the whole grouped CV.
-The independent-draw null and visible side-task checks pass in repository CI.
-Derived bootstrap bandwidth/start budgets and adopted the lead's four-SE coverage bar.
-All alignment tests and the full CI workflow pass on the implementation head.
-Shared records, interfaces and pipeline files remain unchanged; core is stdlib-only.
-Verification used GitHub CI because the shell never became available.
-Three shell-dependent check groups remain for the lead; the patch and script are included.
+Continued the existing metadata lane with non-force GitHub commits.
+Restored the independent-null mean-AUC assertion using this run's sample SD.
+The existing null print now includes its four-standard-error mean-AUC bar.
+Updated Newton precision comments using measured half-widths and probability sensitivity.
+The required 1e-10 convergence bar and all executable statistics code are unchanged.
+Both fixes are saved, but their new test run is blocked by the PR's registry conflict.
+The shell remained unavailable through the requested retry window.
+Prior CI evidence and round-1 FIX LOG entries are retained below as historical evidence.
+Only the reviewer test, statistics documentation and this report changed in round 2.
 
 ## FILES
 
 - joulewise/align/metadata_baseline.py: corrected logged-view features, leave-pair-out CV, new refitted permutation procedure and statistics re-exports.
-- joulewise/align/stats.py: reusable stdlib statistics, conditional-CV interval documentation, derived bootstrap bandwidth/start budget and Newton precision explanation.
+- joulewise/align/stats.py: reusable stdlib statistics; round 2 changes only the Newton precision docstring/comment, adding the measured half-width and step-to-probability derivation.
 - tests/align/test_metadata_baseline.py: hand arithmetic, hidden-stripped equality, training-fold isolation, serializer-to-classifier visible world with calibrated inference, deterministic paired leakage control.
-- tests/align/test_metadata_baseline_review.py: reviewer worlds and exact-equality repros, independent-draw null calibration, label-count/refit/hand-p mechanics and invalid-input flags.
+- tests/align/test_metadata_baseline_review.py: reviewer worlds and exact-equality repros, independent-draw null calibration, label-count/refit/hand-p mechanics and invalid-input flags; round 2 adds the lead's mean-AUC assertion and prints its computed bar.
 - tests/align/test_stats.py: arithmetic, literal resampling precision replay, numerical flags and four-SE coverage bar.
-- tests/test_shard_tests.py: registry exception only; existing discovery prefix changed from "align.test_" to "align." to include twins, matching sibling lanes.
+- tests/test_shard_tests.py: round-1 registry exception only; unchanged in round 2. Its lane-local prefix now conflicts with the spine's newer registry fix, blocking PR CI (see OPEN ISSUES).
 - .codex-report/align-metadata.md: this report, patch and lead-run probe.
 
 ## PUBLIC API
@@ -57,6 +57,34 @@ DeLong and cluster-bootstrap intervals applied to pooled CV scores are
 of refitting the classifier and must not be used alone to claim separation.
 
 ## TESTS RUN
+
+### Round 2 — verification blocked
+
+The first attempted shell command was `python3 --version`; it and the
+roughly minute-spaced retries through the requested ten-minute window returned
+"No usable execution environment is available." No local test command ran;
+there is no **my shell** numerical result. The requested focused command remains
+unexecuted:
+
+```sh
+python3 -m unittest tests.align.test_metadata_baseline_review tests.align.test_stats tests.align.test_metadata_baseline -v
+```
+
+The authorized GitHub fallback saved N1 in ba6f6098c0dbd2db453f491581be9872e555235c
+and F7-carry in 30e51132d835120d37dade7a6161df10ec930e25.
+PR #523 is open but GitHub reports mergeable=false, mergeable_state=dirty.
+No Actions run was created for either fix head, so no new passing test count,
+runtime, null mean, or computed mean-AUC bar is claimed.
+
+The conflict is in tests/test_shard_tests.py: the spine advanced to
+6bca315c2e04d5a254ab1a4aedd366deb4e59ddf while this seat was starting,
+replacing the same registry predicate the lane changed in round 1.
+The permission request and exact proposed one-line revert are in OPEN ISSUES.
+The F7-carry source comparison, excluding docstrings and comment-only lines,
+is identical to its parent; the 1e-10 solver threshold is untouched.
+No extra was installed, and this lane has no extra-dependent tests or skips.
+
+### Round 1 — historical CI receipts (unchanged)
 
 Completed [CI run 39733292767](https://github.com/mpmdw/JouleWise/actions/runs/39733292767)
 on implementation head 895d3fb1c20bd5910eee03d0e06edb4cc195e5ff.
@@ -322,6 +350,19 @@ NOT-RUN rows; no review or merge gate is claimed.
 
 ## END-TO-END
 
+### Round 2
+
+The independent-draw null still runs real multi-turn episodes through logged
+features, leave-task-pair-out refits, held-out AUC, conditional intervals and
+within-pair refitted permutation inference. It now additionally asserts
+`abs(mean(estimates) - 0.5) <= 4 * stdev(estimates) / sqrt(n)` and appends
+`auc_mean_four_se_bar` to the existing print line. The SD is computed from
+that run's estimates. No fixture, seed, compute budget or earlier assertion
+was weakened. Because CI is blocked, the fresh computed bar and null results
+are unmeasured; the values below belong to the explicitly named prior CI jobs.
+
+### Round 1 — historical synthetic-world results
+
 The visible fixture runs shared Episode/Turn/ToolCall construction through
 to_json/from_json, logged features, leave-one-task-pair-out training,
 held-out probabilities, AUC, intervals and the new whole-CV permutation test.
@@ -408,6 +449,9 @@ in the public function; no hardware result is claimed.
 
 ## DECISIONS I MADE
 
+- Round-2 N1 follows the lead's exact four-standard-error mean bar, with the run's own sample SD. Independent worlds give SE=sd/sqrt(n); the four-SE false-alarm and printed-half-width derivation is beside the assertion. This checks label-independent AUC bias separately from the permutation false-separation check.
+- F7-carry uses the measured printed half-widths about 0.05 (1%=5e-4) and the probability sensitivity bound p(1-p)*delta*|x| <= delta*|x|/4. Only comments change; the brief-fixed 1e-10 Newton threshold remains unchanged.
+- Round 2 uses the explicitly authorized GitHub fallback after shell retries failed. CI is blocked by a new upstream registry conflict. WRITE_SCOPE is exhaustive, so a one-line revert of the earlier registry exception requires the user's scope approval; no registry or other out-of-scope file was changed.
 - F1 is decided by the records' hidden-token definition and the lead's ruling. Every logged decode feature subtracts each selected turn's hidden_tokens. The all-work view retains full decode and hidden counts. Episode.totals is not changed.
 - Logged timestamps remain visible, including time spent generating hidden tokens; duration_s remains whole-episode elapsed time and decode throughput uses selected turn time.
 - F2 uses option (a), a within-task-pair label permutation test with whole-CV refitting. With only a few pairs its exchangeability-based level is preferable to a refitting cluster bootstrap's small-cluster approximation.
@@ -435,6 +479,32 @@ none. The logged-view interpretation is a lane-local adapter over the frozen
 records contract. No shared record, interface or pipeline plan was edited.
 
 ## OPEN ISSUES
+
+### Round-2 CI blocker and concrete scope request
+
+Both requested fixes are saved, but not newly executed. The metadata branch's
+round-1 registry edit conflicts with new spine commit
+6bca315c2e04d5a254ab1a4aedd366deb4e59ddf. GitHub consequently cannot produce
+the PR merge and does not start its pull_request workflows.
+
+The exact additional file needed is **tests/test_shard_tests.py**, solely to
+revert the lane's earlier predicate to its original spine value:
+
+```diff
+-        if module.startswith(("test_", "align.")):
++        if module.startswith("test_"):
+```
+
+This removes the overlapping lane edit, allowing the upstream registry fix and
+its regression tests to apply to the PR merge without changing those upstream
+bytes. It changes no metadata data or estimator. The brief authorizes registry
+name additions only after the stated test failure; resolving a newly introduced
+merge conflict is outside that narrow exception. Approval was requested for
+exactly this line; no registry write has occurred. With approval, commit it on
+this lane, verify PR CI, and replace this blocked receipt with named CI job/run
+evidence. No other branch or shared contract file needs an edit.
+
+### Retained round-1 limitations
 
 The new public grouped_cv_permutation_test needs an independent twin.
 Its direct tests verify pair class counts, real refit counts and a hand-derived
@@ -662,3 +732,7 @@ none
 - N4: fixed in 895d3fb1c20bd5910eee03d0e06edb4cc195e5ff; same lead-ruled coverage change as F4.
 - N5: fixed in 895d3fb1c20bd5910eee03d0e06edb4cc195e5ff; independent literal-resampling replay uses the derived Bofinger bandwidth and passes the endpoint precision check.
 
+### Round 2
+
+- N1: fixed in ba6f6098c0dbd2db453f491581be9872e555235c; asserts the lead's four-SE mean-AUC bar from the run's sample SD and prints it; execution is blocked by the registry conflict.
+- F7-carry: fixed in 30e51132d835120d37dade7a6161df10ec930e25; comments use measured half-widths and the coefficient-step-to-probability bound; the 1e-10 threshold is unchanged.
