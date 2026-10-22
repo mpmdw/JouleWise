@@ -6,7 +6,7 @@ import math
 import unittest
 from dataclasses import replace
 
-from joulewise.align.mock_world import PowerModel, ScriptedEndpoint, SyntheticPowerSampler, WorkLedger
+from joulewise.align.mock_world import PowerModel, ScriptConfig, ScriptedEndpoint, SyntheticPowerSampler, WorkLedger
 from joulewise.align.records import to_json
 from joulewise.align.tamper import delete_turns, drop_tool_calls
 from tests.align.test_runner import inbox_episode
@@ -202,7 +202,10 @@ class MockWorldTests(unittest.TestCase):
                 result = super().chat(messages, **kwargs)
                 captured.append((list(messages), result))
                 return result
-        ep, _, task, endpoint, _ = inbox_episode(endpoint_class=Capture)
+        # A nondefault block size is a configured cache-model assumption; the
+        # ordinary episode/matrix tests independently check the default 16.
+        ep, _, task, endpoint, _ = inbox_episode(endpoint_class=Capture,
+                                                config=ScriptConfig(cache_block_tokens=32))
         prior = None
         schema_tokens = len(to_json(list(task.tool_schemas())).split())
         for messages, result in captured:
