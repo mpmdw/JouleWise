@@ -131,6 +131,30 @@ class MatrixTests(unittest.TestCase):
         self.assertTrue(math.isclose(doubled.gpu_hours, planned.gpu_hours * 2, rel_tol=1e-6))
         self.assertTrue(math.isclose(doubled.wall_seconds, planned.wall_seconds, rel_tol=1e-6))
 
+    def test_static_missing_input_flags_are_recomputed(self):
+        matrix, _ = load_matrix(CONFIG / "shade.json")
+        missing = estimate(matrix, "A100-SXM4-80GB")
+        self.assertIn("throughput_efficiency_not_supplied", missing.flags)
+        self.assertIn("workload_token_volumes_unavailable:prefill_tokens,decode_tokens",
+                      missing.flags)
+        supplied = planning_fixture(matrix)
+        # Explicit synthetic achieved rate is one half the ideal ceiling;
+        # other GPU classes retain null efficiency and cannot taint this estimate.
+        for rate in supplied["gpu_classes"]["A100-SXM4-80GB"]["throughput"].values():
+            rate.update(efficiency=1 / 2, efficiency_source={
+                "url": "https://github.com/mpmdw/JouleWise/blob/lane/2026-10-21-align-gpukit/tests/align/test_gpukit.py",
+                "accessed": "2026-10-22", "note": "Synthetic twice-ideal-duration fixture only."})
+        current = estimate(supplied, "A100-SXM4-80GB")
+        self.assertNotIn("throughput_efficiency_not_supplied", current.flags)
+        self.assertFalse(any(f.startswith("workload_token_volumes_unavailable")
+                             for f in current.flags))
+        self.assertIn("provisional_planning_inputs", current.flags)
+        # One missing active-model efficiency must still flag the selected class.
+        first = supplied["models"][0]["id"]
+        supplied["gpu_classes"]["A100-SXM4-80GB"]["throughput"][first]["efficiency"] = None
+        self.assertIn("throughput_efficiency_not_supplied",
+                      estimate(supplied, "A100-SXM4-80GB").flags)
+
     def test_bad_inputs_are_flags(self):
         matrix, _ = load_matrix(CONFIG / "shade.json")
         for mutation, expected in (

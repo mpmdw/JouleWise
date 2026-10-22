@@ -227,7 +227,12 @@ def estimate(matrix: Mapping[str, Any], gpu_class: str, *,
     monitor_hours = seconds / 3600 if monitor_placement == "gpu" and seconds is not None else None
     monitor_total = (monitor_hours * monitor_usd_per_gpu_hour
                      if monitor_hours is not None and monitor_usd_per_gpu_hour is not None else None)
-    flags.extend(matrix.get("flags", ()))
+    # These static missing-input labels describe the committed template. This
+    # estimate has evaluated the selected GPU's efficiencies and agent token
+    # volumes above; preserve that current verdict instead of stale labels.
+    evaluated_input_flags = {"throughput_efficiency_not_supplied",
+                             "workload_token_volumes_unavailable"}
+    flags.extend(f for f in matrix.get("flags", ()) if f not in evaluated_input_flags)
     flags.append("provisional_single_stream_bf16_bound")
     return Estimate(gpu_class, matrix["episode_count"], sum(n for n, _ in counts.values()),
                     sum(n for _, n in counts.values()), lower, lh,
