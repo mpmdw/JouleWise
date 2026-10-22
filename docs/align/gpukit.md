@@ -381,3 +381,12 @@ the fix-2 brief, dated 2026-10-22 with that distinction in each note. Card and
 config provenance pins do not select model weights: serving revisions remain
 null and must be frozen before paid work. No parameter count, decode weight
 formula or printed cost/throughput number changes.
+
+### Driver power-limit names (GK2-5)
+
+For v12/v13 gpu_power_readings, current_power_limit records the enforced board
+limit and requested_power_limit records the requested limit. Legacy
+power_readings/enforced_power_limit remains supported. Module/platform readings
+do not overwrite board readings. The telegraf schema_v12 and schema_v13 types.go
+files at commit 2156aa5089436522eec36b05fad94d850c728388 were read through GitHub
+by this seat on 2026-10-22; both paths are cited in throttle.py.

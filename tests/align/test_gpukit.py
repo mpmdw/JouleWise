@@ -851,6 +851,26 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
         self.assertIn("calibration_setup_load_and_offbox_waits_unavailable", projection.flags)
 
 
+    def test_v13_board_limits_on_session_path(self):
+        self._script("nvidia-smi", """#!/usr/bin/env python3
+print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_mode>"
+      "<gpu_virtualization_mode><virtualization_mode>Pass-Through</virtualization_mode>"
+      "</gpu_virtualization_mode><gpu_power_readings>"
+      "<current_power_limit>700.00 W</current_power_limit>"
+      "<requested_power_limit>650.00 W</requested_power_limit>"
+      "<default_power_limit>700.00 W</default_power_limit></gpu_power_readings>"
+      "<module_power_readings><current_power_limit>N/A</current_power_limit>"
+      "</module_power_readings></gpu></nvidia_smi_log>")
+""")
+        result = run_session(self._options("v13-power-limits"))
+        self.assertTrue(result["data_complete"], result["flags"])
+        self.assertNotIn("throttle_power_limit_unavailable:enforced", result["flags"])
+        for model in result["models"]:
+            for snapshot in (*model["throttle_before"], *model["throttle_after"]):
+                self.assertEqual(snapshot["power_limits"]["enforced"], "700.00 W")
+                self.assertEqual(snapshot["power_limits"]["requested"], "650.00 W")
+
+
 class FixArithmeticTests(unittest.TestCase):
     def test_budget_protocol_counts_by_hand(self):
         matrix, flags = load_matrix(CONFIG / "budget.json")

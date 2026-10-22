@@ -314,3 +314,27 @@ class ProvenanceTests(unittest.TestCase):
                     self.assertIn("not fetched by this seat", source["note"])
                 if nonembedding is not None:
                     self.assertEqual(params["non_embedding_parameters_source"]["quote"], nonembedding)
+
+
+class PowerLimitTests(unittest.TestCase):
+    def test_modern_and_legacy_board_limits(self):
+        from joulewise.align.gpukit.throttle import parse_snapshot
+        for group, limits, expected in (
+                ("gpu_power_readings",
+                 "<current_power_limit>700.00 W</current_power_limit>"
+                 "<requested_power_limit>650.00 W</requested_power_limit>",
+                 {"enforced": "700.00 W", "requested": "650.00 W"}),
+                ("power_readings",
+                 "<enforced_power_limit>350.00 W</enforced_power_limit>"
+                 "<power_limit>400.00 W</power_limit>",
+                 {"enforced": "350.00 W", "requested": "400.00 W"})):
+            snapshot = parse_snapshot(
+                "<nvidia_smi_log><gpu><" + group + ">" + limits +
+                "</" + group + "><module_power_readings>"
+                "<current_power_limit>N/A</current_power_limit>"
+                "<requested_power_limit>N/A</requested_power_limit>"
+                "</module_power_readings></gpu></nvidia_smi_log>")
+            for key, value in expected.items():
+                # Printed XML cells are preserved byte-for-byte, not computed watts.
+                self.assertEqual(snapshot["power_limits"][key], value)
+                self.assertNotIn("throttle_power_limit_unavailable:" + key, snapshot["flags"])

@@ -2,7 +2,9 @@
 
 Field names: NVIDIA nvsmi_device_v7.dtd (embedded driver DTD mirrored at
 https://github.com/rai-project/nvidia-smi/blob/864eb441c9ae3171601e2e9df942b9ca386612c0/_fixtures/example2.xml)
-and v13 driver XML names corroborated by
+and v12/v13 driver XML names corroborated by
+https://github.com/influxdata/telegraf/blob/2156aa5089436522eec36b05fad94d850c728388/plugins/inputs/nvidia_smi/schema_v12/types.go
+and
 https://github.com/influxdata/telegraf/blob/2156aa5089436522eec36b05fad94d850c728388/plugins/inputs/nvidia_smi/schema_v13/types.go .
 Semantics: https://docs.nvidia.com/deploy/nvidia-smi/index.html#clocks-event-reasons
 and #clocks-event-reason-counters. Accessed through the public GitHub mirrors
@@ -28,7 +30,10 @@ REASONS = ("hw_power_brake_slowdown", "hw_slowdown", "sw_power_cap")
 COUNTERS = ("hw_power_brake", "hw_therm_slowdown", "sw_power_cap")
 POWER_FIELDS = {
     "default": ("default_power_limit",),
-    "enforced": ("enforced_power_limit",),
+    # v12/v13 gpu_power_readings calls the enforced limit current_power_limit;
+    # legacy power_readings may explicitly name enforced_power_limit.
+    "enforced": ("enforced_power_limit", "current_power_limit"),
+    "requested": ("requested_power_limit", "power_limit"),
     "current": ("current_power_limit", "power_limit"),
 }
 
