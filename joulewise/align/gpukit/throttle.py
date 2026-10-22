@@ -26,8 +26,9 @@ from typing import Any, Mapping
 
 # Old drivers say "throttle"; current ones say "event". Keep original names in
 # the payload, alongside semantic categories so counter deltas survive a rename.
-REASONS = ("hw_power_brake_slowdown", "hw_slowdown", "sw_power_cap")
-COUNTERS = ("hw_power_brake", "hw_therm_slowdown", "sw_power_cap")
+REASONS = ("hw_power_brake_slowdown", "hw_slowdown", "sw_power_cap",
+           "hw_thermal_slowdown", "sw_thermal_slowdown")
+COUNTERS = ("hw_power_brake", "hw_therm_slowdown", "sw_power_cap", "sw_therm_slowdown")
 POWER_FIELDS = {
     "default": ("default_power_limit",),
     # v12/v13 gpu_power_readings calls the enforced limit current_power_limit;
@@ -62,6 +63,8 @@ def parse_snapshot(xml: str) -> dict[str, Any]:
             result["reasons"][reason] = active
             if active and reason.startswith("hw_"):
                 flags.append("throttle_hardware_active:" + reason)
+            elif active and reason == "sw_thermal_slowdown":
+                flags.append("throttle_thermal_active:" + reason)
     # v13's cumulative event-reason counters are integer microseconds, not event
     # counts. Parse their printed units; never compare a delta after a unit guess.
     for counter in COUNTERS:

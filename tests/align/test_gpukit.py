@@ -1072,6 +1072,19 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
             self.assertEqual(argv[argv.index("--served-model-name") + 1], argv[2])
 
 
+    def test_thermal_reasons_flag_without_changing_data_completeness(self):
+        self._script("nvidia-smi", "#!" + sys.executable + "\n" +
+                     "print('<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_mode><gpu_virtualization_mode><virtualization_mode>None</virtualization_mode></gpu_virtualization_mode><clocks_event_reasons><clocks_event_reason_hw_thermal_slowdown>Active</clocks_event_reason_hw_thermal_slowdown><clocks_event_reason_sw_thermal_slowdown>Active</clocks_event_reason_sw_thermal_slowdown></clocks_event_reasons><clocks_event_reasons_counters><clocks_event_reasons_counters_sw_therm_slowdown>1000 us</clocks_event_reasons_counters_sw_therm_slowdown></clocks_event_reasons_counters></gpu></nvidia_smi_log>')\n")
+        result = run_session(self._options("thermal-flags"))
+        self.assertTrue(result["data_complete"])
+        self.assertIn("throttle_hardware_active:hw_thermal_slowdown", result["flags"])
+        self.assertIn("throttle_thermal_active:sw_thermal_slowdown", result["flags"])
+        start = result["throttle_start"][0]
+        self.assertIs(start["reasons"]["hw_thermal_slowdown"], True)
+        self.assertIs(start["reasons"]["sw_thermal_slowdown"], True)
+        self.assertEqual(start["counters_us"]["sw_therm_slowdown"], "1000")
+
+
 class FixArithmeticTests(unittest.TestCase):
     def test_budget_protocol_counts_by_hand(self):
         matrix, flags = load_matrix(CONFIG / "budget.json")
