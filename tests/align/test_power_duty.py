@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import bisect
 import ctypes
 import json
 import math
 import random
 import threading
 import unittest
+import time
 
 from joulewise.align.power.duty import (
     DUTY_CONFIDENCE, DutyEstimate, _student_quantile, estimate_energy, plan_offsets,
@@ -63,6 +65,8 @@ def agent_world() -> tuple[Episode, tuple[float, ...], float]:
 
 def sampled_runs(episode: Episode, powers: tuple[float, ...], repeats: int, *,
                  seed: int, noise_sigma_w: float = 0.0,
+                 # Diagnostic bound only: above the 320 W deterministic peak;
+                 # Gaussian shifts are unbounded. F5 excludes it from nominal width.
                  power_bound_w: float | None = 400.0) -> list[tuple[PowerTrace, int, int]]:
     rng = random.Random(seed)
     runs = []
@@ -88,6 +92,64 @@ def sampled_runs(episode: Episode, powers: tuple[float, ...], repeats: int, *,
             TICK_NS, 0.25, 0.001, json.dumps(notes))
         runs.append((trace, episode.start_ns, episode.end_ns))
     return runs
+
+
+class ReplayWorld:
+    """One agent turn with 1500 prefill tokens, 135 decoded tokens and a tool.
+
+    Prefill lasts 187.5 ms at 350 W (~8k tokens/s). Decode lasts 3 s at
+    220 W with 15 W, 7 Hz ripple represented by 1 ms constant steps (~45
+    tokens/s). A 483.271 ms tool wait draws 75 W; idle is 55 W. Durations
+    are deliberately not multiples of the sensor's 100 ms period.
+    These are world parameters, not measurement thresholds.
+    """
+    def __init__(self) -> None:
+        self.edges = [0, 187_500_137]
+        self.watts = [350.0]
+        for step in range(3000):
+            self.edges.append(self.edges[-1]+1_000_000)
+            self.watts.append(220+15*math.sin(2*math.pi*7*step/1000))
+        self.edges.append(self.edges[-1]+483_271_299)
+        self.watts.append(75.0)
+        self.duration = self.edges[-1]
+        self.prefix = [0.0]
+        for left, right, level in zip(self.edges, self.edges[1:], self.watts):
+            self.prefix.append(self.prefix[-1]+(right-left)*level)
+
+    def integral(self, left: int, right: int, duration: int, shift: float) -> float:
+        def primitive(t: int) -> float:
+            if t <= 0:
+                return 55.0*t
+            inside = min(t, duration)
+            base = min(inside, self.duration)
+            index = min(bisect.bisect_right(self.edges, base)-1, len(self.watts)-1)
+            total = self.prefix[index]+(base-self.edges[index])*self.watts[index]
+            total += max(0, inside-self.duration)*self.watts[-1]+inside*shift
+            return total+max(0, t-duration)*55.0
+        return primitive(right)-primitive(left)
+
+
+def replay_runs(seed: int, start_jitter_ns: int, duration_jitter_ns: int,
+                repeats: int = 16) -> tuple[list[tuple[PowerTrace, int, int]], float]:
+    world = ReplayWorld()
+    rng = random.Random(seed)
+    runs = []
+    for offset in plan_offsets(PERIOD_NS, .25, repeats):
+        jitter = rng.randint(0, start_jitter_ns) if start_jitter_ns else 0
+        duration = world.duration+(rng.randint(-duration_jitter_ns, duration_jitter_ns)
+                                   if duration_jitter_ns else 0)
+        shift = rng.gauss(0, 2.0)  # Reviewer's 2 W independent Gaussian run shifts.
+        start = EPOCH_NS+offset+jitter
+        times = tuple(EPOCH_NS+k*PERIOD_NS for k in range(
+            -1, (offset+jitter+duration)//PERIOD_NS+3))
+        values = tuple(round((world.integral(t-start-TICK_NS, t-start, duration, shift)
+                              /TICK_NS+rng.gauss(0, .3))/.001)*.001 for t in times)
+        trace = PowerTrace("nvml_power", "gpu0:power_instant", "synthetic:monotonic",
+                           times, values, "W", PERIOD_NS, TICK_NS, .25, .001,
+                           json.dumps({"repeat_group": f"phase-{offset}",
+                                       "timing_half_width_ns": [0]*len(times)}))
+        runs.append((trace, start, start+duration))
+    return runs, world.integral(0, world.duration, world.duration, 0)/1e9
 
 
 class DutyWorldTests(unittest.TestCase):
@@ -241,9 +303,9 @@ class DutyWorldTests(unittest.TestCase):
             outside += abs(result.joules-truth) > result.half_width_j
         alpha = 1-DUTY_CONFIDENCE
         fraction = outside/seed_count
-        # The requested one-binomial-standard-error calibration bar. Seeds
-        # 0..999 and 64 repeats are declared before inspecting any result.
-        bar = math.sqrt(alpha*(1-alpha)/seed_count)
+        # Four binomial SE per F5/N1; at S=1000, 4 SE < alpha, so both
+        # a never-missing interval (m=0) and an always-missing one fail.
+        bar = 4*math.sqrt(alpha*(1-alpha)/seed_count)
         print("NVML DUTY CALIBRATION", json.dumps({
             "seeds": seed_count, "repeats": repeats, "outside": outside,
             "outside_fraction": fraction, "nominal_alpha": alpha, "binomial_se": bar}))
@@ -257,7 +319,8 @@ class DutyWorldTests(unittest.TestCase):
         self.assertLess(result.coverage_fraction, 1.0)
         self.assertTrue(math.isinf(result.half_width_j))
         self.assertIn("partial_coverage", result.flags)
-        self.assertIn("power_bound_required", result.flags)
+        self.assertIn("worst_case_bias_unbounded", result.flags)
+        self.assertIn("phase_without_replicates", result.flags)
 
     def test_a_fully_observed_tiling_does_not_need_a_power_bound(self) -> None:
         episode, powers, truth = agent_world()
@@ -277,11 +340,12 @@ class DutyWorldTests(unittest.TestCase):
             metadata["window_end_ns"] = list(trace.t_ns)
             metadata["window_timing_half_width_ns"] = [0]*len(trace.values)
             metadata["flags"] = ["driver_field_timestamp_is_wall_clock"]
-            # Calls occur 7 ms after the driver sample; actual windows retain
-            # their original endpoints through the lane-local notes adapter.
-            trace = PowerTrace(**{
-                **trace.__dict__, "t_ns": tuple(t+7_000_000 for t in trace.t_ns),
-                "notes": json.dumps(metadata)})
+            # F2: the shared timestamp is the window end. Query midpoints
+            # seven milliseconds later belong only in notes. Conflicting
+            # lane-local endpoint notes must not override the shared field.
+            metadata["query_midpoint_ns"] = [t+7_000_000 for t in trace.t_ns]
+            metadata["window_end_ns"] = [t+7_000_000 for t in trace.t_ns]
+            trace = PowerTrace(**{**trace.__dict__, "notes": json.dumps(metadata)})
             shifted.append((trace, start, end))
         result = estimate_energy(shifted)
         self.assertLessEqual(abs(result.joules-truth), 0.01*result.half_width_j)
@@ -310,7 +374,7 @@ class DutyWorldTests(unittest.TestCase):
         runs = sampled_runs(episode, powers, 8, seed=0)
         expected = estimate_energy(runs)
         trace, start, end = runs[0]
-        invalid = PowerTrace(**{**trace.__dict__, "resolution": None})
+        invalid = PowerTrace(**{**trace.__dict__, "averaging_window_ns": None})
         outside = PowerTrace(**{
             **trace.__dict__, "t_ns": tuple(t-2*(end-start) for t in trace.t_ns),
             "notes": json.dumps({"flags": ["sensor_update_phase_unreported"]})})
@@ -320,6 +384,70 @@ class DutyWorldTests(unittest.TestCase):
             # identical; rejected/nonoverlapping inputs have zero weight.
             self.assertEqual((actual.joules, actual.half_width_j, actual.coverage_fraction),
                              (expected.joules, expected.half_width_j, expected.coverage_fraction))
+
+    def test_production_replays_duration_jitter_keep_all_runs(self) -> None:
+        runs, _ = replay_runs(77, 2_000_000, 300_000)
+        result = estimate_energy(runs)
+        self.assertIn("runs_retained=16", result.flags)
+        self.assertIn("durations_differ", result.flags)
+        self.assertNotIn("duration_mismatch", result.flags)
+        self.assertNotIn("phase_without_replicates", result.flags)
+        self.assertTrue(math.isfinite(result.half_width_j), result)
+
+    def test_production_jitter_calibration_at_nominal_95_percent(self) -> None:
+        started = time.monotonic()
+        seeds = 400  # F5: >304 ensures 4 binomial SE is smaller than alpha=.05.
+        alpha = 1-DUTY_CONFIDENCE
+        bar = 4*math.sqrt(alpha*(1-alpha)/seeds)
+        # Both m=0 and m=S must fail; an interval that always covers cannot
+        # pass as calibrated. This is derived from 4 SE < alpha < 1-alpha.
+        self.assertLess(bar, min(alpha, 1-alpha))
+        for name, start_jitter, duration_jitter in (
+                ("aligned", 0, 0), ("100us", 100_000, 0),
+                ("2ms", 2_000_000, 0), ("2ms_duration300us", 2_000_000, 300_000)):
+            outside = 0
+            for seed in range(seeds):
+                runs, truth = replay_runs(seed, start_jitter, duration_jitter)
+                result = estimate_energy(runs)
+                self.assertIn("runs_retained=16", result.flags)
+                self.assertTrue(math.isfinite(result.half_width_j), (name, seed, result))
+                outside += abs(result.joules-truth) > result.half_width_j
+            fraction = outside/seeds
+            print("NVML PRODUCTION CALIBRATION", json.dumps({
+                "case": name, "seeds": seeds, "repeats": 16, "misses": outside,
+                "fraction": fraction, "nominal_alpha": alpha, "four_se_bar": bar,
+                "elapsed_s": time.monotonic()-started}))
+            self.assertLessEqual(abs(fraction-alpha), bar, (name, outside, seeds))
+
+    def test_metadata_keeps_run_and_drops_only_invalid_samples(self) -> None:
+        episode, powers, _ = agent_world()
+        runs = sampled_runs(episode, powers, 12, seed=5, noise_sigma_w=1.0)
+        trace, start, end = runs[0]
+        # Add a noncontributing pre-roll observation; changing it cannot
+        # change any coefficient on the workload, including its uncertainty.
+        notes = json.loads(trace.notes)
+        notes["timing_half_width_ns"].insert(0, 0)
+        trace = PowerTrace(**{**trace.__dict__,
+            "t_ns": (start-PERIOD_NS,)+trace.t_ns,
+            "values": (55.0,)+trace.values, "notes": json.dumps(notes)})
+        runs[0] = trace, start, end
+        baseline = estimate_energy(runs)
+        for change in ({"duty_fraction": None},
+                       {"values": (-0.001,)+trace.values[1:]},
+                       {"resolution": None}):
+            result = estimate_energy([(PowerTrace(**{**trace.__dict__, **change}), start, end)]+runs[1:])
+            self.assertEqual(result.joules, baseline.joules)  # Identical contributing inputs.
+            self.assertIn("runs_retained=12", result.flags)
+            if "resolution" in change:
+                self.assertTrue(math.isinf(result.half_width_j))
+                self.assertIn("sensor_resolution_unknown", result.flags)
+            else:
+                self.assertEqual(result.half_width_j, baseline.half_width_j)
+        mixed = PowerTrace(**{**trace.__dict__, "channel": "gpu1:power_instant",
+                              "clock_domain": "other:monotonic"})
+        result = estimate_energy([(mixed, start, end)]+runs[1:])
+        self.assertIn("mixed_channels", result.flags)
+        self.assertIn("mixed_clock_domains", result.flags)
 
     def test_student_quantile_has_independent_closed_form_checks(self) -> None:
         for probability in (0.95, 0.975, 0.995):

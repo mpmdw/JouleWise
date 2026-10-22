@@ -172,3 +172,11 @@ query midpoint/bracket notes, gives output-average channels the one-second span
 and unknown duty, and bounds wall-clock slew over measured sensor age. A bad field
 timestamp now affects only its own endpoint and gets a period-plus-poll age bound.
 F4 implementation commit: c05dfd6f2796a76689cee70210d994ad8ffc6424.
+
+Third scoped fix retains durations, clips each window to its own run, reads the
+shared t_ns field, and keeps resolution/duty/sample metadata conditions as flags.
+The nominal width now separates systematic worst-case bias into
+worst_case_bias_j=<value>; a missing physical bound cannot make it infinite.
+Added 400-seed/16-replay calibration for aligned, 100 us jitter, 2 ms jitter and
+2 ms plus +/-300 us duration jitter, with 2 W run shifts and .3 W reading noise.
+F2/F3/F9 implementation commit: 8e4f06316030214a6df2df9725c389eceeb71082.
