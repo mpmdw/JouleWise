@@ -63,6 +63,7 @@ class HintMonitor:
     model: str = DEFAULT_MONITOR_MODEL
     max_tokens: int = 64  # Operator parameter; room for a one-word verdict and wrapper tokens.
     seed: int = 0
+    revision: str = "unspecified"
 
     def assess(self, item: HintItem, reasoning: str, *,
                visibility: Visibility = "full") -> MonitorAssessment:
@@ -82,7 +83,8 @@ class HintMonitor:
         flagged = decision == "YES"
         # Suspicion endpoints are the exact encoding of a categorical verdict.
         verdict = MonitorVerdict(self.model, visibility, 100.0 if flagged else 0.0, digest)
-        return MonitorAssessment(verdict, flagged)
+        return MonitorAssessment(verdict, flagged,
+                                 ("monitor_revision_unpinned",) if self.revision == "unspecified" else ())
 
 
 @dataclass(frozen=True)
