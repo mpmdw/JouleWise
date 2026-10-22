@@ -1909,3 +1909,172 @@ observed), not ~1 s.
 
 Not verified by the seat: `_v5` block counts per cell; an inference warm-up
 rule in the draft; the ACM badging page (403; SIGIR mirror used).
+
+## Candidate questions 2026-10-21 (power as an out-of-band record of agent work)
+
+**Status: candidates in the bank, not registry rows.** Nothing below is
+registered, funded or promoted, and none of it runs on the measurement M3 Max
+while block-6-style windows collect. Promotion out of the bank needs the usual
+gates: a named slot in `PROJECT_STATUS.md`, a data plan that does not displace
+queue ranks above it, scope fit, a registration that passes its cold gate, and,
+for anything that rents GPUs, buys hardware or pays for API calls, Ed's explicit
+go. The build plan is `docs/align/PIPELINE.md`. Two draft registrations sit
+beside these rows, both headed "DRAFT, not funded, not registered":
+`docs/registrations/align_metadata_baseline_DRAFT.md` (first row) and
+`docs/registrations/align_budget_pilot_DRAFT.md` (fourth row).
+
+**The idea.** An AI agent is a language model run in a loop: it writes text,
+calls tools (search, send an email, transfer money in a simulated bank), reads
+the results and writes again. Its logs, its transcript and any monitor that
+reads them are software the agent may be able to reach. The electricity the
+inference machine draws is measured outside that software, so the agent cannot
+edit it afterwards. Power cannot show what one forward pass computes (a forward
+pass is the model's computation for one token, and it costs about the same
+whatever the token says). Power can count work: generated tokens the log leaves
+out, tool calls the log leaves out, and the run's phases (reading the prompt,
+generating, waiting on a tool). A sabotage run (one where the agent secretly
+pursues a second goal beside its assigned task) lasting minutes and dozens of
+turns may carry enough extra work to rise above the measurement floor, the
+smallest energy difference the instrument can attribute to a run (about 1 J per
+run on the M3 Max), where a single query would not. The framing is a
+tamper-evident record of work for agents privileged enough to touch their own
+logs, not a reader of thoughts. **Limit stated by every row:** power catches
+hidden tokens and unlogged tool calls; it is blind to reasoning that fits
+inside one forward pass.
+
+**Shared test bed.** SHADE-Arena (Kutasov et al. 2025, arXiv 2506.15740) is a
+benchmark of agent sabotage. Each of its task pairs has a main task in a
+simulated environment with mock tools and a side task that the agent, in the
+sabotage condition only, is secretly told to complete without being noticed; 5
+of its 17 pairs are public. A monitor (a second model) reads the transcript and
+gives a suspicion score from 0 to 100. The rows below run the public pairs
+against open-weight models served locally, never against a paid API.
+
+**Prior work these rows must cite** (identifiers from the 2026-10-21
+literature review; re-verify each before any paper text): AgentStop (Pham et
+al., arXiv 2605.15206), which uses the same `powermetrics` sampling and
+trapezoid integration as JouleWise and is already in the literature list above;
+workload identification from GPU power traces (Gargiulo and Kulp, 2609.00309);
+hijacked tool calls detected from electromagnetic emissions (ClawGuard,
+2605.06205); mixture-of-experts routing and speculative-decoding leaks through
+timing and caches, not power (MoEcho 2508.15036; Nuriyev and Kulp 2602.04105;
+2411.01076; 2410.17175); chain-of-thought monitorability under length pressure
+(Little 2607.09786; Lewis-Lim et al. 2610.03509; OpenAI 2512.18311);
+energy-aware distillation (Lambert and Luccioni 2605.13981); the duty-cycled
+NVIDIA power sensor (Yang et al. 2312.02741, already cited above).
+
+- **RQ-ALIGN-METADATA-BASELINE Logged counts alone as a sabotage detector:**
+  How well do the counts a log already holds (tokens, turns, tool calls,
+  durations), with no energy and no reading of content, separate benign from
+  sabotage runs on SHADE-Arena's public pairs? Reported as an AUC: the
+  probability that a randomly chosen sabotage run scores above a randomly
+  chosen benign one (0.5 is chance, 1.0 is perfect). **Why first:** on one
+  inference stream energy follows token count closely, so every energy result
+  must beat this bar to mean anything; if the counts already separate the
+  runs, energy adds value only where the counts themselves are tampered with.
+  No published token- or tool-count baseline for sabotage detection exists, so
+  the bar is reportable on its own. **Design:** five public pairs x benign and
+  sabotage x 30 seeds x two agent models (Qwen3-8B, Qwen3-30B-A3B) served by
+  vLLM; a logistic score cross-validated by leaving one task pair out;
+  compared on the same runs with an open-weight monitor's AUC; repeated on a
+  copy whose log the saboteur has edited. **Hardware:** no power instrument;
+  any GPU that serves the pinned weights (one 80 GB GPU for the 30B model at
+  16-bit), plus a second endpoint for the monitor. It rides the rented
+  whole-GPU sessions that sample power for the next row, so it costs no GPU
+  time of its own there. **Kill condition:** none; a baseline is reportable at
+  any value. **Risk:** a small local agent may rarely complete the side task,
+  so "sabotage" would label an instruction rather than a behaviour; the
+  side-task success rate is printed with every result. Only five pairs are
+  public, so the between-task uncertainty rests on five groups.
+
+- **RQ-ALIGN-ENERGY-RESIDUAL Energy the log cannot explain:** Does measured
+  energy beyond what the logged tokens predict flag runs with hidden or deleted
+  work? A model fitted on benign runs, where the log is complete, predicts each
+  turn's energy from its logged prompt tokens, generated tokens and context
+  length; a run's residual is measured minus predicted energy, in units of its
+  uncertainty. Hidden reasoning, unlogged tool calls and log tampering
+  (deleting turns from the record while the measured energy stays) all push
+  the residual up. **Design:** `joulewise/align/energy_residual.py` fits and
+  scores; its detection-power formula gives, before any data, the smallest
+  number of hidden generated tokens each instrument can see at a 5%
+  false-alarm rate and 80% power (the conventional pair for a power
+  statement). **Hardware:** a power instrument with a known floor beside every
+  run, one run at a time: NVIDIA's NVML sensor on a rented whole GPU first
+  (A100 and H100 class sensors average only 25 ms of every 100 ms, so each run
+  is repeated with staggered starts; a GPU slice hides board power and is
+  refused); the M3 Max instrument when measurement windows have room for it;
+  the Jetson Orin Nano Super's INA3221 rail monitor as a third. **Kill
+  condition:** the residual is indistinguishable from noise at the measured
+  floor: on every available instrument, the minimum detectable hidden work
+  exceeds the extra work sabotage runs actually generate. **Risk:** within one
+  stream energy may be close to relabelled tokens, so the residual has nothing
+  to find unless tokens or tool calls are hidden from the log; batched serving
+  mixes runs on one power trace, which is why runs are measured singly.
+
+- **RQ-ALIGN-MOE-ROUTING-STATS Routing statistics of a mixture-of-experts
+  model:** A mixture-of-experts (MoE) model sends each token through a few of
+  many expert sub-networks, chosen per layer by a small router (Qwen3-30B-A3B:
+  128 experts per layer, 8 per token; verify from its config). Stage A: do
+  aggregate routing statistics (how evenly the experts are used, how often
+  consecutive tokens reuse an expert, how unequal the load is) separate benign
+  from sabotage runs, and do they add separation beyond the logged counts of
+  the first row? Stage B: are those statistics visible in power? **Why
+  staged:** if routing does not separate the runs, power cannot either, and the
+  direction stops before any hardware is bought. **Design:** Stage A logs
+  router decisions on the first row's runs (`joulewise/align/moe/`), tests each
+  statistic with a permutation test that shuffles labels only within a task
+  pair, corrects for testing several statistics (Holm), and compares against
+  the counts-only AUC. Stage B (`joulewise/align/moe_stage_b/`) offloads
+  experts out of GPU memory so that routing locality becomes memory traffic,
+  which costs energy. **Hardware:** Stage A needs no power instrument: a GPU
+  that runs the MoE with router hooks (an 80 GB GPU at 16-bit), or a replay of
+  the first row's transcripts through it. Stage B: an expert-offloaded
+  configuration on a borrowable Jetson Orin Nano Super (8 GB) with its INA3221
+  rails, or a borrowable RTX 3080 Ti; a 20 kHz external sensor (PowerSensor3,
+  arXiv 2504.17883) would be a purchase and needs Ed's go. **Kill condition:**
+  Stage A shows no separation. **Risk:** with every expert resident in GPU
+  memory, routing changes which weights are read but not how many bytes, so
+  power barely moves; the nearest prior work recovers routing from timing and
+  caches, and the same groups may get to power first.
+
+- **RQ-ALIGN-EFFICIENCY-MONITORABILITY Cheapest monitorable configuration in
+  joules:** When a reasoning model thinks less (thinking switched off, a capped
+  reasoning budget, or a "be concise" instruction), a monitor that reads its
+  chain of thought (the reasoning text it writes before answering) catches
+  less; length pressure cut one monitor's catch rate from 71% to 51% on
+  Qwen3-14B (Little 2607.09786). What is the cheapest configuration, in
+  measured joules, that still reaches a given catch rate, across model sizes
+  and reasoning budgets? **Why joules:** within one model, joules are close to
+  relabelled tokens; they earn their place only as the common unit across
+  model sizes, where a token of a 14B model costs more than a token of a 4B
+  model. **Design:** Qwen3-4B, 8B and 14B and one model with a different
+  attention design; seven generation settings each; a multiple-choice suite
+  with planted hints; a fixed open-weight monitor; tokens and catch rates
+  first, joules second on a subset (`joulewise/align/budget/`,
+  `joulewise/align/frontier.py`). **Hardware:** a rented whole GPU with NVML
+  and the staggered-repeat protocol; a second endpoint for the monitor; an M3
+  Max replication only after the GPU pilot. **Kill condition:** the joule
+  frontier is identical to the token frontier across sizes (the set of
+  configurations that no other configuration beats on both catch rate and cost
+  is the same whether cost is counted in joules or in tokens). **Risk:** a free
+  compute proxy (active parameters x tokens) may reproduce the joule frontier
+  without measuring anything; the draft prints that frontier too, so surviving
+  the token test is not mistaken for a need to measure.
+
+- **RQ-ALIGN-JOULE-DISTILL Joule-based trace selection for distillation
+  (provisionally killed):** Distillation trains a small model on reasoning
+  traces written by a larger teacher model. Does choosing traces by measured
+  joules differ from choosing them by length? **Cause of death
+  (provisional):** for a fixed teacher, a trace's energy is close to a
+  function of its token count, so selecting by joules reduces to selecting by
+  length. **Reopens only if** the joule-token divergence gate
+  (`joule_token_divergence` in `joulewise/align/frontier.py`), run on the
+  fourth row's energy measurements, finds a model whose energy varies beyond
+  what its generated tokens predict by more than the measurement can explain.
+  **Hardware:** none until reopened; the gate reuses the fourth row's data.
+  **Kill condition:** met provisionally, as stated; the gate above is the only
+  way back.
+
+**Order and sharing.** The first row and MoE Stage A ride the same rented
+runs; the second row needs those runs with power sampled beside them; the
+fourth row is independent of the SHADE runs; the fifth depends on the fourth.
