@@ -145,6 +145,9 @@ def synthetic_token_schedule(
     The jitter half-width is a scenario parameter; hardware must replace this
     distribution with measured per-token timestamps. Route RNG is untouched.
     """
+    if (not isinstance(config.prefill_batch_tokens, int)
+            or isinstance(config.prefill_batch_tokens, bool) or config.prefill_batch_tokens <= 0):
+        return (replace(episode, flags=(*episode.flags, 'invalid_prefill_batch_size')), ())
     jitter = config.decode_step_jitter_ns
     if (not isinstance(jitter, int) or isinstance(jitter, bool)
             or not 0 <= jitter < config.decode_token_period_ns):
@@ -174,9 +177,12 @@ def synthetic_token_schedule(
         turns.append(replace(turn, start_ns=start, first_token_ns=boundary,
                              end_ns=cursor, tool_calls=calls))
         cursor = max((call.end_ns for call in calls), default=cursor)
-    flag = ("variable_decode_step_timing" if jitter else "synchronized_bursts")
+    timing_flags = (("variable_decode_step_timing",) if jitter
+                    else ("fixed_compute_step_timing",))
+    if jitter == 0 and not config.decode_miss_stalls:
+        timing_flags += ("synchronized_bursts",)
     return (replace(episode, turns=tuple(turns), end_ns=cursor,
-                    flags=(*episode.flags, flag)), tuple(windows))
+                    flags=(*episode.flags, *timing_flags)), tuple(windows))
 
 
 def default_sensors() -> tuple[SensorModel, ...]:

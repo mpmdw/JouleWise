@@ -574,6 +574,8 @@ class TestMoeStageBEndToEnd(StageBAssertions):
                             decode_tokens_per_turn=4)
         sensor = default_sensors()[0]
         cases = ((replace(world, hidden_size=33), sensor, "quantized_rows_not_block_aligned"),
+                 (replace(world, prefill_batch_tokens=0), sensor, "invalid_prefill_batch_size"),
+                 (replace(world, decode_step_jitter_ns=-1), sensor, "invalid_decode_step_jitter"),
                  (replace(world, decode_tokens_per_turn=1), sensor, "routing_statistic_unavailable"),
                  (world, replace(sensor, interval_ns=0), "invalid_sensor_or_profile"),
                  (world, replace(sensor, quantum_w=0.0), "invalid_sensor_or_profile"))
