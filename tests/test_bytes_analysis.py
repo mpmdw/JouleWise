@@ -257,11 +257,13 @@ class MeterWorkedExamples(NumericTestCase):
 
 
 class BatteryRulingWorkedExamples(NumericTestCase):
-    def example(self, duration_ns, n, first_ns, nonzero):
+    def example(self, duration_ns, n, first_ns, nonzero, *, meter=None):
         # Battery numbers: JouleWise-data c17fdca, bat-council-20261022/
         # data/h_decode_extract.json. Only the required numbers are copied.
-        # Meter power is a constant test input: the director checks H's actual
-        # meter integral on the Mac; this test executes the exact battery rule.
+        # The packet has the old meter integral and edge readings, not its
+        # full interior trace. When supplied, reconstruct three interior
+        # powers with that mean and those edges; the director separately
+        # checks H's real raw meter stream on the Mac.
         inside = [first_ns + i * 200_000_000 for i in range(n)]
         values = {t: {"B0AC": 0, "B0AV": 12774} for t in inside}
         for t, current, voltage in nonzero:
@@ -277,6 +279,16 @@ class BatteryRulingWorkedExamples(NumericTestCase):
         stream.host_ns = [-12_000_000_000, -10_000_000_000, -5_000_000_000,
                           0, duration_ns // 2, duration_ns, duration_ns + 4_000_000_000]
         stream.watts = [10.0] * len(stream.host_ns)
+        if meter is not None:
+            gross, idle, start_w, end_w = meter
+            mean = gross / (duration_ns / 1e9)
+            stream.host_ns = [-12_000_000_000, -10_000_000_000, -5_000_000_000, -1,
+                              0, duration_ns // 2, duration_ns - 1, duration_ns, duration_ns + 4_000_000_000]
+            stream.watts = [idle, idle, idle, start_w, start_w, 3 * mean - start_w - end_w,
+                            end_w, end_w, end_w]
+            stream.samples.step_ms = 20
+            stream.fit.stats.update(excess_latency_ms_min=-6.730335482299805,
+                                    excess_latency_ms_max=17.762388349609374)
         stream.poll_ns, stream.smc = times, [values[t] for t in times]
         return ba.meter_decode(stream, [0, duration_ns], [-10_000_000_000, -5_000_000_000])
 
@@ -285,7 +297,8 @@ class BatteryRulingWorkedExamples(NumericTestCase):
             (5_151_255, -37, 12773), (205_211_213, -37, 12773),
             (405_189_838, -47, 12774), (605_216_297, -47, 12774),
             (805_253_338, -47, 12774), (1_005_212_505, -47, 12774),
-            (1_205_201_088, -47, 12774)])
+            (1_205_201_088, -47, 12774)],
+            meter=(884.4995504506778, 2.536644694190233, 81.966026218812, 87.178466370239))
         # BAT-2 executed evidence #3: 1e-5 J exceeds 1e6 * float noise at
         # 6,424 J (1.4e-6 J) and six-decimal rounding (5e-7 J), and is below
         # 1% of the smallest printed bound entry (1.1e-3 J).
@@ -298,16 +311,24 @@ class BatteryRulingWorkedExamples(NumericTestCase):
         self.assertFalse(result["decode_battery_assist"])
         self.assertEqual(result["battery_tau_s"], 2 + .302440875)
         self.assertAlmostEqual(result["gross_j"] - result["meter_gross_j"], .776577, delta=1e-5)
+        for key, expected in (("gross_j", 885.276128), ("secondary_j", 857.327851),
+                              ("phase_edge_j", 7.163877), ("offset_bound_j", 4.068644)):
+            self.assertAlmostEqual(result[key], expected, delta=1e-5)  # Same six-decimal bar above.
+        self.assertAlmostEqual(result["gross_j"] - 308.06612272598744, 577.210005, delta=1e-5)
 
     def test_bat2_soak_r11_middle_of_decode(self):
         result = self.example(57_436_307_192, 287, 121_732_798, [
             (45_721_732_798, -31, 12770), (45_921_723_714, -31, 12770),
             (46_119_268_381, -31, 12770), (46_320_625_006, -31, 12770),
-            (46_521_773_923, -31, 12770)])
+            (46_521_773_923, -31, 12770)],
+            meter=(6423.530864461606, 2.825615313424226, 118.867547707628, 107.47745012112))
         self.assertAlmostEqual(result["battery_gross_j"], .396120, delta=1e-5)  # Same printed-value bar above.
         self.assertEqual(result["battery_n"], 287)
         self.assertEqual(result["battery_phase_edge_j"], 0)
         self.assertTrue(result["decode_battery_assist"])
+        self.assertAlmostEqual(result["gross_j"], 6423.926985, delta=1e-5)  # Same six-decimal bar above.
+        self.assertAlmostEqual(result["secondary_j"], 6261.634076, delta=1e-5)
+        self.assertAlmostEqual(result["phase_edge_j"], 8.547328, delta=1e-5)
 
     def test_charging_is_signed_and_idle_is_subtracted_on_its_own_basis(self):
         stream = MeterWorkedExamples().stream()
