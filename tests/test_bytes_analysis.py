@@ -1998,5 +1998,91 @@ manifest = f.archive_campaign(root, non_claim=False, release="none", subpack_ses
                   "evidence": evidence}, sort_keys=True), flush=True)
 
 
+class Q2CommitmentCLIChainTests(unittest.TestCase):
+    def test_changed_module_evaluates_original_commitment_and_labels_rebuild(self):
+        """B6 Q2 judge: fixed code evaluates C1 as data; C2 is the alternative."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = archive_campaign(root, non_claim=False, release="all")
+            _write_json(root / "manifest.json", manifest)
+            clean_source = (ROOT / "joulewise/bytes_analysis.py").read_text()
+            for case in ("comment", "fit-line"):
+                with self.subTest(case=case):
+                    tree = root / case
+                    shutil.copytree(ROOT / "joulewise", tree / "joulewise")
+                    (tree / "scripts").mkdir()
+                    shutil.copyfile(ROOT / "scripts/bytes_analyze.py", tree / "scripts/bytes_analyze.py")
+                    source = clean_source + "\n# Q2 comment-only provenance change.\n"
+                    if case == "fit-line":
+                        # A deliberately defective central line uses the existing upper
+                        # interval endpoints instead of e. No new magnitude or bar:
+                        # Q2 compares files rebuilt by identical code exactly.
+                        old = '\"line\": line(xs, [p[\"e\"] for p in points]),'
+                        new = '\"line\": line(xs, [p[\"upper\"] for p in points]),'
+                        self.assertEqual(clean_source.count(old), 1)
+                        source = clean_source.replace(old, new)
+                    (tree / "joulewise/bytes_analysis.py").write_text(source)
+
+                    def run(checkout, stage, label, predictions=None, expected=0):
+                        command = [sys.executable, "-B", checkout / "scripts/bytes_analyze.py",
+                            "--export", root / "export", "--manifest", root / "manifest.json",
+                            "--stage", stage, "--out", root / label]
+                        if predictions is not None:
+                            command += ["--predictions", predictions]
+                        result = subprocess.run(list(map(str, command)), cwd=checkout,
+                            capture_output=True, text=True, check=False,
+                            env={**os.environ, "JW_B5_SYNTHETIC_ONLY": "1"})
+                        self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+                        return root / label
+
+                    first = run(tree, "fit", case + "-C1")
+                    committed_bytes = (first / "predictions.json").read_bytes()
+                    committed = json.loads(committed_bytes)
+                    second = run(ROOT, "fit", case + "-C2")
+                    rebuilt = ba.read_json(second / "predictions.json")
+                    registered = run(ROOT, "heldout", case + "-registered", first / "predictions.json")
+                    alternative = run(ROOT, "heldout", case + "-alternative", second / "predictions.json")
+                    record = ba.read_json(registered / "analysis_record.json")
+                    expected_fields = [] if case == "comment" else ["rival_lines"]
+                    expected_flags = ["bytes.module_changed_after_commitment"]
+                    if expected_fields:
+                        expected_flags.append("bytes.commitment_not_rebuilt")
+                    self.assertEqual(record["flags"], expected_flags)
+                    self.assertEqual(record["fields_not_rebuilt"], expected_fields)
+                    self.assertEqual(record["bytes_analysis_sha256"], {
+                        "committed": committed["bytes_analysis_sha256"],
+                        "evaluating": rebuilt["bytes_analysis_sha256"]})
+                    self.assertNotEqual(committed["bytes_analysis_sha256"], rebuilt["bytes_analysis_sha256"])
+                    self.assertEqual(record["predictions_sha256"], hashlib.sha256(committed_bytes).hexdigest())
+                    self.assertEqual((first / "predictions.json").read_bytes(), committed_bytes)
+                    self.assertEqual(ba.read_json(alternative / "analysis_record.json")["flags"], [])
+                    if case == "comment":
+                        # Same code and same inputs: bit identity is the property.
+                        for name in ("h1", "h2", "moe", "model_estimates", "unavailable", "heldout_pass_estimates"):
+                            self.assertEqual((registered / (name + ".json")).read_bytes(),
+                                             (alternative / (name + ".json")).read_bytes())
+                    else:
+                        rows = [r for r in ba.read_json(registered / "h1.json") if r["pass_id"] == "mean"]
+                        points = {tuple(p[k] for k in ("model", "selection", "basis", "boundary")): p
+                                  for p in ba.read_json(registered / "model_estimates.json")}
+                        groups = {tuple(g[k] for k in ("selection", "basis", "boundary")): g["lines"]
+                                  for g in committed["rival_lines"]}
+                        for row in rows:
+                            point = points[tuple(row[k] for k in ("model", "selection", "basis", "boundary"))]
+                            lines = groups[tuple(row[k] for k in ("selection", "basis", "boundary"))]
+                            for check in row["checks"]:
+                                hypothesis = check["hypothesis"]
+                                intercept, slope = lines[hypothesis]["line"]
+                                # Identical committed coefficients and point inputs,
+                                # with identical multiply/add: exact data identity.
+                                self.assertEqual(check["predicted"], intercept + slope * point[hypothesis])
+                        self.assertNotEqual((registered / "h1.json").read_bytes(),
+                                            (alternative / "h1.json").read_bytes())
+                    print("BYTES_Q2_CHAIN=" + json.dumps({"case": case, "flags": record["flags"],
+                        "fields_not_rebuilt": record["fields_not_rebuilt"],
+                        "module_digests": record["bytes_analysis_sha256"],
+                        "predictions_sha256": record["predictions_sha256"]}, sort_keys=True), flush=True)
+
+
 if __name__ == "__main__":
     unittest.main()

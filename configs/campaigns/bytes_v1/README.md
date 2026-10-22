@@ -23,7 +23,7 @@ collection plans live under `configs/campaigns/bytes-sN-p1/` and
 `configs/campaigns/bytes-sN-p2/`. Each registration names its own tree through
 `plan_tree_ref`; there is no unused `pass_plan_tree_refs` map.
 
-Pass 1 has target/minimum 1/1; pass 2 has 1/0. `configs/b6/loop.json` retains
+Both passes have target/minimum 1/1 (Addendum 6); pass 2 is optional in the analysis. `configs/b6/loop.json` retains
 ALPHA/BETA/GAMMA in their original order, then lists s1-p1 through s6-p1, then
 s6-p2 through s1-p2. `pass_order.json` records the same BYTES order. Pass-2 trees
 reverse whole model modules; runs within each module retain their order.
