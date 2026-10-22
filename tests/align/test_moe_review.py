@@ -67,29 +67,34 @@ class CostTests(unittest.TestCase):
     def test_shade_sized_episode(self):
         E, K, L = 128, 8, 48  # Verified published model configuration.
         # r1 section 6: 30 turns x (1500 prefill + 250 decode) = 52,500 rows.
-        rng = random.Random(1)
-        phases, rows = [], []
-        for _ in range(30):
-            for phase, count in (("prefill", 1500), ("decode", 250)):
-                for _ in range(count):
-                    phases.append(phase)
-                    rows.append(tuple(tuple(rng.sample(range(E), K)) for _ in range(L)))
-        log = RouterLog("rev", E, K, tuple(range(L)), tuple(phases), tuple(rows))
-        self.compare_paths(log)
-        # For independent uniform top-K draws, overlap is hypergeometric
-        # (E population, K marked, K drawn). Dividing by K gives mean K/E
-        # and variance sigma_squared below. Adjacent overlaps are independent
-        # conditional on their common set, with a set-independent law, so the
-        # mean over L*(T-1) pair-layer terms has this standard error.
-        # Five SE gives a normal-tail false failure probability below 6e-7;
-        # at E=128,K=8,L=48,T=52500 the bar is about 2.62e-4.
-        result = S.episode_stats(log)
-        T = len(log.experts)
-        sigma_squared = (1 / E) * ((E - K) / E) * ((E - K) / (E - 1))
-        bar = 5 * math.sqrt(sigma_squared / (L * (T - 1)))
-        self.assertLessEqual(abs(result["both_reuse_fraction"] - K / E), bar)
-        print("MOE_REVIEW_R2_REUSE_BAR", {"reuse": result["both_reuse_fraction"],
-                                        "expectation": K / E, "bar": bar}, flush=True)
+        # Port E4's six seeds unchanged; cost comparison needs only seed 1.
+        for seed in range(1, 7):
+            with self.subTest(seed=seed):
+                rng = random.Random(seed)
+                phases, rows = [], []
+                for _ in range(30):
+                    for phase, count in (("prefill", 1500), ("decode", 250)):
+                        for _ in range(count):
+                            phases.append(phase)
+                            rows.append(tuple(tuple(rng.sample(range(E), K)) for _ in range(L)))
+                log = RouterLog("rev", E, K, tuple(range(L)), tuple(phases), tuple(rows))
+                if seed == 1:
+                    self.compare_paths(log)
+                value = S.reuse_fraction(log)
+                # Uniform top-K overlap is hypergeometric (E population,
+                # K marked, K drawn). Dividing by K gives mean K/E and
+                # variance sigma_squared below. Adjacent overlaps are
+                # conditionally independent with a common-set-independent
+                # law, so SE = sigma/sqrt(L*(T-1)).
+                # Five SE gives normal-tail false failure below 6e-7;
+                # for this fixture the derived bar is about 2.62e-4.
+                T = len(log.experts)
+                sigma_squared = (1 / E) * ((E - K) / E) * ((E - K) / (E - 1))
+                bar = 5 * math.sqrt(sigma_squared / (L * (T - 1)))
+                self.assertLessEqual(abs(value - K / E), bar)
+                print("MOE_REVIEW_R2_E4", {"seed": seed, "reuse": value,
+                                          "expectation": K / E, "bar": bar}, flush=True)
+                del log, rows, phases  # Keep production-sized seeds sequential in memory.
 
 
 
@@ -126,6 +131,7 @@ def run_twin_from_local_ref(root: Path) -> tuple[str, subprocess.CompletedProces
             cwd=target, env=env, capture_output=True, text=True)
     return revision, process
 
+
 class ReviewerWorldTests(unittest.TestCase):
     def test_independent_twin_from_local_review_ref(self):
         # CI checkout supplies the public ref; the test never fetches network data.
@@ -133,7 +139,6 @@ class ReviewerWorldTests(unittest.TestCase):
         revision, process = run_twin_from_local_ref(root)
         print("MOE_TWIN_REVIEW_REF", revision, process.stdout, process.stderr, flush=True)
         self.assertEqual(process.returncode, 0)  # Every independent agreement test must pass.
-
 
     def test_independent_twin_missing_git_or_ref_skips(self):
         root = Path(__file__).resolve().parents[2]

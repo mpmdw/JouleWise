@@ -325,5 +325,20 @@ class DroppedGroupTests(unittest.TestCase):
             self.assertFalse(any("group_has_no_label_exchangeability" in flag for flag in statistic.flags))
 
 
+class TimingMapTests(unittest.TestCase):
+    def test_calibration_weight_matches_single_hosted_observation(self):
+        root = Path(__file__).resolve().parents[2]
+        timing = json.loads((root / "scripts/test_timings.json").read_text(encoding="utf-8"))
+        # Bit identity with the literal MODULE PASS observation supplied in
+        # R2-m2 (run 39715696032); this is scheduling metadata, not an estimate
+        # of hardware performance or a numerical acceptance tolerance.
+        self.assertEqual(timing["seconds_by_module"]["tests.align.test_moe_calibration"], 1451.183)
+        print("MOE_REVIEW_R2_TIMING", {
+            "unknown_module_weight_seconds": timing["unknown_module_weight_seconds"],
+            "tests.align.test_moe_calibration":
+                timing["seconds_by_module"]["tests.align.test_moe_calibration"],
+        }, flush=True)
+
+
 if __name__ == "__main__":
     unittest.main()
