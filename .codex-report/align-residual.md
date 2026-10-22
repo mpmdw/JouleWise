@@ -34,6 +34,9 @@ No new module or registry edit; no twin/probe file is committed. The three prote
 files docs/align/PIPELINE.md, joulewise/align/records.py and interfaces.py are unchanged.
 First round-2 checkpoint d96a6cf901fafc5782db2fae3448a5488192b71e defined ownership;
 implementation, regressions and expanded documentation are in e7e69393e6c13cd08c3199a4dc94478465662cd2.
+Follow-up 914ff040e52d5f97f775d1b6a33df0cf3110903d keeps training-exclusion provenance flags
+from invalidating power on valid scored rows; its regression extends the existing
+missing-turn test without changing its earlier assertions.
 
 ## PUBLIC API
 
@@ -187,10 +190,18 @@ not represented as observations. No whole-repository suite was launched.
 
 ### CI
 
-CI run 39732765372 at e7e69393e6c13cd08c3199a4dc94478465662cd2 was pending at the latest read.
-https://github.com/mpmdw/JouleWise/actions/runs/39732765372
-This is not a local test result; no successful run/count is claimed here.
-A final-head CI observation, if available, is recorded below before handoff.
+Latest code-head CI run 39733328023 at 914ff040e52d5f97f775d1b6a33df0cf3110903d was queued at
+the latest read: https://github.com/mpmdw/JouleWise/actions/runs/39733328023
+This is not a local test result; no successful test run/count is claimed here.
+
+Earlier run 39732765372 at e7e69393e6c13cd08c3199a4dc94478465662cd2 completed changes, fences and
+build successfully; installed-wheel's smoke step succeeded before the job was marked
+cancelled, and quick was still running at that read. A later push superseded it.
+Gate-ledger run 39732765227 failed because the draft PR body explicitly leaves all
+five merge gates NOT-RUN; the log lists rows 1 through 5 as "still NOT-RUN".
+Those lead-owned gates are not represented as complete and the PR body was not edited.
+Final-report-only heads start their own CI runs; the final response reports the
+available final-head run status without waiting for completion.
 
 ## END-TO-END
 
@@ -205,7 +216,7 @@ sqrt(.4^2+(.02*mean_energy)^2) J and separate episode standard uncertainty 2 J.
 These are planning/scale parameters, not measurements. Both context products are active.
 
 Budgets and seeds reproduce the lead's scale world: 600 calibration episodes across
-12 pairs (seed 600000), 2000 evaluation episodes across 20 other pairs (seed 700000),
+12 pairs (seed 600000), 2000 evaluation episodes across 20 independently generated pairs (seed 700000),
 with independent tool-energy draws at seeds 1/2. Tool energy A+B*wait+N(0,C^2) is
 added to the total and, for the ownership control, the owning turn's energy too.
 The regression checks absent departure flags when owned and present flags when omitted
@@ -281,6 +292,8 @@ Without a benign score summary the hardware calibrated value is unknown.
 - Add hidden_token_counts_logged=False keyword-only to the lane-local adapter;
   default subtraction is unchanged, True keeps reported reasoning-token counts.
   The same reading must be chosen for calibration and scored episodes.
+- Training exclusion flags remain diagnostics: they do not invalidate otherwise
+  usable scored counts in either power function. Validate the scored rows themselves.
 - Retain all numerical bars and derivations from round 1. New four-SE diagnostics
   and calibrated-power bars are the lead's. Pure representation/row identities use
   exact equality because normalized integers feed identical arithmetic.
@@ -352,7 +365,7 @@ implementation is blocked: both readings are available with the ruled default.
 
 ### Round 2
 
-- RES-R2-01 fixed (NOT EXECUTED) e7e69393e6c13cd08c3199a4dc94478465662cd2; ownership checkpoint d96a6cf901fafc5782db2fae3448a5488192b71e.
+- RES-R2-01 fixed (NOT EXECUTED) e7e69393e6c13cd08c3199a4dc94478465662cd2; ownership checkpoint d96a6cf901fafc5782db2fae3448a5488192b71e; provenance follow-up 914ff040e52d5f97f775d1b6a33df0cf3110903d.
 - RES-R2-02 fixed (NOT EXECUTED) e7e69393e6c13cd08c3199a4dc94478465662cd2: quantile_at_sample_max at rank=m, no threshold change.
 - RES-R2-03 fixed (NOT EXECUTED) e7e69393e6c13cd08c3199a4dc94478465662cd2: normalize indexable/whole-real counts to Python ints.
 - RES-R2-04 fixed (NOT EXECUTED) e7e69393e6c13cd08c3199a4dc94478465662cd2: hidden_token_counts_logged=False; True retains reported reasoning counts.

@@ -404,7 +404,7 @@ class TestEnergyResidualCalibrationDiagnostics(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Same independent budgets/seeds as the lead: m=600 calibration episodes
-        # from 12 task pairs; n=2000 evaluation episodes from 20 other pairs.
+        # from 12 task pairs; n=2000 independent evaluation episodes across 20 pairs.
         cls.calibration_world = _record_world(600_000, 12, 50)
         cls.evaluation_world = _record_world(700_000, 20, 100)
 
