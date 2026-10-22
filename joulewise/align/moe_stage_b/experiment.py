@@ -453,14 +453,14 @@ def run_world(
 def timing_spread_sweep(
     config: WorldConfig, sensor: SensorModel, *,
     jitter_points_ns: tuple[int, ...] = (2_000_000, 10_000_000, 25_000_000),
-    episode_factor_half_widths: tuple[float, ...] = (0.0, 0.025, 0.05, 0.10),
+    episode_factor_half_widths: tuple[float, ...] = (0.0, 0.025, 0.05, 0.10, 0.20),
     stage_a_effect_sd: float, n_per_condition: int, alpha: float,
     power: float, comparisons: int,
 ) -> list[dict[str, Any]]:
     """Scenario grid, not acceptance bars, on episode-mean timing spread.
 
-    +/-10% uniform episode factors have SD 10%/sqrt(3), reaching beyond
-    5% of mean compute time. Jitter points reproduce reviewer q3 exactly.
+    +/-20% uniform episode factors have SD 20%/sqrt(3), reaching beyond
+    5% of mean decode time even with the scenario upload stalls. Jitter points reproduce reviewer q3 exactly.
     Power stays at the same running watts for the changed compute duration;
     bytes and transfer J are unchanged, while sensor acquisition phase changes.
     """

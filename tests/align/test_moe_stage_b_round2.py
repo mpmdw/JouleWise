@@ -245,7 +245,9 @@ class TestMoeStageBRound2(unittest.TestCase):
                     ex.default_sensors()[0], **DESIGN)
                 emit("timing_spread_sweep "+("stalled" if stalls else "counterfactual_no_stall"), rows)
                 # Grid rows are supplied scenario points, not scientific bars.
-                self.assertEqual(len(rows), 7)
+                self.assertEqual(len(rows), 8)
+                # Positive timing variation produces distinct seeded durations;
+                # zero would mean the scenario variation was lost in the chain.
                 self.assertTrue(all(row["within_condition_sd_episode_mean_decode_ms"] > 0 for row in rows))
 
     def test_continuous_rounding_bound(self):

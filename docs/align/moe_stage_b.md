@@ -547,9 +547,9 @@ alignment. Its zero default preserves existing worlds. Independent per-token
 jitter averages down across 384 tokens and cannot substitute for this factor.
 
 timing_spread_sweep prints the reviewer +/-2, 10 and 25 ms jitter scenarios
-then factor half-widths 0, 2.5%, 5%, 10%. These are scenario points, not bars.
-Uniform +/-10% has SD 10%/sqrt(3)=5.77% of the mean compute time, exceeding
-the requested 5% scenario reach. The measured sweep axis is within-condition
+then factor half-widths 0, 2.5%, 5%, 10%, 20%. These are scenario points, not bars.
+Uniform +/-20% has SD 20%/sqrt(3)=11.55% of mean compute time,
+exceeding the requested 5% reach even after the scenario upload stalls. The measured sweep axis is within-condition
 SD of episode-mean decode time (mean of the two condition population SDs).
 
 The scenario grid will be printed by the round-2 regression test. Verdicts
