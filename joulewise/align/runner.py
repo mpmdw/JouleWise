@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from joulewise.align.interfaces import (
-    AgentTask, ChatEndpoint, ChatMessage, Monitor, PowerSampler, TokenCounter,
+    AgentTask, ChatEndpoint, ChatMessage, ChatResult, Monitor, PowerSampler, TokenCounter,
 )
 from joulewise.align.records import (
     ClockMapping, Episode, MonitorVerdict, PowerTrace, Turn, ToolCall,
@@ -146,6 +146,36 @@ def _text_result(value: Any) -> str:
             return "<" + type(value).__name__ + ">"
 
 
+def _endpoint_history(transcript: Sequence[ChatMessage]) -> list[ChatMessage]:
+    """Visible assistant content for backend history and task scorers."""
+    history = []
+    for message in transcript:
+        if message.role == "assistant" and message.tool_call_id is None:
+            content, _, _ = _spans(message.content, _REASONING_TAGS)
+            message = replace(message, content=content)
+        history.append(message)
+    return history
+
+
+def _endpoint_flags(value: Any, flags: list[str]) -> None:
+    """Lift adapter diagnostics without importing any endpoint implementation."""
+    if isinstance(value, str):
+        value = (value,)
+    if isinstance(value, (list, tuple)):
+        flags.extend("endpoint." + flag for flag in value if isinstance(flag, str))
+
+
+def _capture_usage(result: ChatResult, flags: list[str]) -> Any:
+    usage = to_jsonable(result.raw_usage)
+    if isinstance(usage, Mapping):
+        diagnostics = usage.get("joulewise", {})
+        if isinstance(diagnostics, Mapping):
+            _endpoint_flags(diagnostics.get("flags", ()), flags)
+    if result.prompt_tokens == 0:
+        flags.append("endpoint.empty_result")
+    return usage
+
+
 def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                 monitors: Sequence[Any] = (), samplers: Sequence[PowerSampler] = (),
                 seed: int, max_turns: int, max_tokens: int, temperature: float,
@@ -165,6 +195,8 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
     started: list[PowerSampler] = []
     counts: dict[str, int | None] = {}
     counted: list[int] = []
+    raw_usage: dict[str, Any] = {}
+    failed_requests: list[Any] = []
     traces: list[PowerTrace] = []
     mappings: dict[str, ClockMapping] = {}
     hardware: dict[str, Any] = {
@@ -205,12 +237,7 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
             for index in range(max(0, max_turns)):
                 call_start = now()
                 try:
-                    history = []
-                    for message in transcript:
-                        if message.role == "assistant" and message.tool_call_id is None:
-                            content, _, _ = _spans(message.content, _REASONING_TAGS)
-                            message = replace(message, content=content)
-                        history.append(message)
+                    history = _endpoint_history(transcript)
                     result = endpoint.chat(history, tools=tools, max_tokens=max_tokens,
                                            temperature=temperature, seed=seed)
                 except KeyboardInterrupt:
@@ -218,8 +245,16 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                     break
                 except Exception as exc:
                     flags.append("endpoint.error." + type(exc).__name__)
+                    _endpoint_flags(getattr(exc, "flags", ()), flags)
+                    partial = getattr(exc, "partial_result", None)
+                    if isinstance(partial, ChatResult):
+                        raw_usage[str(index)] = _capture_usage(partial, flags)
+                        # Incomplete responses are diagnostics, not completed model
+                        # turns or executable tool requests. Preserve partial counts.
+                        failed_requests.append({"index": index, "partial_result": to_jsonable(partial)})
                     break
                 call_end = now()
+                raw_usage[str(index)] = _capture_usage(result, flags)
                 prompt = _count(result.prompt_tokens, flags, "prompt_tokens")
                 cached = _count(result.cached_prompt_tokens, flags, "cached_prompt_tokens")
                 if cached > prompt:
@@ -278,6 +313,18 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                         except Exception as exc:
                             flags.append("token_counter.error." + type(exc).__name__)
                             scratch_count = None
+                if result.reasoning_text and result.reasoning_tokens == 0:
+                    # A tokenizer estimate is distinct from server-reported usage,
+                    # even when it recovers every separated reasoning token.
+                    flags.append("usage.reasoning_uncounted")
+                    if token_counter is not None:
+                        try:
+                            hidden += _count(token_counter.count_tokens(result.reasoning_text),
+                                             flags, "reasoning_text_tokens")
+                        except KeyboardInterrupt:
+                            flags.append("episode.interrupted")
+                        except Exception as exc:
+                            flags.append("token_counter.error." + type(exc).__name__)
                 counts[str(index)] = scratch_count
                 if scratch_count is not None:
                     hidden += scratch_count
@@ -329,6 +376,8 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
     end = max(end, now())
     hardware["runner"] = {
         "matrix_id": matrix_id, "scratchpad_tokens": counts,
+        "raw_usage": raw_usage, "failed_requests": failed_requests,
+        "scoring_transcript_view": "endpoint_history",
         "scratchpad_counted_hidden": counted,
         "reasoning_history_policy": "strip_separated_reasoning",
         "max_turns": max_turns, "max_tokens": max_tokens, "temperature": temperature,
@@ -381,7 +430,7 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
     scores: dict[str, Any] = {}
     for name, scorer in (("main_task_score", task.score_main), ("side_task_success", task.score_side)):
         try:
-            value = scorer(transcript)
+            value = scorer(_endpoint_history(transcript))
             if value is not None:
                 valid = (isinstance(value, (int, float)) and not isinstance(value, bool)
                          and math.isfinite(value)) if name == "main_task_score" else isinstance(value, bool)
@@ -525,8 +574,8 @@ def run_matrix(spec_path: str | Path) -> Path:
 
     Planned cells come from the spec, so resume skips complete cells before
     constructing a factory. A task-config digest distinguishes prompt variants.
-    Endpoint identity may be declared explicitly; otherwise its factory slot
-    names the cell. Runtime identities remain in the resulting Episode.
+    Endpoint identity may be declared explicitly; otherwise its public config
+    digest names the cell. Runtime identities remain in the resulting Episode.
     """
     spec_path = Path(spec_path)
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
@@ -601,17 +650,11 @@ def run_matrix(spec_path: str | Path) -> Path:
         else:
             flags.append("matrix.condition_unknown." + str(condition))
     endpoint_slots = []
-    seen_endpoints: dict[str, str] = {}
-    factory_slots: dict[str, int] = {}
     for value in spec.get("endpoints", []):
         entry = _component(value)
         fingerprint = _digest(_public_spec(entry))
-        if fingerprint not in seen_endpoints:
-            factory = entry["factory"]
-            slot = factory_slots.get(factory, 0)
-            factory_slots[factory] = slot + 1
-            seen_endpoints[fingerprint] = str(entry.get("identity", factory + "/slot/" + str(slot)))
-        endpoint_slots.append((entry, seen_endpoints[fingerprint]))
+        endpoint_key = str(entry.get("identity", entry["factory"] + "/config/" + fingerprint))
+        endpoint_slots.append((entry, endpoint_key))
     jobs = list(itertools.product(tasks, conditions, spec.get("seeds", [0]), endpoint_slots))
     random.Random(order_seed).shuffle(jobs)
     if not jobs:
@@ -648,6 +691,9 @@ def run_matrix(spec_path: str | Path) -> Path:
         task = None
         endpoint = None
         construction_flags: list[str] = []
+        pair_declared = any(value is not None for value in (
+            task_spec.get("task_pair"), task_spec.get("config", {}).get("task_pair"),
+            task_spec.get("config", {}).get("pair")))
         try:
             if "clock" in spec:
                 context = replace(context, clock=_make("clock", spec["clock"], context))
@@ -659,6 +705,8 @@ def run_matrix(spec_path: str | Path) -> Path:
             construction_flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt)
                                       else "factory.error." + type(exc).__name__)
         if construction_flags:
+            if task is None and not pair_declared:
+                construction_flags.append("matrix.task_pair_undeclared")
             if factory_retry and tuple(construction_flags) == latest.flags:
                 continue  # A still-unavailable factory does not duplicate its diagnostic.
             timestamp = context.clock()

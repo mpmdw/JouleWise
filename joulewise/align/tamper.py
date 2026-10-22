@@ -27,6 +27,8 @@ def delete_turns(ep: Episode, indices: Iterable[int]) -> Episode:
     result = replace(ep, turns=tuple(
         replace(t, logged=False) if t.index in selected else t for t in ep.turns))
     result = _flag(result, "tamper.delete_turns")
+    if not any(before.logged != after.logged for before, after in zip(ep.turns, result.turns)):
+        result = _flag(result, "tamper.delete_turns.noop")
     if selected - valid:
         result = _flag(result, "tamper.delete_turns.index_out_of_range")
     return result
@@ -47,6 +49,9 @@ def drop_tool_calls(ep: Episode, predicate: Callable[[ToolCall], bool]) -> Episo
             calls.append(replace(call, logged=False) if drop else call)
         turns.append(replace(turn, tool_calls=tuple(calls)))
     result = _flag(replace(ep, turns=tuple(turns)), "tamper.drop_tool_calls")
+    if not any(a.logged != b.logged for before, after in zip(ep.turns, result.turns)
+               for a, b in zip(before.tool_calls, after.tool_calls)):
+        result = _flag(result, "tamper.drop_tool_calls.noop")
     return _flag(result, "tamper.drop_tool_calls.predicate_error") if failed else result
 
 
@@ -107,6 +112,8 @@ def random_tamper(ep: Episode, rng: random.Random, kind: str, fraction: float) -
             replace(c, logged=False) if (t.index, i) in selected else c
             for i, c in enumerate(t.tool_calls))) for t in ep.turns))
         result = _flag(result, "tamper.drop_tool_calls")
+        if not selected:
+            result = _flag(result, "tamper.drop_tool_calls.noop")
     elif kind == "hide_scratchpad":
         choices = [t.index for t in ep.turns if t.logged]
         selected = set(rng.sample(choices, round(len(choices) * fraction)))

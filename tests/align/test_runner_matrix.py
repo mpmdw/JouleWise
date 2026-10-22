@@ -465,6 +465,63 @@ class MatrixTests(unittest.TestCase):
             self.assertTrue(all("power.notes" not in ep.flags for ep in episodes))
 
 
+    def test_undeclared_endpoint_configs_survive_reorder_removal_and_credentials(self):
+        def endpoint(config, context):
+            value = ScriptedEndpoint(clock=context.clock, condition=context.condition)
+            value.identity = "test/think=" + str(int(config["thinking"]))
+            return value
+        runner.register_endpoint_factory("test.arms", endpoint)
+        on = {"factory": "test.arms", "config": {"thinking": True, "api_key": "synthetic-a"}}
+        off = {"factory": "test.arms", "config": {"thinking": False}}
+        with tempfile.TemporaryDirectory() as directory:
+            spec = write_spec(directory, task_pairs=[{"factory": "mock.inbox", "task_pair": "arms"}],
+                              seeds=[0], conditions=["sabotage"], endpoints=[on])
+            path = runner.run_matrix(spec)
+            original = read_episodes(path)[0]
+            payload = json.loads(spec.read_text())
+            payload["endpoints"] = [off, on]
+            spec.write_text(json.dumps(payload))
+            runner.run_matrix(spec)
+            records = read_episodes(path)
+            self.assertEqual(sorted(e.endpoint for e in records), ["test/think=0", "test/think=1"])
+            self.assertIn(original.episode_id, {e.episode_id for e in records})
+            payload["endpoints"] = [off]
+            spec.write_text(json.dumps(payload))
+            runner.run_matrix(spec)
+            self.assertEqual(len(read_episodes(path)), 2)
+            on["config"]["api_key"] = "synthetic-b"
+            payload["endpoints"] = [on, off]
+            spec.write_text(json.dumps(payload))
+            before = path.read_bytes()
+            runner.run_matrix(spec)
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_undeclared_pair_on_task_factory_failure_is_flagged_without_duplicate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            spec = write_spec(directory, task_pairs=[{"factory": "mock.inbox", "config": {"bogus": 1}}],
+                              conditions=["benign"], seeds=[0, 1])
+            path = runner.run_matrix(spec)
+            records = read_episodes(path)
+            self.assertEqual(len(records), 2)
+            for episode in records:
+                self.assertIn("matrix.task_pair_undeclared", episode.flags)
+                self.assertIn("factory.error.TypeError", episode.flags)
+                self.assertEqual(episode.turns, ())
+            before = path.read_bytes()
+            runner.run_matrix(spec)
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_cli_drop_without_tool_name_records_noop(self):
+        from joulewise.align.__main__ import main
+        with tempfile.TemporaryDirectory() as directory:
+            source = runner.run_matrix(write_spec(directory, seeds=[0], conditions=["benign"]))
+            target = Path(directory) / "noop.jsonl"
+            self.assertEqual(main(["tamper", "--input", str(source), "--output", str(target),
+                                   "--kind", "drop_tool_calls"]), 0)
+            for original, changed in zip(read_episodes(source), read_episodes(target)):
+                self.assertEqual(changed.totals(logged_only=True), original.totals(logged_only=True))
+                self.assertIn("tamper.drop_tool_calls.noop", changed.flags)
+
 
 if __name__ == "__main__":
     unittest.main()

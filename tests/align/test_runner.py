@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from dataclasses import replace
 
-from joulewise.align.interfaces import ToolCallRequest
+from joulewise.align.interfaces import ChatResult, ToolCallRequest
 from joulewise.align.mock_world import (
     InboxTask, MockMonitor, MockTokenCounter, ScriptConfig, ScriptedEndpoint,
     SyntheticPowerSampler, VirtualClock,
@@ -39,9 +39,9 @@ class RunnerTests(unittest.TestCase):
                 ep, transcript, task, endpoint, sampler = inbox_episode(condition, seed=3)
                 plan = endpoint.config.plan(condition, 3)
                 self.assertEqual(len(ep.turns), len(plan))
-                for turn, row in zip(ep.turns, plan):
-                    self.assertEqual(turn.context_tokens, row["context"])
-                    self.assertEqual(turn.prefill_tokens, row["prefill"])
+                for turn, row, work in zip(ep.turns, plan, task.ledger.turns):
+                    self.assertEqual(turn.context_tokens, work.context_tokens)
+                    self.assertEqual(turn.prefill_tokens, work.prefill_tokens)
                     self.assertEqual(turn.decode_tokens, row["decode"])
                     self.assertEqual(turn.hidden_tokens, row["reasoning"] + row["scratchpad"])
                     self.assertLessEqual(turn.start_ns, turn.first_token_ns)
@@ -318,6 +318,101 @@ class RunnerTests(unittest.TestCase):
         ep, _, _, _, _ = inbox_episode(sampler_class=NotedSampler)
         self.assertEqual([flag for flag in ep.flags if flag.startswith("power.")],
                          ["power.gpu0.battery.assist", "power.gpu0.throttle.power"])
+
+
+    def test_unreported_reasoning_and_cached_usage_survive_json(self):
+        class Unreported(ScriptedEndpoint):
+            def chat(self, messages, **kwargs):
+                result = super().chat(messages, **kwargs)
+                return replace(result, cached_prompt_tokens=0, reasoning_tokens=0,
+                    raw_usage={"joulewise": {"flags": [
+                        "cached_prompt_tokens_unreported", "reasoning_tokens_unreported",
+                        "generation_cap_reached"]}, "server": {"prompt": result.prompt_tokens}})
+        ep, _, _, _, _ = inbox_episode(endpoint_class=Unreported)
+        self.assertEqual(ep.totals()["hidden_tokens"], 120 + 64)
+        self.assertTrue(all(t.context_tokens == 0 for t in ep.turns))
+        for flag in ("endpoint.cached_prompt_tokens_unreported",
+                     "endpoint.reasoning_tokens_unreported", "endpoint.generation_cap_reached",
+                     "usage.reasoning_uncounted"):
+            self.assertIn(flag, ep.flags)
+        restored = from_json(Episode, to_json(ep))
+        self.assertEqual(restored.hardware["runner"]["raw_usage"]["6"]["joulewise"]["flags"],
+                         ["cached_prompt_tokens_unreported", "reasoning_tokens_unreported",
+                          "generation_cap_reached"])
+        no_counter = inbox_episode(endpoint_class=Unreported, counter=False)[0]
+        self.assertEqual(no_counter.totals()["hidden_tokens"], 0)
+        self.assertIn("usage.reasoning_uncounted", no_counter.flags)
+        self.assertIn("hidden_tokens.scratchpad_uncounted", no_counter.flags)
+
+    def test_zero_usage_response_is_flagged_and_kept(self):
+        class Empty(ScriptedEndpoint):
+            def chat(self, messages, **kwargs):
+                if sum(m.role == "tool" for m in messages) == 3:
+                    stamp = self.clock()
+                    return ChatResult("", "", (), 0, 0, 0, 0, stamp, None, stamp,
+                        {"joulewise": {"flags": ["http_error:500", "stream_missing_done"]}})
+                return super().chat(messages, **kwargs)
+        ep, _, _, _, _ = inbox_episode(endpoint_class=Empty)
+        self.assertEqual(len(ep.turns), 4)  # Three successes and one returned empty response.
+        self.assertEqual((ep.turns[-1].prefill_tokens, ep.turns[-1].decode_tokens), (0, 0))
+        self.assertIn("endpoint.empty_result", ep.flags)
+        self.assertIn("endpoint.http_error:500", ep.flags)
+        self.assertIn("endpoint.stream_missing_done", ep.flags)
+
+    def test_endpoint_exception_partial_result_and_flags_are_retained(self):
+        class FailedRequest(RuntimeError):
+            pass
+        for with_partial in (True, False):
+            class Failed(ScriptedEndpoint):
+                def chat(self, messages, **kwargs):
+                    if sum(m.role == "tool" for m in messages) == 3:
+                        error = FailedRequest("synthetic failure")
+                        error.flags = ("http_error:500",)
+                        if with_partial:
+                            stamp = self.clock()
+                            error.partial_result = ChatResult("", "", (), 0, 0, 0, 0,
+                                stamp, None, stamp,
+                                {"joulewise": {"flags": ["usage_unavailable"]}})
+                        raise error
+                    return super().chat(messages, **kwargs)
+            ep, _, _, _, sampler = inbox_episode(endpoint_class=Failed)
+            self.assertEqual(len(ep.turns), 3)  # Failed requests are diagnostics, not completed Turns.
+            self.assertIn("endpoint.error.FailedRequest", ep.flags)
+            self.assertIn("endpoint.http_error:500", ep.flags)
+            self.assertEqual(len(ep.hardware["runner"]["failed_requests"]), int(with_partial))
+            if with_partial:
+                self.assertIn("endpoint.usage_unavailable", ep.flags)
+                self.assertIn("endpoint.empty_result", ep.flags)
+                self.assertEqual(ep.hardware["runner"]["failed_requests"][0]["index"], 3)
+            self.assertFalse(sampler.started)
+            self.assertEqual(to_json(from_json(Episode, to_json(ep))), to_json(ep))
+
+    def test_task_scorers_get_endpoint_history_and_monitor_views_stay_distinct(self):
+        seen = {}
+        class Scored(InboxTask):
+            def score_main(self, transcript):
+                seen["main"] = list(transcript)
+                return super().score_main(transcript)
+            def score_side(self, transcript):
+                seen["side"] = list(transcript)
+                return super().score_side(transcript)
+        class Monitor(MockMonitor):
+            def score(self, transcript, **kwargs):
+                seen[kwargs["visibility"]] = list(transcript)
+                return super().score(transcript, **kwargs)
+        ep, archive, _, _, _ = inbox_episode(task_class=Scored,
+            monitors=((Monitor(), ("full", "no_scratchpad", "actions_only")),))
+        self.assertEqual(ep.hardware["runner"]["scoring_transcript_view"], "endpoint_history")
+        for name in ("main", "side"):
+            self.assertFalse(any("<jw_reasoning>" in m.content for m in seen[name]))
+            self.assertFalse(any("private" in m.content for m in seen[name] if m.role == "assistant"))
+            self.assertTrue(any("<scratchpad>" in m.content for m in seen[name] if m.role == "assistant"))
+        self.assertEqual(seen["main"], seen["side"])
+        self.assertEqual(seen["full"], archive)
+        self.assertTrue(any("<jw_reasoning>" in m.content for m in seen["full"]))
+        self.assertFalse(any("<scratchpad>" in m.content or "<jw_reasoning>" in m.content
+                             for m in seen["no_scratchpad"] if m.role == "assistant"))
+        self.assertEqual(len(seen["actions_only"]), 2 * ep.totals()["tool_calls"])
 
 
 if __name__ == "__main__":

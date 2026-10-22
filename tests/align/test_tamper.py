@@ -97,6 +97,31 @@ class TamperTests(unittest.TestCase):
         self.assertIn("tamper.drop_tool_calls.predicate_error", result.flags)
         self.assertEqual(result.totals(logged_only=True), self.ep.totals(logged_only=True))
 
+    def test_empty_repeated_and_unlogged_selections_report_noop(self):
+        for changed in (delete_turns(self.ep, []), delete_turns(self.ep, [100]),
+                        delete_turns(delete_turns(self.ep, [6]), [6])):
+            self.assertIn("tamper.delete_turns.noop", changed.flags)
+        self.assertNotIn("tamper.delete_turns.noop", delete_turns(self.ep, [6]).flags)
+        for changed in (drop_tool_calls(self.ep, lambda c: False),
+                        drop_tool_calls(drop_tool_calls(self.ep, lambda c: True), lambda c: True)):
+            self.assertIn("tamper.drop_tool_calls.noop", changed.flags)
+        self.assertNotIn("tamper.drop_tool_calls.noop",
+                         drop_tool_calls(self.ep, lambda c: c.name == "transfer").flags)
+
+    def test_small_random_fractions_never_mislabel_unchanged_logs(self):
+        # Fractions are evaluation design parameters exercising half-even rounding
+        # to zero on this dozen-turn/call world; integer flag/count identity is exact.
+        for kind, fraction in (("delete_turns", 0.02), ("delete_turns", 0.05),
+                               ("drop_tool_calls", 0.02), ("drop_tool_calls", 0.1),
+                               ("hide_scratchpad", 0.1)):
+            for seed in range(5):
+                ep = inbox_episode(seed=seed)[0]
+                result = random_tamper(ep, random.Random(7), kind, fraction)
+                same = result.totals(logged_only=True) == ep.totals(logged_only=True)
+                self.assertEqual("tamper." + kind + ".noop" in result.flags, same)
+                self.assertEqual(result.totals(), ep.totals())
+                self.assertIs(result.power_traces, ep.power_traces)
+
 
 if __name__ == "__main__":
     unittest.main()
