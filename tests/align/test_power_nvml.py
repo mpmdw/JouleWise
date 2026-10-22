@@ -238,6 +238,25 @@ class NvmlSamplerTests(unittest.TestCase):
                                     for value in later.values))
                 self.assertNotEqual(earlier.values, later.values)
 
+    def test_thread_start_failure_keeps_native_cleanup_balanced(self) -> None:
+        library = FakeNvmlLibrary()
+        sampler = NvmlSampler(library=library, interval_ns=1_000_000)
+        with mock.patch.object(threading.Thread, "start", side_effect=RuntimeError(
+                "synthetic worker creation failure")):
+            sampler.start()
+        first = sampler.stop()
+        self.assertTrue(any(trace.values for trace in first))
+        self.assertTrue(any("worker_join_failed" in flag
+                            for trace in first for flag in json.loads(trace.notes)["flags"]))
+        self.assertEqual(library.init_calls, 1)
+        self.assertEqual(library.shutdown_calls, 1)
+        sampler.start()
+        second = sampler.stop()
+        self.assertTrue(any(trace.values for trace in second))
+        self.assertIsNot(first, second)
+        self.assertEqual(library.init_calls, 2)
+        self.assertEqual(library.shutdown_calls, 2)
+
     def test_call_midpoints_and_odd_bracket_rounding(self) -> None:
         lock = threading.Lock()
         ticks = 0

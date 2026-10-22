@@ -540,7 +540,12 @@ class NvmlSampler:
                 self._flags.append("not_started")
             for device in self._devices:
                 if device.thread is not None:
-                    device.thread.join(timeout=self._stop_timeout_s)
+                    try:
+                        device.thread.join(timeout=self._stop_timeout_s)
+                    except RuntimeError as exc:
+                        # Thread.start() can fail after NVML initialization.
+                        # Joining that unstarted thread must not bypass shutdown.
+                        self._flags.append(f"gpu{device.index}_worker_join_failed: {exc}")
                     if device.thread.is_alive():
                         self._flags.append(f"gpu{device.index}_worker_stop_timeout")
             if self._initialized:
