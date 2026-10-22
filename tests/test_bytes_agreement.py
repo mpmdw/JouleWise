@@ -185,7 +185,7 @@ def bar_two_significant_figures(a, t):
 
 def bar_no_half_width(a, t):
     """A number with no half-width and no fixed printed decimals (the brief, section 5): 1e-6
-    relative, or 1e-6 absolute in the column's unit, whichever is larger.  1e-6 relative is 4,500 x
+    relative, or 1e-6 absolute in the column's unit, whichever is larger.  1e-6 relative is about 4.5e9 x float noise (1e-6 / 2.2e-16), above 1e6 x
     float noise (2.2e-16) and below 1% of any printed uncertainty."""
     return max(1e-6 * max(abs(a), abs(t)), 1e-6)
 
