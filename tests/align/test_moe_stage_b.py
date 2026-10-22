@@ -124,6 +124,24 @@ class TestMoeStageBTraffic(StageBAssertions):
         self.assertIn("request_exceeds_cache_capacity", tiny.flags)
         self.assertEqual(tiny.tokens[-1].bytes_moved, 20)
 
+    def test_mixed_size_slru_and_ordered_multi_hit_match_oracle(self):
+        rng = random.Random(20261022)
+        log = RouterLog("mixed-layout-sensitivity", 64, 2, (0, 1),
+                        ("decode",)*128,
+                        tuple(tuple(tuple(rng.sample(range(6), 2)) for _ in range(2))
+                              for _ in range(128)))
+        # The byte budget deliberately spans unequal 10/15-byte experts.
+        # Its odd 49-byte capacity also exercises the floor(capacity/2) rule.
+        config = small_config(expert_bytes={0: 10, 1: 15}, cache_capacity_bytes=49)
+        actual, expected = model_traffic(log, config), reference_transfers(log, config)
+        self.assertEqual(tuple(t.bytes_moved for t in actual.tokens),
+                         tuple(t.moved_bytes for t in expected))
+        ordered = one_layer([(0, 1), (1, 0), (2, 3), (0, 2), (1, 0)], top_k=2)
+        actual = model_traffic(ordered, small_config(cache_capacity_bytes=40))
+        expected = reference_transfers(ordered, small_config(cache_capacity_bytes=40))
+        self.assertEqual(tuple(t.bytes_moved for t in actual.tokens),
+                         tuple(t.moved_bytes for t in expected))
+
     def test_invalid_inputs_are_flags_and_do_not_refuse(self):
         log = one_layer([(0,)])
         for config, flag in (
@@ -325,6 +343,60 @@ class TestMoeStageBAnalysis(StageBAssertions):
             **dict(kwargs, stage_a_effect_sd=0.0)).flags)
         self.assertIsNone(pearson((1.0, 1.0), (0.0, 1.0)))
 
+    def test_finite_scale_correlation_and_invalid_design_edges(self):
+        for scale in (1e-100, 1e100):
+            # Scale changes units, not correlation. The old variance product
+            # underflowed/overflowed although each independent variance was finite.
+            values = tuple(scale*i for i in (1, 2, 3))
+            self.assertRelative(pearson(values, values), reference_pearson(values, values))
+        base = dict(stage_a_effect_sd=1.0, n_per_condition=50,
+                    alpha=0.05, power=0.8, comparisons=3)
+        for count in (math.inf, 1.5, True):
+            self.assertIn("invalid_detection_design", required_correlation(
+                **dict(base, n_per_condition=count)).flags)
+        # Smallest positive binary64 alpha: dividing it by 2 underflows.
+        self.assertIn("design_tail_below_float_range", required_correlation(
+            **dict(base, alpha=float.fromhex("0x0.0000000000001p-1022"), comparisons=1)).flags)
+        self.assertTrue(required_correlation(**dict(base, power=0.5)).feasible)
+        forecast = plan_detectability(
+            default_sensors()[0], **dict(base, stage_a_effect_sd=math.nan),
+            routing_stat_sd=0.2, traffic_energy_slope_j_per_token=0.05,
+            decode_tokens=512, decode_duration_s=25.6, phase_bias_std_j=0.1,
+            systematic_contrast_half_width_j=1.0)
+        self.assertIsNone(forecast.contrast_energy_j)
+        self.assertIn("invalid_sensor_forecast", forecast.flags)
+
+    def test_clock_bound_covers_disjoint_explicit_decode_windows(self):
+        world = WorldConfig(turns=1, prefill_tokens_per_turn=1,
+                            decode_tokens_per_turn=3, prefill_duration_ns=1_000_000_000,
+                            decode_token_period_ns=2_000_000_000)
+        episode = synthetic_episode(world, group=0, condition="benign", hot_probability=0.8)
+        windows = (TokenWindow(0, 0, 1_000_000_000),
+                   TokenWindow(1, 2_000_000_000, 3_000_000_000),
+                   TokenWindow(2, 4_000_000_000, 5_000_000_000),
+                   TokenWindow(3, 6_000_000_000, 7_000_000_000))
+        uncertainty = 1_000_000
+        loads = tuple(PowerPulse(w.start_ns-uncertainty, w.start_ns, 1.0)
+                      for w in windows[1:])
+        sensor = SensorModel("clock-fixture", "mock", "test", uncertainty,
+                             uncertainty, 1e-6, 0.0)
+        trace = simulate_trace(TrafficResult((), ()), sensor, start_ns=0,
+                                end_ns=episode.end_ns, clock_domain="sensor",
+                                baseline_w=0.0, loads=loads).trace
+        mapped = replace(episode, power_traces=(trace,), clock_mappings=(
+            ClockMapping("sensor", episode.clock_domain, 0, uncertainty, "fixture"),))
+        base = extract_features(mapped, trace, baseline_w=0.0, noise_std_w=0.0,
+                                noise_multiplier=1.0, attribution_floor_j=0.0, windows=windows)
+        shifted = replace(mapped, clock_mappings=(
+            ClockMapping("sensor", episode.clock_domain, uncertainty, 0, "fixture"),))
+        other = extract_features(shifted, trace, baseline_w=0.0, noise_std_w=0.0,
+                                 noise_multiplier=1.0, attribution_floor_j=0.0, windows=windows)
+        # Each of three disjoint windows gains 1W*1ms under a permitted shift.
+        # The diagnostic bound must cover that observed difference; counting only
+        # this episode's one turn previously allowed just two boundary shifts.
+        self.assertLessEqual(abs(other.energy_per_decode_token_j-base.energy_per_decode_token_j),
+                             base.energy_half_width_per_token_j)
+
     def test_uncoupled_and_systematic_floor_forecasts_do_not_claim_detection(self):
         sensor = default_sensors()[0]
         base = dict(stage_a_effect_sd=1.0, n_per_condition=50, alpha=0.05, power=0.8,
@@ -357,7 +429,7 @@ class TestMoeStageBEndToEnd(StageBAssertions):
 
     def test_ina_routing_signal_clears_parameterized_stage_b_requirement(self):
         result = self.ina
-        correlation = result["recovery"]["energy_per_decode_token_j"]["held_out_correlation"]
+        correlation = result["recovery"]["energy_per_decode_token_j"]["within_condition_held_out_correlation"]
         # The comparison bar is the normal-design correlation required for the
         # supplied Stage A d=1, n=50 groups/condition, alpha=.05, power=.8,
         # with three predeclared features, not an arbitrary recovery threshold.
