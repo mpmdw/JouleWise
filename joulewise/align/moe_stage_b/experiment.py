@@ -313,9 +313,20 @@ def run_world(
                                        n_per_condition=n_per_condition, alpha=alpha,
                                        power=power, comparisons=comparisons)
     x = [o.routing_statistic for o in observations]
-    x_mean, y_mean = statistics.fmean(x), statistics.fmean(actual_extra)
-    xx = math.fsum((v-x_mean)**2 for v in x)
-    slope = math.fsum((a-x_mean)*(b-y_mean) for a, b in zip(x, actual_extra))/xx if xx else 0.0
+    centered_x, centered_y = [], []
+    for condition in ("benign", "sabotage"):
+        selected = [(o.routing_statistic, y) for o, y in zip(observations, actual_extra)
+                    if condition_by_id[o.episode_id] == condition]
+        mx = statistics.fmean(a for a, _ in selected)
+        my = statistics.fmean(b for _, b in selected)
+        centered_x.extend(a-mx for a, _ in selected)
+        centered_y.extend(b-my for _, b in selected)
+    xx = math.fsum(v*v for v in centered_x)
+    slope = (math.fsum(a*b for a, b in zip(centered_x, centered_y))/xx if xx else 0.0)
+    # Routing reuse is an imperfect proxy for traffic: retain that residual
+    # variance in the linear forecast instead of treating traffic as exact.
+    routing_residual_sd = math.sqrt(statistics.fmean(
+        (y-slope*x)**2 for x, y in zip(centered_x, centered_y)))
     error_j = [(a-b)*decode_count for a, b in zip(estimated_extra, actual_extra)]
     # Phase/noise error is measured from this synthetic sweep only. A real forecast
     # must replace it with phase-swept hardware repetitions on the same channel.
@@ -333,7 +344,8 @@ def run_world(
         alpha=alpha, power=power, comparisons=comparisons, routing_stat_sd=within_sd,
         traffic_energy_slope_j_per_token=slope, decode_tokens=decode_count,
         decode_duration_s=decode_duration_s,
-        phase_bias_std_j=phase_bias, systematic_contrast_half_width_j=0.0)
+        phase_bias_std_j=phase_bias, systematic_contrast_half_width_j=0.0,
+        routing_energy_residual_std_j_per_token=routing_residual_sd)
     flags.add("synthetic_finite_cohort_recoverability_check")
     empirical_meets: dict[str, bool | None] = {}
     required = requirement.minimum_absolute_correlation
@@ -383,6 +395,7 @@ def run_world(
         "phase_sweep_energy_error_std_j": error_std,
         "estimated_phase_bias_std_j": phase_bias,
         "routing_stat_within_condition_sd": within_sd,
+        "routing_energy_residual_std_j_per_token": routing_residual_sd,
         "requirement": asdict(requirement), "forecast": asdict(forecast),
         "recovery": recovery, "flags": sorted(flags),
     }

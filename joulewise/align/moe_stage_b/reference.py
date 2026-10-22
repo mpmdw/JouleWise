@@ -520,3 +520,14 @@ def reference_decode_stall_schedule(windows, phases, moved_bytes,
     adjusted = tuple((index, mapped(start), mapped(end)) for index, start, end in windows)
     adjusted_bounds = {name: mapped(t) for name, t in boundaries.items()}
     return adjusted, adjusted_bounds, sum(dt for _, dt in insertions)
+
+
+def reference_residual_adjusted_correlation(signal_sd, residual_sd,
+                                            white_j, phase_j, decode_tokens):
+    """Independent episode-scale sum of signal, mapping and sensor variances."""
+    import math
+    signal_j = signal_sd * decode_tokens
+    residual_j = residual_sd * decode_tokens
+    total_sd_j = math.sqrt(math.fsum(value*value for value in
+        (signal_j, residual_j, white_j, phase_j)))
+    return signal_j / total_sd_j if total_sd_j else None

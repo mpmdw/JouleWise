@@ -16,7 +16,7 @@ from typing import Sequence
 from joulewise.align.records import Episode, PowerTrace
 from joulewise.align.moe_stage_b.traffic import (
     NS_PER_SECOND, OffloadConfig, TokenWindow, TrafficResult,
-    episode_token_windows, model_traffic,
+    episode_token_windows, model_traffic, apply_decode_stalls,
 )
 
 
@@ -51,6 +51,8 @@ class SimulatedEpisode:
     episode: Episode
     traffic: TrafficResult
     flags: tuple[str, ...] = ()
+    windows: tuple[TokenWindow, ...] = ()
+    reference_decode_duration_ns: int | None = None
 
 
 def nvml_sensor(*, noise_std_w: float, quantum_w: float, phase_ns: int = 0) -> SensorModel:
@@ -196,17 +198,25 @@ def simulate_episode(
 
     Loads are above baseline and supplied independently of route identity.
     Explicit token windows bypass only the uniform timing adapter, not traffic
-    or sensor simulation. All input episode flags survive.
+    or sensor simulation. Explicit windows must already include any upload waits;
+    the implicit compute-only adapter applies configured stalls once. Outputs
+    expose actual windows and the nominal decode duration for feature extraction.
+    All input episode flags survive.
     """
     flags = list(episode.flags)
     if episode.router_log is None:
         flags.append("missing_router_log")
         return SimulatedEpisode(replace(episode, flags=tuple(dict.fromkeys(flags))),
                                 TrafficResult((), (), ("missing_router_log",)), tuple(flags))
+    reference_duration_ns = None
     if windows is None:
         timing = episode_token_windows(episode, prefill_batch_tokens=config.prefill_batch_tokens)
         flags.extend(timing.flags)
         windows = timing.windows
+        stalled = apply_decode_stalls(episode, config, windows=windows)
+        episode, windows = stalled.episode, stalled.windows
+        reference_duration_ns = stalled.reference_decode_duration_ns
+        flags.extend(stalled.flags)
     traffic = model_traffic(episode.router_log, config, windows=windows)
     flags.extend(traffic.flags)
     if len(traffic.tokens) != len(episode.router_log.phase):
@@ -231,4 +241,4 @@ def simulate_episode(
     result = replace(episode,
                      power_traces=episode.power_traces + ((sampled.trace,) if sampled.trace else ()),
                      flags=tuple(dict.fromkeys(flags)))
-    return SimulatedEpisode(result, traffic, result.flags)
+    return SimulatedEpisode(result, traffic, result.flags, tuple(windows), reference_duration_ns)

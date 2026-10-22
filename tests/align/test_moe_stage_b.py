@@ -31,7 +31,7 @@ from joulewise.align.moe_stage_b.reference import (
     reference_linear_prediction, reference_required_correlation,
     reference_interval_energies, reference_spectrum_amplitude,
     reference_detection_forecast, reference_within_condition_fisher_interval,
-    reference_decode_stall_schedule,
+    reference_decode_stall_schedule, reference_residual_adjusted_correlation,
 )
 
 
@@ -233,7 +233,7 @@ class TestMoeStageBSensors(StageBAssertions):
 class TestMoeStageBAnalysis(StageBAssertions):
     @classmethod
     def setUpClass(cls):
-        cls.world = WorldConfig(turns=3)
+        cls.world = WorldConfig(turns=3, decode_miss_stalls=False)
         episode = synthetic_episode(cls.world, group=0, condition="benign", hot_probability=0.8)
         cls.sensor = replace(default_sensors()[0], noise_std_w=0.0, phase_ns=3_000_000)
         cls.simulated = simulate_episode(
@@ -600,6 +600,22 @@ class TestMoeStageBEndToEnd(StageBAssertions):
 
 
 class TestMoeStageBContinuation(StageBAssertions):
+    def test_forecast_includes_routing_to_traffic_residual(self):
+        # Declared signal/residual SD .004/.003J/token form a 3-4-5
+        # variance triangle: r=.004/.005=.8, whereas omitting residual gives1.
+        sensor = replace(default_sensors()[0], noise_std_w=0)
+        result = plan_detectability(
+            sensor, stage_a_effect_sd=1, n_per_condition=50, alpha=.05,
+            power=.8, comparisons=3, routing_stat_sd=.1,
+            traffic_energy_slope_j_per_token=.04, decode_tokens=512,
+            decode_duration_s=25.6, phase_bias_std_j=0,
+            systematic_contrast_half_width_j=0,
+            routing_energy_residual_std_j_per_token=.003)
+        expected = reference_residual_adjusted_correlation(.004, .003, 0, 0, 512)
+        self.assertRelative(result.model_correlation, expected)
+        self.assertRelative(result.model_correlation, .8)
+        self.assertIn('routing_to_energy_residual_in_forecast', result.flags)
+
     def test_fisher_intervals_match_independent_algebra_and_small_cohort_is_inconclusive(self):
         # Independent exponential/rational oracle, 1e-6 relative algebra bar.
         for correlation, count in ((.725190209, 12), (.503039, 24),
@@ -614,8 +630,8 @@ class TestMoeStageBContinuation(StageBAssertions):
         self.assertLess(interval[0], required.minimum_absolute_correlation)
         self.assertGreater(interval[1], required.minimum_absolute_correlation)
         self.assertIsNone(fisher_interval_95(.8, 5, fitted_means=2))
-        # Six held-out episodes cannot decide a typical noisy correlation.
-        world = WorldConfig(groups=3, turns=2)
+        # Four held-out episodes have n_eff=2, below Fisher's n>3 domain.
+        world = WorldConfig(groups=2, turns=2)
         result = run_world(world, default_sensors()[0], all_resident=False,
                            stage_a_effect_sd=1, n_per_condition=50,
                            alpha=.05, power=.8, comparisons=3)
@@ -669,6 +685,11 @@ class TestMoeStageBContinuation(StageBAssertions):
         self.assertEqual(timing.episode.turns[0].tool_calls[0].end_ns
                          -timing.episode.turns[0].tool_calls[0].start_ns, 5_000_000)
         self.assertNotIn("transfer_exceeds_token_window", traffic.flags)
+        automatic = simulate_episode(episode, config, sensor, baseline_w=8,
+                                     prefill_load_w=0, decode_load_w=4, tool_load_w=1)
+        self.assertEqual(automatic.episode.end_ns, timing.episode.end_ns)
+        self.assertEqual(automatic.reference_decode_duration_ns, 10_000_000)
+        self.assertEqual(len(automatic.windows), len(windows))
 
     def test_variable_schedule_preserves_routes_and_uses_nonuniform_windows(self):
         world = WorldConfig(turns=2)

@@ -59,6 +59,10 @@ def fisher_interval_95(
     This is an approximate episode-level interval, not a grouped bootstrap or
     proof of design power. Overlapping cross-validation fits can add dependence.
     """
+    if (not isinstance(episodes, int) or isinstance(episodes, bool)
+            or not isinstance(fitted_means, int) or isinstance(fitted_means, bool)
+            or fitted_means < 0):
+        return None
     effective_n = episodes-fitted_means
     if (correlation is None or not math.isfinite(correlation)
             or abs(correlation) > 1 or effective_n <= 3):
@@ -202,6 +206,9 @@ def extract_features(
     # blocking time. The trace already contains that power: do not add a pulse.
     stall_energy = (baseline_w*(duration_ns-reference_decode_duration_ns)/NS_PER_SECOND
                     if reference_decode_duration_ns is not None else 0.0)
+    if stall_energy:
+        flags.append("nominal_compute_energy_reference")
+        flags.append("variance_excludes_running_stall_energy")
     if coverage_ns == 0:
         return missing("no_decode_sample_coverage")
     quantum = trace.resolution
@@ -346,6 +353,7 @@ def plan_detectability(
     traffic_energy_slope_j_per_token: float, decode_tokens: int,
     decode_duration_s: float, phase_bias_std_j: float,
     systematic_contrast_half_width_j: float,
+    routing_energy_residual_std_j_per_token: float = 0.0,
 ) -> DetectionPlan:
     """Conditional linear/noise forecast for a sensor and a Stage A effect.
 
@@ -361,7 +369,7 @@ def plan_detectability(
     flags = list(requirement.flags)
     numeric = (stage_a_effect_sd, routing_stat_sd, traffic_energy_slope_j_per_token, decode_duration_s,
                phase_bias_std_j, systematic_contrast_half_width_j,
-               sensor.noise_std_w, sensor.quantum_w)
+               sensor.noise_std_w, sensor.quantum_w, routing_energy_residual_std_j_per_token)
     if (not all(math.isfinite(v) for v in numeric) or not isinstance(decode_tokens, int) or isinstance(decode_tokens, bool)
             or decode_tokens <= 0 or decode_duration_s <= 0
             or not isinstance(sensor.interval_ns, int) or isinstance(sensor.interval_ns, bool)
@@ -369,14 +377,16 @@ def plan_detectability(
             or isinstance(sensor.averaging_window_ns, bool)
             or sensor.interval_ns <= 0 or sensor.averaging_window_ns <= 0
             or min(routing_stat_sd, phase_bias_std_j, systematic_contrast_half_width_j,
-                   sensor.noise_std_w, sensor.quantum_w) < 0):
+                   sensor.noise_std_w, sensor.quantum_w,
+                   routing_energy_residual_std_j_per_token) < 0):
         return DetectionPlan(requirement.minimum_absolute_correlation, None, None, None,
                              False, tuple(dict.fromkeys(flags + ["invalid_sensor_forecast"])))
     sample_s = max(sensor.interval_ns, sensor.averaging_window_ns)/NS_PER_SECOND
     # Variance of the integral of independent averaged readings: sigma_W^2 * T * dt.
     white_noise_j = sensor.noise_std_w*math.sqrt(decode_duration_s*sample_s)
     signal_sd = abs(traffic_energy_slope_j_per_token)*routing_stat_sd
-    noise_sd = math.hypot(white_noise_j, phase_bias_std_j)/decode_tokens
+    noise_sd = math.hypot(white_noise_j/decode_tokens, phase_bias_std_j/decode_tokens,
+                         routing_energy_residual_std_j_per_token)
     correlation = (signal_sd/math.hypot(signal_sd, noise_sd)
                    if signal_sd or noise_sd else None)
     contrast = abs(stage_a_effect_sd)*signal_sd*decode_tokens
@@ -384,6 +394,8 @@ def plan_detectability(
     bound = systematic_contrast_half_width_j + sensor.quantum_w*decode_duration_s
     if sensor.averaging_window_ns < sensor.interval_ns:
         flags.append("requires_measured_random_phase_bias")
+    if routing_energy_residual_std_j_per_token:
+        flags.append("routing_to_energy_residual_in_forecast")
     if signal_sd == 0:
         flags.append("no_routing_energy_coupling")
     if contrast <= bound:
