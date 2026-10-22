@@ -85,7 +85,9 @@ def synthetic_harvest(root):
     return result, measured
 
 
-class GatesTests(unittest.TestCase):
+class World(unittest.TestCase):
+    """The synthetic native harvest shared by the C5 test classes."""
+
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
@@ -110,6 +112,8 @@ class GatesTests(unittest.TestCase):
         # or absolute in its column unit; far above 1e6*float noise.
         self.assertTrue(math.isclose(float(actual), float(expected), rel_tol=1e-6, abs_tol=1e-6), (actual, expected))
 
+
+class GatesTests(World):
     def test_cli_runs_every_gate_from_native_nonclaim_harvest(self):
         out = self.root / "c5.json"
         result = subprocess.run([sys.executable, str(ROOT / "scripts/bytes_gates.py"),
@@ -251,3 +255,117 @@ class GatesTests(unittest.TestCase):
             self.result(rows=rows)
         with self.assertRaises(ValueError):
             self.result(rows=self.rows + self.rows[:1])
+
+
+H_CUT_STAGES = ("bytes-mac-check-soak-qwen35-122b", "bytes-mac-check-test7-llama-70b-end",
+                "bytes-mac-check-test7-qwen35-122b-end", "bytes-mac-check-test7-qwen3-next-80b-end",
+                "bytes-mac-check-reference-end")
+
+
+class StoppedSessionTests(World):
+    """BYTES item H (2026-10-21): the chain was stopped during soak llama-70b
+    r12. Harvest exports every planned row; the 28 that never ran are status
+    "failed" with empty numeric cells, and desk's MEASUREMENTS.json leaves their
+    timing receipts null. The regime, cpu_contention and sizing receipts are
+    null too (no stage or program derived them). C5 must print every line the
+    95 measured members support and mark the rest, not withhold the file."""
+
+    def stopped_world(self, *, receipts_absent=True):
+        rows, measured = deepcopy(self.rows), deepcopy(self.measured)
+        dropped = sorted(r["run_id"] for r in rows if r["stage_id"] in H_CUT_STAGES
+                         or r["run_id"] == "bytes-mac-check-soak-llama-70b-r12")
+        numeric = [k for k in rows[0] if k.startswith(("phase_", "dur_", "bound_E_")) or k.endswith(("_energy_j", "_j"))]
+        for row in rows:
+            if row["run_id"] in dropped:
+                row["status"] = "failed"
+                row.update({k: "" for k in numeric})
+                measured["runs"][row["run_id"]] = {**{f: None for f in gates.TIMING_FIELDS}, "retained_bytes": 0}
+        if receipts_absent:
+            measured["cpu_contention"] = {"w_j_per_cpu_s": None, "c_q_cpu_s": None}
+            for regime in measured["regimes"].values():
+                regime.update(F_min_j=None, census_resolution_w=None, outside_power_w=None, operative_bound_s=None)
+            measured["sizing"] = {"fixed_desk_s": None, "collection_stage_overhead_s": None}
+        return rows, measured, dropped
+
+    def test_stopped_session_prints_measured_lines_and_marks_the_rest(self):
+        rows, measured, dropped = self.stopped_world()
+        # The same membership H exported: 95 ran, 28 never started.
+        self.assertEqual((len(rows) - len(dropped), len(dropped)), (95, 28))
+        result = self.result(measured, rows)
+        lines = {g["gate"]: g for g in result["gates"]}
+        self.assertEqual(result["status"], "fail")
+        self.assertEqual(result["unmeasured_members"], dropped)
+        self.assertEqual((lines["completeness:llama-70b:soak"]["status"], lines["completeness:llama-70b:soak"]["succeeded"]), ("fail", 11))
+        self.assertEqual((lines["completeness:qwen35-122b:soak"]["status"], lines["completeness:qwen35-122b:soak"]["succeeded"]), ("fail", 0))
+        for model in self.measured["regimes"]:
+            self.assertEqual(lines["completeness:" + model + ":check"]["status"], "pass")
+            for gate in ("contention:", "cpu_contention:", "resolvability:"):
+                self.assertEqual(lines[gate + model]["status"], "unavailable")
+            self.assertEqual(lines["calibration_T10:" + model]["status"], "flag_only")
+        self.assertEqual(lines["thermal"]["status"], "pass")
+        self.assertEqual(lines["sizing:bytes-s1-p1"]["status"], "unavailable")
+        self.assertIsNone(result["sessions"]["bytes-s1-p1"]["est_minutes"])
+        groups = {(g["model_id"], g["purpose"]): g for g in result["spread_groups"]}
+        self.assertEqual((groups["qwen35-122b", "soak"]["runs"], groups["qwen35-122b", "soak"]["spread"]), (0, None))
+        self.assertEqual((groups["llama-70b", "soak"]["runs"], groups["llama-70b", "soak"]["complete"]), (11, False))
+        # Independent recomputation over the members that ran.
+        ran = {r["run_id"] for r in rows if r["status"] == "succeeded"}
+        expected = Decimal(0)
+        for model in result["models"]:
+            for purpose in ("check", "soak"):
+                times = [Decimal(self.measured["runs"][m["run_id"]]["request_s"]) for m in self.plan["members"]
+                         if m["model_id"] == model and m["purpose"] == purpose and m["run_id"] in ran]
+                if len(times) >= 2:
+                    expected = max(expected, max(times) / min(times) - 1)
+        self.close(result["measured_margin"], expected)
+        kept = [Decimal(self.measured["runs"][m["run_id"]]["request_s"]) for m in self.plan["members"]
+                if m["model_id"] == "llama-70b" and m["purpose"] in ("check", "soak") and m["run_id"] in ran]
+        self.assertEqual(len(kept), 16)
+        self.close(result["models"]["llama-70b"]["request_mean_s"], sum(kept) / len(kept))
+        self.assertFalse(result["models"]["llama-70b"]["measured_margin_complete"])
+
+    def test_stopped_session_cli_writes_c5_and_exit_reports_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for receipts_absent, code, status in ((True, 2, "fail"), (False, 2, "fail")):
+                rows, measured, _ = self.stopped_world(receipts_absent=receipts_absent)
+                csv_path = root / "x.runs.csv"
+                with csv_path.open("w", newline="") as stream:
+                    writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+                    writer.writeheader()
+                    writer.writerows(rows)
+                write(root / "x.session.json", self.sidecar)
+                write(root / "measurements.json", measured)
+                out = root / "c5.json"
+                result = subprocess.run([sys.executable, str(ROOT / "scripts/bytes_gates.py"), "--runs", str(csv_path),
+                                         "--measurements", str(root / "measurements.json"), "--out", str(out)],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, code, result.stderr)
+                self.assertEqual(gates.read(out)["status"], status)
+                self.assertIn("completeness:qwen35-122b:soak: fail", result.stdout)
+                self.assertIn("sizing:bytes-s1-p1: " + ("unavailable" if receipts_absent else "flag only"), result.stdout)
+                out.unlink()
+
+    def test_complete_runs_with_absent_receipts_are_unavailable_not_withheld(self):
+        measured = deepcopy(self.measured)
+        measured["cpu_contention"] = {"w_j_per_cpu_s": None, "c_q_cpu_s": None}
+        result = self.result(measured)
+        self.assertEqual(result["status"], "unavailable")
+        self.assertEqual({g["status"] for g in result["gates"] if g["gate"].startswith("cpu_contention:")}, {"unavailable"})
+        self.assertEqual(result["cpu_contention_alternative"], [])
+        self.assertEqual({g["status"] for g in result["gates"] if g["gate"].startswith("sizing:")}, {"pass"})
+        with tempfile.TemporaryDirectory() as tmp:
+            write(Path(tmp) / "measurements.json", measured)
+            out = Path(tmp) / "c5.json"
+            cli = subprocess.run([sys.executable, str(ROOT / "scripts/bytes_gates.py"), "--runs", str(self.export.csv_path),
+                                  "--measurements", str(Path(tmp) / "measurements.json"), "--out", str(out)],
+                                 capture_output=True, text=True)
+            self.assertEqual(cli.returncode, 1, cli.stderr)
+            self.assertEqual(gates.read(out)["status"], "unavailable")
+
+    def test_succeeded_member_with_null_timing_is_still_refused(self):
+        measured = deepcopy(self.measured)
+        rid = next(r["run_id"] for r in self.rows if r["status"] == "succeeded")
+        measured["runs"][rid].update({f: None for f in gates.TIMING_FIELDS})
+        with self.assertRaises((ValueError, ArithmeticError)):
+            self.result(measured)
