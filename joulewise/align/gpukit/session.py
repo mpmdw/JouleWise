@@ -84,14 +84,14 @@ def whole_gpu(*, gpu_index: int, timeout_s: float) -> dict[str, Any]:
                         mig=gpu.findtext("mig_mode/current_mig"),
                         virtualization=gpu.findtext("gpu_virtualization_mode/virtualization_mode"))
         mig = (evidence["mig"] or "").strip().lower()
-        virtualization = (evidence["virtualization"] or "").strip().lower()
+        virtualization = "".join(c for c in (evidence["virtualization"] or "").lower() if c.isalnum())
         if mig == "enabled" or "mig-" in (evidence["uuid"] or "").lower():
             raise IsolationError("MIG enabled: whole GPU required")
-        if virtualization in ("vgpu", "host vgpu", "guest vgpu") or "vgpu" in virtualization:
+        if virtualization in ("vgpu", "hostvgpu", "guestvgpu") or "vgpu" in virtualization:
             raise IsolationError("vGPU detected: whole GPU required")
         if mig not in ("disabled", "n/a", "[n/a]"):
             evidence["flags"].append("gpu_mig_state_unverified")
-        if virtualization not in ("none", "passthrough", "pass through"):
+        if virtualization not in ("none", "passthrough"):
             evidence["flags"].append("gpu_virtualization_unverified")
     except (OSError, subprocess.TimeoutExpired, ET.ParseError) as exc:
         evidence["flags"].append(f"gpu_inventory_unavailable:{type(exc).__name__}")

@@ -311,41 +311,127 @@
       "total_parameters": 4000000000,
       "active_parameters": 4000000000,
       "source": {
-        "url": "https://huggingface.co/Qwen/Qwen3-4B",
+        "url": "https://github.com/yiyihum/rag291/blob/ea64553f7d1979c92aa70009cf3a3b6b2a7b6261/data/hf_cards_2025/models/Qwen__Qwen3-4B.md",
         "accessed": "2026-10-22",
-        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count. Counts supplied by prior lane citations/reviewer; direct HF access unavailable in this seat.",
-        "quote": "Model card printed counts: total_parameters=4000000000, active_parameters=4000000000."
-      }
+        "quote": "Number of Parameters: 4B; activated 4B; Non-Embedding: 3.6B",
+        "note": "Qwen model-card mirror inspected through GitHub; canonical card https://huggingface.co/Qwen/Qwen3-4B"
+      },
+      "vocab_size": 151936,
+      "hidden_size": 2560,
+      "hidden_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-4B/blob/main/config.json",
+        "accessed": "2026-10-22",
+        "quote": "vocab_size: 151936; hidden_size: 2560",
+        "note": "Fields supplied in reviewer repro; direct HF access unavailable. Freeze/recheck exact checkpoint revision before rental."
+      },
+      "vocab_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-4B/blob/main/config.json",
+        "accessed": "2026-10-22",
+        "quote": "vocab_size: 151936; hidden_size: 2560",
+        "note": "Fields supplied in reviewer repro; direct HF access unavailable. Freeze/recheck exact checkpoint revision before rental."
+      },
+      "non_embedding_parameters": 3600000000,
+      "non_embedding_parameters_source": {
+        "url": "https://github.com/yiyihum/rag291/blob/ea64553f7d1979c92aa70009cf3a3b6b2a7b6261/data/hf_cards_2025/models/Qwen__Qwen3-4B.md",
+        "accessed": "2026-10-22",
+        "quote": "Number of Parameters: 4B; activated 4B; Non-Embedding: 3.6B",
+        "note": "Qwen model-card mirror inspected through GitHub; canonical card https://huggingface.co/Qwen/Qwen3-4B"
+      },
+      "decode_weight_parameters": 3988956160,
+      "decode_weight_parameters_derivation": "Printed non_embedding_parameters + vocab_size * hidden_size (output head); input lookup excluded, output read once even if tied. Card totals are rounded independently."
     },
     "Qwen/Qwen3-8B": {
       "total_parameters": 8200000000,
       "active_parameters": 8200000000,
       "source": {
-        "url": "https://huggingface.co/Qwen/Qwen3-8B",
+        "url": "https://github.com/yiyihum/rag291/blob/ea64553f7d1979c92aa70009cf3a3b6b2a7b6261/data/hf_cards_2025/models/Qwen__Qwen3-8B.md",
         "accessed": "2026-10-22",
-        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count. Counts supplied by prior lane citations/reviewer; direct HF access unavailable in this seat.",
-        "quote": "Model card printed counts: total_parameters=8200000000, active_parameters=8200000000."
-      }
+        "quote": "Number of Parameters: 8.2B; activated 8.2B; Non-Embedding: 6.95B",
+        "note": "Qwen model-card mirror inspected through GitHub; canonical card https://huggingface.co/Qwen/Qwen3-8B"
+      },
+      "vocab_size": 151936,
+      "hidden_size": 4096,
+      "hidden_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-8B/blob/main/config.json",
+        "accessed": "2026-10-22",
+        "quote": "vocab_size: 151936; hidden_size: 4096",
+        "note": "Fields supplied in reviewer repro; direct HF access unavailable. Freeze/recheck exact checkpoint revision before rental."
+      },
+      "vocab_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-8B/blob/main/config.json",
+        "accessed": "2026-10-22",
+        "quote": "vocab_size: 151936; hidden_size: 4096",
+        "note": "Fields supplied in reviewer repro; direct HF access unavailable. Freeze/recheck exact checkpoint revision before rental."
+      },
+      "non_embedding_parameters": 6950000000,
+      "non_embedding_parameters_source": {
+        "url": "https://github.com/yiyihum/rag291/blob/ea64553f7d1979c92aa70009cf3a3b6b2a7b6261/data/hf_cards_2025/models/Qwen__Qwen3-8B.md",
+        "accessed": "2026-10-22",
+        "quote": "Number of Parameters: 8.2B; activated 8.2B; Non-Embedding: 6.95B",
+        "note": "Qwen model-card mirror inspected through GitHub; canonical card https://huggingface.co/Qwen/Qwen3-8B"
+      },
+      "decode_weight_parameters": 7572329856,
+      "decode_weight_parameters_derivation": "Printed non_embedding_parameters + vocab_size * hidden_size (output head); input lookup excluded, output read once even if tied. Card totals are rounded independently."
     },
     "Qwen/Qwen3-14B": {
       "total_parameters": 14800000000,
       "active_parameters": 14800000000,
       "source": {
-        "url": "https://huggingface.co/Qwen/Qwen3-14B",
+        "url": "https://github.com/yiyihum/rag291/blob/ea64553f7d1979c92aa70009cf3a3b6b2a7b6261/data/hf_cards_2025/models/Qwen__Qwen3-14B.md",
         "accessed": "2026-10-22",
-        "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count. Counts supplied by prior lane citations/reviewer; direct HF access unavailable in this seat.",
-        "quote": "Model card printed counts: total_parameters=14800000000, active_parameters=14800000000."
-      }
+        "quote": "Number of Parameters: 14.8B; activated 14.8B; Non-Embedding: 13.2B",
+        "note": "Qwen model-card mirror inspected through GitHub; canonical card https://huggingface.co/Qwen/Qwen3-14B"
+      },
+      "vocab_size": 151936,
+      "hidden_size": 5120,
+      "hidden_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-14B/blob/main/config.json",
+        "accessed": "2026-10-22",
+        "quote": "vocab_size: 151936; hidden_size: 5120",
+        "note": "Fields supplied in reviewer repro; direct HF access unavailable. Freeze/recheck exact checkpoint revision before rental."
+      },
+      "vocab_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-14B/blob/main/config.json",
+        "accessed": "2026-10-22",
+        "quote": "vocab_size: 151936; hidden_size: 5120",
+        "note": "Fields supplied in reviewer repro; direct HF access unavailable. Freeze/recheck exact checkpoint revision before rental."
+      },
+      "non_embedding_parameters": 13200000000,
+      "non_embedding_parameters_source": {
+        "url": "https://github.com/yiyihum/rag291/blob/ea64553f7d1979c92aa70009cf3a3b6b2a7b6261/data/hf_cards_2025/models/Qwen__Qwen3-14B.md",
+        "accessed": "2026-10-22",
+        "quote": "Number of Parameters: 14.8B; activated 14.8B; Non-Embedding: 13.2B",
+        "note": "Qwen model-card mirror inspected through GitHub; canonical card https://huggingface.co/Qwen/Qwen3-14B"
+      },
+      "decode_weight_parameters": 13977912320,
+      "decode_weight_parameters_derivation": "Printed non_embedding_parameters + vocab_size * hidden_size (output head); input lookup excluded, output read once even if tied. Card totals are rounded independently."
     },
     "Qwen/Qwen3-30B-A3B": {
       "total_parameters": 30500000000,
       "active_parameters": 3300000000,
       "source": {
-        "url": "https://huggingface.co/Qwen/Qwen3-30B-A3B",
+        "url": "https://github.com/yiyihum/rag291/blob/ea64553f7d1979c92aa70009cf3a3b6b2a7b6261/data/hf_cards_2025/models/Qwen__Qwen3-30B-A3B.md",
         "accessed": "2026-10-22",
-        "note": "Model Overview: 30.5B total, 3.3B activated. Counts supplied by prior lane citations/reviewer; direct HF access unavailable in this seat.",
-        "quote": "Model card printed counts: total_parameters=30500000000, active_parameters=3300000000."
-      }
+        "quote": "Number of Parameters: 30.5B; activated 3.3B",
+        "note": "Qwen model-card mirror inspected through GitHub; canonical card https://huggingface.co/Qwen/Qwen3-30B-A3B"
+      },
+      "vocab_size": 151936,
+      "hidden_size": 2048,
+      "hidden_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-30B-A3B/blob/main/config.json",
+        "accessed": "2026-10-22",
+        "quote": "vocab_size: 151936; hidden_size: 2048",
+        "note": "Fields supplied in reviewer repro; direct HF access unavailable. Freeze/recheck exact checkpoint revision before rental."
+      },
+      "vocab_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-30B-A3B/blob/main/config.json",
+        "accessed": "2026-10-22",
+        "quote": "vocab_size: 151936; hidden_size: 2048",
+        "note": "Fields supplied in reviewer repro; direct HF access unavailable. Freeze/recheck exact checkpoint revision before rental."
+      },
+      "non_embedding_parameters": null,
+      "decode_weight_parameters": 2988835072,
+      "decode_weight_parameters_derivation": "active_parameters - vocab_size * hidden_size (input lookup); output head retained in active count. Inputs cited by sibling source and *_source."
     },
     "microsoft/Phi-3.5-mini-instruct": {
       "total_parameters": 3800000000,
@@ -355,16 +441,51 @@
         "accessed": "2026-10-22",
         "note": "Dense model; all parameters treated as active. Model Overview/Training Model card printed count. Counts supplied by prior lane citations/reviewer; direct HF access unavailable in this seat.",
         "quote": "Model card printed counts: total_parameters=3800000000, active_parameters=3800000000."
-      }
+      },
+      "vocab_size": 32064,
+      "hidden_size": 3072,
+      "hidden_size_source": {
+        "url": "https://huggingface.co/microsoft/Phi-3.5-mini-instruct/blob/main/config.json",
+        "accessed": "2026-10-22",
+        "quote": "vocab_size: 32064; hidden_size: 3072",
+        "note": "Fields supplied in reviewer repro; direct HF access unavailable. Freeze/recheck exact checkpoint revision before rental."
+      },
+      "vocab_size_source": {
+        "url": "https://huggingface.co/microsoft/Phi-3.5-mini-instruct/blob/main/config.json",
+        "accessed": "2026-10-22",
+        "quote": "vocab_size: 32064; hidden_size: 3072",
+        "note": "Fields supplied in reviewer repro; direct HF access unavailable. Freeze/recheck exact checkpoint revision before rental."
+      },
+      "non_embedding_parameters": null,
+      "decode_weight_parameters": 3701499392,
+      "decode_weight_parameters_derivation": "active_parameters - vocab_size * hidden_size (input lookup); output head retained in active count. Inputs cited by sibling source and *_source."
     },
     "Qwen/Qwen3-Next-80B-A3B-Thinking": {
       "total_parameters": 80000000000,
       "active_parameters": 3000000000,
       "source": {
-        "url": "https://github.com/mpmdw/JouleWise/blob/58750718f/docs/align/budget_pilot.md",
+        "url": "https://github.com/yiyihum/rag291/blob/ea64553f7d1979c92aa70009cf3a3b6b2a7b6261/data/hf_cards_2025/models/Qwen__Qwen3-Next-80B-A3B-Thinking.md",
         "accessed": "2026-10-22",
-        "quote": "Record total parameters (80B), active parameters (3B) in the model description"
-      }
+        "quote": "Number of Parameters: 80B; activated 3B",
+        "note": "Qwen model-card mirror inspected through GitHub; canonical card https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking"
+      },
+      "vocab_size": 151936,
+      "hidden_size": 2048,
+      "hidden_size_source": {
+        "url": "https://github.com/xorbitsai/inference/blob/14270e589d0abd2788699d91742f770e811c45d9/xinference/model/llm/models/Qwen3-Next-Thinking.json",
+        "accessed": "2026-10-22",
+        "quote": "vocab_size: 151936; hidden_size: 2048; config_source points to Qwen3-Next Thinking config.json e502dd4100cc68c0de57643fd4317ec93a128670",
+        "note": "Corroborates Qwen/HF configuration fields via an inspected public registry, not a downloaded weight verification."
+      },
+      "vocab_size_source": {
+        "url": "https://github.com/xorbitsai/inference/blob/14270e589d0abd2788699d91742f770e811c45d9/xinference/model/llm/models/Qwen3-Next-Thinking.json",
+        "accessed": "2026-10-22",
+        "quote": "vocab_size: 151936; hidden_size: 2048; config_source points to Qwen3-Next Thinking config.json e502dd4100cc68c0de57643fd4317ec93a128670",
+        "note": "Corroborates Qwen/HF configuration fields via an inspected public registry, not a downloaded weight verification."
+      },
+      "non_embedding_parameters": null,
+      "decode_weight_parameters": 2688835072,
+      "decode_weight_parameters_derivation": "active_parameters - vocab_size * hidden_size (input lookup); output head retained in active count. Inputs cited by sibling source and *_source."
     }
   },
   "lower_bound_wall_seconds": {

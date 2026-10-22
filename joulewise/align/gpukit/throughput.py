@@ -6,7 +6,7 @@ are optimistic bounds under the stated weight-read model, never benchmarks.
 
 from __future__ import annotations
 
-import math
+from decimal import Decimal, ROUND_FLOOR, ROUND_HALF_EVEN
 from typing import Any, Mapping
 
 
@@ -14,13 +14,14 @@ def ceilings(matrix: Mapping[str, Any], gpu_class: str, model: str) -> tuple[flo
     """Return (prefill, decode) tokens/s, or None for an unavailable source."""
     hardware = matrix["gpu_classes"][gpu_class]["hardware"]
     params = matrix["model_parameters"][model]["active_parameters"]
+    decode_params = matrix["model_parameters"][model].get("decode_weight_parameters")
     bandwidth = hardware["memory_bandwidth_bytes_s"]["value"]
     flops = hardware["dense_bf16_flops_s"]["value"]
-    if any(value is None for value in (params, bandwidth, flops)):
+    if any(value is None for value in (params, decode_params, bandwidth, flops)):
         return None
     # BF16 stores 16 bits / 8 bits per byte = 2 bytes per active weight.
     # A matrix multiply uses one multiply and one add = 2 FLOPs per weight.
-    return flops / (2 * params), bandwidth / (2 * params)
+    return flops / (2 * params), bandwidth / (2 * decode_params)
 
 
 def display_number(value: float | None, *, lower_bound: bool = False) -> float | None:
@@ -32,6 +33,6 @@ def display_number(value: float | None, *, lower_bound: bool = False) -> float |
     """
     if value is None or value == 0:
         return value
-    quantum = 10.0 ** (math.floor(math.log10(abs(value))) - 1)
-    return float(math.floor(value / quantum) * quantum if lower_bound
-                 else round(value / quantum) * quantum)
+    decimal = Decimal(str(value))
+    quantum = Decimal(1).scaleb(decimal.copy_abs().adjusted() - 1)
+    return float(decimal.quantize(quantum, rounding=ROUND_FLOOR if lower_bound else ROUND_HALF_EVEN))
