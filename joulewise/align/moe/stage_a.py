@@ -238,14 +238,29 @@ def analyze_stage_a(episodes: Sequence[Episode], *, n_bootstrap: int,
     bootstrap = _bootstrap_indices(groups, n_bootstrap, seed)
     raw = {}
     for name in keys:
-        values = tuple(row[name] for row in features)
-        effect, p, used = grouped_permutation_test(values, labels, groups, n_perm=n_perm, seed=seed)
-        draws = [_difference([values[i] for i in indices], [labels[i] for i in indices])
-                 for indices in bootstrap]
-        standardized = [_standardized([values[i] for i in indices], [labels[i] for i in indices])
-                        for indices in bootstrap]
+        # Capture gaps are excluded separately for each metric, before both
+        # randomization and resampling. Retain episode-aligned features above.
+        kept = [i for i, row in enumerate(features) if math.isfinite(row[name])]
+        dropped = [i for i, row in enumerate(features) if not math.isfinite(row[name])]
+        values = tuple(features[i][name] for i in kept)
+        local_labels = tuple(labels[i] for i in kept)
+        local_groups = tuple(groups[i] for i in kept)
+        effect, p, used = grouped_permutation_test(
+            values, local_labels, local_groups, n_perm=n_perm, seed=seed)
+        local_bootstrap = _bootstrap_indices(local_groups, n_bootstrap, seed)
+        draws = [_difference([values[i] for i in indices], [local_labels[i] for i in indices])
+                 for indices in local_bootstrap]
+        standardized = [_standardized([values[i] for i in indices],
+                                      [local_labels[i] for i in indices])
+                        for indices in local_bootstrap]
         valid = sum(math.isfinite(x) for x in draws)
         local_flags = []
+        if dropped:
+            local_flags.append(f"dropped_nonfinite_episodes:{len(dropped)}")
+            local_flags.extend(f"dropped_nonfinite_episode:{episodes[i].episode_id}" for i in dropped)
+        for group in dict.fromkeys(local_groups):
+            if len({y for y, g in zip(local_labels, local_groups) if g == group}) < 2:
+                local_flags.append(f"group_has_no_label_exchangeability:{group}")
         if not math.isfinite(p):
             local_flags.append("statistic_not_estimable")
         if valid != n_bootstrap:
@@ -253,7 +268,7 @@ def analyze_stage_a(episodes: Sequence[Episode], *, n_bootstrap: int,
         invalid_standardized = sum(not math.isfinite(x) for x in standardized)
         if invalid_standardized:
             local_flags.append(f"undefined_standardized_bootstrap_replicates:{invalid_standardized}")
-        raw[name] = StatisticResult(effect, _interval(draws, confidence), _standardized(values, labels),
+        raw[name] = StatisticResult(effect, _interval(draws, confidence), _standardized(values, local_labels),
                                     _interval(standardized, confidence), p, math.nan, used, valid,
                                     tuple(local_flags))
     # The family always contains all 12 planned tests, even when a phase is
