@@ -11,6 +11,43 @@ from tests.align import test_power_ina3221 as fixtures
 
 
 class CharacterizationReviewTest(unittest.TestCase):
+    def test_real_sysfs_path_through_detector_with_held_conversions(self):
+        from joulewise.align.phase_detect import detect_phases, match_tool_calls
+        from joulewise.align.sensor_sim import timeline_from_episode
+        from tests.align.test_sensor_sim import model, world
+        episode = world(5, 250_000_000)
+        timeline = timeline_from_episode(episode, model())
+        conversion = 4_000_000  # Scenario conversion every four 1 ms polls.
+        with tempfile.TemporaryDirectory() as tmp:
+            dev = fixtures.Ina3221Test().make_device(
+                Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
+            (dev / "samples").write_text("1")
+            now = [episode.start_ns]
+            def read(path):
+                if path.name == "curr1_input":
+                    timestamp = (now[0] // conversion) * conversion
+                    watts = (timeline.integral(timestamp - conversion, timestamp) / conversion
+                             if timestamp > conversion else timeline.power_at(now[0]))
+                    return str(round(watts / 5.0 * 1000))  # Integer mA on a 5 V rail.
+                return path.read_text().strip()
+            sampler = Ina3221Sampler(sysfs_root=tmp, sample_interval_ns=1_000_000,
+                                     clock=lambda: now[0], read_text=read)
+            sampler.discover()
+            while now[0] < episode.end_ns:
+                now[0] += 1_000_000
+                sampler.sample_once()
+            trace, = sampler.stop()
+            self.assertGreaterEqual(trace.averaging_window_ns, conversion)
+            self.assertIsNotNone(trace.resolution)
+            self.assertIn("driver_characterized_cadence_disagreement", trace.notes)
+            for sd in (None, .005):
+                with self.subTest(noise_sd_w=sd):
+                    match = match_tool_calls(detect_phases(trace, noise_sd_w=sd), episode)
+                    self.assertEqual(match.matched_count, 3)
+                    self.assertEqual(len(match.unlogged_candidates), 0)
+                    # Poll plus actual conversion is the minimum timing bound.
+                    self.assertGreaterEqual(match.tolerance_ns, 1_000_000 + conversion)
+
     def test_mainline_shunt_sum_is_not_a_bus_rail(self):
         with tempfile.TemporaryDirectory() as tmp:
             dev = fixtures.Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
