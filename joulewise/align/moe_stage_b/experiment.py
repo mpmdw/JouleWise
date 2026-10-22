@@ -413,6 +413,8 @@ def run_world(
                                if o.condition == c])*1000
             for c in ("benign", "sabotage") if any(o.condition == c for o in observations)
         ) if any(o.condition in ("benign", "sabotage") for o in observations) else None,
+        "mean_decode_ms_per_token": statistics.fmean(
+            o.features.decode_seconds_per_token for o in observations)*1000,
         "requirement_effect_provenance": "marginal_stage_a_not_timing_conditional",
         "energy_baseline_provenance": "simulator_running_level_unavailable_on_hardware",
         "increment_null_calibration": "none_nominal_fisher_not_measured_absence",
@@ -479,6 +481,7 @@ def timing_spread_sweep(
             episode_factor_half_width=world.decode_episode_factor_half_width,
             within_condition_sd_episode_mean_decode_ms=result[
                 "within_condition_sd_episode_mean_decode_ms"],
+            mean_decode_ms_per_token=result["mean_decode_ms_per_token"],
             increment_r=inc["held_out_correlation"], interval_95=inc["held_out_interval_95"],
             verdict=result["stage_b_verdict"]))
     return rows

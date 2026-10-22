@@ -249,6 +249,11 @@ class TestMoeStageBRound2(unittest.TestCase):
                 # Positive timing variation produces distinct seeded durations;
                 # zero would mean the scenario variation was lost in the chain.
                 self.assertTrue(all(row["within_condition_sd_episode_mean_decode_ms"] > 0 for row in rows))
+                # Lead F3 requires the grid to reach 5% of mean decode time.
+                # If the episode factor is ignored, averaged token jitter is
+                # far below this bar and the end-to-end regression fails.
+                self.assertGreater(rows[-1]["within_condition_sd_episode_mean_decode_ms"],
+                                   .05*rows[-1]["mean_decode_ms_per_token"])
 
     def test_continuous_rounding_bound(self):
         from joulewise.align.moe_stage_b.analysis import rounding_uncertainty
