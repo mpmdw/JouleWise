@@ -124,7 +124,7 @@ attribution can be supplied to summarize as an Episode-to-Energy callback.
 
 Offline smoke, using only the standard library:
 
-    python3 -m joulewise.align.budget --synthetic --count 200 --seeds 11 --sizes 4,8,14 --output /tmp/budget-smoke --checkpoint /tmp/budget-smoke.jsonl
+    python3 -m joulewise.align.budget --synthetic --count 200 --seeds 0 --sizes 4,8,14 --output /tmp/budget-smoke --checkpoint /tmp/budget-smoke.jsonl
 
 Local-server run:
 
