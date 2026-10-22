@@ -745,8 +745,8 @@ with the helpers arm uses (`_recheck_identity_projection`,
 `scripts/launch_window.py:277-301`, called at `:348`): it loads the frozen
 projection and its freeze receipt and calls `_derive_projection_units`, which
 reads the model and config files, prepares the runtime once per identity
-unit, and re-runs prompt projection and tokenization for every registered
-prompt realization. It refuses with
+unit, and re-derives the prompt realization (rendering and tokenizing the
+prompt again) for every registered prompt-realization configuration. It refuses with
 `readiness_identity_environment_dirty` unless the frozen pack still matches
 its receipt, the re-derived `projection_input_sha256` equals the frozen value,
 and every identity unit's `model_runtime_config` is unchanged. The recheck

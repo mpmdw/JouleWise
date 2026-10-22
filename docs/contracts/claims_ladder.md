@@ -6,10 +6,11 @@ D-037 records adoption. Per-claim IDs and structural enforcement exist:
 `all`) validates every row of the canonical claims index
 `analysis/rpt001-v2/claims_index.jsonl`, including unique claim IDs, the
 linked claim-verdict artifact, and each row's ladder level against that
-verdict (a supported or refuted L2 or L3 row needs a claim-ready verdict), and reports a
-structural defect as an error. Wording outside the index is checked only by
-the warning-only prose scan below, so authors still apply this ladder during
-review.
+verdict (an L2 or L3 row whose `editorial_status` is `supported` or
+`refuted` needs a claim-ready verdict; `weak` and `out-of-data` rows are
+exempt), and reports a structural defect as an error. Wording outside the
+index is checked only by the warning-only prose scan below, so authors still
+apply this ladder during review.
 
 This contract governs wording in reports, slides, README/status prose, figure
 captions, and tables that a reader could treat as a result. Dated run reports,

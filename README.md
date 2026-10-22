@@ -183,8 +183,8 @@ The repository currently contains:
   status views and the recorded file fingerprints match their sources, that
   the documentation's cross-references and status statements are consistent,
   and that historical evidence receipts still satisfy their recorded rules,
-  and it runs a mock end-to-end measurement with bundle validation, a package
-  build, and an install of the built package outside the repository. The
+  and it runs a mock end-to-end measurement with bundle validation, a
+  validation of the two example configs, a package build, and an install of the built package outside the repository. The
   canonical command below and CI output own the current result; reader docs
   intentionally do not copy its volatile count.
 
