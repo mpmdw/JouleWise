@@ -110,6 +110,7 @@ def canon(name) -> str:
 # Student t (stdlib only): regularized incomplete beta by continued fraction.
 
 def _betacf(a: float, b: float, x: float) -> float:
+    # Lentz continued-fraction underflow floor (Numerical Recipes FPMIN), not a quantity bar.
     tiny = 1e-300
     qab, qap, qam = a + b, a + 1.0, a - 1.0
     c, d = 1.0, 1.0 - qab * x / qap
@@ -192,10 +193,12 @@ def student_t_critical_95(df: int) -> float:
 
 def _solve(matrix, rhs):
     n = len(matrix)
+    # As bytes_analysis._inverse: n-step roundoff is n * epsilon * max|matrix entry|.
+    pivot_noise = n * sys.float_info.epsilon * max(abs(v) for row in matrix for v in row)
     a = [list(map(float, row)) + [float(v)] for row, v in zip(matrix, rhs)]
     for col in range(n):
         pivot = max(range(col, n), key=lambda r: abs(a[r][col]))
-        if abs(a[pivot][col]) < 1e-300:
+        if abs(a[pivot][col]) <= pivot_noise:
             raise ValueError("singular design")
         a[col], a[pivot] = a[pivot], a[col]
         for r in range(n):
@@ -532,6 +535,8 @@ def read_manifest(path):
     manifest = {}
     for entry in entries:
         name = canon(entry.get("_name"))
+        if name in manifest:
+            raise ValueError("duplicate manifest model")
         w, kv, r = _pick(entry, W_KEYS), _pick(entry, KV_KEYS), _pick(entry, R_KEYS)
         if not name or w is None or r is None:
             continue
@@ -1293,6 +1298,11 @@ def sha256_of(value) -> str:
 
 def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, listed=None):
     """sidecars: {session_id: export sidecar dict}; listed: {session_id: manifest sessions entry}."""
+    roster = {name: spec for name, spec in ROSTER.items() if name in manifest}
+    if set(manifest) not in (set(ROSTER), set(ROSTER) - {"qwen3-8b-8bit"}):
+        raise ValueError("manifest requires the registered roster, optionally without Qwen3-8B-8bit")
+    held_out = tuple(name for name in HELD_OUT if name in roster)
+    h1_family = len(HYPOTHESES) * len(held_out)  # R5: manifest membership, including missing rows.
     sessions = group_sessions(rows)
     sidecars, listed = sidecars or {}, listed or {}
     identities = {s: pass_identity(s, listed, sidecars.get(s)) for s in sessions}
@@ -1309,7 +1319,7 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         rows = unblind(rows, key_dir, keys)
         sessions = group_sessions(rows)
     archive_by_session = {a["session_id"]: a for a in archives if a.get("session_id")}
-    alpha_h1 = ALPHA / H1_FAMILY
+    alpha_h1 = ALPHA / h1_family
 
     cells, notes, flags = {}, [], []
     for session_id, identity in sorted(identities.items()):
@@ -1388,7 +1398,7 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
 
     def h2_points(pass_key, boundary, *, two_pass_only=False):
         points, rails_power = {}, {}
-        for model in ROSTER:
+        for model in roster:
             q = point(model, pass_key, boundary)
             if q and (not two_pass_only or q.get("passes_computed", 1) >= 2):
                 points[model] = {"status": "ok", "P": q["P_mean_w"], "BW": q["BW_GB_per_s"],
@@ -1399,7 +1409,7 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                 rails_power[model] = qr["P_mean_w"] if qr else None
         return points, rails_power
 
-    h1, h2, multiplicity = {}, {}, {"H1": {"family_size": H1_FAMILY, "alpha_per_check": alpha_h1,
+    h1, h2, multiplicity = {}, {}, {"H1": {"family_size": h1_family, "alpha_per_check": alpha_h1,
                                             "t_quantile_level": 1 - alpha_h1 / 2}, "H2": {}}
     stage1 = {"fit_cells": {}, "h1_lines": {}, "h2_tier1_inputs": {}}
     for boundary in BOUNDARIES:
@@ -1416,14 +1426,14 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
             else:
                 lines = h1_lines(fit_points)
                 all_points = dict(fit_points)
-                for model in HELD_OUT:
+                for model in held_out:
                     q = point(model, pass_key, boundary)
                     if q:
                         all_points[model] = {"x": {"bytes": q["b_GB_per_step"], "resident": q["R_GB"], "time": q["tau_s_per_step"]},
                                              "e": q["e_j_per_step"], "w": q["e_half_width_j_per_step"], "kind": ROSTER[model]["kind"],
                                              "label": q.get("label", "pass_mean")}
                 words = h1_words(lines, all_points)
-                for model in HELD_OUT:
+                for model in held_out:
                     if model not in all_points and model in cells:
                         q = cells[model].get(pass_key, {}).get("boundaries", {}).get(boundary, {}).get("quantities", {}).get("gross", {})
                         words["models"][model] = {"kind": ROSTER[model]["kind"], "word": None, "role": "held_out",
@@ -1439,7 +1449,7 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                     words["models"][model]["label"] = pt.get("label", "pass_mean")
                 predictions = {model: {hyp: h1_predict(lines, hyp, (manifest[model]["b_GB"] if hyp == "bytes" else manifest[model]["R_GB"]))
                                        for hyp in ("bytes", "resident")}
-                               for model in HELD_OUT if model in manifest}
+                               for model in held_out if model in manifest}
                 h1[boundary][pass_key] = {"status": "ok", "lines": lines, "held_out_predictions_at_manifest_x": predictions, **words}
                 stage1["h1_lines"].setdefault(boundary, {})[pass_key] = {"lines": lines, "predictions_at_manifest_x": predictions}
                 stage1["fit_cells"].setdefault(boundary, {})[pass_key] = {m: fit_points[m] for m in fit_points}
@@ -1460,7 +1470,7 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                         **h2_fits(two_points, alpha_h2, rails_power=two_rails if boundary == "rest" else None)}
             stage1["h2_tier1_inputs"].setdefault(boundary, {})[pass_key] = {m: points[m] for m in FIT_SET if m in points}
     stage1_hash = sha256_of(stage1)
-    return {"schema": SCHEMA, "stage": stage, "notes": notes, "flags": flags, "roster": ROSTER, "manifest": manifest,
+    return {"schema": SCHEMA, "stage": stage, "notes": notes, "flags": flags, "roster": roster, "manifest": manifest,
             "constants": {"decode_steps": DECODE_STEPS, "printed_tokens": PRINTED_TOKENS, "GB": GB,
                           "unit_minimum": UNIT_MINIMUM, "corpus_cap": CORPUS_CAP},
             "sessions": {s: {"rows": len(r), "neg8": {f"{b}/{v}": a for (b, v), a in allowances[s].items()},

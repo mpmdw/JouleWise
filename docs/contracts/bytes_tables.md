@@ -1,7 +1,8 @@
 # BYTES analysis tables and verification
 
 Authority: `docs/design/bytes_pack_design.md` at `db83dbb58`, including Addenda
-1–8 and B6-RULING.md Q1 (activation af419b16). Addendum 7 and Addendum 5 item 4 supersede the affected round-2 choices
+1–8, Addendum 9 (NR1, `B2-NR1-RULING.md`, activation a017b694), and
+`B6-RULING.md` Q1/Q2 (activation af419b16). Addendum 7 and Addendum 5 item 4 supersede the affected round-2 choices
 at `fbd4b3f4f`; the round-2 verification below is historical evidence.
 Implementation: `joulewise/bytes_analysis.py`; CLI: `scripts/bytes_analyze.py`.
 Synthetic evidence only. No model inference or measurement was run.
@@ -178,6 +179,23 @@ Rest uses its own rest-family allowance and scale, plus the rails anchor /
 interpolation terms and u (D3). The meter edge never substitutes for drift.
 
 ## Arithmetic and output schema
+
+Registration §§2 and 10 accept exactly the registered ten-model roster or that
+roster without `Qwen3-8B-8bit`, removed before registration. Three fit, three
+MoE and six tier models remain. H1 counts three checks per registered held-out
+model, including a model printed missing: k is 21 or 18 per boundary. The frozen
+H2 roster expectation is rails/DC input/rest 9/9/11 or 8/8/10; actual H2 k counts
+the primary intervals printed under Addendum 7 D9. Held-out evaluation requires
+one record per manifest model, including unavailable records.
+
+Under B6 Q2, `analysis_record.json` records `bytes_analysis_sha256` with
+`committed` and `evaluating` digests, `flags`, and `fields_not_rebuilt` (sorted
+top-level frozen fields that do not rebuild, excluding the source digest).
+A changed module records `bytes.module_changed_after_commitment`; if frozen
+content also differs, it records `bytes.commitment_not_rebuilt`. Evaluation
+uses the committed content and leaves the prediction file unchanged. An
+unchanged module with differing frozen content fails the existing consistency
+check; a changed digest alone is provenance disclosure, not a collection refusal.
 
 `estimate_phase_energy` follows Block-5 plan §4 in registered order: canonical
 50-member fmean at 10/10, otherwise fixed .2/.8 stratum weights; sample SDs;
