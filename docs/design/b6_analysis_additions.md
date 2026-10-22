@@ -16,7 +16,9 @@ code at `lane/2026-10-17-b6-packs-registered` `1706257c4` (`joulewise/b6/accepta
 `configs/b6/registration/README.md`, `scripts/harvest_b6_session.py`); lane L9 at
 `lane/2026-10-20-l9-ruling-build` `1ab888a68` (`joulewise/b5_analysis/*.py`, the step programs' window-index
 bindings, `joulewise/external/km003c_parse.py`, `joulewise/analysis_engine/inputs.py`,
-`joulewise/paper_reported_energy_issuer.py`); the independent recompute at
+`joulewise/paper_reported_energy_issuer.py`; L9's head on 2026-10-22, `64b4e2cbf`, changes no file under
+`joulewise/` or `scripts/` that this design reads; in its tests it amends `tests/b5_analysis/fixtures_s10.py` and adds
+the real joined-driver harness `tests/b5_analysis/joined_s10.py`); the independent recompute at
 `lane/2026-10-14-independent-recompute` `76f45da3e` (its meter functions only); RUN_STATE items 53, 59 and 65, and
 the record of activation c634f6f3 (item 53), which carry structure only (counting, rounds, flag codes). One blind
 consult round (§19) checked the draft by execution on synthetic inputs.
@@ -218,7 +220,8 @@ Not bound, because block 6 does not run them: `joulewise/paper_custody.py`, `scr
 
 1. *Binding census* (a test): after the seam, the grep above finds the block-5 constants only in `block.py`.
 2. *Equivalence replay* (a test, exact): L9's own production-shaped synthetic block-5 chain (the S10 fixture,
-   `tests/b5_analysis/fixtures_s10.py`) runs at L9's release tag and at the analysis commit. Whole-file digests
+   `tests/b5_analysis/fixtures_s10.py`, driven through L9's real joined driver by its harness
+   `tests/b5_analysis/joined_s10.py`) runs at L9's release tag and at the analysis commit. Whole-file digests
    cannot match, because L9 writes the analysis commit into the mint (`dry_run.py` 729, 735; minted cells record it,
    `mint_floor_artifact_generalized.py` 3229; issuance requires it to equal HEAD, 4508). So the test compares every
    output after a closed projection removes the provenance fields (the analysis and project commit and the paths
@@ -616,8 +619,9 @@ session whose Q is not computable (for example a refused cell): left out, n redu
 value that its analysis did not compute: n counts block-6 sessions only and the line says "block 5: not computed".
 
 *Worked example (synthetic).* BETA's prefill-p2048 reported mean: block 5 58.40 J; three counting block-6 sessions
-58.71, 57.96 and 58.83 J. n = 4, Q̄ = 58.475 J, s_Q = 0.388 J. The per-token values (÷ 2,048) are 0.02851563,
-0.02866699, 0.02830078 and 0.02872559 J; their summary is 0.02855225 J, standard deviation 0.00018955 J. GAMMA decode
+58.71, 57.96 and 58.83 J. n = 4, Q̄ = 58.475 J, s_Q = 0.388 J. The per-token values (÷ 2,048) are 0.02851562,
+0.02866699, 0.02830078 and 0.02872559 J (58.40 / 2,048 is 0.028515625 exactly, a tie at 8 decimals; the float
+rounds down, so 0.02851562 is printed); their summary is 0.02855225 J, standard deviation 0.00018955 J. GAMMA decode
 dbar: block 5 +3.00 J; block 6 +2.84, +3.21, +2.95 J: n = 4, Q̄ = 3.000 J, s_Q = 0.155 J. A dominance ratio: 3.84, 3.51,
 4.02, 3.77: Q̄ = 3.785, s_Q = 0.211.
 
@@ -653,7 +657,8 @@ Inputs: block 5's outcome word w5 and dbar5; for each counting block-6 GAMMA ses
    sign(dbar5); else "not replicated", followed by each session's word and signed dbar.
 3. A block-6 session whose contrast is `not_estimable` has no sign: it differs from any w5 other than `not_estimable`,
    so the contrast is "not replicated".
-4. If GAMMA closed with fewer than 3 counting sessions, the sentence adds "short: k counting block-6 sessions of the
+4. If GAMMA closed with fewer than 3 counting sessions (k and the short mark from the loop's `close` event, written
+   when the loop state becomes `DONE`, `joulewise/b6/loop.py` `_next`, fields `counts` and `short`), the sentence adds "short: k counting block-6 sessions of the
    3 targeted" (and, below 2, "below the commitment of 2"). With k = 0 there is no replication sentence, only that
    line.
 5. A pairing with rule 4 (§5) adds "floor from block 5" to that session's outcome line and to the sentence.
@@ -734,8 +739,8 @@ On L9's branch, `analysis_manifest_v3.py` and `dominance_closeout.py` no longer 
 above (it moved with L9's changes); the base of §15 step 3 decides which version runs, and the meaning stays cell-level
 either way.
 
-**The r2-gamma check.** The task asked for a test on r2-gamma's real `exclusions.json`. That file names each excluded
-run's codes, which REG §12.1 restricts, so no test file may hold it. Instead: (a) a synthetic fixture shaped like
+**The r2-gamma check.** No test may hold r2-gamma's real `exclusions.json`: that file names each excluded run's codes,
+which REG §12.1 restricts. Instead: (a) a synthetic fixture shaped like
 r2-gamma (§16, session G2), and (b) in the blind dry run on the real sessions, r2-gamma's structure record must read
 `b5_exclusions_claim_usable: false`, `b5_reasons: ["neg8.midpoint_lost_primary"]`, `b6_exclusions_claim_usable: true`,
 `acceptance_counting: true`, `analysis_counting: true` and `analysed: true` (structure only). The lead reads those
@@ -772,9 +777,16 @@ six fields.
 | §11.3 ceilings, wording | `crossblock.SENTENCES` | template test |
 | §11.4 composition (i), (ii); ignored P1 to P4, D1; run exclusions apply; label; never replaces | `crossblock.flagged_inclusive()` | fixtures N1 and N2 (§16) |
 | §12.1 structure only before release | `driver.record()` (§14) | no float token in the record; restricted codes masked |
+| §12.2 built and run blind on the real archives, structure only written out; code by models that read no block-5 or block-6 energy | `--mode blind-dry-run` writes only the §14 record outside `restricted/`; the blind rule of the brief (§17) | the §12.1 record test; process |
+| §12.3 item 1 (block 6 closed, §5.3) and item 2 (block 5's release event) | `--mode release` and the cross-block phase require the loop state `DONE` with its `close` event, and block 5's `B5-RELEASE-RECORD.json` authenticated by digest (§14); otherwise exit 2 naming the missing condition. Blinding protection, not a data refusal | e2e: release mode on fixtures with the loop not `DONE`, and with no block-5 record |
+| §12.4 a §8 rule changed while blind applies to every session, the original rule's result printed beside | process (a dated REG §17 entry with one executing refuter); none exists at this design's date, so the build adds no switch | — |
 | §12.3 item 3 blind dry run, no tooling refusal | `scripts/b6_analyze.py --mode blind-dry-run` | e2e |
 | §12.3 item 4 recompute agreement (S-13) | `compare.py` | unit test with a synthetic recompute file |
 | §13 steps 1 to 11 per counting session | L9 steps per unit (§4.3) | e2e |
+| §13 strict validation and re-reduction of every kept run | L9 steps 1, 2 per unit, from the claim runs root (§4.1) | e2e |
+| §13 the kept units from the session's exclusions (block 6's rule: the item-53 fix) | `binding.b6_exclusions()` (§4.5), never `derived/exclusions.json`'s `claim_usable` | fixture G2 analysed; member sets and cell counts equal the acceptance record (B1) |
+| §13 floor extraction for each ALPHA and BETA session | floor unit step 4 (§4.3) | e2e: six floor units |
+| §13 reported energy per cell (§9.1); descriptive estimates and disclosures | L9 issuer and step 11 per unit; floor units' step `11f` | e2e; `test_issuer_equals_project_cell` |
 | §13 per GAMMA pairing: aggregate floor and dominance close-out | GAMMA unit steps 5, 6 | e2e |
 | §13 per GAMMA session: finalization and claim gate with paired floors | GAMMA unit steps 8, 9 | e2e |
 | §13 L9 at its release tag plus additions | binding seam with census and equivalence replay (§4.2) | `test_binding_census`, `test_block5_equivalence` |
@@ -953,7 +965,8 @@ derivation in a comment beside it. You do not choose a bar; use these:
   other conflict: stop and report.
 - **B1, binding seam.** `joulewise/b5_analysis/block.py`; every binding site of §4.2 reads through
   `block_for_index`; `tests/b6_analysis/test_binding_census.py`; `tests/b6_analysis/test_block5_equivalence.py` (L9's
-  S10 chain at L9's release tag and at your head: equal outputs after the provenance projection of §4.2, bar B1). Done
+  S10 chain through its joined-driver harness `tests/b5_analysis/joined_s10.py`, at L9's release tag and at your head:
+  equal outputs after the provenance projection of §4.2, bar B1). Done
   when both pass and the L9 tests that
   import an edited file pass unchanged (CI runs all of `tests/b5_analysis/` on the draft PR).
 - **B2, fixtures.** The generator of §16 and the eleven archives plus the block-5 stub, cached; `PROVENANCE.md`.
@@ -991,7 +1004,15 @@ derivation in a comment beside it. You do not choose a bar; use these:
   module imports goes into `scan.modules` or into `scan.not_scanned` with reason `analysis`; never BASELINE);
   `tests/hazards/test_import_graph.py`; `tests/flags/test_flags_import_graph.py`; `tests/b6/test_catalog.py` (expect no
   change: the catalog file is pinned); `tests/test_fixture_orphan_census.py`; `tests/test_digest_pin_census.py`;
-  `tests/test_schemas.py` (expect no change).
+  `tests/test_schemas.py` (expect no change). The inventory tests L9's own stages had to join (precedents in
+  brackets): `tests/fixtures/custody_read_replay_allowlist.json`, one row per new call that passes a read-replay mode
+  to a custody reader that `tests/test_custody_mode_inventory.py` censuses (L9 S9, `af36e8292`);
+  `tests/test_single_count_discipline_census.py`, a manifest row for each new reader of the single-count discipline
+  (L9 S10, `d5e5a0ffd`); `tests/test_authentication_io.py`, only to move the line numbers of its existing
+  `path:function:line:call` rows in files you edit, or to classify a new read or write in a file it scans, with the
+  reason beside it (L9 `67bdea4a7`).
+- `tests/b6_analysis/__init__.py` uses the `load_tests` loader of `tests/b5_analysis/__init__.py` (the shard runner
+  finds the tests only through it).
 - In stage B0 only: `configs/pins/registry.json`, and `joulewise/whole_window.py` and `configs/gates/hazard_refusals.json`
   for the merge resolution of §15 step 3 (both are also in scope later, for the seam and its census rows).
 
@@ -1005,7 +1026,15 @@ If a file outside this scope is needed, name it in the report and continue with 
 the rest on the draft PR), `tests/b5_analysis/test_frozen_files.py`, `tests/b6/test_catalog.py`,
 `tests/hazards/test_refusal_allowlist.py`, `tests/hazards/test_import_graph.py`,
 `tests/flags/test_flags_import_graph.py`, `tests/test_battery_float_sweep.py`, `tests/test_fixture_orphan_census.py`,
-`tests/test_digest_pin_census.py`, `tests/test_schemas.py`. Environmental failures (`/private/tmp`, launchd,
+`tests/test_digest_pin_census.py`, `tests/test_schemas.py`, `tests/test_custody_mode_inventory.py`,
+`tests/test_single_count_discipline_census.py`, `tests/test_authentication_io.py`, `tests/test_d165_rationale_census.py`;
+`tests/flags/test_number_coverage.py` and `tests/hazards/test_physics_coverage.py` (they name functions and tests in
+`whole_window.py` and `floor_extraction.py`; a seam edit renames none of them, and `configs/flags/number_rows.json`
+and `configs/gates/physics_rows.json` are not edited); and the test modules of each library file you edit:
+`tests/test_whole_window.py`, `tests/test_whole_window_selection.py`, `tests/test_floor_extraction.py`,
+`tests/test_floor_mint_estimator.py`, `tests/test_mint_floor_artifact_generalized.py`,
+`tests/test_mint_floor_artifact_generalized_d165.py`, `tests/test_analysis_inputs.py`,
+`tests/b5_analysis/test_issuer.py`, `tests/b5_analysis/test_disclosures.py`. Environmental failures (`/private/tmp`, launchd,
 powermetrics, fixture `git commit` exit 128) are listed, not chased.
 
 **Report** (first line your model id): commits; tests run with counts; the cold-build wall time of the fixtures;
@@ -1093,3 +1122,14 @@ the dominance ratio's fields are `floor.corner_widened_unguarded_floor_j` over
 record whose `ratio` is the value; L9 commits only the request-level whole-machine line. Not run by the seat: the
 full-size joined S10 chain.
 
+
+## 20. Second pass (2026-10-22)
+
+A re-check of this file against the item's acceptance list, by the author, blind as before. Changes: the clause map
+gains rows for REG §12.2, §12.3 items 1 and 2, §12.4 and the four §13 clauses it had folded into one row (strict
+validation, kept units from the session's exclusions, floor extraction, reported energy and disclosures); §11.2 takes
+k and the short mark from the loop's `close` event; the build brief adds the three inventory registries L9's own stages
+had to join (custody read-replay allowlist, single-count discipline census, authentication IO census), the tests that
+name functions in the seam's library files, and the test modules of those files; the equivalence replay names L9's
+joined-driver harness, added after `1ab888a68`; the §10 per-token example prints 0.02851562 (the exact value is a tie
+at 8 decimals and the float rounds down, so a test at bar B2 would have failed on the old digit).
