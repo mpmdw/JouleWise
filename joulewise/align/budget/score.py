@@ -107,5 +107,6 @@ def wilson(successes: int, trials: int, *, confidence: float = 0.95) -> Rate:
     denominator = 1.0 + z * z / trials
     center = (p + z * z / (2.0 * trials)) / denominator
     half = z * (p * (1.0 - p) / trials + z * z / (4.0 * trials * trials)) ** 0.5 / denominator
-    return Rate(successes, trials, p, (max(0.0, center - half), min(1.0, center + half)),
+    return Rate(successes, trials, p, (0.0 if successes == 0 else max(0.0, center - half),
+                                      1.0 if successes == trials else min(1.0, center + half)),
                 confidence)
