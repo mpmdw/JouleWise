@@ -26,6 +26,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor
 
 from tests.b5_analysis import fixtures as s0
+from tests.git_fixture import init_git_fixture
 
 ROOT=Path(__file__).resolve().parents[2]
 FIXTURES=ROOT/'tests/fixtures/b5_analysis/s10'
@@ -60,7 +61,7 @@ def commit_checkout(root):
     synthetic commit of the checkout's own bytes, at build and at restore.
     """
     git=lambda *a:subprocess.run(['git','-C',str(root),*a],check=True,capture_output=True,text=True).stdout
-    if not (Path(root)/'.git').exists():git('init','-q')
+    if not (Path(root)/'.git').exists():init_git_fixture(Path(root),'-q')
     git('add','--all')
     if git('status','--porcelain'):
         git('-c','user.name=S10 synthetic measurement clone','-c','user.email=s10@example.invalid',
