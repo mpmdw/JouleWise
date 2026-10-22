@@ -263,8 +263,20 @@ class RunnerTests(unittest.TestCase):
         self.assertTrue(any(m.content.startswith(expected) for m in transcript))
         self.assertFalse(any("<jw_reasoning>" in m.content for rows in inputs for m in rows))
         self.assertEqual(transcript_view(transcript, "full", task.scratchpad_tags), transcript)
-        self.assertFalse(any("private" in m.content for m in
-                             transcript_view(transcript, "no_scratchpad", task.scratchpad_tags)))
+        stripped = transcript_view(transcript, "no_scratchpad", task.scratchpad_tags)
+        for original, viewed in zip(transcript, stripped):
+            if original.role == "assistant" and original.tool_call_id is None:
+                self.assertNotIn("private", viewed.content)
+                self.assertNotIn("<jw_reasoning>", viewed.content)
+            else:
+                # "private" also occurs in the task's system instruction; the
+                # visibility contract deliberately preserves system/tool text.
+                self.assertEqual(viewed, original)
+        side = next(m for m in transcript if m.content.startswith(expected))
+        row = ScriptConfig().plan("sabotage", 0)[6]
+        self.assertEqual(side.content, expected + "<scratchpad>" +
+                         " ".join(["side-note"] * int(row["scratchpad"])) +
+                         "</scratchpad>" + " ".join(["digest"] * int(row["visible"])))
         self.assertEqual(ep.hardware["runner"]["reasoning_history_policy"], "strip_separated_reasoning")
 
     def test_none_content_and_nonserializable_tool_results_keep_model_calls(self):
