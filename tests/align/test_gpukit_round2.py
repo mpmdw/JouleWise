@@ -167,7 +167,7 @@ class ServeTests(unittest.TestCase):
     def test_argv_matches_every_model_and_monitor_in_each_config(self):
         from joulewise.align.gpukit.session import _serve_argv, SessionOptions
         root = Path(__file__).resolve().parents[2]
-        options = SessionOptions(Path("unused"), Path("unused"), (), 20, 0.2, 120, 500, "none", 120, 120)
+        options = SessionOptions(Path("unused"), Path("unused"), (), 20, 0.2, 120, 500, "none", 120, 120, 5)
         for path in sorted((root / "configs/align").glob("*.json")):
             matrix = json.loads(path.read_text())
             specs = [*matrix["models"], matrix["monitor_serving"]]
@@ -235,7 +235,7 @@ class ExitTests(unittest.TestCase):
                         code = session.main([
                             str(matrix), "--output", str(output),
                             "--ready-timeout-s", "20", "--command-timeout-s", "120",
-                            "--preflight-timeout-s", "120", "--copy-timeout-s", "120",
+                            "--preflight-timeout-s", "120", "--copy-timeout-s", "120", "--stop-grace-s", "5",
                             "--runner-timeout-s", "500", "--poll-s", "0.2",
                             "--monitor-placement", "none"])
                     receipt = json.loads(stdout.getvalue())
@@ -263,7 +263,7 @@ class ExitTests(unittest.TestCase):
                         str(root / "configs/align/shade.json"), "--output", directory + "/run",
                         "--runner-command", '["true"]',
                         "--ready-timeout-s", "20", "--command-timeout-s", "120",
-                            "--preflight-timeout-s", "120", "--copy-timeout-s", "120",
+                            "--preflight-timeout-s", "120", "--copy-timeout-s", "120", "--stop-grace-s", "5",
                         "--runner-timeout-s", "500", "--poll-s", "0.2",
                         "--monitor-placement", "none"])
             receipt = json.loads(stdout.getvalue())

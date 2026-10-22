@@ -60,6 +60,7 @@ class SessionOptions:
     monitor_placement: str
     preflight_timeout_s: float
     copy_timeout_s: float
+    stop_grace_s: float
     preflight_command: tuple[str, ...] = ()
     ready_command: tuple[str, ...] = ()
     vllm_command: tuple[str, ...] = ("vllm",)
@@ -312,24 +313,94 @@ def _validate_output(path: Path, *, expected_count: int, router: bool, model: st
     return tuple(sorted(set(flags)))
 
 
+def _enable_child_reaping() -> None:
+    """Linux adopts orphaned group workers so their zombies can be reaped here."""
+    if sys.platform.startswith("linux"):
+        import ctypes
+        # Linux prctl.h: PR_SET_CHILD_SUBREAPER=36. This changes only this
+        # session process; waitpid below is restricted to the stopped group.
+        libc = ctypes.CDLL(None, use_errno=True)
+        if libc.prctl(36, 1, 0, 0, 0):
+            raise OSError(ctypes.get_errno(), "PR_SET_CHILD_SUBREAPER")
+
+
 def _stop_group(process: subprocess.Popen, *, grace_s: float) -> None:
-    """Terminate the serving/runner session including children of an exited parent."""
-    try:
-        os.killpg(process.pid, signal.SIGTERM)
-        process.wait(timeout=grace_s)
-    except (ProcessLookupError, subprocess.TimeoutExpired):
-        pass
-    finally:
+    """Return only after the complete group is gone, including worker children."""
+    _enable_child_reaping()
+    pgid = process.pid
+
+    def alive() -> bool:
+        process.poll()  # Reap the Popen leader before adopted workers.
         try:
-            os.killpg(process.pid, signal.SIGKILL)
+            while True:
+                child, _ = os.waitpid(-pgid, os.WNOHANG)
+                if child == 0:
+                    break
+        except ChildProcessError:
+            pass
+        try:
+            os.killpg(pgid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+
+    deadline = time.monotonic() + grace_s
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        process.wait()
+        return
+    try:
+        process.wait(timeout=grace_s)
+    except subprocess.TimeoutExpired:
+        pass
+    while alive() and time.monotonic() < deadline:
+        # Yield to exiting children; zero is a scheduler yield, not a time bar.
+        time.sleep(0)
+    if alive():
+        try:
+            os.killpg(pgid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-        process.wait()
+    process.wait()
+    while alive():
+        time.sleep(0)
+
+
+def _wait_gpu_clear(devices: Sequence[int], *, directory: Path,
+                    options: SessionOptions) -> tuple[str, ...]:
+    """Bound post-server GPU process release; unavailable/remaining is flag-only."""
+    flags = []
+    for device in devices:
+        deadline = time.monotonic() + options.stop_grace_s
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                flags.append(f"gpu_processes_remaining:{device}")
+                break
+            try:
+                raw = subprocess.run(["nvidia-smi", "-q", "-x", "-i", str(device)],
+                                     capture_output=True, text=True, check=False,
+                                     timeout=min(options.command_timeout_s, remaining))
+                (directory / f"gpu-processes-{device}.xml").write_text(raw.stdout, encoding="utf-8")
+                if raw.returncode:
+                    raise ValueError("inventory command failed")
+                root = ET.fromstring(raw.stdout)
+                if root.find("gpu") is None:
+                    raise ValueError("GPU inventory missing")
+                if not root.findall(".//gpu/processes/process_info"):
+                    break  # Drivers/stubs omitting processes also mean none (R18).
+            except (OSError, ValueError, subprocess.TimeoutExpired, ET.ParseError) as exc:
+                flags.append(f"gpu_processes_unavailable:{device}:{type(exc).__name__}")
+                break
+            time.sleep(min(options.poll_s, max(0.0, deadline - time.monotonic())))
+    return tuple(flags)
 
 
 def _runner_command(argv: Sequence[str], log: Path, *, timeout_s: float,
                     grace_s: float) -> tuple[int, bool]:
     """A runner owns a process group; a timeout must stop its samplers too."""
+    _enable_child_reaping()
     with log.open("wb") as handle:
         process = subprocess.Popen(list(argv), stdout=handle, stderr=subprocess.STDOUT,
                                    start_new_session=True)
@@ -435,6 +506,7 @@ def run_session(options: SessionOptions, *,
         if not options.runner_command and not settings:
             flags.append("runner_settings_missing")
             matrix_flags = (*matrix_flags, "runner_settings_missing")
+        _enable_child_reaping()
         for argv, name in (([sys.executable, "-m", "pip", "freeze"], "packages"),
                            (["git", "rev-parse", "HEAD"], "repository-head")):
             if _command(argv, output / (name + ".log"), timeout_s=options.command_timeout_s):
@@ -614,7 +686,7 @@ def run_session(options: SessionOptions, *,
                             command = [part.format_map(mapping) for part in runner_command]
                             code, timed_out = _runner_command(
                                 command, model_dir / "runner.log",
-                                timeout_s=options.runner_timeout_s, grace_s=options.poll_s)
+                                timeout_s=options.runner_timeout_s, grace_s=options.stop_grace_s)
                             model_receipt["runner_returncode"] = code
                             if code:
                                 model_receipt["flags"].append("runner_command_failed")
@@ -631,8 +703,10 @@ def run_session(options: SessionOptions, *,
                     model_receipt["flags"].append(f"model_run_failed:{type(exc).__name__}")
                 finally:
                     if process is not None:
-                        _stop_group(process, grace_s=options.poll_s)
+                        _stop_group(process, grace_s=options.stop_grace_s)
                         model_receipt["server_returncode"] = process.returncode
+                        model_receipt["flags"].extend(_wait_gpu_clear(
+                            devices, directory=model_dir, options=options))
                 after = [snapshot(gpu_index=i, directory=model_dir, label="after",
                                   timeout_s=options.command_timeout_s) for i in devices]
                 model_receipt["throttle_after"] = after
@@ -656,7 +730,7 @@ def run_session(options: SessionOptions, *,
         receipt["data_complete"] = False
     finally:
         if monitor_process is not None:
-            _stop_group(monitor_process, grace_s=options.poll_s)
+            _stop_group(monitor_process, grace_s=options.stop_grace_s)
             receipt["monitor_server"]["returncode"] = monitor_process.returncode
         if monitor_log is not None:
             monitor_log.close()
@@ -710,6 +784,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--command-timeout-s", type=float, required=True)
     parser.add_argument("--preflight-timeout-s", type=float, required=True)
     parser.add_argument("--copy-timeout-s", type=float, required=True)
+    parser.add_argument("--stop-grace-s", type=float, required=True)
     parser.add_argument("--poll-s", type=float, required=True)
     parser.add_argument("--runner-timeout-s", type=float, required=True)
     parser.add_argument("--monitor-placement", choices=("external", "gpu", "none"), required=True)
@@ -725,7 +800,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if any(not (0 < x < float("inf")) for x in (
             args.ready_timeout_s, args.command_timeout_s, args.runner_timeout_s, args.poll_s,
-            args.preflight_timeout_s, args.copy_timeout_s)):
+            args.preflight_timeout_s, args.copy_timeout_s, args.stop_grace_s)):
         parser.error("timeouts and poll cadence must be finite and positive")
     validate_only = vars(args).pop("validate_only")
     options = SessionOptions(**vars(args))

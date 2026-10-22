@@ -412,7 +412,7 @@ raise SystemExit(1)
                                      'import os,sys; sys.exit(not os.path.exists(os.environ["GPUKIT_READY"]))'),
                       ready_timeout_s=30.0, command_timeout_s=30.0, runner_timeout_s=30.0,
                       monitor_placement="none", poll_s=0.01, preflight_timeout_s=30.0,
-                      copy_timeout_s=30.0)
+                      copy_timeout_s=30.0, stop_grace_s=5.0)
         values.update(changes)
         return SessionOptions(**values)
 
@@ -424,7 +424,7 @@ raise SystemExit(1)
                    "--preflight-command", json.dumps(options.preflight_command),
                    "--ready-command", json.dumps(options.ready_command),
                    "--ready-timeout-s", "30", "--command-timeout-s", "30",
-                   "--preflight-timeout-s", "30", "--copy-timeout-s", "30", "--poll-s", "0.01",
+                   "--preflight-timeout-s", "30", "--copy-timeout-s", "30", "--stop-grace-s", "5", "--poll-s", "0.01",
                    "--runner-timeout-s", "30", "--monitor-placement", "none",
                    "--destination", options.destination, "--copy-kind", "local"]
         result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
@@ -691,7 +691,7 @@ raise SystemExit(1)
             with contextlib.redirect_stdout(stdout):
                 code = main([str(options.matrix), "--output", str(options.output),
                              "--ready-timeout-s", "30", "--command-timeout-s", "30",
-                   "--preflight-timeout-s", "30", "--copy-timeout-s", "30",
+                   "--preflight-timeout-s", "30", "--copy-timeout-s", "30", "--stop-grace-s", "5",
                              "--runner-timeout-s", "30", "--poll-s", "0.01",
                              "--monitor-placement", "none",
                              "--preflight-command", json.dumps(options.preflight_command),
@@ -970,7 +970,7 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
             "bash", str(ROOT / "joulewise/align/gpukit/bootstrap.sh"),
             "--gpu-index", "0", str(path), "--output", str(self.base / "tp2-run"),
             "--ready-timeout-s", "30", "--command-timeout-s", "30",
-                   "--preflight-timeout-s", "30", "--copy-timeout-s", "30",
+                   "--preflight-timeout-s", "30", "--copy-timeout-s", "30", "--stop-grace-s", "5",
             "--runner-timeout-s", "30", "--poll-s", "0.01", "--monitor-placement", "none"],
             cwd=self.base, capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 2, result.stderr)
@@ -1018,6 +1018,30 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
         self.assertEqual(result["transfer_flags"], ("copy_timeout",))
         self.assertTrue(Path(result["archive"]).is_file())
         self.assertEqual(verify_manifest(self.base / "copy-timeout"), ())
+
+
+    def test_stop_group_waits_for_sigkill_and_complete_group_disappearance(self):
+        from joulewise.align.gpukit.session import _stop_group, _enable_child_reaping
+        import signal
+        _enable_child_reaping()
+        ready = self.base / "term-ignoring-ready"
+        process = subprocess.Popen([
+            sys.executable, "-c",
+            "import signal,time,sys; from pathlib import Path; "
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+            "Path(sys.argv[1]).write_text('ready'); time.sleep(30)", str(ready)],
+            start_new_session=True)
+        self.addCleanup(lambda: process.poll() is None and _stop_group(process, grace_s=0.05))
+        # Existing 30 s fixture setup budget, no timing assertion on scheduler latency.
+        import time
+        deadline = time.monotonic() + 30
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)  # Existing fixture readiness polling cadence.
+        self.assertTrue(ready.exists())
+        _stop_group(process, grace_s=0.05)  # Operator-selected cleanup policy for this stub.
+        self.assertEqual(process.returncode, -signal.SIGKILL)
+        with self.assertRaises(ProcessLookupError):
+            os.killpg(process.pid, 0)
 
 
 class FixArithmeticTests(unittest.TestCase):
