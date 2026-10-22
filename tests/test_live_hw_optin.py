@@ -10,8 +10,9 @@ from tests.live_hw import live_hw_only
 
 
 class LiveHardwareOptInTests(unittest.TestCase):
-    # This is also the census of class-wide live probes. The mixed classes
-    # and function-style G10 probe are exercised separately below.
+    # This census of class-wide live probes includes SupervisorTests, guarded
+    # on macOS only; the class guard test patches sys.platform to darwin for it.
+    # The mixed classes and function-style G10 probe are exercised separately below.
     LIVE_CLASSES = (
         ("tests.hazards.test_smc", "LiveSmcTests"),
         ("tests.hazards.test_battery", "LiveReadOnlyTests"),
@@ -37,6 +38,7 @@ class LiveHardwareOptInTests(unittest.TestCase):
             for env, enabled in self.environments():
                 with self.subTest(cls=f"{module_name}.{class_name}", env=env), ExitStack() as stack:
                     stack.enter_context(mock.patch.dict(os.environ, env, clear=True))
+                    stack.enter_context(mock.patch("sys.platform", "darwin"))
                     # Bypass only the existing OS prerequisite: the actual
                     # class setup must enforce opt-in even in Linux CI.
                     stack.enter_context(mock.patch.object(cls, "__unittest_skip__", False, create=True))
@@ -59,6 +61,20 @@ class LiveHardwareOptInTests(unittest.TestCase):
                         setup.assert_not_called()
                         for body in bodies:
                             body.assert_not_called()
+
+    def test_supervisor_tests_are_not_guarded_off_macos(self):
+        from tests.hazards.test_monitor import SupervisorTests
+
+        for env, enabled in self.environments():
+            with self.subTest(env=env), mock.patch.dict(os.environ, env, clear=True):
+                with mock.patch("sys.platform", "linux"):
+                    try:
+                        SupervisorTests.setUpClass()
+                    except unittest.SkipTest as exc:
+                        self.fail(f"SupervisorTests must not skip off macOS: {exc}")
+                if not enabled:
+                    with mock.patch("sys.platform", "darwin"), self.assertRaises(unittest.SkipTest):
+                        SupervisorTests.setUpClass()
 
     def test_individual_guards_precede_the_first_live_operation(self):
         from tests.hazards import test_contention as c
