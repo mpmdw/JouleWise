@@ -138,9 +138,11 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
 
     half_width_j is a nominal 95% Gaussian repeatability interval, conditional
     on the observed phase coverage and deterministic-workload model, plus the
-    sensor quantum bound sum(|c_i|*q_i/2). Phase groups use exact observed phase
-    geometry or an explicit repeat_group label. Normalize each run's weighted
-    mean to the group's total weight before estimating its variance. For
+    sensor quantum bound sum(|d_i|*q_i/2). Phase groups use exact observed phase
+    geometry or an explicit repeat_group label. If h_r=sum(c_i) for run r and
+    H_g=sum(h_r), the auxiliary coefficients are d_i=(H_g/n_g)*c_i/h_r.
+    Normalize each run's weighted mean to this common group weight before
+    estimating its variance. For
     differing durations, multiply that mean by D_r/mean(D_g), so duration
     variability enters the same run-to-run variance instead of discarding runs.
     Welch-Satterthwaite degrees of freedom combine independent phase variances.
@@ -302,9 +304,10 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
     center_widening = 0.0
     declared_groups: dict[Any, list[int]] = defaultdict(list)
     auxiliary_variances: list[tuple[float, int]] = []
-    if labels:
-        flags.add("declared_phase_groups_auxiliary_interval")
-        flags.add("repeatability_interval_provisional")
+    if signatures:
+        if labels:
+            flags.add("declared_phase_groups_auxiliary_interval")
+            flags.add("repeatability_interval_provisional")
         for run_index, signature in signatures.items():
             key = ("label", type(labels[run_index]).__name__, labels[run_index]) if run_index in labels else (
                 "geometry", signature)
@@ -373,29 +376,11 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
         bias = math.inf
     flags.add(f"worst_case_bias_j={bias!r}")
 
-    variances: list[tuple[float, int]] = []
+    variances = auxiliary_variances
     spread = 0.0
-    if labels:
-        variances = auxiliary_variances
-        if any(len(members) < 2 for members in declared_groups.values()):
-            flags.add("phase_without_replicates")
-            spread = math.inf
-    else:
-        contributions: dict[int, list[float]] = defaultdict(list)
-        for weight, window in zip(seconds, windows):
-            contributions[window.run].append(weight*window.watts)
-        groups: dict[tuple[tuple[int, int], ...], list[float]] = defaultdict(list)
-        for index, signature in signatures.items():
-            # Duration spread is part of the run-to-run energy variability.
-            members = [r for r, candidate in signatures.items() if candidate == signature]
-            mean_duration = statistics.mean(durations[r] for r in members)
-            groups[signature].append(math.fsum(contributions[index])*durations[index]/mean_duration)
-        for values in groups.values():
-            if len(values) < 2:
-                flags.add("phase_without_replicates")
-                spread = math.inf
-            else:
-                variances.append((len(values)*statistics.variance(values), len(values)-1))
+    if any(len(members) < 2 for members in declared_groups.values()):
+        flags.add("phase_without_replicates")
+        spread = math.inf
     if math.isfinite(spread):
         variance = math.fsum(value for value, _ in variances)
         if variance > 0:

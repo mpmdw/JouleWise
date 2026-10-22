@@ -6,6 +6,7 @@ import ctypes
 import importlib.util
 import json
 import math
+import os
 import threading
 import time
 import tempfile
@@ -529,6 +530,7 @@ class NvmlSamplerTests(unittest.TestCase):
     def test_optional_pynvml_uses_the_same_sampler_path(self) -> None:
         import pynvml
         from joulewise.align.power import preflight
+        from tests.align.test_power_preflight import FakeExecutables
         library = FakeNvmlLibrary()
 
         def resolve(name: str) -> object:
@@ -554,9 +556,11 @@ class NvmlSamplerTests(unittest.TestCase):
                                 for trace in traces))
             with tempfile.TemporaryDirectory() as directory:
                 output = Path(directory)/"preflight.json"
+                FakeExecutables(Path(directory))
                 # A zero-span CLI world checks native scalar serialization;
                 # the load/no-load worlds separately test movement physics.
-                with mock.patch.object(preflight, "open_nvml", return_value=pynvml), \
+                with mock.patch.dict(os.environ, {"PATH": directory+os.pathsep+os.defpath}), \
+                        mock.patch.object(preflight, "open_nvml", return_value=pynvml), \
                         mock.patch.object(preflight.importlib.util, "find_spec", return_value=None):
                     self.assertEqual(preflight.main([
                         "--out", str(output), "--idle-seconds", "0",
