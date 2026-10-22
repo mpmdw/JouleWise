@@ -1010,6 +1010,7 @@ def load_records(source, manifest, *, stage, key_dir=None, stage1_commit=None):
                 except (ValueError, KeyError, TypeError):
                     row.update(status="unusable", invalid_energy_record=True)
                 row["neg8_inputs"] = refs
+                row["decode_assist_evaluated"] = False
                 records.append(row)
         else:
             records.extend(archive_records(Path(session["archive"]), manifest, session, stage=stage,
@@ -1229,7 +1230,15 @@ def reduce_models(records, manifest, *, inclusive=False, boundaries=BOUNDARIES):
                                                        for stratum in ("repeat", "quad")},
                         harvest_assisted_member_counts={stratum: sum(r["stratum"] == stratum and
                             "battery.assist" in r["flags"] for r in kept) for stratum in ("repeat", "quad")})
-            if assisted:
+            if any(r.get("decode_assist_evaluated") is False for r in kept):
+                reason = "not evaluated at the blinded stage"
+                cell.update(decode_assisted_member_counts=None,
+                    decode_assisted_member_counts_reason=reason,
+                    with_assisted_label="with assisted members",
+                    without_assisted={"status": "not_evaluated", "reason": reason,
+                        "description_only": True, "label": "without assisted members; " + reason,
+                        **dict.fromkeys(("n_r", "n_b", "mean_j", "h_j", "B_j", "lower_j", "upper_j"))})
+            elif assisted:
                 units = {(r["stratum"], r["unit_id"]) for r in assisted}
                 without = [r for r in kept if (r["stratum"], r["unit_id"]) not in units]
                 n_r = sum(r["stratum"] == "repeat" for r in without)
@@ -1329,6 +1338,10 @@ def combine_passes(rows):
                 "printed_j_per_output_token": diagnostic_mean / 512 if diagnostic_mean is not None else None,
                 "output_label": OUTPUT_LABEL,
                 "passes": [{"pass_id": r["pass_id"], **d} for r, d in zip(group, diagnostics)]}
+            if any(d.get("status") == "not_evaluated" for d in diagnostics):
+                point["without_assisted"].update(status="not_evaluated",
+                    reason="not evaluated at the blinded stage",
+                    label="without assisted members; not evaluated at the blinded stage")
         points.append(point)
     return points
 

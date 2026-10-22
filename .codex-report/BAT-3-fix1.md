@@ -7,25 +7,32 @@
 - Done: finding 4 assertions now compare flags, complete meter dictionaries and NEG-8 inputs exactly after both reverse and fixed-seed shuffle.
 - Done: all three battery/meter classes pass, 19 tests in 72.538 s, exit 0, no skips. Log `/tmp/bat3f1/battery-classes-slice1.log`. Each run receives synthetic-only and no-bytecode environment, with its own disposable TMPDIR; cleanup completed.
 - Done: refusal census exits 0, all five arrays empty; `/tmp/bat3f1/refusal-census-slice1.log`. git diff --check passes.
-- Next: implement finding 2 charging/weighted columns and finding 3 blinded null representation; run nine copy-only mutants in groups of at most three per slice, bit identity and required focused modules.
-- Open: all required verification, comparison scripts and mutation evidence; CI is director-owned under local route. No commit/push attempted (.git read-only).
+- Done (slice 2): finding 2 adds retained +100 mA, 1 s charging episodes (1.2774 J) and independent .2/.8 weighted-column/count assertions. Test-only missing idle B0AV on a clean 70B repeat makes DC/rest strata unequal (9 repeats, 10 quads); measured weighted/plain difference is 0.044056348856499616 J (>44,000 times the bar).
+- Done (slice 2): finding 3 adds record-level decode_assist_evaluated=False at blinded ingress, null counts with reason, and labelled null without-assisted diagnostics; contract sentence and blinded/heldout tests pass. Combined diagnostics preserve the reason.
+- Done (slice 2): all three battery/meter classes pass individually: 3 + 3 + 14 = 20 tests, exit 0, no skips; logs `/tmp/bat3f1/slice2-{BatteryRulingWorkedExamples,MeterWorkedExamples,BatteryCampaignTests}.log`. Five supporting modules pass (28 tests); hazard import-graph has five passes and one local NULL-versus-GO failure. Refusal census: all five arrays empty, exit 0.
+- Done (slice 2): M1, M2 and M8 KILLED by test_delayed_publications_pin_forward_edges_marker_and_offset_max (marker, v_end and C_j assertions respectively); each runs all 20 battery/meter tests and fails exactly one. Logs `/tmp/bat3f1/M*.log`, results `/tmp/bat3f1/mutations-slice2.jsonl`. All mutant copies and TMPDIRs deleted; clone source never mutated.
+- Done (slice 2): BoundaryAndStagingTests (10 tests, 42.208 s) and ProductionArchiveTests (4 tests, 49.919 s), both exit 0, no skips. The same hazard import-graph NULL/GO failure reproduces at unchanged ddcbafc4d (6 tests, one failure, exit 1).
+- Next: remaining six copy-only mutants in groups of at most three per slice, bit identity, regression classes touched by fixture/reducer changes and agreement rerun. CI replaces the whole analysis-module run under the local-route override.
+- Open: all required verification, comparison scripts and mutation evidence; CI is director-owned under local route. No commit/push attempted (.git read-only). Slice 2 is ready for director commit; it is intentionally incomplete until the remaining verification is executed. Do not mark COMPLETE yet.
 
 ## SUMMARY
 
-Slice 1 fixes finding 1 with a delayed physical world and independent raw-JSON assertions.
-All 30 large-model delayed placements pass, including post-end-only markers and both nonzero edges.
+Findings 1–5 are implemented; three battery/meter classes pass all 20 tests.
+All 30 large-model delayed discharge placements pass, including post-end-only markers and both nonzero edges.
+Two retained charging runs have signed negative terms and no assist flags; delayed evidence now has 32 placements.
+Independent printed-column assertions pin the stratified mean and signed nonzero count.
+Blinded-stage decode counts and without-assisted numbers explicitly print null with the prescribed reason.
 Finding 4 checks exact flags, full meter dictionaries and NEG-8 inputs after reversal and shuffle.
 Finding 5 uses a shared SMC cadence/delay helper with unchanged arithmetic order.
-All 19 battery/meter tests pass; the five refusal-census arrays are empty.
 Default non-assisted generation keeps its original mode and inputs; comparison remains pending.
-Findings 2–3, nine mutation executions, bit identity and remaining focused modules need later slices.
+Mutation executions, bit identity, agreement and remaining regression classes continue in later slices.
 No hardware measurement, quiet-window task, commit, push or network action was run.
 
 ## FIX LOG
 
 1. Fixed: delayed fixture/test passes in corrected-source three-class run. All 30 placements checked at 1e-6 J; exact markers/counts and printed maxima. Director commit pending.
-2. Pending: weighted mean and retained charging member.
-3. Pending: blinded-stage nulls and reason.
+2. Fixed: test_large_model_assist_cli_chain_all_four_placements_and_counts independently checks registered stratified means on every printed DC/rest cell and signed nonzero counts, including retained charging; margin 0.044056348856499616 J. Director commit pending.
+3. Fixed: test_blinded_assist_is_null_with_reason_and_heldout_counts_are_evaluated passes through the real CLI chain; count reason and without-assisted nulls match the disposition. Director commit pending.
 4. Fixed: test_out_of_receive_order_batches_match_ordered_terms_and_flags passes for exact flags/meter/NEG-8 equality under reversal and deterministic shuffle. Director commit pending.
 5. Fixed: T_SMC_S constant and shared _battery_delay_s helper; all 19 battery/meter tests pass. Full bit-identity comparison remains pending. Director commit pending.
 6. Rejected as directed: production writes rx on every poll (all 93,533 H polls); malformed rx already causes a recorded bytes.meter_decode_unavailable fit-error flag, not refusal. Reference parser sorts by b["rx"] too; keep parity.
@@ -33,7 +40,21 @@ No hardware measurement, quiet-window task, commit, push or network action was r
 
 ## MUTATION KILLS
 
-Pending: M1, M2, M8, M10, M18, M20 previously survive; M3, M19, M21 previously killed. Run copies only, never mutate clone files.
+All mutants run against disposable copies, with the three classes BatteryRulingWorkedExamples, MeterWorkedExamples, BatteryCampaignTests (20 tests). Exact command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1/mutate_slice2.py`; the runner sets fresh TMPDIR, invokes `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BatteryRulingWorkedExamples tests.test_bytes_analysis.MeterWorkedExamples tests.test_bytes_analysis.BatteryCampaignTests` with the mutant copy as cwd, and deletes TMPDIR and copy in finally. Clone source is never mutated.
+
+| mutant | before | after | killing test / evidence |
+|---|---|---|---|
+| M1_marker_no_end_tau | SURVIVED | KILLED | test_delayed_publications_pin_forward_edges_marker_and_offset_max: marker false vs true on late-end burst; 20 tests, one failure, exit 1, 68.931 s unittest / 69.851 s process |
+| M2_v_end_zero | SURVIVED | KILLED | same delayed test: v_end 0 vs 12.65003513402062 J; 20 tests, one failure, exit 1, 68.304 s unittest |
+| M8_offset_sum_not_max | SURVIVED | KILLED | test_delayed_publications_pin_forward_edges_marker_and_offset_max: both-edge C_j max assertion; 20 tests, one failure, exit 1, 64.847 s unittest / 65.719 s process |
+| M10_battery_mean_unweighted | SURVIVED | pending | weighted-column assertion |
+| M18_v_end_backward_window | SURVIVED | pending | delayed forward-end assertion |
+| M20_nonzero_count_off | SURVIVED | pending | signed charging count |
+| M3_marker_no_start_tau | KILLED | pending | existing start/prefill assertion |
+| M19_tau_one_refresh_plus_poll | KILLED | pending | shared helper mutation: return T_SMC_S + poll_interval |
+| M21_without_line_on_harvest_flag | KILLED | pending | existing decode/harvest count distinction |
+
+Prepared `/tmp/bat3f1/mutate_remaining.py` (syntax-checked, not executed yet). Next slice: pass exactly `M10_battery_mean_unweighted M18_v_end_backward_window M20_nonzero_count_off` as arguments. Following slice: M3/M19/M21. Each copy and TMPDIR is deleted, logs are `/tmp/bat3f1/<mutant>.log`; remaining result rows append to `/tmp/bat3f1/mutations-remaining.jsonl`.
 
 ## DELAYED WORLD
 
@@ -78,12 +99,27 @@ Verified delayed per-run values (J; marker exact). Each row passed the independe
 | 2 | Qwen3.5-122B-A10B-4bit | prefill_only | 10.219200000 | 8.456388000 | 8.456388000 | 0.000000000 | False | 8.699307177 | 8.942226355 |
 | 2 | Qwen3.5-122B-A10B-4bit | both_edges | 25.548000000 | 12.774000000 | 12.390780000 | 12.390780000 | True | 12.633759655 | 25.267519310 |
 
+Slice 2 retains all 30 discharge rows above unchanged and adds these charging rows (same quantities, J):
+
+| pass | model | placement | burst | E_b | v_start | v_end | marker | C_j | u+v |
+|---|---|---|---:|---:|---:|---:|---|---:|---:|
+| 1 | Llama-3.3-70B-Instruct-4bit | charging | -1.277400000 | -1.279602414 | 0.000000000 | 0.000000000 | False | 0.757729017 | 1.515458034 |
+| 2 | Llama-3.3-70B-Instruct-4bit | charging | -1.277400000 | -1.277400000 | 0.000000000 | 0.000000000 | False | 0.380188791 | 0.760377582 |
+
+Instant charging terms are -1.2796024137931035 J and -1.2774 J, with no decode or harvest assist marker. The .2/.8 mean test checks all DC/rest cells; maximum plain-mean difference is 0.044056348856499616 J.
+
 ## BIT-IDENTITY
 
-Pending base bda481d5a and round-1 ddcbafc4d comparisons against final working tree.
+Pending base bda481d5a and round-1 ddcbafc4d comparisons against final working tree. Read-only git archives now exported to `/tmp/bat3f1/base` and `/tmp/bat3f1/round1` with `git archive <commit> | tar -x -C <path>`; both exit 0. Run older-tree Python with that directory passed as cwd, per local route. No Git writes.
 
 ## HUNKS FOR BY-MERGE
 
+- Slice 2 joulewise/bytes_analysis.py load_records blinded branch: add decode_assist_evaluated=False per record; no new reduce_models argument.
+- Slice 2 reduce_models diagnostic branch: print null decode counts and labelled null diagnostic with reason when records say not evaluated; retain harvest counts and evaluated branch.
+- Slice 2 combine_passes diagnostic branch: preserve not_evaluated status/reason/label in combined output.
+- Slice 2 tests/fixtures/bytes/campaign.py episode construction: append optional one-second charging episode at first large model's ordinal 5 (both passes).
+- Slice 2 stream assembly: publication mean supports signed per-episode current; instant branch looks up per-episode current; baseline empty-episode behavior unchanged.
+- Slice 2 harvest flag construction: emit battery.assist only for negative-current episodes, matching harvest semantics.
 - tests/fixtures/bytes/campaign.py archive_campaign signature: append battery_publication keyword and mode validation, without moving battery_assist.
 - Episode construction: optional fifth both_edges placement only in delayed mode; retain span_ns and add spans_ns for two bursts.
 - Stream assembly: cached integer-mA preceding-second publications; instant branch retains prior arithmetic and baseline poll generation.
@@ -105,6 +141,28 @@ Agreement field list pending rerun.
 
 ## TESTS RUN
 
+Slice 2 additional regression runs: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BoundaryAndStagingTests` (10 tests, 42.208 s, exit 0), and `... tests.test_bytes_analysis.ProductionArchiveTests` (4 tests, 49.919 s, exit 0), with the same synthetic-only/no-bytecode/fresh-TMPDIR wrapper and clone cwd. Logs `/tmp/bat3f1/slice2-{BoundaryAndStagingTests,ProductionArchiveTests}.log`. No skips.
+
+Baseline check: `/opt/homebrew/bin/python3.13 -B -m unittest tests.hazards.test_import_graph`, process cwd `/tmp/bat3f1/round1` (ddcbafc4d read-only archive), same environment and disposable TMPDIR. Six tests, five pass / one failure, exit 1, 3.692 s: same NULL-versus-GO assertion as final working tree. Log `/tmp/bat3f1/round1-hazards-import-graph.log`.
+
+Slice 2 commands use `/opt/homebrew/bin/python3.13 -B -m unittest <name>` for each table row (prefix battery class names with `tests.test_bytes_analysis.`). Each separate invocation has `JW_B5_SYNTHETIC_ONLY=1`, `PYTHONDONTWRITEBYTECODE=1`, and its own `TMPDIR=tempfile.mkdtemp(prefix="jwtmp-bat3f1.", dir="/tmp")`, deleted by `shutil.rmtree` in finally. Cwd is the clone. Logs are `/tmp/bat3f1/slice2-<name>.log`. No skips.
+
+| class/module | tests | seconds | exit |
+|---|---:|---:|---|
+| BatteryRulingWorkedExamples | 3 | 0.001 | 0 |
+| MeterWorkedExamples | 3 | 0.001 | 0 |
+| BatteryCampaignTests | 14 | 75.422 | 0 |
+| tests.b6.test_bytes_packs | 9 | 2.248 | 0 |
+| tests.b6.test_catalog | 4 | 0.313 | 0 |
+| tests.flags.test_flags_catalog | 7 | 0.009 | 0 |
+| tests.hazards.test_import_graph | 6 | 3.894 | 1; 1 failure |
+| tests.flags.test_flags_import_graph | 3 | 0.256 | 0 |
+| tests.test_battery_float_sweep | 5 | 3.154 | 0 |
+
+Hazard import-graph failure: `test_a_complete_arm_and_monitor_run_load_no_retired_module` receives `NULL` instead of `GO` from its fake-hardware arm; unchanged module, five remaining tests pass. No hazard-path repair attempted; the identical failure reproduces on the read-only ddcbafc4d archive (six tests, one failure, 3.692 s, exit 1), so it predates this fix. No environment repair attempted.
+
+`/opt/homebrew/bin/python3.13 -B -m tests.hazards.refusal_census`: exit 0, unlisted=[], stale=[], miscounted=[], guard_changed=[], scope_gaps=[]; same environment/fresh-TMPDIR/cleanup wrapper. Log `/tmp/bat3f1/refusal-census-slice2.log`.
+
 In progress: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BatteryCampaignTests.test_delayed_publications_pin_forward_edges_marker_and_offset_max`, with JW_B5_SYNTHETIC_ONLY=1, PYTHONDONTWRITEBYTECODE=1 and fresh TMPDIR; output `/tmp/bat3f1/delayed-first.log`.
 Initial shell cleanup command was rejected by command guard (rm -rf disallowed); no test ran in that attempt. Switched to Python tempfile/subprocess/shutil cleanup, retaining all required environment controls.
 First delayed test: 1 test, 46.785 s, exit 1: fixed symmetric end bursts could publish before decode end in some phases. Tightened only delayed end-burst placement as described above.
@@ -118,6 +176,7 @@ Slice 1 verification: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_by
 `/opt/homebrew/bin/python3.13 -B -m tests.hazards.refusal_census`: exit 0, unlisted=[], stale=[], miscounted=[], guard_changed=[], scope_gaps=[], using the same fresh-TMPDIR/environment wrapper. Log `/tmp/bat3f1/refusal-census-slice1.log`.
 `git diff --check`: exit 0.
 
+Slice 2 continuation HEAD: 998d0dc05160baa740b493c33c51c461c6aa22c7 (director committed slice 1; clean starting tree). No unexpected baseline change.
 Lane: lane/2026-10-22-bytes-battery-term. Launch HEAD ddcbafc4dc53fb40c89b507d46a74cf6d9101c98.
 CI branch ci/2026-10-22-bytes-battery-term; existing draft PR #544.
 Director commits, pushes and records CI state under local route; no network/push performed here.
@@ -128,11 +187,13 @@ Director commits, pushes and records CI state under local route; no network/push
 - Use independent plain-JSON battery formulas; meter-edge factor is checked using the per-run printed powers/residual/sample interval.
 - Deterministic reverse and seed-1100 shuffle use exact equality after rx sort.
 - Use installed /opt/homebrew/bin/python3.13; no setup/link/install needed on this local route.
-- Charging fixture pending: harvest code excludes only SMC current >200 mA (battery.member_span); choose <=200 mA and enough duration for >=1 J, with no battery.assist, to retain the member as requested.
+- Harvest battery_join and _smc_phase (joulewise/b5/harvest.py around 2557–2700) disclose battery.assist only for discharge and exclude SMC charging above 200 mA. Use +100 mA for one second (1.2774 J) so no other harvest code applies and the run stays in the primary cell.
+- To make registered weighting observable without inventing a harvest hazard, BatteryCampaignTests clears B0AV in one unassisted 70B repeat's idle span per pass before the CLI chain. Existing missing-reading handling removes that repeat only from DC/rest; primary and inclusive counts are 9 repeats / 10 quads, and without-assisted counts are 7 / 10 (rails remain 10 / 10 and 8 / 10). The four original discharge placements and their joules are unchanged.
+- Decode evaluation is a record-level fact set only by blinded ingress. No new reduce_models argument, flag code, refusal, registration edit or generated pack change is needed. BAT-2 and the table contract do not prescribe a different representation for unevaluated blinded counts.
 
 ## OPEN ISSUES
 
-Implementation and verification pending as PROGRESS above. No baseline mismatch, out-of-scope write or ruling question encountered.
+All requested implementation changes are complete; remaining verification is listed in PROGRESS. One required hazard import-graph test locally returns NULL instead of GO; unchanged hazard code, no repair attempted, the identical failure reproduces at ddcbafc4d, so it predates this fix. No environment repair attempted. No baseline mismatch, out-of-scope write or ruling question encountered.
 
 ## NEEDS_RULING
 

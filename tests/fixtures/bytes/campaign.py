@@ -143,6 +143,12 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                     battery_episodes.append({"run_id": run_id, "placement": placement,
                         "span_ns": [round(spans[0][0] * 1e9), round(spans[0][1] * 1e9)],
                         "spans_ns": [[round(a * 1e9), round(z * 1e9)] for a, z in spans]})
+                if battery_assist and not ref and model["model"] == design["battery_assist"]["models"][0] and ordinal == 5:
+                    charge = design["battery_assist"]["charging"]
+                    a = decode_start + duration / 2 - charge["duration_s"] / 2
+                    span = [round(a * 1e9), round((a + charge["duration_s"]) * 1e9)]
+                    battery_episodes.append({"run_id": run_id, "placement": "charging",
+                        "span_ns": span, "spans_ns": [span], "current_ma": charge["current_ma"]})
                 config = load_config(run_id=run_id, model={"name": model["model"], "family": "mock",
                     "weight_format": "mock", "context_window": 4096}, workload_profile={"name": "bytes-synthetic",
                     "prompt_tokens": 2048, "output_tokens": 512, "repetitions": 1, "warmup_runs": 1})
@@ -232,12 +238,16 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                 phase = design["battery_assist"]["publication_phase_ns"]
                 publication = (rx - phase) // 1_000_000_000 * 1_000_000_000 + phase
                 if publication not in publications:
-                    active = sum(any(a <= t < z for e in battery_episodes for a, z in e["spans_ns"])
-                        for t in range(publication - 1_000_000_000, publication, 10_000_000))
-                    publications[publication] = round(design["battery_assist"]["current_ma"] * active / 100)
+                    current = sum(e.get("current_ma", design["battery_assist"]["current_ma"])
+                        for t in range(publication - 1_000_000_000, publication, 10_000_000)
+                        for e in battery_episodes if any(a <= t < z for a, z in e["spans_ns"]))
+                    publications[publication] = round(current / 100)
                 smc.update(B0AC=publications[publication], B0AV=design["battery_assist"]["voltage_mv"])
-            elif any(e["span_ns"][0] <= rx < e["span_ns"][1] for e in battery_episodes):
-                smc.update(B0AC=design["battery_assist"]["current_ma"], B0AV=design["battery_assist"]["voltage_mv"])
+            else:
+                episode = next((e for e in battery_episodes if e["span_ns"][0] <= rx < e["span_ns"][1]), None)
+                if episode:
+                    smc.update(B0AC=episode.get("current_ma", design["battery_assist"]["current_ma"]),
+                               B0AV=design["battery_assist"]["voltage_mv"])
             batches.append({"k": "b", "tx": rx, "rx": rx, "n": len(part), "p": payload.hex(),
                             "smc": smc})
         stream = archive / "sources/night-custody/hazards/meter/stream-001.jsonl"
@@ -246,7 +256,7 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         stream.write_text("".join(json.dumps(item) + "\n" for item in (header, *batches, trailer)))
         _write_json(archive / "derived/roster.json", {"pack_id": pack_id, "attempt": 1, "members": roster})
         harvest_assist = [{"code": "battery.assist", "effect": "DISCLOSE", "scope": {"run_id": e["run_id"]}}
-                         for e in battery_episodes]
+                         for e in battery_episodes if e.get("current_ma", design["battery_assist"]["current_ma"]) < 0]
         acceptance = {"pack_id": pack_id, "session_id": session_id, "verdict": "PASS", "counting": True,
                       "excluding": [], "flag_counts": {}, "emitted_flags": harvest_assist,
                       "calibration": calibration.evaluate(calibration.Capture(Decimal(".040"), "valid"),

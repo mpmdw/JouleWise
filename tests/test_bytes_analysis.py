@@ -2178,6 +2178,22 @@ class BatteryCampaignTests(NumericTestCase):
         cls.directory = tempfile.TemporaryDirectory()
         cls.root = Path(cls.directory.name)
         cls.manifest = archive_campaign(cls.root, battery_assist=True, release="none")
+        # A clean repeat with missing idle voltage leaves DC/rest only. Nine
+        # repeats versus ten quads makes registered .2/.8 weights observable:
+        # the plain mean differs by .044056 J, far above BAT-2's 1e-6 J bar.
+        from joulewise.b6.archive import bundle_of
+        for session in cls.manifest["sessions"]:
+            archive = Path(session["archive"])
+            charge = next(e for e in session["synthetic_battery_episodes"] if e["placement"] == "charging")
+            bundle = bundle_of(archive, {}, charge["run_id"].removesuffix("-5") + "-9")
+            events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+            a, z = ba._event_span(events, "idle_baseline", ba.read_json(bundle / "metadata.json"))
+            path = archive / "sources/night-custody/hazards/meter/stream-001.jsonl"
+            items = [json.loads(line) for line in path.read_text().splitlines()]
+            for item in items:
+                if item.get("k") == "b" and a <= item["rx"] < z:
+                    item["smc"].pop("B0AV")
+            path.write_text("".join(json.dumps(item) + "\n" for item in items))
         cls.out = cli_stage_chain(cls.root, cls.manifest)
         cls.records = ba.load_records(cls.root / "export", cls.manifest, stage="all")
         cls.session = cls.manifest["sessions"][0]
@@ -2353,7 +2369,8 @@ class BatteryCampaignTests(NumericTestCase):
                         self.assertAlmostEqual(meter["offset_bound_j"], max(meter["edge_powers_w"]) * factor + max(start, end), delta=1e-6)
                         self.assertAlmostEqual(meter["phase_edge_j"], math.fsum(meter["edge_powers_w"]) * factor + start + end, delta=1e-6)
                     evidence.append({"pass": session["pass_id"], "model": record["model"], "placement": placement,
-                        "burst_j": sum((z-a) / 1e9 * 12.774 for a, z in episode["spans_ns"]),
+                        "burst_j": sum((z-a) / 1e9 * -episode.get("current_ma", -1000) * 12774 / 1e6
+                                       for a, z in episode["spans_ns"]),
                         "battery_j": energy, "v_start_j": start, "v_end_j": end, "marker": marker,
                         "C_j": meter["offset_bound_j"], "phase_edge_j": meter["phase_edge_j"]})
             for cell in cells:
@@ -2362,7 +2379,7 @@ class BatteryCampaignTests(NumericTestCase):
                 terms = cell["meter_run_terms"]
                 self.assertEqual(cell["battery_phase_edge_max_j"], max(t["battery_phase_edge_j"] for t in terms))
                 self.assertEqual(cell["meter_attribution_floor_j"], max(t["phase_edge_j"] for t in terms))
-            self.assertEqual(len(evidence), 30)
+            self.assertEqual(len(evidence), 32)  # 30 discharge placements plus one charging run per pass.
             print("BAT3_DELAYED=" + json.dumps(evidence, sort_keys=True), flush=True)
 
     def test_global_poll_gap_including_empty_poll_outside_selected_spans_sets_tau(self):
@@ -2409,10 +2426,15 @@ class BatteryCampaignTests(NumericTestCase):
                 record = next(r for r in self.records if r["run_id"] == episode["run_id"] and r["session_id"] == session["session_id"])
                 meter, placement = record["meter"], episode["placement"]
                 burst, _ = kp.integrate(times, watts, *episode["span_ns"])
-                self.assertGreaterEqual(burst, 1.0)  # BAT-2 §12's approximately 1 J attribution limit.
+                self.assertGreaterEqual(abs(burst), 1.0)  # BAT-2 §12's approximately 1 J attribution limit.
                 expected_marker = placement in ("inside_decode", "across_end")
                 self.assertEqual("bytes.decode_battery_assist" in record["flags"], expected_marker)
-                if placement == "prefill_only":
+                if placement == "charging":
+                    self.assertLess(meter["battery_gross_j"], 0)  # Signed, BAT-2 §2.
+                    self.assertNotIn("battery.assist", record["flags"])
+                    self.assertIn(record["run_id"], next(c for c in cells if c["model"] == record["model"] and
+                        c["session_id"] == record["session_id"] and c["boundary"] == "DC input")["kept_runs"])
+                elif placement == "prefill_only":
                     self.assertEqual(meter["battery_gross_j"], 0)
                     self.assertEqual(meter["battery_phase_edge_j"], 0)
                 elif placement == "across_start":
@@ -2427,16 +2449,55 @@ class BatteryCampaignTests(NumericTestCase):
                 for cell in [c for c in cells if c["model"] == record["model"] and c["session_id"] == record["session_id"]]:
                     self.assertEqual(cell["decode_assisted_member_counts"], {"repeat": 2, "quad": 0})
                     self.assertEqual(cell["harvest_assisted_member_counts"], {"repeat": 4, "quad": 0})
-                    self.assertEqual((cell["without_assisted"]["n_r"], cell["without_assisted"]["n_b"]), (8, 10))
+                    self.assertEqual((cell["without_assisted"]["n_r"], cell["without_assisted"]["n_b"]), (cell["n_r"] - 2, 10))
                     if cell["boundary"] != "rails":
                         self.assertEqual(cell["boundary_description"], ba.DC_BOUNDARY_DESCRIPTION)
                         self.assertGreater(cell["battery_term_mean_j"], 0)
-                        self.assertEqual(cell["battery_nonzero_run_count"], 3)
+                        self.assertEqual(cell["battery_nonzero_run_count"], 4 if record["model"] == self.manifest["models"][0]["model"] else 3)
                         # The burst must also clear the actual cell's ruled
                         # 1% of (h+B) agreement bar, not merely float noise.
-                        self.assertGreater(burst, .01 * (cell["h_j"] + cell["B_j"]))
-        self.assertEqual(len(evidence), 24)
+                        if placement != "charging":
+                            self.assertGreater(burst, .01 * (cell["h_j"] + cell["B_j"]))
+        differences = []
+        for cell in cells:
+            if cell["boundary"] == "rails":
+                continue
+            rows = [r for r in self.records if r["session_id"] == cell["session_id"] and
+                    r["run_id"] in cell["kept_runs"]]
+            field = "battery_secondary_j" if cell["basis"] == "idle-subtracted secondary" else "battery_gross_j"
+            repeats = [r["meter"][field] for r in rows if r["stratum"] == "repeat"]
+            quads = {}
+            for row in rows:
+                if row["stratum"] == "quad":
+                    quads.setdefault(row["unit_id"], []).append(row["meter"][field])
+            expected = .2 * statistics.fmean(repeats) + .8 * statistics.fmean(statistics.fmean(q) for q in quads.values())
+            self.assertAlmostEqual(cell["battery_term_mean_j"], expected, delta=1e-6)
+            self.assertEqual(cell["battery_nonzero_run_count"], sum(r["meter"][field] != 0 for r in rows))
+            differences.append(abs(expected - statistics.fmean(r["meter"][field] for r in rows)))
+        self.assertGreater(max(differences), 1e-6)  # The plain-mean mutant must clear the ruled program bar.
+        self.assertEqual(len(evidence), 26)  # Original 24 placements plus one charging run per pass.
+        print("BAT3_WEIGHTING_MARGIN_J=" + str(max(differences)), flush=True)
         print("BAT3_SYNTHETIC=" + json.dumps(evidence, sort_keys=True), flush=True)
+
+    def test_blinded_assist_is_null_with_reason_and_heldout_counts_are_evaluated(self):
+        reason = "not evaluated at the blinded stage"
+        blinded = ba.read_json(self.root / "blinded/blinded_pass_estimates.json")
+        heldout = ba.read_json(self.out / "heldout_pass_estimates.json")
+        for cell in blinded:
+            self.assertIsNone(cell["decode_assisted_member_counts"])
+            self.assertEqual(cell["decode_assisted_member_counts_reason"], reason)
+            line = cell["without_assisted"]
+            self.assertEqual(line["status"], "not_evaluated")
+            self.assertEqual(line["reason"], reason)
+            self.assertIn(reason, line["label"])
+            for key in ("n_r", "n_b", "mean_j", "h_j", "B_j", "lower_j", "upper_j"):
+                self.assertIsNone(line[key])
+            peer = next(r for r in heldout if all(r[k] == cell[k] for k in
+                ("model", "session_id", "boundary", "basis", "selection"))) if cell["role"] == "heldout" else None
+            if peer:
+                self.assertIsInstance(peer["decode_assisted_member_counts"], dict)
+                self.assertNotIn("decode_assisted_member_counts_reason", peer)
+                self.assertEqual(cell["harvest_assisted_member_counts"], peer["harvest_assisted_member_counts"])
 
 
 if __name__ == "__main__":
