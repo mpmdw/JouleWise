@@ -13,8 +13,9 @@ written with blinding not applied.
 **Status: queued, not applied.** This file does not edit the registration. DIFFICULTY stays December-January
 (RUN_STATE item 53). When that lane resumes, both changes go into one revision (2.4) of
 `docs/registrations/difficulty_pack_v2.md`, which takes its own cold gate before any DIFFICULTY energy exists. Line
-numbers below are for that file at origin/main `bfab7c950`, re-checked on 2026-10-22. The file last changed at
-`fe6d61b4f` (revision 2.3), so the lines are the same at `4d49364ca`, where this record was first written.
+numbers below are for that file at origin/main `81db9f355`, re-checked on 2026-10-22 (fourth dispatch). The file
+last changed at `fe6d61b4f` (revision 2.3), so the lines are the same at `4d49364ca`, where this record was first
+written, and at `bfab7c950`.
 
 | Change | Clause | Governing source | Expected size on DIFFICULTY's models |
 |---|---|---|---|
@@ -33,12 +34,13 @@ decision family) and 371 (`wall` is printed as a labelled line).
 
 **Governing source.** `docs/process_traces/2026-10-22-forward/BAT-RULING.md` §6 (Q5), on
 `lane/2026-10-22-battery-assist-audit` (draft PR #536, not yet on main). §6 was ruled at `e6595ae13`. It is
-unchanged at `fc7548a17`, which adds the lead's executed re-run of the worked example, and at the branch head
-`367a0fa6d`, which changes only BAT-1's record (checked by diff). That ruling came from two blind seats (Opus 5.5
-and Sol 6.1 xhigh) and a cold Fable 5.1 judge, and all three agreed that DIFFICULTY's `wall` takes the correction.
-The evidence is `BAT-1-BATTERY-ASSIST.md` on the same branch (first at `7e59b54ab`), in its "Boundary by boundary"
-table, DIFFICULTY row. At `367a0fa6d` that row reads "Ruled, queued, not built" and points to this file at
-`c400061a3`. The ruling's terms:
+unchanged at `fc7548a17`, which adds the lead's executed re-run of the worked example; at `367a0fa6d`, which changes
+only BAT-1's record; and at the branch head `281b53370`, BAT-2's third dispatch, whose additions are for BYTES only
+(§1, §4, §8, §10, executed evidence). Each was checked by diff, and at `281b53370` by extracting §6 at both commits
+and comparing them. That ruling came from two blind seats (Opus 5.5 and Sol 6.1 xhigh) and a cold Fable 5.1 judge,
+and all three agreed that DIFFICULTY's `wall` takes the correction. The evidence is `BAT-1-BATTERY-ASSIST.md` on the
+same branch (first at `7e59b54ab`), in its "Boundary by boundary" table, DIFFICULTY row. At `281b53370` that row
+reads "Ruled, queued, not built" and points to this file at `aaae90e60`. The ruling's terms:
 
 - `wall` energy is the meter energy plus E_b over the whole request, gross and signed.
 - It uses block 5's request-level rule: the two terms of `km003c_parse.delta_machine_energy`, without its baseline
@@ -90,7 +92,21 @@ parts go to a side table, and a missing battery reading is a recorded flag (BAT-
 3. **A known limit, not a proposal.** The laptop publishes battery readings up to τ late, and τ was 2.302 s on H
    (BAT-2 ruling §3). So battery energy in the last τ of a request can be reported after the request ends, and the
    request-span rule misses it. The ruling adds no edge term for `wall`, because DIFFICULTY's intervals are
-   bootstrap intervals over attempts. On H, DIFFICULTY's models had no negative reading to miss.
+   bootstrap intervals over attempts. On H the rule missed nothing, for every model:
+   - after each of H's 95 requests, the 1,099 polls received in the τ that followed the request's end all read
+     0 mA, the 70B and 122B runs included (fourth dispatch, third script below);
+   - BAT-2's third dispatch adds a reopen condition: a run that starts within τ of the previous decode end. Then the
+     earlier request's late readings would be counted in the later request. Under DIFFICULTY's collection design
+     each run begins with its own idle baseline (registration line 386), and that baseline cannot be shorter than
+     the 60 s the clock fit needs (`docs/design/block6_collection_draft.md` line 554). On H the smallest gap from a
+     request end to the next run's first span was 45.0 s, and 0 of 94 gaps were below τ.
+4. **The battery column prints at every stage.** BAT-2's third dispatch prints BYTES's decode-assisted counts as
+   null at the blinded stage, because its marker is read from the meter stream and the blinded stage reads no meter
+   stream. DIFFICULTY's battery column needs no such rule. `battery_j` is an energy, so like every energy it is
+   multiplied by the factors at harvest (line 384) and is in the side table at every stage, and `battery_assist` is
+   an adapter flag (line 214). Within one configuration, the share divides two energies blinded by the same factor,
+   so the factor cancels and the share reveals nothing about it. The count of nonzero rows does not depend on the
+   factor, and the largest `battery_j` stays blinded like every other energy.
 
 **Expected size on DIFFICULTY's models.** H ran all three models at the revisions this registration fixes:
 `Qwen3-1.7B-4bit` `3b1b1768…`, `Qwen3-4B-4bit` `4dcb3d10…` and `Qwen3-8B-4bit` `545dc425…` (from H's run
@@ -235,13 +251,21 @@ Simulation (script below; 4,000 campaigns):
     `integrate`, on origin/main at lines 312 and 368.
   - The `wall_battery.csv` side table and the battery column.
   - The rule that idle columns go to the withheld store.
-- **BYTES's term is built.** It is BAT-3, `lane/2026-10-22-bytes-battery-term` at `ddcbafc4d`, not merged. On H it
-  gives the same battery term as BAT-1 in all 95 runs: the largest difference is 0.0 J
+- **BYTES's term is built.** It is BAT-3, `lane/2026-10-22-bytes-battery-term`, not merged. At `ddcbafc4d` it gives
+  the same battery term as BAT-1 on H in all 95 runs: the largest difference is 0.0 J
   (`forward-20261021/BAT-1/out/bat3_crosscheck.txt`). Both sides call the same two functions, so this confirms
-  BAT-3's wiring, not the integration rule (BAT-1). BAT-3 integrates over BYTES's decode span and adds an edge term.
-  The DIFFICULTY adapter integrates over the whole request and adds no edge term (ruling §6).
+  BAT-3's wiring, not the integration rule (BAT-1). Its executing review (Opus 5.5, blind) returned ACCEPT_WITH_FIXES:
+  the numbers were right and the synthetic tests too weak. Fix round 1 is at `a846ba997` and not finished. H through
+  `a846ba997` gives a cross-check byte-identical to the `ddcbafc4d` one (`out/bat3_crosscheck_a846ba997.txt`; BAT-1
+  fourth dispatch). BAT-3 integrates over BYTES's decode span and adds an edge term. The DIFFICULTY adapter
+  integrates over the whole request and adds no edge term (ruling §6).
 - **Tests.** Its synthetic worlds include a request with a battery burst of at least 1 J (the attribution limit, as
-  BAT-2 ruling §12 sets for BYTES). This is claim-path code: an executing review and both cold passes.
+  BAT-2 ruling §12 sets for BYTES). They publish the battery reading the way the Mac does: once a second and up to
+  τ late. BAT-3's first synthetic campaign reported the battery current with no delay, and its review found four
+  mutations touching printed numbers that the tests did not catch (review finding 1, in BAT-1's fourth-dispatch
+  checks). For DIFFICULTY that means one world with a burst whose reading arrives inside the request and one whose
+  reading arrives after the request ends: the first counts in that request, the second in no request. This is
+  claim-path code: an executing review and both cold passes.
 - **Draft header for the revision:** "Revision 2.4 (date, still before any DIFFICULTY energy). `wall` adds the
   battery's energy over the request, because the meter on the charging cable misses what the battery supplies when
   the laptop draws more than its adapter delivers (BAT-2 ruling). No per-run idle quantity is visible before
@@ -282,6 +306,34 @@ Third dispatch, 2026-10-22:
   Full-length runs are every run except test-7 r02 and r04. Its output:
   `llama-70b: 18 runs, 8.85 to 27.05 J, 0.099 to 0.295 %` and `qwen35-122b: 7 runs, 0.80 to 1.43 J, 0.060 to
   0.106 %`.
+
+Fourth dispatch, 2026-10-22 (no number changed):
+
+- **Anchors re-checked.**
+  - Main is `81db9f355`. Since `bfab7c950` it changed only the shard invariant test. The registration, the
+    4b350f47 record and `km003c_parse.py` (SHA-256 `e8fc584a…`) are unchanged, and the cited lines read the same.
+  - The twin `scripts/difficulty_twin.py` has SHA-256 `4ec1b833…`, as registered, at `fc4078667` and at the head of
+    `lane/2026-10-14-difficulty-pack` (`281a06043`). So its header check at line 178 is unchanged.
+  - `joulewise/b6/export_runs.py` last changed at `a050674f6`, and lines 24 to 26 and 162 to 166 at `0b6023dcc` still
+    write the idle columns. No branch on origin has changed it since.
+  - The BAT-2 ruling branch is at `281b53370`, and §6 there is identical to §6 at `367a0fa6d`.
+- **What changed and why.**
+  - Decision 3 now carries H's evidence for the request's end edge, and the ruling's new reopen condition is checked
+    against DIFFICULTY's schedule.
+  - Decision 4 is new. It answers, for DIFFICULTY, the blinded-stage question that BAT-2's third dispatch answered
+    for BYTES.
+  - "For the lane" records BAT-3's review and fix round, and adds delayed battery readings to the test worlds.
+- **Re-runs.** The first two scripts and BAT-1's `peaks_by_model.py` (with `km003c_parse.py` from `81db9f355`) were
+  re-run unchanged on the same inputs, exit 0. The first two match every number quoted here. `peaks_by_model.py`'s
+  output is byte-identical to `out/peaks_by_model.txt`.
+- **Third script below** (new). Its input is BAT-2's extract of H, `data/h_decode_extract.json` on JouleWise-data
+  `analysis/bat-council-20261022` at `c17fdca` (SHA-256 `cb751e23…`). Run it as `/opt/homebrew/bin/python3.13 -I -B
+  request_edge.py h_decode_extract.json`. It orders integer nanosecond stamps and counts polls, so it needs no bar.
+  It first checks that every run's poll list reaches past its request end plus τ (95 of 95). Output:
+  - τ = 2.302440875 s;
+  - 1,099 polls received in [q1, q1 + τ) over 95 runs, where q1 is the request end; 0 nonzero (Qwen3-1.7B 58 polls,
+    4B 60, 8B 58);
+  - smallest gap from a request end to the next run's first span 45.028 s, 0 of 94 below τ.
 
 ```python
 import csv, json, math, random, re, statistics as st, sys
@@ -330,4 +382,30 @@ for m in ("llama-70b", "qwen35-122b"):
     j = [float(r["mon_request_j"]) for r in full]
     s = [float(r["mon_request_j"]) / float(r["meter_request_j"]) * 100 for r in full]
     print(f"{m}: {len(full)} runs, {min(j):.2f} to {max(j):.2f} J, {min(s):.3f} to {max(s):.3f} % of the meter's request energy")
+```
+
+```python
+import json, sys
+d = json.load(open(sys.argv[1]))
+off = d["meta"]["offset_raw_minus_mono_ns"]
+tau = 2 * 1.0 + d["meta"]["smc_refresh_from_stream"]["poll_interval_max_s"]
+runs = d["runs"]
+print(f"tau = {tau:.9f} s; runs = {len(runs)}")
+covered = sum(r["polls_raw_ns_B0AC_mA_B0AV_mV"][-1][0] >= r["request_ns"][1] + off + tau * 1e9 for r in runs)
+print(f"runs whose poll list reaches request end + tau: {covered} of {len(runs)}")
+by = {}
+for r in runs:
+    q1 = r["request_ns"][1] + off
+    c = z = 0
+    for t, ac, av in r["polls_raw_ns_B0AC_mA_B0AV_mV"]:
+        if q1 <= t < q1 + tau * 1e9:
+            c += 1; z += (ac is not None and ac != 0)
+    s = by.setdefault(r["model"], [0, 0, 0]); s[0] += 1; s[1] += c; s[2] += z
+for m, (n, c, z) in sorted(by.items()):
+    print(f"  {m:28s} runs {n:3d}  polls in [q1, q1+tau) {c:4d}  nonzero B0AC {z}")
+print(f"all: polls {sum(v[1] for v in by.values())}, nonzero {sum(v[2] for v in by.values())}")
+order = sorted(runs, key=lambda r: r["request_ns"][0])
+gaps = sorted(((min(b["idle_baseline_ns"][0], b["request_ns"][0], b["prefill_ns"][0]) - a["request_ns"][1]) / 1e9)
+              for a, b in zip(order, order[1:]))
+print(f"request end to next run's first span: min {gaps[0]:.3f} s, below tau {sum(g < tau for g in gaps)} of {len(gaps)}")
 ```
