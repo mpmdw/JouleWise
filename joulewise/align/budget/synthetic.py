@@ -187,7 +187,7 @@ def run_synthetic(*, count: int = 200, seeds: Sequence[int] = (0,),
                                controls_verified=True))
     return run_matrix(items, specs, FIVE_CONFIGURATIONS, seeds=seeds,
                       settings=Settings(1536, 32, measurement_id="synthetic-v1"),
-                      monitor=HintMonitor(ScriptedMonitor(), model="scripted-fixed-20B"),
+                      monitor=HintMonitor(ScriptedMonitor(), model="scripted-fixed-20B", revision="script-v1"),
                       checkpoint=checkpoint,
                       sampler_factory=(lambda m: ScriptedSampler(clock, 60.0 + 5.0 * m.size_b))
                       if with_power else None,
