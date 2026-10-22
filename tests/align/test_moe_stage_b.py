@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import json
 import random
 import statistics
 import unittest
@@ -426,6 +427,23 @@ class TestMoeStageBEndToEnd(StageBAssertions):
         cls.ina = run_world(cls.world, ina, all_resident=False, **cls.design)
         cls.resident = run_world(cls.world, ina, all_resident=True, **cls.design)
         cls.nvml = run_world(cls.world, nvml, all_resident=False, **cls.design)
+        # Emit a compact reproducible evidence row for hosted CI, where there
+        # may be no interactive shell to invoke the standalone experiment CLI.
+        evidence = []
+        for result in (cls.ina, cls.resident, cls.nvml):
+            evidence.append({
+                "sensor": result["sensor"]["name"], "resident": result["all_resident"],
+                "episodes": result["episodes"], "samples": result["total_samples"],
+                "decode_tokens_per_episode": result["decode_tokens_per_episode"],
+                "true_extra_j_per_token": result["true_extra_j_per_decode_token_range"],
+                "apparent_extra_j_per_token": result["apparent_extra_j_per_decode_token_range"],
+                "within_condition_held_out_r": result["recovery"][
+                    "energy_per_decode_token_j"]["within_condition_held_out_correlation"],
+                "required_r": result["requirement"]["minimum_absolute_correlation"],
+                "phase_sweep_error_std_j": result["phase_sweep_energy_error_std_j"],
+                "conditional_detection": result["forecast"]["detectable_under_assumptions"],
+            })
+        print("STAGEB_SYNTHETIC_EVIDENCE " + json.dumps(evidence, sort_keys=True, allow_nan=False))
 
     def test_ina_routing_signal_clears_parameterized_stage_b_requirement(self):
         result = self.ina
