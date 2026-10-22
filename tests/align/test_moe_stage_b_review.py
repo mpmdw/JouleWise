@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import statistics
 import time
 import unittest
@@ -55,6 +56,11 @@ def emit(tag, result):
 
 
 class TestMoeStageBReview(unittest.TestCase):
+    def setUp(self):
+        guard = patch.dict(os.environ, {"JW_B5_SYNTHETIC_ONLY": "1"})
+        guard.start()
+        self.addCleanup(guard.stop)
+
     def test_reviewer_worlds_and_pass_conditions(self):
         started = time.perf_counter()
         ina, nvml = ex.default_sensors()
