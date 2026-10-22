@@ -19,6 +19,10 @@ model files only.
    `configs/bytes/identity_pins.json` (sha256 `553859a0…c4392f`).
 3. Flags (none touches a number, none is a refusal): the manifest stores W, KV and b as JSON floats; Qwen3-8B-8bit's
    revision is still null in the configs and roster; the pins cover weight files only. Details are in "Flags" below.
+4. **Run 3 (2026-10-22, 03:17-03:45 PDT, a fresh Opus 5.5 seat after the workflow resumed):** a second reviewer
+   script, written from scratch, again finds zero mismatches (310 checks). Its own hash of all 47 weight files gives
+   the same eleven pins. Re-running the kit derivation reproduces `configs/bytes/identity_pins.json` byte for byte.
+   See "Run 3" below.
 
 ## Inputs
 
@@ -234,6 +238,52 @@ Full source paths, per-file digests, sizes and resolved blob paths are in `confi
 4. **Label.** `derive()` labels each per-pack document `non_claim` / `NON_CLAIM_FILE_IDENTITIES_ONLY` because it
    was written for the item-H kit. The merged file carries `status: FILE_IDENTITIES_ONLY` and states this in
    `derivation.per_pack_label_note`. The file identities are the same quantity whichever tree dispatches the model.
+
+## Run 3: a second independent pass (2026-10-22)
+
+The workflow was resumed after the Claude usage limit stopped it, and BY-G ran again. This seat did not reuse run 1's
+script. It wrote `/Users/edr/night-archive/forward-20261021/BY-G/run3/byg3.py` (untracked, stdlib only, imports
+nothing from `joulewise/` or `scripts/`; sha256 `d702eb389160b2683fc9355fd8114e8f7b9994593c91cfaf3e7026171798f5a0`).
+The category rules come from §4 of the registration, and the KV formulas are the ones in Part 1.
+
+- **Bytes:** 31 checks per model, 310 in all, against the manifest at `99c9099d8` (sha256 `33352242…afe1c`). There
+  are **0 mismatches**. Each model is checked on:
+  - W, R, KV and b, with float-stored counts required to be integer-valued and equal;
+  - the six category totals, k, E, tied embeddings and the shared-expert bytes;
+  - the config and tokenizer SHA-256s;
+  - the four GB columns, compared bit for bit with bytes / 1e9;
+  - both cache snapshots, total and per layer (class, allocated bytes, capacity, occupied length, state shapes);
+  - every tensor row (dtype, shape, stored bytes, category).
+
+  The header checks also pass: each span equals shape × dtype width, the spans tile each file, and the index agrees.
+  The quantization check passes too: Qwen3-8B-8bit has 254 packed weights at 8 bits with group 64.
+- **Negative control:** a copy of the manifest had five values changed: W of 8B-8bit +0.5 B, KV of Next-80B +1 B,
+  one Next-80B layer's allocated bytes +2 B, one tensor row +2 B, and Llama-70B's `R_GB` moved by one unit in the last
+  place. The script reported exactly those five (seven lines, because a layer or row mismatch also shows in its
+  count). The copy was deleted.
+- **Pins:** `byg3.py hash` covered the same 47 weight files (215,449,636,568 B), one call per model, 4 to 102 s
+  each. Every file's SHA-256 equals Hugging Face's recorded hash: the blob name for an HF-cache file, or the etag in
+  the download metadata for a `jw_models` file. Folding them gives all eleven pins in Table 3. Each equals both
+  `configs/bytes/identity_pins.json` at `10f3e4f15` and the kit's `identity_pins.json` at `c10b6895f`
+  (11 of 11, 0 unequal).
+- **Kit derivation re-run:** the derivation was run again, per sub-pack pair, through the kit's `derive()` at
+  `c10b6895f` (driver `byg_derive_pins.py`, sha256 `14e3f70e…5c55c8`, unchanged). The pairs took 21 s to 4 min 28 s.
+  The re-run gave the same units and config counts: 50 per science model per pack, which is 10 repeats + 10 quads ×
+  4, and 25 reference members per pack, which is 18 + 3 + 1 + 3. After the merge, the output is byte-identical to the
+  committed file (sha256 `553859a07578869ed4afe7b4b406462897b561d684b64a8e29ee33f800c4392f`).
+- The twelve sub-pack trees, `bytes_v1/`, `joulewise/provenance.py` and `joulewise/b5/plan.py` have no diff
+  between `c10b6895f` and `99c9099d8`. So the pins apply to this branch's trees.
+
+One-model re-run with the run-3 script (Qwen3-8B-8bit; about 1 s for the bytes and 20 s for the hash):
+
+```sh
+/opt/homebrew/bin/python3.13 -I /Users/edr/night-archive/forward-20261021/BY-G/run3/byg3.py bytes --manifest /Users/edr/night-archive/forward-20261021/BY-G/run3/manifest.99c9099d8.json --model Qwen3-8B-8bit --out /Users/edr/night-archive/forward-20261021/BY-G/run3/lead-8b8-bytes.json
+/opt/homebrew/bin/python3.13 -I /Users/edr/night-archive/forward-20261021/BY-G/run3/byg3.py hash --model-dir /Users/edr/jw_models/mlx-community/Qwen3-8B-8bit --out /Users/edr/night-archive/forward-20261021/BY-G/run3/lead-8b8-hash.json
+/opt/homebrew/bin/python3.13 -I /Users/edr/night-archive/forward-20261021/BY-G/run3/byg3.py fold --parts /Users/edr/night-archive/forward-20261021/BY-G/run3/lead-8b8-hash.json
+```
+
+Expected: `{"checks": 31, "mismatches": 0, ...}`; then `folded_sha256`
+`d4f5fe85e4b0dccc49a48098978f39540cfb6f52baafb6f78656cdbacba2a753` with `upstream_all_match` true.
 
 ## Reproduce (the lead re-runs on one model)
 
