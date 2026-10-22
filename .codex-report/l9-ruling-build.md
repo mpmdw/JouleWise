@@ -254,7 +254,7 @@ Done: all implementation items, focused refusals/limitations, the opted-in joine
 
 ## L9-1 joined-head acceptance (2026-10-22)
 
-L9 implementation source: merge `70fd61aa192d7a1dae299d662c6b2767b52c9aa6`, with report-only acceptance-start head `c413e6f04`. Newer-main merge `01aac454c12bf31ba7c2628a3ecc4d12eae1d413` contains main `c21c52dfa`; the selected L9 package/test diff from 70fd61aa1 is empty. Rows retain their actual execution anchors; authentication and docs freshness are rerun after the incoming documentation changes. Each module has its own TMPDIR and all three required variables. Native Python 3.13.5 is director-approved. Detailed merge, classification, and decision record: `.codex-report/L9-1.md`. No in-progress run is counted as a pass.
+L9 implementation source: merge `70fd61aa192d7a1dae299d662c6b2767b52c9aa6`, with report-only acceptance-start head `c413e6f04`. Latest newer-main merge `8987dffb30943d10451c2d95bf956e70f1d38e06` contains main `abd9f1597`; the selected L9 package/test diff from 70fd61aa1 is empty. Rows retain their actual execution anchors; authentication passed after the preceding 01aac454c merge; docs freshness was rerun after the latest documentation changes at 8987dffb3. Each module has its own TMPDIR and all three required variables. Native Python 3.13.5 is director-approved. Detailed merge, classification, and decision record: `.codex-report/L9-1.md`. No in-progress run is counted as a pass.
 
 A dash means not run or not supplied, never zero. Mac rows are only the three results supplied by the director at `7cadb3f4a`. Two supplied Mac digests are prefixes.
 
@@ -265,7 +265,7 @@ A dash means not run or not supplied, never zero. Mac rows are only the three re
 | tests.b5_analysis.test_chain_fixture | 32 | 0 | 0 | 0 | 0 | 17779.392 | Codex Cloud | `d598f5a288249a6aa2296b6d5186e70b086a5f405dff4c299ad40e0995e07644` |
 | tests.b5_analysis.test_joined_probes | 2 | 2 | 0 | 0 | 1 | 0.028 | Codex Cloud | `9f5fc1a9a32f112b5d12ec0651bd9d15be6bf8677aaa41fdb018f932d51ad051` |
 | tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 2.290 | Codex Cloud | `aaeea1de6565d2b2513e565f27a992d6445cb556fdffb4f8c16ca95f5f57802b` |
-| tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 1.155 | Codex Cloud | `e07c6fb1abd7a00f20ae1854231da7ea58b5d37e685b352d65b8ca8b3145ecb1` |
+| tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 0.801 | Codex Cloud | `85172dafa6cc42afc4c55e666a269ab7e68083e6cc91d51a2db789ddd0ff3568` |
 | tests.b5_analysis.test_sensitivity_guard | 12 | 0 | 0 | 0 | 0 | 27.989 | Codex Cloud | `cd69866fa8b2d81a53bd1f56b0fcc471b13313886b5b9ccd3b017c37780173c4` |
 | tests.b5_analysis.test_mint_kept_units | 87 | 0 | 0 | 1 | 0 | 492.383 | Codex Cloud | `7f60c453bf8cb5bd567af6b3bf1772bed6b1cb9f99d1550cc42c66e55ea1e892` |
 | tests.b5_analysis.test_s10_chain_defects | 34 | 0 | 0 | 0 | 0 | 6.176 | Codex Cloud | `0b440240b077c3ba9fe793e93ab4f186d2b723ccbef3037d13991a8601cacada` |
@@ -300,6 +300,7 @@ Completed cloud logs and test failures:
 - `tests.b5_analysis.test_release_equality` at `500f7ad3d230a4b764283134426eea6d90354f74`: 12 tests, 2 failures, 0 errors, 0 skips, exit 1, 47231.364 s. Log `/workspace/l9-1/j6-1/logs/tests_b5_analysis_test_release_equality.log`, SHA-256 `be8b5525f71ccf076008decfcd76622a90be1ef371e09c46e04d0b437ada9559`.
   - failure_names: tests.b5_analysis.test_release_equality.JoinedReleaseTests.test_J6_release_after_dry_run_passes
   - failure_names: tests.b5_analysis.test_release_equality.JoinedReleaseTests.test_J6_two_custody_roots_have_identical_output_digests
+- `tests.test_docs_freshness` at `8987dffb30943d10451c2d95bf956e70f1d38e06`: 31 tests, 0 failures, 0 errors, 0 skips, exit 0, 0.801 s. Log `/workspace/l9-1/checks-main-2/logs/tests_test_docs_freshness.log`, SHA-256 `85172dafa6cc42afc4c55e666a269ab7e68083e6cc91d51a2db789ddd0ff3568`.
 
 Additional logs (not completed acceptance modules):
 
