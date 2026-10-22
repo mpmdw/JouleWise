@@ -43,6 +43,21 @@ class ToolCallMatch:
     indeterminate_candidates: tuple[Segment, ...] = ()
 
 
+def _held_change_indices(values: tuple[float, ...]) -> list[int]:
+    """Conservative evidence of multi-poll held conversions, from values alone."""
+    changes = [i for i, value in enumerate(values) if i and value != values[i - 1]]
+    periods = [b - a for a, b in zip(changes, changes[1:])]
+    repeated = len(values) - 1 - len(changes)
+    # Retain the sqrt(n) local sample-count guard against a few true phases.
+    # A median needs a majority of held differences. A completed one-poll
+    # run demonstrates native-rate changes, so plateaus alone cannot justify
+    # thinning. Ambiguous streams retain all their observations.
+    if (len(changes) >= math.isqrt(len(values)) and periods and
+            repeated * 2 >= len(values) - 1 and min(periods) > 1):
+        return changes
+    return []
+
+
 def estimate_noise_sd(values: tuple[float, ...]) -> float:
     """MAD of first differences / (sqrt(2) * Phi^-1(0.75)).
 
@@ -50,15 +65,14 @@ def estimate_noise_sd(values: tuple[float, ...]) -> float:
     The Gaussian MAD consistency factor is Phi^-1(0.75), computed by stdlib.
     Sparse phase boundaries are robust outliers; ripple/correlation can bias
     this estimator, which is a limitation, not a hardware noise calibration.
+    Remove repeats only with evidence of a multi-poll conversion stream.
+    Otherwise, constant quantized plateaus carry real low-variance evidence.
     """
     if len(values) < 2:
         return 0.0
-    # Adjacent bit-identical repeats are held observations, not independent
-    # noise measurements. Any sensor can be polled faster than it converts.
-    distinct = [a for i, a in enumerate(values) if i == 0 or a != values[i - 1]]
-    if len(distinct) < 2:
-        return 0.0
-    differences = [b - a for a, b in zip(distinct, distinct[1:])]
+    changes = _held_change_indices(values)
+    observed = [values[0]] + [values[i] for i in changes] if changes else values
+    differences = [b - a for a, b in zip(observed, observed[1:])]
     center = statistics.median(differences)
     mad = statistics.median(abs(x - center) for x in differences)
     return mad / (math.sqrt(2) * statistics.NormalDist().inv_cdf(0.75))
@@ -96,25 +110,13 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
     gaps = [(a, b) for a, b in zip(trace.t_ns, trace.t_ns[1:]) if b - a >= 2 * interval]
     if gaps:
         flags.append("sample_gaps")
-    # Infer held-register cadence only when changes are numerous enough to
-    # distinguish a conversion stream from a few real phase plateaus. The
-    # sqrt(n) count is the same local scale used for nuisance estimation;
-    # sparse step traces must retain their duration/sample likelihood weight.
-    changes = [i for i, value in enumerate(trace.values)
-               if i and value != trace.values[i - 1]]
-    change_times = [trace.t_ns[i] for i in changes]
-    observed_periods = [b - a for a, b in zip(change_times, change_times[1:])]
-    repeated = n - 1 - len(changes)
+    # Infer cadence only from conversion-like multi-poll runs, not from
+    # constant quantized phases. The same evidence rule governs noise MAD.
+    changes = _held_change_indices(trace.values)
     effective_interval = interval
-    # Repeats alone do not establish sample-and-hold: integer-mW flat
-    # plateaus repeat even when the sensor converts every poll. Require every
-    # completed change-to-change run to span more than one poll. Consecutive
-    # changing polls demonstrate native-rate information, which thinning must
-    # preserve. This conservative test can leave an ambiguous hold unthinned;
-    # it cannot turn ordinary constant phases into a slower conversion clock.
-    hold_runs = [b - a for a, b in zip(changes, changes[1:])]
-    if (len(changes) >= math.isqrt(n) and observed_periods and
-            repeated * 2 >= n - 1 and min(hold_runs) > 1):
+    if changes:
+        change_times = [trace.t_ns[i] for i in changes]
+        observed_periods = [b - a for a, b in zip(change_times, change_times[1:])]
         effective_interval = max(interval, round(statistics.median(observed_periods)))
         flags.append("held_values_cadence_inferred")
     # Thin by the observed cadence rather than removing entire constant
