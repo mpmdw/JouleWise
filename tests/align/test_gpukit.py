@@ -1023,6 +1023,46 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
         self.assertEqual(cli.returncode, 3, cli.stderr)
         self.assertIn("session_ran_no_model", json.loads(cli.stdout)["flags"])
 
+
+    def test_late_session_exception_preserves_failed_status_and_exit_three(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from joulewise.align.gpukit import session
+
+        armed = False
+
+        def probe(url, timeout_s):
+            nonlocal armed
+            if armed:
+                raise RuntimeError("unexpected failure while starting the second model")
+            ready = Path(os.environ["GPUKIT_READY"]).exists()
+            armed = ready
+            return ready
+
+        options = self._options("late-failure", ready_command=())
+        original = session.run_session
+        stdout = io.StringIO()
+        with patch.object(session, "run_session",
+                          side_effect=lambda parsed: original(parsed, probe=probe)), \
+             contextlib.redirect_stdout(stdout):
+            code = session.main([
+                str(options.matrix), "--output", str(options.output),
+                "--runner-command", json.dumps(options.runner_command),
+                "--preflight-command", json.dumps(options.preflight_command),
+                "--ready-timeout-s", "30", "--command-timeout-s", "30",
+                "--preflight-timeout-s", "30", "--copy-timeout-s", "30",
+                "--stop-grace-s", "5", "--runner-timeout-s", "30",
+                "--poll-s", "0.01", "--monitor-placement", "none"])
+        result = json.loads(stdout.getvalue())
+        self.assertEqual(sum("runner_returncode" in m for m in result["models"]), 1)
+        self.assertEqual(code, 3)
+        self.assertEqual(result["status"], "failed")
+        self.assertFalse(result["data_complete"])
+        self.assertIn("session_failed:RuntimeError", result["flags"])
+        self.assertEqual(verify_manifest(options.output), ())
+        self.assertTrue(Path(result["archive"]).is_file())
+
     def test_argument_error_exits_three(self):
         from joulewise.align.gpukit.session import main
         with self.assertRaises(SystemExit) as raised:

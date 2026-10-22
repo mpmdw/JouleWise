@@ -757,6 +757,10 @@ def run_session(options: SessionOptions, *,
             flags.append("session_ran_no_model")
             receipt["status"] = "failed"
             receipt["data_complete"] = False
+        if receipt["status"] == "failed" or any(f.startswith("session_failed:") for f in flags):
+            # R8/R13: a late exception remains a failed command even after a runner ran.
+            receipt["status"] = "failed"
+            receipt["data_complete"] = False
         else:
             receipt["status"] = "completed_with_flags" if flags else "completed"
     receipt["end_ns"] = time.monotonic_ns()
