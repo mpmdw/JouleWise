@@ -2,8 +2,8 @@
 
 - Done: Part 2 (review of dcceb8480) started at 0a585bb8e; all A1–A8, BY-MERGE and R2-1–R2-6 dispositions are recorded below. Director committed and pushed slice 8 as c36ef1c51; this final slice changes reports only.
 - Done: all twelve committed-fixed P values pass native planner/arm/precheck boundaries; four desk freshness cases pass; M4/M8/M12/M13 are CAUGHT; sealed inventory diff is empty (682 files).
-- Done: 103 of 113 importer/native individual tests pass, zero failures and no skips in those 103. The ten remaining tests (capture_screen_reachability 4, cold_pass_fixes 5, desk_resume_finalize 1) are **delegated to CI run 39819912999 (director)** on PR #547 at c36ef1c51. They are not claimed as local passes. No slow importer test was rerun in this final slice.
-- Next: director reviews/commits these two reports, verifies CI run 39819912999 and owns final verification, ledger done line and BY-MERGE hand-forward. No worker implementation or report task remains.
+- Done: 103 of 113 importer/native individual tests pass, zero failures and no skips in those 103. The ten remaining tests (capture_screen_reachability 4, cold_pass_fixes 5, desk_resume_finalize 1) are **delegated to PR #547 CI on the final head (director)** on PR #547 at c36ef1c51. They are not claimed as local passes. No slow importer test was rerun in this final slice.
+- Next: director reviews/commits these two reports, verifies PR #547 CI on the final head and owns final verification, ledger done line and BY-MERGE hand-forward. No worker implementation or report task remains.
 - Open: physical free-space recovery before arming; declared sandbox hazard failures and CI results remain director-owned. NEEDS_RULING: none.
 
 BY-C5-fix1 COMPLETE
@@ -17,7 +17,7 @@ Missing registered P deliberately holds before planning; future BYTES sizing row
 Fresh-output desk status distinguishes program_fault from unavailable, fail and pass; all four real-desk cases pass.
 Hand-computed P and missing-P coverage catch M4/M8/M12/M13; disclosure labels and decimal stdout are fixed.
 Director's real replay refuses 0 of 10 available sessions, with r2-alpha prepared, never ran; 682 sealed files are unchanged.
-103 of 113 importer/native tests passed individually; ten are delegated to CI run 39819912999 (director), with no CI result claimed here.
+103 of 113 importer/native tests passed individually; ten are delegated to PR #547 CI on the final head (director), with no CI result claimed here.
 Only the two reports changed in this final slice; director owns commit/push, CI adjudication and final verification on PR #547.
 
 ## FIX LOG
@@ -34,7 +34,7 @@ Only the two reports changed in this final slice; director owns commit/push, CI 
 | A8 nit | Fixed in both reports: H exit 2 names completeness plus thermal_level 1; committed-fixed tables/R6 and final PROGRESS are current. Scope grant recorded for bytes_h_session.measurements and native tests; native H 36/36 passes, including fully observed native-export C5. |
 | R2 open issue | No code change needed: reviewer free space below every pass P correctly refuses/WAITs; operator must free space. Reviewer quantities and smoke share recorded under OPEN ISSUES. |
 | BY-MERGE | No change needed in this lane (director disposition 9). Pass1 ancestors alter sealed files relative to main; BY-MERGE owns reconciliation. No code/test added for this hand-forward. The bda481d5a-to-current 682-file diff is empty. |
-| R2-1 major | Fixed: numeric audit corrected BY-C5.md replay table from director dcceb8480 archived replay; all old P values absent, measured fixed remains explicitly unused. All twelve native writer/boundary lines re-executed in all12-r2.log, 1 test OK. Final SUMMARY/PROGRESS completed; ten importer checks delegated to CI run 39819912999 (director). |
+| R2-1 major | Fixed: numeric audit corrected BY-C5.md replay table from director dcceb8480 archived replay; all old P values absent, measured fixed remains explicitly unused. All twelve native writer/boundary lines re-executed in all12-r2.log, 1 test OK. Final SUMMARY/PROGRESS completed; ten importer checks delegated to PR #547 CI on the final head (director). |
 | R2-4 minor | Fixed: implemented freshness by unlinking derived C5.json immediately before every gates invocation, including convergence reruns. desk.json records c5_written and c5_sha256; without a new file status is program_fault regardless of exit. Four real desk/harvest/export tests stub only gates (three required exit-1 cases plus usage exit 2). Verified all four new real-desk tests individually, exit 0; /tmp/byc5f1/r2-desk-case1.log through case4.log. |
 | R2-5 nit | Fixed sibling notes keep both keys intact and identify retained two-copy disclosure; no gate consumes them. Reader search quoted below; other bytes_per_member hits belong to native planner inputs, not C5 output. |
 | R2-6 nit | Decimal stdout fixed and CLI assertions pin each rate/allowance exact formatting; 20 gates tests pass. Replay row now prepared, never ran. No smoke-source change: precheck.py:88 uses compose.registered_smoke_keep; loop.py:368 calls compose.smoke_keep; compose.py:223-225 dispatches to registered_smoke_keep; smoke.py:29 KEEP_PATH, :263 same registration. |
@@ -169,7 +169,7 @@ Real H main exits 2 because completeness and thermal lines fail (thermal_level 1
 
 ## TESTS RUN
 
-Final accounting (director instruction supersedes every historical pending/next note below): 103 of 113 importer/native individual passes stand as evidence. Ten tests are **delegated to CI run 39819912999 (director)** on PR #547, head c36ef1c51. No local test or slow importer module was run in this final slice. CI exit code/result is not yet observed. The exact local commands and final logs from earlier slices remain below; the table in FINAL REPORT VERIFICATION records the final allocation.
+Final accounting (director instruction supersedes every historical pending/next note below): 103 of 113 importer/native individual passes stand as evidence. Ten tests are **delegated to PR #547 CI on the final head (director)** on PR #547, head c36ef1c51. No local test or slow importer module was run in this final slice. CI exit code/result is not yet observed. The exact local commands and final logs from earlier slices remain below; the table in FINAL REPORT VERIFICATION records the final allocation.
 
 Earlier-slice execution evidence follows; pending instructions in these historical records are superseded by the CI delegation above.
 
@@ -204,7 +204,7 @@ Command: `git diff --name-only bda481d5a -- <all 682 keys of configs/campaigns/v
 
 ## DECISIONS I MADE
 
-- Applied the final director note: retain 103/113 individual passes and delegate the remaining 4+5+1 importer cases to CI run 39819912999 (director). No further slow runs; COMPLETE means assigned implementation/report work is complete, with CI/final verification still owned by the director.
+- Applied the final director note: retain 103/113 individual passes and delegate the remaining 4+5+1 importer cases to PR #547 CI on the final head (director). No further slow runs; COMPLETE means assigned implementation/report work is complete, with CI/final verification still owned by the director.
 - Applied ruling precedence: exact rational maximum of the two summed bases, rounded once each; raw allocated bytes only, c=2 with measured c disclosed, registered 7,200-second WAIT, per-model pass allowances/counts and reference terms. No reserve or added margin. Committed fixed supersedes measured partial fixed.
 - A4/A5: retain the ruled member-wall form and whole-base maximum, document both allowances and check/soak margin; BY-SLOTS must recompute if its registered form changes. Alpha/beta/gamma retain their existing path.
 - A8/BY-MERGE: correct report location/completeness/thermal text, acknowledge native-producer scope grant; ancestor sealed-file differences relative to main remain BY-MERGE's work.
@@ -246,9 +246,9 @@ Command: `git diff --name-only bda481d5a -- <all 682 keys of configs/campaigns/v
 ## OPEN ISSUES
 
 - R2 physical free-space issue: reviewer reading 53,472,432,128 B was below every pass P. Arm refusal/precheck WAIT is correct until the operator frees about 9.3 GB (s6) to 31.7 GB (s4), plus smoke retention up to 1.83 GB. Final slice intake: 47 GiB available (>25 GiB workspace stop). No arming or measurement attempted.
-- Ten importer tests are delegated to CI run 39819912999 (director); their result is unobserved here. The 103 individual passes stand; none of the ten is counted as passed. Environmental hazard reruns (arm sysmond/pgrep, import-graph GO/NULL, clock bootsessionuuid) remain director-owned. Refusal census has one existing skip for the absent block-5 design branch.
+- Ten importer tests are delegated to PR #547 CI on the final head (director); their result is unobserved here. The 103 individual passes stand; none of the ten is counted as passed. Environmental hazard reruns (arm sysmond/pgrep, import-graph GO/NULL, clock bootsessionuuid) remain director-owned. Refusal census has one existing skip for the absent block-5 design branch.
 - BY-MERGE hand-forward: pass1 ancestors change sealed files relative to main (including b5/plan.py, b5/driver.py and hazards/clock.py). No lane change is required; the sealed diff against bda481d5a is empty.
-- PR #547: director committed/pushed c36ef1c51 and reports whole-suite CI run 39819912999 on that head. No CI result was fetched or inferred. Director owns final review, report commit/push and ledger done line.
+- PR #547: director committed/pushed c36ef1c51 and reports whole-suite PR #547 CI on the final head on that head. No CI result was fetched or inferred. Director owns final review, report commit/push and ledger done line.
 
 ## NEEDS_RULING
 
@@ -475,31 +475,31 @@ Final importer/native accounting, using the director-accepted /tmp/byc5f1/r2-sta
 | Module | Individual local passes (exit 0) | Remaining disposition |
 |---|---:|---|
 | tests.test_bytes_h_session | 36/36 | none |
-| tests.b6.test_capture_screen_reachability | 5/9 | 4 delegated to CI run 39819912999 (director) |
-| tests.b6.test_cold_pass_fixes | 9/14 | 5 delegated to CI run 39819912999 (director) |
-| tests.b6.test_desk_resume_finalize | 5/6 | 1 delegated to CI run 39819912999 (director) |
+| tests.b6.test_capture_screen_reachability | 5/9 | 4 delegated to PR #547 CI on the final head (director) |
+| tests.b6.test_cold_pass_fixes | 9/14 | 5 delegated to PR #547 CI on the final head (director) |
+| tests.b6.test_desk_resume_finalize | 5/6 | 1 delegated to PR #547 CI on the final head (director) |
 | tests.b6.test_loop_round_desk | 5/5 | none |
 | tests.b6.test_round2_review_fixes | 8/8 | none |
 | tests.b6.test_s3_cold_fixes | 6/6 | none |
 | tests.test_b6_machine_test | 29/29 | none |
-| Total | 103/113 | 10 delegated to CI run 39819912999 (director) |
+| Total | 103/113 | 10 delegated to PR #547 CI on the final head (director) |
 
 No failures or skips in the 103 individual passes. The ten cases below have no local success claim; CI exit codes/results are unobserved:
 
 ```text
-tests.b6.test_capture_screen_reachability.CaptureDispositionTests.test_block6_and_block5_capture_disposition_and_exit_matrix — delegated to CI run 39819912999 (director)
-tests.b6.test_capture_screen_reachability.CaptureDispositionTests.test_block6_does_not_promote_invalid_evidence — delegated to CI run 39819912999 (director)
-tests.b6.test_capture_screen_reachability.ChainReachabilityTests.test_opening_150ms_stops_at_13_and_full_pack_outcome_is_physics — delegated to CI run 39819912999 (director)
-tests.b6.test_capture_screen_reachability.ChainReachabilityTests.test_opening_40ms_reaches_real_screen_and_desk — delegated to CI run 39819912999 (director)
-tests.b6.test_cold_pass_fixes.FullRoundTests.test_completed_full_alpha — delegated to CI run 39819912999 (director)
-tests.b6.test_cold_pass_fixes.FullRoundTests.test_exit4_and_acceptance_unavailable_reharvest_into_new_archive — delegated to CI run 39819912999 (director)
-tests.b6.test_cold_pass_fixes.FullRoundTests.test_gamma_lost_midpoint_counts_and_overrides_b5_claim — delegated to CI run 39819912999 (director)
-tests.b6.test_cold_pass_fixes.FullRoundTests.test_lost_start_reference_without_spare_counts — delegated to CI run 39819912999 (director)
-tests.b6.test_cold_pass_fixes.FullRoundTests.test_physical_and_opening_no_bound_stops_rotate — delegated to CI run 39819912999 (director)
-tests.b6.test_desk_resume_finalize.DeskResumeFinalizeTests.test_unfinalized_pre_40ms_keeps_physical_abort — delegated to CI run 39819912999 (director)
+tests.b6.test_capture_screen_reachability.CaptureDispositionTests.test_block6_and_block5_capture_disposition_and_exit_matrix — delegated to PR #547 CI on the final head (director)
+tests.b6.test_capture_screen_reachability.CaptureDispositionTests.test_block6_does_not_promote_invalid_evidence — delegated to PR #547 CI on the final head (director)
+tests.b6.test_capture_screen_reachability.ChainReachabilityTests.test_opening_150ms_stops_at_13_and_full_pack_outcome_is_physics — delegated to PR #547 CI on the final head (director)
+tests.b6.test_capture_screen_reachability.ChainReachabilityTests.test_opening_40ms_reaches_real_screen_and_desk — delegated to PR #547 CI on the final head (director)
+tests.b6.test_cold_pass_fixes.FullRoundTests.test_completed_full_alpha — delegated to PR #547 CI on the final head (director)
+tests.b6.test_cold_pass_fixes.FullRoundTests.test_exit4_and_acceptance_unavailable_reharvest_into_new_archive — delegated to PR #547 CI on the final head (director)
+tests.b6.test_cold_pass_fixes.FullRoundTests.test_gamma_lost_midpoint_counts_and_overrides_b5_claim — delegated to PR #547 CI on the final head (director)
+tests.b6.test_cold_pass_fixes.FullRoundTests.test_lost_start_reference_without_spare_counts — delegated to PR #547 CI on the final head (director)
+tests.b6.test_cold_pass_fixes.FullRoundTests.test_physical_and_opening_no_bound_stops_rotate — delegated to PR #547 CI on the final head (director)
+tests.b6.test_desk_resume_finalize.DeskResumeFinalizeTests.test_unfinalized_pre_40ms_keeps_physical_abort — delegated to PR #547 CI on the final head (director)
 ```
 
-Director reports the whole suite running on PR #547 in [CI run 39819912999](https://github.com/mpmdw/JouleWise/actions/runs/39819912999) at c36ef1c51. This is a delegated verification result to be adjudicated by the director, not a claimed pass. The earlier environmental arm/sysmond/pgrep, import-graph GO/NULL and clock/bootsessionuuid failures remain documented in BY-C5.md TESTS RUN; the one existing refusal-census skip is the missing block-5 design branch. No new environmental failure occurred in this report-only slice.
+Director reports the whole suite running on PR #547 in PR #547 CI (first queued as run 39819912999 at c36ef1c51; superseded by the run on the final head after the director pushed the report commits). This is a delegated verification result to be adjudicated by the director, not a claimed pass. The earlier environmental arm/sysmond/pgrep, import-graph GO/NULL and clock/bootsessionuuid failures remain documented in BY-C5.md TESTS RUN; the one existing refusal-census skip is the missing block-5 design branch. No new environmental failure occurred in this report-only slice.
 
 Exact final read-only checks (no repository-code test execution):
 
@@ -523,4 +523,25 @@ Only two report paths changed; both PROGRESS sections COMPLETE
 
 `git diff --check`: exit 0, empty output. `df -g /Users/edr`: 47 GiB available at final-slice intake, above the 25 GiB workspace stop; this is not a live arm gate reading.
 
-Next exact step: director reviews and commits the two report edits, checks CI run 39819912999 (including the ten delegated cases and environmental hazard lanes), performs final verification, and writes the ledger done line. Suggested report commit: `BY-C5 fix1 complete: finalize reports and delegate ten importer cases to CI 39819912999`. Destination lane/2026-10-22-bytes-c5-gates, draft PR #547. No worker commit/push was attempted.
+Next exact step: director reviews and commits the two report edits, checks PR #547 CI on the final head (including the ten delegated cases and environmental hazard lanes), performs final verification, and writes the ledger done line. Suggested report commit: `BY-C5 fix1 complete: finalize reports and delegate ten importer cases to CI 39819912999`. Destination lane/2026-10-22-bytes-c5-gates, draft PR #547. No worker commit/push was attempted.
+
+## DIRECTOR VERIFICATION (outside the sandbox, head 465742178; code identical to c36ef1c51)
+
+Evidence: /Users/edr/night-archive/forward-20261021/BY-C5/director-verify-fix1/ (one log per run). Every run used
+JW_B5_SYNTHETIC_ONLY=1 and its own TMPDIR under /private/tmp.
+
+- Touched modules: tests.test_bytes_gates 20 OK; tests.b6.test_plan_inputs 9 OK; tests.b6.test_lane_adapters 22 OK;
+  tests.b6.test_session_wrapper 6 OK; tests.b6.test_precheck 24 OK; tests.hazards.test_refusal_allowlist 23 OK
+  (1 skip: the block-5 design branch is not in this standalone clone); tests.b6.test_bytes_packs 9 OK.
+- R2-4 desk cases (tests.test_bytes_h_session.SessionTests): all four OK, about 178 s each.
+- Mutants (review-r2/mut.py on a disposable copy): M4, M8, M12, M13, M7 and M14 all CAUGHT.
+- C5 on H's augmented receipts at this head: exit 2, file written, status fail (completeness and thermal lines).
+  All twelve P equal the reviewer's independent re-derivation exactly: s1 73,814,147,037; s2 75,981,813,519;
+  s3 79,464,395,095; s4 85,140,886,637; s5 75,849,013,177; s6 62,811,368,483 B (p1 = p2). Disk lines print
+  r_s=1805538.52 and r_w=1285759.05 beside their exact fractions.
+- Report audit: no superseded cf716ce00 P value remains in BY-C5.md; the measured 1,266,544,640 B appears twice,
+  both labelled unused disclosure; r2-alpha reads "prepared, never ran".
+- The ten importer tests the seat left pending: eight OK locally (capture_screen_reachability 4 of 4,
+  cold_pass_fixes 3 of 5, desk_resume_finalize 1 of 1). Two (cold_pass_fixes
+  test_exit4_and_acceptance_unavailable_reharvest_into_new_archive and test_physical_and_opening_no_bound_stops_rotate)
+  hit the director's 560 s per-test limit under machine load with no failure output; they are left to PR #547 CI.
