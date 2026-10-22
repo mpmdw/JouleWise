@@ -115,6 +115,10 @@ class SessionTests(unittest.TestCase):
         self.old_env = dict(os.environ)
         self.addCleanup(self._restore_env)
         os.environ["PATH"] = str(self.bin) + os.pathsep + os.environ.get("PATH", "")
+        # Child fixture scripts run from a temporary directory without an installed
+        # package. Scope the source checkout path to this test and its children.
+        os.environ["PYTHONPATH"] = str(ROOT) + (
+            os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")
         os.environ["GPUKIT_READY"] = str(self.base / "ready")
         self._script("nvidia-smi", """#!/usr/bin/env python3
 import os
@@ -299,6 +303,11 @@ raise SystemExit(1)
         self.assertIn("episode_router_log_missing", moe["flags"])
         self.assertFalse(moe["data_complete"])
         self.assertNotIn("runner_episode_count_mismatch", moe["flags"])
+        self.assertNotIn("runner_command_failed", moe["flags"])
+        episodes = read_episodes(self.base / "moe/model-0/episodes.jsonl")
+        self.assertEqual(len(episodes), 5 * 2 * 3)  # All requested integer trial rows.
+        self.assertTrue(all(e.router_log is None and e.power_traces for e in episodes))
+        self.assertEqual(moe["models"][0]["runner_returncode"], 0)
 
     def test_readiness_failure_still_seals_evidence(self):
         self._script("vllm", "#!/usr/bin/env python3\nraise SystemExit(1)\n")
@@ -342,6 +351,20 @@ raise SystemExit(1)
         self.assertIn(["-m", "pip", "install", "--no-deps", str(ROOT)], recorded)
         self.assertIn(["-m", "joulewise.align.gpukit.session",
                        "--fixture-session-argument"], recorded)
+        # Second session must select the existing venv, even when the original
+        # creator/system interpreter is unavailable. No new install is allowed.
+        calls.write_text("", encoding="utf-8")
+        env.pop("JOULEWISE_PYTHON")
+        result = subprocess.run(
+            ["bash", str(ROOT / "joulewise/align/gpukit/bootstrap.sh"),
+             "--skip-install", "--fixture-session-argument"],
+            cwd=self.base, env=env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        recorded = [json.loads(line) for line in calls.read_text().splitlines()]
+        self.assertEqual(recorded[-1], ["-m", "joulewise.align.gpukit.session",
+                                       "--fixture-session-argument"])
+        self.assertFalse(any(args[:2] in (["-m", "venv"], ["-m", "pip"])
+                             for args in recorded))
 
     def test_existing_output_is_preserved(self):
         options = self._options("preserved")
