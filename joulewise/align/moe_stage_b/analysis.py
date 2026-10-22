@@ -355,7 +355,10 @@ def recover_power_increment(observations: Sequence[RoutingObservation]) -> Routi
             rr = [r-mr-sr*(t-mt) for r, t in zip(routing, times)]
             _, _, slope = line(er, rr)
             variance = math.fsum((e-statistics.fmean(er))**2 for e in er)
-            if variance:
+            # Centering/projecting N binary64 inputs accumulates O(N) ulps.
+            # Residuals below that arithmetic scale are a constant, not signal.
+            arithmetic_sd = len(train)*math.ulp(max(map(abs, energy)))
+            if math.sqrt(variance/len(train)) > arithmetic_sd:
                 t = observation.features.decode_seconds_per_token
                 prediction = slope*(observation.features.energy_per_decode_token_j-me-se*(t-mt))
                 truth.append(observation.routing_statistic-mr-sr*(t-mt))
@@ -442,6 +445,8 @@ def plan_detectability(
                sensor.noise_std_w, sensor.quantum_w, routing_energy_residual_std_j_per_token)
     if (not all(math.isfinite(v) for v in numeric) or not isinstance(decode_tokens, int) or isinstance(decode_tokens, bool)
             or decode_tokens <= 0 or decode_duration_s <= 0
+            or not isinstance(n_per_condition, int) or isinstance(n_per_condition, bool)
+            or n_per_condition <= 0
             or not isinstance(sensor.interval_ns, int) or isinstance(sensor.interval_ns, bool)
             or not isinstance(sensor.averaging_window_ns, int)
             or isinstance(sensor.averaging_window_ns, bool)
