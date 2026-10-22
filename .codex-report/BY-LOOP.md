@@ -78,13 +78,13 @@ No test count, exit code, skip count or environmental test failure is claimed. I
 
 ## SEALED INVENTORY
 
-The base inventory contains **682 paths**, listed verbatim below. No sealed file has been edited. A local `git -C /workspace/JouleWise diff --name-only bda481d5a HEAD` has not run because the executor is unavailable; connected-GitHub compare of base to checkpoint `46ed133ad8cb3bf50b6785d35a817b6b85996f8b` returned exactly `.codex-report/BY-LOOP.md`, with no overlap against all 682 inventory paths. The final checkpoint must be compared again after this report update. This is API evidence, not a claim that the required local Git command ran.
+The base inventory contains **682 paths**, listed verbatim below. No sealed file has been edited. A local `git -C /workspace/JouleWise diff --name-only bda481d5a HEAD` has not run because the executor is unavailable; connected-GitHub compare of base to checkpoint `46ed133ad8cb3bf50b6785d35a817b6b85996f8b` returned exactly `.codex-report/BY-LOOP.md`, with no overlap against all 682 inventory paths. A second compare from the base to `c2a7dd5025079c2ab01bc5aaf2ea845434171c2b` again returned exactly `.codex-report/BY-LOOP.md` (two report-only commits), so no inventory path overlaps. This final report-only update adds the observed verification and CI status. This is API evidence, not a claim that the required local Git command ran.
 
 ## CI
 
 Draft PR **#542**, `ci/2026-10-22-bytes-loop` against main, titled “CI: BYTES loop readiness (BY-LOOP)”: https://github.com/mpmdw/JouleWise/pull/542.
 
-Initial head `46ed133ad8cb3bf50b6785d35a817b6b85996f8b` mirrors the lane checkpoint. The CI and gate-ledger workflows were both observed in progress immediately after opening the draft (run IDs 39743305170 and 39743305168). No code-readiness result is claimed; the PR body explicitly says implementation and execution remain blocked. After committing this report update, fast-forward the CI branch to the lane's same head. Do not merge.
+Checkpoint `c2a7dd5025079c2ab01bc5aaf2ea845434171c2b` was verified as the exact head of both lane and CI branch through connected GitHub. Its CI workflow was observed pending (run 39743424315); gate-ledger completed with failure (run 39743424387). The failure reason was not inspected; no claim of green checks is made. The earlier report checkpoint had both workflows in progress. This final commit changes only the report and is fast-forwarded to the CI branch as well. No code-readiness result is claimed; the PR body explicitly says implementation and execution remain blocked. Do not merge.
 
 ## DECISIONS I MADE
 
