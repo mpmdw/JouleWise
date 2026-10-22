@@ -10,12 +10,12 @@ No measurement window, launch job, production pack state, or main push is author
 
 ## MERGES
 
-1. B4 `0b6023dcc`: pending merge commit (this commit). Conflict: `tests/fixtures/bytes/campaign.py`, two hunks. Combined B2's fixture defaults and synthetic-parameter manifest (unequal durations, signed clock latency, 50 ms sample phase, independent random edge phase, 10 ms minimum arrival latency, reference drift) with B4's `subpack_sessions` / `uncollected_sessions` and configuration keys. Governing: Addendum 7 item 12 and Addendum 8 item 4 (`docs/design/bytes_pack_design.md` at `298a292a7`); `docs/process_traces/2026-10-21-magistrate-a017b694/B2-NR1-RULING.md` items 1, 3, 5; `docs/process_traces/2026-10-21-magistrate-283e9802/B2-NR1-COLD-DISPOSITION.md` M1; `docs/process_traces/2026-10-20-magistrate-af419b16/B6-RULING.md` Q1 and Q2; `docs/process_traces/2026-10-20-magistrate-4b350f47/RECORD.md` blinding ruling items 1–3. Other paths merged automatically; generated drafts came from the B4 generator output.
-2. B3 `0c04bb181`: pending.
-3. H `c10b6895f` exactly (including B5 `20e6984c9`): pending.
-4. Manifest/KV `99c9099d8`: pending.
-5. Registration `91b20d7c2`: pending.
-6. Regeneration: pending.
+1. B4 `0b6023dcc`: `e564d4db75137f307ee726f7d8f92dd7916e6bb9`. Conflict: `tests/fixtures/bytes/campaign.py`, two hunks. Combined B2's fixture defaults and synthetic-parameter manifest (unequal durations, signed clock latency, 50 ms sample phase, independent random edge phase, 10 ms minimum arrival latency, reference drift) with B4's `subpack_sessions` / `uncollected_sessions` and configuration keys. Governing: Addendum 7 item 12 and Addendum 8 item 4 (`docs/design/bytes_pack_design.md` at `298a292a7`); `docs/process_traces/2026-10-21-magistrate-a017b694/B2-NR1-RULING.md` items 1, 3, 5; `docs/process_traces/2026-10-21-magistrate-283e9802/B2-NR1-COLD-DISPOSITION.md` M1; `docs/process_traces/2026-10-20-magistrate-af419b16/B6-RULING.md` Q1 and Q2; `docs/process_traces/2026-10-20-magistrate-4b350f47/RECORD.md` blinding ruling items 1–3. Other paths merged automatically; generated drafts came from the B4 generator output.
+2. B3 `0c04bb181`: resulting head `990763f02e021e28bbae6d7b5d78fd71d4374e0d`; no conflicts.
+3. H `c10b6895f` exactly (including B5 `20e6984c9`): resulting head `33fda48b643b82b6d2aab0e573a36c1af18d4897`; no conflicts. Later H branch commits were excluded.
+4. Manifest/KV `99c9099d8`: resulting head `4f6237d46d7ed8bd87e1f50e2a4b4d961c18492e`; no conflicts.
+5. Registration `91b20d7c2`: resulting head `e7ffa7c8c1e55b18e6dd9bb48035b416979e75ca`; no conflicts. Twelve registrations auto-merged B4 flag effects with registration-lane estimators and notes.
+6. Regeneration: `scripts/bytes_plan_trees.py` produced no tracked differences. `--check` and `scripts/bytes_mac_kit.py --check` pass. `scripts/build_b6_flag_catalog.py --check` exits 1: inherited B4 catalog entries are absent from its builder. Exact-file scope expansion requested; builder untouched pending reply.
 7. `origin/main`: pending.
 
 ## GENERATED
@@ -36,7 +36,7 @@ Pending CLI stage chain and scratch-only `open_packs`.
 
 ## CI
 
-Draft PR pending first push.
+Draft PR #535, https://github.com/mpmdw/JouleWise/pull/535, against main; gate-ledger intentionally NOT-RUN pending lead gates.
 
 ## DECISIONS I MADE
 
