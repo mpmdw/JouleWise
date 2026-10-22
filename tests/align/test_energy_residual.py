@@ -6,7 +6,7 @@ import importlib.util
 import math
 import random
 import unittest
-from dataclasses import replace
+from dataclasses import asdict, fields, replace
 from statistics import NormalDist
 
 from joulewise.align.energy_residual import (
@@ -37,7 +37,7 @@ def _dot(a, b):
 def _make_episode(seed: int, index: int, *, trace: bool = False):
     rng = random.Random(seed)
     episode_id = f"run-{index}"
-    turns, energies = [], {}
+    turns, energies, true_energies = [], {}, []
     context, now = rng.randint(512, 2048), 0
     times, counter = [0], [0.0]
     for k in range(20):
@@ -53,7 +53,9 @@ def _make_episode(seed: int, index: int, *, trace: bool = False):
                     first_token_ns=now+math.ceil(prefill/2000*1e9), tool_calls=calls)
         h = _TURN_H[k % len(_TURN_H)]
         x = (1, prefill, decode, context*decode, context*prefill)
-        energy = _dot(x, _COEF) + rng.gauss(0, math.hypot(_SIGMA, h))
+        true_energy = _dot(x, _COEF) + rng.gauss(0, _SIGMA)
+        true_energies.append(true_energy)
+        energy = true_energy + rng.gauss(0, h)
         energies[k] = (energy, h)
         turns.append(turn)
         if trace:
@@ -71,7 +73,8 @@ def _make_episode(seed: int, index: int, *, trace: bool = False):
     episode = Episode(episode_id, f"shade/task-{index % 8}", "benign", "synthetic-8b",
                       "mock/local", seed, "host", 0, now, tuple(turns),
                       power_traces=power)
-    total = math.fsum(energy for energy, _ in energies.values())
+    # The whole-episode integral has its own noise; turn-cut errors cancel.
+    total = math.fsum(true_energies)
     total += rng.gauss(0, _EPISODE_H)
     return episode, energies, total, _EPISODE_H
 
@@ -133,10 +136,11 @@ class TestEnergyResidual(unittest.TestCase):
         self.assertTrue(math.isclose(q, dof, rel_tol=1e-6), (q, dof))
         self.assertEqual(m.flags, ())
         # Moment sampling sd includes extra plus mean measurement variance,
-        # times sqrt(2/dof); derive its 95% normal comparison bar.
+        # times sqrt(2/dof); four SE fail a correct normal approximation
+        # about 6e-5 of the time and detect departures above 4*variance_se.
         variance_se = (_SIGMA**2 + sum(r.energy_half_width_j**2 for r in self.rows)/len(self.rows)) * math.sqrt(2/dof)
         self.assertLess(abs(m.sigma2_per_turn-_SIGMA**2),
-                        _NORMAL.inv_cdf(.975)*variance_se)
+                        4*variance_se)
 
     def test_mixed_exact_and_uncertain_turns_keep_full_rank(self):
         # A zero turn measurement component is valid when episode-level
@@ -183,8 +187,7 @@ class TestEnergyResidual(unittest.TestCase):
         expected_mean = _dot(s, self.model.coef)
         expected_var = math.fsum(s[i]*self.model.cov[i][j]*s[j]
                                  for i in range(5) for j in range(5))
-        expected_var += math.fsum(self.model.sigma2_per_turn+r.energy_half_width_j**2
-                                  for r in rows)
+        expected_var += len(rows)*self.model.sigma2_per_turn
         # No printed comparison uncertainty: 1e-6 relative agreement.
         self.assertTrue(math.isclose(mean, expected_mean, rel_tol=1e-6))
         self.assertTrue(math.isclose(sd**2, expected_var, rel_tol=1e-6))
@@ -195,8 +198,7 @@ class TestEnergyResidual(unittest.TestCase):
         independent = math.fsum(
             math.fsum(design_row(r)[i]*self.model.cov[i][j]*design_row(r)[j]
                       for i in range(5) for j in range(5)) for r in rows)
-        shared = expected_var - math.fsum(
-            self.model.sigma2_per_turn+r.energy_half_width_j**2 for r in rows)
+        shared = expected_var - len(rows)*self.model.sigma2_per_turn
         self.assertGreater(shared, independent)
 
     def test_power_boundary_and_context(self):
@@ -226,16 +228,22 @@ class TestEnergyResidual(unittest.TestCase):
         # Identical coefficients, covariance and design arithmetic: bit identity.
         self.assertEqual(predict_episode(renamed, rows), predict_episode(self.model, rows))
 
-    def test_flags_do_not_refuse_or_drop_data(self):
+    def test_flags_exclude_unusable_fit_rows_and_keep_diagnostics(self):
         empty = fit_energy_model([])
         self.assertIn("insufficient_turns", empty.flags)
         self.assertTrue(math.isnan(empty.sigma2_per_turn))
         constant = [replace(self.rows[0], energy_j=r.energy_j) for r in self.rows]
-        self.assertIn("rank_deficient_design", fit_energy_model(constant).flags)
+        reduced = fit_energy_model(constant)
+        self.assertTrue(math.isfinite(reduced.sigma2_per_turn))
+        self.assertIn("unidentified_column:decode_tokens", reduced.flags)
         bad = [replace(r, energy_j=math.nan) if i == 0 else r
                for i, r in enumerate(self.rows)]
         result = fit_energy_model(bad)
-        self.assertEqual(result.n_turns, len(bad))
+        self.assertEqual(result.n_turns, len(bad)-1)  # Used-row count is an integer.
+        self.assertIn("excluded_turn_rows=1", result.flags)
+        # The same ordered usable rows run identical arithmetic.
+        expected = fit_energy_model(bad[1:])
+        self.assertEqual(asdict(result), asdict(expected))
         self.assertIn("nonfinite_input", result.flags)
         diagnostic = [replace(r, duration_s=-1) for r in self.rows]
         m = fit_energy_model(diagnostic)
@@ -243,6 +251,23 @@ class TestEnergyResidual(unittest.TestCase):
         self.assertEqual(m.coef, self.model.coef)
         invalid = grouped_benign_threshold({}, alpha=.05)
         self.assertIn("empty_calibration", invalid.flags)
+
+    def test_model_dataclass_round_trip_has_exactly_five_fields(self):
+        expected = ("names", "coef", "cov", "sigma2_per_turn", "n_turns")
+        self.assertEqual(tuple(f.name for f in fields(self.model)), expected)
+        plain = EnergyModel(**asdict(self.model))
+        self.assertEqual(asdict(plain), asdict(self.model))  # Bit-preserving copy.
+        empty = fit_energy_model([])
+        EnergyModel(**asdict(empty))  # An undefined flagged result also constructs.
+
+    def test_scoring_does_not_read_turn_attribution(self):
+        rows, total, h = _adapt(self.data[0])
+        missing = [replace(r, energy_j=math.nan, energy_half_width_j=math.nan)
+                   for r in rows]
+        # Identical scoring inputs: energy fields are never read, so bit identity.
+        self.assertEqual(predict_episode(self.model, missing), predict_episode(self.model, rows))
+        self.assertEqual(residual_score(self.model, missing, total, h),
+                         residual_score(self.model, rows, total, h))
 
     def test_record_adapter_and_power_counter_end_to_end(self):
         data = _make_episode(41, 0, trace=True)

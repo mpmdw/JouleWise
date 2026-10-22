@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import random
 import unittest
 from dataclasses import replace
 from statistics import NormalDist
@@ -26,41 +25,16 @@ def _true_total(rows):
 
 
 def _noise_variance(rows, measurement_h):
-    return math.fsum(_SIGMA**2+row.energy_half_width_j**2 for row in rows) + measurement_h**2
+    return len(rows)*_SIGMA**2 + measurement_h**2
 
-
-def _stratified_calibration(seed, count):
-    """Reduce Monte Carlo tail noise while retaining Gaussian turn marginals.
-
-    Condition each episode's independent Gaussian errors on a stratified normal
-    aggregate: e_i <- e_i + v_i/V * (target_total_error - total_error).
-    The orthogonal Gaussian errors are unchanged; with a normal aggregate the
-    covariance is still diag(v). A randomly permuted quantile grid approximates
-    that normal aggregate without a chance 400-episode tail imbalance. Evaluation
-    episodes and coefficient-coverage worlds retain independent Gaussian draws.
-    """
-    data = _world(seed, count)
-    quantiles = [_NORMAL.inv_cdf((i+.5)/count) for i in range(count)]
-    random.Random(seed).shuffle(quantiles)
-    balanced = []
-    for (episode, energies, total, h), z in zip(data, quantiles):
-        rows = turn_rows_from_episode(episode, energies)
-        variance = _noise_variance(rows, h)
-        correction = z*math.sqrt(variance) - (total-_true_total(rows))
-        adjusted = {
-            i: (energy + (_SIGMA**2+half_width**2)/variance*correction, half_width)
-            for i, (energy, half_width) in energies.items()
-        }
-        balanced.append((episode, adjusted, total+correction, h))
-    return balanced
 
 
 class TestEnergyResidualCoverage(unittest.TestCase):
     def test_coefficient_standard_error_coverage_across_seeds(self):
-        # 512 independent worlds make binomial SE about 0.021 at 68% coverage;
-        # the five-coefficient 95% simultaneous bar is approximately 0.053.
-        # This resolves coverage more precisely than the initial 128-world
-        # smoke; a factor-two covariance error changes coverage by about 0.16.
+        # Compute budget: 512 independent worlds. Four binomial SE at nominal
+        # 68.27% coverage detect departures of 0.082; a factor-two covariance
+        # error shifts coverage about 0.16. Each comparison's normal-approximation
+        # false-failure rate is about 6e-5 (the lead's round-1 ruling).
         seeds = 512
         target = _NORMAL.cdf(1)-_NORMAL.cdf(-1)
         counts, errors, ses = [0]*5, [[] for _ in range(5)], [[] for _ in range(5)]
@@ -75,34 +49,35 @@ class TestEnergyResidualCoverage(unittest.TestCase):
                 counts[j] += abs(error) <= se
                 errors[j].append(error)
                 ses[j].append(se)
-        # Bonferroni controls a 5-coefficient, two-sided 95% family.
-        z = _NORMAL.inv_cdf(1-.05/(2*5))
-        bar = z*math.sqrt(target*(1-target)/seeds)
+        # Four SE per comparison: about 6e-5 false failure, 0.082 resolution.
+        bar = 4*math.sqrt(target*(1-target)/seeds)
         table = "\ncoefficient true mean_se coverage expected\n" + "\n".join(
             f"{j} {_COEF[j]:.6g} {sum(ses[j])/seeds:.6g} "
             f"{counts[j]/seeds:.4f} {target:.4f}" for j in range(5))
         for j in range(5):
             self.assertLessEqual(abs(counts[j]/seeds-target), bar, table)
-            # Mean bias SE combines independent fit uncertainties across seeds.
+            # Mean bias combines independent fit uncertainties; four mean SE
+            # detect a bias of 4*mean_se, with about 6e-5 false failure.
             mean_se = math.sqrt(math.fsum(se*se for se in ses[j]))/seeds
-            self.assertLessEqual(abs(sum(errors[j])/seeds), z*mean_se, table)
+            self.assertLessEqual(abs(sum(errors[j])/seeds), 4*mean_se, table)
         print(table)
 
 
 class TestEnergyResidualPower(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # 400 calibration and 1000 evaluation episodes give a conservative iid
-        # binomial comparison SE of sqrt(.05*.95*(1/400+1/1000))=0.012894.
-        # Stratification reduces calibration tail variance below that iid bar.
-        # Even a family-corrected bar is below the 0.05 signal of a dead detector.
-        cls.calibration_data = _stratified_calibration(2_000_000, 400)
+        # Compute budgets: m=1000 iid calibration and n=2000 iid evaluation
+        # episodes. FP count variance is alpha*(1-alpha)/n; calibration's
+        # empirical-quantile tail mass adds about alpha*(1-alpha)/m.
+        # Four combined SE give about 6e-5 false failure per normal comparison
+        # and detect FP departures of 0.0338 (0.0516 at n=1000, m=400).
+        cls.calibration_data = _world(2_000_000, 1000)
         cls.calibration = {datum[0].episode_id:_adapt(datum)
                            for datum in cls.calibration_data}
         cls.training_rows = [row for rows, _, _ in cls.calibration.values() for row in rows]
         cls.model = fit_energy_model(cls.training_rows)
         cls.threshold = grouped_benign_threshold(cls.calibration, alpha=_ALPHA)
-        cls.evaluation = _world(3_000_000, 1000)
+        cls.evaluation = _world(3_000_000, 2000)
 
     def test_grouped_quantile_is_real_leave_pair_out(self):
         # Real refits, not patched score fixtures, independently construct the
@@ -132,8 +107,8 @@ class TestEnergyResidualPower(unittest.TestCase):
         # uncertainty; neither test set is used to choose the threshold.
         se = math.sqrt(_ALPHA*(1-_ALPHA)*(1/n+1/m))
         message = f"benign threshold={self.threshold:.6f}, FP={count}/{n}={rate:.6f}, SE={se:.6f}"
-        # One combined binomial SE is the brief's requested agreement bar.
-        self.assertLessEqual(abs(rate-_ALPHA), se, message)
+        # Four combined SE: about 6e-5 false failure; 0.0338 departure resolves.
+        self.assertLessEqual(abs(rate-_ALPHA), 4*se, message)
         print(message)
 
     def test_hidden_decode_power_curve(self):
@@ -175,12 +150,12 @@ class TestEnergyResidualPower(unittest.TestCase):
         table = "\nH/Hmin mean_H observed conditional_theory normal_approx binomial_SE\n" + "\n".join(
             f"{r:.1f} {h:.3f} {obs:.4f} {theory:.4f} {approx:.4f} {se:.5f}"
             for r, h, obs, theory, approx, se in results)
-        # Five powers get a two-sided 95% simultaneous normal/binomial bar.
-        z = _NORMAL.inv_cdf(1-.05/(2*len(results)))
+        # Four SE plus one count: about 6e-5 false failure per comparison.
+        # Resolves 4*se+1/n (at most 0.0453 for n=2000, since p*(1-p)<=1/4).
         for _, _, observed, expected, approximation, se in results:
             # One count is the minimum discrete empirical-rate resolution.
-            self.assertLessEqual(abs(observed-expected), z*se+1/len(self.evaluation), table)
-            self.assertLessEqual(abs(observed-approximation), z*se+1/len(self.evaluation), table)
+            self.assertLessEqual(abs(observed-expected), 4*se+1/len(self.evaluation), table)
+            self.assertLessEqual(abs(observed-approximation), 4*se+1/len(self.evaluation), table)
         # Removing hidden energy must miss the high-H branch by much more than
         # the same Monte Carlo bar; the next test checks that negative control.
         print(table)
@@ -213,10 +188,10 @@ class TestEnergyResidualPower(unittest.TestCase):
         table = "\ndeleted_turns observed theory binomial_SE\n" + "\n".join(
             f"{d} {observed:.4f} {expected:.4f} {se:.5f}"
             for d, observed, expected, se in results)
-        # Three deletion effects: two-sided 95% simultaneous binomial bar.
-        z = _NORMAL.inv_cdf(1-.05/(2*len(results)))
+        # Four SE plus one count: about 6e-5 false failure per comparison.
+        # Resolves 4*se+1/n (at most 0.0453 for this n=2000 compute budget).
         for _, observed, expected, se in results:
-            self.assertLessEqual(abs(observed-expected), z*se+1/len(self.evaluation), table)
+            self.assertLessEqual(abs(observed-expected), 4*se+1/len(self.evaluation), table)
         print(table)
 
     def test_zero_energy_hidden_work_is_false_positives_only(self):
@@ -235,7 +210,9 @@ class TestEnergyResidualPower(unittest.TestCase):
         self.assertEqual(caught, benign)  # Same visible work and same energy inputs.
         n, m = len(self.evaluation), len(self.calibration)
         se = math.sqrt(_ALPHA*(1-_ALPHA)*(1/n+1/m))
-        self.assertLessEqual(abs(caught/n-_ALPHA), se,
+        # Same four-combined-SE rule as benign FP: about 6e-5 false failure,
+        # detecting departures above 0.0338 at the declared n/m budgets.
+        self.assertLessEqual(abs(caught/n-_ALPHA), 4*se,
                              f"zero-energy control={caught}/{n}; alpha={_ALPHA}, SE={se:.6f}")
         print(f"zero-energy hidden control: {caught}/{n} = {caught/n:.6f}")
 

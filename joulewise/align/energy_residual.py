@@ -2,7 +2,9 @@
 
 Half-widths are read as standard uncertainties. Duration is diagnostic only:
 using it would absorb hidden work. Returned models, numbers and sequences expose
-flags; copy these into Episode.flags when persisting results. Stdlib-only.
+flags; read .flags before arithmetic, comparison or JSON encoding, which lose
+flags on float and tuple results. Copy them into Episode.flags when persisting.
+Stdlib-only.
 """
 
 from __future__ import annotations
@@ -49,9 +51,16 @@ class EnergyModel:
     n_turns: int
 
 
-@dataclass(frozen=True)
 class _ModelResult(EnergyModel):
-    flags: tuple[str, ...] = ()
+    # No new dataclass field: asdict and EnergyModel(**asdict(model)) keep the
+    # five-field public contract. Diagnostics are a lane-local attribute.
+    def __init__(
+        self, names: tuple[str, ...], coef: tuple[float, ...],
+        cov: tuple[tuple[float, ...], ...], sigma2_per_turn: float,
+        n_turns: int, flags: Sequence[str] = (),
+    ) -> None:
+        super().__init__(names, coef, cov, sigma2_per_turn, n_turns)
+        object.__setattr__(self, "flags", tuple(dict.fromkeys(flags)))
 
 
 class _Number(float):
@@ -91,14 +100,14 @@ def _row_flags(rows: Sequence[TurnRow], *, use_energy: bool) -> list[str]:
         counts = (row.context_tokens, row.prefill_tokens, row.decode_tokens)
         if any(not isinstance(x, int) or isinstance(x, bool) or x < 0 for x in counts):
             flags.append("invalid_token_count")
-        values = (*counts, row.energy_half_width_j)
+        values = counts
         if use_energy:
-            values += (row.energy_j,)
+            values += (row.energy_j, row.energy_half_width_j)
         if not all(_finite(x) for x in values):
             flags.append("nonfinite_input")
         if not _finite(row.duration_s) or row.duration_s < 0:
             flags.append("invalid_duration")
-        if _finite(row.energy_half_width_j) and row.energy_half_width_j < 0:
+        if use_energy and _finite(row.energy_half_width_j) and row.energy_half_width_j < 0:
             flags.append("negative_half_width")
     return list(dict.fromkeys(flags))
 
@@ -146,23 +155,47 @@ def _dot(a: Sequence[float], b: Sequence[float]) -> float:
     return math.fsum(x * y for x, y in zip(a, b))
 
 
+def _identified_columns(x: Sequence[Sequence[float]]) -> list[int]:
+    """Keep resolvable columns in contract order, once, before weighting."""
+    n = len(x)
+    scales = [max(abs(row[j]) for row in x) for j in range(_P)]
+    columns = [[row[j] / scales[j] if scales[j] else 0.0 for row in x]
+               for j in range(_P)]
+    # The QR bar also defines identifiability: a column remainder at
+    # O(n*epsilon*||A||) is information the floating-point fit cannot resolve.
+    rank_bar = _EPS * max(n, _P) * max(math.sqrt(_dot(c, c)) for c in columns)
+    basis, kept = [], []
+    for j, column in enumerate(columns):
+        remainder = list(column)
+        # Reorthogonalize to prevent loss of orthogonality on collinear inputs.
+        for _ in range(2):
+            for q in basis:
+                projection = _dot(q, remainder)
+                remainder = [v - projection*u for v, u in zip(remainder, q)]
+        norm = math.sqrt(_dot(remainder, remainder))
+        if norm > rank_bar:
+            kept.append(j)
+            basis.append([v / norm for v in remainder])
+    return kept
+
+
 def _wls(
     x: Sequence[Sequence[float]], y: Sequence[float], variances: Sequence[float],
 ) -> tuple[list[float], list[list[float]], list[float]] | None:
     """Column-scaled Householder QR, avoiding normal-equation condition squaring."""
-    n = len(x)
-    scales = [max(abs(row[j]) for row in x) for j in range(_P)]
+    n, p = len(x), len(x[0])
+    scales = [max(abs(row[j]) for row in x) for j in range(p)]
     if any(scale == 0 for scale in scales):
         return None
     reference = min(variances)
     roots = [math.sqrt(reference / value) for value in variances]
-    a = [[row[j] / scales[j] * root for j in range(_P)]
+    a = [[row[j] / scales[j] * root for j in range(p)]
          for row, root in zip(x, roots)]
     b = [value * root for value, root in zip(y, roots)]
     # Standard QR rank bar: floating error accumulates as O(n*epsilon*||A||).
-    rank_bar = _EPS * max(n, _P) * max(
-        math.sqrt(math.fsum(row[j] ** 2 for row in a)) for j in range(_P))
-    for k in range(_P):
+    rank_bar = _EPS * max(n, p) * max(
+        math.sqrt(math.fsum(row[j] ** 2 for row in a)) for j in range(p))
+    for k in range(p):
         v = [a[i][k] for i in range(k, n)]
         norm = math.sqrt(_dot(v, v))
         if norm <= rank_bar:
@@ -171,7 +204,7 @@ def _wls(
         v[0] -= diagonal
         vnorm = math.sqrt(_dot(v, v))
         v = [value / vnorm for value in v]
-        for j in range(k + 1, _P):
+        for j in range(k + 1, p):
             projection = 2 * math.fsum(v[i-k] * a[i][j] for i in range(k, n))
             for i in range(k, n):
                 a[i][j] -= projection * v[i-k]
@@ -181,17 +214,17 @@ def _wls(
         a[k][k] = diagonal
 
     def backsolve(rhs: Sequence[float]) -> list[float]:
-        out = [0.0] * _P
-        for j in reversed(range(_P)):
+        out = [0.0] * p
+        for j in reversed(range(p)):
             out[j] = (rhs[j] - math.fsum(a[j][k] * out[k]
-                                       for k in range(j + 1, _P))) / a[j][j]
+                                       for k in range(j + 1, p))) / a[j][j]
         return out
 
-    coef = [value / scale for value, scale in zip(backsolve(b[:_P]), scales)]
-    columns = [backsolve([float(i == j) for i in range(_P)]) for j in range(_P)]
+    coef = [value / scale for value, scale in zip(backsolve(b[:p]), scales)]
+    columns = [backsolve([float(i == j) for i in range(p)]) for j in range(p)]
     cov = [[reference * math.fsum(columns[k][i] * columns[k][j]
-                                 for k in range(_P)) / scales[i] / scales[j]
-            for j in range(_P)] for i in range(_P)]
+                                 for k in range(p)) / scales[i] / scales[j]
+            for j in range(p)] for i in range(p)]
     residuals = [value - _dot(row, coef) for row, value in zip(x, y)]
     return coef, cov, residuals
 
@@ -200,33 +233,53 @@ def fit_energy_model(rows: Sequence[TurnRow]) -> EnergyModel:
     """Fit benign turns by WLS; read each half-width h as one standard uncertainty.
 
     Weights are 1/(sigma2+h_i**2). Iterate the method-of-moments equation
-    sum(residual_i**2/(sigma2+h_i**2)) = n-5 (Paule-Mandel), with sigma2>=0.
+    sum(residual_i**2/(sigma2+h_i**2)) = n-p_kept (Paule-Mandel), sigma2>=0.
+    Select identifiable columns on the scaled unweighted design, in contract
+    order; unidentified coefficients and covariance entries are zero and flagged.
+    Exclude unusable fit rows, flag excluded_turn_rows=N, and count only used rows.
     Safeguarded Newton/bisection converges at sqrt(float epsilon) relative
-    moment error. Covariance is (X'WX)^-1 in original column units, without a
+    moment error with degrees of freedom n-p_kept. Covariance is (X'WX)^-1 in original column units, without a
     second reduced-chi-square multiplier. Benign complete logs and separate
     hardware/serving configurations are the caller's responsibility:
     TurnRow has no condition label.
     """
-    n = len(rows)
     flags = _row_flags(rows, use_energy=True)
+    usable = [row for row in rows if not (
+        {"invalid_token_count", "nonfinite_input", "negative_half_width"}
+        & set(_row_flags((row,), use_energy=True)))]
+    excluded = len(rows) - len(usable)
+    if excluded:
+        flags.append(f"excluded_turn_rows={excluded}")
+    n = len(usable)
     if n <= _P:
         return _bad_model(n, flags + ["insufficient_turns"])
-    if "nonfinite_input" in flags:
-        return _bad_model(n, flags)
-    x, y = [design_row(row) for row in rows], [row.energy_j for row in rows]
-    h2 = [row.energy_half_width_j ** 2 for row in rows]
+    full_x = [design_row(row) for row in usable]
+    kept = _identified_columns(full_x)
+    flags.extend(f"unidentified_column:{_NAMES[j]}" for j in range(_P) if j not in kept)
+    x = [[row[j] for j in kept] for row in full_x]
+    y = [row.energy_j for row in usable]
+    h2 = [row.energy_half_width_j ** 2 for row in usable]
+
+    def result(coef, cov, sigma2):
+        full_coef, full_cov = [0.0] * _P, [[0.0] * _P for _ in range(_P)]
+        for i, original_i in enumerate(kept):
+            full_coef[original_i] = coef[i]
+            for j, original_j in enumerate(kept):
+                full_cov[original_i][original_j] = cov[i][j]
+        return _ModelResult(_NAMES, tuple(full_coef), tuple(map(tuple, full_cov)),
+                            sigma2, n, flags)
+
     ordinary = _wls(x, y, [1.0] * n)
     if ordinary is None:
         return _bad_model(n, flags + ["rank_deficient_design"])
-    dof = n - _P
+    dof = n - len(kept)
     upper = _dot(ordinary[2], ordinary[2]) / dof
     if not any(h2):
         coef, base_cov, _ = ordinary
         cov = [[value * upper for value in row] for row in base_cov]
         if upper == 0:
             flags.append("zero_training_uncertainty")
-        return _ModelResult(_NAMES, tuple(coef), tuple(map(tuple, cov)),
-                            upper, n, tuple(flags))
+        return result(coef, cov, upper)
 
     # At sigma2=0 a zero h is exact. Represent its limiting weight with one
     # ULP of the variance scale. Squaring one energy ULP would whiten at a
@@ -281,18 +334,21 @@ def fit_energy_model(rows: Sequence[TurnRow]) -> EnergyModel:
             return _bad_model(n, flags + ["rank_deficient_weighted_design"])
         fit = evaluated[0]
     coef, cov, _ = fit
-    return _ModelResult(_NAMES, tuple(coef), tuple(map(tuple, cov)),
-                        sigma2, n, tuple(dict.fromkeys(flags)))
+    return result(coef, cov, sigma2)
 
 
 def predict_episode(model: EnergyModel, rows: Sequence[TurnRow]) -> tuple[float, float]:
-    """Sum predictions; variance=s' cov s + sum(sigma2+h_turn**2).
+    """Sum predictions; variance=s' cov s + n*sigma2_per_turn.
 
-    The summed design row s preserves parameter covariance shared across turns.
-    Turn and measurement errors are assumed independent. Correlated baseline
-    and clock errors must instead be carried as episode uncertainty.
+    The measured total must be an integral over the whole episode with its own
+    standard uncertainty, passed to residual_score. A caller summing turn energies
+    must pass the standard uncertainty of that sum as measured_half_width_j.
+    The summed design row preserves shared parameter covariance. Only intrinsic
+    turn deviations are independent here; turn attribution energies/half-widths
+    are fit inputs and are never read when predicting.
     """
-    flags = list(_flags(model)) + _row_flags(rows, use_energy=False)
+    row_flags = _row_flags(rows, use_energy=False)
+    flags = list(_flags(model)) + row_flags
     if len({row.episode_id for row in rows}) > 1:
         flags.append("multiple_episode_ids")
     # The public contract fixes feature order, not the spelling of its labels.
@@ -303,15 +359,17 @@ def predict_episode(model: EnergyModel, rows: Sequence[TurnRow]) -> tuple[float,
     if not all(_finite(x) for x in (*model.coef, model.sigma2_per_turn,
                                     *(v for row in model.cov for v in row))):
         return _SequenceResult((math.nan, math.nan), flags + ["nonfinite_model"])
-    if "nonfinite_input" in flags:
+    if "nonfinite_input" in row_flags or "invalid_token_count" in row_flags:
         return _SequenceResult((math.nan, math.nan), flags)
     designs = [design_row(row) for row in rows]
+    for j, name in enumerate(_NAMES):
+        if f"unidentified_column:{name}" in _flags(model) and any(row[j] != 0 for row in designs):
+            flags.append(f"unidentified_column_used:{name}")
     summed = [math.fsum(row[j] for row in designs) for j in range(_P)]
     mean = _dot(summed, model.coef)
     terms = [summed[i] * model.cov[i][j] * summed[j]
              for i in range(_P) for j in range(_P)]
-    variance = math.fsum(terms) + math.fsum(
-        model.sigma2_per_turn + row.energy_half_width_j ** 2 for row in rows)
+    variance = math.fsum(terms) + len(rows) * model.sigma2_per_turn
     # Clamp only cancellation bounded by floating accumulation in the 25
     # covariance products, never a physically negative variance.
     roundoff = _EPS * len(terms) * math.fsum(abs(value) for value in terms)
@@ -330,7 +388,12 @@ def residual_score(
     model: EnergyModel, logged_rows: Sequence[TurnRow],
     measured_total_j: float, measured_half_width_j: float,
 ) -> float:
-    """Return (measured-predicted)/sqrt(sd_pred**2+measured_half_width**2)."""
+    """Return (measured-predicted)/sqrt(sd_pred**2+measured_half_width**2).
+
+    The measured total must be an integral over the whole episode with its own
+    standard uncertainty. A caller summing turn energies must pass the standard
+    uncertainty of that sum as measured_half_width_j. It is added once.
+    """
     prediction = predict_episode(model, logged_rows)
     flags = list(_flags(prediction))
     if not _finite(measured_total_j) or not _finite(measured_half_width_j):
@@ -357,7 +420,9 @@ def grouped_benign_threshold(
     TurnRow.group supplies the task pair, not the episode mapping key.
     Mixed-group episodes connect their groups into one held-out component
     to prevent leakage without deleting episodes. Empty logs have no group;
-    calibration is then undefined and flagged.
+    exclude and count them. Exclude non-finite held-out scores, retain their
+    explanatory flags, and take the quantile over the remaining finite scores.
+    Unusable episode totals do not remove finite turn energies from training.
     """
     flags = []
     if not _finite(alpha) or not 0 < alpha < 1:
@@ -365,10 +430,13 @@ def grouped_benign_threshold(
     if not benign:
         return _Number(math.nan, ["empty_calibration"])
     components: list[set[str]] = []
-    entries = list(benign.values())
+    entries = [entry for entry in benign.values() if entry[0]]
+    excluded_empty = len(benign) - len(entries)
+    if excluded_empty:
+        flags.extend(["missing_group", f"excluded_empty_episodes={excluded_empty}"])
+    if not entries:
+        return _Number(math.nan, flags + ["no_finite_calibration_scores"])
     for rows, _, _ in entries:
-        if not rows:
-            return _Number(math.nan, ["missing_group"])
         groups = {row.group for row in rows}
         if len(groups) > 1:
             flags.append("mixed_episode_groups")
@@ -380,6 +448,7 @@ def grouped_benign_threshold(
     if len(components) < 2:
         return _Number(math.nan, flags + ["insufficient_groups"])
     scores = []
+    excluded_scores = 0
     for component in components:
         training = [row for rows, _, _ in entries
                     if not ({r.group for r in rows} & component) for row in rows]
@@ -389,9 +458,14 @@ def grouped_benign_threshold(
             if {row.group for row in rows} & component:
                 score = residual_score(model, rows, energy, half_width)
                 flags.extend(_flags(score))
-                scores.append(score)
-    if not all(_finite(score) for score in scores):
-        return _Number(math.nan, flags + ["nonfinite_calibration_score"])
+                if _finite(score):
+                    scores.append(score)
+                else:
+                    excluded_scores += 1
+    if excluded_scores:
+        flags.extend(["nonfinite_calibration_score", f"excluded_heldout_scores={excluded_scores}"])
+    if not scores:
+        return _Number(math.nan, flags + ["no_finite_calibration_scores"])
     rank = math.ceil((1 - alpha) * len(scores))
     return _Number(sorted(scores)[rank - 1], flags)
 
@@ -408,6 +482,8 @@ def min_detectable_hidden_decode_tokens(
     and assumes hidden decode adds energy without changing D or adding a call
     intercept. Nonpositive e gives infinity above the false-positive power;
     requested power <= alpha needs no hidden work. Ceil H for a token budget.
+    An unidentified context-decode coefficient contributes zero with its flag;
+    an unidentified decode coefficient makes hidden-token energy undefined.
     """
     prediction = predict_episode(model, logged_rows)
     flags = list(_flags(prediction))
@@ -422,6 +498,8 @@ def min_detectable_hidden_decode_tokens(
         flags.append("negative_half_width")
     if "invalid_model_shape" in flags:
         return _Number(math.nan, flags)
+    if f"unidentified_column:{_NAMES[2]}" in _flags(model):
+        return _Number(math.nan, flags + ["hidden_decode_energy_unidentified"])
     context = math.fsum(row.context_tokens for row in logged_rows) / len(logged_rows)
     per_token = model.coef[2] + model.coef[3] * context
     if not _finite(per_token):
