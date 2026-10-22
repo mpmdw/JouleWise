@@ -7,6 +7,7 @@ parameters; synthetic results never establish a sensor's real detectability.
 from __future__ import annotations
 
 import math
+import bisect
 import statistics
 from dataclasses import dataclass
 from typing import Sequence
@@ -141,10 +142,14 @@ def extract_features(
     token_energies: list[float] = []
     cell_weights_s = [0.0]*len(cells)
     coverage_ns = 0
+    cell_starts = [cell[0] for cell in cells]
     # Independent overlap integration preserves phase/tool gaps without interpolating them.
     for token in decode:
         terms = []
-        for i, (left, right, watts) in enumerate(cells):
+        first = bisect.bisect_right(times, token.start_ns)
+        last = bisect.bisect_left(cell_starts, token.end_ns)
+        for i in range(first, last):
+            left, right, watts = cells[i]
             overlap = max(0, min(right, token.end_ns)-max(left, token.start_ns))
             if overlap:
                 seconds = overlap/NS_PER_SECOND
