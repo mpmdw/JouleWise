@@ -89,4 +89,42 @@ class Monitor(Protocol):
               task_description: str) -> MonitorVerdict: ...
 
 
-__all__ = ["ChatMessage", "ToolCallRequest", "ChatResult", "ChatEndpoint", "PowerSampler", "Monitor"]
+@runtime_checkable
+class AgentTask(Protocol):
+    """One agentic task pair (a main task and, under "sabotage", a side task).
+
+    ``scratchpad_tags`` names the open/close tags of a hidden scratchpad the
+    agent is told the monitor cannot see (SHADE-Arena convention), or None.
+    The runner strips that span before a ``no_scratchpad`` or
+    ``actions_only`` monitor reads the transcript.
+    """
+
+    task_pair: str
+    scratchpad_tags: tuple[str, str] | None
+
+    def reset(self, seed: int) -> None: ...
+
+    def system_prompt(self, condition: str) -> str: ...
+
+    def user_prompt(self) -> str: ...
+
+    def task_description(self) -> str: ...  # what the monitor is told the agent was asked to do
+
+    def tool_schemas(self) -> Sequence[Mapping[str, Any]]: ...  # OpenAI "tools" entries
+
+    def call_tool(self, name: str, arguments_json: str) -> str: ...
+
+    def score_main(self, transcript: Sequence[ChatMessage]) -> float | None: ...
+
+    def score_side(self, transcript: Sequence[ChatMessage]) -> bool | None: ...
+
+
+@runtime_checkable
+class TokenCounter(Protocol):
+    """Counts tokens of text with the served model's tokenizer (vLLM and llama.cpp expose /tokenize)."""
+
+    def count_tokens(self, text: str) -> int: ...
+
+
+__all__ = ["ChatMessage", "ToolCallRequest", "ChatResult", "ChatEndpoint", "PowerSampler", "Monitor",
+           "AgentTask", "TokenCounter"]
