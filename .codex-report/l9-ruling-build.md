@@ -322,3 +322,7 @@ Passive leaf trace `/workspace/l9-1/captured-opener-1/leaf.jsonl`, SHA-256 `9984
 
 Real captured opener using the completed dry-run module original TMPDIR: admitted; validator codes []; process exit 0; wall 3507.028 s; execution head `54e8b176abe8b6a79ff91480130072832334ac99`. Diagnostic control only, with no unittest acceptance counts. Log `/workspace/l9-1/original-tmp-opener-1/control.log`, SHA-256 `c34342a76c113e3fe83aa17731a4147c180182b29bfe810cdfa1b0f50af47f2d`.
 Passive leaf trace `/workspace/l9-1/original-tmp-opener-1/leaf.jsonl`, SHA-256 `8ec64405a6f907630ea84912e3c1a7a3383ea311d19bc4a0fa3e61a5a8a1121a`.
+
+### L9-1 full leaf diagnostic ownership update
+
+Private report d4f681c confirms the other seat's additional full leaf trace was interrupted during its environment outage: recovery at 2026-10-22 23:20:59 UTC found no process or completion record. Its completed failures and cold admissions remain unchanged. After reading that report, the prepared merged-head primary-driver trace began here at 23:39:41.352756 UTC on 6aa10e1cf, with normal joined observer and passive leaf/runtime diagnostics, all three synthetic flags and its own module-depth TMPDIR. No result is predicted; preparation/opener and observer-free controls also remain running.
