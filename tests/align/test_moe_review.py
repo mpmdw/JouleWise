@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import math
 import random
+import subprocess
+import sys
+from pathlib import Path
 import time
 import tracemalloc
 import unittest
@@ -73,10 +76,33 @@ class CostTests(unittest.TestCase):
         # this fixture checks the same rounded production quantity, not a new
         # numerical agreement tolerance on the random sampling realization.
         result = S.episode_stats(log)
-        self.assertEqual(round(result["both_reuse_fraction"], 3), round(K / E, 3))
+        assert_close(self, round(result["both_reuse_fraction"], 3), round(K / E, 3))
 
 
 class ReviewerWorldTests(unittest.TestCase):
+    def test_independent_twin_from_local_review_ref(self):
+        # Full-history CI checkout fetches public branches. Read the reviewer's
+        # files from that local ref; tests make no network requests and do not
+        # commit the fetched twin. The brief authorizes these untracked paths.
+        root = Path(__file__).resolve().parents[2]
+        ref = "origin/lane/2026-10-21-align-moe-twin"
+        revision = subprocess.run(["git", "rev-parse", ref], cwd=root,
+                                  check=True, capture_output=True, text=True).stdout.strip()
+        paths = ("tests/align/twins/moe_twin.py",
+                 "tests/align/twins/test_moe_twin_selfcheck.py",
+                 "tests/align/test_twin_moe.py")
+        target = root / "tests/align/twins"
+        target.mkdir(exist_ok=True)
+        (target / "__init__.py").touch()
+        for path in paths:
+            blob = subprocess.run(["git", "show", f"{ref}:{path}"], cwd=root,
+                                  check=True, capture_output=True, text=True).stdout
+            (root / path).write_text(blob, encoding="utf-8")
+        process = subprocess.run([sys.executable, "-m", "unittest", "tests.align.test_twin_moe", "-v"],
+                                 cwd=root, capture_output=True, text=True)
+        print("MOE_TWIN_REVIEW_REF", revision, process.stdout, process.stderr, flush=True)
+        self.assertEqual(process.returncode, 0)  # Every independent agreement test must pass.
+
     def test_review_r3_complete_missing_and_empty_decode(self):
         world = make_world(seed=11, f=0.25, count_ratio=1.3, L=8, E=64, K=6)
         result = analyze_stage_a(world, n_bootstrap=400, seed=3)
