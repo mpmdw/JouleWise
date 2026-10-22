@@ -308,7 +308,7 @@ class DutyWorldTests(unittest.TestCase):
         bar = 4*math.sqrt(alpha*(1-alpha)/seed_count)
         print("NVML DUTY CALIBRATION", json.dumps({
             "seeds": seed_count, "repeats": repeats, "outside": outside,
-            "outside_fraction": fraction, "nominal_alpha": alpha, "binomial_se": bar}))
+            "outside_fraction": fraction, "nominal_alpha": alpha, "binomial_se": bar/4, "four_se_bar": bar}))
         self.assertLessEqual(abs(fraction-alpha), bar,
                              (outside, seed_count, fraction, alpha, bar))
 

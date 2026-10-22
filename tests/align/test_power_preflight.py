@@ -523,7 +523,7 @@ class PreflightTests(unittest.TestCase):
         bar = 4*math.sqrt(alpha*(1-alpha)/seed_count)
         print("NVML PREFLIGHT CALIBRATION", json.dumps({
             "seeds": seed_count, "outside": exceeded, "fraction": fraction,
-            "alpha": alpha, "binomial_se": bar}))
+            "alpha": alpha, "binomial_se": bar/4, "four_se_bar": bar}))
         self.assertLessEqual(abs(fraction-alpha), bar,
                              (exceeded, seed_count, fraction, alpha, bar))
 

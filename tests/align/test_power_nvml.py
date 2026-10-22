@@ -412,8 +412,14 @@ class NvmlSamplerTests(unittest.TestCase):
     def test_nonincreasing_clock_is_flagged_without_invented_timestamps(self) -> None:
         traces = collect(FakeNvmlLibrary(), clock_ns=lambda: 100)
         for trace in traces:
-            self.assertEqual(trace.t_ns, (100,))
-            self.assertIn("nonincreasing_call_clock", json.loads(trace.notes)["flags"])
+            notes = json.loads(trace.notes)
+            self.assertEqual(len(trace.t_ns), 1)
+            self.assertEqual(notes["query_midpoint_ns"], [100])
+            if trace.channel.endswith((":power_instant", ":power_average")):
+                self.assertEqual(notes["window_end_ns"], list(trace.t_ns))
+            else:
+                self.assertEqual(trace.t_ns, (100,))
+            self.assertIn("nonincreasing_call_clock", notes["flags"])
 
     def test_missing_architecture_entry_point_preserves_collected_channels(self) -> None:
         library = FakeNvmlLibrary()
@@ -536,7 +542,8 @@ class NvmlSamplerTests(unittest.TestCase):
                 return library.nvmlSystemGetCudaDriverVersion_v2
             return getattr(library, name)
 
-        with mock.patch.object(pynvml, "_nvmlGetFunctionPointer", side_effect=resolve):
+        with mock.patch.object(pynvml, "nvmlLib", library), \
+                mock.patch.object(pynvml, "_nvmlGetFunctionPointer", side_effect=resolve):
             self.assertIs(open_nvml(prefer_pynvml=True), pynvml)
             sampler = NvmlSampler(nvml=pynvml)
             sampler.start()

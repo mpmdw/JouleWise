@@ -71,9 +71,11 @@ class _FieldValue(ctypes.Structure):
 def _field_number(value: Any) -> float:
     names = {0: "dVal", 1: "uiVal", 2: "ulVal", 3: "ullVal",
              4: "sllVal", 5: "siVal", 6: "usVal"}
-    if value.valueType not in names:
+    value_type = int(getattr(value.valueType, "value", value.valueType))
+    if value_type not in names:
         raise NvmlError(f"unknown NVML valueType {value.valueType}")
-    return float(getattr(value.value, names[value.valueType]))
+    scalar = getattr(value.value, names[value_type])
+    return float(getattr(scalar, "value", scalar))
 
 
 class CtypesNvml:
@@ -414,7 +416,7 @@ class NvmlSampler:
             return _scalar_int(self._nvml.nvmlDeviceGetPowerUsage(device.handle)), None
         field_id = POWER_INSTANT_FIELD if channel.kind == "power_instant" else POWER_AVERAGE_FIELD
         value = self._nvml.nvmlDeviceGetFieldValues(device.handle, [field_id])[0]
-        if value.nvmlReturn != 0:
+        if _scalar_int(value.nvmlReturn) != 0:
             raise NvmlError(f"field {field_id} returned NVML status {value.nvmlReturn}")
         return _field_number(value), _scalar_int(value.timestamp)
 
