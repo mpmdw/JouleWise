@@ -89,8 +89,9 @@ assumptions to check on the first hardware data, not a demonstrated live rate.
   it or silently unwrap a driver reset. Preserve the raw mJ values and flags;
   use uninterrupted segments or explicitly report the missing evidence.
 - Missing sensor calibration accuracy is not supplied by the API's 1 mW/mJ
-  quantum. A duty estimate reports coverage separately from its nominal
-  quantum/repeatability width; it cannot supply an absent accuracy calibration.
+  quantum. A duty estimate includes observed-range coverage, boundary and
+  timing bounds, conditional on their stated range assumptions; it cannot
+  supply an absent accuracy calibration.
 
 ## Choose the channel and check the sensor
 
@@ -135,7 +136,10 @@ one, as the shared records contract requires. Notes keep the equal known
 other endpoints remain intact. For a missing age, the query midpoint is a
 flagged proxy with an age bound of sensor period plus polling interval (or
 one-second output period plus polling interval for output averages). An unknown
-period leaves the age bound unknown. Check these flags before attribution.
+period leaves the age bound unknown. A maximum age is not a measured sensor
+endpoint: the duty estimator gives infinite half-width for contributing
+unknown-age samples, including A100 legacy power_usage. Use power_instant
+with valid driver timestamps for a finite interval. Check these flags before attribution.
 Mapped timing bounds include the full 1 us driver rounding quantum, the local
 wall/monotonic mapping bracket, and maximum wall-clock slew over timestamp age.
 The configurable `wall_clock_slew_ppm=500` cites Linux adjtimex MAXFREQ; supply
@@ -185,16 +189,23 @@ result = estimate_energy(runs)
 ```
 
 The first four offsets tile the period at quarter periods; subsequent offsets
-replicate those phases. Fewer than four phases leave gaps. Four phases can
-recover the point integral but do not estimate within-phase repeatability;
-use at least two replicas per phase for a finite spread term (eight total for
-25-of-100 ms). Six replays leave two phases without a replica and therefore
-an infinite width. Eight rather than four costs four additional episode durations,
-plus their pre/post-roll and dispatch waits; for a 26.7 s episode that adds
-106.8 s of workload GPU time. A finite four-replay interval would need an
-external repeatability/noise model, which this protocol does not invent.
+replicate those phases. The minimum that can tile is ceil(1/d), four for
+25-of-100 ms. Fewer repeats emit RuntimeWarning and return an evenly spread
+plan; preserve partial_coverage and its coverage bound. This keeps incomplete
+data usable while warning before collection.
+Four phases recover the point integral but cannot identify within-phase
+repeatability; use at least two replicas per phase (eight total here). An
+unreplicated phase is flagged and uses a conservative group-mass times
+observed-range envelope, under an additional assumption, rather than an
+identified 95% Gaussian term. Six replays still have unreplicated phases.
+Eight rather than four costs four episode durations plus pre/post-roll and
+dispatch waits; for a 26.7 s episode that adds 106.8 s of workload GPU time.
 Actual measured durations may differ: every replay is kept, clipped to its own
-duration, and the duration spread enters run-to-run variability. Pass each planned offset as the sampler's
+duration, and the duration spread enters run-to-run variability. Each aligned
+span is weighted by the fraction of runs still active. The estimand is mean
+run energy, not the longest replay; coefficients sum to mean duration.
+Coverage is active-run-weighted covered time divided by mean duration.
+Pass each planned offset as the sampler's
 repeat_group label when collecting real runs; this identifies intended phase
 replicas while preserving actual, jittered endpoints. Without labels, the
 estimator groups exact sensor-grid phases independently of terminal duration. Never round observed timestamps
@@ -211,25 +222,37 @@ prove it from power.
 A reading covers its documented window ending at its actual sensor timestamp.
 The estimator aligns windows on workload start, pools covered intervals and
 integrates them; it does not join sparse points with straight lines. It
-reports coverage fraction and a nominal statistical repeatability half-width
-plus the sensor quantum bound. Duration variability enters the same run spread. The nominal 95% spread interval assumes
-independent Gaussian run shifts (equal normalized shift scale within each
-declared phase). Boundary-straddling windows retain their
-original support, so outside-workload power is accounted for in the bound.
+reports coverage fraction and a half-width that adds the two-sided 95%
+Gaussian/Welch repeatability term, quantum rounding bound, auxiliary-center
+displacement and three observed-data systematic bounds. Duration variability
+enters the run spread; normalized phase groups assume independent Gaussian
+run shifts with equal shift scale within each declared phase.
 
-Systematic coverage/smoothing/timing bias is separate from that nominal interval.
-A caller-supplied conservative instantaneous `power_bound_w` produces the
-`worst_case_bias_j=<value>` flag. Preserve its physical evidence, including
-transients; an enforced average power limit alone is not an instantaneous bound.
-This diagnostic bound does not size `half_width_j`. When the systematic mismatch/timing area is nonzero and no bound is given,
-the systematic receipt is `worst_case_bias_j=inf` plus `worst_case_bias_unbounded`; the nominal
-interval remains computable from replay variation and resolution with the
-sampler's default arguments. Report both quantities and all model flags.
-Even successful calibration on synthetic Gaussian replay worlds would not
-validate sensor accuracy, waveform bias or the hardware model. Tiny/no-noise
-fixed worlds can miss this statistical interval; the separate bias receipt
-explains that limitation. Prefer complete phase coverage and validate on the
-first pilot before interpreting energy residuals.
+Let R be the largest minus smallest valid reading in retained traces, including
+pre/post-roll, M the mean duration and C the active-run-weighted covered time.
+Coverage contributes (M-C)*R. A clipped window contributes its coefficient
+times its outside fraction times R. A known endpoint uncertainty h contributes
+its coefficient times min(h/window,1)*R. These are bounds and add linearly,
+conditional on underlying unobserved power and inside/outside contrasts staying
+within the observed reading range. Averaged readings cannot prove this range
+assumption; preserve observed_range_bounds_assumed and validate it on the pilot.
+The flag nominal_95pct_gaussian_repeatability_plus_observed_range_bounds names
+this combined interval. It is conservative on deterministic edge-error worlds;
+the Gaussian component's calibration is tested separately on spread-dominated
+worlds.
+
+Numeric flags expose observed_reading_range_w, coverage_bound_j, boundary_bound_j,
+timing_bound_j, unreplicated_phase_bound_j, repeatability_half_width_j,
+resolution_bound_j and auxiliary_center_bound_j (each followed by =<value>).
+Preserve them beside the result. A supplied instantaneous power_bound_w is
+diagnostic only: worst_case_bias_j=<value> still gives the original-window
+kernel bound. With nonzero mismatch and no supplied bound it is inf plus
+worst_case_bias_unbounded; this alone does not make half_width_j infinite.
+No term in the data-bounded interval needs a power bound. Preserve any bound's
+physical evidence, including transients; an average power limit alone is not
+an instantaneous bound. Neither interval includes sensor calibration accuracy.
+Prefer complete phase coverage and validate these assumptions on the first
+pilot before interpreting energy residuals.
 
 Unknown resolution keeps every run and makes the width infinite. Unknown duty
 with a known window is flagged and does not change the estimate. Invalid power

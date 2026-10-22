@@ -10,6 +10,7 @@ import random
 import threading
 import unittest
 import time
+import statistics
 
 from joulewise.align.power.duty import (
     DUTY_CONFIDENCE, DutyEstimate, _student_quantile, estimate_energy, plan_offsets,
@@ -152,6 +153,58 @@ def replay_runs(seed: int, start_jitter_ns: int, duration_jitter_ns: int,
     return runs, world.integral(0, world.duration, world.duration, 0)/1e9
 
 
+class ShortReplayWorld(ReplayWorld):
+    """Reviewer's one-turn boundary witness: 300-380 W prefill, then
+    200-240 W decode with 5-25 W/7 Hz ripple in 1 ms bins; idle is 55 W.
+    Prefill is 100-300 ms and decode 0.5-2.5 s. These are waveform
+    parameters, not acceptance thresholds. No trailing tool wait hides the
+    roughly 165 W decode-to-idle step.
+    """
+    def __init__(self, rng: random.Random) -> None:
+        self.edges = [0, rng.randint(100_000_000, 300_000_000)+rng.randint(0, 999)]
+        self.watts = [rng.uniform(300, 380)]
+        base, amplitude = rng.uniform(200, 240), rng.uniform(5, 25)
+        for step in range(rng.randint(500, 2500)):
+            self.edges.append(self.edges[-1]+1_000_000)
+            self.watts.append(base+amplitude*math.sin(2*math.pi*7*step/1000))
+        self.edges.append(self.edges[-1]+rng.randint(1, 999_999))
+        self.watts.append(base)
+        self.duration = self.edges[-1]
+        self.prefix = [0.0]
+        for left, right, level in zip(self.edges, self.edges[1:], self.watts):
+            self.prefix.append(self.prefix[-1]+(right-left)*level)
+
+
+def r2_runs(world: ReplayWorld, rng: random.Random, *, repeats: int,
+            shift_sigma_w: float, duration_jitter_ns: int = 0
+            ) -> tuple[list[tuple[PowerTrace, int, int]], float, float]:
+    """Exact waveform integrals -> rounded noisy 25-of-100 ms PowerTraces.
+    Truth is mean shift-free run energy (the reviewer's Gaussian-shift
+    population target); the longest truth excludes random run shifts too.
+    """
+    runs = []
+    truths = []
+    for offset in plan_offsets(PERIOD_NS, .25, repeats):
+        shift = rng.gauss(0, shift_sigma_w)
+        jitter = rng.randint(0, 1_000_000)  # Reviewer's 0-1 ms dispatch jitter.
+        duration = world.duration+(rng.randint(-duration_jitter_ns, duration_jitter_ns)
+                                   if duration_jitter_ns else 0)
+        start = EPOCH_NS+offset+jitter
+        times = tuple(EPOCH_NS+k*PERIOD_NS for k in range(
+            (offset+jitter-PERIOD_NS)//PERIOD_NS,
+            (offset+jitter+duration+PERIOD_NS)//PERIOD_NS+2))
+        values = tuple(round((world.integral(t-start-TICK_NS, t-start, duration, shift)
+                              /TICK_NS+rng.gauss(0, .3))/.001)*.001 for t in times)
+        trace = PowerTrace(
+            "nvml_power", "gpu0:power_instant", "synthetic:monotonic",
+            times, values, "W", PERIOD_NS, TICK_NS, .25, .001,
+            json.dumps({"repeat_group": f"phase-{offset}",
+                        "timing_half_width_ns": [0]*len(times)}))
+        runs.append((trace, start, start+duration))
+        truths.append(world.integral(0, duration, duration, 0)/1e9)
+    return runs, statistics.mean(truths), max(truths)
+
+
 class DutyWorldTests(unittest.TestCase):
     def test_waveform_through_ctypes_threads_estimator_and_episode(self) -> None:
         episode, powers, truth = agent_world()
@@ -251,7 +304,8 @@ class DutyWorldTests(unittest.TestCase):
     def test_phase_plan_tiles_then_replicates(self) -> None:
         self.assertEqual(plan_offsets(PERIOD_NS, 0.25, 8),
                          [0, 25_000_000, 50_000_000, 75_000_000]*2)
-        self.assertEqual(plan_offsets(PERIOD_NS, 0.25, 2), [0, 50_000_000])
+        with self.assertWarnsRegex(RuntimeWarning, "need at least 4"):
+            self.assertEqual(plan_offsets(PERIOD_NS, 0.25, 2), [0, 50_000_000])
         self.assertEqual(plan_offsets(100, 1.0, 3), [0, 0, 0])
         for args in ((0, 0.25, 4), (100, 0.0, 4), (100, 0.25, 0)):
             self.assertEqual(plan_offsets(*args), [])
@@ -312,12 +366,15 @@ class DutyWorldTests(unittest.TestCase):
         self.assertLessEqual(abs(fraction-alpha), bar,
                              (outside, seed_count, fraction, alpha, bar))
 
-    def test_missing_coverage_needs_an_explicit_power_bound(self) -> None:
+    def test_missing_coverage_has_a_finite_observed_range_bound(self) -> None:
         episode, powers, _ = agent_world()
-        result = estimate_energy(sampled_runs(
-            episode, powers, 2, seed=0, power_bound_w=None))
+        with self.assertWarns(RuntimeWarning):
+            runs = sampled_runs(episode, powers, 2, seed=0, power_bound_w=None)
+        result = estimate_energy(runs)
         self.assertLess(result.coverage_fraction, 1.0)
-        self.assertTrue(math.isinf(result.half_width_j))
+        self.assertTrue(math.isfinite(result.half_width_j))
+        truth = math.fsum(powers)*TICK_NS/1e9
+        self.assertLessEqual(abs(result.joules-truth), result.half_width_j)
         self.assertIn("partial_coverage", result.flags)
         self.assertIn("worst_case_bias_unbounded", result.flags)
         self.assertIn("phase_without_replicates", result.flags)
@@ -455,6 +512,111 @@ class DutyWorldTests(unittest.TestCase):
         result = estimate_energy([(mixed, start, end)]+runs[1:])
         self.assertIn("mixed_channels", result.flags)
         self.assertIn("mixed_clock_domains", result.flags)
+
+    def test_late_sampler_without_power_bound_contains_truth(self) -> None:
+        episode, powers, truth = agent_world()
+        late = []
+        for trace, start, end in sampled_runs(episode, powers, 8, seed=0, power_bound_w=None):
+            keep = [i for i, timestamp in enumerate(trace.t_ns)
+                    if timestamp-start > 1_300_000_000]  # Reviewer's 1.3 s late start.
+            notes = json.loads(trace.notes)
+            notes["timing_half_width_ns"] = [notes["timing_half_width_ns"][i] for i in keep]
+            late.append((PowerTrace(**{**trace.__dict__,
+                "t_ns": tuple(trace.t_ns[i] for i in keep),
+                "values": tuple(trace.values[i] for i in keep),
+                "notes": json.dumps(notes)}), start, end))
+        result = estimate_energy(late)
+        self.assertTrue(math.isfinite(result.half_width_j), result)
+        self.assertIn("partial_coverage", result.flags)
+        self.assertLessEqual(abs(result.joules-truth), result.half_width_j)
+        coverage_bound = next(float(flag.split("=")[1]) for flag in result.flags
+                              if flag.startswith("coverage_bound_j="))
+        # 1% of the isolated coverage bound; a millijoule-only interval must
+        # fail visibly, even though the honest total interval now widens.
+        self.assertGreater(abs(result.joules-truth), .01*coverage_bound)
+        print("NVML R2 LATE", json.dumps({
+            "truth_j": truth, "joules": result.joules, "half_width_j": result.half_width_j,
+            "coverage": result.coverage_fraction, "coverage_bound_j": coverage_bound}))
+
+    def test_short_boundary_calibration_one_sided(self) -> None:
+        started = time.monotonic()
+        seeds, alpha = 400, 1-DUTY_CONFIDENCE  # Lead: 400 seeds at two-sided 95%.
+        ceiling = alpha+4*math.sqrt(alpha*(1-alpha)/seeds)  # Lead's four binomial SE.
+        for sigma in (0.0, 0.5):  # Lead's required low-spread boundary worlds.
+            errors, widths = [], []
+            for seed in range(seeds):
+                rng = random.Random(1000+seed)
+                world = ShortReplayWorld(rng)
+                runs, truth, _ = r2_runs(world, rng, repeats=8, shift_sigma_w=sigma)
+                result = estimate_energy(runs)
+                self.assertTrue(math.isfinite(result.half_width_j), (seed, sigma, result))
+                errors.append(abs(result.joules-truth))
+                widths.append(result.half_width_j)
+            misses = sum(error > width for error, width in zip(errors, widths))
+            print("NVML R2 SHORT CALIBRATION", json.dumps({
+                "sigma_w": sigma, "seeds": seeds, "misses": misses,
+                "fraction": misses/seeds, "one_sided_ceiling": ceiling,
+                "median_abs_error_j": statistics.median(errors),
+                "median_half_width_j": statistics.median(widths),
+                "elapsed_s": time.monotonic()-started}), flush=True)
+            self.assertLessEqual(misses/seeds, ceiling, (sigma, misses, seeds))
+
+    def test_large_duration_jitter_targets_mean_run(self) -> None:
+        started = time.monotonic()
+        seeds, alpha = 400, 1-DUTY_CONFIDENCE  # Lead's required seed count/nominal level.
+        ceiling = alpha+4*math.sqrt(alpha*(1-alpha)/seeds)  # Lead's one-sided four-SE bar.
+        misses = nearer_mean = 0
+        errors, widths = [], []
+        for seed in range(seeds):
+            rng = random.Random(seed)
+            world = ShortReplayWorld(rng)  # Only the waveform is shorter than the 2-turn repro.
+            runs, truth, longest = r2_runs(
+                world, rng, repeats=16, shift_sigma_w=2.0, duration_jitter_ns=50_000_000)
+            result = estimate_energy(runs)
+            self.assertTrue(math.isfinite(result.half_width_j), (seed, result))
+            error = result.joules-truth
+            errors.append(error)
+            widths.append(result.half_width_j)
+            misses += abs(error) > result.half_width_j
+            nearer_mean += abs(error) < abs(result.joules-longest)
+        print("NVML R2 DURATION CALIBRATION", json.dumps({
+            "seeds": seeds, "misses": misses, "fraction": misses/seeds,
+            "one_sided_ceiling": ceiling, "nearer_mean": nearer_mean,
+            "median_error_j": statistics.median(errors),
+            "median_half_width_j": statistics.median(widths),
+            "elapsed_s": time.monotonic()-started}), flush=True)
+        self.assertLessEqual(misses/seeds, ceiling, (misses, seeds))
+        # Lead's median test between the two estimands: strictly more than half.
+        self.assertGreater(nearer_mean, seeds/2)
+
+    def test_mean_duration_coefficients_on_constant_power(self) -> None:
+        runs = []
+        for duration in (1_000_000_000, 2_000_000_000):
+            ends = tuple(EPOCH_NS+t for t in range(TICK_NS, duration+1, TICK_NS))
+            trace = PowerTrace("nvml_power", "gpu0:power_instant", "synthetic:monotonic",
+                               ends, (100.0,)*len(ends), "W", TICK_NS, TICK_NS, 1.0, .001,
+                               json.dumps({"timing_half_width_ns": [0]*len(ends)}))
+            runs.append((trace, EPOCH_NS, EPOCH_NS+duration))
+        result = estimate_energy(runs)
+        # Exact mean duration 1.5 s at 100 W gives 150 J. Use 1% of its
+        # isolated q/2*M=.00075 J term so a wide spread cannot hide max-D bias.
+        self.assertAlmostEqual(result.joules, 150.0, delta=.01*(.001/2*1.5))
+        self.assertEqual(result.coverage_fraction, 1.0)
+
+    def test_coarse_age_bound_does_not_identify_sensor_age(self) -> None:
+        episode, powers, _ = agent_world()
+        runs = []
+        for trace, start, end in sampled_runs(episode, powers, 8, seed=0):
+            notes = json.loads(trace.notes)
+            notes.update({"flags": ["sensor_age_unknown", "sensor_update_phase_unreported"],
+                          "unknown_sensor_age_bound_ns": 110_000_000})
+            # 100 ms physical period + 10 ms poll is a maximum age, not an
+            # observed window end; a finite call bracket cannot resolve it.
+            runs.append((PowerTrace(**{**trace.__dict__, "notes": json.dumps(notes)}), start, end))
+        result = estimate_energy(runs)
+        self.assertTrue(math.isinf(result.half_width_j))
+        self.assertIn("sensor_window_time_unknown", result.flags)
+
 
     def test_student_quantile_has_independent_closed_form_checks(self) -> None:
         for probability in (0.95, 0.975, 0.995):

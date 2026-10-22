@@ -1,8 +1,11 @@
-"""Independent duty estimator, derived without reading the production reducer.
+"""Independent direct-grid duty estimator, amended for the R2 interval rule.
 
 This reference enumerates every interval against every window and keeps its
 geometry rational.  It shares only PowerTrace and the public estimate_energy
 entry point with production; no production helper or numerical constant is used.
+The original reference was independently authored; this lane updates only
+the R2 rule's data-bounded interval terms, leaving its direct-grid integration
+and Student inversion independent. The external twin is never edited.
 The synthetic worlds are fixture evidence, not NVML hardware validation.
 """
 
@@ -115,6 +118,7 @@ def twin_estimate_energy(
     signatures: dict[int, tuple[tuple[int, int], ...]] = {}
     declared_groups: dict[int, str] = {}
     power_bounds: list[float | None] = []
+    observed: list[float] = []
     flags = ["constant_workload_assumed"]
     duration: int | None = None
 
@@ -172,6 +176,7 @@ def twin_estimate_energy(
         if not this_run:
             flags.append("run_without_coverage")
             continue
+        observed.extend(trace.values)
         readings.extend(this_run)
         signatures[run_id] = tuple((item.left, item.right) for item in this_run)
         label = notes.get("repeat_group")
@@ -239,6 +244,7 @@ def twin_estimate_energy(
     auxiliary = coefficients.copy()
     contributions = []
     spread = 0.0
+    unreplicated_mass = Fraction(0)
     for run_ids in groups.values():
         n = len(run_ids)
         group_mass = sum((run_mass[run_id] for run_id in run_ids), Fraction(0))
@@ -250,7 +256,8 @@ def twin_estimate_energy(
                 flags.append("declared_phase_variable_geometry_provisional")
         if n == 1:
             flags.append("unreplicated_phase")
-            spread = math.inf
+            # R2 property 2: finite data-envelope bound, not an identified SE.
+            unreplicated_mass += group_mass
         else:
             xs = [normalized_power[run_id] for run_id in run_ids]
             mean = math.fsum(xs) / n
@@ -313,8 +320,22 @@ def twin_estimate_energy(
     else:
         bound = max(power_bounds)
         bias = bound * (float(area) + timing_area)
+    reading_range = max(observed)-min(observed)
+    # R2: missing time times observed contrast; whole-window contamination
+    # times each auxiliary coefficient; displaced-window fraction times it.
+    # These assume underlying contrasts stay in the observed reading range.
+    coverage_bound = (duration-covered_ns)/1_000_000_000*reading_range
+    outside_mass = sum((
+        weight * Fraction((item.right-item.left) -
+                          (min(item.right, duration)-max(item.left, 0)),
+                          item.right-item.left)
+        for weight, item in zip(auxiliary, readings)), Fraction(0))
+    boundary_bound = float(outside_mass)*reading_range
+    timing_bound = timing_area*reading_range
     return TwinEstimate(
-        energy, spread + quantum + center_shift, float(coverage), tuple(flags),
+        energy, spread + quantum + center_shift + coverage_bound + boundary_bound
+        + timing_bound + float(unreplicated_mass)*reading_range,
+        float(coverage), tuple(flags),
     )
 
 
@@ -408,7 +429,8 @@ class DutyIndependentTwinTests(unittest.TestCase):
         estimate = self.assert_matches_twin(runs)
         self.assertEqual(estimate.coverage_fraction, 1.0)
         self.assertTrue(math.isfinite(estimate.half_width_j))
-        self.assertAlmostEqual(estimate.joules, 20.0, delta=20e-6)
+        # N7: a joules value with finite printed half-width uses its 1% bar.
+        self.assertAlmostEqual(estimate.joules, 20.0, delta=0.01 * estimate.half_width_j)
 
     def test_sparse_coverage_with_and_without_explicit_power_bound(self):
         ms = 1_000_000
@@ -424,7 +446,7 @@ class DutyIndependentTwinTests(unittest.TestCase):
             with self.subTest(bound=bound):
                 estimate = self.assert_matches_twin(runs)
                 self.assertEqual(estimate.coverage_fraction, 0.4)
-                # F5: the physical bias bound is separate from nominal width.
+                # R2: observed-range coverage bound needs no physical power bound.
                 self.assertTrue(math.isfinite(estimate.half_width_j))
 
     def test_partial_window_keeps_its_outside_support(self):
@@ -477,7 +499,7 @@ class DutyIndependentTwinTests(unittest.TestCase):
         expected = self.assert_matches_twin([run, run])
         self.assertIn("timing_uncertainty_unreported", expected.flags)
 
-    def test_unreplicated_geometry_cannot_estimate_spread(self):
+    def test_unreplicated_geometry_has_a_flagged_data_envelope(self):
         runs = [
             _run(
                 [25_000_000 + phase * 25_000_000], [100.0],
@@ -486,7 +508,9 @@ class DutyIndependentTwinTests(unittest.TestCase):
             )
             for phase in range(4)
         ]
-        self.assertEqual(self.assert_matches_twin(runs).half_width_j, math.inf)
+        estimate = self.assert_matches_twin(runs)
+        self.assertTrue(math.isfinite(estimate.half_width_j))
+        self.assertIn("unreplicated_phase", estimate.flags)
 
     def test_seeded_mixed_window_worlds(self):
         rng = random.Random(470912)
@@ -578,13 +602,16 @@ class DutyIndependentTwinTests(unittest.TestCase):
         self.assertIn("declared_phase_variable_geometry_provisional", expected.flags)
 
         # Actual geometry stays distinct: without the caller's planned labels
-        # these runs have no exact replicas and the spread is unidentifiable.
+        # these runs have no exact replicas and the Gaussian spread is
+        # unidentifiable. R2 property 2 uses a flagged range envelope instead.
         unlabeled = []
         for trace, start, end in runs:
             notes = json.loads(trace.notes)
             del notes["repeat_group"]
             unlabeled.append((replace(trace, notes=json.dumps(notes)), start, end))
-        self.assertEqual(self.assert_matches_twin(unlabeled).half_width_j, math.inf)
+        estimate = self.assert_matches_twin(unlabeled)
+        self.assertTrue(math.isfinite(estimate.half_width_j))
+        self.assertIn("unreplicated_phase", estimate.flags)
 
     def test_invalid_runs_are_skipped_without_changing_valid_result(self):
         run = _run(
