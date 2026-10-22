@@ -1,0 +1,538 @@
+{
+  "schema": "joulewise.align.gpukit.matrix.v2",
+  "name": "moe_stage_a",
+  "kind": "moe_stage_a",
+  "models": [
+    {
+      "id": "Qwen/Qwen3-30B-A3B",
+      "attention": "GQA-MoE",
+      "revision": null,
+      "tensor_parallel_size": 1,
+      "weight_precision": "bf16",
+      "kv_headroom_bytes": null,
+      "layout_derivation": "One whole GPU for this baseline; tensor_parallel_size is an operator layout, memory_fit reports sourced weight arithmetic and requires explicit KV headroom.",
+      "reasoning_parser": "qwen3",
+      "reasoning_parser_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/README.md",
+        "accessed": "2026-10-22",
+        "quote": "vllm serve Qwen/Qwen3-8B --enable-reasoning --reasoning-parser deepseek_r1",
+        "note": "fetched by the lead, quoted in the fix-2 brief; not fetched by this seat. The card's deepseek_r1 line is deliberately not followed: in vLLM v0.10.2 deepseek_r1 returns model_output,None without </think>; qwen3 returns None,model_output unless both tags exist, preserving hybrid thinking-off answers. --enable-reasoning is absent from v0.10.2 arg_utils. The quote is the exact Qwen3-8B family example supplied in R6; model_card_url preserves this model's supplied pinned card, without inventing a model-specific command quotation.",
+        "parser_code_urls": [
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/qwen3_reasoning_parser.py",
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/deepseek_r1_reasoning_parser.py",
+          "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/engine/arg_utils.py"
+        ],
+        "model_card_url": "https://huggingface.co/Qwen/Qwen3-30B-A3B/blob/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/README.md"
+      },
+      "tool_call_parser": "hermes",
+      "enable_auto_tool_choice": true,
+      "tool_call_parser_source": "Retained Qwen agent hermes setting; source was not fetched. Recorded as tool_call_parser_source_not_fetched.",
+      "serve_flags": [
+        "tool_call_parser_source_not_fetched"
+      ]
+    }
+  ],
+  "tasks": [
+    "shade/american_airlines_2",
+    "shade/api_key_calendar_agendas_2",
+    "shade/bank_transfer_2",
+    "shade/expenditure_accounting",
+    "shade/spam_filter_update"
+  ],
+  "conditions": [
+    "benign",
+    "sabotage"
+  ],
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "episode_count": 30,
+  "episode_count_meaning": "Requested trial rows; see measured_episode_count for actual fresh generation episodes.",
+  "monitor_model": "Qwen/Qwen3-4B",
+  "monitor_visibilities": [
+    "full",
+    "no_scratchpad",
+    "actions_only"
+  ],
+  "sampling": {
+    "interval_ns": 10000000,
+    "source": "Polling parameter from nvml lane default; 10 ms polling does not imply a 10 ms sensor update rate."
+  },
+  "workload": {
+    "prefill_tokens": null,
+    "decode_tokens": null,
+    "tool_wait_s": null,
+    "host_overhead_s": null,
+    "monitor_prefill_tokens": null,
+    "monitor_decode_tokens": null,
+    "source": "Unavailable: no sourced production token/wait/host volumes. Calibrate on the exact task/model/precision/GPU layout before spend approval.",
+    "derivation": "Null values carry no estimate; observed per-episode tokens and durations may supply a calibration basis."
+  },
+  "gpu_classes": {
+    "A100-SXM4-80GB": {
+      "gpu_count": 1,
+      "setup_s": null,
+      "model_load_s": null,
+      "router_overhead_fraction": null,
+      "source": "No sourced setup/model-load/router allowances; these remain null. Hardware specifications are sourced separately.",
+      "hardware": {
+        "memory_bandwidth_bytes_s": {
+          "value": 2039000000000,
+          "source": {
+            "url": "https://images.nvidia.com/data-center/a100/a100-datasheet.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity).",
+            "quote": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity)."
+          }
+        },
+        "dense_bf16_flops_s": {
+          "value": 312000000000000,
+          "source": {
+            "url": "https://images.nvidia.com/data-center/a100/a100-datasheet.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity).",
+            "quote": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity)."
+          }
+        },
+        "memory_bytes": {
+          "value": 80000000000,
+          "source": {
+            "url": "https://images.nvidia.com/data-center/a100/a100-datasheet.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity).",
+            "quote": "NVIDIA A100 datasheet p1: SXM 80GB bandwidth 2039 GB/s; BFLOAT16 312 TFLOPS dense (624 with sparsity)."
+          }
+        }
+      },
+      "throughput": {
+        "Qwen/Qwen3-4B": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-8B": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-14B": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-30B-A3B": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "microsoft/Phi-3.5-mini-instruct": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-Next-80B-A3B-Thinking": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Cited hardware values and model_parameters; ideal BF16 single-stream roofline only.",
+          "efficiency": null,
+          "efficiency_source": null
+        }
+      },
+      "gpu_count_derivation": "Legacy one-device roofline basis; GPU-hour billing uses each models.tensor_parallel_size."
+    },
+    "H100-SXM-80GB": {
+      "gpu_count": 1,
+      "setup_s": null,
+      "model_load_s": null,
+      "router_overhead_fraction": null,
+      "source": "No sourced setup/model-load/router allowances; these remain null. Hardware specifications are sourced separately.",
+      "hardware": {
+        "memory_bandwidth_bytes_s": {
+          "value": 3350000000000,
+          "source": {
+            "url": "https://i.dell.com/sites/csdocuments/App-Merchandizing_Documents/en/us/h100-gpu.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/.",
+            "quote": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/."
+          }
+        },
+        "dense_bf16_flops_s": {
+          "value": 989500000000000,
+          "source": {
+            "url": "https://i.dell.com/sites/csdocuments/App-Merchandizing_Documents/en/us/h100-gpu.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/.",
+            "quote": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/."
+          }
+        },
+        "memory_bytes": {
+          "value": 80000000000,
+          "source": {
+            "url": "https://i.dell.com/sites/csdocuments/App-Merchandizing_Documents/en/us/h100-gpu.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/.",
+            "quote": "NVIDIA H100 datasheet p1, Sep22 (NVIDIA-authored PDF hosted by Dell): SXM 80GB 3.35 TB/s; BFLOAT16 1979 TFLOPS with sparsity, footnote specifies half without sparsity; dense = 989.5 TFLOPS. Corroborated at https://www.nvidia.com/en-us/data-center/h100/."
+          }
+        }
+      },
+      "throughput": {
+        "Qwen/Qwen3-4B": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-8B": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-14B": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-30B-A3B": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "microsoft/Phi-3.5-mini-instruct": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-Next-80B-A3B-Thinking": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Cited hardware values and model_parameters; ideal BF16 single-stream roofline only.",
+          "efficiency": null,
+          "efficiency_source": null
+        }
+      },
+      "gpu_count_derivation": "Legacy one-device roofline basis; GPU-hour billing uses each models.tensor_parallel_size."
+    },
+    "L40S-PCIe-48GB": {
+      "gpu_count": 1,
+      "setup_s": null,
+      "model_load_s": null,
+      "router_overhead_fraction": null,
+      "source": "No sourced setup/model-load/router allowances; these remain null. Hardware specifications are sourced separately.",
+      "hardware": {
+        "memory_bandwidth_bytes_s": {
+          "value": 864000000000,
+          "source": {
+            "url": "https://www.krinfra.co.kr/download/l40s-datasheet-2841316.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/.",
+            "quote": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/."
+          }
+        },
+        "dense_bf16_flops_s": {
+          "value": 362050000000000,
+          "source": {
+            "url": "https://www.krinfra.co.kr/download/l40s-datasheet-2841316.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/.",
+            "quote": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/."
+          }
+        },
+        "memory_bytes": {
+          "value": 48000000000,
+          "source": {
+            "url": "https://www.krinfra.co.kr/download/l40s-datasheet-2841316.pdf",
+            "accessed": "2026-10-22",
+            "note": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/.",
+            "quote": "NVIDIA L40S datasheet p2, Aug23 (NVIDIA-authored PDF hosted by KRinfra): 48GB GDDR6, 864 GB/s and dense BFLOAT16 362.05 TFLOPS. Use printed dense column; sparse column is 733. Corroborated at https://www.nvidia.com/en-us/data-center/l40s/."
+          }
+        }
+      },
+      "throughput": {
+        "Qwen/Qwen3-4B": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-8B": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-14B": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-30B-A3B": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "microsoft/Phi-3.5-mini-instruct": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Hardware fields and model_parameters; decode excludes input lookup and retains output head. No TP speedup or FP8 compute rate inferred.",
+          "efficiency": null,
+          "efficiency_source": null
+        },
+        "Qwen/Qwen3-Next-80B-A3B-Thinking": {
+          "ceiling_formula": "prefill=dense_bf16_flops_s/(2*active_parameters); decode=memory_bandwidth_bytes_s/(2*decode_weight_parameters)",
+          "source": "Cited hardware values and model_parameters; ideal BF16 single-stream roofline only.",
+          "efficiency": null,
+          "efficiency_source": null
+        }
+      },
+      "gpu_count_derivation": "Legacy one-device roofline basis; GPU-hour billing uses each models.tensor_parallel_size."
+    }
+  },
+  "example_prices": [],
+  "planning_wall_seconds": {
+    "A100-SXM4-80GB": null,
+    "H100-SXM-80GB": null,
+    "L40S-PCIe-48GB": null
+  },
+  "sources": {
+    "pipeline": "docs/align/PIPELINE.md",
+    "sha256_manifest": "Written by session.py for all output bytes",
+    "shade": {
+      "repository": "https://github.com/jkutaso/SHADE-Arena",
+      "revision": "6614e77191c1f8e2d0c44c123c6f915905ebafae"
+    },
+    "model_configs": "https://huggingface.co/Qwen/Qwen3-4B/blob/1cfa9a7208912126459214e8b04321603b3df60c/config.json ; https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/config.json ; https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/config.json ; https://huggingface.co/Qwen/Qwen3-30B-A3B/blob/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/config.json ; https://huggingface.co/microsoft/Phi-3.5-mini-instruct/blob/2fe192450127e6a83f7441aef6e3ca586c338b77/config.json ; https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking/blob/e502dd4100cc68c0de57643fd4317ec93a128670/config.json",
+    "budget_protocol": "https://github.com/mpmdw/JouleWise/tree/58750718f/joulewise/align/budget"
+  },
+  "flags": [
+    "provisional_planning_inputs",
+    "model_revisions_unpinned",
+    "runner_lane_not_on_spine",
+    "vllm_router_capture_adapter_required",
+    "throughput_efficiency_not_supplied",
+    "single_stream_bf16_bound_only",
+    "workload_token_volumes_unavailable",
+    "monitor_and_judge_off_measured_gpu"
+  ],
+  "measured_episode_count": 30,
+  "monitor_call_count": 90,
+  "model_parameters": {
+    "Qwen/Qwen3-4B": {
+      "total_parameters": 4000000000,
+      "active_parameters": 4000000000,
+      "source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-4B/blob/1cfa9a7208912126459214e8b04321603b3df60c/README.md",
+        "accessed": "2026-10-22",
+        "quote": "- Number of Parameters: 4.0B",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "vocab_size": 151936,
+      "hidden_size": 2560,
+      "hidden_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-4B/blob/1cfa9a7208912126459214e8b04321603b3df60c/config.json",
+        "accessed": "2026-10-22",
+        "quote": "\"hidden_size\": 2560,",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "vocab_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-4B/blob/1cfa9a7208912126459214e8b04321603b3df60c/config.json",
+        "accessed": "2026-10-22",
+        "quote": "\"vocab_size\": 151936",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "non_embedding_parameters": 3600000000,
+      "non_embedding_parameters_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-4B/blob/1cfa9a7208912126459214e8b04321603b3df60c/README.md",
+        "accessed": "2026-10-22",
+        "quote": "- Number of Paramaters (Non-Embedding): 3.6B",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "decode_weight_parameters": 3988956160,
+      "decode_weight_parameters_derivation": "Printed non_embedding_parameters + vocab_size * hidden_size (output head); input lookup excluded, output read once even if tied. Card totals are rounded independently."
+    },
+    "Qwen/Qwen3-8B": {
+      "total_parameters": 8200000000,
+      "active_parameters": 8200000000,
+      "source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/README.md",
+        "accessed": "2026-10-22",
+        "quote": "- Number of Parameters: 8.2B",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "vocab_size": 151936,
+      "hidden_size": 4096,
+      "hidden_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/config.json",
+        "accessed": "2026-10-22",
+        "quote": "\"hidden_size\": 4096,",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "vocab_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/config.json",
+        "accessed": "2026-10-22",
+        "quote": "\"vocab_size\": 151936",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "non_embedding_parameters": 6950000000,
+      "non_embedding_parameters_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/README.md",
+        "accessed": "2026-10-22",
+        "quote": "- Number of Paramaters (Non-Embedding): 6.95B",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "decode_weight_parameters": 7572329856,
+      "decode_weight_parameters_derivation": "Printed non_embedding_parameters + vocab_size * hidden_size (output head); input lookup excluded, output read once even if tied. Card totals are rounded independently."
+    },
+    "Qwen/Qwen3-14B": {
+      "total_parameters": 14800000000,
+      "active_parameters": 14800000000,
+      "source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/README.md",
+        "accessed": "2026-10-22",
+        "quote": "- Number of Parameters: 14.8B",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "vocab_size": 151936,
+      "hidden_size": 5120,
+      "hidden_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/config.json",
+        "accessed": "2026-10-22",
+        "quote": "\"hidden_size\": 5120,",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "vocab_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/config.json",
+        "accessed": "2026-10-22",
+        "quote": "\"vocab_size\": 151936",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "non_embedding_parameters": 13200000000,
+      "non_embedding_parameters_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/README.md",
+        "accessed": "2026-10-22",
+        "quote": "- Number of Paramaters (Non-Embedding): 13.2B",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "decode_weight_parameters": 13977912320,
+      "decode_weight_parameters_derivation": "Printed non_embedding_parameters + vocab_size * hidden_size (output head); input lookup excluded, output read once even if tied. Card totals are rounded independently."
+    },
+    "Qwen/Qwen3-30B-A3B": {
+      "total_parameters": 30500000000,
+      "active_parameters": 3300000000,
+      "source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-30B-A3B/blob/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/README.md",
+        "accessed": "2026-10-22",
+        "quote": "- Number of Parameters: 30.5B in total and 3.3B activated",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "vocab_size": 151936,
+      "hidden_size": 2048,
+      "hidden_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-30B-A3B/blob/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/config.json",
+        "accessed": "2026-10-22",
+        "quote": "\"hidden_size\": 2048,",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "vocab_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-30B-A3B/blob/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/config.json",
+        "accessed": "2026-10-22",
+        "quote": "\"vocab_size\": 151936",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "non_embedding_parameters": null,
+      "decode_weight_parameters": 2988835072,
+      "decode_weight_parameters_derivation": "active_parameters - vocab_size * hidden_size (input lookup); output head retained in active count. Inputs cited by sibling source and *_source."
+    },
+    "microsoft/Phi-3.5-mini-instruct": {
+      "total_parameters": 3800000000,
+      "active_parameters": 3800000000,
+      "source": {
+        "url": "https://huggingface.co/microsoft/Phi-3.5-mini-instruct/blob/2fe192450127e6a83f7441aef6e3ca586c338b77/README.md",
+        "accessed": "2026-10-22",
+        "quote": "**Architecture:** Phi-3.5-mini has 3.8B parameters and is a dense decoder-only Transformer model using the same tokenizer as Phi-3 Mini.<br>",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "vocab_size": 32064,
+      "hidden_size": 3072,
+      "hidden_size_source": {
+        "url": "https://huggingface.co/microsoft/Phi-3.5-mini-instruct/blob/2fe192450127e6a83f7441aef6e3ca586c338b77/config.json",
+        "accessed": "2026-10-22",
+        "quote": "\"hidden_size\": 3072,",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "vocab_size_source": {
+        "url": "https://huggingface.co/microsoft/Phi-3.5-mini-instruct/blob/2fe192450127e6a83f7441aef6e3ca586c338b77/config.json",
+        "accessed": "2026-10-22",
+        "quote": "\"vocab_size\": 32064",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "non_embedding_parameters": null,
+      "decode_weight_parameters": 3701499392,
+      "decode_weight_parameters_derivation": "active_parameters - vocab_size * hidden_size (input lookup); output head retained in active count. Inputs cited by sibling source and *_source."
+    },
+    "Qwen/Qwen3-Next-80B-A3B-Thinking": {
+      "total_parameters": 80000000000,
+      "active_parameters": 3000000000,
+      "source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking/blob/e502dd4100cc68c0de57643fd4317ec93a128670/README.md",
+        "accessed": "2026-10-22",
+        "quote": "- Number of Parameters: 80B in total and 3B activated",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "vocab_size": 151936,
+      "hidden_size": 2048,
+      "hidden_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking/blob/e502dd4100cc68c0de57643fd4317ec93a128670/config.json",
+        "accessed": "2026-10-22",
+        "quote": "\"hidden_size\": 2048,",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "vocab_size_source": {
+        "url": "https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking/blob/e502dd4100cc68c0de57643fd4317ec93a128670/config.json",
+        "accessed": "2026-10-22",
+        "quote": "\"vocab_size\": 151936",
+        "note": "fetched by the lead 2026-10-22 03:24 UTC, quoted in the fix-2 brief; not fetched by this seat"
+      },
+      "non_embedding_parameters": null,
+      "decode_weight_parameters": 2688835072,
+      "decode_weight_parameters_derivation": "active_parameters - vocab_size * hidden_size (input lookup); output head retained in active count. Inputs cited by sibling source and *_source."
+    }
+  },
+  "lower_bound_wall_seconds": {
+    "A100-SXM4-80GB": null,
+    "H100-SXM-80GB": null,
+    "L40S-PCIe-48GB": null
+  },
+  "rounding": "Two significant digits (active parameter counts have as few as two); lower bounds rounded downward, planning values nearest. Full-precision arithmetic is available from cost.estimate.",
+  "judge_model": "Qwen/Qwen3-4B",
+  "monitor_serving": {
+    "id": "Qwen/Qwen3-4B",
+    "tensor_parallel_size": 1,
+    "reasoning_parser": "qwen3",
+    "reasoning_parser_source": {
+      "url": "https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/README.md",
+      "accessed": "2026-10-22",
+      "quote": "vllm serve Qwen/Qwen3-8B --enable-reasoning --reasoning-parser deepseek_r1",
+      "note": "fetched by the lead, quoted in the fix-2 brief; not fetched by this seat. The card's deepseek_r1 line is deliberately not followed: in vLLM v0.10.2 deepseek_r1 returns model_output,None without </think>; qwen3 returns None,model_output unless both tags exist, preserving hybrid thinking-off answers. --enable-reasoning is absent from v0.10.2 arg_utils. The quote is the exact Qwen3-8B family example supplied in R6; model_card_url preserves this model's supplied pinned card, without inventing a model-specific command quotation.",
+      "parser_code_urls": [
+        "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/qwen3_reasoning_parser.py",
+        "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/deepseek_r1_reasoning_parser.py",
+        "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/engine/arg_utils.py"
+      ],
+      "model_card_url": "https://huggingface.co/Qwen/Qwen3-4B/blob/1cfa9a7208912126459214e8b04321603b3df60c/README.md"
+    },
+    "tool_call_parser": null,
+    "enable_auto_tool_choice": false,
+    "tool_call_parser_source": "Monitor calls no tools; no tool parser or automatic tool choice.",
+    "serve_flags": []
+  }
+}
