@@ -555,8 +555,9 @@ def _filtered_stream(path, spans):
     One sample on either side is retained for the ruled meter edge bound.
     All poll receive times are retained for BAT-2's largest poll interval.
     SMC readings are retained only in selected raw-clock [start, end + tau)
-    windows; without a raw/monotonic mapping, none are retained. No unselected
-    meter power is decoded.
+    windows using the header/trailer raw/monotonic mapping, independently of
+    the meter clock fit, including its early failure paths. Without that
+    mapping, none are retained. No unselected meter power is decoded.
     """
     from joulewise.external import km003c_parse as kp
     header = trailer = None
@@ -583,6 +584,15 @@ def _filtered_stream(path, spans):
     polls.sort(key=lambda row: row[0]["rx"])
     poll_ns = [item["rx"] for item, _ in polls]
     smc = [{} for _ in polls]
+    shell = kp.Stream(header, trailer, [], [], None, None, [], [], poll_ns, smc)
+    offset = kp.raw_offset_ns(shell)
+    if offset is not None:
+        tau = _battery_delay_s(_battery_stream_data(shell)[2])
+        for a, b in spans:
+            lo = bisect.bisect_left(poll_ns, a + offset)
+            hi = bisect.bisect_left(poll_ns, b + offset + tau * 1e9)
+            for i in range(lo, hi):
+                smc[i] = dict(polls[i][0].get("smc") or {})
     with Path(path).open() as handle:
         for item, location in polls:
             if item.get("n"):
@@ -614,15 +624,8 @@ def _filtered_stream(path, spans):
     except ValueError as exc:
         return kp.Stream(header, trailer, [], [], None, None, [], [], poll_ns, smc, str(exc))
     shell = kp.Stream(header, trailer, [], [], None, fit, [], [], poll_ns, smc)
-    offset = kp.raw_offset_ns(shell)
     if offset is None:
         return shell
-    tau = _battery_delay_s(_battery_stream_data(shell)[2])
-    for a, b in spans:
-        lo = bisect.bisect_left(poll_ns, a + offset)
-        hi = bisect.bisect_left(poll_ns, b + offset + tau * 1e9)
-        for i in range(lo, hi):
-            smc[i] = dict(polls[i][0].get("smc") or {})
     # Sorted disjoint time ranges permit O(log n) selection per sample.
     ranges = sorted((a + offset - step * 1_000_000, b + offset + step * 1_000_000) for a, b in spans)
     merged = []

@@ -2330,6 +2330,31 @@ class BatteryCampaignTests(NumericTestCase):
                 self.assertEqual(cell["decode_assisted_member_counts"]["repeat"], sum(
                     r["stratum"] == "repeat" and "bytes.decode_battery_assist" in r["flags"] for r in records))
 
+    def test_marker_survives_no_meter_samples_and_failed_clock_fit(self):
+        a, z = self.spans(self.target["run_id"])["decode"]
+        tau_ns = round(self.target["meter"]["battery_tau_s"] * 1e9)
+        for failure in ("no_samples", "clock_fit"):
+            with self.subTest(failure=failure):
+                def change(items):
+                    for item in items:
+                        if item.get("k") != "b":
+                            continue
+                        if failure == "no_samples":
+                            item.update(n=0, p="")
+                        # One second at -1000 mA wholly in [d0+tau, d1+tau).
+                        if a + tau_ns <= item["rx"] < a + tau_ns + 1_000_000_000:
+                            item["smc"]["B0AC"] = -1000
+                if failure == "clock_fit":
+                    with patch.object(kp, "clock_fit", side_effect=ValueError("injected fit failure")):
+                        records, _ = self.mutate(change)
+                else:
+                    records, _ = self.mutate(change)
+                target = next(r for r in records if r["run_id"] == self.target["run_id"])
+                self.assertIsNone(target["meter"])
+                self.assertIn("bytes.meter_decode_unavailable", target["flags"])
+                self.assertIn("bytes.decode_battery_assist", target["flags"])
+                self.assertIs(target["decode_assist_evaluated"], True)
+
     def test_no_marker_polls_prints_null_with_real_cause_and_run_ids(self):
         stream = kp.parse(self.path)
         stream.poll_ns, stream.smc = [], []
