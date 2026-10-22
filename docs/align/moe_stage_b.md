@@ -210,6 +210,10 @@ gives |rounding bias| <= min(q/2, q*G/pi), continuous down to sigma=0.
 Here k² >= 1+3(k-1) bounds the series by a geometric sum. The error-square
 series similarly gives E(error²) <= min(q²/4, q²/12 + q²*G/pi²), a
 conservative variance bound approaching q²/12 under strong dithering.
+The covariance term also matters: Gaussian integration by parts bounds
+2*Cov(noise,rounding) by 4*sigma²*min(G, sqrt(pi)/(2*sqrt(a))). The second
+term is the integral bound on the Gaussian series and makes this term vanish
+continuously at sigma=0. Code adds this term to the second-moment contribution.
 There is no switch at sigma=q/2. Hardware must validate Gaussian noise and
 reading independence; correlated systematic errors do not average away. The about 1 J M3 Max attribution limit
 belongs to that instrument; supply an appropriate floor for that channel rather

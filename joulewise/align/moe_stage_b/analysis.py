@@ -119,13 +119,15 @@ def pearson(x: Sequence[float], y: Sequence[float]) -> float | None:
 
 
 def rounding_uncertainty(quantum_w: float, noise_std_w: float) -> tuple[float, float]:
-    """Continuous Gaussian rounding-bias and second-moment upper bounds.
+    """Continuous Gaussian rounding bias and variance-contribution bounds.
 
     With a=2*pi^2*sigma^2/q^2, the Fourier bias series is at most
     q/pi * exp(-a)/(1-exp(-3*a)): k^2 >= 1+3*(k-1), 1/k <= 1.
     Cap by q/2. The error-square series has coefficients q^2/(pi^2*k^2),
     giving the same geometric majorant plus q^2/12, capped by q^2/4.
-    The second moment bounds variance conservatively; no sigma=q/2 switch.
+    Stein\'s identity bounds 2*Cov(noise,error) by 4*sigma^2*sum exp(-a*k^2).
+    Also bound that sum by its Gaussian integral sqrt(pi)/(2*sqrt(a));
+    its covariance bound then vanishes continuously at sigma=0. No q/2 switch.
     """
     if quantum_w == 0:
         return 0.0, 0.0
@@ -136,7 +138,9 @@ def rounding_uncertainty(quantum_w: float, noise_std_w: float) -> tuple[float, f
     bias = min(quantum_w/2, quantum_w/math.pi*geometric)
     second_moment = min(quantum_w**2/4,
                         quantum_w**2*(1/12+geometric/math.pi**2))
-    return bias, second_moment
+    series = min(geometric, math.sqrt(math.pi)/(2*math.sqrt(a)))
+    covariance_bound = 4*noise_std_w**2*series
+    return bias, second_moment+covariance_bound
 
 
 def extract_features(

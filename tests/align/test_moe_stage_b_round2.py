@@ -265,3 +265,16 @@ class TestMoeStageBRound2(unittest.TestCase):
         self.assertLess(abs(below[0]-above[0]), .01*q/2)
         self.assertEqual(rounding_uncertainty(q, 0), (q/2, q*q/4))
         self.assertEqual(rounding_uncertainty(0, q), (0, 0))
+
+        # At a half-quantum mean and sigma=q/4, rounding and Gaussian
+        # noise covary. This analytic bin integration catches a bound that
+        # incorrectly adds only their separate variances.
+        sigma, mean = q/4, q/2
+        normal = statistics.NormalDist(mean, sigma)
+        # +/-10 quanta leave tails >=40 sigma away; Mills' tail bound
+        # exp(-800)/(40*sqrt(2*pi)) is below binary64 representable mass.
+        variance = math.fsum((k*q-mean)**2 * (
+            normal.cdf((k+.5)*q)-normal.cdf((k-.5)*q)) for k in range(-10, 11))
+        _, contribution = rounding_uncertainty(q, sigma)
+        # No printed uncertainty here: rule 3 supplies 1e-6 relative.
+        self.assertLessEqual(variance, sigma*sigma+contribution+1e-6*variance)

@@ -480,6 +480,8 @@ def reference_detection_forecast(
         series_bound = math.exp(-exponent)/(-math.expm1(-3*exponent))
         bias = min(quantum/2, quantum/math.pi*series_bound)
         moment = min(quantum**2/4, quantum**2/12+quantum**2/math.pi**2*series_bound)
+        # Fourier derivative + Gaussian integration by parts bounds covariance.
+        moment += 4*sensor_sigma**2*min(series_bound, math.sqrt(math.pi)/(2*math.sqrt(exponent)))
     else:
         bias, moment = quantum/2, quantum**2/4
     rounding_j2 = moment*duration*dt
