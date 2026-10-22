@@ -115,19 +115,19 @@ def world_offload(config: WorldConfig, *, all_resident: bool = False) -> Offload
     size = expert_size_from_config(
         {"hidden_size": config.hidden_size, "intermediate_size": config.intermediate_size},
         block_elements=config.quant_block_elements, block_bytes=config.quant_block_bytes)
-    if size.bytes_per_expert is None:
-        raise ValueError("synthetic world has invalid expert storage dimensions")
     resident = frozenset((layer, expert) for layer in range(config.layers)
                          for expert in range(config.num_experts)) if all_resident else frozenset()
     return OffloadConfig(
-        expert_bytes={layer: size.bytes_per_expert for layer in range(config.layers)},
-        resident=resident, cache_capacity_bytes=config.cache_experts*size.bytes_per_expert,
+        expert_bytes=({layer: size.bytes_per_expert for layer in range(config.layers)}
+                      if size.bytes_per_expert is not None else {}),
+        resident=resident, cache_capacity_bytes=(config.cache_experts*size.bytes_per_expert
+                              if size.bytes_per_expert is not None else 0),
         cache_policy="slru", bandwidth_bytes_s=config.bandwidth_bytes_s,
         joules_per_byte=config.joules_per_byte, path="hypothetical_sensor_visible_memory_path",
         bandwidth_source="scenario input; calibrate effective bandwidth, not a device specification",
         energy_source=("scenario input: 640 pJ / 32-bit DRAM read = 160 pJ/B, "
                        "Horowitz ISSCC 2014 scale illustration; not a modern hardware calibration"),
-        prefill_batch_tokens=config.prefill_batch_tokens,
+        prefill_batch_tokens=config.prefill_batch_tokens, flags=size.flags,
     )
 
 
@@ -155,6 +155,7 @@ def run_world(
     estimated_extra: list[float] = []
     condition_statistics: dict[str, list[float]] = {"benign": [], "sabotage": []}
     flags: set[str] = set()
+    outcomes: list[dict[str, Any]] = []
     total_bytes = total_samples = 0
     decode_count = config.turns*config.decode_tokens_per_turn
     for group in range(config.groups):
@@ -167,13 +168,28 @@ def run_world(
                                         hot_probability=max(0.0, min(1.0, base+offset)))
             # A deterministic, seeded acquisition-phase sweep avoids a synchronized
             # 20 Hz token stream always falling in the same NVML blind interval.
-            phase = random.Random(episode.seed).randrange(sensor.interval_ns)
+            phase = (random.Random(episode.seed).randrange(sensor.interval_ns)
+                     if isinstance(sensor.interval_ns, int) and not isinstance(sensor.interval_ns, bool)
+                     and sensor.interval_ns > 0 else 0)
             sampled_sensor = replace(sensor, phase_ns=phase)
             simulated = simulate_episode(
                 episode, offload, sampled_sensor, baseline_w=config.baseline_w,
                 prefill_load_w=config.prefill_load_w, decode_load_w=config.decode_load_w,
                 tool_load_w=config.tool_load_w, seed=episode.seed)
             flags.update(simulated.flags)
+            statistic = decode_reuse(episode.router_log) if episode.router_log else None
+            if statistic is None:
+                flagged = replace(simulated.episode, flags=tuple(dict.fromkeys(
+                    (*simulated.episode.flags, "routing_statistic_unavailable"))))
+                simulated = replace(simulated, episode=flagged, flags=flagged.flags)
+                flags.update(flagged.flags)
+            outcome: dict[str, Any] = {"episode_id": episode.episode_id,
+                                       "flags": simulated.episode.flags}
+            outcomes.append(outcome)
+            if not simulated.episode.power_traces:
+                outcome["episode"] = asdict(simulated.episode)
+                outcome["estimates"] = None
+                continue
             trace = simulated.episode.power_traces[-1]
             features = extract_features(
                 simulated.episode, trace, baseline_w=config.baseline_w+config.decode_load_w,
@@ -181,9 +197,12 @@ def run_world(
                 # Gaussian one-sigma diagnostic half-width; alpha is a separate
                 # design parameter in required_correlation, not this display bound.
                 noise_multiplier=1.0, attribution_floor_j=0.0)
-            statistic = decode_reuse(episode.router_log)
-            if statistic is None:
-                raise ValueError("world needs adjacent decode tokens")
+            outcome["features"] = asdict(features)
+            flags.update(features.flags)
+            if statistic is None or features.energy_per_decode_token_j is None:
+                outcome["episode"] = asdict(simulated.episode)
+                outcome["estimates"] = None
+                continue
             condition_statistics[condition].append(statistic)
             observations.append(RoutingObservation(episode.episode_id, episode.task_pair,
                                                    statistic, features))
@@ -194,6 +213,13 @@ def run_world(
             total_bytes += simulated.traffic.total_bytes
             total_samples += len(trace.t_ns)
             flags.update(features.flags)
+    if len(observations) != len(outcomes) or not observations:
+        flags.add("incomplete_synthetic_world")
+        return {"status": "unavailable", "sensor": asdict(sensor),
+                "all_resident": all_resident, "episodes": len(outcomes),
+                "groups": config.groups, "episode_outcomes": outcomes,
+                "recovery": None, "forecast": None, "total_modelled_bytes": None,
+                "flags": sorted(flags)}
     names = ("energy_per_decode_token_j", "token_energy_variance_j2", "token_rate_amplitude_w")
     recovery = {name: asdict(recover_routing(observations, feature_name=name)) for name in names}
     # The attenuation r in d_B=r*d_A is WITHIN-condition. Held-out

@@ -327,9 +327,12 @@ def plan_detectability(
     numeric = (stage_a_effect_sd, routing_stat_sd, traffic_energy_slope_j_per_token, decode_duration_s,
                phase_bias_std_j, systematic_contrast_half_width_j,
                sensor.noise_std_w, sensor.quantum_w)
-    if (not all(math.isfinite(v) for v in numeric) or decode_tokens <= 0
-            or decode_duration_s <= 0 or sensor.interval_ns <= 0
-            or sensor.averaging_window_ns <= 0
+    if (not all(math.isfinite(v) for v in numeric) or not isinstance(decode_tokens, int) or isinstance(decode_tokens, bool)
+            or decode_tokens <= 0 or decode_duration_s <= 0
+            or not isinstance(sensor.interval_ns, int) or isinstance(sensor.interval_ns, bool)
+            or not isinstance(sensor.averaging_window_ns, int)
+            or isinstance(sensor.averaging_window_ns, bool)
+            or sensor.interval_ns <= 0 or sensor.averaging_window_ns <= 0
             or min(routing_stat_sd, phase_bias_std_j, systematic_contrast_half_width_j,
                    sensor.noise_std_w, sensor.quantum_w) < 0):
         return DetectionPlan(requirement.minimum_absolute_correlation, None, None, None,

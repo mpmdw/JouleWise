@@ -39,6 +39,7 @@ class OffloadConfig:
     energy_source: str
     prefill_mode: str = "bypass"  # "bypass" (no cache update) | "serial"
     prefill_batch_tokens: int = 1  # Explicit backend microbatch size; never inferred.
+    flags: tuple[str, ...] = ()  # Unavailable configuration inputs remain explicit.
 
 
 @dataclass(frozen=True)
@@ -131,7 +132,8 @@ def episode_token_windows(episode: Episode, *, prefill_batch_tokens: int = 1) ->
     """
     router = episode.router_log
     flags = ["uniform_within_phase_token_timing"]
-    if not isinstance(prefill_batch_tokens, int) or prefill_batch_tokens <= 0:
+    if (not isinstance(prefill_batch_tokens, int) or isinstance(prefill_batch_tokens, bool)
+            or prefill_batch_tokens <= 0):
         return TimingResult((), ("invalid_prefill_batch_size",))
     if prefill_batch_tokens > 1:
         flags.append("prefill_batch_timing_assumption")
@@ -235,7 +237,7 @@ def model_traffic(
     queued and flagged, not silently clipped or discarded. Prefill defaults to
     bypassing cache updates because shared records do not describe its batches.
     """
-    flags: list[str] = []
+    flags: list[str] = list(config.flags)
     if config.cache_policy not in ("none", "lru", "slru"):
         flags.append("invalid_cache_policy")
     if config.prefill_mode not in ("serial", "bypass"):
@@ -264,8 +266,10 @@ def model_traffic(
         flags.append("unknown_router_phase")
     if windows is not None:
         if (len(windows) != len(router.phase)
-                or any(w.token_index != i or w.end_ns <= w.start_ns
-                       for i, w in enumerate(windows))
+                or any(w.token_index != i or not isinstance(w.start_ns, int)
+                       or not isinstance(w.end_ns, int)
+                       or isinstance(w.start_ns, bool) or isinstance(w.end_ns, bool)
+                       or w.end_ns <= w.start_ns for i, w in enumerate(windows))
                 or any(b.start_ns < a.start_ns for a, b in zip(windows, windows[1:]))):
             flags.append("invalid_token_windows")
     if flags:

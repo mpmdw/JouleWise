@@ -130,7 +130,10 @@ def simulate_trace(
     noise_std_w is independent noise after acquisition averaging. Seeds are local.
     """
     flags = list(traffic.flags)
-    invalid = (end_ns <= start_ns or sensor.interval_ns <= 0
+    time_values = (start_ns, end_ns, sensor.interval_ns,
+                   sensor.averaging_window_ns, sensor.phase_ns)
+    invalid = (any(not isinstance(v, int) or isinstance(v, bool) for v in time_values)
+               or end_ns <= start_ns or sensor.interval_ns <= 0
                or sensor.averaging_window_ns <= 0
                or not 0 <= sensor.phase_ns < sensor.interval_ns
                or sensor.source not in ("ina3221", "nvml_power", "mock")
@@ -139,12 +142,14 @@ def simulate_trace(
                or not math.isfinite(baseline_w) or not math.isfinite(episode_bias_w))
     if invalid:
         return SimulatedTrace(None, tuple(dict.fromkeys(flags + ["invalid_sensor_or_profile"])))
-    if any(p.end_ns <= p.start_ns or not math.isfinite(p.watts) for p in loads):
+    if any(not isinstance(p.start_ns, int) or not isinstance(p.end_ns, int)
+           or p.end_ns <= p.start_ns or not math.isfinite(p.watts) for p in loads):
         return SimulatedTrace(None, tuple(dict.fromkeys(flags + ["invalid_power_pulse"])))
     pulses = list(loads)
     for pulse in traffic.pulses:
         duration = pulse.end_ns-pulse.start_ns
-        if duration <= 0 or not math.isfinite(pulse.energy_j):
+        if (not isinstance(pulse.start_ns, int) or not isinstance(pulse.end_ns, int)
+                or duration <= 0 or not math.isfinite(pulse.energy_j)):
             return SimulatedTrace(None, tuple(dict.fromkeys(flags + ["invalid_transfer_pulse"])))
         pulses.append(PowerPulse(pulse.start_ns, pulse.end_ns,
                                  pulse.energy_j*NS_PER_SECOND/duration))
@@ -204,6 +209,10 @@ def simulate_episode(
         windows = timing.windows
     traffic = model_traffic(episode.router_log, config, windows=windows)
     flags.extend(traffic.flags)
+    if len(traffic.tokens) != len(episode.router_log.phase):
+        flags.append("traffic_unavailable")
+        output = replace(episode, flags=tuple(dict.fromkeys(flags)))
+        return SimulatedEpisode(output, traffic, output.flags)
     loads: list[PowerPulse] = []
     for turn in episode.turns:
         if turn.first_token_ns is not None:

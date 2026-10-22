@@ -137,9 +137,12 @@ class TestMoeStageBTraffic(StageBAssertions):
         actual, expected = model_traffic(log, config), reference_transfers(log, config)
         self.assertEqual(tuple(t.bytes_moved for t in actual.tokens),
                          tuple(t.moved_bytes for t in expected))
-        ordered = one_layer([(0, 1), (1, 0), (2, 3), (0, 2), (1, 0)], top_k=2)
-        actual = model_traffic(ordered, small_config(cache_capacity_bytes=40))
-        expected = reference_transfers(ordered, small_config(cache_capacity_bytes=40))
+        ordered = one_layer([(0, 1), (1, 0), (2, 3), (0, 2)], top_k=2)
+        actual = model_traffic(ordered, small_config(cache_capacity_bytes=30))
+        expected = reference_transfers(ordered, small_config(cache_capacity_bytes=30))
+        # Correct first-occurrence hit order retains expert 0; sorting those
+        # touches instead evicts 0 and adds ten bytes on the final request.
+        self.assertEqual(tuple(t.bytes_moved for t in actual.tokens), (20, 0, 20, 0))
         self.assertEqual(tuple(t.bytes_moved for t in actual.tokens),
                          tuple(t.moved_bytes for t in expected))
 
@@ -367,6 +370,22 @@ class TestMoeStageBAnalysis(StageBAssertions):
         self.assertIsNone(forecast.contrast_energy_j)
         self.assertIn("invalid_sensor_forecast", forecast.flags)
 
+    def test_forecast_rejects_noninteger_token_and_sensor_time_inputs_with_flags(self):
+        sensor = default_sensors()[0]
+        base = dict(stage_a_effect_sd=1.0, n_per_condition=50, alpha=0.05, power=0.8,
+                    comparisons=3, routing_stat_sd=0.2, traffic_energy_slope_j_per_token=0.05,
+                    decode_tokens=512, decode_duration_s=25.6, phase_bias_std_j=0.1,
+                    systematic_contrast_half_width_j=1.0)
+        for tokens in (math.inf, 1.5, True):
+            result = plan_detectability(sensor, **dict(base, decode_tokens=tokens))
+            self.assertIsNone(result.contrast_energy_j)
+            self.assertIn("invalid_sensor_forecast", result.flags)
+        for bad in (replace(sensor, interval_ns=1.5),
+                    replace(sensor, averaging_window_ns=math.inf)):
+            result = plan_detectability(bad, **base)
+            self.assertIsNone(result.contrast_energy_j)
+            self.assertIn("invalid_sensor_forecast", result.flags)
+
     def test_clock_bound_covers_disjoint_explicit_decode_windows(self):
         world = WorldConfig(turns=1, prefill_tokens_per_turn=1,
                             decode_tokens_per_turn=3, prefill_duration_ns=1_000_000_000,
@@ -466,6 +485,22 @@ class TestMoeStageBEndToEnd(StageBAssertions):
         self.assertLessEqual(max(map(abs, result["true_extra_j_per_decode_token_range"])), bar)
         self.assertFalse(result["forecast"]["detectable_under_assumptions"])
         self.assertIn("no_routing_energy_coupling", result["forecast"]["flags"])
+
+    def test_unavailable_worlds_preserve_flagged_episode_records(self):
+        world = WorldConfig(groups=1, turns=1, prefill_tokens_per_turn=4,
+                            decode_tokens_per_turn=4)
+        sensor = default_sensors()[0]
+        cases = ((replace(world, hidden_size=33), sensor, "quantized_rows_not_block_aligned"),
+                 (replace(world, decode_tokens_per_turn=1), sensor, "routing_statistic_unavailable"),
+                 (world, replace(sensor, interval_ns=0), "invalid_sensor_or_profile"),
+                 (world, replace(sensor, quantum_w=0.0), "invalid_sensor_or_profile"))
+        for config, selected_sensor, flag in cases:
+            result = run_world(config, selected_sensor, all_resident=False, **self.design)
+            self.assertEqual(result["episodes"], 2*config.groups)
+            self.assertIsNone(result["total_modelled_bytes"])
+            self.assertIsNone(result["recovery"])
+            for outcome in result["episode_outcomes"]:
+                self.assertIn(flag, outcome["episode"]["flags"])
 
     def test_nvml_reports_underresolved_features_and_keeps_all_episodes(self):
         result = self.nvml
