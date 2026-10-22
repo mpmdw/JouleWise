@@ -18,13 +18,14 @@ import sys
 import tarfile
 import time
 import xml.etree.ElementTree as ET
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Sequence
 from urllib.error import URLError
 from urllib.request import urlopen
 
-from joulewise.align.gpukit.matrix import load_matrix
+from joulewise.align.gpukit.matrix import expand, load_matrix
 from joulewise.align.gpukit.runner_adapter import write_runner_matrix
 from joulewise.align.records import read_episodes
 
@@ -215,7 +216,22 @@ def copy_back(paths: Sequence[Path], *, kind: str, destination: str,
     return () if code == 0 else ("copy_failed",)
 
 
-def _validate_output(path: Path, *, expected_count: int, router: bool, model: str) -> tuple[str, ...]:
+# Runner failures use dotted names. Usage/clock/tool failures also invalidate a
+# physical work record; monitor/score errors are retained but do not erase the
+# agent/power product (off-box scoring can be deferred).
+def _incomplete_flag(flag: str) -> bool:
+    return (flag.startswith(("endpoint_", "runner_", "episode_", "model_run_failed",
+                             "budget_runner_", "endpoint.error.", "runner.error.",
+                             "factory.error.", "task.setup_error.", "sampler.",
+                             "usage.", "clock.", "tool.", "token_counter.error."))
+            or ".factory_error." in flag
+            or flag in {"episode.interrupted", "episode.max_turns",
+                        "power.empty", "condition.unknown"}) and flag != "runner_adapter_provisional"
+
+
+def _validate_output(path: Path, *, expected_count: int, router: bool, model: str,
+                     expected_coordinates: Sequence[tuple[str, str, int]] = ()) -> tuple[str, ...]:
+    """Check coordinates, usable turns and non-mock power spanning each episode."""
     flags: list[str] = []
     try:
         episodes = read_episodes(path)
@@ -223,12 +239,45 @@ def _validate_output(path: Path, *, expected_count: int, router: bool, model: st
             flags.append("runner_episode_count_mismatch")
         if len({e.episode_id for e in episodes}) != len(episodes):
             flags.append("runner_duplicate_episode_ids")
+        actual = Counter((e.task_pair, e.condition, e.seed) for e in episodes)
+        if expected_coordinates and actual != Counter(expected_coordinates):
+            flags.append("runner_episode_coordinates_mismatch")
         for episode in episodes:
-            if episode.agent_model != model:
-                flags.append("runner_episode_model_mismatch")
+            # ChatEndpoint guarantees identity, not a .model attribute; the runner
+            # may therefore put a serving identity containing the model ID here.
+            identity = episode.agent_model
+            if identity != model and not any(
+                    model + separator in identity for separator in ("@", ":", "|", " ")):
+                if not identity.endswith(model):
+                    flags.append("runner_episode_model_mismatch")
             flags.extend(episode.flags)
-            if not episode.power_traces or any(not t.t_ns for t in episode.power_traces):
+            if not episode.turns:
+                flags.append("episode_turns_missing")
+            if not episode.power_traces:
                 flags.append("episode_power_missing")
+            for trace in episode.power_traces:
+                if trace.source == "mock":
+                    flags.append("episode_power_mock")
+                if not trace.t_ns:
+                    flags.append("episode_power_missing")
+                    continue
+                offset = 0
+                if trace.clock_domain != episode.clock_domain:
+                    mappings = [m for m in episode.clock_mappings
+                                if m.trace_domain == trace.clock_domain
+                                and m.episode_domain == episode.clock_domain]
+                    if not mappings:
+                        flags.append("episode_power_clock_unmapped")
+                        continue
+                    offset = mappings[0].offset_ns
+                # A sensor polled at interval I with averaging window W has a
+                # reading within I + W of a boundary. This is the coverage bar,
+                # not an arbitrary duration fraction or an interpolation claim.
+                slack = trace.nominal_interval_ns + (trace.averaging_window_ns or 0)
+                if (trace.nominal_interval_ns <= 0 or slack < 0
+                        or trace.t_ns[0] + offset > episode.start_ns + slack
+                        or trace.t_ns[-1] + offset < episode.end_ns - slack):
+                    flags.append("episode_power_coverage_incomplete")
             if router and episode.router_log is None:
                 flags.append("episode_router_log_missing")
     except (OSError, ValueError, TypeError, KeyError) as exc:
@@ -249,7 +298,8 @@ def run_session(options: SessionOptions, *,
     receipt: dict[str, Any] = {"schema": "joulewise.align.gpukit.session.v1",
                              "status": "incomplete", "flags": flags,
                              "models": [], "data_complete": False,
-                             "start_ns": time.monotonic_ns()}
+                             "start_ns": time.monotonic_ns(),
+                             "data_complete_meaning": "Every planned coordinate exactly once per model, usable turns without runner failures, and non-mock power covering each episode; scoring may be deferred."}
     try:
         matrix, matrix_flags = load_matrix(options.matrix)
         flags.extend(matrix_flags)
@@ -353,7 +403,9 @@ def run_session(options: SessionOptions, *,
                             expected //= len(matrix["models"])
                             model_receipt["flags"].extend(_validate_output(
                                 model_dir / "episodes.jsonl", expected_count=expected,
-                                router=matrix["kind"] == "moe_stage_a", model=model["id"]))
+                                router=matrix["kind"] == "moe_stage_a", model=model["id"],
+                                expected_coordinates=[(r.task_pair, r.condition, r.seed)
+                                                      for r in expand(matrix) if r.model == model["id"]]))
                 except (OSError, ValueError, KeyError) as exc:
                     model_receipt["flags"].append(f"model_run_failed:{type(exc).__name__}")
                 finally:
@@ -380,9 +432,8 @@ def run_session(options: SessionOptions, *,
             flags.append("output_symlink_omitted")
         receipt["data_complete"] = bool(
             matrix and not matrix_flags and len(receipt["models"]) == len(matrix["models"])
-            and all(not any(f.startswith(("endpoint_", "runner_", "episode_", "model_run_failed", "budget_runner_"))
-                            and f != "runner_adapter_provisional"
-                            for f in model["flags"]) for model in receipt["models"]))
+            and all(not any(_incomplete_flag(f) for f in model["flags"])
+                    for model in receipt["models"]))
         if receipt["status"] != "refused":
             receipt["status"] = "completed_with_flags" if flags else "completed"
     except Exception as exc:
