@@ -1,6 +1,8 @@
 ## PROGRESS
 
-Fix round findings 1–3, 6–7 implemented; finding 4 form retained and R6 corrected; finding 5 no change. Finding 8 committed-fixed tables and thermal/completeness text corrected. Twelve updated budgets pass real planner/arm/precheck boundary tests. Native H module is now 36/36 passing, including all four new desk cases. Remaining heavy importer checks/final handoff are tracked in BY-C5-fix1.md. No completion claim yet.
+A1–A8 and R2-1–R2-6 are resolved as recorded in BY-C5-fix1.md; BY-MERGE remains a director hand-forward. All twelve committed-fixed budgets match native planner/arm/precheck boundaries. Native H 36/36 and 103/113 importer/native individual tests pass; the remaining capture 4, cold-pass 5 and desk-resume 1 are delegated to CI run 39819912999 (director) on PR #547 at c36ef1c51. No additional slow runs in this final report-only slice. Director owns CI adjudication, final verification, report commit/push and ledger done line.
+
+BY-C5-fix1 COMPLETE
 
 ## SUMMARY
 
@@ -13,7 +15,7 @@ All 20 bytes_gates tests pass in fix round; H rates agree with disk_h at the req
 Pack encoding and synthetic end-to-end hazard verification are implemented; byte-only replay CLI is tested on synthetic 9+1 receipts.
 Native producer now emits one-copy raw allocated-byte receipts; fully observed native-export C5 integration passes.
 All twelve H P values equal the actual planner and disk-hazard requirement, as exact integers.
-Director real replay: 0 refusals of 10 available sessions, 1 unavailable row; largest pass also refuses 0. CI remains director-owned.
+Director real replay: 0 refusals of 10 available sessions, 1 unavailable row; largest pass also refuses 0. Director reports whole-suite CI run 39819912999 on c36ef1c51, PR #547; result unobserved here.
 
 ## GATES FIX
 
@@ -139,7 +141,9 @@ Both commands exited 0 with empty stdout. No block-five changes.
 
 ## TESTS RUN
 
-Current Part 2 slice 4 results supersede historical pending runs below: native H 36/36 pass (32 individual logs plus four desk cases); loop_round_desk 5/5, round2_review_fixes 8/8, s3_cold_fixes 6/6 and machine-test 29/29 pass. Capture 5/9, cold-pass 9/14 and desk-resume 5/6 are accounted for; ten individual tests remain pending in the slice-4 census; tests.test_b6_loop 55 pass; tests.b6.test_integration_seams 7 pass; tests.b6.test_smoke 22 pass; all 24 precheck tests pass individually in fresh TMPDIRs; all four real-desk freshness/status cases pass individually (exit 0). Import graph: 6 tests, 1 known sandbox GO/NULL failure, 5 static checks pass. Exact commands and pending native desk/importer runs are recorded in BY-C5-fix1.md. No success is inferred from partial dots.
+Final accounting: 103/113 importer/native tests passed individually with zero failures or skips in those 103. Native H 36/36, loop_round_desk 5/5, round2_review_fixes 8/8, s3_cold_fixes 6/6 and machine-test 29/29 are complete; capture 5/9, cold-pass 9/14 and desk-resume 5/6 retain their local passes. The remaining ten are **delegated to CI run 39819912999 (director)** on PR #547 at c36ef1c51; no result is claimed for them. Loop 55, integration seams 7, smoke 22 and precheck 24 also pass. Import graph has five static passes and one known sandbox GO/NULL failure. Exact commands, desk cases, environmental failures and final delegation census are in BY-C5-fix1.md. No tests were run in the final report-only slice.
+
+Historical test commands/checkpoints below are retained as execution evidence; any pending/next instruction is superseded by final PROGRESS and the director's CI delegation.
 
 
 Slice 6 native module split: 31 tests PASS in 20.471 s, exit 0, no skips. Only test_prepare_to_real_nonclaim_harvest_to_measurements_to_gates was excluded from this split because its full-module invocation remains running; all other native-module tests, including the real producer C5 integration, passed. Exact command:
@@ -265,9 +269,11 @@ The committed fixed source is configs/campaigns/bytes_mac_check/registration/siz
 
 ## CI
 
-Draft PR #547; latest reviewer-supplied CI at dcceb8480: 20 of 20 green, gate-ledger red as expected for a draft. Part 2 slice 3 intake local HEAD 4aa17a44e on by-c5; director commits/pushes fix slices to lane/2026-10-22-bytes-c5-gates. No network query or Git writes by worker.
+Draft PR #547, lane/2026-10-22-bytes-c5-gates (local branch by-c5), head c36ef1c51f5f0d13a7f9ec08e781f5a56073f7ce. Director committed/pushed slice 8 and reports whole-suite [CI run 39819912999](https://github.com/mpmdw/JouleWise/actions/runs/39819912999) on that head. Ten remaining importer tests are delegated to CI run 39819912999 (director). Result unobserved by this worker; no network query or Git write attempted. Historical review at dcceb8480 reported 20/20 green plus expected draft gate-ledger red; that is not a result for this head.
 
 ## DECISIONS I MADE
+
+Final director instruction: stop slow importer runs, retain 103/113 local individual passes and delegate ten to CI run 39819912999 (director). Final reports are complete; CI and final verification remain director-owned.
 
 Fix round: PRECHECK and arm share disk-term validity and pack lookup. A missing P contributes no disk wait; DriverLane keeps LaneMissing. Smoke retention is ceil(2 B m/n), derived from registered pack B and real member counts. Full pack metadata and smoke native requirements are separately labelled. C5 absent-model observations make dependent model/disk/sizing lines unavailable and still write JSON with exit 2. Measured-c equality is exact int/int division; WAIT imports sealed SESSION_WAIT_BUDGET_S.
 
@@ -308,13 +314,13 @@ The production/test map below records the governing numerical clauses. Counterfa
 Reviewer free space 53,472,432,128 B is below all pass P values: correct arm refusal/PRECHECK WAIT until operator frees about 9.3–31.7 GB, plus up to 1.83 GB smoke retention. Part 2 slice 4 intake free space is 48 GiB; during tests 47 GiB. No arming or measurement was attempted.
 
 
-BY-MERGE hand-forward: pass1 ancestors change sealed files relative to main (including b5/plan.py, b5/driver.py and hazards/clock.py); no changes for that issue in this lane. Current importer results and remaining long checks are tracked in BY-C5-fix1.md PROGRESS; historical pending invocations do not establish results. Part 2 slice 4 definitively confirms native H 36/36, round2 review 8/8, s3 cold 6/6 and machine-test 29/29 individually passing.
+BY-MERGE hand-forward: pass1 ancestors change sealed files relative to main (including b5/plan.py, b5/driver.py and hazards/clock.py); no changes for that issue in this lane. Final importer allocation is in BY-C5-fix1.md: 103 individual passes; ten delegated to CI run 39819912999 (director). Historical pending invocations do not establish results. Part 2 slice 4 definitively confirms native H 36/36, round2 review 8/8, s3 cold 6/6 and machine-test 29/29 individually passing.
 
 Native producer support is implemented and the fully observed native-export integration passes under the explicit slice-6 scope grant: raw-only POSIX st_blocks*512, independent per-run seen-set, null absent raw trees; retained_bytes unchanged. Synthetic full raw/archive copies assert retained_bytes == 2*raw_allocated_bytes. No BY-H2 producer blocker remains.
 
 The production reader path-alias regression is resolved: all six subtests pass under /private/tmp. No production fix was necessary.
 
-Environmental-pending for director outside sandbox: tests.hazards.test_arm (sysmond/pgrep), tests.hazards.test_import_graph GO/NULL, tests.hazards.test_clock bootsessionuuid. Director explicitly owns these reruns; no hardware path changes made. CI/PR, executing review, replay re-run and final verification remain director-owned. Long importer checks listed in TESTS RUN have not yet produced final results; the director may run them outside the sandbox per the slice-6 instruction. Part 2 slice 3 intake HEAD 4aa17a44e on by-c5; destination lane/2026-10-22-bytes-c5-gates. No Git writes attempted.
+Environmental-pending for director outside sandbox: tests.hazards.test_arm (sysmond/pgrep), tests.hazards.test_import_graph GO/NULL, tests.hazards.test_clock bootsessionuuid. Director explicitly owns these reruns; no hardware path changes made. CI/PR, executing review, replay re-run and final verification remain director-owned. Ten remaining importer checks are delegated to CI run 39819912999 (director); no further local importer runs are required. Final slice HEAD c36ef1c51 on by-c5; destination lane/2026-10-22-bytes-c5-gates. No Git writes attempted.
 
 ## NEEDS_RULING
 
