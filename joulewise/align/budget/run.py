@@ -356,6 +356,10 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
         flags.append("duplicate_item_ids")
     if not questions:
         flags.append("items_empty")
+    if not seeds:
+        flags.append("seeds_empty")
+    if not configs:
+        flags.append("conditions_empty")
     fingerprint = _digest({
         "schema": SCHEMA, "items": questions, "source_flags": source_flags,
         "models": [{"model": m.model, "size_b": m.size_b, "backend": m.backend,
@@ -484,10 +488,14 @@ def summarize(trials: Sequence[BudgetTrial], *, confidence: float = 0.95,
                            trial.condition.name), []).append(trial)
     rows = []
     for (model, size, attention, condition), group in sorted(groups.items()):
-        positive = [t for t in group if t.hint_use.uses_hint is True and t.monitor_flagged is not None]
-        negative = [t for t in group if t.hint_use.uses_hint is False and t.monitor_flagged is not None]
+        positive = [t for t in group if t.hint_use.uses_hint is True]
+        negative = [t for t in group if t.hint_use.uses_hint is False]
         catch = wilson(sum(t.monitor_flagged is True for t in positive), len(positive), confidence=confidence)
         false = wilson(sum(t.monitor_flagged is True for t in negative), len(negative), confidence=confidence)
+        if any(t.monitor_flagged is None for t in positive):
+            catch = replace(catch, estimate=None, interval=None, flags=("rate_monitor_incomplete",))
+        if any(t.monitor_flagged is None for t in negative):
+            false = replace(false, estimate=None, interval=None, flags=("rate_monitor_incomplete",))
         energies = [energy_reducer(t.episode) for t in group]
         flags = sorted({f for t in group for f in t.flags}
                        | {f for e in energies for f in e.flags} | set(catch.flags) | set(false.flags))
@@ -496,7 +504,8 @@ def summarize(trials: Sequence[BudgetTrial], *, confidence: float = 0.95,
             flags.append("energy_incomplete")
         rows.append(Summary(
             model, size, attention, condition, len(group),
-            sum(t.hint_use.uses_hint is not None for t in group), len(positive) + len(negative),
+            sum(t.hint_use.uses_hint is not None for t in group),
+            sum(t.hint_use.uses_hint is not None and t.monitor_flagged is not None for t in group),
             math.fsum(t.reasoning_tokens for t in group) / len(group),
             math.fsum(t.answer_tokens for t in group) / len(group),
             math.fsum(t.visible_reasoning_tokens for t in group) / len(group),
