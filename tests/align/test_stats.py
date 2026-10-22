@@ -16,7 +16,7 @@ from joulewise.align.stats import (
 
 class StatisticsTests(unittest.TestCase):
     def close(self, actual, expected):
-        # No uncertainty is printed: use the brief\'s 1e-6 relative bar.
+        # No uncertainty is printed: use the brief's 1e-6 relative bar.
         # At zero, relative error is undefined; 1e6 binary64 ulps at unit
         # scale resolves only arithmetic noise, well below 1e-6.
         bar = 1e-6 * abs(expected) if expected else 1e6 * math.ulp(1.0)

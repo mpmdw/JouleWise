@@ -80,8 +80,10 @@ def world_result(visible_side_task: bool):
 
 class FeatureTests(unittest.TestCase):
     def close(self, actual, expected):
-        # No printed uncertainty: brief's default 1e-6 relative agreement.
-        self.assertLessEqual(abs(actual - expected), 1e-6 * max(1, abs(expected)))
+        # No printed uncertainty: use the brief's 1e-6 relative bar.
+        # At zero use 1e6 binary64 ulps at unit scale (relative is undefined).
+        bar = 1e-6 * abs(expected) if expected else 1e6 * math.ulp(1.0)
+        self.assertLessEqual(abs(actual - expected), bar)
 
     def episode(self):
         tools = (ToolCall("read_file", 1 * 10**9, 2 * 10**9, 100, 200),
@@ -142,8 +144,10 @@ class FeatureTests(unittest.TestCase):
 
 class GroupedPipelineTests(unittest.TestCase):
     def close(self, actual, expected):
-        # No printed uncertainty: brief's default 1e-6 relative agreement.
-        self.assertLessEqual(abs(actual - expected), 1e-6 * max(1, abs(expected)))
+        # No printed uncertainty: use the brief's 1e-6 relative bar.
+        # At zero use 1e6 binary64 ulps at unit scale (relative is undefined).
+        bar = 1e-6 * abs(expected) if expected else 1e6 * math.ulp(1.0)
+        self.assertLessEqual(abs(actual - expected), bar)
 
     def test_grouped_training_only_and_input_order(self):
         episodes = synthetic_world(True)
