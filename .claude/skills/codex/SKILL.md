@@ -108,8 +108,10 @@ foreground route.
 ## Session observability + recovery (WO-027)
 
 The native Codex pet does not consume the external observer JSONL. It follows
-running local conversations owned by the Codex desktop app. On Ed's configured
-machine, `.codex-bridge/app-host-thread-id` selects a dedicated app-owned task;
+running local conversations owned by the Codex desktop app. When the app is
+installed, `.codex-bridge/app-host-thread-id` selects a dedicated app-owned task
+(the app is not installed on the measurement Mac, checked 2026-10-21, so the
+file is moved aside there and the CLI transport runs);
 `scripts/codex-bridge` uses `scripts/codex-app-bridge.mjs` to start the real Sol
 turn there. The script serializes calls on that host task, captures the final
 answer from its rollout, and interrupts the app turn if the wrapper is

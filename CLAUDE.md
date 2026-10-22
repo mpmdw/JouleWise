@@ -8,7 +8,7 @@ measurement Mac (checked 2026-10-21), so the bridge runs the CLI transport.
 ## MCP Path (pinned legacy CLI): Codex MCP
 
 The tracked `.mcp.json` starts `npx -y @openai/codex@0.153.3 mcp-server`
-(gpt-5.6-sol); Sol 6.0 work goes through the exec route below. Claude Code exposes the
+(gpt-5.6-sol); Sol 6.x work goes through the exec route below. Claude Code exposes the
 server's two entry points as the `codex` tool (start a session) and
 `codex-reply` (continue the returned thread).
 
@@ -57,20 +57,21 @@ peer advice.
 
 Use `scripts/codex-bridge` when a substantial delegated run needs D-050's
 prompt/response/log hashes and invocation manifest, or when a CLI-native review
-is preferable. This is the preferred route for background calls that must be
-visible in the native Codex pet. When the ignored local
-`.codex-bridge/app-host-thread-id` is present, `new` and `review` send the real
-turn to that app-owned task and return its final answer through the ordinary
+is preferable. While the Codex desktop app is installed it is also the route
+for background calls that must be visible in the native Codex pet: when the
+ignored local `.codex-bridge/app-host-thread-id` is present, `new` and `review`
+send the real turn to that app-owned task and return its final answer through the ordinary
 audit trail. External observer JSONL is diagnostic only; it does not drive the
 pet. Set `CODEX_APP_BRIDGE=off` only to require standalone `codex exec`.
 
 The current orchestration wrapper is `~/.local/bin/codex-run-v3` (personal
 tooling, not tracked here). It supplies the audited report and D-064 evidence
 path described by the contract. Current model: gpt-6.1-sol (exec route, CLI
-0.163.0, checked 2026-10-21). The MCP server in `.mcp.json` is pinned to CLI 0.153.3 with
-gpt-5.6-sol because `codex mcp-server` is absent from CLI 0.154.0, 0.155.0 and
-0.156.1 (checked 2026-09-23) and from 0.163.0 (checked 2026-10-21) and the 0.153.3 client cannot use the 6.0 models.
-The exec route is therefore the primary route for Sol 6.0 work.
+0.163.0, checked 2026-10-21). The MCP server in `.mcp.json` is pinned to CLI
+0.153.3 with gpt-5.6-sol because `codex mcp-server` is absent from CLI 0.154.0,
+0.155.0 and 0.156.1 (checked 2026-09-23) and from 0.163.0 (checked
+2026-10-21), and the 0.153.3 client cannot use the 6.x models. The exec route
+is therefore the primary route for Sol 6.x work.
 `scripts/codex-run` remains the older
 hardened, timeout-bounded single-call protocol.
 
