@@ -7,13 +7,13 @@ import unittest
 from pathlib import Path
 
 from joulewise.align.power.ina3221 import Characterization, Ina3221Sampler, RailCharacterization
-from tests.align.test_power_ina3221 import Ina3221Test
+from tests.align import test_power_ina3221 as fixtures
 
 
 class CharacterizationReviewTest(unittest.TestCase):
     def test_mainline_shunt_sum_is_not_a_bus_rail(self):
         with tempfile.TemporaryDirectory() as tmp:
-            dev = Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
+            dev = fixtures.Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
             (dev / "in7_label").write_text("sum of shunt voltages")
             (dev / "in7_input").write_text("32")
             sampler = Ina3221Sampler(sysfs_root=tmp, sample_interval_ns=1_000_000)
@@ -24,7 +24,7 @@ class CharacterizationReviewTest(unittest.TestCase):
     def test_cadence_uses_endpoint_span_and_flags_poll_limit(self):
         for poll in (100_000, 300_000, 500_000, 1_000_000):
             with self.subTest(poll=poll), tempfile.TemporaryDirectory() as tmp:
-                Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
+                fixtures.Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
                 now = [0]
                 conversion = 840_000  # Datasheet minimum: 140 us * bus/shunt * 3 rails.
                 def clock():
@@ -49,7 +49,7 @@ class CharacterizationReviewTest(unittest.TestCase):
 
     def test_watt_resolution_propagates_both_lattices(self):
         with tempfile.TemporaryDirectory() as tmp:
-            Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
+            fixtures.Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
             seq = iter(itertools.product(range(6), range(40)))
             current = [None]
             now = [0]
@@ -76,7 +76,7 @@ class CharacterizationReviewTest(unittest.TestCase):
 
     def test_driver_metadata_and_characterization_disagreement(self):
         with tempfile.TemporaryDirectory() as tmp:
-            dev = Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
+            dev = fixtures.Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
             (dev / "samples").write_text("4")
             sampler = Ina3221Sampler(sysfs_root=tmp, sample_interval_ns=1_000_000)
             rail, = sampler.discover()
@@ -94,7 +94,7 @@ class CharacterizationReviewTest(unittest.TestCase):
     def test_alarm_clear_set_missing_and_separate_throttle_counter(self):
         for value in (None, "0", "1"):
             with self.subTest(alarm=value), tempfile.TemporaryDirectory() as tmp:
-                dev = Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
+                dev = fixtures.Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
                 if value is not None:
                     (dev / "curr1_crit_alarm").write_text(value)
                     (dev / "curr1_max_alarm").write_text("0")
@@ -122,7 +122,7 @@ class CharacterizationReviewTest(unittest.TestCase):
 
     def test_health_attribute_read_loss_is_recorded(self):
         with tempfile.TemporaryDirectory() as tmp:
-            dev = Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
+            dev = fixtures.Ina3221Test().make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
             alarm = dev / "curr1_max_alarm"
             alarm.write_text("0")
             sampler = Ina3221Sampler(sysfs_root=tmp, sample_interval_ns=1_000_000)

@@ -129,14 +129,15 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
         quantum = 0.0
     variance = max(sigma * sigma, quantum * quantum / 12)
     # Token ripple is correlated work within decode, not a new phase. The
-    # maximum robust difference scale over dyadic lags through sqrt(n)
-    # estimates its within-phase envelope without assuming amplitude or TPS.
-    # sqrt(n) keeps each lag local as episodes grow; sparse steps are MAD
-    # outliers. Supplied sd is read noise, not a zero-ripple assertion.
+    # robust difference scale over lags through one exposure plus one sample
+    # estimates its local envelope without assuming amplitude or TPS. Going
+    # out to seconds on a slow sensor would confuse real phase changes with
+    # nuisance noise. Supplied sd is read noise, not a zero-ripple assertion.
     lag = 1
     modulation_variance = 0.0
     normal_mad = math.sqrt(2) * statistics.NormalDist().inv_cdf(0.75)
-    while lag <= math.isqrt(n):
+    max_lag = max(1, min(math.isqrt(n), math.ceil(window / effective_interval) + 1))
+    while lag <= max_lag:
         ds = [xs[i + lag] - xs[i] for i in range(n - lag)]
         if ds:
             median = statistics.median(ds)
@@ -210,12 +211,19 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
         for group in groups[2:]:
             for i in group:
                 labels[i] = "prefill"
-        decode_duration = statistics.median(leaves[i][1] - leaves[i][0] for i in groups[1])
-        if any(statistics.median(leaves[i][1] - leaves[i][0] for i in group) >
-               decode_duration for group in groups[2:]):
-            flags.append("level_duration_model_mismatch")
+        decode_weight = sum(leaves[i][1] - leaves[i][0] for i in groups[1])
+        decode_level = sum(means[i] * (leaves[i][1] - leaves[i][0]) for i in groups[1]) / decode_weight
         for i in range(len(leaves)):
             if i in stable:
+                continue
+            a, b = leaves[i]
+            burst_separation = max(modulation_envelope, math.sqrt(
+                2 * math.log(max(2, n)) * variance * (1 / (b - a) + 1 / decode_weight)))
+            # A short prefill can have only one pure slow-sensor exposure.
+            # It need not establish a new level, but a sample significantly
+            # ABOVE sustained decode is a burst, never a low-power wait.
+            if means[i] - decode_level > burst_separation:
+                labels[i] = "prefill"
                 continue
             left = next((j for j in reversed(stable) if j < i), None)
             right = next((j for j in stable if j > i), None)
@@ -249,6 +257,14 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
                 flags=tuple(sorted(set(previous.flags) | set(segment.flags))),
                 boundary_uncertainty_ns=max(previous.boundary_uncertainty_ns, boundary_uncertainty))
         result.append(segment)
+    # Compare phase-run durations after consolidation; comparing individual
+    # ripple leaves with a whole prefill would manufacture a model mismatch.
+    decode_durations = [s.end_ns - s.start_ns for s in result if s.label == "decode"]
+    prefill_durations = [s.end_ns - s.start_ns for s in result if s.label == "prefill"]
+    if (decode_durations and prefill_durations and
+            statistics.median(prefill_durations) > statistics.median(decode_durations)):
+        result = [replace(s, flags=tuple(sorted(set(s.flags) |
+                                               {"level_duration_model_mismatch"}))) for s in result]
     return [replace(s, label=("idle" if i in (0, len(result) - 1) else "tool_wait"))
             if s.label == "low" else s for i, s in enumerate(result)]
 

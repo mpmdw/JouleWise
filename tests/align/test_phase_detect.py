@@ -127,7 +127,6 @@ def run_duration_study(*, seeds=range(64), durations_ns=(
                 hidden = match_tool_calls(segments, isolated_log)
                 hidden_shared = match_tool_calls(segments, shared_log)
                 # The log implies call.end + client gap as the trough end.
-                bound = hidden.tolerance_ns
                 def found(match, call):
                     return any(abs(s.start_ns - call.start_ns) <= match.tolerance_ns and
                                s.end_ns >= call.end_ns - match.tolerance_ns and

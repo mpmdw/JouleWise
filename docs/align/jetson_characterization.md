@@ -179,7 +179,8 @@ Binary segmentation retains the 2 variance log(n) BIC-style SSE penalty.
 For held readings it infers a change cadence and thins to independent
 conversion-sized observations while retaining the duration of constant
 plateaus. Noise estimation first removes bit-identical repeats. A robust
-difference-variance envelope at dyadic lags through sqrt(n) includes
+difference-variance envelope at local dyadic lags through one exposure
+plus one sample includes
 correlated token ripple as within-phase variation. This avoids treating
 every ripple half-cycle as a prefill. Persistent levels use complete-span
 grouping; mixed-exposure leaves borrow adjacent sustained labels, and
