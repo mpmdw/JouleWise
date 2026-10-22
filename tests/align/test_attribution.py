@@ -199,6 +199,60 @@ class AttributionChecks(unittest.TestCase):
         # One uncovered second at 300 W, not the pre-reset megajoule baseline.
         self.close(before.half_width_j, 300 * 1 + 2 * 0.001)
 
+    def test_counter_dip_cannot_masquerade_as_a_restart(self):
+        period = NS // 10  # A 100 ms counter poll at fixture power 300 W.
+        times = tuple(range(0, 4 * NS + 1, period))
+        poll_j = 300 * (period / NS)
+        quantum = 0.001  # NVML reports integer mJ.
+        values = [5_000_000.0 + poll_j * k for k in range(len(times))]
+        middle = len(times) // 2
+        values[middle] = values[middle - 1] - quantum
+        sensor = trace(times=times, values=tuple(values), source="nvml_energy",
+                       unit="J_cumulative", resolution=quantum)
+        result = trace_energy(sensor, 0, 4 * NS)
+        self.assertIn("counter.decrease", result.flags)
+        self.assertIn("counter.decrease_interval", result.flags)
+        self.assertNotIn("counter.reset", result.flags)
+        # Ignoring the dip loses one 30 J poll; the recovery step contains
+        # two polls plus the 1 mJ dip. Net error is therefore just 1 mJ.
+        self.close(result.joules, 300 * 4 + quantum, half_width=result.half_width_j)
+        self.assertLessEqual(abs(result.joules - 300 * 4), result.half_width_j)
+        # The largest NON-reset step is the 60.001 J recovery. It sets
+        # peak = recovery_J/.1 s; one ambiguous poll plus two quanta follows.
+        recovery_j = 2 * poll_j + quantum
+        self.close(result.half_width_j, recovery_j + 2 * quantum)
+        before = trace_energy(sensor, -NS, 0)
+        # One missing second uses the recovery's observed power, never the
+        # counter's multi-megajoule baseline.
+        self.close(before.half_width_j, recovery_j / (period / NS) + 2 * quantum)
+
+    def test_counter_first_drop_exceeding_poll_work_is_a_decrease(self):
+        period = NS // 10  # 300 W * .1 s = 30 J per fixture poll.
+        times = tuple(range(0, 4 * NS + 1, period))
+        values = tuple(5_000_000.0 if k == 0 else 30.0 * (k + 1)
+                       for k in range(len(times)))
+        result = trace_energy(trace(times=times, values=values, source="nvml_energy",
+                                    unit="J_cumulative", resolution=0.001), 0, 4 * NS)
+        self.assertIn("counter.decrease", result.flags)
+        # The implausible first 60 J is ignored; 39 remaining polls deliver
+        # 1170 J. One 30 J poll of sensitivity covers the 1200 J truth.
+        self.close(result.joules, 300 * 4 - 300 * 0.1, half_width=result.half_width_j)
+        self.close(result.half_width_j, 300 * 0.1 + 2 * 0.001)
+        self.assertLessEqual(abs(result.joules - 300 * 4), result.half_width_j)
+
+    def test_all_decreasing_counter_has_no_observed_peak(self):
+        sensor = trace(times=(0, NS, 2 * NS), values=(100.0, 80.0, 60.0),
+                       source="nvml_energy", unit="J_cumulative", resolution=0.001)
+        result = trace_energy(sensor, 0, 2 * NS)
+        # Identically absent accepted increments yield bit-exact zero.
+        self.assertEqual(result.joules, 0.0)
+        self.assertTrue(math.isinf(result.half_width_j))
+        self.assertIn("counter.peak_missing", result.flags)
+        self.assertIn("counter.decrease", result.flags)
+        outside = trace_energy(sensor, -NS, 0)
+        self.assertTrue(math.isinf(outside.half_width_j))
+        self.assertIn("coverage.peak_missing", outside.flags)
+
     def test_counter_hold_includes_jump_at_partial_start_interval_end(self):
         sensor = trace(times=(0, NS, 2 * NS), values=(0.0, 100.0, 300.0),
                        source="nvml_energy", unit="J_cumulative", resolution=0.001)

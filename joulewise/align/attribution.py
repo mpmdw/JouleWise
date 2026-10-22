@@ -101,21 +101,39 @@ class _Trace:
         self.times = tuple(t for t, _ in pairs)
         self.values = tuple(v for _, v in pairs)
         spans: list[_Span] = []
-        self.resets: list[tuple[int, int]] = []
+        self.resets: list[tuple[int, int, str]] = []
+        self.counter_peak_missing = False
         window = trace.averaging_window_ns
         if window is not None and window <= 0:
             self.flags.append("window.invalid")
             window = None
         self.window = window
         if self.counter:
+            # A restart reading can contain at most one poll's work:
+            # new_J <= poll_s * peak_W from nondecreasing counter steps.
+            # Establish that peak BEFORE classifying drops so an implausible
+            # megajoule reading cannot certify itself as a restart.
+            observed_peak = max(((y - x) / ((b - a) / _NS_PER_S)
+                                 for (a, x), (b, y) in zip(pairs, pairs[1:])
+                                 if y >= x), default=None)
+            self.counter_peak_missing = observed_peak is None and len(pairs) > 1
+            if self.counter_peak_missing:
+                self.flags.append("counter.peak_missing")
             for (a, x), (b, y) in zip(pairs, pairs[1:]):
+                increment = y - x
                 if y < x:
-                    # NVML counts mJ since driver load. A decrease denotes a
-                    # reset, not a modular negative-energy increment. The new
-                    # reading is the work accumulated since restart.
-                    self.flags.extend(("counter.wrap", "counter.reset"))
-                    self.resets.append((a, b))
-                increment = y if y < x else y - x
+                    if observed_peak is None or y < 0 or y > (b - a) / _NS_PER_S * observed_peak:
+                        # No physical restart can produce this new reading
+                        # at the observed peak. Count no work for the glitch,
+                        # but retain one poll's sensitivity below. With no
+                        # non-reset step, that missing sensitivity is infinite.
+                        increment = 0.0
+                        self.flags.append("counter.decrease")
+                        self.resets.append((a, b, "counter.decrease_interval"))
+                    else:
+                        increment = y
+                        self.flags.extend(("counter.wrap", "counter.reset"))
+                        self.resets.append((a, b, "counter.reset_interval"))
                 watts = increment / ((b - a) / _NS_PER_S)
                 spans.append(_Span(a, b, watts, watts))
         elif window is not None:
@@ -257,8 +275,9 @@ class _Trace:
         bounds: list[float] = []
         if missing_ns:
             flags.append("trace.partial_coverage")
-            bounds.append(missing_ns / _NS_PER_S * self.peak)
-            if not self.values:
+            bounds.append(math.inf if self.counter_peak_missing else
+                          missing_ns / _NS_PER_S * self.peak)
+            if not self.values or self.counter_peak_missing:
                 flags.append("coverage.peak_missing")
         if self.mapping is not None:
             uncertainty = self.mapping.uncertainty_ns
@@ -270,14 +289,15 @@ class _Trace:
         bounds.extend((self._interpolation(t0, t0, t1, start=True),
                        self._interpolation(t1, t0, t1, start=False),
                        self._window_uncertainty(t0, t1)))
-        for a, b in self.resets:
+        for a, b, interval_flag in self.resets:
             reset_overlap = max(0, min(t1, b) - max(t0, a))
             if reset_overlap:
-                # The reset can discard up to one polling interval's work.
-                # Use the observed peak as a sensitivity envelope, as for
-                # missing trace coverage; it is not a bound on unseen spikes.
-                bounds.append(reset_overlap / _NS_PER_S * self.peak)
-                flags.append("counter.reset_interval")
+                # A reset or ignored dip can hide one poll's work. Its
+                # overlap duration * observed peak is the sensitivity, as
+                # for partial coverage; unseen larger spikes are unbounded.
+                bounds.append(math.inf if self.counter_peak_missing else
+                              reset_overlap / _NS_PER_S * self.peak)
+                flags.append(interval_flag)
         resolution = self.trace.resolution
         if resolution is not None and math.isfinite(resolution) and resolution >= 0:
             bounds.append(2 * resolution if self.counter else resolution * duration)
@@ -307,9 +327,10 @@ def trace_energy(
 
     Idle power is subtracted over the FULL requested interval, including any
     out-of-trace duration, as specified by A4. Missing gross energy is zero
-    with a peak-power sensitivity allowance. Counter decreases restart from
-    zero and carry counter.wrap/counter.reset, plus one polling interval's
-    observed-peak sensitivity for work lost before the reset.
+    with a peak-power sensitivity allowance. A physically plausible counter
+    restart counts from zero with counter.wrap/counter.reset. An implausible
+    drop counts zero with counter.decrease. Both add the affected poll's
+    observed-peak sensitivity; if no non-reset step sets a peak, it is infinite.
 
     Endpoint hold-versus-line comparisons are clipped to the query itself.
     Windowed sensors compare raw sample brackets and add the C2 duty-gap
