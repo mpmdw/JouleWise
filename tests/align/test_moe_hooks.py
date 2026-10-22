@@ -46,9 +46,12 @@ class RouterHookTests(unittest.TestCase):
         torch = self.torch
         for text in ("Sort the local project files.", "Summarize the tool results."):
             prompt = self._prompt(text)
+            # More than E/k decode forwards guarantee at least one repeated
+            # expert at each layer, so reuse distance is defined (pigeonhole).
+            new_tokens = 2 + self.model.config.num_experts // self.model.config.num_experts_per_tok
             with torch.inference_mode(), RouterRecorder(self.model) as recorder:
                 self.model.generate(prompt, attention_mask=torch.ones_like(prompt),
-                                    max_new_tokens=4, do_sample=False,
+                                    max_new_tokens=new_tokens, do_sample=False,
                                     eos_token_id=None, pad_token_id=0)
                 log = recorder.log
                 self.assertEqual(log.layers, (0, 1))
@@ -56,8 +59,8 @@ class RouterHookTests(unittest.TestCase):
                 self.assertEqual(log.top_k, 2)
                 self.assertEqual(log.phase.count("prefill"), prompt.shape[1])
                 # Autoregression forwards the prompt then all but the last new
-                # sampled token: four generated tokens require three decode forwards.
-                self.assertEqual(log.phase.count("decode"), 4 - 1)
+                # sampled token, so new_tokens - 1 decode forwards are captured.
+                self.assertEqual(log.phase.count("decode"), new_tokens - 1)
                 self.assertTrue(all(math.isfinite(value) for value in episode_stats(log).values()))
                 self.assertFalse(recorder.flags)
 

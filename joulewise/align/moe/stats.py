@@ -61,7 +61,7 @@ def usage_entropy(log: RouterLog, *, phase: str | None = None,
                   per_layer: bool = False) -> float | list[float]:
     """Mean per-layer Shannon entropy, normalized by log(num_experts).
 
-    A one-expert router has zero entropy by continuity. Unselected experts
+    A one-expert router is assigned zero diversity (Shannon entropy is zero). Unselected experts
     contribute zero. Phase filtering precedes all sequence calculations.
     """
     rows = _rows(log, phase)

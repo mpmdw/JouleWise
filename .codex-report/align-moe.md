@@ -1,5 +1,5 @@
 # SUMMARY
-- IN PROGRESS: implementation is saved; local runtime has not become usable.
+- IN PROGRESS: implementation and synthetic results are saved; CI fixture correction awaits rerun.
 - Implemented lazy HF Qwen3-MoE, Qwen2-MoE and Mixtral gate capture with phase tags.
 - Implemented all exact public statistics signatures and grouped randomization.
 - Added Holm-adjusted tests, grouped-bootstrap effects and held-out classifier AUCs.
@@ -53,19 +53,36 @@ Existing CI via draft PR #520 at b1015ffc0713f752a137532f000df8b957b7a155:
 - Minimal registry exception applied at 7f89688922d5750539cec72cb1649ae9d908a097:
   add "align." to the existing module-name prefix normalization in tests/test_shard_tests.py.
   This covers the three new test modules and the spine's existing test_records.
-- Awaiting CI after that fix; final evidence will replace this checkpoint.
+- At 2a170db68740f2abe567776b93bca5a6ecf14b17: quick tier passed.
+  New stats module: 10 passed. New Stage A module: 14 tests, 1 fixture-oracle failure.
+  Hook module: 6 skipped, reason "tiny HF MoE integration needs optional torch and transformers".
+  Spine records: 4 passed. Other shards were cancelled after Stage A's failed oracle.
+- Correcting the deterministic oracle and guaranteeing repeated selections in the
+  optional tiny-model fixture; final evidence will replace this checkpoint.
 
 # END-TO-END
-Implemented but not yet executed:
-- 12 task groups, 24 episodes, 6 turns/5 tools each; 32 experts/top-4/four layers.
-- A side topic replaces 40% of sabotage decode tokens; counts and prefill stay paired.
-- RouterLog -> episode_stats -> grouped permutation -> Holm -> group bootstrap ->
-  held-out routing/metadata/combined classifiers -> Mann-Whitney AUC/gain.
-- Analytic targets: decode load CV f*sqrt(E/k-1), reuse k/E+f^2*(1-k/E).
-- Exact paired zero-shift and independent-noise zero-shift controls.
-- Counts-only positive control repeats benign decode forwards with consistent records.
-- Shared JSONL serialization/CLI path and full 48-layer/128-expert/top-8 dimensions.
-- Tiny real HF models and two prompts: pending optional-dependency execution.
+Observed in CI at 2a170db68740f2abe567776b93bca5a6ecf14b17:
+- 12 task groups, 24 episodes, 144 turns, 120 tool calls.
+- 23,176 prefill tokens and 34,494 decode tokens; 32 experts, top-4, four layers.
+- Sabotage changes the topic of 40% of decode tokens in expectation.
+- RouterLog -> episode_stats -> grouped permutation -> Holm -> grouped bootstrap ->
+  task-held-out routing/metadata/combined classifiers -> Mann-Whitney AUC/gain.
+- AUC metadata 0.5, routing 1.0, combined 1.0; added AUC 0.5 [0.5, 0.5].
+- Decode reuse effect 0.1359071076578115 [0.13118738132590682, 0.14117669025037116],
+  containing analytic target 0.14 = .4^2*(1-4/32).
+- Decode load effect 0.9648177222877435 [0.9501019886896048, 0.983076392559291].
+- Decode entropy effect -0.1011543498323929 [-0.10440648355007826, -0.09856993805219644].
+- All four decode Holm p-values 0.005859375 (exact 4096 arrangements).
+- Paired zero-shift control: all AUCs 0.5, AUC gain 0, all Holm p-values 1.
+- Independent-noise zero-shift control: routing/combined AUC 0.5902777777777778;
+  added AUC 0.09027777777777779 [-0.026562499999999985, 0.26388888888888884];
+  all Holm p-values 1. The interval includes zero.
+- Counts-only positive control, shared JSONL CLI, and full 48/128/top-8 shape passed.
+- Tiny real HF models skipped: optional torch/transformers absent.
+- The nominal-f finite-CV oracle was the sole Stage A test failure (13/14 passed).
+  It compared a finite topic draw with its population expectation. Replaced with
+  balanced exposure whose entropy/load expectations are exact, without changing
+  the random world or its reported analysis numbers. Awaiting rerun.
 
 # DECISIONS I MADE
 - Verified the published Qwen3-30B-A3B config at d47d535f78ec44bd57128f8e8aeba17eeb0285ea:
@@ -92,6 +109,11 @@ Implemented but not yet executed:
   produce a flagged non-estimable report rather than silently dropping rows.
 - Runtime startup forced GitHub API checkpoints and a draft PR to run existing CI.
 - Used only the brief's registry exception for the discovery-namespace inventory fix.
+- Replaced a nominal-probability confidence-coverage assertion with an exact balanced-
+  exposure oracle: a single finite random topic draw need not be inside a 95% interval.
+- Tiny-model generation length follows the pigeonhole bound so reuse distance is defined.
+- The classifier comparison is specific to this learner/features; conditional, possibly
+  degenerate control-world AUC intervals do not quantify real-model generalization.
 
 # CONTRACT-CHANGE
 none
@@ -99,7 +121,7 @@ none
 # OPEN ISSUES
 - Managed runtime unavailable: local required discovery, canonical suite, optional
   dependency installation, and tiny-model execution remain pending.
-- Current checkpoint has no observed synthetic numbers until the new MoE tests execute.
+- Awaiting green CI after correcting the load-calibration fixture; current observed numbers are above.
 - Lead-owned independent twin/review and merge gates are not claimed by this build lane.
 - Compiled/fused/distributed HF capture requires separate coverage validation.
 - Recorder host synchronization must not be interpreted as Stage B energy evidence.

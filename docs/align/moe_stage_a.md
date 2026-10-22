@@ -170,8 +170,9 @@ sample top_k distinct experts uniformly. Counts stay matched within task pairs.
 For E experts and k selections, the asymptotic decode load CV is
 f sqrt(E/k-1), and expected reuse is k/E + f^2(1-k/E). Entropy follows the
 mixture probabilities: f/k+(1-f)/E on core experts and (1-f)/E elsewhere.
-Finite-token CV-squared also has the multinomial marginal-count variance term;
-the tests compare it to the analytic expectation using independent task groups.
+Finite-token CV-squared also has a marginal-count variance term. A balanced-exposure
+control checks entropy and load against the exact mixture law. The random world
+checks the expected reuse effect using its grouped-bootstrap interval.
 
 The matched zero-shift control uses common random numbers, producing identical
 paired router logs when f=0. A second control uses independent routing noise
@@ -182,3 +183,12 @@ skip explicitly when torch/transformers or Qwen3-MoE support is unavailable.
 
 Implementation and test execution status, with exact commands and observed
 numbers, is tracked in .codex-report/align-moe.md.
+
+
+The classifier comparison is specific to this fixed learner and these four
+metadata features. It does not establish conditional independence from every
+possible function of counts. Perfect synthetic separation can give a degenerate
+bootstrap AUC interval; that is a property of the finite control world, not
+uncertainty about real-model generalization. The optional tiny-model generation
+length guarantees recurrent expert selections by the pigeonhole principle
+before asserting that reuse distance is finite.

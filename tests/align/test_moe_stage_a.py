@@ -5,16 +5,16 @@ from __future__ import annotations
 import io
 import json
 import math
-import statistics
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from dataclasses import replace
+from fractions import Fraction
 from pathlib import Path
 
 from joulewise.align.records import Episode, RouterLog, from_json, to_json, write_episodes
 from joulewise.align.moe.stage_a import analyze_stage_a, main, mann_whitney_auc
-from joulewise.align.moe.stats import episode_stats, load_imbalance
+from joulewise.align.moe.stats import episode_stats
 from joulewise.align.moe.synthetic import TopicWorld, expected_topic_statistics, topic_episodes
 from tests.align.test_moe_stats import assert_close
 
@@ -81,25 +81,31 @@ class StageAWorldTests(unittest.TestCase):
         self.assertLessEqual(interval[0], effect)
         self.assertGreaterEqual(interval[1], effect)
 
-    def test_finite_token_imbalance_matches_marginal_count_law(self):
-        residuals = []
-        e, k, f = self.design.num_experts, self.design.top_k, self.shift
-        for episode in self.world[1::2]:
-            log = episode.router_log
-            n = log.phase.count("decode")
-            p_core, p_other = f + (1 - f) * k / e, (1 - f) * k / e
-            expected_cv_squared = f * f * (e / k - 1) + e / (n * k * k) * (
-                k * p_core * (1 - p_core) + (e - k) * p_other * (1 - p_other))
-            observed = []
-            for layer in range(len(log.layers)):
-                single = RouterLog(log.model, e, k, (log.layers[layer],), log.phase,
-                                   tuple((row[layer],) for row in log.experts))
-                observed.append(load_imbalance(single, phase="decode")**2)
-            residuals.append(statistics.mean(observed) - expected_cv_squared)
-        # Independent task groups supply the SE. The normal 95% half-width is
-        # derived from their observed variance; no arbitrary numerical tolerance.
-        half_width = statistics.NormalDist().inv_cdf(0.975) * statistics.stdev(residuals) / math.sqrt(len(residuals))
-        self.assertLessEqual(abs(statistics.mean(residuals)), half_width)
+    def test_balanced_affinity_limit_matches_expected_counts(self):
+        # Use balanced exposure for a deterministic count-law oracle. A single
+        # nominal-f random world need not fall inside its 95% sampling interval;
+        # that interval is for inference, not a floating agreement tolerance.
+        e, k = self.design.num_experts, self.design.top_k
+        cycle = [tuple(range(first, first + k)) for first in range(0, e, k)]
+        repeats = self.design.decode_tokens // len(cycle)
+        # f=.4 = 2/(3+2): three balanced main-topic cycles per two side-topic
+        # cycles. Repetition supplies realistic decode counts without noise in
+        # the quantity this arithmetic oracle checks.
+        mixture = Fraction(str(self.shift))
+        main_cycles = mixture.denominator - mixture.numerator
+        main = cycle * (main_cycles * repeats)
+        side = [tuple(range(k))] * (mixture.numerator * repeats * len(cycle))
+        for fraction, selections in ((self.shift, main + side),
+                                     (0.0, cycle * (mixture.denominator * repeats))):
+            log = RouterLog("balanced/topic-affinity", e, k, tuple(range(self.design.layers)),
+                            ("decode",) * len(selections),
+                            tuple(tuple(tuple((expert + layer * k) % e for expert in ids)
+                                        for layer in range(self.design.layers))
+                                  for ids in selections))
+            expected = expected_topic_statistics(e, k, fraction)
+            measured = episode_stats(log)
+            assert_close(self, measured["decode_load_imbalance"], expected["load_imbalance"])
+            assert_close(self, measured["decode_usage_entropy"], expected["usage_entropy"])
 
     def test_zero_shift_removes_separation(self):
         null = topic_episodes(0.0, design=self.design, seed=731)
