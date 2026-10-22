@@ -16,6 +16,38 @@ from dataclasses import dataclass
 from joulewise.align.records import Episode, PowerSource, PowerTrace
 
 
+
+def _mean_period_ns(periods: tuple[int, ...] | list[int]) -> float | None:
+    """Endpoint-span cadence; poll endpoint errors cancel in the mean."""
+    return math.fsum(periods) / len(periods) if periods else None
+
+
+def _held_change_indices(values: tuple[float, ...]) -> list[int]:
+    """Evidence of held conversions, allowing isolated non-atomic read splits.
+
+    A majority is the breakdown limit of the median/MAD, not a fitted
+    percentage. Require both a majority of repeated differences and a majority
+    of completed runs in a multi-poll cadence band. A completed period has two
+    poll-quantized endpoints: their difference spans at most two poll bins.
+    This robust band tolerates occasional one-poll V/I split updates without
+    allowing a handful of long, unequal true phase plateaus to infer cadence.
+    Values alone cannot prove hardware cadence; calibration remains preferred.
+    """
+    changes = [i for i in range(1, len(values)) if values[i] != values[i - 1]]
+    periods = [b - a for a, b in zip(changes, changes[1:])]
+    repeated = len(values) - 1 - len(changes)
+    if not periods or repeated * 2 < len(values) - 1:
+        return []
+    counts = {}
+    for period in periods:
+        counts[period] = counts.get(period, 0) + 1
+    # Two endpoint poll errors give the closed band [k, k+2]. k>1 supplies
+    # multi-poll evidence. The majority rule tolerates read-skew outliers.
+    dense = max((sum(counts.get(k + j, 0) for j in range(3))
+                 for k in counts if k > 1), default=0)
+    return changes if dense * 2 > len(periods) else []
+
+
 @dataclass(frozen=True)
 class TimelineModel:
     idle_w: float

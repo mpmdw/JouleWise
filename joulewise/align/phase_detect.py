@@ -16,6 +16,7 @@ import statistics
 from dataclasses import dataclass, replace
 
 from joulewise.align.records import Episode, PowerTrace, ToolCall
+from joulewise.align.sensor_sim import _held_change_indices, _mean_period_ns
 
 
 @dataclass(frozen=True)
@@ -41,21 +42,6 @@ class ToolCallMatch:
     matched_count: int = 0
     tolerance_ns: int = 0
     indeterminate_candidates: tuple[Segment, ...] = ()
-
-
-def _held_change_indices(values: tuple[float, ...]) -> list[int]:
-    """Conservative evidence of multi-poll held conversions, from values alone."""
-    changes = [i for i, value in enumerate(values) if i and value != values[i - 1]]
-    periods = [b - a for a, b in zip(changes, changes[1:])]
-    repeated = len(values) - 1 - len(changes)
-    # Retain the sqrt(n) local sample-count guard against a few true phases.
-    # A median needs a majority of held differences. A completed one-poll
-    # run demonstrates native-rate changes, so plateaus alone cannot justify
-    # thinning. Ambiguous streams retain all their observations.
-    if (len(changes) >= math.isqrt(len(values)) and periods and
-            repeated * 2 >= len(values) - 1 and min(periods) > 1):
-        return changes
-    return []
 
 
 def estimate_noise_sd(values: tuple[float, ...]) -> float:
@@ -117,7 +103,7 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
     if changes:
         change_times = [trace.t_ns[i] for i in changes]
         observed_periods = [b - a for a, b in zip(change_times, change_times[1:])]
-        effective_interval = max(interval, round(statistics.median(observed_periods)))
+        effective_interval = max(interval, math.ceil(_mean_period_ns(observed_periods)))
         flags.append("held_values_cadence_inferred")
     # Thin by the observed cadence rather than removing entire constant
     # plateaus. A 500 ms truly idle span still has 500/dt observations.
@@ -146,7 +132,9 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
     lag = 1
     modulation_variance = 0.0
     normal_mad = math.sqrt(2) * statistics.NormalDist().inv_cdf(0.75)
-    max_lag = max(1, min(math.isqrt(n), math.ceil(window / effective_interval) + 1))
+    # A lag needs two observations; the exposure duration supplies the other
+    # cap. No sample-count square-root cap is physically justified.
+    max_lag = max(1, min(n - 1, math.ceil(window / effective_interval) + 1))
     while lag <= max_lag:
         ds = [xs[i + lag] - xs[i] for i in range(n - lag)]
         if ds:

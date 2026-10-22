@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 from joulewise.align.records import PowerTrace
+from joulewise.align.sensor_sim import _held_change_indices, _mean_period_ns
 
 
 @dataclass(frozen=True)
@@ -45,7 +46,7 @@ class RailCharacterization:
         one actual poll period / number of observed periods. A median instead
         picks a neighboring poll multiple when conversion and poll do not tile.
         """
-        return statistics.fmean(self.distinct_periods_ns) if self.distinct_periods_ns else None
+        return _mean_period_ns(self.distinct_periods_ns)
 
     @property
     def median_distinct_period_ns(self) -> float | None:
@@ -234,11 +235,10 @@ class Ina3221Sampler:
         # Held register values can reveal a slower cadence than the configured
         # integer-ms exposure. This is an observation, confounded by steady
         # loads; keep that limitation visible and prefer supplied calibration.
-        changed = [row[0] for previous, row in zip(rows, rows[1:]) if row[1] != previous[1]]
-        repeats = sum(a[1] == b[1] for a, b in zip(rows, rows[1:]))
-        if (cadence is None and len(changed) >= max(2, math.isqrt(len(rows))) and
-                repeats * 2 >= len(rows) - 1):
-            cadence = statistics.median(b - a for a, b in zip(changed, changed[1:]))
+        changed = _held_change_indices(tuple(row[1] for row in rows))
+        if cadence is None and changed:
+            change_times = [rows[i][0] for i in changed]
+            cadence = _mean_period_ns([b - a for a, b in zip(change_times, change_times[1:])])
             self._flag(f"cadence_inferred_from_held_values:{rail.channel}")
         if cadence and driver_window and abs(cadence - driver_window) > self.sample_interval_ns:
             # One poll is the endpoint quantization bound for one cadence
@@ -430,9 +430,13 @@ class Ina3221Sampler:
             flags = [] if len(changes) >= 2 else ["insufficient_distinct_changes"]
             periods = tuple(b - a for a, b in zip(changes, changes[1:]))
             polls = [b[0] - a[0] for a, b in zip(rows, rows[1:])]
-            # A change period within one actual poll of the poll interval
-            # cannot resolve whether the sensor converted between polls.
-            if periods and polls and statistics.median(periods) <= 2 * statistics.median(polls):
+            # If a majority of completed changes occur on adjacent reads,
+            # the median is poll-limited. Periods of one OR two polls resolve
+            # a slower conversion; their mean is not poll-limited merely
+            # because it lies below two polls.
+            indices = [i for i in range(1, len(rows)) if rows[i][1] != rows[i - 1][1]]
+            adjacent = sum(b - a == 1 for a, b in zip(indices, indices[1:]))
+            if periods and adjacent * 2 >= len(periods):
                 flags.append("cadence_poll_limited")
             dq_v = _step([row[2] for row in rows])
             dq_i = _step([row[3] for row in rows])
