@@ -7,11 +7,13 @@ held-out groups. Statistics are re-exported here for the public lane API.
 from __future__ import annotations
 
 import math
+import random
+from dataclasses import replace
 from typing import Sequence
 
 from joulewise.align.records import Episode
 from joulewise.align.stats import (
-    _List, _sigmoid, auc, cluster_bootstrap_auc_ci, delong_ci,
+    _List, _Tuple, _sigmoid, auc, cluster_bootstrap_auc_ci, delong_ci,
     fit_logistic, paired_auc_difference,
 )
 
@@ -113,7 +115,64 @@ def grouped_cv_scores(episodes: Sequence[Episode], *, l2: float,
     return _List([(e.episode_id, score) for e, score in zip(episodes, scores)], flags)
 
 
+
+def grouped_cv_permutation_test(episodes: Sequence[Episode], *, l2: float,
+                                n_permutations: int, seed: int = 0,
+                                feature_names: Sequence[str] | None = None) -> tuple[float, float, int]:
+    """Return (observed AUC, two-sided permutation p, permutations used).
+
+    Shuffle condition labels within each task pair, preserving its class counts,
+    and rerun grouped_cv_scores (every fold is refitted) for every permutation.
+    The statistic is abs(AUC - 0.5). Count ties as at least as extreme:
+    p = (1 + k) / (B + 1), with resolution 1 / (B + 1). Under within-pair
+    exchangeability this Monte Carlo test has level at most alpha for any B.
+    n_permutations is an explicit compute budget, not a precision threshold.
+    A strict p < 0.05 needs B >= 20; B=19 has minimum p exactly 0.05.
+
+    This assesses separation of the refitted procedure. DeLong and cluster
+    bootstrap intervals applied to the pooled CV scores remain conditional
+    on the fitted fold models; they do not replace this test. Invalid budgets
+    or undefined CV return flagged NaNs, without excluding any episode.
+    """
+    if (isinstance(n_permutations, bool) or not isinstance(n_permutations, int)
+            or n_permutations < 1):
+        return _Tuple((math.nan, math.nan, 0), ("invalid_n_permutations",))
+    original = grouped_cv_scores(episodes, l2=l2, feature_names=feature_names)
+    labels = [int(e.condition == "sabotage") for e in episodes]
+    observed = auc([s for _, s in original], labels)
+    flags = list(original.flags) + list(observed.flags)
+    if not math.isfinite(observed):
+        return _Tuple((observed, math.nan, 0), tuple(dict.fromkeys(flags)))
+    rows = [[i for i, e in enumerate(episodes) if e.task_pair == group]
+            for group in dict.fromkeys(e.task_pair for e in episodes)]
+    rng = random.Random(seed)
+    extreme = 0
+    invalid = False
+    for _ in range(n_permutations):
+        permuted_labels = list(labels)
+        for indices in rows:
+            shuffled = [labels[i] for i in indices]
+            rng.shuffle(shuffled)
+            for i, label in zip(indices, shuffled):
+                permuted_labels[i] = label
+        permuted = [replace(e, condition="sabotage" if label else "benign")
+                    for e, label in zip(episodes, permuted_labels)]
+        prediction = grouped_cv_scores(permuted, l2=l2, feature_names=feature_names)
+        estimate = auc([s for _, s in prediction], permuted_labels)
+        flags.extend(prediction.flags)
+        flags.extend(estimate.flags)
+        if not math.isfinite(estimate):
+            invalid = True
+        else:
+            extreme += abs(estimate - 0.5) >= abs(observed - 0.5)
+    # Undefined permutations cannot be discarded or counted as non-extreme:
+    # doing either would change the randomisation distribution and its level.
+    if invalid:
+        flags.append("undefined_permutation")
+    p_value = math.nan if invalid else (1 + extreme) / (n_permutations + 1)
+    return _Tuple((observed, p_value, n_permutations), tuple(dict.fromkeys(flags)))
+
 __all__ = [
     "features", "auc", "delong_ci", "paired_auc_difference", "fit_logistic",
-    "grouped_cv_scores", "cluster_bootstrap_auc_ci",
+    "grouped_cv_scores", "cluster_bootstrap_auc_ci", "grouped_cv_permutation_test",
 ]

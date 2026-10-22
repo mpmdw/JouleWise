@@ -137,6 +137,13 @@ class StatisticsTests(unittest.TestCase):
         self.assertIn("invalid_l2", fit_logistic([[1], [2]], [0, 1], l2=-1).flags)
         result = cluster_bootstrap_auc_ci([0, 1], [0, 1], ["a"], n_boot=10)
         self.assertIn("length_mismatch", result.flags)
+        # A quarter of the gap below 1 makes 1-level round to 1 in binary64,
+        # so the tail probability rounds to 0.5. Four draws are a compute budget.
+        with patch.object(stats, "AUTO_BOOTSTRAP_MAX_REPLICATES", 4):
+            tiny = cluster_bootstrap_auc_ci(
+                [1, 1, 1, 1], [0, 1, 0, 1], ["a", "a", "b", "b"],
+                level=(1 - math.nextafter(1.0, 0.0)) / 4)
+        self.assertIn("normal_reference_target_unresolved", tiny.flags)
 
     def test_cluster_bootstrap_matches_literal_resampling(self):
         scores = [0, 2, 1, 3, 2, 5, 1, 4, 4]
@@ -203,8 +210,14 @@ class StatisticsTests(unittest.TestCase):
             lower = int(index)
             return values[lower] + (index - lower) * (values[min(lower + 1, B - 1)] - values[lower])
         half = (result[1] - result[0]) / 2
-        bandwidth = min(0.025, B ** (-1 / 5))
+        # Replay Bofinger's normal-reference quantile-density rule, including
+        # its MSE-optimal 4.5 constant and B^(-1/5) rate (N1/N5).
+        z = NormalDist().inv_cdf(0.025)
+        phi = NormalDist().pdf(z)
+        bandwidth = min(0.025, B ** (-1 / 5)
+                        * (4.5 * phi ** 4 / (2 * z ** 2 + 1) ** 2) ** (1 / 5))
         rank_se = math.sqrt(0.025 * 0.975 / B)
+        errors = []
         for p in (0.025, 0.975):
             span = q(p + bandwidth) - q(p - bandwidth)
             error = rank_se * span / (2 * bandwidth)
@@ -212,6 +225,10 @@ class StatisticsTests(unittest.TestCase):
                 error = (q(p + rank_se) - q(p - rank_se)) / 2
             # Required MC endpoint bar: 1% of returned interval half-width.
             self.assertLess(error, 0.01 * half)
+            errors.append(error)
+        print(f"AUTO BOOTSTRAP B={B} bandwidth={bandwidth:.9f} "
+              f"endpoint_mc_se={tuple(errors)} target={0.01 * half:.9f} "
+              f"interval={tuple(result)}", flush=True)
 
 
 def coverage_counts(worlds=200, n_boot=799):
@@ -241,8 +258,14 @@ class CoverageTests(unittest.TestCase):
         truth, counts = coverage_counts(worlds)
         print(f"INTERVAL COVERAGE truth={truth:.9f} worlds={worlds} "
               f"delong_hits={counts[0]} bootstrap_hits={counts[1]}")
-        # One binomial SE around nominal 95% coverage, as requested in brief.
-        tolerance = math.sqrt(0.95 * 0.05 / worlds)
+        # Lead's F4 ruling: four SEs of the Bin(worlds, 0.95) coverage count,
+        # false-alarm probability about 6e-5 under the normal approximation.
+        # One SE spuriously fails about a quarter of calibrated fresh seed sets.
+        # At 200 worlds this detects coverage below 0.888, including every
+        # under-coverage size measured in F2.
+        tolerance = 4 * math.sqrt(0.95 * 0.05 / worlds)
+        print(f"COVERAGE BAR four_se={tolerance:.9f} "
+              f"delta_from_old_one_se={tolerance - math.sqrt(0.95 * 0.05 / worlds):.9f}")
         for name, count in zip(("DeLong", "cluster bootstrap"), counts):
             with self.subTest(method=name, count=count):
                 self.assertLessEqual(abs(count / worlds - 0.95), tolerance)

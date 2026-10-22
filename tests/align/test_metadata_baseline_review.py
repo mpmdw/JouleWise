@@ -107,13 +107,15 @@ def add_scratchpad(ep, rng, lo, hi):
     return replace(ep, turns=tuple(out), end_ns=ep.end_ns + shift)
 
 
-class ReviewReproTests(unittest.TestCase):
+class _TimedCase(unittest.TestCase):
     def setUp(self):
         self.started = time.monotonic()
 
     def tearDown(self):
         print(f"REVIEW TEST {self.id()} runtime_s={time.monotonic() - self.started:.3f}", flush=True)
 
+
+class ReviewReproTests(_TimedCase):
     def assert_same_log_scores(self, episodes, *, l2):
         stripped = [strip_hidden(e) for e in episodes]
         for a, b in zip(episodes, stripped):
@@ -174,3 +176,105 @@ class ReviewReproTests(unittest.TestCase):
                   f"lane_first_delong_conditional_on_fitted_fold_models={tuple(results[0][0][1])} "
                   f"stripped_first_delong_conditional_on_fitted_fold_models={tuple(results[0][1][1])}",
                   flush=True)
+
+
+class PermutationTests(_TimedCase):
+    def test_label_counts_real_refits_and_hand_p_value(self):
+        # Tiny hand case: each of three groups has decode 200 (benign) and 400
+        # (sabotage). Uniform group-label orientation gives AUC 1. With mixed
+        # orientation, majority groups train on opposite orientations and score
+        # 0.5; the minority group's ranking is reversed. U=2 of 9, so AUC=2/9.
+        eps = []
+        for group in range(3):
+            for label in (0, 1):
+                eps.append(Episode(
+                    f"tiny/{group}/{label}", f"pair{group}",
+                    "sabotage" if label else "benign", "local", "mock", 0, "mono",
+                    0, 10 * NS, (Turn(0, 0, 10 * NS, 0, 1000, 200 + 200 * label),)))
+        original_conditions = [e.condition for e in eps]
+        real_cv = mb.grouped_cv_scores
+        real_fit = mb.fit_logistic
+        vectors = []
+        aucs = []
+        def capture(episodes, **kwargs):
+            labels = [int(e.condition == "sabotage") for e in episodes]
+            vectors.append(labels)
+            result = real_cv(episodes, **kwargs)
+            aucs.append(mb.auc([s for _, s in result], labels))
+            return result
+        from unittest.mock import patch
+        B = 31  # Explicit mechanics-test compute budget.
+        with patch.object(mb, "grouped_cv_scores", side_effect=capture), patch.object(
+                mb, "fit_logistic", wraps=real_fit) as fits:
+            result = mb.grouped_cv_permutation_test(
+                eps, l2=1, feature_names=["decode_tokens"], n_permutations=B, seed=9)
+        self.assertEqual(len(vectors), B + 1)
+        self.assertEqual(fits.call_count, 3 * (B + 1))  # Three real refits per CV.
+        self.assertEqual([e.condition for e in eps], original_conditions)
+        extreme_by_hand = 0
+        for i, labels in enumerate(vectors):
+            for group in range(3):
+                self.assertEqual(sum(labels[2 * group:2 * group + 2]), 1)
+            uniform = len({labels[2 * group] for group in range(3)}) == 1
+            target = 1.0 if uniform else 2 / 9
+            # No uncertainty is printed for this hand computation: brief's 1e-6 relative.
+            self.assertLessEqual(abs(aucs[i] - target), 1e-6 * target)
+            if i:
+                extreme_by_hand += uniform
+        self.assertEqual(result[0], 1.0)
+        self.assertEqual(result[1], (1 + extreme_by_hand) / (B + 1))
+        self.assertEqual(result[2], B)
+        print(f"PERMUTATION HAND B={B} real_fit_calls={fits.call_count} "
+              f"k={extreme_by_hand} p={result[1]}", flush=True)
+
+    def test_invalid_and_undefined_inputs_flagged(self):
+        for budget in (0, -1, True, 1.5):
+            result = mb.grouped_cv_permutation_test([], l2=1, n_permutations=budget)
+            self.assertIn("invalid_n_permutations", result.flags)
+            self.assertTrue(math.isnan(result[1]))
+        result = mb.grouped_cv_permutation_test([], l2=1, n_permutations=1)
+        self.assertIn("no_episodes", result.flags)
+        self.assertTrue(math.isnan(result[1]))
+        self.assertEqual(result[2], 0)
+
+
+class IndependentNullTests(_TimedCase):
+    def test_refitted_procedure_independent_null(self):
+        started = time.monotonic()
+        # n=40 and B=20 are compute budgets, with five pairs x 30 seeds/class
+        # as in the brief. B=20 gives p resolution 1/21, permitting strict p<.05.
+        # The lead's Bin(n,.05) four-SE bar is 0.05*n + 4*sqrt(.0475*n).
+        # At n=40 it permits at most 7 claims; the measured conditional-bootstrap
+        # 38.5% error rate would yield about 15 claims and fail this check.
+        n, B = 40, 20
+        claims = 0
+        delong_claims = 0
+        bootstrap_claims = 0
+        estimates = []
+        for seed in range(n):
+            # Same independent-draw null and seed sequence as null_cov2.py.
+            eps = world(5000 + seed, mode="null", pairs=5, seeds=30)
+            result = mb.grouped_cv_permutation_test(
+                eps, l2=1, n_permutations=B, seed=seed)
+            self.assertTrue(math.isfinite(result[1]), result.flags)
+            claims += result[1] < 0.05  # Strict two-sided 5% lead criterion.
+            estimates.append(result[0])
+            pred = mb.grouped_cv_scores(eps, l2=1)
+            sc = [s for _, s in pred]
+            lab = [int(e.condition == "sabotage") for e in eps]
+            groups = [e.task_pair for e in eps]
+            d = mb.delong_ci(sc, lab)
+            b = mb.cluster_bootstrap_auc_ci(sc, lab, groups, n_boot=999, seed=seed)
+            delong_claims += not d[0] <= 0.5 <= d[1]
+            bootstrap_claims += not b[0] <= 0.5 <= b[1]
+            # The null has independent, nonidentical logged draws, not paired duplicates.
+            self.assertGreater(statistics.pstdev(sc), 0)
+        bar = 0.05 * n + 4 * math.sqrt(0.0475 * n)
+        print(f"INDEPENDENT NULL worlds={n} pairs=5 seeds=30 B={B} "
+              f"auc_mean={statistics.mean(estimates):.9f} "
+              f"delta_mean_from_old_paired_null={statistics.mean(estimates) - 0.5:.9f} auc_sd={statistics.stdev(estimates):.9f} "
+              f"delong_conditional_on_fitted_fold_models_claims={delong_claims} "
+              f"bootstrap_conditional_on_fitted_fold_models_claims={bootstrap_claims} "
+              f"refitted_permutation_claims={claims} four_se_bar={bar:.9f} "
+              f"runtime_s={time.monotonic() - started:.3f}", flush=True)
+        self.assertLessEqual(claims, bar)

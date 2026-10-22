@@ -93,7 +93,8 @@ def delong_ci(scores: Sequence[float], labels: Sequence[int], level: float = 0.9
 
     Inverse-logit bounds lie in [0, 1]. Empirical AUC 0 or 1 has zero DeLong
     variance: return a point interval flagged boundary_degenerate. This is
-    not evidence of zero population uncertainty.
+    not evidence of zero population uncertainty. On pooled CV scores this
+    interval is conditional on the fitted fold models; it omits refit variation.
     """
     flags = _check(scores, labels)
     if not _valid_level(level):
@@ -161,8 +162,11 @@ def fit_logistic(X: Sequence[Sequence[float]], y: Sequence[int], *, l2: float) -
     Minimise SUM negative log likelihood + l2/2 * sum(standardised slopes²).
     Use training population standard deviations; constant columns get zero
     slopes. Intercept is unpenalised. Converge when max absolute Newton step
-    is below 1e-10 * max(1, max absolute coefficient), four orders below
-    the 1e-6 relative comparison precision. Backtracking dampens steps.
+    is below 1e-10 * max(1, max absolute coefficient), as the brief requires.
+    For the printed AUC half-widths (order 0.01), 1% is order 1e-4:
+    the coefficient-relative step is six orders smaller on standardised
+    features. This is a solver stopping rule, not an interval guarantee.
+    Backtracking dampens steps.
     Undefined fits return flagged NaNs; no rows are removed.
     """
     width = len(X[0]) if len(X) else 0
@@ -215,7 +219,8 @@ def fit_logistic(X: Sequence[Sequence[float]], y: Sequence[int], *, l2: float) -
         step = _solve(hessian, gradient)
         if step is None:
             return _List([math.nan] * (width + 1), ("singular_fit",))
-        # Brief-mandated bar, far below reporting precision.
+        # Brief's 1e-10 relative step: six orders below 1% of an order-0.01
+        # printed AUC half-width on standardised features (see docstring).
         if max(map(abs, step)) < 1e-10 * max(1.0, max(map(abs, coefficients))):
             break
         current = loss(coefficients)
@@ -259,14 +264,18 @@ def cluster_bootstrap_auc_ci(scores: Sequence[float], labels: Sequence[int], gro
 
     Automatic B uses SE(q_p) = sqrt(p*(1-p)/B) / f(q_p). Estimate inverse
     density by symmetric quantile spacing with probability bandwidth
-    min(p, 1-p, B**(-1/5)); both SEs must be below 1% of interval half-width.
+    Bofinger's normal-reference bandwidth (see formula below), clipped to
+    the available tail probability; both SEs must be below 1% of half-width.
     At atoms use the quantile range across one binomial rank SE instead.
-    Start at ceil(1 / tail_probability²), then double until satisfied.
+    Start at the B implied by that target for a normal bootstrap distribution,
+    then double until satisfied (derivation below).
     This is an empirical plug-in precision estimate, not a finite-sample
     guarantee. A point-mass distribution stops with a degeneracy flag. The
     configurable AUTO_BOOTSTRAP_MAX_REPLICATES compute budget bounds automatic
     work; an unmet precision target is returned with a flag, never concealed.
 
+    Applied to pooled CV scores this interval is conditional on the fitted
+    fold models: resampling scores does not include between-refit variation.
     Each draw contains G groups with replacement, keeping all their episodes.
     Single-class draws have undefined AUC: count them in flags and redraw;
     B returned counts valid replicates. Group-pair U sums make a draw O(G²).
@@ -290,7 +299,19 @@ def cluster_bootstrap_auc_ci(scores: Sequence[float], labels: Sequence[int], gro
     u = [[math.fsum((bisect.bisect_left(negatives[j], s) + bisect.bisect_right(negatives[j], s)) / 2
                    for s in positives[i]) for j in range(g)] for i in range(g)]
     p = (1 - level) / 2
-    target = n_boot if n_boot is not None else math.ceil(1 / p ** 2)
+    z = NormalDist().inv_cdf(p)
+    phi = NormalDist().pdf(z)
+    # Normal-reference starting B: half-width = |z| sigma, f(q_p)=phi(z)/sigma.
+    # Solving sqrt(p(1-p)/B)/f(q_p) < 0.01 * half-width gives this lower bound.
+    # Doubling is only a compute schedule; the endpoint stopping rule still rules.
+    denominator = (0.01 * abs(z) * phi) ** 2
+    # A valid level can be too small for binary64 to distinguish p from 0.5.
+    # Record the unresolved normal-reference target rather than divide by zero.
+    if n_boot is None and denominator == 0:
+        flags.append("normal_reference_target_unresolved")
+    target = (n_boot if n_boot is not None else
+              math.ceil(p * (1 - p) / denominator) if denominator else
+              AUTO_BOOTSTRAP_MAX_REPLICATES)
     if n_boot is None:
         target = min(target, AUTO_BOOTSTRAP_MAX_REPLICATES)
     rng = random.Random(seed)
@@ -323,7 +344,11 @@ def cluster_bootstrap_auc_ci(scores: Sequence[float], labels: Sequence[int], gro
             flags.append("degenerate_bootstrap")
             break
         errors = []
-        bandwidth = min(p, len(draws) ** (-1 / 5))
+        # Bofinger's MSE-optimal normal-reference quantile-density bandwidth:
+        # h = B^(-1/5) [4.5 phi(z)^4 / (2 z^2 + 1)^2]^(1/5), z=Phi^-1(p).
+        # The 4.5 constant and -1/5 exponent come from that rule, not tuning.
+        bandwidth = min(p, len(draws) ** (-1 / 5)
+                        * (4.5 * phi ** 4 / (2 * z ** 2 + 1) ** 2) ** (1 / 5))
         rank_se = math.sqrt(p * (1 - p) / len(draws))
         for probability in (p, 1 - p):
             span = (_quantile(ordered, probability + bandwidth)
