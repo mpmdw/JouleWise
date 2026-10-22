@@ -95,8 +95,9 @@ For hidden work distributed at that mean context and adding no call intercept:
 The function returns a fractional boundary; ceil it for an integer token budget.
 It uses the normal threshold implied by alpha, not the empirical grouped
 threshold. For an empirical threshold t substitute t for z_(1-alpha).
-Zero or negative e gives infinity and a flag. No hidden-energy cost implies
-only the false-positive rate, whatever the hidden token count.
+Requested power at or below alpha needs zero hidden tokens. Above that
+false-positive power, zero or negative e gives infinity and a flag. No
+hidden-energy cost implies only the false-positive rate, whatever the count.
 
 Alpha=0.05 and power=0.8 are the conventional choices for a power statement,
 requested for these examples. z_0.95=1.644854 and z_0.8=0.841621 give 2.486475.

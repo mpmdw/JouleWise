@@ -77,8 +77,22 @@ needed. Every local test command below used PYTHONDONTWRITEBYTECODE=1.
   all mandatory production and synthetic paths still execute.
 - python3 -m unittest tests.test_shard_tests
   4 passed, 0 failures/errors/skips, 7.905 s.
+- python3 -S -m unittest tests.align.test_energy_residual.TestEnergyResidual.test_power_boundary_and_context
+  1 passed, 0 failures/errors/skips, 0.020 s, after the zero-hidden-energy /
+  requested-power-below-alpha edge fix. Conventional 0.05/0.8 outputs unchanged.
 - python3 scripts/quick_suite.py --tier touched --since 4d47c4362352ccd8d4d904134a79f0d8260b21b5
-  Pending.
+  254 modules, 135 excluded, 7 failed modules, 754.316 s. Both detector
+  modules passed. Failed modules: tests.test_b5_chain_prune2 (2 failures),
+  tests.test_b5_driver_p2 (3 failures), tests.test_harvest_b5_p2harv (1 failure),
+  tests.test_run_campaign_p2_rc (3 failures), tests.test_v5_block4_x12a (2 errors),
+  tests.test_v5_block4_composed (1 error), tests.test_fixture_orphan_census
+  (1 failure). These files and their production code are unchanged by this lane.
+  Exclusions: 130 timing-threshold, 2 exclusive, 3 split and 5 A211 declarations
+  (categories overlap). The runner reports module counts, not aggregate skips.
+  Process-tree/orphan checks report surviving PIDs. Three closeout errors
+  reported backup command failures; rsync was absent from the VM. Public Debian
+  rsync 3.4.1/libpopt packages were subsequently extracted under /tmp for the
+  canonical run, since apt installation lacks privileges and sudo is absent.
 - python3 -m unittest discover -s tests
   Pending.
 - git diff --check
@@ -215,6 +229,8 @@ gives 30.755995 (ceil 31). These are explicit assumptions, not hardware findings
   subtracts hidden counts, honors logged=False and leaves missing energy flagged.
 - Hidden-decode power uses mean logged context and the normal threshold,
   with no added-call intercept and fixed denominator, exactly as specified.
+- Requested power <= alpha requires no hidden tokens, even when hidden work
+  costs no energy; above alpha a nonpositive per-token cost remains unreachable.
 - Adopt stratified synthetic calibration to reduce finite-tail Monte Carlo
   variability without changing the one-binomial-SE assertion or production
   quantile/model. Keep independent evaluation and iid coefficient-coverage worlds.
@@ -242,7 +258,8 @@ this lane's analysis conditions are returned as flags.
 
 ## OPEN ISSUES
 
-- Broader touched/canonical repository checks pending.
+- Canonical repository check pending. Touched failures outside this lane are
+  recorded above; no out-of-scope production/test repair was attempted.
 - Independent cross-model twin agreement belongs to the integration gate;
   NumPy linear algebra checks are not represented as that independent twin.
 - Hardware results and linear/normal/independent-error assumptions need a pilot.

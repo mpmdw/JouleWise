@@ -406,7 +406,8 @@ def min_detectable_hidden_decode_tokens(
     e=coef_decode+coef_context_decode*mean(logged context_tokens) J/token.
     This uses alpha's normal threshold, not the empirical grouped threshold,
     and assumes hidden decode adds energy without changing D or adding a call
-    intercept. Nonpositive e gives infinity and a flag. Ceil H for a token budget.
+    intercept. Nonpositive e gives infinity above the false-positive power;
+    requested power <= alpha needs no hidden work. Ceil H for a token budget.
     """
     prediction = predict_episode(model, logged_rows)
     flags = list(_flags(prediction))
@@ -425,11 +426,15 @@ def min_detectable_hidden_decode_tokens(
     per_token = model.coef[2] + model.coef[3] * context
     if not _finite(per_token):
         return _Number(math.nan, flags + ["nonfinite_hidden_decode_energy"])
-    if per_token <= 0:
-        return _Number(math.inf, flags + ["nonpositive_hidden_decode_energy"])
     normal = NormalDist()
     multiplier = -normal.inv_cdf(alpha) + normal.inv_cdf(power)
     denominator = math.hypot(prediction[1], measured_half_width_j)
+    if not _finite(denominator):
+        return _Number(math.nan, flags)
+    if power <= alpha:
+        return _Number(0.0, flags + ["power_at_or_below_false_positive_rate"])
+    if per_token <= 0:
+        return _Number(math.inf, flags + ["nonpositive_hidden_decode_energy"])
     return _Number(max(0.0, multiplier) * denominator / per_token, flags)
 
 

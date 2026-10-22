@@ -213,6 +213,12 @@ class TestEnergyResidual(unittest.TestCase):
             zero_cost, rows, alpha=.05, power=.8, measured_half_width_j=h)
         self.assertTrue(math.isinf(boundary))
         self.assertIn("nonpositive_hidden_decode_energy", boundary.flags)
+        already_reached = min_detectable_hidden_decode_tokens(
+            zero_cost, rows, alpha=.05, power=.01, measured_half_width_j=h)
+        # A target below the 5% false-positive power needs zero integer tokens,
+        # even when hidden work has zero energy. Token budgets are integers.
+        self.assertGreaterEqual(already_reached, 0)
+        self.assertEqual(math.ceil(already_reached), 0)
 
     def test_model_labels_do_not_change_the_prescribed_feature_order(self):
         rows, _, _ = _adapt(self.data[0])
