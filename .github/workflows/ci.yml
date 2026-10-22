@@ -142,6 +142,8 @@ jobs:
       # ordinary and exclusive jobs.
       SHARD_COUNT: "12"
     strategy:
+      # CI-only diagnostic branch (L9-1): show every failing shard; never merged.
+      fail-fast: false
       matrix:
         # 3.13: production nights (the measurement venv).
         # PRs and main pushes use production 3.13 only. 3.14 is
