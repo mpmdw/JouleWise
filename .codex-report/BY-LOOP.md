@@ -173,6 +173,12 @@ shell).
 - Install step (arm-time, not done here): render configs/launchd/com.joulewise.b6loop.plist.template with __LOOP_ROOT__=/Users/edr/night-b6/loop-bytes; the CLI now selects configs/b6/loop_bytes.json from that root. Same label as the replication job, which is DONE. Install only after the BYTES packs are registered: until then a fresh BYTES root sits in NEXT and each 300 s tick starts Python (NEXT with no open pack is not dormant by design, so a later registration is discovered).
 - Production BYTES C5 sizing remains external; fixture values are synthetic.
 - SIGKILL cannot execute cleanup; production parent-death supervision requires a separate sealed-code decision.
+- (Lead, verification 2.) configs/b6/loop.json is unchanged: its base_order still lists the twelve BYTES packs and
+  it has no pack_ids filter. A manual `b6_loop.py resume` on the replication root takes DONE to NEXT
+  (Loop.control), and a tick there would then open bytes-s1-p1 once the BYTES packs are registered, alongside the
+  BYTES root. Only a manual resume plus a tick on that root can do this (the one launchd label will point at
+  loop-bytes). One-line remedy for the lead or BY-MERGE: add `"pack_ids": ["alpha", "beta", "gamma"]` to loop.json
+  (alpha, beta and gamma discovery is unchanged by the filter), or never resume the replication root.
 
 ## NEEDS_RULING
 
@@ -250,3 +256,12 @@ lanes' Sol seats (load average 30-38).
   registered for reaping, not its timing. Environmental, not chased.
 - Sealed inventory on the lead commit: `git diff --name-only bda481d5a HEAD` (13 paths, the same 13 as at
   ceac3ad86) intersect 682 sealed paths = []. `git diff --check` clean.
+- All six tests.b6.test_loop_round_desk tests under the same runner-like git config (three parallel processes):
+  6 OK (bytes_guard_shaped_rehearsal, alpha_smoke_session_desk_and_beta_rotation, physics_refusal_wait_reprepare_then_retry,
+  stops_close_bracket_advance_pin_and_reach_next_smoke, lost_session_reaches_desk_and_holds_before_beta,
+  resume_after_hold_continues_real_round).
+- CI: ci/2026-10-22-bytes-loop fast-forwarded (no force) to 7c37fb5c2 = merge of fba44874a and lane 5e562859f;
+  its tree differs from fba44874a only in tests/b6/round_support.py and this report. Run 39811233131: 20 of 20
+  jobs green, including shard 7, whose log shows test_bytes_guard_shaped_rehearsal ok on Linux (the cloud
+  rehearsal). gate-ledger 39811233416 red (draft PR, expected). The later report-only lane commit was not
+  pushed to the CI branch.
