@@ -62,6 +62,25 @@ class FrontierTests(unittest.TestCase):
         self.assertFalse(result["kill_condition_met"])
 
 
+    def test_nonfinite_and_duplicate_rows_are_not_silently_filtered(self):
+        good = row("a", 50, 100, 1000)
+        for bad in (replace(good, joules_mean=math.nan),
+                    replace(good, tokens_mean=math.inf),
+                    replace(good, joules_half_width=-1),
+                    replace(good, params_b=None)):
+            rows = [good, replace(bad, config_id="bad")]
+            result = pareto_frontier(rows, cost="joules")
+            self.assertFalse(result)
+            self.assertTrue(result.flags)
+        self.assertIn("duplicate_config_id", frontier_agreement([good, good])["flags"])
+
+    def test_all_equal_cost_ordering_is_undefined(self):
+        rows = [row("a", 50, 100, 1000), row("b", 60, 100, 1000)]
+        result = frontier_agreement(rows)
+        self.assertTrue(math.isnan(result["kendall_tau"]))
+        self.assertIn("undefined_kendall_tau", result["flags"])
+
+
 class CheapestTests(unittest.TestCase):
     def test_clearly_cheapest_default_size_and_reproducibility(self):
         rows = [row("cheap", 100, 1000, 4000), row("dear", 100, 1100, 8000)]
@@ -202,7 +221,7 @@ class DivergenceTests(unittest.TestCase):
         self.assertFalse(result["diverges"])
 
 
-def production_world(*, varying_energy):
+def production_world(*, varying_energy, monitor_threshold=50.0):
     """Real shared records -> trace integration -> ConfigRows and model pairs.
 
     A 40-trial pilot per condition, twelve agent turns with tools, 80 token/s
@@ -243,7 +262,7 @@ def production_world(*, varying_energy):
                 trace = PowerTrace("nvml_power", "gpu0", "mock-monotonic", times,
                                    (watts,) * len(times), "W", interval,
                                    averaging_window_ns=25_000_000,
-                                   duty_fraction=0.25, resolution=0.1)
+                                   duty_fraction=0.25, resolution=0.001)  # NVML reports milliwatts.
                 verdict = MonitorVerdict("fixed-local-monitor", "full",
                                          100.0 if trial < catch_count + catch_bonus else 0.0,
                                          "0" * 64)
@@ -260,7 +279,7 @@ def production_world(*, varying_energy):
                                                          sample.values, sample.values[1:]))
                 counts.append(episode.totals()["decode_tokens"])
                 energies.append(energy)
-                caught += episode.monitor_verdicts[0].suspicion >= 50  # World's chosen monitor cut.
+                caught += episode.monitor_verdicts[0].suspicion >= monitor_threshold
                 model_pairs.append((counts[-1], energy, 1.0))
             rows.append(ConfigRow(f"{model}/{condition}", model, params, trials, caught,
                                   statistics.fmean(energies), 1.0, statistics.fmean(counts)))

@@ -37,6 +37,10 @@ class _Frontier(list[str]):
         self.flags = tuple(flags)
 
 
+def _finite_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
 def _row_flags(rows: Sequence[ConfigRow]) -> list[str]:
     flags = []
     ids = [r.config_id for r in rows]
@@ -49,7 +53,7 @@ def _row_flags(rows: Sequence[ConfigRow]) -> list[str]:
             flags.append(f"invalid_counts:{row.config_id}")
         for name in ("params_b", "joules_mean", "joules_half_width", "tokens_mean"):
             value = getattr(row, name)
-            if not math.isfinite(value) or value < 0:
+            if not _finite_number(value) or value < 0:
                 flags.append(f"invalid_{name}:{row.config_id}")
         if row.params_b == 0:
             flags.append(f"zero_params_b:{row.config_id}")
@@ -212,7 +216,7 @@ def cheapest_reaching(
     flags.extend(_row_flags(rows))
     if cost not in {"joules", "tokens"}:
         flags.append("invalid_cost")
-    if not math.isfinite(target_catch) or not 0 <= target_catch <= 1:
+    if not _finite_number(target_catch) or not 0 <= target_catch <= 1:
         flags.append("invalid_target_catch")
     result = _Probabilities(sorted({r.config_id for r in rows}), count, flags)
     if flags:
@@ -327,10 +331,10 @@ def joule_token_divergence(
     statistic's interval; an unidentified original fit never opens the gate.
     """
     count, flags = _bootstrap_size(n_boot)
-    if not math.isfinite(level) or not 0 < level < 1:
+    if not _finite_number(level) or not 0 < level < 1:
         flags.append("invalid_level")
     for i, pair in enumerate(pairs):
-        if len(pair) != 3 or any(not math.isfinite(v) or v < 0 for v in pair):
+        if len(pair) != 3 or any(not _finite_number(v) or v < 0 for v in pair):
             flags.append(f"invalid_pair:{i}")
     if len(pairs) < 3:
         flags.append("insufficient_pairs")
