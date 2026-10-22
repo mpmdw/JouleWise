@@ -215,10 +215,10 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
     options = thinking_options(model.backend, condition.mode != "off")
     cap = None
     if condition.mode == "budget":
-        if median_tokens is None:
-            flags.append("budget_median_missing")
-        elif condition.fraction is None or not math.isfinite(condition.fraction) or not 0 <= condition.fraction <= 1:
+        if condition.fraction is None or not math.isfinite(condition.fraction) or not 0 <= condition.fraction <= 1:
             flags.append("condition_fraction_invalid")
+        elif median_tokens is None:
+            flags.append("budget_median_missing")
         else:
             cap = cap_tokens(median_tokens, condition.fraction)
     calls: list[ChatResult] = []
@@ -426,8 +426,12 @@ def run_matrix(items: ItemBatch | Sequence[HintItem], models: Sequence[ModelSpec
                             if cut_key is not None:
                                 removed_target = max(0, base.reasoning_tokens - cut_key.reasoning_tokens)
                             else:
-                                removed_target = max(0, base.reasoning_tokens - (cap or 0))
-                                trial_flags.append("deletion_nominal_cut_only")
+                                if cap is None:
+                                    removed_target = 0
+                                    trial_flags.append("deletion_target_unresolved")
+                                else:
+                                    removed_target = max(0, base.reasoning_tokens - cap)
+                                    trial_flags.append("deletion_nominal_cut_only")
                             deletion = delete_spans(generation.reasoning, remove_tokens=removed_target,
                                                     codec=model.codec, seed=_seed(seed, key, "delete"))
                             visible, visible_count = deletion.text, deletion.visible_tokens
