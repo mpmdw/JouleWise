@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from joulewise.b5 import plan
 from joulewise.b6 import plan_inputs, precheck
 from joulewise.hazards import clock
+from joulewise.hazards import base, disk
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -40,6 +41,52 @@ class ClockThresholdTests(unittest.TestCase):
 
 
 class DiskBudgetTests(unittest.TestCase):
+    def test_precheck_all_twelve_p_and_retained_smoke_boundaries(self):
+        # Synthetic integer bytes: exact P reconstruction is the property.
+        with tempfile.TemporaryDirectory() as directory:
+            reg = Path(directory)
+            sized = json.loads((ROOT / "configs/b6/registration/sizing_b5.json").read_text())
+            for path in sorted((ROOT / "configs/b6/packs").glob("bytes-s*/registration.json")):
+                pack = path.parent.name
+                b, wait, fixed = 1000001, 7200, 19
+                required = 2 * (b + wait) + fixed
+                terms = dict(B_bytes=b, extra_wait_raw_bytes=wait, fixed_retained_bytes=fixed,
+                    required_free_bytes=required, peak_copies=2, session_wait_budget_s=plan.SESSION_WAIT_BUDGET_S)
+                sized["packs"][pack] = dict(pack_id=pack, programmed_span_s=3600,
+                    T_stream_max_s=100, disk_derivation=terms)
+            (reg / "sizing_b5.json").write_text(json.dumps(sized))
+            for pack in sorted(k for k in sized["packs"] if k.startswith("bytes-s")):
+                limits = precheck.thresholds_for(ROOT, pack, reg)["disk"]
+                self.assertEqual(limits["largest_session_bytes"], required)
+                self.assertEqual(limits["headroom_bytes"], 0)
+                encoded = {"pack_root": str(ROOT / "configs/campaigns" / pack),
+                           "spare_retries": False, "thresholds": {"disk": {}}}
+                plan_inputs.encode_disk_budget(encoded, plan_inputs.registered_disk_terms(reg, pack))
+                self.assertEqual(encoded["disk_budget"]["required_free_bytes"], required)
+                derivation = limits["smoke_derivation"]
+                self.assertEqual(limits["smoke_bytes"], (2 * b * derivation["smoke_members"] +
+                    derivation["pack_members"] - 1) // derivation["pack_members"])
+                for smoke in (False, True):
+                    bar = required + (limits["smoke_bytes"] if smoke else 0)
+                    for free, expected in ((bar - 1, base.REFUSE), (bar, base.PASS)):
+                        with self.subTest(pack=pack, smoke=smoke, free=free):
+                            measured = disk.measure(base.Context(), targets=[{"path": "/synthetic", "copies": 1}],
+                                statvfs=lambda path: SimpleNamespace(f_bavail=free, f_frsize=1, f_blocks=bar * 2),
+                                stat=lambda path: SimpleNamespace(st_dev=1))
+                            verdict = disk.judge(measured, {"planned_bytes": bar, "headroom_bytes": 0})
+                            self.assertEqual(verdict.observed["volumes"][0]["required_bytes"], bar)
+                            self.assertEqual(verdict.status, expected)
+
+    def test_precheck_missing_p_never_inherits_replication_reserve(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for pack in ("bytes-s1-p1", "bytes-s6-p2"):
+                limits = precheck.thresholds_for(ROOT, pack, directory)["disk"]
+                self.assertEqual(limits["flags"], ["disk.budget_missing"])
+                self.assertEqual(limits["largest_session_bytes"] + limits["headroom_bytes"] + limits["smoke_bytes"], 0)
+            for pack in plan_inputs.PACK_LABELS:
+                self.assertEqual(precheck.thresholds_for(ROOT, pack, directory)["disk"],
+                                 precheck.PRECHECK_DEFAULTS["disk"])
+
     def test_replication_budgets_keep_existing_path(self):
         identities = {name: {"path": "/synthetic/" + name, "sha256": "a" * 64}
                       for name in ("identity-epoch.json", "t1-bindings.json")}

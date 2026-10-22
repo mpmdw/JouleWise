@@ -21,6 +21,9 @@
   "classified by the 2026-10-06 refusal census ('added' names the commit).",
   "DEFERRED_REPRESENTATION is a known representation refusal with a named owner lane fixing it."
  ],
+ "desk_wait_sites": [
+  {"file": "joulewise/b6/precheck.py", "function": "run_precheck", "code": "disk.low", "category": "PHYSICS", "protects": "BYTES session-volume free bytes f_bavail*f_frsize must cover the registered P=2*(B+WAIT)+fixed, with headroom zero. When a smoke is due, ceil(2*B*smoke_members/pack_members) covers its retained member bytes before the full session arms at P. thresholds_for and the native encoding share disk-term validation and sizing lookup; missing P is disk.budget_missing, never a disk wait. Other packs retain the block-6 defaults."}
+ ],
  "baseline": {
   "sweep_base": "e6b6a0ce",
   "census_head": "ba0e0c72e",

@@ -1,7 +1,7 @@
 ## PROGRESS
 
 Fix round 1 is in progress; current status and evidence are in [BY-C5-fix1.md](BY-C5-fix1.md).
-Findings 2 and 7 are implemented in the first local slice. The historical tables below use the earlier measured fixed term and are superseded by the committed-fixed table in the fix-round report until the final refresh.
+Findings 2, 3 and 7 are committed; slice 3 implements shared PRECHECK P validation and smoke retention (finding 1) and tests smoke native-requirement metadata (finding 6). Updated real-H planner/precheck evidence and final report refresh remain. The historical tables below use the earlier measured fixed term and are superseded by the committed-fixed table in the fix-round report until the final refresh.
 H C5 exit 2 reflects both completeness failures and the thermal line (thermal_level 1), not completeness alone.
 Native raw-byte producer changes were authorized under the recorded director grant; no further scope action required.
 

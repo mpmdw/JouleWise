@@ -106,6 +106,15 @@ class DriverLane:
                 registration_dir=reg, defer_plan=True, keep=keep)
             smoke_record = prepared_smoke.to_json()
             inputs = read(prepared_smoke.smoke_dir / "smoke-state.json")["plan_inputs"]
+            if disk_budget is not None:
+                disk_budget = {**disk_budget, "pack_required_free_bytes": disk_budget["required_free_bytes"],
+                               "pack_member_count": disk_budget["member_count"]}
+                m = plan_inputs.member_count(inputs)
+                disk_budget.update(member_count=m,
+                    required_free_bytes=3 * m * inputs["bytes_per_member"] +
+                                        inputs["thresholds"]["disk"]["headroom_bytes"])
+                notes = [note for note in notes if note.get("kind") != "disk.budget"]
+                notes.append({"kind": "disk.budget", **disk_budget})
             paths = replace(paths, measurement=prepared_smoke.measurement, custody=prepared_smoke.custody,
                 runs_parent=Path(inputs["runs_parent"]), backup_claim=Path(inputs["claim_backup_destination"]),
                 backup_bound=Path(inputs["bound_backup_destination"]), archive=prepared_smoke.smoke_dir / "archive",

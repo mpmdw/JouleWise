@@ -17,7 +17,7 @@ import statistics
 from typing import Any, Callable
 
 from joulewise.b5 import chain, plan
-from joulewise.b6 import fingerprint, plan_inputs
+from joulewise.b6 import compose, fingerprint, plan_inputs
 from joulewise.b6.acceptance_interface import (
     CaptureEvidence, MemberEvidence, StageEvidence, SessionEvidence, load_acceptance,
 )
@@ -76,6 +76,23 @@ def thresholds_for(measurement_root, pack_id, registration_dir, overrides=None):
                 result[key].update(value)
             else:
                 result[key] = value
+    if pack_id.startswith("bytes-s"):
+        terms = plan_inputs.registered_disk_terms(registration_dir, pack_id)
+        # A record condition never inherits the unrelated block-6 reserve.
+        result["disk"] = {"largest_session_bytes": 0, "headroom_bytes": 0, "smoke_bytes": 0,
+                          "flags": ["disk.budget_missing"] if terms is None else [],
+                          "derivation": terms}
+        if terms is not None:
+            n = plan_inputs.member_count({"pack_root": str(Path(measurement_root) /
+                "configs/campaigns" / pack_id), "spare_retries": False})
+            m = sum(compose.registered_smoke_keep(pack_id).values())
+            # Smoke bytes remain on the session volume at the full-session arm.
+            # Round its share of c*B upward to the next allocatable byte.
+            retained = (2 * terms["B_bytes"] * m + n - 1) // n
+            result["disk"].update(largest_session_bytes=terms["required_free_bytes"],
+                smoke_bytes=retained, smoke_derivation={"formula": "ceil(c * B * smoke_members / pack_members)",
+                    "peak_copies": 2, "B_bytes": terms["B_bytes"], "smoke_members": m,
+                    "pack_members": n, "retained_bytes": retained})
     return result
 
 
@@ -483,8 +500,15 @@ def run_precheck(pack_id, measurement_root, state_root, *, out=None, ledger=None
         limits["disk"]["smoke_bytes"] if smoke else 0), "headroom_bytes": limits["disk"]["headroom_bytes"]}
     disk_reading = (disk.measure(ctx, targets=disk_targets, statvfs=seams.statvfs, stat=seams.stat)
                     if disk_targets is not None else _default_disk_measurement(ctx, measurement, state_root, seams))
-    judged(disk, disk_reading,
-           disk_limits, "disk.low", "wake_orchestrator")
+    if limits["disk"].get("flags"):
+        flags.extend({"code": code, "source": "disk", "observed": limits["disk"]}
+                     for code in limits["disk"]["flags"])
+        readings["disk"] = {"measurement": disk_reading.to_json(), "verdict": None,
+                            "budget": limits["disk"]}
+    else:
+        judged(disk, disk_reading,
+               disk_limits, "disk.low", "wake_orchestrator")
+        readings["disk"]["budget"] = limits["disk"]
     if reap:
         readings["orphans_killed"] = reap_orphans(ctx, collect=seams.orphan_collect, kill=seams.kill,
                                                 process_uid=seams.process_uid)

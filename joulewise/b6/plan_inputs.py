@@ -83,7 +83,7 @@ def build(measurement_root, registration_dir, pack_id, session_id, identities, *
         head = run(["git", "-C", str(measurement), "rev-parse", "HEAD"],
                    check=True, capture_output=True, text=True, timeout=30).stdout.strip()
     sized = registration.load_sizing(reg)
-    label = next((key for key, value in sized["packs"].items() if value["pack_id"] == pack_id), None)
+    label = sizing_label(sized, pack_id)
     if label is None:
         raise ValueError("pack has no registered sizing: " + pack_id)
     sizing_path = reg / "sizing_b5.json"
@@ -121,31 +121,53 @@ def build(measurement_root, registration_dir, pack_id, session_id, identities, *
     return deepcopy(result)
 
 
+def sizing_label(sized, pack_id):
+    return next((key for key, value in sized["packs"].items() if value["pack_id"] == pack_id), None)
+
+
+def valid_disk_terms(terms):
+    """One validation contract for the PRECHECK and native arm encodings."""
+    keys = ("B_bytes", "extra_wait_raw_bytes", "fixed_retained_bytes", "required_free_bytes")
+    return (isinstance(terms, dict)
+            and all(type(terms.get(k)) is int and terms[k] >= 0 for k in keys)
+            and terms.get("peak_copies") == 2
+            and terms.get("session_wait_budget_s") == SESSION_WAIT_BUDGET_S
+            and terms["required_free_bytes"] == 2 * (terms["B_bytes"] + terms["extra_wait_raw_bytes"])
+            + terms["fixed_retained_bytes"])
+
+
+def registered_disk_terms(registration_dir, pack_id):
+    """Missing registration is a record flag, with no fallback disk bar."""
+    try:
+        sized = registration.load_sizing(registration_dir)
+        label = sizing_label(sized, pack_id)
+        terms = sized["packs"][label].get("disk_derivation")
+        return deepcopy(terms) if valid_disk_terms(terms) else None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def member_count(inputs):
+    tree, _ = plan.read_plan_tree(Path(inputs["pack_root"]))
+    collections = [s for s in plan.b5_chain.stage_plan(tree)
+                   if s.in_chain and s.kind == "campaign_collection"]
+    return sum(s.expected_count for s in collections) + sum(
+        max(s.spare_sets) for s in collections if s.spare_sets and inputs.get("spare_retries", True))
+
+
 def encode_disk_budget(inputs, terms):
     """Encode the registered P in the native three-target budget, exactly.
 
     No P is a disclosed open slot, never an inherited reserve threshold.
     Count the same real stages (including optional spares) as the writer.
     """
-    tree, _ = plan.read_plan_tree(Path(inputs["pack_root"]))
-    stages = plan.b5_chain.stage_plan(tree)
-    collections = [s for s in stages if s.in_chain and s.kind == "campaign_collection"]
-    n = sum(s.expected_count for s in collections)
-    n += sum(max(s.spare_sets) for s in collections
-             if s.spare_sets and inputs.get("spare_retries", True))
-    try:
-        keys = ("B_bytes", "extra_wait_raw_bytes", "fixed_retained_bytes", "required_free_bytes")
-        if not isinstance(terms, dict) or any(type(terms.get(k)) is not int or terms[k] < 0 for k in keys):
-            raise ValueError("missing or malformed disk terms")
-        if terms.get("peak_copies") != 2 or terms.get("session_wait_budget_s") != SESSION_WAIT_BUDGET_S:
-            raise ValueError("disk terms differ from H-DISK-RULING")
-        b, wait, fixed, required = (terms[k] for k in keys)
-        if required != 2 * (b + wait) + fixed or n <= 0:
-            raise ValueError("disk terms do not reconstruct P")
-    except ValueError as exc:
-        inputs["disk_budget"] = {"flags": ["disk.budget_missing"], "detail": str(exc),
+    n = member_count(inputs)
+    if not valid_disk_terms(terms) or n <= 0:
+        inputs["disk_budget"] = {"flags": ["disk.budget_missing"], "detail": "missing or malformed disk terms",
                                  "required_free_bytes": None, "member_count": n}
         return
+    b, wait, fixed, required = (terms[k] for k in
+        ("B_bytes", "extra_wait_raw_bytes", "fixed_retained_bytes", "required_free_bytes"))
     q, remainder = divmod(2 * b, 3 * n)
     headroom = remainder + 2 * wait + fixed
     inputs["bytes_per_member"] = q

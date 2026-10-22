@@ -62,6 +62,8 @@ class ProductionPlanRenderTests(DeskCase):
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if argv[0] == "git":
             return subprocess.run(argv, **kwargs)
+        if argv[1:4] == ["-m", "venv", "--without-pip"]:
+            return subprocess.run(argv, **kwargs)
         raise AssertionError("unexpected production-plan subprocess: " + repr(argv))
 
     def render(self, pack, registered):
@@ -228,6 +230,32 @@ class ProductionPlanRenderTests(DeskCase):
                 judged = disk.judge(measured, window["thresholds"]["disk"])
                 self.assertEqual(judged.observed["volumes"][0]["required_bytes"], required)
                 self.assertEqual(judged.status, expected)
+
+        # The real smoke reducer keeps q/headroom but reduces the member count.
+        # Metadata must name that native requirement and disclose full-pack P.
+        (self.measurement / ".venv/lib/python3.13/site-packages").mkdir(parents=True, exist_ok=True)
+        loop = self.root / "bytes-smoke" / "loop"
+        lane = DriverLane(self.measurement, loop, self.runner, block_root=loop.parent,
+                          launchctl_bin="/usr/bin/false")
+        value = read(self.measurement / "configs/b6/packs/bytes-s1-p1/registration.json")
+        value["status"] = "registered"
+        layout = compose.layout(queue.Selection(("bytes-s1-p1",), 1),
+            {"bytes-s1-p1": Registration(value, commit_time=0)}, self.measurement)
+        prepared = lane.prepare_session(layout, compose.render(layout), smoke=True,
+            keep=compose.smoke_keep(layout), staging_root=loop / "staging" / layout.session_id)
+        smoke_metadata = read(Path(prepared.plan_path).parent.parent / "session.json")
+        smoke_budget = smoke_metadata["disk_budget"]
+        self.assertEqual(smoke_budget["pack_required_free_bytes"], required)
+        self.assertEqual(smoke_budget["pack_member_count"], budget["member_count"])
+        m = plan_inputs.member_count(smoke_metadata["inputs"])
+        self.assertLess(m, smoke_budget["pack_member_count"])
+        self.assertEqual(smoke_budget["member_count"], m)
+        native_required = 3 * m * smoke_metadata["inputs"]["bytes_per_member"] + \
+            smoke_metadata["inputs"]["thresholds"]["disk"]["headroom_bytes"]
+        self.assertEqual(smoke_budget["required_free_bytes"], native_required)
+        self.assertNotEqual(native_required, required)
+        self.assertEqual(next(n for n in smoke_metadata["notes"] if n["kind"] == "disk.budget")
+                         ["required_free_bytes"], native_required)
 
 
 class ScreenInputsTests(DeskCase):
