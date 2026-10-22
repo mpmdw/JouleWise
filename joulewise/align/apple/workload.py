@@ -137,8 +137,42 @@ class EpisodeRuntimeAdapter:
             )
 
     def identity_projection_metadata(self, config: BenchmarkConfig) -> dict[str, Any]:
-        """Forward the runtime-owned probe used by identity_pins at readiness."""
-        return self.runtime.identity_projection_metadata(config)
+        """Project the same fixed model/sampler/policy as measured episode bundles."""
+        spec = EpisodeSpec.from_text(config.workload_profile.prompt_text or "")
+        projector = getattr(self.runtime, "identity_projection_metadata", None)
+        if callable(projector):
+            metadata = dict(projector(config))
+        else:
+            # MockRuntimeAdapter has no readiness probe. These are its actual
+            # deterministic tokenizer/sampler identities; prepare owns the artifact.
+            metadata = {
+                "tokenizer": {
+                    "backend": "mock", "identifier": "joulewise.mock_tokenizer.v1",
+                    "revision": self.prepared.get("version"),
+                    "class": "MockRuntimeAdapter", "vocab_size": None,
+                },
+                "sampler": {"kind": "greedy", "temperature": 0.0, "pinned": True},
+            }
+        metadata["model"] = {
+            "name": config.model.name, "source": config.model.source,
+            "revision": config.model.revision,
+            "artifact_identity": self.prepared.get("model_artifact_identity"),
+        }
+        metadata["sampler"] = {
+            **metadata.get("sampler", {}),
+            # Generation stays greedy, but a mismatched registered request must
+            # have a distinct identity and retain the endpoint's mismatch flag.
+            "requested_temperature": spec.temperature,
+            "max_tokens": spec.max_tokens,
+        }
+        metadata["output_policy"] = {
+            "name": "agent_episode",
+            "requested_tokens": spec.max_turns * spec.max_tokens,
+            "max_turns": spec.max_turns,
+            "max_tokens_per_turn": spec.max_tokens,
+            "stop_condition": "episode_returns_or_turn_budget_reached",
+        }
+        return metadata
 
     def warmup(
         self, config: BenchmarkConfig, context: RunContext | None = None,
@@ -297,6 +331,11 @@ class EpisodeRuntimeAdapter:
         prompt = prompt_provenance(endpoint.prompt_token_ids, text=None)
         if not endpoint.prompt_token_ids:
             prompt["realized_token_count"] = None
+        identity = self.identity_projection_metadata(config)
+        outcome = {
+            "stop_condition": "turn_budget_reached" if "turn_budget_reached" in flags else "episode_returned",
+            "emitted_tokens": sum(t.decode_tokens for t in turns),
+        }
         return RuntimeResult(
             events=events,
             output_artifacts={
@@ -313,13 +352,10 @@ class EpisodeRuntimeAdapter:
                 "prompt": prompt,
                 "generator": {"name": WORKLOAD_KIND, "version": SPEC_SCHEMA},
                 "tokenizer": endpoint.tokenizer_provenance,
-                "model": {"source": config.model.source, "revision": config.model.revision},
-                "output_policy": {
-                    "name": "agent_episode",
-                    "requested_tokens": spec.max_turns * spec.max_tokens if spec else None,
-                    "emitted_tokens": sum(t.decode_tokens for t in turns),
-                    "stop_condition": "turn_budget_reached" if "turn_budget_reached" in flags else "episode_returned",
-                },
+                "model": identity["model"],
+                "sampler": identity["sampler"],
+                "output_policy": identity["output_policy"],
+                "episode_outcome": outcome,
                 "episode_spec_sha256": hashlib.sha256(
                     (config.workload_profile.prompt_text or "").encode("utf-8")
                 ).hexdigest(),
@@ -328,7 +364,7 @@ class EpisodeRuntimeAdapter:
                 "cache_policy": "full_prompt_each_turn",
                 "flags": list(episode.flags),
             },
-            metadata={"align_episode": {"id": episode_id, "flags": list(episode.flags)}},
+            metadata={"align_episode": {"id": episode_id, "flags": list(episode.flags), **outcome}},
         )
 
     def cleanup(

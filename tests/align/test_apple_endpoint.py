@@ -91,8 +91,14 @@ class AppleEndpointTests(unittest.TestCase):
         from tests.align.test_apple_campaign import episode_spec
         import json
 
+        clock = FakeClock()
         def stream_generate(model, tokenizer, prompt, *, max_tokens, sampler):
-            yield from ()  # projection never generates; retain the real native API signature
+            # Same production-shaped 2048-token prefill and D-019 decode timing
+            # as the endpoint world; readiness itself never generates.
+            clock.sleep(2048 * 0.001)
+            for token in range(max_tokens):
+                clock.sleep(0.010)
+                yield SimpleNamespace(token=token, text="x", finish_reason=None)
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -117,7 +123,23 @@ class AppleEndpointTests(unittest.TestCase):
                     "joulewise.adapters.mlx_runtime._distribution_version", return_value="synthetic-native"
                 ):
                     metadata = _runtime_probe_metadata(config)
+                    from joulewise.controller import run_benchmark
+                    clock = FakeClock()
+                    bundle, summary = run_benchmark(config, root / "runs", clock)
+                self.assertEqual(summary.status.value, "succeeded", summary)
+                measured = json.loads((bundle / "metadata.json").read_text())
+                measured_stack, _ = derive_model_runtime_config_from_metadata(
+                    config.to_dict(), measured
+                )
+                for key in ("model", "sampler", "output_policy"):
+                    self.assertEqual(
+                        metadata["workload_provenance"][key],
+                        measured["workload_provenance"][key],
+                    )  # the readiness and bundle identity must be bit-identical
                 stack, pins = derive_model_runtime_config_from_metadata(config.to_dict(), metadata)
+                self.assertEqual(
+                    stack["sampler_output_policy"], measured_stack["sampler_output_policy"]
+                )
                 self.assertEqual(stack["runtime_version"]["name"], "mlx")
                 self.assertEqual(set(pins), {"model_artifact_sha256", "runtime_identity_sha256", "config_set_sha256"})
                 self.assertTrue(all(len(value) == 64 and int(value, 16) >= 0 for value in pins.values()))

@@ -379,6 +379,60 @@ class AppleCampaignTests(unittest.TestCase):
                 raw = json.loads((bundle / "outputs/align_episode.json").read_text())
                 self.assertIn(summary_flag, raw["flags"])
 
+    def test_governed_identity_is_fixed_across_episode_outcomes_and_readiness(self) -> None:
+        from joulewise.identity_pins import (
+            _runtime_probe_metadata, build_stack_identity,
+            derive_model_runtime_config_from_metadata,
+        )
+
+        base = episode_spec(hidden=False)
+        at_turn_budget = list(base.mock_turns)
+        # Keep all model/tool work identical, but the last assistant asks for a
+        # sixth lookup. A no-tool last answer returns; this one exhausts six turns.
+        at_turn_budget[-1] = {**at_turn_budget[-1], "content": at_turn_budget[0]["content"]}
+        specs = (
+            base, replace(base, mock_turns=tuple(at_turn_budget)),
+            replace(base, temperature=0.7),
+        )
+        stacks = []
+        policies = []
+        outcomes = []
+        with tempfile.TemporaryDirectory() as directory:
+            for index, spec in enumerate(specs):
+                config = as_config(spec, f"apple-identity-{index}")
+                bundle, summary = run_benchmark(config, Path(directory), FakeClock())
+                self.assertEqual(summary.status.value, "succeeded", summary)
+                metadata = json.loads((bundle / "metadata.json").read_text())
+                raw_config = json.loads((bundle / "config.json").read_text())
+                provenance = metadata["workload_provenance"]
+                stack = build_stack_identity(raw_config, metadata)
+                self.assertIsNotNone(stack)
+                stacks.append(stack)
+                policies.append(provenance["output_policy"])
+                outcomes.append(provenance["episode_outcome"])
+                self.assertEqual(provenance["model"]["name"], config.model.name)
+                self.assertEqual(
+                    provenance["model"]["artifact_identity"],
+                    metadata["adapters"]["runtime"]["prepare_metadata"]["model_artifact_identity"],
+                )
+                self.assertNotIn("emitted_tokens", provenance["output_policy"])
+                probe = _runtime_probe_metadata(config)
+                projected, _ = derive_model_runtime_config_from_metadata(config.to_dict(), probe)
+                self.assertEqual(
+                    projected["sampler_output_policy"], stack["sampler_output_policy"]
+                )  # exact identity projection, with no episode outcome in it
+                for key in ("model", "sampler", "output_policy"):
+                    self.assertEqual(probe["workload_provenance"][key], provenance[key])
+            self.assertEqual(outcomes[0]["stop_condition"], "episode_returned")
+            self.assertEqual(outcomes[1]["stop_condition"], "turn_budget_reached")
+            self.assertEqual(stacks[0], stacks[1])  # same governed identity, different outcomes
+            self.assertEqual(policies[0], policies[1])
+            self.assertNotEqual(stacks[0], stacks[2])  # requested temperature is registered
+            self.assertIn(
+                "requested_temperature_differs_from_pinned_greedy",
+                read_episode_bundle(Path(directory) / "apple-identity-2").flags,
+            )
+
     def test_order_manifest_counterbalances_cells_and_pack_ids_do_not_collide(self) -> None:
         from scripts.run_campaign import apply_order_manifest, load_order_entries
 
