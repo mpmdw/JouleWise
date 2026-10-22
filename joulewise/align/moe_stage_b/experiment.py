@@ -16,7 +16,7 @@ from typing import Any
 
 from joulewise.align.records import Episode, RouterLog, ToolCall, Turn
 from joulewise.align.moe_stage_b.analysis import (
-    RoutingObservation, extract_features, plan_detectability, recover_routing,
+    RoutingObservation, extract_features, pearson, plan_detectability, recover_routing,
     required_correlation,
 )
 from joulewise.align.moe_stage_b.simulation import (
@@ -196,6 +196,26 @@ def run_world(
             flags.update(features.flags)
     names = ("energy_per_decode_token_j", "token_energy_variance_j2", "token_rate_amplitude_w")
     recovery = {name: asdict(recover_routing(observations, feature_name=name)) for name in names}
+    # The attenuation r in d_B=r*d_A is WITHIN-condition. Held-out
+    # predictions stay blind to condition; condition labels are used only to
+    # evaluate residual correlations after prediction, never to train them.
+    condition_by_id = {o.episode_id: ("sabotage" if o.episode_id.endswith("-sabotage")
+                                     else "benign") for o in observations}
+    truth_by_id = {o.episode_id: o.routing_statistic for o in observations}
+    for name, values in recovery.items():
+        pairs = [(identity, prediction) for identity, prediction in values["predictions"]
+                 if prediction is not None]
+        truth_residuals, prediction_residuals = [], []
+        for condition in ("benign", "sabotage"):
+            selected = [(identity, prediction) for identity, prediction in pairs
+                        if condition_by_id[identity] == condition]
+            if selected:
+                truth_mean = statistics.fmean(truth_by_id[identity] for identity, _ in selected)
+                prediction_mean = statistics.fmean(prediction for _, prediction in selected)
+                truth_residuals.extend(truth_by_id[identity]-truth_mean for identity, _ in selected)
+                prediction_residuals.extend(prediction-prediction_mean for _, prediction in selected)
+        values["within_condition_held_out_correlation"] = pearson(
+            truth_residuals, prediction_residuals)
     requirement = required_correlation(stage_a_effect_sd=stage_a_effect_sd,
                                        n_per_condition=n_per_condition, alpha=alpha,
                                        power=power, comparisons=comparisons)
