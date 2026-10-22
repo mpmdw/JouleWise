@@ -123,15 +123,21 @@ def world(seed, sensor, *, load_variation_fraction=0.05, clock_offset_ns=17_000_
         first = cursor
         add(index, "decode", before_ns + after_ns if tools_after_turn else before_ns)
         model_end = cursor
+        if tools_after_turn:
+            # Fixture client dispatch delay after the model call, using the
+            # same declared 5-90 ms range as tool-end -> next-call gaps.
+            add(None, "gap", rng.randint(*client_gap_ns))
         tool_start = cursor
         add(index, "tool", tool_ticks * NS // 10)
         tool_end = cursor
         if not tools_after_turn:
             add(index, "decode", after_ns)
             model_end = cursor
-        # 600 prompt tokens/s and 40 generated tokens/s are chosen synthetic
-        # serving rates; the token counts and context grow as in an agent loop.
-        prefill_tokens = prefill_ns * 600 // NS
+        # Fixture serving rates: 600 prompt tokens/s for the initial
+        # uncached call, 6000 for cached-prefix appends, 40 generated tokens/s.
+        # Cached 20-80 ms prefills therefore append 120-480 tokens.
+        prefill_rate = 600 if index == 0 else 6000
+        prefill_tokens = prefill_ns * prefill_rate // NS
         decode_tokens = (before_ns + after_ns) * 40 // NS
         call = ToolCall("local_search" if index % 2 else "local_exec",
                         ORIGIN + tool_start, ORIGIN + tool_end,
