@@ -622,19 +622,26 @@ class TestMoeStageBEndToEnd(StageBAssertions):
 
 class TestMoeStageBContinuation(StageBAssertions):
     def test_forecast_includes_routing_to_traffic_residual(self):
-        # Declared signal/residual SD .004/.003J/token form a 3-4-5
-        # variance triangle: r=.004/.005=.8, whereas omitting residual gives1.
+        # Signal/residual SD .004/.003J/token form a 3-4-5 triangle.
+        # Its r=.8 limit requires both zero noise AND zero quantization.
         sensor = replace(default_sensors()[0], noise_std_w=0)
-        result = plan_detectability(
-            sensor, stage_a_effect_sd=1, n_per_condition=50, alpha=.05,
+        parameters = dict(
+            stage_a_effect_sd=1, n_per_condition=50, alpha=.05,
             power=.8, comparisons=3, routing_stat_sd=.1,
             traffic_energy_slope_j_per_token=.04, decode_tokens=512,
             decode_duration_s=25.6, phase_bias_std_j=0,
             systematic_contrast_half_width_j=0,
             routing_energy_residual_std_j_per_token=.003)
-        expected = reference_residual_adjusted_correlation(.004, .003, 0, 0, 512)
+        result = plan_detectability(sensor, **parameters)
+        # F8: at sigma=0 the continuous rounding second-moment bound is
+        # q^2/4; its integral SD is (q/2)*sqrt(T*dt). Keep the original
+        # 1e-6 relative oracle agreement bar, including this changed bound.
+        white_j = sensor.quantum_w/2*math.sqrt(
+            25.6*max(sensor.interval_ns, sensor.averaging_window_ns)/1_000_000_000)
+        expected = reference_residual_adjusted_correlation(.004, .003, white_j, 0, 512)
         self.assertRelative(result.model_correlation, expected)
-        self.assertRelative(result.model_correlation, .8)
+        ideal = plan_detectability(replace(sensor, quantum_w=0), **parameters)
+        self.assertRelative(ideal.model_correlation, .8)
         self.assertIn('routing_to_energy_residual_in_forecast', result.flags)
 
     def test_fisher_intervals_match_independent_algebra_and_small_cohort_is_inconclusive(self):
