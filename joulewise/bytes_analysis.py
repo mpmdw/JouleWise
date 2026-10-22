@@ -643,7 +643,9 @@ def _stage_export_rows(path, *, include_withheld=False):
 def _withheld_counts(info, model):
     key_digest = hashlib.sha256(model.get("config_key", "").encode("utf-8")).hexdigest()
     count = info["config_key_sha256"].get(key_digest, 0) if info else 0
-    return {"withheld_row_count": info["row_count"], "withheld_config_row_count": count} if count else {}
+    return {"withheld_row_count": info["row_count"], "withheld_config_row_count": count,
+            **({"withheld_path_checked": info["withheld_path_checked"]}
+               if "withheld_path_checked" in info else {})} if count else {}
 
 
 def _missing_withheld_records(info, manifest, session):
@@ -658,8 +660,7 @@ def _missing_withheld_records(info, manifest, session):
                 "unit_id": str(index if index < 10 else (index - 10) // 4),
                 "status": "unusable", "invalid_energy_record": True,
                 "excluded": False, "harvest_excluded": False, "meter": None,
-                "flags": ["bytes.withheld_missing"], **counts,
-                **({"withheld_path_checked": info["withheld_path_checked"]} if "withheld_path_checked" in info else {})}
+                "flags": ["bytes.withheld_missing"], **counts}
 
 
 def _released_rows(rows, key_dir, *, blinded):

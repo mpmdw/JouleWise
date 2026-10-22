@@ -2164,20 +2164,30 @@ class ReviewInputTests(unittest.TestCase):
                 if source.name.endswith(('.runs.csv', '.session.json')):
                     shutil.copyfile(source, copied / source.name)
             supplied = [copied if p == original else p for p in exports]
-            command = [sys.executable, '-B', 'scripts/bytes_analyze.py', '--manifest', str(manifest_path),
-                       '--export', *map(str, supplied), '--stage', 'blinded', '--stage1-commit', 'a' * 40,
-                       '--out', str(root / 'copied-analysis')]
-            result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             info = ba.read_json(copied / 'bytes-s2-p1.session.json')['blinding']['withheld']
             checked = str((copied / info['path']).resolve())
-            records = ba.load_records(supplied, manifest, stage='blinded', stage1_commit='a' * 40)
-            missing = [r for r in records if 'bytes.withheld_missing' in r['flags']]
-            self.assertEqual(len(missing), info['row_count'])  # exact sidecar census
-            self.assertEqual({r['withheld_path_checked'] for r in missing}, {checked})
-            points = ba.read_json(root / 'copied-analysis/model_estimates.json')
-            passes = [p for point in points for p in point['passes'] if p['status'] == 'missing']
-            self.assertTrue(passes)
-            self.assertEqual({p['withheld_path_checked'] for p in passes}, {checked})
+            for stage in ('blinded', 'heldout'):
+                with self.subTest(stage=stage):
+                    out = root / ('copied-analysis-' + stage)
+                    extra = (['--stage1-commit', 'a' * 40] if stage == 'blinded' else
+                             ['--predictions', str(root / 'single/predictions.json')])
+                    command = [sys.executable, '-B', 'scripts/bytes_analyze.py', '--manifest', str(manifest_path),
+                               '--export', *map(str, supplied), '--stage', stage, *extra, '--out', str(out)]
+                    result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    records = ba.load_records(supplied, manifest, stage=stage,
+                                              stage1_commit='a' * 40 if stage == 'blinded' else None)
+                    missing = [r for r in records if 'bytes.withheld_missing' in r['flags']]
+                    self.assertEqual(len(missing), info['row_count'])  # exact sidecar census
+                    self.assertEqual({r['withheld_path_checked'] for r in missing}, {checked})
+                    points = ba.read_json(out / 'model_estimates.json')
+                    passes = [p for point in points for p in point['passes'] if p['status'] == 'missing']
+                    self.assertTrue(passes)
+                    self.assertEqual({p['withheld_path_checked'] for p in passes}, {checked})
+                    printed = ba.read_json(out / (stage + '_pass_estimates.json'))
+                    rails_missing = [p for p in printed if p['boundary'] == 'rails' and p['status'] == 'missing']
+                    # Two energy bases in two selections for the one missing model/pass.
+                    self.assertEqual(len(rails_missing), 4)
+                    self.assertEqual({p['withheld_path_checked'] for p in rails_missing}, {checked})
             with self.assertRaisesRegex(ba.AnalysisError, 'duplicate records across inputs'):
                 ba.load_records([exports[0], exports[0]], manifest, stage='blinded')
