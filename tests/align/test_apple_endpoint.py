@@ -92,7 +92,7 @@ class AppleEndpointTests(unittest.TestCase):
         import json
 
         clock = FakeClock()
-        def stream_generate(model, tokenizer, prompt, *, max_tokens, sampler):
+        def stream_generate(model, tokenizer, prompt, *, max_tokens, sampler=None):
             # Same production-shaped 2048-token prefill and D-019 decode timing
             # as the endpoint world; readiness itself never generates.
             clock.sleep(2048 * 0.001)
@@ -128,6 +128,9 @@ class AppleEndpointTests(unittest.TestCase):
                     bundle, summary = run_benchmark(config, root / "runs", clock)
                 self.assertEqual(summary.status.value, "succeeded", summary)
                 measured = json.loads((bundle / "metadata.json").read_text())
+                flags = measured["workload_provenance"]["flags"]
+                self.assertFalse(any(flag.startswith("warmup_failed:") for flag in flags), flags)
+                self.assertIn("turn_token_budget_reached:0", flags)
                 measured_stack, _ = derive_model_runtime_config_from_metadata(
                     config.to_dict(), measured
                 )
