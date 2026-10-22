@@ -270,11 +270,20 @@ class IndependentNullTests(_TimedCase):
             # The null has independent, nonidentical logged draws, not paired duplicates.
             self.assertGreater(statistics.pstdev(sc), 0)
         bar = 0.05 * n + 4 * math.sqrt(0.0475 * n)
+        # The n null worlds are independent draws, so their mean AUC has
+        # SE = sd/sqrt(n), using this run's sample sd. Four SEs make a false
+        # alarm on an unbiased procedure rare: two-sided normal tail about
+        # 6e-5, or about 3e-4 with sample sd on 39 degrees of freedom.
+        # At the measured sd 0.0452 and n=40 the bar is about 0.029,
+        # detecting bias well below the printed AUC half-widths about 0.05.
+        mean_bar = 4 * statistics.stdev(estimates) / math.sqrt(n)
+        self.assertLessEqual(abs(statistics.mean(estimates) - 0.5), mean_bar)
         print(f"INDEPENDENT NULL worlds={n} pairs=5 seeds=30 B={B} "
               f"auc_mean={statistics.mean(estimates):.9f} "
               f"delta_mean_from_old_paired_null={statistics.mean(estimates) - 0.5:.9f} auc_sd={statistics.stdev(estimates):.9f} "
               f"delong_conditional_on_fitted_fold_models_claims={delong_claims} "
               f"bootstrap_conditional_on_fitted_fold_models_claims={bootstrap_claims} "
               f"refitted_permutation_claims={claims} four_se_bar={bar:.9f} "
+              f"auc_mean_four_se_bar={mean_bar:.9f} "
               f"runtime_s={time.monotonic() - started:.3f}", flush=True)
         self.assertLessEqual(claims, bar)
