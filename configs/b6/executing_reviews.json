@@ -1,0 +1,356 @@
+[
+ {
+  "commit": "8932cfbbd1d70e74bebf626dcdaac0a10352d6d2",
+  "number_bearing_paths": [
+   "joulewise/b5/chain.py"
+  ],
+  "change": "precheck lane (Sol 6.1)",
+  "executing_reviews": [
+   {
+    "reviewer": "Opus 5.5, lane executing review (non-author)",
+    "covered": "lane/2026-10-14-b6-precheck at 8932cfbbd",
+    "paper": "/Users/edr/night-archive/b6-build/precheck/REVIEW.md"
+   },
+   {
+    "reviewer": "Opus 5.5 lane director, dispositions and fix verification",
+    "covered": "8932cfbbd..82dfb8bdc",
+    "paper": "/Users/edr/night-archive/b6-build/precheck/DISPOSITIONS.md"
+   },
+   {
+    "reviewer": "Fable 5.1, cold, blind, executing",
+    "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Fable.md"
+   },
+   {
+    "reviewer": "Opus 5.5, cold, blind, executing",
+    "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Opus.md"
+   }
+  ]
+ },
+ {
+  "commit": "12aa7db824dfaaaf1800f9184ce607c789b95cc0",
+  "number_bearing_paths": [
+   "joulewise/b5/chain.py"
+  ],
+  "change": "harvest lane round 2 (Sol 6.1)",
+  "executing_reviews": [
+   {
+    "reviewer": "Opus 5.5, lane executing review (non-author)",
+    "covered": "lane/2026-10-14-b6-harvest at 34e1f7196 (contains 12aa7db82)",
+    "paper": "/Users/edr/night-archive/b6-build/harvest/REVIEW.md"
+   },
+   {
+    "reviewer": "Opus 5.5 lane director, dispositions",
+    "covered": "34e1f7196..83163e6a4",
+    "paper": "/Users/edr/night-archive/b6-build/harvest/DISPOSITIONS.md"
+   },
+   {
+    "reviewer": "Fable 5.1, cold, blind, executing",
+    "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Fable.md"
+   },
+   {
+    "reviewer": "Opus 5.5, cold, blind, executing",
+    "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Opus.md"
+   }
+  ]
+ },
+ {
+  "commit": "495569dfc44c85b412903a1940d01f01d2f185ef",
+  "number_bearing_paths": [
+   "joulewise/b5/driver.py",
+   "joulewise/b6/agent_pause.py",
+   "joulewise/b6/idle_wait.py",
+   "joulewise/b6/sleep_guard.py",
+   "joulewise/controller.py",
+   "scripts/run_campaign.py"
+  ],
+  "change": "driver lane (Sol 6.1)",
+  "executing_reviews": [
+   {
+    "reviewer": "Opus 5.5, lane executing review (non-author)",
+    "covered": "lane/2026-10-14-b6-driver at 495569dfc",
+    "paper": "/Users/edr/night-archive/b6-build/driver/REVIEW.md"
+   },
+   {
+    "reviewer": "Fable 5.1, cold, blind, executing",
+    "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Fable.md"
+   },
+   {
+    "reviewer": "Opus 5.5, cold, blind, executing",
+    "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Opus.md"
+   }
+  ]
+ },
+ {
+  "commit": "a1b2b59c3d02b93d5022f91cec1275140162810b",
+  "number_bearing_paths": [
+   "joulewise/b5/driver.py",
+   "joulewise/b6/agent_pause.py",
+   "joulewise/b6/sleep_guard.py",
+   "joulewise/controller.py",
+   "scripts/run_campaign.py"
+  ],
+  "change": "driver lane review fixes (Sol 6.1)",
+  "executing_reviews": [
+   {
+    "reviewer": "Opus 5.5 lane director, dispositions and executing verification",
+    "covered": "495569dfc..a1b2b59c3",
+    "paper": "/Users/edr/night-archive/b6-build/driver/DISPOSITIONS.md"
+   },
+   {
+    "reviewer": "Fable 5.1, cold, blind, executing",
+    "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Fable.md"
+   },
+   {
+    "reviewer": "Opus 5.5, cold, blind, executing",
+    "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Opus.md"
+   }
+  ]
+ },
+ {
+  "commit": "f96c046fd1783164453e79f71b539dcbc4cb5afd",
+  "number_bearing_paths": [
+   "joulewise/b5/driver.py",
+   "joulewise/b6/agent_pause.py",
+   "joulewise/b6/idle_wait.py",
+   "joulewise/b6/sleep_guard.py",
+   "joulewise/controller.py",
+   "scripts/run_campaign.py"
+  ],
+  "change": "merge of the driver lane into the integration",
+  "executing_reviews": [
+   {
+    "reviewer": "Fable 5.1, cold, blind, executing",
+    "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Fable.md"
+   },
+   {
+    "reviewer": "Opus 5.5, cold, blind, executing",
+    "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Opus.md"
+   }
+  ]
+ },
+ {
+  "commit": "817c7b9aec31167ea359b136b0f33ad5b734ba6c",
+  "number_bearing_paths": [
+   "joulewise/b5/chain.py"
+  ],
+  "change": "merge of the precheck lane into the integration",
+  "executing_reviews": [
+   {
+    "reviewer": "Fable 5.1, cold, blind, executing",
+    "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Fable.md"
+   },
+   {
+    "reviewer": "Opus 5.5, cold, blind, executing",
+    "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Opus.md"
+   }
+  ]
+ },
+ {
+  "commit": "ca65937e1d76bb510e7410d27d12adde66b28735",
+  "number_bearing_paths": [
+   "scripts/run_campaign.py"
+  ],
+  "change": "integration commit, desk idle-admission read (Opus 5.5 integration director)",
+  "executing_reviews": [
+   {
+    "reviewer": "Sol 6.1 xhigh finder + Opus 5.5 stage-3 director (equivalence probe re-run on every production-reachable shape)",
+    "covered": "696164b31 (the seven integration commits)",
+    "paper": "/Users/edr/night-archive/b6-build/stage3/DISPOSITIONS-integration-review.md"
+   },
+   {
+    "reviewer": "Fable 5.1, cold, blind, executing",
+    "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Fable.md"
+   },
+   {
+    "reviewer": "Opus 5.5, cold, blind, executing",
+    "covered": "integration 850265137 (all block-6 stage-1 claim-path code since 3bb305d7a)",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/COLD-PASS-Opus.md"
+   }
+  ]
+ },
+ {
+  "commit": "2b2bea4cc25c968dc1f456e35c3c7ba676cbd76a",
+  "number_bearing_paths": [
+   "joulewise/b5/chain.py"
+  ],
+  "change": "stage-2 cold fix seat A (Sol 6.1)",
+  "executing_reviews": [
+   {
+    "reviewer": "Opus 5.5 disposition director, re-execution of every refusal finding",
+    "covered": "850265137..696164b31",
+    "paper": "/Users/edr/night-archive/b6-build/stage2/DISPOSITIONS-cold.md"
+   },
+   {
+    "reviewer": "Fable 5.1, cold, blind, executing",
+    "covered": "850265137..696164b31",
+    "paper": "/Users/edr/night-archive/b6-build/stage3/COLD-PASS-Fable.md"
+   },
+   {
+    "reviewer": "Opus 5.5, cold, blind, executing",
+    "covered": "850265137..696164b31",
+    "paper": "/Users/edr/night-archive/b6-build/stage3/COLD-PASS-Opus.md"
+   }
+  ]
+ },
+ {
+  "commit": "b158665b28abf8fe511fef3a9941ecd7b601d16d",
+  "number_bearing_paths": [
+   "joulewise/b5/driver.py"
+  ],
+  "change": "stage-3 review fix F1 (Sol 6.1 patch, corrected by the stage-3 director)",
+  "executing_reviews": [
+   {
+    "reviewer": "Opus 5.5 stage-3 disposition director (non-author), executing: real DriverLane plans for ALPHA/BETA/GAMMA loaded by run_night, courier resolution for program/claude/symlink/missing and the block-5 shape",
+    "covered": "696164b31..9409c83b2",
+    "paper": "/Users/edr/night-archive/b6-build/stage3/DISPOSITIONS-cold.md (probes/courier_review_e81e60530.log)"
+   }
+  ]
+ },
+ {
+  "commit": "d9ce14fcbf52e9d5ff8a2b58b2f4190a1941687e",
+  "number_bearing_paths": [
+   "joulewise/b5/chain.py"
+  ],
+  "change": "stage-3 cold fix (Sol 6.1)",
+  "executing_reviews": [
+   {
+    "reviewer": "Opus 5.5 stage-3 disposition director (non-author), executing: the Opus cold pass's own reproductions re-run on the fix, the rendered opening screen under zsh on ALPHA/BETA/GAMMA, the whole suite on the merged tree",
+    "covered": "e81e60530..d9ce14fcb",
+    "paper": "/Users/edr/night-archive/b6-build/stage3/DISPOSITIONS-cold.md (probes/open_bracket_d9ce14fcb.log, probes/render_recheck_d9ce14fcb.log)"
+   }
+  ]
+ },
+ {
+  "commit": "6ae3965bf2e2b55c7b9a0a0795b8eb7d4b540668",
+  "number_bearing_paths": [
+   "joulewise/kernel_clock.py"
+  ],
+  "change": "block-6 round 2 (Sol 6.1): clock hold at 5 ms / T - 0.25 ppm with a flag band, tolerance sizing, review items R1-R3",
+  "executing_reviews": [
+   {
+    "reviewer": "Fable 5.1 cold pass (non-author, blind), executing: real capture tool and rendered chain at 36.5-300 ms, precheck and arm on synthetic anchor series across the hold, every flag through the real exclusion code",
+    "covered": "220166913..0421b1f9f",
+    "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (cold passes: JouleWise-data claude/b6-r2-cold-fable @ 088d6e5 and claude/b6-r2-cold-opus @ d7d30d0, cold/REPORT.md with cold/probes and outputs)"
+   },
+   {
+    "reviewer": "Opus 5.5 cold pass (non-author, blind), executing: real capture main and RenderedRound to the 139 ms edge, clock_rate on synthetic series, flags.exclusions.compute on the shipped catalog",
+    "covered": "220166913..0421b1f9f",
+    "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (cold passes: JouleWise-data claude/b6-r2-cold-fable @ 088d6e5 and claude/b6-r2-cold-opus @ d7d30d0, cold/REPORT.md with cold/probes and outputs)"
+   }
+  ]
+ },
+ {
+  "commit": "2d80db35edf71628738071d5b9e55bd0c4af573f",
+  "number_bearing_paths": [
+   "joulewise/kernel_clock.py"
+  ],
+  "change": "clock hold scoped to block 6 (Sol 6.1): kernel_clock.py restored byte-identical to 220166913; block-6 plans hold via h_ms 0",
+  "executing_reviews": [
+   {
+    "reviewer": "Fable 5.1 delta cold pass (non-author, blind), executing: byte identity against 220166913, five rates x three code paths for block-5 and block-6 plans, the real arm through the test rig",
+    "covered": "0421b1f9f..734d3e3c0",
+    "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (delta cold passes: JouleWise-data claude/b6-r2-delta-fable @ a8213b4 and claude/b6-r2-delta-opus-rmmapr @ 11a63d5, cold/REPORT.md with cold/probes)"
+   },
+   {
+    "reviewer": "Opus 5.5 delta cold pass (non-author, blind), executing: clock_rate and frequency_bound across the hold for block-5 and block-6 thresholds, the no-locator capture matrix",
+    "covered": "0421b1f9f..734d3e3c0",
+    "paper": "/Users/edr/night-archive/silly-numbers-2026-10-15/DISPOSITIONS-r2-cold.md (delta cold passes: JouleWise-data claude/b6-r2-delta-fable @ a8213b4 and claude/b6-r2-delta-opus-rmmapr @ 11a63d5, cold/REPORT.md with cold/probes)"
+   }
+  ]
+ },
+ {
+  "commit": "8c42d38a6f58a8e0db37419171b61f51f622a719",
+  "number_bearing_paths": [
+   "joulewise/b5/driver.py"
+  ],
+  "change": "machine-test fixes: agent.presence interval carries monotonic_raw_ns null so make_flag accepts it (Sol 6.1)",
+  "executing_reviews": [
+   {
+    "reviewer": "Sol 6.1 xhigh, executing review (non-author)",
+    "covered": "fix/2026-10-16-b6-mt-fixes at 3359719ea (contains 8c42d38a6)",
+    "paper": "/Users/edr/night-archive/b6-mt-fix/review/SOL-REVIEW.md"
+   },
+   {
+    "reviewer": "Fable 5.1, cold, blind, executing",
+    "covered": "729449fa0..3359719ea",
+    "paper": "/Users/edr/night-archive/b6-mt-fix/review/COLD-fable.md"
+   },
+   {
+    "reviewer": "Opus 5.5, cold, blind, executing",
+    "covered": "729449fa0..3359719ea",
+    "paper": "/Users/edr/night-archive/b6-mt-fix/review/COLD-opus.md"
+   },
+   {
+    "reviewer": "Opus 5.5, delta executing review (non-author)",
+    "covered": "bc099c85b and afd6d865d",
+    "paper": "/Users/edr/night-archive/b6-mt-fix/review/DELTA-REVIEW-bc099c85b.md"
+   }
+  ]
+ },
+ {
+  "commit": "0276a3327cbe11627d905ed3f728423b6280f129",
+  "number_bearing_paths": [
+   "joulewise/environment_admission.py",
+   "joulewise/whole_window.py",
+   "joulewise/b6/acceptance.py",
+   "joulewise/b6/smoke.py"
+  ],
+  "change": "block-6 MT-20261017T1735Z desk fixes, round 1: explicit busy-only admissions honoured by the shared environment validator and whole-window core check (council Q3); recorded wait-cap losses are not structural (Sol 6.1)",
+  "executing_reviews": [
+   {
+    "reviewer": "Fable 5.1, cold, blind, executing (non-author)",
+    "covered": "f3ef7804b..0276a3327",
+    "paper": "docs/process_traces/2026-10-17-magistrate-d34bf254/pr501-cold-fable.md (main fc3306137)"
+   },
+   {
+    "reviewer": "Opus 5.5, cold, blind, executing (non-author)",
+    "covered": "f3ef7804b..0276a3327",
+    "paper": "docs/process_traces/2026-10-17-magistrate-d34bf254/pr501-cold-opus.md (main fc3306137)"
+   },
+   {
+    "reviewer": "Opus 5.5, executing delta review (non-author)",
+    "covered": "0276a3327..021f935c8",
+    "paper": "docs/process_traces/2026-10-17-magistrate-d34bf254/pr501-delta-opus.md (main fc3306137)"
+   }
+  ]
+ },
+ {
+  "commit": "021f935c8ae5ad821771014d5009f21ddc677d17",
+  "number_bearing_paths": [
+   "scripts/run_campaign.py",
+   "joulewise/b6/acceptance.py",
+   "joulewise/b6/smoke.py"
+  ],
+  "change": "block-6 MT r2 fixes, round 2: verdict writer uses the shared claim barrier (busy-only member no longer fails the whole-window core); acceptance keeps the base absence predicate with only the recorded idle-skip exemption; wait-budget skips covered (Sol 6.1). PR #501, merged 5b58cfa06",
+  "executing_reviews": [
+   {
+    "reviewer": "Fable 5.1, cold, blind, executing (non-author)",
+    "covered": "f3ef7804b..0276a3327",
+    "paper": "docs/process_traces/2026-10-17-magistrate-d34bf254/pr501-cold-fable.md (main fc3306137)"
+   },
+   {
+    "reviewer": "Opus 5.5, cold, blind, executing (non-author)",
+    "covered": "f3ef7804b..0276a3327",
+    "paper": "docs/process_traces/2026-10-17-magistrate-d34bf254/pr501-cold-opus.md (main fc3306137)"
+   },
+   {
+    "reviewer": "Opus 5.5, executing delta review (non-author)",
+    "covered": "0276a3327..021f935c8",
+    "paper": "docs/process_traces/2026-10-17-magistrate-d34bf254/pr501-delta-opus.md (main fc3306137)"
+   }
+  ]
+ }
+]

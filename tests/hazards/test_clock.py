@@ -60,6 +60,22 @@ class FrequencyGateTests(unittest.TestCase):
             self.assertAlmostEqual(ours["bound_ms"], theirs["bound_ms"], places=9)
 
 
+    def test_block6_flag_band_and_exact_kernel_word_boundary(self):
+        from fractions import Fraction
+        from joulewise.b6.plan_inputs import CLOCK_THRESHOLDS
+        limits = {**LIMITS, **CLOCK_THRESHOLDS}
+        edge = int((Fraction(5000, 335) - Fraction(1, 4)) * clock.FREQUENCY_SCALE)
+        for sign in (-1, 1):
+            for word, passes, flags in ((ppm_word(3.6), True, []),
+                                        (ppm_word(4), True, ["clock.rate_above_budget"]),
+                                        (edge, True, ["clock.rate_above_budget"]),
+                                        (edge + 1, False, [])):
+                gate = clock.frequency_bound(sign * word, limits)
+                self.assertEqual(gate["passes"], passes)
+                self.assertEqual([flag["code"] for flag in clock.rate_flags(gate)], flags)
+        self.assertEqual(clock.rate_flags(clock.frequency_bound(ppm_word(4), LIMITS)), [])
+
+
 class InstantJudgeTests(unittest.TestCase):
     def test_instant_reading_passes_and_records_three_stamps(self):
         clocks = FakeClocks()

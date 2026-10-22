@@ -1,0 +1,898 @@
+{
+  "authority": "BYTES R2/R8.6; block-6 design \u00a714; threshold note \u00a74 test 7",
+  "check_runs_per_model": 5,
+  "long_regimes": [
+    "llama-70b",
+    "qwen35-122b",
+    "qwen3-next-80b"
+  ],
+  "members": [
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-1p7b/bytes-mac-check-check-qwen3-1p7b-r01.json",
+      "end": "middle",
+      "model_id": "qwen3-1p7b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-1p7b-r01",
+      "stage_id": "bytes-mac-check-check-qwen3-1p7b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-1p7b/bytes-mac-check-check-qwen3-1p7b-r02.json",
+      "end": "middle",
+      "model_id": "qwen3-1p7b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-1p7b-r02",
+      "stage_id": "bytes-mac-check-check-qwen3-1p7b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-1p7b/bytes-mac-check-check-qwen3-1p7b-r03.json",
+      "end": "middle",
+      "model_id": "qwen3-1p7b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-1p7b-r03",
+      "stage_id": "bytes-mac-check-check-qwen3-1p7b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-1p7b/bytes-mac-check-check-qwen3-1p7b-r04.json",
+      "end": "middle",
+      "model_id": "qwen3-1p7b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-1p7b-r04",
+      "stage_id": "bytes-mac-check-check-qwen3-1p7b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-1p7b/bytes-mac-check-check-qwen3-1p7b-r05.json",
+      "end": "middle",
+      "model_id": "qwen3-1p7b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-1p7b-r05",
+      "stage_id": "bytes-mac-check-check-qwen3-1p7b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-4b/bytes-mac-check-check-qwen3-4b-r01.json",
+      "end": "middle",
+      "model_id": "qwen3-4b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-4b-r01",
+      "stage_id": "bytes-mac-check-check-qwen3-4b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-4b/bytes-mac-check-check-qwen3-4b-r02.json",
+      "end": "middle",
+      "model_id": "qwen3-4b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-4b-r02",
+      "stage_id": "bytes-mac-check-check-qwen3-4b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-4b/bytes-mac-check-check-qwen3-4b-r03.json",
+      "end": "middle",
+      "model_id": "qwen3-4b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-4b-r03",
+      "stage_id": "bytes-mac-check-check-qwen3-4b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-4b/bytes-mac-check-check-qwen3-4b-r04.json",
+      "end": "middle",
+      "model_id": "qwen3-4b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-4b-r04",
+      "stage_id": "bytes-mac-check-check-qwen3-4b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-4b/bytes-mac-check-check-qwen3-4b-r05.json",
+      "end": "middle",
+      "model_id": "qwen3-4b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-4b-r05",
+      "stage_id": "bytes-mac-check-check-qwen3-4b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b/bytes-mac-check-check-qwen3-8b-r01.json",
+      "end": "middle",
+      "model_id": "qwen3-8b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-8b-r01",
+      "stage_id": "bytes-mac-check-check-qwen3-8b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b/bytes-mac-check-check-qwen3-8b-r02.json",
+      "end": "middle",
+      "model_id": "qwen3-8b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-8b-r02",
+      "stage_id": "bytes-mac-check-check-qwen3-8b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b/bytes-mac-check-check-qwen3-8b-r03.json",
+      "end": "middle",
+      "model_id": "qwen3-8b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-8b-r03",
+      "stage_id": "bytes-mac-check-check-qwen3-8b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b/bytes-mac-check-check-qwen3-8b-r04.json",
+      "end": "middle",
+      "model_id": "qwen3-8b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-8b-r04",
+      "stage_id": "bytes-mac-check-check-qwen3-8b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b/bytes-mac-check-check-qwen3-8b-r05.json",
+      "end": "middle",
+      "model_id": "qwen3-8b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-8b-r05",
+      "stage_id": "bytes-mac-check-check-qwen3-8b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-30b-a3b/bytes-mac-check-check-qwen3-30b-a3b-r01.json",
+      "end": "middle",
+      "model_id": "qwen3-30b-a3b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-30b-a3b-r01",
+      "stage_id": "bytes-mac-check-check-qwen3-30b-a3b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-30b-a3b/bytes-mac-check-check-qwen3-30b-a3b-r02.json",
+      "end": "middle",
+      "model_id": "qwen3-30b-a3b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-30b-a3b-r02",
+      "stage_id": "bytes-mac-check-check-qwen3-30b-a3b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-30b-a3b/bytes-mac-check-check-qwen3-30b-a3b-r03.json",
+      "end": "middle",
+      "model_id": "qwen3-30b-a3b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-30b-a3b-r03",
+      "stage_id": "bytes-mac-check-check-qwen3-30b-a3b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-30b-a3b/bytes-mac-check-check-qwen3-30b-a3b-r04.json",
+      "end": "middle",
+      "model_id": "qwen3-30b-a3b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-30b-a3b-r04",
+      "stage_id": "bytes-mac-check-check-qwen3-30b-a3b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-30b-a3b/bytes-mac-check-check-qwen3-30b-a3b-r05.json",
+      "end": "middle",
+      "model_id": "qwen3-30b-a3b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-30b-a3b-r05",
+      "stage_id": "bytes-mac-check-check-qwen3-30b-a3b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-14b/bytes-mac-check-check-qwen3-14b-r01.json",
+      "end": "middle",
+      "model_id": "qwen3-14b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-14b-r01",
+      "stage_id": "bytes-mac-check-check-qwen3-14b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-14b/bytes-mac-check-check-qwen3-14b-r02.json",
+      "end": "middle",
+      "model_id": "qwen3-14b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-14b-r02",
+      "stage_id": "bytes-mac-check-check-qwen3-14b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-14b/bytes-mac-check-check-qwen3-14b-r03.json",
+      "end": "middle",
+      "model_id": "qwen3-14b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-14b-r03",
+      "stage_id": "bytes-mac-check-check-qwen3-14b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-14b/bytes-mac-check-check-qwen3-14b-r04.json",
+      "end": "middle",
+      "model_id": "qwen3-14b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-14b-r04",
+      "stage_id": "bytes-mac-check-check-qwen3-14b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-14b/bytes-mac-check-check-qwen3-14b-r05.json",
+      "end": "middle",
+      "model_id": "qwen3-14b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-14b-r05",
+      "stage_id": "bytes-mac-check-check-qwen3-14b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-next-80b/bytes-mac-check-check-qwen3-next-80b-r01.json",
+      "end": "middle",
+      "model_id": "qwen3-next-80b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-next-80b-r01",
+      "stage_id": "bytes-mac-check-check-qwen3-next-80b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-next-80b/bytes-mac-check-check-qwen3-next-80b-r02.json",
+      "end": "middle",
+      "model_id": "qwen3-next-80b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-next-80b-r02",
+      "stage_id": "bytes-mac-check-check-qwen3-next-80b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-next-80b/bytes-mac-check-check-qwen3-next-80b-r03.json",
+      "end": "middle",
+      "model_id": "qwen3-next-80b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-next-80b-r03",
+      "stage_id": "bytes-mac-check-check-qwen3-next-80b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-next-80b/bytes-mac-check-check-qwen3-next-80b-r04.json",
+      "end": "middle",
+      "model_id": "qwen3-next-80b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-next-80b-r04",
+      "stage_id": "bytes-mac-check-check-qwen3-next-80b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-next-80b/bytes-mac-check-check-qwen3-next-80b-r05.json",
+      "end": "middle",
+      "model_id": "qwen3-next-80b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-next-80b-r05",
+      "stage_id": "bytes-mac-check-check-qwen3-next-80b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-32b/bytes-mac-check-check-qwen3-32b-r01.json",
+      "end": "middle",
+      "model_id": "qwen3-32b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-32b-r01",
+      "stage_id": "bytes-mac-check-check-qwen3-32b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-32b/bytes-mac-check-check-qwen3-32b-r02.json",
+      "end": "middle",
+      "model_id": "qwen3-32b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-32b-r02",
+      "stage_id": "bytes-mac-check-check-qwen3-32b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-32b/bytes-mac-check-check-qwen3-32b-r03.json",
+      "end": "middle",
+      "model_id": "qwen3-32b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-32b-r03",
+      "stage_id": "bytes-mac-check-check-qwen3-32b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-32b/bytes-mac-check-check-qwen3-32b-r04.json",
+      "end": "middle",
+      "model_id": "qwen3-32b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-32b-r04",
+      "stage_id": "bytes-mac-check-check-qwen3-32b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-32b/bytes-mac-check-check-qwen3-32b-r05.json",
+      "end": "middle",
+      "model_id": "qwen3-32b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-32b-r05",
+      "stage_id": "bytes-mac-check-check-qwen3-32b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r01.json",
+      "end": "middle",
+      "model_id": "qwen3-8b-8bit",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-8b-8bit-r01",
+      "stage_id": "bytes-mac-check-check-qwen3-8b-8bit"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r02.json",
+      "end": "middle",
+      "model_id": "qwen3-8b-8bit",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-8b-8bit-r02",
+      "stage_id": "bytes-mac-check-check-qwen3-8b-8bit"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r03.json",
+      "end": "middle",
+      "model_id": "qwen3-8b-8bit",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-8b-8bit-r03",
+      "stage_id": "bytes-mac-check-check-qwen3-8b-8bit"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r04.json",
+      "end": "middle",
+      "model_id": "qwen3-8b-8bit",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-8b-8bit-r04",
+      "stage_id": "bytes-mac-check-check-qwen3-8b-8bit"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen3-8b-8bit/bytes-mac-check-check-qwen3-8b-8bit-r05.json",
+      "end": "middle",
+      "model_id": "qwen3-8b-8bit",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen3-8b-8bit-r05",
+      "stage_id": "bytes-mac-check-check-qwen3-8b-8bit"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-llama-70b/bytes-mac-check-check-llama-70b-r01.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-llama-70b-r01",
+      "stage_id": "bytes-mac-check-check-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-llama-70b/bytes-mac-check-check-llama-70b-r02.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-llama-70b-r02",
+      "stage_id": "bytes-mac-check-check-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-llama-70b/bytes-mac-check-check-llama-70b-r03.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-llama-70b-r03",
+      "stage_id": "bytes-mac-check-check-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-llama-70b/bytes-mac-check-check-llama-70b-r04.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-llama-70b-r04",
+      "stage_id": "bytes-mac-check-check-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-llama-70b/bytes-mac-check-check-llama-70b-r05.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-llama-70b-r05",
+      "stage_id": "bytes-mac-check-check-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen35-122b/bytes-mac-check-check-qwen35-122b-r01.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen35-122b-r01",
+      "stage_id": "bytes-mac-check-check-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen35-122b/bytes-mac-check-check-qwen35-122b-r02.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen35-122b-r02",
+      "stage_id": "bytes-mac-check-check-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen35-122b/bytes-mac-check-check-qwen35-122b-r03.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen35-122b-r03",
+      "stage_id": "bytes-mac-check-check-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen35-122b/bytes-mac-check-check-qwen35-122b-r04.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen35-122b-r04",
+      "stage_id": "bytes-mac-check-check-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/check-qwen35-122b/bytes-mac-check-check-qwen35-122b-r05.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "check",
+      "run_id": "bytes-mac-check-check-qwen35-122b-r05",
+      "stage_id": "bytes-mac-check-check-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-llama-70b/bytes-mac-check-soak-llama-70b-r01.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-llama-70b-r01",
+      "stage_id": "bytes-mac-check-soak-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-llama-70b/bytes-mac-check-soak-llama-70b-r02.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-llama-70b-r02",
+      "stage_id": "bytes-mac-check-soak-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-llama-70b/bytes-mac-check-soak-llama-70b-r03.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-llama-70b-r03",
+      "stage_id": "bytes-mac-check-soak-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-llama-70b/bytes-mac-check-soak-llama-70b-r04.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-llama-70b-r04",
+      "stage_id": "bytes-mac-check-soak-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-llama-70b/bytes-mac-check-soak-llama-70b-r05.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-llama-70b-r05",
+      "stage_id": "bytes-mac-check-soak-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-llama-70b/bytes-mac-check-soak-llama-70b-r06.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-llama-70b-r06",
+      "stage_id": "bytes-mac-check-soak-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-llama-70b/bytes-mac-check-soak-llama-70b-r07.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-llama-70b-r07",
+      "stage_id": "bytes-mac-check-soak-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-llama-70b/bytes-mac-check-soak-llama-70b-r08.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-llama-70b-r08",
+      "stage_id": "bytes-mac-check-soak-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-llama-70b/bytes-mac-check-soak-llama-70b-r09.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-llama-70b-r09",
+      "stage_id": "bytes-mac-check-soak-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-llama-70b/bytes-mac-check-soak-llama-70b-r10.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-llama-70b-r10",
+      "stage_id": "bytes-mac-check-soak-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-llama-70b/bytes-mac-check-soak-llama-70b-r11.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-llama-70b-r11",
+      "stage_id": "bytes-mac-check-soak-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-llama-70b/bytes-mac-check-soak-llama-70b-r12.json",
+      "end": "middle",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-llama-70b-r12",
+      "stage_id": "bytes-mac-check-soak-llama-70b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r01.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-qwen35-122b-r01",
+      "stage_id": "bytes-mac-check-soak-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r02.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-qwen35-122b-r02",
+      "stage_id": "bytes-mac-check-soak-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r03.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-qwen35-122b-r03",
+      "stage_id": "bytes-mac-check-soak-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r04.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-qwen35-122b-r04",
+      "stage_id": "bytes-mac-check-soak-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r05.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-qwen35-122b-r05",
+      "stage_id": "bytes-mac-check-soak-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r06.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-qwen35-122b-r06",
+      "stage_id": "bytes-mac-check-soak-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r07.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-qwen35-122b-r07",
+      "stage_id": "bytes-mac-check-soak-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r08.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-qwen35-122b-r08",
+      "stage_id": "bytes-mac-check-soak-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r09.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-qwen35-122b-r09",
+      "stage_id": "bytes-mac-check-soak-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r10.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-qwen35-122b-r10",
+      "stage_id": "bytes-mac-check-soak-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r11.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-qwen35-122b-r11",
+      "stage_id": "bytes-mac-check-soak-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/soak-qwen35-122b/bytes-mac-check-soak-qwen35-122b-r12.json",
+      "end": "middle",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "soak",
+      "run_id": "bytes-mac-check-soak-qwen35-122b-r12",
+      "stage_id": "bytes-mac-check-soak-qwen35-122b"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-llama-70b-start/bytes-mac-check-test7-llama-70b-start-r01.json",
+      "end": "start",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-llama-70b-start-r01",
+      "stage_id": "bytes-mac-check-test7-llama-70b-start"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-llama-70b-start/bytes-mac-check-test7-llama-70b-start-r02.json",
+      "end": "start",
+      "model_id": "reference",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-llama-70b-start-r02",
+      "stage_id": "bytes-mac-check-test7-llama-70b-start"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-llama-70b-start/bytes-mac-check-test7-llama-70b-start-r03.json",
+      "end": "start",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-llama-70b-start-r03",
+      "stage_id": "bytes-mac-check-test7-llama-70b-start"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-llama-70b-start/bytes-mac-check-test7-llama-70b-start-r04.json",
+      "end": "start",
+      "model_id": "reference",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-llama-70b-start-r04",
+      "stage_id": "bytes-mac-check-test7-llama-70b-start"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen35-122b-start/bytes-mac-check-test7-qwen35-122b-start-r01.json",
+      "end": "start",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen35-122b-start-r01",
+      "stage_id": "bytes-mac-check-test7-qwen35-122b-start"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen35-122b-start/bytes-mac-check-test7-qwen35-122b-start-r02.json",
+      "end": "start",
+      "model_id": "reference",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen35-122b-start-r02",
+      "stage_id": "bytes-mac-check-test7-qwen35-122b-start"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen35-122b-start/bytes-mac-check-test7-qwen35-122b-start-r03.json",
+      "end": "start",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen35-122b-start-r03",
+      "stage_id": "bytes-mac-check-test7-qwen35-122b-start"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen35-122b-start/bytes-mac-check-test7-qwen35-122b-start-r04.json",
+      "end": "start",
+      "model_id": "reference",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen35-122b-start-r04",
+      "stage_id": "bytes-mac-check-test7-qwen35-122b-start"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen3-next-80b-start/bytes-mac-check-test7-qwen3-next-80b-start-r01.json",
+      "end": "start",
+      "model_id": "qwen3-next-80b",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen3-next-80b-start-r01",
+      "stage_id": "bytes-mac-check-test7-qwen3-next-80b-start"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen3-next-80b-start/bytes-mac-check-test7-qwen3-next-80b-start-r02.json",
+      "end": "start",
+      "model_id": "reference",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen3-next-80b-start-r02",
+      "stage_id": "bytes-mac-check-test7-qwen3-next-80b-start"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen3-next-80b-start/bytes-mac-check-test7-qwen3-next-80b-start-r03.json",
+      "end": "start",
+      "model_id": "qwen3-next-80b",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen3-next-80b-start-r03",
+      "stage_id": "bytes-mac-check-test7-qwen3-next-80b-start"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen3-next-80b-start/bytes-mac-check-test7-qwen3-next-80b-start-r04.json",
+      "end": "start",
+      "model_id": "reference",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen3-next-80b-start-r04",
+      "stage_id": "bytes-mac-check-test7-qwen3-next-80b-start"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-llama-70b-end/bytes-mac-check-test7-llama-70b-end-r01.json",
+      "end": "end",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-llama-70b-end-r01",
+      "stage_id": "bytes-mac-check-test7-llama-70b-end"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-llama-70b-end/bytes-mac-check-test7-llama-70b-end-r02.json",
+      "end": "end",
+      "model_id": "reference",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-llama-70b-end-r02",
+      "stage_id": "bytes-mac-check-test7-llama-70b-end"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-llama-70b-end/bytes-mac-check-test7-llama-70b-end-r03.json",
+      "end": "end",
+      "model_id": "llama-70b",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-llama-70b-end-r03",
+      "stage_id": "bytes-mac-check-test7-llama-70b-end"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-llama-70b-end/bytes-mac-check-test7-llama-70b-end-r04.json",
+      "end": "end",
+      "model_id": "reference",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-llama-70b-end-r04",
+      "stage_id": "bytes-mac-check-test7-llama-70b-end"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen35-122b-end/bytes-mac-check-test7-qwen35-122b-end-r01.json",
+      "end": "end",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen35-122b-end-r01",
+      "stage_id": "bytes-mac-check-test7-qwen35-122b-end"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen35-122b-end/bytes-mac-check-test7-qwen35-122b-end-r02.json",
+      "end": "end",
+      "model_id": "reference",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen35-122b-end-r02",
+      "stage_id": "bytes-mac-check-test7-qwen35-122b-end"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen35-122b-end/bytes-mac-check-test7-qwen35-122b-end-r03.json",
+      "end": "end",
+      "model_id": "qwen35-122b",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen35-122b-end-r03",
+      "stage_id": "bytes-mac-check-test7-qwen35-122b-end"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen35-122b-end/bytes-mac-check-test7-qwen35-122b-end-r04.json",
+      "end": "end",
+      "model_id": "reference",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen35-122b-end-r04",
+      "stage_id": "bytes-mac-check-test7-qwen35-122b-end"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen3-next-80b-end/bytes-mac-check-test7-qwen3-next-80b-end-r01.json",
+      "end": "end",
+      "model_id": "qwen3-next-80b",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen3-next-80b-end-r01",
+      "stage_id": "bytes-mac-check-test7-qwen3-next-80b-end"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen3-next-80b-end/bytes-mac-check-test7-qwen3-next-80b-end-r02.json",
+      "end": "end",
+      "model_id": "reference",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen3-next-80b-end-r02",
+      "stage_id": "bytes-mac-check-test7-qwen3-next-80b-end"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen3-next-80b-end/bytes-mac-check-test7-qwen3-next-80b-end-r03.json",
+      "end": "end",
+      "model_id": "qwen3-next-80b",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen3-next-80b-end-r03",
+      "stage_id": "bytes-mac-check-test7-qwen3-next-80b-end"
+    },
+    {
+      "config_path": "configs/campaigns/bytes_mac_check/stages/test7-qwen3-next-80b-end/bytes-mac-check-test7-qwen3-next-80b-end-r04.json",
+      "end": "end",
+      "model_id": "reference",
+      "non_claim": true,
+      "purpose": "test7",
+      "run_id": "bytes-mac-check-test7-qwen3-next-80b-end-r04",
+      "stage_id": "bytes-mac-check-test7-qwen3-next-80b-end"
+    }
+  ],
+  "non_claim": true,
+  "plan_id": "bytes-mac-check",
+  "schema_version": "joulewise.bytes_mac_check.v1",
+  "soak_runs_per_model": 12,
+  "test7_pairs_per_end": 2
+}
