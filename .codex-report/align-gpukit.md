@@ -1,37 +1,37 @@
-# align-gpukit — FIX ROUND 2b
+# align-gpukit — FIX ROUND 2b, fix2c continuation
 
 ## SUMMARY
 
-Continued lane/2026-10-21-align-gpukit from 2e0155dd8; preserved the earlier GK2 fixes.
-Split structural matrix failures from record-only flags throughout session and runner translation.
-Bootstrap now validates before installation and checks the session's complete measured/monitor GPU pool.
-Empty sessions and argument errors exit 3; physical refusals retain exit 2 and precedence.
-Added independent preflight/copy limits, explicit process-stop grace, GPU-release checks and thermal flags.
-Bound served identity to checkpoint, recorded precision/monitor revision, and masked unsourced cost inputs.
-Prices echo exactly; the runbook is procedural and explains repeated MoE coordinates and cost.
-All own Python, shell, stdlib/extra tests and reviewer repros are NOT RUN: no executable environment launched.
-Pushed each implementation step through the authorized GitHub fallback; PR #521 stays draft, with no rental or merge.
+Continued lane/2026-10-21-align-gpukit from pushed head 7aed47856; retained the Round 2b fixes.
+Late session_failed:* exceptions now remain failed/exit 3 after earlier model work, with data_complete false.
+Process cleanup waits at the operator's poll cadence, bounded separately after SIGTERM and SIGKILL.
+A surviving group records process_group_survived_sigkill in its model/runner or monitor receipt.
+Bootstrap preserves set -euo pipefail while guarding empty arrays for macOS Bash 3.2.
+Failed structural/layout validation now prints its JSON to stderr before bootstrap exits 3.
+Added three regression methods, strengthened the layout diagnostic test and preserved every old assertion.
+Reconciled the lead's macOS execution at 7aed47856: 78 tests, one Bash 3.2 failure; all supplied repro pass conditions held.
+This seat could not launch any shell/Python process: current-head tests and repros are NOT RUN.
+Each fix was committed/pushed through GitHub; PR #521 remains draft/unmerged and no rental ran.
 
 ## FILES
 
-Round 2b changed these authorized paths:
+This continuation changed exactly these authorized paths:
 
-- joulewise/align/gpukit/matrix.py: structural_flags(), full record validation, served checkpoint identity, dated public citations and key-referencing derivations.
-- joulewise/align/gpukit/runner_adapter.py: preserve record flags while translating executable coordinates; safe optional campaign label.
-- joulewise/align/gpukit/session.py: shared validate-only/layout, coordinate counts, no-run failure/exit 3, independent required time limits, group reaping/GPU release, precision/monitor pins and malformed optional flag handling.
-- joulewise/align/gpukit/bootstrap.sh: preserve device argv, environment fallback only without flags, validate/check full pool before venv/pip, exit 2 for isolation and 3 for arguments.
-- joulewise/align/gpukit/cost.py: mask unsourced inputs/decode dependencies while retaining independent figures, exact agent/monitor input prices, tolerant optional calibration label.
-- joulewise/align/gpukit/matrix.schema.json: reserved-host URL pattern and access-date format/range shape.
-- joulewise/align/gpukit/throttle.py: hardware/software thermal reasons and software thermal counter; prior enforced-limit behavior retained.
-- tests/align/test_gpukit.py: 22 added source methods; old fixture sources/policy arguments and fake install interpreter's validate-only response updated; every old assertion retained.
-- tests/align/test_gpukit_round2.py: three newly required policy arguments in CLI/Python calls; no assertion/bar/skip changed.
-- docs/align/gpukit.md: run procedure, codes, timeout derivations, structural/record distinction, identities, prices, thermal flags and MoE duplicate-cost paragraph; seat status removed.
-- .codex-report/align-gpukit.md: current evidence handoff; entire earlier FIX LOG retained verbatim plus Round 2b.
+- joulewise/align/gpukit/session.py: preserve late failure; bounded signal waits, positive polling and cleanup-flag propagation for runner, agent server and monitor.
+- joulewise/align/gpukit/bootstrap.sh: Bash 3.2 guarded empty-array expansions; echo failed validation JSON before returning its failure code.
+- tests/align/test_gpukit.py: three added methods for late failure, persistent SIGKILL survival, and cleanup receipt propagation; required poll_s in the existing group test; existing layout test additionally checks stderr.
+- docs/align/gpukit.md: amended bounded cleanup semantics, late-failure exit behavior and validation diagnostics.
+- .codex-report/align-gpukit.md: attributed historical lead execution, current unexecuted status and four correction hashes.
 
-Configs, coverage.py, identity.py and throughput.py are unchanged. No registry
-exception, sibling/protected-contract edit or out-of-scope write. No .review3
-materialization or commit: the executor never launched.
-Implementation/test head before this report: bce45811a23ab8e9d09a76e78bedcae4f7b26d11.
+Retained kit inventory: matrix.py validates structural/record fields and provenance;
+matrix.schema.json describes the campaign shape; runner_adapter.py translates to
+runner coordinates; cost.py/throughput.py compute sourced planning figures;
+coverage.py checks R5 trace coverage; identity.py reconciles endpoint identity;
+throttle.py records board limits and thermal/power observations. The three
+configs/align matrices and test_gpukit_round2.py are unchanged in this continuation.
+No registry exception, protected-contract change or out-of-scope write. No local
+checkout or .review3 files could be materialized because the executor never started.
+Implementation/test head before this report: dd29144d2feb80f78f3dea480075d491a0ac3606.
 
 ## PUBLIC API
 
@@ -74,7 +74,8 @@ Additional public functions/replay seams:
 - session.session_layout(matrix: dict[str, Any], options: SessionOptions) -> dict[str, Any]
 - session.validate_session(options: SessionOptions) -> dict[str, Any]
 - session.SessionParser(argparse.ArgumentParser); error(self, message: str) -> None exits 3.
-- session._stop_group(process: subprocess.Popen, *, grace_s: float) -> None; returns after group disappearance.
+- session._stop_group(process: subprocess.Popen, *, grace_s: float, poll_s: float) -> tuple[str, ...]; bounded TERM/KILL waits return process_group_survived_sigkill if still present.
+- session._runner_command(argv: Sequence[str], log: Path, *, timeout_s: float, grace_s: float, poll_s: float) -> tuple[int, bool, tuple[str, ...]]; return code, timeout marker and cleanup flags.
 - session._validate_output(path: Path, *, expected_count: int, router: bool, model: str, expected_coordinates: Sequence[tuple[str, str, int]] = (), measured_devices: Sequence[int] = (), power_metrics: dict[str, Any] | None = None) -> tuple[str, ...]; coordinates override declared expected_count.
 - coverage.Coverage(flags: tuple[str, ...], incomplete: bool, lost_reads: bool, max_gap_over_bar: float, max_cycle_over_two_expected: float), unchanged.
 - coverage.power_coverage(episode: Episode, measured_devices: Sequence[int] = ()) -> Coverage, unchanged.
@@ -84,27 +85,31 @@ CLI requires --preflight-timeout-s, --copy-timeout-s and --stop-grace-s alongsid
 the previous ready/command/runner timeouts, poll cadence and monitor placement.
 --validate-only prints measured_gpu_indices, monitor_gpu_index, flags and
 structural_flags without output creation/hardware calls; exit 0 valid, 3 invalid.
-Normal execution: physical refusal 2; no runner started 3; otherwise 0 with
-data_complete describing collection. copy_timeout is a transfer flag beside the
+Normal execution: physical refusal 2; no runner started or session_failed:* 3;
+otherwise 0 with data_complete describing collection. Late failure stays failed
+and data_complete false even after an earlier runner completed. Bootstrap echoes
+invalid validate-only JSON to stderr before exiting. copy_timeout is a transfer flag beside the
 retained archive; nvml_preflight_timeout is a distinct instrument-readiness refusal.
 
 ## TESTS RUN
 
-### This seat: all Python/shell checks NOT RUN
+### This continuation: Python/shell tests and repros NOT RUN
 
-Initial and later attempts of `pwd` and `python3 --version` were rejected
-before process launch: "No usable execution environment is available. Wait for an
-environment to become available before using this tool." Runtime status was
-pending/offline, no capabilities, network-policy state unknown. This is executor
-unavailability, not an automatic approval rejection.
+Both `pwd` and `python3 --version` were attempted independently, with later
+rechecks. Every process launch failed before execution:
+"No usable execution environment is available. Wait for an environment to become
+available before using this tool." The environment wait remained pending; runtime
+status reported starting/offline with no capabilities and unknown policy enforcement.
+This was executor unavailability, not an automatic approval-review rejection.
 
-No shell, Python, local git, installation, compilation, test, manifest verification,
-process census or repro executed here. No local checkout, harness chmod, integrated
-tree or NVML fake extraction was possible. No extra dependency was installed.
-All commands below are **NOT RUN**, counts/failures/actual skips unknown.
+No local git, shell, Python, Bash version check, installation, test, compilation,
+manifest verification, process census or repro executed here. No extra dependency
+was installed. No actual test count or skip result exists for this continuation.
+The user-authorized GitHub fallback pushed all four fixes as fast-forwards with
+expected-head checks and force=false.
 
-Requested cwd /workspace/JouleWise, uninstalled package, no PYTHONPATH, with
-TMPDIR=/tmp/gk-tmp JW_B5_SYNTHETIC_ONLY=1:
+Requested current-head commands, all **NOT RUN** here. Cwd /workspace/JouleWise,
+no installed package or PYTHONPATH, TMPDIR=/tmp/gk-tmp JW_B5_SYNTHETIC_ONLY=1:
 
     python3 -m unittest tests.align.test_gpukit -v
     python3 -m unittest tests.align.test_gpukit_round2 -v
@@ -115,17 +120,27 @@ TMPDIR=/tmp/gk-tmp JW_B5_SYNTHETIC_ONLY=1:
     /tmp/gpukit-jsonschema/bin/python -m unittest tests.align.test_gpukit_round2 -v
     /tmp/gpukit-jsonschema/bin/python -m unittest discover -s tests/align -t .
 
-Source inventory: 60 methods in test_gpukit.py, 14 in test_gpukit_round2.py
-(74 source methods, **not an executed count**). All original 38 + 14 remain.
-No original assertion line removed or skip added. Three optional-jsonschema
-guards retain "optional jsonschema is not installed"; the existing SessionTests
-Bash guard retains "bootstrap requires Bash". No new dependency.
+The source inventory is 63 test methods in test_gpukit.py and 14 in
+test_gpukit_round2.py (77 methods, **not an executed discovery count**).
+All three optional-jsonschema guards and the existing Bash class guard remain.
+No original assertion, expected result or test method was removed; no bar widened
+and no skip added. The existing real SIGTERM-ignoring group test now supplies
+poll_s=0.01 as required by the amended helper; its SIGKILL/group-gone assertions
+are unchanged. The bootstrap layout test adds a stderr flag assertion.
 
-Reviewer repros, **all NOT RUN**: materialize the appendix at .review3/h verbatim,
-chmod h/pywrap and h/bin/*, and fetch runner/NVML and nvml_fake_base.py as directed.
-Build /tmp/gk-integ from this lane plus the four runner files and NVML power/.
-No sibling patch or integrated sibling head was used here. Record actual SHAs
-on execution; the supplied prior run used runner ec4a37270 and NVML 432f14c7a.
+The lead's Mac uses /bin/bash 3.2.57, which treats an empty array as unset under
+set -u; Bash >=4.4 accepts the old expansion. A modern Linux VM Bash cannot
+demonstrate that Mac-specific failure. This VM's Bash was never launched or
+versioned. The existing test_bootstrap_flag_order_and_passthrough covers the
+empty-array/environment-fallback path; the lead must rerun it on the Mac.
+
+Reviewer harness commands below were **executed by the lead's agent (local macOS)
+at 7aed47856**, as supplied in the continuation brief, and are **NOT RUN by this
+seat at the corrected head**. Integrated heads were gpukit 7aed47856,
+runner ec4a37270 and NVML 432f14c7a. The APPENDIX harness was used exactly as
+written, including --preflight-timeout-s 60 --copy-timeout-s 60 --stop-grace-s 5.
+No sibling head was integrated locally here. Materialize the appendix, fetch the
+NVML test fake, chmod the stubs and build /tmp/gk-integ as the brief directs.
 
     export TMPDIR=/tmp/gk-tmp JW_B5_SYNTHETIC_ONLY=1
     H=/workspace/JouleWise/.review3/h
@@ -142,27 +157,83 @@ on execution; the supplied prior run used runner ec4a37270 and NVML 432f14c7a.
     env -C $I python3 -m joulewise.align.gpukit.cost configs/align/shade.json --gpu-class H100-SXM-80GB --calibration $O/e2e/nvml-shade
     /tmp/gpukit-jsonschema/bin/python -I $H/schema_probe.py $I
 
-Delete previous output/archive names before replay. Use subprocess cwd for cost
-if env -C is unavailable. The old I+W per-channel lines are information, not R5
-pass conditions. The appendix already supplies all three required new options.
-No appendix file was changed or materialized here. The whole repository suite
-was intentionally not run, as directed.
 
-Actually performed through GitHub/JavaScript, **source checking only**:
+The extra interpreter path above is the prescribed replay command; the lead
+reported jsonschema 4.23.0, without supplying its local venv path/install argv.
+The whole repository suite was not run, as directed. The old I+W per-channel
+coverage printouts are information; R5 governs completeness. Delete previous
+output/archive names before rerunning a world.
 
-- Read report first, shared contracts, AGENTS.md, M0, orchestration, targeted
-  RUN_STATE intake/status/workspace and empty TASK_QUEUE. ACTIVE_STOP_CARD is NONE.
-  User scope overrides repo bookkeeping/full-suite instructions.
-- Confirmed initial head 2e0155dd8 and PR #521 open/draft/unmerged. Each commit
-  parents the prior head; each lane update uses expected_sha and force=false.
-- Read back ten code/test/runbook files at 4a2b91948, exactly matching authored
-  text; later source follow-ups are in FIX LOG and remain unexecuted.
-- Compared prior/current test method names, assertion lines and skip guards:
-  no old method/assertion line removed or skip added.
-- Parsed unchanged configs/schema as JSON. A separate JavaScript source scan
-  found no numeric leaf lacking a citation or key-referencing formula in the
-  three configs. This is not Python validate(), jsonschema or schema_probe.
-- Branch comparison was ahead-only and contained only authorized paths.
+New late-failure command, **NOT RUN** here; the lead ran the pre-fix version at
+7aed47856 and supplied the failure described below:
+
+    python3 -I /workspace/JouleWise/.review3/late_failure_probe.py /tmp/gk-integ /workspace/JouleWise/.review3/h /tmp/gk-out/late
+
+### Executed by the lead's agent (local macOS) at 7aed47856
+
+Supplied evidence, not this seat's execution: Python 3.13, no PYTHONPATH,
+TMPDIR set and JW_B5_SYNTHETIC_ONLY=1. Integrated heads as above.
+
+- `python3 -m unittest discover -s tests/align -t .` on the gpukit-only checkout:
+  78 tests, 1 failure, 3 skipped. The three skips need optional jsonschema:
+  MatrixTests.test_json_schema, FixArithmeticTests.test_schema_typos_and_cited_price_rows,
+  and ServeTests.test_jsonschema_rejects_missing_parser (module/class names follow
+  the source). With jsonschema 4.23.0: 78 tests, 1 failure, 0 skipped.
+  Both failures were SessionTests.test_bootstrap_flag_order_and_passthrough:
+  bootstrap.sh line 36, session_args[@]: unbound variable on Bash 3.2.57.
+  Corrected by 9217d60b9fb471bc62d3bdf22fe1f182e8cbaac6; no corrected-head executed pass is claimed.
+- Every supplied repro pass condition held: nvml-shade/noinstant complete,
+  complete/gap controls distinguish coverage, and mock-shade incomplete only for
+  episode_power_mock. Per-model power metrics are in END-TO-END.
+- Three record gates each rc=0, completed_with_flags, data_complete=True,
+  models_run=2, preflight_ran=True, vllm_started=True. Structural condition typo:
+  rc=3, failed, models_run=0, preflight_ran=False, vllm_started=False, smi_calls=0.
+- Both Qwen agents use reasoning-parser qwen3; parser/CUDA unit assertions remain.
+  Calibration basis covers both models, 30 observed episodes each, no
+  calibration_model_missing and generation_wall_seconds 19.0.
+- Bootstrap tp2-gpu-index: rc=0, nvidia-smi indices ['0','1'], argv --gpu-index 0
+  with no --gpu-indices, measured [0,1], two models, no layout/executable flag.
+  fresh and tp2-layout-invalid rc=3 before venv/pip; mig-fresh and
+  vgpu-monitor-fresh rc=2 before venv/pip; check-skip and skip-check rc=0.
+- ready-never/ready-exit rc=3, failed; refusals rc=2; every other probe rc=0.
+  The late-failure probe exposed a distinct regression: one runner_returncode
+  recorded, session_failed:RuntimeError, data_complete=False, but exit 0 and
+  completed_with_flags. Corrected by 459cbb90e1341f435d94299a515d8454aa2b12d0; its new unit world and final-head
+  probe remain NOT RUN here.
+- Modern thermal start reasons: hw_thermal_slowdown=True and
+  sw_thermal_slowdown=False; throttle_hardware_active:hw_thermal_slowdown present.
+  Brake counter advancement/legacy parsing retained; enforced limit 700 W in all
+  three worlds. Healthy NVML completeness stays true with the thermal flag.
+- mon-gpu records monitor_revision_unpinned. Existing identity/precision/monitor
+  revision-key tests had no reported failure.
+- Invented bare derivations list provenance flags and print lower_bound_status
+  unavailable None, plan_status unavailable None, usd None, price echo 2.49.
+  Committed configs: schema_errors=0, validate=[]; typo/price-row results unchanged.
+- Round-1/GK2 regressions unchanged: MIG/vGPU/MIG-monitor refuse rc=2 before
+  preflight/vLLM; every preflight case; no surviving worker grandchild; monitor
+  on GPU 1/own port with measured devices alone sampled/preflighted; overlap flag;
+  TP2 layout; runner timeout kills its grandchild; slice ten per model; failed
+  copies keep the archive.
+- The lead identified the unbounded busy cleanup loop and silent bootstrap
+  validation stderr by inspection/repro. The amended survival-bound unit world
+  and strengthened stderr assertion have not been executed by this seat.
+
+### Source-only checks performed by this continuation
+
+- Read the pushed report first, then PIPELINE.md, records.py and interfaces.py;
+  read AGENTS.md/M0/orchestration and targeted RUN_STATE intake/status/workspace.
+  ACTIVE_STOP_CARD is NONE. The explicit brief determines scope and test commands.
+- Confirmed branch initially 7aed478564b93fe0bab48bab75f96d7b3ded5bfa and PR #521
+  open/draft/unmerged. Read back all four implementation/test/runbook files at
+  dd29144d2feb80f78f3dea480075d491a0ac3606, matching the authored bytes exactly.
+- JavaScript source comparison found no deleted old assertion lines or changed
+  skip guards; method inventory above is source-only. This is not Python parsing,
+  test execution or proof of process-cleanup behavior.
+- GitHub comparison 7aed47856...dd29144d2 was ahead-only by four commits,
+  behind zero, with exactly session.py, bootstrap.sh, test_gpukit.py and the
+  runbook changed. Each is inside WRITE_SCOPE. The report is the fifth path.
+- The only code changes address the four continuation defects. No hardware,
+  credentials, service calls from tests, rental, merge or PR-state change.
 
 ### Executed by the lead's agent (local macOS) at 2e0155dd8
 
@@ -197,95 +268,88 @@ appendix before the new options/portable additions. No new-head pass is inferred
 
 ## END-TO-END
 
-No Python/shell world ran here. These were **executed by the lead's agent
-(local macOS) at 2e0155dd8**, with the integrated heads above:
+The following worlds were **executed by the lead's agent (local macOS) at
+7aed47856**, with runner ec4a37270 and NVML 432f14c7a. None was rerun here.
+For comparison the supplied older 2e0155dd8 metrics are beside them:
 
-| World/model | Lead checked | Lead power incomplete | Lead lost reads | Lead max gap/B | Lead max C/2E | Own rerun |
-|---|---:|---:|---:|---:|---:|---|
-| nvml-shade Qwen3-8B | 30 | 0 | 0 | 0.836 | 0.749 | NOT RUN |
-| nvml-shade Qwen3-30B-A3B | 30 | 0 | 0 | 0.761 | 0.749 | NOT RUN |
-| nvml-noinstant each model | per-model count not supplied | complete | not supplied | not supplied | not supplied | NOT RUN |
+| World/model | 7aed checked/incomplete/lost | 7aed max gap/B | 7aed max C/2E | 2e0155dd8 max gap/B | 2e0155dd8 max C/2E |
+|---|---|---:|---:|---:|---:|
+| nvml-shade Qwen3-8B | 30 / 0 / 0 | 0.724 | 0.749 | 0.836 | 0.749 |
+| nvml-shade Qwen3-30B-A3B | 30 / 0 / 0 | 0.662 | 0.749 | 0.761 | 0.749 |
+| nvml-noinstant Qwen3-8B | 30 / 0 / 0 | 0.668 | 0.750 | not supplied | not supplied |
+| nvml-noinstant Qwen3-30B-A3B | 30 / 0 / 0 | 0.793 | 0.750 | not supplied | not supplied |
 
-Driver-shaped H100 fields advance every 100 ms; real NvmlSampler/runner use a
-real-time endpoint with tools. Unsupported field 186 stays a flag. The 60 s hole
-in each 148 s fixture Episode is incomplete; its complete control passes. R5
-coverage code/factors are unchanged. The supplied mock world has 30 Episodes per
-model, 12–13 turns and 90 verdicts; mock power alone makes all 30 incomplete.
-No new coverage margin or already-fixed-id repro is measured here.
+The chain is bootstrap/session -> served stub endpoint -> real runner ->
+real NvmlSampler using a driver-shaped fake H100 -> shared Episode JSONL ->
+R5 coverage -> receipt/manifest/archive. The fake instant field advances every
+100 ms; agent/tool delays are real-time. Both NVML worlds were
+completed_with_flags/data_complete true. Unsupported field 186 adds
+episode_power_channel_unsupported:gpu0:power_instant without episode_power_missing.
 
-New authored worlds below are **NOT RUN**, expected behavior only:
+The fixture complete control is complete. Removing 60 s from every 148 s,
+12-turn/eight-tool Episode produces episode_power_coverage_hole:gpu0:power_instant
+and incomplete data. The runner's own mock factories produce 30 Episodes/model,
+12–13 turns and 90 verdicts/model; data_complete is false only through
+episode_power_mock. Calibration uses both agents' 30 observed Episodes and
+prints generation_wall_seconds 19.0. These are synthetic/mocked, not hardware.
 
-- Existing production-shaped fixture: 5 pairs x 2 conditions x 3 seeds x 2 models
-  = 60 Episodes, 12 turns, eight 2 s tools, 40,000 prefill/8,000 decode tokens,
-  148 virtual seconds, 100 ms cadence, 1,481 samples/Episode, alternating 1 W
-  fixture noise. Nominal hand energy: 148*280 - 8*2*80 = 40,160 J.
-- Provenance/stale-count/malformed-workload worlds traverse load/validate -> real
-  adapter -> stub vLLM -> fixture runner -> shared Episode JSONL -> coordinate/
-  power validator -> receipt/manifest/archive. Two-seed stale world has 20 rows
-  per model/40 total while old 60/180 declarations stay flagged; data is complete.
-- Condition typo/differing served checkpoint fail before hardware; malformed
-  optional flag metadata remains record-only.
-- Budget uses valid settings, reaches all four actual adapters, then skips with
-  budget_runner_adapter_required; failed/session_ran_no_model, CLI exit 3.
-- TP2 bootstrap checks second-device MIG before install and fails short explicit
-  layout before install, using actual shell/session validation.
-- Preflight sleep 0.2 s vs explicit 0.05 s preflight policy refuses distinctly.
-  Short probes at 0.05 s with preflight allowance 30 s still collect. A sleeping
-  copy expires separate 0.05 s copy policy and retains the archive.
-- SIGTERM-ignoring group must vanish after explicit 0.05 s grace/SIGKILL.
-  Persistent GPU process_info after 1 s fixture cleanup allowance is only a flag.
-- Active hardware/software thermal reasons traverse session/snapshots without
-  changing completeness. Exact categorical fields/counter strings are identities.
-- Invented unsourced inputs suppress dependent figures; unsourced setup alone
-  leaves the independent lower bound. Old synthetic arithmetic inputs/assertions
-  are unchanged and now cited. Operator prices 2.49/3.79 echo exactly.
+Lead gate/bootstrap/throttle/source worlds and their exact categorical results
+are recorded in TESTS RUN. No new coverage rule, data eligibility bar, planning
+number or price was introduced by this continuation.
 
-Scheduling policies above are test parameters, not sensor/uncertainty bars.
-All own stdlib/extra/reviewer worlds remain NOT RUN; no paid/hardware evidence
-or current-head pass is claimed.
+New continuation worlds, **NOT RUN**, expectations only:
+
+- Two-model session through real CLI/session/fixture runner and shared records:
+  first model completes all 30 coordinates (12 turns, eight tools, 148 virtual
+  seconds/Episode), then the second readiness probe raises RuntimeError. Require
+  one runner_returncode, session_failed:RuntimeError, failed/3, incomplete,
+  retained manifest/archive.
+- Existing real SIGTERM-ignoring group receives the operator's 50 ms grace at
+  10 ms cadence, then SIGKILL, retaining exact SIGKILL/group-absent assertions.
+- Injected persistent group uses grace_s=0.05, poll_s=0.01 and a controlled
+  monotonic clock. It must return process_group_survived_sigkill within two
+  grace periods plus one poll; every sleep must be positive. This is a policy
+  scheduling bound, not a measured-quantity agreement bar.
+- A real two-model/monitor fixture session wraps actual cleanup, then injects
+  its survival flag to check all five cleanup call sites (two runners, two
+  servers, monitor), matching receipt entries and unchanged data completeness.
+- Existing TP2/one-device bootstrap world additionally requires
+  runner_measured_gpu_layout_invalid on stderr before any installation.
+  Existing empty-array flag-order world is retained for the Mac's Bash 3.2.
 
 ## DECISIONS I MADE
 
-- Continue existing lane at 2e0155dd8; no restart, force push, merge, draft-state
-  change or rental. Use explicit GitHub fallback, retain honest NOT RUN labels.
-- R11 structural check examines executable fields/coordinates only; full validate
-  keeps citations/counts/planning flags. Carry separation through adapter and
-  session skip logic. Optional malformed flag metadata cannot stop collection.
-- Expected counts come from expanded coordinates, including inside validator;
-  record flags never change data_complete. Optional campaign labels have a safe
-  fallback and do not select scientific coordinates.
-- R13 run means a model receipt with runner_returncode. No run fails/3; physical
-  refusal has precedence/2; any run completes/0 with data_complete for data faults.
-  Argument errors and invalid validate-only inputs use 3.
-- Share GPU layout between validation/execution. Preserve GPU flags exactly;
-  environment applies only without either flag. Preinstall checks include every
-  measured/monitor index; argument-free check-only remains a literal index check.
-- Require separate preflight/copy/stop policy values, no invented defaults.
-  Preserve short-probe timeout; distinguish expiry from launch failure. Runbook
-  uses the ruled 22 s plus startup and 44e3*N*T*G copy derivations.
-- R18 stops complete groups with explicit grace. Linux process-local child
-  subreaper (prctl PR_SET_CHILD_SUBREAPER=36) is enabled before spawning so adopted
-  worker zombies can be reaped by group without depending on container PID 1.
-  Poll group disappearance after SIGKILL. GPU-release timeout remains flag-only.
-  Zero sleeps are scheduler yields, not scientific time bars.
-- R15 requires checkpoint=id only for served entries; cost alternatives retain
-  checkpoints. Record precision and monitor revision/unpinned flag. Preserve
-  BF16/4 default; an FP8 rental is its own checkpoint id, already ruled.
-- R16 adds exactly two thermal reasons/software duration counter; retain enforced
-  limits and flag-only throttle semantics.
-- R17 rejects reserved/private/local hosts and invalid ISO dates, and requires
-  real key references in derivations. Mask unsourced inputs/decode dependencies
-  before cost arithmetic; preserve independent figures/calibration observations.
-- R19 echoes input prices exactly; derived display stays two significant digits
-  with downward lower bounds. Remove all seat/run status from the runbook.
-- Keep every old test method/assertion/bar/skip. Only required policy arguments,
-  synthetic citation metadata and installation-stub validate-only protocol change
-  old fixtures. Add stronger no-run assertions; no old expected answer changed.
-- Explain duplicated MoE coordinates/cost; operator selects matrices. No config
-  numeric input/count or R5 bar changes. Earlier parser/HF/identity/CUDA/enforced
-  fixes remain intact and require no replacement.
-- Separate source audits, historical lead evidence and NOT RUN final-head checks.
-  No new measured contradiction is inferred from an unavailable executor.
+- Continue the pushed 7aed47856 head and implement only the four continuation
+  defects; retain all earlier matrix/coverage/parser/source/cost fixes.
+- R8/R13 late session_failed:* remains failed with data_complete false, even
+  after earlier runner work. Empty-session flags and physical-refusal handling
+  stay intact. No science/data inclusion rule changes.
+- Amended R18 replaces the earlier infinite-wait instruction: each of SIGTERM
+  and SIGKILL gets at most stop_grace_s. Sleep min(poll_s, remaining positive
+  budget), never sleep(0); poll/reap without an unbounded process.wait().
+  Surviving groups are flag-only observations. Propagate returned flags to
+  model receipts for agent/runner groups and to monitor_server.flags for monitor.
+- Preserve Linux child-subreaper/adopted-worker reaping and the existing bounded
+  GPU process-release check. Longer cleanup allowance delays progression only.
+- Guard all three potentially empty session_args expansions with Bash 3.2's
+  guarded-array form, preserving quoting, argument identity and set -euo pipefail.
+  Keep the existing Mac-failing test and all its assertions.
+- Bootstrap captures validate-only's actual exit status, prints any JSON to
+  stderr on failure, then exits before inventory/install. Argument-parser stderr
+  remains visible when no JSON exists. Strengthen the existing TP2 layout test.
+- Add late-failure/surviving-group/receipt-wiring worlds; no old expected answer,
+  threshold or skip changes. Required helper poll_s arguments are wiring, not
+  relaxed expectations.
+- Attribute the lead's historical 78-test failure and passing repros at 7aed47856
+  separately from own NOT RUN corrected-head commands. Source readback is not
+  an executed test. A modern Linux Bash cannot certify the Mac-specific case;
+  this VM never launched Bash.
+- Preserve prior decisions: R11 executable structure vs record flags, coordinates
+  determine completeness, device argv/layout shared with validation, independent
+  preflight/copy limits, checkpoint=id, pinned monitor evidence, thermal flags,
+  sourced-only cost outputs/exact input prices and duplicated MoE cost disclosure.
+- No external spend/provider choice, hardware run, sibling change, force push,
+  merge or non-draft PR transition. Scope also excludes repo bookkeeping files.
 
 ## CONTRACT-CHANGE
 
@@ -294,34 +358,32 @@ No change to PIPELINE.md, records.py or interfaces.py.
 Retain NVML-lane requests: closing sample in stop(), and per-sample throttle/
 clock-event reasons/cumulative violation durations where supported. R5 coverage
 does not depend on them. Snapshot deltas cannot place events inside an Episode.
-No sibling file was modified.
+No sibling file was modified. Amended R18 is installed by the continuation brief,
+not a shared-record contract change.
 
 ## OPEN ISSUES
 
-- All final-head Python/shell tests, verbose/discovery runs, jsonschema setup/
-  reruns and reviewer repros are NOT RUN. Executing lead must materialize appendix,
-  build integration, record sibling SHAs and run exact commands before acceptance.
-  Source inspection is not process-cleanup or final-head correctness evidence.
-- Prior 56-test/world results at 2e0155dd8 establish earlier fixes only. The old
-  a37655231 constructor error below is historical; supplied 2e0155dd8 passed after
-  eb2b446ad corrected it.
-- Budget custom driver/translator is sibling-owned. Generic adapter still flags/
-  skips it and now fails honestly when nothing ran. Hybrid truncated thinking
-  output still needs budget content-prefix handling.
+- Current-head Python/Bash/discovery/extra tests, reviewer repros and late-failure
+  probe are NOT RUN here because the executor remained starting/offline.
+  The lead must rerun the supplied commands at the corrected head, including
+  Bash 3.2 on macOS. Historical 7aed47856 evidence does not certify these fixes.
+- New process-group survival bounds/receipt tests and late-failure test require
+  execution. No process census or hardware-memory release behavior was verified.
+- Budget custom driver/translator is sibling-owned; generic adapter flags/skips
+  it and honestly fails when nothing ran. Hybrid truncated-thinking content-prefix
+  handling remains budget-owned.
 - Factory registration, staged public data/model revisions, router capture and
-  actual serving/layout/headroom need integrated rehearsal/live preflight.
-  Serving pins are operator inputs; hermes provenance stays explicitly not fetched.
-- Rental estimates need sourced setup/load/wait/efficiency or complete receipt
-  calibration including budget strata. Unknowns stay unavailable. Ed must approve
-  provider/spend/cap/layout/precision/matrix choice before any rental.
-- NVML requests, independent final review, CI and merge remain lead-owned;
-  PR #521 stays draft/unmerged. No spend or provider approval was presumed.
+  real serving/layout/headroom still require integrated/live preflight.
+- Estimates need sourced setup/load/wait/efficiency or complete receipt calibration
+  including budget strata. Unknowns stay unavailable. Ed must approve provider,
+  spend/cap/layout/precision and matrix choice before rental.
+- Independent final review, CI, merge and NVML requests remain lead-owned.
+  PR #521 stays draft/unmerged; no spend/provider approval was presumed.
 
 ## NEEDS_RULING
 
-none. R11–R19 determine this build. Provider/spend and eventual distinct served
-configuration selection are pre-rental operator approvals, not unresolved code/
-count rulings. No new measured numbers force a question.
+none. The continuation's four explicit corrections and amended R18 determine
+this build. No new measured number or data-eligibility choice forces a question.
 
 ## FIX LOG
 
@@ -429,24 +491,26 @@ and GitHub readback are not test execution.
 
 ### Round 2b
 
-"fixed" means pushed implementation, not an executed pass. All own tests and
-repros below are **NOT RUN** because no executor launched. Earlier lead results
-at 2e0155dd8 are attributed above; every earlier FIX LOG line is retained verbatim.
+"fixed" means pushed implementation. Repro results below were **executed by the
+lead's agent (local macOS) at 7aed47856** with runner ec4a37270/NVML 432f14c7a,
+not by this continuation. All corrected-head tests/repros here are **NOT RUN**
+because no executor launched. Every earlier round-1/Round-2 FIX LOG line above
+is retained verbatim.
 
-- GK2B-1: fixed e47d3282ccb60f3e3b49e0cf26ac14263b48fca1 (GK2-1; constructor correction eb2b446ad), repro re-run: NOT RUN; lead controls complete/gap incomplete; R5 unchanged.
-- GK2B-2: fixed 91612a5c334bc170dd2c1690ba38084da1152749; adapter follow-up 4a2b91948d23b3c83a7db070d2a2becddf9205f3; coordinate/record follow-up 55fdd026f6394060985f88ea64ae40ba5c418162; repro re-run: NOT RUN.
-- GK2B-3: fixed d48ecf855b9781286140c2da1d53ad706ad04114 (GK2-2), repro re-run: NOT RUN; lead qwen3/deepseek_r1 checks passed at 2e0155dd8.
-- GK2B-4: fixed af3f48945f6de3aabae67ca7b8b4e66fc44fa666 (GK2-3), repro re-run: NOT RUN; lead 30 observed/model, no identity missing, generation_wall_seconds 19.0.
-- GK2B-5: fixed bf7155b7059af930a1eabbec70e1f196948a339b; layout regression 55fdd026f6394060985f88ea64ae40ba5c418162; repro re-run: NOT RUN.
-- GK2B-6: fixed d8d838475ae350079b8c4825d7c2fc01ac9263af; preinstall wiring bf7155b7059af930a1eabbec70e1f196948a339b; budget CLI regression bce45811a23ab8e9d09a76e78bedcae4f7b26d11; repro re-run: NOT RUN.
-- GK2B-7: fixed 614223ceae52ef88fc8a96c73ae7d208dcf483db; independent preflight/copy limits and flags; repro re-run: NOT RUN.
-- GK2B-8: fixed 1df60966407e4db2f7be12308209fd6491f23f42 (thermal); enforced half fixed b259f5f04fffb822a01616303cf4088608debce6 (GK2-5), repro re-run: NOT RUN; lead enforced 700 W passed.
-- GK2B-9: fixed 67fe51e1980801c753ee5ce048deb2304a3f37a8 (GK2-7), repro re-run: NOT RUN; lead child-environment check passed at 2e0155dd8.
-- GK2B-10: fixed 991ae09e2783a225c06f7bb6c5855a830220af86; checkpoint identity, precision/monitor pins; repro re-run: NOT RUN.
-- GK2B-11: fixed 8e9c3ac375c78b3b7ba724fbf6f5821535824e44; malformed-planning guard 55fdd026f6394060985f88ea64ae40ba5c418162; repro re-run: NOT RUN. JSON/source scan is not validate()/jsonschema.
-- GK2B-12: fixed 1a6b2d91f7136ad09e810ea7098e1373941e2992; remaining-GPU regression 55fdd026f6394060985f88ea64ae40ba5c418162; repro re-run: NOT RUN.
-- GK2B-13: fixed f1850a8a79c121ae4e72d83bbd401b418f29f51e (price/runbook); HF half fixed a33ff4f785206e6be8a57182f355962f721de658 (GK2-4), repro re-run: NOT RUN; HF configs unchanged.
-- GK2B-14: info, runbook paragraph 2b7490533cd58271d49c0c06b299f766e4491392; no code change for overlap.
+- GK2B-1: fixed e47d3282ccb60f3e3b49e0cf26ac14263b48fca1 (GK2-1; constructor correction eb2b446ad), lead repro re-run at 7aed47856: nvml-shade/noinstant complete, every model 30 checked/0 power incomplete/0 lost; unsupported instant flag without missing-power; gap incomplete and complete control true. R5 unchanged; metrics in END-TO-END.
+- GK2B-2: fixed 91612a5c334bc170dd2c1690ba38084da1152749; adapter follow-up 4a2b91948d23b3c83a7db070d2a2becddf9205f3; coordinate/record follow-up 55fdd026f6394060985f88ea64ae40ba5c418162; lead repro re-run at 7aed47856: all three record gates run two models/rc0/complete; structural typo rc3 before hardware (smi_calls=0).
+- GK2B-3: fixed d48ecf855b9781286140c2da1d53ad706ad04114 (GK2-2), lead repro re-run at 7aed47856: both agents qwen3; existing deepseek_r1 parser test retained with no reported failure.
+- GK2B-4: fixed af3f48945f6de3aabae67ca7b8b4e66fc44fa666 (GK2-3), lead repro re-run at 7aed47856: 30 observed/model, no calibration_model_missing, generation_wall_seconds 19.0.
+- GK2B-5: fixed bf7155b7059af930a1eabbec70e1f196948a339b; layout regression 55fdd026f6394060985f88ea64ae40ba5c418162; lead repro re-run at 7aed47856: TP2 contiguous devices [0,1], argv --gpu-index 0 preserved, two models; MIG/invalid-layout before installation. Fix2c corrections: 9217d60b9fb471bc62d3bdf22fe1f182e8cbaac6 guards every possibly empty session_args expansion for Bash 3.2; dd29144d2feb80f78f3dea480075d491a0ac3606 echoes failed validation JSON/stderr. The lead's discovery exposed Bash 3.2 failure; corrected-head Mac test NOT RUN here.
+- GK2B-6: fixed d8d838475ae350079b8c4825d7c2fc01ac9263af; preinstall wiring bf7155b7059af930a1eabbec70e1f196948a339b; budget CLI regression bce45811a23ab8e9d09a76e78bedcae4f7b26d11; lead repro re-run at 7aed47856: fresh/layout rc3 without install, readiness failures failed/3, refusals/2, other probes/0. Fix2c corrections: 459cbb90e1341f435d94299a515d8454aa2b12d0 preserves failed/3/data_complete false after a late session_failed:* even with one prior runner; 9217d60b9fb471bc62d3bdf22fe1f182e8cbaac6 and dd29144d2feb80f78f3dea480075d491a0ac3606 correct Bash 3.2 and silent validation. Added late two-model unit world; strengthened stderr assertion; corrected-head tests/late_failure_probe NOT RUN here.
+- GK2B-7: fixed 614223ceae52ef88fc8a96c73ae7d208dcf483db; independent preflight/copy limits and flags unchanged. Lead 78-test runs at 7aed47856 had only the unrelated Bash failure (three optional skips without jsonschema); timeout tests had no reported failure. Corrected-head rerun NOT RUN here.
+- GK2B-8: fixed 1df60966407e4db2f7be12308209fd6491f23f42 (thermal); enforced half fixed b259f5f04fffb822a01616303cf4088608debce6 (GK2-5), lead repro re-run at 7aed47856: hardware thermal active flagged, software false, brake advancement/legacy retained and enforced 700 W in all three; healthy NVML completeness unchanged.
+- GK2B-9: fixed 67fe51e1980801c753ee5ce048deb2304a3f37a8 (GK2-7), lead repro re-run at 7aed47856: child-environment assertions had no reported failure; round-1 measured/monitor device behavior unchanged.
+- GK2B-10: fixed 991ae09e2783a225c06f7bb6c5855a830220af86; lead repro re-run at 7aed47856: mon-gpu flags monitor_revision_unpinned; checkpoint/precision/revision-key tests had no reported failure.
+- GK2B-11: fixed 8e9c3ac375c78b3b7ba724fbf6f5821535824e44; malformed-planning guard 55fdd026f6394060985f88ea64ae40ba5c418162; lead repro re-run at 7aed47856: invented-input provenance flags, lower bound/plan unavailable, USD None; all committed configs schema_errors=0 validate=[], typo/price-row results unchanged.
+- GK2B-12: fixed 1a6b2d91f7136ad09e810ea7098e1373941e2992; GPU regression 55fdd026f6394060985f88ea64ae40ba5c418162; lead repro re-run at 7aed47856: ready-spawn/hang no surviving grandchild. Fix2c correction 8994e128a49167f260784b8d2aa4a120c1f95b70 implements amended R18: positive poll cadence, at most one grace per signal, surviving-group flag returned/recorded for every caller. Added persistent-group bound and receipt-wiring worlds; existing SIGKILL/group-gone assertions unchanged, adding required poll_s only. Corrected-head reruns NOT RUN here.
+- GK2B-13: fixed f1850a8a79c121ae4e72d83bbd401b418f29f51e (price/runbook); HF half fixed a33ff4f785206e6be8a57182f355962f721de658 (GK2-4), lead repro re-run at 7aed47856: price echo 2.49; committed configs clean. HF configs unchanged; runbook stays procedural.
+- GK2B-14: info, runbook paragraph 2b7490533cd58271d49c0c06b299f766e4491392; no code change for overlap; 30B MoE coordinates measured twice if both matrices run.
 
 Old-test changes in Round 2b: no assertion deleted/bar widened/skip added/old
 expected result changed. Both modules supply required options. Fake installation
@@ -454,4 +518,10 @@ interpreter returns validate-only JSON. planning_fixture gets dated synthetic
 sources without numerical changes. Existing readiness failure additionally
 asserts failed/session_ran_no_model under R13. New budget skip world supplies
 valid settings to reach all adapters, then asserts failure and CLI exit 3.
-No .review3 appendix edits/files materialized or committed.
+
+Fix2c changes to old tests: existing _stop_group calls supply poll_s=0.01;
+existing bootstrap layout failure additionally asserts its named flag on stderr.
+Every old assertion remains. Three new test methods cover late failure, bounded
+survival and flag propagation. No .review3 appendix edits/files materialized or
+committed. Own tests and repros remain NOT RUN; supplied lead results at 7aed47856
+replace pending labels only for that head.
