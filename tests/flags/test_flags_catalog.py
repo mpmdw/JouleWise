@@ -29,6 +29,10 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class CatalogTests(unittest.TestCase):
+    def test_b6_decode_battery_assist_is_disclose_only(self) -> None:
+        catalog = load_catalog(REPO / "configs/b6/flag_catalog_b6.json")
+        self.assertEqual(catalog.effect("bytes.decode_battery_assist"), "DISCLOSE")
+
     def test_draft_table_matches_plan_section_3_5(self) -> None:
         window = {code for code, entry in DRAFT_CODES.items() if entry["effect"] == EXCLUDE_WINDOW}
         self.assertTrue({

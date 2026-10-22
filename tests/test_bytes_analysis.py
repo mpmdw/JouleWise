@@ -225,7 +225,8 @@ class MeterWorkedExamples(NumericTestCase):
         return kp.Stream({"start_raw_ns": 0, "start_mono_ns": 0},
             {"end_raw_ns": 10_000_000_000, "end_mono_ns": 10_000_000_000},
             batches, [], samples, fit, [fit.host_ns(d) for d in samples.dev_ms],
-            samples.watts, [], [])
+            samples.watts, [i * 200_000_000 for i in range(51)],
+            [{"B0AC": 0, "B0AV": 12774} for _ in range(51)])
 
     def test_gross_own_idle_and_phase_edge_bound(self):
         result = ba.meter_decode(self.stream(), [4_000_000_000, 6_000_000_000],
@@ -253,6 +254,70 @@ class MeterWorkedExamples(NumericTestCase):
                 ba.meter_decode(stream, [4_000_000_000, 6_000_000_000], [1, 2])
         with self.assertRaises(ba.AnalysisError):
             ba.meter_decode(self.stream(), [-1, 6_000_000_000], [1, 2])
+
+
+class BatteryRulingWorkedExamples(NumericTestCase):
+    def example(self, duration_ns, n, first_ns, nonzero):
+        # Battery numbers: JouleWise-data c17fdca, bat-council-20261022/
+        # data/h_decode_extract.json. Only the required numbers are copied.
+        # Meter power is a constant test input: the director checks H's actual
+        # meter integral on the Mac; this test executes the exact battery rule.
+        inside = [first_ns + i * 200_000_000 for i in range(n)]
+        values = {t: {"B0AC": 0, "B0AV": 12774} for t in inside}
+        for t, current, voltage in nonzero:
+            index = round((t - first_ns) / 200_000_000)
+            del values[inside[index]]
+            values[t] = {"B0AC": current, "B0AV": voltage}
+        before = [-11_900_000_000 + i * 200_000_000 for i in range(60)]
+        before[1] = before[0] + 302_440_875  # H's maximum over ALL 93,533 polls.
+        for t in before + [duration_ns + 100_000_000 + i * 200_000_000 for i in range(16)]:
+            values[t] = {"B0AC": 0, "B0AV": 12774}
+        times = sorted(values)
+        stream = MeterWorkedExamples().stream()
+        stream.host_ns = [-12_000_000_000, -10_000_000_000, -5_000_000_000,
+                          0, duration_ns // 2, duration_ns, duration_ns + 4_000_000_000]
+        stream.watts = [10.0] * len(stream.host_ns)
+        stream.poll_ns, stream.smc = times, [values[t] for t in times]
+        return ba.meter_decode(stream, [0, duration_ns], [-10_000_000_000, -5_000_000_000])
+
+    def test_bat2_qwen_check_r01_seven_nonzero_polls(self):
+        result = self.example(11_017_812_967, 56, 5_151_255, [
+            (5_151_255, -37, 12773), (205_211_213, -37, 12773),
+            (405_189_838, -47, 12774), (605_216_297, -47, 12774),
+            (805_253_338, -47, 12774), (1_005_212_505, -47, 12774),
+            (1_205_201_088, -47, 12774)])
+        # BAT-2 executed evidence #3: 1e-5 J exceeds 1e6 * float noise at
+        # 6,424 J (1.4e-6 J) and six-decimal rounding (5e-7 J), and is below
+        # 1% of the smallest printed bound entry (1.1e-3 J).
+        for value in (result["battery_gross_j"], result["battery_v_start_j"],
+                      result["offset_bound_j"] - max(result["edge_powers_w"]) *
+                      (result["r_max_s"] + result["sample_interval_s"])):
+            self.assertAlmostEqual(value, .776577, delta=1e-5)
+        self.assertEqual(result["battery_n"], 56)
+        self.assertEqual(result["battery_v_end_j"], 0)
+        self.assertFalse(result["decode_battery_assist"])
+        self.assertEqual(result["battery_tau_s"], 2 + .302440875)
+        self.assertAlmostEqual(result["gross_j"] - result["meter_gross_j"], .776577, delta=1e-5)
+
+    def test_bat2_soak_r11_middle_of_decode(self):
+        result = self.example(57_436_307_192, 287, 121_732_798, [
+            (45_721_732_798, -31, 12770), (45_921_723_714, -31, 12770),
+            (46_119_268_381, -31, 12770), (46_320_625_006, -31, 12770),
+            (46_521_773_923, -31, 12770)])
+        self.assertAlmostEqual(result["battery_gross_j"], .396120, delta=1e-5)  # Same printed-value bar above.
+        self.assertEqual(result["battery_n"], 287)
+        self.assertEqual(result["battery_phase_edge_j"], 0)
+        self.assertTrue(result["decode_battery_assist"])
+
+    def test_charging_is_signed_and_idle_is_subtracted_on_its_own_basis(self):
+        stream = MeterWorkedExamples().stream()
+        stream.smc[25]["B0AC"] = 1000  # One 0.2 s poll at 12.774 W of charging.
+        stream.smc[10]["B0AC"] = -1000  # Same quantum in the own idle span.
+        result = ba.meter_decode(stream, [4_000_000_000, 6_000_000_000], [1_000_000_000, 3_000_000_000])
+        # Same-input re-derivation uses BAT-2's 1e-6 J program agreement bar.
+        self.assertAlmostEqual(result["battery_gross_j"], -12.774 * .2, delta=1e-6)
+        self.assertAlmostEqual(result["battery_secondary_j"], -2 * 12.774 * .2, delta=1e-6)
+        self.assertFalse(result["decode_battery_assist"])
 
 
 class RegisteredArithmeticTests(NumericTestCase):
@@ -717,7 +782,8 @@ class ProductionArchiveTests(NumericTestCase):
             rows.append({"run_id":str(i), "model":spec["model"], "pass_id":1, "session_id":"s",
                 "stratum":"repeat" if i<10 else "quad", "unit_id":str(i if i<10 else (i-10)//4),
                 "duration_s":2, "rails_j":10, "rails_secondary_j":-2, "rails_anchor_j":.3,
-                "meter":{"gross_j":16,"secondary_j":-4,"phase_edge_j":.7},
+                "meter":{"gross_j":16,"secondary_j":-4,"phase_edge_j":.7,
+                         "battery_gross_j":0.0,"battery_secondary_j":0.0,"battery_phase_edge_j":0.0},
                 "excluded":i in (0,10), "status":"succeeded", "flags":["thermal" if i==0 else "contention"] if i in (0,10) else [],
                 "operative":{"operative_bound_s":.05,"status":"rereduced"}})
         manifest = {"models":[spec], "sessions":[{"session_id":"s", "drift_allowance_j":dict.fromkeys(ba.BOUNDARIES,.2),
@@ -1421,7 +1487,7 @@ class Addendum7RegressionTests(NumericTestCase):
             energy = repeats[i] if i < 10 else blocks[(i - 10) // 4]
             row.update(rails_j=energy, rails_secondary_j=energy - 1)
             row["meter"].update(gross_j=2 * energy, secondary_j=2 * energy - 2)
-            row["flags"] = ["battery.assist"] if i in assist_ordinals else ["battery.assist_outside_request"]
+            row["flags"] = ["battery.assist", "bytes.decode_battery_assist"] if i in assist_ordinals else ["battery.assist_outside_request"]
         return module
 
     def test_a7_10_without_assisted_registered_example_all_cells_atomic_quad(self):
@@ -2083,6 +2149,205 @@ class Q2CommitmentCLIChainTests(unittest.TestCase):
                         "fields_not_rebuilt": record["fields_not_rebuilt"],
                         "module_digests": record["bytes_analysis_sha256"],
                         "predictions_sha256": record["predictions_sha256"]}, sort_keys=True), flush=True)
+
+
+class BatteryCampaignTests(NumericTestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.directory = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.directory.name)
+        cls.manifest = archive_campaign(cls.root, battery_assist=True, release="none")
+        cls.out = cli_stage_chain(cls.root, cls.manifest)
+        cls.records = ba.load_records(cls.root / "export", cls.manifest, stage="all")
+        cls.session = cls.manifest["sessions"][0]
+        cls.archive = Path(cls.session["archive"])
+        cls.path = cls.archive / "sources/night-custody/hazards/meter/stream-001.jsonl"
+        cls.original = cls.path.read_bytes()
+        cls.items = [json.loads(line) for line in cls.original.splitlines()]
+        cls.spec = next(m for m in cls.manifest["models"] if m["model"] == "Qwen3.5-122B-A10B-4bit")
+        cls.target = next(r for r in cls.records if r["session_id"] == cls.session["session_id"] and
+                          r["model"] == cls.spec["model"] and r["run_id"].endswith("-4"))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.directory.cleanup()
+
+    def spans(self, run_id):
+        from joulewise.b6.archive import bundle_of
+        bundle = bundle_of(self.archive, {}, run_id)
+        events = [json.loads(t) for t in (bundle / "events.jsonl").read_text().splitlines() if t.strip()]
+        metadata = ba.read_json(bundle / "metadata.json")
+        return {name: ba._event_span(events, name, metadata) for name in ("decode", "idle_baseline", "measured_run")}
+
+    def mutate(self, change):
+        items = copy.deepcopy(self.items)
+        change(items)
+        try:
+            self.path.write_text("".join(json.dumps(item) + "\n" for item in items))
+            manifest = {**self.manifest, "models": [self.spec], "sessions": [self.session]}
+            return list(ba.archive_records(self.archive, manifest, self.session, stage="all")), manifest
+        finally:
+            self.path.write_bytes(self.original)
+
+    def missing(self, phase, key):
+        a, z = self.spans(self.target["run_id"])[phase]
+        def change(items):
+            for item in items:
+                if item.get("k") == "b" and a <= item["rx"] < z:
+                    if key is None:
+                        item["smc"] = {}
+                    else:
+                        item["smc"].pop(key)
+        records, manifest = self.mutate(change)
+        target = next(r for r in records if r["run_id"] == self.target["run_id"])
+        self.assertEqual(target["status"], "succeeded")
+        self.assertIsNone(target["meter"])
+        self.assertIn("bytes.meter_decode_unavailable", target["flags"])
+        self.assertEqual(target["meter_unavailable_reason"], "battery reading missing")
+        self.assertEqual(target["rails_j"], self.target["rails_j"])
+        self.assertFalse(target.get("invalid_energy_record", False))
+        for cell in ba.reduce_models(records, manifest):
+            self.assertEqual(cell["status"], "computed")
+            self.assertEqual(cell["n_r"], 10 if cell["boundary"] == "rails" else 9)
+            self.assertEqual(cell["n_b"], 10)
+
+    def test_missing_current_in_decode_is_boundary_only_flag(self):
+        self.missing("decode", "B0AC")
+
+    def test_missing_voltage_in_decode_is_boundary_only_flag(self):
+        self.missing("decode", "B0AV")
+
+    def test_missing_current_in_idle_is_boundary_only_flag(self):
+        self.missing("idle_baseline", "B0AC")
+
+    def test_missing_voltage_in_idle_is_boundary_only_flag(self):
+        self.missing("idle_baseline", "B0AV")
+
+    def test_whole_decode_without_battery_reading_is_boundary_only_flag(self):
+        self.missing("decode", None)
+
+    def test_single_incomplete_poll_is_ignored_when_other_complete_reads_survive(self):
+        for phase, count in (("decode", "battery_n"), ("idle_baseline", "battery_n_idle")):
+            a, z = self.spans(self.target["run_id"])[phase]
+            for key in ("B0AC", "B0AV"):
+                def change(items):
+                    next(item for item in items if item.get("k") == "b" and a <= item["rx"] < z)["smc"].pop(key)
+                records, _ = self.mutate(change)
+                target = next(r for r in records if r["run_id"] == self.target["run_id"])
+                self.assertIsNotNone(target["meter"])
+                self.assertEqual(target["meter"][count], self.target["meter"][count] - 1)
+                self.assertNotIn("bytes.meter_decode_unavailable", target["flags"])
+
+    def test_current_marker_survives_missing_voltage_for_rails_description(self):
+        a, z = self.spans(self.target["run_id"])["decode"]
+        def change(items):
+            for item in items:
+                if item.get("k") == "b" and a <= item["rx"] < z:
+                    item["smc"].pop("B0AV")
+                    if item["rx"] >= (a + z) // 2:
+                        item["smc"]["B0AC"] = -1000
+        records, _ = self.mutate(change)
+        target = next(r for r in records if r["run_id"] == self.target["run_id"])
+        self.assertIsNone(target["meter"])
+        self.assertIn("bytes.meter_decode_unavailable", target["flags"])
+        self.assertIn("bytes.decode_battery_assist", target["flags"])
+
+    def test_charging_read_survives_archive_join_with_signed_energy(self):
+        a, z = self.spans(self.target["run_id"])["decode"]
+        def change(items):
+            next(item for item in items if item.get("k") == "b" and item["rx"] >= (a + z) // 2)["smc"]["B0AC"] = 1000
+        records, _ = self.mutate(change)
+        target = next(r for r in records if r["run_id"] == self.target["run_id"])
+        meter = target["meter"]
+        # BAT-2's same-input program agreement bar is 1e-6 J.
+        self.assertAlmostEqual(meter["battery_gross_j"], -12.774 * (z-a) / 1e9 / meter["battery_n"], delta=1e-6)
+        self.assertLess(meter["gross_j"], self.target["meter"]["gross_j"])
+        self.assertNotIn("bytes.decode_battery_assist", target["flags"])
+        self.assertNotIn("bytes.meter_decode_unavailable", target["flags"])
+
+    def test_out_of_receive_order_batches_match_ordered_terms_and_flags(self):
+        def change(items):
+            batches = [i for i in items if i.get("k") == "b"]
+            items[:] = [items[0], *reversed(batches), items[-1]]
+        records, _ = self.mutate(change)
+        for record in records:
+            expected = next(r for r in self.records if r["run_id"] == record["run_id"] and
+                            r["session_id"] == record["session_id"])
+            self.assertEqual(record["flags"], expected["flags"])
+            self.assertEqual(record["meter"]["battery_n"], expected["meter"]["battery_n"])
+            for key in ("gross_j", "secondary_j", "battery_gross_j", "battery_phase_edge_j", "offset_bound_j"):
+                self.assertAlmostEqual(record["meter"][key], expected["meter"][key], delta=1e-6)
+
+    def test_global_poll_gap_including_empty_poll_outside_selected_spans_sets_tau(self):
+        items = copy.deepcopy(self.items)
+        first = next(item for item in items if item.get("k") == "b")
+        # Inject a three-poll stall (3 * production's 0.2 s) before any
+        # selected span. No meter payload, no SMC pair: it still sets delta-t_p.
+        rx = first["rx"] - 3 * 200_000_000
+        items.insert(1, {"k": "b", "tx": rx, "rx": rx, "n": 0, "p": "", "smc": {}})
+        spans = self.spans(self.target["run_id"])
+        try:
+            self.path.write_text("".join(json.dumps(item) + "\n" for item in items))
+            stream = ba._filtered_stream(self.path, [spans["decode"], spans["idle_baseline"]])
+            result = ba.meter_decode(stream, spans["decode"], spans["idle_baseline"])
+        finally:
+            self.path.write_bytes(self.original)
+        self.assertIn(rx, stream.poll_ns)  # Exact integer receive time is retained.
+        self.assertEqual(result["battery_tau_s"], 2 * 1.0 + .6)  # Identical input arithmetic.
+
+    def test_neg8_request_battery_correction_reaches_dc_and_rest_references(self):
+        span = self.spans("neg8-start-0")["measured_run"]
+        def change(items):
+            next(item for item in items if item.get("k") == "b" and
+                 span[0] <= item["rx"] < span[1])["smc"]["B0AC"] = -1000
+        records, _ = self.mutate(change)
+        actual = next(r for r in records[0]["neg8_inputs"]["references"] if r["run_id"] == "neg8-start-0")
+        old = next(r for r in self.target["neg8_inputs"]["references"] if r["run_id"] == "neg8-start-0")
+        stream = kp.parse(self.path)
+        times, watts = stream.battery_watts()
+        _, n = kp.integrate(times, watts, *span)
+        battery = 12.774 * (span[1] - span[0]) / 1e9 / n
+        self.assertEqual(actual["rails"], old["rails"])
+        for boundary in ("DC input", "rest"):
+            for basis in ("gross", "idle_subtracted"):
+                self.assertAlmostEqual(actual[boundary][basis] - old[boundary][basis], battery, delta=1e-6)
+
+    def test_large_model_assist_cli_chain_all_four_placements_and_counts(self):
+        cells = ba.read_json(self.root / "stage1/fit_pass_estimates.json") + ba.read_json(self.out / "heldout_pass_estimates.json")
+        evidence = []
+        for session in self.manifest["sessions"]:
+            stream = kp.parse(Path(session["archive"]) / "sources/night-custody/hazards/meter/stream-001.jsonl")
+            times, watts = stream.battery_watts()
+            for episode in session["synthetic_battery_episodes"]:
+                record = next(r for r in self.records if r["run_id"] == episode["run_id"] and r["session_id"] == session["session_id"])
+                meter, placement = record["meter"], episode["placement"]
+                burst, _ = kp.integrate(times, watts, *episode["span_ns"])
+                self.assertGreaterEqual(burst, 1.0)  # BAT-2 §12's approximately 1 J attribution limit.
+                expected_marker = placement in ("inside_decode", "across_end")
+                self.assertEqual("bytes.decode_battery_assist" in record["flags"], expected_marker)
+                if placement == "prefill_only":
+                    self.assertEqual(meter["battery_gross_j"], 0)
+                    self.assertEqual(meter["battery_phase_edge_j"], 0)
+                elif placement == "across_start":
+                    self.assertLessEqual(abs(meter["battery_gross_j"]), meter["battery_phase_edge_j"])
+                else:
+                    self.assertGreater(meter["battery_gross_j"], 0)
+                evidence.append({"pass": session["pass_id"], "model": record["model"], "placement": placement,
+                    "burst_j": burst, "battery_j": meter["battery_gross_j"], "v_j": meter["battery_phase_edge_j"],
+                    "marker": expected_marker})
+                for cell in [c for c in cells if c["model"] == record["model"] and c["session_id"] == record["session_id"]]:
+                    self.assertEqual(cell["decode_assisted_member_counts"], {"repeat": 2, "quad": 0})
+                    self.assertEqual(cell["harvest_assisted_member_counts"], {"repeat": 4, "quad": 0})
+                    self.assertEqual((cell["without_assisted"]["n_r"], cell["without_assisted"]["n_b"]), (8, 10))
+                    if cell["boundary"] != "rails":
+                        self.assertEqual(cell["boundary_description"], ba.DC_BOUNDARY_DESCRIPTION)
+                        self.assertGreater(cell["battery_term_mean_j"], 0)
+                        self.assertEqual(cell["battery_nonzero_run_count"], 3)
+                        # The burst must also clear the actual cell's ruled
+                        # 1% of (h+B) agreement bar, not merely float noise.
+                        self.assertGreater(burst, .01 * (cell["h_j"] + cell["B_j"]))
+        self.assertEqual(len(evidence), 24)
+        print("BAT3_SYNTHETIC=" + json.dumps(evidence, sort_keys=True), flush=True)
 
 
 if __name__ == "__main__":

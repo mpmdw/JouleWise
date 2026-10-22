@@ -17,7 +17,7 @@ def _write_json(path, value):
 def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release="all",
                      pass_duration_scales=(1.0, 2.0), clock_latency_ms=(-8.0, 3.0), sample_phase_ms=50,
                      edge_phase=True, min_receive_latency_ms=10.0,
-                     subpack_sessions=False, uncollected_sessions=()):
+                     subpack_sessions=False, uncollected_sessions=(), battery_assist=False):
     """1000 on-disk runs: real mock trace reducer -> harvest layout -> B6 export.
 
     No calibration hardware is claimed: the zero phase envelope is explicitly
@@ -86,7 +86,7 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
             continue
         archive = root / session_id
         bundles = archive / "sources/claim-runs"
-        roster, evidence_members, meter_samples = [], [], []
+        roster, evidence_members, meter_samples, battery_episodes = [], [], [], []
         # Native 10 Hz meter, with optional unequal passes and signed clock-fit excess latency.
         tick = 1000
         meter_samples.extend([(.2, tick - 2), (.2, tick - 1)])
@@ -123,6 +123,14 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                 power = energy / duration
                 start = tick / 10 + (phase_rng.random() * .1 if edge_phase and not ref else 0)
                 decode_start, end = start + 2, start + 2 + duration
+                if battery_assist and not ref and model["model"] in design["battery_assist"]["models"] and ordinal < 4:
+                    placement = design["battery_assist"]["episodes"][ordinal]
+                    a, z = {"inside_decode": (decode_start + duration / 2 - .5, decode_start + duration / 2 + .5),
+                            "across_start": (decode_start - .5, decode_start + .5),
+                            "across_end": (end - .5, end + .5),
+                            "prefill_only": (decode_start - .9, decode_start - .1)}[placement]
+                    battery_episodes.append({"run_id": run_id, "placement": placement,
+                        "span_ns": [round(a * 1e9), round(z * 1e9)]})
                 config = load_config(run_id=run_id, model={"name": model["model"], "family": "mock",
                     "weight_format": "mock", "context_window": 4096}, workload_profile={"name": "bytes-synthetic",
                     "prompt_tokens": 2048, "output_tokens": 512, "repetitions": 1, "warmup_runs": 1})
@@ -184,32 +192,43 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                     # The meter samples the true waveform at its own instants (tick + phase); edges are off-grid.
                     meter_samples.extend((meter_power if decode_start <= t / 10 + sample_phase_ms / 1000 < end else baseline, t)
                                          for t in range(tick, end_tick + 2))
-                tick = end_tick + 2
+                # Leave the whole post-decode reporting window before the next
+                # run's own idle, so an end burst does not charge its baseline.
+                if battery_assist:
+                    meter_samples.extend((.2, t) for t in range(end_tick + 2, end_tick + 40))
+                tick = end_tick + (40 if battery_assist else 2)
         header = {"k": "h", "status": "streaming", "rate_idx": 1, "start_raw_ns": 0, "start_mono_ns": 0}
         batches = []
-        for i in range(0, len(meter_samples), 10):
-            part = meter_samples[i:i + 10]
+        batch_size = 2 if battery_assist else 10  # 10 Hz samples; assisted polls match production's 5 Hz.
+        for i in range(0, len(meter_samples), batch_size):
+            part = meter_samples[i:i + batch_size]
             payload = b"".join(kp.SAMPLE.pack((t * 100 + sample_phase_ms) % kp.WRAP, 0, 1_000_000,
                 round(w * 1e6), 0, 0, 0, 0) for w, t in part)
             stamp = part[-1][1] * 100_000_000 + sample_phase_ms * 1_000_000
             # One rare early receive and recurring late receives give the native
             # envelope fit both signs, with the negative extreme dominant.
             latency = 0 if clock_latency_ms is None else (clock_latency_ms[0]
-                if i // 10 == (len(meter_samples) + 9) // 20 else clock_latency_ms[1] if i // 10 % 7 == 3 else 0)
+                if i // batch_size == (len(meter_samples) + batch_size - 1) // (2 * batch_size)
+                else clock_latency_ms[1] if i // batch_size % 7 == 3 else 0)
             rx = stamp + round((latency + min_receive_latency_ms) * 1e6)
+            smc = {"B0AC": 0, "B0AV": 12774}
+            if any(e["span_ns"][0] <= rx < e["span_ns"][1] for e in battery_episodes):
+                smc.update(B0AC=design["battery_assist"]["current_ma"], B0AV=design["battery_assist"]["voltage_mv"])
             batches.append({"k": "b", "tx": rx, "rx": rx, "n": len(part), "p": payload.hex(),
-                            "smc": {"B0AC": 0, "B0AV": 12774}})
+                            "smc": smc})
         stream = archive / "sources/night-custody/hazards/meter/stream-001.jsonl"
         stream.parent.mkdir(parents=True)
         trailer = {"k": "t", "end_raw_ns": tick * 100_000_000, "end_mono_ns": tick * 100_000_000}
         stream.write_text("".join(json.dumps(item) + "\n" for item in (header, *batches, trailer)))
         _write_json(archive / "derived/roster.json", {"pack_id": pack_id, "attempt": 1, "members": roster})
+        harvest_assist = [{"code": "battery.assist", "effect": "DISCLOSE", "scope": {"run_id": e["run_id"]}}
+                         for e in battery_episodes]
         acceptance = {"pack_id": pack_id, "session_id": session_id, "verdict": "PASS", "counting": True,
-                      "excluding": [], "flag_counts": {}, "emitted_flags": [],
+                      "excluding": [], "flag_counts": {}, "emitted_flags": harvest_assist,
                       "calibration": calibration.evaluate(calibration.Capture(Decimal(".040"), "valid"),
                           calibration.Capture(Decimal(".030"), "valid"), document(), [], [session_id], False)}
         _write_json(archive / "derived/b6-acceptance.json", acceptance)
-        (archive / "derived/flags.jsonl").write_text("")
+        (archive / "derived/flags.jsonl").write_text("".join(json.dumps(f) + "\n" for f in harvest_assist))
         evidence = SimpleNamespace(stages=[SimpleNamespace(members=evidence_members)], runtime={}, session_id=session_id)
         export_runs.export(archive, {}, root / "registration", root / "private-keys", root / "export", non_claim=non_claim,
                            evidence=evidence, acceptance_record=acceptance,
@@ -220,6 +239,8 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
             # Deliberately false legacy values: the consumer must ignore these.
             "drift_allowance_j": dict.fromkeys(ba.BOUNDARIES, 999),
             "drift_reference": {"energy_j": dict.fromkeys(ba.BOUNDARIES, 999), "duration_s": 999, "test7_passed": True}})
+        if battery_assist:
+            manifest["sessions"][-1]["synthetic_battery_episodes"] = battery_episodes
     # Synthetic non-claim exports have identity keys, yet still require explicit
     # release files. Claim-shaped exports use the native exporter's random keys.
     if non_claim:

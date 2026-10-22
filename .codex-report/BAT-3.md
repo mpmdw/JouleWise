@@ -2,6 +2,9 @@
 
 ## PROGRESS
 
+- **Implementation checkpoint:** signed battery energy on both bases; v_start/v_end and stream-wide tau; u + v and NR1 max-edge addition; current-based decode marker, including rails disclosure when voltage is missing; per-run and per-cell battery columns; both assist counts; optional assisted campaign and worked/fault/real-CLI tests are written. Registration §8 placements and contract text are updated. All are unexecuted pending the interpreter-path answer.
+- **Generators pending:** builder source contains the new disclose-only code; the catalog, BYTES registration/plan-tree regeneration and registration SHA line have not yet been updated. Run the real generators, do not hand-generate them. No unrelated pack was changed.
+- **Static check:** git diff --check passes. No Python execution is claimed. CI is being opened on the implementation checkpoint so compilation and independent suite feedback can proceed while local execution remains blocked by the exact interpreter-path requirement.
 - **RECOVERED:** workspace became running/connected after the initial report checkpoint. Local checkout now follows this lane; BY-INT still equals the required base. Fetch and seat setup ran. The remaining sections below describe the initial checkpoint and will be replaced with executed build evidence before completion.
 - **Done now:** filtered stream retains every poll's rx/SMC and processes sampled batches in rx order; fixture polls now carry B0AV = 12774 mV as well as B0AC = 0. Exact-base worktree and packet export are preserved under /tmp/bat3-base and /tmp/bat3-packet.
 - **Next now:** signed battery integration, u + v and C_j, decode marker and disclosures; registration/catalog; worked/fault/CLI tests and exact no-assist comparison.
