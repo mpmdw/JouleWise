@@ -1,0 +1,310 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mpmdw/JouleWise/blob/lane/2026-10-21-align-gpukit/joulewise/align/gpukit/matrix.schema.json",
+  "title": "JouleWise gpukit matrix v1",
+  "description": "Runner not present on spine; lane-local format. matrix.validate adds cross-field count checks. All rates and times are operator parameters, not hardware claims.",
+  "type": "object",
+  "required": [
+    "schema",
+    "name",
+    "kind",
+    "models",
+    "tasks",
+    "conditions",
+    "seeds",
+    "episode_count",
+    "measured_episode_count",
+    "monitor_call_count",
+    "monitor_model",
+    "monitor_visibilities",
+    "sampling",
+    "workload",
+    "gpu_classes",
+    "planning_wall_seconds",
+    "flags",
+    "sources",
+    "example_prices"
+  ],
+  "properties": {
+    "schema": {
+      "const": "joulewise.align.gpukit.matrix.v1"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "enum": [
+        "shade",
+        "moe_stage_a",
+        "budget"
+      ]
+    },
+    "models": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "attention",
+          "revision"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "attention": {
+            "type": "string"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{40}$"
+          }
+        }
+      }
+    },
+    "tasks": {
+      "$ref": "#/$defs/strings"
+    },
+    "conditions": {
+      "$ref": "#/$defs/strings"
+    },
+    "seeds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "integer"
+      }
+    },
+    "episode_count": {
+      "$ref": "#/$defs/count"
+    },
+    "measured_episode_count": {
+      "$ref": "#/$defs/count"
+    },
+    "monitor_call_count": {
+      "$ref": "#/$defs/count"
+    },
+    "episode_count_meaning": {
+      "type": "string"
+    },
+    "monitor_model": {
+      "type": "string"
+    },
+    "monitor_visibilities": {
+      "$ref": "#/$defs/strings"
+    },
+    "sampling": {
+      "type": "object",
+      "required": [
+        "interval_ns",
+        "source"
+      ],
+      "properties": {
+        "interval_ns": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "required": [
+        "prefill_tokens",
+        "decode_tokens",
+        "tool_wait_s",
+        "host_overhead_s",
+        "monitor_prefill_tokens",
+        "monitor_decode_tokens",
+        "source"
+      ],
+      "properties": {
+        "prefill_tokens": {
+          "$ref": "#/$defs/nonnegative"
+        },
+        "decode_tokens": {
+          "$ref": "#/$defs/nonnegative"
+        },
+        "tool_wait_s": {
+          "$ref": "#/$defs/nonnegative"
+        },
+        "host_overhead_s": {
+          "$ref": "#/$defs/nonnegative"
+        },
+        "monitor_prefill_tokens": {
+          "$ref": "#/$defs/nonnegative"
+        },
+        "monitor_decode_tokens": {
+          "$ref": "#/$defs/nonnegative"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shape": {
+          "type": "string"
+        }
+      }
+    },
+    "gpu_classes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "gpu_count",
+          "setup_s",
+          "model_load_s",
+          "router_overhead_fraction",
+          "source",
+          "throughput"
+        ],
+        "properties": {
+          "gpu_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "setup_s": {
+            "$ref": "#/$defs/nonnegative"
+          },
+          "model_load_s": {
+            "$ref": "#/$defs/nonnegative"
+          },
+          "router_overhead_fraction": {
+            "$ref": "#/$defs/nonnegative"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "throughput": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "prefill_tps",
+                "decode_tps",
+                "source"
+              ],
+              "properties": {
+                "prefill_tps": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "decode_tps": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "source": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "planning_wall_seconds": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/nonnegative"
+      }
+    },
+    "flags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sources": {
+      "type": "object"
+    },
+    "example_prices": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "budget": {
+      "type": "object",
+      "required": [
+        "fractions",
+        "calibration_repetitions",
+        "paired_generations",
+        "live_conditions",
+        "source",
+        "item_source"
+      ],
+      "properties": {
+        "fractions": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "calibration_repetitions": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "paired_generations": {
+          "const": 2
+        },
+        "live_conditions": {
+          "$ref": "#/$defs/strings"
+        },
+        "source": {
+          "type": "string"
+        },
+        "item_source": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "budget"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "budget"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "nonnegative": {
+      "type": "number",
+      "minimum": 0
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "strings": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

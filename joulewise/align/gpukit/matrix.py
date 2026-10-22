@@ -87,6 +87,20 @@ def validate(matrix: Mapping[str, Any]) -> tuple[str, ...]:
                 flags.append("matrix_live_conditions_duplicate")
             if spec["paired_generations"] != 2:
                 flags.append("matrix_paired_generation_contract_mismatch")
+        item_seeds = len(matrix["tasks"]) * len(matrix["seeds"])
+        if matrix["kind"] == "budget":
+            spec = matrix["budget"]
+            measured = len(matrix["models"]) * (
+                len(matrix["tasks"]) * spec["calibration_repetitions"]
+                + item_seeds * len(spec["live_conditions"]) * spec["paired_generations"])
+            monitor_calls = count
+        else:
+            measured = count
+            monitor_calls = count * len(matrix["monitor_visibilities"])
+        if matrix.get("measured_episode_count") != measured:
+            flags.append("matrix_measured_episode_count_mismatch")
+        if matrix.get("monitor_call_count") != monitor_calls:
+            flags.append("matrix_monitor_call_count_mismatch")
     except (KeyError, TypeError, ValueError, OverflowError):
         flags.append("matrix_required_field_invalid")
     return tuple(sorted(set(flags)))
