@@ -281,8 +281,8 @@ The lead's round-2 record-path world assumes an 8B vLLM agent on a whole H100:
 coefficients are (2, .0008, .25, 2.5e-6, 1.5e-7), extra turn sd 3 J, turn
 measurement sd sqrt(.4^2+(.02*mean_energy)^2) J, and independent episode sd 2 J.
 These are scale assumptions, not measurements. Twelve pairs with 50 episodes
-each give m=600 calibration episodes; 20 other pairs with 100 each give
-n=2000 evaluation episodes, at conventional alpha=.05 and power=.8.
+each give m=600 calibration episodes; 20 pairs with 100 each give
+n=2000 independently generated evaluation episodes, at conventional alpha=.05 and power=.8.
 
 Suppose each tool call contributes A+B*wait+N(0,C^2) joules to the episode
 total but this energy is omitted from its owner's turn attribution. The lead

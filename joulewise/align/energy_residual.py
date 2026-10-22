@@ -586,7 +586,8 @@ def min_detectable_hidden_decode_tokens(
         return _Number(math.nan, flags)
     if f"unidentified_column:{_NAMES[2]}" in _flags(model):
         return _Number(math.nan, flags + ["hidden_decode_energy_unidentified"])
-    if "invalid_token_count" in flags or "nonfinite_input" in flags:
+    row_flags = _row_flags(logged_rows, use_energy=False)
+    if "invalid_token_count" in row_flags or "nonfinite_input" in row_flags:
         return _Number(math.nan, flags)
     context = math.fsum(_token_count(row.context_tokens) for row in logged_rows) / len(logged_rows)
     per_token = model.coef[2] + model.coef[3] * context
@@ -639,7 +640,8 @@ def calibrated_min_detectable_hidden_decode_tokens(
         return _Number(math.nan, flags)
     if f"unidentified_column:{_NAMES[2]}" in _flags(model):
         return _Number(math.nan, flags + ["hidden_decode_energy_unidentified"])
-    if "invalid_token_count" in flags or "nonfinite_input" in flags:
+    row_flags = _row_flags(logged_rows, use_energy=False)
+    if "invalid_token_count" in row_flags or "nonfinite_input" in row_flags:
         return _Number(math.nan, flags)
     context = math.fsum(_token_count(row.context_tokens) for row in logged_rows) / len(logged_rows)
     per_token = model.coef[2] + model.coef[3] * context

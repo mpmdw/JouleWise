@@ -133,6 +133,17 @@ class TestEnergyResidualExclusions(unittest.TestCase):
         threshold = grouped_benign_threshold(bench, alpha=.05)
         self.assertTrue(math.isfinite(threshold))
         self.assertIn("excluded_turn_rows=1", threshold.flags)
+        # A fit's recorded exclusion flags are provenance, not invalid scored
+        # counts. Valid normalized logged work must retain usable power values.
+        scored_rows = self.bench[key][0]
+        normal = min_detectable_hidden_decode_tokens(
+            model, scored_rows, alpha=.05, power=.8, measured_half_width_j=h)
+        calibrated = calibrated_min_detectable_hidden_decode_tokens(
+            model, scored_rows, threshold=threshold, power=.8, measured_half_width_j=h)
+        self.assertTrue(math.isfinite(normal))
+        self.assertTrue(math.isfinite(calibrated))
+        self.assertIn("nonfinite_input", normal.flags)
+        self.assertIn("nonfinite_input", calibrated.flags)
 
     def test_empty_episode_does_not_change_threshold(self):
         bench = dict(self.bench)
