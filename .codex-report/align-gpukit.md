@@ -2,42 +2,53 @@
 
 ## SUMMARY
 
-Built a stdlib-only, build-only whole-GPU campaign planning and session kit.
-Added SHADE (60 episodes), MoE Stage A (30 episodes), and budget (4,224 trial rows / 5,760 fresh generations) matrices.
-Added explicit throughput/overhead parameters and GPU-hour costing with no embedded prices.
-Added Ubuntu bootstrap with a vLLM 0.10.2 pin, NVML preflight invocation, endpoint lifecycle and runner-command adapter.
-Added shared-record output checks, SHA-256 manifests, archives, and rsync/S3/local copy-back.
-Added 12 offline shell/session, cost and schema tests plus an internal approval/recovery runbook.
-Shared PIPELINE.md, records.py and interfaces.py are unchanged; no hardware, rental or paid API was used.
-Implementation is pushed, but verification is blocked by unavailable cloud execution and the existing shard-discovery census mismatch.
+Continued the pushed gpukit lane from b8dbd1f3de61610221b80c4f02fafbd4f80ec039.
+Fixed temporary runner imports in the test fixture and strengthened the nonempty MoE/router checks.
+Made --skip-install reuse the existing session venv and its vLLM executable.
+Replaced invented rates with dated NVIDIA/Hugging Face inputs and derived single-stream BF16 ceilings.
+Added wall-time/GPU-hour/cost lower bounds; planning estimates stay null without sourced efficiency.
+Added a provisional per-model adapter to the runner lane's documented CLI; budget retains its custom driver.
+The lane now contains 17 authored offline tests, source-aware validation and an updated internal runbook.
+No shell or Python execution was available; no final-head test pass or hardware result is claimed.
+All writes stay in the lane allowlist; PR #521 remains draft and no hardware was rented.
 
 ## FILES
 
-- joulewise/align/gpukit/__init__.py: package purpose; no eager optional dependencies.
-- joulewise/align/gpukit/matrix.py: matrix expansion, stdlib validation and recorded format flags.
-- joulewise/align/gpukit/matrix.schema.json: local JSON Schema because the runner format is absent from the spine.
-- joulewise/align/gpukit/cost.py: fresh-generation/monitor counts, serial wall time, billed GPU-hours and supplied-price costing.
-- joulewise/align/gpukit/session.py: isolation inventory, preflight, endpoint lifecycle, runner argv adapter, output checks, receipts, archive integrity and copy-back.
-- joulewise/align/gpukit/bootstrap.sh: executable Ubuntu/Python-venv install/session wrapper with pinned vLLM.
-- configs/align/shade.json: five public pairs, two conditions, two models, three seeds; 60 episodes and 180 monitor calls.
-- configs/align/moe_stage_a.json: corresponding MoE subset with router-capture request; 30 episodes and 90 monitor calls.
-- configs/align/budget.json: four models, 32 explicit item slots, 11 conditions, three seeds; calibration/pair/deletion accounting.
-- tests/align/test_gpukit.py: 12 authored tests, including the full shell/session fixture; optional jsonschema test skips if absent.
-- docs/align/gpukit.md: internal setup, estimate derivation, approvals, integration contract, recovery and verification runbook.
+- joulewise/align/gpukit/__init__.py: existing package purpose, no eager heavy imports.
+- joulewise/align/gpukit/bootstrap.sh: pinned vLLM/repo install; existing-venv interpreter and PATH selection on repeat sessions.
+- joulewise/align/gpukit/session.py: whole-GPU check, module-name NVML preflight, endpoint/runner lifecycle, output flags, receipts, manifest/archive and copy-back; default runner CLI/settings integration.
+- joulewise/align/gpukit/matrix.py: v2 matrix validation and row expansion; dated-source and efficiency checks.
+- joulewise/align/gpukit/matrix.schema.json: v2 local format with physical source values, nullable efficiencies and nullable planning times.
+- joulewise/align/gpukit/throughput.py: single-stream BF16 ceilings and two-significant-digit presentation.
+- joulewise/align/gpukit/cost.py: fresh-generation/monitor accounting, physical work lower bounds, conditional planning and supplied-price costs.
+- joulewise/align/gpukit/runner_adapter.py: provisional per-model translation, required factory names and run limits, budget dependency flags.
+- configs/align/shade.json: five public task pairs, two conditions, two models, three seeds; 60 requested/fresh episodes and 180 monitor calls.
+- configs/align/moe_stage_a.json: corresponding MoE repeat; 30 requested/fresh episodes and 90 monitor calls.
+- configs/align/budget.json: four models, 32 item slots, 11 conditions and three seeds; 4,224 trial rows, 5,760 fresh generation episodes and 4,224 monitor calls.
+- tests/align/test_gpukit.py: 17 authored unittest methods; source/hand arithmetic, shell repeat-session path, realistic Episode output, nonempty missing-router case, adapter keys and failure receipts.
+- docs/align/gpukit.md: source derivations, approval inputs, default/custom runner usage, repeat-session interpreter behavior, packaging and recovery.
 - .codex-report/align-gpukit.md: this report.
-- Registry exceptions used so far: none. No out-of-scope file has been changed.
+- Registry exceptions: none. tests/test_shard_tests.py and all other out-of-scope paths are unchanged.
+- docs/align/PIPELINE.md, joulewise/align/records.py and joulewise/align/interfaces.py are unchanged.
 
 ## PUBLIC API
+
+All Python modules below are under joulewise.align.gpukit.
 
 - matrix.Run(model: str, task_pair: str, condition: str, seed: int)
 - matrix.expand(matrix: Mapping[str, Any]) -> tuple[Run, ...]
 - matrix.validate(matrix: Mapping[str, Any]) -> tuple[str, ...]
 - matrix.load_matrix(path: Path) -> tuple[dict[str, Any], tuple[str, ...]]
-- cost.Estimate(gpu_class, trial_rows, measured_episodes, monitor_calls, wall_seconds, gpu_hours, usd_per_gpu_hour, total_usd, flags)
+- throughput.ceilings(matrix: Mapping[str, Any], gpu_class: str, model: str) -> tuple[float, float] | None
+- throughput.display_number(value: float | None, *, lower_bound: bool = False) -> float | None
+- cost.Estimate(gpu_class, trial_rows, measured_episodes, monitor_calls, lower_bound_wall_seconds, lower_bound_gpu_hours, lower_bound_total_usd, wall_seconds, gpu_hours, usd_per_gpu_hour, total_usd, flags)
 - cost.work_counts(matrix: Mapping[str, Any]) -> dict[str, tuple[int, int]]
 - cost.estimate(matrix: Mapping[str, Any], gpu_class: str, *, usd_per_gpu_hour: float | None = None) -> Estimate
+- cost.printable(result: Estimate) -> dict[str, Any]
 - cost.main(argv: list[str] | None = None) -> int
-- session.SessionOptions(matrix, output, runner_command, ready_timeout_s, poll_s, command_timeout_s, preflight_command=(), ready_command=(), vllm_command=("vllm",), gpu_index=0, port=8000, destination=None, copy_kind="rsync")
+- runner_adapter.runner_matrix(matrix: Mapping[str, Any], *, model: str, endpoint: str, output_dir: Path, settings: Mapping[str, Any]) -> tuple[dict[str, Any], tuple[str, ...]]
+- runner_adapter.write_runner_matrix(path: Path, matrix: Mapping[str, Any], *, model: str, endpoint: str, output_dir: Path, settings: Mapping[str, Any]) -> tuple[str, ...]
+- session.SessionOptions(matrix, output, runner_command, ready_timeout_s, poll_s, command_timeout_s, preflight_command=(), ready_command=(), vllm_command=("vllm",), gpu_index=0, port=8000, destination=None, copy_kind="rsync", runner_settings=None)
 - session.whole_gpu(*, gpu_index: int, timeout_s: float) -> dict[str, Any]
 - session.wait_ready(process: subprocess.Popen, endpoint: str, *, timeout_s: float, poll_s: float, ready_command: Sequence[str], log: Path, probe: Callable[[str, float], bool] = _healthy) -> tuple[str, ...]
 - session.package_results(directory: Path) -> tuple[Path, Path]
@@ -46,126 +57,170 @@ Implementation is pushed, but verification is blocked by unavailable cloud execu
 - session.run_session(options: SessionOptions, *, probe: Callable[[str, float], bool] = _healthy) -> dict[str, Any]
 - session.main(argv: list[str] | None = None) -> int
 
+CLI default runner: <session-python> -m joulewise.align run --matrix {runner_matrix}.
+CLI adds --runner-settings PATH; custom --runner-command JSON_ARGV remains supported.
+For Python callers, runner_command=() chooses the default with supplied runner_settings.
+
 ## TESTS RUN
 
-Local execution: none. Repeated exec_command requests for pwd failed with
-"No usable execution environment is available." The selected managed runtime
-remains pending/starting with connectivity offline. It has no retained
-diagnostic records. No shell checkout, local test, pip installation or local
-Git mutation could run; connected GitHub tools were used for all branch writes.
+This continuation seat executed no shell commands, Python tests, installs or hardware work.
+The initial and later exec_command attempts with command text:
 
-Requested commands still awaiting an executable environment:
+    pwd
+    python3 --version
 
-- python3 -m unittest tests.align.test_gpukit -v
-- python3 -m unittest discover -s tests/align -t .
-- python3 -m unittest discover -s tests
-- python3 scripts/fixture_orphan_census.py --fail-on-orphans
+both failed before process launch: "No usable execution environment is available."
+The cloud-environment runtime skill/status reported observed phase pending and
+connectivity offline. Connected GitHub tools performed all commits and fast-forward
+branch updates. Public web documentation was read for citations; tests make no network calls.
 
-Remote fallback: draft PR https://github.com/mpmdw/JouleWise/pull/521 against
-lane/2026-10-21-align-spine, never merged.
+Current-head requested runs (not executed; counts and skips are unavailable):
 
-CI run 39703500845 at implementation head 9507a4bb091557014cba3f00292910ea4194b563:
+| Environment | Exact requested command from repo root | Outcome |
+|---|---|---|
+| Uninstalled source, no external PYTHONPATH | python3 -m unittest tests.align.test_gpukit -v | NOT RUN: no executor |
+| Uninstalled source, no external PYTHONPATH | python3 -m unittest discover -s tests/align -t . | NOT RUN: no executor |
+| Throwaway venv with jsonschema, uninstalled repo, no external PYTHONPATH | python3 -m unittest tests.align.test_gpukit -v | NOT RUN: no executor |
+| Same extra-dependency venv | python3 -m unittest discover -s tests/align -t . | NOT RUN: no executor |
 
-- python -m build: PASS (wheel and sdist); no unit-test count.
-- Installed-wheel smoke: PASS; no unit-test count.
-- Repository fences (state, pins, docs, receipts, CLI/mock smokes): PASS.
-- python3 scripts/quick_suite.py --tier quick --workers 4:
-  212 modules selected, 176 excluded, one module failure; run canceled on the next push.
-  The recorded failed module was tests.test_shard_tests, 4 tests, 1 failure,
-  0 errors, 0 skips. Its discovery census compares tests.align.test_records
-  and tests.align.test_gpukit with align.test_records and align.test_gpukit.
-  This includes the pre-existing spine records test, not only the new test.
-- Full-suite jobs were canceled without executing because the quick prerequisite
-  did not pass. The gpukit tests were not selected by the quick tier's unknown-weight policy.
+No pip install was possible. The optional test still uses skipUnless(find_spec("jsonschema"),
+"optional jsonschema is not installed"); this is its defined skip reason, not an observed skip.
+There are 17 test methods by source inspection; this is not a test-run count.
+The repository-wide command python3 -m unittest discover -s tests also could not execute.
+No passing current-head CI result is claimed or awaited.
 
-CI run 39703855656 at implementation head 11e36a8dfde4075d68d3c0eafa5dc2b9d82ff783:
-build, installed-wheel and repository fences PASS; quick tier still pending at
-this report checkpoint. The same census failure is expected until its helper is fixed.
+Director evidence supplied in the continuation brief, on the OLD b8dbd1f head,
+macOS/Python 3.13.1 (not executed by this seat):
 
-Final lane delta after those CI starts: readiness command timeout uses the remaining
-load budget rather than the polling cadence, and tests check data_complete.
-This delta has not executed. No green final-head test claim is made.
+- python3 -m unittest tests.align.test_gpukit -v: Ran 12; FAILED (failures=2, skipped=1).
+  Skip reason: optional jsonschema is not installed. Both failures came from the
+  temporary runner's ModuleNotFoundError: No module named 'joulewise'.
+- With PYTHONPATH=<repo root>, python3 -m unittest discover -s tests/align -t .:
+  Ran 16; OK (skipped=1). This proves the reported baseline fixture import cause,
+  not the correctness of this continuation's new cost or runner changes.
 
-The separate gate-ledger workflow correctly fails: independent review, merged-tree
-suite, final CI and cold-review evidence are NOT-RUN. This draft is not merge-ready.
-No optional dependency was installed; no extra-dependency run is claimed.
-The optional jsonschema test has not yet executed, so no observed skip count is claimed.
+The lead owns the known tests/test_shard_tests.py discovery-census mismatch;
+it is not a scope blocker for this seat and no permission request remains pending.
+Independent executing review, merged-tree suite, green final CI and cold final pass
+remain NOT RUN. PR #521 stays draft and is not merge-ready.
 
 ## END-TO-END
 
-Authored but NOT EXECUTED yet: Bash bootstrap --skip-install -> real session ->
-fake nvidia-smi XML -> preflight module-name command stub -> fake vLLM process ->
-runner argv fixture -> shared Episode JSONL -> production read_episodes validation ->
-manifest -> tar.gz/checksum -> local copy-back -> byte/hash verification -> deliberate
-one-byte-content mutation detected by manifest verification.
+No current-head session executed, so there are no observed episode counts,
+integrals, wall times, archive checks or router flags to report from this seat.
+The director's old-head discovery run above is the only supplied successful
+execution evidence; it did not supply per-episode observations. No fixture design
+number is presented here as an observed result.
 
-The planned synthetic campaign has 60 episodes across the actual SHADE matrix,
-each with 12 turns, eight tool calls, 40,000 prefill tokens, 8,000 generated tokens,
-148 s duration and 1,481 samples at 100 ms. Fixture power is 280 W plus alternating
-+/-1 W, with 80 W reductions during eight two-second tool waits.
-The analytic fixture integral is 148*280 - 8*2*80 = 40,160 J per episode;
-the test compares the serialized trace integral at the prescribed 1e-6 relative bar.
-These are fixture design numbers, not measured results or completed test evidence.
-A second Stage A fixture requests 30 episodes and verifies that absent RouterLog
-is retained as a flag. Operational failure fixtures preserve sealed evidence.
-The fixture boundary is the runner command: it does not claim to test the absent
-agentic runner, real CUDA/vLLM or real NVML.
+The repaired end-to-end test runs Bash bootstrap -> production session ->
+stub NVIDIA XML/preflight/vLLM -> a subprocess fixture writing real shared
+Episodes -> production read_episodes validation -> manifest/archive/local copy ->
+byte verification and intentional mutation detection. The fixture is multi-turn,
+contains tool calls, and samples a synthetic power trace at an NVML-shaped cadence.
+It now supplies the source-root import path only inside SessionTests and restores
+the original environment afterward.
 
-Planning arithmetic was independently expanded in JavaScript while authoring
-configs, then encoded in a closed-form Python test. Python execution remains pending.
-For the H100 scenario the declared wall times are 10,554.756302521007 s (SHADE),
-7,509.731092436974 s (MoE), and 134,532.45362637364 s (budget).
-No hardware performance or scientific detection claim follows from these scenarios.
+The Stage A test additionally requires successful subprocess completion,
+reads the episode file and checks every requested row exists with power and no
+RouterLog before checking episode_router_log_missing and data_complete=False.
+The repeat-session shell test invokes --skip-install from a non-repository cwd
+using the venv created by its preceding fake installation; it rejects any repeated
+pip/venv call. These checks are authored, not observed passes.
+
+The runner adapter's key test follows the sibling lane's documented format.
+Default-runner session tests preserve translated matrices and missing-integration
+flags; they do not claim to test the missing runner implementation or factories.
 
 ## DECISIONS I MADE
 
-- No previous remote gpukit lane existed; branch from spine 4d47c4362352ccd8d4d904134a79f0d8260b21b5.
-- Use GitHub connected tools for early and incremental commits because /workspace never became usable.
-- Read AGENTS.md, targeted RUN_STATE/queue intake, playbook M0 and orchestration guidance; retain the exhaustive lane write fence.
-- Keep the three shared contract files untouched.
-- Define local JSON Schema plus stdlib cross-field validation because no runner docs/code exist on the spine.
-- Pass the concrete integrated runner as an argv template; do not invent a parallel lane's CLI.
-- Preserve operational problems as flags. Honor the brief's explicit MIG/vGPU refusal requirement; unknown isolation is flagged.
-- Use immutable-source SHADE pair names from jkutaso/SHADE-Arena at 6614e77191c1f8e2d0c44c123c6f915905ebafae.
-- Use the budget lane's 11 default conditions at 232e8516528cd85d94e3a24760cc85465f275664.
-- Keep budget effort conditions out of shared Episode.condition (which only permits benign/sabotage); they remain matrix/budget metadata.
-- Count calibration, hinted/no-hint pairs, all monitor calls and on-box setup/loading. Reused deletion energy is never fresh generation.
-- Pilot size, seeds, rates, overheads and timeouts are explicit operator parameters, not inferred statistical or physical constants.
-- Pin vLLM 0.10.2 as a reproducibility choice, label hardware compatibility unverified, and capture the actual environment.
-- Choose Phi-3.5-mini-instruct as the different-attention comparison; flag unsupported thinking control and require immutable-config recheck.
-- Leave prices empty; a real dated provider quote remains Ed's input.
-- Leave unprovided model revisions and dataset bindings visibly flagged rather than fabricate immutable revisions or public data.
-- Keep router capture missing when current HF eager hooks do not instrument vLLM; an endpoint option alone is not evidence.
-- Stop the owned serving process group and preserve exclusive output directories.
-- Separate readiness polling cadence from command-startup time: a probe command gets the remaining model-load timeout.
-- Put the transfer receipt beside the sealed archive because transfer happens after hashing.
-- Open draft PR 521 only to use existing CI; no merge or other-branch push.
-- Do not modify tests/test_shard_tests.py without scope authorization: its needed logic change is wider than adding new names to a registry.
+- Continue from the actual existing remote head b8dbd1f; use connected GitHub writes
+  because the executor is unavailable. Push small forward-only commits to the
+  gpukit branch, never main or another lane.
+- Follow the cloud-environment runtime skill for environment diagnosis. No runtime
+  credentials were read or printed.
+- Preserve the exhaustive write scope and shared records/protocols. Read the lane
+  report and shared contracts before writing; inspect AGENTS, M0 and intake.
+  TASK_QUEUE.md is empty on this branch; explicit user lane direction controls work.
+- Fix only the fixture import environment for the director's reported bug. No
+  production PYTHONPATH workaround was added to session.py.
+- Make a prepared session venv win on --skip-install, including PATH for vLLM.
+  Without one, JOULEWISE_PYTHON/system python remains a documented prepared-env fallback.
+- Replace the local planning format with v2 because throughput inputs changed shape.
+  This is lane-local; no shared contract version changes.
+- Name GPU form factors exactly. Use dated NVIDIA-authored datasheets and Hub model
+  cards, with accessed date 2026-10-22 in each physical-input citation. H100 and L40S
+  datasheets were accessible through public hosts carrying NVIDIA's documents;
+  NVIDIA product specification pages corroborate their values.
+- Use dense BF16, not sparse or FP8, and decimal bytes/second. H100 dense BF16 is
+  its 1,979 sparse TFLOPS divided by two, as the datasheet states. L40S uses the
+  printed dense value 362.05 TFLOPS rather than deriving it from its inconsistent
+  sparse value. These are specifications, not observed throughput.
+- Use the brief's single-stream ceiling: bandwidth/(active P * 2 BF16 bytes) for
+  decode and dense BF16 FLOP/s/(2 FLOPs * active P) for prefill. Exclude KV reads
+  and context-dependent attention FLOPs, so the rates are optimistic under the
+  stated model. Do not infer batch or tensor-parallel performance.
+- Retain total parameter counts as well as active counts. A BF16 MoE's total weights
+  exceed L40S memory; record that flag without deleting rows or refusing.
+- Sum all fresh generations and local monitor work for the lower bound. Count budget
+  calibration and paired generations; deletion controls reuse generation energy.
+- Exclude arbitrary setup, loading, waits and router allowances from the physical
+  lower bound. Retain them only as explicit operator planning parameters.
+- Leave every efficiency/source null. No matching public efficiency measurement has
+  been established. Require a dated public source when the operator supplies one;
+  a bare scenario number cannot produce a planning estimate.
+- Return full-precision arithmetic in cost.estimate; serialize derived times/hours/costs
+  at two significant digits (least precise model counts), bounds downward and plans
+  nearest. Hand arithmetic tests independently expand the sourced closed form at
+  the brief's 1e-6 relative agreement bar, with comments deriving each input.
+- Config lower-bound seconds, in A100-SXM4/H100-SXM/L40S-PCIe order, are SHADE
+  2,800/1,700/6,500; MoE 830/490/1,800; budget 91,000/54,000/210,000.
+  These were calculated while authoring configs in JavaScript, not by executing
+  the Python estimator. All planning values remain null. No rental budget is claimed.
+- Keep prices empty and operator-supplied. No provider quote or spend approval is inferred.
+- Read the sibling runner lane docs/code to match factory/config, outer task_pair,
+  output_dir and CLI conventions. Implement only a lane-local provisional adapter,
+  with factory names, imports and run limits required from the operator.
+- Budget conditions cannot be mapped to Episode.condition, which permits only
+  benign/sabotage. Record budget_runner_adapter_required and retain the original
+  matrix; use an explicit budget driver argv instead of relabeling conditions.
+- Keep vLLM router capture a dependency. A router_logging request is not a RouterLog;
+  session checks the actual shared-record output.
+- Preserve the original public SHADE pair bindings, budget condition accounting,
+  vLLM 0.10.2 reproducibility pin, process-group cleanup and immutable bundle flow.
+  None establishes real CUDA/NVML/endpoint compatibility.
+- Leave tests/test_shard_tests.py to the lead, as explicitly instructed; do not
+  request scope expansion or wait for its quick-tier failure to be repaired.
+- Retain draft PR #521 and report unexecuted verification plainly.
 
 ## CONTRACT-CHANGE
 
-none. Lane-local adapters handle matrix inputs and runner commands.
-The records Condition is benign/sabotage only, so budget effort conditions stay
-outside that shared field. The runner and MoE integrations must preserve this.
+none for PIPELINE.md, records.py or interfaces.py.
+The lane-local matrix schema is now v2. Budget effort conditions remain metadata
+outside shared Episode.condition; no cross-lane contract extension is requested.
 
 ## OPEN ISSUES
 
-- Scope blocker: tests/test_shard_tests.py needs to normalize align.* module names
-  to tests.align.* in its discovery census. User approval requested before changing it.
-  The brief permits only minimal registry-name additions outside the lane; this
-  is a helper logic change and also affects the existing spine records test.
-- Cloud execution remains unavailable; no local test, extra installation or
-  orphan census can be claimed.
-- Full CI cannot reach the new tests until the discovery-census prerequisite passes.
-- Runner, SHADE task binding, budget item binding and vLLM router-capture integration
-  are absent from the spine; rehearse the concrete integrated argv before renting.
-- Model revisions and the 32 budget item slots need immutable operator-supplied bindings.
-- Real CUDA install, whole-GPU tenancy, NVML sensor behavior, endpoint controls and
-  vLLM router coverage remain unverified; Ed still owns provider/spend approval.
-- Independent executing review, cross-model arithmetic review and merge gates remain
-  lead-owned and unclaimed. No scientific result is produced by this lane.
+- Current-head Python/shell tests and the jsonschema-extra reruns require the
+  director's executable checkout. Execute the four requested runs with the repo
+  uninstalled and no external PYTHONPATH, then record actual counts/skips and
+  end-to-end observations; do not infer them from this report.
+- Runner integration is provisional until its lane merges. The SHADE endpoint,
+  sampler, monitor/tokenizer factories and public dataset bindings need a reviewed
+  settings file and integrated offline rehearsal before rental.
+- Budget needs its own integrated driver, immutable item bindings and condition
+  support on the different-attention model. Default runner translation records
+  this dependency without running a mislabeled campaign.
+- vLLM router capture remains unimplemented in the sibling integration; eager HF
+  router hooks do not establish vLLM worker coverage.
+- Real GPU tenancy, CUDA/vLLM installation, NVML behavior and factory compatibility
+  remain unverified. Ed must approve provider and spend before any paid session.
+- Source ceilings are bounds for the stated idealized BF16 stream. Planning remains
+  unavailable until appropriate cited efficiencies are supplied; workload volumes,
+  setup/load/router allowances, model/tokenizer revisions and pilot size still
+  need operator review. L40S cannot hold the MoE's BF16 weights as configured.
+- The lead owns the repository discovery census and all executing/cross-model
+  verification and merge gates. No final-head green CI claim is made.
 
 ## NEEDS_RULING
 
-none on scientific data selection or printed results. The scope authorization
-request is listed under OPEN ISSUES, not presented as a scientific ruling.
+none.
