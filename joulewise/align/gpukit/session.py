@@ -243,7 +243,8 @@ def run_session(options: SessionOptions, *,
     flags: list[str] = []
     receipt: dict[str, Any] = {"schema": "joulewise.align.gpukit.session.v1",
                              "status": "incomplete", "flags": flags,
-                             "models": [], "start_ns": time.monotonic_ns()}
+                             "models": [], "data_complete": False,
+                             "start_ns": time.monotonic_ns()}
     try:
         matrix, matrix_flags = load_matrix(options.matrix)
         flags.extend(matrix_flags)
@@ -349,6 +350,10 @@ def run_session(options: SessionOptions, *,
             flags.append("matrix_not_executable")
         if any(p.is_symlink() for p in output.rglob("*")):
             flags.append("output_symlink_omitted")
+        receipt["data_complete"] = bool(
+            matrix and not matrix_flags and len(receipt["models"]) == len(matrix["models"])
+            and all(not any(f.startswith(("endpoint_", "runner_", "episode_", "model_run_failed"))
+                            for f in model["flags"]) for model in receipt["models"]))
         if receipt["status"] != "refused":
             receipt["status"] = "completed_with_flags" if flags else "completed"
     except Exception as exc:
