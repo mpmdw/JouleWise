@@ -74,8 +74,16 @@ FIT_BIN_MS = 10_000
 FIT_MIN_POINTS = 20
 
 DROP_LIMIT = 0.005                  # meter.drops_excess above 0.5 %
-PDTR_GAIN_BAND = (0.95, 1.02)       # meter.pdtr_gain_out_of_band outside this
-PDTR_MIN_W = 1.0                    # bins with less meter power carry no gain
+# Audit F7 (2026-10-22), capture-C2: the 12 pooled-session 20 s slopes
+# have mean 0.968 and SD 0.0034. Four SD is the smallest integer multiple
+# that also includes the registration probe's 0.955: 3 SD gives 0.9578,
+# whereas 4 SD gives 0.9544. This is a diagnostic engineering margin, not
+# a confidence interval. A +/-5% meter gain fault moves even the observed
+# extremes outside the band: 0.974/1.05 < 0.9544 and 0.963/0.95 > 0.9816.
+# An intercept absorbs the fixed sensor offset that dominates idle ratios.
+PDTR_GAIN_BAND = (0.9544, 0.9816)    # 0.968 +/- 4 * 0.0034; DISCLOSE only
+PDTR_BIN_NS = 20_000_000_000        # registration's 20 s PDTR-on-meter fit
+PDTR_MIN_W = 1.0                    # only for the legacy descriptive ratio
 VBUS_BAND_V = (26.6, 29.4)          # 28 V EPR contract +/- 5 %
 BATTERY_FLOOR_MA = 0                # meter.battery_activity when |B0AC| > this
 FIT_RESIDUAL_PERIODS = 2            # meter.clock_fit_residual above this many sample periods
@@ -446,16 +454,23 @@ def _flag(code: str, observed: Any, expected: Any, detail: str) -> dict[str, Any
             "detail": detail}
 
 
-def pdtr_gain(stream: Stream, bin_ns: int = 1_000_000_000) -> dict[str, Any]:
-    """Median over 1 s host-time bins of mean PDTR / mean meter power.
+def pdtr_gain(stream: Stream, bin_ns: int = PDTR_BIN_NS) -> dict[str, Any]:
+    """OLS slope of mean PDTR on mean meter power in paired 20 s bins.
 
-    PDTR is the SMC's DC-input power (refreshed once a second); a gain near 1
-    says the meter and the Mac's own input sensor agree.  Bins with meter
-    power under 1 W or no PDTR read are skipped.
+    Fitting with a free intercept removes the fixed offset between the two
+    sensors. Each bin needs a PDTR read and more than half its nominal meter
+    samples (over 500 at 50 SPS), matching audit capture-C2's fit. A short or
+    constant-power stream cannot establish gain and remains unconfirmed.
+    ``median`` is retained as a descriptive bin-ratio diagnostic for existing
+    readers; only ``slope`` decides meter.pdtr_gain_out_of_band.
     """
 
-    if not stream.host_ns:
-        return {"bins": 0, "median": None}
+    if bin_ns <= 0:
+        raise ValueError("PDTR bin duration must be positive")
+    result = {"statistic": "ols_pdtr_on_meter", "bin_ns": bin_ns,
+              "bins": 0, "slope": None, "median": None}
+    if not stream.host_ns or stream.samples is None:
+        return {**result, "reason": "no_aligned_samples"}
     start = stream.host_ns[0]
     meter_bins: dict[int, list[float]] = {}
     for t, w in zip(stream.host_ns, stream.watts):
@@ -464,12 +479,30 @@ def pdtr_gain(stream: Stream, bin_ns: int = 1_000_000_000) -> dict[str, Any]:
     for t, values in zip(stream.poll_ns, stream.smc):
         if values.get("PDTR") is not None:
             pdtr_bins.setdefault((t - start) // bin_ns, []).append(values["PDTR"])
-    gains = []
+    pairs = []
+    # A majority of nominal samples prevents a sparse final bin or dropout
+    # from carrying the same weight as a full bin. Scale by the device rate,
+    # rather than hard-coding the 50 SPS probe's 500-sample boundary.
+    half_bin_samples = bin_ns / (stream.samples.step_ms * 1_000_000) / 2
     for k, ws in meter_bins.items():
-        mean_w = sum(ws) / len(ws)
-        if k in pdtr_bins and mean_w >= PDTR_MIN_W:
-            gains.append(sum(pdtr_bins[k]) / len(pdtr_bins[k]) / mean_w)
-    return {"bins": len(gains), "median": percentile(gains, 50) if gains else None}
+        if k in pdtr_bins and len(ws) > half_bin_samples:
+            pairs.append((math.fsum(ws) / len(ws), math.fsum(pdtr_bins[k]) / len(pdtr_bins[k])))
+    result["bins"] = len(pairs)
+    if any(not math.isfinite(v) for pair in pairs for v in pair):
+        return {**result, "reason": "nonfinite_bin_power"}
+    gains = [y / x for x, y in pairs if x >= PDTR_MIN_W]
+    result["median"] = percentile(gains, 50) if gains else None
+    if len(pairs) < 2:
+        return {**result, "reason": "fewer_than_two_paired_bins"}
+    mean_x = math.fsum(x for x, _ in pairs) / len(pairs)
+    mean_y = math.fsum(y for _, y in pairs) / len(pairs)
+    sxx = math.fsum((x - mean_x) ** 2 for x, _ in pairs)
+    if sxx == 0:
+        return {**result, "reason": "no_meter_power_variation"}
+    slope = math.fsum((x - mean_x) * (y - mean_y) for x, y in pairs) / sxx
+    if not math.isfinite(slope):
+        return {**result, "reason": "nonfinite_slope"}
+    return {**result, "slope": slope}
 
 
 def flags(stream: Stream, windows: Iterable[Sequence[int]] = ()) -> list[dict[str, Any]]:
@@ -507,9 +540,10 @@ def flags(stream: Stream, windows: Iterable[Sequence[int]] = ()) -> list[dict[st
                          f"fit residual {stream.fit.stats['excess_latency_ms_max']:.1f} ms above "
                          f"{limit_ms} ms (two sample periods)"))
     gain = pdtr_gain(stream)
-    if gain["median"] is None or not PDTR_GAIN_BAND[0] <= gain["median"] <= PDTR_GAIN_BAND[1]:
+    if gain["slope"] is None or not PDTR_GAIN_BAND[0] <= gain["slope"] <= PDTR_GAIN_BAND[1]:
         out.append(_flag("meter.pdtr_gain_out_of_band", gain, list(PDTR_GAIN_BAND),
-                         f"median PDTR/meter gain {gain['median']} outside {PDTR_GAIN_BAND}"))
+                         f"PDTR-on-meter slope {gain['slope']} outside {PDTR_GAIN_BAND} "
+                         f"or unconfirmed ({gain.get('reason', 'computed')})"))
     outside = [v for v in stream.samples.vbus_v if not VBUS_BAND_V[0] <= v <= VBUS_BAND_V[1]]
     if outside:
         out.append(_flag("meter.vbus_out_of_contract",

@@ -111,13 +111,18 @@ class RecordedFixtureTests(unittest.TestCase):
         self.assertGreater(stats["excess_latency_ms_min"], -1.0)
         self.assertLess(stats["excess_latency_ms_p50"], 10)
 
-    def test_repo_recording_is_clean_and_agrees_with_pdtr(self):
+    def test_short_repo_recording_leaves_pdtr_slope_unconfirmed(self):
         stream = fixture("repo_live_50sps.jsonl")
         self.assertEqual(stream.header["firmware_version"], "2.0.5")
-        self.assertEqual(kp.flags(stream, [(stream.host_ns[0], stream.host_ns[-1])]), [])
+        found = kp.flags(stream, [(stream.host_ns[0], stream.host_ns[-1])])
+        self.assertEqual([row["code"] for row in found], ["meter.pdtr_gain_out_of_band"])
+        self.assertEqual(found[0]["effect"], "DISCLOSE")
         gain = kp.pdtr_gain(stream)
-        self.assertGreaterEqual(gain["bins"], 15)
-        self.assertTrue(0.95 <= gain["median"] <= 1.02, gain)
+        # This copied fixture spans only 20 s: one paired bin cannot fit a
+        # slope with a free intercept, even though its old ratio looked good.
+        self.assertEqual(gain["bins"], 1)
+        self.assertIsNone(gain["slope"])
+        self.assertEqual(gain["reason"], "fewer_than_two_paired_bins")
 
     def test_worked_example_numbers(self):
         stream = fixture("repo_live_50sps.jsonl")
@@ -350,8 +355,10 @@ class FlagTests(unittest.TestCase):
     def test_pdtr_gain_band(self):
         for pdtr_scale, expected in ((0.98, False), (0.90, True), (1.05, True)):
             s = Synthetic()
-            for _ in range(50):
-                s.poll(10, watts=70.0, smc={"B0AC": 0, "B0AV": 12000, "PDTR": 70.0 * pdtr_scale})
+            for watts in (2.0, 20.0, 60.0):
+                for _ in range(100):  # 20 s per level at 50 samples/s
+                    s.poll(10, watts=watts, smc={"B0AC": 0, "B0AV": 12000,
+                                               "PDTR": watts * pdtr_scale + 0.5})
             with self.subTest(scale=pdtr_scale):
                 self.assertEqual("meter.pdtr_gain_out_of_band" in self.codes(s, f"g{pdtr_scale}.jsonl"),
                                  expected)
@@ -369,6 +376,93 @@ class FlagTests(unittest.TestCase):
                 s.poll(10, vbus=vbus, watts=60.0, smc={"B0AC": 0, "B0AV": 12000, "PDTR": 60.0})
             with self.subTest(vbus=vbus):
                 self.assertEqual("meter.vbus_out_of_contract" in self.codes(s, f"v{vbus}.jsonl"), expected)
+
+
+class PDTRSlopeTests(unittest.TestCase):
+    """Audit F7: synthetic sensor offsets and gain faults, with no claim data."""
+
+    @staticmethod
+    def stream(levels=(2.0, 20.0, 60.0), *, slope=0.968, offset=0.5,
+               meter_gain=1.0, counts=None, step_ms=20):
+        counts = counts if counts is not None else [20_000 // step_ms] * len(levels)
+        host, watts, polls, smc = [], [], [], []
+        for k, (level, count) in enumerate(zip(levels, counts)):
+            host.extend(k * kp.PDTR_BIN_NS + i * step_ms * MS for i in range(count))
+            watts.extend([level * meter_gain] * count)
+            polls.append(k * kp.PDTR_BIN_NS)
+            smc.append({"PDTR": slope * level + offset})
+        samples = kp.Samples([t // MS for t in host], [28.0] * len(host),
+                             [w / 28.0 for w in watts], [0] * len(host), 0, step_ms)
+        return kp.Stream({"status": "streaming"}, None, [], [], samples,
+                         None, host, watts, polls, smc)
+
+    def gain_flags(self, stream):
+        return [f for f in kp.flags(stream) if f["code"] == "meter.pdtr_gain_out_of_band"]
+
+    def test_offset_dominated_idle_ratio_no_longer_fires(self):
+        stream = self.stream(levels=(2.0,) * 8 + (20.0,))
+        gain = kp.pdtr_gain(stream)
+        self.assertGreater(gain["median"], 1.02)  # the superseded ratio fired
+        # No printed interval belongs to this analytic fixture: use COMMON's
+        # fallback 1e-6 relative agreement bar at the unit-scale slope.
+        self.assertAlmostEqual(gain["slope"], 0.968, delta=0.968e-6)
+        self.assertEqual(gain["statistic"], "ols_pdtr_on_meter")
+        self.assertEqual(gain["bin_ns"], 20 * NS)
+        self.assertEqual(gain["bins"], 9)
+        self.assertEqual(self.gain_flags(stream), [])
+
+    def test_registered_probe_and_session_extremes_pass_and_five_percent_faults_fire(self):
+        for slope in (0.955, 0.963, 0.968, 0.974):
+            for offset in (0.5, 2.3):
+                for meter_gain in (0.95, 1.0, 1.05):
+                    with self.subTest(slope=slope, offset=offset, meter_gain=meter_gain):
+                        stream = self.stream(slope=slope, offset=offset, meter_gain=meter_gain)
+                        self.assertAlmostEqual(kp.pdtr_gain(stream)["slope"], slope / meter_gain,
+                                               delta=(slope / meter_gain) * 1e-6)
+                        flags = self.gain_flags(stream)
+                        self.assertEqual(bool(flags), meter_gain != 1.0)
+                        for row in flags:
+                            self.assertEqual(row["effect"], "DISCLOSE")
+                            self.assertEqual(row["expected"], list(kp.PDTR_GAIN_BAND))
+                            self.assertIn("slope", row["detail"])
+
+    def test_fewer_than_two_bins_or_constant_power_is_unconfirmed(self):
+        for levels, reason in (((), "no_aligned_samples"),
+                               ((2.0,), "fewer_than_two_paired_bins"),
+                               ((2.0, 2.0), "no_meter_power_variation")):
+            with self.subTest(levels=levels):
+                stream = self.stream(levels=levels)
+                gain = kp.pdtr_gain(stream)
+                self.assertIsNone(gain["slope"])
+                self.assertEqual(gain["reason"], reason)
+                if levels:
+                    self.assertEqual(self.gain_flags(stream)[0]["effect"], "DISCLOSE")
+
+    def test_missing_pdtr_bin_and_half_full_bin_cannot_establish_gain(self):
+        stream = self.stream(levels=(2.0, 20.0))
+        stream.smc[1] = {}
+        self.assertEqual(kp.pdtr_gain(stream)["bins"], 1)
+        self.assertIsNone(kp.pdtr_gain(stream)["slope"])
+        for step_ms in (20, 100, 500):
+            half = 20_000 // step_ms // 2
+            for last_count in (half, half + 1):
+                with self.subTest(step_ms=step_ms, last_count=last_count):
+                    stream = self.stream(levels=(2.0, 20.0), step_ms=step_ms,
+                                         counts=(20_000 // step_ms, last_count))
+                    gain = kp.pdtr_gain(stream)
+                    self.assertEqual(gain["bins"], 1 if last_count == half else 2)
+                    self.assertEqual(gain["slope"] is None, last_count == half)
+
+    def test_nonfinite_bin_and_invalid_bin_duration(self):
+        stream = self.stream()
+        stream.smc[1]["PDTR"] = float("nan")
+        gain = kp.pdtr_gain(stream)
+        self.assertIsNone(gain["slope"])
+        self.assertEqual(gain["reason"], "nonfinite_bin_power")
+        self.assertEqual(self.gain_flags(stream)[0]["effect"], "DISCLOSE")
+        for duration in (0, -NS):
+            with self.assertRaises(ValueError):
+                kp.pdtr_gain(stream, bin_ns=duration)
 
 
 if __name__ == "__main__":
