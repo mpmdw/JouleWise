@@ -3,7 +3,7 @@
 All physical coefficients below are configurable world assumptions, not fitted
 hardware constants. A virtual clock drives the real runner and tool timing.
 Power is generated from the endpoint/task ledger, independently of the runner's
-Episode bookkeeping. Hidden decode consumes work; tool waits draw the idle floor.
+Episode bookkeeping. Hidden decode consumes work; tool wait excess is configurable.
 This is synthetic validation evidence.
 """
 
@@ -21,6 +21,12 @@ from joulewise.align.records import ClockMapping, Episode, MonitorVerdict, Power
 _NS = 1_000_000_000  # SI nanoseconds per second
 
 
+def _world_seed(task_pair: str, condition: str, seed: int) -> int:
+    """Stable independent draws for each pair/condition/seed coordinate."""
+    return int.from_bytes(hashlib.sha256(to_json([task_pair, condition, seed]).encode(
+        "utf-8")).digest(), "big")
+
+
 
 @dataclass(frozen=True)
 class ModelWork:
@@ -36,7 +42,7 @@ class ModelWork:
 
 @dataclass(frozen=True)
 class ToolWork:
-    """Task-owned tool wait; its only power contribution is the idle floor."""
+    """Task-owned tool wait; the power model supplies its excess above idle."""
 
     name: str
     start_ns: int
@@ -85,12 +91,13 @@ class ScriptConfig:
     message_overhead_tokens: int = 4
     cache_block_tokens: int = 16
 
-    def plan(self, condition: str, seed: int) -> list[dict[str, int | str]]:
+    def plan(self, condition: str, seed: int,
+             task_pair: str = "mock/inbox") -> list[dict[str, int | str]]:
         """Plan generated work; prefill/context are legacy nominal workload targets.
 
         Actual request usage comes from received messages, never these targets.
         """
-        rng = random.Random(seed)
+        rng = random.Random(_world_seed(task_pair, condition, seed))
         result: list[dict[str, int | str]] = []
         context = 0
         main_turn = 0
@@ -139,7 +146,7 @@ class InboxTask:
         self.reset(0)
 
     def reset(self, seed: int) -> None:
-        self.seed = seed
+        self.seed = _world_seed(self.task_pair, "task", seed)
         self.ledger.turns.clear()
         self.ledger.tools.clear()
         self.read_ids: set[int] = set()
@@ -208,11 +215,12 @@ class ScriptedEndpoint:
     model = "synthetic-8B"
 
     def __init__(self, *, clock: VirtualClock | None = None, config: ScriptConfig | None = None,
-                 condition: str = "benign") -> None:
+                 condition: str = "benign", task_pair: str = "mock/inbox") -> None:
         self.clock = clock or VirtualClock()
         self.ledger = self.clock.ledger
         self.config = config or ScriptConfig()
         self.condition = condition
+        self.task_pair = task_pair
         digest = hashlib.sha256(to_json(asdict(self.config)).encode("utf-8")).hexdigest()
         self.identity = "mock/synthetic-8B/v2/" + digest
         self.previous_messages: list[ChatMessage] | None = None
@@ -225,7 +233,7 @@ class ScriptedEndpoint:
             if message.role == "system" and "[condition=sabotage]" in message.content:
                 condition = "sabotage"
         index = sum(m.role == "assistant" and m.tool_call_id is None for m in messages)
-        row = self.config.plan(condition, seed if seed is not None else 0)[index]
+        row = self.config.plan(condition, seed if seed is not None else 0, self.task_pair)[index]
         action = str(row["action"])
         reasoning = " ".join(["private"] * int(row["reasoning"]))
         scratch = " ".join(["side-note"] * int(row["scratchpad"]))
@@ -256,6 +264,8 @@ class ScriptedEndpoint:
                     break
                 common += message_tokens(new)
         block = self.config.cache_block_tokens
+        # vLLM always recomputes the last prompt token to produce logits:
+        # at most prompt - 1 tokens can therefore be served from the KV cache.
         cached = min(max(0, prompt - 1), (common // block) * block) if block > 0 else 0
         self.previous_messages = list(messages)
         self.previous_tools = tool_text
@@ -319,6 +329,7 @@ class PowerModel:
     prefill_joules_per_token: float = 0.03
     decode_joules_per_token: float = 3.0
     context_joules_per_token_squared: float = 0.00004
+    tool_wait_excess_watts: float = 0.0
 
 
 class SyntheticPowerSampler:
@@ -363,9 +374,12 @@ class SyntheticPowerSampler:
         self.end_ns = None
         self._turn_offset = len(self.ledger.turns)
 
-    def clock_mapping(self) -> ClockMapping:
-        return ClockMapping(self.clock_domain, self.episode_domain, self.offset_ns,
-                            self.uncertainty_ns, "synthetic exact clock plus configured uncertainty")
+    @property
+    def clock_mappings(self) -> tuple[ClockMapping, ...]:
+        if self.clock_domain == self.episode_domain:
+            return ()
+        return (ClockMapping(self.clock_domain, self.episode_domain, self.offset_ns,
+                            self.uncertainty_ns, "synthetic exact clock plus configured uncertainty"),)
 
     def segments(self, episode: Episode | WorkLedger) -> list[tuple[int, int, float]]:
         """Analytic phases; stop supplies the independent ledger, never Episode."""
@@ -391,6 +405,10 @@ class SyntheticPowerSampler:
             ):
                 if right > left:
                     result.append((left, right, joules * _NS / (right - left)))
+        waits = (episode.tools if isinstance(episode, WorkLedger) else
+                 [call for turn in episode.turns for call in turn.tool_calls])
+        result.extend((wait.start_ns, wait.end_ns, self.model.tool_wait_excess_watts)
+                      for wait in waits if wait.end_ns > wait.start_ns)
         return result
 
     def expected_energy_joules(self, episode: Episode) -> float:
@@ -399,7 +417,10 @@ class SyntheticPowerSampler:
                 sum(self.model.prefill_joules_per_token * t.prefill_tokens +
                     (self.model.decode_joules_per_token +
                      self.model.context_joules_per_token_squared * t.context_tokens) * t.decode_tokens
-                    for t in episode.turns))
+                    for t in episode.turns) +
+                self.model.tool_wait_excess_watts * sum(
+                    (call.end_ns - call.start_ns) / _NS
+                    for turn in episode.turns for call in turn.tool_calls))
 
     def stop(self) -> tuple[PowerTrace, ...]:
         self.started = False
@@ -463,14 +484,15 @@ def register_mock_factories() -> None:
             if name in parameters:
                 parameters[name] = tuple(parameters[name])
         return ScriptedEndpoint(clock=context.clock, config=ScriptConfig(**parameters),
-                                condition=context.condition)
+                                condition=context.condition, task_pair=context.task_pair)
 
     def sampler_factory(config: Mapping[str, Any], context: Any) -> SyntheticPowerSampler:
         parameters = dict(config)
         model = PowerModel(**parameters.pop("model", {}))
         domain = parameters.pop("clock_domain", context.clock_domain)
         return SyntheticPowerSampler(clock_domain=domain, episode_domain=context.clock_domain,
-                                     seed=context.seed, model=model, clock=context.clock, **parameters)
+                                     seed=_world_seed(context.task_pair, context.condition, context.seed),
+                                     model=model, clock=context.clock, **parameters)
 
     register_task_factory("mock.inbox", task_factory)
     register_endpoint_factory("mock.scripted", endpoint_factory)

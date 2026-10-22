@@ -20,7 +20,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Sequence
 
-from joulewise.align.records import PowerTrace
+from joulewise.align.records import ClockMapping, PowerTrace
 
 # ABI, field IDs and output semantics:
 # https://github.com/NVIDIA/go-nvml/blob/main/pkg/nvml/nvml.h
@@ -302,6 +302,7 @@ class NvmlSampler:
         self.device_indices = tuple(device_indices) if device_indices is not None else None
         self.interval_ns = interval_ns
         self.clock_domain = clock_domain or f"{socket.gethostname()}:monotonic"
+        self.clock_mappings: tuple[ClockMapping, ...] = ()
         self._nvml = nvml
         self._library = library
         self.power_bound_w = power_bound_w

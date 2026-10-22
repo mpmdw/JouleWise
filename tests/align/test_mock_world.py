@@ -29,6 +29,40 @@ def full_coverage(episode, ledger):
 
 
 class MockWorldTests(unittest.TestCase):
+    def test_tool_wait_excess_conserves_parameter_times_wait_duration(self):
+        episode, _, task, _, _ = inbox_episode(seed=2)
+        # Configured contrast, not a measured coefficient: 25 W above idle.
+        excess_watts = 25.0
+        models = (PowerModel(), PowerModel(tool_wait_excess_watts=excess_watts))
+        sensors = [SyntheticPowerSampler(model=model, interval_ns=100_000_000,
+            averaging_window_ns=100_000_000, noise_watts=0.01, quantum_watts=0.01,
+            seed=episode.seed) for model in models]
+        traces = [sensor.sample_ledger(task.ledger, start_ns=episode.start_ns,
+                                      end_ns=episode.end_ns)[0] for sensor in sensors]
+        wait_seconds = sum((call.end_ns - call.start_ns) / _NS for call in task.ledger.tools)
+        expected = excess_watts * wait_seconds
+        dt = sensors[0].interval_ns / _NS
+        # Matched noise draws cancel before quantization. Each rounded sample
+        # contributes at most half a quantum per trace, so the two-trace sum
+        # is bounded by N * dt * quantum, with no averaging-down assumption.
+        sensor_bar = len(traces[0].values) * dt * sensors[0].quantum_watts
+        measured = math.fsum((high - low) * dt for low, high in
+                             zip(traces[0].values, traces[1].values))
+        self.assertGreater(expected, sensor_bar)
+        self.assertLessEqual(abs(measured - expected), sensor_bar)
+        analytic_delta = (sensors[1].expected_energy_joules(episode) -
+                          sensors[0].expected_energy_joules(episode))
+        # Analytic rederivation has no printed uncertainty: 1e-6 relative.
+        self.assertTrue(math.isclose(analytic_delta, expected, rel_tol=1e-6))
+        original_segments = sensors[0].segments(task.ledger)
+        changed_segments = sensors[1].segments(task.ledger)
+        self.assertEqual(changed_segments[:2 * len(episode.turns)],
+                         original_segments[:2 * len(episode.turns)])
+        # The only changed phases are the task ledger's actual wait intervals.
+        self.assertEqual([(left, right) for left, right, _ in
+                          changed_segments[2 * len(episode.turns):]],
+                         [(wait.start_ns, wait.end_ns) for wait in task.ledger.tools])
+
     def test_production_shaped_counts_and_waits(self):
         ep, _, task, _, _ = inbox_episode()
         self.assertTrue(10 <= len(ep.turns) <= 40)

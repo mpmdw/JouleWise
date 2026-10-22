@@ -67,6 +67,7 @@ from __future__ import annotations
 
 import bisect
 import math
+import json
 import random
 import sys
 import unittest
@@ -289,7 +290,7 @@ def build_world(seed, *, ina_hz_divisor=1):
         ts.append(epoch + t)
         vs.append(math.floor(v / 0.001) * 0.001)  # integer mJ, truncated
     traces.append(PowerTrace("nvml_energy", "gpu0", "host", tuple(ts), tuple(vs), "J_cumulative", 100 * MS,
-                             resolution=0.001))
+                             resolution=0.001, notes=json.dumps({"unknown_sensor_age_bound_ns":0})))
 
     record = Episode(f"rv2b-{seed}", "shade/synthetic", "sabotage" if seed % 2 else "benign",
                      "qwen3-32b", "mock:vllm", seed, "host", epoch, epoch + end, tuple(turns),
@@ -397,7 +398,8 @@ class TwinAgreement(unittest.TestCase):
                                  f"{label} joules lane {le.joules!r} twin {te.joules!r}")
             self.assertEqual(le.method.split(";")[0], te.method.split(";")[0], label)
             if compare_hw:
-                expected = (te.half_width_j + twin_interpolation(trace, mapping, a, b)
+                from tests.align.test_twin_attribution import knot_interpolation_bound
+                expected = (te.half_width_j + knot_interpolation_bound(trace,mapping,a,b) + twin_interpolation(trace, mapping, a, b)
                             + c2_terms(trace, mapping, a, b) + reset_term(trace, mapping, a, b))
                 if math.isinf(expected):
                     self.assertTrue(math.isinf(le.half_width_j), f"{label} lane half-width finite")

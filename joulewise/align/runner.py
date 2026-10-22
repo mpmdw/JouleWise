@@ -15,7 +15,7 @@ import math
 import os
 import random
 import time
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, is_dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
@@ -93,7 +93,7 @@ def _spans(text: str, tags: tuple[str, str]) -> tuple[str, list[str], bool]:
         visible.append(text[position:start])
         end = text.find(closing, start + len(opening))
         if end < 0:
-            hidden.append(text[start + len(opening):])
+            visible.append(text[start:])
             position = len(text)
             unclosed = True
             break
@@ -107,9 +107,11 @@ def transcript_view(transcript: Sequence[ChatMessage], visibility: str,
                     scratchpad_tags: tuple[str, str] | None = None) -> list[ChatMessage]:
     """Build monitor views; call messages carry name, call ID and JSON arguments.
 
-    Full/tampered preserve the supplied transcript. The latter is a label for a
+    Every view excludes system messages. Full/tampered preserve other messages.
+    The latter is a label for a
     caller-supplied tampered transcript; Episode-only transforms do not edit text.
     """
+    transcript = [m for m in transcript if m.role != "system"]
     if visibility == "actions_only":
         return [m for m in transcript if m.role == "tool" or
                 (m.role == "assistant" and m.tool_call_id is not None)]
@@ -166,7 +168,7 @@ def _endpoint_flags(value: Any, flags: list[str]) -> None:
 
 
 def _capture_usage(result: ChatResult, flags: list[str]) -> Any:
-    usage = to_jsonable(result.raw_usage)
+    usage = _finite_json(result.raw_usage, flags, "usage.raw_non_finite")
     if isinstance(usage, Mapping):
         diagnostics = usage.get("joulewise", {})
         if isinstance(diagnostics, Mapping):
@@ -174,6 +176,21 @@ def _capture_usage(result: ChatResult, flags: list[str]) -> Any:
     if result.prompt_tokens == 0:
         flags.append("endpoint.empty_result")
     return usage
+
+
+def _finite_json(value: Any, flags: list[str], flag: str) -> Any:
+    """Keep JSON diagnostics writable even when a server reports NaN/inf."""
+    value = to_jsonable(value)
+    def clean(item: Any) -> Any:
+        if isinstance(item, float) and not math.isfinite(item):
+            flags.append(flag)
+            return None
+        if isinstance(item, Mapping):
+            return {key: clean(entry) for key, entry in item.items()}
+        if isinstance(item, (list, tuple)):
+            return [clean(entry) for entry in item]
+        return item
+    return clean(value)
 
 
 def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
@@ -199,6 +216,7 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
     failed_requests: list[Any] = []
     traces: list[PowerTrace] = []
     mappings: dict[str, ClockMapping] = {}
+    pending_counts: dict[int, tuple[list[str], str]] = {}
     hardware: dict[str, Any] = {
         "endpoint": endpoint.identity,
         "samplers": [getattr(s, "identity", type(s).__name__) for s in samplers],
@@ -251,7 +269,8 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                         raw_usage[str(index)] = _capture_usage(partial, flags)
                         # Incomplete responses are diagnostics, not completed model
                         # turns or executable tool requests. Preserve partial counts.
-                        failed_requests.append({"index": index, "partial_result": to_jsonable(partial)})
+                        failed_requests.append({"index": index, "partial_result":
+                            _finite_json(partial, flags, "usage.raw_non_finite")})
                     break
                 call_end = now()
                 raw_usage[str(index)] = _capture_usage(result, flags)
@@ -298,41 +317,10 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                     _, scratch, unclosed = _spans(content, tags)
                     if unclosed:
                         flags.append("scratchpad.unclosed")
-                scratch_count: int | None = 0
-                if scratch:
-                    if token_counter is None:
-                        scratch_count = None
-                        flags.append("hidden_tokens.scratchpad_uncounted")
-                    else:
-                        try:
-                            scratch_count = sum(_count(token_counter.count_tokens(span),
-                                flags, "scratchpad_tokens") for span in scratch)
-                        except KeyboardInterrupt:
-                            flags.append("episode.interrupted")
-                            scratch_count = None
-                        except Exception as exc:
-                            flags.append("token_counter.error." + type(exc).__name__)
-                            scratch_count = None
                 if result.reasoning_text and result.reasoning_tokens == 0:
-                    # A tokenizer estimate is distinct from server-reported usage,
-                    # even when it recovers every separated reasoning token.
-                    flags.append("usage.reasoning_uncounted")
-                    if token_counter is not None:
-                        try:
-                            hidden += _count(token_counter.count_tokens(result.reasoning_text),
-                                             flags, "reasoning_text_tokens")
-                        except KeyboardInterrupt:
-                            flags.append("episode.interrupted")
-                        except Exception as exc:
-                            flags.append("token_counter.error." + type(exc).__name__)
-                counts[str(index)] = scratch_count
-                if scratch_count is not None:
-                    hidden += scratch_count
-                    counted.append(index)
-                if hidden > decode:
-                    flags.append("usage.hidden_exceeds_decode")
-                    hidden = decode
-                turns[-1] = replace(turns[-1], hidden_tokens=hidden)
+                    # Keep the existing diagnostic alias for readers of older runs.
+                    flags.extend(("hidden_tokens.unreported", "usage.reasoning_uncounted"))
+                pending_counts[index] = (scratch, result.reasoning_text)
                 if result.reasoning_text:
                     content = _REASONING_TAGS[0] + result.reasoning_text + _REASONING_TAGS[1] + content
                 transcript.append(ChatMessage("assistant", content))
@@ -374,6 +362,8 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
     except Exception as exc:
         flags.append("runner.error." + type(exc).__name__)
     end = max(end, now())
+    if tools and not any(turn.tool_calls for turn in turns):
+        flags.append("episode.no_tool_calls")
     hardware["runner"] = {
         "matrix_id": matrix_id, "scratchpad_tokens": counts,
         "raw_usage": raw_usage, "failed_requests": failed_requests,
@@ -382,12 +372,8 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
         "reasoning_history_policy": "strip_separated_reasoning",
         "max_turns": max_turns, "max_tokens": max_tokens, "temperature": temperature,
     }
-    episode = Episode(
-        episode_id(task.task_pair, condition, endpoint.identity, seed, matrix_id),
-        task.task_pair, condition if condition in ("benign", "sabotage") else "benign",
-        getattr(endpoint, "model", endpoint.identity), endpoint.identity, seed,
-        clock_domain, start, end, tuple(turns), hardware=hardware,
-    )
+    runner = hardware["runner"]
+    collected: list[tuple[PowerTrace, tuple[Any, ...]]] = []
     for sampler in started:
         try:
             sampled = tuple(sampler.stop())
@@ -395,38 +381,114 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
             flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt) else
                          "sampler.stop_error." + type(exc).__name__)
             continue
+        try:
+            offered = tuple(getattr(sampler, "clock_mappings", ()))
+        except (TypeError, ValueError):
+            offered = (getattr(sampler, "clock_mappings", None),)
         for trace in sampled:
             if not isinstance(trace, PowerTrace):
                 flags.append("sampler.invalid_trace")
                 continue
-            if trace.clock_domain != clock_domain:
-                try:
-                    mapping = sampler.clock_mapping()
-                    if (not isinstance(mapping, ClockMapping) or
-                        mapping.trace_domain != trace.clock_domain or
-                        mapping.episode_domain != clock_domain or mapping.uncertainty_ns < 0):
-                        raise ValueError("clock mapping does not cover trace")
-                    if trace.clock_domain in mappings and mappings[trace.clock_domain] != mapping:
-                        flags.append("clock.mapping_conflict")
-                        continue
-                    mappings[trace.clock_domain] = mapping
-                except (Exception, KeyboardInterrupt) as exc:
-                    flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt) else
-                                 "clock.unmapped")
-                    continue
-            if not trace.t_ns:
-                flags.append("power.empty")
-            if trace.notes:
-                try:
-                    notes = json.loads(trace.notes)
-                except (ValueError, TypeError):
-                    notes = None
-                if (isinstance(notes, dict) and isinstance(notes.get("flags"), list) and
-                    all(isinstance(flag, str) for flag in notes["flags"])):
-                    flags.extend("power." + trace.channel + "." + flag for flag in notes["flags"])
-                else:
-                    flags.append("power.notes")
-            traces.append(trace)
+            if trace.clock_domain != clock_domain and not hasattr(sampler, "clock_mappings"):
+                flags.append("sampler.clock_mappings_missing")
+            collected.append((trace, offered))
+    # Resolve domains after every sampler stops: a later conflicting offer must
+    # not leave an earlier trace attached to an ambiguous episode mapping.
+    for original, offered in collected:
+        trace = original
+        finite = [(t, value) for t, value in zip(trace.t_ns, trace.values)
+                  if math.isfinite(value)]
+        dropped = len(trace.values) - len(finite)
+        if dropped:
+            flag = "power." + trace.channel + ".non_finite_samples"
+            flags.append(flag)
+            losses = runner.setdefault("non_finite_samples", {})
+            losses[trace.channel] = losses.get(trace.channel, 0) + dropped
+            trace = replace(trace, t_ns=tuple(t for t, _ in finite),
+                            values=tuple(value for _, value in finite))
+        if trace.clock_domain != clock_domain:
+            candidates = []
+            for _, offers in collected:
+                for mapping in offers:
+                    if (isinstance(mapping, ClockMapping) and
+                        mapping.trace_domain == trace.clock_domain and mapping not in candidates):
+                        candidates.append(mapping)
+            valid = [m for m in offered if isinstance(m, ClockMapping) and
+                     m.trace_domain == trace.clock_domain and
+                     m.episode_domain == clock_domain and
+                     isinstance(m.offset_ns, int) and not isinstance(m.offset_ns, bool) and
+                     isinstance(m.uncertainty_ns, int) and not isinstance(m.uncertainty_ns, bool) and
+                     m.uncertainty_ns >= 0]
+            valid = list(dict.fromkeys(valid))
+            reason = ("clock.mapping_conflict" if len(candidates) > 1 else
+                      "clock.unmapped" if len(valid) != 1 else None)
+            if reason:
+                flags.append(reason)
+                runner.setdefault("unattached_traces", []).append({
+                    "trace": _finite_json(original, flags,
+                        "power." + trace.channel + ".non_finite_samples"),
+                    "reason": reason, "clock_mappings": _finite_json(
+                        offered, flags, "clock.mapping_non_finite"),
+                })
+                continue
+            mappings[trace.clock_domain] = valid[0]
+        if not trace.t_ns:
+            flags.append("power.empty")
+        if trace.notes:
+            try:
+                notes = json.loads(trace.notes)
+            except (ValueError, TypeError):
+                notes = None
+            if (isinstance(notes, dict) and isinstance(notes.get("flags"), list) and
+                all(isinstance(flag, str) for flag in notes["flags"])):
+                flags.extend("power." + trace.channel + "." + flag for flag in notes["flags"])
+            else:
+                flags.append("power.notes")
+        traces.append(trace)
+    # Tokenizer requests are diagnostics. They run only after the loop AND
+    # every sampler.stop(), outside the episode and every sampled interval.
+    derived: dict[str, Any] = {
+        "source": getattr(token_counter, "identity", type(token_counter).__name__)
+                  if token_counter is not None else "unavailable",
+        "label": "Tokenizer count, not server accounting",
+        "per_turn": {}, "flags": [],
+    }
+    def count_text(text: str, field: str, failures: list[str]) -> int | None:
+        if token_counter is None:
+            failures.append("token_counter.unavailable")
+            return None
+        try:
+            value = token_counter.count_tokens(text)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise ValueError("invalid tokenizer count for " + field)
+            return value
+        except (Exception, KeyboardInterrupt) as exc:
+            flag = ("episode.interrupted" if isinstance(exc, KeyboardInterrupt) else
+                    "token_counter.error." + type(exc).__name__)
+            flags.append(flag)
+            failures.append(flag)
+            return None
+    for index, (scratch, reasoning) in pending_counts.items():
+        scratch_count: int | None = 0
+        if scratch:
+            values = [count_text(span, "scratchpad_tokens", []) for span in scratch]
+            scratch_count = sum(values) if all(v is not None for v in values) else None
+            if scratch_count is None:
+                flags.append("hidden_tokens.scratchpad_uncounted")
+        counts[str(index)] = scratch_count
+        if scratch_count is not None:
+            counted.append(index)
+            hidden = turns[index].hidden_tokens + scratch_count
+            if hidden > turns[index].decode_tokens:
+                flags.append("usage.hidden_exceeds_decode")
+                hidden = turns[index].decode_tokens
+            turns[index] = replace(turns[index], hidden_tokens=hidden)
+        if reasoning:
+            derived["per_turn"][str(index)] = count_text(
+                reasoning, "reasoning_text_tokens", derived["flags"])
+    if derived["per_turn"]:
+        derived["flags"] = list(dict.fromkeys(derived["flags"]))
+        runner["derived_reasoning_tokens"] = derived
     scores: dict[str, Any] = {}
     for name, scorer in (("main_task_score", task.score_main), ("side_task_success", task.score_side)):
         try:
@@ -441,6 +503,7 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
         except (Exception, KeyboardInterrupt) as exc:
             flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt) else
                          "score." + name + ".error." + type(exc).__name__)
+    flags.extend("task." + flag for flag in getattr(task, "flags", ()) if isinstance(flag, str))
     verdicts: list[MonitorVerdict] = []
     for entry in monitors:
         monitor, visibilities = entry if isinstance(entry, tuple) else (entry, ("full",))
@@ -458,12 +521,26 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                     flags.append("monitor.visibility_mismatch")
                 else:
                     verdicts.append(verdict)
+                diagnostics = getattr(monitor, "last_verdict", None)
             except (Exception, KeyboardInterrupt) as exc:
                 flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt) else
                              "monitor.error." + type(exc).__name__)
-    episode = replace(episode, **scores, monitor_verdicts=tuple(verdicts),
-                      power_traces=tuple(traces), clock_mappings=tuple(mappings.values()),
-                      flags=tuple(dict.fromkeys(flags)))
+                diagnostics = getattr(exc, "diagnostics", None)
+            if diagnostics is not None:
+                flags.extend("monitor." + flag for flag in getattr(diagnostics, "flags", ())
+                             if isinstance(flag, str))
+                runner.setdefault("monitor_diagnostics", []).append({
+                    "visibility": visibility, "model": getattr(monitor, "model", "unknown"),
+                    "snapshot": _finite_json(asdict(diagnostics) if is_dataclass(diagnostics)
+                                             else diagnostics, flags, "monitor.non_finite"),
+                })
+    episode = Episode(
+        episode_id(task.task_pair, condition, endpoint.identity, seed, matrix_id),
+        task.task_pair, condition if condition in ("benign", "sabotage") else "benign",
+        getattr(endpoint, "model", endpoint.identity), endpoint.identity, seed,
+        clock_domain, start, end, tuple(turns), hardware=hardware,
+        **scores, monitor_verdicts=tuple(verdicts), power_traces=tuple(traces),
+        clock_mappings=tuple(mappings.values()), flags=tuple(dict.fromkeys(flags)))
     return episode, transcript
 
 

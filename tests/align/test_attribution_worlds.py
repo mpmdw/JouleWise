@@ -190,6 +190,9 @@ def world(seed, sensor, *, load_variation_fraction=0.05, clock_offset_ns=17_000_
         averaging_window_ns=sensor.window_ns,
         duty_fraction=(None if sensor.window_ns is None else sensor.window_ns / period),
         resolution=sensor.resolution,
+        # Synthetic register values integrate exactly to each timestamp;
+        # unlike actual NVML, this world has characterized zero update age.
+        notes=json.dumps({"unknown_sensor_age_bound_ns":0}) if sensor.source == "nvml_energy" else "",
     )
     clock = ClockMapping("meter", "host", offset, sensor.clock_half_width_ns,
                          "synthetic round-trip bracket")
@@ -247,7 +250,7 @@ class ProductionWorldsTest(unittest.TestCase):
             self.assertNotIn("trace.partial_coverage", result.flags)
             if sensor.source == "nvml_power":
                 self.assertEqual(record.clock_mappings, ())
-                self.assertIn("clock.uncertainty_missing", result.flags)
+                self.assertNotIn("clock.uncertainty_missing", result.flags)
             if sensor.window_ns is not None and sensor.window_ns < sensor.period_ns:
                 self.assertIn("duty.uncovered", result.flags)
             else:
@@ -359,6 +362,8 @@ class ProductionWorldsTest(unittest.TestCase):
         # R2b-M1 retains the exact 100% segment requirement on every sensor.
         # Only this known coverage shortfall may skip after the check runs;
         # INA3221 retains an ordinary failure if its coverage ever regresses.
+        # Restored unchanged by the PR #548 fix round: R2b-M1 predates it and
+        # still awaits the lead's ruling (shortfall counts are unchanged).
         try:
             self.assertEqual(stats["segments_inside"], stats["segments"], stats)
         except self.failureException:
@@ -426,7 +431,8 @@ class ProductionWorldsTest(unittest.TestCase):
             values.append(math.floor(value / quantum) * quantum)
         counter = replace(old, source="nvml_energy", unit="J_cumulative",
                           values=tuple(values), averaging_window_ns=None,
-                          duty_fraction=None, resolution=quantum)
+                          duty_fraction=None, resolution=quantum,
+                          notes=json.dumps({"unknown_sensor_age_bound_ns":0}))
         record = from_json(Episode, to_json(replace(record, power_traces=(counter,))))
         result = attribute_episode(record, source="nvml_energy", channel="gpu0")
         exact = truth.integral(0, record.end_ns - ORIGIN)

@@ -9,6 +9,8 @@ the synthetic sampler):
   ``judge_endpoint`` (``OpenAICompatEndpoint`` keyword arguments) and the
   remaining ``ShadeTask`` keyword arguments.
 - endpoint ``openai_compat``: ``OpenAICompatEndpoint(**config)``.
+- token counter ``openai_compat``: the endpoint's ``count_tokens``, raising
+  when the endpoint flags an unavailable tokenizer rather than accepting zero.
 - samplers ``nvml`` and ``ina3221``: ``NvmlSampler`` and ``Ina3221Sampler``.
   Unless the config names its own ``clock_domain``, a sampler timestamps with
   the episode clock in the episode clock domain, so the runner needs no clock
@@ -23,6 +25,7 @@ from typing import Any, Mapping
 
 from joulewise.align.runner import (
     FactoryContext, register_endpoint_factory, register_sampler_factory, register_task_factory,
+    register_token_counter_factory,
 )
 
 
@@ -41,6 +44,29 @@ def _shade_task(config: Mapping[str, Any], context: FactoryContext) -> Any:
     return ShadeTask(pair, upstream=PinnedUpstream(**upstream) if upstream is not None else None,
                      judge_endpoint=_openai_compat(judge) if judge is not None else None,
                      **parameters)
+
+
+class _OpenAICompatTokenCounter:
+    """Turn the endpoint's flagged tokenizer zero into a counting failure."""
+
+    def __init__(self, endpoint: Any) -> None:
+        self.endpoint = endpoint
+        self.identity = endpoint.identity + "/tokenize"
+
+    def count_tokens(self, text: str) -> int:
+        count = self.endpoint.count_tokens(text)
+        # count_tokens ends every failed request with one of these flags and
+        # every success with tokenize_shape:*. Read the LAST flag: the endpoint
+        # clears its flag list per operation, so a length-based slice taken
+        # before the call can miss a failure that produced fewer flags.
+        flags = self.endpoint.flags
+        if flags and flags[-1] in {"tokenize_unavailable", "tokenize_invalid_base_url"}:
+            raise RuntimeError("server tokenizer unavailable")
+        return count
+
+
+def _openai_tokens(config: Mapping[str, Any], context: FactoryContext) -> Any:
+    return _OpenAICompatTokenCounter(_openai_compat(config, context))
 
 
 def _episode_clock(config: Mapping[str, Any], context: FactoryContext,
@@ -68,6 +94,7 @@ def register_defaults() -> None:
     register_mock_factories()
     register_task_factory("shade", _shade_task)
     register_endpoint_factory("openai_compat", _openai_compat)
+    register_token_counter_factory("openai_compat", _openai_tokens)
     register_sampler_factory("nvml", _nvml)
     register_sampler_factory("ina3221", _ina3221)
 

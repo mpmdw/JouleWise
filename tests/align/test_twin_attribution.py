@@ -44,6 +44,7 @@ from __future__ import annotations
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, replace
 import math
+import json
 import random
 import unittest
 
@@ -302,7 +303,8 @@ def sense(world: World, shape: str, seed: int) -> tuple[PowerTrace, tuple[ClockM
                 running += truth.integral(times[k - 1], t)
             values.append(math.floor(running / 0.001) * 0.001)
         return PowerTrace("nvml_energy", "gpu0", "host", tuple(times), tuple(values),
-                          "J_cumulative", period, resolution=0.001), ()
+                          "J_cumulative", period, resolution=0.001,
+                          notes=json.dumps({"unknown_sensor_age_bound_ns":0})), ()
     raise ValueError(shape)
 
 
@@ -358,14 +360,47 @@ def lane_reading_half_width(trace: PowerTrace, mapping: ClockMapping | None,
                     near = values[max(0, k - 1):k + 2]
                     inside = min(b, times[k]) - max(a, times[k] - w)
                     extra.append((max(near) - min(near)) * min(w / 4, inside) / NS)
-    return base.half_width_j + math.fsum(extra)
+    return base.half_width_j + math.fsum(extra) + knot_interpolation_bound(trace,mapping,t0,t1)
+
+
+def knot_interpolation_bound(trace, mapping, t0, t1):
+    """Additional endpoint triangles at exact raw-sample knots, independently.
+
+    The unchanged twin suppresses knot comparisons. Enumerate both touching
+    intervals and clip their line-minus-left-hold integrals to the query.
+    A cumulative counter compares its full held jump with the clipped
+    interval increment; it contributes zero only on a whole interval.
+    """
+    offset=mapping.offset_ns if mapping else 0
+    a,b=t0-offset,t1-offset
+    ts,vs=trace.t_ns,trace.values
+    if trace.unit == "J_cumulative":
+        vs,_=twin._unwrapped(vs)
+    terms=[]
+    for endpoint in (a,b):
+        k=bisect_right(ts,endpoint)-1
+        if k < 0 or ts[k] != endpoint:
+            continue
+        for j in (k-1,k):
+            if not 0 <= j < len(ts)-1:
+                continue
+            lo,hi=max(a,ts[j]),min(b,ts[j+1])
+            if hi > lo:
+                if trace.unit == "J_cumulative":
+                    linear=(vs[j+1]-vs[j])*(hi-lo)/(ts[j+1]-ts[j])
+                    held=(vs[j+1]-vs[j]) if hi == ts[j+1] else 0.
+                    terms.append(abs(linear-held))
+                else:
+                    # Integral of slope*(t-t_left): dP/(2*dt)*(hi^2-lo^2).
+                    terms.append(abs((vs[j+1]-vs[j])/(ts[j+1]-ts[j])
+                                     *((hi-ts[j])**2-(lo-ts[j])**2)/2/NS))
+    return math.fsum(terms)
 
 
 FLAG_MAP = {  # lane flag -> twin flag of the same meaning
     "duty.uncovered": "duty.uncovered",
     "trace.partial_coverage": "trace.partial_coverage",
     "counter.wrap": "counter.wrap",
-    "clock.uncertainty_missing": "half_width.missing.clock",
     "resolution.missing": "half_width.missing.resolution",
 }
 EPISODE_FLAG_MAP = {
@@ -509,6 +544,8 @@ class KnownReadingDifferences(unittest.TestCase):
         fields = dict(source="mock", channel="c", clock_domain="host", t_ns=tuple(times),
                       values=tuple(values), unit="W", nominal_interval_ns=NS, resolution=0.001)
         fields.update(kw)
+        if fields["source"] == "nvml_energy":
+            fields.setdefault("notes",json.dumps({"unknown_sensor_age_bound_ns":0}))
         return PowerTrace(**fields)
 
     def test_partial_coverage_idle_reading(self):

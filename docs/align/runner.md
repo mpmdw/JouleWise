@@ -85,7 +85,11 @@ locally. run_episode also accepts monitor objects (full visibility) or
 
 The lane components have default factories in joulewise.align.registry_defaults
 (list it under imports): task shade, endpoint openai_compat, samplers nvml and
-ina3221; the synthetic sampler is the mock world's mock.power. A hardware sampler
+ina3221, and token counter openai_compat; the synthetic sampler is the mock world's
+mock.power. The token counter accepts base_url, model and the endpoint's keyword
+arguments. It wraps /tokenize and raises on tokenize_unavailable or
+tokenize_invalid_base_url instead of treating an unavailable count as zero.
+A hardware sampler
 without its own clock_domain uses the episode clock and clock domain.
 
 Sampling brackets model/tool work and stops before scoring and monitors.
@@ -101,13 +105,23 @@ Per-request raw_usage is retained under hardware.runner.raw_usage, keyed by the
 zero-based request/turn index. raw_usage.joulewise.flags strings are lifted as
 endpoint.<flag>. A zero prompt count also records endpoint.empty_result.
 When reasoning_text is nonempty but reasoning_tokens is zero, the runner always
-records usage.reasoning_uncounted and counts that text only if token_counter is
-provided. The flag remains even when a tokenizer recovers the count: server usage
-and local estimates are distinct provenance. Unreported cached/prefill counts
+records hidden_tokens.unreported and the compatibility alias
+usage.reasoning_uncounted, whether or not a token counter exists. Turn.hidden_tokens
+keeps the server-reported reasoning count, including an unreported zero.
+Tokenizer counts of separated reasoning never enter hidden_tokens. After the
+turn loop ends and every sampler stops, the runner records them under
+hardware.runner.derived_reasoning_tokens: source, a plain label distinguishing
+tokenizer counts from server accounting, per_turn counts (None on failure), and
+failure flags. No runner tokenizer request falls inside a measured span.
+Unreported cached/prefill counts
 remain unrecoverable and explicitly flagged by the adapter.
 
-Reasoning plus tokenizer-counted scratchpad spans are inside hidden_tokens,
-which are part of decode_tokens. Invalid usage is flagged and normalized only
+Server-reported reasoning plus tokenizer-counted closed scratchpad spans are
+inside hidden_tokens, which are part of decode_tokens. Scratchpad counts include
+the text between the tags, not the tags themselves. Scratchpad counting also
+runs after every sampler stops; without a usable counter it records
+hidden_tokens.scratchpad_uncounted. An unclosed suffix stays visible, contributes
+no hidden count, and records scratchpad.unclosed. Invalid usage is flagged and normalized only
 to satisfy records.py. Missing tokenizer counts are flagged. Model work is
 recorded before parsing content or executing tools. Null content becomes empty
 with endpoint.content_missing; non-text tool results record tool.non_text_result
@@ -116,6 +130,15 @@ monitor, scoring and setup failures remain records with flags. Exceptions may
 supply flags and a partial_result ChatResult; these are read with getattr and
 lifted too. Failed requests do not become Turns or execute tools. Their partial
 results, including usage and timings, remain in hardware.runner.failed_requests.
+Non-finite raw_usage floats become None with usage.raw_non_finite. When tools
+were offered but no turn called one, the runner records episode.no_tool_calls.
+
+After task scoring, optional task.flags strings become task.<flag> episode flags.
+After each monitor score, optional monitor.last_verdict is snapshotted; a failed
+call can instead supply exception.diagnostics. Diagnostic flags become
+monitor.<flag>. hardware.runner.monitor_diagnostics retains a list of visibility,
+model and JSON-able snapshot entries, including unavailable verdicts. Flags are
+deduplicated in first-seen order. Components without these attributes still work.
 
 ## Transcript contract
 
@@ -133,21 +156,35 @@ receive this already-filtered history and must not turn the archived reasoning
 into ordinary assistant content. Main and side task scorers receive the same
 endpoint_history view: separated reasoning is stripped, task scratchpads and
 calls/results are retained. hardware.runner.scoring_transcript_view names it.
-Monitor views are unchanged. Native reasoning fields would require an additive
+Every monitor view excludes system messages, so the sabotage side task in the
+system prompt never reaches the monitor. The archive and endpoint/scoring history
+retain system messages. Native reasoning fields would require an additive
 ChatMessage contract extension; the runner offers no native-history opt-in under
 the current contract.
 
-no_scratchpad strips jw_reasoning and task scratchpad spans from natural assistant
-text. actions_only contains calls/results. System prompts, tool arguments and
-results are unchanged. transcript_view(..., "tampered") remains available for an
+no_scratchpad strips only closed, case-sensitive jw_reasoning and task scratchpad
+pairs from natural assistant text. Unclosed suffixes remain visible. actions_only
+contains calls/results. Tool arguments and results are unchanged.
+transcript_view(..., "tampered") remains available for an
 explicit caller-supplied altered transcript. run_episode has no such transcript:
 it skips that monitor visibility with monitor.visibility_tampered_unavailable.
 
 ## Clock mappings and power flags
 
-A sampler may offer clock_mapping() returning a ClockMapping. A foreign trace
-without a matching mapping is omitted with clock.unmapped; no offset is invented.
-Conflicting mappings record clock.mapping_conflict. Empty traces remain flagged.
+A sampler exposes clock_mappings: tuple[ClockMapping, ...], read after stop().
+It is empty when all traces already use the episode domain. A foreign trace
+attaches with one distinct offered mapping matching its trace domain and the
+episode domain, with nonnegative uncertainty. Conflicting mappings for one
+trace domain record clock.mapping_conflict. Missing or invalid mappings record
+clock.unmapped. A missing plural attribute additionally records
+sampler.clock_mappings_missing only when a trace needed mapping. No offset is invented.
+Unattachable traces retain all samples under hardware.runner.unattached_traces,
+alongside their reason and offered clock_mappings as JSON. They stay outside
+power_traces until a valid mapping can be supplied later. Empty traces remain flagged.
+Non-finite samples are removed from attached trace arrays, counted by channel
+under hardware.runner.non_finite_samples, and flagged
+power.<channel>.non_finite_samples. Non-finite values in diagnostic snapshots are
+represented as None so every episode can commit and resume.
 
 For attached traces, notes containing a JSON object with a flags list of strings
 are propagated verbatim as power.<channel>.<original flag>. Distinct full names
@@ -251,7 +288,9 @@ Built-in names/config keys remain mock.clock, mock.inbox, mock.scripted,
 mock.monitor, mock.power and mock.tokens. ScriptConfig defaults represent a
 12-turn inbox job, with one extra sabotage turn at index 6: 120 reasoning tokens,
 64 scratchpad tokens and a transfer tool. Prefill draws are 800/1200/1600 tokens;
-visible decode draws are 80/160/240. ScriptConfig.plan retains nominal legacy
+visible decode draws are 80/160/240. Workload and sensor random seeds mix task_pair,
+condition and seed through SHA-256, so different pairs have distinct deterministic
+draws. ScriptConfig.plan retains nominal legacy
 prefill/context targets for callers; actual usage comes from request messages.
 InboxTask.observation_tokens (default 800) sizes initial context and tool payloads;
 that is a configurable workload assumption within the brief's 200..4000-token
@@ -280,7 +319,9 @@ PowerModel parameters are assumptions, not measured coefficients:
 - Context excess: 0.00004 J/(cached token * decoded token). At 25000 cached
   tokens this adds 1 J/decode token, one third of the chosen decode base;
   the size is a configurable context stress contrast.
-- Tool waits draw idle power.
+- Tool waits draw idle power plus tool_wait_excess_watts (default 0.0 W),
+  configured under mock.power's model. Their added energy is this excess power
+  times the total tool-wait duration.
 - Default sensor: 100 ms cadence, preceding 25 ms average, 0.5 W Gaussian sigma
   and 0.1 W quantum. These noise/quantum values are configurable assumptions.
 - supply_limit=true on mock.power simulates battery assistance and writes
