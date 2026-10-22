@@ -306,6 +306,9 @@ interpolated hardware limits. Neither nulls nor flagged episodes are discarded.
 - Retain conservative labels where sparse exposure misses a prefill. Do not
   manufacture a burst count from an unobserved interval to satisfy m1's
   unconditional 20/20 criterion.
+- Root AGENTS.md handoff item 8 requested a read-only document-consistency
+  agent. That sweep checked API descriptions, Round 1 preservation, repro
+  evidence and final numeric tables; its factual corrections were applied.
 - No hardware, paid service, external message, PR, merge, force push, main
   push, registry edit or out-of-scope tracked write. Extra packages were unnecessary.
 
@@ -355,7 +358,7 @@ Full machine outputs remain in untracked .review2/before and .review2/verified.
 - JET2-m4 — fixed in 7299f9371582b9c27c0cb9c698aeb052303fe4c3. Before e13 `poll=500000 ... 840000 ... flags=('cadence_poll_limited', 'quantum_one_coordinate_unobserved')`; after same exact cadence with only `('quantum_one_coordinate_unobserved',)`. The existing every-read-changing test still requires poll-limited and passes.
 - JET2-m5 — fixed in 7299f9371582b9c27c0cb9c698aeb052303fe4c3. Both consumers now use one held predicate and endpoint-span mean. Before r7 skew50 seed1 `window=1688120 thinning_evidence=False`; after `window=1892148 thinning_evidence=True`. All 24 runs infer their trace window exactly with common thinning evidence; no private-name repro port.
 - JET2-m6 — fixed in c19381b858bafe53158ee2555a7031377f92b9fa. Before default 64 could only give derived zero-FA upper `0.056009089386636624`; after default is 72, the smallest integer making `1-.025**(1/n)<.05`. Both point and 95%-bound columns are computed and printed rather than choosing one silently.
-- JET2-m7 — fixed in this documentation checkpoint (hash recorded by the next report-only checkpoint). Before report said zero tests and doc had stale FIX1C status; after both contain this seat's 46-test execution, all repro outcomes, full 72-seed production grid and shortest answers. Historical Round 1 FIX LOG is preserved; current non-passes are explicit.
+- JET2-m7 — fixed in 22c08424776f928b40e4b76a782b1d50a17d6972. Before report said zero tests and doc had stale FIX1C status; after both contain this seat's 46-test execution, all repro outcomes, full 72-seed production grid and shortest answers. Historical Round 1 FIX LOG is preserved; current non-passes are explicit.
 
 ## OPEN ISSUES
 
