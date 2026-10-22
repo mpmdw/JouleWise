@@ -728,11 +728,12 @@ def record_plan_diagnostics(
 
 
 def load_plans(storage: Storage, *, now_epoch_s: float | None = None) -> PlanSnapshot:
-    """Read and classify plans without mutating watchdog custody."""
+    """Combine scanned and installed plans, deduplicated by resolved identity."""
 
     plans: list[NightPlan] = []
     errors: list[str] = []
     diagnostics: list[PlanDiagnostic] = []
+    seen: set[tuple[str, Path]] = set()
     observed_now = time.time() if now_epoch_s is None else now_epoch_s
     for path in storage.glob_plans():
         try:
@@ -777,12 +778,22 @@ def load_plans(storage: Storage, *, now_epoch_s: float | None = None) -> PlanSna
             )
             errors.append(f"night_plan_malformed {path}: {exc}")
             continue
-        plans.append(plan)
+        key = (plan.plan_id, path.resolve(strict=False))
+        if key not in seen:
+            seen.add(key)
+            plans.append(plan)
+    try:
+        plans.extend(_installed_agent_plans(
+            dt.datetime.fromtimestamp(observed_now, tz=dt.timezone.utc), storage, seen=seen, errors=errors))
+    except (OSError, ValueError, OverflowError) as exc:
+        errors.append(f"installed_agent_fence: {exc}")
     return PlanSnapshot(tuple(plans), tuple(errors), tuple(diagnostics))
 
 
 def _installed_agent_plans(
     now: dt.datetime, storage: Storage, *, launch_agents_dir: Path | None = None,
+    seen: set[tuple[str, Path]] | None = None,
+    errors: list[str] | None = None,
 ) -> list[NightPlan]:
     """Read installed agents independently of custody discovery; fail closed."""
     directory = launch_agents_dir or Path.home() / "Library" / "LaunchAgents"
@@ -795,6 +806,7 @@ def _installed_agent_plans(
             raise ValueError(f"unreadable LaunchAgents directory: {directory}")
         return []
     plans = []
+    seen = set() if seen is None else seen
     for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
         plist = directory / f"{label}.plist"
         if plist not in entries:
@@ -813,10 +825,19 @@ def _installed_agent_plans(
             if plan.authored_epoch_s > now.timestamp():
                 raise ValueError("installed plan authored_epoch_s is in the future")
             deadman_epoch(plan)
-            plans.append(plan)
-        except (OSError, ValueError, OverflowError, TypeError, KeyError, IndexError, PlanError,
-                plistlib.InvalidFileException, ExpatError) as exc:
-            raise ValueError(f"unreadable installed agent {plist}: {exc}") from exc
+            # Validate every installed plist even when its plan was already
+            # scanned, or the night and deadman plists name the same plan.
+            key = (plan.plan_id, plan_path.resolve(strict=False))
+            if key not in seen:
+                seen.add(key)
+                plans.append(plan)
+        except Exception as exc:  # any content fault (e.g. a malformed <date> raises
+            # AttributeError, deep nesting RecursionError) must hold and drain, never escape.
+            if errors is None:
+                raise ValueError(f"unreadable installed agent {plist}: {exc}") from exc
+            # Keep readable siblings for their absolute drain deadlines, while
+            # the snapshot error still holds launches and drains the resident.
+            errors.append(f"installed_agent_fence: unreadable installed agent {plist}: {exc}")
     return plans
 
 
@@ -1909,12 +1930,11 @@ def _remote_probe_allowed(storage: Storage, deps: Dependencies, state: Mapping[s
     snapshot = load_plans(storage, now_epoch_s=now.timestamp())
     if snapshot.errors:
         raise ValueError("; ".join(snapshot.errors))
-    installed = _installed_agent_plans(now, storage)
-    # Evaluate both sources with the same fresh clock after all file reads.
+    # Evaluate the combined snapshot with a fresh clock after all file reads.
     now = deps.wall_now().astimezone()
     return not any(
         plan_span_active(plan, now.timestamp(), storage, state)
-        for plan in (*snapshot.plans, *installed)
+        for plan in snapshot.plans
     )
 
 
@@ -1931,14 +1951,9 @@ def _launch_fence(storage: Storage, deps: Dependencies, state: Mapping[str, Any]
         snapshot = load_plans(storage, now_epoch_s=now.timestamp())
         if snapshot.errors:
             return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
-        installed = _installed_agent_plans(now, storage)
         now = deps.wall_now().astimezone()
         if any(plan_span_active(plan, now.timestamp(), storage, state) for plan in snapshot.plans):
             return Decision("FENCED", "plan span active at launch boundary")
-        reasons = [f"installed_plan:{plan.plan_id}" for plan in installed
-                   if plan_span_active(plan, now.timestamp(), storage, state)]
-        if reasons:
-            return Decision("FENCED", "; ".join(reasons))
     except (OSError, ValueError, OverflowError) as exc:
         return Decision("HOLD_UNSAFE", f"launch_fence: {exc}")
     return None
@@ -2100,12 +2115,8 @@ def decide(
             storage.unlink(storage.root / "magistrate.lock")
             lock = None
 
-    try:
-        installed = installed_agent_fence(wall, storage, state=state)
-    except (OSError, ValueError, OverflowError) as exc:
-        return Decision("HOLD_UNSAFE", f"installed_agent_fence: {exc}")
     active_plans = [plan for plan in plans if plan_span_active(plan, wall.timestamp(), storage, state)]
-    if probe_span_active or installed is not None:
+    if probe_span_active:
         stop = StopObservation("NOT_PROBED", "remote stop probe skipped during plan span")
     else:
         try:
@@ -2141,8 +2152,6 @@ def decide(
         return Decision("STOPPED", stop.detail, adopt=owner is not None)
     if stop.state not in {"CLEAR", "NOT_PROBED"}:
         return Decision("NETWORK_UNCERTAIN", stop.detail, adopt=owner is not None)
-    if installed is not None:
-        return Decision("FENCED", installed)
     if owner is not None:
         return Decision("ACTIVE", f"owned pid {owner.pid} is live", adopt=True)
     if wall.timestamp() < float(state.get("next_eligible_epoch_s", 0.0)):
