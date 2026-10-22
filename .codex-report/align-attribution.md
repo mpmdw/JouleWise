@@ -117,9 +117,6 @@ No shared contract file was modified.
 - The specified bound cannot certify arbitrary unobserved duty-gap work; consumers must retain duty.uncovered.
 - No physical hardware was accessed or validated.
 
-## NEEDS_RULING
-No scientific/data-selection ruling is needed.
-
 A WRITE_SCOPE expansion is pending for a concrete one-line inventory fix:
 in `tests/test_shard_tests.py`, change
 `loader.discover(os.fspath(TESTS_DIR))` to
@@ -128,3 +125,6 @@ This corrects the discovered namespace for both the spine's record tests and the
 The brief permits only name additions to registries, so that logic change has NOT been made.
 Options: allow the one-line fix (recommended), or preserve the file and leave CI blocked.
 Blocked work: full CI shards, including attribution test execution.
+
+## NEEDS_RULING
+none
