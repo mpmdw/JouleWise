@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import math
 from collections import defaultdict
-from dataclasses import asdict
 from typing import Any, Mapping, Sequence
 
 from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
@@ -26,6 +25,29 @@ TRACE_DOMAIN = "joulewise.controller.epoch_ns"
 def seconds_ns(seconds: float) -> int:
     """Convert controller seconds once; price float representation in mapping."""
     return round(seconds * NS_PER_SECOND)
+
+
+def _stamp_record(stamp: ClockStamp) -> dict[str, int]:
+    """Keep the existing paired observation as integer ns in shared records."""
+    return {
+        "epoch_ns": seconds_ns(stamp.epoch_s),
+        "monotonic_before_ns": seconds_ns(stamp.monotonic_before_s),
+        "monotonic_after_ns": seconds_ns(stamp.monotonic_after_s),
+        "wall_resolution_ns": math.ceil(stamp.wall_resolution_s * NS_PER_SECOND),
+        "monotonic_resolution_ns": math.ceil(stamp.monotonic_resolution_s * NS_PER_SECOND),
+    }
+
+
+def _restore_stamp(record: Mapping[str, int]) -> ClockStamp:
+    # A second integer/float conversion contributes at most 1 ns rounding,
+    # in addition to the float epoch ulp priced by stamp_mapping.
+    return ClockStamp(
+        epoch_s=record["epoch_ns"] / NS_PER_SECOND,
+        monotonic_before_s=record["monotonic_before_ns"] / NS_PER_SECOND,
+        monotonic_after_s=record["monotonic_after_ns"] / NS_PER_SECOND,
+        wall_resolution_s=(record["wall_resolution_ns"] + 1) / NS_PER_SECOND,
+        monotonic_resolution_s=(record["monotonic_resolution_ns"] + 1) / NS_PER_SECOND,
+    )
 
 
 def monotonic_ns(stamp: ClockStamp) -> int:
@@ -107,6 +129,8 @@ def power_records(
             if not math.isfinite(sample.power_w):
                 flags.append(f"nonfinite_power:{channel}")
                 continue
+            if sample.power_w < 0.0:
+                flags.append(f"negative_power:{channel}")
             times.append(timestamp)
             values.append(sample.power_w)
             supports.append(
@@ -133,7 +157,15 @@ def power_records(
             resolution=resolution,
             notes=json.dumps({
                 "sample_support_ns": supports,
-                "clock_anchor": (evidence or {}).get("clock_anchor"),
+                "clock_anchor": {
+                    "method": (evidence or {}).get("clock_anchor", {}).get("method"),
+                    "status": (evidence or {}).get("clock_anchor", {}).get("status", "unknown"),
+                    "effective_bound_ns": math.ceil(
+                        (evidence or {}).get("clock_anchor", {}).get(
+                            "effective_clock_anchor_bound_s", 0.0
+                        ) * NS_PER_SECOND
+                    ) if (evidence or {}).get("clock_anchor", {}).get("status") == "bounded" else None,
+                },
                 "flags": [flag for flag in flags if flag.endswith(f":{channel}")],
                 "power_scope": "SoC rails; not wall energy",
             }, sort_keys=True),
@@ -212,6 +244,6 @@ class ApplePowerSampler:
                 source="powermetrics", channel="package", clock_domain=TRACE_DOMAIN,
                 t_ns=(), values=(), unit="W",
                 nominal_interval_ns=round(NS_PER_SECOND / self.config.sampling.power_hz),
-                notes=json.dumps({"flags": self.flags, "stamps": [asdict(start), asdict(stop)]}),
+                notes=json.dumps({"flags": self.flags, "paired_stamps_ns": [_stamp_record(start), _stamp_record(stop)]}),
             ),)
         return traces

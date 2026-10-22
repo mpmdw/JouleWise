@@ -84,8 +84,19 @@ class MlxEndpoint:
         self.events: list[Any] = []
         self.turn_provenance: list[Mapping[str, Any]] = []
         self.flags: list[str] = []
+        self.prompt_token_ids: list[int] = []
+        self.tokenizer_provenance: dict[str, Any] = {
+            "backend": config.hardware_target.runtime_backend.value,
+            "identifier": None, "revision": None, "class": None, "vocab_size": None,
+        }
         self._turn = 0
         prepared = dict(prepare_metadata or {})
+        if config.model.revision is None:
+            self.flags.append("model_revision_unpinned")
+        if config.hardware_target.runtime_backend == RuntimeBackend.MLX:
+            for version_key in ("mlx_version", "mlx_lm_version"):
+                if prepared.get(version_key) is None:
+                    self.flags.append(f"{version_key}_unavailable")
         self.identity = json.dumps({
             "backend": config.hardware_target.runtime_backend.value,
             "execution": "in_process",
@@ -140,10 +151,14 @@ class MlxEndpoint:
                 if reasoning_tokens < 0 or reasoning_tokens > completion_tokens:
                     flags.append("mock_reasoning_count_outside_completion")
                     reasoning_tokens = 0
-                provenance = result.workload_provenance or {}
+                provenance = dict(result.workload_provenance or {})
+                actual_ids = self.runtime._prompt_token_ids(prompt_tokens)
+                self.prompt_token_ids.extend(actual_ids)
+                provenance["prompt_token_ids"] = actual_ids
+                self.tokenizer_provenance = dict(provenance.get("tokenizer", self.tokenizer_provenance))
                 flags.append("synthetic_mock_runtime")
             else:
-                from joulewise.adapters.mlx_runtime import _encode
+                from joulewise.adapters.mlx_runtime import _encode, _tokenizer_identity
 
                 tokenizer = self.runtime._tokenizer
 
@@ -172,7 +187,10 @@ class MlxEndpoint:
                 prompt_tokens = record.prompt_tokens
                 completion_tokens = record.output_tokens
                 new_events = record.events
+                self.prompt_token_ids.extend(record.prompt_token_ids)
+                self.tokenizer_provenance = _tokenizer_identity(tokenizer, self.config)
                 provenance = {
+                    "prompt_token_ids": record.prompt_token_ids,
                     "sampler": record.sampler_provenance,
                     "prompt_token_ids_sha256": hashlib.sha256(
                         json.dumps(record.prompt_token_ids, separators=(",", ":")).encode("utf-8")
@@ -211,6 +229,7 @@ class MlxEndpoint:
             text, reasoning_tokens=reasoning_tokens
         )
         flags.extend(parse_flags)
+        calls = tuple(replace(call, call_id=f"{turn_index}-{call.call_id}") for call in calls)
         self.flags.extend(flags)
         self.turn_provenance.append({
             "turn": turn_index, "flags": flags, "generation": provenance,

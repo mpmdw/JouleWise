@@ -18,7 +18,7 @@ from typing import Any, Mapping
 
 from joulewise.align.apple.endpoint import MlxEndpoint
 from joulewise.align.apple.sampler import (
-    NS_PER_SECOND, monotonic_ns, power_records, stamp_mapping,
+    NS_PER_SECOND, monotonic_ns, power_records, stamp_mapping, _stamp_record, _restore_stamp,
 )
 from joulewise.align.interfaces import AgentTask, ChatMessage
 from joulewise.align.records import (
@@ -27,7 +27,8 @@ from joulewise.align.records import (
 from joulewise.bundle_read import BundleReader
 from joulewise.clock import Clock, ClockStamp
 from joulewise.interfaces import AdapterResult, PowerSample, RunContext, RuntimeEvent, RuntimeResult
-from joulewise.schemas import BenchmarkConfig
+from joulewise.schemas import BenchmarkConfig, RuntimeBackend
+from joulewise.provenance import prompt_provenance
 
 WORKLOAD_KIND = "align_episode"
 SPEC_SCHEMA = "joulewise.align.apple.episode_spec.v1"
@@ -105,6 +106,11 @@ class EpisodeRuntimeAdapter:
         except Exception as exc:
             self.flags.append(f"task_unavailable:{type(exc).__name__}:{exc}")
         try:
+            if config.hardware_target.runtime_backend == RuntimeBackend.MLX:
+                source = Path(config.model.source or "").expanduser()
+                if not config.model.source or not source.is_dir():
+                    self.flags.append("runtime_unavailable:local_model_mirror_required")
+                    return AdapterResult(ok=True, metadata={"align_episode_flags": list(self.flags)})
             result = self.runtime.prepare(config, context)
             self._runtime_ready = result.ok
             self.prepared = dict(result.metadata)
@@ -249,8 +255,13 @@ class EpisodeRuntimeAdapter:
             side_task_success=side_success,
             hardware={
                 "run_bundle_id": episode_id,
-                "paired_clock_stamps": [asdict(start), asdict(end)],
-                "runtime_prepare": self.prepared,
+                "paired_clock_stamps_ns": [_stamp_record(start), _stamp_record(end)],
+                "controller_clock_domain": "joulewise.controller.epoch_ns",
+                "runtime_identity": {
+                    key: self.prepared.get(key) for key in (
+                        "mlx_version", "mlx_lm_version", "model_artifact_identity"
+                    )
+                },
                 "power_scope": "existing controller rail manifest",
             },
             flags=tuple(dict.fromkeys(flags)),
@@ -258,6 +269,9 @@ class EpisodeRuntimeAdapter:
         transcript_text = "".join(
             json.dumps(to_jsonable(message), sort_keys=True) + "\n" for message in transcript
         )
+        prompt = prompt_provenance(endpoint.prompt_token_ids, text=None)
+        if not endpoint.prompt_token_ids:
+            prompt["realized_token_count"] = None
         return RuntimeResult(
             events=events,
             output_artifacts={
@@ -271,6 +285,16 @@ class EpisodeRuntimeAdapter:
             output_token_count=sum(t.decode_tokens for t in turns),
             workload_provenance={
                 "kind": WORKLOAD_KIND,
+                "prompt": prompt,
+                "generator": {"name": WORKLOAD_KIND, "version": SPEC_SCHEMA},
+                "tokenizer": endpoint.tokenizer_provenance,
+                "model": {"source": config.model.source, "revision": config.model.revision},
+                "output_policy": {
+                    "name": "agent_episode",
+                    "requested_tokens": spec.max_turns * spec.max_tokens if spec else None,
+                    "emitted_tokens": sum(t.decode_tokens for t in turns),
+                    "stop_condition": "turn_budget_reached" if "turn_budget_reached" in flags else "episode_returned",
+                },
                 "episode_spec_sha256": hashlib.sha256(
                     (config.workload_profile.prompt_text or "").encode("utf-8")
                 ).hexdigest(),
@@ -298,7 +322,7 @@ def read_episode_bundle(bundle: Path) -> Episode:
     episode = from_json(Episode, (Path(bundle) / "outputs" / "align_episode.json").read_text())
     metadata = reader.metadata()
     evidence = metadata.get("uncertainty_evidence")
-    stamps = tuple(ClockStamp(**row) for row in episode.hardware["paired_clock_stamps"])
+    stamps = tuple(_restore_stamp(row) for row in episode.hardware["paired_clock_stamps_ns"])
     mapping, mapping_flags = stamp_mapping(
         stamps, episode_domain=episode.clock_domain, evidence=evidence
     )
