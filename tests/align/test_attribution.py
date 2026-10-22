@@ -87,9 +87,9 @@ class AttributionChecks(unittest.TestCase):
                                 mapping=mapping())
         # Integral of 10 + 10t from .25 to 1.75 is 30 J.
         self.close(estimate.joules, 30.0, half_width=estimate.half_width_j)
-        # Start: half integral of 10t on [.25,1] = 2.34375 J.
-        # End: half integral of 10(t-1) on [1,1.75] = 1.40625 J.
-        self.close(estimate.half_width_j, 2.34375 + 1.40625 + (20 + 30) * 0.01 + 0.1 * 1.5)
+        # C1 start: integral of 10t on [.25,1] = 4.6875 J.
+        # C1 end: integral of 10(t-1) on [1,1.75] = 2.8125 J.
+        self.close(estimate.half_width_j, 4.6875 + 2.8125 + (20 + 30) * 0.01 + 0.1 * 1.5)
 
     def test_square_pulse_point_reconstruction(self):
         # A 200 W plateau and two 100 ms linear edges above 50 W.
@@ -123,7 +123,20 @@ class AttributionChecks(unittest.TestCase):
         self.close(cut.joules, 150 * 0.025, half_width=cut.half_width_j)
         self.assertEqual(cut.method, "window_average_W;duty.uncovered_fraction=1.0")
 
-    def test_window_mean_does_not_bound_work_allocation_inside_window(self):
+    def test_c2_duty_gap_sensitivity_applies_to_total_and_partial_overlap(self):
+        sensor = trace(times=(0, NS // 10), values=(100.0, 200.0),
+                       averaging_window_ns=NS // 40, duty_fraction=0.25)
+        full = trace_energy(sensor, 0, NS // 10, mapping=mapping(uncertainty=0))
+        # Endpoint knots have no C1 or window-cut term. The 75 ms gap
+        # contributes |200-100| W * .075 s/2; resolution is .1 W * .1 s.
+        self.close(full.half_width_j, 100 * 0.075 / 2 + 0.1 * 0.1)
+        cut = trace_energy(sensor, NS // 40, NS // 20, mapping=mapping(uncertainty=0))
+        # The raw 100..200 W bracket has slope 1000 W/s. Its line-minus-
+        # hold integral on [.025,.05] s is .9375 J at EACH end (C1);
+        # only 25 ms of the duty gap overlaps, contributing 100*.025/2.
+        self.close(cut.half_width_j, 2 * 0.9375 + 100 * 0.025 / 2 + 0.1 * 0.025)
+
+    def test_c2_bounds_one_step_allocation_inside_window(self):
         period = NS // 10  # Whole 100 ms powermetrics reporting window.
         edge = 37 * NS // 1000  # Explicit 37 ms fixture edge, off the grid.
         sensor = trace(times=(0, period, 2 * period), values=(0.0, 63.0, 100.0),
@@ -136,8 +149,9 @@ class AttributionChecks(unittest.TestCase):
         self.close(estimate.joules, 63 * 0.063, half_width=estimate.half_width_j)
         # Raw means interpolate from 0 to 63 W. On [37,100] ms the
         # line's integral is (23.31 + 63)/2 * .063 = 2.718765 J.
-        self.close(estimate.half_width_j, 2.718765 / 2 + 0.001 * 0.063)
-        self.assertGreater(abs(exact - estimate.joules), estimate.half_width_j)
+        # Full C1 comparison plus C2's neighbouring range 100 W * .1 s/4.
+        self.close(estimate.half_width_j, 2.718765 + 100 * 0.1 / 4 + 0.001 * 0.063)
+        self.assertLessEqual(abs(exact - estimate.joules), estimate.half_width_j)
         self.assertIn("window.edge_allocation_unresolved", estimate.flags)
 
     def test_single_window_covers_time_before_its_timestamp(self):
@@ -152,9 +166,9 @@ class AttributionChecks(unittest.TestCase):
         estimate = trace_energy(sensor, NS // 2, 3 * NS // 2,
                                 mapping=mapping(uncertainty=1_000_000))
         self.close(estimate.joules, 150.0, half_width=estimate.half_width_j)
-        # Half of the 50 J and 100 J partial counter increments, clock slopes
+        # Full 50 J and 100 J partial counter differences, clock slopes
         # (100+200) W * 1 ms, and two 1 mJ counter quanta.
-        self.close(estimate.half_width_j, 25 + 50 + 0.3 + 0.002)
+        self.close(estimate.half_width_j, 50 + 100 + 0.3 + 0.002)
         self.assertEqual(estimate.method, "counter_J")
 
     def test_counter_wrap_is_flagged_without_guessing_modulus(self):
@@ -191,9 +205,9 @@ class AttributionChecks(unittest.TestCase):
         estimate = trace_energy(sensor, NS // 4, 3 * NS // 2,
                                 mapping=mapping(uncertainty=0))
         self.close(estimate.joules, 175.0, half_width=estimate.half_width_j)
-        # At the start: |100 J held jump - 75 J linear| / 2 = 12.5 J.
-        # At the stop: |0 J held increment - 100 J linear| / 2 = 50 J.
-        self.close(estimate.half_width_j, 12.5 + 50 + 2 * 0.001)
+        # At the start: full |100 J held jump - 75 J linear| = 25 J.
+        # At the stop: full |0 J held increment - 100 J linear| = 100 J.
+        self.close(estimate.half_width_j, 25 + 100 + 2 * 0.001)
 
     def test_short_interval_uncertainty_uses_only_its_own_support(self):
         sensor = trace(times=(0, NS), values=(0.0, 100.0))
@@ -201,8 +215,8 @@ class AttributionChecks(unittest.TestCase):
                                 mapping=mapping(uncertainty=0))
         self.close(estimate.joules, 4.5, half_width=estimate.half_width_j)
         # Left sample holds at 0 W; the line integrates to 4.5 J. Each end
-        # compares on the same requested 100 ms support: 2 * 4.5/2 + .1*.1.
-        self.close(estimate.half_width_j, 4.5 + 0.1 * 0.1)
+        # compares on the same requested 100 ms support: 2 * 4.5 + .1*.1.
+        self.close(estimate.half_width_j, 2 * 4.5 + 0.1 * 0.1)
         empty = trace_energy(sensor, NS // 2, NS // 2)
         self.assertEqual((empty.joules, empty.half_width_j), (0.0, 0.0))
 

@@ -187,7 +187,41 @@ class _Trace:
             held = span.integral(span.start, span.end) if b == span.end else 0.0
         else:
             held = span.left * ((b - a) / _NS_PER_S)
-        return abs(linear - held) / 2
+        # C1: use the full hold-versus-line difference. With at most one
+        # step dP at fraction u of a partial interval L, the point-sensor
+        # error is (1-u)*dP*L/2, bounded by (1+u)*dP*L/2 here.
+        # A counter's full held jump likewise bounds its linear allocation;
+        # halving the difference only bounds the point error for u >= 1/3.
+        return abs(linear - held)
+
+    def _window_uncertainty(self, t0: int, t1: int) -> float:
+        if self.counter or self.window is None:
+            return 0.0
+        terms = []
+        k0 = max(1, bisect_left(self.times, t0))
+        for k in range(k0, len(self.times)):
+            if self.times[k - 1] >= t1:
+                break
+            a, b = self.times[k - 1], self.times[k] - self.window
+            overlap = max(0, min(t1, b) - max(t0, a))
+            if overlap:
+                # C2(a), assuming at most one step per duty gap: a step
+                # dP versus its linear fill differs by at most the triangle
+                # |dP|*L/2 on the gap length L inside this query.
+                terms.append(abs(self.values[k] - self.values[k - 1])
+                             * (overlap / _NS_PER_S) / 2)
+        for t in (t0, t1):
+            k = bisect_left(self.times, t)
+            if k < len(self.times) and self.times[k] - self.window < t < self.times[k]:
+                neighbours = self.values[max(0, k - 1):k + 2]
+                # C2(b), assuming at most one step per window: allocating
+                # a trailing mean across a cut errs by dP*w*u*(1-u).
+                # Its maximum is |dP|*w/4 at the midpoint. Use the range
+                # of adjacent means as the observed step sensitivity;
+                # an unseen burst or an unobserved larger step is unbounded.
+                terms.append((max(neighbours) - min(neighbours))
+                             * (self.window / _NS_PER_S) / 4)
+        return math.fsum(terms)
 
     def energy(self, t0: int, t1: int, idle_watts: float) -> EnergyEstimate:
         flags = list(self.flags)
@@ -234,7 +268,8 @@ class _Trace:
                 bounds.append((self._adjacent_peak(t0) + self._adjacent_peak(t1))
                               * uncertainty / _NS_PER_S)
         bounds.extend((self._interpolation(t0, t0, t1, start=True),
-                       self._interpolation(t1, t0, t1, start=False)))
+                       self._interpolation(t1, t0, t1, start=False),
+                       self._window_uncertainty(t0, t1)))
         for a, b in self.resets:
             reset_overlap = max(0, min(t1, b) - max(t0, a))
             if reset_overlap:
@@ -248,8 +283,8 @@ class _Trace:
             bounds.append(2 * resolution if self.counter else resolution * duration)
         method = self.method
         if self.window is not None:
-            # Window means do not identify the position of work inside a
-            # window. The specified three terms do not bound that ambiguity.
+            # C2 is a one-step sensitivity, not a bound on arbitrary work
+            # hidden inside a window or unobserved duty gap.
             for t in (t0, t1):
                 i = bisect_right(self.starts, t) - 1
                 if i >= 0 and self.spans[i].start < t < self.spans[i].end:
@@ -277,9 +312,10 @@ def trace_energy(
     observed-peak sensitivity for work lost before the reset.
 
     Endpoint hold-versus-line comparisons are clipped to the query itself.
-    Windowed sensors compare raw sample brackets, because their means can
-    straddle a phase edge; window.edge_allocation_unresolved records the
-    missing allocation bound. A held counter jumps
+    Windowed sensors compare raw sample brackets and add the C2 duty-gap
+    and within-window allocation sensitivities under a one-step assumption.
+    window.edge_allocation_unresolved retains the warning that arbitrary
+    unsampled work is unbounded. A held counter jumps
     at the right sample; that jump counts when the partial interval reaches it.
     Empty reconstructions return zero energy with infinite uncertainty.
     """
