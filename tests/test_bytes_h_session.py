@@ -217,7 +217,13 @@ class RealKitStagingTests(unittest.TestCase):
                 manifest = h.read(view / soak['input']['path'])
                 self.assertEqual(len(manifest['executed_order']), 12 if mode == 'full' else 1)
                 if mode == 'r12':
-                    self.assertEqual(manifest['executed_order'][0]['run_id'], h.PACK_ID + '-soak-llama-70b-r12')
+                    kept = manifest['executed_order'][0]
+                    self.assertEqual(kept['index'], 1)
+                    source_soak = next(d for d in plan.resolve_stage_dispatches(original, ROOT) if d.stage_id == soak['stage_id'])
+                    source_row = h.read(ROOT / source_soak.config_dir / 'order_manifest.json')['executed_order'][-1]
+                    for key in ('run_id', 'rep', 'config_sha256', 'block_index', 'position_in_block', 'sentinel_position'):
+                        self.assertEqual(kept.get(key), source_row.get(key), key)
+                    self.assertEqual(kept['run_id'], h.PACK_ID + '-soak-llama-70b-r12')
         self.assertEqual({p: p.read_bytes() for p in source_bytes}, source_bytes)
 
     def test_staged_real_kit_publishes_lineage_and_authenticates_every_dispatched_config(self):
@@ -376,6 +382,7 @@ class SessionTests(unittest.TestCase):
         state = self.prepared()
         record = h.read(state['plan_path'])
         self.assertEqual(state['preparation_status'], 'STAGED')
+        self.assertEqual(len([f for f in state['flags'] if f['kind'] == 'runtime_stack_unobserved']), 11)
         self.assertEqual(record['hazard_window']['member_count'], 123)
         self.assertEqual(record['window_max_s'], h.plan_inputs.window_max_s(state['inputs']))
         self.assertEqual(record['t0_epoch_s'], 60*math.ceil((1700000000+420)/60))
@@ -389,6 +396,12 @@ class SessionTests(unittest.TestCase):
         self.assertTrue(Path(state['plan_path']).is_file())
 
     def test_remainder_prepare_real_writer_both_soaks_and_journal_math(self):
+        self.remainder_prepare_both_soaks(harvest=True)
+
+    def test_remainder_every_staged_directory_real_runner_dry_run(self):
+        self.remainder_prepare_both_soaks(harvest=False)
+
+    def remainder_prepare_both_soaks(self, *, harvest):
         # Appendix millisecond member durations; shell intervals stay integer
         # seconds. Synthetic stamps/paths exercise real parsing and writing.
         durations = {
@@ -440,6 +453,10 @@ class SessionTests(unittest.TestCase):
                         measured_session=measured,run=self.producer,now=lambda:1700000000,
                         statvfs=lambda _:SimpleNamespace(f_bavail=10**12,f_frsize=1),capacity=lambda _:None)
                 self.assertEqual(state['preparation_status'],'STAGED')
+                expected_units = {'llama-70b', 'qwen35-122b', 'qwen3-next-80b', 'neg8_reference'}
+                self.assertEqual({f['model_id'] for f in state['flags'] if f['kind'] == 'runtime_stack_unobserved'}, expected_units)
+                staged = h.read(Path(state['inputs']['pack_root']) / 'plan_tree.json')
+                self.assertEqual({u['identity_unit_id'] for u in staged['arm_attachments']['identity_pin_projection']['identity_units']}, expected_units)
                 self.assertTrue(state['session_id'].startswith('bytes-h2-'))
                 record = h.read(state['plan_path'])
                 self.assertEqual(record['hazard_window']['member_count'],count)
@@ -451,13 +468,17 @@ class SessionTests(unittest.TestCase):
                 member = sum(durations['bound-collection'])+2*sum(durations['reference-start'])+127.715
                 member += 2*sum(sum(durations['test7-'+model+'-start']) for model in
                                 ('llama-70b','qwen35-122b','qwen3-next-80b'))+soak70+soak122
-                base = 1+227+719+2442+2*397+2*(807+649+598)+128+soak70+soak122+2*overhead+227+1191+13*60
+                base = 1+227+719+2442+2*397+2*(807+649+598)+128+soak70+soak122+2*overhead+236+13*60
                 # 1e-6 relative/absolute seconds follows the brief's precision
                 # rule and exceeds binary epoch-subtraction roundoff.
                 self.assertTrue(math.isclose(receipt['measured_margin'],margin,rel_tol=1e-6,abs_tol=1e-6))
                 self.assertTrue(math.isclose(receipt['programmed_span_s'],base+member*margin,rel_tol=1e-6,abs_tol=1e-6))
                 terms = {t['stage_id'].removeprefix(h.PACK_ID+'-'):t for t in receipt['terms'] if 'stage_id' in t}
                 for short, term in terms.items():
+                    if short in ('whole-window-verdict', 'backup'):
+                        self.assertEqual(term['seconds'], 0)
+                        self.assertEqual(term['sources'], ['joulewise.b5.chain.DESK_KINDS'])
+                        continue
                     source = short.replace('post-calibration','pre-calibration')
                     if source.endswith('-end'):
                         source = source[:-4]+'-start'
@@ -465,6 +486,9 @@ class SessionTests(unittest.TestCase):
                         expected_base, expected_member = soak70+overhead,soak70
                     elif short == 'soak-qwen35-122b':
                         expected_base, expected_member = soak122+overhead,soak122
+                    elif short == 'post-calibration':
+                        expected_base, expected_member = 236, 0
+                        self.assertEqual([p['seconds'] for p in term['parts']], [215, 20, 1])
                     else:
                         expected_base = {'pre-calibration':227,'bound-derivation':719}.get(source,stage_seconds[source])
                         expected_member = sum(durations.get(source,[]))
@@ -498,6 +522,22 @@ class SessionTests(unittest.TestCase):
                 # The full plan has 98 science members plus 25 scaffold
                 # members dispatched by the tree, for 123 total.
                 self.assertEqual(len(h.read(view / h.KIT / 'collection_plan.json')['members']), 98)
+                total = 0
+                for dispatch in plan.resolve_stage_dispatches(h.read(Path(state['inputs']['pack_root']) / 'plan_tree.json'), view):
+                    directory = view / dispatch.config_dir
+                    scratch = self.root / ('runner-' + mode) / dispatch.stage_id
+                    scratch.mkdir(parents=True)
+                    child = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/run_campaign.py'),
+                        str(directory), '--runs-dir', str(scratch / 'runs'), '--log', str(scratch / 'campaign_log.jsonl'),
+                        '--campaign-policy', str(ROOT / 'configs/campaign_policies/quiet_mac_p2_b5.json'),
+                        '--max-failures', '1', '--dry-run'], capture_output=True, text=True)
+                    self.assertEqual(child.returncode, 0, (mode, dispatch.stage_id, child.stdout, child.stderr))
+                    expected = next(s['expected_count'] for s in printed_stages if s['stage_id'] == dispatch.stage_id)
+                    self.assertEqual(sum(line.startswith('dry_run ') for line in child.stdout.splitlines()), expected)
+                    total += expected
+                self.assertEqual(total, count)
+                if not harvest:
+                    continue
                 self.seed_collection(state)
                 def real_child(argv, **kwargs):
                     if 'harvest_b6_session.py' in Path(argv[1]).name:
@@ -520,6 +560,28 @@ class SessionTests(unittest.TestCase):
                 self.assertIn('sizing.c5_remainder_checks_absent', desk_output.getvalue())
                 self.assertIn('sizing.c5_remainder_checks_absent', {f['code'] for f in observed['flags']})
                 self.assertEqual(hashlib.sha256(ledger.read_bytes()).hexdigest(),before)
+
+    def test_remainder_missing_payload_leaves_session_root_absent(self):
+        reg = self.measurement / h.KIT / 'registration'
+        pins = h.read(reg / 'identity_pins.json')
+        pins['units']['llama-70b']['model_source'] = str(self.root / 'missing-model')
+        h.write(reg / 'identity_pins.json', pins)
+        with self.assertRaises(h.PhysicalHazard):
+            h.prepare(self.measurement, self.session, remainder=True)
+        self.assertFalse(self.session.exists())
+
+    def test_cli_remainder_options_flagged_without_remainder(self):
+        for options in (['--soak-70b', 'r12'], ['--measured-session', '/tmp/H']):
+            with patch.object(h, 'prepare') as prepare, redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(h.main(['prepare', '--measurement-root', str(self.measurement),
+                    '--session-root', str(self.session), *options]), 0)
+            flag = json.loads(output.getvalue().removeprefix('flag: '))
+            self.assertEqual(flag, {'kind': 'cli.remainder_option_ignored', 'option': options[0]})
+            self.assertFalse(prepare.call_args.kwargs['remainder'])
+        with patch.object(h, 'prepare') as prepare, redirect_stdout(io.StringIO()) as output:
+            h.main(['prepare', '--measurement-root', str(self.measurement), '--session-root', str(self.session), '--remainder'])
+        self.assertEqual(prepare.call_args.kwargs['soak_70b'], 'full')
+        self.assertEqual(output.getvalue(), '')
 
     def test_remainder_missing_journals_flags_inputs_only_without_pilot_span(self):
         output = io.StringIO()

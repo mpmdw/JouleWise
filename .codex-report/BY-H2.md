@@ -1,3 +1,5 @@
+Fix round 1 corrections and verification: [BY-H2-fix1.md](BY-H2-fix1.md).
+
 # BY-H2 — remainder implementation handoff (2026-10-22)
 
 ## PROGRESS
@@ -7,7 +9,7 @@
 - DONE: implementation and local focused verification complete. Slice 3 began clean at f2f9bc72e; added assertions for prepare's printed stage order/counts and completed this report. Director owns commits/pushes because .git is read-only here.
 - DONE: both remainder modes prepare STAGED through the real writer in production-shaped synthetic tests; source ledger hash and full-kit bytes stay unchanged. Full session module: 35 tests pass; strengthened printed-order test rerun passes.
 - DONE: kit tests 4 pass; gates 7 pass; refusal census 23 pass (1 skip); generator --check passes. Import graph: 5 pass, 1 known sandbox process-group environmental failure (NULL rather than GO); no bypass attempted.
-- DONE: read-only H journals yield full span 16817.331989693055 s / maximum 34560 s and r12 span 13804.910209347223 s / maximum 31560 s. P is 63878576237 B full, 56122258559 B r12. No live validation claimed.
+- DONE: read-only H journals yield full span 15635.331989693057 s / maximum 33360 s and r12 span 12622.910209347223 s / maximum 30360 s (corrected in fix round 1). P is 63878576237 B full, 56122258559 B r12. No live validation claimed.
 - NEXT: director commits/pushes this slice, dispositions R1/R2, runs final executing review and CI, and prepares the real arm notice. Do not install/arm until Ed lifts the pause and lead clears the quiet-Mac gates.
 - OPEN: executing ACCEPT review, CI and PR are director-owned. Standalone probe B/N require quiet-Mac memory observations and rehearsal; procedure below. No agent measurement, install, launchd action or arm was performed. No launched process remains running.
 
@@ -79,17 +81,17 @@ The table gives each base b and member component M; each row contributes b + m*M
 | test7-qwen35-122b-end | 649.000000 | 623.024698 | 24.792256 | test7-qwen35-122b-start |
 | test7-qwen3-next-80b-end | 598.000000 | 571.416020 | 22.738572 | test7-qwen3-next-80b-start |
 | reference-end | 397.000000 | 379.363332 | 15.096148 | reference-start |
-| post-calibration | 227.000000 | 0.000000 | 0.000000 | pre-calibration, pre-calibration.screen, pre-calibration.window-calibration-verdict |
+| post-calibration | 236.000000 | 0.000000 | 0.000000 | H pre-calibration capture alone 215 + chain post-minus-pre countdown 20 + session-status stamp bound 1 |
 | soak-llama-70b (r12 alternative) | 434.192782 | 263.375909 | 10.480616 | same r01-r11 mean plus O |
 
-The identical H stages use their complete stage envelopes: pre = 215 capture + 0 screen + 12 verdict = 227 s; bound derivation = 356 corpus + 363 derivation = 719 s. Test7/reference ends reuse their own starts; post uses the pre envelope. The H 70B soak mean is 263.37590902501887 s from r01-r11; multiply by 12 or 1. The 122B mean is 183.49149308885846 s from check r01-r05 and test7-start r01/r03; multiply by 12. No reference workload is mixed into either large-workload mean.
+The identical H stages use their complete stage envelopes: pre = 215 capture + 0 screen + 12 verdict = 227 s; bound derivation = 356 corpus + 363 derivation = 719 s. Test7/reference ends reuse their own starts; post uses only the 215 s pre capture, plus the code-derived 20 s countdown delta and 1 s session-status upper stamp endpoint ([0,1), integer shell stamps as in derive_sizing.py). The director cross-checked six B6 journals (r1-alpha/beta/gamma, r2-beta/gamma, r3-alpha): post capture 236–238 s plus session-status 0–1 s, against pre capture 215–217 s; these are cross-checks, not code inputs. The H 70B soak mean is 263.37590902501887 s from r01-r11; multiply by 12 or 1. The 122B mean is 183.49149308885846 s from check r01-r05 and test7-start r01/r03; multiply by 12. No reference workload is mixed into either large-workload mean.
 
 Additional terms:
-- Closing whole-window-verdict + backup: ONE aggregate 1191 s B6 fixed-work envelope, from registration/sizing_b5.json #/packs/bytes-mac-check/breakdown/fixed_s. sizing_evidence.json names its r4-alpha chain/run-clock/compression sources. No independent verdict/backup durations are asserted; this intentionally retains the full observed B6 fixed envelope as conservative closing allowance.
+- Whole-window-verdict: 0 s; backup: 0 s. Both are desk steps excluded from the chain (`joulewise.b5.chain.DESK_KINDS`). The former 1191 s term was unrelated B6 non-collection work and is removed.
 - Settles: (12 collection stages + 1 pre-calibration) * chain.SETTLE_S=60 = 780 s. Post has no added settle.
-- Full: sum(b + m*M) + 1191 + 780 = 16817.331989693055 s, printed ceiling 16818 s (about 4 h 40 min 18 s).
-- r12: 13804.910209347223 s, printed ceiling 13805 s (about 3 h 50 min 5 s).
-- window_max_s = 60*ceil((ceil(span)+3300 T0 +7200 pause +7200 WAIT)/60): 34560 s full (9 h 36 min), 31560 s r12 (8 h 46 min). Uses plan_inputs.window_max_s unchanged.
+- Full: sum(b + m*M) + 780 = 15635.331989693057 s, printed ceiling 15636 s (4 h 20 min 36 s).
+- r12: 12622.910209347223 s, printed ceiling 12623 s (3 h 30 min 23 s).
+- window_max_s = 60*ceil((ceil(span)+3300 T0 +7200 pause +7200 WAIT)/60): 33360 s full, 30360 s r12. Uses plan_inputs.window_max_s unchanged.
 
 ## DISK
 P = 2*(B+WAIT)+fixed. The source is registration/sizing_b5.json disk_derivation; the helper calls registration.derive_sizing.apply_disk_ruling unchanged with only selected inventory counts. No measured-H alternative changes the refusal line. The table retains exact rational registered allowances; multiply each by its count and sum per basis.
@@ -207,11 +209,15 @@ Production-shaped fixture uses the appendix member durations (rounded millisecon
 Both print bytes-h2- session identity, every span source/term, programmed ceiling/window, complete subset disk derivation, all 18 ordered stage IDs/kinds/counts, then preparation_status: STAGED. Tests independently hand-compute every base/member/margin/span/window term, exact rational P terms, check 73/62 members, stage order/counts, ledger SHA-256 unchanged and source full-kit byte identity. Missing-journal regression prints INPUTS_ONLY and no fabricated plan. Existing full prepare real-writer and desk chain tests pass. These tests are synthetic execution evidence only; real dry preparation is attributed to the director above.
 
 ## ARM PACKET DRAFT
+Before prepare, the lead clears seat TMPDIRs and finished worktrees, then runs `df -g /Users/edr` immediately before prepare. Prepare correctly refuses below P. Reviewer measurement on 2026-10-22: prepare takes about 6–13 s with the Mac under load.
+
 Lead fills FRESH and SCRATCH, choosing the 70B option from BY-0 (default full). FRESH must be the director's new measurement clone with the committed 402-row ledger and reproduced .venv. Do not use the h2 ledger with its two extra reservations. No access to the director's checkout occurred here.
 
 ```sh
 FRESH/.venv/bin/python -B FRESH/scripts/bytes_h_session.py prepare --measurement-root FRESH --session-root SCRATCH --remainder --soak-70b full --measured-session /Users/edr/night-bytes/h-20261021T185555Z
 ```
+
+The optional `--soak-70b r12` requires the director to re-run `scripts/run_campaign.py <staged-r12-soak-dir> --runs-dir <scratch> --log <scratch>/campaign_log.jsonl --campaign-policy configs/campaign_policies/quiet_mac_p2_b5.json --max-failures 1 --dry-run` and verify one member before arming.
 
 Director records ledger SHA-256 before/after, STAGED output, every P term, real statvfs free>=P, span/stage list and diff review. Fresh scratch root is under /Users/edr/night-archive/forward-20261021/BY-H2/. Source checkout follows the director's specified measurement location; this session never reads/writes that location. Execute within foreground calls under ten minutes and never install during the pause.
 
@@ -226,7 +232,7 @@ FRESH/.venv/bin/python -B FRESH/scripts/bytes_h_session.py install --session-roo
 Use the verified Interactive night-agent context for cadence, never the magistrate's launchd rehearsal context as proof. Lead owns executing ACCEPT review, CI (except gate-ledger), arm notice, real t0 and authorization.
 
 Notice draft:
-"BY-H2 is a separate non-claim remainder session. It runs fresh reservation/calibration/bound/reference work, all three test7 starts and ends, [full twelve / r12-only] 70B soak and twelve 122B soaks, midpoint/end references, closing calibration, whole-window verdict and backup. No check stages. Start [epoch/UTC/PDT]; programmed [16818 s full / 13805 s r12], maximum [34560 s / 31560 s]. Real free disk [bytes] >= P [63878576237 B / 56122258559 B]. Expect native battery.assist disclosures on 70B/122B large workloads; retain all observed flags and withheld receipts. Other record/identity/lineage observations remain named flags. The known-bytes probe is a separate quiet-Mac step. Nothing is armed until Ed lifts the pause and the lead clears gates."
+"BY-H2 is a separate non-claim remainder session. It runs fresh reservation/calibration/bound/reference work, all three test7 starts and ends, [full twelve / r12-only] 70B soak and twelve 122B soaks, midpoint/end references, closing calibration, then desk verdict and backup outside the programmed chain span. No check stages. Start [epoch/UTC/PDT]; programmed [15636 s full / 12623 s r12], maximum [33360 s / 30360 s]. Real free disk [bytes] >= P [63878576237 B / 56122258559 B]. Expect native battery.assist disclosures on 70B/122B large workloads; retain all observed flags and withheld receipts. Other record/identity/lineage observations remain named flags. The known-bytes probe is a separate quiet-Mac step. Nothing is armed until Ed lifts the pause and the lead clears gates."
 
 ## DECISIONS I MADE
 - R1 uses staged subset inputs only for remainder desk; C5's existing check requirement remains unchanged and is disclosed as sizing.c5_remainder_checks_absent. No combining H/remainder data in this item.
