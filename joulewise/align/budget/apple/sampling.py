@@ -98,6 +98,8 @@ def normalize_result(result: MatrixResult) -> MatrixResult:
 
 def apple_energy(episode: Episode) -> Energy:
     """Gross CPU+GPU+ANE rails only; unresolved native anchors have no estimate."""
+    if not any(t.values for t in episode.power_traces):
+        return Energy(None, flags=("energy_trace_missing",))
     if any(json.loads(t.notes).get("clock_anchor", {}).get("status") != "bounded"
            for t in episode.power_traces):
         return Energy(None, flags=("energy_apple_anchor_unresolved",))

@@ -138,7 +138,9 @@ class BudgetMlxEndpoint:
         return replace(result, content=content, reasoning_text=reasoning,
                        reasoning_tokens=reasoning_tokens,
                        raw_usage={**result.raw_usage, "_finish_reason": finish,
-                                  "_budget_flags": sorted(set(flags)),
+                                  "_budget_flags": sorted({
+                                      "turn_token_budget_reached" if f.startswith("turn_token_budget_reached:") else f
+                                      for f in flags}),
                                   "budget_options": self.options,
                                   "native_events": [asdict(e) for e in self.endpoint.events[first_event:]],
                                   "native_generation": self.endpoint.turn_provenance[-1]})

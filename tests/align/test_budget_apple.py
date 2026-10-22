@@ -29,8 +29,8 @@ from joulewise.align.budget.storage import read_episode_views, read_result
 from joulewise.align.budget.synthetic import ScriptedMonitor, synthetic_items
 from joulewise.align.interfaces import ChatMessage
 from joulewise.align.records import Episode, to_json
-from joulewise.clock import FakeClock
-from joulewise.interfaces import AdapterResult
+from joulewise.clock import ClockStamp, FakeClock
+from joulewise.interfaces import AdapterResult, PowerSample, TelemetryStopResult
 from joulewise.schemas import BenchmarkConfig
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -160,10 +160,20 @@ class EndpointTests(unittest.TestCase):
     def test_censored_prefilled_reasoning_has_no_answer(self):
         clock = FakeClock()
         runtime = native_runtime(clock, "thinking continues")
-        result = endpoint(runtime, clock).chat((ChatMessage("user", "Question"),),
-                                               max_tokens=4, temperature=0.0, seed=3)
-        self.assertEqual((result.content, result.reasoning_text, result.reasoning_tokens), ("", "thin", 4))
-        self.assertEqual(result.raw_usage["_finish_reason"], "length")
+        ep = endpoint(runtime, clock)
+        native_flags = []
+        for _ in range(2):
+            result = ep.chat((ChatMessage("user", "Question"),), max_tokens=4, temperature=0.0, seed=3)
+            self.assertEqual((result.content, result.reasoning_text, result.reasoning_tokens), ("", "thin", 4))
+            self.assertEqual(result.raw_usage["_finish_reason"], "length")
+            self.assertIn("turn_token_budget_reached", result.raw_usage["_budget_flags"])
+            self.assertFalse(any(f.startswith("turn_token_budget_reached:") for f in result.raw_usage["_budget_flags"]))
+            indexed = [f for f in result.raw_usage["flags"] if f.startswith("turn_token_budget_reached:")]
+            self.assertEqual(indexed, [f"turn_token_budget_reached:{result.raw_usage['native_generation']['turn']}"])
+            self.assertNotIn("turn_token_budget_reached", result.raw_usage["flags"])
+            self.assertEqual(result.raw_usage["native_generation"], ep.endpoint.turn_provenance[-1])
+            native_flags.extend(indexed)
+        self.assertEqual(len(set(native_flags)), 2)  # Native calls retain distinct indices.
 
     def test_fault_restores_runtime_and_is_not_empty_success(self):
         clock = FakeClock()
@@ -213,7 +223,13 @@ class MatrixTests(unittest.TestCase):
                 self.assertFalse(any("energy_clock_mapping_unmeasured" in f for f in trial.flags))
                 energy = apple_energy(trial.episode)
                 # Independent closed-form oracle for a designed constant 32.3 W
-                # three-rail trace. The required agreement bar is 1e-6 relative.
+                # three-rail trace. With uncertainty_j=None (no half-width),
+                # CLAUDE.local.md "No silly numbers" defaults to 1e-6 relative
+                # (DIFFICULTY revision 2.3). FakeClock has epoch=monotonic,
+                # offset=0; a conservative float floor is ~1e-13 relative
+                # (observed worst 3.51e-16 relative / 1.07e-14 J), so this
+                # bar exceeds 1e6 times noise and is far below 1% of the
+                # ~1 J attribution limit.
                 expected = (trial.end_ns - trial.start_ns) / 1e9 * (4.0 + 28.0 + 0.3)
                 self.assertTrue(math.isclose(energy.joules, expected, rel_tol=1e-6), energy)
                 self.assertIsNone(energy.uncertainty_j)  # Unknown native quantum stays unknown.
@@ -226,6 +242,92 @@ class MatrixTests(unittest.TestCase):
                 BudgetAppleSampler, "start", side_effect=AssertionError("must replay trace")):
                 replay = run_dry(output=out, config=base(), count=1, seed=7)
             self.assertEqual(replay, result)
+
+    def test_offset_ramp_energy_oracle_and_mapping_counterfactual(self):
+        # Reviewer's offset_world.py world: point samples on three linear rails.
+        offset_s = 1_790_901_234.567
+        offset_ns = 1_790_901_234_567_000_000  # Exact decimal OFF * 1e9, without float-product rounding.
+        start_ns = 100_000_000_000  # run_dry starts monotonic time at 100 s.
+        t0 = offset_s + start_ns / 1e9
+        rails = {"cpu_power": (4.0, 2.0), "gpu_power": (28.0, 7.0), "ane_power": (0.3, 1.0)}
+
+        class OffsetClock:
+            def __init__(self, start=100.0):
+                self.mono = float(start)
+
+            def now(self):
+                return self.mono + offset_s
+
+            def stamp(self):
+                return ClockStamp(epoch_s=self.now(), monotonic_before_s=self.mono,
+                                  monotonic_after_s=self.mono, wall_resolution_s=0.0,
+                                  monotonic_resolution_s=0.0)
+
+            def sleep(self, seconds):
+                self.mono += seconds
+
+            def info(self):
+                return {"kind": "offset-fake"}
+
+        class RampTelemetry:
+            def __init__(self, clock):
+                self.clock = clock
+
+            def start_sampling(self, config, context):
+                self.start_s = self.clock.now()
+                return AdapterResult(ok=True)
+
+            def stop_sampling_with_evidence(self, config, context, **kwargs):
+                step = 1 / config.sampling.power_hz
+                count = math.floor((self.clock.now() - self.start_s) / step)
+                samples = []
+                for i in range(1, count + 1):
+                    t = self.start_s + i * step
+                    for rail, (watts, slope) in rails.items():
+                        samples.append(PowerSample(t, watts + slope * (t - t0),
+                                                   "powermetrics", rail, t - step, t))
+                return TelemetryStopResult(samples, {"clock_anchor": {
+                    "status": "bounded", "method": "synthetic_offset_anchor",
+                    "wall_minus_monotonic_lower_s": offset_s,
+                    "wall_minus_monotonic_upper_s": offset_s,
+                    "effective_clock_anchor_bound_s": 0.0}})
+
+        config = BenchmarkConfig.from_mapping(json.loads((ROOT / "configs/examples/mock_local.json").read_text()))
+        with tempfile.TemporaryDirectory() as tmp, patch(
+            "joulewise.align.budget.apple.run.FakeClock", OffsetClock
+        ), patch("joulewise.align.budget.apple.run.SyntheticAppleTelemetry", RampTelemetry):
+            result = run_dry(output=Path(tmp), config=config, count=1, seed=3)
+        # Lead-set 0.01 J absolute bar = 1% of the ~1 J per-run attribution
+        # limit (D-078 clause 11; CLAUDE.local.md physics source for bars).
+        # At epoch 1.79e9 s, float64 ulp is ~2.4e-7 s. The reviewer measured
+        # worst relative error 1.58e-7, putting the 1e-6 default <10x above
+        # that float floor. With the relative-time oracle here, observed worst
+        # errors are 1.719414968e-6 J absolute / 8.735061670e-9 relative.
+        # Even that leaves the relative default far below doctrine's 1e6x
+        # float-noise separation; shorter trials could fail on timestamp noise.
+        bar_j = 0.01
+        for trial in result.trials:
+            episode = trial.episode
+            # Subtract integer monotonic ns BEFORE converting to relative
+            # seconds since T0; the oracle never adds an epoch-sized float.
+            s = (episode.start_ns - start_ns) / 1e9
+            e = (episode.end_ns - start_ns) / 1e9
+            expected = sum(a * (e - s) + b * (e ** 2 - s ** 2) / 2 for a, b in rails.values())
+            energy = apple_energy(episode)
+            self.assertIsNotNone(energy.joules, (trial.trial_id, energy.flags))
+            self.assertLessEqual(abs(energy.joules - expected), bar_j, trial.trial_id)
+            self.assertTrue(episode.clock_mappings)
+            for mapping in episode.clock_mappings:
+                self.assertLessEqual(abs(mapping.offset_ns + offset_ns), mapping.uncertainty_ns)
+            # A -100 ms offset shift moves integration 0.1 s RIGHT, within
+            # the sampler's 1 s post-window dwell. Total slope is 10 W/s,
+            # so this changes energy by 10 * 0.1 * duration = ~1 J/s of
+            # trial, exercising the mapping well above the 0.01 J bar.
+            shifted = replace(episode, clock_mappings=tuple(
+                replace(m, offset_ns=m.offset_ns - 100_000_000) for m in episode.clock_mappings))
+            wrong = apple_energy(shifted)
+            self.assertIsNotNone(wrong.joules, (trial.trial_id, wrong.flags))
+            self.assertGreater(abs(wrong.joules - expected), bar_j, trial.trial_id)
 
     def test_unresolved_anchor_and_missing_channel_have_no_energy(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -255,6 +357,10 @@ class MatrixTests(unittest.TestCase):
                      100_000_000_000, 101_000_000_000, (), power_traces=traces,
                      clock_mappings=sampler.clock_mappings)
         self.assertIsNone(apple_energy(ep).joules)
+        self.assertEqual(apple_energy(ep).flags, ("energy_trace_missing",))
+        empty = apple_energy(replace(ep, power_traces=()))
+        self.assertIsNone(empty.joules)
+        self.assertEqual(empty.flags, ("energy_trace_missing",))
         self.assertEqual(traces[0].values, ())
         self.assertIn("power_unavailable:synthetic permission denied", json.loads(traces[0].notes)["flags"])
 

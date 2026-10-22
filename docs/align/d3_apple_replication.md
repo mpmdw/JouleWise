@@ -85,10 +85,11 @@ a different fingerprint. Other-run checkpoint entries stay preserved and flagged
 Offline rehearsal, using all three model labels and authored items:
 
 ```sh
-JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR="$PWD/.scratch-D3-BUILD/tmp-dry" \
-  /opt/homebrew/bin/python3.13 -m joulewise.align.budget.apple \
-  --dry-run --benchmark configs/examples/mock_local.json \
-  --count 2 --seed 0 --output .scratch-D3-BUILD/dry
+JW_WT=/ABS/WORKTREE-BEING-EXECUTED
+JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR="$JW_WT/.scratch-D3-BUILD/tmp-dry" \
+  PYTHONPATH="$JW_WT" /opt/homebrew/bin/python3.13 -P -m joulewise.align.budget.apple \
+  --dry-run --benchmark "$JW_WT/configs/examples/mock_local.json" \
+  --count 2 --seed 0 --output "$JW_WT/.scratch-D3-BUILD/dry"
 ```
 
 Create that TMPDIR first. Rehearsal uses scripted endpoints, a simulated clock,
@@ -138,20 +139,42 @@ The lead's live command, only after the normal machine/hazard and authorization
 checks, is:
 
 ```sh
-/opt/homebrew/bin/python3.13 -m joulewise.align.budget.apple --live \
-  --benchmark configs/examples/mac_mlx_local.json --config /ABS/d3-live.json \
+JW_WT=/ABS/WORKTREE-BEING-EXECUTED
+PYTHONPATH="$JW_WT" /Users/edr/code/JouleWise/.venv/bin/python -P -m joulewise.align.budget.apple --live \
+  --benchmark "$JW_WT/configs/examples/mac_mlx_local.json" --config /ABS/d3-live.json \
   --model mlx-community/Qwen3-4B-4bit \
   --revision 4dcb3d101c2a062e5c1d4bb173588c54ea6c4d25 \
   --seed 0 --output /ABS/d3-block1-4b-seed0
 ```
+
+`-P` (Python 3.11+) removes the current directory from `sys.path`, so the
+JouleWise package comes from the explicit `PYTHONPATH` worktree. The live
+interpreter must have the pyproject `mac` extra; the Apple lane's real H2 run
+used Python 3.13.1, mlx 0.31.2, mlx_lm 0.31.3, and transformers 5.12.1 in the
+venv above. Prepare metadata records the versions actually loaded. The offline
+rehearsal imports no MLX and stays on python3.13.
+
+Native per-token events are retained in every `ChatResult`. At about 800
+reasoning tokens, the measured footprint was about 2.19 MB per item per file:
+200 items × 2.19 MB is about 0.44 GB per file, or about 0.9 GB including traces,
+per model-and-seed invocation. Before each invocation, the operator checks
+`df -g /Users/edr` and keeps free disk above 40 GiB.
 
 The base benchmark must select MLX/powermetrics and the intended sampling
 cadence. Its optional tokenizer/template pins must belong to the selected model.
 Each invocation loads one cached model, warms outside sampled brackets, exercises
 on/off and four answer-prefix shapes (natural close, mid-line cut, newline cut,
 zero cap), runs its matrix, and cleans up the runtime. API success alone does
-not establish correct controls. Inspect the warm outputs through the real stack
-before marking `controls_verified=true`; otherwise every trial stays flagged.
+not establish correct controls. Before marking `controls_verified=true`, inspect
+the warm outputs through the real stack, decode the recorded `prompt_token_ids`
+of the preflight continuations, and compare them with the NVIDIA serving stack's
+rendering of the same prefixes; otherwise every trial stays flagged. On
+transformers 5.12.1 the continuation prefix rendered as `...\n</think>\n\n`,
+and real Qwen3-4B emitted a stray `</think>` on three of four preflight shapes.
+Size `answer_max_tokens` from the preflight and the pilot's first continuations:
+in the 2026-10-22 PR #555 review run on real Qwen3-4B, a cap-16 cut and forced
+close led to a re-explanation that did not reach `ANSWER:` within 32
+continuation tokens.
 The sampler retains the Apple lane's post-window support dwell. This entry point
 does not perform the controller's idle/hazard admission or authorize a window;
 `hazard.unjudged:battery,ac,thermal,contention` remains in its traces.
