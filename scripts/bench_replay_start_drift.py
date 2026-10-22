@@ -810,19 +810,15 @@ def execute_bench(args):
     stub = str(REPO_ROOT / STUB)
     started = time.time()
     previous = {key: os.environ.get(key) for key in environment}
-    os.environ.update(environment)
-    sudo, systemsetup = campaign.SUDO, campaign.SYSTEMSETUP
-    # Brief D2: the module's own documented rebinding seam.  BOTH constants
-    # move, because ``network_time_argv`` prefixes ``sudo -n`` and the hard
-    # limit on this lane is that no sudo runs at all; with both bound to the
-    # stub, the receipt's own argv contains neither `/usr/bin/sudo` nor
-    # `/usr/sbin/systemsetup`, which makes the control record self-identifying
-    # as a bench record.
-    campaign.SUDO, campaign.SYSTEMSETUP = stub, stub
+    off_argv = campaign.network_time_off.OFF_ARGV
     try:
+        os.environ.update(environment)
+        # Redirect the current setter's command, including sudo, to the
+        # replay-gated stub. The receipt records this bench-only argv too.
+        campaign.network_time_off.OFF_ARGV = (stub, "-n", stub, "-setusingnetworktime", "off")
         returncode = campaign.execute(plan, protocol, night_dir)
     finally:
-        campaign.SUDO, campaign.SYSTEMSETUP = sudo, systemsetup
+        campaign.network_time_off.OFF_ARGV = off_argv
         for key, value in previous.items():
             if value is None:
                 os.environ.pop(key, None)
