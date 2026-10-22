@@ -242,8 +242,10 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
                 continue
             run_unknown_timing = any(x is None for x in timing)
             reported_flags = metadata.get("flags", ())
-            if "sensor_age_unknown" in reported_flags:
+            if ("sensor_age_unknown" in reported_flags
+                    and not isinstance(metadata.get("window_end_ns"), (list, tuple))):
                 # A maximum age is not a measured sensor window endpoint.
+                # Per-sample endpoint notes below isolate contributing unknowns.
                 run_unknown_timing = True
             if any(flag in reported_flags for flag in
                    ("sensor_update_phase_unreported", "driver_field_timestamp_is_wall_clock")):

@@ -225,6 +225,34 @@ preflight counts are historical; no fresh counts are claimed.
 
 ## DECISIONS I MADE
 
+### Round 2 boundary refinement, derived before implementation
+
+The global-range candidate passes the aligned F5 case (7/400 misses) but
+fails its unchanged 100 us case (2/400, below the lead lower limit .0064).
+Its boundary term uses the entire 350-to-55 W workload range even though
+the clipped end sees a 75-to-55 W tool-wait step. This is the wrong local
+contrast for a spread-dominated world; no seed-specific constant is changed.
+
+For each boundary, take each retained run's nearest fully inside sensor
+window and nearest fully outside sensor window, using measured endpoints
+(no chosen radius or timing threshold). Pool those readings across runs.
+Use their observed range R_b in c_i * outside_fraction_i * R_b. This is
+conditional on inside/outside power at that boundary staying within this
+observed local range. If any run lacks either bracketing window, fall back
+to the global observed range. A window straddling both boundaries uses the
+larger boundary range. Coverage and known-timing terms remain global-range
+bounds. All bounds add linearly; statistical calculation is unchanged.
+
+Hand check: a 25 ms window with 15 ms inside at 75 W and 10 ms outside at
+55 W reads 67 W. Assigning 67 W to 15 ms loses .120 J. The local bound is
+.015*(10/25)*(75-55)=.120 J, while the unrelated 350 W prefill makes the
+global bound .015*(10/25)*(350-55)=1.770 J. The local formula bounds this
+error exactly and cannot let an unrelated prefill set interval size.
+This derivation follows the lead's observed-data boundary-bound option;
+it is not a fitted multiplier, tuned quantile, changed bar or changed seed.
+New flags: boundary_observed_range_assumed, boundary_start_range_w=<value>,
+boundary_end_range_w=<value>; fallback is boundary_range_fallback_global.
+
 ### Round 2 derivation recorded before implementation
 
 - R2-M2 estimand: the mean run. Let A(u)=count{r:D_r>u}/n.

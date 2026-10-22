@@ -366,7 +366,9 @@ class NvmlSamplerTests(unittest.TestCase):
         start = min(trace.t_ns)-25_000_000
         end = max(trace.t_ns)
         result = estimate_energy([(trace, start, end)]*2)
-        self.assertTrue(math.isfinite(result.half_width_j), result)
+        # R2-M1(c): maximum age does not identify the sensor endpoint.
+        self.assertTrue(math.isinf(result.half_width_j), result)
+        self.assertIn("sensor_window_time_unknown", result.flags)
 
     def test_cached_field_values_do_not_fabricate_new_measurements(self) -> None:
         library = FakeNvmlLibrary()
