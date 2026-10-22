@@ -65,10 +65,14 @@ A text request to restart/reattach the VM was sent to the user while independent
 authorized code work continued. This is the brief's execution-unavailable
 fallback, not successful verification.
 
-Attempted commands included:
+The following exact command requests were rejected before any process started:
 ```bash
 python3 --version
 python3 -m unittest discover -s tests/align -t .
+python3 -m unittest discover -s tests/align -t . -p 'test_attribution*.py'
+python3 -m unittest discover -s tests/align -t . -p test_twin_attribution.py
+python3 -P /workspace/JouleWise/.review2/r2_truth.py /workspace/JouleWise 12
+python3 -P /workspace/JouleWise/.review2/r2_edges.py /workspace/JouleWise
 ```
 The required checkout/fetch, uncommitted repro-file setup and the following exact
 verification commands cannot execute until a usable VM is attached. All commands
@@ -104,7 +108,8 @@ cumulative-counter sampling -> bounded analogue noise plus quantization ->
 PowerTrace/ClockMapping -> twenty-turn Episode -> JSON round trip ->
 attribute_episode -> exact tiling, conservation, tool contrast and own-half-width
 coverage assertions. Public trace_energy queries are also compared to the episode
-preparation over every segment and total on the same five seeds.
+preparation and the former eager span/start representation over every segment
+and total on the same five seeds.
 
 The original power fixtures are unchanged: 100 ms NVML polling with 25 ms duty,
 1 ms INA3221 point sampling and 100 ms whole-window powermetrics. Tools span
@@ -218,7 +223,8 @@ as measured until r2_truth runs.
   O(log n + q) work. Full-trace peak evaluation is lazy when missing coverage
   needs it. Window/counter preparations remain reusable eager reconstructions.
   No estimator formula, integration order or public signature changes here.
-- Compare public queries with episode preparation on every own world using
+- Compare public queries with episode preparation and the former eager
+  span/start arrays on every own world using
   1e-6 relative agreement capped at 1% of the smaller printed width, and
   assert the million-ulp floor. The cold-query test counts requested spans
   plus two endpoint comparisons rather than using an arbitrary timing bar.
@@ -264,7 +270,7 @@ Statuses below mean code/report treatment, not a claim that blocked repros ran.
 
 ### Round 2
 - R2-M2 fixed 6a54c7da4b3df57233fb20dbf1f56302a7d7d147; added full C1 and both C2 sensitivities with one-step derivations. World reporting is in 47f8b75e32ad260afc86cb5a22fb57e619491e36. Post-fix measurements remain blocked by the unavailable runtime; no passing repro is claimed.
-- R2-m1 fixed 374ea7465670496e77d08e8bdf2f93c5b95b2817; removed the false 100% comment and obsolete expectedFailure docstrings. This report replaces unexecuted “pending” claims with explicit unavailable results and labeled reviewer/derived references, using the brief's execution-unavailable fallback.
+- R2-m1 fixed 3572ac7f12a43d2c0ea305b131372f08dac4ff1b (report) and 374ea7465670496e77d08e8bdf2f93c5b95b2817 (tests); removed the false 100% comment and obsolete expectedFailure docstrings. This report replaces unexecuted placeholders with explicit unavailable results and labeled reviewer/derived references, using the brief's execution-unavailable fallback.
 - R2-m2 fixed 19fa3d5b4fb447fef6b6e5dfe6c0749576db3033; classify impossible restart readings as counter.decrease, count zero, exclude the drop from peak and retain poll sensitivity. No non-reset peak gives infinite uncertainty.
 - R2-m3 fixed 374ea7465670496e77d08e8bdf2f93c5b95b2817; lazy requested point spans plus a single-entry preparation cache. Construction-count and own-world numerical agreement regressions are authored; timing is unmeasured.
 - R2-m4 rejected: the brief says idle_watts is “subtracted as a constant power over [t0,t1]”; retain that reading while the lead rules on it. Updated reference numbers are labeled below; no code change.

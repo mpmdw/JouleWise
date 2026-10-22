@@ -377,27 +377,34 @@ class ProductionWorldsTest(unittest.TestCase):
             half_width_j=result.total.half_width_j, before_half_width_j=before.half_width_j),
             sort_keys=True))
 
-    def test_public_queries_match_episode_preparation_on_each_world(self):
+    def test_public_queries_match_episode_preparation_and_eager_spans_on_each_world(self):
         for sensor in SENSORS:
             for seed in range(5):  # The same deterministic five-seed regression set.
                 record, _ = world(seed, sensor, same_domain=sensor.source == "nvml_power")
                 result = attribute_episode(record, source=sensor.source, channel=sensor.channel)
                 clock = record.clock_mappings[0] if record.clock_mappings else None
+                eager = _Trace(record.power_traces[0], clock)
+                # Materialize the pre-optimization representation on the same
+                # observations. This checks lazy indexing against the former
+                # eager span/start arrays as well as public cache reuse.
+                eager.spans = tuple(eager.spans)
+                eager.starts = tuple(span.start for span in eager.spans)
                 intervals = [(record.start_ns, record.end_ns, result.total)]
                 intervals.extend((s.start_ns, s.end_ns, s.energy) for s in result.segments)
                 for a, b, prepared in intervals:
                     queried = trace_energy(record.power_traces[0], a, b, mapping=clock)
-                    for actual, expected in ((queried.joules, prepared.joules),
-                                             (queried.half_width_j, prepared.half_width_j)):
-                        # Agreement is 1e-6 relative, capped at 1% of the
-                        # smallest printed width, with a million-ulp floor.
-                        scale = max(abs(actual), abs(expected))
-                        bar = min(1e-6 * scale, 0.01 * min(
-                            queried.half_width_j, prepared.half_width_j))
-                        self.assertGreaterEqual(bar, 1e6 * math.ulp(scale))
-                        self.assertLessEqual(abs(actual - expected), bar)
-                    self.assertEqual(queried.method, prepared.method)
-                    self.assertEqual(queried.flags, prepared.flags)
+                    for reference in (prepared, eager.energy(a, b, 0.0)):
+                        for actual, expected in ((queried.joules, reference.joules),
+                                                 (queried.half_width_j, reference.half_width_j)):
+                            # Agreement is 1e-6 relative, capped at 1% of the
+                            # smallest printed width, with a million-ulp floor.
+                            scale = max(abs(actual), abs(expected))
+                            bar = min(1e-6 * scale, 0.01 * min(
+                                queried.half_width_j, reference.half_width_j))
+                            self.assertGreaterEqual(bar, 1e6 * math.ulp(scale))
+                            self.assertLessEqual(abs(actual - expected), bar)
+                        self.assertEqual(queried.method, reference.method)
+                        self.assertEqual(queried.flags, reference.flags)
 
     def test_idle_subtraction_reaches_every_segment(self):
         record, truth = world(0, SENSORS[0])
