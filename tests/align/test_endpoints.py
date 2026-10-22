@@ -167,6 +167,31 @@ class EndpointTests(unittest.TestCase):
             result = self.chat(OpenAICompatEndpoint(world.url, "local", timeout_s=5))
             self.assertIsNone(result.first_token_ns)
 
+    def test_empty_reasoning_delta_is_not_unreported_work(self) -> None:
+        cases = (
+            ("", 0, True, False),
+            ("", 0, False, False),
+            ("Plan carefully.", 0, True, True),
+            ("Plan carefully.", 0, False, True),
+            ("Plan carefully.", 384, True, False),
+        )
+        for flavour in ("vllm", "llamacpp"):
+            for reasoning, hidden, reported, flagged in cases:
+                with self.subTest(flavour=flavour, reasoning=reasoning, reported=reported,
+                                  hidden=hidden):
+                    packet = stream_packets(flavour=flavour, reasoning=reasoning, hidden=hidden)
+                    if not reported:
+                        del packet["chunks"][-1]["usage"]["completion_tokens_details"]
+                    with HTTPWorld([packet]) as world:
+                        client = OpenAICompatEndpoint(world.url, "local", timeout_s=5)
+                        result = self.chat(client)
+                    self.assertEqual(result.reasoning_text, reasoning)
+                    # Exact server integers; missing counts retain the contract's zero.
+                    self.assertEqual(result.reasoning_tokens, hidden)
+                    self.assertEqual("reasoning_tokens_unreported" in
+                                     result.raw_usage["joulewise"]["flags"], flagged)
+                    self.assertEqual("reasoning_tokens_unreported" in client.flags, flagged)
+
     def test_tokenize_both_shapes(self) -> None:
         worlds = [
             ([{"json": {"count": 120, "tokens": list(range(120))}}], 1),

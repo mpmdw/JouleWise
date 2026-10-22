@@ -313,7 +313,8 @@ class OpenAICompatEndpoint:
             flags.append("cached_prompt_tokens_exceed_prompt")
         if hidden > completion:
             flags.append("reasoning_tokens_exceed_completion")
-        if reasoning and not hidden:
+        # Empty reasoning deltas carry no generated text or unreported work.
+        if any(reasoning) and not hidden:
             flags.append("reasoning_tokens_unreported")
         requests = []
         for index, call in sorted(calls.items()):
