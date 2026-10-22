@@ -314,7 +314,7 @@ def run_world(
             truth_residuals, prediction_residuals)
         # Two fitted condition means reduce the requested Fisher effective n.
         values["within_condition_held_out_episodes"] = len(truth_residuals)
-        values["within_condition_held_out_effective_n"] = len(truth_residuals)-2
+        values["within_condition_held_out_effective_n"] = max(0, len(truth_residuals)-2)
         values["within_condition_held_out_interval_95"] = fisher_interval_95(
             values["within_condition_held_out_correlation"], len(truth_residuals), fitted_means=2)
     requirement = required_correlation(stage_a_effect_sd=stage_a_effect_sd,
