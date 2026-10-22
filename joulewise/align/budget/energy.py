@@ -11,7 +11,6 @@ import json
 import math
 from bisect import bisect_left
 from dataclasses import dataclass
-from statistics import median
 from typing import Sequence
 
 from joulewise.align.records import Episode, PowerTrace
@@ -53,6 +52,31 @@ def _edge(trace: PowerTrace, t: int) -> tuple[float, float, int]:
 
 def _interpolate(trace: PowerTrace, t: int) -> float:
     return _edge(trace, t)[0]
+
+
+def _median_interval_ns(intervals: list[int]) -> float:
+    """Select the observed median in linear time, preserving the reducer's scaling."""
+    def select(values: list[int], rank: int) -> int:
+        # Median-of-five pivots discard at least 3n/10 values per selection.
+        # T(n) <= T(n/5) + T(7n/10) + O(n), hence O(n), unlike sorting all polls.
+        if len(values) <= 5:
+            return sorted(values)[rank]
+        groups = [values[i:i + 5] for i in range(0, len(values), 5)]
+        medians = [sorted(group)[len(group) // 2] for group in groups]
+        pivot = select(medians, len(medians) // 2)
+        lower = [v for v in values if v < pivot]
+        equal = sum(v == pivot for v in values)
+        if rank < len(lower):
+            return select(lower, rank)
+        if rank < len(lower) + equal:
+            return pivot
+        return select([v for v in values if v > pivot], rank - len(lower) - equal)
+
+    middle = len(intervals) // 2
+    upper = select(intervals, middle)
+    if len(intervals) % 2:
+        return float(upper)
+    return (select(intervals, middle - 1) + upper) / 2
 
 
 def episode_energy(episode: Episode, *,
@@ -164,7 +188,7 @@ def episode_energy(episode: Episode, *,
         # event.wait(T) followed by acquisition A has cycle T+A, not T.
         # A missed cycle is near 2*(T+A); 1.5 is their midpoint. The observed
         # median estimates T+A without treating normal acquisition as a gap.
-        cycle_ns = max(trace.nominal_interval_ns, median(intervals))
+        cycle_ns = max(trace.nominal_interval_ns, _median_interval_ns(intervals))
         if any(interval > gap_factor * cycle_ns for interval in intervals):
             flags.append("energy_sample_gap")
         flags.append("energy_piecewise_linear_between_samples")
