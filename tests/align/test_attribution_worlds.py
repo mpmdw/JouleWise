@@ -15,7 +15,7 @@ import random
 import sys
 import unittest
 
-from joulewise.align.attribution import attribute_episode, trace_energy
+from joulewise.align.attribution import _Trace, attribute_episode, trace_energy
 from joulewise.align.records import ClockMapping, Episode, PowerTrace, ToolCall, Turn, from_json, to_json
 
 
@@ -48,6 +48,12 @@ SENSORS = (
     # separate approximately 1 J phase-attribution limitation.
     Sensor("powermetrics", "package", NS // 10, NS // 10, 0.001, NS // 1000,
            (8.0, 45.0, 30.0, 12.0)),
+    # NVML cumulative energy prints integer mJ: .001 J. The known synthetic
+    # clock offset is exact; the counter resets once inside a polling bracket.
+    # Phase levels are fixture workload choices. The 300 W decode keeps
+    # the 0.2 s tool contrast above two partial counter-poll sensitivities.
+    Sensor("nvml_energy", "gpu0", NS // 10, None, 0.001, 0,
+           (70.0, 330.0, 300.0, 90.0)),
 )
 
 
@@ -143,9 +149,21 @@ def world(seed, sensor, *, load_variation_fraction=0.05, clock_offset_ns=17_000_
     times = tuple(t + rng.randint(-jitter, jitter)
                   for t in range(-period + phase, cursor + 2 * period, period))
     values = []
-    for t in times:
-        value = (truth.watts(t) if sensor.window_ns is None else
-                 truth.integral(t - sensor.window_ns, t) / (sensor.window_ns / NS))
+    # Place this counter-world restart inside the longest tool, so the
+    # reset-poll sensitivity itself remains below the tool's true contrast.
+    longest_tool = max((part for part in parts if part[1] == "tool"),
+                       key=lambda part: part[3] - part[2])
+    reset_index = bisect_right(times, (longest_tool[2] + longest_tool[3]) // 2)
+    reset_time = (times[reset_index - 1] + times[reset_index]) // 2
+    for k, t in enumerate(times):
+        if sensor.source == "nvml_energy":
+            # Fixture driver baseline is independent of delivered energy.
+            # After reset the reading contains only energy since that reset.
+            value = (5_000_000 + truth.integral(times[0], t) if k < reset_index
+                     else truth.integral(reset_time, t))
+        else:
+            value = (truth.watts(t) if sensor.window_ns is None else
+                     truth.integral(t - sensor.window_ns, t) / (sensor.window_ns / NS))
         # Half-quantum bounded analogue noise plus half-quantum rounding gives
         # at most one resolution quantum per observation, the required budget.
         noisy = value + rng.uniform(-sensor.resolution / 2, sensor.resolution / 2)
@@ -154,7 +172,8 @@ def world(seed, sensor, *, load_variation_fraction=0.05, clock_offset_ns=17_000_
     offset = 0 if same_domain else clock_offset_ns
     power = PowerTrace(
         sensor.source, sensor.channel, domain,
-        tuple(ORIGIN + t - offset for t in times), tuple(values), "W", period,
+        tuple(ORIGIN + t - offset for t in times), tuple(values),
+        "J_cumulative" if sensor.source == "nvml_energy" else "W", period,
         averaging_window_ns=sensor.window_ns,
         duty_fraction=(None if sensor.window_ns is None else sensor.window_ns / period),
         resolution=sensor.resolution,
@@ -177,6 +196,20 @@ class ProductionWorldsTest(unittest.TestCase):
             return self.statistics[sensor.source]
         errors, widths, totals, clearances = [], [], [], []
         inside = total_inside = 0
+        reading_inside = dict(round1=0, c1=0, c2=0)
+        reading_totals = dict(round1=0, c1=0, c2=0)
+        total_widths = dict(round1=[], c1=[], c2=[])
+        width_deltas, tool_errors = [], []
+
+        def reading_widths(reconstruction, estimate, a, b):
+            # Algebraic replay of the earlier readings on the same samples:
+            # round 1 used half the current C1 endpoint difference and no
+            # window terms; C1 omitted only C2's window sensitivities.
+            interpolation = math.fsum((
+                reconstruction._interpolation(a, a, b, start=True),
+                reconstruction._interpolation(b, a, b, start=False)))
+            c1 = estimate.half_width_j - reconstruction._window_uncertainty(a, b)
+            return dict(round1=c1 - interpolation / 2, c1=c1, c2=estimate.half_width_j)
         # Five fixed seeds form a deterministic empirical regression set.
         # Coverage is measured below; its required fraction remains 100%.
         seeds = range(5)
@@ -184,6 +217,8 @@ class ProductionWorldsTest(unittest.TestCase):
             record, truth = world(seed, sensor, same_domain=sensor.source == "nvml_power")
             record = from_json(Episode, to_json(record))
             result = attribute_episode(record, source=sensor.source, channel=sensor.channel)
+            clock = record.clock_mappings[0] if record.clock_mappings else None
+            reconstruction = _Trace(record.power_traces[0], clock)
             self.assertEqual(len(record.turns), 20)
             self.assertEqual(sum(s.kind == "tool" for s in result.segments), 20)
             expected = [(owner, kind, ORIGIN + a, ORIGIN + b)
@@ -206,7 +241,13 @@ class ProductionWorldsTest(unittest.TestCase):
                 errors.append(error)
                 widths.append(segment.energy.half_width_j)
                 inside += error <= segment.energy.half_width_j
+                readings = reading_widths(reconstruction, segment.energy,
+                                          segment.start_ns, segment.end_ns)
+                for name, half_width in readings.items():
+                    reading_inside[name] += error <= half_width
+                width_deltas.append(readings["c2"] - readings["round1"])
                 if segment.kind == "tool":
+                    tool_errors.append(segment.energy.joules - exact)
                     # The 0.2 s minimum tool must clear its printed width.
                     drop = (truth.levels["decode"] - truth.levels["tool"]) * (b - a) / NS
                     clearance = drop - segment.energy.half_width_j
@@ -214,6 +255,10 @@ class ProductionWorldsTest(unittest.TestCase):
                     self.assertGreater(clearance, 0.0)
             exact_total = truth.integral(0, record.end_ns - ORIGIN)
             total_inside += abs(result.total.joules - exact_total) <= result.total.half_width_j
+            for name, half_width in reading_widths(
+                    reconstruction, result.total, record.start_ns, record.end_ns).items():
+                reading_totals[name] += abs(result.total.joules - exact_total) <= half_width
+                total_widths[name].append(half_width)
             values = [s.energy.joules for s in result.segments]
             # Sixteen rounded operations per span/segment conservatively
             # bound interpolation and quadrature. This is an accumulation
@@ -228,7 +273,11 @@ class ProductionWorldsTest(unittest.TestCase):
                      duration_s=(record.end_ns - record.start_ns) / NS,
                      maximum_error_j=max(errors), minimum_half_width_j=min(widths),
                      minimum_tool_clearance_j=min(clearances),
-                     total_j_range=(min(totals), max(totals)))
+                     total_j_range=(min(totals), max(totals)),
+                     coverage_by_reading=reading_inside, totals_by_reading=reading_totals,
+                     total_half_widths_j=total_widths,
+                     segment_half_width_delta_j_range=(min(width_deltas), max(width_deltas)),
+                     tool_count=len(tool_errors), signed_tool_error_j=math.fsum(tool_errors))
         print("attribution unaligned worlds: " + json.dumps(stats, sort_keys=True))
         self.statistics[sensor.source] = stats
         return stats
@@ -257,6 +306,10 @@ class ProductionWorldsTest(unittest.TestCase):
     def test_twenty_turn_powermetrics_worlds_cover_every_segment(self):
         """R2-M2: C2 one-step worlds retain the 100% coverage requirement."""
         self.assert_coverage(SENSORS[2])
+
+    def test_twenty_turn_counter_worlds_cover_every_segment(self):
+        """R2-M2: reset counters retain the 100% coverage requirement."""
+        self.assert_coverage(SENSORS[3])
 
     def test_twenty_runner_turns_retain_each_post_model_tool(self):
         for sensor in SENSORS[:2]:
