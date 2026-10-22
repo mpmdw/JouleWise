@@ -8,8 +8,9 @@ with provenance; nominal bus specifications are not measured coefficients.
 from __future__ import annotations
 
 import math
+import bisect
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Mapping, Sequence
 
 from joulewise.align.records import Episode, RouterLog
@@ -40,6 +41,8 @@ class OffloadConfig:
     prefill_mode: str = "bypass"  # "bypass" (no cache update) | "serial"
     prefill_batch_tokens: int = 1  # Explicit backend microbatch size; never inferred.
     flags: tuple[str, ...] = ()  # Unavailable configuration inputs remain explicit.
+    decode_miss_stalls: bool = False
+    running_power_w: float = 0.0  # Sensor-visible platform power during a blocking upload.
 
 
 @dataclass(frozen=True)
@@ -76,6 +79,12 @@ class TokenTraffic:
     bytes_moved: int
     energy_j: float
     transfer_time_s: float
+    stall_energy_j: float = 0.0
+
+    @property
+    def incremental_energy_j(self) -> float:
+        """Memory traffic plus running power during added decode time."""
+        return self.energy_j + self.stall_energy_j
 
 
 @dataclass(frozen=True)
@@ -252,6 +261,9 @@ def model_traffic(
         flags.append("invalid_bandwidth")
     if not math.isfinite(config.joules_per_byte) or config.joules_per_byte < 0:
         flags.append("invalid_energy_coefficient")
+    if (not isinstance(config.decode_miss_stalls, bool)
+            or not math.isfinite(config.running_power_w) or config.running_power_w < 0):
+        flags.append("invalid_stall_parameters")
     if len(set(router.layers)) != len(router.layers):
         flags.append("duplicate_layer_ids")
     if any(not isinstance(config.expert_bytes.get(layer), int)
@@ -329,7 +341,10 @@ def model_traffic(
         energy = moved * config.joules_per_byte
         duration_s = moved / config.bandwidth_bytes_s
         tokens.append(TokenTraffic(i, phase, selected, resident_hits, hits, batch_reuse,
-                                   misses, moved, energy, duration_s))
+                                   misses, moved, energy, duration_s,
+                                   (math.ceil(duration_s*NS_PER_SECOND)/NS_PER_SECOND
+                                    * config.running_power_w
+                                    if phase == "decode" and config.decode_miss_stalls else 0.0)))
         if moved:
             start = max(available_ns, windows[batch_start].start_ns if windows is not None else 0)
             # Round upward to integer ns so the profile never exceeds configured bandwidth.
@@ -339,6 +354,66 @@ def model_traffic(
             if windows is not None and end > windows[batch_end].end_ns:
                 flags.append("transfer_exceeds_token_window")
     return TrafficResult(tuple(tokens), tuple(pulses), tuple(dict.fromkeys(flags)))
+
+
+
+@dataclass(frozen=True)
+class StallTiming:
+    """A synthetic compute-only schedule retimed for blocking decode uploads."""
+
+    episode: Episode
+    windows: tuple[TokenWindow, ...]
+    reference_decode_duration_ns: int
+    flags: tuple[str, ...] = ()
+
+
+def apply_decode_stalls(
+    episode: Episode, config: OffloadConfig, *, windows: Sequence[TokenWindow],
+) -> StallTiming:
+    """Extend a compute-only schedule; never apply to measured token timestamps.
+
+    Uploads precede dependent expert work in the pinned llama.cpp CUDA stream.
+    Each decode miss adds ceil(bytes/bandwidth * 1e9) ns, and later turns/tools
+    move by the accumulated delay. Prefill timing remains a separate assumption.
+    The returned windows are passed unchanged to traffic, sensor and features.
+    """
+    router = episode.router_log
+    nominal = tuple(windows)
+    if router is None or len(nominal) != len(router.phase):
+        return StallTiming(episode, nominal, 0, ("missing_stall_token_timing",))
+    reference_ns = sum(w.end_ns-w.start_ns for w, phase in zip(nominal, router.phase)
+                       if phase == "decode")
+    if not config.decode_miss_stalls:
+        return StallTiming(episode, nominal, reference_ns)
+    # Counts and cache misses are independent of timestamps. Production traffic
+    # is rerun on the resulting actual windows; this pass only sizes delays.
+    counts = model_traffic(router, config)
+    if len(counts.tokens) != len(nominal):
+        return StallTiming(episode, nominal, reference_ns, counts.flags)
+    delays = [(w.end_ns, math.ceil(t.transfer_time_s*NS_PER_SECOND))
+              for w, t in zip(nominal, counts.tokens) if t.phase == "decode"]
+    ends = [end for end, _ in delays]
+    cumulative = [0]
+    for _, delay in delays:
+        cumulative.append(cumulative[-1]+delay)
+
+    def shifted(time_ns: int) -> int:
+        return time_ns+cumulative[bisect.bisect_right(ends, time_ns)]
+
+    actual = tuple(TokenWindow(w.token_index, shifted(w.start_ns), shifted(w.end_ns))
+                   for w in nominal)
+    turns = tuple(replace(
+        turn, start_ns=shifted(turn.start_ns), end_ns=shifted(turn.end_ns),
+        first_token_ns=(shifted(turn.first_token_ns)
+                        if turn.first_token_ns is not None else None),
+        tool_calls=tuple(replace(call, start_ns=shifted(call.start_ns),
+                                 end_ns=shifted(call.end_ns)) for call in turn.tool_calls))
+                  for turn in episode.turns)
+    flags = ("blocking_decode_upload_stalls", "constant_running_power_during_stall",
+             "compute_only_schedule_retimed")
+    result = replace(episode, end_ns=shifted(episode.end_ns), turns=turns,
+                     flags=tuple(dict.fromkeys((*episode.flags, *flags))))
+    return StallTiming(result, actual, reference_ns, flags)
 
 
 def decode_reuse(router: RouterLog) -> float | None:

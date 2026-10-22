@@ -17,13 +17,14 @@ from typing import Any
 from joulewise.align.records import Episode, RouterLog, ToolCall, Turn
 from joulewise.align.moe_stage_b.analysis import (
     RoutingObservation, extract_features, pearson, plan_detectability, recover_routing,
-    required_correlation,
+    required_correlation, fisher_interval_95,
 )
 from joulewise.align.moe_stage_b.simulation import (
     SensorModel, ina3221_sensor, nvml_sensor, simulate_episode,
 )
 from joulewise.align.moe_stage_b.traffic import (
-    NS_PER_SECOND, OffloadConfig, decode_reuse, expert_size_from_config,
+    NS_PER_SECOND, OffloadConfig, TokenWindow, apply_decode_stalls,
+    decode_reuse, episode_token_windows, expert_size_from_config,
 )
 
 
@@ -43,6 +44,8 @@ class WorldConfig:
     prefill_duration_ns: int = 4_000_000_000
     prefill_batch_tokens: int = 128
     decode_token_period_ns: int = 50_000_000
+    decode_step_jitter_ns: int = 2_000_000  # Uniform +/- input scenario, not measured jitter.
+    decode_miss_stalls: bool = True
     tool_duration_ns: int = 800_000_000
     layers: int = 16
     num_experts: int = 64
@@ -128,7 +131,52 @@ def world_offload(config: WorldConfig, *, all_resident: bool = False) -> Offload
         energy_source=("scenario input: 640 pJ / 32-bit DRAM read = 160 pJ/B, "
                        "Horowitz ISSCC 2014 scale illustration; not a modern hardware calibration"),
         prefill_batch_tokens=config.prefill_batch_tokens, flags=size.flags,
+        decode_miss_stalls=config.decode_miss_stalls,
+        running_power_w=config.baseline_w+config.decode_load_w,
     )
+
+
+
+def synthetic_token_schedule(
+    config: WorldConfig, episode: Episode,
+) -> tuple[Episode, tuple[TokenWindow, ...]]:
+    """Explicit compute-only token windows with independent seeded step variation.
+
+    The jitter half-width is a scenario parameter; hardware must replace this
+    distribution with measured per-token timestamps. Route RNG is untouched.
+    """
+    jitter = config.decode_step_jitter_ns
+    if (not isinstance(jitter, int) or isinstance(jitter, bool)
+            or not 0 <= jitter < config.decode_token_period_ns):
+        return (replace(episode, flags=(*episode.flags, "invalid_decode_step_jitter")),
+                ())
+    rng = random.Random(f"timing-{episode.seed}")
+    windows: list[TokenWindow] = []
+    turns: list[Turn] = []
+    cursor = episode.start_ns
+    for turn in episode.turns:
+        start = cursor
+        boundary = start+config.prefill_duration_ns
+        for j in range(turn.prefill_tokens):
+            left = (j//config.prefill_batch_tokens)*config.prefill_batch_tokens
+            right = min(turn.prefill_tokens, left+config.prefill_batch_tokens)
+            windows.append(TokenWindow(len(windows),
+                start+config.prefill_duration_ns*left//turn.prefill_tokens,
+                start+config.prefill_duration_ns*right//turn.prefill_tokens))
+        cursor = boundary
+        for _ in range(turn.decode_tokens):
+            duration = config.decode_token_period_ns+rng.randint(-jitter, jitter)
+            windows.append(TokenWindow(len(windows), cursor, cursor+duration))
+            cursor += duration
+        delta = cursor-turn.end_ns
+        calls = tuple(replace(call, start_ns=call.start_ns+delta,
+                              end_ns=call.end_ns+delta) for call in turn.tool_calls)
+        turns.append(replace(turn, start_ns=start, first_token_ns=boundary,
+                             end_ns=cursor, tool_calls=calls))
+        cursor = max((call.end_ns for call in calls), default=cursor)
+    flag = ("variable_decode_step_timing" if jitter else "synchronized_bursts")
+    return (replace(episode, turns=tuple(turns), end_ns=cursor,
+                    flags=(*episode.flags, flag)), tuple(windows))
 
 
 def default_sensors() -> tuple[SensorModel, ...]:
@@ -157,6 +205,9 @@ def run_world(
     flags: set[str] = set()
     outcomes: list[dict[str, Any]] = []
     total_bytes = total_samples = 0
+    decode_durations_s: list[float] = []
+    nominal_durations_s: list[float] = []
+    transfer_only_extra: list[float] = []
     decode_count = config.turns*config.decode_tokens_per_turn
     for group in range(config.groups):
         # Group offsets prevent task-specific routing rates from being identical.
@@ -166,8 +217,12 @@ def run_world(
                                  ("sabotage", config.sabotage_hot_probability)):
             episode = synthetic_episode(config, group=group, condition=condition,
                                         hot_probability=max(0.0, min(1.0, base+offset)))
-            # A deterministic, seeded acquisition-phase sweep avoids a synchronized
-            # 20 Hz token stream always falling in the same NVML blind interval.
+            episode, nominal_windows = synthetic_token_schedule(config, episode)
+            timing = apply_decode_stalls(episode, offload, windows=nominal_windows)
+            episode, windows = timing.episode, timing.windows
+            flags.update(timing.flags)
+            # Acquisition phase is randomized once per episode. Variable decode
+            # steps and blocking uploads prevent a fixed per-episode clock lock.
             phase = (random.Random(episode.seed).randrange(sensor.interval_ns)
                      if isinstance(sensor.interval_ns, int) and not isinstance(sensor.interval_ns, bool)
                      and sensor.interval_ns > 0 else 0)
@@ -175,7 +230,7 @@ def run_world(
             simulated = simulate_episode(
                 episode, offload, sampled_sensor, baseline_w=config.baseline_w,
                 prefill_load_w=config.prefill_load_w, decode_load_w=config.decode_load_w,
-                tool_load_w=config.tool_load_w, seed=episode.seed)
+                tool_load_w=config.tool_load_w, seed=episode.seed, windows=windows)
             flags.update(simulated.flags)
             statistic = decode_reuse(episode.router_log) if episode.router_log else None
             if statistic is None:
@@ -196,7 +251,8 @@ def run_world(
                 noise_std_w=sensor.noise_std_w,
                 # Gaussian one-sigma diagnostic half-width; alpha is a separate
                 # design parameter in required_correlation, not this display bound.
-                noise_multiplier=1.0, attribution_floor_j=0.0)
+                noise_multiplier=1.0, attribution_floor_j=0.0, windows=windows,
+                reference_decode_duration_ns=timing.reference_decode_duration_ns)
             outcome["features"] = asdict(features)
             flags.update(features.flags)
             if statistic is None or features.energy_per_decode_token_j is None:
@@ -206,9 +262,15 @@ def run_world(
             condition_statistics[condition].append(statistic)
             observations.append(RoutingObservation(episode.episode_id, episode.task_pair,
                                                    statistic, features))
-            decode_extra = math.fsum(t.energy_j for t in simulated.traffic.tokens
+            decode_extra = math.fsum(t.incremental_energy_j for t in simulated.traffic.tokens
                                      if t.phase == "decode")
             actual_extra.append(decode_extra/decode_count)
+            transfer_only_extra.append(math.fsum(t.energy_j for t in simulated.traffic.tokens
+                                               if t.phase == 'decode')/decode_count)
+            decode_durations_s.append(sum(w.end_ns-w.start_ns for w, phase in
+                                          zip(windows, episode.router_log.phase)
+                                          if phase == 'decode')/NS_PER_SECOND)
+            nominal_durations_s.append(timing.reference_decode_duration_ns/NS_PER_SECOND)
             estimated_extra.append(features.energy_per_decode_token_j)
             total_bytes += simulated.traffic.total_bytes
             total_samples += len(trace.t_ns)
@@ -242,6 +304,11 @@ def run_world(
                 prediction_residuals.extend(prediction-prediction_mean for _, prediction in selected)
         values["within_condition_held_out_correlation"] = pearson(
             truth_residuals, prediction_residuals)
+        # Two fitted condition means reduce the requested Fisher effective n.
+        values["within_condition_held_out_episodes"] = len(truth_residuals)
+        values["within_condition_held_out_effective_n"] = len(truth_residuals)-2
+        values["within_condition_held_out_interval_95"] = fisher_interval_95(
+            values["within_condition_held_out_correlation"], len(truth_residuals), fitted_means=2)
     requirement = required_correlation(stage_a_effect_sd=stage_a_effect_sd,
                                        n_per_condition=n_per_condition, alpha=alpha,
                                        power=power, comparisons=comparisons)
@@ -253,7 +320,7 @@ def run_world(
     # Phase/noise error is measured from this synthetic sweep only. A real forecast
     # must replace it with phase-swept hardware repetitions on the same channel.
     error_std = statistics.pstdev(error_j)
-    decode_duration_s = decode_count*config.decode_token_period_ns/NS_PER_SECOND
+    decode_duration_s = statistics.fmean(decode_durations_s)
     white_variance_j2 = (sensor.noise_std_w**2 * decode_duration_s
                          * max(sensor.interval_ns, sensor.averaging_window_ns)/NS_PER_SECOND)
     phase_bias = math.sqrt(max(0.0, error_std**2-white_variance_j2))
@@ -265,31 +332,43 @@ def run_world(
         sensor, stage_a_effect_sd=stage_a_effect_sd, n_per_condition=n_per_condition,
         alpha=alpha, power=power, comparisons=comparisons, routing_stat_sd=within_sd,
         traffic_energy_slope_j_per_token=slope, decode_tokens=decode_count,
-        decode_duration_s=decode_count*config.decode_token_period_ns/NS_PER_SECOND,
+        decode_duration_s=decode_duration_s,
         phase_bias_std_j=phase_bias, systematic_contrast_half_width_j=0.0)
     flags.add("synthetic_finite_cohort_recoverability_check")
-    empirical_meets = {
-        name: (requirement.feasible and requirement.minimum_absolute_correlation is not None
-               and result["within_condition_held_out_correlation"] is not None
-               and result["within_condition_held_out_correlation"]
-               >= requirement.minimum_absolute_correlation)
-        for name, result in recovery.items()
-    }
-    # Energy is the predeclared primary decision. Variance/spectrum recovery
-    # remains reported separately; the linear noise forecast cannot substitute
-    # for held-out performance on the actual sampled traces.
+    empirical_meets: dict[str, bool | None] = {}
+    required = requirement.minimum_absolute_correlation
+    for name, result in recovery.items():
+        interval = result["within_condition_held_out_interval_95"]
+        if required is None or interval is None or interval[0] <= required <= interval[1]:
+            empirical_meets[name] = None
+            result["verdict"] = "inconclusive at this cohort size"
+            result["flags"] = (*result["flags"], "held_out_recovery_inconclusive_at_cohort_size")
+        else:
+            empirical_meets[name] = requirement.feasible and interval[0] > required
+            result["verdict"] = "yes" if empirical_meets[name] else "no"
+    # Energy is predeclared; diagnostic features cannot override its uncertainty.
     energy_recovers = empirical_meets["energy_per_decode_token_j"]
     contrast_clears = (forecast.contrast_energy_j is not None
                        and forecast.contrast_half_width_j is not None
                        and forecast.contrast_energy_j > forecast.contrast_half_width_j)
-    if not energy_recovers:
+    if energy_recovers is None:
+        flags.add("held_out_recovery_inconclusive_at_cohort_size")
+    elif not energy_recovers:
         flags.add("held_out_energy_recovery_below_design_requirement")
-    if forecast.detectable_under_assumptions and not energy_recovers:
+    if forecast.detectable_under_assumptions and energy_recovers is False:
         flags.add("forecast_empirical_disagreement")
+    energy_interval = recovery["energy_per_decode_token_j"]["within_condition_held_out_interval_95"]
+    forecast_agrees = (energy_interval[0] <= forecast.model_correlation <= energy_interval[1]
+                       if energy_interval is not None and forecast.model_correlation is not None
+                       else None)
     return {
         "sensor": asdict(sensor), "all_resident": all_resident,
         "empirical_recovery_meets_requirement": empirical_meets,
-        "stage_b_detectable_under_assumptions": energy_recovers and contrast_clears,
+        "stage_b_detectable_under_assumptions": (energy_recovers and contrast_clears
+                                                  if energy_recovers is not None else None),
+        "stage_b_verdict": ("inconclusive at this cohort size" if energy_recovers is None
+                            else "yes" if energy_recovers and contrast_clears else "no"),
+        "forecast_inside_held_out_interval_95": forecast_agrees,
         "episodes": len(observations), "groups": config.groups,
         "turns_per_episode": config.turns, "decode_tokens_per_episode": decode_count,
         "prefill_tokens_per_episode": config.turns*config.prefill_tokens_per_turn,
@@ -297,6 +376,9 @@ def run_world(
         "total_modelled_bytes": total_bytes,
         "routing_reuse_range": [min(x), max(x)],
         "true_extra_j_per_decode_token_range": [min(actual_extra), max(actual_extra)],
+        "transfer_only_j_per_decode_token_range": [min(transfer_only_extra), max(transfer_only_extra)],
+        "decode_duration_s_range": [min(decode_durations_s), max(decode_durations_s)],
+        "nominal_decode_duration_s_range": [min(nominal_durations_s), max(nominal_durations_s)],
         "apparent_extra_j_per_decode_token_range": [min(estimated_extra), max(estimated_extra)],
         "phase_sweep_energy_error_std_j": error_std,
         "estimated_phase_bias_std_j": phase_bias,

@@ -113,6 +113,7 @@ def extract_features(
     episode: Episode, trace: PowerTrace, *, baseline_w: float,
     noise_std_w: float, noise_multiplier: float, attribution_floor_j: float,
     windows: Sequence[TokenWindow] | None = None,
+    reference_decode_duration_ns: int | None = None,
 ) -> PowerFeatures:
     """Reconstruct interval energy and per-token/spectral power features.
 
@@ -192,6 +193,15 @@ def extract_features(
     if coverage_ns < duration_ns:
         flags.append("incomplete_decode_coverage")
     duration_s = duration_ns/NS_PER_SECOND
+    if (reference_decode_duration_ns is not None
+            and (not isinstance(reference_decode_duration_ns, int)
+                 or isinstance(reference_decode_duration_ns, bool)
+                 or not 0 <= reference_decode_duration_ns <= duration_ns)):
+        return missing("invalid_reference_decode_duration")
+    # Subtract nominal compute energy, preserving platform power during added
+    # blocking time. The trace already contains that power: do not add a pulse.
+    stall_energy = (baseline_w*(duration_ns-reference_decode_duration_ns)/NS_PER_SECOND
+                    if reference_decode_duration_ns is not None else 0.0)
     if coverage_ns == 0:
         return missing("no_decode_sample_coverage")
     quantum = trace.resolution
@@ -236,7 +246,7 @@ def extract_features(
     if trace.averaging_window_ns and trace.averaging_window_ns > interval:
         flags.append("noise_independence_requires_calibration")
     return PowerFeatures(episode.episode_id, count,
-                         math.fsum(token_energies)/count,
+                         (math.fsum(token_energies)+stall_energy)/count,
                          statistics.pvariance(token_energies) if len(token_energies) > 1 else 0.0,
                          rate, amplitude, half_width, coverage,
                          tuple(dict.fromkeys(flags)))
