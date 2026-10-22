@@ -44,7 +44,6 @@ def _citation(value: Any) -> bool:
             and bool(value.get("quote") or value.get("note")))
 
 
-
 def numeric_provenance(matrix: Mapping[str, Any]) -> tuple[str, ...]:
     """Require each numeric input's sibling citation or formula referencing sources."""
     flags: list[str] = []

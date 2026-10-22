@@ -75,8 +75,15 @@ def parse_snapshot(xml: str) -> dict[str, Any]:
             scale = {None: Decimal(1), "us": Decimal(1), "ms": Decimal(1000),
                      "ns": Decimal("0.001"), "s": Decimal(1000000)}[match[2]]
             result["counters_us"][counter] = str(Decimal(match[1]) * scale)
+    # v13 distinguishes board GPU power from optional module/platform power.
+    # Do not let a later module_power_readings element overwrite board limits.
+    power = gpu.find("gpu_power_readings")
+    if power is None:
+        power = gpu.find("power_readings")
+    power_leaves = ({n.tag: (n.text or "").strip() for n in power.iter() if len(n) == 0}
+                    if power is not None else {})
     for label, names in POWER_FIELDS.items():
-        raw = next((leaves[n] for n in names if n in leaves), None)
+        raw = next((power_leaves[n] for n in names if n in power_leaves), None)
         result["power_limits"][label] = raw
         if raw is None or raw.lower() in ("n/a", "[n/a]", "not supported"):
             flags.append("throttle_power_limit_unavailable:" + label)

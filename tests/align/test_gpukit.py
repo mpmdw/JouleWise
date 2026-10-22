@@ -782,6 +782,7 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
                 self.assertIn("throttle_hardware_active:hw_power_brake_slowdown", result["flags"])
             elif mode == "advance":
                 self.assertIn("throttle_hardware_counter_advanced:hw_power_brake", result["flags"])
+                # Counter quantum is one printed microsecond; >0 means at least one tick.
                 self.assertGreater(int(change["counter_deltas_us"]["sw_power_cap"]), 0)
             elif mode == "missing":
                 self.assertIn("throttle_reason_unavailable:hw_slowdown", result["flags"])
@@ -831,7 +832,7 @@ class FixArithmeticTests(unittest.TestCase):
         from joulewise.align.gpukit.matrix import numeric_provenance
         for path in CONFIG.glob("*.json"):
             self.assertEqual(numeric_provenance(json.loads(path.read_text())), (), path.name)
-        # Exact old-head structure: these three values were unsourced at 280866c8d.
+        # Exact old-head structure: these two values were unsourced at 280866c8d.
         old = {"workload": {"prefill_tokens": 40000, "source": "Operator-supplied"},
                "gpu_classes": {"H100": {"setup_s": 1800, "source": "Operator-supplied"}},
                "model_parameters": {}}

@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Callable, Sequence
 from urllib.error import URLError
 from urllib.request import urlopen
+from urllib.parse import urlsplit
 
 from joulewise.align.gpukit.matrix import expand, load_matrix
 from joulewise.align.gpukit.cost import calibration_slice
@@ -422,6 +423,19 @@ def run_session(options: SessionOptions, *,
                 judge_endpoint = monitor_endpoint
         elif placement != "none":
             flags.append("monitor_placement_unknown")
+        if placement == "external":
+            def measured_endpoint(url: str | None) -> bool:
+                if not url:
+                    return False
+                parsed = urlsplit(url)
+                return (parsed.hostname in ("127.0.0.1", "localhost", "::1")
+                        and parsed.port == options.port)
+            if measured_endpoint(monitor_endpoint):
+                flags.append("monitor_measured_endpoint_overlap")
+                monitor_endpoint = None
+            if measured_endpoint(judge_endpoint):
+                flags.append("judge_measured_endpoint_overlap")
+                judge_endpoint = None
         inventory = []
         indices = measured + ([monitor_gpu] if placement == "gpu" and monitor_gpu is not None else [])
         try:
@@ -483,7 +497,9 @@ def run_session(options: SessionOptions, *,
         receipt["monitor_base_url"] = monitor_endpoint
         receipt["judge_base_url"] = judge_endpoint
         if monitor_endpoint is None:
-            flags.extend(("monitoring_deferred", "judging_deferred"))
+            flags.append("monitoring_deferred")
+        if judge_endpoint is None:
+            flags.append("judging_deferred")
         if executable:
             for index, model in enumerate(matrix["models"]):
                 model_dir = output / f"model-{index}"
