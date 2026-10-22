@@ -23,6 +23,10 @@ model files only.
    script, written from scratch, again finds zero mismatches (310 checks). Its own hash of all 47 weight files gives
    the same eleven pins. Re-running the kit derivation reproduces `configs/bytes/identity_pins.json` byte for byte.
    See "Run 3" below.
+5. **Run 4 (2026-10-22, 07:55-08:20 PDT, relaunch):** a third reviewer script finds zero mismatches. The kit
+   derivation, run over the newer sub-pack trees that every later BYTES lane carries, gives the same eleven pins from
+   today's files. One thing is new for BY-MERGE: on those lanes only the twelve `tree_sha256` values in
+   `configs/bytes/identity_pins.json` differ. See "Run 4" below.
 
 ## Inputs
 
@@ -284,6 +288,71 @@ One-model re-run with the run-3 script (Qwen3-8B-8bit; about 1 s for the bytes a
 
 Expected: `{"checks": 31, "mismatches": 0, ...}`; then `folded_sha256`
 `d4f5fe85e4b0dccc49a48098978f39540cfb6f52baafb6f78656cdbacba2a753` with `upstream_all_match` true.
+
+## Run 4: relaunch check (2026-10-22)
+
+The workflow dispatched BY-G a third time after runs 1 and 3 had been pushed. This run did only what could still
+change an answer: a third reviewer script, the kit derivation over the newer sub-pack trees, and a check of the files
+as they are on disk today. Files are under `/Users/edr/night-archive/forward-20261021/BY-G/run4/` (untracked).
+
+- **Bytes.** `byg4.py` (new, stdlib only, imports nothing from `joulewise/` or `scripts/`; sha256
+  `3298d39c91b9b1bcde1ebb246bd8d31d07c81465dd388cee5d805606d7164d3f`) re-derives every model from its headers and
+  `config.json`. It made 60,054 checks against the manifest at `99c9099d8` and found **0 mismatches**. The checks
+  cover W, R, KV and b with their GB columns, the six category totals, k, E, tied embeddings, the shared-expert bytes,
+  the config SHA-256, every tensor row (dtype, shape, stored bytes, category) and both cache snapshots layer by layer
+  (class, allocated bytes, capacity, occupied length, state shapes). The per-layer cache is computed from
+  `config.json` with the Part 1 formulas, so it is checked against the manifest's measured snapshots, not against a
+  formula. The header checks and the bits/group check also pass (Qwen3-8B-8bit: 254 packed weights at 8 bits, group
+  64). Negative control: a copy with five changes (8B-8bit W +0.5 B, Next-80B KV +1 B, one Qwen3.5 layer's state
+  shape, one 30B tensor's category, Llama-70B `W_GB` moved one unit in the last place) gave exactly those five
+  mismatches. The 8B-4bit pilot difference was re-checked: the double nearest 4.257673472 is
+  4.2576734719999995704…, and that × 1e9 rounds to 4,257,673,471.9999995, one unit in the last place (2^-21 =
+  4.77e-7) below W.
+- **Pins over the newer trees.** The kit's `derive()` at `c10b6895f` (unchanged, sha256 `6652cc07…44766`) was run
+  over the twelve sub-pack trees of `91b20d7c2`, exported with `git archive` (driver `derive4.py`, sha256
+  `e9029ea72d61b3772d9b49a1cf5ac4fd07845b82d4c4e8831e6cb714e84668a7`). It ran as six calls of 3 to 49 s. The result
+  matches `configs/bytes/identity_pins.json` at `917d6151d` and the kit's pins at `c10b6895f`: the same eleven units,
+  pins, config counts, config paths and file inventory (47 files, 215,449,636,568 B). `byg4.py pins` then
+  enumerated each source's weight files itself (the same set) and found that each file's SHA-256 equals Hugging
+  Face's recorded hash (47 of 47). It refolded each pin with its own code (11 of 11 equal).
+- **Precheck reads the pins.** Block 6's own loader (`joulewise/b6/registration.load_identity_pins`) accepts the
+  committed file, and accepts each per-pack document. Block 6's `precheck.model_files` was run for all twelve packs
+  with the committed file, with the identity seam returning the run-4 digests. Every dispatched source is pinned and
+  matches, on both the old and the new trees: 0 errors. A copy with one pin changed and one unit removed gave
+  `model.hash_mismatch` (s4-p1, s4-p2) and `model.source_unpinned` (s1-p1, s1-p2), as it should. The
+  `registration.py` blob is the same on `c10b6895f`, `bytes-loop` and `bytes-c5-gates`. `precheck.py` is the same on
+  `c10b6895f` and `bytes-loop`.
+- **New for BY-MERGE: the plan trees differ on the later BYTES lanes.** This branch's twelve trees equal those at
+  `99c9099d8` and `c10b6895f`, and on `lane/2026-10-20-bytes-integration`. `91b20d7c2`
+  (docs/2026-10-20-bytes-registration) changed three `draft_notes` lines and the generator SHA-256 in every tree.
+  `bytes-pass1`, `-loop`, `-c5-gates`, `-battery-term`, `-twin-parity` and `-pass1-review-fixes` all carry that
+  version. No stage, argv, order manifest, roster entry or model source changed, so no pin changes. Only the twelve
+  `packs.<pack>.tree_sha256` values in `identity_pins.json` differ. If BY-MERGE lands the file on a line with the
+  newer trees, two things work: use `run4/identity_pins.trees-91b20d7c2.json` (sha256
+  `1601296fe45d270aae5316f1b38e00860836e8990413982ccb00729ffefa2903`, assembled by the run-1 `merge`), which differs
+  from the committed file in exactly those twelve values, or re-run the derivation there. No code reads
+  `configs/bytes/identity_pins.json`, and the precheck matches by model source, not by tree hash.
+- **CI on PR #527.** This branch adds no code or tests. Shard 6 stopped three times at the same place
+  (`test_run_night.CourierReapingTests`, 9 to 10 min in): `test_delivered_courier_exit_wait_respects_deadman_epoch`
+  fails, and in the same millisecond the runner logs "The runner has received a shutdown signal". The PR body
+  records this diagnosis.
+  `test (3.13, 1)` of run 39765653170 still showed in progress at 08:13 PDT, about 4 h 20 min after it started.
+  gate-ledger fails because the draft has no filled ledger. `bytes-pass1` at `da27be7b9`, which contains this
+  branch's base, passed CI (run 39774406161). The merged line's CI is the run that counts.
+
+One-model re-run (Qwen3-8B-8bit; under 1 s for the bytes and about 16 s for the s4 derivation):
+
+```sh
+/opt/homebrew/bin/python3.13 -I /Users/edr/night-archive/forward-20261021/BY-G/run4/byg4.py bytes --manifest /Users/edr/night-archive/forward-20261021/BY-G/run3/manifest.99c9099d8.json --model Qwen3-8B-8bit --out /Users/edr/night-archive/forward-20261021/BY-G/run4/lead-8b8.json
+/opt/homebrew/bin/python3.13 -I -B /Users/edr/night-archive/forward-20261021/BY-G/run4/derive4.py --kit-root /Users/edr/code/JouleWise-wt-byg-kit --tree-root /Users/edr/night-archive/forward-20261021/BY-G/run4/tree-91b20d7c2 --runtime-python /Users/edr/code/JouleWise/.venv/bin/python --packs bytes-s4-p1 bytes-s4-p2 --out /Users/edr/night-archive/forward-20261021/BY-G/run4/lead-s4.json
+/opt/homebrew/bin/python3.13 -I /Users/edr/night-archive/forward-20261021/BY-G/run4/byg4.py pins --partials /Users/edr/night-archive/forward-20261021/BY-G/run4/lead-s4.json --committed /Users/edr/night-archive/forward-20261021/BY-G/run4/committed_pins.917d6151d.json --kit /Users/edr/night-archive/forward-20261021/BY-G/run4/kit_pins.c10b6895f.json --out /Users/edr/night-archive/forward-20261021/BY-G/run4/lead-s4-pins.json
+```
+
+Expected: `{"checks": 4082, "mismatches": 0}`. Then the `qwen3-8b-8bit` row shows `hf=True refold=True
+committed=True/None kit=True` and pin `d4f5fe85…a2753`, and `"unequal_units": 0`. `None` means the config counts
+are not compared, because they sum over all twelve packs. The `bytes-s4` tree lines print DIFFERENT, because the
+export is the newer tree version. `/Users/edr/code/JouleWise-wt-byg-kit` is a detached
+checkout at `c10b6895f`.
 
 ## Reproduce (the lead re-runs on one model)
 
