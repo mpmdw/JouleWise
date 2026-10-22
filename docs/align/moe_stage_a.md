@@ -112,7 +112,11 @@ execution needs separate capture-coverage validation.
   log topology or selections. Stage A retains every episode in the aligned feature
   report, but excludes non-finite values separately for each routing test before
   permutation, effects and bootstrap. Each test flags the excluded episode IDs
-  and count, and any retained group with only one condition. Undefined report
+  and count. After those metric-specific drops, groups with only one condition
+  are flagged and excluded from that metric's effect, standardized effect,
+  permutation test and grouped bootstrap. Groups that still contain both
+  conditions remain eligible with their actual composition. Episode-aligned
+  features and classifier comparisons retain all episodes. Undefined report
   fields print as JSON null.
 
 RouterLog contains no turn/sequence boundary offsets. Sequence statistics use its
@@ -126,7 +130,9 @@ fraction of all arrangements at least as extreme as observed. Monte Carlo p is
 (extreme+1)/(draws+1); draws are at least floor(.05*.95/.005^2)+1 = 1901, since
 sqrt(.05*.95/1901) < .005. An explicit smaller budget is raised to that minimum.
 Binary-rational integer sums handle equality exactly without a floating tie
-tolerance. Groups with only one condition cannot exchange labels and are flagged.
+tolerance. The standalone permutation function uses all supplied rows. Stage A
+first excludes and flags groups without a condition contrast for that statistic,
+so its difference of means is over the exchangeable set.
 
 Holm correction always covers all twelve planned metrics; missing phases cannot
 shrink the correction family. Effects include raw differences and pooled-SD

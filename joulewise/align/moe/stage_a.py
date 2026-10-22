@@ -255,6 +255,21 @@ def analyze_stage_a(episodes: Iterable[Episode], *, n_bootstrap: int,
         # randomization and resampling. Retain episode-aligned features above.
         kept = [i for i, row in enumerate(features) if math.isfinite(row[name])]
         dropped = [i for i, row in enumerate(features) if not math.isfinite(row[name])]
+        local_flags = []
+        if dropped:
+            local_flags.append(f"dropped_nonfinite_episodes:{len(dropped)}")
+            local_flags.extend(f"dropped_nonfinite_episode:{episode_ids[i]}" for i in dropped)
+        group_labels: dict[str, set[int]] = {}
+        for i in kept:
+            group_labels.setdefault(groups[i], set()).add(labels[i])
+        no_contrast = {group for group, conditions in group_labels.items()
+                       if conditions != {0, 1}}
+        local_flags.extend(f"group_has_no_label_exchangeability:{group}"
+                           for group in group_labels if group in no_contrast)
+        # After this metric's capture drops, single-condition tasks have no
+        # exchangeable contrast. Exclude them from every effect/test/bootstrap
+        # input so their task baseline cannot shift the pooled mean difference.
+        kept = [i for i in kept if groups[i] not in no_contrast]
         values = tuple(features[i][name] for i in kept)
         local_labels = tuple(labels[i] for i in kept)
         local_groups = tuple(groups[i] for i in kept)
@@ -267,13 +282,6 @@ def analyze_stage_a(episodes: Iterable[Episode], *, n_bootstrap: int,
                                       [local_labels[i] for i in indices])
                         for indices in local_bootstrap]
         valid = sum(math.isfinite(x) for x in draws)
-        local_flags = []
-        if dropped:
-            local_flags.append(f"dropped_nonfinite_episodes:{len(dropped)}")
-            local_flags.extend(f"dropped_nonfinite_episode:{episode_ids[i]}" for i in dropped)
-        for group in dict.fromkeys(local_groups):
-            if len({y for y, g in zip(local_labels, local_groups) if g == group}) < 2:
-                local_flags.append(f"group_has_no_label_exchangeability:{group}")
         if not math.isfinite(p):
             local_flags.append("statistic_not_estimable")
         if valid != n_bootstrap:
