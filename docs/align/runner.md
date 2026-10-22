@@ -165,3 +165,20 @@ Samples arrive every 100 ms, average the preceding 25 ms, add Gaussian sigma
 assumptions. The trace records cadence, averaging, duty fraction and quantum.
 It includes trailing averaging coverage. Sampler seed, virtual clock and
 script seed make synthetic files reproducible.
+
+## Executed synthetic checks
+
+The matrix test prints an ALIGN_RUNNER_END_TO_END JSON line to stderr with
+episode, turn, call and token totals, hidden work by sabotage episode, and
+sampled versus independently summed gross energy. It also runs all four
+tamper dataset variants through write_episodes/read_episodes. A separate test
+kills the writer at four append boundaries and checks both recovered primary
+files against the uninterrupted files byte for byte.
+
+For energy conservation the test configures 100 ms samples averaging contiguous
+100 ms bins, with noise and quantum set to zero. Including trailing averaging
+coverage conserves excess energy; the independent calculation adds idle energy
+only inside the episode. Agreement uses 1e-6 relative, the pipeline rule when no
+uncertainty is specified. The default 100 ms/25 ms duty sensor, 0.5 W Gaussian
+noise and 0.1 W quantum are exercised separately in test_mock_world. These are
+synthetic checks and do not validate a physical sensor.
