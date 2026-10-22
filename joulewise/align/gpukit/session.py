@@ -119,7 +119,10 @@ def wait_ready(process: subprocess.Popen, endpoint: str, *, timeout_s: float,
         if process.poll() is not None:
             return ("endpoint_exited_before_ready",)
         if ready_command:
-            if _command(ready_command, log, timeout_s=min(poll_s, timeout_s)) == 0:
+            # Poll cadence is not a subprocess-startup deadline. A readiness
+            # command gets the remaining model-load budget, then cadence applies.
+            remaining = max(0.0, deadline - time.monotonic())
+            if _command(ready_command, log, timeout_s=remaining) == 0:
                 return ()
         elif probe(endpoint + "/health", min(poll_s, timeout_s)):
             return ()
