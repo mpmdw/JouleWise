@@ -12,7 +12,7 @@ import statistics
 import unittest
 from dataclasses import replace
 
-from joulewise.align.records import ClockMapping, Episode, RouterLog, from_json, to_json
+from joulewise.align.records import ClockMapping, Episode, RouterLog, Turn, ToolCall, from_json, to_json
 from joulewise.align.moe_stage_b import (
     OffloadConfig, PowerPulse, SensorModel, TokenWindow, TrafficResult,
     TransferPulse, decode_reuse, episode_token_windows, expert_size_from_config,
@@ -20,15 +20,18 @@ from joulewise.align.moe_stage_b import (
     recover_routing, required_correlation, simulate_episode, simulate_trace,
     nvml_sensor,
 )
-from joulewise.align.moe_stage_b.analysis import RoutingObservation
+from joulewise.align.moe_stage_b.analysis import RoutingObservation, fisher_interval_95
+from joulewise.align.moe_stage_b.traffic import apply_decode_stalls
 from joulewise.align.moe_stage_b.experiment import (
     WorldConfig, default_sensors, run_world, synthetic_episode, world_offload,
+    synthetic_token_schedule,
 )
 from joulewise.align.moe_stage_b.reference import (
     reference_transfers, reference_window_samples, reference_pearson,
     reference_linear_prediction, reference_required_correlation,
     reference_interval_energies, reference_spectrum_amplitude,
-    reference_detection_forecast,
+    reference_detection_forecast, reference_within_condition_fisher_interval,
+    reference_decode_stall_schedule,
 )
 
 
@@ -440,9 +443,10 @@ class TestMoeStageBAnalysis(StageBAssertions):
 class TestMoeStageBEndToEnd(StageBAssertions):
     @classmethod
     def setUpClass(cls):
-        # Six task groups, each benign/sabotage, three turns and 384 decode
-        # tokens: a multi-minute cohort of multi-turn, tool-using episodes.
-        cls.world = WorldConfig(groups=6, turns=3)
+        # 96 episodes give Fisher margin 1.96/sqrt(96-2-3)=0.2055 in z.
+        # Thus a positive world near r=.8 (z=1.099) clears required z=.770.
+        # Keep the same routing span/energy/noise as r0; enlarge the cohort.
+        cls.world = WorldConfig(groups=48, turns=3, decode_miss_stalls=False)
         cls.design = dict(stage_a_effect_sd=1.0, n_per_condition=50,
                           alpha=0.05, power=0.8, comparisons=3)
         ina, nvml = default_sensors()
@@ -454,11 +458,14 @@ class TestMoeStageBEndToEnd(StageBAssertions):
         cls.gapped_ina = run_world(cls.world, ina, all_resident=False, **cls.design)
         cls.resident = run_world(cls.world, ina, all_resident=True, **cls.design)
         cls.nvml = run_world(cls.world, nvml, all_resident=False, **cls.design)
+        cls.synchronized = run_world(replace(cls.world, decode_step_jitter_ns=0),
+                                     ina, all_resident=False, **cls.design)
         # Emit a compact reproducible evidence row for hosted CI, where there
         # may be no interactive shell to invoke the standalone experiment CLI.
         evidence = []
-        for result in (cls.ina, cls.gapped_ina, cls.resident, cls.nvml):
+        for result in (cls.ina, cls.gapped_ina, cls.resident, cls.nvml, cls.synchronized):
             evidence.append({
+                "world": ("synchronized bursts" if result is cls.synchronized else "variable timing"),
                 "sensor": result["sensor"]["name"], "resident": result["all_resident"],
                 "interval_ns": result["sensor"]["interval_ns"],
                 "window_ns": result["sensor"]["averaging_window_ns"],
@@ -468,6 +475,11 @@ class TestMoeStageBEndToEnd(StageBAssertions):
                 "apparent_extra_j_per_token": result["apparent_extra_j_per_decode_token_range"],
                 "within_condition_held_out_r": result["recovery"][
                     "energy_per_decode_token_j"]["within_condition_held_out_correlation"],
+                "within_condition_interval_95": result["recovery"][
+                    "energy_per_decode_token_j"]["within_condition_held_out_interval_95"],
+                "n_eff": result["recovery"]["energy_per_decode_token_j"]["within_condition_held_out_effective_n"],
+                "forecast_r": result["forecast"]["model_correlation"],
+                "verdict": result["stage_b_verdict"],
                 "required_r": result["requirement"]["minimum_absolute_correlation"],
                 "phase_sweep_error_std_j": result["phase_sweep_energy_error_std_j"],
                 "conditional_detection": result["stage_b_detectable_under_assumptions"],
@@ -481,21 +493,24 @@ class TestMoeStageBEndToEnd(StageBAssertions):
         # The comparison bar is the normal-design correlation required for the
         # supplied Stage A d=1, n=50 groups/condition, alpha=.05, power=.8,
         # with three predeclared features, not an arbitrary recovery threshold.
-        self.assertGreater(correlation, result["requirement"]["minimum_absolute_correlation"])
+        self.assertGreater(result["recovery"]["energy_per_decode_token_j"][
+            "within_condition_held_out_interval_95"][0],
+            result["requirement"]["minimum_absolute_correlation"])
         self.assertTrue(result["stage_b_detectable_under_assumptions"])
         self.assertEqual(result["episodes"], 2*self.world.groups)
         self.assertEqual(result["tool_calls_per_episode"], self.world.turns)
 
-    def test_gapped_ina_retains_failed_empirical_recovery_despite_optimistic_forecast(self):
-        result = self.gapped_ina
-        # Same routes, energy coefficients, target effect and design bar as the
-        # full-frame control. Only polling cadence changes. This exposes periodic
-        # acquisition bias that the simple linear/white-noise forecast misses.
-        self.assertLess(
-            result["recovery"]["energy_per_decode_token_j"]["within_condition_held_out_correlation"],
-            result["requirement"]["minimum_absolute_correlation"])
-        self.assertFalse(result["stage_b_detectable_under_assumptions"])
-        self.assertIn("forecast_empirical_disagreement", result["flags"])
+    def test_variable_timing_gapped_ina_clears_interval_and_synchronized_world_fails(self):
+        # Same routes, energy, sensor and fixed design. Only step-time jitter
+        # changes. Assert interval separation, never a finite-cohort point.
+        required = self.gapped_ina["requirement"]["minimum_absolute_correlation"]
+        positive = self.gapped_ina["recovery"]["energy_per_decode_token_j"]
+        negative = self.synchronized["recovery"]["energy_per_decode_token_j"]
+        self.assertGreater(positive["within_condition_held_out_interval_95"][0], required)
+        self.assertTrue(self.gapped_ina["stage_b_detectable_under_assumptions"])
+        self.assertLess(negative["within_condition_held_out_interval_95"][1], required)
+        self.assertFalse(self.synchronized["stage_b_detectable_under_assumptions"])
+        self.assertIn("synchronized_bursts", self.synchronized["flags"])
 
     def test_all_resident_control_has_no_modelled_routing_energy(self):
         result = self.resident
@@ -535,6 +550,17 @@ class TestMoeStageBEndToEnd(StageBAssertions):
                 "apparent_extra_j_per_token": case["apparent_extra_j_per_decode_token_range"],
                 "within_condition_r": {name: recovery["within_condition_held_out_correlation"]
                                        for name, recovery in case["recovery"].items()},
+                "within_condition_interval_95": {name: recovery["within_condition_held_out_interval_95"]
+                                                 for name, recovery in case["recovery"].items()},
+                "raw_held_out": {name: {"r": recovery["held_out_correlation"],
+                                        "interval_95": recovery["held_out_interval_95"]}
+                                 for name, recovery in case["recovery"].items()},
+                "n_eff": case["recovery"]["energy_per_decode_token_j"]["within_condition_held_out_effective_n"],
+                "forecast_r": case["forecast"]["model_correlation"],
+                "verdict": case["stage_b_verdict"],
+                "transfer_only_j_per_token": case["transfer_only_j_per_decode_token_range"],
+                "decode_duration_s": case["decode_duration_s_range"],
+                "nominal_decode_duration_s": case["nominal_decode_duration_s_range"],
                 "required_r": case["requirement"]["minimum_absolute_correlation"],
                 "phase_sweep_error_std_j": case["phase_sweep_energy_error_std_j"],
                 "conditional_detection": case["stage_b_detectable_under_assumptions"],
@@ -565,8 +591,95 @@ class TestMoeStageBEndToEnd(StageBAssertions):
         self.assertIn("duty_cycled_apparent_energy", result["flags"])
         self.assertIn("token_rate_at_or_above_nyquist", result["flags"])
         self.assertIn("per_token_energy_underresolved", result["flags"])
+        # Negative world must clear the upper Fisher bound below the design bar.
+        self.assertLess(result["recovery"]["energy_per_decode_token_j"][
+            "within_condition_held_out_interval_95"][1],
+            result["requirement"]["minimum_absolute_correlation"])
         self.assertTrue(all(value is None for _, value in
                             result["recovery"]["token_rate_amplitude_w"]["predictions"]))
+
+
+class TestMoeStageBContinuation(StageBAssertions):
+    def test_fisher_intervals_match_independent_algebra_and_small_cohort_is_inconclusive(self):
+        # Independent exponential/rational oracle, 1e-6 relative algebra bar.
+        for correlation, count in ((.725190209, 12), (.503039, 24),
+                                   (.95, 12), (0.0, 12), (-.7, 24), (.8, 100)):
+            expected = reference_within_condition_fisher_interval(correlation, count)
+            actual = fisher_interval_95(correlation, count, fitted_means=2)
+            for a, b in zip(actual, expected):
+                self.assertRelative(a, b)
+        required = required_correlation(stage_a_effect_sd=1, n_per_condition=50,
+                                        alpha=.05, power=.8, comparisons=3)
+        interval = fisher_interval_95(.725190209, 12, fitted_means=2)
+        self.assertLess(interval[0], required.minimum_absolute_correlation)
+        self.assertGreater(interval[1], required.minimum_absolute_correlation)
+        self.assertIsNone(fisher_interval_95(.8, 5, fitted_means=2))
+        # Six held-out episodes cannot decide a typical noisy correlation.
+        world = WorldConfig(groups=3, turns=2)
+        result = run_world(world, default_sensors()[0], all_resident=False,
+                           stage_a_effect_sd=1, n_per_condition=50,
+                           alpha=.05, power=.8, comparisons=3)
+        self.assertIsNone(result["stage_b_detectable_under_assumptions"])
+        self.assertEqual(result["stage_b_verdict"], "inconclusive at this cohort size")
+        self.assertIn("held_out_recovery_inconclusive_at_cohort_size", result["flags"])
+
+    def test_blocking_stall_retimes_actual_windows_tools_and_running_energy_end_to_end(self):
+        # 3 decode tokens: 10/0/10 bytes at 1000 B/s add 10/0/10ms.
+        # Nominal 2/5/3ms -> actual 12/5/13ms. These are timing inputs.
+        router = one_layer([(0,), (0,), (1,)])
+        # Layer size is fixed: use three tokens 10/0/10 bytes, 20ms added.
+        # The independent oracle also tests 10/0/20 unequal traffic separately.
+        windows = (TokenWindow(0, 0, 2_000_000), TokenWindow(1, 2_000_000, 7_000_000),
+                   TokenWindow(2, 7_000_000, 10_000_000))
+        call = ToolCall("lookup_document", 10_000_000, 15_000_000, 96, 2048)
+        episode = Episode("stall", "synthetic/document", "benign", router.model, "mock/local",
+                          0, "test", 0, 15_000_000,
+                          (Turn(0, 0, 10_000_000, 0, 0, 3, first_token_ns=0,
+                                tool_calls=(call,)),), router_log=router)
+        config = small_config(bandwidth_bytes_s=1000, joules_per_byte=.001,
+                              decode_miss_stalls=True, running_power_w=12)
+        timing = apply_decode_stalls(episode, config, windows=windows)
+        traffic = model_traffic(router, config, windows=timing.windows)
+        expected_windows, bounds, stall_ns = reference_decode_stall_schedule(
+            tuple((w.token_index, w.start_ns, w.end_ns) for w in windows), router.phase,
+            tuple(t.bytes_moved for t in traffic.tokens), config.bandwidth_bytes_s,
+            {"turn_end": 10_000_000, "tool_end": 15_000_000})
+        actual = tuple((w.token_index, w.start_ns, w.end_ns) for w in timing.windows)
+        self.assertEqual(actual, expected_windows)
+        self.assertEqual(actual, ((0, 0, 12_000_000), (1, 12_000_000, 17_000_000),
+                                  (2, 17_000_000, 30_000_000)))
+        self.assertEqual(timing.episode.turns[0].end_ns, bounds["turn_end"])
+        self.assertEqual(timing.episode.end_ns, bounds["tool_end"])
+        self.assertEqual(stall_ns, 20_000_000)
+        sensor = SensorModel("stall-fixture", "mock", "test", 100_000, 100_000, .0001, 0)
+        sampled = simulate_episode(timing.episode, config, sensor, baseline_w=8,
+                                   prefill_load_w=0, decode_load_w=4, tool_load_w=1,
+                                   windows=timing.windows)
+        features = extract_features(sampled.episode, sampled.episode.power_traces[-1],
+                                    baseline_w=12, noise_std_w=0, noise_multiplier=1,
+                                    attribution_floor_j=0, windows=timing.windows,
+                                    reference_decode_duration_ns=timing.reference_decode_duration_ns)
+        # 20B*.001J/B + 12W*.020s = .26J incremental. Sensor q/2
+        # times actual .030s is its rounding bound; /400 comparison is below
+        # 1% of that bound and above 1e6*float noise at this energy scale.
+        expected_energy = .02+12*.020
+        self.assertLessEqual(abs(features.energy_per_decode_token_j*3-expected_energy),
+                             sensor.quantum_w*.030/400)
+        self.assertRelative(sum(t.incremental_energy_j for t in traffic.tokens), expected_energy)
+        self.assertEqual(timing.episode.turns[0].tool_calls[0].end_ns
+                         -timing.episode.turns[0].tool_calls[0].start_ns, 5_000_000)
+        self.assertNotIn("transfer_exceeds_token_window", traffic.flags)
+
+    def test_variable_schedule_preserves_routes_and_uses_nonuniform_windows(self):
+        world = WorldConfig(turns=2)
+        original = synthetic_episode(world, group=0, condition="benign", hot_probability=.8)
+        scheduled, windows = synthetic_token_schedule(world, original)
+        decode = [w for w, p in zip(windows, original.router_log.phase) if p == "decode"]
+        self.assertEqual(scheduled.router_log, original.router_log)
+        self.assertGreater(len({w.end_ns-w.start_ns for w in decode}), 1)
+        for w in decode:
+            self.assertLessEqual(abs(w.end_ns-w.start_ns-world.decode_token_period_ns),
+                                 world.decode_step_jitter_ns)  # Declared jitter support.
 
 
 if __name__ == "__main__":

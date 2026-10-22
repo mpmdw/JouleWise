@@ -489,3 +489,34 @@ def reference_detection_forecast(
     contrast = abs(effect) * signal * decode_tokens
     bound = systematic + quantum * duration
     return ReferenceDetectionForecast(correlation, contrast, bound)
+
+
+# Continuation oracle independently authored by gpt-6.1-sol without production code.
+def reference_within_condition_fisher_interval(r, heldout_episodes):
+    import math
+    if (not isinstance(heldout_episodes, int)
+            or isinstance(heldout_episodes, bool) or heldout_episodes <= 5
+            or r is None or not math.isfinite(r) or not -1.0 <= r <= 1.0):
+        return None
+    # N minus two fitted means, then Fisher's -3. 3.92 = 2*1.96.
+    spread = math.exp(3.92 / math.sqrt(heldout_episodes - 5))
+    plus, minus = 1.0 + r, 1.0 - r
+    return ((plus - spread*minus)/(plus + spread*minus),
+            (spread*plus - minus)/(spread*plus + minus))
+
+
+def reference_decode_stall_schedule(windows, phases, moved_bytes,
+                                    bandwidth_bytes_s, boundaries):
+    from fractions import Fraction
+    rate = Fraction(str(bandwidth_bytes_s))
+    insertions = []
+    for (_, _, end), phase, count in zip(windows, phases, moved_bytes):
+        if phase == "decode" and count:
+            exact_ns = Fraction(count * 1_000_000_000, 1) / rate
+            dt = (exact_ns.numerator + exact_ns.denominator - 1) // exact_ns.denominator
+            insertions.append((end, dt))
+    def mapped(t):
+        return None if t is None else t + sum(dt for end, dt in insertions if end <= t)
+    adjusted = tuple((index, mapped(start), mapped(end)) for index, start, end in windows)
+    adjusted_bounds = {name: mapped(t) for name, t in boundaries.items()}
+    return adjusted, adjusted_bounds, sum(dt for _, dt in insertions)
