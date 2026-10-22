@@ -1,5 +1,8 @@
 ## PROGRESS (round b, findings on a846ba997)
 
+- Slice 4 resumed from clean director commit `3566073ae17aa9c5a9575c181495d761fd0c5799`, which already includes director note D1 and slice-3 evidence. No stop card; branch and baseline ancestry match. This slice finishes the prescribed bounded archive/join regressions, preserving all implementation and round-a content.
+- Slice-4 progress: Addendum7RegressionTests (13) and Q1WithheldCensusTests (4) pass, exit 0, no skips. Remaining bounded checks are running or queued; detailed logs use the same fresh-TMPDIR runner under `/tmp/bat3f1r2/`.
+- Slice-4 progress: final-source BatteryCampaignTests (18) and ReviewerProbeTests (1) pass, exit 0, no skips. Session-end fixture census cannot observe processes: exit 2, `PermissionError: [Errno 1] Operation not permitted: 'ps'`; this is unavailable observation, not a clean census. All launched children are tracked through their explicit test sessions; no process-control action attempted.
 - Slice 1 started from clean `115f9ac179795f4aedc232d5e87177708f44ba75`, branch `lane/2026-10-22-bytes-battery-term`; recent history matches the supplied baseline. No active stop card. This explicit delegated fix-round brief selects the work; queue/state files remain lead-owned and untouched.
 - Done: read the whole build brief and current BAT-2 ruling at `281b53370`, including §4 and §8 in full. Exported ruling: `/tmp/bat3f1r2/BAT-RULING.md`. No H data or forbidden night directories read.
 - Done: finding 1's three third-dispatch registration blocks inserted verbatim, with whitespace wrapping matching the registration, and the §20 row gains Authority. `regtext_check.py` against `281b53370`: ALL OK, exit 0. `tests.b6.test_bytes_packs`: 9 tests pass, exit 0, no skips. Registration diff has only the four authorized changes; `git diff --check` passes.
@@ -7,10 +10,15 @@
 - Done in slice 2: implemented findings 2–4 and four new focused tests, with no fixture hook, import change or new flag code. Final runs: seven meter/ruling tests, all 17 BatteryCampaignTests, nine pack tests and five float-sweep tests pass (38 total; no skips). Initial fault missed one late-batch sample; corrected and full class reran green. Log `/tmp/bat3f1r2/roundb-campaign-recheck.log`.
 - Done: M24 KILLED by the new cut/full coverage test; disposable copy and TMPDIR deleted. Runner `/tmp/bat3f1r2/mutate_roundb.py` is ready for M22 and M23 next slice.
 - Slice-2 handoff requested mutations, archive/boundary regressions, identity, agreement and refusal census. Slice 3 completed the mutations, boundary/archive classes, all three identity scenarios, agreement and census as recorded below.
-- Next slice: run the remaining bounded archive/join classes: Addendum4RegressionTests (14), Addendum7RegressionTests (13), ReviewerProbeTests (1), Q1WithheldCensusTests (4), SubsetReleaseChainTests (2), Q1MissingFilesCLIChainTests (3), Q2CommitmentCLIChainTests (1), and final-source BatteryCampaignTests (18). Split across slices if needed; each invocation uses `/tmp/bat3f1r2/run_check.py` for fresh TMPDIR/logging. The long CampaignWordRates remains CI-only under the local route.
-- Open: remaining prescribed regression classes; director owns commit/push and PR #544 CI; BY-MERGE owns conflict resolution and final cold passes. No scope expansion or science ruling needed.
+- Done in slice 4: all eight remaining bounded classes pass (56 tests, exit 0, no skips), including all 18 final-source BatteryCampaignTests. Across slices, all 77 prescribed bounded analysis tests and 14 pack/float-sweep tests pass. All launched check sessions completed and their TMPDIRs were deleted. Only this report changed in slice 4.
+- Next: director commits this report, pushes the final head to the lane and CI branch for PR #544, re-runs H, and owns final review. BY-MERGE resolves the listed conflicts and runs both cold passes. The long CampaignWordRates remains CI-only under the local route, as in round a; no whole-module or whole-repository suite was run here.
+- Open external work: director-owned live/CI checks and final review; BY-TWIN-BAT parity; BY-MERGE integration. Fixture-process census observation is unavailable because sandbox `ps` is denied; recorded below, never represented as clean. No remaining bounded local implementation or prescribed regression check; no scope expansion or science ruling needed.
 
 - Slice 3 resumed from clean director commit `ac03d8cd0`, a descendant of `115f9ac17`. Director note D1 implemented before remaining verification: SMC selection now uses header/trailer mapping before meter samples/fit, so both early returns carry selected readings. New synthetic test covers all-n=0 batches and injected clock-fit failure with a one-second −1000 mA marker-window burst. Focused run passes all 3 tests (including both D1 subcases), exit 0, no skips. M22, M23, M25 all KILLED and copies cleaned. BoundaryAndStagingTests passes all 10; refusal census all five arrays empty. Default bit identity passes with 1,320,307 common fields, zero value differences and only three expected digests. Instant/delayed identity also pass (all common values exact; only three expected digest differences in each), ProductionArchiveTests passes all 4 tests, and agreement has the same 238 above-bar field identities as round a, seven passes and one expected defects failure. All child processes finished; no mutant/test process left active. Logs/runners persist under `/tmp/bat3f1r2/`.
+
+BAT-3-fix1 ROUND B COMPLETE
+
+Final handoff: branch `lane/2026-10-22-bytes-battery-term`, head worked on `3566073ae17aa9c5a9575c181495d761fd0c5799`. Round-b findings 1–4 and director note D1 fixed and pinned; finding 5 rejected as directed; finding 6 handled by director; finding 7 handed to BY-MERGE. No Git writes, network actions, measurements or H-data reads. Final report awaits director commit/push; PR #544 CI state was not observed from this sandbox.
 
 ## FIX LOG (round b)
 
@@ -87,6 +95,23 @@ Additional slice-3 checks (same wrapper/environment/TMPDIR discipline; child cwd
 
 - `roundb-slice3-preservation /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r2/check_slice3.py`: exit 0; round-a content exactly preserved after only the two required heading renames; changed paths exactly the three scoped files for this slice; baseline ancestry holds; every M22–M25 copy and all three identity worlds removed. Log `/tmp/bat3f1r2/roundb-slice3-preservation.log`. Final `git diff --check`: exit 0. No work remains running at handoff.
 
+Slice 4 commands (same wrapper/environment/fresh-TMPDIR discipline): each invocation is `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r2/run_check.py <label> /opt/homebrew/bin/python3.13 -B -m unittest <class>` with the exact label/class pairs below. Every test exits 0, with no skips or environmental test failures; all output is preserved in `/tmp/bat3f1r2/<label>.log`, exact argv/cwd/exit/time in `checks.jsonl`.
+
+| label | class | tests | unittest / process seconds |
+|---|---|---:|---:|
+| roundb-addendum4 | tests.test_bytes_analysis.Addendum4RegressionTests | 14 | 170.736 / 171.475 |
+| roundb-addendum7 | tests.test_bytes_analysis.Addendum7RegressionTests | 13 | 19.752 / 20.486 |
+| roundb-reviewer | tests.test_bytes_analysis.ReviewerProbeTests | 1 | 56.904 / 57.701 |
+| roundb-q1census | tests.test_bytes_analysis.Q1WithheldCensusTests | 4 | 0.003 / 0.733 |
+| roundb-subset | tests.test_bytes_analysis.SubsetReleaseChainTests | 2 | 58.476 / 59.274 |
+| roundb-q1missing | tests.test_bytes_analysis.Q1MissingFilesCLIChainTests | 3 | 37.904 / 38.719 |
+| roundb-q2commitment | tests.test_bytes_analysis.Q2CommitmentCLIChainTests | 1 | 21.755 / 22.658 |
+| roundb-battery-final | tests.test_bytes_analysis.BatteryCampaignTests | 18 | 64.858 / 65.607 |
+
+- Session-end fixture census: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r2/run_check.py roundb-fixture-census /opt/homebrew/bin/python3.13 -B scripts/fixture_orphan_census.py --fail-on-orphans`: exit 2, 0.149 s; JSON `{"error": "PermissionError: [Errno 1] Operation not permitted: 'ps'"}`. Observation unavailable in sandbox; no census count or clean result claimed. Log `/tmp/bat3f1r2/roundb-fixture-census.log`. Every explicit test session completed; no process signaling attempted.
+- Final cumulative documentation diff reviewed: registration has only finding 1's three blocks and §20 cell; contract has only the two authorized sentences. No implementation/test/fixture changes in slice 4. `git diff 115f9ac17 --check`: exit 0.
+- Final preservation command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r2/run_check.py roundb-slice4-preservation /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r2/check_slice4.py`: exit 0, 0.266 s. AST inventory confirms all eight slice-4 classes total 56 tests; round-a tail exactly preserved after only required heading renames; only report changed this slice; cumulative round-b paths exactly within scope; baseline ancestry/diff checks pass; no mutant copies or identity worlds remain. Log `/tmp/bat3f1r2/roundb-slice4-preservation.log`.
+
 ## MUTATION KILLS (round b)
 
 Command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r2/mutate_roundb.py M24`. The runner copies the working tree without .git, changes only the copy, creates a fresh TMPDIR for the child, then deletes TMPDIR and copy in finally.
@@ -113,11 +138,11 @@ Exact invocation for each scenario: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTEC
 
 Earlier round-a evidence remains below unchanged.
 
-Next-slice test inventory from grep: BatteryRulingWorkedExamples, MeterWorkedExamples, BatteryCampaignTests; archive/boundary classes BoundaryAndStagingTests and ProductionArchiveTests; Addendum4RegressionTests has direct meter_decode calls (lines 1249, 1253). Also inspect Addendum7RegressionTests, ReviewerProbeTests, Q1WithheldCensusTests, SubsetReleaseChainTests, Q1MissingFilesCLIChainTests and Q2CommitmentCLIChainTests for indirect join coverage. Do not run the long CampaignWordRates class as a single local slice. Each class/method gets its own disposable TMPDIR.
+Final archive/join inventory from grep: BatteryRulingWorkedExamples, MeterWorkedExamples, BatteryCampaignTests, BoundaryAndStagingTests, ProductionArchiveTests, Addendum4RegressionTests, Addendum7RegressionTests, ReviewerProbeTests, Q1WithheldCensusTests, SubsetReleaseChainTests, Q1MissingFilesCLIChainTests and Q2CommitmentCLIChainTests all ran and passed in round b (the first two share one seven-test invocation). The long CampaignWordRates class (twenty full campaigns per world in one test) remains CI-only; no partial-seed substitute or new tolerance was introduced.
 
 ## OPEN ISSUES (round b)
 
-- Findings 2–4 and director note D1 implemented. All four required mutants killed, all three bit-identity scenarios exact, agreement field list unchanged, refusal census empty. Remaining regression classes listed in PROGRESS must finish before marking round b complete.
+- Findings 1–4 and director note D1 complete. All four required mutants killed, all three bit-identity scenarios exact, agreement field list unchanged, refusal census empty; all remaining bounded archive/join classes pass. No local fix work remains. The long CampaignWordRates and whole-suite checks remain CI-owned under the local route; fixture-process observation requires a director session where `ps` is available.
 - Residual finding-3 case: a released run's [d1, d1 + τ) window can still read a held-out run starting within τ of d1. This is the ruling §4 reopen condition; H's smallest gap was 45.0 s. The filter must preserve required selected-span windows, not alter the arithmetic.
 - Director re-runs H's real-data reductions and fault shapes, checks the final diff, commits/pushes lane and same head to CI PR #544. This worker reads no H data and claims no new live validation.
 - BY-TWIN-BAT owns parity; BY-MERGE owns conflicts and merged-tree cold passes. Finding 5 remains intentionally unchanged.
