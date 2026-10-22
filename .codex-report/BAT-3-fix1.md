@@ -1,3 +1,96 @@
+## PROGRESS (round c, findings on 9bdcf6c95)
+
+- Slice 1 started from clean `9bdcf6c95255f2701188b9bb54531699ff5ca256` on `lane/2026-10-22-bytes-battery-term`; no active stop card. Read whole brief and BAT-2 ruling, with §4 reread in full. Explicit delegated brief selects this work; state/queue/run-report files outside scope remain untouched. No H data or forbidden night directories read.
+- Implemented findings 1, 2 and 5: combined reasons join distinct unevaluated pass causes in pass order with the specified fallback; marker evaluation requires B0AC in both success and fallback paths; contract describes receive-time/SMC retention correctly. All four new regression methods pass; remaining verification is listed below.
+- Focused tests pass: 5 tests, exit 0, no skips (18.602 s unittest / 19.379 s process), including all four new methods and existing blinded-stage regression. Log `/tmp/bat3f1r3/roundc-focused.log`. No new CLI chain or fixture edit.
+- Done: meter/ruling (7), battery (22), boundary (10), production archive (4) and Addendum 7 (13) tests pass; packs (9) and float sweep (5) pass; all five refusal-census arrays empty. M26–M28 KILLED; all copies and TMPDIRs removed. Final changed marker/blinded methods reran green.
+- Next slice: run ReviewerProbeTests; kill M29 using `/tmp/bat3f1r3/mutate_roundc.py M29`; run `/tmp/bat3f1r3/bit_identity_roundc.py <scenario>` for default/instant/delayed; run `/tmp/bat3f1r3/agreement_run.py` and compare field identities against `/tmp/bat3f1r2/agreement-all-fields.json` (expected same 238). Use run_check.py, required environment and fresh TMPDIR for every run. Adapted workers and base export `/tmp/bat3f1r3/base-9bdcf6c95` are ready; baseline child cwd must be the export. Identity expects zero new/removed keys and zero non-digest differences. Long CampaignWordRates remains CI-only. Logs/runners: `/tmp/bat3f1r3/`.
+- Open local fixture issue: import-graph modules have 8 passes / 1 NULL-versus-GO failure; same failure reproduced on exported 9bdcf6c95 and recorded in round a. No hazard repair. No process remains running at handoff.
+- Open: no scope expansion or science ruling needed. Director owns commits/pushes, H reruns, CI PR #544 and final review; BY-TWIN-BAT and BY-MERGE retain their work.
+
+## FIX LOG (round c)
+
+1. Implemented joined combined reasons; exact new regression passes. Missing reason falls back to `not evaluated at the blinded stage` as directed.
+2. Implemented B0AC-qualified marker evaluation, including successful meter decode with an empty current-reading marker window; new focused tests pass; M28 killed. End-window completeness retains round b's any-poll definition.
+3. Exact per-model battery aggregation test passes on the assisted campaign, with unequal pass means; M26 killed.
+4. Test-only idle charging stream mutation and exact cell weighting test pass; no standard campaign output change.
+5. Fixed only the inaccurate retention sentence in the stream paragraph; existing stage-correct reason contract already suffices.
+- τ stall question: handed forward, no code change (director forwards to ruling owner).
+- 1-ulp meter watts difference: no change, older than BAT-3; battery fields bit-identical per review evidence, no new H claim.
+
+## WHAT CHANGED (round c)
+
+- `joulewise/bytes_analysis.py`: BAT-2 §4 marker evaluation and combined description reason fixes.
+- `tests/test_bytes_analysis.py`: four new regression methods pin findings 1–4; existing no-poll reason assertion and blinded combined-label assertions updated. M27 also killed.
+- `docs/contracts/bytes_tables.md`: finding 5's one retention sentence.
+- `.codex-report/BAT-3-fix1.md`: prepend round-c record; earlier rounds preserved verbatim below.
+
+## HUNKS FOR BY-MERGE (round c)
+
+- `joulewise/bytes_analysis.py`, `_decode_battery_marker`: distinguish no B0AC readings (None) from evaluated False; `meter_decode` keeps its existing bool marker output.
+- `joulewise/bytes_analysis.py`, `archive_records`: annotate unevaluated success-path rows; fallback qualifies streams by B0AC readings rather than any poll, with stage-correct reason.
+- `joulewise/bytes_analysis.py`, `combine_passes`: deduplicated ordered pass reasons and specified fallback.
+- No `_phase_cell` or campaign fixture hunk.
+
+## TESTS RUN (round c)
+
+Focused invocation: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r3/run_check.py roundc-focused /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BatteryCampaignTests.test_combined_unevaluated_reason_preserves_meter_stage_causes tests.test_bytes_analysis.BatteryCampaignTests.test_marker_requires_current_readings_on_failed_and_successful_meter_paths tests.test_bytes_analysis.BatteryCampaignTests.test_combined_battery_columns_use_exact_pass_aggregations tests.test_bytes_analysis.BatteryCampaignTests.test_idle_charge_changes_secondary_cell_battery_column_only tests.test_bytes_analysis.BatteryCampaignTests.test_blinded_assist_is_null_with_reason_and_heldout_counts_are_evaluated`: 5 tests, exit 0, no skips; 18.602 s unittest / 19.379 s process. Wrapper creates/deletes a fresh `/tmp/jwtmp-bat3f1.*` TMPDIR and sets both required variables. Exact argv/cwd/exit/time recorded in `/tmp/bat3f1r3/checks.jsonl`; output in `roundc-focused.log`. `git diff --check`: exit 0.
+
+No import dependency added or changed; conditional import-graph lists and float-sweep READERS need no edit.
+
+
+Slice-1 completed check inventory. Each child below uses wrapper `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r3/run_check.py <label> <child>`, required variables and fresh TMPDIR. Cwd is this clone except baseline import check uses the exported tree. No skips. Exact argv/cwd/exit/time is in checks.jsonl; logs are `/tmp/bat3f1r3/<label>.log`.
+
+- `roundc-meter`: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BatteryRulingWorkedExamples tests.test_bytes_analysis.MeterWorkedExamples`; 7 tests, 0.014 s unittest, exit 0, 0.736 s process.
+- `roundc-packs`: `/opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_bytes_packs`; 9 tests, 1.455 s unittest, exit 0, 1.700 s process.
+- `roundc-refusal`: `/opt/homebrew/bin/python3.13 -B -m tests.hazards.refusal_census`; all five census arrays empty, exit 0, 2.228 s process.
+- `roundc-float`: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_battery_float_sweep`; 5 tests, 2.609 s unittest, exit 0, 2.828 s process.
+- `roundc-blinded-final`: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BatteryCampaignTests.test_blinded_assist_is_null_with_reason_and_heldout_counts_are_evaluated`; 1 tests, 15.994 s unittest, exit 0, 16.745 s process.
+- `roundc-battery`: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BatteryCampaignTests`; 22 tests, 65.213 s unittest, exit 0, 65.971 s process.
+- `roundc-imports`: `/opt/homebrew/bin/python3.13 -B -m unittest tests.hazards.test_import_graph tests.flags.test_flags_import_graph`; 9 tests, 3.464 s unittest, exit 1, 3.647 s process.
+- `roundc-boundary`: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BoundaryAndStagingTests`; 10 tests, 36.564 s unittest, exit 0, 37.364 s process.
+- `roundc-production`: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.ProductionArchiveTests`; 4 tests, 38.697 s unittest, exit 0, 39.496 s process.
+- `roundc-addendum7`: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.Addendum7RegressionTests`; 13 tests, 19.993 s unittest, exit 0, 20.728 s process.
+- `roundc-import-baseline`: `/opt/homebrew/bin/python3.13 -B -m unittest tests.hazards.test_import_graph.ImportGraphTests.test_a_complete_arm_and_monitor_run_load_no_retired_module`; 1 tests, 3.132 s unittest, exit 1, 3.310 s process.
+- `roundc-marker-final`: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BatteryCampaignTests.test_marker_requires_current_readings_on_failed_and_successful_meter_paths`; 1 tests, 18.229 s unittest, exit 0, 19.021 s process.
+
+BatteryCampaignTests passed all 22 tests before the final exact combined-blinded label assertions and marker `.get` style were added; both changed methods passed separately on final source. Production code did not change after the class run. Import-graph fixture failure: `ImportGraphTests.test_a_complete_arm_and_monitor_run_load_no_retired_module`, `AssertionError: 'NULL' != 'GO'`. Same failure reproduced alone at exported 9bdcf6c95; it also appears in untouched round-a report. No hazard/environment repair attempted. No other test failure.
+
+A report-update Python stdin command initially had a syntax error before executing; corrected and reran. No repository code or report was changed by that failed command.
+
+## MUTATION KILLS (round c)
+
+Commands: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1r3/mutate_roundc.py M26 M27 M28`, then same command with M28 only after changing the test assertion to `.get`, turning an absent field into an explicit assertion failure. Child: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.<test below>`. Each mutant copies this working tree without .git into `/tmp/bat3f1r3/mut/<name>`, runs there with required variables and a fresh TMPDIR, then deletes both in finally. Clone source never mutated. Exact argv/time/exit: `/tmp/bat3f1r3/mutations.jsonl`; failure logs `<name>.log`.
+
+- M26 KILLED by `BatteryCampaignTests.test_combined_battery_columns_use_exact_pass_aggregations`: 1 test / 1 failure, exit 1; 15.393 s unittest / 16.140 s process. `AssertionError: 0.53969027349212 != 0.5395184700793934`.
+- M27 KILLED by `BatteryCampaignTests.test_idle_charge_changes_secondary_cell_battery_column_only`: 1 test / 1 failure, exit 1; 16.644 s unittest / 17.399 s process. `AssertionError: 0.51096 != 0.817536`.
+- M28 KILLED by `BatteryCampaignTests.test_marker_requires_current_readings_on_failed_and_successful_meter_paths`: final 1 test / 2 subcase failures, exit 1; 17.468 s unittest / 18.264 s process. `True is not False` (failed meter) and `None is not False` (successful meter). Initial kill was 1 failure plus a missing-key error; final test style uses `.get` and clean source reran green.
+- M29 pending; new killing test `BatteryCampaignTests.test_combined_unevaluated_reason_preserves_meter_stage_causes` passes clean source; mutation prepared in runner.
+
+
+## BIT-IDENTITY (round c)
+
+Pending against 9bdcf6c95, expected only module/predictions digests.
+
+## DECISIONS I MADE (round c)
+
+- Successful meter integration does not guarantee current readings in the shifted marker window: removing current only from that window leaves early decode/idle samples available. Apply the evaluation rule on the success path too, without adding keys to standard evaluated rows or changing `meter_decode`'s bool marker schema.
+- Marker helper returns None for no current readings, otherwise bool; callers distinguish unevaluated from an evaluated zero count. Current without voltage still evaluates the marker.
+- `battery_end_window_complete` retains round b's any-poll-at/after-d1+τ definition on qualifying streams; current-qualified marker evaluation does not require that terminal poll to carry B0AC.
+- Idle test: 100 mA at 12.774 V gives −1.2774 W, hence +15.3288 J secondary-minus-gross over this 12 s decode, above the ~1 J attribution scale. Exact cell weighting passes; gross columns remain identical; only the test copy stream changes.
+- No reason field on an unevaluated pass uses the explicitly authorized blinded-stage fallback; reasons deduplicate in sorted pass order.
+
+Final slice-1 preservation: earlier round-b/a tail exactly equals 9bdcf6c95; `git diff --check` passes, changed paths exactly the four files listed above, all launched sessions completed and all mutant copies deleted. No Git writes or network actions.
+
+## OPEN ISSUES (round c)
+
+- Remaining: ReviewerProbeTests, M29, three identity scenarios and agreement field-list comparison. Earlier rounds exactly preserved; all four changed paths within scope; no process left running. No measurements, Git writes, network actions, new CLI chains or campaign fixture changes.
+- Director owns real-H reruns, final review, commit/push and CI; BY-TWIN-BAT owns expected agreement failure, BY-MERGE owns integration.
+
+## NEEDS_RULING (round c)
+
+none
+
 ## PROGRESS (round b, findings on a846ba997)
 
 - Slice 4 resumed from clean director commit `3566073ae17aa9c5a9575c181495d761fd0c5799`, which already includes director note D1 and slice-3 evidence. No stop card; branch and baseline ancestry match. This slice finishes the prescribed bounded archive/join regressions, preserving all implementation and round-a content.

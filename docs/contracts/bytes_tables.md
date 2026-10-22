@@ -133,8 +133,10 @@ is scanned incrementally for clock metadata and endpoint sequence numbers;
 no out-of-selection power samples are unpacked or retained. Only authorized
 science decode/idle spans, released NEG-8 request/idle spans and one adjacent
 sample at each edge are decoded. Clock-fit metadata may cover the session;
-all poll receive times and SMC values are retained, in receive order, so the
-stream-wide maximum poll interval and post-decode battery window remain available;
+every poll's receive time is retained, in receive order, so the stream-wide
+largest poll interval and τ are unchanged; SMC values are retained only for
+polls received in [start, end + τ) of a selected span, and none when the
+raw/monotonic mapping is missing;
 held-out power is absent at fit stage. Tests compare this clock fit exactly
 with the full native parser. No raw/monotonic mapping or fit gives a labelled
 unavailable meter value, without changing rails. There is no hazard-journal

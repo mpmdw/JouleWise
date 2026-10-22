@@ -436,8 +436,9 @@ def _decode_battery_marker(stream, raw_span, tau):
     # voltage was available to calculate energy at that poll.
     lo = bisect.bisect_left(stream.poll_ns, raw_span[0] + tau * 1e9)
     hi = bisect.bisect_left(stream.poll_ns, raw_span[1] + tau * 1e9)
-    return any(values.get("B0AC") is not None and values["B0AC"] < 0
-               for values in stream.smc[lo:hi])
+    currents = [values["B0AC"] for values in stream.smc[lo:hi]
+                if values.get("B0AC") is not None]
+    return any(current < 0 for current in currents) if currents else None
 
 
 def meter_decode(stream, decode_span, idle_span, *, battery_readings=None):
@@ -505,7 +506,7 @@ def meter_decode(stream, decode_span, idle_span, *, battery_readings=None):
             "battery_end_window_complete": bool(stream.poll_ns and
                 stream.poll_ns[-1] >= spans[0][1] + tau * 1e9),
             "battery_n": battery_n, "battery_n_idle": battery_nb,
-            "decode_battery_assist": assisted,
+            "decode_battery_assist": bool(assisted),
             "edge_powers_w": powers, "r_max_s": residual, "sample_interval_s": interval,
             # One slice is swapped under a coherent offset, hence max, not
             # the sum in u. NR1 adopts the existing (r_max + interval) factor.
@@ -940,6 +941,13 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
                 try:
                     row["meter"] = {**meter_decode(stream, *spans[row["run_id"]],
                                                   battery_readings=battery_readings), "stream": name}
+                    from joulewise.external import km003c_parse as kp
+                    raw_span = [edge + kp.raw_offset_ns(stream) for edge in spans[row["run_id"]][0]]
+                    if _decode_battery_marker(stream, raw_span, row["meter"]["battery_tau_s"]) is None:
+                        row["decode_assist_evaluated"] = False
+                        row["decode_assist_evaluated_reason"] = (
+                            "decode marker not evaluated: selected meter stream has no polls carrying B0AC"
+                            f" in the marker window (run {row['run_id']})")
                     if row["meter"]["decode_battery_assist"]:
                         row["flags"] = sorted(set(row["flags"]) | {"bytes.decode_battery_assist"})
                     break
@@ -955,18 +963,17 @@ def archive_records(root, manifest, session, *, stage, export_path=None, key_dir
                         continue
                     raw_span = [edge + offset for edge in spans[row["run_id"]][0]]
                     tau = _battery_delay_s(battery_readings[2])
-                    lo = bisect.bisect_left(stream.poll_ns, raw_span[0] + tau * 1e9)
-                    hi = bisect.bisect_left(stream.poll_ns, raw_span[1] + tau * 1e9)
-                    if lo == hi:
+                    marker = _decode_battery_marker(stream, raw_span, tau)
+                    if marker is None:
                         continue
                     marker_windows.append(stream.poll_ns[-1] >= raw_span[1] + tau * 1e9)
-                    if _decode_battery_marker(stream, raw_span, tau):
+                    if marker:
                         row["flags"] = sorted(set(row["flags"]) | {"bytes.decode_battery_assist"})
                 row["decode_assist_evaluated"] = bool(marker_windows)
                 row["battery_end_window_complete"] = any(marker_windows)
                 if not marker_windows:
                     row["decode_assist_evaluated_reason"] = (
-                        "decode marker not evaluated: no mapped meter stream has polls in the marker window"
+                        "decode marker not evaluated: no mapped meter stream has polls carrying B0AC in the marker window"
                         f" (run {row['run_id']})")
         row["meter_unavailable_reason"] = "; ".join(errors) or "no raw KM003C streams" if row["meter"] is None else None
         row["neg8_inputs"] = refs
@@ -1369,9 +1376,10 @@ def combine_passes(rows):
                 "output_label": OUTPUT_LABEL,
                 "passes": [{"pass_id": r["pass_id"], **d} for r, d in zip(group, diagnostics)]}
             if any(d.get("status") == "not_evaluated" for d in diagnostics):
+                reason = "; ".join(dict.fromkeys(d.get("reason", "not evaluated at the blinded stage")
+                    for d in diagnostics if d.get("status") == "not_evaluated"))
                 point["without_assisted"].update(status="not_evaluated",
-                    reason="not evaluated at the blinded stage",
-                    label="without assisted members; not evaluated at the blinded stage")
+                    reason=reason, label="without assisted members; " + reason)
         points.append(point)
     return points
 

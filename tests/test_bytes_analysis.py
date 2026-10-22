@@ -2369,12 +2369,113 @@ class BatteryCampaignTests(NumericTestCase):
             if cell["boundary"] == "rails":
                 self.assertIsNone(cell["decode_assisted_member_counts"])
                 reason = cell["decode_assisted_member_counts_reason"]
-                self.assertIn("no mapped meter stream has polls in the marker window", reason)
+                self.assertIn("no mapped meter stream has polls carrying B0AC in the marker window", reason)
                 self.assertNotIn("blinded", reason)
                 self.assertTrue(all(r["run_id"] in reason for r in records))
                 self.assertEqual(cell["without_assisted"]["reason"], reason)
                 self.assertIsNone(cell["without_assisted"]["mean_j"])
                 self.assertIsNotNone(cell["harvest_assisted_member_counts"])
+
+    def test_combined_unevaluated_reason_preserves_meter_stage_causes(self):
+        stream = kp.parse(self.path)
+        stream.poll_ns, stream.smc = [], []
+        manifest = {**self.manifest, "models": [self.spec], "sessions": [self.session]}
+        with patch.object(ba, "_session_streams", return_value=[("no-polls", stream)]):
+            records = list(ba.archive_records(self.archive, manifest, self.session, stage="all"))
+        cells = ba.reduce_models(records, manifest, boundaries=("rails",))
+        for cell in cells:
+            peer = copy.deepcopy(cell)
+            peer["pass_id"] += 1
+            first = cell["without_assisted"]["reason"]
+            for second in (first, "another meter-stage cause", None):
+                with self.subTest(basis=cell["basis"], second=second):
+                    if second is None:
+                        peer["without_assisted"].pop("reason", None)
+                    else:
+                        peer["without_assisted"]["reason"] = second
+                    point = ba.combine_passes([peer, cell])[0]
+                    reason = first if second == first else first + "; " + (
+                        second if second is not None else "not evaluated at the blinded stage")
+                    # Exact strings: same pass causes, deduplicated in pass order.
+                    self.assertEqual(point["without_assisted"]["reason"], reason)
+                    self.assertEqual(point["without_assisted"]["label"], "without assisted members; " + reason)
+                    self.assertIn(self.target["run_id"], reason)
+                    if second is not None:
+                        self.assertNotIn("blinded", reason)
+
+    def test_marker_requires_current_readings_on_failed_and_successful_meter_paths(self):
+        a, z = self.spans(self.target["run_id"])["decode"]
+        tau_ns = round(self.target["meter"]["battery_tau_s"] * 1e9)
+        for successful in (False, True):
+            with self.subTest(successful=successful):
+                def change(items):
+                    lo, hi = (a + tau_ns, z + tau_ns) if successful else (a, z + 6_000_000_000)
+                    for item in items:
+                        if item.get("k") == "b" and lo <= item["rx"] < hi:
+                            item["smc"].pop("B0AC", None)
+                records, manifest = self.mutate(change)
+                row = next(r for r in records if r["run_id"] == self.target["run_id"])
+                self.assertEqual(row["meter"] is not None, successful)
+                self.assertIs(row.get("decode_assist_evaluated"), False)
+                self.assertNotIn("bytes.decode_battery_assist", row["flags"])
+                reason = row["decode_assist_evaluated_reason"]
+                self.assertIn(row["run_id"], reason)
+                self.assertIn("B0AC", reason)
+                self.assertNotIn("blinded", reason)
+                for cell in ba.reduce_models(records, manifest, boundaries=("rails",)):
+                    self.assertIsNone(cell["decode_assisted_member_counts"])
+                    self.assertEqual(cell["decode_assisted_member_counts_reason"], reason)
+                    self.assertEqual(cell["without_assisted"]["reason"], reason)
+                    original = next(c for c in ba.reduce_models(self.records, self.manifest, boundaries=("rails",))
+                        if all(c[k] == cell[k] for k in ("session_id", "model", "basis")))
+                    self.assertEqual(cell["harvest_assisted_member_counts"], original["harvest_assisted_member_counts"])
+
+    def test_combined_battery_columns_use_exact_pass_aggregations(self):
+        cells = ba.reduce_models(self.records, self.manifest)
+        exercised = False
+        for point in ba.combine_passes(cells):
+            if point["boundary"] == "rails":
+                continue
+            passes = point["passes"]
+            self.assertEqual(len(passes), 2)
+            values = [p["battery_term_mean_j"] for p in passes]
+            exercised |= min(values) < statistics.fmean(values) < max(values)
+            # Exact: identical pass values and the registered aggregation code.
+            self.assertEqual(point["battery_term_mean_j"], statistics.fmean(values))
+            self.assertEqual(point["battery_term_max_j"], max(p["battery_term_max_j"] for p in passes))
+            self.assertEqual(point["battery_nonzero_run_count"], sum(p["battery_nonzero_run_count"] for p in passes))
+            self.assertEqual(point["battery_phase_edge_max_j"], max(p["battery_phase_edge_max_j"] for p in passes))
+        self.assertTrue(exercised)
+
+    def test_idle_charge_changes_secondary_cell_battery_column_only(self):
+        a, z = self.spans(self.target["run_id"])["idle_baseline"]
+        def change(items):
+            for item in items:
+                if item.get("k") == "b" and a <= item["rx"] < z:
+                    # 100 mA * 12.774 V = 1.2774 W charging, hence
+                    # 1.2774 J per decode second subtracted from the idle.
+                    # This run lasts >1 s, above the ~1 J attribution scale.
+                    item["smc"]["B0AC"] = 100
+        records, manifest = self.mutate(change)
+        target = next(r for r in records if r["run_id"] == self.target["run_id"])
+        self.assertAlmostEqual(target["meter"]["battery_idle_power_w"], -1.2774, delta=1e-6)
+        self.assertGreater(target["meter"]["battery_secondary_j"] - target["meter"]["battery_gross_j"], 1)
+        original = ba.reduce_models([r for r in self.records if r["session_id"] == self.session["session_id"] and
+                                    r["model"] == self.spec["model"]], manifest)
+        cells = ba.reduce_models(records, manifest)
+        for cell in cells:
+            if cell["boundary"] == "rails":
+                continue
+            rows = [r for r in records if r["run_id"] in cell["kept_runs"]]
+            gross = next(c for c in cells if c["boundary"] == cell["boundary"] and c["basis"] == "gross primary")
+            old = next(c for c in original if c["boundary"] == cell["boundary"] and c["basis"] == cell["basis"])
+            field = "battery_secondary_j" if cell["basis"] == "idle-subtracted secondary" else "battery_gross_j"
+            self.assertEqual(cell["battery_term_mean_j"], ba._weighted(rows, [r["meter"][field] for r in rows]))
+            if cell["basis"] == "idle-subtracted secondary":
+                self.assertNotEqual(cell["battery_term_mean_j"], gross["battery_term_mean_j"])
+            else:
+                for key in ("battery_term_mean_j", "battery_term_max_j", "battery_nonzero_run_count"):
+                    self.assertEqual(cell[key], old[key])
 
     def test_filtered_stream_hides_unselected_smc_and_preserves_terms_and_tau(self):
         spans = self.spans(self.target["run_id"])
@@ -2606,6 +2707,10 @@ class BatteryCampaignTests(NumericTestCase):
                 self.assertIsInstance(peer["decode_assisted_member_counts"], dict)
                 self.assertNotIn("decode_assisted_member_counts_reason", peer)
                 self.assertEqual(cell["harvest_assisted_member_counts"], peer["harvest_assisted_member_counts"])
+        for point in ba.combine_passes(blinded):
+            if "without_assisted" in point:
+                self.assertEqual(point["without_assisted"]["reason"], reason)
+                self.assertEqual(point["without_assisted"]["label"], "without assisted members; " + reason)
 
 
 if __name__ == "__main__":
