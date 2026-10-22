@@ -11,6 +11,7 @@ import json
 import math
 from bisect import bisect_left
 from dataclasses import dataclass
+from statistics import median
 from typing import Sequence
 
 from joulewise.align.records import Episode, PowerTrace
@@ -65,9 +66,11 @@ def episode_energy(episode: Episode, *,
     yields an infinite power interpolation bound, with a flag, while retaining J.
     Summaries export that as an unknown bound rather than a nonfinite JSON number.
 
-    gap_factor is an operator parameter: 1.5 is the midpoint between one poll
-    and two polls. A missed poll is near 2*interval, unlike modest positive
-    event.wait + acquisition jitter. This flags gaps; it never discards energy.
+    gap_factor is an operator parameter: 1.5 is the midpoint between one
+    completed sampling cycle and a missed cycle near twice that duration.
+    Estimate the cycle from the trace's median interval, including event.wait
+    and acquisition overhead, with the nominal wait as a lower bound. This
+    diagnostic assumes most cycles completed normally; it never discards energy.
     """
     traces = episode.power_traces
     if not traces:
@@ -157,9 +160,12 @@ def episode_energy(episode: Episode, *,
             flags.append("energy_powermetrics_attribution_floor")
             # Documented M3 Max attribution half-width is about 1 J.
             bound = None if bound is None else max(1.0, bound)
-        if trace.nominal_interval_ns > 0 and any(
-                b - a > gap_factor * trace.nominal_interval_ns
-                for a, b in zip(trace.t_ns, trace.t_ns[1:])):
+        intervals = [b - a for a, b in zip(trace.t_ns, trace.t_ns[1:])]
+        # event.wait(T) followed by acquisition A has cycle T+A, not T.
+        # A missed cycle is near 2*(T+A); 1.5 is their midpoint. The observed
+        # median estimates T+A without treating normal acquisition as a gap.
+        cycle_ns = max(trace.nominal_interval_ns, median(intervals))
+        if any(interval > gap_factor * cycle_ns for interval in intervals):
             flags.append("energy_sample_gap")
         flags.append("energy_piecewise_linear_between_samples")
         values.append(joules)
