@@ -450,11 +450,11 @@ class TestMoeStageBEndToEnd(StageBAssertions):
         cls.design = dict(stage_a_effect_sd=1.0, n_per_condition=50,
                           alpha=0.05, power=0.8, comparisons=3)
         ina, nvml = default_sensors()
-        # Positive control: sample at the complete INA conversion-frame cadence,
-        # so acquisition covers time continuously. The separately retained 10ms
-        # polling world deliberately has gaps after its 6.6ms acquisition windows.
-        full_coverage_ina = replace(ina, interval_ns=ina.averaging_window_ns)
-        cls.ina = run_world(cls.world, full_coverage_ina, all_resident=False, **cls.design)
+        # Source-backed positive configuration adds blocking upload running
+        # energy. The no-stall world below isolates jitter versus synchronization;
+        # its recovered r can clear while the independent q*T contrast bound fails.
+        cls.ina = run_world(replace(cls.world, decode_miss_stalls=True),
+                            ina, all_resident=False, **cls.design)
         cls.gapped_ina = run_world(cls.world, ina, all_resident=False, **cls.design)
         cls.resident = run_world(cls.world, ina, all_resident=True, **cls.design)
         cls.nvml = run_world(cls.world, nvml, all_resident=False, **cls.design)
@@ -465,7 +465,8 @@ class TestMoeStageBEndToEnd(StageBAssertions):
         evidence = []
         for result in (cls.ina, cls.gapped_ina, cls.resident, cls.nvml, cls.synchronized):
             evidence.append({
-                "world": ("synchronized bursts" if result is cls.synchronized else "variable timing"),
+                "world": ("synchronized bursts" if result is cls.synchronized
+                          else "variable timing + stalls" if result is cls.ina else "variable timing"),
                 "sensor": result["sensor"]["name"], "resident": result["all_resident"],
                 "interval_ns": result["sensor"]["interval_ns"],
                 "window_ns": result["sensor"]["averaging_window_ns"],
@@ -479,6 +480,8 @@ class TestMoeStageBEndToEnd(StageBAssertions):
                     "energy_per_decode_token_j"]["within_condition_held_out_interval_95"],
                 "n_eff": result["recovery"]["energy_per_decode_token_j"]["within_condition_held_out_effective_n"],
                 "forecast_r": result["forecast"]["model_correlation"],
+                "contrast_j": result["forecast"]["contrast_energy_j"],
+                "contrast_bound_j": result["forecast"]["contrast_half_width_j"],
                 "verdict": result["stage_b_verdict"],
                 "required_r": result["requirement"]["minimum_absolute_correlation"],
                 "phase_sweep_error_std_j": result["phase_sweep_energy_error_std_j"],
@@ -507,7 +510,12 @@ class TestMoeStageBEndToEnd(StageBAssertions):
         positive = self.gapped_ina["recovery"]["energy_per_decode_token_j"]
         negative = self.synchronized["recovery"]["energy_per_decode_token_j"]
         self.assertGreater(positive["within_condition_held_out_interval_95"][0], required)
-        self.assertTrue(self.gapped_ina["stage_b_detectable_under_assumptions"])
+        self.assertTrue(self.gapped_ina["empirical_recovery_meets_requirement"][
+            "energy_per_decode_token_j"])
+        # Recovery clears its Fisher bound; the unchanged q*T physical bar
+        # separately rejects this transfer-only scenario. Keep both conclusions.
+        self.assertFalse(self.gapped_ina["stage_b_detectable_under_assumptions"])
+        self.assertIn("contrast_below_systematic_bound", self.gapped_ina["forecast"]["flags"])
         self.assertLess(negative["within_condition_held_out_interval_95"][1], required)
         self.assertFalse(self.synchronized["stage_b_detectable_under_assumptions"])
         self.assertIn("synchronized_bursts", self.synchronized["flags"])
@@ -557,6 +565,8 @@ class TestMoeStageBEndToEnd(StageBAssertions):
                                  for name, recovery in case["recovery"].items()},
                 "n_eff": case["recovery"]["energy_per_decode_token_j"]["within_condition_held_out_effective_n"],
                 "forecast_r": case["forecast"]["model_correlation"],
+                "contrast_j": case["forecast"]["contrast_energy_j"],
+                "contrast_bound_j": case["forecast"]["contrast_half_width_j"],
                 "verdict": case["stage_b_verdict"],
                 "transfer_only_j_per_token": case["transfer_only_j_per_decode_token_range"],
                 "decode_duration_s": case["decode_duration_s_range"],
