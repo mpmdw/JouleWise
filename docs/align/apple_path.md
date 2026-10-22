@@ -4,8 +4,12 @@ This is code and a prospective D1 plan for RQ-ALIGN-ENERGY-RESIDUAL.
 Nothing is registered, armed or installed by this lane. The lead ran the
 synthetic campaign and lane tests locally at 9162afd6d; the reviewer ran 19
 lane tests and H1–H4 at b7739911b (H2 used real MLX with mock telemetry).
-Round-2 source changes are NOT EXECUTED by this cloud seat: its executor
-remained unavailable. The lane report separates those runs from derived plans.
+The lead's local run at 10352c24b ran 23 lane tests: 22 passed; the campaign
+test failed strict validation because output_policy.emitted_tokens was absent.
+The lead also ran H1/H3/H4/id_probe and real-MLX H2 at that head. Fix2c
+restores the count; that correction is NOT EXECUTED by this cloud seat,
+whose executor remained unavailable. All reported measurements below are
+attributed; planning calculations remain derived.
 
 Energy can count inference work omitted from a visible log. It cannot identify
 reasoning that fits inside the same forward passes.
@@ -36,13 +40,19 @@ suite workloads do. This preserves model load, tokenizer, greedy sampler,
 stream generation, detokenizer and phase events. A separate mlx_lm.server
 would add another process and dispatch boundary. Identity records model,
 local source, revision, artifact identity, mlx and mlx-lm versions; the wrapper
-projects the same model, sampler and fixed episode output policy at readiness
+projects the same model, sampler and fixed episode policy fields at readiness
 and in the bundle. Model provenance forwards prepare's model_artifact_identity.
 Sampler provenance records actual greedy settings, the requested temperature
 and per-turn max_tokens; a nonzero request retains the mismatch flag and a
 distinct identity. The fixed policy contains the registered turn/token budgets
-and a stable stop rule. episode_outcome carries emitted_tokens and the actual
-stop_condition outside governed identity. Heavy libraries remain
+and the stable stop rule episode_returns_or_turn_budget_reached.
+The bundle's output_policy also carries the realized emitted_tokens, equal to
+workload_observed.output_token_count, as strict campaign validation requires.
+The identity builder projects only name, requested_tokens and stop_condition;
+emitted_tokens therefore does not split identities. Readiness precedes
+generation and carries only the fixed fields. episode_outcome retains
+emitted_tokens and the actual stopping outcome outside governed identity.
+Heavy libraries remain
 lazy optional imports. No implicit weight download is permitted.
 
 The model's chat template receives messages and tools; encoding adds no
@@ -169,9 +179,11 @@ including conversion losses where applicable, rather than just SoC rails.
 battery.py's archived evidence identifies SystemPowerIn as mW and
 SystemLoad = SystemPowerIn - BatteryPower; neither is silently assigned to a
 new model. Inspect those readings beside B0AC during the pilot.
-The lead's local lane tests at 9162afd6d and the reviewer's 19 passing tests at
-b7739911b exercised the real-bundle synthetic assist/charging regression;
-neither establishes any D1 candidate's whole-machine draw.
+The lead's local lane tests at 9162afd6d, the reviewer's 19 passing tests at
+b7739911b, and the 22 passing lane tests in the lead's local run at 10352c24b
+exercised the real-bundle synthetic assist/charging regression. The sole
+failure at 10352c24b was the campaign's missing emitted_tokens key.
+These synthetic checks do not establish any D1 candidate's whole-machine draw.
 
 D1 pilot battery checks (ruling item 6's evidence that would reopen it):
 
@@ -337,8 +349,28 @@ b7739911b ran the offset-clock H1 world at 100 Hz with phase-dependent power:
 worst-turn integration error was 0.02 J, and hidden tokens added
 +63.999944957700336 J against derived 64.0 J, with FAILURES 0.
 Those are reviewer-measured at b7739911b, not this seat's observations.
+
+The lead's local run at 10352c24b repeated H1 at 100 Hz: both members
+succeeded, offset_ns=-1790901234567899904, uncertainty 5123/5004 ns,
+dE turns=63.999944957700336 J against derived 64.0 J, FAILURES 0.
+H3/H4 verified that reset faults stop at prepare with
+unsupported/runtime_unavailable under both clocks and turn-0 no-output
+calls fail/unknown_error; H3 also carries turn_token_budget_reached:5.
+The lead's id_probe built the mock governed identity.
+
+Lead-measured H2 at 10352c24b used real Qwen3-1.7B-4bit, local revision
+3b1b1768f8f8cf8351c712464f906e86c2b8269e, mlx_lm 0.31.3,
+SystemClock and mock telemetry. It succeeded with one turn, prefill 168,
+decode 768 and episode 3.151 s; turn_token_budget_reached:0 and
+unclosed_reasoning_span were recorded. Identity built, the readiness
+fixed policy agreed with the bundle (requested_tokens=4608 and the stable
+stop rule), output_token_count=768, and records round-trip True.
 The native-plist world exercises the real parser/anchor at 100 ms cadence;
 the HAZARD fixture tests an actual bundle span against the real battery judge.
-This round's changed source/tests remain NOT EXECUTED by the cloud seat.
-See the lane report for attribution and exact rerun commands.
+The lead's 23-test lane run at that head had one strict campaign failure:
+the bundle's output_policy lacked emitted_tokens. Fix2c restores that
+realized count and checks equality with the observed member, retaining
+identity/readiness equality checks. The correction is NOT EXECUTED here:
+this cloud seat could not launch Python and ran 0 tests or harnesses.
+See the lane report for exact commands, attribution and remaining checks.
 Never run the whole suite from this brief.

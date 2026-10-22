@@ -1,24 +1,25 @@
-# align-apple lane report — fix round 2
+# align-apple lane report — fix round 2, continuation fix2c
 
 ## SUMMARY
 
-Round 2 continues b7739911b72709b02213a9773ab04b7e81fe1f79 and fixes R2-1 through R2-6 in source.
-Task reset/prompts now run in prepare; zero-token measured episodes raise AdapterFailure(UNKNOWN_ERROR), while partial episodes keep flags.
-Bundles and readiness share prepared model artifact, actual/requested sampler settings and a fixed registered-budget output policy.
-Episode outcomes stay recorded outside identity; both endpoint paths flag a turn that reaches its token budget.
-The D1 plan now uses sourced 1.5B/7B energy inputs, defines pair/window variance, and derives conditional quiet time.
-Battery guidance corrects the model-load observation, cites the overload validation and specifies pilot/sensitivity/sustained-deficit checks.
-Nothing ran in Python this round: the executor remained unavailable after about ten minutes; all round-2 fixes are NOT EXECUTED.
-Prior lead/reviewer evidence is attributed below; R2-7 and all lead-owned hardware, census and registration gates remain open.
+The lead's local run at 10352c24b executed 23 lane tests: 22 passed; the campaign test failed strict validation because output_policy lacked emitted_tokens.
+Continuation fix2c starts from that pushed apple head, 10352c24bad016a4d26a821a70402582cd63a250; it does not restart from the spine.
+Correction b839ba2f96513660edaf1de25775fd5d572d78bf restores the realized integer count to bundle output_policy while preserving the fixed stop rule and separate episode_outcome.
+Identity-built, equal-across-outcomes and readiness-stack checks remain; realized-count assertions replace the mistaken absence assertion.
+The lead verified R2-1's clock-independent failures, R2-2's mock/real governed identity, and R2-3's mock/real turn-budget flags at 10352c24b.
+Lead-measured H1 retained FAILURES 0 and 63.999944957700336 J versus derived 64.0 J; real-MLX H2 succeeded with 768 output tokens and exact record round-trip.
+The D1 arithmetic and battery guidance remain conditional planning, with the lead's arithmetic check and historical battery ruling attributed below.
+This cloud seat executed 0 Python tests: the environment never became usable; the emitted_tokens correction is NOT EXECUTED.
+R2-7, the battery.py docstring and cooldown/IsCharging proposal, and lead-owned hardware/census/registration gates remain open.
 
 ## FILES
 
-Round-2 changed paths only:
+Round-2 paths (including this fix2c continuation):
 
-- joulewise/align/apple/workload.py: startup validation before admission; zero-output model failure; shared bundle/readiness model, sampler and fixed policy; episode_outcome.
+- joulewise/align/apple/workload.py: startup validation before admission; zero-output model failure; shared bundle/readiness model, sampler and fixed policy; episode_outcome. Fix2c restores output_policy.emitted_tokens from the episode's realized decode-token count.
 - joulewise/align/apple/endpoint.py: turn_token_budget_reached:<index> on both mock and MLX paths.
-- tests/align/test_apple_campaign.py: reset/prompt prepare faults, FakeClock/SystemClock empty-run failures, partial-run disclosure, H3 final-turn cut, governed identity across outcomes and temperatures, and readiness agreement. In the existing battery test only the comment changed; all values/assertions remain intact.
-- tests/align/test_apple_endpoint.py: native-helper budget flag; actual MLX adapter prepare/generation/bundle/readiness chain with only native computation synthesized.
+- tests/align/test_apple_campaign.py: reset/prompt prepare faults, FakeClock/SystemClock empty-run failures, partial-run disclosure, H3 final-turn cut, governed identity across outcomes and temperatures, and readiness agreement. In the existing battery test only the comment changed; all values/assertions remain intact. Fix2c replaces the mistaken emitted_tokens absence assertion with observed-count equality and the fixed stop-rule assertion, and compares readiness against every fixed policy field.
+- tests/align/test_apple_endpoint.py: native-helper budget flag; actual MLX adapter prepare/generation/bundle/readiness chain with only native computation synthesized. Fix2c checks the realized count and compares all fixed readiness policy fields; full projected-stack equality stays intact.
 - docs/align/apple_path.md: corrected evidence attribution, battery evidence/pilot checks, sourced detection-power arithmetic, variance units and quiet-time scenarios.
 - .codex-report/align-apple.md: this report, historical verification attribution and preserved round-1 plus round-2 FIX LOG.
 
@@ -70,13 +71,15 @@ Round-2 signatures are unchanged. Behavioral/output changes:
 - run_workload raises AdapterFailure(UNKNOWN_ERROR, ...) if no chat result
   returned generated tokens, independently of clock domain.
 - identity_projection_metadata(config) and bundle workload_provenance carry
-  the same model/sampler/output_policy. model now includes name, source,
+  the same model, sampler and fixed output-policy fields. model includes name, source,
   revision and prepared artifact_identity. sampler preserves the inner MLX
   greedy controls (or mock deterministic greedy controls), plus
   requested_temperature and max_tokens.
 - output_policy contains name=agent_episode, requested_tokens=max_turns*max_tokens,
   max_turns, max_tokens_per_turn and the fixed stop_condition
-  episode_returns_or_turn_budget_reached.
+  episode_returns_or_turn_budget_reached. The bundle additionally carries
+  emitted_tokens, equal to workload_observed.output_token_count; readiness
+  has no realized count. The unchanged identity builder ignores emitted_tokens.
 - workload_provenance.episode_outcome and metadata.adapters.runtime.align_episode carry the actual
   emitted_tokens and stop_condition (episode_returned or turn_budget_reached);
   those outcome fields do not enter the governed identity.
@@ -85,36 +88,55 @@ Round-2 signatures are unchanged. Behavioral/output changes:
 
 ## TESTS RUN
 
-**Nothing ran this round. Executed Python test count: 0.**
-No own pass/fail/skip counts, Python version, syntax/import check or harness
-result exists. No optional dependency was installed; there is no extra run.
+Lead's local verification at 10352c24b (supplied in the fix2c brief): macOS,
+/opt/homebrew/bin/python3.13, JW_B5_SYNTHETIC_ONLY=1, fresh TMPDIR per run,
+cwd repository root. These are the lead's results, not this cloud seat's.
 
-The first command attempted from /workspace/JouleWise was python3 --version.
-It failed before process creation:
+| Check | Lead-measured at 10352c24b | Own fix2c execution |
+|---|---|---|
+| python3 -m unittest discover -s tests/align -t . | 23 ran, failures=1; other 22 passed | NOT EXECUTED |
+| 16 existing modules, exact command below | 450 ran, one known spine shard failure (R2-7) | NOT EXECUTED |
+| H1: h1_offset_phase.py repo 100 | Both succeeded; FAILURES 0; dE=63.999944957700336 J, expected 64.0 J | NOT EXECUTED |
+| H3: h3_edges.py repo | 10 cases; reset refusal and final-turn flag corrected; all other lines unchanged from b7739911b | NOT EXECUTED |
+| H4: h4_sys_zero_turn.py repo | 2 cases: reset unsupported/runtime_unavailable; turn-0 failed/unknown_error | NOT EXECUTED |
+| id_probe.py repo | identity built; sampler/artifact/fixed policy recorded | NOT EXECUTED |
+| H2: h2_real_mlx.py repo local-snapshot Qwen3-1.7B-4bit 768 | Succeeded, 1 turn, prefill 168, decode 768; identity built; round-trip True | Not attempted: Apple Silicon required |
+
+The sole lane failure was
+tests.align.test_apple_campaign.AppleCampaignTests.test_generator_real_campaign_and_hidden_work_control
+(line 189 at 10352c24b). The member itself succeeded, but strict campaign
+validation rejected missing output_policy.emitted_tokens and its mismatch
+with workload_observed.output_token_count. The new R2-1/R2-2/R2-3 tests
+were among the other 22 passing tests. Fix2c corrects the missing key;
+there is no executed result for that correction yet.
+
+Lead's exact existing-module command at 10352c24b:
+
+    python3 -m unittest tests.test_mlx_runtime tests.test_adapters_powermetrics tests.test_mock_adapters tests.test_shard_split tests.test_fixture_orphan_census tests.test_custody_mode_inventory tests.test_revision_five_b_readers tests.test_single_count_discipline_census tests.test_digest_pin_census tests.test_identity_pins tests.test_repin tests.test_window_lineage tests.hazards.test_refusal_allowlist tests.test_shard_tests tests.hazards.test_battery tests.test_controller_hazard_flags
+
+Own fix2c attempts: executed Python test count 0. The first tool command was
+python3 --version (cwd /workspace); it failed before process creation:
 
     No usable execution environment is available. Wait for an environment to become available before using this tool.
 
-The managed instance stayed pending/offline, capabilities [], with no reported
-failure. A startup wait and retries after approximately ten minutes still
-could not launch Python. The same command failure prevented local fetch/checkout,
-reading /etc/codex/network-policy.json, creation of a fresh TMPDIR, and
-materializing the APPENDIX scripts under .review2/. Changes were made through
-GitHub from the confirmed existing apple head with non-forced, expected-head
-fast-forward updates.
+Discovery and both touched test modules were submitted before and after the
+correction, with cwd /workspace/JouleWise; every attempt failed before launch:
 
-Exact commands submitted before fixes (cwd /workspace/JouleWise):
-
-    python3 --version
     JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR="$(mktemp -d)" python3 -m unittest discover -s tests/align -t .
     JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR="$(mktemp -d)" python3 -m unittest tests.align.test_apple_campaign tests.align.test_apple_endpoint
 
-The module command and discovery command were also submitted after the runtime
-fixes; both failed before launch with the same unavailable-executor error.
-The fresh-TMPDIR shell expression itself did not execute. The whole suite was
-not requested or run. No test was weakened.
+No Python version, own pass/fail/skip count, syntax/import check or harness
+measurement exists. A bounded startup wait and retries left the instance pending/offline with
+capabilities []. Stopped waiting within the brief's approximately ten-minute
+limit. The unavailable executor also prevented local fetch/checkout, reading
+/etc/codex/network-policy.json, fresh TMPDIR creation and writing the scripts
+under .review2/. Read the existing pushed head and
+made commits through GitHub, using parent-preserving, non-forced,
+expected-head updates. No optional dependency was installed and no
+extra-dependency run occurred here. The whole suite was not run.
 
-Required reruns on an executable checkout (all NOT EXECUTED this round;
-JW_B5_SYNTHETIC_ONLY=1 and a fresh TMPDIR per invocation, cwd repository root):
+Required correction reruns remain NOT EXECUTED; use cwd repository root,
+JW_B5_SYNTHETIC_ONLY=1 and a fresh TMPDIR for each command:
 
     JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 -m unittest discover -s tests/align -t .
     JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 -m unittest tests.align.test_apple_campaign tests.align.test_apple_endpoint
@@ -123,38 +145,39 @@ JW_B5_SYNTHETIC_ONLY=1 and a fresh TMPDIR per invocation, cwd repository root):
     JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 -P .review2/h4_sys_zero_turn.py /workspace/JouleWise
     JW_B5_SYNTHETIC_ONLY=1 TMPDIR="$(mktemp -d)" python3 -P .review2/id_probe.py /workspace/JouleWise
 
-No APPENDIX checks were adapted or removed: the scripts could not be written
-locally. On rerun H4 needs only the brief-authorized H3-style try/except around
-read_episode_bundle, because prepare refusals and raised measured failures
-write no episode artifact. H2 was deliberately not attempted: it requires
-Apple Silicon, MLX packages and the lead's local model snapshot. The lead
-re-runs H2 after push. The synthetic-native MLX test requires no MLX install.
+This seat did not materialize or adapt the APPENDIX scripts. The lead's H4
+run at 10352c24b used only the brief-authorized H3-style absent-episode
+try/except around read_episode_bundle. H2 was not attempted here; the lead
+already ran the real MLX path at 10352c24b with mlx_lm 0.31.3.
 
-Historical executed evidence, not this seat's results:
+Historical evidence retained, also not this seat's results:
 
-| Source | Exact command / harness | Reported result |
+| Source | Command / harness | Reported result |
 |---|---|---|
-| Lead-measured at 9162afd6d, macOS /opt/homebrew/bin/python3.13 | python3 -m unittest discover -s tests/align -t . | 19, OK |
-| Lead-measured at 9162afd6d | python3 -m unittest tests.hazards.test_refusal_allowlist tests.test_shard_tests | 27, one known spine shard failure; allowlist passes |
-| Lead-measured at 9162afd6d | 12-module command below | 300, OK |
-| Reviewer-measured at b7739911b, same Python/flags/fresh TMPDIR convention | python3 -m unittest discover -s tests/align -t . | 19, all passed |
-| Reviewer-measured at b7739911b | 16 existing modules (the 12 below plus test_refusal_allowlist, test_shard_tests, hazards.test_battery, test_controller_hazard_flags) | 450, one known spine shard failure |
-| Reviewer-measured at b7739911b | H1 at 100 Hz | Both succeeded; FAILURES 0; worst turn error 0.02 J |
-| Reviewer-measured at b7739911b | H2, real Qwen3-1.7B-4bit MLX / mock telemetry | Succeeded; 2 turns, 5 parsed/run tool calls; identity absent before R2-2 |
-| Lead-measured at b7739911b | H3, H4 and id_probe | Before values in brief: reset/turn-0 defects, missing sampler/artifact identity, missing final-turn budget flag |
+| Lead at 9162afd6d | python3 -m unittest discover -s tests/align -t . | 19, OK |
+| Lead at 9162afd6d | python3 -m unittest tests.hazards.test_refusal_allowlist tests.test_shard_tests | 27, one known spine shard failure; allowlist passes |
+| Lead at 9162afd6d | First 12 modules of the 16-module command above | 300, OK |
+| Reviewer at b7739911b | python3 -m unittest discover -s tests/align -t . | 19, all passed |
+| Reviewer at b7739911b | Same 16 existing modules | 450, one known spine shard failure |
+| Reviewer at b7739911b | H1 at 100 Hz | Both succeeded; FAILURES 0; worst-turn error 0.02 J |
+| Reviewer at b7739911b | H2, real Qwen3-1.7B-4bit MLX / mock telemetry | Succeeded; 2 turns, 5 parsed/run tool calls; pre-R2-2 identity absent |
+| Lead at b7739911b | H3, H4, id_probe | Pre-fix reset/turn-0 failures, missing governed identity and final-turn flag |
 
-Historical targeted command (lead-measured at 9162afd6d):
-
-    python3 -m unittest tests.test_mlx_runtime tests.test_adapters_powermetrics tests.test_mock_adapters tests.test_shard_split tests.test_fixture_orphan_census tests.test_custody_mode_inventory tests.test_revision_five_b_readers tests.test_single_count_discipline_census tests.test_digest_pin_census tests.test_identity_pins tests.test_repin tests.test_window_lineage
-
-The supplied evidence does not separately report skip counts/reasons; none
-are inferred. The reviewer/lead observations do not verify this round's edits.
-Read-only GitHub inspection, branch ancestry and file comparisons are source
-checks, not executed Python. Planning arithmetic below is derived.
+The supplied lead/reviewer results do not separately report skip counts or
+reasons; none are inferred. The original round-2 cloud seat at 10352c24b
+executed no Python either. The lead's later local run verifies those fixes
+as described above; it does not execute b839ba2f96513660edaf1de25775fd5d572d78bf.
+GitHub file/diff/ancestry inspection is source review, not Python execution.
+No test was weakened: integer count and fixed stop-rule checks replace the
+incorrect absence assertion; raw readiness comparisons exclude only the
+unavailable realized count. Built-identity, cross-outcome identity equality,
+all fixed policy fields and full readiness-stack equality remain checked.
 
 ## END-TO-END
 
-This round added regressions through real production paths, all NOT EXECUTED:
+The lead's local 23-test run at 10352c24b exercised the round-2 regressions below;
+22 passed and the strict campaign test failed as described above. The fix2c
+count correction has no executed verification:
 
 - AgentTask startup -> real registry/controller prepare -> unsupported,
   RUNTIME_UNAVAILABLE before idle/warmup, for reset and both prompt faults.
@@ -172,6 +195,44 @@ This round added regressions through real production paths, all NOT EXECUTED:
 - Real MLX registry/prepare/_generate/controller/bundle and readiness with a
   synthetic native stream, local synthetic weight bytes, 2048 prompt tokens
   and D-019 10 ms/token timing; projected model/sampler/policy must match.
+
+Lead-measured at 10352c24b, H3 retained context_overflow_turn3 at 876.81 J
+with six turns, dict_tool at 615.21 J with five coerced-result flags,
+temperature's mismatch flag, hidden_mid_turn at 637.71 J with 300 hidden
+tokens (+22.5 J), and unclosed_think's reasoning flag. Invalid task,
+condition and boolean budget stop at prepare without an episode.
+reset_fails now gives unsupported/runtime_unavailable and
+task_unavailable:RuntimeError:reset fault under both FakeClock H3 and
+SystemClock H4. H4 turn0_model_call_fails gives failed/unknown_error with
+align_episode:no_model_call_returned_tokens. H3 final_turn_at_budget
+includes turn_token_budget_reached:5.
+
+Lead-measured at 10352c24b, H1 at 100 Hz had two succeeded members,
+offset_ns=-1790901234567899904, uncertainty 5123/5004 ns,
+dE turns=63.999944957700336 J versus derived 256 * 0.010 * 25 = 64.0 J,
+FAILURES 0. These are the lead's values, independent of the reviewer's
+earlier 0.02 J worst-turn error quoted below.
+
+Lead-measured at 10352c24b, H2 used real MLX, SystemClock, mock telemetry,
+the repo .venv with mlx_lm 0.31.3 and local Qwen3-1.7B-4bit snapshot
+revision 3b1b1768f8f8cf8351c712464f906e86c2b8269e. Status succeeded;
+one turn, 168 prefill and 768 decode tokens, episode 3.151 s.
+Flags included turn_token_budget_reached:0 and unclosed_reasoning_span.
+The greedy sampler was pinned at temperature 0.0 (requested 0.0),
+make_sampler API/parameter temp, max_tokens 768. Model artifact identity
+was present; build_stack_identity returned built; records round-trip True.
+The bundle/readiness fixed policy was name=agent_episode,
+requested_tokens=4608, max_turns=6, max_tokens_per_turn=768,
+stop_condition=episode_returns_or_turn_budget_reached.
+episode_outcome was emitted_tokens=768, stop_condition=episode_returned,
+and workload_observed.output_token_count=768. At that head the bundle
+still lacked output_policy.emitted_tokens, the strict-validation defect
+fixed in b839ba2f96513660edaf1de25775fd5d572d78bf; the lead's H2 did not execute this correction.
+
+Lead-measured id_probe at 10352c24b likewise built the identity, with
+mock artifact identity, sampler and episode_outcome. Its fixed policy
+used requested_tokens=7680, max_turns=6, max_tokens_per_turn=1280 and
+the same stable stop rule; it also lacked the now-restored emitted_tokens.
 
 Prior observed production-shaped world (lead-measured at 9162afd6d):
 six turns, five ledger tools, 27,648 prompt tokens, 4,608 base output tokens
@@ -220,15 +281,18 @@ e=0.37575 gives delta=48.096 J and
 ceil((2.801585218*5/46.096)^2)=1.
 For two models at six hours/window, science time is 24 h / 12 h;
 adding one six-hour pilot per model gives 36 h / 24 h.
+The lead's arithmetic check at 10352c24b confirmed the intermediate
+ratios 1.300112 and 0.303886, squared 1.690291 and 0.092347, hence N=2/1.
 These are known-sigma calculations, not a recommendation that one pilot
 estimates window variance. The plan explicitly requires pilot-estimated
 variance and t quantiles; independent analysis and registration remain open.
 
 ## DECISIONS I MADE
 
-- Continue the existing apple head b7739911b, preserve round-1 fixes and push
-  each meaningful step with a non-forced expected-head update. The executor
-  never started; use the brief's unexecuted-fix fallback, with no claimed Python results.
+- The original round-2 seat continued b7739911b. Fix2c continues its pushed
+  head 10352c24bad016a4d26a821a70402582cd63a250, preserving all prior fixes.
+  The executor could not launch; use GitHub parent-preserving, non-forced
+  expected-head updates and the brief's unexecuted-correction fallback.
 - R2-1 follows the lead's installed disposition: validate reset and both
   prompts in prepare. Tasks must tolerate repeated reset(seed); prepare's
   validation reset is outside measured energy, warmup resets, and the measured
@@ -251,9 +315,17 @@ variance and t quantiles; independent analysis and registration remain open.
   stop_condition. Use a fixed total requested-token budget, stable stop rule,
   and explicit max_turns/max_tokens_per_turn in bundle/probe policy.
   Sampler max_tokens preserves per-turn budget identity even when different
-  budget factorizations share the same total. No outcome enters that policy.
+  budget factorizations share the same total. Keep the stop rule fixed;
+  no realized stopping outcome enters those governed policy fields.
 - Keep actual stop_condition/emitted_tokens in episode_outcome and the
-  existing metadata.adapters.runtime.align_episode record. No shared records contract edit.
+  existing metadata.adapters.runtime.align_episode record. Fix2c also restores
+  emitted_tokens in bundle output_policy, as cli.py requires, equal to
+  workload_observed.output_token_count. identity_pins.py projects only name,
+  requested_tokens and stop_condition, so this does not split identities.
+  Readiness has no realized output; compare fixed policy fields and full
+  projected stacks, and verify realized counts separately. This corrects the
+  lead's earlier disposition and its absence assertion, without weakening
+  identity/readiness checks. Neither cli.py nor identity_pins.py is changed.
 - Keep in-process MLX: existing workloads use the same model load, tokenizer,
   pinned greedy sampler, stream_generate and events. No server or duplicate
   model is launched, and all optional imports remain lazy.
@@ -277,9 +349,9 @@ variance and t quantiles; independent analysis and registration remain open.
   Carry item-5 sensitivity and item-6 reopen evidence into the pilot.
   Battery capacity/resume-charge state of charge are pilot parameters, not
   invented constants. Hazard docstring/cooldown proposals go to the lead.
-- R2-6 attributes prior observations to the lead at 9162afd6d or reviewer/lead
-  at b7739911b; this seat's arithmetic is labelled derived and its changed tests
-  remain NOT EXECUTED. H2 is reserved for the lead's real Apple Silicon rerun.
+- R2-6 now also attributes the local run at 10352c24b to the lead, including
+  real-MLX H2, H1, edge harnesses, identity and test counts. Only the fix2c
+  correction remains NOT EXECUTED; arithmetic stays labelled derived.
 - R2-7 makes no changes: the brief explicitly excludes the spine shard defect
   and leaves registry merge timing to the lead.
 
@@ -302,14 +374,15 @@ unchanged.
 
 - R2-7: tests.test_shard_tests has the spine defect: shard names tests.align.*
   versus discovery's align.*. Lead-measured at 9162afd6d and reviewer-measured
-  at b7739911b, the relevant existing groups had this sole failure. Do not
-  repair it in this lane.
+  at b7739911b, and lead-measured at 10352c24b (450 tests, one failure),
+  the relevant existing groups had this sole failure. Do not repair it here.
 - R2-7: merging joulewise/adapters/__init__.py makes registered packs carry
   code.changed_since_registration; merge timing is the lead's call.
-- Round-2 Python verification is unavailable: materialize the unchanged
-  APPENDIX H1/H3/H4/id_probe scripts and execute the commands above on a usable
-  host. H4 permits only the specified absent-episode exception wrapper.
-  The lead must also rerun H2 on real MLX to check the governed bundle identity.
+- Fix2c emitted_tokens correction b839ba2f96513660edaf1de25775fd5d572d78bf is NOT EXECUTED.
+  Rerun discovery, both touched modules and H1/H3/H4/id_probe on a usable host.
+  H4 permits only the specified absent-episode exception wrapper. The lead
+  already verified real-MLX H2 identity and the budget flag at 10352c24b;
+  those measurements precede this strict-validation correction.
 - Lead-owned outside scope: joulewise/hazards/battery.py line 11 still calls
   the corrected model-load bursts "during inference"; fix that docstring.
 - Lead-owned outside scope: decide whether campaign cooldown should also
@@ -354,10 +427,12 @@ battery cooldown proposal and shard/merge issues stay with the lead.
 
 ### Round 2
 
-- R2-1 — fixed (NOT EXECUTED), 10446eec7068b4d77458a04a73d66d159167080d: validate task startup at prepare; UNKNOWN_ERROR/failed when no model call returns generated tokens; FakeClock/SystemClock and partial-episode regressions.
-- R2-2 — fixed (NOT EXECUTED), 5d9a3719c07868c43ff1a283bcb2adf9d199764c, c08068e80d6b990b813f0f113b6ed27f5ef0c13e: prepared artifact and sampler provenance, stable registered-budget policy, outcome outside identity, mock/native readiness-versus-bundle regressions.
-- R2-3 — fixed (NOT EXECUTED), 10446eec7068b4d77458a04a73d66d159167080d: exact-integer turn-token-budget flag shared by mock and MLX, with H3/native-helper assertions.
-- R2-4 — fixed (NOT EXECUTED), 0102dd0b47368989006efc7d85c04702d2868e6a: sourced 1.5B/7B coefficients, pair/window variance model, known-sigma/t-pilot caveat and derived quiet-time arithmetic.
-- R2-5 — fixed (NOT EXECUTED), 0102dd0b47368989006efc7d85c04702d2868e6a: correct model-load wording/comment only in existing battery test, cite overload validation, add pilot/sensitivity/sustained-deficit guidance and lead-owned proposals.
-- R2-6 — fixed (NOT EXECUTED), 0102dd0b47368989006efc7d85c04702d2868e6a: replace stale execution statements with attributed lead/reviewer results and this round's unexecuted status.
+- R2-1 — fixed, verified by the lead's local run at 10352c24b, 10446eec7068b4d77458a04a73d66d159167080d: validate task startup at prepare; UNKNOWN_ERROR/failed when no model call returns generated tokens; FakeClock/SystemClock and partial-episode regressions.
+- R2-2 — fixed, verified by the lead's local run at 10352c24b (mock/real identity and readiness; strict emitted_tokens omission corrected separately below), 5d9a3719c07868c43ff1a283bcb2adf9d199764c, c08068e80d6b990b813f0f113b6ed27f5ef0c13e: prepared artifact and sampler provenance, stable registered-budget policy, outcome outside identity, mock/native readiness-versus-bundle regressions.
+- R2-3 — fixed, verified by the lead's local run at 10352c24b, 10446eec7068b4d77458a04a73d66d159167080d: exact-integer turn-token-budget flag shared by mock and MLX, with H3/native-helper assertions.
+- R2-4 — fixed, verified by the lead's local run at 10352c24b (planning arithmetic check, not a hardware result), 0102dd0b47368989006efc7d85c04702d2868e6a: sourced 1.5B/7B coefficients, pair/window variance model, known-sigma/t-pilot caveat and derived quiet-time arithmetic.
+- R2-5 — fixed, verified by the lead's local run at 10352c24b (battery regression passed; documentation follows the quoted ruling, D1 pilot remains prospective), 0102dd0b47368989006efc7d85c04702d2868e6a: correct model-load wording/comment only in existing battery test, cite overload validation, add pilot/sensitivity/sustained-deficit guidance and lead-owned proposals.
+- R2-6 — fixed (documentation; execution status reconciled in fix2c), 0102dd0b47368989006efc7d85c04702d2868e6a: replace stale execution statements with attributed lead/reviewer results; fix2c also records the lead's 10352c24b run and its own unavailable executor.
 - R2-7 — rejected: the round-2 brief explicitly says no action outside this lane; preserve the spine shard defect and adapters/__init__.py merge-timing note in OPEN ISSUES.
+
+- R2-2 emitted_tokens correction (fix2c) — fixed (NOT EXECUTED), b839ba2f96513660edaf1de25775fd5d572d78bf: restore the realized integer to bundle output_policy, equal to workload_observed.output_token_count, while retaining the fixed stop rule and separate episode_outcome. Replace test_apple_campaign.py's mistaken absence assertion with count equality and fixed-stop assertions; retain built identity, cross-outcome equality and full readiness-stack checks. Raw readiness/bundle policy comparisons in both identity tests exclude only the realized count, which readiness cannot know; every fixed field still agrees. This corrects the lead's wrong disposition, not a weakened check. cli.py and identity_pins.py stay unchanged.
