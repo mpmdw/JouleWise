@@ -27,6 +27,11 @@ model files only.
    derivation, run over the newer sub-pack trees that every later BYTES lane carries, gives the same eleven pins from
    today's files. One thing is new for BY-MERGE: on those lanes only the twelve `tree_sha256` values in
    `configs/bytes/identity_pins.json` differ. See "Run 4" below.
+6. **Run 5 (2026-10-22, 14:00-14:20 PDT, relaunch):** a fourth reviewer script finds zero mismatches, and today's
+   files give the same eleven pins. The kit derivation reproduces the committed file byte for byte. One correction to
+   run 4: `bytes-pass1-review-fixes` (BY-REV, PR #545) carries a third version of the twelve plan trees, not the
+   `91b20d7c2` version. Its pins are unchanged; only the twelve `tree_sha256` values differ, and a ready file is in the
+   archive. See "Run 5" below.
 
 ## Inputs
 
@@ -353,6 +358,82 @@ committed=True/None kit=True` and pin `d4f5fe85…a2753`, and `"unequal_units": 
 are not compared, because they sum over all twelve packs. The `bytes-s4` tree lines print DIFFERENT, because the
 export is the newer tree version. `/Users/edr/code/JouleWise-wt-byg-kit` is a detached
 checkout at `c10b6895f`.
+
+## Run 5: relaunch check (2026-10-22)
+
+The workflow dispatched BY-G a fifth time. Since run 4, the inputs have not changed. The manifest, the twelve trees and
+`bytes_v1/roster.json` on `bytes-loop` (`e4e71de43`), `bytes-c5-gates` (`436cd4353`) and `bytes-battery-term`
+(`9bdcf6c95`) are the same as before, apart from `bytes_v1/README.md`. Main carries no BYTES files. So this run
+checked the files on disk and every tree version on the remote. Its outputs are untracked, under
+`/Users/edr/night-archive/forward-20261021/BY-G/run5/`.
+
+- **Bytes.** `byg5.py` is a new script (stdlib only; it imports nothing from `joulewise/` or `scripts/`; sha256
+  `1ad858399c86be182185b813530e9b4a28b62afb08e8834ccb0eacdf9c4cf0a8`). It re-derived all ten models against the
+  manifest at `99c9099d8`: 59,726 checks, **0 mismatches**. The checks are the same kinds as run 4's: W, R, KV and b
+  with their GB columns, the category totals, k, E, tied embeddings, the config and tokenizer hashes, every tensor
+  row, and every cache layer of both snapshots computed from `config.json`. Item G read Qwen3-1.7B, 4B and 8B-4bit from
+  their `jw_models` copies, but the sessions load the HF-cache snapshots. The same script, run on the snapshots,
+  gives 11,359 checks and 0 mismatches. Negative control: a copy of the manifest with five changes:
+  - 8B-8bit W +0.5 B;
+  - Next-80B KV +1 B;
+  - one Qwen3.5 cache layer +2 B;
+  - one 30B routed tensor relabelled always-active;
+  - Llama-70B `R_GB` moved one unit in the last place.
+
+  The script reported exactly those five.
+- **Pins from today's files.** `byg5.py hash` read the 47 weight files (215,449,636,568 B), one call per model,
+  52 s in total. All 47 equal the SHA-256 that Hugging Face recorded for them. The folds give the eleven pins in Table
+  3. Each pin and each per-file digest equals `configs/bytes/identity_pins.json` at `84f48d1d0` and the kit's pins at
+  `c10b6895f` (11 of 11).
+- **Kit derivation.** The kit's `derive()` at `c10b6895f` (unchanged) was run once per sub-pack pair through a new
+  driver, `kitderive5.py` (sha256 `562223900ed4b7d4ccc6bddde20f79ff3468053bceb14b3634c11ad9819402eb`). The pairs
+  took 3 to 34 s each. Against the committed file it made 365 field checks with 0 differences. The fields were the
+  units, pins, revisions, flags, packs, config counts, config paths, file inventories, tree hashes and runtime
+  versions. Merged with run 1's `merge`, the output is byte-identical to the committed file (sha256
+  `553859a0…c4392f`).
+- **Correction to run 4: there are three tree versions, not two.** Run 4 said `bytes-pass1-review-fixes` carries
+  the `91b20d7c2` trees. At its head `478873066`, it does not. Commit `bd4a5603c` (BY-REV slice 1, 00:49 today) made
+  two changes in every pack:
+  - it added `downstream_contract` and `external_inputs` entries and a new generator hash to each plan tree;
+  - it added an `extraction_spec.json`.
+
+  The stage graphs, order manifests, configs, roster, `joulewise/b5/plan.py` and `joulewise/provenance.py` did not
+  change. I ran the kit derivation over that tree version, exported with `git archive`. It gives the same eleven
+  units, pins, config counts, config paths and inventory. Only the twelve `tree_sha256` values differ. Every remote
+  ref that carries the twelve trees matches exactly one of these three files:
+
+| Tree version | Refs (remote heads, 14:10 PDT) | File whose twelve `tree_sha256` match |
+|---|---|---|
+| `99c9099d8` = `c10b6895f` | this branch, `bytes-manifest-kv`, `bytes-integration`, `bytes-mac-kit`, `bytes-twin`, `bytes-analysis-a8`, `bytes-h-session`, `bytes-h-desk-partial`, `b6-blinding-group`, `bytes-config`, and ci/ `b2-nr1`, `bytes-h`, `bytes-h3`, `bytes-h-remainder` | `configs/bytes/identity_pins.json` (sha256 `553859a0…c4392f`) |
+| `91b20d7c2` | `docs/2026-10-20-bytes-registration`, `bytes-pass1`, `bytes-twin-parity`, `bytes-loop`, `bytes-c5-gates`, `bytes-battery-term`, and ci/ `BY-INT`, `bytes-loop`, `bytes-battery-term` | `run4/identity_pins.trees-91b20d7c2.json` (sha256 `1601296fe45d270aae5316f1b38e00860836e8990413982ccb00729ffefa2903`) |
+| `478873066` | `bytes-pass1-review-fixes` (BY-REV) | `run5/identity_pins.trees-478873066.json` (sha256 `dc81a6a979ff985c026e6b9ae23a9f12e71f417c16a0d2bb46e9421de9e74a50`) |
+
+  For BY-MERGE there are two ways to proceed. One is to take the file that matches the trees on the merged line. The
+  other is to re-run the derivation there; it takes about two minutes for all twelve packs. No code reads
+  `configs/bytes/identity_pins.json`, and block 6's precheck matches by model source, not by tree hash. So a stale
+  `tree_sha256` is a representation flag, not a refusal.
+
+One-model re-run with the run-5 script (Qwen3-8B-8bit). The bytes take under 0.1 s and the hash about 3 s:
+
+```sh
+/opt/homebrew/bin/python3.13 -I /Users/edr/night-archive/forward-20261021/BY-G/run5/byg5.py bytes --manifest /Users/edr/night-archive/forward-20261021/BY-G/run5/manifest.99c9099d8.json --model Qwen3-8B-8bit --out /Users/edr/night-archive/forward-20261021/BY-G/run5/lead-8b8-bytes.json
+/opt/homebrew/bin/python3.13 -I /Users/edr/night-archive/forward-20261021/BY-G/run5/byg5.py hash --model-dir /Users/edr/jw_models/mlx-community/Qwen3-8B-8bit --out /Users/edr/night-archive/forward-20261021/BY-G/run5/lead-8b8-hash.json
+/opt/homebrew/bin/python3.13 -I /Users/edr/night-archive/forward-20261021/BY-G/run5/byg5.py pins --hashes /Users/edr/night-archive/forward-20261021/BY-G/run5/lead-8b8-hash.json --committed /Users/edr/night-archive/forward-20261021/BY-G/run5/committed_pins.84f48d1d0.json --kit /Users/edr/night-archive/forward-20261021/BY-G/run5/kit_pins.c10b6895f.json --out /Users/edr/night-archive/forward-20261021/BY-G/run5/lead-8b8-pins.json
+```
+
+Expected output, in order:
+1. `{"checks": 4093, "mismatches": 0}`, with W = 8,041,724,160 and KV = 339,738,624.
+2. `upstream_all_match` true.
+3. The row `qwen3-8b-8bit d4f5fe85…a2753 … hf=True committed=True/True kit=True`, and
+   `{"hashed_units": 1, "unequal_units": 0, …}`.
+
+The kit derivation for one pair (s4), on this branch's trees, takes about 16 s:
+
+```sh
+/opt/homebrew/bin/python3.13 -I -B /Users/edr/night-archive/forward-20261021/BY-G/run5/kitderive5.py derive --kit-root /Users/edr/code/JouleWise-wt-byg-kit --runtime-python /Users/edr/code/JouleWise/.venv/bin/python --packs bytes-s4-p1 bytes-s4-p2 --out /Users/edr/night-archive/forward-20261021/BY-G/run5/lead-s4.json
+```
+
+Add `--tree-root /Users/edr/night-archive/forward-20261021/BY-G/run5/tree-478873066` to run it on the BY-REV trees.
 
 ## Reproduce (the lead re-runs on one model)
 
