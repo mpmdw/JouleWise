@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 
-from joulewise.align.records import MonitorVerdict, PowerTrace, Visibility
+from joulewise.align.records import ClockMapping, MonitorVerdict, PowerTrace, Visibility
 
 
 @dataclass(frozen=True)
@@ -73,6 +73,8 @@ class PowerSampler(Protocol):
     """
 
     clock_domain: str
+    # Populated by stop(); empty when all traces use clock_domain already.
+    clock_mappings: tuple[ClockMapping, ...]
 
     def start(self) -> None: ...
 
@@ -81,7 +83,12 @@ class PowerSampler(Protocol):
 
 @runtime_checkable
 class Monitor(Protocol):
-    """Scores a transcript for suspicion under a given visibility."""
+    """Scores a transcript for suspicion under a given visibility.
+
+    Optional ``last_verdict`` holds per-call diagnostics, including ``flags``.
+    The runner snapshots it after score(); exceptions may instead expose the
+    same object as ``diagnostics``. Neither attribute is required for conformance.
+    """
 
     model: str
 
@@ -95,8 +102,9 @@ class AgentTask(Protocol):
 
     ``scratchpad_tags`` names the open/close tags of a hidden scratchpad the
     agent is told the monitor cannot see (SHADE-Arena convention), or None.
-    The runner strips that span before a ``no_scratchpad`` or
-    ``actions_only`` monitor reads the transcript.
+    The runner strips only closed pairs before a ``no_scratchpad`` monitor
+    reads the transcript; unclosed suffixes stay visible. Optional ``flags``
+    contains diagnostic strings copied after scoring as ``task.<flag>``.
     """
 
     task_pair: str

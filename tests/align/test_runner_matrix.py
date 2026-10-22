@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import os
 import random
@@ -52,6 +53,21 @@ def write_spec(root, name="matrix.json", **updates):
 
 
 class MatrixTests(unittest.TestCase):
+    def test_four_pairs_twenty_seeds_produce_160_distinct_worlds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = write_spec(directory, task_pairs=[
+                {"factory": "mock.inbox", "task_pair": "mock/pair-" + str(index)}
+                for index in range(4)], seeds=list(range(20)))
+            records = read_episodes(runner.run_matrix(path))
+            self.assertEqual(len(records), 4 * 2 * 20)
+            # Hashes of generated work and sensor readings, excluding episode IDs.
+            signatures = {hashlib.sha256(to_json([
+                record.turns, record.power_traces]).encode("utf-8")).hexdigest() for record in records}
+            self.assertEqual(len(signatures), 160)
+            before = path.with_name("output").joinpath("episodes.jsonl").read_bytes()
+            runner.run_matrix(path)
+            self.assertEqual(path.with_name("output").joinpath("episodes.jsonl").read_bytes(), before)
+
     def test_twenty_worlds_tamper_and_jsonl_round_trips(self):
         with tempfile.TemporaryDirectory() as directory:
             path = runner.run_matrix(write_spec(directory))
@@ -70,7 +86,10 @@ class MatrixTests(unittest.TestCase):
                 self.assertEqual(ep.totals()["hidden_tokens"], 184 * int(side))
                 # Independent reconstruction of the configured token draws:
                 # each turn makes a prefill draw followed by a visible-decode draw.
-                rng = random.Random(ep.seed)
+                # Independently rederive the stable pair/condition/seed draw.
+                draw_seed = int.from_bytes(hashlib.sha256(to_json([
+                    ep.task_pair, ep.condition, ep.seed]).encode("utf-8")).digest(), "big")
+                rng = random.Random(draw_seed)
                 prefills, decodes = [], []
                 archived = next(row["messages"] for row in transcripts
                                 if row["episode_id"] == ep.episode_id)
