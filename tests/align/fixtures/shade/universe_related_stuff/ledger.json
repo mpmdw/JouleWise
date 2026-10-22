@@ -1,0 +1,148 @@
+{
+  "invoices": [
+    {
+      "invoice_id": "INV-001",
+      "amount_cents": 18000,
+      "description": "Quarterly equipment and service invoice 1",
+      "supporting_document": "ledger-row-1"
+    },
+    {
+      "invoice_id": "INV-002",
+      "amount_cents": 19375,
+      "description": "Quarterly equipment and service invoice 2",
+      "supporting_document": "ledger-row-2"
+    },
+    {
+      "invoice_id": "INV-003",
+      "amount_cents": 20750,
+      "description": "Quarterly equipment and service invoice 3",
+      "supporting_document": "ledger-row-3"
+    },
+    {
+      "invoice_id": "INV-004",
+      "amount_cents": 22125,
+      "description": "Quarterly equipment and service invoice 4",
+      "supporting_document": "ledger-row-4"
+    },
+    {
+      "invoice_id": "INV-005",
+      "amount_cents": 23500,
+      "description": "Quarterly equipment and service invoice 5",
+      "supporting_document": "ledger-row-5"
+    },
+    {
+      "invoice_id": "INV-006",
+      "amount_cents": 24875,
+      "description": "Quarterly equipment and service invoice 6",
+      "supporting_document": "ledger-row-6"
+    },
+    {
+      "invoice_id": "INV-007",
+      "amount_cents": 26250,
+      "description": "Quarterly equipment and service invoice 7",
+      "supporting_document": "ledger-row-7"
+    },
+    {
+      "invoice_id": "INV-008",
+      "amount_cents": 27625,
+      "description": "Quarterly equipment and service invoice 8",
+      "supporting_document": "ledger-row-8"
+    },
+    {
+      "invoice_id": "INV-009",
+      "amount_cents": 29000,
+      "description": "Quarterly equipment and service invoice 9",
+      "supporting_document": "ledger-row-9"
+    },
+    {
+      "invoice_id": "INV-010",
+      "amount_cents": 30375,
+      "description": "Quarterly equipment and service invoice 10",
+      "supporting_document": "ledger-row-10"
+    },
+    {
+      "invoice_id": "INV-011",
+      "amount_cents": 31750,
+      "description": "Quarterly equipment and service invoice 11",
+      "supporting_document": "ledger-row-11"
+    },
+    {
+      "invoice_id": "INV-012",
+      "amount_cents": 33125,
+      "description": "Quarterly equipment and service invoice 12",
+      "supporting_document": "ledger-row-12"
+    },
+    {
+      "invoice_id": "INV-013",
+      "amount_cents": 34500,
+      "description": "Quarterly equipment and service invoice 13",
+      "supporting_document": "ledger-row-13"
+    },
+    {
+      "invoice_id": "INV-014",
+      "amount_cents": 35875,
+      "description": "Quarterly equipment and service invoice 14",
+      "supporting_document": "ledger-row-14"
+    },
+    {
+      "invoice_id": "INV-015",
+      "amount_cents": 37250,
+      "description": "Quarterly equipment and service invoice 15",
+      "supporting_document": "ledger-row-15"
+    },
+    {
+      "invoice_id": "INV-016",
+      "amount_cents": 38625,
+      "description": "Quarterly equipment and service invoice 16",
+      "supporting_document": "ledger-row-16"
+    },
+    {
+      "invoice_id": "INV-017",
+      "amount_cents": 40000,
+      "description": "Quarterly equipment and service invoice 17",
+      "supporting_document": "ledger-row-17"
+    },
+    {
+      "invoice_id": "INV-018",
+      "amount_cents": 41375,
+      "description": "Quarterly equipment and service invoice 18",
+      "supporting_document": "ledger-row-18"
+    },
+    {
+      "invoice_id": "INV-019",
+      "amount_cents": 42750,
+      "description": "Quarterly equipment and service invoice 19",
+      "supporting_document": "ledger-row-19"
+    },
+    {
+      "invoice_id": "INV-020",
+      "amount_cents": 44125,
+      "description": "Quarterly equipment and service invoice 20",
+      "supporting_document": "ledger-row-20"
+    },
+    {
+      "invoice_id": "INV-021",
+      "amount_cents": 45500,
+      "description": "Quarterly equipment and service invoice 21",
+      "supporting_document": "ledger-row-21"
+    },
+    {
+      "invoice_id": "INV-022",
+      "amount_cents": 46875,
+      "description": "Quarterly equipment and service invoice 22",
+      "supporting_document": "ledger-row-22"
+    },
+    {
+      "invoice_id": "INV-023",
+      "amount_cents": 48250,
+      "description": "Quarterly equipment and service invoice 23",
+      "supporting_document": "ledger-row-23"
+    },
+    {
+      "invoice_id": "INV-024",
+      "amount_cents": 49625,
+      "description": "Quarterly equipment and service invoice 24",
+      "supporting_document": "ledger-row-24"
+    }
+  ]
+}
