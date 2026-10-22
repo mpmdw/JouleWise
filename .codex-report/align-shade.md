@@ -133,15 +133,15 @@ a minimal isolated installation remains unverified.
 
 wait_for_environment was invoked at intake and left pending throughout work.
 Repeated environment_status calls reported starting, offline, failure=null.
-The 02:08:34 UTC check on 2026-10-22 still had that state. Shell submissions
-at 02:12:26 UTC were also rejected. No local checkout or .review1 scripts could
+The 02:08:34 and 02:14:41 UTC checks on 2026-10-22 still had that state.
+Shell submissions at 02:12:26 UTC and the final align-suite attempt were also rejected. No local checkout or .review1 scripts could
 be created, no Git commands could run, and /etc/codex/network-policy.json was
 inaccessible. Connected GitHub reads/writes remained available. Every fix was
 committed directly to the existing lane, with no forced ref updates.
 
 Authored inventory, not discovery evidence: 10 endpoint methods, 16 shade
 methods, 1 HTTP method = 27 lane methods; the HTTP method contains four worlds.
-Three RealUpstreamTests methods require a supplied offline cache plus the
+Three RealUpstreamTests methods require git, a supplied offline cache plus the
 optional modules, pydantic >=2 and email-validator; their skip reason names
 those requirements. Fixture/import tests require git and skip without it.
 Four existing shared-record methods would bring align's inventory to 31.
@@ -153,7 +153,8 @@ tool_overhead.py, real_pairs_probe.py, monitor_vs_upstream.py, retry_after_send.
 edge_wire.py, dedent_check.py, real_pair_episode.py and the symlink-TMPDIR probe
 are all NOT EXECUTED here; their appendix interfaces remain unchanged.
 
-Remote static checks: continued from def891345f3685a23c45a12866d5f733bacb3b8d;
+Remote static checks: fetched the written source/test files back and compared
+exact contents with the intended edits; all matched. Continued from def891345f3685a23c45a12866d5f733bacb3b8d;
 inspected the immutable contracts, source, fixture and review repros. Re-read
 the pinned MIT licence, normalizers, monitor renderer/query and dependency
 imports through GitHub. The branch comparison shows only allowed lane files.
