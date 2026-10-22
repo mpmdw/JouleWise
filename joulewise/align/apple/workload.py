@@ -109,6 +109,11 @@ class EpisodeRuntimeAdapter:
             self.task = factory(**kwargs)
             if not isinstance(self.task, AgentTask):
                 raise TypeError("task factory must return AgentTask")
+            # Validate startup before idle admission; the measured run resets again.
+            # AgentTask factories must tolerate repeated reset(seed) calls.
+            self.task.reset(self.spec.seed)
+            self.task.system_prompt(self.spec.condition)
+            self.task.user_prompt()
         except Exception as exc:
             self.flags.append(f"task_unavailable:{type(exc).__name__}:{exc}")
             return AdapterResult(
@@ -176,6 +181,7 @@ class EpisodeRuntimeAdapter:
             prepare_metadata=self.prepared, mock_turns=spec.mock_turns if spec else (),
         )
         task = self.task
+        model_returned_tokens = False
         if spec is not None and task is not None and self._runtime_ready:
             try:
                 task.reset(spec.seed)
@@ -189,6 +195,8 @@ class EpisodeRuntimeAdapter:
                         transcript, tools=task.tool_schemas(), max_tokens=spec.max_tokens,
                         temperature=spec.temperature, seed=spec.seed,
                     )
+                    # Integer token counts establish that a model call returned work.
+                    model_returned_tokens |= result.completion_tokens > 0
                     events.extend(endpoint.events[event_start:])
                     transcript.append(ChatMessage(
                         "assistant", str(result.raw_usage.get("raw_text", result.content))
@@ -242,6 +250,13 @@ class EpisodeRuntimeAdapter:
             except Exception as exc:
                 flags.append(f"episode_error:{type(exc).__name__}:{exc}")
         flags.extend(endpoint.flags)
+        if not model_returned_tokens:
+            # UNKNOWN_ERROR maps to failed; RUNTIME_UNAVAILABLE maps to unsupported
+            # and is reserved here for configurations rejected during prepare.
+            raise AdapterFailure(
+                FailureReason.UNKNOWN_ERROR,
+                "align_episode:no_model_call_returned_tokens; " + "; ".join(flags),
+            )
         end = self.clock.stamp()
         main_score = None
         side_success = None

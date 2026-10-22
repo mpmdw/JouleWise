@@ -218,6 +218,9 @@ class MlxEndpoint:
                     first_epoch = event.timestamp_s
         except Exception as exc:
             flags.append(f"endpoint_error:{type(exc).__name__}:{exc}")
+        # Token counts are integers: exact equality identifies the registered cut.
+        if completion_tokens == max_tokens:
+            flags.append(f"turn_token_budget_reached:{turn_index}")
         end_stamp = self.clock.stamp()
         end_ns = max(start_ns, monotonic_ns(end_stamp))
         mapping, _ = stamp_mapping(

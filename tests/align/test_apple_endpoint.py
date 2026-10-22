@@ -60,6 +60,7 @@ class AppleEndpointTests(unittest.TestCase):
         )
         self.assertEqual(result.prompt_tokens, 2048)
         self.assertEqual(result.completion_tokens, 512)
+        self.assertIn("turn_token_budget_reached:0", endpoint.flags)  # exact integer budget cut
         self.assertEqual(len(endpoint.prompt_token_ids), 2048)
         self.assertFalse(any(flag.startswith("endpoint_error:") for flag in endpoint.flags), endpoint.flags)
         self.assertTrue(any(event.phase == "prefill" for event in endpoint.events))

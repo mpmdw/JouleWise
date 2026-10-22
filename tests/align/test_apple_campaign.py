@@ -17,7 +17,7 @@ from joulewise.align.apple.campaign import generate_campaign
 from joulewise.align.apple.workload import EpisodeSpec, read_episode_bundle
 from joulewise.align.records import Episode, from_json, to_json
 from joulewise.bundle_read import BundleReader
-from joulewise.clock import Clock, FakeClock
+from joulewise.clock import Clock, FakeClock, SystemClock
 from joulewise.controller import run_benchmark
 from joulewise.reduce import _integrate
 from joulewise.schemas import BenchmarkConfig, FailureReason, RuntimeBackend
@@ -96,6 +96,33 @@ class SyntheticTask:
 
 def make_synthetic_task(clock: Clock, fail_step: int | None = None) -> SyntheticTask:
     return SyntheticTask(clock, fail_step)
+
+
+class StartupFaultTask(SyntheticTask):
+    """Exercise task startup failures at the real prepare boundary."""
+
+    def __init__(self, clock: Clock, fault: str) -> None:
+        super().__init__(clock)
+        self.fault = fault
+
+    def reset(self, seed: int) -> None:
+        if self.fault == "reset":
+            raise RuntimeError("reset fault")
+        super().reset(seed)
+
+    def system_prompt(self, condition: str) -> str:
+        if self.fault == "system_prompt":
+            raise RuntimeError("system prompt fault")
+        return super().system_prompt(condition)
+
+    def user_prompt(self) -> str:
+        if self.fault == "user_prompt":
+            raise RuntimeError("user prompt fault")
+        return super().user_prompt()
+
+
+def make_startup_fault_task(clock: Clock, fault: str) -> StartupFaultTask:
+    return StartupFaultTask(clock, fault)
 
 
 def episode_spec(*, hidden: bool, fail_step: int | None = None) -> EpisodeSpec:
@@ -245,7 +272,14 @@ class AppleCampaignTests(unittest.TestCase):
             unsupported.append(replace(config, hardware_target=replace(
                 config.hardware_target, runtime_backend=backend
             )))
-        for config in (missing, bad, mlx, *unsupported):
+        startup_faults = [
+            as_config(replace(
+                base, task_factory="tests.align.test_apple_campaign:make_startup_fault_task",
+                task_kwargs={"fault": fault},
+            ), f"apple-{fault}-fault")
+            for fault in ("reset", "system_prompt", "user_prompt")
+        ]
+        for config in (missing, bad, mlx, *unsupported, *startup_faults):
             with self.subTest(run_id=config.run_id), tempfile.TemporaryDirectory() as directory:
                 clock = FakeClock()
                 bundle, summary = run_benchmark(config, Path(directory), clock)
@@ -260,6 +294,59 @@ class AppleCampaignTests(unittest.TestCase):
                     for event in (json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines())
                 ))
 
+    def test_system_clock_reset_fault_stops_before_idle_or_warmup(self) -> None:
+        spec = replace(
+            episode_spec(hidden=False),
+            task_factory="tests.align.test_apple_campaign:make_startup_fault_task",
+            task_kwargs={"fault": "reset"},
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            bundle, summary = run_benchmark(
+                as_config(spec, "apple-system-reset-fault"), Path(directory), SystemClock()
+            )
+            self.assertEqual(summary.status.value, "unsupported", summary)
+            self.assertEqual(summary.failure_reason, FailureReason.RUNTIME_UNAVAILABLE)
+            self.assertIn("task_unavailable:RuntimeError:reset fault", summary.failure_message)
+            self.assertFalse((bundle / "outputs/align_episode.json").exists())
+            events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+            self.assertFalse(any(
+                event.get("phase") in ("idle_baseline", "warmup", "measured_run")
+                for event in events
+            ))
+
+    def test_zero_token_model_failure_is_failed_on_both_clocks(self) -> None:
+        base = episode_spec(hidden=False)
+        turns = ({**base.mock_turns[0], "prompt_tokens": "not-an-int"},)
+        spec = replace(base, mock_turns=turns)
+        for clock in (FakeClock(), SystemClock()):
+            with self.subTest(clock=type(clock).__name__), tempfile.TemporaryDirectory() as directory:
+                config = as_config(spec, "apple-zero-token-fault")
+                # H4's 1 s idle covers ten 10 Hz samples and keeps this live-clock
+                # error regression short; generation itself fails before sleeping.
+                config = replace(config, sampling=replace(config.sampling, idle_seconds=1.0))
+                bundle, summary = run_benchmark(config, Path(directory), clock)
+                self.assertEqual(summary.status.value, "failed", summary)
+                self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+                self.assertIn("no_model_call_returned_tokens", summary.failure_message)
+                self.assertIn("endpoint_error:ValueError:", summary.failure_message)
+                self.assertFalse((bundle / "outputs/align_episode.json").exists())
+
+    def test_later_model_failure_keeps_partial_episode_as_flag(self) -> None:
+        base = episode_spec(hidden=False)
+        turns = list(base.mock_turns)
+        turns[1] = {**turns[1], "prompt_tokens": "not-an-int"}
+        with tempfile.TemporaryDirectory() as directory:
+            bundle, summary = run_benchmark(
+                as_config(replace(base, mock_turns=tuple(turns)), "apple-partial"),
+                Path(directory), FakeClock(),
+            )
+            self.assertEqual(summary.status.value, "succeeded", summary)
+            self.assertIsNotNone(summary.gross_energy_j)
+            episode = read_episode_bundle(bundle)
+            self.assertEqual(episode.turns[0].decode_tokens, COMPLETIONS[0])
+            self.assertEqual(episode.turns[1].decode_tokens, 0)
+            self.assertTrue(any(flag.startswith("endpoint_error:ValueError:") for flag in episode.flags))
+
     def test_flag_paths_succeed_with_measured_energy(self) -> None:
         base = episode_spec(hidden=False)
         malformed = list(base.mock_turns)
@@ -268,7 +355,10 @@ class AppleCampaignTests(unittest.TestCase):
         reasoning[-1] = {**reasoning[-1], "reasoning_tokens": 99999}
         # 99,999 is a deliberately impossible usage fixture, above this
         # world's largest completion count (1,024), not an acceptance bar.
+        at_budget = list(base.mock_turns)
+        at_budget[-1] = {**at_budget[-1], "completion_tokens": base.max_tokens}
         cases = (
+            (replace(base, mock_turns=tuple(at_budget)), "turn_token_budget_reached:5", 6),
             (replace(base, max_turns=3), "turn_budget_reached", 3),
             (replace(base, mock_turns=tuple(malformed)), "malformed_tool_call:", 1),
             (replace(base, mock_turns=tuple(reasoning)), "mock_reasoning_count_outside_completion", 6),
