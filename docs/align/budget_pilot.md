@@ -90,11 +90,13 @@ The run order is:
    call: a forced logical question therefore has two Turns. Include both
    prefills and their gap in its physical cost.
 6. For each deletion control reuse the thinking-on generation and traces. Remove
-   uniformly selected token positions, coalesced into contiguous spans, matching
+   uniformly selected positions in the served tokenizer encoding of the reasoning
+   text, coalesced into contiguous spans, matching
    the *observed* number of reasoning tokens the corresponding budget trial
    removed. Retain original token positions, source trial ID, visible count and
    physical decode count. If no paired budget cut was requested, the nominal
-   cap is used and flagged. Retokenization changes are flagged. Never count a
+   cap is used and flagged. Retokenization changes and differences from server reasoning-usage counts are
+   flagged. Never count a
    deletion control as an additional physical generation or energy expenditure.
 7. Repeat the entire planned roster/seeds, then switch model. Keep calibration,
    paired-run, monitor and warmup overhead identifiable. Use resumption only
@@ -150,6 +152,11 @@ joules with energy_trace_missing. Multiple sensor channels need an explicit
 nonoverlapping selection through the Python reducer API; the CLI leaves them
 flagged and empty. Never add redundant counters or overlapping package/rail
 channels.
+
+Summary configuration identities include backend/runtime identity, hardware and
+measurement_id, settings, monitor identity and the full condition. Combining
+trial collections cannot silently average different hardware or reuse a condition
+name for different fractions.
 
 Outputs are result.json (all local trial records), summary.json, summary.md,
 episodes.jsonl, paired_episodes.jsonl and calibration_episodes.jsonl. Shared
