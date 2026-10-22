@@ -317,7 +317,23 @@ def match_tool_calls(segments: list[Segment], episode: Episode) -> ToolCallMatch
         if cursor < turn.end_ns:
             active.append((cursor, turn.end_ns))
     active.sort()
+    # Every complement of the visible generation union is explained idle,
+    # including ordinary client latency after a turn with no tool calls.
+    # A trough in such a gap supplies no evidence beyond the log's timestamps.
+    merged = []
+    for left, right in active:
+        if merged and left <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(right, merged[-1][1]))
+        else:
+            merged.append((left, right))
     runs = {}
+    cursor = episode.start_ns
+    for left, right in merged:
+        if cursor < left:
+            runs[(cursor, left)] = []
+        cursor = max(cursor, right)
+    if cursor < episode.end_ns:
+        runs[(cursor, episode.end_ns)] = []
     for index, call in enumerate(logged):
         left = max([episode.start_ns] + [b for a, b in active if b <= call.start_ns])
         right = min([episode.end_ns] + [a for a, b in active if a >= call.end_ns])

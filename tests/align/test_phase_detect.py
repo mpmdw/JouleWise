@@ -229,8 +229,9 @@ class PhaseDetectTest(unittest.TestCase):
                 self.assertEqual(len(full.unlogged_candidates), 0)
                 hidden = episode.turns[1].tool_calls[0]
                 altered = replace(episode, turns=tuple(
-                    replace(t, tool_calls=tuple(replace(c, logged=False) if c == hidden else c
-                                                for c in t.tool_calls)) for t in episode.turns))
+                    replace(t, end_ns=max(t.end_ns, hidden.end_ns) if hidden in t.tool_calls else t.end_ns,
+                            tool_calls=tuple(replace(c, logged=False) if c == hidden else c
+                                             for c in t.tool_calls)) for t in episode.turns))
                 matched = match_tool_calls(segments, altered)
                 self.assertEqual(len(matched.unlogged_candidates), 1)
                 self.assertIn("prefill", [s.label for s in segments])
