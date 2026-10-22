@@ -79,12 +79,29 @@ class PinnedUpstream:
         self.allow_fetch, self.source_timeout_s = allow_fetch, source_timeout_s
         self.flags: list[str] = []
         self._modules: dict[str, ModuleType] = {}
+        self._verified: tuple[int, str, str, Path] | None = None
 
     @property
     def root(self) -> Path:
         return self.cache_dir / self.commit
 
-    def prepare(self) -> Path | None:
+    def prepare(self, *, force: bool = False) -> Path | None:
+        """Verify once per instance/process; force=True explicitly rechecks bytes.
+
+        Treat a verified cache as immutable for its lifetime. No git subprocess
+        or file hashing belongs in a measured per-tool phase. Failures are not
+        cached, and flags describe this operation rather than earlier episodes.
+        """
+        with _IMPORT_LOCK:
+            self.flags.clear()
+            key = (os.getpid(), self.commit, self.file_sha256, self.root.resolve())
+            if not force and self._verified == key:
+                return self.root
+            self._verified = None
+            self._modules.clear()
+            return self._prepare(key)
+
+    def _prepare(self, key: tuple[int, str, str, Path]) -> Path | None:
         try:
             if not self.root.exists():
                 if not self.allow_fetch:
@@ -111,6 +128,7 @@ class PinnedUpstream:
             if file_list_sha256(self.root) != self.file_sha256:
                 self.flags.append("upstream_manifest_mismatch")
                 return None
+            self._verified = key
             return self.root
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
             self.flags.append("upstream_unavailable:" + type(exc).__name__)
