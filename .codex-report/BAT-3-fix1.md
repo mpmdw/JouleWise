@@ -12,8 +12,15 @@
 - Done (slice 2): all three battery/meter classes pass individually: 3 + 3 + 14 = 20 tests, exit 0, no skips; logs `/tmp/bat3f1/slice2-{BatteryRulingWorkedExamples,MeterWorkedExamples,BatteryCampaignTests}.log`. Five supporting modules pass (28 tests); hazard import-graph has five passes and one local NULL-versus-GO failure. Refusal census: all five arrays empty, exit 0.
 - Done (slice 2): M1, M2 and M8 KILLED by test_delayed_publications_pin_forward_edges_marker_and_offset_max (marker, v_end and C_j assertions respectively); each runs all 20 battery/meter tests and fails exactly one. Logs `/tmp/bat3f1/M*.log`, results `/tmp/bat3f1/mutations-slice2.jsonl`. All mutant copies and TMPDIRs deleted; clone source never mutated.
 - Done (slice 2): BoundaryAndStagingTests (10 tests, 42.208 s) and ProductionArchiveTests (4 tests, 49.919 s), both exit 0, no skips. The same hazard import-graph NULL/GO failure reproduces at unchanged ddcbafc4d (6 tests, one failure, exit 1).
-- Next: remaining six copy-only mutants in groups of at most three per slice, bit identity, regression classes touched by fixture/reducer changes and agreement rerun. CI replaces the whole analysis-module run under the local-route override.
-- Open: all required verification, comparison scripts and mutation evidence; CI is director-owned under local route. No commit/push attempted (.git read-only). Slice 2 is ready for director commit; it is intentionally incomplete until the remaining verification is executed. Do not mark COMPLETE yet.
+- Done (slice 3): resumed clean director head 552561b3f (slice 2), descended from required ddcbafc4d. Finding 1/4/5 implementation commit is 998d0dc05; findings 2/3 implementation commit is 552561b3f. No active stop card; local route/scope unchanged.
+- Done (slice 3): M10 KILLED by test_large_model_assist_cli_chain_all_four_placements_and_counts: 0.044056348856499616 J weighted/plain mismatch; all 20 tests execute, exactly one fails, exit 1, 79.315 s unittest / 80.401 s process. Log `/tmp/bat3f1/M10_battery_mean_unweighted.log`.
+- Done (slice 3): M18 KILLED by delayed forward-end assertion (0 vs 12.65003513402062 J); M20 KILLED by charging-aware nonzero count (3 vs 4). Each executes all 20 tests, exactly one failure, exit 1; 78.184/75.403 s unittest and 79.117/76.358 s process respectively. All three copies and TMPDIRs deleted; results `/tmp/bat3f1/mutations-remaining.jsonl`.
+- Done (slice 3): exact base/round1/final three-stage CLI and load_records comparison passes; 523,819 common scalar fields vs base exactly equal, zero scientific differences. Against ddcbafc4d, 1,316,507 common scalar fields exactly equal, with 160 blinded count objects changing to null and the prescribed added blinded diagnostics; three digest locations change. Details under BIT-IDENTITY; comparison JSON `/tmp/bat3f1/comparison-{base,round1}.json`. All three CLI chains exit 0; disposable TMPDIRs and campaign scratch deleted. Clone source never mutated.
+- Done (slice 3): Addendum7RegressionTests (13 tests), Q1WithheldCensusTests (4), RegisteredArithmeticTests (3) all pass, exit 0, no skips. Logs `/tmp/bat3f1/slice3-tests.test_bytes_analysis.*.log`.
+- Done (slice 3): tests.test_bytes_agreement complete: eight tests, seven pass / one expected defects failure, exit 1, 73.175 s unittest / 74.139 s process. All 238 above-bar fields and every affected stage/group are recorded under HAND-FORWARD FOR BY-TWIN-BAT; full rows `/tmp/bat3f1/agreement-all-fields.json`, log `/tmp/bat3f1/agreement-slice3.log`. Disposable TMPDIR deleted. Four other campaigns have zero above-bar fields.
+- Next: run exactly M3_marker_no_start_tau, M19_tau_one_refresh_plus_poll and M21_without_line_on_harvest_flag via `/tmp/bat3f1/mutate_remaining.py`, then remaining regression classes (Addendum4RegressionTests, ReviewerProbeTests, SubsetReleaseChainTests, Q1MissingFilesCLIChainTests, Q2CommitmentCLIChainTests and small H1/H2 classes). CI replaces the whole analysis-module run, including the long CampaignWordRates class, under the local-route override. Final report cleanup and director CI observation remain.
+- Done (slice 3): independently generated default no-assist campaigns at round1 and final trees on identical paths: manifests exactly equal and both raw meter-stream SHA-256 values exactly equal. Fresh TMPDIR per tree, both builds exit 0; scratch tree/TMPDIRs deleted. `/tmp/bat3f1/default-fixture-comparison.json`.
+- Open: remaining M3/M19/M21 mutation executions, remaining fixture/reducer regression classes, director-owned CI and final report cleanup. No commit/push attempted (.git read-only). Slice 3 is ready for director commit; task intentionally incomplete until remaining verification is executed. Do not mark COMPLETE yet.
 
 ## SUMMARY
 
@@ -24,17 +31,18 @@ Independent printed-column assertions pin the stratified mean and signed nonzero
 Blinded-stage decode counts and without-assisted numbers explicitly print null with the prescribed reason.
 Finding 4 checks exact flags, full meter dictionaries and NEG-8 inputs after reversal and shuffle.
 Finding 5 uses a shared SMC cadence/delay helper with unchanged arithmetic order.
-Default non-assisted generation keeps its original mode and inputs; comparison remains pending.
-Mutation executions, bit identity, agreement and remaining regression classes continue in later slices.
+Default non-assisted inputs pass exact comparison: 523,819 common scalar fields vs base unchanged.
+Six of nine mutants are killed; agreement reproduces only the expected 238-entry defects failure.
+The remaining three mutants and regression checks continue in later slices.
 No hardware measurement, quiet-window task, commit, push or network action was run.
 
 ## FIX LOG
 
-1. Fixed: delayed fixture/test passes in corrected-source three-class run. All 30 placements checked at 1e-6 J; exact markers/counts and printed maxima. Director commit pending.
-2. Fixed: test_large_model_assist_cli_chain_all_four_placements_and_counts independently checks registered stratified means on every printed DC/rest cell and signed nonzero counts, including retained charging; margin 0.044056348856499616 J. Director commit pending.
-3. Fixed: test_blinded_assist_is_null_with_reason_and_heldout_counts_are_evaluated passes through the real CLI chain; count reason and without-assisted nulls match the disposition. Director commit pending.
-4. Fixed: test_out_of_receive_order_batches_match_ordered_terms_and_flags passes for exact flags/meter/NEG-8 equality under reversal and deterministic shuffle. Director commit pending.
-5. Fixed: T_SMC_S constant and shared _battery_delay_s helper; all 19 battery/meter tests pass. Full bit-identity comparison remains pending. Director commit pending.
+1. Fixed in 998d0dc05: delayed fixture/test passes in corrected-source three-class run. All 30 placements checked at 1e-6 J; exact markers/counts and printed maxima. Charging extension in 552561b3f.
+2. Fixed in 552561b3f: test_large_model_assist_cli_chain_all_four_placements_and_counts independently checks registered stratified means on every printed DC/rest cell and signed nonzero counts, including retained charging; margin 0.044056348856499616 J.
+3. Fixed in 552561b3f: test_blinded_assist_is_null_with_reason_and_heldout_counts_are_evaluated passes through the real CLI chain; count reason and without-assisted nulls match the disposition. Combined diagnostics retain the reason.
+4. Fixed in 998d0dc05: test_out_of_receive_order_batches_match_ordered_terms_and_flags passes for exact flags/meter/NEG-8 equality under reversal and deterministic shuffle.
+5. Fixed in 998d0dc05: T_SMC_S constant and shared _battery_delay_s helper; all 20 current battery/meter tests pass. Slice 3 bit-identity comparison passes; no scientific value changes.
 6. Rejected as directed: production writes rx on every poll (all 93,533 H polls); malformed rx already causes a recorded bytes.meter_decode_unavailable fit-error flag, not refusal. Reference parser sorts by b["rx"] too; keep parity.
 7. Handed forward; no twin edits authorized.
 
@@ -47,14 +55,14 @@ All mutants run against disposable copies, with the three classes BatteryRulingW
 | M1_marker_no_end_tau | SURVIVED | KILLED | test_delayed_publications_pin_forward_edges_marker_and_offset_max: marker false vs true on late-end burst; 20 tests, one failure, exit 1, 68.931 s unittest / 69.851 s process |
 | M2_v_end_zero | SURVIVED | KILLED | same delayed test: v_end 0 vs 12.65003513402062 J; 20 tests, one failure, exit 1, 68.304 s unittest |
 | M8_offset_sum_not_max | SURVIVED | KILLED | test_delayed_publications_pin_forward_edges_marker_and_offset_max: both-edge C_j max assertion; 20 tests, one failure, exit 1, 64.847 s unittest / 65.719 s process |
-| M10_battery_mean_unweighted | SURVIVED | pending | weighted-column assertion |
-| M18_v_end_backward_window | SURVIVED | pending | delayed forward-end assertion |
-| M20_nonzero_count_off | SURVIVED | pending | signed charging count |
+| M10_battery_mean_unweighted | SURVIVED | KILLED | test_large_model_assist_cli_chain_all_four_placements_and_counts: 0.044056348856499616 J mean mismatch; 20 tests, one failure, exit 1, 79.315 s unittest / 80.401 s process |
+| M18_v_end_backward_window | SURVIVED | KILLED | test_delayed_publications_pin_forward_edges_marker_and_offset_max: v_end 0 vs 12.65003513402062 J; 20 tests, one failure, exit 1, 78.184 s unittest / 79.117 s process |
+| M20_nonzero_count_off | SURVIVED | KILLED | test_large_model_assist_cli_chain_all_four_placements_and_counts: count 3 vs 4; 20 tests, one failure, exit 1, 75.403 s unittest / 76.358 s process |
 | M3_marker_no_start_tau | KILLED | pending | existing start/prefill assertion |
 | M19_tau_one_refresh_plus_poll | KILLED | pending | shared helper mutation: return T_SMC_S + poll_interval |
 | M21_without_line_on_harvest_flag | KILLED | pending | existing decode/harvest count distinction |
 
-Prepared `/tmp/bat3f1/mutate_remaining.py` (syntax-checked, not executed yet). Next slice: pass exactly `M10_battery_mean_unweighted M18_v_end_backward_window M20_nonzero_count_off` as arguments. Following slice: M3/M19/M21. Each copy and TMPDIR is deleted, logs are `/tmp/bat3f1/<mutant>.log`; remaining result rows append to `/tmp/bat3f1/mutations-remaining.jsonl`.
+Slice 3 command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1/mutate_remaining.py M10_battery_mean_unweighted M18_v_end_backward_window M20_nonzero_count_off`. Next slice: pass exactly `M3_marker_no_start_tau M19_tau_one_refresh_plus_poll M21_without_line_on_harvest_flag`. Each copy and TMPDIR is deleted, logs are `/tmp/bat3f1/<mutant>.log`; remaining result rows append to `/tmp/bat3f1/mutations-remaining.jsonl`.
 
 ## DELAYED WORLD
 
@@ -110,7 +118,28 @@ Instant charging terms are -1.2796024137931035 J and -1.2774 J, with no decode o
 
 ## BIT-IDENTITY
 
-Pending base bda481d5a and round-1 ddcbafc4d comparisons against final working tree. Read-only git archives now exported to `/tmp/bat3f1/base` and `/tmp/bat3f1/round1` with `git archive <commit> | tar -x -C <path>`; both exit 0. Run older-tree Python with that directory passed as cwd, per local route. No Git writes.
+PASS, slice 3, corrected source at 552561b3f. Read-only Git archives `/tmp/bat3f1/base` (bda481d5a) and `/tmp/bat3f1/round1` (ddcbafc4d) were exported with `git archive <commit> | tar -x -C <path>`; no Git writes. Exact command:
+
+`JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1/bit_identity.py`
+
+The runner launches `/opt/homebrew/bin/python3.13 -B /tmp/bat3f1/identity_worker.py <tree> /tmp/bat3f1/identity-world /tmp/bat3f1/identity-<mode>.json <mode>`, with each tree passed as the process cwd and with its own fresh TMPDIR, deleted in finally. The base fixture creates 1,000 non-assisted runs, then its real blinded → fit → heldout CLI chain and load_records run. BAT-3/final repeat on the same paths/manifest/inputs with only B0AV=12774 added to the base polls, following the first round's comparison method. Each run resets releases and stage outputs; each prediction file stays byte-identical across its held-out stage. All three runs exit 0 (base 14.211 s, round1 10.837 s, final 9.880 s). Campaign scratch tree deleted after snapshots/comparisons.
+
+All 17 JSON outputs are included: blinded/{analysis_record,blinded_pass_estimates,h1,h2,model_estimates,moe,unavailable}; stage1/{fit_pass_estimates,predictions}; out/{analysis_record,h1,h2,heldout_pass_estimates,model_estimates,moe,unavailable}; records. Dictionary common keys recurse, list lengths/types/scalars require exact equality; additions and removals are recorded. Only bytes_analysis_sha256 and predictions_sha256 are disclosed separately as changing provenance, never scientific quantities.
+
+| comparison | exactly equal common scalars | changed common data fields | added key locations | removed | changing digest locations |
+|---|---:|---:|---:|---:|---:|
+| bda481d5a → final | 523,819 | 0 | 19,672 | 0 | 3 |
+| ddcbafc4d → final | 1,316,507 | 160 count objects | 520 | 0 | 3 |
+
+Every changed common data field vs ddcbafc4d is decode_assisted_member_counts: 80 in blinded/blinded_pass_estimates.json[] and 80 in blinded/model_estimates.json[].passes[], each changing {repeat:0,quad:0} to null. Added fields at those same 160 cells are decode_assisted_member_counts_reason, with_assisted_label and without_assisted (480 locations), plus without_assisted at 40 combined blinded/model_estimates.json[] points. No other common value changes. Complete indexed paths and values: `/tmp/bat3f1/comparison-round1.json`.
+
+New field names vs base (19,672 locations, nested objects recorded at their new outer key): battery_gross_j, battery_idle_power_w, battery_n, battery_n_idle, battery_nonzero_run_count, battery_phase_edge_j, battery_phase_edge_max_j, battery_poll_interval_max_s, battery_secondary_j, battery_tau_s, battery_term_max_j, battery_term_mean_j, battery_v_end_j, battery_v_start_j, boundary_description, decode_assisted_member_counts, decode_assisted_member_counts_reason, decode_battery_assist, harvest_assisted_member_counts, meter_gross_j, meter_idle_power_w, meter_phase_edge_j, meter_run_terms, meter_secondary_j, with_assisted_label, without_assisted. Complete paths: `/tmp/bat3f1/comparison-base.json`.
+
+Changing digest locations in both comparisons: stage1/predictions.json.bytes_analysis_sha256; out/analysis_record.json.bytes_analysis_sha256.{committed,evaluating}; out/analysis_record.json.predictions_sha256. Source SHA-256 base ae8c856d6467f8f51fae3c4e966d7948e64fadbbad22ada066d28748d52a1186; round1 fbf7b91acbe361cd3947f8e3d70fb9bc2941da9164b99ee2101294b161fc12e7; final 36cfd4b3f91ce93b7ada90c9663aaad345c0d2613d268a95e0e2888c5258292b. Prediction SHA-256 base a6b0e759c9ca0d76b0d86c38c4a27b3246f84d5d619e96984df09c49f301da21; round1 4d971a818f05eff3f5ff441ea486a3e8987d3d32685abcd460fc9ab2a45bf79d; final cbb257d94bc887dd4f4be8e13c65b29b2b05bb350c2bd119d54c3982717410ea.
+
+Logs `/tmp/bat3f1/identity-{base,round1,final}.log`; snapshots with the same stems and .json. No byte tolerance, changed scientific exemption or numerical rounding.
+
+Additional default-generation check: `/tmp/bat3f1/default_fixture_worker.py <tree> /tmp/bat3f1/default-fixture-world /tmp/bat3f1/default-fixture-<mode>.json`, launched under the required environment, `/opt/homebrew/bin/python3.13 -B`, tree cwd and fresh disposable TMPDIR, for round1 and final. Each worker actually calls archive_campaign(release="none") with default no-assist arguments; comparison gives manifest_equal=true, hashes_equal=true for both bytes-p1 and bytes-p2 raw meter streams. Both processes exit 0. Thus the fixture's new delayed/charging options leave the default meter bytes and manifest unchanged, independent of the same-input reduction proof. Evidence `/tmp/bat3f1/default-fixture-comparison.json`; worker deletes its campaign tree each time.
 
 ## HUNKS FOR BY-MERGE
 
@@ -137,9 +166,55 @@ Finding 7 (verbatim):
    - Make the planted battery power equal to the halved meter power, so the run's DC input stays the same. `tests/test_bytes_agreement.py` is out of BAT-3's write scope.
 
 Finding 3 mirror: blinded-stage decode-assisted count and without-assisted diagnostic must be explicitly null/not evaluated, with reason "not evaluated at the blinded stage"; harvest counts remain evaluated.
-Agreement field list pending rerun.
+Agreement rerun (slice 3): eight tests, seven pass and the expected defects-campaign failure, exit 1; 73.175 s unittest / 74.139 s process. All 238 above-bar entries occur in defects; bytes, resident, time and minimum have zero. Full rows with values and bars: `/tmp/bat3f1/agreement-all-fields.json`; log `/tmp/bat3f1/agreement-slice3.log`. The existing comparison checks without-assisted status; it does not currently compare the new null count/reason fields, so BY-TWIN-BAT must mirror those explicitly too.
+
+| campaign | compared | equal | under bar | above bar |
+|---|---:|---:|---:|---:|
+| bytes | 9986 | 5555 | 4431 | 0 |
+| defects | 10031 | 5582 | 4211 | 238 |
+| minimum | 10110 | 5574 | 4536 | 0 |
+| resident | 9986 | 5695 | 4291 | 0 |
+| time | 9986 | 5644 | 4342 | 0 |
+
+Every affected field by stage/group (no first-40 truncation):
+
+| stage | group | fields above bar |
+|---|---|---|
+| blinded | cell/qwen3-30b-a3b-4bit/pass1/rails/gross/without_assisted | status |
+| heldout | cell/qwen3-30b-a3b-4bit/pass1/dc_input/gross | B_j, B_kind:meter_edge, h_j, lower_j, mean_j, meter_attribution_floor_j, upper_j, variance |
+| heldout | cell/qwen3-30b-a3b-4bit/pass1/rest/gross | B_j, B_kind:meter_edge, h_j, lower_j, mean_j, meter_attribution_floor_j, upper_j, variance |
+| heldout | cell/qwen3-30b-a3b-4bit/pass1/dc_input/idle_subtracted | B_j, B_kind:meter_edge, h_j, lower_j, upper_j, variance |
+| heldout | cell/qwen3-30b-a3b-4bit/pass1/rest/idle_subtracted | B_j, B_kind:meter_edge, h_j, lower_j, upper_j, variance |
+| heldout | cell/qwen3-30b-a3b-4bit/pass1/dc_input/flagged_inclusive | B_j, B_kind:meter_edge, h_j, lower_j, mean_j, upper_j, variance |
+| heldout | cell/qwen3-30b-a3b-4bit/pass1/rest/flagged_inclusive | B_j, B_kind:meter_edge, h_j, lower_j, mean_j, upper_j, variance |
+| heldout | point/qwen3-30b-a3b-4bit/mean/dc_input/gross | e, half_width_j(h+B), lower, mean_j, pass_difference_j, pass_values_j[0], power, power_half_w, printed_j_per_output_token, upper |
+| heldout | point/qwen3-30b-a3b-4bit/mean/rest/gross | e, half_width_j(h+B), lower, mean_j, pass_difference_j, pass_values_j[0], power, power_half_w, printed_j_per_output_token, upper |
+| heldout | point/qwen3-30b-a3b-4bit/mean/dc_input/idle_subtracted | half_width_j(h+B), lower, power_half_w, upper |
+| heldout | point/qwen3-30b-a3b-4bit/mean/rest/idle_subtracted | half_width_j(h+B), lower, power_half_w, upper |
+| heldout | h1/dc_input/passes_mean/qwen3-30b-a3b-4bit | bytes:ln_ratio, bytes:measured_lower, bytes:measured_upper, resident:ln_ratio, resident:measured_lower, resident:measured_upper, time:consistent, time:ln_ratio, time:measured_lower, time:measured_upper, word |
+| heldout | h1/dc_input/pass1/qwen3-30b-a3b-4bit | bytes:ln_ratio, bytes:measured_lower, bytes:measured_upper, resident:ln_ratio, resident:measured_lower, resident:measured_upper, time:consistent, time:ln_ratio, time:measured_lower, time:measured_upper, word |
+| heldout | h1/rest/passes_mean/qwen3-30b-a3b-4bit | bytes:ln_ratio, bytes:measured_lower, bytes:measured_upper, resident:ln_ratio, resident:measured_lower, resident:measured_upper, time:consistent, time:ln_ratio, time:measured_lower, time:measured_upper, word |
+| heldout | h1/rest/pass1/qwen3-30b-a3b-4bit | bytes:ln_ratio, bytes:measured_lower, bytes:measured_upper, resident:ln_ratio, resident:measured_lower, resident:measured_upper, time:consistent, time:ln_ratio, time:measured_lower, time:measured_upper, word |
+| heldout | h2/dc_input/passes_mean | extended:P0:estimate, extended:epsilon:estimate, extended:epsilon:lower[HC3], extended:epsilon:lower[OLS label], extended:epsilon:upper[HC3], extended:epsilon:upper[OLS label], extended:rho:estimate, extended:rho:lower[HC3], extended:rho:lower[OLS label], extended:rho:upper[HC3], extended:rho:upper[OLS label], simple:P0:estimate, simple:epsilon:estimate, simple:epsilon:lower[HC3], simple:epsilon:lower[OLS label], simple:epsilon:upper[HC3], simple:epsilon:upper[OLS label], tier:P0:estimate, tier:epsilon:estimate, tier:epsilon:lower[HC3], tier:epsilon:lower[OLS label], tier:epsilon:upper[HC3], tier:epsilon:upper[OLS label], tier:rho:estimate, tier:rho:lower[HC3], tier:rho:lower[OLS label], tier:rho:upper[HC3], tier:rho:upper[OLS label] |
+| heldout | h2/dc_input/passes_mean/deviation/llama-3.3-70b-instruct-4bit | deviation_w, lower_w, predicted_w, prediction_half_w, upper_w |
+| heldout | h2/dc_input/passes_mean/deviation/qwen3-8b-8bit | deviation_w, lower_w, predicted_w, prediction_half_w, upper_w |
+| heldout | h2/dc_input/passes_mean/deviation/qwen3-next-80b-a3b-instruct-4bit | deviation_w, lower_w, predicted_w, prediction_half_w, upper_w |
+| heldout | h2/dc_input/passes_mean/deviation/qwen3.5-122b-a10b-4bit | deviation_w, lower_w, predicted_w, prediction_half_w, upper_w |
+| heldout | h2/dc_input/passes_mean/loo | llama-3.3-70b-instruct-4bit, qwen3-1.7b-4bit, qwen3-14b-4bit, qwen3-32b-4bit, qwen3-4b-4bit, qwen3-8b-4bit, qwen3-next-80b-a3b-instruct-4bit, qwen3.5-122b-a10b-4bit |
+| heldout | h2/rest/passes_mean | extended:P0:estimate, extended:epsilon:estimate, extended:epsilon:lower[HC3], extended:epsilon:lower[OLS label], extended:epsilon:upper[HC3], extended:epsilon:upper[OLS label], extended:rho:estimate, extended:rho:lower[HC3], extended:rho:lower[OLS label], extended:rho:upper[HC3], extended:rho:upper[OLS label], rest:c:estimate, rest:epsilon_rest:estimate, rest:epsilon_rest:lower[HC3], rest:epsilon_rest:lower[OLS label], rest:epsilon_rest:upper[HC3], rest:epsilon_rest:upper[OLS label], rest:lambda:estimate, rest:lambda:lower[HC3], rest:lambda:lower[OLS label], rest:lambda:upper[HC3], rest:lambda:upper[OLS label], simple:P0:estimate, simple:epsilon:estimate, simple:epsilon:lower[HC3], simple:epsilon:lower[OLS label], simple:epsilon:upper[HC3], simple:epsilon:upper[OLS label], tier:P0:estimate, tier:epsilon:estimate, tier:epsilon:lower[HC3], tier:epsilon:lower[OLS label], tier:epsilon:upper[HC3], tier:epsilon:upper[OLS label], tier:rho:estimate, tier:rho:lower[HC3], tier:rho:lower[OLS label], tier:rho:upper[HC3], tier:rho:upper[OLS label] |
+| heldout | h2/rest/passes_mean/deviation/llama-3.3-70b-instruct-4bit | deviation_w, lower_w, predicted_w, prediction_half_w, upper_w |
+| heldout | h2/rest/passes_mean/deviation/qwen3-8b-8bit | deviation_w, lower_w, predicted_w, prediction_half_w, upper_w |
+| heldout | h2/rest/passes_mean/deviation/qwen3-next-80b-a3b-instruct-4bit | deviation_w, lower_w, predicted_w, prediction_half_w, upper_w |
+| heldout | h2/rest/passes_mean/deviation/qwen3.5-122b-a10b-4bit | deviation_w, lower_w, predicted_w, prediction_half_w, upper_w |
+| heldout | h2/rest/passes_mean/loo | llama-3.3-70b-instruct-4bit, qwen3-1.7b-4bit, qwen3-14b-4bit, qwen3-32b-4bit, qwen3-4b-4bit, qwen3-8b-4bit, qwen3-next-80b-a3b-instruct-4bit, qwen3.5-122b-a10b-4bit |
 
 ## TESTS RUN
+
+Slice 3 agreement exact worker command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1/agreement_run.py`, launched via subprocess with clone cwd and a fresh disposable TMPDIR. The worker loads the complete tests.test_bytes_agreement suite with unittest.defaultTestLoader, runs every test, then writes all Recorder rows before returning the suite status. Eight tests, seven pass / one expected failure, exit 1, no skips or environmental failures; details and every above-bar field under HAND-FORWARD FOR BY-TWIN-BAT. Parent finally deletes TMPDIR.
+
+Slice 3 regression command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1/run_classes.py tests.test_bytes_analysis.Addendum7RegressionTests tests.test_bytes_analysis.Q1WithheldCensusTests tests.test_bytes_analysis.RegisteredArithmeticTests`. The runner invokes `/opt/homebrew/bin/python3.13 -B -m unittest <class>` individually with clone cwd and a fresh TMPDIR, deleted in finally. Results: Addendum7RegressionTests 13 tests / 30.761 s unittest / 31.725 s process; Q1WithheldCensusTests 4 / 0.004 s / 0.902 s; RegisteredArithmeticTests 3 / 1.482 s / 2.315 s. All exit 0, no skips or environmental failures. Logs `/tmp/bat3f1/slice3-<class>.log`.
+
+Slice 3 mutations: exact command and individual killing tests/timings are under MUTATION KILLS. All 60 executions complete (20 tests per mutant); expected exit 1 with exactly one assertion failure per mutant. No mutant retained. Bit identity: three chains exit 0, all 17 outputs and 1,000 joined records included; exact command/results under BIT-IDENTITY. `git diff --check` exit 0.
 
 Slice 2 additional regression runs: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BoundaryAndStagingTests` (10 tests, 42.208 s, exit 0), and `... tests.test_bytes_analysis.ProductionArchiveTests` (4 tests, 49.919 s, exit 0), with the same synthetic-only/no-bytecode/fresh-TMPDIR wrapper and clone cwd. Logs `/tmp/bat3f1/slice2-{BoundaryAndStagingTests,ProductionArchiveTests}.log`. No skips.
 
@@ -180,6 +255,7 @@ Slice 2 continuation HEAD: 998d0dc05160baa740b493c33c51c461c6aa22c7 (director co
 Lane: lane/2026-10-22-bytes-battery-term. Launch HEAD ddcbafc4dc53fb40c89b507d46a74cf6d9101c98.
 CI branch ci/2026-10-22-bytes-battery-term; existing draft PR #544.
 Director commits, pushes and records CI state under local route; no network/push performed here.
+Slice 3 continuation HEAD: 552561b3f4b76bb5d86d868cda736bcb99eab0a8 (director committed slice 2; clean starting tree). PR #544 state not queried; director owns push and CI observation. No new implementation hunk in this slice; only this report changes.
 
 ## DECISIONS I MADE
 
@@ -193,7 +269,7 @@ Director commits, pushes and records CI state under local route; no network/push
 
 ## OPEN ISSUES
 
-All requested implementation changes are complete; remaining verification is listed in PROGRESS. One required hazard import-graph test locally returns NULL instead of GO; unchanged hazard code, no repair attempted, the identical failure reproduces at ddcbafc4d, so it predates this fix. No environment repair attempted. No baseline mismatch, out-of-scope write or ruling question encountered.
+All requested implementation changes are complete; remaining verification is listed in PROGRESS. Bit identity passes against both baselines; six mutants are killed, three remain unexecuted in this round. One required hazard import-graph test locally returns NULL instead of GO; unchanged hazard code, no repair attempted, the identical failure reproduces at ddcbafc4d, so it predates this fix. No environment repair attempted. No baseline mismatch, out-of-scope write or ruling question encountered.
 
 ## NEEDS_RULING
 
