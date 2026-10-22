@@ -163,9 +163,13 @@ def fit_logistic(X: Sequence[Sequence[float]], y: Sequence[int], *, l2: float) -
     Use training population standard deviations; constant columns get zero
     slopes. Intercept is unpenalised. Converge when max absolute Newton step
     is below 1e-10 * max(1, max absolute coefficient), as the brief requires.
-    For the printed AUC half-widths (order 0.01), 1% is order 1e-4:
-    the coefficient-relative step is six orders smaller on standardised
-    features. This is a solver stopping rule, not an interval guarantee.
+    Measured printed AUC half-widths are about 0.05; 1% is 5e-4.
+    A coefficient change delta on a standardised feature x moves probability
+    p by at most p(1-p) * delta * |x| <= delta * |x| / 4. Thus a
+    1e-10-relative step moves held-out probabilities orders of magnitude
+    less than 5e-4 in these worlds. AUC changes only if such a shift swaps
+    scores closer than the shift (effectively ties). This is a solver
+    stopping rule, not an interval guarantee.
     Backtracking dampens steps.
     Undefined fits return flagged NaNs; no rows are removed.
     """
@@ -219,8 +223,11 @@ def fit_logistic(X: Sequence[Sequence[float]], y: Sequence[int], *, l2: float) -
         step = _solve(hessian, gradient)
         if step is None:
             return _List([math.nan] * (width + 1), ("singular_fit",))
-        # Brief's 1e-10 relative step: six orders below 1% of an order-0.01
-        # printed AUC half-width on standardised features (see docstring).
+        # Brief's unchanged 1e-10 relative step versus measured half-widths
+        # about 0.05 (1% = 5e-4): a coefficient change delta on standardised
+        # x moves p by <= p(1-p)*delta*|x| <= delta*|x|/4. Held-out shifts
+        # are orders smaller than 5e-4 here; AUC moves only on score-order
+        # swaps within such shifts, effectively ties (see docstring).
         if max(map(abs, step)) < 1e-10 * max(1.0, max(map(abs, coefficients))):
             break
         current = loss(coefficients)
