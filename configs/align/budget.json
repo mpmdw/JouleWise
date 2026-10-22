@@ -1,0 +1,249 @@
+{
+  "schema": "joulewise.align.gpukit.matrix.v1",
+  "name": "budget",
+  "kind": "budget",
+  "models": [
+    {
+      "id": "Qwen/Qwen3-4B",
+      "attention": "GQA",
+      "revision": null
+    },
+    {
+      "id": "Qwen/Qwen3-8B",
+      "attention": "GQA",
+      "revision": null
+    },
+    {
+      "id": "Qwen/Qwen3-14B",
+      "attention": "GQA",
+      "revision": null
+    },
+    {
+      "id": "microsoft/Phi-3.5-mini-instruct",
+      "attention": "MHA",
+      "revision": null
+    }
+  ],
+  "tasks": [
+    "budget/item-slot-01",
+    "budget/item-slot-02",
+    "budget/item-slot-03",
+    "budget/item-slot-04",
+    "budget/item-slot-05",
+    "budget/item-slot-06",
+    "budget/item-slot-07",
+    "budget/item-slot-08",
+    "budget/item-slot-09",
+    "budget/item-slot-10",
+    "budget/item-slot-11",
+    "budget/item-slot-12",
+    "budget/item-slot-13",
+    "budget/item-slot-14",
+    "budget/item-slot-15",
+    "budget/item-slot-16",
+    "budget/item-slot-17",
+    "budget/item-slot-18",
+    "budget/item-slot-19",
+    "budget/item-slot-20",
+    "budget/item-slot-21",
+    "budget/item-slot-22",
+    "budget/item-slot-23",
+    "budget/item-slot-24",
+    "budget/item-slot-25",
+    "budget/item-slot-26",
+    "budget/item-slot-27",
+    "budget/item-slot-28",
+    "budget/item-slot-29",
+    "budget/item-slot-30",
+    "budget/item-slot-31",
+    "budget/item-slot-32"
+  ],
+  "conditions": [
+    "thinking_on",
+    "thinking_off",
+    "concise",
+    "budget_1",
+    "budget_0.6",
+    "budget_0.4",
+    "budget_0.3",
+    "deletion_1",
+    "deletion_0.6",
+    "deletion_0.4",
+    "deletion_0.3"
+  ],
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "episode_count": 4224,
+  "episode_count_meaning": "Requested trial rows; see measured_episode_count for actual fresh generation episodes.",
+  "monitor_model": "Qwen/Qwen3-4B",
+  "monitor_visibilities": [
+    "full"
+  ],
+  "sampling": {
+    "interval_ns": 10000000,
+    "source": "Polling parameter from nvml lane default; 10 ms polling does not imply a 10 ms sensor update rate."
+  },
+  "workload": {
+    "prefill_tokens": 4096,
+    "decode_tokens": 2048,
+    "tool_wait_s": 0,
+    "host_overhead_s": 1,
+    "monitor_prefill_tokens": 2048,
+    "monitor_decode_tokens": 32,
+    "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval.",
+    "shape": "Per fresh generation: reasoning then forced answer, including paired no-hint calls. Conservative full-length work for all budgets; posthoc deletion has no fresh generation."
+  },
+  "gpu_classes": {
+    "A100-80GB": {
+      "gpu_count": 1,
+      "setup_s": 1800,
+      "model_load_s": 180,
+      "router_overhead_fraction": 0.25,
+      "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval.",
+      "throughput": {
+        "Qwen/Qwen3-4B": {
+          "prefill_tps": 2800,
+          "decode_tps": 84,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        },
+        "Qwen/Qwen3-8B": {
+          "prefill_tps": 2000,
+          "decode_tps": 60,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        },
+        "Qwen/Qwen3-14B": {
+          "prefill_tps": 1300,
+          "decode_tps": 39,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        },
+        "microsoft/Phi-3.5-mini-instruct": {
+          "prefill_tps": 2800,
+          "decode_tps": 84,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        },
+        "Qwen/Qwen3-30B-A3B": {
+          "prefill_tps": 1700,
+          "decode_tps": 51,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        }
+      }
+    },
+    "H100-80GB": {
+      "gpu_count": 1,
+      "setup_s": 1800,
+      "model_load_s": 180,
+      "router_overhead_fraction": 0.25,
+      "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval.",
+      "throughput": {
+        "Qwen/Qwen3-4B": {
+          "prefill_tps": 5600,
+          "decode_tps": 140,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        },
+        "Qwen/Qwen3-8B": {
+          "prefill_tps": 4000,
+          "decode_tps": 100,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        },
+        "Qwen/Qwen3-14B": {
+          "prefill_tps": 2600,
+          "decode_tps": 65,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        },
+        "microsoft/Phi-3.5-mini-instruct": {
+          "prefill_tps": 5600,
+          "decode_tps": 140,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        },
+        "Qwen/Qwen3-30B-A3B": {
+          "prefill_tps": 3400,
+          "decode_tps": 85,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        }
+      }
+    },
+    "L40S-48GB": {
+      "gpu_count": 1,
+      "setup_s": 1800,
+      "model_load_s": 180,
+      "router_overhead_fraction": 0.25,
+      "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval.",
+      "throughput": {
+        "Qwen/Qwen3-4B": {
+          "prefill_tps": 2520,
+          "decode_tps": 77,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        },
+        "Qwen/Qwen3-8B": {
+          "prefill_tps": 1800,
+          "decode_tps": 55,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        },
+        "Qwen/Qwen3-14B": {
+          "prefill_tps": 1170,
+          "decode_tps": 35.75,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        },
+        "microsoft/Phi-3.5-mini-instruct": {
+          "prefill_tps": 2520,
+          "decode_tps": 77,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        },
+        "Qwen/Qwen3-30B-A3B": {
+          "prefill_tps": 1530,
+          "decode_tps": 46.75,
+          "source": "Operator-adjustable planning scenario, authored 2026-10-22 for this kit; not a benchmark or vendor claim. Replace with measured effective episode throughput before spend approval."
+        }
+      }
+    }
+  },
+  "example_prices": [],
+  "planning_wall_seconds": {
+    "A100-80GB": 220565.55780219784,
+    "H100-80GB": 134532.45362637364,
+    "L40S-48GB": 240081.19054279054
+  },
+  "sources": {
+    "pipeline": "docs/align/PIPELINE.md",
+    "sha256_manifest": "Written by session.py for all output bytes",
+    "shade": {
+      "repository": "https://github.com/jkutaso/SHADE-Arena",
+      "revision": "6614e77191c1f8e2d0c44c123c6f915905ebafae"
+    },
+    "model_configs": "https://huggingface.co/Qwen/Qwen3-8B/blob/main/config.json ; https://huggingface.co/microsoft/Phi-3.5-mini-instruct/blob/main/config.json (attention design must be rechecked at the supplied immutable model revision)"
+  },
+  "flags": [
+    "provisional_planning_inputs",
+    "model_revisions_unpinned",
+    "runner_lane_not_on_spine",
+    "local_monitor_included_in_estimate",
+    "item_slots_require_pinned_manifest",
+    "phi_thinking_control_unverified"
+  ],
+  "budget": {
+    "fractions": [
+      1,
+      0.6,
+      0.4,
+      0.3
+    ],
+    "calibration_repetitions": 3,
+    "paired_generations": 2,
+    "live_conditions": [
+      "thinking_on",
+      "thinking_off",
+      "concise",
+      "budget_1",
+      "budget_0.6",
+      "budget_0.4",
+      "budget_0.3"
+    ],
+    "source": "joulewise/align/budget/conditions.py default_conditions and run.py run_matrix at budget lane 232e8516528cd85d94e3a24760cc85465f275664",
+    "item_source": "32 authored item slots (8 per four hint types); replace slots with a digest-pinned public item manifest before scientific use."
+  },
+  "measured_episode_count": 5760,
+  "monitor_call_count": 4224
+}
