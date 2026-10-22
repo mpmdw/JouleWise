@@ -53,7 +53,7 @@ def plan_offsets(period_ns: int, duty_fraction: float, repeats: int) -> list[int
             or not isinstance(repeats, int) or isinstance(repeats, bool) or repeats <= 0
             or not math.isfinite(duty_fraction) or not 0 < duty_fraction <= 1):
         return []
-    phases = min(repeats, math.ceil(1 / duty_fraction))
+    phases = repeats if duty_fraction*repeats <= 1 else math.ceil(1 / duty_fraction)
     return [(index % phases) * period_ns // phases for index in range(repeats)]
 
 
@@ -168,7 +168,9 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
         try:
             trace, start, end = item
             if (not isinstance(start, int) or not isinstance(end, int) or end <= start
-                    or trace.unit != "W" or not trace.averaging_window_ns
+                    or isinstance(start, bool) or isinstance(end, bool)
+                    or trace.unit != "W" or not isinstance(trace.averaging_window_ns, int)
+                    or isinstance(trace.averaging_window_ns, bool)
                     or trace.averaging_window_ns <= 0 or trace.duty_fraction is None):
                 flags.add("invalid_or_unknown_sensor_run")
                 continue
@@ -186,9 +188,8 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
                 continue
             quantum = trace.resolution
             if quantum is None or not math.isfinite(quantum) or quantum <= 0:
-                unknown_resolution = True
-                quantum = 0.0
                 flags.add("sensor_resolution_unknown")
+                continue
             timing = metadata.get("window_timing_half_width_ns",
                                   metadata.get("timing_half_width_ns"))
             endpoints = metadata.get("window_end_ns", trace.t_ns)
