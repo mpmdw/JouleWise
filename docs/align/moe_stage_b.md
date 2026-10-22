@@ -35,6 +35,11 @@ variance q²/12 per reading; the former same-sign q*T bound is an alternative
 and cannot decide the verdict. Current synthetic outcomes appear below.
 Hardware must record token timing, sensor phase, supply and throttling events.
 
+Executed decision: default stalled INA/NVML do not show a power increment beyond
+timing under the chosen residualized criterion. No-stall INA does clear it,
+while mean-power and energy-only readings can give different conclusions.
+The outcome table below and NEEDS_RULING in the report preserve those alternatives.
+
 These are conditional design decisions, not findings that sabotage is detectable.
 Stage A effect size, within-condition routing spread, transfer energy, sensor noise,
 systematic bounds, independent task count and required power are all parameters.
@@ -159,8 +164,12 @@ shunt and 8 mV bus LSBs. From P=VI:
 ```text
 delta_I = 40e-6 / shunt_ohm
 power_quantum_bound = |V|*delta_I + |I|*8e-3 + delta_I*8e-3
-frame_ns = channels * (shunt_conversion_ns + bus_conversion_ns) * averages
+cycle_ns = channels * (shunt_conversion_ns + bus_conversion_ns)
+frame_ns = cycle_ns * averages
 effective_interval_ns = max(frame_ns, poll_interval_ns)
+exposure_span_ns = (averages - 1) * cycle_ns + shunt_conversion_ns
+acquired_ns = averages * shunt_conversion_ns
+duty_fraction = min(1, acquired_ns / effective_interval_ns)
 ```
 
 The illustrative 5 V, 2 A, 10 mOhm rail gives 0.036032 W. Three enabled channels
@@ -415,9 +424,9 @@ tensors. The upstream dynamic cache implements per-expert locality.
    On Jetson retain per-episode INA alarms/warnings, input-voltage load sag and
    L4T OC counter deltas from /sys/class/hwmon/hwmon*/oc*_event_cnt, including
    separate soctherm devices. Follow docs/align/jetson_characterization.md on
-   lane/2026-10-21-align-jetson. On RTX 3080 Ti retain NVML power-limit and
+   lane/2026-10-21-align-jetson ([source](https://github.com/mpmdw/JouleWise/blob/lane/2026-10-21-align-jetson/docs/align/jetson_characterization.md)). On RTX 3080 Ti retain NVML power-limit and
    slowdown/throttle reasons, following docs/align/nvidia_runbook.md on the
-   NVML sampler lane. These events change decode timing and power.
+   NVML sampler lane ([source](https://github.com/mpmdw/JouleWise/blob/lane/2026-10-21-align-nvml/docs/align/nvidia_runbook.md)). These events change decode timing and power.
    An over-current or power-cap event during an episode is a physical hazard:
    stop the physical run, retain the episode and investigate supply, cable,
    cooling and configuration before resuming. Never disable protection or raise
@@ -490,12 +499,74 @@ r=0.647120 (rounded here; full precision is retained in JSON).
 These choices are supplied design parameters, not estimates from the synthetic
 condition labels.
 
-<!-- FIX ROUND 1 EVIDENCE: populated from current CI before handoff. -->
-The review port in tests/align/test_moe_stage_b_review.py runs all p1--p5 worlds:
-blind sensors, real/fine quantization, shunt/frame alternatives, one-sample
-deletion and the 24-episode dropped world. Its STAGEB_REVIEW lines retain raw
-energy, timing, mean power and the primary increment. Before/after values
-are preserved in the lane report.
+### Fix round 1: executed synthetic outcomes
+
+The fixed code at dfe3436e10c07a57ed65f086b7228b213009ba35 executed 42
+alignment tests successfully (zero failures/errors/skips). The core 34-test
+module took 159.159s; the reviewer port took 289.657s, including every p1--p5
+world and the extra noise-seed comparison. Records took 0.008s. This is
+448.824s summed module elapsed time, not an unrun local discovery wall time.
+CI run 39726492085 was subsequently superseded by report-only work; its module
+PASS lines and numeric evidence are retained in the report. Final-head CI runs
+through draft PR #526 and is not a merge-ready claim.
+
+E2E means 48 groups/condition, three turns, 768 prefill and 384 decode tokens
+with three tool calls per episode (N=96). Default means 12 groups/condition,
+four turns, 1024 prefill and 512 decode tokens (N=24). The first four rows use
+blocking stalls. The p3 rows use the same E2E world with stalls disabled.
+INA acquisition is the 1.1ms shunt slice; the 6.6ms row is an alternative.
+The requirement remains r=0.6471202066782847.
+
+| World / sensor | Energy r [95% CI] | Timing-only r [95% CI] | Mean-power r [95% CI] | Increment r [95% CI] | Stage B |
+|---|---|---|---|---|---|
+| e2e ina3221 | 0.7847682385203254 [0.6922172578618175, 0.8519241883004665] | 0.8213906829904342 [0.7423138889988465, 0.8779015354109604] | 0.844028133904538 [0.7737286721887902, 0.8937942788319294] | 0.03878094817615853 [-0.16624431709872659, 0.24059214797596737] | no |
+| e2e nvml_100ms_25ms | 0.274986590911851 [0.07663600667060576, 0.45240035809789975] | 0.8213906829904342 [0.7423138889988465, 0.8779015354109604] | 0.2797199163562553 [0.08173163642031049, 0.45646919101002054] | 0.13023441275020084 [-0.07548000626420594, 0.32531560352046] | no |
+| default ina3221 | 0.7740006547148806 [0.5230834994984437, 0.9014464496892164] | 0.8438154771382044 [0.6553517606446033, 0.9333699301483963] | 0.8478338120759732 [0.6633335569803914, 0.9351652157432788] | 0.1734304799794651 [-0.2791638835042857, 0.5629748878035307] | no |
+| default nvml_100ms_25ms | 0.6345858161086284 [0.29076507775888405, 0.8332611577713871] | 0.8438154771382044 [0.6553517606446033, 0.9333699301483963] | 0.6736148880248951 [0.35195791312058256, 0.8529787790146469] | -0.5886004907339206 [-0.8135700110924684, -0.21035765763800887] | no |
+| p3 shunt_slice_1.1ms | 0.7245660029010135 [0.611758967778493, 0.8084904919807115] | -0.010303124188217116 [-0.21248013030776805, 0.19271978742984244] | 0.7235703428110349 [0.6104476360084228, 0.8077643915236326] | 0.8938423135247563 [0.8437692437918409, 0.9284890626614218] | yes |
+| p3 contiguous_6.6ms (alternative) | 0.8107156206127827 [0.7276193778957244, 0.8703636017948386] | -0.010303124188217116 [-0.21248013030776805, 0.19271978742984244] | 0.8083738802855257 [0.7244060763277498, 0.8687062918438864] | 0.9270878135830587 [0.891800255448484, 0.9511640036403203] | yes |
+
+Both blind sensors, in both E2E and default worlds, have zero observed extra
+energy, constant mean-power/increment flags, undefined power correlations and
+"inconclusive at this cohort size" verdicts. All 96/24 episodes remain.
+Timing-only recovery is unchanged by blinding: E2E r=0.8213906829904342 and
+default r=0.8438154771382044.
+
+The default stalled worlds do not clear the chosen increment criterion:
+routing is visible in decode timing; the sensor adds no detected conditional
+increment in those worlds. The no-stall shunt INA world does clear it at
+r=0.8938423135247563 [0.8437692437918409, 0.9284890626614218].
+Its energy-only and mean-power intervals remain inconclusive. Controlling timing
+can remove nuisance variation as well as timing signal; this residualized
+criterion is not interchangeable with mean-power recovery. The mean-power
+criterion would instead give yes for stalled INA (both cohorts). These different
+readings are printed for a prospective lead ruling; no registration is installed.
+Nominal intervals, shared CV fits and nuisance estimation need independent
+repetition before a physical detectability claim.
+
+For p2, real q and fine q now both give yes under the chosen increment
+criterion. Their energy-only r values are 0.7245660029010135 and
+0.7245426207698503. The random rounding contrast SD is
+0.0009114822446086623J (real q), versus the labelled q*T alternative
+0.6917183744201088J. Contrast is 0.5982422458787154J. The former "negative
+physical result" was the assumed same-sign bound and is withdrawn.
+Measured rounding differences have SD 0.004324237908642516J per episode and
+condition-mean difference 0.00097816833854091J.
+
+One dropped reading remains a finite feature with incomplete_decode_coverage:
+INA p4 changes by -0.000001355000000001494J/token at coverage
+0.9993467110604671; NVML changes by -0.0002519531250000026J/token at
+coverage 0.9934671106046709. The p5 stalled world stays ok with 24 episodes,
+energy recovery r=0.7740014099210382 and verdict no. Its dropped episode
+changes from 0.009750006204274273 to 0.009750032454274273J/token
+(delta 2.6250000000060947e-8J/token); the gap is flagged, never filled.
+
+Small-prefill policy alone moves default traffic/energy numbers by zero:
+all default prefills consist of full 128-token microbatches. Noise seeding
+does move sampled numbers; the exact legacy-noise ablation and all before/after
+probe outputs are in the report. Physical true_extra ranges and actual decode
+duration ranges remain unchanged; the observed extra now subtracts running
+baseline over actual covered time, with no nominal compute reference.
 
 The tests also include a transfer wholly missed by NVML's blind phase, visible
 under a shifted phase; an all-resident zero-traffic control; realistic router
