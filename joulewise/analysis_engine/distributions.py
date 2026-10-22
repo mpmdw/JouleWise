@@ -173,8 +173,6 @@ def two_sided_student_t_p_value(statistic: float, df: int) -> float:
 
 def exact_sign_flip_p_value(
     deltas: list[float] | tuple[float, ...],
-    *,
-    tolerance: float = 1.0e-15,
 ) -> float:
     """Enumerate the exact two-sided paired sign-flip distribution.
 
@@ -182,6 +180,11 @@ def exact_sign_flip_p_value(
     the P2-037 minimum of six exchangeable blocks and manifest design) remains
     the caller's responsibility.  Enumeration is deliberately refused above
     20 blocks, the frozen exact-enumeration ceiling.
+
+    Compare absolute sums exactly over the supplied binary float values.
+    The common block-count divisor cancels, and exact ties count as extreme;
+    no floating comparison tolerance or rounded mean enters the count.
+    Exact rescaling preserves the count; rounding the inputs can change it.
     """
 
     if not isinstance(deltas, (list, tuple)):
@@ -196,9 +199,6 @@ def exact_sign_flip_p_value(
         _finite_float(value, name=f"deltas[{index}]")
         for index, value in enumerate(deltas)
     )
-    comparison_tolerance = _finite_float(tolerance, name="tolerance")
-    if comparison_tolerance < 0.0:
-        raise ValueError("tolerance must be >= 0")
     try:
         absolute_sum = math.fsum(abs(value) for value in values)
         observed_mean = abs(math.fsum(values) / block_count)
@@ -207,23 +207,26 @@ def exact_sign_flip_p_value(
     if not math.isfinite(absolute_sum) or not math.isfinite(observed_mean):
         raise ValueError("deltas must have finite derived sums")
 
-    threshold = observed_mean - comparison_tolerance
+    # Every finite binary float is an integer divided by a power of two.
+    # Lift all values to the largest denominator so integer addition and
+    # comparison preserve their exact ratios without Fraction work per leaf.
+    ratios = tuple(value.as_integer_ratio() for value in values)
+    denominator = max(divisor for _, divisor in ratios)
+    exact_values = tuple(
+        numerator * (denominator // divisor) for numerator, divisor in ratios
+    )
+    observed_sum = abs(sum(exact_values))
     extreme_count = 0
 
-    signed_terms = [0.0] * block_count
-
-    def enumerate_sums(index: int) -> None:
+    def enumerate_sums(index: int, signed_sum: int) -> None:
         nonlocal extreme_count
         if index == block_count:
-            permuted_mean = abs(math.fsum(signed_terms) / block_count)
-            if permuted_mean >= threshold:
+            if abs(signed_sum) >= observed_sum:
                 extreme_count += 1
             return
-        value = values[index]
-        signed_terms[index] = -value
-        enumerate_sums(index + 1)
-        signed_terms[index] = value
-        enumerate_sums(index + 1)
+        value = exact_values[index]
+        enumerate_sums(index + 1, signed_sum - value)
+        enumerate_sums(index + 1, signed_sum + value)
 
-    enumerate_sums(0)
+    enumerate_sums(0, 0)
     return extreme_count / (1 << block_count)

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import itertools
 import math
+import random
 import unittest
+from fractions import Fraction
 
 from joulewise.analysis_engine.distributions import (
     exact_sign_flip_p_value,
@@ -16,6 +19,7 @@ from joulewise.analysis_engine.multiplicity import (
     benjamini_hochberg_adjust,
     holm_adjust,
 )
+from joulewise.analysis_engine.sensitivity import randomization_check
 
 
 class StudentTDistributionTests(unittest.TestCase):
@@ -84,6 +88,31 @@ class StudentTDistributionTests(unittest.TestCase):
 
 
 class ExactSignFlipTests(unittest.TestCase):
+    TIE_WORLDS = {
+        "A": [151.1, -144.4, -160.0, 8.9, -38.9, -199.3],
+        "B": [146.0, 43.7, -124.6, -122.6, 152.8, 50.7],
+    }
+
+    @staticmethod
+    def _fraction_oracle(values: list[float]) -> float:
+        exact_values = tuple(Fraction(value) for value in values)
+        observed = abs(sum(exact_values))
+        extreme_count = sum(
+            abs(sum(terms)) >= observed
+            for terms in itertools.product(*[(-value, value) for value in exact_values])
+        )
+        return extreme_count / (1 << len(values))
+
+    @staticmethod
+    def _legacy_p_value(values: list[float]) -> float:
+        # Freeze the pre-fix algorithm for the continuous-noise comparison.
+        threshold = abs(math.fsum(values) / len(values)) - 1.0e-15
+        extreme_count = sum(
+            abs(math.fsum(terms) / len(values)) >= threshold
+            for terms in itertools.product(*[(-value, value) for value in values])
+        )
+        return extreme_count / (1 << len(values))
+
     def test_six_equal_paired_deltas_have_exact_two_of_sixty_four_tail(self) -> None:
         # Only all-positive and all-negative signs attain |mean| >= 1.
         self.assertEqual(exact_sign_flip_p_value([1.0] * 6), 2 / 64)
@@ -106,6 +135,90 @@ class ExactSignFlipTests(unittest.TestCase):
         # not_run rather than use this p-value below six exchangeable blocks.
         self.assertEqual(exact_sign_flip_p_value([1.0] * 5), 2 / 32)
 
+    def test_tie_worlds_match_exact_binary_oracle(self) -> None:
+        for name, expected in (("A", 16 / 64), ("B", 40 / 64)):
+            with self.subTest(world=name):
+                values = self.TIE_WORLDS[name]
+                self.assertEqual(self._fraction_oracle(values), expected)
+                self.assertEqual(exact_sign_flip_p_value(values), expected)
+
+    def test_exact_unit_rescaling_preserves_p_value(self) -> None:
+        worlds = list(self.TIE_WORLDS.values()) + [
+            [3.0, -2.0, 1.0, 0.0, -4.0, 7.0],
+            [0.125, -0.25, 0.5, -1.0, 2.0, 4.0],
+        ]
+        for values in worlds:
+            for scale in (1 / 1024, 1024):
+                scaled = [value * scale for value in values]
+                with self.subTest(values=values, scale=scale):
+                    self.assertTrue(
+                        all(
+                            Fraction(result) == Fraction(value) * Fraction(scale)
+                            for value, result in zip(values, scaled, strict=True)
+                        )
+                    )
+                    self.assertEqual(
+                        exact_sign_flip_p_value(scaled), exact_sign_flip_p_value(values)
+                    )
+                    self.assertEqual(
+                        exact_sign_flip_p_value(scaled), self._fraction_oracle(scaled)
+                    )
+
+    def test_continuous_noise_worlds_are_unchanged(self) -> None:
+        for seed in range(300):
+            rng = random.Random(seed)
+            values = [rng.gauss(2.0, 3.0) for _ in range(12)]
+            expected = self._fraction_oracle(values)
+            for scale in (1, 1 / 1024, 1024, 1000):
+                scaled = [value * scale for value in values]
+                with self.subTest(seed=seed, scale=scale):
+                    actual = exact_sign_flip_p_value(scaled)
+                    self.assertEqual(actual, expected)
+                    self.assertEqual(actual, self._legacy_p_value(scaled))
+                    if scale == 1000:
+                        # Decimal rescaling can round; these noise worlds
+                        # have no boundary ties, and must keep the same tail.
+                        self.assertEqual(actual, self._fraction_oracle(scaled))
+
+    def test_caller_reports_exact_p_value_and_rejection_for_both_designs(self) -> None:
+        block_ids = [f"b{index}" for index in range(6)]
+        designs = [
+            {"scheme": "paired_label_swap_within_block", "exchangeability": "within_block"},
+            {
+                "scheme": "stratified_paired_label_swap",
+                "exchangeability": "within_named_strata",
+                "named_strata": [
+                    {"stratum_id": "early", "block_ids": block_ids[:3]},
+                    {"stratum_id": "late", "block_ids": block_ids[3:]},
+                ],
+            },
+        ]
+        for name, values in self.TIE_WORLDS.items():
+            for scale in (1, 1 / 1024, 1024):
+                scaled = [value * scale for value in values]
+                expected = self._fraction_oracle(scaled)
+                for design in designs:
+                    for alpha in (0.05, expected):
+                        with self.subTest(world=name, scale=scale, design=design, alpha=alpha):
+                            result = randomization_check(
+                                scaled, design, alpha=alpha, block_ids=block_ids
+                            )
+                            self.assertEqual(result["exact_two_sided_p"], expected)
+                            self.assertEqual(result["rejects"], expected <= alpha)
+
+    def test_subnormal_deltas_and_exact_zero_ties(self) -> None:
+        tiny = math.ulp(0.0)
+        for values in (
+            [tiny] * 6,
+            [tiny, -tiny] * 3,
+            [0.0, -0.0] * 3,
+            [1.0e300, -1.0e300, tiny, -tiny, 0.0, 1.0],
+        ):
+            with self.subTest(values=values):
+                self.assertEqual(
+                    exact_sign_flip_p_value(values), self._fraction_oracle(values)
+                )
+
     def test_sign_flip_limits_and_nonfinite_inputs_fail_closed(self) -> None:
         with self.assertRaisesRegex(ValueError, "at most 20"):
             exact_sign_flip_p_value([1.0] * 21)
@@ -113,8 +226,8 @@ class ExactSignFlipTests(unittest.TestCase):
             exact_sign_flip_p_value([])
         with self.assertRaisesRegex(ValueError, r"deltas\[1\]"):
             exact_sign_flip_p_value([1.0, float("nan")])
-        with self.assertRaisesRegex(ValueError, "tolerance"):
-            exact_sign_flip_p_value([1.0], tolerance=-1.0)
+        with self.assertRaisesRegex(ValueError, "finite derived sums"):
+            exact_sign_flip_p_value([1.0e308, 1.0e308])
 
 
 class MultiplicityAdjustmentTests(unittest.TestCase):

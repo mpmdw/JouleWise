@@ -771,7 +771,13 @@ applicable.
 - `paired_label_swap_within_block`: with at least six exchangeable blocks,
   enumerate all `2^n` sign flips of the paired deltas at `n <= 20`. The exact
   two-sided p-value is the fraction whose absolute mean is at least the
-  observed absolute mean, using a `1e-15` comparison tolerance.
+  observed absolute mean. Compare absolute sums exactly over the supplied
+  binary float values (the common `n` divisor cancels), using integer ratios
+  or equivalent exact arithmetic. Include exact ties with `>=`; no floating
+  comparison tolerance or rounded mean enters the count. Exact rescaling,
+  such as multiplication by `1/1024` or `1024` without underflow or overflow,
+  preserves the p-value. Multiplication by `1000` can round the inputs and
+  therefore can change the exact p-value for tie-heavy data.
 - fewer than six exchangeable blocks: status `not_run`, reason
   `randomization_check_insufficient_blocks`; the t interval remains primary
   and the artifact carries the required caveat.
