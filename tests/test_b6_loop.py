@@ -810,6 +810,22 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(len(self.transport.sent), sent)
         self.assertFalse((self.root / "wake").exists())
 
+    def test_wake_labels_are_root_unique_and_bootstrap_failure_is_recorded(self):
+        labels = []
+        for root in (self.root / "first/shared", self.root / "second/shared"):
+            calls = []
+            waker = Waker(root, wake_argv=["/synthetic/wake"],
+                          run=lambda argv: calls.append(argv) or SimpleNamespace(returncode=7))
+            record = waker.wake("close", {})
+            saved = json.loads((root / "wake/000001.json").read_text())
+            self.assertEqual(record["bootstrap_rc"], 7)
+            self.assertEqual(saved["bootstrap_rc"], 7)
+            plist = plistlib.loads(next((root / "wake").glob("*.plist")).read_bytes())
+            labels.append(plist["Label"])
+            self.assertNotRegex(plist["Label"], r"^com\.joulewise\.b6wake\.[0-9]+$")
+            self.assertEqual(len(calls), 1)
+        self.assertNotEqual(*labels)
+
     def test_wake_record_dedup_and_optional_job_deferred_while_active(self):
         calls = []
         waker = Waker(self.root, wake_argv=["/usr/bin/true"], run=lambda argv: calls.append(argv))
@@ -920,6 +936,30 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(set(self.loop.regs), {"bytes-s1-p1"})
         self.assertEqual(self.state()["session"]["packs"], ["bytes-s1-p1"])
         self.assertEqual(self.state()["state"], "PRECHECK")
+
+    def test_bytes_loop_order_matches_registered_pass_order(self):
+        config = json.loads((ROOT / "configs/b6/loop_bytes.json").read_text())
+        passes = json.loads((ROOT / "configs/campaigns/bytes_v1/pass_order.json").read_text())["passes"]
+        expected = passes["1"] + passes["2"]
+        self.assertEqual(config["base_order"], expected)
+        self.assertEqual(config["pack_ids"], expected)
+
+    def test_replication_resume_rejects_bytes_without_reopening_done_root(self):
+        from joulewise.b6.pack_registration import load
+        reg = load(ROOT / "configs/b6/packs/bytes-s1-p1/registration.json")
+        self.loop.regs_source = None
+        state = self.state()
+        state["state"] = "DONE"
+        loop_module.atomic_state(self.root / "state.json", state)
+        with patch.object(loop_module, "open_packs", return_value=[*self.regs.values(), reg]):
+            with self.assertRaisesRegex(ValueError, "unknown pack"):
+                main(["resume", "--loop-root", str(self.root), "--pack", "bytes-s1-p1"],
+                     factory=lambda *a, **kw: self.loop)
+            self.assertEqual(self.state()["state"], "DONE")
+            self.assertEqual(main(["resume", "--loop-root", str(self.root), "--pack", "alpha"],
+                                  factory=lambda *a, **kw: self.loop), 0)
+        self.assertEqual(self.state()["state"], "NEXT")
+        self.assertEqual(set(self.state()["packs"]), {"alpha", "beta", "gamma"})
 
     def test_cli_config_root_and_explicit_override(self):
         roots = []
