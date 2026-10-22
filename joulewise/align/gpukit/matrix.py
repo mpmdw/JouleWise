@@ -108,6 +108,8 @@ def structural_flags(matrix: Mapping[str, Any]) -> tuple[str, ...]:
         for spec in [*matrix["models"], matrix["monitor_serving"]]:
             if not isinstance(spec["id"], str) or not spec["id"]:
                 flags.append("matrix_required_field_invalid")
+            if "checkpoint" in spec and spec["checkpoint"] != spec["id"]:
+                flags.append("matrix_checkpoint_not_id")
             for key in ("reasoning_parser", "tool_call_parser"):
                 if key not in spec or (spec[key] is not None and
                                       (not isinstance(spec[key], str) or not spec[key])):

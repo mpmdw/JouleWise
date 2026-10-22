@@ -413,3 +413,10 @@ power_readings/enforced_power_limit remains supported. Module/platform readings
 do not overwrite board readings. The telegraf schema_v12 and schema_v13 types.go
 files at commit 2156aa5089436522eec36b05fad94d850c728388 were read through GitHub
 by this seat on 2026-10-22; both paths are cited in throttle.py.
+
+Served identity rule: every agent and monitor id is the actual checkpoint.
+A checkpoint field, if present, must equal id; a mismatch fails structurally
+before hardware calls. Use a separate id for an FP8 checkpoint. Cost-only
+layout_options may still name alternative checkpoints. Each model receipt
+records weight_precision and server_argv. A GPU-served monitor records revision
+(or null), with monitor_revision_unpinned when no revision was supplied.

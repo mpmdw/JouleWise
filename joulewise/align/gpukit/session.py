@@ -416,7 +416,7 @@ def _runner_command(argv: Sequence[str], log: Path, *, timeout_s: float,
 
 
 def _serve_argv(options: SessionOptions, model: dict[str, Any], port: int) -> list[str]:
-    argv = [*options.vllm_command, "serve", model.get("checkpoint", model["id"]),
+    argv = [*options.vllm_command, "serve", model["id"],
             "--host", "127.0.0.1", "--port", str(port),
             "--served-model-name", model["id"],
             "--tensor-parallel-size", str(model.get("tensor_parallel_size", 1)),
@@ -609,7 +609,10 @@ def run_session(options: SessionOptions, *,
         if executable and placement == "gpu" and monitor_endpoint is not None:
             monitor_log = (output / "monitor-server.log").open("wb")
             monitor_argv = _serve_argv(options, monitor_model, options.monitor_port)
-            receipt["monitor_server"] = {"argv": monitor_argv, "gpu_index": monitor_gpu}
+            receipt["monitor_server"] = {"argv": monitor_argv, "gpu_index": monitor_gpu,
+                                         "revision": monitor_model.get("revision")}
+            if not monitor_model.get("revision"):
+                flags.append("monitor_revision_unpinned")
             flags.extend(monitor_model.get("serve_flags", ()))
             try:
                 monitor_process = subprocess.Popen(
@@ -639,7 +642,8 @@ def run_session(options: SessionOptions, *,
                 devices = measured[:model.get("tensor_parallel_size", 1)]
                 endpoint = f"http://127.0.0.1:{options.port}"
                 model_receipt: dict[str, Any] = {
-                    "model": model["id"], "flags": list(model.get("serve_flags", ())),
+                    "model": model["id"], "weight_precision": model.get("weight_precision", "bf16"),
+                    "flags": list(model.get("serve_flags", ())),
                     "measured_gpu_indices": devices, "power_coverage": _power_metrics()}
                 receipt["models"].append(model_receipt)
                 runner_path = model_dir / "runner-matrix.json"

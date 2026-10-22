@@ -1044,6 +1044,34 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
             os.killpg(process.pid, 0)
 
 
+    def test_different_served_checkpoint_fails_before_hardware(self):
+        from unittest.mock import patch
+        from joulewise.align.gpukit import session
+        for label in ("agent", "monitor"):
+            matrix = json.loads((CONFIG / "shade.json").read_text())
+            spec = matrix["models"][0] if label == "agent" else matrix["monitor_serving"]
+            spec["checkpoint"] = spec["id"] + "-FP8"
+            path = self.base / (label + "-identity.json")
+            path.write_text(json.dumps(matrix))
+            with patch.object(session, "whole_gpu") as hardware, patch.object(session, "_command") as command:
+                result = run_session(self._options(label + "-identity", matrix=path))
+            self.assertEqual(result["status"], "failed")
+            self.assertIn("matrix_checkpoint_not_id", result["flags"])
+            hardware.assert_not_called()
+            command.assert_not_called()
+
+    def test_precision_and_monitor_revision_are_in_receipt(self):
+        result = run_session(self._options("served-provenance", monitor_placement="gpu",
+                                           monitor_gpu_index=1, monitor_port=8001))
+        self.assertTrue(result["data_complete"])
+        self.assertIn("monitor_revision_unpinned", result["flags"])
+        self.assertIsNone(result["monitor_server"]["revision"])
+        self.assertEqual([m["weight_precision"] for m in result["models"]], ["bf16", "bf16"])
+        for model in result["models"]:
+            argv = model["server_argv"]
+            self.assertEqual(argv[argv.index("--served-model-name") + 1], argv[2])
+
+
 class FixArithmeticTests(unittest.TestCase):
     def test_budget_protocol_counts_by_hand(self):
         matrix, flags = load_matrix(CONFIG / "budget.json")
