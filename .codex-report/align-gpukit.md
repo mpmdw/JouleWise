@@ -89,6 +89,17 @@ There are 17 test methods by source inspection; this is not a test-run count.
 The repository-wide command python3 -m unittest discover -s tests also could not execute.
 No passing current-head CI result is claimed or awaited.
 
+Static checks actually performed in this seat:
+- GitHub compare confirmed every continuation change is within WRITE_SCOPE.
+- Read back all 13 changed files at checkpoint 5e264d2 and compared their content
+  with the authored strings: all matched exactly. This is a remote-write custody
+  check, not Python verification.
+- The read-only documentation-consistency agent required by AGENTS.md inspected
+  the report/runbook, test inventory, config bounds/null plans and CLI/settings
+  at 5e264d2. It found no concrete inconsistency. It executed no tests and is not
+  an independent executing or cross-model arithmetic review.
+These static checks caught no additional number-changing issue.
+
 Director evidence supplied in the continuation brief, on the OLD b8dbd1f head,
 macOS/Python 3.13.1 (not executed by this seat):
 
