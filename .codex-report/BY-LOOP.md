@@ -2,18 +2,60 @@
 
 ## PROGRESS
 
-- DONE (prior committed slice 9de9ae0a5): dedicated BYTES root, guard/no-tick sentinel, scratch rehearsal, item 48 relay audit and record-only item 6 disposition. Clean tree at this slice start; descendant baseline confirmed.
-- IMPLEMENTED item 4: smoke.py reads campaign member evaluations for anchor-only rc 1 explanation; desk caller no longer requires idle flags. Expanded existing exact-dispatch desk regression with anchor-only and three rejection cases. Fails-before: 1 test, anchor subcase failed (`fail != pass`), 1.123s, exit 1. Passes-after: 1 test, 1.615s, exit 0. Companion-member rejection added and passed; focused final regression PASS (2.014s); full combined run completed 81 tests / 204.993s, four failures from attempting recovery on incomplete/crashed chains. Fixed caller to attempt only when all failing exits are exactly rc 1. Final focused regression rerun: 3 tests / 2.420s / exit 0 (anchor matrix, incidental-physics crash controls, named physical stops).
-- CURRENT slice 3: clean start b8a25c2e179dd6e76c9890e00d3ba016230ae919. Final loop module PASS: 59 tests / 25.019s / exit 0. Final smoke module PASS: 22 tests / 183.653s / exit 0. Round-desk alpha/session/rotation PASS: 1 test / 136.630s / exit 0; resume PASS: 1 test / 136.594s / exit 0. Lost-session FAIL: exception:RuntimeError:SESSION_RUN instead of structure_defect, 1 test / 85.125s / exit 1. Diagnostic rerun PASS: 1 test / 126.950s / exit 0; HOLD_DIAGNOSTIC None and both INSTALL_STDERR entries empty. Earlier failure not reproduced; retain as unresolved transient, do not claim it fixed. All test sessions from this slice are finished. Prior session 60415 cannot be recovered in this fresh tool session. No DIRECTOR NOTES present at intake.
-- NEXT: run tests.b6.test_loop_round_desk.RoundTests.test_physics_refusal_wait_reprepare_then_retry, then test_stops_close_bracket_advance_pin_and_reach_next_smoke (one case per invocation, budget the four-stop loop). Retain lost-session first-fail/rerun-pass discrepancy for lead verification. Continue identifying historical item 5 runner; no scope expansion identified yet. Run each module (each module gets its own fresh TMPDIR); trace item 5 with bounded candidates. No whole suite. Do not call launchctl or access production state.
-- DIRECTOR REQUEST: preserve/read any archived s3-cold scratch runner command or script that launched the historical .scratch-fix/tmp/s3-run monitor; no tracked s3-run source found. Do not expand scope without an identified path.
-- OPEN: process visibility blocked in this sandbox: pgrep exits 3 (`sysmond service not found`); /bin/ps denied. No monitor child started by this slice. Cannot claim leak reproduction/census. Production BYTES sizing remains external. Director owns commits/pushes/CI. No scope request yet.
-
-- Slice 3 hygiene finding (separate from historical real monitor): live orphan-census test spawned a fake meter BEFORE learning ps is denied, then skipped while its cleanup also required ps. Added a pre-spawn inventory check plus regression; fails-before 1 test / 0.190s / exit 1, with spawn trapped (no child created). Full post-fix census PASS: 15 tests / 0.484s / exit 0 / 2 skips (sandbox ps). Historical hazard-monitor source still unproven.
+- DIRECTOR NOTES (before slice 4, 2026-10-22 13:25Z; director ran these outside the sandbox):
+  - ITEM 5 SOURCE FOUND. pid 43816 was started 10-15 09:41 by the s3-cold lane's ad-hoc runner
+    `/Users/edr/code/JouleWise-wt-b6-s3cold-fix/.scratch-fix/run_remaining.py`, which ran every tests/b6 and
+    tests/hazards module. Its log `.scratch-fix/logs/after-remaining.log` ends inside
+    `tests.hazards.test_monitor.SupervisorTests.test_all_probes_together_cost_at_most_half_a_percent_of_one_core`
+    ("Two real monitors side by side for about 40 s") with a KeyboardInterrupt raised in `wait_for`'s
+    `time.sleep` (line 697 -> 624): the runner was interrupted mid-test. The leaked custody dir is
+    `.scratch-fix/tmp/s3-run/tmpxwija5mv/tmpzvtu2yd3/hazards/monitor` (TMPDIR/setUp tmp/mkdtemp root), matching
+    that test's two `tempfile.mkdtemp(dir=self.custody)` roots. Mechanism: unittest re-raises KeyboardInterrupt out of
+    `TestCase.run` WITHOUT running tearDown or `addCleanup` callbacks, so `_kill_quietly` never ran; and
+    `monitor.Supervisor.start` launches the monitor with `start_new_session=True`, so the runner's process-group
+    kill does not reach it; the monitor does not watch its parent, so it ran on as a ppid-1 orphan.
+    `joulewise/hazards/monitor.py` and `scripts/hazard_monitor.py` are in the block-5 sealed inventory: do not touch.
+  - SCOPE GRANT (director, slice 4): `tests/hazards/test_monitor.py` and `tests/fixture_signatures.json` (neither is in
+    the sealed inventory; checked). Fix lives in the test file; `tests/b6/test_s3_cold_fixes.py` needs no change.
+  - WHAT TO BUILD (decide details yourself, list them under DECISIONS I MADE):
+    (a) In tests/hazards/test_monitor.py make every real `monitor.Supervisor` a SupervisorTests test starts get reaped
+        even when the run is interrupted: e.g. track started supervisors on the instance and override
+        `SupervisorTests.run` with try/finally that calls `_kill_quietly` on each (finally runs on KeyboardInterrupt;
+        addCleanup does not). Also cover SIGTERM (the default signal of wall-clock bounds such as timeout(1)): while
+        SupervisorTests runs in the main thread, temporarily turn SIGTERM into an exception so the finally runs, and
+        restore the previous handler afterwards. SIGKILL cannot be covered from the test; record it as residual
+        (only a parent-death watch in the sealed monitor would cover it).
+    (b) A regression in tests/hazards/test_monitor.py: run a SupervisorTests-derived case (class defined inside the
+        test, not module level) whose test method starts one real supervisor, records its pid, then raises
+        KeyboardInterrupt; assert the KeyboardInterrupt still propagates AND `os.kill(pid, 0)` raises
+        ProcessLookupError afterwards (the reaper waits on the child, so no timing bar is needed). Its own finally must
+        kill the pid if the assertion fails, so the regression can never leak. Fails-before / passes-after evidence:
+        run it against the unfixed class first (stash or temporarily revert your (a) edit), then fixed.
+    (c) Census visibility: the census (scripts/fixture_orphan_census.py, sealed; registry tests/fixture_signatures.json,
+        not sealed) deliberately ignores production monitor commands, so it cannot see this orphan class today. Add one
+        registry row, e.g. id `hazards-test-real-monitor`, matching a real `scripts/hazard_monitor.py --config <path>`
+        only when the config path has a tempfile-made component (`tmp` + 8 of [a-z0-9_]) before
+        `.../hazards/monitor/config.json`; check by grep that no production custody path is a tempfile name, and
+        add a row-matching unit test in tests/test_fixture_orphan_census.py (test-shaped path matches; production-shaped
+        paths such as `/Users/edr/night-b6/.../custody/hazards/monitor/config.json` and the existing
+        `-m joulewise.hazards.monitor` row do not). The census is a recorded flag, never a refusal; keep it so.
+  - The director will prove (c) live after your slice: interrupt the SupervisorTests module mid-test with SIGINT and
+    SIGTERM, let the runner exit, then run the census CLI: before your fix it should list a
+    `hazards-test-real-monitor` orphan; after, none. You cannot do this in the sandbox (ps denied); do not try.
+  - Round-desk cases (`test_physics_refusal_wait_reprepare_then_retry`, `test_stops_close_bracket_advance_pin_and_reach_next_smoke`),
+    the lost-session rerun, tests.hazards.test_import_graph and the local rehearsal repeat: the DIRECTOR runs these
+    outside the sandbox now. Do not run them in slice 4. Run only tests.hazards.test_monitor (its non-live classes run
+    in the sandbox; list any ps/taskpolicy environment failures), tests.test_fixture_orphan_census and
+    tests.b6.test_s3_cold_fixes.
+- SLICE 4 DONE: identified historical source from director evidence; tests/hazards/test_monitor.py now tracks both real-supervisor creation sites and reaps them in SupervisorTests.run finally, including KeyboardInterrupt and main-thread SIGTERM. Previous SIGTERM handler is restored. Added real-child regressions: unfixed KeyboardInterrupt case FAIL (1 test / 0.007s, child still exists); fixed KeyboardInterrupt + SIGTERM PASS (2 tests / 0.012s). Regression finally reaped the pre-fix child; no unowned PID was signalled.
+- CENSUS DONE: tests/fixture_signatures.json adds hazards-test-real-monitor restricted to scripts/hazard_monitor.py --config with a tmp[a-z0-9_]{8} path component before hazards/monitor/config.json. Positive historical/nested-temp paths and negative production-shaped/module argv paths covered. Repository config/registration/design grep found no production custody path with that tempfile component. Full census PASS: 16 tests / 0.375s / exit 0 / 2 skips (ps denied). Cold fixes PASS: 6 tests / 0.169s / exit 0.
+- TESTS FINISHED: tests.hazards.test_monitor: 37 tests / 121.126s / exit 1; 35 passed, two real SupervisorTests failed at startup waits. Bounded /usr/sbin/taskpolicy -b /usr/bin/true probe returned 70: setpriority(): Operation not permitted. Focused final interruption regressions PASS: 2 tests / 0.018s. Census CLI exit 2: ps PermissionError; cannot claim an empty census. All invocations synthetic-only with separate /private/tmp TMPDIR. No running tool sessions remain.
+- NEXT (director): review/commit these four scoped files; run interrupted-module SIGINT/SIGTERM checks and census outside sandbox; run the two live SupervisorTests with taskpolicy permission. Director also owns round-desk remaining cases, lost-session rerun, import-graph, independent rehearsal repeat, push and CI. Scoped diff reviewed; sealed intersection empty (682 paths), git diff --check passed.
+- OPEN: SIGKILL cannot execute Python finally; only sealed production parent-death supervision could cover it. Sandbox ps/pgrep unavailable, so no claim of empty live process census. No scope request; no authority ruling needed. Existing lost-session first-fail/rerun-pass discrepancy retained for director. No production state accessed, no launchctl invoked, no measurements armed.
 
 ## SUMMARY
 
-- Status: PARTIAL local implementation. Dedicated BYTES queue, CLI config-root selection, DONE guard and scratch rehearsal passed. Item 4 final loop/smoke runs passed. Census now checks process visibility before creating a fake orphan. Two round-desk cases and the historical real-monitor leak remain pending.
+- Status: local implementation complete for items 1–6; director verification remains pending. Dedicated BYTES queue, CLI config-root selection, DONE guard and scratch rehearsal passed. Item 4 final loop/smoke runs passed. Historical monitor test interruption cleanup now has fails-before/passes-after evidence and a census signature.
 - Base confirmed through connected GitHub: `bda481d5af510b29dde4976f172a20170a42c955`.
 - BY-INT's lane head still equals that base; no base movement was observed.
 - No earlier BY-LOOP lane branch existed when checked.
@@ -21,7 +63,7 @@
 - Item 48's live yield notice is built inside the sealed block-5 driver; the authorized known-false-alarm disposition is recorded.
 - The duplicate close notice is traced to the magistrate's manual step; loop wake remains the chosen single owner.
 - Only scoped production/test/config/report files changed; production registrations, measurement state and sealed files remain untouched.
-- Final loop module: 59 tests passed; final smoke module: 22 tests passed. Rehearsal passed. Two round-desk cases passed; lost-session failure and historical monitor leak remain open.
+- Final loop module: 59 tests passed; final smoke module: 22 tests passed. Rehearsal passed. Two round-desk cases passed; remaining round-desk cases, lost-session discrepancy and live orphan-census proof are director-owned.
 
 ## LOOP ROOT CHOICE
 
@@ -59,7 +101,11 @@ Expanded existing real desk/archive regression to exercise positive anchor-only 
 
 ### 5. Leaked hazard monitor
 
-Historical real monitor not fixed or reproduced: process visibility is denied in this local sandbox. Read `tests/b6/test_s3_cold_fixes.py`, `tests/test_fixture_orphan_census.py`, and `tests/b6/support.py`. The named cold-fix module has no direct Popen call at the base, so the originating process must be traced through its exercised seams or the broader s3-cold execution before asserting a cause. Do not claim the leak is repaired merely because the module contains no direct spawn. Slice 3 found a separate fake-meter leak in the census test itself: it spawned before discovering that ps was denied, then skipped while cleanup also required ps. tests/test_fixture_orphan_census.py now probes inventory before spawning; a trapped-spawn regression failed before and passes afterward. Full census: 15 tests / 0.484s / exit 0 / two environment skips. This prevents new sandbox fake-meter orphans but does not identify or fix historical pid 43816; its process proof remains outstanding.
+Director evidence identifies the historical source: the s3-cold ad-hoc runner was interrupted inside SupervisorTests.test_all_probes_together_cost_at_most_half_a_percent_of_one_core. unittest propagates KeyboardInterrupt without tearDown or addCleanup; Supervisor.start creates a new session, outside the runner's process group. Both monitor production files are sealed and unchanged.
+
+Implemented test-owned interruption cleanup in tests/hazards/test_monitor.py: both supervisor creation sites register before starting, SupervisorTests.run finally reaps every registered child, and a temporary main-thread SIGTERM handler raises KeyboardInterrupt to unwind through that finally. The old handler is restored. New nested-case regressions start the real supervisor (without taskpolicy or waiting on hardware), interrupt, verify propagation, and assert os.kill(pid, 0) raises ProcessLookupError after reaping. Before: 1 test / 0.007s / exit 1 (ProcessLookupError not raised). After: 2 tests / 0.012s / exit 0 (KeyboardInterrupt and SIGTERM). Each regression has its own fallback reaper, including the pre-fix failure.
+
+Added hazards-test-real-monitor to tests/fixture_signatures.json, restricted to real script argv with a tempfile-made path component. Census unit coverage matches historical nested temp roots and excludes production-shaped paths and module argv. Full census passes (16 tests, two process-visibility skips). Director owns live interrupt-and-census proof outside the sandbox. SIGKILL remains residual because it cannot execute finally. No production refusal or census enforcement changed. Slice 3 found a separate fake-meter leak in the census test itself: it spawned before discovering that ps was denied, then skipped while cleanup also required ps. tests/test_fixture_orphan_census.py now probes inventory before spawning; a trapped-spawn regression failed before and passes afterward. Full census: 15 tests / 0.484s / exit 0 / two environment skips. That slice-3 fix addressed a separate fake-meter leak. Slice 4 addresses the director-identified historical monitor interruption path; live process proof remains outstanding.
 
 ### 6. Duplicate block-6 close mail
 
@@ -106,7 +152,7 @@ Initial run exit 0: 57 tests in 32.572s, OK (before DONE guard addition). Final 
 JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/jwtmp-byloop.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest tests.test_b6_loop.LoopTests.test_dedicated_bytes_config_limits_discovery_and_starts_next tests.test_b6_loop.LoopTests.test_cli_config_root_and_explicit_override tests.test_b6_loop.LoopTests.test_done_guard_skips_tick_and_resume_invalidates
 ```
 
-Exit 0: 3 tests in 0.076s, OK, no skips. Rehearsal above exit 0. No whole suite. Stages/leak fails-before/passes-after pending.
+Exit 0: 3 tests in 0.076s, OK, no skips. Rehearsal above exit 0. No whole suite. Later slice checkpoints below record stages/leak fails-before/passes-after evidence.
 
 `pgrep -fl hazard_monitor`: exit 3; `sysmon request failed with error: sysmond service not found`; `pgrep: Cannot get process list`. No processes killed. Need usable process evidence for leak investigation.
 
@@ -120,7 +166,7 @@ After final outbox refinement: `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /tmp/j
 
 Draft PR **#542**, `ci/2026-10-22-bytes-loop` against main, titled “CI: BYTES loop readiness (BY-LOOP)”: https://github.com/mpmdw/JouleWise/pull/542.
 
-Checkpoint `c2a7dd5025079c2ab01bc5aaf2ea845434171c2b` was verified as the exact head of both lane and CI branch through connected GitHub. Its CI workflow was observed pending (run 39743424315); gate-ledger completed with failure (run 39743424387). The failure reason was not inspected; no claim of green checks is made. The earlier report checkpoint had both workflows in progress. This final commit changes only the report and is fast-forwarded to the CI branch as well. No code-readiness result is claimed; the PR body explicitly says implementation and execution remain blocked. Do not merge.
+Historical cloud checkpoint c2a7dd502 observed CI pending (run 39743424315) and gate-ledger failing (run 39743424387). That observation predates the local implementation and is not current CI evidence. Local branch by-loop at 6129d0475227ce2ff144251e9f7a97c083b2fcc9 plus uncommitted slice-4 changes. No network/commit/push attempted on the local route; director owns publication to lane/2026-10-22-bytes-loop and ci/2026-10-22-bytes-loop, and CI refresh. Current CI status unknown.
 
 ## DECISIONS I MADE
 
@@ -129,17 +175,19 @@ Checkpoint `c2a7dd5025079c2ab01bc5aaf2ea845434171c2b` was verified as the exact 
 - Keep loop wake as the single owner of close notification; record the external/manual magistrate duplication without changing the shared mailer.
 - Preserve cloud source findings; local slice now supplies filesystem execution evidence.
 - Do not substitute unit-only, remote source-reading or historical evidence for the required synthetic real-entry-point rehearsal.
+- Item 5: track both SupervisorTests creation sites before start; reap in run/finally; temporarily map main-thread SIGTERM to KeyboardInterrupt and restore the old handler. The regression installs its own fallback handler so a regressed implementation cannot terminate the entire test runner. SIGKILL remains residual.
+- Extend only the fixture signature registry and its tests for test-shaped real-monitor commands; production monitor modules remain sealed.
 
 ## OPEN ISSUES
 
-- Item 4 implemented with focused regressions passed; remaining round-desk runs/failure and historical item 5 leak remain pending; final smoke passed. Item 48 relay audit complete; recorded false alarm retained.
+- Item 4 implemented with focused regressions passed; remaining round-desk runs/failure need director verification; final smoke passed. Item 5 test cleanup implemented and focused real-child regressions passed; live interrupted-module census proof remains director-owned. Item 48 relay audit complete; recorded false alarm retained.
 - Prior slice completed mailer, chain reduction, cold fixes and refusal census; final loop/smoke and updated orphan census now pass. Two round-desk cases remain unrun, lost-session failed, and import-graph GO verification is blocked by sandbox pgrep.
 - Production BYTES C5 sizing absent; scratch values are synthetic only.
 - Director independent rehearsal, final review, commit/push and CI refresh outstanding.
 
 ## NEEDS_RULING
 
-none. Historical monitor source remains unidentified; process visibility and external CI/live gates remain lead-owned.
+none. Historical monitor source identified by director and test-owned cleanup implemented; process visibility and external CI/live gates remain lead-owned.
 
 ### Local slice 2 verification checkpoint
 
@@ -207,3 +255,36 @@ PY
 ```
 
 Observed HOLD_DIAGNOSTIC None, two empty INSTALL_STDERR entries. No behavior substitution; diagnostics only wrap Round.until. Earlier exception hold not reproduced, source unresolved. No claim of a fix or environmental explanation for that earlier failure.
+
+### Local slice 4 verification checkpoint
+
+All test commands run in repository cwd, with prefix `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byloop.XXXXXX) /opt/homebrew/bin/python3.13 -B -m unittest` and one fresh TMPDIR per invocation.
+
+- `tests.hazards.test_monitor.SupervisorCleanupTests`: pre-fix 1 test / 0.007s / exit 1, expected missing ProcessLookupError; finally reaped child. Post-fix 2 tests / 0.012s / exit 0.
+- `tests.test_fixture_orphan_census`: 16 tests / 0.375s / exit 0 / two skips (ps denied).
+- `tests.b6.test_s3_cold_fixes`: 6 tests / 0.169s / exit 0.
+- `tests.hazards.test_monitor`: exit 1 / 37 tests / 121.126s; 35 passed, two failures in SupervisorTests live startup waits: test_all_probes_together_cost_at_most_half_a_percent_of_one_core (80 s wait), test_killed_monitor_is_restarted_and_the_gap_is_recorded (20 s wait). Both require taskpolicy; bounded permission probe below confirms sandbox denial. No assertion or production behavior changed to bypass these environment failures. Final regression-only rerun after fallback hardening passes separately.
+
+Decisions for item 5: use run/finally rather than addCleanup alone because unittest bypasses cleanup on KeyboardInterrupt; translate SIGTERM to KeyboardInterrupt only for SupervisorTests in the main thread, restore previous handler; keep production modules sealed; census row requires the Python tempfile eight-character name shape and script argv. SIGKILL remains an external residual. Director process evidence, not sandbox unit evidence, owns the live orphan census acceptance.
+
+Final focused interruption regression after adding the regression-owned SIGTERM fallback: 2 tests / 0.018s / exit 0. `git diff --check`: exit 0. Sealed intersection rerun using both `git diff --name-only bda481d5a HEAD` and working-tree-inclusive `git diff --name-only bda481d5a`, each union untracked files: committed sealed_paths: 682 changed_overlap: []; working-tree-inclusive sealed_paths: 682 changed_overlap: []. No sealed file changed.
+
+Monitor environment diagnosis (repository cwd, fresh /private/tmp TMPDIR, JW_B5_SYNTHETIC_ONLY=1, Python -B): subprocess.run([*monitor.TASKPOLICY_PREFIX, '/usr/bin/true'], capture_output=True, text=True, timeout=5) printed argv ['/usr/sbin/taskpolicy', '-b', '/usr/bin/true'], returncode 70, stderr `taskpolicy: setpriority(): Operation not permitted`. This starts only true, no additional monitor or probe. Both full-module live startup tests use the denied taskpolicy prefix. No hardware/cost validation claimed.
+
+Session-end census exact command: `JW_B5_SYNTHETIC_ONLY=1 TMPDIR=$(mktemp -d /private/tmp/jwtmp-byloop.XXXXXX) /opt/homebrew/bin/python3.13 -B scripts/fixture_orphan_census.py --fail-on-orphans`: exit 2, stderr JSON `{"error": "PermissionError: [Errno 1] Operation not permitted: 'ps'"}`. Observation unavailable, never treated as a clean census. All real supervisors started by tests in this slice went through the reaper; no external PID signalled. Director owns independent process-list proof.
+
+Sealed verification exact Python body (run with the same synthetic-only Python -B prefix and a fresh TMPDIR):
+
+```python
+import json, subprocess
+from pathlib import Path
+files = set(json.loads(Path('configs/campaigns/v5_claim_25g83/sealed_inventory.json').read_text())['files'])
+for label, args in [('committed', ['git','diff','--name-only','bda481d5a','HEAD']),
+                    ('working-tree-inclusive', ['git','diff','--name-only','bda481d5a'])]:
+    changed = set(subprocess.check_output(args, text=True).splitlines())
+    changed.update(subprocess.check_output(['git','ls-files','--others','--exclude-standard'], text=True).splitlines())
+    print(label, 'sealed_paths:', len(files), 'changed_overlap:', sorted(files & changed))
+    assert not files & changed
+```
+
+Output: committed sealed_paths: 682 changed_overlap: []; working-tree-inclusive sealed_paths: 682 changed_overlap: []. No commits/pushes attempted; director retains publication authority. Slice-4 changed files: tests/hazards/test_monitor.py, tests/fixture_signatures.json, tests/test_fixture_orphan_census.py, .codex-report/BY-LOOP.md (preserves director notes). No SCOPE REQUEST; NEEDS_RULING none.

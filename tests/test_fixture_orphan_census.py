@@ -54,6 +54,29 @@ class FixtureOrphanCensusTests(unittest.TestCase):
                 with self.subTest(command=command, parent=parent):
                     self.assertEqual(sentinel.census(row(command, ppid=parent), self.signatures), [])
 
+    def test_real_monitor_requires_test_tempfile_custody(self) -> None:
+        prefix = "/opt/homebrew/bin/python3.13 -B /repo/scripts/hazard_monitor.py --config "
+        for path in (
+            "/private/tmp/jwtmp-byloop.Abc123/tmpxwija5mv/hazards/monitor/config.json",
+            "/repo/.scratch-fix/tmp/s3-run/tmpxwija5mv/tmpzvtu2yd3/hazards/monitor/config.json",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual([item["signature"] for item in sentinel.census(row(prefix + path), self.signatures)],
+                                 ["hazards-test-real-monitor"])
+                self.assertEqual(sentinel.census(row(prefix + path, ppid=200), self.signatures), [])
+        for path in (
+            "/Users/edr/night-b6/session/custody/hazards/monitor/config.json",
+            "/Users/edr/night-bytes/session/custody/hazards/monitor/config.json",
+            "/Users/edr/night-custody/session/hazards/monitor/config.json",
+            "/private/tmp/tmpfixture/hazards/monitor/config.json",
+            "/private/tmp/tmpxwija5mvX/hazards/monitor/config.json",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(sentinel.census(row(prefix + path), self.signatures), [])
+        self.assertEqual(sentinel.census(row(
+            "/usr/bin/python3 -m joulewise.hazards.monitor --config "
+            "/private/tmp/tmpxwija5mv/hazards/monitor/config.json"), self.signatures), [])
+
     def test_nonfixtures_do_not_match(self) -> None:
         for command in (
             "/usr/bin/sleep 30",
