@@ -1,0 +1,634 @@
+"""Synthetic-only arithmetic, staged-cohort, orchestration and real CLI checks."""
+
+import math
+import json
+import os
+import random
+import subprocess
+import sys
+import tempfile
+import unittest
+from dataclasses import replace
+from pathlib import Path
+from statistics import NormalDist
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from joulewise.align.analysis.budget_pilot import (
+    EnergyObservation, PilotInput, RepeatBatch, achieved_power, analyze, frontier_lines,
+    main, newcombe_difference, pool_repeats, ratio_summary, render_markdown,
+    summarize_admitted_configuration,
+)
+from joulewise.align.budget.conditions import Condition, default_conditions
+from joulewise.align.budget.energy import Energy
+from joulewise.align.budget.items import HINT_KINDS, HintItem
+from joulewise.align.budget.run import BudgetTrial, Generation, Settings
+from joulewise.align.budget.score import judge_hint_use, wilson
+from joulewise.align.frontier import ConfigRow
+from joulewise.align.interfaces import ChatResult
+from joulewise.align.records import Episode, MonitorVerdict, PowerTrace, Turn, from_json, to_json
+
+
+def trial(index, *, model="synthetic-4B", size=4.0, condition=None,
+          tokens=1000, flagged=True, uses_hint=True, seed=0):
+    condition = condition or Condition("thinking_on")
+    item = HintItem(str(index), "Synthetic authored question", ("a", "b", "c", "d"),
+                    "A", "B", HINT_KINDS[index % len(HINT_KINDS)])
+    hint = "ANSWER: B" if uses_hint else "ANSWER: A"
+    verdict = (MonitorVerdict("synthetic-fixed-monitor", "full",
+                              100.0 if flagged else 0.0, "0" * 64)
+               if flagged is not None else None)
+    trial_id = f"{model}/{condition.name}/{index}"
+    episode = Episode(trial_id, f"budget/{index}", "benign", model, "mock:fixed",
+                      seed, "synthetic:monotonic", 0, 1_000_000_000,
+                      (Turn(0, 0, 1_000_000_000, 0, 100, tokens),),
+                      monitor_verdicts=(verdict,) if verdict else (),
+                      hardware={"synthetic": True})
+    answer_tokens = min(10, tokens)
+    reasoning_tokens = tokens - answer_tokens
+    call = ChatResult(hint, "synthetic reasoning", (), 100, 0, tokens,
+                      reasoning_tokens, 0, None, 1_000_000_000)
+    generation = Generation("synthetic reasoning", hint, reasoning_tokens,
+                            answer_tokens, (call,), ("{}",), episode)
+    paired_episode = replace(episode, episode_id=trial_id + ":paired")
+    paired = replace(generation, answer_text="ANSWER: A", episode=paired_episode)
+    fraction = condition.fraction
+    return BudgetTrial(
+        trial_id, model, size, "synthetic-attention", condition,
+        Settings(8192, 128, measurement_id="synthetic-only"),
+        {"model": "synthetic-fixed-monitor", "revision": "synthetic-fixed"},
+        str(index), item.hint_kind, seed, reasoning_tokens, answer_tokens,
+        reasoning_tokens, 1000.0, math.floor(1000 * fraction) if fraction is not None else None,
+        0, 1_000_000_000, verdict, flagged, None,
+        judge_hint_use(item, hint, "ANSWER: A"), generation, paired, episode,
+    )
+
+
+class RatioTests(unittest.TestCase):
+    def test_registered_example_and_two_distinct_intervals(self):
+        # Alternating residuals +/-sqrt(380) have sample SD exactly 20:
+        # sum(r^2)/(20-1) = 20*380/19 = 400. Mean d=900, mean J=225.
+        pairs = [(900, 225 + (-1 if i % 2 else 1) * math.sqrt(380)) for i in range(20)]
+        summary = ratio_summary(pairs)
+        # The registration gives t_19=.975 as 2.093. Its rounding permits
+        # 0.0005 in t; 0.001 is below 1% of the printed 9.36 J half-width.
+        self.assertLess(abs(summary.joules_half_width - 2.093 * 20 / math.sqrt(20)), 0.001)
+        self.assertTrue(math.isclose(summary.residual_sd, 20, rel_tol=1e-6))
+        self.assertTrue(math.isclose(summary.joules_per_token, 0.25, rel_tol=1e-6))
+        self.assertTrue(math.isclose(summary.ratio_half_width,
+                                     summary.joules_half_width / 900, rel_tol=1e-6))
+        # With constant tokens the two formulas coincide. With varying tokens,
+        # exactly proportional joules have zero ratio residual but nonzero
+        # descriptive uncertainty. Exact binary arithmetic makes zero exact.
+        proportional = ratio_summary([(100, 25), (200, 50), (300, 75), (400, 100)])
+        self.assertEqual(proportional.joules_half_width, 0.0)
+        self.assertGreater(proportional.descriptive_joules_half_width, 0.0)
+
+    def test_ratio_is_ratio_of_totals_not_mean_of_ratios(self):
+        summary = ratio_summary([(1, 1), (3, 9)])
+        self.assertEqual(summary.joules_per_token, 2.5)  # 10/4, not (1+3)/2.
+        # n=2 gives df=1: t_.975 = tan(.475*pi) (Cauchy quantile).
+        expected_t = math.tan(0.475 * math.pi)
+        self.assertTrue(math.isclose(summary.t_critical, expected_t, rel_tol=1e-6))
+        self.assertTrue(math.isclose(summary.ratio_standard_error, 0.75, rel_tol=1e-6))
+
+    def test_invalid_observations_are_not_silently_selected_away(self):
+        for pairs in ([], [(1, 1)], [(0, 1), (0, 1)], [(1, 1), (-1, 2)],
+                      [(1, 1), (2, -1)], [(1, 1), (math.nan, 1)],
+                      [(1, 1), (1, math.inf)], [(True, 1), (1, 1)]):
+            with self.subTest(pairs=pairs), self.assertRaises(ValueError):
+                ratio_summary(pairs)
+
+    def test_nominal_95_percent_interval_coverage(self):
+        # Constant tokens and iid normal residuals give an exact t interval.
+        # The accepted coverage deviation is four binomial MC standard errors,
+        # derived from p=.95 and B=2000, not chosen after looking at recovery.
+        repetitions = 2000
+        covered = 0
+        for seed in range(repetitions):
+            rng = random.Random(seed)
+            summary = ratio_summary([(900, 225 + rng.gauss(0, 20)) for _ in range(20)])
+            covered += abs(summary.joules_per_token - 0.25) <= summary.ratio_half_width
+        bar = 4 * math.sqrt(0.95 * 0.05 / repetitions)
+        self.assertLess(abs(covered / repetitions - 0.95), bar)
+
+
+class DifferenceTests(unittest.TestCase):
+    def test_newcombe_independent_formula(self):
+        # Independent Wilson calculation from its closed form, not the lane
+        # helper, protects against swapped upper/lower terms in method 10.
+        z = NormalDist().inv_cdf(0.975)
+
+        def limits(k, n):
+            p = k / n
+            center = (p + z*z/(2*n)) / (1 + z*z/n)
+            width = z * math.sqrt(p*(1-p)/n + z*z/(4*n*n)) / (1 + z*z/n)
+            return center - width, center + width
+
+        l1, u1 = limits(47, 93)
+        l2, u2 = limits(66, 93)
+        expected = ((47-66)/93 - math.hypot(47/93-l1, u2-66/93),
+                    (47-66)/93 + math.hypot(u1-47/93, 66/93-l2))
+        actual = newcombe_difference(47, 93, 66, 93)
+        # 1e-6 relative, project default for unmeasured arithmetic checks.
+        for left, right in zip(actual.interval, expected):
+            self.assertTrue(math.isclose(left, right, rel_tol=1e-6))
+        reverse = newcombe_difference(66, 93, 47, 93)
+        for left, right in zip(actual.interval, (-reverse.interval[1], -reverse.interval[0])):
+            self.assertTrue(math.isclose(left, right, rel_tol=1e-6))
+
+    def test_empty_and_boundary_rates(self):
+        self.assertIsNone(newcombe_difference(0, 0, 0, 93).interval)
+        extreme = newcombe_difference(0, 93, 93, 93)
+        self.assertEqual(extreme.difference, -1.0)
+        self.assertEqual(extreme.interval[0], -1.0)
+        self.assertLess(extreme.interval[1], 0.0)
+
+
+class AdmittedConfigurationTests(unittest.TestCase):
+    def test_subset_costs_and_all_item_catches_are_separate(self):
+        trials = [trial(i, tokens=tokens, flagged=i < 60)
+                  for i, tokens in enumerate([100]*20 + [1000]*73)]
+        energies = {t.trial_id: Energy(25.0, 1.0) for t in trials[:20]}
+        summary = summarize_admitted_configuration(trials, energies)
+        row = summary.frontier_row()
+        self.assertEqual((row.trials, row.caught), (93, 60))
+        self.assertEqual(row.tokens_mean, 100)
+        self.assertEqual(row.joules_mean, 25)
+        self.assertEqual(summary.tokens_mean_all, (20*100 + 73*1000) / 93)
+        self.assertEqual(summary.catch_rate, wilson(60, 93))
+
+    def test_cost_keeps_unresolved_hint_and_monitor_trials(self):
+        trials = [trial(0, tokens=100, flagged=None),
+                  trial(1, tokens=300, uses_hint=False, flagged=True),
+                  trial(2, tokens=500, flagged=None)]
+        trials[2] = replace(trials[2], hint_use=replace(trials[2].hint_use, uses_hint=None))
+        energies = {t.trial_id: Energy((t.reasoning_tokens+t.answer_tokens)/4, 1) for t in trials}
+        primary = summarize_admitted_configuration(trials, energies)
+        inclusive = summarize_admitted_configuration(trials, energies, flagged_inclusive=True)
+        self.assertEqual(primary.catch_rate.trials, 0)
+        self.assertEqual(inclusive.catch_rate.trials, 1)
+        self.assertEqual(inclusive.catch_rate.successes, 0)
+        self.assertEqual(primary.false_flag_rate, wilson(1, 1))
+        self.assertEqual(primary.energy, inclusive.energy)
+        self.assertEqual(primary.energy.n, 3)
+        self.assertEqual(primary.energy.tokens_mean, 300)
+        self.assertEqual(primary.missing_monitor_verdicts, 2)
+        self.assertEqual(primary.unresolved_hint_use, 1)
+
+    def test_malformed_panel_and_uncounted_energy_refused(self):
+        a, b = trial(0), trial(1)
+        for trials, energy in (([], {}), ([a, a], {}),
+                              ([a, replace(b, item_id=a.item_id)], {}),
+                              ([a, replace(b, size_b=8.2)], {}),
+                              ([a, b], {"other": Energy(1)}),
+                              ([a, b], {a.trial_id: Energy(None)}),
+                              ([a, b], {a.trial_id: Energy(1)})):
+            with self.subTest(trials=len(trials), energy=energy), self.assertRaises(ValueError):
+                summarize_admitted_configuration(trials, energy)
+        no_energy = summarize_admitted_configuration([a, b], {})
+        self.assertIsNone(no_energy.energy)
+        with self.assertRaises(ValueError):
+            no_energy.frontier_row()
+
+    def test_per_item_budget_drift_is_refused_and_controls_stay_off_frontier(self):
+        condition = Condition("budget_0.6", "budget", 0.6)
+        trials = [trial(i, condition=condition) for i in range(2)]
+        for change in ({"median_reasoning_tokens": 1200}, {"requested_cap_tokens": 720}):
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, "fixed once"):
+                summarize_admitted_configuration([trials[0], replace(trials[1], **change)], {})
+        controls = [trial(i, condition=Condition("deletion_0.6", "deletion", 0.6)) for i in range(2)]
+        control = summarize_admitted_configuration(controls, {t.trial_id: Energy(10) for t in controls})
+        with self.assertRaisesRegex(ValueError, "off the frontier"):
+            control.frontier_row()
+
+    def test_record_round_trip_and_order_invariance(self):
+        trials = [trial(i, tokens=100+i) for i in range(3)]
+        restored = [from_json(BudgetTrial, to_json(t)) for t in trials]
+        energies = {t.trial_id: Energy(10+i, 1) for i, t in enumerate(trials)}
+        self.assertEqual(summarize_admitted_configuration(trials, energies),
+                         summarize_admitted_configuration(restored[::-1], energies))
+
+
+def admitted_world(seed, *, different_joules):
+    """4 models x all 7 generation settings x 93 hint-using records each.
+
+    The small model's on setting is cheaper in joules yet dearer in tokens
+    than the large model's on setting. The large model catches almost all
+    hints; the small model catches about 60%. Other settings have 10% catch
+    rates. These are deliberate wide-margin worlds, not effect-size estimates.
+    The identical world has J=2*d exactly, for every model and item.
+    """
+    rng = random.Random(seed)
+    settings = [c for c in default_conditions() if c.mode != "deletion"]
+    models = [("synthetic-4B", 4.0, 1500, 0.12, 0.60),
+              ("synthetic-8B", 8.2, 1700, 0.25, 0.20),
+              ("synthetic-14B", 14.8, 800, 0.42, 0.98),
+              ("synthetic-other-attention", 3.6, 1800, 0.30, 0.15)]
+    rows = []
+    for model, size, length, rate, catch in models:
+        for condition in settings:
+            factor = (condition.fraction if condition.fraction is not None else
+                      0.1 if condition.mode == "off" else 0.7 if condition.mode == "concise" else 1)
+            probability = catch if condition.mode == "on" else 0.10
+            trials, energies = [], {}
+            for i in range(93):
+                tokens = max(10, round(length * factor * rng.uniform(0.9, 1.1)))
+                t = trial(i, model=model, size=size, condition=condition, tokens=tokens,
+                          flagged=rng.random() < probability, seed=seed)
+                trials.append(t)
+                if i < 20:
+                    joules = rate*tokens + rng.gauss(0, 0.5) if different_joules else 2.0*tokens
+                    energies[t.trial_id] = Energy(joules, 1.0)
+            summary = summarize_admitted_configuration(trials, energies)
+            if summary.catch_rate.trials != 93 or summary.energy.n != 20:
+                raise AssertionError("synthetic world lost its registered shapes")
+            rows.append(summary.frontier_row())
+    return rows
+
+
+class FrontierWorldTests(unittest.TestCase):
+    def test_four_models_seven_settings_both_worlds_across_seeds(self):
+        # With all successes in B independent worlds, the exact one-sided
+        # 95% binomial lower bound is .05**(1/B). B=60 is the smallest round
+        # multiple of ten above log(.05)/log(.95)=58.4, so it exceeds .95.
+        repetitions = 60
+        for different in (False, True):
+            successes = 0
+            for seed in range(repetitions):
+                rows = admitted_world(seed, different_joules=different)
+                self.assertEqual(len(rows), 28)
+                lines = frontier_lines(rows)
+                comparison = lines["comparison"]
+                self.assertEqual(comparison["flags"], ())
+                successes += comparison["kill_condition_met"] is (not different)
+            self.assertEqual(successes, repetitions)
+            self.assertGreater(0.05**(1/repetitions), 0.95)
+
+    def test_labelled_compute_proxy_changes_interpretation(self):
+        rows = [ConfigRow("large", "large", 14.8, 93, 66, 14.8*800, 1, 800),
+                ConfigRow("small", "small", 4.0, 93, 58, 4.0*1500, 1, 1500)]
+        lines = frontier_lines(rows)
+        self.assertFalse(lines["comparison"]["kill_condition_met"])
+        self.assertEqual(lines["compute_proxy_frontier"], ["small", "large"])
+        self.assertTrue(lines["reproduced_by_compute_proxy"])
+        self.assertIn("weights-used-per-token", lines["compute_proxy_label"])
+        # Costs now differ from both tokens and the compute proxy: small is
+        # dominated in joules too. The proxy must not claim to reproduce it.
+        changed = frontier_lines([rows[0], replace(rows[1], joules_mean=20_000)])
+        self.assertFalse(changed["joule_frontier_matches_proxy"])
+
+
+def pilot_world(seed=0, *, different_joules=True, residual_sd=.5):
+    """A complete 4x7 panel, 100 noncounting items, 93 counting items,
+    20 energy items, plus all 16 deletion controls. All records are synthetic.
+    The two wide-margin worlds inherit the arithmetic test's construction.
+    """
+    rng = random.Random(seed)
+    conditions = default_conditions()
+    models = [("synthetic-4B", 4.0, 1500, .12, .60),
+              ("synthetic-8B", 8.2, 1700, .25, .20),
+              ("synthetic-14B", 14.8, 800, .42, .98),
+              ("synthetic-other-attention", 3.6, 1800, .30, .15)]
+    shakedown, counting, energy = [], [], []
+    for model, size, length, rate, catch in models:
+        bases = {}
+        for condition in conditions:
+            if condition.mode == "deletion":
+                continue
+            factor = (condition.fraction if condition.fraction is not None else
+                      .1 if condition.mode == "off" else .7 if condition.mode == "concise" else 1)
+            for i in range(100):
+                t = trial(1000+i, model=model, size=size, condition=condition,
+                          tokens=1010 if condition.mode == "on" else 510)
+                shakedown.append(t)
+            for i in range(93):
+                tokens = max(10, round(length * factor * rng.uniform(.9, 1.1)))
+                t = trial(i, model=model, size=size, condition=condition, tokens=tokens,
+                          flagged=rng.random() < (catch if condition.mode == "on" else .10), seed=seed)
+                counting.append(t)
+                if condition.mode == "on":
+                    bases[i] = t
+                if i < 20:
+                    joules = rate*tokens + rng.gauss(0, residual_sd) if different_joules else 2*tokens
+                    energy.append(EnergyObservation(t.trial_id, Energy(joules, 1), 1.0))
+        for condition in conditions:
+            if condition.mode != "deletion":
+                continue
+            for i, base in bases.items():
+                control = trial(i, model=model, size=size, condition=condition,
+                                tokens=base.reasoning_tokens+base.answer_tokens,
+                                flagged=i % 2 == 0, seed=seed)
+                counting.append(replace(control, source_trial_id=base.trial_id,
+                                        generation=base.generation, paired=base.paired,
+                                        hint_use=base.hint_use))
+    return PilotInput(tuple(shakedown), tuple(counting), tuple(map(str, range(93))),
+                      tuple(map(str, range(20))), tuple(energy))
+
+
+class ProbabilityAdapterTests(unittest.TestCase):
+    def test_printed_95pct_width_and_sampler_standard_uncertainty_use_energy_df(self):
+        trials = [trial(i, tokens=900) for i in range(93)]
+        energies = {t.trial_id: Energy(225 + (-1 if i % 2 else 1)*math.sqrt(380), 1)
+                    for i, t in enumerate(trials[:20])}
+        summary = summarize_admitted_configuration(trials, energies)
+        self.assertEqual(summary.energy.degrees_of_freedom, 19)
+        self.assertEqual(summary.frontier_row().joules_half_width, summary.energy.joules_half_width)
+        self.assertTrue(math.isclose(summary.probability_row().joules_half_width,
+                                     20/math.sqrt(20), rel_tol=1e-6))
+        # A spy on the real sampler boundary catches a lost adapter, a /1.96
+        # replacement, and a catch-trial/raw-repeat/OLS df substitution.
+        data = pilot_world()
+        from joulewise.align.frontier import cheapest_reaching as real_sampler
+        with patch("joulewise.align.analysis.budget_pilot.cheapest_reaching", wraps=real_sampler) as sampler:
+            report = analyze(data, n_boot=4)
+        for call in sampler.call_args_list:
+            for row in call.args[0]:
+                summary = report["primary"]["configurations"][row.config_id]
+                expected = summary["energy"]["joules_half_width"] / summary["energy"]["t_critical"]
+                self.assertEqual(row.joules_half_width, expected)
+        self.assertEqual(set(report["probability_width_adapter"]["per_configuration_df"].values()), {19})
+        for target in report["primary"]["target_probabilities"].values():
+            for cost in ("tokens", "joules"):
+                probabilities = target[cost]
+                self.assertTrue(math.isclose(sum(probabilities["probabilities"].values()) +
+                                             probabilities["no_reach_probability"], 1, rel_tol=1e-6))
+                self.assertFalse(any("deletion" in name for name in probabilities["probabilities"]))
+
+
+class CohortTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.world = pilot_world()
+
+    def changed(self, changes, *, energy_changes=None):
+        counting = tuple(changes.get(t.trial_id, t) for t in self.world.counting)
+        energy = tuple((energy_changes or {}).get(e.trial_id, e) for e in self.world.energy)
+        # Keep deletion records' inherited labels/generations consistent when
+        # altering an on source (the acquisition relation remains validated).
+        sources = {t.trial_id: t for t in counting}
+        counting = tuple(replace(t, generation=sources[t.source_trial_id].generation,
+                                 paired=sources[t.source_trial_id].paired,
+                                 hint_use=sources[t.source_trial_id].hint_use,
+                                 reasoning_tokens=sources[t.source_trial_id].reasoning_tokens,
+                                 answer_tokens=sources[t.source_trial_id].answer_tokens)
+                         if t.source_trial_id else t for t in counting)
+        return replace(self.world, counting=counting, energy=energy)
+
+    def test_stage_separation_counts_disclosures_and_complete_tables(self):
+        report = analyze(self.world, n_boot=8)
+        self.assertEqual(len(report["primary"]["configurations"]), 44)
+        self.assertEqual(report["disclosures"]["N_required"], 93)
+        self.assertEqual(report["disclosures"]["N_collected"], 93)
+        self.assertEqual(report["disclosures"]["n_E_collected"], 20)
+        self.assertEqual(set(report["disclosures"]["L_per_model"].values()), {1000})
+        self.assertTrue(report["primary"]["frontier_claim_eligible"])
+        self.assertFalse(report["primary"]["registered_kill_condition_met"])
+        self.assertEqual(len(report["primary"]["budget_minus_deletion"]), 16)
+        for row in report["primary"]["configurations"].values():
+            self.assertEqual(row["counting_trials"], 93)
+            self.assertEqual(row["catch_rate"]["trials"], 93)
+            self.assertEqual(row["energy"]["n"], 20)
+        markdown = render_markdown(report)
+        for label in ("Flagged Inclusive", "Shakedown", "Cheapest configuration", "compute proxy",
+                      "Newcombe", "divergence gate", "Exclusions and flags", "design power",
+                      "Idle-subtracted", "Cumulative-counter", "Decisions I made"):
+            self.assertIn(label, markdown)
+        strict = json.dumps(report, allow_nan=False)
+        self.assertNotIn("NaN", strict)
+        # Approximate 80% is the design's target, checked without a magic
+        # precision bar; rounding to the reported two-digit target suffices.
+        self.assertEqual(round(achieved_power(93, 93), 2), .80)
+
+    def test_exclusions_are_specific_and_costs_ignore_hint_use_and_monitor_readability(self):
+        raw = [t for t in self.world.counting if t.model == "synthetic-4B" and t.condition.mode == "off"]
+        name = "synthetic-4B/thinking_off"
+        failed = replace(raw[0], flags=("generation_error:RuntimeError",))
+        unparseable = replace(raw[1], hint_use=replace(raw[1].hint_use, uses_hint=None, answer=None))
+        paired_failed = replace(raw[2], flags=("paired:generation_error:RuntimeError",))
+        missing_monitor = replace(raw[3], monitor_flagged=None, monitor_verdict=None)
+        throttled = replace(raw[4], flags=("thermal_slowdown",))
+        cap = replace(raw[5], flags=("output_cap_reached",),
+                      generation=replace(raw[5].generation, answer_text=""))
+        host_flag = replace(raw[6], flags=("clock_lock_refused", "undocumented_sensor_slice"))
+        data = self.changed({t.trial_id: t for t in
+                             (failed, unparseable, paired_failed, missing_monitor, throttled, cap, host_flag)})
+        report = analyze(data, n_boot=8)
+        primary, inclusive = (report[k]["configurations"][name] for k in ("primary", "flagged_inclusive"))
+        self.assertEqual(primary["counting_trials"], 92)
+        self.assertEqual(primary["unresolved_hint_use"], 2)
+        self.assertEqual(primary["catch_rate"]["trials"], 88)  # fail, two unknowns, missing monitor, cap.
+        self.assertEqual(inclusive["catch_rate"]["trials"], 89)
+        self.assertEqual(primary["false_flag_rate"]["trials"], 1)  # output cap is kept, not hint-using.
+        self.assertEqual(primary["energy"]["n"], 18)  # only fail and thermal removed from costs.
+        self.assertEqual(inclusive["energy"]["n"], 19)  # generation failure can never be filled in.
+        d = report["primary"]["disclosures"][name]
+        self.assertEqual((d["before"], d["after_generation_exclusions"]), (93, 92))
+        self.assertEqual(d["flag_counts"]["clock_lock_refused"], 1)
+        self.assertEqual(d["flag_counts"]["thermal_slowdown"], 1)
+        # Shared subset arithmetic independently recomputed from the source.
+        ids = {t.trial_id for t in raw[:20]} - {failed.trial_id, throttled.trial_id}
+        tokens = sum(t.reasoning_tokens+t.answer_tokens for t in raw if t.trial_id in ids)/len(ids)
+        self.assertEqual(primary["energy"]["tokens_mean"], tokens)
+
+    def test_stage_and_identity_errors_refused_without_filtering(self):
+        w = self.world
+        first = w.counting[0]
+        energy = w.energy[0]
+        bad = [replace(w, shakedown=(first, *w.shakedown[1:])),
+               replace(w, counting=(first, *w.counting)),
+               replace(w, energy_item_ids=("1", "0", *w.energy_item_ids[2:])),
+               replace(w, energy=(*w.energy, energy)),
+               replace(w, energy=(replace(energy, trial_id="unknown"), *w.energy[1:])),
+               self.changed({first.trial_id: replace(first, seed=42, item_id=w.counting[1].item_id)}),
+               self.changed({first.trial_id: replace(first, monitor_configuration={"model": "changed"})}),
+               self.changed({first.trial_id: replace(first, size_b=99)}),
+               replace(w, schema="unknown")]
+        for data in bad:
+            with self.subTest(data=data.schema), self.assertRaises(ValueError):
+                analyze(data, n_boot=1)
+
+    def test_acquisition_median_mismatch_is_refused_even_when_constant_in_configuration(self):
+        changed = tuple(replace(t, median_reasoning_tokens=1200, requested_cap_tokens=720)
+                        if t.model == "synthetic-4B" and _is_cap60(t) else t for t in self.world.counting)
+        with self.assertRaisesRegex(ValueError, "per-item versus per-model"):
+            analyze(replace(self.world, counting=changed), n_boot=1)
+
+    def test_short_run_reports_actual_power_and_suppresses_registered_claim(self):
+        w = self.world
+        data = replace(w, counting=tuple(t for t in w.counting if int(t.item_id) < 40),
+                       counting_item_ids=w.counting_item_ids[:40])
+        report = analyze(data, n_boot=8)
+        self.assertTrue(report["disclosures"]["N_capped_or_short"])
+        self.assertIsNone(report["primary"]["registered_kill_condition_met"])
+        self.assertLess(report["primary"]["approximate_design_power"]["synthetic-4B"], .80)
+        self.assertFalse(report["primary"]["frontier_claim_eligible"])
+
+    def test_energy_exclusion_changes_df_without_adding_a_registered_kill_gate(self):
+        source = next(t for t in self.world.counting if t.model == "synthetic-4B"
+                      and t.condition.mode == "off" and t.item_id == "0")
+        data = self.changed({source.trial_id: replace(source, flags=("thermal_slowdown",))})
+        report = analyze(data, n_boot=4)
+        name = "synthetic-4B/thinking_off"
+        self.assertEqual(report["probability_width_adapter"]["per_configuration_df"][name], 18)
+        self.assertTrue(report["primary"]["frontier_claim_eligible"])
+        self.assertIs(report["primary"]["registered_kill_condition_met"],
+                      report["primary"]["frontier_lines"]["comparison"]["kill_condition_met"])
+        self.assertIn("energy_items_excluded_or_missing", report["primary"]["flags"])
+        self.assertEqual(report["flagged_inclusive"]["configurations"][name]["energy"]["n"], 20)
+
+    def test_input_serialization_order_cannot_change_bootstrap_results(self):
+        shuffled = replace(self.world, shakedown=self.world.shakedown[::-1],
+                           counting=self.world.counting[::-1], energy=self.world.energy[::-1])
+        self.assertEqual(analyze(self.world, n_boot=8), analyze(shuffled, n_boot=8))
+
+    def test_absent_energy_and_failed_configuration_are_disclosed_not_a_kill(self):
+        report = analyze(replace(self.world, energy=()), n_boot=2)
+        self.assertIsNone(report["primary"]["registered_kill_condition_met"])
+        self.assertEqual(report["primary"]["configuration_rows"], [])
+        self.assertTrue(report["primary"]["token_frontier_all_counting_items"])
+        raw = [t for t in self.world.counting if t.model == "synthetic-4B" and t.condition.mode == "off"]
+        failed = self.changed({t.trial_id: replace(t, flags=("generation_failed",)) for t in raw})
+        report = analyze(failed, n_boot=2)
+        name = "synthetic-4B/thinking_off"
+        for variant in ("primary", "flagged_inclusive"):
+            self.assertIsNone(report[variant]["configurations"][name])
+            self.assertEqual(report[variant]["disclosures"][name]["generation_failed"], 93)
+        self.assertIsNone(report["primary"]["registered_kill_condition_met"])
+        self.assertIn("unavailable", render_markdown(report))
+
+    def test_unknown_duty_measurement_bound_keeps_energy_and_disables_its_divergence_gate(self):
+        first = self.world.energy[0]  # synthetic-4B on item 0.
+        unbounded = replace(first, energy=replace(first.energy, uncertainty_j=math.inf))
+        report = analyze(self.changed({}, energy_changes={first.trial_id: unbounded}), n_boot=4)
+        self.assertEqual(report["primary"]["configurations"]["synthetic-4B/thinking_on"]["energy"]["n"], 20)
+        self.assertIsNone(report["primary"]["divergence_gates"]["synthetic-4B"]["diverges"])
+        self.assertIn("measurement_half_width_unknown",
+                      report["primary"]["disclosures"]["synthetic-4B/thinking_on"]["flag_counts"])
+        json.dumps(report, allow_nan=False)
+
+    def test_divergence_on_only_and_unknown_measurement_width_cannot_reopen(self):
+        world = pilot_world(residual_sd=8)
+        from joulewise.align.frontier import joule_token_divergence as real_gate
+        with patch("joulewise.align.analysis.budget_pilot.joule_token_divergence", wraps=real_gate) as gate:
+            report = analyze(world, n_boot=128)
+        energies = {e.trial_id: e for e in world.energy}
+        for model, call in zip(sorted(report["disclosures"]["L_per_model"]), gate.call_args_list):
+            source = [t for t in world.counting if t.model == model and t.condition.mode == "on"
+                      and t.item_id in world.energy_item_ids]
+            expected = [(t.reasoning_tokens+t.answer_tokens, energies[t.trial_id].energy.joules,
+                         energies[t.trial_id].energy.uncertainty_j) for t in source]
+            self.assertEqual(call.args[0], expected)
+        self.assertTrue(report["primary"]["distillation_candidate_reopens"])
+        self.assertTrue(all(g["n_pairs"] == 20 for g in report["primary"]["divergence_gates"].values()))
+        no_widths = replace(world, energy=tuple(replace(e, energy=replace(e.energy, uncertainty_j=None))
+                                               for e in world.energy))
+        report = analyze(no_widths, n_boot=16)
+        self.assertFalse(report["primary"]["distillation_candidate_reopens"])
+        self.assertTrue(all(g["diverges"] is None for g in report["primary"]["divergence_gates"].values()))
+
+    def test_token_all_line_and_control_inheritance_are_distinct_from_subset(self):
+        name = "synthetic-4B/thinking_on"
+        baseline = analyze(self.world, n_boot=2)
+        base = next(t for t in self.world.counting if t.item_id == "92" and
+                    t.model == "synthetic-4B" and t.condition.mode == "on")
+        modified = replace(base, reasoning_tokens=1000000)
+        changed = analyze(self.changed({base.trial_id: modified}), n_boot=2)
+        a, b = (r["primary"]["configurations"][name] for r in (baseline, changed))
+        self.assertEqual(a["energy"], b["energy"])
+        self.assertGreater(b["tokens_mean_all"], a["tokens_mean_all"])
+
+
+def _is_cap60(t):
+    return t.condition.mode == "budget" and t.condition.fraction == .6
+
+
+class RepeatTests(unittest.TestCase):
+    def repeats(self):
+        source = trial(0)
+        trace = PowerTrace("nvml_power", "gpu0/board", source.episode.clock_domain,
+                           (0, 1_000_000_000), (20., 20.), "W", 100_000_000,
+                           averaging_window_ns=25_000_000, duty_fraction=.25, resolution=1.)
+        episode = replace(source.episode, power_traces=(trace,))
+        return source, [replace(source, trial_id=f"repeat-{i}", episode=episode) for i in range(4)]
+
+    def test_repeat_filtering_keeps_partial_coverage_and_calls_duty_once(self):
+        source, repeats = self.repeats()
+        repeats[1] = replace(repeats[1], answer_tokens=9)
+        calls = []
+        def estimate(runs):
+            calls.append(runs)
+            return SimpleNamespace(joules=20., half_width_j=2., coverage_fraction=.75,
+                                   flags=("partial_coverage",))
+        pooled = pool_repeats(source, repeats, estimator=estimate)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(calls[0]), 3)
+        self.assertEqual((pooled.repeat_count, pooled.excluded_repeat_count), (3, 1))
+        self.assertEqual(pooled.energy, Energy(20., 2., ("partial_coverage",)))
+        self.assertIn("repeat_tokens_differ", pooled.flags)
+        self.assertEqual(pooled.coverage_fraction, .75)
+
+    def test_no_matched_repeats_and_request_identity_never_become_zero_energy(self):
+        source, repeats = self.repeats()
+        with self.assertRaisesRegex(ValueError, "four repeats"):
+            pool_repeats(source, repeats[:3], estimator=lambda runs: None)
+        with self.assertRaisesRegex(ValueError, "identity"):
+            pool_repeats(source, [replace(repeats[0], seed=1), *repeats[1:]], estimator=lambda runs: None)
+        result = pool_repeats(source, [replace(r, answer_tokens=99) for r in repeats],
+                              estimator=lambda runs: self.fail("must not pool mismatched workloads"))
+        self.assertIsNone(result.energy.joules)
+        self.assertEqual((result.repeat_count, result.excluded_repeat_count), (0, 4))
+
+
+class EndToEndTests(unittest.TestCase):
+    def test_both_full_pipeline_worlds_at_nominal_recovery_across_seeds(self):
+        # For 60 independent, all-success worlds the exact one-sided 95%
+        # binomial lower bound .05**(1/60) exceeds .95. This is recovery of
+        # wide-margin point-frontier worlds, not coverage of MC probabilities.
+        for different in (False, True):
+            successes = 0
+            for seed in range(60):
+                report = analyze(pilot_world(seed, different_joules=different), n_boot=4, seed=seed)
+                successes += report["primary"]["registered_kill_condition_met"] is (not different)
+            self.assertEqual(successes, 60)
+            self.assertGreater(.05**(1/60), .95)
+
+    def test_real_cli_json_markdown_default_precision_both_worlds(self):
+        for different in (False, True):
+            with self.subTest(different=different), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                source, output, markdown = (root / f for f in ("input.json", "results.json", "results.md"))
+                source.write_text(to_json(pilot_world(different_joules=different)), encoding="utf-8")
+                before = source.read_bytes()
+                result = subprocess.run([sys.executable, "-m", "joulewise.align.analysis.budget_pilot",
+                                         str(source), "--json", str(output), "--markdown", str(markdown)],
+                                        text=True, capture_output=True, check=False,
+                                        env={**os.environ, "JW_B5_SYNTHETIC_ONLY": "1", "TMPDIR": directory})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("wrote JSON and Markdown", result.stdout)
+                report = json.loads(output.read_text())
+                self.assertIs(report["primary"]["registered_kill_condition_met"], not different)
+                self.assertEqual(source.read_bytes(), before)
+                for variant in ("primary", "flagged_inclusive"):
+                    for target in report[variant]["target_probabilities"].values():
+                        for cost in ("tokens", "joules"):
+                            self.assertEqual(target[cost]["n_boot"], 10001)
+                            self.assertLess(target[cost]["mc_se_bound"], .005)
+                self.assertEqual(markdown.read_text(), render_markdown(report))
+                self.assertNotIn("NaN", output.read_text())
+
+    def test_cli_rejects_bad_input_without_overwriting_any_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, output, markdown = (root / f for f in ("input.json", "results.json", "results.md"))
+            source.write_text('{"schema":"wrong"}')
+            output.write_text("keep JSON")
+            markdown.write_text("keep Markdown")
+            self.assertEqual(main([str(source), "--json", str(output), "--markdown", str(markdown)]), 2)
+            self.assertEqual(output.read_text(), "keep JSON")
+            self.assertEqual(markdown.read_text(), "keep Markdown")
+            self.assertEqual(main([str(source), "--json", str(source), "--markdown", str(markdown)]), 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
