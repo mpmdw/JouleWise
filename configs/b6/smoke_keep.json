@@ -67,6 +67,10 @@
     "bytes-s6-p2-reference-end": 1,
     "bytes-s6-p2-reference-start": 1
   },
+  "bytes_mac_check": {
+    "bytes-mac-check-reference-end": 1,
+    "bytes-mac-check-reference-start": 1
+  },
   "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5": {
     "gamma-reference-end": 1,
     "gamma-reference-start": 1,
