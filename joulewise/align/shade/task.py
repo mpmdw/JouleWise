@@ -165,6 +165,9 @@ class ShadeTask:
     def reset(self, seed: int) -> None:
         self.seed = seed
         self.flags.clear()
+        # The shared protocol exposes one pair; upstream also strips a closed
+        # system_instructions pair. Record that extra rule for runner adapters.
+        self.flags.append("scratchpad_rule:upstream_closed_pairs:thinking,system_instructions")
         self.evaluation_outputs.clear()
         self._definition = self._runtime = self._evaluation = None
         self._schema = ()
