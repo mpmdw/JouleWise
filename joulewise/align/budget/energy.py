@@ -132,7 +132,9 @@ def episode_energy(episode: Episode, *,
                               for (a, x), (b, y) in zip(points, points[1:]))
             maximum = power_max_w
             if maximum is None:
-                maximum = _notes(trace).get("power_bound_w", episode.hardware.get("power_max_w"))
+                maximum = _notes(trace).get("power_bound_w")
+                if maximum is None:
+                    maximum = episode.hardware.get("power_max_w")
             if maximum is not None and (not math.isfinite(maximum) or maximum < max(trace.values)):
                 flags.append("energy_power_max_invalid")
                 maximum = None

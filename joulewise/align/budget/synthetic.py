@@ -177,7 +177,8 @@ FIVE_CONFIGURATIONS = (
 
 def run_synthetic(*, count: int = 200, seeds: Sequence[int] = (0,),
                   with_power: bool = True, sizes_b: Sequence[float] = (4.0,),
-                  checkpoint=None) -> MatrixResult:
+                  checkpoint=None,
+                  conditions: Sequence[Condition] = FIVE_CONFIGURATIONS) -> MatrixResult:
     """Run the real source→calibration→paired calls→monitor→Episode chain."""
     items = synthetic_items(count)
     clock = SyntheticClock()
@@ -190,7 +191,7 @@ def run_synthetic(*, count: int = 200, seeds: Sequence[int] = (0,),
         specs.append(ModelSpec(f"scripted-{size:g}B", size, "mock", endpoint.identity,
                                codec, endpoint.configured, "dense", "synthetic:monotonic",
                                controls_verified=True))
-    return run_matrix(items, specs, FIVE_CONFIGURATIONS, seeds=seeds,
+    return run_matrix(items, specs, conditions, seeds=seeds,
                       settings=Settings(1536, 32, measurement_id="synthetic-v1"),
                       monitor=HintMonitor(ScriptedMonitor(), model="scripted-fixed-20B", revision="script-v1"),
                       checkpoint=checkpoint,

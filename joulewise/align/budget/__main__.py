@@ -12,9 +12,9 @@ from joulewise.align.budget.conditions import Condition, LocalEndpoint, default_
 from joulewise.align.budget.items import HubMMLUSource, HubPin, ItemBatch, stratified_roster
 from joulewise.align.budget.run import ModelSpec, Settings, run_matrix, summarize, summary_table
 from joulewise.align.budget.score import DEFAULT_MONITOR_MODEL, HintMonitor
-from joulewise.align.budget.storage import write_result
+from joulewise.align.budget.storage import write_episode_views, write_result
 from joulewise.align.budget.synthetic import run_synthetic
-from joulewise.align.records import ClockMapping, to_json, write_episodes
+from joulewise.align.records import ClockMapping, to_json
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -89,10 +89,10 @@ def main(argv: list[str] | None = None) -> int:
         write_result(args.output / "result.json", result)
         (args.output / "summary.json").write_text(to_json(rows) + "\n", encoding="utf-8")
         (args.output / "summary.md").write_text(summary_table(rows), encoding="utf-8")
-        write_episodes(args.output / "episodes.jsonl", (t.episode for t in result.trials))
-        write_episodes(args.output / "paired_episodes.jsonl", (t.paired.episode for t in result.trials
+        write_episode_views(args.output / "episodes.jsonl", (t.episode for t in result.trials))
+        write_episode_views(args.output / "paired_episodes.jsonl", (t.paired.episode for t in result.trials
                                                              if t.source_trial_id is None))
-        write_episodes(args.output / "calibration_episodes.jsonl",
+        write_episode_views(args.output / "calibration_episodes.jsonl",
                        (e for c in result.calibrations for e in c.episodes))
         print(summary_table(rows), end="")
         print(to_json({"run_sha256": result.run_sha256, "flags": result.flags}))

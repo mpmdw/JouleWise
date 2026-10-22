@@ -110,3 +110,29 @@ def read_result(path: Path) -> Any:
 def read_trial_episode(path: Path, trial_id: str) -> Episode:
     """Read an ordinary shared Episode from a compact result export."""
     return next(t.episode for t in read_result(path).trials if t.trial_id == trial_id)
+
+
+def write_episode_views(path: Path, episodes: Any, *,
+                        trace_file: str = "result.traces.jsonl") -> None:
+    """Stream Episode views referencing the result's shared trace sidecar."""
+    path = Path(path)
+    store = TraceStore(path.with_name(trace_file))
+    with path.open("w", encoding="utf-8") as handle:
+        for episode in episodes:
+            store.dump({"episode": episode, "trace_file": trace_file}, handle)
+            handle.write("\n")
+
+
+def read_episode_views(path: Path) -> Any:
+    """Yield hydrated shared Episodes from compact JSONL, one record at a time."""
+    path = Path(path)
+    stores: dict[str, TraceStore] = {}
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            entry = json.loads(line)
+            name = entry["trace_file"]
+            if Path(name).name != name:
+                raise ValueError("trace_file must be a sibling filename")
+            if name not in stores:
+                stores[name] = TraceStore(path.with_name(name))
+            yield from_json(Episode, json.dumps(stores[name].expand(entry["episode"])))
