@@ -214,7 +214,6 @@ def run_world(
     outcomes: list[dict[str, Any]] = []
     total_bytes = total_samples = 0
     decode_durations_s: list[float] = []
-    nominal_durations_s: list[float] = []
     transfer_only_extra: list[float] = []
     decode_count = config.turns*config.decode_tokens_per_turn
     for group in range(config.groups):
@@ -277,7 +276,6 @@ def run_world(
             decode_durations_s.append(sum(w.end_ns-w.start_ns for w, phase in
                                           zip(windows, episode.router_log.phase)
                                           if phase == 'decode')/NS_PER_SECOND)
-            nominal_durations_s.append(timing.reference_decode_duration_ns/NS_PER_SECOND)
             estimated_extra.append(features.energy_per_decode_token_j)
             total_bytes += simulated.traffic.total_bytes
             total_samples += len(trace.t_ns)
@@ -410,7 +408,7 @@ def run_world(
         "true_extra_j_per_decode_token_range": [min(actual_extra), max(actual_extra)],
         "transfer_only_j_per_decode_token_range": [min(transfer_only_extra), max(transfer_only_extra)],
         "decode_duration_s_range": [min(decode_durations_s), max(decode_durations_s)],
-        "nominal_decode_duration_s_range": [min(nominal_durations_s), max(nominal_durations_s)],
+        "nominal_decode_duration_s_range": None,  # Deprecated unavailable alias; no truth reference.
         "apparent_extra_j_per_decode_token_range": [min(estimated_extra), max(estimated_extra)],
         "phase_sweep_energy_error_std_j": error_std,
         "estimated_phase_bias_std_j": phase_bias,

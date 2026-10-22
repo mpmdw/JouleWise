@@ -450,9 +450,9 @@ class TestMoeStageBEndToEnd(StageBAssertions):
         cls.design = dict(stage_a_effect_sd=1.0, n_per_condition=50,
                           alpha=0.05, power=0.8, comparisons=3)
         ina, nvml = default_sensors()
-        # Source-backed positive configuration adds blocking upload running
-        # energy. The no-stall world below isolates jitter versus synchronization;
-        # its recovered r can clear while the independent q*T contrast bound fails.
+        # Blocking upload timing is a candidate confound. The registered
+        # increment must separate sensor information from that same timing.
+        # Shunt-slice and dithered-rounding defaults replace the reviewed model.
         cls.ina = run_world(replace(cls.world, decode_miss_stalls=True),
                             ina, all_resident=False, **cls.design)
         cls.gapped_ina = run_world(cls.world, ina, all_resident=False, **cls.design)
@@ -483,6 +483,9 @@ class TestMoeStageBEndToEnd(StageBAssertions):
                 "contrast_j": result["forecast"]["contrast_energy_j"],
                 "contrast_bound_j": result["forecast"]["contrast_half_width_j"],
                 "verdict": result["stage_b_verdict"],
+                "timing_r": result["recovery"]["decode_seconds_per_token"]["within_condition_held_out_correlation"],
+                "increment_r": result["power_increment_over_timing"]["held_out_correlation"],
+                "increment_ci": result["power_increment_over_timing"]["held_out_interval_95"],
                 "required_r": result["requirement"]["minimum_absolute_correlation"],
                 "phase_sweep_error_std_j": result["phase_sweep_energy_error_std_j"],
                 "conditional_detection": result["stage_b_detectable_under_assumptions"],
@@ -572,6 +575,8 @@ class TestMoeStageBEndToEnd(StageBAssertions):
                 "contrast_j": case["forecast"]["contrast_energy_j"],
                 "contrast_bound_j": case["forecast"]["contrast_half_width_j"],
                 "verdict": case["stage_b_verdict"],
+                "increment_r": case["power_increment_over_timing"]["held_out_correlation"],
+                "increment_ci": case["power_increment_over_timing"]["held_out_interval_95"],
                 "transfer_only_j_per_token": case["transfer_only_j_per_decode_token_range"],
                 "decode_duration_s": case["decode_duration_s_range"],
                 "nominal_decode_duration_s": case["nominal_decode_duration_s_range"],
@@ -706,7 +711,7 @@ class TestMoeStageBContinuation(StageBAssertions):
         automatic = simulate_episode(episode, config, sensor, baseline_w=8,
                                      prefill_load_w=0, decode_load_w=4, tool_load_w=1)
         self.assertEqual(automatic.episode.end_ns, timing.episode.end_ns)
-        self.assertEqual(automatic.reference_decode_duration_ns, 10_000_000)
+        self.assertIsNone(automatic.reference_decode_duration_ns)
         self.assertEqual(len(automatic.windows), len(windows))
         automatic_features = extract_features(
             automatic.episode, automatic.episode.power_traces[-1], baseline_w=12,

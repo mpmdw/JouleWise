@@ -395,7 +395,7 @@ class StallTiming:
 
     episode: Episode
     windows: tuple[TokenWindow, ...]
-    reference_decode_duration_ns: int
+    reference_decode_duration_ns: int | None  # Deprecated unavailable alias; never an analysis reference.
     flags: tuple[str, ...] = ()
 
 
@@ -412,22 +412,20 @@ def apply_decode_stalls(
     router = episode.router_log
     nominal = tuple(windows)
     if router is None or len(nominal) != len(router.phase):
-        return StallTiming(episode, nominal, 0, ("missing_stall_token_timing",))
+        return StallTiming(episode, nominal, None, ("missing_stall_token_timing",))
     if (any(w.token_index != i or not isinstance(w.start_ns, int)
             or not isinstance(w.end_ns, int) or isinstance(w.start_ns, bool)
             or isinstance(w.end_ns, bool) or w.end_ns <= w.start_ns
             for i, w in enumerate(nominal))
             or any(b.start_ns < a.start_ns for a, b in zip(nominal, nominal[1:]))):
         return StallTiming(episode, nominal, 0, ("invalid_stall_token_timing",))
-    reference_ns = sum(w.end_ns-w.start_ns for w, phase in zip(nominal, router.phase)
-                       if phase == "decode")
     if not config.decode_miss_stalls:
-        return StallTiming(episode, nominal, reference_ns)
+        return StallTiming(episode, nominal, None)
     # Counts and cache misses are independent of timestamps. Production traffic
     # is rerun on the resulting actual windows; this pass only sizes delays.
     counts = model_traffic(router, config)
     if len(counts.tokens) != len(nominal):
-        return StallTiming(episode, nominal, reference_ns, counts.flags)
+        return StallTiming(episode, nominal, None, counts.flags)
     delays = [(w.end_ns, t.transfer_duration_ns)
               for w, t in zip(nominal, counts.tokens) if t.phase == "decode"]
     ends = [end for end, _ in delays]
@@ -451,7 +449,7 @@ def apply_decode_stalls(
              "compute_only_schedule_retimed")
     result = replace(episode, end_ns=shifted(episode.end_ns), turns=turns,
                      flags=tuple(dict.fromkeys((*episode.flags, *flags))))
-    return StallTiming(result, actual, reference_ns, flags)
+    return StallTiming(result, actual, None, flags)
 
 
 def decode_reuse(router: RouterLog) -> float | None:

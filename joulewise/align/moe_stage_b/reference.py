@@ -464,8 +464,9 @@ def reference_detection_forecast(
         raise ValueError("standard deviations, quantum, and bounds must be nonnegative")
     if interval_ns <= 0 or window_ns < 0:
         raise ValueError("interval must be positive and window nonnegative")
-    if decode_tokens <= 0 or duration <= 0:
-        raise ValueError("decode token count and duration must be positive")
+    _integer(n_per_condition, "n_per_condition")
+    if decode_tokens <= 0 or duration <= 0 or n_per_condition <= 0:
+        raise ValueError("decode token count, duration and condition count must be positive")
     signal = abs(slope) * routing
     dt = max(interval_ns, window_ns)/1_000_000_000
     # Integral is dt*sum(readings), so rounding Var=q^2/12*T*dt.

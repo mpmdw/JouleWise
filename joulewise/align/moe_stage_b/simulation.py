@@ -213,8 +213,8 @@ def simulate_episode(
     Explicit token windows bypass only the uniform timing adapter, not traffic
     or sensor simulation. Explicit windows must already include any upload waits;
     the implicit compute-only adapter applies configured stalls once. Outputs
-    expose actual windows. The nominal duration remains a simulator diagnostic
-    compatibility alias and is never consumed by feature extraction.
+    expose actual windows. The deprecated nominal-duration alias is None;
+    feature extraction cannot consume simulator-only compute truth.
     All input episode flags survive.
     """
     flags = list(episode.flags)

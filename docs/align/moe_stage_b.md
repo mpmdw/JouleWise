@@ -72,8 +72,8 @@ extract_features. Prefill stall/overlap is a separate, flagged approximation.
 Never apply this adapter to observed timestamps that already include waits.
 simulate_episode applies it automatically for implicit compute-only timing;
 explicit windows mean actual timing. SimulatedEpisode exposes windows and the
-reference_decode_duration_ns as a simulator compatibility diagnostic;
-no feature consumes it.
+reference_decode_duration_ns as an unavailable (None) compatibility alias;
+the compute-duration reference has been removed.
 
 model_traffic returns serialized transfer pulses containing only J/B energy.
 The trace's extended running load supplies stall power. A decode-upload
