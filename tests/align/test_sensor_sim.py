@@ -120,6 +120,12 @@ class SensorSimTest(unittest.TestCase):
         # A 250 ms wait is wholly inside the turn envelope, still near-idle.
         self.assertAlmostEqual(timeline.power_at(call.start_ns + 100_000_000),
                                5, delta=5 * 1e-6)
+        cycles = sum((s.end_ns - s.start_ns) / s.ripple_period_ns
+                     for s in timeline.intervals if s.label == "decode" and
+                     s.start_ns >= turn.first_token_ns and s.end_ns <= turn.end_ns)
+        # The analytic token clock must retain all 96 tokens; no uncertainty,
+        # so agreement uses the required 1e-6 relative bar.
+        self.assertAlmostEqual(cycles, turn.decode_tokens, delta=turn.decode_tokens * 1e-6)
 
 
 if __name__ == "__main__":

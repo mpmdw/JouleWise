@@ -154,7 +154,7 @@ class Ina3221Sampler:
                 else:
                     try:
                         path.write_text(str(requested), encoding="utf-8")
-                        self._original_intervals[path] = original
+                        self._original_intervals.setdefault(path, original)
                         observed = int(self._read(path))
                         if observed != requested:
                             self._flag(f"update_interval_clamped:{device}:{observed}")
@@ -246,15 +246,20 @@ class Ina3221Sampler:
         if self._thread is not None:
             self._flag("characterization_while_sampling")
             return Characterization((), tuple(self.update_intervals_ms.items()), tuple(self.flags))
-        self._rows.clear()
-        self.discover()
-        if reads <= 0 or self.sample_interval_ns <= 0:
-            self._flag("invalid_characterization_parameters")
-        else:
-            for index in range(reads):
-                if index:
-                    sleep(self.sample_interval_ns / 1_000_000_000)
-                self.sample_once()
+        try:
+            self._rows.clear()
+            self.discover()
+            if reads <= 0 or self.sample_interval_ns <= 0:
+                self._flag("invalid_characterization_parameters")
+            else:
+                for index in range(reads):
+                    if index:
+                        sleep(self.sample_interval_ns / 1_000_000_000)
+                    self.sample_once()
+        except Exception as exc:
+            self._flag(f"characterization_error:{type(exc).__name__}")
+        finally:
+            self._restore_intervals()
         results = []
         for rail in self.rails:
             rows = self._rows.get(rail.channel, [])
@@ -266,5 +271,4 @@ class Ina3221Sampler:
                 _step([row[1] for row in rows]), _step([row[2] for row in rows]),
                 _step([row[3] for row in rows]), flags,
             ))
-        self._restore_intervals()
         return Characterization(tuple(results), tuple(self.update_intervals_ms.items()), tuple(self.flags))

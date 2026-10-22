@@ -95,3 +95,46 @@ Jetson floor nor a tool-wait duration threshold.
 
 Power can count additional work and expose some omitted waits. It cannot
 identify reasoning that fits inside the same forward pass.
+
+## Software rehearsal and commands
+
+From a checkout of this lane, without any optional dependencies:
+
+```sh
+python3 -m unittest discover -s tests/align -t .
+python3 -m unittest discover -s tests
+python3 -m tests.align.test_phase_detect --study
+```
+
+The last command runs the actual simulator, detector and matcher for four-turn
+episodes (512 prefill and 96 decode tokens per turn), with growing cached
+context, three waits and one omitted call in a copied log. It reports complete
+call recall, omitted-call recall, false alarms on episodes with calls and false
+alarms on separate episodes with no tools. Its default grid is 1, 5, 10, 25, 50,
+100, 250 and 500 ms, with 64 seeds per grid point and sensor. These durations
+are an explicit experimental grid, not physics-derived thresholds; the seed
+count is a configurable simulation budget, not a power guarantee.
+
+The synthetic INA scenario polls/averages at 1 ms; that is a scenario parameter
+and must be replaced with the board's characterization result. The other two
+scenarios use 100/25 ms (NVML) and 100/100 ms (powermetrics). All use specified
+0.05 W Gaussian read noise and 0.01 W quantum, with a 5 W idle floor, about
+21 W prefill and 13 W decode. These are controlled synthetic inputs, not claims
+about any of those physical instruments. Each episode has 2,048 fresh tokens,
+384 decoded tokens and three waits; decode is 64 tokens/s, prefill 2,000
+tokens/s, and token ripple amplitude is 0.1 W. Vary these parameters before
+drawing conclusions about a target model or rail.
+
+Binary segmentation uses a known-variance BIC-style penalty: an extra mean
+plus a boundary location gives two parameters, hence 2 sigma-squared log(n)
+in SSE units. When noise is not supplied, first-difference MAD is divided by
+sqrt(2) Phi-inverse(0.75), with the quantization variance as a lower bound.
+The universal Gaussian excursion bound separates segment levels; higher,
+shorter bursts are prefill, intermediate plateaus decode, and interior low
+segments tool-wait candidates. Single-level or conflicting level/duration
+patterns are flagged. Greedy segmentation can miss short balanced troughs;
+that is why the duration study is required.
+
+No sensitivity numbers or shortest passing duration are claimed until these
+commands actually run. As of this checkpoint, the managed executor was
+unavailable, so the software and tests are unverified.

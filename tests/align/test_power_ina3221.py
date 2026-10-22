@@ -118,6 +118,22 @@ class Ina3221Test(unittest.TestCase):
             self.assertEqual((device / "update_interval").read_text(), "1")
             self.assertIn("insufficient_distinct_changes", result.rails[0].flags)
             self.assertIsNone(result.rails[0].quantum_w)
+            # Re-discovery must preserve the first observed hardware setting.
+            sampler.discover()
+            sampler.start()
+            sampler.stop()
+            self.assertEqual((device / "update_interval").read_text(), "1")
+
+    def test_characterization_restores_interval_after_interrupted_probe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            device = self.make_device(Path(tmp), "bus/i2c/devices/1-0040/hwmon/hwmon1")
+            sampler = Ina3221Sampler(sysfs_root=tmp, sample_interval_ns=1_000_000,
+                                     update_interval_ms=2)
+            def interrupted(_):
+                raise OSError("probe interrupted")
+            result = sampler.characterize(reads=4, sleep=interrupted)
+            self.assertEqual((device / "update_interval").read_text(), "1")
+            self.assertIn("characterization_error:OSError", result.flags)
 
 
 if __name__ == "__main__":

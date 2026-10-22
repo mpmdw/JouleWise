@@ -75,7 +75,8 @@ def timeline_from_episode(episode: Episode, model: TimelineModel) -> Timeline:
 
     first_token_ns owns the prefill boundary; when absent, estimate duration
     from the caller's synthetic prefill throughput and record the assumption.
-    Gaps are idle, tools near idle. Tool waits take precedence over turn envelopes; concurrent turns are flagged. Power is never double-counted.
+    Gaps are idle, tools near idle. Tool waits take precedence over turn
+    envelopes; concurrent turns are flagged. Power is never double-counted.
     """
     flags = []
     active = []
@@ -97,9 +98,26 @@ def timeline_from_episode(episode: Episode, model: TimelineModel) -> Timeline:
                 model.prefill_token_w * turn.prefill_tokens +
                 model.context_token_w * turn.context_tokens, "prefill"))
         if turn.decode_tokens and turn.end_ns > first:
-            active.append(PowerInterval(
-                first, turn.end_ns, model.idle_w + model.decode_w, "decode",
-                model.ripple_w, (turn.end_ns - first) / turn.decode_tokens, first))
+            # Pause the token clock during waits, preserving all declared
+            # decode tokens across the remaining active portions of the turn.
+            blocked = sorted((max(first, call.start_ns), min(turn.end_ns, call.end_ns))
+                             for call in calls if call.end_ns > first and call.start_ns < turn.end_ns)
+            cursor, portions = first, []
+            for left, right in blocked:
+                if left > cursor:
+                    portions.append((cursor, left))
+                cursor = max(cursor, right)
+            if cursor < turn.end_ns:
+                portions.append((cursor, turn.end_ns))
+            duration = sum(right - left for left, right in portions)
+            if not duration:
+                flags.append("decode_without_active_time")
+            elapsed = 0
+            for left, right in portions:
+                active.append(PowerInterval(
+                    left, right, model.idle_w + model.decode_w, "decode",
+                    model.ripple_w, duration / turn.decode_tokens, left - elapsed))
+                elapsed += right - left
     edges = {episode.start_ns, episode.end_ns}
     for span in active + calls:
         edges.update((max(episode.start_ns, min(episode.end_ns, span.start_ns)),

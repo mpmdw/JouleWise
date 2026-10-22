@@ -80,6 +80,10 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
     if flags:
         return [Segment(trace.t_ns[0] if n else 0, trace.t_ns[-1] if n else 0,
                         0.0, "unknown", trace.clock_domain, interval, window, tuple(flags))]
+    if trace.averaging_window_ns is None:
+        flags.append("averaging_window_unknown")
+    if any(b - a > interval for a, b in zip(trace.t_ns, trace.t_ns[1:])):
+        flags.append("sample_gaps")
     sigma = estimate_noise_sd(trace.values) if noise_sd_w is None else noise_sd_w
     if noise_sd_w is None:
         flags.append("noise_estimated_from_differences")
@@ -145,16 +149,21 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
             for i in group:
                 labels[i] = "decode"
         if len(groups) >= 3:
-            high = groups[-1]
-            lower = [i for group in groups[1:-1] for i in group]
-            # Prefill is higher and shorter than decode in this timeline model.
-            # No absolute duration cutoff is fitted to the benchmark.
-            if statistics.median(leaves[i][1] - leaves[i][0] for i in high) < statistics.median(
-                    leaves[i][1] - leaves[i][0] for i in lower):
-                for i in high:
-                    labels[i] = "prefill"
-            else:
-                flags.append("level_duration_model_mismatch")
+            def duration(group):
+                return statistics.median(leaves[i][1] - leaves[i][0] for i in group)
+
+            # Decode is the longest sustained nonidle level in the timeline.
+            # Growing context can create several distinct prefill levels;
+            # classify every higher/shorter group, not only the highest one.
+            decode_group = max(groups[1:], key=duration)
+            decode_level = statistics.mean(means[i] for i in decode_group)
+            for group in groups[1:]:
+                if statistics.mean(means[i] for i in group) > decode_level:
+                    if duration(group) < duration(decode_group):
+                        for i in group:
+                            labels[i] = "prefill"
+                    else:
+                        flags.append("level_duration_model_mismatch")
     else:
         flags.append("unidentified_single_level")
     if len(groups) > 3:

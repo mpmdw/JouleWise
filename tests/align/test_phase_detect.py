@@ -100,6 +100,11 @@ class PhaseDetectTest(unittest.TestCase):
                 self.assertEqual(len(matched.unlogged_candidates), 1)
                 self.assertIn("prefill", [s.label for s in segments])
                 self.assertIn("decode", [s.label for s in segments])
+                for turn in episode.turns:
+                    midpoint = (turn.start_ns + turn.first_token_ns) // 2
+                    covering = [s for s in segments if s.start_ns <= midpoint < s.end_ns]
+                    self.assertEqual(len(covering), 1)
+                    self.assertEqual(covering[0].label, "prefill")
 
     def test_no_tool_episode_has_no_unlogged_candidate(self):
         episode = world(9, tools=False)
@@ -169,6 +174,10 @@ class PhaseDetectTest(unittest.TestCase):
         self.assertIn("unsupported_cumulative_energy", detect_phases(cumulative)[0].flags)
         empty = PowerTrace("mock", "x", "host.monotonic", (), (), "W", 1_000_000)
         self.assertIn("empty_trace", detect_phases(empty)[0].flags)
+        gapped = PowerTrace("mock", "x", "host.monotonic",
+                            (1_000_000, 2_000_000, 100_000_000), (5, 5, 5), "W", 1_000_000)
+        self.assertIn("sample_gaps", detect_phases(gapped)[0].flags)
+        self.assertIn("averaging_window_unknown", detect_phases(gapped)[0].flags)
 
 
 if __name__ == "__main__":
