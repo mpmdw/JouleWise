@@ -280,6 +280,7 @@ def model_traffic(
             flags.append("prefill_readonly_cache_reuse_unmodelled")
     if windows is None:
         flags.append("transfer_only_time_axis")
+    flags.append("serialized_token_start_transfer_profile")
     cache = _Cache(config)
     tokens: list[TokenTraffic] = []
     pulses: list[TransferPulse] = []
