@@ -299,16 +299,17 @@ was built and checked (§10); the replication (§11).
   the workload.
 - **Evidence.** Registration `docs/registrations/block6_replication_DRAFT.md:104-110` (machine and sampler),
   `:824-837` (the meter excludes nothing; the cross-checks M14, known loads switched on and off, and M10, a fit over
-  steady load levels, both in worked example 1), `:1030-1037` (whole-machine energy per phase and its *boundary
-  sentence*: the one sentence stating where the measured machine begins and ends, that is, which losses are inside
-  the number and which outside); `joulewise/hazards/smc.py:17-27` (SMC keys: `B0AC` battery current, `B0AV` battery
-  voltage, `PDTR` DC-in power, `PSTR` system total power); `joulewise/external/km003c_parse.py:79` (the accepted band
-  around 28 V, the supply voltage the adapter and laptop agree on over USB-C; §6), `:368` (`integrate`), `:397`
-  (`delta_machine_energy`); `docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md:100` (the
-  meter placed inline on the adapter's output, its data cable to the Mac). Session H files (local): the harvest's
-  meter record `/Users/edr/night-bytes/h-20261021T185555Z/archive/withheld/meter.json` (per run: the request window,
-  the span from the runner's prefill-start stamp to its decode-end stamp; meter and battery energy from
-  `delta_machine_energy`), the meter stream `.../custody/hazards/meter/stream-001.jsonl`, and each run's
+  steady load levels, both in worked example 1), `:1030-1037` (the whole-machine line, the DC input energy per phase,
+  and its *boundary sentence*: the one sentence stating where the measured machine begins and ends, that is, which
+  losses are inside the number and which outside); `joulewise/hazards/smc.py:17-27` (SMC keys: `B0AC` battery
+  current, `B0AV` battery voltage, `PDTR` DC-in power, `PSTR` system total power);
+  `joulewise/external/km003c_parse.py:79` (the accepted band around 28 V, the supply voltage the adapter and laptop
+  agree on over USB-C; §6), `:368` (`integrate`), `:397` (`delta_machine_energy`);
+  `docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md:100` (the meter placed inline on
+  the adapter's output, its data cable to the Mac). Session H files (local): the harvest's meter record
+  `/Users/edr/night-bytes/h-20261021T185555Z/archive/withheld/meter.json` (per run: the request window, the span from
+  the runner's prefill-start stamp to its decode-end stamp; meter and battery energy from `delta_machine_energy`),
+  the meter stream `.../custody/hazards/meter/stream-001.jsonl`, and each run's
   `.../runs-parent/runs_bytes_mac_check/*/summary_metrics.json` (`gross_energy_j`: item 6's gross phase energy summed
   over both phases; the runner also records an idle-subtracted value, which is not used here).
 - **Status.** Writable now from non-claim data. The whole-machine lines of blocks 5 and 6 wait for the release.
@@ -634,22 +635,22 @@ was built and checked (§10); the replication (§11).
   lost voltage for 26 s during BETA's attempt 4 and the Mac then slept for 3,507 s, costing 4 runs, which is why the
   pre-session check and every run read the battery current directly. The battery term printed beside the
   whole-machine line (§2) adds the battery's energy back over each request, so that DC input energy + battery energy
-  is what the whole machine took (its *machine energy*); block 6 keeps the battery term per request, not per phase,
-  because the battery is read only once a second (§2), and flags a phase whose request shows battery assist. BYTES,
-  the other experiment on this instrument (§0 item 18), splits the battery term at the phase edges anyway, and there
-  the reading's timing matters: because a battery reading is recorded up to 2.302 s after its energy flows (worked
-  example, second bullet), the battery energy recorded in the 2.302 s after a phase edge may belong to the phase
-  before it. Its per-phase battery term carries that energy as uncertainty, the rule the BAT-2 ruling adopted for
-  BYTES. In block 6 no run showed battery assist (Status, below).
+  is what the whole machine took (the request's *machine energy*); block 6 keeps the battery term per request, not
+  per phase, because the battery is read only once a second (§2), and flags a phase whose request shows battery
+  assist. BYTES, the other experiment on this instrument (§0 item 18), splits the battery term at the phase edges
+  anyway, and there the reading's timing matters: because a battery reading is recorded up to 2.302 s after its
+  energy flows (worked example, second bullet), the battery energy recorded in the 2.302 s after a phase edge may
+  belong to the phase before it. Its per-phase battery term carries that energy as uncertainty, the rule the BAT-2
+  ruling adopted for BYTES. In block 6 no run showed battery assist (Status, below).
 - **Evidence.** `RUN_STATE.md:36` and `docs/design/block6_collection_draft.md:72` (the block-5 drop in the adapter's
   output); `joulewise/external/km003c_parse.py:312` (`battery_watts`: −B0AC × B0AV / 10⁶ W at each poll), `:397-425`
-  (`delta_machine_energy`: the machine term is the meter term plus the battery term); `joulewise/hazards/smc.py:1-12`
-  (why the SMC key is read: the battery values macOS publishes in its device registry refresh only every 60 s and
-  missed discharge bursts entirely), `:21` (`B0AC`); registration `:620-625` (charging or loss of AC excludes a run;
-  battery discharge alone, `battery.assist`, is disclosed), `:860-861` (pre-t0: battery current within 200 mA of
-  zero, not charging), `:1016` (the battery-assist labelled line: each estimate also over the units with no
-  battery-assisted run), `:1030-1037` (whole-machine line; boundary sentence "DC input at the USB-C port; the
-  adapter's AC-to-DC loss is not included"). Session H files (local): the harvest's meter record
+  (`delta_machine_energy`: machine energy is the DC input energy plus the battery term);
+  `joulewise/hazards/smc.py:1-12` (why the SMC key is read: the battery values macOS publishes in its device registry
+  refresh only every 60 s and missed discharge bursts entirely), `:21` (`B0AC`); registration `:620-625` (charging or
+  loss of AC excludes a run; battery discharge alone, `battery.assist`, is disclosed), `:860-861` (pre-t0: battery
+  current within 200 mA of zero, not charging), `:1016` (the battery-assist labelled line: each estimate also over
+  the units with no battery-assisted run), `:1030-1037` (whole-machine line; boundary sentence "DC input at the USB-C
+  port; the adapter's AC-to-DC loss is not included"). Session H files (local): the harvest's meter record
   `.../archive/withheld/meter.json` (per run: request window, meter and battery energy from `delta_machine_energy`),
   `.../custody/hazards/meter/stream-001.jsonl` (93,535 records, one per line),
   `.../custody/hazards/monitor/battery.jsonl` (19,023 records; the hazard monitor's own once-a-second SMC journal,
