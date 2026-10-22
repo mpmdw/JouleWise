@@ -252,15 +252,20 @@ def _incomplete_flag(flag: str) -> bool:
                         "hidden_tokens.scratchpad_uncounted"}) and flag != "runner_adapter_provisional"
 
 
+def _power_metrics() -> dict[str, Any]:
+    """Empty maxima/counts mean no episode checked, never successful coverage."""
+    return {"episodes_checked": 0, "episodes_incomplete_on_power": 0,
+               "episodes_with_lost_reads": 0, "max_gap_over_bar": 0.0,
+               "max_cycle_over_two_expected": 0.0}
+
+
 def _validate_output(path: Path, *, expected_count: int, router: bool, model: str,
                      expected_coordinates: Sequence[tuple[str, str, int]] = (),
                      measured_devices: Sequence[int] = (),
                      power_metrics: dict[str, Any] | None = None) -> tuple[str, ...]:
     """Check coordinates, usable turns and non-mock power spanning each episode."""
     flags: list[str] = []
-    metrics = {"episodes_checked": 0, "episodes_incomplete_on_power": 0,
-               "episodes_with_lost_reads": 0, "max_gap_over_bar": 0.0,
-               "max_cycle_over_two_expected": 0.0}
+    metrics = _power_metrics()
     try:
         episodes = read_episodes(path)
         if len(episodes) != expected_count:
@@ -525,7 +530,7 @@ def run_session(options: SessionOptions, *,
                 endpoint = f"http://127.0.0.1:{options.port}"
                 model_receipt: dict[str, Any] = {
                     "model": model["id"], "flags": list(model.get("serve_flags", ())),
-                    "measured_gpu_indices": devices}
+                    "measured_gpu_indices": devices, "power_coverage": _power_metrics()}
                 receipt["models"].append(model_receipt)
                 runner_path = model_dir / "runner-matrix.json"
                 if settings or not options.runner_command:
@@ -579,7 +584,6 @@ def run_session(options: SessionOptions, *,
                                 model_receipt["flags"].append("runner_timeout")
                             expected = matrix.get("measured_episode_count", matrix["episode_count"])
                             expected //= len(matrix["models"])
-                            model_receipt["power_coverage"] = {}
                             model_receipt["flags"].extend(_validate_output(
                                 model_dir / "episodes.jsonl", expected_count=expected,
                                 router=matrix["kind"] == "moe_stage_a", model=model["id"],

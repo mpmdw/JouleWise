@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import math
 import tempfile
@@ -73,6 +74,12 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(metrics["episodes_checked"], 1)
         self.assertEqual(metrics["episodes_incomplete_on_power"], 0)
         self.assertEqual(metrics["episodes_with_lost_reads"], 0)
+        # Two supported channels each cost 2*50 us: D=0.2 ms.
+        # Energy B=2*(10+0.2)=20.4 ms; its largest gap is 18 ms.
+        # Deduplicated average has C=E=100 ms, so max C/(2E)=1/2.
+        # These exact-input computations use the brief's 1e-6 relative bar.
+        self.assertTrue(math.isclose(metrics["max_gap_over_bar"], 18 / 20.4, rel_tol=1e-6))
+        self.assertTrue(math.isclose(metrics["max_cycle_over_two_expected"], 0.5, rel_tol=1e-6))
 
     def test_covered_lost_read_and_power_hole(self):
         # One 25 ms gap = 2.5 nominal cycles, above B~20 ms. Other 10 ms
@@ -169,7 +176,7 @@ class ServeTests(unittest.TestCase):
         schema = json.loads((root / "joulewise/align/gpukit/matrix.schema.json").read_text())
         self.assertIn("reasoning_parser", schema["properties"]["models"]["items"]["required"])
 
-    @unittest.skipUnless(__import__("importlib.util", fromlist=["find_spec"]).find_spec("jsonschema"),
+    @unittest.skipUnless(importlib.util.find_spec("jsonschema"),
                          "optional jsonschema is not installed")
     def test_jsonschema_rejects_missing_parser(self):
         import jsonschema

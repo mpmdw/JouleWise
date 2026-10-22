@@ -2,8 +2,9 @@
 
 This kit builds the rented-server workflow. It does not rent hardware or authorize
 paid APIs. Ed approves provider and spend before any paid session. The director
-executed bed93a095 and supplied the evidence recorded in the lane report; this
-continuation seat has no working executor and claims no test run of its own.
+and reviewer executed earlier heads; their supplied evidence is separated from
+this round's work in the lane report. This seat has no working executor and
+claims no Python/shell test or repro run of its own.
 PR #521 remains draft. Final-head integrated offline rehearsal is required before rental.
 
 Power can count extra work; it cannot distinguish computations within one forward
@@ -32,10 +33,9 @@ Tensor-parallel compatibility and actual allocation still need a serving preflig
 
 Qwen publishes [Qwen3-Next-80B-A3B-Thinking-FP8](https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking-FP8).
 Its [pinned model card](https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking-FP8/blob/1a28d48a94e799860201879be67616b9e21c4bd2/README.md)
-was read on 2026-10-22 and explicitly names the FP8 checkpoint. The public
-[Xinference registry](https://github.com/xorbitsai/inference/blob/14270e589d0abd2788699d91742f770e811c45d9/xinference/model/llm/models/Qwen3-Next-Thinking.json)
-also supplies its exact config-source revision. Direct HF fetching was unavailable
-in the build seat. The provisional matrix uses BF16/4; either alternative runs by
+was fetched by the lead and quoted in the fix-2 brief, including its FP8 serve
+command; this seat did not fetch it. Model dimension/count sources now point
+directly to the supplied immutable HF configs/cards. The provisional matrix uses BF16/4; either alternative runs by
 copying its checkpoint, weight_precision, tensor_parallel_size and headroom into
 that model's fields. This choice changes the joules' configuration and needs Ed.
 
@@ -254,7 +254,7 @@ The kit never changes limits to hide this evidence.
 
 At session start and before/after every model, measured devices are queried using
 nvidia-smi -i N -q -x --dtd. Raw XML, driver DTD when available, reasons, cumulative
-microsecond counters, and default/enforced/current board power limits are bundled.
+microsecond counters, and default/enforced/requested/current board power limits are bundled.
 Old clocks_throttle_reasons and current clocks_event_reasons are supported.
 A positive hardware counter tick or active hardware reason raises a flag.
 Software power-cap deltas remain recorded quantities, not errors. Missing elements,
@@ -274,15 +274,15 @@ each power sample, using nvmlDeviceGetViolationStatus or clock-event-reason call
 
 data_complete means every planned (task_pair, condition, seed) coordinate occurs
 exactly once per model, every Episode has a turn and no work-breaking runner flag,
-all measured devices have non-mock traces, and each trace covers the episode.
-The first sample must be at/before start + I + W and the last at/after end - I - W:
-a sensor polled at interval I with averaging window W has a reading within I+W of
-each boundary. One sample in a long episode fails. A ClockMapping offset is applied
-when the trace's clock differs. This is a coverage test, not a sensor-calibration
-or scientific-admission verdict. Scoring can remain deferred.
+every measured device has at least one supported non-mock trace, and supported
+traces pass R5's cycle, edge and power-hole checks (derived below). ClockMapping
+offset/uncertainty applies at edges; offset cancels inside a trace. Unsupported
+channels, power.empty alone and covered lost reads do not invalidate completeness.
+A single sample in a long episode fails the edge check. Scoring may be deferred.
+This is a coverage test, not a sensor-calibration or scientific-admission verdict.
 
 Dotted endpoint/runner/factory/task/sampler failures, interrupted/max-turn episodes,
-empty power, unknown conditions, unclosed/uncounted scratchpads and usage/clock/tool/token-counter failures invalidate
+empty supported traces, unknown conditions, unclosed/uncounted scratchpads and usage/clock/tool/token-counter failures invalidate
 completeness. Monitor/score failures stay recorded without erasing agent/power work;
 deferred scoring reads preserved transcripts. A declared mock trace cannot pass.
 
@@ -305,12 +305,14 @@ From the uninstalled repo with no external PYTHONPATH, set TMPDIR=/tmp/gk-tmp an
 JW_B5_SYNTHETIC_ONLY=1 and run:
 
     python3 -m unittest tests.align.test_gpukit -v
+    python3 -m unittest tests.align.test_gpukit_round2 -v
     python3 -m unittest discover -s tests/align -t .
 
 Repeat in a throwaway venv with jsonschema, then run the supplied reviewer repros
 and integrated runner/NVML tree cases. None ran in this continuation seat. The
-report separates the director's bed93a095 results from the final-head commands
-still NOT RUN here and lists the authorized harness wiring changes. Never rent
+report separates the supplied reviewer/lead evidence at 28b9a22f4 from this
+seat's final-head commands still NOT RUN. The fix-2 harness needs no new CLI
+options or signature adaptations. Never rent
 on the strength of the authored test inventory alone.
 
 ### Round-2 power completeness (R5)

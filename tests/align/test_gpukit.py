@@ -1005,6 +1005,8 @@ class FixArithmeticTests(unittest.TestCase):
             output_flags = _validate_output(path, expected_count=1, router=False,
                                             model=matrix["models"][0]["id"],
                                             expected_coordinates=[("task", "benign", 0)])
+            # R5 also catches this declared mock's 1 s median cycle against
+            # 2*100 ms expected: synthetic identity tolerance does not waive it.
             self.assertEqual(output_flags, ("episode_power_coverage_cycle:gpu0",
                                             "episode_power_coverage_incomplete",
                                             "episode_power_mock"))
