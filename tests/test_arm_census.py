@@ -112,6 +112,9 @@ class ArmCensusTests(unittest.TestCase):
             ("/bin/claude", ("bg-spare",), False),
             ("/bin/claude", ("--bg-pty-host",), False),
             ("/bin/codex", ("mcp-server",), False),
+            ("/bin/node", ("/checkout/scripts/codex-mcp-server.mjs",), False),
+            ("/bin/codex", ("app-server",), False),
+            ("/bin/node", ("/opt/bin/codex", "app-server"), False),
         ):
             with self.subTest(executable=executable, args=args):
                 verdict = self.classify(observation(row(20, 1, executable, *args)))

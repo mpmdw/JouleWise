@@ -404,6 +404,9 @@ class CheckGateLedgerTests(unittest.TestCase):
         self.assertNotIn("continue-on-error", workflow)
         self.assertIn("permissions:\n  contents: read", workflow)
         self.assertIn("fetch-depth: 0", workflow)
+        # Draft PRs skip the job (Ed, 2026-10-22); ready_for_review, pinned above,
+        # is what makes the check run when the draft is marked ready.
+        self.assertIn("if: github.event.pull_request.draft == false", workflow)
 
     def test_shipped_template_is_refused_until_filled(self) -> None:
         template = (ROOT / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
