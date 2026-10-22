@@ -1,22 +1,23 @@
-# Alignment attribution lane — fix round 1
+# Alignment attribution lane — fix round 2
 
 ## SUMMARY
-- Continued the existing attribution lane from e64cd15c2bb92ebdb3d6653552376e40208968aa.
-- Tools are clipped to the episode and retain their owning turn, including runner tools after model completion.
-- Counter decreases restart from zero, with reset flags and a polling-interval sensitivity allowance.
-- Empty traces report zero joules with infinite uncertainty; short and zero-duration intervals use only their own support.
-- A mislabeled mapping retains its known offset and records the destination-domain mismatch.
-- Synthetic worlds now use unaligned phases, poll jitter, derived sensor quanta, and host-clock NVML without a mapping.
-- The 100% window-sensor coverage assertions remain, marked expectedFailure for M2; structural checks remain ordinary tests.
-- All code is pushed within WRITE_SCOPE; Python verification and measured re-review deltas remain blocked by the unavailable cloud runtime.
+- Continued the existing lane from e3db70aeb27d3f9d4ac83e34421a771b12058ba4.
+- Implemented C2: full endpoint hold-versus-line differences, duty-gap sensitivity and within-window cut sensitivity.
+- Every C2 term applies to public interval queries, episode segments and episode totals; each states its one-step assumption.
+- Implausible counter drops count zero with counter.decrease and poll sensitivity; absent non-reset peak evidence yields infinite uncertainty.
+- Cold point queries construct only requested spans; repeated public calls cache the latest immutable trace/mapping preparation.
+- Preserved the 100% world-coverage assertions and the invisible-burst control; removed obsolete expected-failure decorators and stale coverage claims.
+- Added round-1/C1/C2 coverage and signed tool-bias reporting, including five reset-counter worlds.
+- Changes are committed and pushed within WRITE_SCOPE; the cloud runtime remains unavailable, so no local Python result or post-fix measurement is claimed.
+- C2 printed widths, twin disagreement deltas and the full-request partial-coverage reading still require lead review.
 
 ## FILES
-- `joulewise/align/attribution.py`: reconstruction, uncertainty, reset handling, mapping selection and episode-wide tool overlay.
-- `tests/align/test_attribution.py`: 28 authored closed-form/record tests, including runner tools, reset, window-edge ambiguity, short intervals and cwd-independent import.
-- `tests/align/test_attribution_worlds.py`: eight authored production-shaped tests, including two explicitly expected coverage failures a twenty-turn runner convention world and a mid-episode NVML reset world.
-- `.codex-report/align-attribution.md`: report and per-finding fix log.
-- No registry, workflow, inventory or shared-contract file was changed. In particular, `tests/test_shard_tests.py` remains untouched.
-- The independent twin and probe scripts have not been written into the unavailable workspace and have not been committed.
+- `joulewise/align/attribution.py`: integration, additive C2 uncertainty, physical counter-drop classification, lazy point spans and a single-entry preparation cache.
+- `tests/align/test_attribution.py`: closed-form C2 expectations, duty-gap overlap, counter dip/first-drop/no-peak regressions and a cold-query construction-count regression.
+- `tests/align/test_attribution_worlds.py`: twenty-turn production-shaped worlds, round-1/C1/C2 statistics, signed tool bias, reset counters and public-query/prepared-episode agreement checks.
+- `.codex-report/align-attribution.md`: current report, retained round-1 FIX LOG and round-2 dispositions.
+- No registry, workflow, inventory or shared-contract file changed. `tests/test_shard_tests.py` is untouched.
+- Twin files and the two .review2 scripts were read from the brief/public twin branch but could not be written into the unavailable VM. They are not committed.
 
 ## PUBLIC API
 ```python
@@ -52,180 +53,202 @@ def attribute_episode(episode: Episode, *, source: str, channel: str,
 ```
 
 ## TESTS RUN
-**No local Python test has executed in this seat. Counts, skips and seed-coverage measurements are unavailable, not passing.**
-Repeated `exec_command` requests, including `pwd`, return
+**Nothing ran locally in this seat.** No Python version, test count, skip count,
+coverage count or runtime has been measured here. Repeated shell attempts fail
+before starting the command:
 `No usable execution environment is available. Wait for an environment to become available before using this tool.`
-Two environment waits were attempted; runtime observations alternate between
-pending/starting, always offline, with no reported failure or retained diagnostic
-record. An asynchronous request to restart/reattach the environment is pending.
 
-Required commands still blocked (from `/workspace/JouleWise` unless specified):
+An environment wait was started and remained unresolved across repeated retries.
+Runtime status alternated between starting and pending, always offline, with
+failure=null. Diagnostics returned history_status=not_found and no records.
+A text request to restart/reattach the VM was sent to the user while independent
+authorized code work continued. This is the brief's execution-unavailable
+fallback, not successful verification.
+
+Attempted commands included:
 ```bash
+python3 --version
 python3 -m unittest discover -s tests/align -t .
-python3 -m unittest discover -s tests/align -t . -p test_twin_attribution.py
-python3 -P /workspace/JouleWise/.review1/truth_and_edges.py /workspace/JouleWise
-python3 -P /workspace/JouleWise/.review1/probes.py /workspace/JouleWise
-python3 -P /workspace/JouleWise/.review1/lane_world_unaligned.py /workspace/JouleWise
 ```
-Cwd regression, to run from `/tmp`:
+The required checkout/fetch, uncommitted repro-file setup and the following exact
+verification commands cannot execute until a usable VM is attached. All commands
+are from `/workspace/JouleWise` unless the command itself gives an absolute path:
+```bash
+python3 -m unittest discover -s tests/align -t . -p 'test_attribution*.py'
+python3 -m unittest discover -s tests/align -t . -p test_attribution_worlds.py
+python3 -m unittest discover -s tests/align -t . -p test_twin_attribution.py
+python3 -P /workspace/JouleWise/.review2/r2_truth.py /workspace/JouleWise 12
+python3 -P /workspace/JouleWise/.review2/r2_edges.py /workspace/JouleWise
+```
+Cwd-independent import/discovery regression, from `/tmp`:
 ```bash
 python3 -m unittest discover -s /workspace/JouleWise/tests/align -t /workspace/JouleWise -p test_attribution.py
 ```
-The authorized local setup/fetch and uncommitted repro-file creation remain
-pending for the same reason. No extras were installed; core and tests require
-only stdlib. There is no extra-dependent test run or dependency skip to report.
+No extras were installed. Production code and authored tests use stdlib only;
+there is no extra-dependent run or measured dependency skip.
 
-Existing CI evidence at intermediate code commit 711148d337c86e15c13b2105f29507575d738069:
-https://github.com/mpmdw/JouleWise/actions/runs/39707828576
-- changes, fences, build and installed-wheel jobs succeeded.
-- quick and downstream test jobs were cancelled by subsequent lane pushes;
-  no attribution test result or passing count is inferred.
-- This is intermediate-head evidence, not final-head verification.
-The pre-existing quick-tier discovery-namespace failure identified in the brief
-remains outside this lane's scope; no fix or approval request for it is pending.
+Historical baseline only: **reviewer-measured at e3db70aeb**: 62 align tests ran,
+including two expected failures. This is not verification of this round's code.
+
+Hosted intermediate evidence at code commit
+374ea7465670496e77d08e8bdf2f93c5b95b2817:
+https://github.com/mpmdw/JouleWise/actions/runs/39713701147
+The build job succeeded. The fence steps completed successfully but the job
+was cancelled by the next authorized lane push; quick/test/downstream jobs were
+cancelled. No attribution test count or final-head success is inferred.
+The known quick-tier discovery-namespace failure is outside WRITE_SCOPE.
 
 ## END-TO-END
-Authored chain: independent rectangular true-power timeline -> point or trailing
-window sensor sampling -> bounded analogue noise and quantization -> PowerTrace
-and ClockMapping -> twenty-turn Episode -> to_json/from_json -> attribute_episode
--> exact segment-identity, conservation, tool-effect and own-half-width checks.
+Authored chain: independent rectangular true power -> point, trailing-window or
+cumulative-counter sampling -> bounded analogue noise plus quantization ->
+PowerTrace/ClockMapping -> twenty-turn Episode -> JSON round trip ->
+attribute_episode -> exact tiling, conservation, tool contrast and own-half-width
+coverage assertions. Public trace_energy queries are also compared to the episode
+preparation over every segment and total on the same five seeds.
 
-Five deterministic seeds per sensor retain the original requirement: every
-segment and every episode total within its own printed half-width. Timing now
-uses integer-ns phase draws, a parameterized 37%-of-poll grid phase, and up to
-2 ms poll jitter capped at a quarter period. Whole-window samples remain
-back-to-back, because fixed-width windows cannot describe jittered contiguous
-support. The regular worlds have 20 tools and 101 segments; tools span 0.2–30 s.
-A further twenty-turn world derives a cumulative mJ counter from the same
-true timeline, resets it halfway through a poll, and checks true episode
-energy against its printed width plus absence of negative segments and
-reset-driven peak inflation. Its outcomes are also pending execution.
-The runner-convention world ends each model turn before its tool and has 20
-tools and 81 segments. Hidden tokens and logged=False turns/calls remain present.
+The original power fixtures are unchanged: 100 ms NVML polling with 25 ms duty,
+1 ms INA3221 point sampling and 100 ms whole-window powermetrics. Tools span
+0.2–30 s; the constructed regular episode has 101 segments and 20 tools.
+Sensor quanta remain derived in code: integer mW = .001 W, integer mJ = .001 J,
+and 40 uV / 5 mOhm * 5 V = .04 W. Clock brackets remain .5 ms for INA3221,
+1 ms for powermetrics and unknown/no mapping for host-clock NVML power.
 
-Sensor fixtures:
-- NVML power: 100 ms poll, 25 ms duty window, 0.001 W quantum from integer mW.
-  Primary coverage/runner worlds use the host clock with no ClockMapping.
-  The standalone reviewer adapter's default world retains a foreign domain
-  with an exact synthetic offset and zero clock half-width.
-- INA3221: 1 ms sampling; 40 uV shunt LSB / fixture 5 mOhm shunt * 5 V bus
-  = 0.04 W. A one-sample timestamp bracket gives a 0.5 ms clock half-width.
-- Powermetrics: 100 ms whole window, 0.001 W quantum from integer mW; a
-  synthetic 2 ms synchronization bracket gives a 1 ms half-width. That clock
-  term does not substitute for the M3 instrument's separate ~1 J attribution
-  limitation.
-- Bounded noise before quantization is half a quantum; rounding adds at most
-  another half, matching the resolution term.
-- The invisible-burst control remains: 400 W excess for 50 ms inside a 75 ms
-  unobserved NVML gap is 20 J, exceeding the 0.0001 J resolution-only width.
+The added counter worlds use the same twenty-turn timing, 100 ms polls,
+integer-mJ quantization, an exact synthetic offset and one restart inside the
+longest tool. Their workload levels are fixture choices; 300 W decode keeps
+the shortest tool's contrast above its partial-counter sensitivities. Restart
+placement keeps a reset's uncertainty below that long tool's contrast.
+The original midpoint-reset world and runner-post-model tool worlds remain.
 
-**No seed outcomes or runtimes have been measured in this seat.** The expected
-failure docstrings explicitly retain that pending status; the requested measured
-coverage text must be installed after the first runnable verification.
+The world output now emits coverage_by_reading, totals_by_reading,
+total_half_widths_j, segment_half_width_delta_j_range, signed_tool_error_j and
+tool_count. Earlier readings are replayed algebraically on the same observations:
+round1 = C2 width - window terms - half the full endpoint term;
+C1 = C2 width - window terms. The original three worlds retain their fixtures.
+No new output from that chain exists yet because Python cannot start.
 
-Derived hand-case deltas (algebraic expectations, not claimed repro executions):
-| Case | Old lane | Twin | Revised lane |
-|---|---:|---:|---:|
-| P1 tool [4,9] s, 1 kHz trace | no tool; 0 J | one tool; 449.99 J | one tool; 449.99 J |
-| P2 300 W reset, [0,4] s | -4,999,370 J; hw .002 J | 1,200 J | 1,200 J; hw 30.002 J |
-| P3 zero-length ramp | 0 J; hw 25 J | 0 J; hw 0 J | 0 J; hw 0 J |
-| P4 ramp [.4,.5] s | 4.5 J; hw 27.26 J | 4.5 J; hw 4.51 J | 4.5 J; hw 4.51 J |
-| Missing trace, 20 s, 70 W idle | -1,400 J; hw 0 J | 0 J; method none | 0 J; hw infinity |
+The invisible-burst control is unchanged: derived 400 W * .050 s = 20 J of
+unseen excess inside a 75 ms NVML duty gap, versus derived .001 W * .1 s
+= .0001 J nominal width for identical window means. C2 adds zero when all
+observed means are identical and therefore does not certify that burst.
 
-P1 derives 450 J minus the 0.001 s terminal trapezoid's 20 W / 2 correction
-= 449.99 J. P2 adds 5,000,570 J relative to the old negative estimate; its
-30 J extra sensitivity is one 100 ms poll at the observed 300 W peak.
+Reference coverage below is **reviewer-measured at e3db70aeb**, using the
+reviewer's candidate additions to that old code. It is not a run of the current
+implementation. “Not supplied” means the brief contains no such measurement.
 
-B1 delta re-review is still required on the reviewer's exact worlds. The
-review-provided references were old 0 tools / 0 J versus twin 20 tools /
-399.1 J (INA3221) and 13,623.8 J (NVML, truth 13,597.2 J). The revised
-reconstruction is intended to reproduce those twin tool energies; **those new
-world numbers have not been measured here**, so they are references for the
-pending rerun, not verification. Episode gross totals are unaffected by B1;
-the same interval's energy moves from gap/model phases into tool.
+| Worlds / sensor | Round-1 segments; totals | C1 segments; totals | C2 segments; totals |
+|---|---|---|---|
+| Lane / INA3221 | 505/505; 5/5 | not supplied | not supplied |
+| Lane / NVML power | 228/505; 0/5 | not supplied | not supplied |
+| Lane / powermetrics | 131/505; 5/5 | not supplied | not supplied |
+| Lane / new counter worlds | unexecuted | unexecuted | unexecuted |
+| Reviewer / INA3221 | 635/635; totals not supplied | 635/635; totals not supplied | 635/635; totals not supplied |
+| Reviewer / NVML power | 816/2134; 0/12 | not supplied | 1988/2134; 12/12 |
+| Reviewer / powermetrics | 866/1987; 12/12 | not supplied | 1983/1987; 12/12 (totals derived from nonnegative widening) |
+| Reviewer / NVML counter | 1940/2198; 12/12 | 2193/2198; 12/12 (totals derived) | 2193/2198; 12/12 (totals derived) |
+
+Current-code segment/totals coverage for all three readings, numerical width
+deltas and signed tool errors on both sets of worlds are unmeasured.
+The ordinary 100% assertions have not been relaxed. Their execution must confirm
+that removing the two obsolete expectedFailure decorators is correct; if a
+sensor remains below 100%, the brief requires restoring its expectedFailure
+with the actually measured count in its docstring.
+
+Counter edge deltas below are **derived**, rounded here to the integer-mJ
+reporting quantum; no repro execution is claimed. The comparison uses the
+reviewer's old outputs and the current physical classification:
+| Reviewer edge | New J | New half-width J | Change in J / half-width J |
+|---|---:|---:|---|
+| Steady | 1200.000 | .002 | 0 / 0 |
+| Stuck counter | 0 | .002 | 0 / 0 |
+| Reset at first step | 1170.000 | 30.002 | -60 / -30 |
+| Two resets | 1200.000 | 90.002 | 0 / 0 |
+| 1 mJ non-reset dip | 1200.001 | 60.003 | about -5,000,570 / -5,000,510 |
+
+For the dip, ignoring one 30 J poll is offset by the following 60.001 J recovery:
+1200 - 30 + 30.001 = 1200.001 J. That recovery, a non-reset step, sets
+600.01 W observed peak; the ignored dip contributes no power peak. Its .1 s
+ambiguity allowance is 60.001 J, plus two .001 J quanta. The old megajoule
+baseline can no longer inflate the peak to about 50 MW.
+For the first drop, 60 J exceeds .1 s * 300 W = 30 J: count zero, retain
+39 * 30 J and add one 30 J poll. Its 1200 J truth remains inside the width.
+The two-resets fixture actually includes three drops, including its first step;
+each new reading fits the physical poll limit, so its 90 J sensitivity stays.
+
+Derived hand C2 delta: the 0/63/100 W means at 0/100/200 ms and query [37,100] ms
+still give 3.969 J against 6.3 J true energy. Half-width increases from
+1.3594455 J to 5.218828 J (+3.8593825 J): C1 adds 1.3593825 J and C2's
+100 W * .1 s / 4 adds 2.5 J. This is a closed-form regression expectation.
+The reviewer-world numerical half-width distribution deltas cannot be reported
+as measured until r2_truth runs.
 
 ## DECISIONS I MADE
-- This explicit bounded brief selects [AGENT] synthetic/code work. WRITE_SCOPE
-  overrides repository-wide generated state/report writes. No hardware or paid
-  model service was used.
-- Read the previous report first, then PIPELINE.md, records.py, interfaces.py,
-  phase_share.py and reduce._integrate before writes. Also inspected root
-  AGENTS.md, the stop-card/intake texts, Mission M0 and orchestration guidance.
-  The generated stop card is NONE and TASK_QUEUE.md is empty on this lane.
-- The managed runtime never became usable. Continued the existing branch
-  through the connected GitHub tools, using e64cd15c2 as parent and
-  expected-head, non-forced fast-forward updates. The required local checkout
-  is still pending. Public source reads include runner.py and the independent
-  twin/comparison test; the twin was not copied into lane production code.
-- Zero-duration turns advance gap support once and do not duplicate it.
-- B1: model/gap support is built first, and every episode-clipped tool overlays
-  it with owning turn index. Earlier-starting calls win overlapping time;
-  adjacent distinct calls stay distinct, and a call crossing phase boundaries
-  coalesces back to one tool segment. Calls outside a turn are valid runner
-  output. Only crossing the episode limits adds tool.outside_episode.
-- M1: NVML counter decreases mean restart since driver load, not a modular
-  wrap or negative megajoules. The reset increment is the new reading.
-  Retain counter.wrap for compatibility and add counter.reset. For a query
-  intersecting the reset interval, add duration * observed trace peak and
-  counter.reset_interval to represent missing pre-reset work. This is the
-  brief's observed-peak sensitivity convention, not a guarantee against
-  unsampled power spikes.
-- M2/READING-A: "partial sample interval" means the raw timestamp bracket,
-  including for window sensors. Use that bracket for the hold-versus-line
-  term. This removes the artificial zero from constant reconstruction spans
-  without claiming a bound on within-window allocation. Add
-  window.edge_allocation_unresolved when a query cuts a support span.
-  No guessed variability multiplier or widened reporting quantum is used.
-- Preserve the 100% coverage assertion in separate M2 expectedFailure tests.
-  Structural, record-roundtrip, conservation and detectable-tool checks run
-  independently as ordinary tests so expectedFailure cannot conceal them.
-  Selection of extra window/duty uncertainty remains NEEDS_RULING below.
-- m1: no observed reconstruction means zero estimated energy with infinite
-  half-width. Retain the exact API's supported base method names rather than
-  introduce method none. Never subtract idle from a nonexistent observation.
-- m2/READING-C: retain idle subtraction and W resolution over the full requested
-  interval, and clock sensitivity at the requested endpoints. The brief says
-  "over [t0,t1]" and resolution times "interval length"; the alternative
-  overlap-only reading changes printed numbers and is recorded below.
-- m3/READING-B: clip both partial-interval comparisons to the query. A
-  zero-duration query has exactly zero energy and zero uncertainty.
-- m4/READING-E: a left-held cumulative counter jumps at the right sample.
-  Include that jump in the hold-minus-line difference when the partial start
-  interval reaches the sample. This selects the twin's physically explicit
-  sample-and-hold reading; it changes a printed half-width, so the alternative
-  remains visible under NEEDS_RULING.
-- m5/READING-D: retain the explicitly documented lane representation:
-  window_average_W;duty.uncovered_fraction=<repr(float)>, numerator actual
-  internal duty-gap ns and denominator requested ns. Out-of-trace ns do not
-  enter the numerator. duty.uncovered is the flag. Missing terms retain
-  clock.uncertainty_missing, interpolation.missing and resolution.missing.
-  The brief requires a stated format, not the twin's spellings.
-- m6: the -S import subprocess explicitly uses the checkout root as cwd.
-- m7: prefer exact domain mapping, then a known source-domain translation with
-  clock.episode_domain_mismatch. Reserve clock.mapping_missing for absence
-  of any translation; never discard a known offset merely because its
-  destination label is malformed.
-- Remove scale=100 around exact zero quantities: equality is justified by
-  identical limits or identically absent terms. Idle-subtraction agreement
-  now uses 1% of the smaller printed width and explicitly checks the
-  one-million-ulp floor. Conservation retains its separate operation-count
-  gamma_n derivation. All fixture sensor quanta now have physical/reporting
-  derivations beside their definitions.
-- Core and tests remain stdlib-only. Continue importing reduce._integrate;
-  subtract integer ns epochs before float conversion. Prepare reconstruction
-  once per episode and binary-search affected spans.
+- Continue the named lane from e3db70aeb, never reset it to the spine. With no
+  usable filesystem runtime, use connected GitHub tree/commit/ref tools with
+  the inspected parent SHA, expected-head checks and force=false. No other
+  branch is written. The local checkout remains unperformed.
+- Read the existing report before edits, then PIPELINE.md, records.py,
+  interfaces.py, phase_share.py and reduce._integrate. Root AGENTS.md and
+  Mission M0 were read; the generated stop card is NONE. WRITE_SCOPE
+  overrides generated-state bookkeeping. No sensor_sim.py exists on this
+  branch, so retain and extend the existing test-local independent generator.
+- Implement the explicitly authorized C2 reading while retaining it under
+  NEEDS_RULING because printed half-widths change. C1 replaces half the
+  absolute hold/linear difference by the full difference at each endpoint.
+  C2 adds |neighbour mean jump| * overlapping duty-gap seconds / 2, and
+  range(neighbouring three means) * window seconds / 4 at each strictly
+  interior window cut. Every term includes its one-step derivation in code.
+- C2 is an observed-variation sensitivity under the stated one-step
+  assumptions, not a universal bound on invisible bursts. Retain
+  window.edge_allocation_unresolved and the unchanged invisible-burst test.
+- R2-m2: determine the peak of nondecreasing counter steps before reading
+  decreases. Accept a restart only when its new nonnegative reading is no
+  larger than poll duration * that peak. Otherwise count zero with
+  counter.decrease and exclude the drop from the peak. Both categories add
+  overlap duration * observed peak with distinct interval flags.
+- A counter with no nondecreasing step has no observed peak: all its drops
+  count zero with counter.decrease, counter.peak_missing and infinite
+  uncertainty for affected intervals/partial coverage. A flat nondecreasing
+  step establishes observed 0 W; as with the old dead-counter control, that
+  sensitivity cannot certify unobserved work from a dead sensor.
+- R2-m3: use lazy point-span construction plus a single latest-trace/mapping
+  cache, keyed by trace identity and mapping equality. Cold calls retain an
+  O(n) finite-value validation scan to preserve global flags, but create O(q)
+  spans for q queried brackets. Repeated calls reuse that validation and do
+  O(log n + q) work. Full-trace peak evaluation is lazy when missing coverage
+  needs it. Window/counter preparations remain reusable eager reconstructions.
+  No estimator formula, integration order or public signature changes here.
+- Compare public queries with episode preparation on every own world using
+  1e-6 relative agreement capped at 1% of the smaller printed width, and
+  assert the million-ulp floor. The cold-query test counts requested spans
+  plus two endpoint comparisons rather than using an arbitrary timing bar.
+  These checks are authored, not yet executed.
+- Remove the two old expectedFailure decorators because C2 now supplies the
+  one-step sensitivity exercised by these rectangular worlds; retain their
+  exact 100% assertions and record the unresolved execution confirmation.
+- Keep full-request idle subtraction, W resolution and requested-endpoint
+  clock sensitivity for partial coverage. The brief explicitly says idle
+  is subtracted “over [t0,t1]”. Empty reconstructions still return zero J and
+  infinite uncertainty, without subtracting idle from nonexistent readings.
+- Retain previous tool ownership/episode clipping, missing-first-token,
+  integer-epoch, missing-term flag, method-format and known-offset rules.
+  Method companion remains exactly
+  window_average_W;duty.uncovered_fraction=<repr(float)>.
+  Duty numerator is internal uncovered ns; denominator is requested ns.
+- Keep core/tests stdlib-only and import reduce._integrate. No hardware,
+  paid model, network test, credential or person-address fixture was added.
 
 ## CONTRACT-CHANGE
-No shared contract files changed. Proposed extension, pending ruling:
-document a within-window allocation uncertainty term, and for duty sensors
-supply a certified maximum-power or temporal-variation bound if finite coverage
-against unobserved work is required. PowerTrace currently supplies neither.
-For nonnegative whole-window power, the total known window energy can bound
-how much energy lies on either side of a cut; the specified three terms do
-not currently include that envelope. A local sensitivity flag is implemented
-without inventing a shared-record field.
+No shared contract file or public API changed.
+If the lead rules C2, the independent twin needs the same full C1 endpoint
+differences and both C2 window terms; until then its half-width comparisons
+are expected to differ by those additive terms. Its existing counter reset
+reading also lacks the lane's physical drop classification and poll sensitivity.
+PowerTrace supplies no certified power/variation bound for an invisible burst;
+such a guarantee still needs a separately ruled physical contract.
 
 ## FIX LOG
+### Round 1
 Statuses below mean code/report treatment, not a claim that blocked repros ran.
 - B1 fixed 865700936f4b3128e72b56dd59bd5699dcc1a0dc; twenty-turn runner regression in 3fd2cf697c6c7215e6db9fe17a626f7ef5028b4b.
 - M1 fixed 480a0a3b6bc7035e71596f15b19c1554032822d3: restart from zero; observed-peak reset sensitivity.
@@ -239,66 +262,72 @@ Statuses below mean code/report treatment, not a claim that blocked repros ran.
 - m7 fixed 480a0a3b6bc7035e71596f15b19c1554032822d3, refined in 74a7fc811cabcfc30ce48eab0cc5d6e3cb4354f5: retain source-domain offset and distinguish mismatch from missing.
 - Numeric test findings fixed in 480a0a3b6bc7035e71596f15b19c1554032822d3 and 711148d337c86e15c13b2105f29507575d738069: exact-zero derivations, agreement floor, physical quanta and host NVML clock.
 
+### Round 2
+- R2-M2 fixed 6a54c7da4b3df57233fb20dbf1f56302a7d7d147; added full C1 and both C2 sensitivities with one-step derivations. World reporting is in 47f8b75e32ad260afc86cb5a22fb57e619491e36. Post-fix measurements remain blocked by the unavailable runtime; no passing repro is claimed.
+- R2-m1 fixed 374ea7465670496e77d08e8bdf2f93c5b95b2817; removed the false 100% comment and obsolete expectedFailure docstrings. This report replaces unexecuted “pending” claims with explicit unavailable results and labeled reviewer/derived references, using the brief's execution-unavailable fallback.
+- R2-m2 fixed 19fa3d5b4fb447fef6b6e5dfe6c0749576db3033; classify impossible restart readings as counter.decrease, count zero, exclude the drop from peak and retain poll sensitivity. No non-reset peak gives infinite uncertainty.
+- R2-m3 fixed 374ea7465670496e77d08e8bdf2f93c5b95b2817; lazy requested point spans plus a single-entry preparation cache. Construction-count and own-world numerical agreement regressions are authored; timing is unmeasured.
+- R2-m4 rejected: the brief says idle_watts is “subtracted as a constant power over [t0,t1]”; retain that reading while the lead rules on it. Updated reference numbers are labeled below; no code change.
+
 ## OPEN ISSUES
-- BLOCKING VERIFICATION: no usable cloud execution environment. The local
-  checkout, uncommitted twin/probe setup, every required Python command,
-  final test counts, measured coverage docstrings, performance measurement
-  and review-world delta measurements are still outstanding.
-- M2's required 100% window coverage is not certified by the specified terms;
-  two explicit expected failures preserve the requirement.
-- Counter reset sensitivity assumes the observed peak for missing time,
-  just as partial coverage does; unseen larger excursions cannot be certified.
-- Partial-coverage and counter-start half-width conventions remain available
-  for the lead's ruling, with numerical alternatives below.
-- CI's pre-existing discovery namespace failure is outside scope; no edit to
-  tests/test_shard_tests.py is requested.
-- No hardware validation or statistical population-coverage claim is made.
+- EXECUTION BLOCKER: no usable VM. Local checkout/setup, actual Python version,
+  align/twin/repro runs, final counts/skips, C2 coverage confirmation, expected
+  failure disposition, width-distribution deltas and runtime measurements have
+  not executed. No final-head passing claim is made. Next action is attach a
+  usable VM, fetch/check out this branch, create only the uncommitted twin and
+  supplied .review2 files, then run the exact commands in TESTS RUN.
+- TWIN DELTAS: the required comparison command is unexecuted, so an exhaustive
+  measured comparison/delta list does not exist. Analytically, for ordinary
+  fully covered traces, lane width minus the unchanged twin is its old
+  interpolation term plus C2's window terms, plus the lane's pre-existing
+  reset-poll allowance for counters. Example derived differences: the
+  37 ms window cut above +3.8593825 J; the [.25,1.5] s 0/100/300 J counter
+  query is now 125.002 J versus twin 62.502 J (+62.5 J). Partial coverage
+  also retains the separately listed full-request reading. Twin files were
+  not edited.
+- A7 TOOL BIAS: post-C2 summed signed tool error and tool counts on both
+  world sets are unmeasured. Own-world reporting now emits both. References,
+  **reviewer-measured at e3db70aeb**, are NVML power +1122 J over 509 tools,
+  NVML counter +1196 J over 535 tools and INA3221 approximately 0 J (tool
+  count not supplied); powermetrics bias was not supplied. C2 changes
+  half-widths, not reconstructions. These same-sign errors accumulate across
+  tools; consumers combining segment widths as independent random errors
+  can under-cover that bias.
+- The reviewer-world C2 candidate still covers fewer than all segments:
+  NVML power 1988/2134, powermetrics 1983/1987 and counters 2193/2198.
+  These are reviewer-measured candidate results on e3db70aeb, not a passing
+  claim for this implementation. C2 needs a delta re-review and a lead ruling.
+- Counter reset/dip and missing-coverage allowances assume the observed peak;
+  unseen larger power and dead sensors remain uncertified. The cache retains
+  at most one latest immutable trace, which may itself be large.
+- CI's discovery namespace issue is outside scope. No hardware validation or
+  statistical population-coverage claim is made.
 
 ## NEEDS_RULING
-**M2 / READING-A — finite window/duty uncertainty.**
-Question: should the printed half-width remain the specified three sensitivity
-terms, or add a nonnegative whole-window allocation envelope and an explicit
-bound on power/variation in duty gaps? Recommend the latter only with a
-documented physical bound; otherwise retain the unresolved flags and the
-100%-coverage expected failures. Blocked: certifying own-half-width coverage.
+**R2-M2 / C2 — changes printed half-widths.**
+Question: ratify full endpoint interpolation differences plus the two
+single-step window sensitivities? Options are the round-1 reading, C1 only,
+or C2. Recommend C2 as explicitly requested by this fix brief, with its
+one-step assumptions and invisible-burst limitation retained. The code
+implements C2; certification/merge awaits lead delta review.
+The labeled reference table in END-TO-END gives every available reviewer
+number for the three readings on both sets of worlds. Actual current-code
+coverage, total/segment width deltas, tool bias and C1-only figures absent
+from the brief are unmeasured because Python cannot start. They must be
+filled from the required runs, not inferred from the reviewer candidates.
 
-Derived off-grid hand world: whole 100 ms window, true power 0 -> 100 W at
-37 ms, means 0/63/100 W at 0/100/200 ms, query [37,100] ms, zero clock
-uncertainty and .001 W quantum. True energy is 6.3 J; every reconstruction
-prints 3.969 J (error 2.331 J). Old lane width is .000063 J; twin and revised
-raw-bracket width is 1.3594455 J. Neither covers the edge allocation error.
-This counterexample is an ordinary regression test, not a coverage relaxation.
-
-Review-provided world coverage, **not remeasured in this seat**:
-| Sensor | Old lane | Twin | Revised lane |
-|---|---|---|---|
-| INA3221 | 100% | not reported | pending runtime |
-| NVML power | 35%; totals 0/8 | not reported | pending runtime |
-| Powermetrics | 6%; worst err/hw 27.9 | 32% | pending runtime |
-| NVML counter | 77% | not reported | pending runtime |
-The old own-world 37 ms replay reported powermetrics 150/505 (or 136/505 with
-1 ms clock) and NVML 373/505 at 1 ms clock. Those old source worlds used widened
-quanta and aligned phase durations. Revised primary worlds correct both and
-therefore require fresh measurement; no percentage is fabricated here.
-
-**m2 / READING-C — requested versus observed interval.**
-Question: retain literal full-request idle/resolution/clock sensitivity, or
-apply all three only to overlap? Recommend full-request as implemented,
-because the brief explicitly names [t0,t1]; every partial estimate is flagged.
-For the review's constant 50 W, 20 s request, idle 10 W, quantum .04 W,
-same clock and trace beginning at 10 s: old/revised 300 J with hw 500.8 J,
-twin 400 J with hw 500.4 J; true net energy 800 J. If the trace is entirely
-after the request: old/revised -200 J with hw 1000.8 J, twin 0 J with hw
-1000 J. These are closed-form derived outcomes; execution is pending.
-Blocked: settling the published partial-coverage convention, not code work.
-
-**m4 / READING-E — cumulative hold jump at the start bracket.**
-Question: compare just the linear remainder, or compare the held counter's
-actual jump minus that remainder? Recommend the latter, implemented here.
-For 0/100/300 J at 0/1/2 s, query [.25,1.5] s and no clock/resolution term:
-all readings give 175 J; old width 87.5 J, twin/revised width 62.5 J
-(delta -25 J). The start bracket contains a held 100 J jump versus a
-75 J linear increment; its contribution is |100-75|/2 = 12.5 J.
-The stop contributes |0-100|/2 = 50 J. With a .001 J quantum add .002 J
-to every width. Derived regression expectations; repro execution pending.
-Blocked: lead endorsement of the printed half-width convention.
+**R2-m4 / READING-C — requested versus observed interval.**
+Question: retain literal full-request idle/resolution/clock sensitivity,
+or apply them only to overlap? Recommend the current full-request reading,
+because the brief expressly names [t0,t1].
+**Reviewer-measured at e3db70aeb:** trace begins 5 s late, 50 W, idle 10 W,
+request [0,20] s: lane 550 J (half-width 250.2 J), twin 600 J
+(250.15 J). A trace wholly before or after gives lane -200 J with
+energy.negative, twin 0 J. These reconstructions and widths are unchanged
+by C2 for this constant waveform (derived: endpoint/window differences are
+zero). No new repro run occurred here.
+For a wholly disjoint constant trace, derived lane width is 50 W * 20 s
++ .01 W * 20 s = 1000.2 J; twin overlap resolution contributes zero,
+giving 1000 J. The missing 5 s case subtracts an additional 10 W * 5 s
+= 50 J and adds .01 W * 5 s = .05 J resolution relative to the twin.
+The ruling changes printed energy, not just a flag.
