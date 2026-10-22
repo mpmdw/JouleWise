@@ -1,6 +1,6 @@
 # Block-6 analysis additions: design and build brief (item B6-1)
 
-**Status: design, written blind, 2026-10-21.** Author: Opus 5.5 (interactive session 2dc9c377, workflow item B6-1).
+**Status: design, written blind, 2026-10-21; third pass 2026-10-22 (§21).** Author: Opus 5.5 (interactive session 2dc9c377, workflow item B6-1).
 Claim-path. It designs the code that registration B6-REPL §13 requires
 (`docs/registrations/block6_replication_DRAFT.md`, written "the registration" or "REG" below), maps every clause of
 REG §9.5 to §11.4 and §13 to a function (§13 of this file), and ends with the Sol build brief (§17).
@@ -18,10 +18,13 @@ code at `lane/2026-10-17-b6-packs-registered` `1706257c4` (`joulewise/b6/accepta
 bindings, `joulewise/external/km003c_parse.py`, `joulewise/analysis_engine/inputs.py`,
 `joulewise/paper_reported_energy_issuer.py`; L9's head on 2026-10-22, `64b4e2cbf`, changes no file under
 `joulewise/` or `scripts/` that this design reads; in its tests it amends `tests/b5_analysis/fixtures_s10.py` and adds
-the real joined-driver harness `tests/b5_analysis/joined_s10.py`); the independent recompute at
+the real joined-driver harness `tests/b5_analysis/joined_s10.py`; its head at the third pass, `500f7ad3d`, adds only
+reports since `64b4e2cbf`); the independent recompute at
 `lane/2026-10-14-independent-recompute` `76f45da3e` (its meter functions only); RUN_STATE items 53, 59 and 65, and
 the record of activation c634f6f3 (item 53), which carry structure only (counting, rounds, flag codes). One blind
-consult round (§19) checked the draft by execution on synthetic inputs.
+consult round (§19) checked the draft by execution on synthetic inputs. For the third pass: the BAT-2 battery ruling
+(`docs/process_traces/2026-10-22-forward/BAT-RULING.md` at `fc7548a17`; its numbers come from the non-claim BYTES
+session H only) and B5-PLAN §8.1's battery-assist rule.
 
 ---
 
@@ -45,7 +48,9 @@ consult round (§19) checked the draft by execution on synthetic inputs.
    whole-machine cross-check (B5-PLAN §8.2). The per-phase definition exists only in the independent recompute. §8
    gives the definition, and §15 says how the lead fills the slot.
 6. **Battery assist** (the MagSafe question in RUN_STATE item 65): the problem was real and was ruled on
-   2026-10-06. The rail numbers are unaffected. The whole-machine line was the remaining gap. §7 closes it.
+   2026-10-06. The rail numbers are unaffected. The whole-machine line was the remaining gap. §7 closes it. The
+   BAT-2 ruling of 2026-10-21 adds the battery term to BYTES' DC input; it does not change block 6's registered
+   per-phase line, and §7.1 says what block 6 takes from it.
 7. **The block-6 harvest stored its brackets with block 5's acceptance** (by the code at `f31aca19f`; found by the
    consult, §19 F2). Counting is unaffected; the analysis builds the registered block-6 bracket and keeps the stored
    one out of every number (§4.8).
@@ -528,7 +533,9 @@ reads low by the battery's share. The registration flags such phases but defines
 2. REG §9.5 item 2 applies to "each estimate", so the whole-machine per-phase value is printed twice, like every rail
    cell: over all kept units, and over the kept units with no assisted run, with the count of assisted runs per
    stratum (`lines.machine_without_assist()`). The second value is free of the gap for every run whose battery state
-   was observed. A run whose request held no battery observation (`meter_battery_unavailable`, or no SMC read) cannot be
+   was observed, except for discharge in the last τ of a request (up to about 2.3 s), which the SMC reports only after
+   the request ends (§7.1): such a run carries `battery.assist_outside_request`, stays in the second value as
+   registered, and the count of such runs per stratum is printed beside it. A run whose request held no battery observation (`meter_battery_unavailable`, or no SMC read) cannot be
    called unassisted: it stays in both values as the registered membership has it, and the count of such runs per
    stratum is printed beside, so a reader sees how much of "without assisted runs" rests on missing observations.
 3. Each run's request-level ΔE_machine with the battery term (block 5's definition) is printed beside, with the
@@ -544,6 +551,52 @@ reads low by the battery's share. The registration flags such phases but defines
 How many block-6 runs carry `battery.assist` is structure (flag counts by code, REG §12.1); the blind dry run writes
 it per session and cell (§14), so the lead can say how often assist happened without opening an energy.
 
+### 7.1 The BAT-2 ruling (2026-10-21) and block 6
+
+*What BAT-2 ruled.* It is a ruling for BYTES, which is not registered and has no data; every number in it comes from
+the non-claim BYTES session H. BYTES' DC input over a decode span becomes the meter's energy plus the battery's signed
+energy E_b = (T / n) × Σ P_b over the n meter polls received in the span, with P_b = −B0AC × B0AV / 10⁶ W from the SMC
+values that each 0.2 s KM003C poll carries (`km003c_parse.Stream.battery_watts` and `integrate`'s rule, the reads
+block 5's request-level ΔE_machine already uses). It measured how late those values are. The SMC publishes about once
+a second (T_SMC = 1.0 s; median 1.002 s between changes on H), each value averages the second before it, and a poll
+sees it up to one poll interval later. So energy that flows at time t is reported within (t, t + τ], with
+τ = 2 × T_SMC + Δt_p and Δt_p the stream's own largest poll interval: 2.302 s on H, whose longest observed tail was
+2.130 s. The attribution error of E_b is then at most v = v_start + v_end, where v_edge = (T / n) × Σ |P_b| over the
+polls received in [edge, edge + τ). BYTES' without-assisted line keys on a decode-scoped marker (a negative B0AC
+received in [d0 + τ, d1 + τ)), because the request-scoped `battery.assist` marked every 122B run of H on prefill
+discharge reported late into decode. The ruling also amended BYTES' Addendum 1 item 2, so BYTES no longer takes
+S-15's fill.
+
+*Why block 6's per-phase value stays meter-only.* REG §9.5 item 5 registers it that way: meter energy per phase; "the
+battery term … stays at request level, and a phase whose request shows the battery assisting the adapter is
+flagged". S-15 fills only "its exact definition, including how the meter's clock-fit residual and the alignment bound
+enter its uncertainty". Putting the battery inside the value would change registered arithmetic (REG §12.4: a dated
+§17 entry, with the registered value printed beside). BAT-2's delay also shows what that would buy on a short phase.
+When the phase is no longer than τ, every poll in it is received in [p0, p0 + τ), so v_start ≥ |E_b|, and the term
+can never be told apart from zero within its own bound. The registration's reason, "read only once a second", is this
+delay.
+
+*What block 6 takes from it.* Two facts about the registered member rule (B5-PLAN §8.1: a run is assisted when an SMC
+read below 0 mA is held into its request). Neither needs new arithmetic:
+
+1. A run assisted only in prefill carries `battery.assist`, so its unit also leaves the decode cell's without-assist
+   value, although its decode may have had no assist. That line is a description and selects nothing in the
+   registered value, so it stays as registered. The per-run request-level ΔE_machine of §7 item 3 shows where the
+   battery energy was.
+2. Discharge in the last τ of a request is read only after the request ends. Such a run carries
+   `battery.assist_outside_request` instead and stays in the without-assist value. The count of such runs per stratum
+   is printed beside that value (§7 item 2); B5-PLAN §8.1 already counts the flag per session.
+
+A phase-scoped marker like BYTES' was considered and not adopted (§18 D21). For a phase shorter than τ, its window
+[p0 + τ, p1 + τ) lies wholly after the phase, so it would also mark the next phase's discharge.
+
+*Worked example (synthetic).* τ = 2 × 1.0 + 0.302 = 2.302 s. A 1.7B prefill at [10.00, 10.40) s with polls at 10.10 and
+10.30 s: both lie in [10.00, 12.302), so v_start counts both, and v_start ≥ |E_b| whatever the battery did. An 8B
+decode at [10.40, 17.00) s whose request ends at 17.00 s discharges during [16.80, 17.00) s. With SMC publications at
+16.00, 17.00 and 18.00 s, the first negative value is published at 17.00 s and read at 17.10 s, after the request
+ends. So the run carries `battery.assist_outside_request`, not `battery.assist`, and is counted beside the
+without-assist value.
+
 ---
 
 ## 8. Whole-machine energy per phase (REG §9.5 item 5, S-15)
@@ -555,6 +608,14 @@ B5-PLAN §8.2 says "the harvest computes no phase-level figures". The per-phase 
 corners), labelled "gross meter energy per phase; battery assist flagged at request level", which is item 37's 03:26
 amendment. The analysis must implement the same definition independently, or REG §12.3 item 4 cannot pass on these
 values.
+
+The item brief points S-15 at `km003c_parse` and at L9's `disclosures.MACHINE_BOUNDARY` ("whole-machine DC input plus
+the battery term, measured at the USB-C input; the adapter's AC-to-DC loss is not included."). That string is the
+boundary of block 5's request-level line, which block 6 prints unchanged beside each run's ΔE_machine (§7 item 3).
+REG §9.5 item 5 registers the per-phase value differently: meter only, the battery at request level, and its own
+boundary sentence. So the per-phase definition below uses `km003c_parse`'s meter functions (`clock_fit`,
+`raw_offset_ns`, `integrate` on the meter samples), not `delta_machine_energy`. The registration wins over the brief
+(§7.1).
 
 *Definition* (`machine.py`; the proposed S-15 fill, §15):
 
@@ -580,7 +641,7 @@ values.
    and the sensitivity is printed only when all four corners have a change, otherwise "not computed". *Why the second
    rule:* in the consult's synthetic probe, a lost repeat moved the mean from 42.120 to 42.121 J by dropping a unit,
    not by shifting an edge.
-5. **Battery.** §7 items 1 to 4.
+5. **Battery.** §7 items 1 to 4 and §7.1.
 
 *Worked example (synthetic).* A prefill phase of 0.620 s holds 31 meter samples with mean 68.0 W: E_meter = 42.16 J.
 Its request holds an SMC read of B0AC = −1,200 mA at B0AV = 12,600 mV, 15.12 W supplied by the battery, so the run
@@ -755,9 +816,13 @@ six fields.
 | §9 "per counting session", no pooling | `driver.units()` (§4.3) | e2e: each unit's index lists one session per pack |
 | §9 kept-unit issuer equals `_project_cell` on a complete cell | L9 issuer, through `driver` | `test_issuer_equals_project_cell` (exact) |
 | §9 GAMMA pack file's estimator-1 entry | corrected by the lead at the S-14 pin (§15 step 6) | — |
+| §9.1 estimator 1, reported phase energy per model and phase (ALPHA, BETA) | L9 issuer and floor unit step `11f` (§4.3) | `test_issuer_equals_project_cell`; e2e |
+| §9.2 estimator 2, detection floors | floor unit step 4 (L9 floor extraction); GAMMA unit step 5 (aggregate floor) | e2e: six floor units, three GAMMA units |
+| §9.3 estimator 3, dominance ratios | R per floor session from its floor unit; GAMMA unit step 6 (close-out), equal to it (§4.3) | e2e; bar B1 equality test |
+| §9.4 estimator 4, the two GAMMA contrasts | GAMMA unit steps 8, 9 (finalization, claim gate) | e2e: three GAMMA units |
 | §9.5 preamble (B5-PLAN §8.1 disclosures, "session" for "window") | L9 `disclosures` per unit; `lines.history()` | e2e: every unit has a disclosure record |
 | §9.5 item 1 | L9 `_energy_lines` | fixture: a thermal-removed unit (§16) |
-| §9.5 item 2 | L9 `_energy_lines`; `lines.machine_without_assist()` | fixture: assisted 8B prefill runs |
+| §9.5 item 2 | L9 `_energy_lines`; `lines.machine_without_assist()` with the `battery.assist_outside_request` count (§7.1) | fixture B2: assisted 8B prefill runs, one assisted in prefill only, one read after its request (§16) |
 | §9.5 item 3 | `lines.scaled_allowance()` | worked example (§6) and fixture |
 | §9.5 item 4 | the recompute; `crossblock` places it | `test_single_step_is_read_not_computed` |
 | §9.5 item 5 | `machine.phase_energy()`, `machine.cell()` | worked example (§8), fixture meter streams |
@@ -868,7 +933,11 @@ output digests are the ones the release re-run must reproduce (§18 D18).
    dated REG §17 entry adopting §8 of this file, citing the recompute commit that implements it for block 5
    (`76f45da3e` or its successor), with one executing refuter (REG §12.4). The §7 additions (the without-assist value
    and the boundary's second sentence) are part of that fill; the recompute lane adds the without-assist value so that
-   REG §12.3 item 4 covers it.
+   REG §12.3 item 4 covers it. The BAT-2 ruling amended BYTES' Addendum 1 item 2, so S-15's fill binds block 6 only.
+   If the lead reads the brief's "DC input plus the battery term" as asking for the battery inside the per-phase
+   value, that changes registered arithmetic: a REG §17 entry under §12.4 with one executing refuter, BAT-2's E_b and
+   v as the definition, and the registered meter-only value printed beside. §7.1 gives its cost on phases shorter
+   than τ.
 8. **Per-session blind dry run** on the Mac (blinded data never goes to a cloud seat): `scripts/b6_analyze.py --mode
    blind-dry-run` over the nine sessions. Each tooling refusal is cured blind (R3) and the run repeats until none
    remains. The lead reads only the structure record, including r2-gamma's six fields (§12).
@@ -902,7 +971,7 @@ B2, B3; G1, G2, G3), plus two that do not count:
 |---|---|
 | G2 | **r2-gamma's shape**: the midpoint reference lost (fails admission), no other window reason. The harvest's `exclusions.json` must read `claim_usable: false`, `reasons: ["neg8.midpoint_lost_primary"]`, and the acceptance `counting: true` |
 | A1 | one repeat removed by `thermal.os_level_nonzero` (item 1) and one quad removed by `member.anchor_not_bounded` |
-| B2 | four 8B prefill-p2048 runs carry `battery.assist` (two repeats, two in different quads), with meter streams whose B0AC is negative inside their requests and a run whose request has no SMC read (`meter_battery_unavailable`) |
+| B2 | four 8B prefill-p2048 runs carry `battery.assist` (two repeats, two in different quads), with meter streams whose B0AC is negative inside their requests and a run whose request has no SMC read (`meter_battery_unavailable`). One of the four is assisted in prefill only, with its negative reads arriving within τ into decode (its unit leaves the decode without-assist value by the registered rule). One further 8B run discharges in the last 0.2 s of its decode, read only after the request ends (`battery.assist_outside_request`: it stays in the without-assist value and is counted beside it, §7.1). Each discharge is at least 1 J (the attribution limit) and at least bar B5 |
 | B3 | two runs admitted after waiting (`idle.waited`) |
 | A4 | one run whose idle baseline holds GPU power above P* (the desk exclusion removes its unit); A4 still counts |
 | G1 | one quad with an outside-processor excess (C = 1.54, k = 2: E_add 2.50 J) and one flagged run below the line |
@@ -1084,13 +1153,19 @@ decisions I made; NEEDS_RULING (or "none"); every L9 or block-6 defect found, wi
 - **D19.** The session index keeps the archived `claim_usable` and carries counting in its own field (§4.4, §19 F3).
 - **D20.** The equivalence replay compares outputs with provenance projected out, and checks provenance on its own
   (§4.2, §19 F4).
+- **D21.** From the BAT-2 ruling, block 6 takes no new arithmetic. The per-phase value stays meter-only, as REG §9.5
+  item 5 registers it; the battery-assist line keeps B5-PLAN §8.1's member rule. The one addition is a printed count
+  of `battery.assist_outside_request` runs beside the whole-machine without-assist value (§7.1). A phase-scoped
+  marker like BYTES' was not adopted: for a phase shorter than τ its window lies wholly after the phase.
 
-**For the lead.** Two things. (1) S-15 (§15 step 7) changes no registered number, but it fills a slot by adopting a
+**For the lead.** Three things. (1) S-15 (§15 step 7) changes no registered number, but it fills a slot by adopting a
 definition that no block-5 analysis commit holds, so it is the lead's call with a REG §17 entry. (2) By the code at
 `f31aca19f`, the block-6 harvest stored each session's bracket with block 5's acceptance (s_bracket 14.531 ms, not the
 registered 10.818 ms; §4.8). Counting is unaffected, because the acceptance evaluated b_op with block 6's registration,
 and the design keeps the stored bracket out of every number; the dry run's structure record confirms it per session.
-Nothing else here needs a ruling.
+(3) The BAT-2 ruling put the battery term into BYTES' DC input. Block 6's registered per-phase line stays meter-only
+(§7.1). If you want the brief's "plus the battery term" inside the per-phase value, it is a REG §12.4 entry (§15
+step 7). Nothing else here needs a ruling.
 
 ---
 
@@ -1133,3 +1208,21 @@ had to join (custody read-replay allowlist, single-count discipline census, auth
 name functions in the seam's library files, and the test modules of those files; the equivalence replay names L9's
 joined-driver harness, added after `1ab888a68`; the §10 per-token example prints 0.02851562 (the exact value is a tie
 at 8 decimals and the float rounds down, so a test at bar B2 would have failed on the old digit).
+
+## 21. Third pass (2026-10-22)
+
+A re-check against the item's acceptance list and against what changed since the second pass, blind as before.
+
+- **BAT-2.** The battery ruling of 2026-10-21 (BYTES) came after the draft and cites it. §7.1 states what it ruled,
+  why block 6's registered per-phase value stays meter-only (REG §9.5 item 5; and by BAT-2's own delay τ, on a phase
+  shorter than τ the term never exceeds its own bound v), and what block 6 takes from it: §7 item 2 no longer
+  claims the without-assist value is free of the gap for discharge read after the request ends, and the count of
+  `battery.assist_outside_request` runs is printed beside it (D21). §8 reconciles the brief's pointer to
+  `MACHINE_BOUNDARY` (block 5's request-level boundary) with the registered per-phase text, and §15 step 7 says how
+  the lead would add the battery inside the per-phase value if wanted. Fixture B2 gains a prefill-only assist and a
+  discharge read after its request.
+- **Clause map.** Rows for REG §9.1 to §9.4 added, so every estimator clause of §9 maps to a step and a test.
+- **Inputs moved?** L9's head is now `500f7ad3d` (reports only since `64b4e2cbf`); the block-6 line is still at
+  `1706257c4`; on main, the registration and the nine `claim_usable` readers of §12 are unchanged since `ef520743c`.
+- **Worked examples** of §4.6, §4.8, §6, §8, §10, §11.1 and §11.4 and the §11 precision derivation re-run with
+  `/opt/homebrew/bin/python3.13 -I -B`: every printed digit reproduces.
