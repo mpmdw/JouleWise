@@ -348,8 +348,8 @@ def detect_phases(trace: PowerTrace, *, noise_sd_w: float | None = None) -> list
                 boundary_uncertainty = max(boundary_uncertainty, b - a)
                 local_flags.append("boundary_indeterminate_read_gap")
         # Retain low-segment exposures to test whether an empty visible gap
-        # can explain their convolution. Even a partial-window trough can
-        # refute a short client gap; it need not be a pure-idle observation.
+        # can contain the observed idle-compatible averaging windows. Mixed
+        # exposures alone are conservatively explained by visible latency.
         # Two independent level errors have variance <=2*variance; the
         # Gaussian tail <=1/n and bounded rounding derive the power bar.
         low_bar = quantum + math.sqrt(4 * variance * math.log(max(2, n)))
@@ -496,9 +496,15 @@ def match_tool_calls(segments: list[Segment], episode: Episode) -> ToolCallMatch
         # Disjoint level-error intervals are needed to identify a pure low.
         if segment.active_floor_w - segment.idle_floor_w <= 2 * segment.power_uncertainty_w:
             return True
+        contrast = segment.active_floor_w - segment.idle_floor_w
         for a, b, value in segment.low_observation_windows:
+            # A sample admitted within +/-bar of idle can itself have a
+            # level error of +/-bar. At most 2*bar/contrast of its exposure
+            # can therefore be active. Convert that bounded power ambiguity
+            # to nanoseconds before asserting the whole exposure is idle.
+            edge_uncertainty = math.ceil(2 * segment.power_uncertainty_w * (b - a) / contrast)
             if (abs(value - segment.idle_floor_w) <= segment.power_uncertainty_w and
-                    (a < left or b > right)):
+                    (a < left - edge_uncertainty or b > right + edge_uncertainty)):
                 return False
         return True
 

@@ -12,17 +12,18 @@ from tests.align.test_sensor_sim import model, production_world, world
 
 class PhaseReviewTwoTest(unittest.TestCase):
     def test_tool_free_client_latency_is_explained_by_every_visible_gap(self):
-        base = production_world(0, tools=False)
-        gap = 20_000_000  # Production client-latency scenario, retained without tools.
-        episode = replace(base, turns=tuple(replace(
-            turn, start_ns=turn.start_ns + i * gap, end_ns=turn.end_ns + i * gap,
-            first_token_ns=turn.first_token_ns + i * gap)
-            for i, turn in enumerate(base.turns)), end_ns=base.end_ns + len(base.turns) * gap)
-        for name, sensor in production_sensor_models(0):
-            with self.subTest(sensor=name):
-                result = match_tool_calls(detect_phases(simulate(
-                    timeline_from_episode(episode, model()), sensor)), episode)
-                self.assertEqual(len(result.unlogged_candidates), 0)
+        for seed in (0, 1):
+            base = production_world(seed, tools=False)
+            gap = 20_000_000  # Production client-latency scenario, retained without tools.
+            episode = replace(base, turns=tuple(replace(
+                turn, start_ns=turn.start_ns + i * gap, end_ns=turn.end_ns + i * gap,
+                first_token_ns=turn.first_token_ns + i * gap)
+                for i, turn in enumerate(base.turns)), end_ns=base.end_ns + len(base.turns) * gap)
+            for name, sensor in production_sensor_models(seed):
+                with self.subTest(sensor=name):
+                    result = match_tool_calls(detect_phases(simulate(
+                        timeline_from_episode(episode, model()), sensor)), episode)
+                    self.assertEqual(len(result.unlogged_candidates), 0)
 
     def test_zero_ripple_cannot_shift_all_labels_by_one_quantum(self):
         for seed in (0, 5):  # Fixed failure/control seeds, not a statistical budget.

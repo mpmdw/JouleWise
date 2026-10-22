@@ -250,7 +250,14 @@ def run_duration_study(*, seeds=range(72), durations_ns=(
 
 def _study_duration(duration_ns):
     """Pickleable CLI worker; duration rows are independent simulation jobs."""
-    return run_duration_study(durations_ns=(duration_ns,))
+    import time
+    started = time.monotonic()
+    print(f"study {duration_ns / 1_000_000:g} ms: start, "
+          f"{len(run_duration_study.__kwdefaults__['seeds'])} seeds", file=sys.stderr, flush=True)
+    result = run_duration_study(durations_ns=(duration_ns,))
+    print(f"study {duration_ns / 1_000_000:g} ms: done in {time.monotonic() - started:.1f} s",
+          file=sys.stderr, flush=True)
+    return result
 
 
 class PhaseDetectTest(unittest.TestCase):
