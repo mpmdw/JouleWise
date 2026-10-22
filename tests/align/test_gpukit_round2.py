@@ -271,3 +271,46 @@ class IdentityTests(unittest.TestCase):
                 self.assertEqual(basis["observed_episodes"], 1)
                 # Same episode brackets; default 1e-6 relative arithmetic bar.
                 self.assertTrue(math.isclose(basis["mean_episode_seconds"], 2.0, rel_tol=1e-6))
+
+
+class ProvenanceTests(unittest.TestCase):
+    def test_r7_dimension_and_count_quotes_are_verbatim_and_pinned(self):
+        root = Path(__file__).resolve().parents[2]
+        expected = {
+            "Qwen/Qwen3-4B": ("1cfa9a7208912126459214e8b04321603b3df60c",
+                            '- Number of Parameters: 4.0B',
+                            '- Number of Paramaters (Non-Embedding): 3.6B'),
+            "Qwen/Qwen3-8B": ("b968826d9c46dd6066d109eabc6255188de91218",
+                            '- Number of Parameters: 8.2B',
+                            '- Number of Paramaters (Non-Embedding): 6.95B'),
+            "Qwen/Qwen3-14B": ("40c069824f4251a91eefaf281ebe4c544efd3e18",
+                             '- Number of Parameters: 14.8B',
+                             '- Number of Paramaters (Non-Embedding): 13.2B'),
+            "Qwen/Qwen3-30B-A3B": ("ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+                                  '- Number of Parameters: 30.5B in total and 3.3B activated', None),
+            "Qwen/Qwen3-Next-80B-A3B-Thinking": (
+                "e502dd4100cc68c0de57643fd4317ec93a128670",
+                '- Number of Parameters: 80B in total and 3B activated', None),
+            "microsoft/Phi-3.5-mini-instruct": (
+                "2fe192450127e6a83f7441aef6e3ca586c338b77",
+                '**Architecture:** Phi-3.5-mini has 3.8B parameters and is a dense decoder-only Transformer model using the same tokenizer as Phi-3 Mini.<br>',
+                None),
+        }
+        for path in sorted((root / "configs/align").glob("*.json")):
+            text = path.read_text()
+            self.assertNotIn("github.com/yiyihum", text)
+            self.assertNotIn("direct HF access unavailable", text)
+            matrix = json.loads(text)
+            for model, params in matrix["model_parameters"].items():
+                commit, quote, nonembedding = expected[model]
+                base = "https://huggingface.co/" + model + "/blob/" + commit + "/"
+                self.assertEqual(params["source"]["url"], base + "README.md")
+                self.assertEqual(params["source"]["quote"], quote)
+                for field, punctuation in (("hidden_size", ","), ("vocab_size", "")):
+                    source = params[field + "_source"]
+                    self.assertEqual(source["url"], base + "config.json")
+                    self.assertEqual(source["quote"], '"' + field + '": ' + str(params[field]) + punctuation)
+                    self.assertEqual(source["accessed"], "2026-10-22")
+                    self.assertIn("not fetched by this seat", source["note"])
+                if nonembedding is not None:
+                    self.assertEqual(params["non_embedding_parameters_source"]["quote"], nonembedding)

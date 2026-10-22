@@ -31,7 +31,7 @@ It stays null, with an unverified-fit flag, until an operator sets it.
 Tensor-parallel compatibility and actual allocation still need a serving preflight.
 
 Qwen publishes [Qwen3-Next-80B-A3B-Thinking-FP8](https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking-FP8).
-Its [model-card mirror](https://github.com/yiyihum/rag291/blob/ea64553f7d1979c92aa70009cf3a3b6b2a7b6261/data/hf_cards_2025/models/Qwen__Qwen3-Next-80B-A3B-Thinking-FP8.md)
+Its [pinned model card](https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking-FP8/blob/1a28d48a94e799860201879be67616b9e21c4bd2/README.md)
 was read on 2026-10-22 and explicitly names the FP8 checkpoint. The public
 [Xinference registry](https://github.com/xorbitsai/inference/blob/14270e589d0abd2788699d91742f770e811c45d9/xinference/model/llm/models/Qwen3-Next-Thinking.json)
 also supplies its exact config-source revision. Direct HF fetching was unavailable
@@ -371,3 +371,13 @@ NVIDIA reference: https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.ht
 (CUDA_DEVICE_ORDER); canonical reference supplied for operators, not fetched by
 this executor-less seat. Placement tests record the actual child's environment
 and require PCI_BUS_ID for both agent and monitor processes.
+
+### Model dimension/count provenance (R7)
+
+Model-count citations now quote the pinned Hugging Face cards verbatim (including
+their spelling); hidden_size and vocab_size quote their separate config.json
+lines at the same supplied commits. These are lead-fetched sources quoted from
+the fix-2 brief, dated 2026-10-22 with that distinction in each note. Card and
+config provenance pins do not select model weights: serving revisions remain
+null and must be frozen before paid work. No parameter count, decode weight
+formula or printed cost/throughput number changes.
