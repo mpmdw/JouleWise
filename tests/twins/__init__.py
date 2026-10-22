@@ -1,4 +1,8 @@
-"""Register twin tests under the same names for discovery and sharding."""
+"""Independent arithmetic-twin tests.
+
+load_tests registers the twin tests under the same names for discovery and
+sharding, and honours the discovery pattern.
+"""
 
 import fnmatch
 import importlib

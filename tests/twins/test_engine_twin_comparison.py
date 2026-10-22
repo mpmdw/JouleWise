@@ -20,13 +20,13 @@ from joulewise.analysis_engine.claims import evaluate_claim
 from joulewise.analysis_engine.distributions import two_sided_student_t_p_value
 from joulewise.analysis_engine.estimators import (
     DeterministicBoundTerm, PairedObservation, StochasticVarianceTerm,
-    estimate_paired_blocks,
+    _ci_t_critical, estimate_paired_blocks,
 )
 from joulewise.analysis_engine.multiplicity import holm_adjust, benjamini_hochberg_adjust
 from joulewise.analysis_engine.inputs import FloorResolution
 from joulewise.analysis_engine.sensitivity import influence_triggers
 from joulewise.twins.engine_twin import (
-    Block, Run, adjust, estimate, family, outcome, t_two_sided,
+    INTERPOLATION, Block, Run, adjust, estimate, family, outcome, t_critical, t_two_sided,
 )
 
 
@@ -50,12 +50,26 @@ def to_observations(blocks, *, gross_variance=0.0):
             sum(r.variance for r in b.b)/len(b.b)**2, b.covariance),)
         if gross_variance:
             stochastic += (StochasticVarianceTerm("E_gross_repetition_j2", gross_variance, gross_variance),)
-        terms = tuple(DeterministicBoundTerm(
-            kind, mean(r.bounds.get(kind, 0.0) for r in b.a),
-            mean(r.bounds.get(kind, 0.0) for r in b.b), b.contrast_bounds.get(kind))
-            for kind in sorted(kinds))
+        terms = []
+        for kind in sorted(kinds):
+            if kind in b.contrast_bounds:
+                # Production ignores the arm fields when a contrast bound is given
+                # (estimators._deterministic_bound_value). Pass the recorded arm
+                # means so a rule that used them would show; an arm whose members
+                # do not all record the kind gets 0.0 in this ignored field only.
+                arms = [mean(r.bounds[kind] for r in side)
+                        if all(kind in r.bounds for r in side) else 0.0
+                        for side in (b.a, b.b)]
+                terms.append(DeterministicBoundTerm(kind, *arms, b.contrast_bounds[kind]))
+                continue
+            try:
+                terms.append(DeterministicBoundTerm(
+                    kind, mean(r.bounds[kind] for r in b.a),
+                    mean(r.bounds[kind] for r in b.b)))
+            except KeyError:
+                raise ValueError(f"member bound unrecorded: {kind}") from None
         observations.append(PairedObservation(b.key, mean(r.energy for r in b.a),
-                                               mean(r.energy for r in b.b), stochastic, terms))
+                                               mean(r.energy for r in b.b), stochastic, tuple(terms)))
     return tuple(observations)
 
 
@@ -65,7 +79,7 @@ def world(differences, *, drift=0.0, bound=0.0, variance=0.0, prefix="q"):
         base = 100 + i*7*drift
         def run(x):
             return Run(x, variance, {"E_clock_anchor_shift_bound_j": bound,
-                                     "E_interpolation_joint_edge_bound_j": 0.0})
+                                     INTERPOLATION: 0.0})
         rows.append(Block(f"{prefix}{i}", (run(base), run(base+3*drift)),
                           (run(base+d+drift), run(base+d+2*drift))))
     return rows
@@ -128,6 +142,22 @@ def synthetic_prepared(blocks, *, missing=()):
     return inputs, prepared
 
 
+def production_loo(blocks, *, missing=()):
+    """Dispatch the same valid LOO call for complete and excluded-quad worlds."""
+    inputs, prepared = synthetic_prepared(blocks, missing=missing)
+    family_spec = {"family_instance_id": "synthetic", "contrast_ids": ["decode"],
+                   "multiplicity": {"method": "holm", "m": 1, "alpha": 0.05, "q": None}}
+    point = prepared["estimate"]
+    full_adjusted = {"decode": {"rejected": point.raw_p <= 0.05}}
+    full_evaluations = {"decode": production_outcome(
+        point, 1.2, point.raw_p, reasons=prepared["global_reason_codes"])}
+    with patch.object(engine, "frozen_family_block_strata",
+                      return_value=[(i, {"decode": b.key}) for i, b in enumerate(blocks)]), \
+         patch.object(engine, "_subset_floor", return_value=({"active_floor_j": 1.2}, ())):
+        return engine._loo_family(inputs, family_spec, {"decode": prepared},
+                                  full_adjusted, full_evaluations, None)["decode"]
+
+
 class ProductionComparisonTests(unittest.TestCase):
     max_energy_delta = 0.0
     compared_worlds = 0
@@ -167,6 +197,10 @@ class ProductionComparisonTests(unittest.TestCase):
                           contrast_bounds={"E_clock_anchor_shift_bound_j": 0.01})
                   for b in world([1,2,3,4,5], bound=2, variance=1)]
         self.compare(blocks)
+        # A replaced kind need not be recorded on the members whose bounds are unused.
+        first = blocks[0]
+        blocks[0] = replace(first, a=(replace(first.a[0], bounds={INTERPOLATION: 0.0}), first.a[1]))
+        self.compare(blocks)
 
     def test_probability_and_frozen_multiplicity(self):
         for df in range(3,10):
@@ -177,6 +211,79 @@ class ProductionComparisonTests(unittest.TestCase):
                         {"a":0.025,"b":0.05}, {"a":1.0,"b":1.0}):
             self.assertEqual(adjust(pvalues,2), holm_adjust(pvalues,m=2))
             self.assertEqual(adjust(pvalues,2,"bh"), benjamini_hochberg_adjust(pvalues,m=2))
+
+    def test_ci_critical_matches_production_rounding(self):
+        # Both round the quantile to the registered three places, so bit identity
+        # is the property. Minimum distance to k/1000 + 0.0005 over df 1..30:
+        # 2.9438642875e-5 (df 26), above its 1e6-ulp noise bar 4.4408920985e-10;
+        # no df needs excluding from the exact comparison.
+        for df in range(1, 31):
+            with self.subTest(df=df):
+                self.assertEqual(t_critical(df), _ci_t_critical(df))
+
+    def test_unrecorded_interpolation_matches_production(self):
+        control = world([3]*10, bound=0.025)
+        unrecorded = [replace(b, a=tuple(replace(r, bounds={
+            k: v for k, v in r.bounds.items() if k != INTERPOLATION}) for r in b.a),
+            b=tuple(replace(r, bounds={k: v for k, v in r.bounds.items()
+                                      if k != INTERPOLATION}) for r in b.b)) for b in control]
+        for label, blocks in (("unrecorded", unrecorded), ("recorded zero", control)):
+            with self.subTest(interpolation=label):
+                _, prepared = synthetic_prepared(blocks)
+                reasons = engine._analysis_reasons(
+                    prepared, prepared["estimate"], prepared["floor"],
+                    prepared["floor_resolutions"], prepared["randomization_check"])
+                expected = "not_resolvable" if label == "unrecorded" else "direction_supported"
+                if label == "unrecorded":
+                    self.assertIn("interpolation_bound_unrecorded", reasons)
+                else:
+                    self.assertEqual(reasons, [])
+                self.assertEqual(production_outcome(prepared["estimate"], 1.2, 0,
+                                                    reasons=reasons)["outcome"], expected)
+                self.assertEqual(outcome(estimate(blocks), 1.2, 0), expected)
+
+    def test_partial_kind_in_every_quad_matches_production(self):
+        anchor = "E_clock_anchor_shift_bound_j"
+        blocks = [replace(b, a=(replace(b.a[0], bounds={INTERPOLATION: 0.0}), b.a[1]))
+                  for b in world([3]*10, bound=0.025)]
+        _, prepared = synthetic_prepared(blocks)
+        reasons = engine._analysis_reasons(
+            prepared, prepared["estimate"], prepared["floor"],
+            prepared["floor_resolutions"], prepared["randomization_check"])
+        self.assertIn("required_error_term_unknown", reasons)
+        self.assertEqual(prepared["estimate"].deterministic_bounds, ())
+        self.assertEqual(production_outcome(prepared["estimate"], 1.2, 0,
+                                            reasons=reasons)["outcome"], "not_resolvable")
+        value = estimate(blocks)
+        self.assertIn(anchor, value.unknown_bounds)
+        self.assertEqual(outcome(value, 1.2, 0), "not_resolvable")
+        with self.assertRaisesRegex(ValueError, anchor):
+            to_observations(blocks)
+
+    def test_single_mismatched_quad_production_raises_pending_fix(self):
+        """Pin today's production defect pending a fix: mismatched kinds abort.
+
+        Production should record not_resolvable with the member's reason,
+        which deterministic_bounds already records. When fixed, this test
+        fails and is rewritten as an outcome equality with the twin.
+        """
+        anchor = "E_clock_anchor_shift_bound_j"
+        control = world([3]*10, bound=0.025)
+        partial = list(control)
+        partial[0] = replace(control[0], a=(replace(control[0].a[0],
+                             bounds={INTERPOLATION: 0.0}), control[0].a[1]))
+        absent_quad = list(control)
+        absent_quad[0] = replace(control[0],
+            a=tuple(replace(r, bounds={INTERPOLATION: 0.0}) for r in control[0].a),
+            b=tuple(replace(r, bounds={INTERPOLATION: 0.0}) for r in control[0].b))
+        for label, blocks in (("one member", partial), ("whole quad", absent_quad)):
+            with self.subTest(missing=label):
+                with self.assertRaisesRegex(
+                        ValueError, "every paired block must carry the same deterministic term names"):
+                    synthetic_prepared(blocks)
+                value = estimate(blocks)
+                self.assertIn(anchor, value.unknown_bounds)
+                self.assertEqual(outcome(value, 1.2, 0), "not_resolvable")
 
     def test_claim_boundaries_and_registered_direction(self):
         cases = ([3]*5, [-3]*5, [0]*5, [-2,-1,1,2,3], [0.2]*4+[10])
@@ -245,17 +352,7 @@ class ProductionComparisonTests(unittest.TestCase):
 
     def test_complete_production_loo_dispatch(self):
         blocks = world([3.1,2.9,3.3,3,2.8,3.2,3.1,2.9,3,2.7],bound=0.025)
-        inputs,prepared = synthetic_prepared(blocks)
-        family_spec = {"family_instance_id":"synthetic", "contrast_ids":["decode"],
-                       "multiplicity":{"method":"holm","m":1,"alpha":0.05,"q":None}}
-        point = prepared["estimate"]
-        full_eval = production_outcome(point,1.2,point.raw_p)
-        with patch.object(engine,"frozen_family_block_strata",
-                          return_value=[(i,{"decode":b.key}) for i,b in enumerate(blocks)]), \
-             patch.object(engine,"_subset_floor",return_value=({"active_floor_j":1.2},())):
-            actual = engine._loo_family(inputs,family_spec,{"decode":prepared},
-                                        {"decode":{"rejected":point.raw_p<=0.05}},
-                                        {"decode":full_eval},None)["decode"]
+        actual = production_loo(blocks)
         twin = family({"decode":blocks},{"decode":1.2})["decode"]["loo"]
         self.assertEqual(len(actual),len(twin))
         for a,b in zip(actual,twin):
@@ -263,22 +360,45 @@ class ProductionComparisonTests(unittest.TestCase):
             self.assertEqual(a["outcome"],b["outcome"])
             self.assertLessEqual(abs(a["estimate"]-b["estimate"].point),ENERGY_BAR_J)
 
-    @unittest.expectedFailure
-    def test_registered_kept_quads_do_not_refuse_known_l9_gap(self):
+    def test_kept_quads_production_refuses_pending_l9_exclusion_consumer(self):
+        """Pin a known production gap fixed by the L9 exclusion consumer.
+
+        The consumer authenticates removed units, keeps the frozen planned
+        slots, and tells an allowed exclusion apart from unplanned
+        incompleteness. When L9 lands this fails and is rewritten as equality
+        of production outcome, ceiling and LOO row count with the twin's.
+        """
         blocks = world([3.1,2.9,3.3,3,2.8,3.2,3.1,2.9,3,2.7],bound=0.025)
         _,prepared = synthetic_prepared(blocks,missing=(3,))
+        # Production withholds this contrast's p from the frozen family today.
+        self.assertIsNone(engine._claim_raw_p(prepared, prepared["estimate"]))
         kept = [b for i,b in enumerate(blocks) if i != 3]
         expected = family({"decode":kept,"prefill":kept},{"decode":1.2,"prefill":1.2})["decode"]
-        observed = production_outcome(prepared["estimate"],1.2,2*prepared["estimate"].raw_p,
+        point = prepared["estimate"]
+        self.assertAlmostEqual(point.estimate, estimate(kept).point, delta=ENERGY_BAR_J)
+        self.assertAlmostEqual(point.estimate, 3.0, delta=ENERGY_BAR_J)
+        self.assertTrue({"fixed_n_plan_incomplete", "paired_block_incomplete"}
+                        <= set(prepared["global_reason_codes"]))
+        p = point.raw_p
+        adjusted = holm_adjust({"decode": p, "prefill": p}, m=2)
+        observed = production_outcome(point,1.2,adjusted["decode"],
                                       reasons=prepared["global_reason_codes"])
-        self.assertEqual(expected["outcome"],observed["outcome"])
+        self.assertEqual(observed["outcome"], "not_resolvable")
+        self.assertNotEqual(observed["claim_level_ceiling"], "L2")
+        self.assertEqual(expected["outcome"], "direction_supported")
+        self.assertEqual(expected["ceiling"], "L2")
 
-    @unittest.expectedFailure
-    def test_registered_kept_quads_get_loo_known_l9_gap(self):
+    def test_kept_quads_production_loo_pending_l9_exclusion_consumer(self):
+        """Pin a known production gap fixed by the L9 exclusion consumer.
+
+        When L9 lands this fails and is rewritten as equality of production
+        outcome, ceiling and LOO row count with the twin's.
+        """
         blocks = world([3.1,2.9,3.3,3,2.8,3.2,3.1,2.9,3,2.7],bound=0.025)
-        inputs,prepared = synthetic_prepared(blocks,missing=(3,))
-        actual = engine._loo_family(inputs,{"contrast_ids":["decode"]},{"decode":prepared},{},{},None)
-        self.assertEqual(len(actual["decode"]),9)
+        self.assertEqual(len(production_loo(blocks, missing=())), 10)
+        self.assertEqual(len(production_loo(blocks, missing=(3,))), 0)
+        kept = [b for i, b in enumerate(blocks) if i != 3]
+        self.assertEqual(len(family({"decode": kept}, {"decode": 1.2})["decode"]["loo"]), 9)
 
     @classmethod
     def tearDownClass(cls):

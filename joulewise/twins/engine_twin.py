@@ -9,18 +9,23 @@ All comparisons in its companion tests use synthetic worlds.
 """
 
 from dataclasses import dataclass, field
-from math import exp, fsum, isfinite, lgamma, log, log1p, sqrt
+from math import exp, fsum, inf, isfinite, lgamma, log, log1p, sqrt
 from statistics import mean, stdev
 from typing import Mapping, Sequence
 
 
+INTERPOLATION = "E_interpolation_joint_edge_bound_j"
+
+
 def _beta_fraction(a: float, b: float, x: float) -> float:
     """Continued fraction for the incomplete beta, evaluated by modified Lentz."""
+    # Lentz division-by-zero guard, well above the smallest normal double (2.2e-308).
     tiny = 1e-300
     c = 1.0
     d = 1.0 - (a + b) * x / (a + 1.0)
     d = 1.0 / (d if abs(d) > tiny else tiny)
     value = d
+    # Cap 1000: review grid (df 1..60,100,200,500,1000,10000; x 0,1e-8..1e8) took at most 39 iterations.
     for k in range(1, 1001):
         for numerator in (
             k * (b - k) * x / ((a + 2*k - 1) * (a + 2*k)),
@@ -32,6 +37,7 @@ def _beta_fraction(a: float, b: float, x: float) -> float:
             c = c if abs(c) > tiny else tiny
             change = c * d
             value *= change
+        # About 9 roundoffs (2^-52): truncation is at float noise, far below the 1e-6 relative p bar.
         if abs(change - 1.0) < 2e-15:
             return value
     raise ArithmeticError("incomplete beta did not converge")
@@ -62,6 +68,7 @@ def t_critical(df: int, *, rounded: bool = True) -> float:
     lo, hi = 0.0, 1.0
     while t_two_sided(hi, df) > 0.05:
         hi *= 2
+    # 90 halvings shrink the bracket by 2^-90, below float resolution of these quantiles.
     for _ in range(90):
         mid = (lo + hi) / 2
         if t_two_sided(mid, df) > 0.05:
@@ -104,6 +111,7 @@ class Estimate:
     bounds: Mapping[str, float]
     decision: tuple[float, float]
     p: float
+    unknown_bounds: tuple[str, ...] = ()
 
     @property
     def direction(self) -> str:
@@ -116,6 +124,7 @@ def estimate(blocks: Sequence[Block]) -> Estimate:
     if n < 2 or len({b.key for b in blocks}) != n:
         raise ValueError("at least two distinct complete blocks required")
     differences, variances, by_kind = [], [], {}
+    unknown = set()
     for block in blocks:
         if not block.a or not block.b:
             raise ValueError("incomplete block")
@@ -137,10 +146,14 @@ def estimate(blocks: Sequence[Block]) -> Estimate:
         for run in (*block.a, *block.b):
             kinds.update(run.bounds)
         for kind in kinds:
-            bound = block.contrast_bounds.get(kind)
-            if bound is None:
-                bound = (mean(r.bounds.get(kind, 0.0) for r in block.a)
-                         + mean(r.bounds.get(kind, 0.0) for r in block.b))
+            if kind in block.contrast_bounds:
+                bound = block.contrast_bounds[kind]
+            elif all(kind in run.bounds for run in (*block.a, *block.b)):
+                bound = (mean(r.bounds[kind] for r in block.a)
+                         + mean(r.bounds[kind] for r in block.b))
+            else:
+                unknown.add(kind)
+                continue
             by_kind.setdefault(kind, []).append(bound)
     point, sd = mean(differences), stdev(differences)
     se_repeat, se_metrology = sd/sqrt(n), sqrt(fsum(variances))/n
@@ -148,11 +161,17 @@ def estimate(blocks: Sequence[Block]) -> Estimate:
     critical = t_critical(n-1)
     ci = (point-critical*se_total, point+critical*se_total)
     repeat_ci = (point-critical*se_repeat, point+critical*se_repeat)
-    bounds = {kind: fsum(values)/n for kind, values in sorted(by_kind.items())}
+    unknown.update(kind for kind, values in by_kind.items() if len(values) != n)
+    unknown_bounds = tuple(sorted(unknown))
+    bounds = {kind: fsum(values)/n for kind, values in sorted(by_kind.items())
+              if kind not in unknown}
     total = fsum(bounds.values())
+    # An unknown non-negative bound has no finite upper limit: its containing interval
+    # is unbounded; the text forbids taking it as zero (analysis_engine_trio B6).
+    decision = (-inf, inf) if unknown_bounds else (ci[0]-total, ci[1]+total)
     p = t_two_sided(point/se_total, n-1) if se_total else (0.0 if point else 1.0)
     return Estimate(n, point, sd, se_repeat, se_metrology, se_total, ci,
-                    repeat_ci, bounds, (ci[0]-total, ci[1]+total), p)
+                    repeat_ci, bounds, decision, p, unknown_bounds)
 
 
 def adjust(pvalues: Mapping[str, float | None], m: int, method: str = "holm") -> dict[str, float | None]:
@@ -196,7 +215,10 @@ def outcome(value: Estimate | None, floor: float | None, adjusted_p: float | Non
         return "not_resolvable"
     if not isfinite(floor) or floor < 0:
         raise ValueError("invalid floor")
-    interpolation = value.bounds.get("E_interpolation_joint_edge_bound_j", 0.0)
+    # Clock-anchor/drift presence is checked by production inputs; selected kept units are given here.
+    if value.unknown_bounds or INTERPOLATION not in value.bounds:
+        return "not_resolvable"
+    interpolation = value.bounds[INTERPOLATION]
     ci_zero = value.ci[0] <= 0 <= value.ci[1]
     decision_zero = value.decision[0] <= 0 <= value.decision[1]
     if (abs(value.point) <= floor or interpolation >= floor
