@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from tests.align.test_budget import OfflineTest
 from joulewise.align.budget.__main__ import main
-from joulewise.align.budget.conditions import Condition, LocalEndpoint, delete_spans
+from joulewise.align.budget.conditions import Condition, LocalEndpoint, default_conditions, delete_spans
 from joulewise.align.budget.energy import episode_energy
 from joulewise.align.budget.items import ItemBatch, hint_suite, stratified_roster
 from joulewise.align.budget.run import ModelSpec, Settings, _generate, run_matrix, summarize, summary_table
@@ -839,3 +839,28 @@ class BudgetReviewTests(OfflineTest):
         self.assertGreater(error, 0.001 * 1.0 / 2)  # Quantum-only bound is resolution*duration/2.
         self.assertLessEqual(error, energy.uncertainty_j)
         self.assertIn("energy_transition_interpolation_bound", energy.flags)
+
+    def test_review_memory_fixture_reports_a_single_trace_set(self):
+        import tracemalloc
+        # The review's production-shaped fixture: 30 s / 10 ms = 3000
+        # samples on each of four channels. Sizes are printed, never asserted
+        # against a VM-dependent byte threshold.
+        tracemalloc.start()
+        try:
+            origin = 1_700_000_000_000_000_000
+            rng = random.Random(0)
+            traces = [PowerTrace("nvml_power", f"gpu0:c{k}", "h",
+                                 tuple(origin + i * 10_000_000 + rng.randrange(1000) for i in range(3000)),
+                                 tuple(250.0 + rng.random() for _ in range(3000)),
+                                 "W", 10_000_000) for k in range(4)]
+            size = tracemalloc.get_traced_memory()[0]
+            self.assertEqual(sum(len(trace.t_ns) for trace in traces), 4 * 3000)
+            reviewer_generations = 200 * (3 + 2 * 10)
+            physical = sum(condition.mode != "deletion" for condition in default_conditions())
+            actual_generations = 200 * (3 + 2 * physical)
+            print("RE-REVIEW memory fixture bytes:", size,
+                  "review-script extrapolation (4600):", size * reviewer_generations,
+                  "default physical Generation count:", actual_generations,
+                  "derived default bytes:", size * actual_generations)
+        finally:
+            tracemalloc.stop()
