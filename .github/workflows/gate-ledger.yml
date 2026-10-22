@@ -4,7 +4,8 @@ name: gate-ledger
 # REQUIRED GATE-LEDGER CHECK on main since 2026-09-24, made required in
 # Ed's interactive session (T26 cold gate item 2, D-170; interactive
 # record 02a24110 §7).
-# Every fresh non-draft PR is red by construction because the template seeds an
+# Every fresh PR is red by construction (once it is out of draft: draft PRs
+# skip this job, see the `if` on the job below) because the template seeds an
 # unresolved Tier choice, TODO Impact lines and NOT-RUN rows; that
 # deliberate nudge keeps an incomplete ledger visible.
 #
