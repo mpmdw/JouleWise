@@ -411,7 +411,8 @@ raise SystemExit(1)
                       ready_command=(sys.executable, "-c",
                                      'import os,sys; sys.exit(not os.path.exists(os.environ["GPUKIT_READY"]))'),
                       ready_timeout_s=30.0, command_timeout_s=30.0, runner_timeout_s=30.0,
-                      monitor_placement="none", poll_s=0.01)
+                      monitor_placement="none", poll_s=0.01, preflight_timeout_s=30.0,
+                      copy_timeout_s=30.0)
         values.update(changes)
         return SessionOptions(**values)
 
@@ -422,7 +423,8 @@ raise SystemExit(1)
                    "--runner-command", json.dumps(options.runner_command),
                    "--preflight-command", json.dumps(options.preflight_command),
                    "--ready-command", json.dumps(options.ready_command),
-                   "--ready-timeout-s", "30", "--command-timeout-s", "30", "--poll-s", "0.01",
+                   "--ready-timeout-s", "30", "--command-timeout-s", "30",
+                   "--preflight-timeout-s", "30", "--copy-timeout-s", "30", "--poll-s", "0.01",
                    "--runner-timeout-s", "30", "--monitor-placement", "none",
                    "--destination", options.destination, "--copy-kind", "local"]
         result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
@@ -689,6 +691,7 @@ raise SystemExit(1)
             with contextlib.redirect_stdout(stdout):
                 code = main([str(options.matrix), "--output", str(options.output),
                              "--ready-timeout-s", "30", "--command-timeout-s", "30",
+                   "--preflight-timeout-s", "30", "--copy-timeout-s", "30",
                              "--runner-timeout-s", "30", "--poll-s", "0.01",
                              "--monitor-placement", "none",
                              "--preflight-command", json.dumps(options.preflight_command),
@@ -967,6 +970,7 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
             "bash", str(ROOT / "joulewise/align/gpukit/bootstrap.sh"),
             "--gpu-index", "0", str(path), "--output", str(self.base / "tp2-run"),
             "--ready-timeout-s", "30", "--command-timeout-s", "30",
+                   "--preflight-timeout-s", "30", "--copy-timeout-s", "30",
             "--runner-timeout-s", "30", "--poll-s", "0.01", "--monitor-placement", "none"],
             cwd=self.base, capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 2, result.stderr)
@@ -982,6 +986,38 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
             cwd=self.base, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 3, result.stderr)
         self.assertFalse((self.base / "session-venv").exists())
+
+
+
+    def test_preflight_timeout_and_probe_timeout_are_separate(self):
+        delayed = self.base / "delayed-preflight.py"
+        delayed.write_text(
+            "import sys,time,json\nfrom pathlib import Path\n"
+            "time.sleep(0.2)\n"
+            "Path(sys.argv[sys.argv.index('--out')+1]).write_text(json.dumps("
+            "{'refused':False,'measurement_ready':True,'flags':[]}))\n")
+        command = (sys.executable, str(delayed))
+        # Fixture scheduling limits: 50 ms expires before its explicit 200 ms sleep;
+        # 30 s is the existing subprocess allowance, unrelated to a sensor bar.
+        refused = run_session(self._options("preflight-timeout", preflight_command=command,
+                                            preflight_timeout_s=0.05))
+        self.assertEqual(refused["status"], "refused")
+        self.assertIn("nvml_preflight_timeout", refused["flags"])
+        self.assertNotIn("nvml_preflight_unavailable", refused["flags"])
+        complete = run_session(self._options("preflight-separate", preflight_command=command,
+                                             command_timeout_s=0.05, preflight_timeout_s=30.0))
+        self.assertTrue(complete["data_complete"])
+        self.assertNotIn("nvml_preflight_timeout", complete["flags"])
+
+    def test_copy_timeout_keeps_sealed_archive(self):
+        self._script("rsync", "#!" + sys.executable + "\nimport time\ntime.sleep(30)\n")
+        # Explicit sleeping stub exceeds 50 ms; this tests command wiring, no
+        # network transfer or measured-throughput comparison is involved.
+        result = run_session(self._options("copy-timeout", destination="fixture-destination",
+                                           copy_timeout_s=0.05))
+        self.assertEqual(result["transfer_flags"], ("copy_timeout",))
+        self.assertTrue(Path(result["archive"]).is_file())
+        self.assertEqual(verify_manifest(self.base / "copy-timeout"), ())
 
 
 class FixArithmeticTests(unittest.TestCase):

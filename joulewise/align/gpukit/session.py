@@ -35,6 +35,8 @@ from joulewise.align.gpukit.throttle import snapshot, compare
 from joulewise.align.gpukit.runner_adapter import write_runner_matrix
 from joulewise.align.records import read_episodes
 
+COMMAND_TIMEOUT = -2  # Distinct from launch failure (-1) and child exit statuses.
+
 VLLM_VERSION = "0.10.2"  # Operator-selected reproducibility pin; no hardware compatibility claim.
 
 
@@ -56,6 +58,8 @@ class SessionOptions:
     command_timeout_s: float
     runner_timeout_s: float
     monitor_placement: str
+    preflight_timeout_s: float
+    copy_timeout_s: float
     preflight_command: tuple[str, ...] = ()
     ready_command: tuple[str, ...] = ()
     vllm_command: tuple[str, ...] = ("vllm",)
@@ -120,7 +124,7 @@ def _command(argv: Sequence[str], log: Path, *, timeout_s: float) -> int:
     except (OSError, subprocess.TimeoutExpired) as exc:
         with log.open("ab") as handle:
             handle.write((f"command_failed:{type(exc).__name__}\n").encode())
-        return -1
+        return COMMAND_TIMEOUT if isinstance(exc, subprocess.TimeoutExpired) else -1
 
 
 def _healthy(url: str, timeout_s: float) -> bool:
@@ -228,9 +232,11 @@ def copy_back(paths: Sequence[Path], *, kind: str, destination: str,
                            destination.rstrip("/") + "/" + path.name],
                           log.with_name(log.stem + "-" + str(i) + log.suffix),
                           timeout_s=timeout_s) for i, path in enumerate(paths)]
-        code = next((c for c in codes if c), 0)
+        code = COMMAND_TIMEOUT if COMMAND_TIMEOUT in codes else next((c for c in codes if c), 0)
     else:
         return ("copy_kind_unknown",)
+    if code == COMMAND_TIMEOUT:
+        return ("copy_timeout",)
     return () if code == 0 else ("copy_failed",)
 
 
@@ -494,8 +500,11 @@ def run_session(options: SessionOptions, *,
             preflight += ["--device", str(device)]
         receipt["preflight_argv"] = preflight
         if receipt["status"] != "refused":
-            code = _command(preflight, output / "preflight.log", timeout_s=options.command_timeout_s)
+            code = _command(preflight, output / "preflight.log", timeout_s=options.preflight_timeout_s)
             receipt["preflight_returncode"] = code
+            if code == COMMAND_TIMEOUT:
+                flags.append("nvml_preflight_timeout")
+                receipt["status"] = "refused"
             try:
                 report = json.loads(preflight_path.read_text(encoding="utf-8"))
                 if not isinstance(report, dict) or type(report.get("refused")) is not bool:
@@ -518,7 +527,8 @@ def run_session(options: SessionOptions, *,
                 elif code and not report["refused"]:
                     flags.append("nvml_preflight_command_failed_with_report")
             except (OSError, ValueError, TypeError):
-                flags.append("nvml_preflight_unavailable")
+                if code != COMMAND_TIMEOUT:
+                    flags.append("nvml_preflight_unavailable")
                 receipt["status"] = "refused"
         executable = bool(matrix and not structural_flags(matrix)
                           and "runner_settings_missing" not in flags
@@ -663,7 +673,7 @@ def run_session(options: SessionOptions, *,
     archive, checksum = package_results(output)
     transfer_flags = (copy_back((archive, checksum), kind=options.copy_kind,
                                destination=options.destination, log=archive.with_suffix(".copy.log"),
-                               timeout_s=options.command_timeout_s)
+                               timeout_s=options.copy_timeout_s)
                       if options.destination else ("copy_destination_not_supplied",))
     _json(archive.with_suffix(".transfer.json"), {"flags": transfer_flags, "archive": archive.name})
     return {**receipt, "archive": str(archive), "transfer_flags": transfer_flags}
@@ -698,6 +708,8 @@ def main(argv: list[str] | None = None) -> int:
     # Timeouts and cadence are operator policy, with no scientific cutoff implied.
     parser.add_argument("--ready-timeout-s", type=float, required=True)
     parser.add_argument("--command-timeout-s", type=float, required=True)
+    parser.add_argument("--preflight-timeout-s", type=float, required=True)
+    parser.add_argument("--copy-timeout-s", type=float, required=True)
     parser.add_argument("--poll-s", type=float, required=True)
     parser.add_argument("--runner-timeout-s", type=float, required=True)
     parser.add_argument("--monitor-placement", choices=("external", "gpu", "none"), required=True)
@@ -712,7 +724,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--copy-kind", choices=("rsync", "s3", "local"), default="rsync")
     args = parser.parse_args(argv)
     if any(not (0 < x < float("inf")) for x in (
-            args.ready_timeout_s, args.command_timeout_s, args.runner_timeout_s, args.poll_s)):
+            args.ready_timeout_s, args.command_timeout_s, args.runner_timeout_s, args.poll_s,
+            args.preflight_timeout_s, args.copy_timeout_s)):
         parser.error("timeouts and poll cadence must be finite and positive")
     validate_only = vars(args).pop("validate_only")
     options = SessionOptions(**vars(args))

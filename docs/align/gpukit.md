@@ -141,8 +141,21 @@ matrices, argv templates or receipts. An external client setting may name a
 credential environment variable; its factory reads it without serializing its value.
 
 Time limits and cadence are operator policy. Supply:
---ready-timeout-s for loading/readiness; --command-timeout-s for probes/preflight/copy;
+--ready-timeout-s for loading/readiness; --command-timeout-s for short probes (nvidia-smi, pip freeze, git);
+--preflight-timeout-s for preflight; --copy-timeout-s for each copy-back command;
 --runner-timeout-s separately for each campaign subprocess; --poll-s for readiness.
+Preflight limit derivation: the NVML defaults take 22 s (idle 10 s + load 10 s +
+recovery 2 s, power/preflight.py defaults), plus interpreter, torch import and CUDA
+context startup, unknown before the first box. Time one preflight during setup
+and set --preflight-timeout-s above it. A long limit costs waiting on a hung
+preflight; a short one refuses with nvml_preflight_timeout.
+
+Copy limit derivation: archive bytes divided by the slowest accepted transfer rate.
+The reviewer measured about 44 kB per episode-second per GPU before compression:
+N episodes of T seconds on G GPUs produce about 44e3 x N x T x G bytes before
+compression. Set --copy-timeout-s from that size and the accepted rate. Expiry
+records copy_timeout and keeps the archive.
+
 Bootstrap additionally requires --probe-timeout-s or JOULEWISE_PROBE_TIMEOUT_S,
 and --gpu-index/--gpu-indices or JOULEWISE_GPU_INDICES.
 Both --skip-install --check-only orders work. --skip-install reuses the prepared
@@ -152,7 +165,7 @@ After filling the policy variables and selecting monitor placement:
 
     bash joulewise/align/gpukit/bootstrap.sh --probe-timeout-s "$PROBE_TIMEOUT" --gpu-indices "$MEASURED_GPU_INDICES" --check-only --skip-install
 
-    bash joulewise/align/gpukit/bootstrap.sh --skip-install configs/align/shade.json --output /path/to/new-slice --calibration-slice --runner-settings /path/to/reviewed-settings.json --gpu-indices "$MEASURED_GPU_INDICES" --probe-timeout-s "$PROBE_TIMEOUT" --ready-timeout-s "$READY_TIMEOUT" --command-timeout-s "$PROBE_TIMEOUT" --runner-timeout-s "$RUNNER_TIMEOUT" --poll-s "$POLL_INTERVAL" --monitor-placement none
+    bash joulewise/align/gpukit/bootstrap.sh --skip-install configs/align/shade.json --output /path/to/new-slice --calibration-slice --runner-settings /path/to/reviewed-settings.json --gpu-indices "$MEASURED_GPU_INDICES" --probe-timeout-s "$PROBE_TIMEOUT" --ready-timeout-s "$READY_TIMEOUT" --command-timeout-s "$PROBE_TIMEOUT" --preflight-timeout-s "$PREFLIGHT_TIMEOUT" --copy-timeout-s "$COPY_TIMEOUT" --runner-timeout-s "$RUNNER_TIMEOUT" --poll-s "$POLL_INTERVAL" --monitor-placement none
 
 Use a new output directory for each session. A fresh session nonce in receipt.json
 enters every translated matrix_id, so repeat sessions have disjoint episode IDs.
