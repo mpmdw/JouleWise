@@ -12,7 +12,7 @@
 
 ## FILES
 - `joulewise/align/attribution.py`: reconstruction, uncertainty, reset handling, mapping selection and episode-wide tool overlay.
-- `tests/align/test_attribution.py`: 27 authored closed-form/record tests, including runner tools, reset, window-edge ambiguity, short intervals and cwd-independent import.
+- `tests/align/test_attribution.py`: 28 authored closed-form/record tests, including runner tools, reset, window-edge ambiguity, short intervals and cwd-independent import.
 - `tests/align/test_attribution_worlds.py`: seven authored production-shaped tests, including two explicitly expected coverage failures and a twenty-turn runner convention world.
 - `.codex-report/align-attribution.md`: report and per-finding fix log.
 - No registry, workflow, inventory or shared-contract file was changed. In particular, `tests/test_shard_tests.py` remains untouched.
@@ -153,6 +153,7 @@ the same interval's energy moves from gap/model phases into tool.
   expected-head, non-forced fast-forward updates. The required local checkout
   is still pending. Public source reads include runner.py and the independent
   twin/comparison test; the twin was not copied into lane production code.
+- Zero-duration turns advance gap support once and do not duplicate it.
 - B1: model/gap support is built first, and every episode-clipped tool overlays
   it with owning turn index. Earlier-starting calls win overlapping time;
   adjacent distinct calls stay distinct, and a call crossing phase boundaries
@@ -226,7 +227,7 @@ Statuses below mean code/report treatment, not a claim that blocked repros ran.
 - M1 fixed 480a0a3b6bc7035e71596f15b19c1554032822d3: restart from zero; observed-peak reset sensitivity.
 - M2 fixed 711148d337c86e15c13b2105f29507575d738069, with hand counterexample in 74a7fc811cabcfc30ce48eab0cc5d6e3cb4354f5; coverage ruling and measured docstrings remain open.
 - m1 fixed 480a0a3b6bc7035e71596f15b19c1554032822d3: zero joules/infinite half-width for missing data.
-- m2 fixed REPORT_COMMIT: retained explicit requested-interval reading and printed both alternatives below.
+- m2 fixed c7cd8f57e6992c9dae94a08d9018428432fe7bd0: retained explicit requested-interval reading and printed both alternatives below.
 - m3 fixed 480a0a3b6bc7035e71596f15b19c1554032822d3: query-clipped comparisons and zero-duration early return.
 - m4 fixed 480a0a3b6bc7035e71596f15b19c1554032822d3: counter hold includes its sample jump; both readings tabulated.
 - m5 rejected: the brief expressly lets the lane state the companion-field format; current documented representation is valid and independent comparisons parse both spellings. No data or number changes are justified by representation alone.

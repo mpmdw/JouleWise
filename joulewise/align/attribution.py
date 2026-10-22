@@ -300,6 +300,7 @@ def _segments(episode: Episode, flags: list[str]) -> list[tuple[int | None, str,
             flags.append("turn.overlap")
         if start > cursor:
             parts.append((None, "gap", cursor, start, None))
+            cursor = start
         if end <= start:
             continue
         first = turn.first_token_ns

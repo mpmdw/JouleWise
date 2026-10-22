@@ -313,6 +313,15 @@ class AttributionChecks(unittest.TestCase):
         self.tile(result, record)
         self.assertEqual([s.kind for s in result.segments], ["gap"])
 
+    def test_zero_duration_turn_does_not_duplicate_gap_support(self):
+        record = episode((turn(start=5 * NS, end=5 * NS, first=5 * NS),))
+        result = attribute_episode(record, source="mock", channel="package")
+        self.tile(result, record)
+        self.assertEqual([(s.turn, s.kind, s.start_ns, s.end_ns) for s in result.segments],
+                         [(None, "gap", 0, 10 * NS)])
+        self.close(result.total.joules, 100 * 10,
+                   half_width=result.total.half_width_j)
+
     def test_malformed_overlap_is_flagged_and_tiles_once(self):
         calls = (ToolCall("pre", 0, 3 * NS, 64, 512),
                  ToolCall("overlap", 2 * NS, 5 * NS, 64, 512),
