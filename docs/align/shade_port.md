@@ -88,7 +88,9 @@ typing-extensions, rich, pandas, and OpenAI/Anthropic SDK imports. The two
 judge-dependent evaluators also import analysis_utils, which imports
 matplotlib and seaborn. Pydantic EmailStr also requires email-validator. These
 imports occur inside task operations, not at
-JouleWise module import. Missing dependencies become task_load_error flags.
+JouleWise module import. A failed task reset records task_load_error:<Type>
+and raises. This includes an unavailable pinned cache. The runner records
+task.setup_error.<Type> and makes no measured turns for that task.
 
 One development installation recipe, once a shell exists, is:
 
@@ -160,16 +162,20 @@ delta.reasoning_content. Both are accepted. llama.cpp reports no reasoning
 counter: separated reasoning remains in reasoning_text, reasoning_tokens stays
 zero and reasoning_tokens_unreported is recorded. Zero is an unknown counter in
 this flagged case, not evidence that no hidden work happened. Empty deltas do
-not flag unreported work. Optional derive_reasoning_tokens=True requests the
-served tokenizer's count of the joined native reasoning text. The result lives
-only in raw_usage["joulewise"]["derived_reasoning_tokens"], with
-source="server:/tokenize", special_tokens=false, per-request flags/retries,
-and count=null when unavailable. It never changes reasoning_tokens or
-Turn.hidden_tokens. This diagnostic is off by default: every such reasoning
-turn adds one /tokenize request to the measured server inside the episode
-(and inside chat()'s timing). Enabling it adds work to the energy record and must
-be disclosed. Tokenization of joined text may differ from summing separately
-tokenized streaming deltas; preserve both when a synthetic server has both.
+not flag unreported work. No tokenizer request occurs inside chat(). The legacy
+derive_reasoning_tokens keyword still loads; True records
+derive_reasoning_tokens_ignored. The runner owns the separately labelled
+/tokenize diagnostic, computed after the episode and outside every measured
+span. Turn.hidden_tokens retains the server-reported zero, with the required
+hidden_tokens.unreported flag; the diagnostic never replaces that count.
+Tokenization of joined text may differ from summing separately tokenized deltas.
+
+Both reasoning aliases use the shared reasoning_fields normalizer. Null,
+non-string or empty values cannot hide the other alias. Identical strings count
+once. If both nonempty strings differ, reasoning_content wins (the previous
+parser's precedence) and reasoning_fields_disagree records the conflict.
+The shared streaming endpoint leaves inline thinking in content; budget thinking
+conditions apply their shared, parameterized inline splitter separately.
 
 llama.cpp puts timings on its final usage chunk. Preserve it in raw_usage.
 When ordinary usage is absent, prompt_n + cache_n and predicted_n are used
@@ -181,14 +187,26 @@ contract, extending the original brief's content/reasoning-only wording.
 Tool argument pieces are concatenated by streaming index. ID and name fields
 are set once; identical repeats are tolerated and conflicting repeats flagged.
 finish_reason is retained in raw_usage["joulewise"]. A length stop records
-generation_cap_reached. timeout_s/max_retries and source_timeout_s are operator
+generation_cap_reached. The shared finish_reason accessor checks this nested
+field, then budget's _finish_reason, then a flat finish_reason field.
+timeout_s/max_retries and source_timeout_s are operator
 transport budgets. Judge and monitor max_tokens (default 4096) are operator-set
 generation caps, not scientific thresholds; both flag length stops on that call.
 Judge per-call audit records are in task.evaluation_outputs["judge_calls"].
 The calendar-agendas and expenditure-accounting main normalizers retain
 upstream's zero when a judge reply has no closed <score> tag; task.flags adds
-judge_score_tag_missing. Formatting failure is recorded without changing
-upstream's score or refusing the episode.
+judge_score_tag_missing. A first closed tag whose body cannot be parsed as a
+float records judge_score_unparseable and keeps upstream's zero. Later valid
+tags do not repair that first-tag failure. Formatting failure is recorded
+without changing upstream's score or refusing the episode.
+
+Endpoint flags and retries describe only the most recent chat or count_tokens
+operation; save chat raw_usage for durable per-call evidence. The recovery cache
+retains tool IDs referenced by the current transcript plus the latest generated
+calls. A new episode's transcript releases the previous episode's IDs. Its size
+therefore follows active history, rather than all calls in a matrix. Task flags
+task_not_ready, llm_judge:<identity>, judge_reply_text_adapter and
+tool_arguments_not_object each occur once per episode; reset clears them.
 
 count_tokens posts model/prompt/content together to /tokenize outside /v1.
 vLLM reads prompt, llama.cpp reads content. Both the combined and fallback
@@ -226,6 +244,11 @@ prompt_sha256 hashes its UTF-8 bytes, including both message roles.
   thinking/system_instructions pairs and collapse whitespace in every role.
   Unclosed thinking spans and local think tags remain visible.
 - actions_only contains tool names and results, never native reasoning.
+  The runner supplies only call records and results, with no plain assistant
+  turns. Each synthetic call group stays immediately before its result.
+  Parallel-call grouping cannot be recovered from that view. Full and
+  no_scratchpad transcripts, and the agent wire, still group all calls on
+  their original assistant turn.
 - Main-task judge conversations drop native reasoning_text and <jw_reasoning> spans;
   upstream still removes content-embedded scratchpads with its closed-pair rule.
 - All views omit agent system prompts and tool-call arguments, as upstream does.

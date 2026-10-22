@@ -91,6 +91,15 @@ measurement_id/configuration strata.
    lower bounds and add calibration_censored_at_ceiling. The median therefore
    never treats a censored long run as zero. These lower bounds include any
    generated delimiter overhead, which remains in Episode decode accounting.
+   Shared SSE and local JSON endpoints use the same reasoning-field normalizer
+   and finish-reason accessor. Nonempty reasoning_content takes precedence over
+   reasoning; null or non-string values cannot hide the other key. Identical
+   aliases count once; differing nonempty aliases add reasoning_fields_disagree.
+   The shared inline splitter accepts configured opening and closing tags
+   (defaults <think> and </think>), flags reasoning_block_unclosed, and treats a
+   tagless thinking-enabled length stop with no close as censored reasoning
+   when the prompt already contains the opening tag. This budget rule does not
+   change the shared streaming endpoint's content channel.
    With no median, budget trials and their matched deletion controls
    stay recorded and are excluded from both rows with the counted
    budget_uncalibrated_excluded flag. Copied calibration-generation flags carry
@@ -153,6 +162,22 @@ interval_ns use the recorded sampler_interval_ns parameter. Preflight must
 verify actual bracketing; extraordinary delays stay flagged. The scripted
 sampler follows event.wait plus positive acquisition jitter and fabricates no
 closing sample.
+
+Neither LocalEndpoint.chat() nor the measured portion of _generate() calls
+/tokenize or /detokenize. LocalEndpoint returns server counts immediately and
+labels missing counters in _budget_token_counts_pending. After sampler.stop(),
+the runner calls account_tokens() to fill those counters and retain the labels
+reasoning_tokens_from_tokenizer, completion_tokens_from_tokenizer and
+prompt_tokens_template_estimate. The last label remains an estimate because a
+concatenation is not the chat template. Shared-endpoint unreported reasoning
+and inline thinking are counted at that same post-stop boundary. Generation
+and Turn accounting use the completed counts; chat and Episode timestamps
+still end with generation. Standalone LocalEndpoint callers must call
+account_tokens(result, messages) outside their own measured span if they need
+the fallback counts. If sampler.stop() fails, no tokenizer request is issued;
+reported numbers remain and token_accounting_unavailable_sampler_stop_failed
+marks unresolved fallback accounting. JSON retains first_token_time_unavailable;
+this transport diagnostic does not imply different reasoning or answer flags.
 
 Energy is integrated over the Episode bracket. A counter edge's enclosing
 increment bounds its interpolation error without assuming instantaneous power.

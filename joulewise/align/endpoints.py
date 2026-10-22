@@ -39,21 +39,74 @@ def assistant_message(result: ChatResult) -> AssistantMessage:
                             reasoning_text=result.reasoning_text)
 
 
+def finish_reason(result: ChatResult) -> str | None:
+    """Read the shared, budget-local, then legacy finish-reason metadata."""
+    diagnostics = result.raw_usage.get("joulewise", {})
+    values = ((diagnostics.get("finish_reason") if isinstance(diagnostics, Mapping) else None),
+              result.raw_usage.get("_finish_reason"), result.raw_usage.get("finish_reason"))
+    return next((value for value in values if isinstance(value, str)), None)
+
+
+def reasoning_fields(fields: Mapping[str, Any]) -> tuple[str, tuple[str, ...]]:
+    """Prefer nonempty reasoning_content, then reasoning; never join aliases.
+
+    Equal aliases count once. Different nonempty strings keep reasoning_content
+    (the older parser's precedence) and flag the discarded alternative.
+    Null, empty and non-string values cannot hide the other alias.
+    """
+    preferred, other = fields.get("reasoning_content"), fields.get("reasoning")
+    preferred = preferred if isinstance(preferred, str) else ""
+    other = other if isinstance(other, str) else ""
+    flags = ("reasoning_fields_disagree",) if preferred and other and preferred != other else ()
+    return preferred or other, flags
+
+
+def split_inline_thinking(text: str, *, open_tag: str = "<think>",
+                          close_tag: str = "</think>", thinking_enabled: bool = False,
+                          finish_reason: str | None = None) -> tuple[str, str, tuple[str, ...]]:
+    """Split one budget thinking block, including a prompt-held opening tag.
+
+    A tagless ceiling hit is reasoning only when thinking is explicitly enabled.
+    The shared streaming endpoint deliberately does not apply this content rule.
+    """
+    flags: list[str] = []
+    reasoning, answer = "", text
+    opened = bool(open_tag and open_tag in text)
+    if opened:
+        before, _, rest = text.partition(open_tag)
+        reasoning, closed, after = rest.partition(close_tag)
+        answer = before + after if closed else before
+        if not closed:
+            flags.append("reasoning_block_unclosed")
+    elif thinking_enabled and close_tag and close_tag in text:
+        reasoning, _, answer = text.partition(close_tag)
+    elif thinking_enabled and text and finish_reason == "length":
+        reasoning, answer = text, ""
+        flags.append("reasoning_block_unclosed")
+    if (reasoning or opened) and not answer.strip() and finish_reason == "length":
+        flags.append("reasoning_censored_at_token_limit")
+    return reasoning, answer, tuple(flags)
+
+
 def _coalesce_assistant_calls(messages: Sequence[ChatMessage]) -> list[ChatMessage]:
     """Fold the runner's per-call records into their assistant turn.
 
     A plain assistant message with tool_call_id contains arguments, never
     visible text. Results can be interleaved with these call records; collect
     all calls on the preceding assistant and leave its results in order.
+    With no plain assistant (runner actions_only), a synthetic assistant ends
+    at the first result. Parallel grouping cannot be reconstructed in that view.
     Structured AssistantMessage transcripts already have the desired shape.
     """
     output: list[ChatMessage] = []
     assistant_index: int | None = None
+    synthetic = False
     for message in messages:
         if message.role == "assistant" and message.tool_call_id is not None:
-            if assistant_index is None:
+            if assistant_index is None or (synthetic and output[-1].role == "tool"):
                 assistant_index = len(output)
                 output.append(AssistantMessage("assistant", ""))
+                synthetic = True
             previous = output[assistant_index]
             call = ToolCallRequest(message.tool_call_id, message.name or "", message.content)
             calls = list(getattr(previous, "tool_calls", ()))
@@ -66,6 +119,7 @@ def _coalesce_assistant_calls(messages: Sequence[ChatMessage]) -> list[ChatMessa
         output.append(message)
         if message.role == "assistant":
             assistant_index = len(output) - 1
+            synthetic = False
         elif message.role != "tool":
             assistant_index = None
     return output
@@ -180,10 +234,11 @@ class OpenAICompatEndpoint:
     timeout_s and max_retries are operator-set transport budgets, not analysis
     thresholds. Retries apply only to failed connects with zero bytes read.
     No HTTP status, partial header or partial completion is ever retried.
-    derive_reasoning_tokens opts into one extra server /tokenize request per
-    reasoning turn lacking a reported count. It is off by default because the
-    request adds measured work; its result is a labelled raw_usage diagnostic,
-    never reasoning_tokens or Turn.hidden_tokens.
+    derive_reasoning_tokens is accepted for old configurations but ignored and
+    flagged. The runner computes tokenizer diagnostics after the episode.
+    flags/retries describe only the latest chat or count_tokens operation;
+    raw_usage retains each chat's diagnostics. Tool recovery retains only IDs
+    referenced by the current transcript plus the latest generated requests.
     """
 
     def __init__(self, base_url: str, model: str, *, api_key_env: str | None = None,
@@ -268,9 +323,15 @@ class OpenAICompatEndpoint:
 
     def chat(self, messages: Sequence[ChatMessage], *, tools: Sequence[Mapping[str, Any]] = (),
              max_tokens: int, temperature: float, seed: int | None) -> ChatResult:
+        self.flags.clear()
+        self.retries.clear()
+        referenced = {m.tool_call_id for m in messages if m.tool_call_id is not None}
+        self._requests = {key: value for key, value in self._requests.items() if key in referenced}
         start = time.monotonic_ns()
         first: int | None = None
         flags: list[str] = []
+        if self.derive_reasoning_tokens:
+            flags.append("derive_reasoning_tokens_ignored")
         retries: list[dict[str, Any]] = []
         content: list[str] = []
         reasoning: list[str] = []
@@ -329,7 +390,8 @@ class OpenAICompatEndpoint:
                             text = delta.get("content")
                             # vLLM currently emits reasoning; llama.cpp and older
                             # vLLM parsers emit reasoning_content.
-                            thought = delta.get("reasoning_content") or delta.get("reasoning")
+                            thought, thought_flags = reasoning_fields(delta)
+                            flags.extend(thought_flags)
                             generated_tool = any(
                                 (c.get("function") or {}).get("name")
                                 or (c.get("function") or {}).get("arguments")
@@ -418,22 +480,8 @@ class OpenAICompatEndpoint:
             flags.append("usage_unavailable")
         failed = missing_usage or any(flag.startswith((
             "http_error:", "transport_or_stream_error:")) for flag in flags)
-        derived = None
-        if self.derive_reasoning_tokens and any(reasoning) and not hidden and not failed:
-            before_flags, before_retries = len(self.flags), len(self.retries)
-            count = self.count_tokens("".join(reasoning))
-            token_flags = self.flags[before_flags:]
-            flags.extend(token_flags)
-            success = any(flag.startswith("tokenize_shape:") for flag in token_flags)
-            flags.append("reasoning_tokens_derived_from_tokenize" if success
-                         else "reasoning_tokenize_unavailable")
-            derived = {"count": count if success else None,
-                       "source": "server:/tokenize", "special_tokens": False,
-                       "flags": list(token_flags), "retries": self.retries[before_retries:]}
         usage["joulewise"] = {"flags": list(dict.fromkeys(flags)), "retries": retries,
                               "finish_reason": finish_reason}
-        if derived is not None:
-            usage["joulewise"]["derived_reasoning_tokens"] = derived
         self.flags.extend(usage["joulewise"]["flags"])
         result = ChatResult("".join(content), "".join(reasoning), tuple(requests), prompt, cached,
                             completion, hidden, start, first, time.monotonic_ns(), usage)
@@ -443,6 +491,8 @@ class OpenAICompatEndpoint:
 
     def count_tokens(self, text: str) -> int:
         """Ask the server tokenizer; zero plus a flag if neither shape works."""
+        self.flags.clear()
+        self.retries.clear()
         flags: list[str] = []
         retries: list[dict[str, Any]] = []
         root = self.base_url.removesuffix("/v1")

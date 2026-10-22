@@ -18,6 +18,7 @@ from joulewise.align.budget.energy import Energy, episode_energy, trace_flags
 from joulewise.align.budget.items import HintItem, ItemBatch
 from joulewise.align.budget.storage import TraceStore
 from joulewise.align.budget.score import HintMonitor, HintUse, MONITOR_PROMPT, Rate, judge_hint_use, wilson
+from joulewise.align.endpoints import finish_reason, split_inline_thinking
 from joulewise.align.interfaces import ChatEndpoint, ChatMessage, ChatResult, PowerSampler
 from joulewise.align.records import (
     ClockMapping, Episode, MonitorVerdict, PowerTrace, RecordError, Turn, from_json, to_json,
@@ -244,8 +245,10 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
         else:
             cap = cap_tokens(median_tokens, condition.fraction)
     calls: list[ChatResult] = []
+    call_sources: list[tuple[ChatEndpoint, Sequence[ChatMessage], bool, int]] = []
     requests: list[str] = []
     reasoning, answer = "", ""
+    budget_reasoning = ""
     reasoning_count, answer_count = 0, 0
     sampler = None
     traces: tuple[PowerTrace, ...] = ()
@@ -254,11 +257,22 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
     def chat(opts: Mapping[str, Any], token_limit: int,
              transcript: Sequence[ChatMessage]) -> ChatResult:
         requests.append(to_json(opts))
-        result = model.endpoint_factory(opts).chat(
+        endpoint = model.endpoint_factory(opts)
+        result = endpoint.chat(
             transcript, max_tokens=token_limit, temperature=settings.temperature, seed=seed)
+        inline = False
+        if not result.reasoning_text and condition.mode != "off" and not opts.get("continue_final_message"):
+            thought, content, split_flags = split_inline_thinking(
+                result.content, open_tag=settings.thinking_open, close_tag=settings.thinking_end.strip(),
+                thinking_enabled=True, finish_reason=finish_reason(result))
+            # A planned budget cut is not a censored uncapped calibration.
+            flags.extend(f for f in split_flags
+                         if cap is None or f != "reasoning_censored_at_token_limit")
+            if thought or content != result.content:
+                inline = bool(thought)
+                result = replace(result, reasoning_text=thought, content=content)
         calls.append(result)
-        if result.completion_tokens >= token_limit:
-            flags.append("generation_at_token_limit")
+        call_sources.append((endpoint, tuple(transcript), inline, token_limit))
         flags.extend(result.raw_usage.get("_budget_flags", ()))
         if result.tool_calls:
             flags.append("unexpected_tool_calls_unexecuted")
@@ -290,25 +304,9 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
         if cap is None:
             result = chat(options, settings.max_tokens, messages)
             reasoning, answer = result.reasoning_text, result.content
-            reasoning_count = result.reasoning_tokens
-            finish = result.raw_usage.get("_finish_reason", result.raw_usage.get("finish_reason"))
-            if (condition.mode != "off" and not reasoning and answer
-                    and (settings.thinking_open in answer or
-                         (finish == "length" and settings.thinking_end.strip() not in answer))):
-                # Also support ChatEndpoints other than LocalEndpoint whose
-                # strict parser files an unfinished thinking block as content.
-                reasoning = answer.partition(settings.thinking_open)[2] if settings.thinking_open in answer else answer
-                reasoning, close, answer = reasoning.partition(settings.thinking_end.strip())
-                reasoning_count = len(model.codec.encode(reasoning))
-                if not close:
-                    flags.append("reasoning_block_unclosed")
-            if reasoning and not answer:
-                # Delimiter tokens are generated work, not answer tokens.
-                answer_count = 0
-                if finish == "length":
+            if reasoning and not answer.strip():
+                if finish_reason(result) == "length":
                     flags.append("reasoning_censored_at_token_limit")
-            else:
-                answer_count = max(0, result.completion_tokens - reasoning_count)
         else:
             if cap:
                 first = chat({**options, "stop": [settings.thinking_end.strip()]}, cap, messages)
@@ -318,7 +316,7 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
                     reasoning = reasoning.split(settings.thinking_end.strip(), 1)[0]
                 if reasoning.startswith(settings.thinking_open):
                     reasoning = reasoning[len(settings.thinking_open):]
-                reasoning_count = first.reasoning_tokens or len(model.codec.encode(reasoning))
+                budget_reasoning = reasoning
                 if not first.reasoning_text:
                     flags.append("budget_reasoning_tokens_from_tokenizer")
                 if first.reasoning_text and first.content:
@@ -335,20 +333,15 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
                 # Some parsers classify a tagless continuation as reasoning.
                 # After our forced close this text is the answer: do not leak
                 # it into the monitor transcript or the reasoning token count.
-                answer, answer_count = final.reasoning_text, final.completion_tokens
+                answer = final.reasoning_text
                 flags.append("continuation_answer_from_reasoning")
             else:
                 reasoning += final.reasoning_text
-                reasoning_count += final.reasoning_tokens
                 answer = final.content
-                answer_count = max(0, final.completion_tokens - final.reasoning_tokens)
-                if final.reasoning_tokens:
-                    flags.append("reasoning_after_forced_delimiter")
-        if condition.mode == "off" and reasoning_count:
-            flags.append("reasoning_present_when_disabled")
     except Exception as exc:
         flags.append(f"generation_error:{type(exc).__name__}")
     finally:
+        sampler_stopped = sampler is None
         if sampler is not None:
             try:
                 # A2 waits a poll period, samples, then repeats; stop takes no
@@ -362,9 +355,66 @@ def _generate(model: ModelSpec, item: HintItem, condition: Condition, *,
                 else:
                     time.sleep(tail_ns / 1_000_000_000)
                 traces = sampler.stop()
+                sampler_stopped = True
             except Exception as exc:
                 flags.append(f"sampler_stop_error:{type(exc).__name__}")
     ended = clock()
+    # Text is needed for the forced continuation while sampling. Token counts
+    # are not: resolve every tokenizer fallback only after the sampler stopped.
+    reasoning_counts = []
+    if not sampler_stopped:
+        flags.append("token_accounting_unavailable_sampler_stop_failed")
+    for index, (endpoint, transcript, inline, token_limit) in enumerate(call_sources):
+        call = calls[index]
+        diagnostics = call.raw_usage.get("joulewise", {})
+        count = call.reasoning_tokens
+        try:
+            if sampler_stopped:
+                account = getattr(endpoint, "account_tokens", None)
+                if account is not None:
+                    call = account(call, transcript)
+                count = call.reasoning_tokens
+                details = call.raw_usage.get("completion_tokens_details") or {}
+                reported = details.get("reasoning_tokens", call.raw_usage.get("reasoning_tokens"))
+                # An explicit server count, including zero, keeps its old value.
+                # Only missing reasoning accounting needs the post-stop codec.
+                if (reported is None and not count
+                        and (inline or "reasoning_tokens_unreported" in diagnostics.get("flags", ()))):
+                    count = len(model.codec.encode(call.reasoning_text)) if call.reasoning_text else 0
+                    if call.reasoning_text:
+                        flags.append("reasoning_tokens_from_tokenizer")
+        except Exception as exc:
+            flags.append(f"generation_error:{type(exc).__name__}")
+        calls[index] = call
+        reasoning_counts.append(count)
+        if call.completion_tokens >= token_limit:
+            flags.append("generation_at_token_limit")
+        flags.extend(call.raw_usage.get("_budget_flags", ()))
+        flags.extend(diagnostics.get("flags", ()))
+    try:
+        if cap is None and calls:
+            reasoning_count = reasoning_counts[0]
+            # Delimiter tokens are generated work, not answer tokens.
+            answer_count = (0 if reasoning and not answer.strip() else
+                            max(0, calls[0].completion_tokens - reasoning_count))
+        elif cap is not None:
+            if cap and calls:
+                reasoning_count = reasoning_counts[0]
+                if not reasoning_count and sampler_stopped:
+                    reasoning_count = len(model.codec.encode(budget_reasoning))
+            if len(calls) > int(bool(cap)):
+                final = calls[-1]
+                if not final.content and final.reasoning_text:
+                    answer_count = final.completion_tokens
+                else:
+                    reasoning_count += reasoning_counts[-1]
+                    answer_count = max(0, final.completion_tokens - reasoning_counts[-1])
+                    if reasoning_counts[-1]:
+                        flags.append("reasoning_after_forced_delimiter")
+        if condition.mode == "off" and reasoning_count:
+            flags.append("reasoning_present_when_disabled")
+    except Exception as exc:
+        flags.append(f"generation_error:{type(exc).__name__}")
     # Client timestamps belong to model.clock_domain. Each model call is its own Turn.
     if calls:
         started = min(c.start_ns for c in calls)
