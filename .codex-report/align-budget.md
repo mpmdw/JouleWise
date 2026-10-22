@@ -9,7 +9,7 @@ Replaced token shredding with recorded contiguous spans and a 13-token disclosur
 Separated seed rows and added seeded subject-stratified rosters with fingerprint metadata.
 Added streamed, content-addressed trace storage and ordinary-Episode hydration readers.
 The source now contains 37 test methods, including 12 review regressions.
-VERIFICATION BLOCKED: the executor remained starting/offline; zero Python tests ran.
+VERIFICATION BLOCKED: the executor stayed unavailable/offline; zero Python tests ran.
 Changes were saved by sequential fast-forward GitHub commits; protected contracts are unchanged.
 
 ## FILES
@@ -130,7 +130,8 @@ The same execution-tool error also blocked pwd and git status --short --branch:
 
 wait_for_environment was started at intake and repeatedly awaited while work
 continued through the connector. environment_status continued to report
-observed_phase=starting, connectivity=offline, failure=null. Thus local checkout,
+observed_phase=starting, then pending at the final check, with connectivity=offline
+and failure=null. Thus local checkout,
 fetch, compiler/import checks, git diff --check, fixture census, the appendix
 scripts and the extra-dependency installation could not run. No network call was
 made by a test. No full repository suite was requested or run.
@@ -197,7 +198,12 @@ combined tree and a valid configured endpoint; no live endpoint was contacted.
 Read-only checks actually completed through tools:
 - Every saved changed source/doc file through code commit 63b8e31 was fetched
   back and matched the authored text; subsequent storage/test updates were saved.
-- GitHub compare from 58750718f showed only allowed lane files.
+- GitHub compare from 58750718f through fa1fef273eeaa9191dfdd20e80c99af9e2fc514c
+  showed only the twelve allowed changed lane/report files. Final updated storage,
+  test and report texts were fetched back and matched as well.
+- Final protected blobs remained PIPELINE.md 829c944bb26e2ced2f5e260f8f799ac4626a62f7,
+  records.py ca3523d5fce7abd97e0ca985ecf7d0e768da4c20,
+  interfaces.py b0468f41721add4ee3b95edf68edeea0e7e2ff98.
 - A V8 lexical scan found balanced strings/delimiters and no trailing whitespace
   in the ten changed Python source/test texts at that point. This is NOT a Python
   parser, import check, test run or second-model numerical implementation.
