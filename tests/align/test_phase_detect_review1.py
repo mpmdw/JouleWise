@@ -3,7 +3,7 @@
 import unittest
 from dataclasses import replace
 
-from joulewise.align.phase_detect import detect_phases, match_tool_calls
+from joulewise.align.phase_detect import detect_phases, estimate_noise_sd, match_tool_calls
 from joulewise.align.records import PowerTrace
 from joulewise.align.sensor_sim import SensorModel, simulate, timeline_from_episode
 from tests.align.test_sensor_sim import model, production_world, world
@@ -126,6 +126,11 @@ class PhaseReviewTest(unittest.TestCase):
                     ("pm", SensorModel.powermetrics(noise_sd_w=sd, quantum_w=quantum, seed=3))):
                 with self.subTest(sd=sd, quantum=quantum, sensor=name):
                     segments = detect_phases(simulate(timeline, sensor))
+                    matches = match_tool_calls(segments, episode)
+                    # Three actual logged waits must survive every low-noise
+                    # row, including sd=0 with quantized whole-window readings.
+                    self.assertEqual(matches.matched_count, 3)
+                    self.assertEqual(len(matches.unlogged_candidates), 0)
                     if sd == 0.05:
                         controls[name] = len(segments)
                     self.assertLessEqual(len(segments), controls[name])
@@ -136,6 +141,54 @@ class PhaseReviewTest(unittest.TestCase):
                         self.assertFalse(any(
                             s.label == "prefill" and s.start_ns < turn.end_ns - margin and
                             s.end_ns > turn.first_token_ns + margin for s in segments))
+
+    def test_single_exposure_trough_survives_mixed_neighbors(self):
+        # Fixed E5 worlds; seed 50 has a 250 ms wait with one clean 100 ms
+        # exposure between mixed samples (12.97/6.73/5.02/9.31 W in review).
+        # Durations and seeds are scenario inputs; counts are ground truth.
+        for duration in (250_000_000, 500_000_000):
+            for seed in (0, 50, 63):
+                episode = world(seed, duration)
+                timeline = timeline_from_episode(episode, model())
+                for name, sensor in sensor_models(seed):
+                    with self.subTest(duration=duration, seed=seed, sensor=name):
+                        segments = detect_phases(simulate(timeline, sensor))
+                        result = match_tool_calls(segments, episode)
+                        self.assertEqual(result.matched_count, 3)  # All three true calls.
+                        self.assertEqual(len(result.unlogged_candidates), 0)
+                        # Consolidated edge samples cannot invent hidden turns.
+                        self.assertLessEqual(sum(s.label == "prefill" for s in segments),
+                                             len(episode.turns))
+
+    def test_quantized_plateaus_keep_zero_noise_evidence(self):
+        # Quantized native-rate phases: exact repeats within a plateau are
+        # informative, while consecutive mixed readings show the sensor moves
+        # at the poll rate. More than half the differences are exactly zero,
+        # hence their MAD is exactly zero, not the scale of phase transitions.
+        values = ((5.0,) * 8 + (9.0, 17.0) + (21.0,) * 8 +
+                  (17.0, 13.0) + (13.0,) * 16 + (9.0, 5.0) + (5.0,) * 8)
+        self.assertEqual(estimate_noise_sd(values), 0.0)
+        trace = PowerTrace("mock", "x", "host.monotonic",
+                           tuple((i + 1) * 100_000_000 for i in range(len(values))),
+                           values, "W", 100_000_000, 100_000_000, resolution=0.01)
+        segments = detect_phases(trace)
+        self.assertFalse(any("held_values_cadence_inferred" in s.flags for s in segments))
+        self.assertEqual([s.label for s in segments], ["idle", "prefill", "decode", "idle"])
+
+    def test_trace_cut_inside_wait_is_indeterminate_not_unlogged(self):
+        episode = world(4, 500_000_000)
+        trace = simulate(timeline_from_episode(episode, model()),
+                         SensorModel.ina3221(cadence_ns=1_000_000,
+                                             noise_sd_w=0.05, quantum_w=0.01, seed=2))
+        call = episode.turns[1].tool_calls[0]
+        cut = (call.start_ns + call.end_ns) // 2  # Half of a true wait is unobserved.
+        kept = [(t, v) for t, v in zip(trace.t_ns, trace.values) if t > cut]
+        cropped = replace(trace, t_ns=tuple(t for t, _ in kept),
+                          values=tuple(v for _, v in kept))
+        result = match_tool_calls(detect_phases(cropped), episode)
+        self.assertEqual(len(result.unlogged_candidates), 0)
+        self.assertTrue(result.indeterminate_candidates)
+        self.assertIn("tool_wait_indeterminate_trace_edge", result.flags)
 
     def test_missed_read_widens_boundary_or_is_indeterminate(self):
         episode = world(4, 500_000_000)
