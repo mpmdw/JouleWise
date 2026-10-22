@@ -1,13 +1,14 @@
 # Outline: the instrumentation and automation paper
 
 **Status.** Section-by-section outline, written 2026-10-21 (PDT) by Opus 5.5 (an AI model session) for Ed, the
-project's owner. It was revised after four rounds of checks of its wording, each by AI model sessions that had no
-part in writing it (two separate checks in the last round), which ask whether every term is built before it is first
-used, and after a re-check of its numbers against their sources. On 22 October, §6 and §12 took in the battery
-reading's reporting delay (how long after the battery's energy flows its reading is recorded), measured for a later
-written decision (a *ruling*, BAT-2) on how to count the battery's energy in another experiment on this instrument
-(§0 item 18). It is not a draft of the paper's prose and has not been sent to anyone; whether any of it goes to the
-advisor (the academic supervising the work, to whom the paper would go) is Ed's decision.
+project's owner. It was revised after five rounds of checks of its wording, each by AI model sessions that had no
+part in writing it (two separate checks of the whole file in the fourth round, and a fifth that confirmed their
+fixes), which ask whether every term is built before it is first used, and after a re-check of its numbers against
+their sources. On 22 October, §6 and §12 took in the battery reading's reporting delay (how long after the battery's
+energy flows its reading is recorded), measured for a later written decision (a *ruling*, BAT-2) on how to count the
+battery's energy in another experiment on this instrument (§0 item 18). It is not a draft of the paper's prose and
+has not been sent to anyone; whether any of it goes to the advisor (the academic supervising the work, to whom the
+paper would go) is Ed's decision.
 
 **Why it exists.** Ed, 2026-10-20: "seems we're close to an instrument paper, whatever the first paper is i forget if
 joules per request matches up in disag inference as you'd expect by model size" (his mail, transcribed in
@@ -202,16 +203,17 @@ its first use.
     mean (its *absolute* form) or from the A-minus-B differences of the null quads (its *comparative* form), as the
     larger of the largest single deviation and a prediction t × s × √(1 + 1/n) (s the deviations' standard deviation,
     n their count, t the 95% Student-t multiplier), widened by letting each value move within its own timing
-    uncertainty (§3) and multiplied by a guard factor for small n (registration `:933-958`; its synthetic example: n
-    = 9 repeats give a floor of 0.5765 J). An *attribution floor* is the largest timing bound (§3: the energy a run's
-    phase edges can move under the session's timing error) over a cell's kept runs; it is printed beside the cell,
-    because every run is placed on the clock by the same method, so it does not shrink when runs are averaged
-    (registration `:215-217`). A *contrast* is GAMMA's 1.7B-versus-8B energy difference on the same workload; it is
-    judged against the larger of the two models' detection floors (the *floor gate*), each model's floor coming from
-    its own pack's session. An *outcome word* is the registered verdict on a contrast, one of four, tested in this
-    order: `not_estimable` (an input is missing or invalid); `not_resolvable` (chiefly: the difference is no larger
-    than the floor gate); `unresolved` (chiefly: its statistical interval contains zero); otherwise
-    `direction_supported`, whose direction is the difference's sign (the full conditions: registration `:990-993`).
+    uncertainty (§3) and multiplied by a *guard factor* g(n) that widens the floor when n is small: √(9 / (n − 1))
+    for n from 5 to 9, and 1 from n = 10 (registration `:933-958`; its synthetic example: n = 9 repeats, g = 1.0607,
+    give a floor of 0.5765 J). An *attribution floor* is the largest timing bound (§3: the energy a run's phase edges
+    can move under the session's timing error) over a cell's kept runs; it is printed beside the cell, because every
+    run is placed on the clock by the same method, so it does not shrink when runs are averaged (registration
+    `:215-217`). A *contrast* is GAMMA's 1.7B-versus-8B energy difference on the same workload; it is judged against
+    the larger of the two models' detection floors (the *floor gate*), each model's floor coming from its own pack's
+    session. An *outcome word* is the registered verdict on a contrast, one of four, tested in this order:
+    `not_estimable` (an input is missing or invalid); `not_resolvable` (chiefly: the difference is no larger than the
+    floor gate); `unresolved` (chiefly: its statistical interval contains zero); otherwise `direction_supported`,
+    whose direction is the difference's sign (the full conditions: registration `:990-993`).
 28. **Blinding, release.** Until the *release*, no person or AI tool reads a block-5 or block-6 energy, power, phase
     duration, floor, contrast or outcome word; programs compute them into restricted files. *Structure* (verdicts,
     counts of flags and runs, hazard readings, stage timing that is not a phase duration) is not restricted
@@ -252,10 +254,10 @@ was built and checked (§10); the replication (§11).
   never fully idle: system daemons wake on their own, the clock can be corrected under the program, the machine can
   sleep, and the people and AI tools that build the software run on the same machine. In block 5, rules about
   bookkeeping files rather than about the machine's physical state cost most of the machine time (a list of the runs
-  the reference check needed, which a program failed to write; a calibration acceptance file, §3, older than the
-  latest capture it should have listed): BETA spent 42.5 h of wall time for one usable 5.9 h session, 21.4 h of it in
-  five lost attempts and 15.1 h in the gaps between them; three of the five losses were rule losses, two of them
-  certain before t0 from files already on disk.
+  the drift screen, §0 item 10, needed, which a program failed to write; a calibration acceptance file, §3, older
+  than the latest capture it should have listed): BETA spent 42.5 h of wall time for one usable 5.9 h session, 21.4 h
+  of it in five lost attempts and 15.1 h in the gaps between them; three of the five losses were rule losses, two of
+  them certain before t0 from files already on disk.
 - **Claim.** A single laptop can measure phase energy unattended, session after session, if (i) power is read three
   independent ways, (ii) the two clocks (the sampler's and the runner's) are calibrated inside every session, (iii)
   collection stops only for a directly measured physical hazard or for data that cannot be the registered experiment,
@@ -288,9 +290,9 @@ was built and checked (§10); the replication (§11).
 - **Claim.** The instrument reads power at three places on one power path, each with its own clock and rate: the
   rails (`powermetrics`, one average about every 130.5 ms), the DC input (the USB-C meter, 50 samples a second) and
   the battery current (the SMC, once a second). The rails are the quantity every result rests on; the DC input plus
-  the *battery term* (the energy the battery discharges into the machine, its current times its voltage; §6) is a
-  printed whole-machine line that never enters a result; the ratio of rail power to whole-machine power is measured,
-  not assumed, and depends on the workload.
+  the *battery term* (the energy the battery discharges into the machine: its current times its voltage, summed over
+  the request's time; §6) is a printed whole-machine line that never enters a result; the ratio of rail power to
+  whole-machine power is measured, not assumed, and depends on the workload.
 - **Evidence.** Registration `docs/registrations/block6_replication_DRAFT.md:104-110` (machine and sampler),
   `:824-837` (the meter excludes nothing; the cross-checks M14, known loads switched on and off, and M10, a fit over
   steady load levels, both in worked example 1), `:1030-1037` (whole-machine energy per phase and its *boundary
@@ -321,18 +323,18 @@ was built and checked (§10); the replication (§11).
   reads the meter's stream (`km003c_parse`) fits the meter's clock to a second Mac clock, its *hardware counter*
   (`CLOCK_MONOTONIC_RAW`, which nothing adjusts), by `clock_fit`. Each batch gives one point: its last sample's
   device time against the hardware-counter time at which the Mac received it. Only replies that held fewer than 63
-  samples (the most one reply can hold) and came back within 3 ms of their poll are used (when at least 20 do). A
-  least-squares straight line is fitted through those points; the device time is cut into 10 s stretches, the point
-  in each stretch lying furthest below that line (the earliest arrival) is kept, and the final line is the
-  least-squares line through the kept points alone, because a delivery delay can only make a batch late. The meter
-  stream also records the difference between the monotonic clock and the hardware counter at its start and at its
-  end; the two readings must agree within 1 ms (they differ only across a sleep), and a runner stamp plus that
-  difference is a hardware-counter time (`raw_offset_ns`). Each poll's reply also carries the SMC's battery current
-  and voltage as read at that moment (the SMC refreshes them about once a second); the battery energies in this
-  outline come from those embedded reads. Meter energy (`integrate`): the mean of the samples inside the window times
-  the window's length. Rail energy: the run's request energy as item 6 defines it, gross, prefill plus decode
-  (`gross_energy_j`), so nothing is subtracted from either side, as nothing was from the steady levels M10 was fitted
-  on.
+  samples (the most one reply can hold) and came back within 3 ms of their poll are used (when at least 20 replies
+  do; with fewer, every reply is used). A least-squares straight line is fitted through those points; the device time
+  is cut into 10 s stretches, the point in each stretch lying furthest below that line (the earliest arrival) is
+  kept, and the final line is the least-squares line through the kept points alone, because a delivery delay can only
+  make a batch late. The meter stream also records the difference between the monotonic clock and the hardware
+  counter at its start and at its end; the two readings must agree within 1 ms (they differ only across a sleep), and
+  a runner stamp plus that difference is a hardware-counter time (`raw_offset_ns`). Each poll's reply also carries
+  the SMC's battery current and voltage as read at that moment (the SMC refreshes them about once a second); the
+  battery energies in this outline come from those embedded reads. Meter energy (`integrate`): the mean of the
+  samples inside the window times the window's length. Rail energy: the run's request energy as item 6 defines it,
+  gross, prefill plus decode (`gross_energy_j`), so nothing is subtracted from either side, as nothing was from the
+  steady levels M10 was fitted on.
   - The meter's clock on session H: the fit used 93,525 of the stream's 93,532 batches (those that met both
     conditions); the meter's clock and the hardware counter differ in rate by 12.6 ppm; batches arrived a median 5.8
     ms after the final line (95th percentile 14.9 ms), and the earliest lay at most 6.7 ms before it. A sample's
@@ -401,9 +403,9 @@ was built and checked (§10); the replication (§11).
   (onset, offset) is *consistent* when its loss is at most the *loss cut-off*, the best pair's loss plus the larger
   of 1.0 and 5% of it; the set of such pairs, widened by the small uncertainty of the command stamps, is the
   *accepted region* (draft-v2 `:1158-1160`, `:1164-1172`, `:1194-1196`, `:1209`). The capture's *fiducial bound* is
-  the largest absolute shift, onset or offset, in the accepted regions of all 59 pulses, plus the capture's own
-  clock-anchor bound (draft-v2 `:1220-1222`): the largest timing error between a commanded and an observed edge that
-  the records allow.
+  the largest absolute shift, onset or offset, in the accepted regions of all 59 pulses, plus the capture's own clock
+  bound (the m of its own clock anchor, found as for a run; draft-v2 `:1220-1222`): the largest timing error between
+  a commanded and an observed edge that the records allow.
 
   The session's *operative timing bound* is b_op = max(opening, closing) + max(|closing − opening|, s_bracket), where
   *opening* and *closing* are the fiducial bounds of the start and end captures and s_bracket allows for the
@@ -430,7 +432,7 @@ was built and checked (§10); the replication (§11).
     = 14,410.5, and every pair of shifts at or below it belongs to the accepted region. Widened for the command
     stamps, that region runs from 25.45 to 28.93 ms at onset and from −8.61 to −5.31 ms at offset (draft-v2 Figure
     A6), so this pulse's largest absolute shift is 28.93 ms. It is the largest of the capture's 118 edges, and adding
-    the capture's clock-anchor bound, 1.13 ms, gives its fiducial bound, 30.07 ms (draft-v2 `:551`).
+    the capture's clock bound, 1.13 ms, gives its fiducial bound, 30.07 ms (draft-v2 `:551`).
   - *The acceptance constants for block 6.* The *calibration acceptance* is the file that fixes, before any session,
     the constants used to judge captures. For block 6, 13 captures on the quiet machine (10 from M1, a set of
     captures taken for this purpose, and 3 from M13, the meter timing check below) had fiducial bounds from 27.38 to
@@ -601,18 +603,18 @@ was built and checked (§10); the replication (§11).
     ms is 0.21 J at one edge of a 42 W prefill, and the rule removes 1 of the 77 rehearsal runs, one whose clock fit
     was unresolved, so it would have been removed anyway (registration `:627-630`).
 - **Figures.** *Figure 8: the decision path of one condition.* A flow chart. Diamond "measured physical hazard
-  (ground P)?"; "yes" leads to a box "refuse: wait and re-measure before t0, stop the session, or remove the run";
-  "no" leads to a second diamond "ground N, W, D or S?", whose "yes" leads to a box "remove the run or session,
-  naming the ground, and print the flagged-inclusive line" and whose "no" leads to a box "write a flag (code, run,
-  observed value, evidence)", then a third diamond "named as excluding in the registration?" with "yes" to "exclude
-  run or session, and print the flagged-inclusive line" and "no" to "disclose only". A side panel lists the five
-  requirements as five ticked boxes beside the third diamond. *Figure 9: a replay table as a figure.* One row per
-  candidate rule: agent overlap; outside processor at w = 5.432; outside processor at the background-priority w =
-  0.0862; another program on the GPU; a run's clock anchor allowing more than 5 ms. For each row, two bars,
-  "known-good runs removed" out of 53 (the 9 October rehearsal) and out of 77 (all rehearsal runs), a column "size in
-  J at the cut-off" (4.96 J for the agent at 8 W, 0.475 J for the three contamination rules, 0.21 J for the clock
-  rule), and a column "decision" reading "kept as physics", "kept as flag", "second labelled alternative", "adopted"
-  or "kept from block 5".
+  (ground P)?"; "yes" leads to a box "refuse on ground P: wait and re-measure before t0, stop the session, or remove
+  the run"; "no" leads to a second diamond "ground N, W, D or S?", whose "yes" leads to a box "refuse on that ground:
+  remove the run or session, naming the ground, and print the flagged-inclusive line" and whose "no" leads to a box
+  "write a flag (code, run, observed value, evidence)", then a third diamond "named as excluding in the
+  registration?" with "yes" to "exclude run or session, and print the flagged-inclusive line" and "no" to "disclose
+  only". A side panel lists the five requirements as five ticked boxes beside the third diamond. *Figure 9: a replay
+  table as a figure.* One row per candidate rule: agent overlap; outside processor at w = 5.432; outside processor at
+  the background-priority w = 0.0862; another program on the GPU; a run's clock anchor allowing more than 5 ms. For
+  each row, two bars, "known-good runs removed" out of 53 (the 9 October rehearsal) and out of 77 (all rehearsal
+  runs), a column "size in J at the cut-off" (4.96 J for the agent at 8 W, 0.475 J for the three contamination rules,
+  0.21 J for the clock rule), and a column "decision" reading "kept as physics", "kept as flag", "second labelled
+  alternative", "adopted" or "kept from block 5".
 
 ## 6. The battery and the adapter's ceiling
 
@@ -735,10 +737,10 @@ was built and checked (§10); the replication (§11).
   NO window runs during them (in block 6 a smoke ran before every session). When the window has closed and the smoke
   has passed, the loop checks for a NO or a stop file, measures the pre-check's hazards again and starts the session
   (t0); after the session it runs the desk step, then reviews each pack's record (a pack whose last two attempts both
-  failed for the same cause is held; one that has used its allowed attempts is paused) and chooses again. A physical
-  hazard makes it wait and re-measure every 240 s; a failed smoke holds only that pack, any other non-physical
-  problem holds the loop, and both wake the orchestrator. Block 6 ran 9 sessions with 9 counting and no physical
-  stop.
+  failed for the same cause is held; one that has used its allowed attempts is *paused*, held in the same way under
+  its own name) and chooses again. A physical hazard makes it wait and re-measure every 240 s; a failed smoke holds
+  only that pack, any other non-physical problem holds the loop, and both wake the orchestrator. Block 6 ran 9
+  sessions with 9 counting and no physical stop.
 - **Evidence.** `joulewise/b6/loop.py` at the pinned commit `f31aca19f`: `:285` (`_precheck`), `:308-310` (the notice
   and its 1,800 s NO window, which runs during the smoke), `:314-316` (wait and re-measure every 240 s), `:423`
   (`_smoke_desk`), `:471-473` (`_arm_wait`: nothing starts before the NO window has closed), `:564`
@@ -773,21 +775,22 @@ was built and checked (§10); the replication (§11).
   session moved to round 4.
 - **Figures.** *Figure 11: the loop's states.* A state diagram. Nodes: NEXT (choose the next pack), PRECHECK,
   WAIT_PHYSICS (a hazard: re-measure every 240 s), SMOKE_RUN, SMOKE_DESK, ARM_WAIT (wait for the NO window to close),
-  SESSION_RUN, SESSION_DESK, ROTATE (review each pack's record: hold or pause a pack), DONE (every pack at its target
-  of three counting sessions), HOLD_LOOP (a non-physical problem, Ed's NO, or a stop file, §0 item 26: wake the
-  orchestrator). Arrows, each labelled with its condition: NEXT → PRECHECK "pack chosen"; NEXT → DONE "every pack at
-  its target"; PRECHECK, SMOKE_DESK, ARM_WAIT, or SMOKE_RUN or SESSION_RUN at its launch → WAIT_PHYSICS "hazard
-  measured"; WAIT_PHYSICS → PRECHECK, SMOKE_RUN or ARM_WAIT, as the waiting state recorded, "hazard clear"; PRECHECK
-  → SMOKE_RUN "pass: notice sent, NO window opens"; SMOKE_RUN → SMOKE_DESK "smoke ended"; SMOKE_DESK → ARM_WAIT
-  "smoke pass"; SMOKE_DESK → NEXT "smoke non-physical failure: hold this pack"; ARM_WAIT → HOLD_LOOP "NO or stop
-  file"; ARM_WAIT → SESSION_RUN "window closed, no NO, hazards clear"; ARM_WAIT → SMOKE_RUN "machine or code changed
-  since the smoke"; SESSION_RUN → SESSION_DESK "chain exit"; SESSION_DESK → ROTATE "harvest written"; SESSION_DESK →
-  HOLD_LOOP "structural defect"; ROTATE → NEXT. The two collecting states, SMOKE_RUN and SESSION_RUN, are drawn with
-  a heavy border and the note "no agent alive". *Figure 12: the block-6 timeline* (the lower bar of Figure 1
-  expanded): one row per session on a clock-time axis from 17 October 20:00 to 21 October 03:00; in each row,
-  segments for the smoke (hatched), the NO window (outline only, overlapping the smoke), the chain (solid, coloured
-  by pack as in Figure 1) and the desk step (a lighter shade of the pack's colour); the time between segments left
-  blank.
+  SESSION_RUN, SESSION_DESK, ROTATE (review each pack's record: hold, or pause, a pack), DONE (every pack at its
+  target of three counting sessions), HOLD_LOOP (a non-physical problem, Ed's NO, or a stop file, §0 item 26: wake
+  the orchestrator). Arrows, each labelled with its condition: NEXT → PRECHECK "pack chosen"; NEXT → DONE "every pack
+  at its target"; PRECHECK, SMOKE_DESK, ARM_WAIT, or SMOKE_RUN or SESSION_RUN at its launch → WAIT_PHYSICS "hazard
+  measured"; WAIT_PHYSICS → "hazard clear" back to PRECHECK (for a hazard found there), to SMOKE_RUN for a new smoke
+  (for one found at the smoke's launch or by its desk check), or to ARM_WAIT (for one found there or at the session's
+  launch); PRECHECK → SMOKE_RUN "pass: notice sent, NO window opens"; SMOKE_RUN → SMOKE_DESK "smoke ended";
+  SMOKE_DESK → ARM_WAIT "smoke pass"; SMOKE_DESK → NEXT "smoke non-physical failure: hold this pack"; ARM_WAIT →
+  HOLD_LOOP "NO or stop file"; ARM_WAIT → SESSION_RUN "window closed, no NO, hazards clear"; ARM_WAIT → SMOKE_RUN
+  "machine or code changed since the smoke"; SESSION_RUN → SESSION_DESK "chain exit"; SESSION_DESK → ROTATE "harvest
+  written"; SESSION_DESK → HOLD_LOOP "structural defect"; ROTATE → NEXT. The two collecting states, SMOKE_RUN and
+  SESSION_RUN, are drawn with a heavy border and the note "no agent alive". *Figure 12: the block-6 timeline* (the
+  lower bar of Figure 1 expanded): one row per session on a clock-time axis from 17 October 20:00 to 21 October
+  03:00; in each row, segments for the smoke (hatched), the NO window (outline only, overlapping the smoke), the
+  chain (solid, coloured by pack as in Figure 1) and the desk step (a lighter shade of the pack's colour); the time
+  between segments left blank.
 
 ## 8. Tests that found defects before data was lost
 
@@ -798,8 +801,8 @@ was built and checked (§10); the replication (§11).
   defects below before any run of the claim collections was collected on the faulty code: the machine test (three
   tries on 16-17 October: two failed, each for defects since fixed, then one passed), the smoke before each session,
   and the pre-check itself (§4). The one smoke hold of block 6 was judged wrong, and the smoke rule behind it (it
-  read a repeated run's exit code 1 as a failure) was listed for repair, because under §5 a condition that is not a
-  measured physical hazard may not stop collection.
+  read a repeated run's exit code 1 as a failure) was listed for repair, because under §5 only a measured physical
+  hazard, or a condition under which no number of the registered experiment would exist, may stop collection.
 - **Evidence.** `RUN_STATE.md:93` (first machine test failed: root cause), `:114-115` (second: three desk defects),
   `:122` (third passed); `docs/process_traces/2026-10-17-magistrate-d34bf254/RECORD.md:17-38` (the three desk defects
   and their effect), `docs/process_traces/2026-10-17-magistrate-52d50d1f/RECORD.md:10-18` (the passing test's
@@ -978,9 +981,10 @@ was built and checked (§10); the replication (§11).
   catalog, the hashes recorded for the model files and the versions recorded for the runtime, and the loop's
   configuration, plus the raw archives on request.
 - **Evidence.** Registration `:506-547` (the pinned commit, the measurement checkout, code identity, and, at
-  `:536-539`, the four files that compute each run's energy and its bounds, byte-identical to block 5's: the
-  phase-energy reducer, the clock anchor, the capture estimator and the sampler reader);
-  `docs/paper/draft-v2-skeleton.md:952-1525` (Appendix A, already written for the calibration method).
+  `:536-539`, the four files that compute each run's energy and its bounds, byte-identical to block 5's: the program
+  that computes phase energies by the overlap sum of §0 item 6, the clock anchor, the capture estimator and the
+  sampler reader); `docs/paper/draft-v2-skeleton.md:952-1525` (Appendix A, already written for the calibration
+  method).
 - **Status.** Writable now; the paths and digests of the released files are added at the release.
 - **Worked example.** Storage, which decides whether raw archives can be shared: a session's bytes are mostly sampler
   text that compresses about 70 times (83.0 MB to 1.2 MB at zstd level 3, round trip byte-identical, on a non-claim
