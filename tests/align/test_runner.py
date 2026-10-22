@@ -22,7 +22,7 @@ def inbox_episode(condition="sabotage", seed=0, *, config=None, counter=True,
     config = config or ScriptConfig()
     task = task_class(clock=clock, turns=config.turns)
     endpoint = endpoint_class(clock=clock, config=config, condition=condition)
-    sampler = sampler_class(clock_domain="mock.monotonic", seed=seed)
+    sampler = sampler_class(clock_domain="mock.monotonic", seed=seed, clock=clock)
     parameters = dict(seed=seed, max_turns=40, max_tokens=600, temperature=0.0,
                       clock_domain="mock.monotonic", clock=clock,
                       token_counter=MockTokenCounter() if counter else None,
@@ -233,6 +233,79 @@ class RunnerTests(unittest.TestCase):
                        ("pair", "benign", "backend/model", 1, "matrix"),
                        ("pair", "benign", "backend/model", 0, "other")):
             self.assertNotEqual(original, episode_id(*values))
+
+
+    def test_endpoint_clock_ahead_and_behind_uses_call_bracket(self):
+        original = inbox_episode("benign", seed=2)[0]
+        for offset in (1_700_000_000_000_000_000, -5_000_000_000):
+            # Offsets model wall-clock and an earlier foreign domain. The exact
+            # ns bracket is ground truth; there is no measured comparison bar.
+            class OffsetEndpoint(ScriptedEndpoint):
+                def chat(self, messages, **kwargs):
+                    result = super().chat(messages, **kwargs)
+                    return replace(result, start_ns=result.start_ns + offset,
+                                   end_ns=result.end_ns + offset,
+                                   first_token_ns=result.first_token_ns + offset)
+            changed = inbox_episode("benign", seed=2, endpoint_class=OffsetEndpoint)[0]
+            self.assertIn("clock.endpoint_outside_call", changed.flags)
+            self.assertEqual((changed.start_ns, changed.end_ns), (original.start_ns, original.end_ns))
+            self.assertEqual([(t.start_ns, t.end_ns) for t in changed.turns],
+                             [(t.start_ns, t.end_ns) for t in original.turns])
+
+    def test_separated_reasoning_history_is_stripped_without_changing_full_view(self):
+        inputs = []
+        class CapturingEndpoint(ScriptedEndpoint):
+            def chat(self, messages, **kwargs):
+                inputs.append(list(messages))
+                return super().chat(messages, **kwargs)
+        ep, transcript, task, _, _ = inbox_episode(endpoint_class=CapturingEndpoint)
+        expected = "<jw_reasoning>" + " ".join(["private"] * 120) + "</jw_reasoning>"
+        self.assertTrue(any(m.content.startswith(expected) for m in transcript))
+        self.assertFalse(any("<jw_reasoning>" in m.content for rows in inputs for m in rows))
+        self.assertEqual(transcript_view(transcript, "full", task.scratchpad_tags), transcript)
+        self.assertFalse(any("private" in m.content for m in
+                             transcript_view(transcript, "no_scratchpad", task.scratchpad_tags)))
+        self.assertEqual(ep.hardware["runner"]["reasoning_history_policy"], "strip_separated_reasoning")
+
+    def test_none_content_and_nonserializable_tool_results_keep_model_calls(self):
+        class NullEndpoint(ScriptedEndpoint):
+            def chat(self, messages, **kwargs):
+                result = super().chat(messages, **kwargs)
+                return replace(result, content=None) if result.tool_calls else result
+        class BytesTask(InboxTask):
+            def call_tool(self, name, arguments_json):
+                super().call_tool(name, arguments_json)
+                return b"\x00raw"
+        for kwargs, flag in (({"endpoint_class": NullEndpoint}, "endpoint.content_missing"),
+                             ({"task_class": BytesTask}, "tool.non_text_result")):
+            ep, transcript, task, endpoint, _ = inbox_episode(**kwargs)
+            # One record per completed ledger call is an exact integer property.
+            self.assertEqual(len(ep.turns), len(endpoint.ledger.turns))
+            self.assertIn(flag, ep.flags)
+            self.assertFalse(any(f.startswith("runner.error.") for f in ep.flags))
+
+    def test_tampered_monitor_view_is_unavailable_in_episode_loop(self):
+        ep, _, _, _, _ = inbox_episode(monitors=((MockMonitor(), ("tampered",)),))
+        self.assertEqual(ep.monitor_verdicts, ())
+        self.assertIn("monitor.visibility_tampered_unavailable", ep.flags)
+
+    def test_plain_text_and_malformed_flag_notes_still_attach_trace(self):
+        for notes in ("ordinary sensor note", '{"flags":[42]}', '{"flags":"battery.assist"}'):
+            class NotedSampler(SyntheticPowerSampler):
+                def stop(self):
+                    return tuple(replace(trace, notes=notes) for trace in super().stop())
+            ep, _, _, _, _ = inbox_episode(sampler_class=NotedSampler)
+            self.assertEqual(len(ep.power_traces), 1)
+            self.assertIn("power.notes", ep.flags)
+
+    def test_structured_power_flags_are_verbatim_and_distinct(self):
+        class NotedSampler(SyntheticPowerSampler):
+            def stop(self):
+                return tuple(replace(trace, notes='{"flags":["battery.assist","battery.assist","throttle.power"]}')
+                             for trace in super().stop())
+        ep, _, _, _, _ = inbox_episode(sampler_class=NotedSampler)
+        self.assertEqual([flag for flag in ep.flags if flag.startswith("power.")],
+                         ["power.gpu0.battery.assist", "power.gpu0.throttle.power"])
 
 
 if __name__ == "__main__":

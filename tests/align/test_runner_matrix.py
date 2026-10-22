@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import random
 import subprocess
 import sys
@@ -289,15 +290,175 @@ class MatrixTests(unittest.TestCase):
             spec = write_spec(directory, task_pairs=[{"factory": "mock.inbox", "task_pair": "cli"}],
                               seeds=[0], conditions=["sabotage"])
             result = subprocess.run([sys.executable, "-m", "joulewise.align", "run",
-                                     "--matrix", str(spec)], capture_output=True, text=True)
+                                     "--matrix", str(spec)], capture_output=True, text=True,
+                                     cwd=Path(__file__).resolve().parents[2],
+                                     env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2])})
             self.assertEqual(result.returncode, 0, result.stderr)
             source = Path(result.stdout.strip())
             target = Path(directory) / "tampered.jsonl"
             result = subprocess.run([sys.executable, "-m", "joulewise.align", "tamper",
                 "--input", str(source), "--output", str(target), "--kind", "delete_turns",
-                "--indices", "6"], capture_output=True, text=True)
+                "--indices", "6"], capture_output=True, text=True,
+                                     cwd=Path(__file__).resolve().parents[2],
+                                     env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2])})
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(read_episodes(target)[0].totals(logged_only=True)["turns"], 12)
+
+
+    def test_complete_resume_does_not_construct_unavailable_factories(self):
+        def endpoint(config, context):
+            return ScriptedEndpoint(clock=context.clock, condition=context.condition)
+        runner.register_endpoint_factory("test.flaky", endpoint)
+        with tempfile.TemporaryDirectory() as directory:
+            spec = write_spec(directory, endpoints=["test.flaky"])
+            path = runner.run_matrix(spec)
+            before = path.read_bytes()
+            def unavailable(config, context):
+                raise ConnectionError("offline")
+            runner.register_endpoint_factory("test.flaky", unavailable)
+            runner.run_matrix(spec)
+            self.assertEqual(path.read_bytes(), before)
+            self.assertEqual(len(read_episodes(path)), 2 * 2 * 5)
+
+    def test_factory_failures_have_distinct_pairs_and_retry_links_without_secrets(self):
+        marker = "synthetic-credential-marker"
+        state = {"down": True}
+        def endpoint(config, context):
+            if state["down"]:
+                raise ConnectionError("offline")
+            return ScriptedEndpoint(clock=context.clock, condition=context.condition)
+        runner.register_endpoint_factory("test.failure", endpoint)
+        with tempfile.TemporaryDirectory() as directory:
+            spec = write_spec(directory, endpoints=[{"factory": "test.failure",
+                "config": {"api_key": marker, "nested": {"password": marker}}}],
+                conditions=["benign"], seeds=[0])
+            path = runner.run_matrix(spec)
+            failed = read_episodes(path)
+            self.assertEqual({ep.task_pair for ep in failed}, {"mock/inbox-a", "mock/inbox-b"})
+            self.assertEqual(len({ep.episode_id for ep in failed}), 2)
+            self.assertEqual(len({ep.hardware["runner"]["planned_cell_id"] for ep in failed}), 2)
+            runner.run_matrix(spec)
+            self.assertEqual(len(read_episodes(path)), 2)
+            state["down"] = False
+            runner.run_matrix(spec)
+            all_records = read_episodes(path)
+            self.assertEqual(len(all_records), 4)
+            for source in failed:
+                linked = [ep for ep in all_records
+                          if ep.hardware["runner"]["planned_cell_id"] ==
+                          source.hardware["runner"]["planned_cell_id"]]
+                self.assertEqual(len(linked), 2)
+                complete = next(ep for ep in linked if ep.turns)
+                self.assertEqual(complete.hardware["runner"]["retry_of"], source.episode_id)
+                self.assertFalse(any(f.startswith("factory.error.") for f in complete.flags))
+            before = path.read_bytes()
+            runner.run_matrix(spec)
+            self.assertEqual(path.read_bytes(), before)
+            # Include recovery output: quarantining a damaged non-secret record
+            # must not reveal any config value either.
+            with path.open("ab") as handle:
+                handle.write(b'{"partial":')
+            runner.run_matrix(spec)
+            for artifact in path.parent.iterdir():
+                if artifact.is_file():
+                    self.assertNotIn(marker.encode(), artifact.read_bytes(), artifact.name)
+
+    def test_task_variants_run_and_adding_one_preserves_existing_cell_ids(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original = {"factory": "mock.inbox", "task_pair": "mock/same",
+                        "config": {"read_seconds": 0.4}}
+            variant = {"factory": "mock.inbox", "task_pair": "mock/same",
+                       "config": {"read_seconds": 0.8}}
+            spec = write_spec(directory, task_pairs=[original], seeds=[0])
+            path = runner.run_matrix(spec)
+            old_ids = {ep.episode_id for ep in read_episodes(path)}
+            payload = json.loads(spec.read_text())
+            payload["task_pairs"] = [original, variant, original]
+            spec.write_text(json.dumps(payload))
+            runner.run_matrix(spec)
+            episodes = read_episodes(path)
+            # Two distinct specs x two conditions x one seed; identical spec dedupes.
+            self.assertEqual(len(episodes), 2 * 2)
+            self.assertTrue(old_ids <= {ep.episode_id for ep in episodes})
+            metadata = json.loads(path.with_name("run.json").read_text())
+            self.assertIn("matrix.duplicate_planned_id", metadata["flags"])
+            self.assertEqual(len(metadata["duplicate_cells"]), 2)
+
+    def test_unknown_condition_is_visible_only_in_matrix_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = runner.run_matrix(write_spec(directory, seeds=[0],
+                conditions=["benign", "sabotge"]))
+            episodes = read_episodes(path)
+            self.assertEqual(len(episodes), 2)
+            self.assertTrue(all(ep.condition == "benign" and not ep.flags for ep in episodes))
+            metadata = json.loads(path.with_name("run.json").read_text())
+            self.assertIn("matrix.condition_unknown.sabotge", metadata["flags"])
+
+    def test_opt_in_interrupt_retry_keeps_history_and_stops_after_complete(self):
+        state = {"interrupt": True}
+        class Interrupted(ScriptedEndpoint):
+            def chat(self, messages, **kwargs):
+                if state["interrupt"] and sum(m.role == "tool" for m in messages) == 4:
+                    raise KeyboardInterrupt
+                return super().chat(messages, **kwargs)
+        runner.register_endpoint_factory("test.retry",
+            lambda config, context: Interrupted(clock=context.clock, condition=context.condition))
+        with tempfile.TemporaryDirectory() as directory:
+            spec = write_spec(directory, endpoints=["test.retry"],
+                              retry_flags=["episode.interrupted"])
+            path = runner.run_matrix(spec)
+            partial = read_episodes(path)[0]
+            self.assertEqual(len(partial.turns), 4)  # Exactly four ledger calls precede the injected interrupt.
+            state["interrupt"] = False
+            runner.run_matrix(spec)
+            records = read_episodes(path)
+            self.assertEqual(len(records), 2 * 2 * 5 + 1)
+            linked = [ep for ep in records if ep.hardware["runner"]["planned_cell_id"] ==
+                      partial.hardware["runner"]["planned_cell_id"]]
+            self.assertEqual(len(linked), 2)
+            complete = next(ep for ep in linked if "episode.interrupted" not in ep.flags)
+            self.assertEqual(complete.hardware["runner"]["retry_of"], partial.episode_id)
+            self.assertEqual(len(complete.turns), 12 + int(complete.condition == "sabotage"))
+            before = path.read_bytes()
+            runner.run_matrix(spec)
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_missing_serving_budgets_flag_and_greedy_default_is_recorded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for field in ("max_turns", "max_tokens"):
+                spec = matrix_spec(output_dir=field)
+                del spec[field]
+                file = Path(directory) / (field + ".json")
+                file.write_text(json.dumps(spec))
+                path = runner.run_matrix(file)
+                self.assertEqual(read_episodes(path), [])
+                self.assertIn("matrix.missing." + field,
+                              json.loads(path.with_name("run.json").read_text())["flags"])
+            spec = matrix_spec(output_dir="greedy")
+            del spec["temperature"]
+            file = Path(directory) / "greedy.json"
+            file.write_text(json.dumps(spec))
+            path = runner.run_matrix(file)
+            metadata = json.loads(path.with_name("run.json").read_text())
+            self.assertIn("matrix.default.temperature", metadata["flags"])
+            self.assertEqual(metadata["run_settings"]["temperature"], 0.0)  # Exact greedy policy parameter.
+            self.assertTrue(all(ep.hardware["runner"]["temperature"] == 0.0 for ep in read_episodes(path)))
+
+    def test_supply_limit_flag_round_trips_on_exactly_one_matrix_cell(self):
+        def supply_sampler(config, context):
+            from joulewise.align.mock_world import SyntheticPowerSampler
+            return SyntheticPowerSampler(clock=context.clock, clock_domain=context.clock_domain,
+                seed=context.seed, supply_limit=context.task_pair == "mock/inbox-a")
+        runner.register_sampler_factory("test.supply", supply_sampler)
+        with tempfile.TemporaryDirectory() as directory:
+            path = runner.run_matrix(write_spec(directory, seeds=[0], conditions=["benign"],
+                                               samplers=["test.supply"]))
+            episodes = read_episodes(path)
+            self.assertEqual(len(episodes), 2)
+            flag = "power.gpu0.supply.battery_assist"
+            self.assertEqual([ep.task_pair for ep in episodes if flag in ep.flags], ["mock/inbox-a"])
+            self.assertTrue(all("power.notes" not in ep.flags for ep in episodes))
+
 
 
 if __name__ == "__main__":

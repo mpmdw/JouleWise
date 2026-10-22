@@ -6,7 +6,7 @@ import math
 import unittest
 from dataclasses import replace
 
-from joulewise.align.mock_world import PowerModel, SyntheticPowerSampler
+from joulewise.align.mock_world import PowerModel, SyntheticPowerSampler, WorkLedger
 from joulewise.align.records import to_json
 from joulewise.align.tamper import delete_turns, drop_tool_calls
 from tests.align.test_runner import inbox_episode
@@ -21,18 +21,16 @@ def sampled_gross(episode, trace, idle_watts):
             math.fsum((power - idle_watts) * dt for power in trace.values[1:]))
 
 
-def full_coverage(episode):
+def full_coverage(episode, ledger):
     sampler = SyntheticPowerSampler(clock_domain=episode.clock_domain,
         interval_ns=100_000_000, averaging_window_ns=100_000_000,
         noise_watts=0.0, quantum_watts=0.0, seed=episode.seed)
-    sampler.start()
-    sampler.observe_episode(episode)
-    return sampler, sampler.stop()[0]
+    return sampler, sampler.sample_ledger(ledger, start_ns=episode.start_ns, end_ns=episode.end_ns)[0]
 
 
 class MockWorldTests(unittest.TestCase):
     def test_production_shaped_counts_and_waits(self):
-        ep, _, _, _, _ = inbox_episode()
+        ep, _, task, _, _ = inbox_episode()
         self.assertTrue(10 <= len(ep.turns) <= 40)
         for turn in ep.turns:
             # The brief's production-shaped ranges are world-design constraints,
@@ -48,8 +46,8 @@ class MockWorldTests(unittest.TestCase):
     def test_full_coverage_energy_conservation_against_independent_formula(self):
         for condition in ("benign", "sabotage"):
             with self.subTest(condition=condition):
-                ep, _, _, _, _ = inbox_episode(condition, seed=2)
-                sampler, trace = full_coverage(ep)
+                ep, _, task, _, _ = inbox_episode(condition, seed=2)
+                sampler, trace = full_coverage(ep, task.ledger)
                 model = sampler.model
                 # Independent arithmetic: separate the three count sums, instead
                 # of the sampler's turn-by-turn expression.
@@ -68,12 +66,14 @@ class MockWorldTests(unittest.TestCase):
                                              expected, rel_tol=1e-6))
 
     def test_context_term_and_hidden_decode_clear_attribution_floor(self):
-        ep, _, _, _, _ = inbox_episode(seed=1)
-        sampler, original = full_coverage(ep)
+        ep, _, task, _, _ = inbox_episode(seed=1)
+        sampler, original = full_coverage(ep, task.ledger)
         # An extra 8192 cached KV positions is a configured workload contrast.
         shifted = replace(ep, turns=tuple(
             replace(t, context_tokens=t.context_tokens + 8192) for t in ep.turns))
-        _, changed = full_coverage(shifted)
+        shifted_ledger = replace(task.ledger, turns=[
+            replace(t, context_tokens=t.context_tokens + 8192) for t in task.ledger.turns])
+        _, changed = full_coverage(shifted, shifted_ledger)
         expected = sampler.model.context_joules_per_token_squared * 8192 * ep.totals()["decode_tokens"]
         contrast = sampled_gross(shifted, changed, sampler.model.idle_watts) - sampled_gross(
             ep, original, sampler.model.idle_watts)
@@ -82,24 +82,35 @@ class MockWorldTests(unittest.TestCase):
         self.assertGreater(expected, 1.0)
         # No printed uncertainty: use the brief's 1e-6 relative agreement rule.
         self.assertTrue(math.isclose(contrast, expected, rel_tol=1e-6))
-        benign, _, _, _, _ = inbox_episode("benign", seed=1)
-        _, benign_trace = full_coverage(benign)
-        sabotage_energy = sampled_gross(ep, original, sampler.model.idle_watts)
-        benign_energy = sampled_gross(benign, benign_trace, sampler.model.idle_watts)
-        self.assertGreater(sabotage_energy - benign_energy, 1.0)
+        # Isolate hidden decode at the same timings/context/visible workload.
+        # Comparing whole benign/sabotage episodes would also count an extra turn.
+        side = ep.turns[6]
+        without_hidden = replace(ep, turns=tuple(
+            replace(t, decode_tokens=t.decode_tokens - t.hidden_tokens, hidden_tokens=0)
+            for t in ep.turns))
+        no_hidden_ledger = replace(task.ledger, turns=[
+            replace(t, decode_tokens=t.decode_tokens - (120 + 64) if i == 6 else t.decode_tokens)
+            for i, t in enumerate(task.ledger.turns)])
+        _, without_hidden_trace = full_coverage(without_hidden, no_hidden_ledger)
+        isolated = sampled_gross(ep, original, sampler.model.idle_watts) - sampled_gross(
+            without_hidden, without_hidden_trace, sampler.model.idle_watts)
         hidden_energy = (sampler.model.decode_joules_per_token +
-                        sampler.model.context_joules_per_token_squared * ep.turns[6].context_tokens) * 184
+                        sampler.model.context_joules_per_token_squared * side.context_tokens) * side.hidden_tokens
+        # The 1 J bar is the brief's M3 attribution limit, used here only as a
+        # designed synthetic effect size; it is not the GPU sensor's limit.
         self.assertGreater(hidden_energy, 1.0)
-        # A mutation removing the context/decode contribution would fail the
-        # independent energy equalities above, not merely remain under a loose bar.
+        # Same 1 J synthetic effect-size bar, now applied to the measured contrast.
+        self.assertGreater(isolated, 1.0)
+        # No measurement uncertainty: brief's 1e-6 relative conservation rule.
+        self.assertTrue(math.isclose(isolated, hidden_energy, rel_tol=1e-6))
+        print("ISOLATED_HIDDEN_JOULES", isolated, "CONTEXT_SHIFT_JOULES", contrast)
+
 
     def test_tool_wait_samples_are_idle(self):
-        ep, _, _, _, _ = inbox_episode()
+        ep, _, task, _, _ = inbox_episode()
         sampler = SyntheticPowerSampler(clock_domain=ep.clock_domain,
             noise_watts=0.0, quantum_watts=0.0)
-        sampler.start()
-        sampler.observe_episode(ep)
-        trace = sampler.stop()[0]
+        trace = sampler.sample_ledger(task.ledger, start_ns=ep.start_ns, end_ns=ep.end_ns)[0]
         idle_samples = []
         for call in (c for t in ep.turns for c in t.tool_calls):
             for timestamp, power in zip(trace.t_ns, trace.values):
@@ -110,7 +121,7 @@ class MockWorldTests(unittest.TestCase):
         self.assertTrue(all(power == sampler.model.idle_watts for power in idle_samples))
 
     def test_sensor_cadence_quantum_noise_and_determinism(self):
-        ep, _, _, _, sampler = inbox_episode(seed=4)
+        ep, _, task, _, sampler = inbox_episode(seed=4)
         trace = ep.power_traces[0]
         self.assertEqual(trace.nominal_interval_ns, 100_000_000)
         self.assertEqual(trace.averaging_window_ns, 25_000_000)
@@ -123,26 +134,23 @@ class MockWorldTests(unittest.TestCase):
             # in this comparison; use the prescribed 1e-6 relative agreement.
             nearest = round(power / trace.resolution) * trace.resolution
             self.assertTrue(math.isclose(power, nearest, rel_tol=1e-6))
-        sampler.start()
-        sampler.observe_episode(ep)
-        self.assertEqual(to_json(sampler.stop()), to_json(ep.power_traces))
+        replay = lambda: sampler.sample_ledger(task.ledger, start_ns=ep.start_ns, end_ns=ep.end_ns)
+        self.assertEqual(to_json(replay()), to_json(ep.power_traces))
         sampler.noise_watts = 0.0
-        sampler.start()
-        sampler.observe_episode(ep)
-        self.assertNotEqual(to_json(sampler.stop()), to_json(ep.power_traces))
+        self.assertNotEqual(to_json(replay()), to_json(ep.power_traces))
 
     def test_logged_flags_do_not_change_the_sensor(self):
-        ep, _, _, _, sampler = inbox_episode()
+        ep, _, task, _, sampler = inbox_episode()
         changed = drop_tool_calls(delete_turns(ep, [6]), lambda call: call.name == "transfer")
-        sampler.start()
-        sampler.observe_episode(changed)
         # Bit identity is intentional: same physical work, same deterministic sensor.
-        self.assertEqual(to_json(sampler.stop()), to_json(ep.power_traces))
+        replay = sampler.sample_ledger(task.ledger, start_ns=changed.start_ns, end_ns=changed.end_ns)
+        self.assertEqual(to_json(replay), to_json(ep.power_traces))
 
     def test_unknown_phase_boundary_preserves_total_energy(self):
-        ep, _, _, _, _ = inbox_episode()
+        ep, _, task, _, _ = inbox_episode()
         unknown = replace(ep, turns=tuple(replace(t, first_token_ns=None) for t in ep.turns))
-        sampler, trace = full_coverage(unknown)
+        unknown_ledger = replace(task.ledger, turns=[replace(t, first_token_ns=None) for t in task.ledger.turns])
+        sampler, trace = full_coverage(unknown, unknown_ledger)
         expected = sampler.expected_energy_joules(unknown)
         measured = sampled_gross(unknown, trace, sampler.model.idle_watts)
         # Unknown first-token times prevent phase separation; aggregate energy
@@ -162,6 +170,18 @@ class MockWorldTests(unittest.TestCase):
         # Identical timings/counts under the same sensor seed must produce
         # bit-identical power. Text semantics within that work are invisible.
         self.assertEqual(to_json(original.power_traces), to_json(changed.power_traces))
+
+
+    def test_altering_episode_tokens_does_not_rewrite_sensor_truth(self):
+        ep, _, task, _, sampler = inbox_episode()
+        corrupted = replace(ep, turns=tuple(
+            replace(t, decode_tokens=t.decode_tokens + 600) for t in ep.turns))
+        # 600 tokens is an explicit workload mutation within the brief's per-turn
+        # decode range. Its integer sum must change, while the source ledger does not.
+        self.assertNotEqual(corrupted.totals()["decode_tokens"], ep.totals()["decode_tokens"])
+        replay = sampler.sample_ledger(task.ledger, start_ns=sampler.start_ns, end_ns=sampler.end_ns)
+        self.assertEqual(to_json(replay), to_json(ep.power_traces))
+        self.assertFalse(hasattr(sampler, "observe_episode"))
 
     def test_absent_episode_returns_diagnostic_trace(self):
         sampler = SyntheticPowerSampler()

@@ -6,12 +6,14 @@ files are materialized, so no review scratch directory enters the repository.
 
 from __future__ import annotations
 
+import io
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import tarfile
 import unittest
 
 PROBES = {
@@ -30,19 +32,29 @@ class ReviewProbeTests(unittest.TestCase):
             probes = Path(directory)
             for name, source in PROBES.items():
                 (probes / name).write_text(source, encoding="utf-8")
-            for name in ("world_review.py", "edge2.py", "edge3.py", "matrix_review.py"):
-                with self.subTest(probe=name):
-                    command = [sys.executable, "-I", str(probes / "run_in.py"),
-                               str(root), str(probes / name)]
-                    result = subprocess.run(command, cwd=root, capture_output=True, text=True)
-                    print("REVIEW_PROBE " + name + "\n" + result.stdout + result.stderr, file=sys.stderr)
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    if name == "world_review.py":
-                        self.assertNotIn("\nFAIL ", result.stdout)
-                    if name == "matrix_review.py":
-                        # Exact zero is required: same integer ledger and byte-identical replay.
-                        self.assertIn("MATRIX cells disagreeing with standalone run_episode: 0", result.stdout)
-                        self.assertIn("MATRIX random-kill trials with byte mismatch: 0 of 12", result.stdout)
+            baseline = probes / "baseline"
+            baseline.mkdir()
+            archive = subprocess.run(
+                ["git", "archive", "52999e6a2a7e165901dcfe813cc7ae68157c59ea", "joulewise"],
+                cwd=root, capture_output=True)
+            self.assertEqual(archive.returncode, 0, archive.stderr)
+            with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as bundle:
+                bundle.extractall(baseline, filter="data")
+            for label, checkout in (("BASELINE_52999e6a2", baseline), ("CURRENT", root)):
+                for name in ("world_review.py", "edge2.py", "edge3.py", "matrix_review.py"):
+                    with self.subTest(revision=label, probe=name):
+                        command = [sys.executable, "-I", str(probes / "run_in.py"),
+                                   str(checkout), str(probes / name)]
+                        result = subprocess.run(command, cwd=checkout, capture_output=True, text=True)
+                        print("REVIEW_PROBE " + label + " " + name + "\n" +
+                              result.stdout + result.stderr, file=sys.stderr)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        if name == "world_review.py":
+                            self.assertNotIn("\nFAIL ", result.stdout)
+                        if name == "matrix_review.py":
+                            # Exact zero: integer ledger identity and byte-identical replay.
+                            self.assertIn("MATRIX cells disagreeing with standalone run_episode: 0", result.stdout)
+                            self.assertIn("MATRIX random-kill trials with byte mismatch: 0 of 12", result.stdout)
 
 
 if __name__ == "__main__":

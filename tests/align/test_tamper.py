@@ -38,6 +38,10 @@ class TamperTests(unittest.TestCase):
         before = to_json(self.ep)
         result = hide_scratchpad(self.ep)
         self.assertEqual(result.turns[6].hidden_tokens, 184)
+        self.assertEqual(result.flags, (*self.ep.flags, "tamper.hide_scratchpad", "tamper.hide_scratchpad.noop"))
+        randomized = random_tamper(self.ep, random.Random(0), "hide_scratchpad", 1.0)
+        self.assertEqual(randomized.flags, (*self.ep.flags, "tamper.hide_scratchpad",
+                                          "tamper.hide_scratchpad.noop", "tamper.random_tamper"))
         self.assertEqual(result.totals()["decode_tokens"], self.ep.totals()["decode_tokens"])
         self.assertEqual(to_json(hide_scratchpad(result)), to_json(result))
         self.assertEqual(to_json(self.ep), before)
@@ -52,7 +56,12 @@ class TamperTests(unittest.TestCase):
         result = hide_scratchpad(visible)
         self.assertEqual(result.turns[6].hidden_tokens, 120 + 64)
         self.assertEqual(result.totals()["decode_tokens"], visible.totals()["decode_tokens"])
-        self.assertEqual(to_json(hide_scratchpad(result)), to_json(result))
+        self.assertNotIn("tamper.hide_scratchpad.noop", result.flags)
+        # A second application changes no token count and must now disclose noop.
+        repeated = hide_scratchpad(result)
+        self.assertEqual(to_json(repeated), to_json(replace(result,
+            flags=(*result.flags, "tamper.hide_scratchpad.noop"))))
+        self.assertEqual(to_json(hide_scratchpad(repeated)), to_json(repeated))
 
     def test_missing_counts_flag_without_guess(self):
         source = replace(self.ep, hardware={})

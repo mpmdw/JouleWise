@@ -74,6 +74,9 @@ def _hide_indices(ep: Episode, indices: set[int]) -> Episode:
                 hidden = turn.decode_tokens
             counted.add(turn.index)
         turns.append(replace(turn, hidden_tokens=hidden))
+    if not any(before.hidden_tokens != after.hidden_tokens
+               for before, after in zip(ep.turns, turns)):
+        flags.append("tamper.hide_scratchpad.noop")
     metadata["scratchpad_counted_hidden"] = sorted(counted)
     hardware["runner"] = metadata
     return _flag(replace(ep, turns=tuple(turns), hardware=hardware), *flags)

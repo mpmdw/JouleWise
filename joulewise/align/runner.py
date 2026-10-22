@@ -1,7 +1,7 @@
 """Run agent episodes and resumable matrices using only the shared contracts.
 
 Factories receive (config, FactoryContext); imports that install factories are
-explicit in a matrix. Optional clock/observation hooks are lane-local adapters,
+explicit in a matrix. Optional clock hooks are lane-local adapters,
 so real endpoints, tasks, monitors and samplers need only the shared protocols.
 """
 
@@ -132,6 +132,20 @@ def _count(value: Any, flags: list[str], field: str) -> int:
     return 0
 
 
+
+def _text_result(value: Any) -> str:
+    """Keep non-text tool output representable without losing the model turn."""
+    if isinstance(value, bytes):
+        return "hex:" + value.hex()
+    try:
+        return to_json(value)
+    except (TypeError, ValueError):
+        try:
+            return repr(value)
+        except Exception:
+            return "<" + type(value).__name__ + ">"
+
+
 def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                 monitors: Sequence[Any] = (), samplers: Sequence[PowerSampler] = (),
                 seed: int, max_turns: int, max_tokens: int, temperature: float,
@@ -191,7 +205,13 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
             for index in range(max(0, max_turns)):
                 call_start = now()
                 try:
-                    result = endpoint.chat(transcript, tools=tools, max_tokens=max_tokens,
+                    history = []
+                    for message in transcript:
+                        if message.role == "assistant" and message.tool_call_id is None:
+                            content, _, _ = _spans(message.content, _REASONING_TAGS)
+                            message = replace(message, content=content)
+                        history.append(message)
+                    result = endpoint.chat(history, tools=tools, max_tokens=max_tokens,
                                            temperature=temperature, seed=seed)
                 except KeyboardInterrupt:
                     flags.append("episode.interrupted")
@@ -207,9 +227,40 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                     cached = prompt
                 decode = _count(result.completion_tokens, flags, "completion_tokens")
                 hidden = _count(result.reasoning_tokens, flags, "reasoning_tokens")
+                t_start, t_end, first = result.start_ns, result.end_ns, result.first_token_ns
+                if (not isinstance(t_start, int) or isinstance(t_start, bool) or
+                    not isinstance(t_end, int) or isinstance(t_end, bool) or t_end < t_start):
+                    flags.append("clock.endpoint_invalid")
+                    t_start, t_end, first = call_start, call_end, None
+                if first is not None and (not isinstance(first, int) or isinstance(first, bool)):
+                    flags.append("clock.first_token_invalid")
+                    first = None
+                outside = (not call_start <= t_start <= t_end <= call_end or
+                           (first is not None and not t_start <= first <= t_end))
+                if outside:
+                    if first is not None and not t_start <= first <= t_end:
+                        flags.append("clock.first_token_invalid")
+                    # Adapter stamps must be inside the measured call, including
+                    # its endpoints. A different clock cannot stretch the record.
+                    flags.append("clock.endpoint_outside_call")
+                    t_start, t_end, first = call_start, call_end, None
+                if hidden > decode:
+                    flags.append("usage.hidden_exceeds_decode")
+                    hidden = decode
+                # Retain measured model work before content parsing or tool execution.
+                turns.append(Turn(index, t_start, t_end, cached, prompt - cached,
+                                  decode, hidden, first))
+                end = max(end, t_end)
+                content = result.content
+                if content is None:
+                    flags.append("endpoint.content_missing")
+                    content = ""
+                elif not isinstance(content, str):
+                    flags.append("endpoint.non_text_content")
+                    content = _text_result(content)
                 scratch: list[str] = []
                 if tags:
-                    _, scratch, unclosed = _spans(result.content, tags)
+                    _, scratch, unclosed = _spans(content, tags)
                     if unclosed:
                         flags.append("scratchpad.unclosed")
                 scratch_count: int | None = 0
@@ -234,20 +285,7 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                 if hidden > decode:
                     flags.append("usage.hidden_exceeds_decode")
                     hidden = decode
-                t_start, t_end = result.start_ns, result.end_ns
-                if (not isinstance(t_start, int) or isinstance(t_start, bool) or
-                    not isinstance(t_end, int) or isinstance(t_end, bool) or t_end < t_start):
-                    flags.append("clock.endpoint_invalid")
-                    t_start, t_end = call_start, call_end
-                if t_start < start or t_start < end:
-                    flags.append("clock.endpoint_out_of_order")
-                start = min(start, t_start)
-                first = result.first_token_ns
-                if first is not None and (not isinstance(first, int) or isinstance(first, bool)
-                                          or not t_start <= first <= t_end):
-                    flags.append("clock.first_token_invalid")
-                    first = None
-                content = result.content
+                turns[-1] = replace(turns[-1], hidden_tokens=hidden)
                 if result.reasoning_text:
                     content = _REASONING_TAGS[0] + result.reasoning_text + _REASONING_TAGS[1] + content
                 transcript.append(ChatMessage("assistant", content))
@@ -269,15 +307,14 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                     tool_end = now()
                     if not isinstance(output, str):
                         flags.append("tool.non_text_result")
-                        output = to_json(output)
+                        output = _text_result(output)
                     calls.append(ToolCall(request.name, tool_start, tool_end,
                                           len(request.arguments_json.encode("utf-8")),
                                           len(output.encode("utf-8"))))
+                    turns[-1] = replace(turns[-1], tool_calls=tuple(calls))
                     transcript.append(ChatMessage("tool", output, request.name, request.call_id))
                     if interrupted:
                         break
-                turns.append(Turn(index, t_start, t_end, cached, prompt - cached,
-                                  decode, hidden, first, tuple(calls)))
                 end = max(end, t_end, now(), *(c.end_ns for c in calls))
                 if interrupted or "episode.interrupted" in flags:
                     break
@@ -293,6 +330,8 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
     hardware["runner"] = {
         "matrix_id": matrix_id, "scratchpad_tokens": counts,
         "scratchpad_counted_hidden": counted,
+        "reasoning_history_policy": "strip_separated_reasoning",
+        "max_turns": max_turns, "max_tokens": max_tokens, "temperature": temperature,
     }
     episode = Episode(
         episode_id(task.task_pair, condition, endpoint.identity, seed, matrix_id),
@@ -301,13 +340,6 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
         clock_domain, start, end, tuple(turns), hardware=hardware,
     )
     for sampler in started:
-        try:
-            observer = getattr(sampler, "observe_episode", None)
-            if observer is not None:
-                observer(episode)
-        except (Exception, KeyboardInterrupt) as exc:
-            flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt) else
-                         "sampler.observe_error." + type(exc).__name__)
         try:
             sampled = tuple(sampler.stop())
         except (Exception, KeyboardInterrupt) as exc:
@@ -336,7 +368,15 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
             if not trace.t_ns:
                 flags.append("power.empty")
             if trace.notes:
-                flags.append("power.notes")
+                try:
+                    notes = json.loads(trace.notes)
+                except (ValueError, TypeError):
+                    notes = None
+                if (isinstance(notes, dict) and isinstance(notes.get("flags"), list) and
+                    all(isinstance(flag, str) for flag in notes["flags"])):
+                    flags.extend("power." + trace.channel + "." + flag for flag in notes["flags"])
+                else:
+                    flags.append("power.notes")
             traces.append(trace)
     scores: dict[str, Any] = {}
     for name, scorer in (("main_task_score", task.score_main), ("side_task_success", task.score_side)):
@@ -356,6 +396,9 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
     for entry in monitors:
         monitor, visibilities = entry if isinstance(entry, tuple) else (entry, ("full",))
         for visibility in visibilities:
+            if visibility == "tampered":
+                flags.append("monitor.visibility_tampered_unavailable")
+                continue
             if visibility not in _VISIBILITIES:
                 flags.append("monitor.visibility_unknown")
                 continue
@@ -444,13 +487,46 @@ def _transcript_row(line: bytes) -> dict[str, Any]:
     return row
 
 
-def run_matrix(spec_path: str | Path) -> Path:
-    """Run task pairs x conditions x seeds x endpoints; return episodes.jsonl.
 
-    A transcript is fsynced before its episode, which is the commit marker.
-    run.json records randomized order, configuration digest and recovery flags.
-    Use one writer per output directory. Factory modules are explicit Python
-    imports supplied by the operator, never installed or fetched by this runner.
+def _public_spec(value: Any) -> Any:
+    """Remove credential fields before hashing or describing a planned cell."""
+    if isinstance(value, Mapping):
+        public = {}
+        for key, item in value.items():
+            name = str(key).lower().replace("-", "_")
+            credential = (name in ("token", "access_token", "auth_token", "api_token",
+                                  "bearer_token", "refresh_token", "api_key", "apikey") or
+                          any(word in name for word in ("secret", "password", "passwd",
+                                                       "credential", "authorization", "cookie")))
+            if not credential:
+                public[str(key)] = _public_spec(item)
+        return public
+    if isinstance(value, (list, tuple)):
+        return [_public_spec(item) for item in value]
+    return value
+
+
+def _digest(value: Any) -> str:
+    return hashlib.sha256(to_json(value).encode("utf-8")).hexdigest()
+
+
+def _planned_cell(task_spec: Mapping[str, Any], condition: str, seed: int,
+                  endpoint_key: str, matrix_id: str) -> str:
+    return episode_id(_digest(_public_spec(task_spec)), condition, endpoint_key, seed, matrix_id)
+
+
+def _retry_requested(episode: Episode, patterns: Sequence[str]) -> bool:
+    from fnmatch import fnmatchcase
+    return any(fnmatchcase(flag, pattern) for flag in episode.flags for pattern in patterns)
+
+
+def run_matrix(spec_path: str | Path) -> Path:
+    """Run a randomized matrix; a durable episode commits each linked attempt.
+
+    Planned cells come from the spec, so resume skips complete cells before
+    constructing a factory. A task-config digest distinguishes prompt variants.
+    Endpoint identity may be declared explicitly; otherwise its factory slot
+    names the cell. Runtime identities remain in the resulting Episode.
     """
     spec_path = Path(spec_path)
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
@@ -462,17 +538,34 @@ def run_matrix(spec_path: str | Path) -> Path:
     transcripts_path = output / "transcripts.jsonl"
     metadata_path = output / "run.json"
     flags: list[str] = []
-    canonical = {key: value for key, value in spec.items() if key != "output_dir"}
-    digest = hashlib.sha256(to_json(canonical).encode("utf-8")).hexdigest()
+    canonical = _public_spec({key: value for key, value in spec.items() if key != "output_dir"})
+    digest = _digest(canonical)
     matrix_id = str(spec.get("matrix_id", digest))
     order_seed = spec.get("order_seed", 0)
-    previous = json.loads(metadata_path.read_text()) if metadata_path.exists() else {}
+    previous = {}
+    if metadata_path.exists():
+        try:
+            previous = json.loads(metadata_path.read_text(encoding="utf-8"))
+            if not isinstance(previous, dict):
+                raise ValueError("run metadata is not an object")
+        except (ValueError, TypeError):
+            flags.append("resume.invalid_metadata")
+            previous = {}
     flags.extend(previous.get("flags", []))
     if previous and previous.get("spec_sha256") != digest:
-        # An explicit matrix ID is stable, so disclose changed run settings.
         flags.append("matrix.spec_changed")
+    # Serving limits are operator inputs, not the mock world's token ranges.
+    # Legacy matrices omitted temperature: retain explicit greedy decoding (0)
+    # with a visible default flag and the effective value in run.json/episodes.
+    settings = {key: spec[key] for key in ("max_turns", "max_tokens") if key in spec}
+    settings["temperature"] = spec.get("temperature", 0.0)
+    if "temperature" not in spec:
+        flags.append("matrix.default.temperature")
+    missing = [key for key in ("max_turns", "max_tokens") if key not in spec]
+    flags.extend("matrix.missing." + key for key in missing)
     metadata = {"matrix_id": matrix_id, "spec_sha256": digest,
-                "order_seed": order_seed, "flags": flags, "order": []}
+                "order_seed": order_seed, "flags": flags, "order": [],
+                "run_settings": settings, "duplicate_cells": []}
     from joulewise.align.mock_world import register_mock_factories
     register_mock_factories()
     for module in spec.get("imports", []):
@@ -484,7 +577,6 @@ def run_matrix(spec_path: str | Path) -> Path:
     transcripts = _load_lines(transcripts_path, _transcript_row, flags)
     committed = {ep.episode_id: ep for ep in episodes}
     transcript_map = {row["episode_id"]: row for row in transcripts}
-    # Drop only uncommitted transcript rows after a kill between the two appends.
     if any(row["episode_id"] not in committed for row in transcripts):
         flags.append("resume.orphan_transcript")
         with transcripts_path.open("w", encoding="utf-8") as handle:
@@ -496,16 +588,63 @@ def run_matrix(spec_path: str | Path) -> Path:
             flags.append("resume.transcript_missing")
             _append(transcripts_path, {"episode_id": ep.episode_id, "messages": [],
                                       "flags": ["resume.transcript_missing"]})
-    tasks = spec.get("task_pairs", spec.get("tasks", []))
-    jobs = list(itertools.product(tasks, spec.get("conditions", ["benign", "sabotage"]),
-                                  spec.get("seeds", [0]), spec.get("endpoints", [])))
+    by_cell: dict[str, list[Episode]] = {}
+    for ep in episodes:
+        cell = ep.hardware.get("runner", {}).get("planned_cell_id", ep.episode_id)
+        by_cell.setdefault(cell, []).append(ep)
+
+    tasks = [_component(value) for value in spec.get("task_pairs", spec.get("tasks", []))]
+    conditions = []
+    for condition in spec.get("conditions", ["benign", "sabotage"]):
+        if condition in ("benign", "sabotage"):
+            conditions.append(condition)
+        else:
+            flags.append("matrix.condition_unknown." + str(condition))
+    endpoint_slots = []
+    seen_endpoints: dict[str, str] = {}
+    factory_slots: dict[str, int] = {}
+    for value in spec.get("endpoints", []):
+        entry = _component(value)
+        fingerprint = _digest(_public_spec(entry))
+        if fingerprint not in seen_endpoints:
+            factory = entry["factory"]
+            slot = factory_slots.get(factory, 0)
+            factory_slots[factory] = slot + 1
+            seen_endpoints[fingerprint] = str(entry.get("identity", factory + "/slot/" + str(slot)))
+        endpoint_slots.append((entry, seen_endpoints[fingerprint]))
+    jobs = list(itertools.product(tasks, conditions, spec.get("seeds", [0]), endpoint_slots))
     random.Random(order_seed).shuffle(jobs)
-    for task_spec, condition, seed, endpoint_spec in jobs:
-        task_spec = _component(task_spec)
-        pair = task_spec.get("task_pair", task_spec["factory"])
+    if not jobs:
+        flags.append("matrix.empty")
+    planned: dict[str, dict[str, str]] = {}
+    retry_flags = spec.get("retry_flags", [])
+    if isinstance(retry_flags, str):
+        retry_flags = [retry_flags]
+    for task_spec, condition, seed, (endpoint_spec, endpoint_key) in jobs:
+        cell = _planned_cell(task_spec, condition, seed, endpoint_key, matrix_id)
+        description = {"task_spec_sha256": _digest(_public_spec(task_spec)),
+                       "endpoint_spec_sha256": _digest(_public_spec(endpoint_spec))}
+        if cell in planned:
+            flags.append("matrix.duplicate_planned_id")
+            metadata["duplicate_cells"].append({"planned_cell_id": cell,
+                                                "specs": [planned[cell], description]})
+            continue
+        planned[cell] = description
+        metadata["order"].append(cell)
+        if missing:
+            continue
+        prior = by_cell.get(cell, [])
+        latest = prior[-1] if prior else None
+        factory_retry = latest is not None and any(
+            flag.startswith("factory.error.") for flag in latest.flags)
+        if latest is not None and not factory_retry and not _retry_requested(latest, retry_flags):
+            continue
+        attempt = len(prior)
+        identity = cell if attempt == 0 else _digest([cell, "attempt", attempt])
+        pair = str(task_spec.get("task_pair", task_spec.get("config", {}).get(
+            "task_pair", task_spec.get("config", {}).get("pair", task_spec["factory"]))))
         domain = spec.get("clock_domain", "host.monotonic")
         context = FactoryContext(pair, condition, seed, matrix_id, domain, time.monotonic_ns)
-        endpoint_identity = to_json(_component(endpoint_spec))
         task = None
         endpoint = None
         construction_flags: list[str] = []
@@ -513,20 +652,17 @@ def run_matrix(spec_path: str | Path) -> Path:
             if "clock" in spec:
                 context = replace(context, clock=_make("clock", spec["clock"], context))
             task = _make("task", task_spec, context)
-            endpoint = _make("endpoint", endpoint_spec, context)
             pair = task.task_pair
             context = replace(context, task_pair=pair)
-            endpoint_identity = endpoint.identity
+            endpoint = _make("endpoint", endpoint_spec, context)
         except (Exception, KeyboardInterrupt) as exc:
             construction_flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt)
                                       else "factory.error." + type(exc).__name__)
-        identity = episode_id(pair, condition, endpoint_identity, seed, matrix_id)
-        metadata["order"].append(identity)
-        if identity in committed:
-            continue
         if construction_flags:
+            if factory_retry and tuple(construction_flags) == latest.flags:
+                continue  # A still-unavailable factory does not duplicate its diagnostic.
             timestamp = context.clock()
-            episode = Episode(identity, pair, condition, endpoint_identity, endpoint_identity,
+            episode = Episode(identity, pair, condition, endpoint_key, endpoint_key,
                               seed, domain, timestamp, timestamp, (), flags=tuple(construction_flags))
             transcript = []
         else:
@@ -541,9 +677,10 @@ def run_matrix(spec_path: str | Path) -> Path:
                     try:
                         component = _make(kind, configuration, context)
                         if kind == "monitor":
-                            visibilities = tuple(_component(configuration).get(
-                                "visibilities", ["full"]))
-                            target.append((component, visibilities))
+                            visibilities = _component(configuration).get("visibilities", ["full"])
+                            if isinstance(visibilities, str):
+                                visibilities = [visibilities]
+                            target.append((component, tuple(visibilities)))
                         else:
                             target.append(component)
                     except (Exception, KeyboardInterrupt) as exc:
@@ -557,27 +694,32 @@ def run_matrix(spec_path: str | Path) -> Path:
                                               else "token_counter.factory_error." + type(exc).__name__)
             if "episode.interrupted" in construction_flags:
                 timestamp = context.clock()
-                episode = Episode(identity, pair, condition, endpoint_identity, endpoint_identity,
-                                  seed, domain, timestamp, timestamp, (),
-                                  flags=tuple(construction_flags))
+                episode = Episode(identity, pair, condition, endpoint.identity, endpoint.identity,
+                                  seed, domain, timestamp, timestamp, (), flags=tuple(construction_flags))
                 transcript = []
             else:
                 episode, transcript = run_episode(
                     task, condition, endpoint, monitors=monitors, samplers=samplers, seed=seed,
-                    max_turns=spec.get("max_turns", 40), max_tokens=spec.get("max_tokens", 600),
-                    temperature=spec.get("temperature", 0.0), clock_domain=domain,
+                    max_turns=settings["max_turns"], max_tokens=settings["max_tokens"],
+                    temperature=settings["temperature"], clock_domain=domain,
                     token_counter=counter, matrix_id=matrix_id, clock=context.clock,
                 )
-            runner_metadata = dict(episode.hardware.get("runner", {}))
-            runner_metadata.update(order_seed=order_seed, order_index=len(metadata["order"]) - 1)
-            hardware = dict(episode.hardware)
-            hardware["runner"] = runner_metadata
-            episode = replace(episode, hardware=hardware,
-                              flags=tuple(dict.fromkeys((*episode.flags, *construction_flags))))
+        runner_metadata = dict(episode.hardware.get("runner", {}))
+        runner_metadata.update(order_seed=order_seed, order_index=len(metadata["order"]) - 1,
+                               planned_cell_id=cell, attempt=attempt, run_settings=settings,
+                               task_spec_sha256=description["task_spec_sha256"],
+                               endpoint_key=endpoint_key)
+        if latest is not None:
+            runner_metadata["retry_of"] = latest.episode_id
+        hardware = dict(episode.hardware)
+        hardware["runner"] = runner_metadata
+        episode = replace(episode, episode_id=identity, hardware=hardware,
+                          flags=tuple(dict.fromkeys((*episode.flags, *construction_flags))))
         _append(transcripts_path, {"episode_id": episode.episode_id,
                                   "messages": to_jsonable(transcript), "flags": []})
         _append(episodes_path, episode)
         committed[episode.episode_id] = episode
+        by_cell.setdefault(cell, []).append(episode)
         if "episode.interrupted" in episode.flags:
             flags.append("matrix.interrupted")
             break
