@@ -19,6 +19,12 @@ re-ran and reproduced byte for byte ("Executed evidence", third dispatch). Three
   finding 3), which this ruling had left open.
 - §4 records what lies in the window after decode on H.
 
+Revision of 2026-10-22, 14:40 PDT (fourth dispatch; no council reconvened, no number changed). Every script re-ran
+and reproduced byte for byte. The build (BAT-3, `lane/2026-10-22-bytes-battery-term` @ `9bdcf6c95`) now agrees with
+this ruling's formula on all 95 H runs, and §8's text is placed there in full ("Executed evidence", fourth dispatch).
+Two build choices made since the third dispatch are recorded as this ruling's (§4): the marker is evaluated when the
+meter value fails, and each run records whether its stream reaches τ after decode end. "Reopen if" gains one line.
+
 ## Who sat
 
 - **Opus 5.5**, Claude cloud `session_016JB6H21N3PeACguhEyyh1L`. Report: JouleWise-data `claude/bat-council-opus`
@@ -279,6 +285,20 @@ and the without-assisted line's numbers print as null, labelled "not evaluated a
 would claim a count that was never taken. The count of runs carrying `battery.assist` comes from the harvest's
 flags and prints at every stage. This changes no number. Every stage that reads the meter stream evaluates the
 marker as above.
+
+**When the meter value fails, or the window is cut short** (added on the fourth dispatch; BAT-3 fix round 1b,
+`ac03d8cd0` and `3566073ae`). Two cases the text above left open. The build's choices are adopted:
+
+- *The meter value fails* (for example `bytes.meter_decode_unavailable` for a missing clock fit). The run leaves the
+  DC-input and rest cells, but it stays in the rails cells, and the without-assisted line is printed at every
+  boundary. So the marker is still evaluated from the stream's polls in [d0 + τ, d1 + τ). If no stream mapped to the
+  host clock has a poll in that window, the run records `decode_assist_evaluated` false with the cause. A cell that
+  holds such a run prints the decode-assisted count and the line's numbers as null, with that cause and the run ids,
+  never as 0. This is the blinded-stage rule above, for the same reason.
+- *The stream ends before d1 + τ.* Then v_end and the marker read only the polls that exist, so v_end can be too
+  small and a decode-end assist can go unmarked. Each run records `battery_end_window_complete` (true when a poll was
+  received at or after d1 + τ). It is a recorded disclosure and removes nothing. On H it is true for 95 of 95 runs:
+  the build says so, and the extract holds a poll at or after d1 + τ for every run.
 
 ## 5. Q4: rest
 
@@ -543,7 +563,8 @@ flag. The only removal rule is the existing missing-reading rule, applied to the
 
 - a later stream shows battery readings arriving later than its own τ after a power step;
 - a decode battery term is large against u (on H the largest v / u is 0.19);
-- a schedule starts a run's first span within τ of the previous run's decode end (H: at least 45.0 s, §4).
+- a schedule starts a run's first span within τ of the previous run's decode end (H: at least 45.0 s, §4);
+- any run records `battery_end_window_complete` false (H: 0 of 95, §4).
 
 ## 11. Re-running it
 
@@ -583,6 +604,10 @@ the real `meter_decode` at `0743a7b90`.
   - The three new §8 placements are text only. They go into `docs/registrations/bytes_pack_v1.md` on
     `lane/2026-10-22-bytes-battery-term`, or at BY-MERGE: the Authority insertion, the last paragraph of §6, and the
     last paragraph of §7. No code changes with them.
+- Added on the fourth dispatch:
+  - The three placements are done (`af821460d`). All of §8 is in the registration at `9bdcf6c95`.
+  - The build at `9bdcf6c95` gives this ruling's values on all 95 H runs. What remains for backlog item 9 is the
+    twin's battery update (BY-TWIN-BAT; PR #544's one failing test waits for it), then both cold passes.
 
 ## Executed evidence
 
@@ -691,3 +716,61 @@ State of the other parts at this dispatch, recorded only:
 - The build (BAT-3, PR #544) is at fix round 1 `a846ba997`. BAT-1's fourth dispatch found that it gives the same H
   output.
 - PR #536's CI on `c220c6e78` was pending when this revision was written.
+
+### Fourth dispatch (2026-10-22, 14:20 to 14:40 PDT)
+
+BAT-2 was dispatched a fourth time with the original brief. The council had sat and every acceptance item was met,
+so no seat or judge was reconvened. The lead's delegate re-ran everything, then checked the build and the
+registration text against this ruling.
+
+Inputs:
+
+- `$P` is `analysis/bat-council-20261022` @ `c17fdca`, and BAT-1's tables are at `d425514`; both were exported with
+  `git archive`.
+- `$K` is `km003c_parse.py` from origin/main `c21c52dfa` (sha256 `e8fc584a…`), byte-identical to the copy at
+  `0743a7b90`.
+- `$J` is `joulewise/` at `0743a7b90`. `$H` is H's session root, read only.
+- `$F` is `/Users/edr/night-archive/forward-20261021/BAT-2/lead-rerun/fourth-dispatch`. It holds the two new scripts
+  (`build_vs_ruling.py`, sha256 `e0d34116…`; `regtext.py`, `318767d9…`) and every output.
+
+```text
+$ python3.13 -I -B $P/worked_example.py $P/data/h_decode_extract.json        exit 0, identical
+$ python3.13 -I -B $P/ruling_table.py $P/data/h_decode_extract.json          exit 0, identical
+$ python3.13 -I -B $P/lead/lead_check2.py $P/data/h_decode_extract.json      exit 0, identical
+$ python3.13 -I -B $P/lead/lead_table.py $P/data/h_decode_extract.json <BAT-1 h_battery_runs.json> $K/km003c_parse.py
+                                                                             exit 0, identical
+$ python3.13 -I -B $L/lead_rerun.py $H $J                                    exit 0, identical
+$ python3.13 -I -B $L/lead_counts.py $H $J                                   exit 0, identical
+$ python3.13 -I -B $L/third-dispatch/gap_check.py $P/data/h_decode_extract.json   exit 0, identical
+$ python3.13 -I -B $F/build_vs_ruling.py $P/data/h_decode_extract.json \
+    <BAT-1 tables>/h_meter_decode_bat3_9bdcf6c95.json                        exit 0, 0 failures
+$ python3.13 -I -B $F/regtext.py BAT-RULING.md <bytes_pack_v1.md at 9bdcf6c95>  22 of 22 found
+```
+
+"Identical" means byte for byte against the stored outputs of 22:31 PDT (`$L/out/`) and of the third dispatch
+(`gap_check.txt`). So the worked examples of §9 reproduce again, to the printed digit.
+
+`build_vs_ruling.py` is new. It computes the ruled quantities from the extract at full precision, as
+`ruling_table.py` does, for all 95 H runs. It compares them with BAT-3's `meter_decode` output at `9bdcf6c95` (BAT-1's
+table, whose runs equal the BAT-3 director's own output; only the recorded source path differs). Bars, set here:
+joules 1e-5 J, as in item 3 of the first re-run (above 10⁶ × float64 noise on 6,424 J, which is 1.4e-6 J, and below
+1 % of the smallest printed bound entry, v = 0.115 J); τ 1e-9 s, one tick of the integer-nanosecond stamps both
+sides read; poll counts and the marker by equality. Results:
+
+- 95 of 95 runs matched by id. τ = 2.302440875 s on both sides.
+- Largest differences: battery term 1.1e-16 J; v_start, v_end and v 0 J; DC input on both bases 2.3e-13 J; u + v
+  1.8e-15 J; C_j term 8.9e-16 J; τ 0 s. Battery poll counts and the marker are equal on every run.
+- 9 runs have a nonzero term, and 1 is marked (soak-llama-70b-r11), as in §4 and §9.
+- `battery_end_window_complete` is true on 95 of 95, and the extract holds a poll at or after d1 + τ for every run.
+
+`regtext.py` is new. It checks every quoted paragraph of §8, and the quoted phrases of the §7 table, §9, §15, §16 and
+§20 replacements, against the registration at `9bdcf6c95`. The match is exact after whitespace is collapsed. All 22
+are present.
+
+State of the other parts at this dispatch, recorded only:
+
+- B6-1's fourth pass (`42dea5496`, draft PR #537) §7.1 still keeps block 6's per-phase value meter-only and states
+  that BYTES no longer takes S-15's fill. Nothing in it changes this ruling.
+- PR #544 is a draft at `9bdcf6c95`. BAT-1's fifth dispatch recorded 20 of 21 CI jobs passing; the one failure
+  expects the twin's battery update.
+- `ops/stop-pause` is present on origin (`dac3b7e62`). Nothing here touched a window.
