@@ -263,6 +263,16 @@ class BudgetConditionTests(OfflineTest):
 
 
 class BudgetRunTests(OfflineTest):
+    def test_summary_does_not_merge_distinct_hardware_or_condition_values(self):
+        result, _ = self.world(count=1, conditions=(Condition("thinking_on"),))
+        original = result.trials[0]
+        different_hardware = replace(original, episode=replace(
+            original.episode, hardware={**original.episode.hardware, "measurement_id": "different-GPU"}))
+        different_condition = replace(original, condition=Condition("thinking_on", "budget", 0.6))
+        rows = summarize((original, different_hardware, different_condition))
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(len({r.configuration_id for r in rows}), 3)
+
     def test_cli_synthetic_writes_complete_outputs_without_a_socket(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "pilot"
