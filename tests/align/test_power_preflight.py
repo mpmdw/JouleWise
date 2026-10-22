@@ -233,7 +233,7 @@ class PreflightTests(unittest.TestCase):
             values = tuple(50 + rng.gauss(0, 0.5) for _ in range(65))
             trace = PowerTrace(
                 "nvml_power", "gpu0:synthetic", "synthetic:monotonic",
-                tuple(index*100_000_000 for index in range(65)), values, "W",
+                tuple(index*100_000_000+25_000_000 for index in range(65)), values, "W",
                 100_000_000, 25_000_000, 0.25, 0.001,
                 json.dumps({"sensor_facts": {"period_ns": 100_000_000}}))
             result = preflight.assess_power_movement(
