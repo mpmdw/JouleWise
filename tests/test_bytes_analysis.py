@@ -2329,7 +2329,9 @@ class BatteryCampaignTests(NumericTestCase):
                     self.assertEqual(meter["battery_gross_j"], 0)
                     self.assertEqual(meter["battery_phase_edge_j"], 0)
                 elif placement == "across_start":
-                    self.assertLessEqual(abs(meter["battery_gross_j"]), meter["battery_phase_edge_j"])
+                    # Same-input integrals use BAT-2's 1e-6 J agreement bar;
+                    # sum/n*T and (T/n)*sum can differ by float roundoff.
+                    self.assertLessEqual(abs(meter["battery_gross_j"]), meter["battery_phase_edge_j"] + 1e-6)
                 else:
                     self.assertGreater(meter["battery_gross_j"], 0)
                 evidence.append({"pass": session["pass_id"], "model": record["model"], "placement": placement,

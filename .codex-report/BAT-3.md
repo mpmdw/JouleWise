@@ -5,7 +5,8 @@
 - **Done:** resumed from accepted checkpoint 71414e1e5; the director approved /usr/bin/python3.13 (3.13.5). No root/sudo is available; missing /opt fixture paths will be listed as environmental.
 - **Done:** catalog generated with --write and verified with --check; SHA-256 33e1c6110d98474465109062cfcdff480679ba8b2c9854fc754fa26fa07bccb6, 263 codes, 203 DISCLOSE, 41 EXCLUDE_MEMBER, 19 EXCLUDE_WINDOW. Registration SHA/counts filled.
 - **Done:** all 39 plan-generator outputs reproduce byte for byte. Only twelve BYTES registration.json files changed; twelve plan trees are identical. No alpha/beta/gamma or other pack changed.
-- **Running:** all eight required modules, each with a fresh TMPDIR and JW_B5_SYNTHETIC_ONLY=1. Initial timing-wrapper attempt did not start tests (/usr/bin/time absent); rerun uses the approved interpreter directly.
+- **Done:** six short required modules pass (34 tests); agreement runs 8 tests with the expected assisted-defect mismatch (238 above-bar comparisons, full field list captured). The exact no-assist comparison has 470,411 common data fields equal and three disclosed changing provenance/commitment-hash locations. All five refusal-census arrays are empty.
+- **Running:** analysis module completed in bounded groups and three full 20-campaign worlds. Its one new test failure was an exact inequality differing by 9e-16 J; replaced with BAT-2’s existing 1e-6 J bar. The corrected assisted CLI test and all worked/fault tests pass; remaining groups are still running. Initial timing-wrapper attempt did not start tests (/usr/bin/time absent).
 - **Next:** fix in-scope failures, execute exact no-assist comparison, record actual fault/CLI evidence and named twin differences, finalize report, push both authorized branches and update PR #544.
 - **Open:** director's real-H re-reduction is on the Mac; no science ruling is pending.
 
