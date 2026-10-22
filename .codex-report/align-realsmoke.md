@@ -130,3 +130,18 @@ none
 ## NEEDS_RULING
 
 none
+
+## CONTINUATION CHECKPOINT — 2026-10-22 14:23 UTC
+
+Resumed from the pushed realsmoke branch requested at `dcf5db2d3`.
+Read this report, the three protected contracts, and repository intake guidance
+through the GitHub connector. No active stop card is recorded.
+The newly selected environment is
+`ccarenv_b64_Y2NhcmVudl9kNTRmOGJhOTI1ZjQ4MTkxOGY0ODg3MDFlMDE2YTRlZA`.
+Two `pwd` probes, `git -C /workspace/JouleWise status --short --branch` and
+`python3 -m unittest discover -s tests/align -t .` have been rejected before
+process creation with the same no-usable-execution-environment error.
+A startup wait is in progress; the runtime reports pending/offline, failure=null,
+and the diagnostic index has no retained records. No implementation changes
+or fabricated captures have been made. Execution remains NOT EXECUTED to date;
+this is a durability checkpoint while startup retries continue, not completion.
