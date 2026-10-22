@@ -70,9 +70,11 @@ def main(argv: list[str] | None = None) -> int:
             sampler_factory = None
             if "sampler" in config:
                 sampler_config = config["sampler"]
-                module, name = sampler_config["factory"].split(":")
-                constructor = getattr(importlib.import_module(module), name)
-                sampler_factory = lambda m: constructor(**sampler_config.get("kwargs", {}))
+                def sampler_factory(model):
+                    # Construction belongs inside the runner's flagged sampler-error path.
+                    module, name = sampler_config["factory"].split(":")
+                    constructor = getattr(importlib.import_module(module), name)
+                    return constructor(**sampler_config.get("kwargs", {}))
             result = run_matrix(items, models, conditions, seeds=seeds, settings=settings,
                                 monitor=monitor, checkpoint=args.checkpoint,
                                 sampler_factory=sampler_factory)
