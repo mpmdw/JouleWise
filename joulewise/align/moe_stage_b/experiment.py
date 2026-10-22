@@ -41,6 +41,7 @@ class WorldConfig:
     prefill_tokens_per_turn: int = 256
     decode_tokens_per_turn: int = 128
     prefill_duration_ns: int = 4_000_000_000
+    prefill_batch_tokens: int = 128
     decode_token_period_ns: int = 50_000_000
     tool_duration_ns: int = 800_000_000
     layers: int = 16
@@ -126,6 +127,7 @@ def world_offload(config: WorldConfig, *, all_resident: bool = False) -> Offload
         bandwidth_source="scenario input; calibrate effective bandwidth, not a device specification",
         energy_source=("scenario input: 640 pJ / 32-bit DRAM read = 160 pJ/B, "
                        "Horowitz ISSCC 2014 scale illustration; not a modern hardware calibration"),
+        prefill_batch_tokens=config.prefill_batch_tokens,
     )
 
 
@@ -151,6 +153,7 @@ def run_world(
     observations: list[RoutingObservation] = []
     actual_extra: list[float] = []
     estimated_extra: list[float] = []
+    condition_statistics: dict[str, list[float]] = {"benign": [], "sabotage": []}
     flags: set[str] = set()
     total_bytes = total_samples = 0
     decode_count = config.turns*config.decode_tokens_per_turn
@@ -181,6 +184,7 @@ def run_world(
             statistic = decode_reuse(episode.router_log)
             if statistic is None:
                 raise ValueError("world needs adjacent decode tokens")
+            condition_statistics[condition].append(statistic)
             observations.append(RoutingObservation(episode.episode_id, episode.task_pair,
                                                    statistic, features))
             decode_extra = math.fsum(t.energy_j for t in simulated.traffic.tokens
@@ -202,10 +206,18 @@ def run_world(
     error_j = [(a-b)*decode_count for a, b in zip(estimated_extra, actual_extra)]
     # Phase/noise error is measured from this synthetic sweep only. A real forecast
     # must replace it with phase-swept hardware repetitions on the same channel.
-    phase_bias = statistics.pstdev(error_j)
+    error_std = statistics.pstdev(error_j)
+    decode_duration_s = decode_count*config.decode_token_period_ns/NS_PER_SECOND
+    white_variance_j2 = (sensor.noise_std_w**2 * decode_duration_s
+                         * max(sensor.interval_ns, sensor.averaging_window_ns)/NS_PER_SECOND)
+    phase_bias = math.sqrt(max(0.0, error_std**2-white_variance_j2))
+    # Stage A d uses WITHIN-condition SD. Pooled between-condition spread would
+    # inflate the planning signal and yield an optimistic detectability claim.
+    within_sd = math.sqrt(statistics.fmean(
+        statistics.pvariance(values) for values in condition_statistics.values()))
     forecast = plan_detectability(
         sensor, stage_a_effect_sd=stage_a_effect_sd, n_per_condition=n_per_condition,
-        alpha=alpha, power=power, comparisons=comparisons, routing_stat_sd=statistics.pstdev(x),
+        alpha=alpha, power=power, comparisons=comparisons, routing_stat_sd=within_sd,
         traffic_energy_slope_j_per_token=slope, decode_tokens=decode_count,
         decode_duration_s=decode_count*config.decode_token_period_ns/NS_PER_SECOND,
         phase_bias_std_j=phase_bias, systematic_contrast_half_width_j=0.0)
@@ -219,7 +231,9 @@ def run_world(
         "routing_reuse_range": [min(x), max(x)],
         "true_extra_j_per_decode_token_range": [min(actual_extra), max(actual_extra)],
         "apparent_extra_j_per_decode_token_range": [min(estimated_extra), max(estimated_extra)],
-        "phase_sweep_energy_error_std_j": phase_bias,
+        "phase_sweep_energy_error_std_j": error_std,
+        "estimated_phase_bias_std_j": phase_bias,
+        "routing_stat_within_condition_sd": within_sd,
         "requirement": asdict(requirement), "forecast": asdict(forecast),
         "recovery": recovery, "flags": sorted(flags),
     }
