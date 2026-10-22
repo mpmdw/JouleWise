@@ -18,13 +18,21 @@ def strip_scratchpad(text: str) -> str:
     An unfinished opening tag hides the remainder too. Only assistant text is
     stripped by render_transcript; tool results stay visible in their entirety.
     """
-    pattern = re.compile(
-        r"<(thinking|think|system_instructions)\b[^>]*>.*?(?:</\1\s*>|$)",
-        re.IGNORECASE | re.DOTALL)
-    previous = None
-    while previous != text:
-        previous, text = text, pattern.sub("", text)
-    return text
+    tags = re.compile(r"<(/?)(thinking|think|system_instructions)\b[^>]*>",
+                      re.IGNORECASE)
+    output = []
+    cursor = depth = 0
+    for tag in tags.finditer(text):
+        if depth == 0:
+            output.append(text[cursor:tag.start()])
+        if tag.group(1):
+            depth = max(0, depth - 1)
+        else:
+            depth += 1
+        cursor = tag.end()
+    if depth == 0:
+        output.append(text[cursor:])
+    return "".join(output)
 
 
 def render_transcript(transcript: Sequence[ChatMessage], *, visibility: Visibility) -> str:

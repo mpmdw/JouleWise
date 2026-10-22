@@ -223,7 +223,11 @@ class OpenAICompatEndpoint:
                     max_tokens=max_tokens, temperature=temperature, n=1)
         body.pop("tools", None)
         body.pop("seed", None)
-        body["stream_options"] = {**body.get("stream_options", {}), "include_usage": True}
+        options = body.get("stream_options") or {}
+        if not isinstance(options, Mapping):
+            flags.append("invalid_stream_options")
+            options = {}
+        body["stream_options"] = {**options, "include_usage": True}
         if tools:
             body["tools"] = list(tools)
         if seed is not None:
@@ -275,22 +279,35 @@ class OpenAICompatEndpoint:
         except urllib.error.HTTPError as exc:
             flags.append(f"http_error:{exc.code}")
             exc.close()
-        except (OSError, http.client.HTTPException, UnicodeError, ValueError, TypeError) as exc:
+        except (OSError, http.client.HTTPException, UnicodeError, ValueError, TypeError,
+                AttributeError, KeyError, IndexError) as exc:
             flags.append("transport_or_stream_error:" + type(exc).__name__)
         if not done:
             flags.append("stream_missing_done")
-        timing = usage.get("timings", {})
+        timing = usage.get("timings") or {}
+        if not isinstance(timing, Mapping):
+            flags.append("invalid_timings")
+            timing = {}
         prompt_value = usage.get("prompt_tokens")
         if prompt_value is None and "prompt_n" in timing:
-            prompt_value = timing["prompt_n"] + timing.get("cache_n", 0)
+            prompt_value = (_integer(timing["prompt_n"], "timings_prompt_n", flags)
+                            + _integer(timing.get("cache_n", 0), "timings_cache_n", flags))
             flags.append("prompt_tokens_from_timings")
         prompt = _integer(prompt_value, "prompt_tokens", flags)
         completion = _integer(usage.get("completion_tokens", timing.get("predicted_n")),
                               "completion_tokens", flags)
-        cached = _integer((usage.get("prompt_tokens_details") or {}).get(
+        prompt_details = usage.get("prompt_tokens_details") or {}
+        completion_details = usage.get("completion_tokens_details") or {}
+        if not isinstance(prompt_details, Mapping):
+            flags.append("invalid_prompt_tokens_details")
+            prompt_details = {}
+        if not isinstance(completion_details, Mapping):
+            flags.append("invalid_completion_tokens_details")
+            completion_details = {}
+        cached = _integer(prompt_details.get(
             "cached_tokens", usage.get("cached_tokens", timing.get("cache_n", 0))),
             "cached_prompt_tokens", flags)
-        hidden = _integer((usage.get("completion_tokens_details") or {}).get(
+        hidden = _integer(completion_details.get(
             "reasoning_tokens", 0), "reasoning_tokens", flags)
         if cached > prompt:
             flags.append("cached_prompt_tokens_exceed_prompt")

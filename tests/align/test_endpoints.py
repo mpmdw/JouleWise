@@ -70,6 +70,8 @@ class HTTPWorld(AbstractContextManager):
                     body = json.loads(self.rfile.read(size))
                     world.requests.append({"path": self.path, "body": body})
                     packet = world.packets.popleft()
+                    if "respond" in packet:
+                        packet = packet["respond"](body)
                     if packet.get("disconnect"):
                         self.connection.shutdown(socket.SHUT_RDWR)
                         return
@@ -142,7 +144,7 @@ class EndpointTests(unittest.TestCase):
                 self.assertEqual(result.raw_usage["joulewise"]["flags"], [])
                 if flavour == "llamacpp":
                     # Exact equality compares untouched JSON, not independent measurements.
-                    self.assertEqual(result.raw_usage["timings"], world.requests and
+                    self.assertEqual(result.raw_usage["timings"],
                                      {"cache_n": 3072, "prompt_n": 1024, "predicted_n": 512,
                                       "prompt_ms": 240.5, "predicted_ms": 8640.25})
                 # Protocol-only callers lack tool_calls on ChatMessage. Recover from result IDs.
