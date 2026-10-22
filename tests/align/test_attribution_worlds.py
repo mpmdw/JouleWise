@@ -83,7 +83,8 @@ class Timeline:
 
 
 def world(seed, sensor, *, load_variation_fraction=0.05, clock_offset_ns=17_000_000,
-          same_domain=False, grid_phase_fraction=0.37, poll_jitter_ns=2_000_000):
+          same_domain=False, grid_phase_fraction=0.37, poll_jitter_ns=2_000_000,
+          tools_after_turn=False):
     """Fixture parameters choose workload variation and a known clock offset."""
     rng = random.Random(seed)
     cursor = 0
@@ -107,11 +108,14 @@ def world(seed, sensor, *, load_variation_fraction=0.05, clock_offset_ns=17_000_
         after_ns = rng.randint(NS, 3 * NS)
         add(index, "prefill", prefill_ns)
         first = cursor
-        add(index, "decode", before_ns)
+        add(index, "decode", before_ns + after_ns if tools_after_turn else before_ns)
+        model_end = cursor
         tool_start = cursor
         add(index, "tool", tool_ticks * NS // 10)
         tool_end = cursor
-        add(index, "decode", after_ns)
+        if not tools_after_turn:
+            add(index, "decode", after_ns)
+            model_end = cursor
         # 600 prompt tokens/s and 40 generated tokens/s are chosen synthetic
         # serving rates; the token counts and context grow as in an agent loop.
         prefill_tokens = prefill_ns * 600 // NS
@@ -120,7 +124,7 @@ def world(seed, sensor, *, load_variation_fraction=0.05, clock_offset_ns=17_000_
                         ORIGIN + tool_start, ORIGIN + tool_end,
                         rng.randint(128, 1024), rng.randint(1024, 8192),
                         logged=index % 5 != 0)
-        turns.append(Turn(index, ORIGIN + start, ORIGIN + cursor,
+        turns.append(Turn(index, ORIGIN + start, ORIGIN + model_end,
                           context, prefill_tokens, decode_tokens,
                           hidden_tokens=decode_tokens // 3, first_token_ns=ORIGIN + first,
                           tool_calls=(call,), logged=index % 7 != 0))
@@ -255,6 +259,30 @@ class ProductionWorldsTest(unittest.TestCase):
     def test_twenty_turn_powermetrics_worlds_cover_every_segment(self):
         """M2: measured coverage pending execution; required coverage is 100%."""
         self.assert_coverage(SENSORS[2])
+
+    def test_twenty_runner_turns_retain_each_post_model_tool(self):
+        for sensor in SENSORS[:2]:
+            with self.subTest(sensor=sensor.source):
+                record, truth = world(0, sensor, tools_after_turn=True,
+                                      same_domain=sensor.source == "nvml_power")
+                record = from_json(Episode, to_json(record))
+                result = attribute_episode(record, source=sensor.source, channel=sensor.channel)
+                self.assertEqual([(s.turn, s.kind, s.start_ns, s.end_ns) for s in result.segments],
+                                 [(owner, kind, ORIGIN + a, ORIGIN + b)
+                                  for owner, kind, a, b in truth.spans])
+                tools = [s for s in result.segments if s.kind == "tool"]
+                self.assertEqual(len(tools), 20)
+                self.assertNotIn("tool.outside_turn", result.flags)
+                self.assertNotIn("tool.outside_episode", result.flags)
+                # Every physical power level in this fixture is positive:
+                # losing tool attribution would produce no segments/zero J.
+                self.assertGreater(math.fsum(s.energy.joules for s in tools), 0.0)
+                print("attribution runner tools: " + json.dumps(dict(
+                    sensor=sensor.source, tools=len(tools),
+                    joules=math.fsum(s.energy.joules for s in tools),
+                    true_joules=math.fsum(truth.integral(s.start_ns - ORIGIN,
+                                                       s.end_ns - ORIGIN) for s in tools)),
+                    sort_keys=True))
 
     def test_idle_subtraction_reaches_every_segment(self):
         record, truth = world(0, SENSORS[0])
