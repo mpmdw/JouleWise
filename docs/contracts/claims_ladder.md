@@ -6,7 +6,7 @@ D-037 records adoption. Per-claim IDs and structural enforcement exist:
 `all`) validates every row of the canonical claims index
 `analysis/rpt001-v2/claims_index.jsonl`, including unique claim IDs, the
 linked claim-verdict artifact, and each row's ladder level against that
-verdict (an L2 or L3 row needs a claim-ready verdict), and reports a
+verdict (a supported or refuted L2 or L3 row needs a claim-ready verdict), and reports a
 structural defect as an error. Wording outside the index is checked only by
 the warning-only prose scan below, so authors still apply this ladder during
 review.
