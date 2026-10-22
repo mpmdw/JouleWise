@@ -139,6 +139,30 @@ class MockWorldTests(unittest.TestCase):
         # Bit identity is intentional: same physical work, same deterministic sensor.
         self.assertEqual(to_json(sampler.stop()), to_json(ep.power_traces))
 
+    def test_unknown_phase_boundary_preserves_total_energy(self):
+        ep, _, _, _, _ = inbox_episode()
+        unknown = replace(ep, turns=tuple(replace(t, first_token_ns=None) for t in ep.turns))
+        sampler, trace = full_coverage(unknown)
+        expected = sampler.expected_energy_joules(unknown)
+        measured = sampled_gross(unknown, trace, sampler.model.idle_watts)
+        # Unknown first-token times prevent phase separation; aggregate energy
+        # still conserves the token model, at 1e-6 relative without uncertainty.
+        self.assertTrue(math.isclose(measured, expected, rel_tol=1e-6))
+        self.assertIn("prefill boundary unknown", trace.notes)
+
+    def test_same_forward_pass_work_is_blind_to_text(self):
+        from joulewise.align.mock_world import ScriptedEndpoint
+        class DifferentText(ScriptedEndpoint):
+            def chat(self, messages, **kwargs):
+                result = super().chat(messages, **kwargs)
+                return replace(result, content=result.content.replace("digest", "alternative"))
+        original, transcript, _, _, _ = inbox_episode()
+        changed, other_transcript, _, _, _ = inbox_episode(endpoint_class=DifferentText)
+        self.assertNotEqual(to_json(transcript), to_json(other_transcript))
+        # Identical timings/counts under the same sensor seed must produce
+        # bit-identical power. Text semantics within that work are invisible.
+        self.assertEqual(to_json(original.power_traces), to_json(changed.power_traces))
+
     def test_absent_episode_returns_diagnostic_trace(self):
         sampler = SyntheticPowerSampler()
         sampler.start()
