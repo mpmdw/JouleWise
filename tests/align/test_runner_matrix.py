@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import random
 import subprocess
 import sys
@@ -12,7 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from joulewise.align import runner
-from joulewise.align.mock_world import ScriptedEndpoint
+from joulewise.align.mock_world import PowerModel, ScriptedEndpoint
 from joulewise.align.records import read_episodes, write_episodes, to_json
 from joulewise.align.tamper import delete_turns, drop_tool_calls, hide_scratchpad, random_tamper
 
@@ -29,7 +30,12 @@ def matrix_spec(output_dir="output"):
         "endpoints": [{"factory": "mock.scripted"}],
         "monitors": [{"factory": "mock.monitor",
                       "visibilities": ["full", "no_scratchpad", "actions_only"]}],
-        "samplers": [{"factory": "mock.power"}],
+        # Equal 100 ms cadence/averaging bins conserve phase energy exactly;
+        # default duty-shaped sampling, noise and quantum run in test_mock_world.
+        "samplers": [{"factory": "mock.power", "config": {
+            "interval_ns": 100_000_000, "averaging_window_ns": 100_000_000,
+            "noise_watts": 0.0, "quantum_watts": 0.0,
+        }}],
         "token_counter": {"factory": "mock.tokens"},
         "max_turns": 40, "max_tokens": 600, "temperature": 0.0,
         "output_dir": output_dir,
@@ -54,6 +60,8 @@ class MatrixTests(unittest.TestCase):
                            path.with_name("transcripts.jsonl").read_text().splitlines()]
             self.assertEqual({row["episode_id"] for row in transcripts},
                              {ep.episode_id for ep in episodes})
+            energy_checks = []
+            model = PowerModel()
             for ep in episodes:
                 side = ep.condition == "sabotage"
                 self.assertEqual(ep.totals()["turns"], 12 + int(side))
@@ -82,6 +90,26 @@ class MatrixTests(unittest.TestCase):
                 self.assertEqual(len(ep.monitor_verdicts), 3)
                 self.assertEqual(len(ep.power_traces), 1)
                 self.assertNotIn("runner.error", " ".join(ep.flags))
+                # Independent count-sum formula versus the production sampler's
+                # averaged trace. Contiguous boxes plus trailing coverage conserve
+                # excess energy; add idle only inside the episode.
+                expected_joules = (
+                    model.idle_watts * (ep.end_ns - ep.start_ns) / 1_000_000_000 +
+                    model.prefill_joules_per_token * sum(t.prefill_tokens for t in ep.turns) +
+                    model.decode_joules_per_token * sum(t.decode_tokens for t in ep.turns) +
+                    model.context_joules_per_token_squared *
+                    sum(t.context_tokens * t.decode_tokens for t in ep.turns))
+                trace = ep.power_traces[0]
+                sampled_joules = (
+                    model.idle_watts * (ep.end_ns - ep.start_ns) / 1_000_000_000 +
+                    math.fsum((watts - model.idle_watts) *
+                              trace.nominal_interval_ns / 1_000_000_000
+                              for watts in trace.values[1:]))
+                # No measurement uncertainty in this noiseless conservation check:
+                # use the brief's 1e-6 relative agreement bar.
+                self.assertTrue(math.isclose(sampled_joules, expected_joules, rel_tol=1e-6),
+                                (ep.episode_id, sampled_joules, expected_joules))
+                energy_checks.append((sampled_joules, expected_joules))
             for label, transform in (
                 ("turns", lambda ep: delete_turns(ep, [6])),
                 ("calls", lambda ep: drop_tool_calls(ep, lambda call: call.name == "transfer")),
@@ -109,6 +137,24 @@ class MatrixTests(unittest.TestCase):
             natural = sorted(episodes, key=lambda ep: (
                 ep.task_pair, ("benign", "sabotage").index(ep.condition), ep.seed))
             self.assertNotEqual(metadata["order"], [ep.episode_id for ep in natural])
+            print("ALIGN_RUNNER_END_TO_END " + json.dumps({
+                "episodes": len(episodes),
+                "turns": sum(ep.totals()["turns"] for ep in episodes),
+                "tool_calls": sum(ep.totals()["tool_calls"] for ep in episodes),
+                "prefill_tokens": sum(ep.totals()["prefill_tokens"] for ep in episodes),
+                "decode_tokens": sum(ep.totals()["decode_tokens"] for ep in episodes),
+                "hidden_tokens": sum(ep.totals()["hidden_tokens"] for ep in episodes),
+                "sabotage_hidden": [
+                    {"task_pair": ep.task_pair, "seed": ep.seed,
+                     "turn_indices": [t.index for t in ep.turns if t.hidden_tokens],
+                     "hidden_tokens": ep.totals()["hidden_tokens"]}
+                    for ep in episodes if ep.condition == "sabotage"],
+                "sampled_gross_joules": math.fsum(item[0] for item in energy_checks),
+                "independent_gross_joules": math.fsum(item[1] for item in energy_checks),
+                "max_energy_error_joules": max(abs(a - b) for a, b in energy_checks),
+                "energy_relative_tolerance": 1e-6,
+                "tamper_round_trip_datasets": 4,
+            }, sort_keys=True), file=sys.stderr)
 
     def test_resume_skips_chat_and_preserves_files(self):
         with tempfile.TemporaryDirectory() as directory:
