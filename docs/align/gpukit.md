@@ -440,3 +440,8 @@ before hardware calls. Use a separate id for an FP8 checkpoint. Cost-only
 layout_options may still name alternative checkpoints. Each model receipt
 records weight_precision and server_argv. A GPU-served monitor records revision
 (or null), with monitor_revision_unpinned when no revision was supplied.
+
+moe_stage_a.json's 30 Qwen3-30B-A3B episodes use the same coordinates as
+shade.json's Qwen3-30B-A3B rows, with router logging. Running both matrices
+measures those 30 episodes twice, so the cost of the pair counts them twice.
+The operator chooses which matrices to run.
