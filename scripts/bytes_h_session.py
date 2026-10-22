@@ -188,6 +188,8 @@ def measurement_view(source, session, *, remainder=False, soak_70b='full'):
         if remainder and soak_70b == 'r12' and stage['stage_id'] == PACK_ID + '-soak-llama-70b':
             manifest['executed_order'] = [r for r in manifest['executed_order']
                                          if r['run_id'] == PACK_ID + '-soak-llama-70b-r12']
+            # Campaign positions are local; r12 run_id/rep/config identity stays intact.
+            manifest['executed_order'][0]['index'] = 1
             manifest['planned_n_bundles'] = len(manifest['executed_order'])
         if len(manifest['executed_order']) != stage['expected_count']:
             raise ValueError('collection count differs from dispatched manifest: ' + stage['stage_id'])
@@ -377,7 +379,11 @@ def remainder_span(measurement, tree, measured_session):
         terms = []
         for stage in tree['stage_graph']:
             sid, kind = stage['stage_id'], stage['kind']
-            if kind in ('whole_window_verdict', 'backup'):
+            if kind in chain.DESK_KINDS:
+                terms.append({'stage_id': sid, 'kind': kind, 'base_seconds': 0,
+                    'member_seconds': 0, 'margin_seconds': 0, 'seconds': 0,
+                    'method': 'desk step; outside programmed chain span',
+                    'sources': ['joulewise.b5.chain.DESK_KINDS']})
                 continue
             source_id = sid
             if sid.endswith('-end') and '-test7-' in sid:
@@ -387,6 +393,22 @@ def remainder_span(measurement, tree, measured_session):
             elif sid.endswith('-post-calibration'):
                 source_id = PACK_ID + '-pre-calibration'
             member_s = 0
+            if sid.endswith('-post-calibration'):
+                capture = observed[source_id]
+                capture_s = capture['ended_epoch_s'] - capture['started_epoch_s']
+                countdown_s = chain.CALIBRATION_ARM_COUNTDOWN_S['post'] - chain.CALIBRATION_ARM_COUNTDOWN_S['pre']
+                # Integer shell stamps represent [s, s+1), as derive_sizing.py
+                # documents: a zero-stamped session-status takes less than 1 s.
+                parts = [
+                    {'seconds': capture_s, 'source': source_id},
+                    {'seconds': countdown_s, 'source': "joulewise.b5.chain.CALIBRATION_ARM_COUNTDOWN_S['post'] - ['pre']"},
+                    {'seconds': 1, 'source': 'session-status: upper endpoint of integer shell stamp [0, 1), derive_sizing.py stamp convention'}]
+                seconds = sum(p['seconds'] for p in parts)
+                terms.append({'stage_id': sid, 'kind': kind, 'base_seconds': seconds,
+                    'member_seconds': 0, 'margin_seconds': 0, 'seconds': seconds,
+                    'parts': parts, 'method': 'H capture + post countdown delta + session-status stamp bound',
+                    'sources': [p['source'] for p in parts]})
+                continue
             if source_id in observed:
                 selected = [s for s in stages if s['stage_id'] == source_id or
                             s['stage_id'].startswith(source_id + '.')]
@@ -411,12 +433,6 @@ def remainder_span(measurement, tree, measured_session):
             terms.append({'stage_id': sid, 'kind': kind, 'base_seconds': seconds,
                           'member_seconds': member_s, 'margin_seconds': member_s * margin,
                           'seconds': seconds + member_s * margin, 'method': method, 'sources': sources})
-        reg = Path(measurement) / KIT / 'registration'
-        fixed = read(reg / 'sizing_b5.json')['packs'][PACK_ID]['breakdown']['fixed_s']
-        terms.append({'stage_ids': [PACK_ID + '-whole-window-verdict', PACK_ID + '-backup'],
-            'seconds': fixed, 'method': 'one aggregate B6 fixed-work envelope; no individual durations inferred',
-            'sources': [str(KIT / 'registration/sizing_b5.json') + '#/packs/' + PACK_ID + '/breakdown/fixed_s',
-                        str(KIT / 'registration/sizing_evidence.json')]})
         collections = sum(s['kind'] == 'campaign_collection' for s in tree['stage_graph'])
         settles = (collections + 1) * chain.SETTLE_S
         terms.append({'seconds': settles, 'count': collections + 1, 'each_seconds': chain.SETTLE_S,
@@ -442,9 +458,23 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
     sized = registration.load_sizing(reg)['packs'][PACK_ID]
     pins = registration.load_identity_pins(reg)
     inventory = read(reg / 'model_artifact_inventory.json')['artifacts']
-    for name, unit in pins['units'].items():
-        if remainder and name not in {'llama-70b', 'qwen35-122b', 'qwen3-next-80b', 'neg8_reference'}:
-            continue
+    selected_units = set(pins['units'])
+    if remainder:
+        # Resolve the same subset dispatches before making the session root:
+        # payload hazards must leave no staged files behind.
+        subset = read(measurement / KIT / 'plan_tree.json')
+        subset['stage_graph'] = [s for s in subset['stage_graph']
+                                if not s['stage_id'].startswith(PACK_ID + '-check-')]
+        roster = read(measurement / 'configs/campaigns/bytes_v1/roster.json')['models']
+        model_ids = {m['model']['source']: m['model_id'] for m in roster}
+        selected_units = {'neg8_reference'}
+        for dispatch in plan.resolve_stage_dispatches(subset, measurement):
+            directory = measurement / dispatch.config_dir
+            for member in read(directory / 'order_manifest.json')['executed_order']:
+                config = BenchmarkConfig.from_mapping(read(directory / member['config'])).to_dict()
+                selected_units.add(model_ids.get(config['model']['source'], 'neg8_reference'))
+    for name in sorted(selected_units):
+        unit = pins['units'][name]
         source = Path(unit['model_source'])
         if not source.is_dir() or any(not (source / f['path']).is_file() for f in inventory[name]['inventory']):
             raise PhysicalHazard('models missing: ' + str(source))
@@ -537,7 +567,7 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
                  capture_output=True, text=True, check=False, timeout=30)
     if status.returncode or status.stdout.strip():
         notes.append({'kind': 'measurement_checkout_dirty_or_unobserved', 'status': status.stdout.strip()})
-    notes.extend({'kind': 'runtime_stack_unobserved', 'model_id': name} for name in pins['units'])
+    notes.extend({'kind': 'runtime_stack_unobserved', 'model_id': name} for name in sorted(selected_units))
     if not remainder:
         notes.append({'kind': 'sizing.planning_bound_interpolated', 'model_id': 'qwen3-8b-8bit'})
     state = {'schema_version': 'joulewise.bytes_h_session.v1', 'non_claim': True,
@@ -1057,15 +1087,19 @@ def main(argv=None):
     p.add_argument('--measurement-root', type=Path, required=True)
     p.add_argument('--session-root', type=Path, required=True)
     p.add_argument('--remainder', action='store_true')
-    p.add_argument('--soak-70b', choices=('full', 'r12'), default='full')
+    p.add_argument('--soak-70b', choices=('full', 'r12'), default=None)
     p.add_argument('--measured-session', type=Path)
     for name in ('install', 'desk'):
         commands.add_parser(name).add_argument('--session-root', type=Path, required=True)
     args = parser.parse_args(argv)
     try:
         if args.command == 'prepare':
+            if not args.remainder:
+                for option, value in (('--soak-70b', args.soak_70b), ('--measured-session', args.measured_session)):
+                    if value is not None:
+                        print('flag: ' + json.dumps({'kind': 'cli.remainder_option_ignored', 'option': option}, sort_keys=True))
             prepare(args.measurement_root, args.session_root, remainder=args.remainder,
-                    soak_70b=args.soak_70b, measured_session=args.measured_session)
+                    soak_70b=args.soak_70b or 'full', measured_session=args.measured_session)
         elif args.command == 'install':
             install(args.session_root)
         else:
