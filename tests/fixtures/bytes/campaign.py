@@ -197,7 +197,8 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
             latency = 0 if clock_latency_ms is None else (clock_latency_ms[0]
                 if i // 10 == (len(meter_samples) + 9) // 20 else clock_latency_ms[1] if i // 10 % 7 == 3 else 0)
             rx = stamp + round((latency + min_receive_latency_ms) * 1e6)
-            batches.append({"k": "b", "tx": rx, "rx": rx, "n": len(part), "p": payload.hex(), "smc": {"B0AC": 0}})
+            batches.append({"k": "b", "tx": rx, "rx": rx, "n": len(part), "p": payload.hex(),
+                            "smc": {"B0AC": 0, "B0AV": 12774}})
         stream = archive / "sources/night-custody/hazards/meter/stream-001.jsonl"
         stream.parent.mkdir(parents=True)
         trailer = {"k": "t", "end_raw_ns": tick * 100_000_000, "end_mono_ns": tick * 100_000_000}

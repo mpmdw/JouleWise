@@ -498,16 +498,23 @@ def _filtered_stream(path, spans):
     The JSONL transport must be scanned, but payloads outside these spans are
     never unpacked into power samples or retained. Batch endpoint *sequence
     numbers* alone provide the same clock-fit points as the native parser.
-    One sample on either side is retained for the ruled edge bound.
+    One sample on either side is retained for the ruled meter edge bound.
+    All poll receive times and SMC readings are retained: BAT-2's delay uses
+    the largest interval over the whole stream, and its end-edge window
+    extends beyond each selected span. No unselected meter power is decoded.
     """
     from joulewise.external import km003c_parse as kp
     header = trailer = None
-    batches, newest, positions = [], [], []
+    polls, batches, newest, positions = [], [], [], []
     previous_seq = previous_rx = None
     current = 0
     payload_re = re.compile(r'"p"\s*:\s*"([0-9a-fA-F]*)"')
     with Path(path).open() as handle:
-        for raw in handle:
+        while True:
+            location = handle.tell()
+            raw = handle.readline()
+            if not raw:
+                break
             match = payload_re.search(raw)
             # Parse transport/timing without materializing the payload as JSON.
             item = json.loads(raw[:match.start(1)] + raw[match.end(1):] if match else raw)
@@ -515,7 +522,19 @@ def _filtered_stream(path, spans):
                 header = item
             elif item.get("k") == "t":
                 trailer = item
-            elif item.get("k") == "b" and item.get("n") and match:
+            elif item.get("k") == "b":
+                polls.append((item, location))
+    # Match km003c_parse.parse: transport line order is not receive order.
+    polls.sort(key=lambda row: row[0]["rx"])
+    poll_ns = [item["rx"] for item, _ in polls]
+    smc = [dict(item.get("smc") or {}) for item, _ in polls]
+    with Path(path).open() as handle:
+        for item, location in polls:
+            if item.get("n"):
+                handle.seek(location)
+                match = payload_re.search(handle.readline())
+                if match is None:
+                    continue
                 payload = match.group(1)
                 seq = int.from_bytes(bytes.fromhex(payload[-kp.SAMPLE.size * 2:][:4]), "little")
                 if previous_seq is None:
@@ -529,17 +548,17 @@ def _filtered_stream(path, spans):
                     current += delta
                 previous_seq, previous_rx = seq, item["rx"]
                 newest.append(current)
-                positions.append((seq, current))
+                positions.append((seq, current, location))
                 batches.append(item)
     if header is None or header.get("status", "streaming") != "streaming" or not batches:
-        return kp.Stream(header, trailer, [], [], None, None, [], [], [], [])
+        return kp.Stream(header, trailer, [], [], None, None, [], [], poll_ns, smc)
     step = kp.STEP_MS[header["rate_idx"]]
     clock_samples = kp.Samples(newest, [], [], list(range(len(batches))), 0, step)
     try:
         fit = kp.clock_fit(clock_samples, batches)
     except ValueError as exc:
-        return kp.Stream(header, trailer, [], [], None, None, [], [], [], [], str(exc))
-    shell = kp.Stream(header, trailer, [], [], None, fit, [], [], [], [])
+        return kp.Stream(header, trailer, [], [], None, None, [], [], poll_ns, smc, str(exc))
+    shell = kp.Stream(header, trailer, [], [], None, fit, [], [], poll_ns, smc)
     offset = kp.raw_offset_ns(shell)
     if offset is None:
         return shell
@@ -556,20 +575,10 @@ def _filtered_stream(path, spans):
         i = bisect.bisect_right(starts, t) - 1
         return i >= 0 and t <= merged[i][1]
     host, watts, devs = [], [], []
-    index = 0
     with Path(path).open() as handle:
-        for raw in handle:
-            match = payload_re.search(raw)
-            if not match:
-                continue
-            # First pass already established batch metadata and clock position.
-            if index >= len(batches):
-                break
-            meta = json.loads(raw[:match.start(1)] + raw[match.end(1):])
-            if meta.get("k") != "b" or not meta.get("n"):
-                continue
-            seq_last, dev_last = positions[index]
-            index += 1
+        for seq_last, dev_last, location in positions:
+            handle.seek(location)
+            match = payload_re.search(handle.readline())
             payload = match.group(1)
             for pos in range(0, len(payload), kp.SAMPLE.size * 2):
                 word = payload[pos:pos + kp.SAMPLE.size * 2]
@@ -583,7 +592,7 @@ def _filtered_stream(path, spans):
                 watts.append(fields[2] / 1e6 * fields[3] / 1e6)
                 devs.append(dev)
     samples = kp.Samples(devs, [], [], [], 0, step)
-    return kp.Stream(header, trailer, [], [], samples, fit, host, watts, [], [])
+    return kp.Stream(header, trailer, [], [], samples, fit, host, watts, poll_ns, smc)
 
 
 def _session_streams(root, spans):

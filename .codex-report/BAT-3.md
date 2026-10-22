@@ -1,7 +1,11 @@
-# BAT-3: BYTES battery term — environment-blocked intake
+# BAT-3: BYTES battery term — build in progress
 
 ## PROGRESS
 
+- **RECOVERED:** workspace became running/connected after the initial report checkpoint. Local checkout now follows this lane; BY-INT still equals the required base. Fetch and seat setup ran. The remaining sections below describe the initial checkpoint and will be replaced with executed build evidence before completion.
+- **Done now:** filtered stream retains every poll's rx/SMC and processes sampled batches in rx order; fixture polls now carry B0AV = 12774 mV as well as B0AC = 0. Exact-base worktree and packet export are preserved under /tmp/bat3-base and /tmp/bat3-packet.
+- **Next now:** signed battery integration, u + v and C_j, decode marker and disclosures; registration/catalog; worked/fault/CLI tests and exact no-assist comparison.
+- **Open now:** seat setup could not create /opt/homebrew/bin/python3.13 (unwritable /opt, no sudo). Asked for authorization to use its intended target /usr/bin/python3.13 (3.13.5); test execution awaits that answer.
 - **Done:** Read the complete BAT-2 ruling at `fc7548a17` through connected GitHub access. Inspected the BY-INT source, registration, design R1–R8, root agent instructions and preflight, and the packet's worked-example and delay-check scripts at `c17fdca`. Retrieved the packet extract by its Git blob.
 - **Done:** Confirmed remotely that `lane/2026-10-22-bytes-pass1` is exactly `bda481d5af510b29dde4976f172a20170a42c955`. BAT-3 did not already exist. Created the authorized BAT-3 lane at that exact base through the connected GitHub API.
 - **Next:** Obtain a working execution environment, fetch and check out this lane, run seat setup, preserve the baseline comparison, then implement the ruling and run all requested checks. Follow the original brief's exhaustive scope.
