@@ -1,40 +1,27 @@
 ## PROGRESS
 
-- Done: intake at clean expected head ddcbafc4dc53fb40c89b507d46a74cf6d9101c98; read BAT-3 report, BAT-2 ruling, contracts and repository intake. No active stop card. Local route and exhaustive scope control.
-- Done: added optional delayed-publication fixture mode (1 Hz, preceding-second mean at 10 ms resolution, held, phase 370 ms), preserving default instant/no-assist generation. Added both-edge placement in delayed mode.
-- Done: delayed CLI-chain test passes on corrected source: independent raw-JSON oracle for all 30 placements, forward end window/marker, both-edge max and printed battery bounds/floor. Values are recorded under DELAYED WORLD.
-- Done: finding 5 adds T_SMC_S and _battery_delay_s, used by meter_decode and missing-reading marker fallback; arithmetic order unchanged.
-- Done: finding 4 assertions now compare flags, complete meter dictionaries and NEG-8 inputs exactly after both reverse and fixed-seed shuffle.
-- Done: all three battery/meter classes pass, 19 tests in 72.538 s, exit 0, no skips. Log `/tmp/bat3f1/battery-classes-slice1.log`. Each run receives synthetic-only and no-bytecode environment, with its own disposable TMPDIR; cleanup completed.
-- Done: refusal census exits 0, all five arrays empty; `/tmp/bat3f1/refusal-census-slice1.log`. git diff --check passes.
-- Done (slice 2): finding 2 adds retained +100 mA, 1 s charging episodes (1.2774 J) and independent .2/.8 weighted-column/count assertions. Test-only missing idle B0AV on a clean 70B repeat makes DC/rest strata unequal (9 repeats, 10 quads); measured weighted/plain difference is 0.044056348856499616 J (>44,000 times the bar).
-- Done (slice 2): finding 3 adds record-level decode_assist_evaluated=False at blinded ingress, null counts with reason, and labelled null without-assisted diagnostics; contract sentence and blinded/heldout tests pass. Combined diagnostics preserve the reason.
-- Done (slice 2): all three battery/meter classes pass individually: 3 + 3 + 14 = 20 tests, exit 0, no skips; logs `/tmp/bat3f1/slice2-{BatteryRulingWorkedExamples,MeterWorkedExamples,BatteryCampaignTests}.log`. Five supporting modules pass (28 tests); hazard import-graph has five passes and one local NULL-versus-GO failure. Refusal census: all five arrays empty, exit 0.
-- Done (slice 2): M1, M2 and M8 KILLED by test_delayed_publications_pin_forward_edges_marker_and_offset_max (marker, v_end and C_j assertions respectively); each runs all 20 battery/meter tests and fails exactly one. Logs `/tmp/bat3f1/M*.log`, results `/tmp/bat3f1/mutations-slice2.jsonl`. All mutant copies and TMPDIRs deleted; clone source never mutated.
-- Done (slice 2): BoundaryAndStagingTests (10 tests, 42.208 s) and ProductionArchiveTests (4 tests, 49.919 s), both exit 0, no skips. The same hazard import-graph NULL/GO failure reproduces at unchanged ddcbafc4d (6 tests, one failure, exit 1).
-- Done (slice 3): resumed clean director head 552561b3f (slice 2), descended from required ddcbafc4d. Finding 1/4/5 implementation commit is 998d0dc05; findings 2/3 implementation commit is 552561b3f. No active stop card; local route/scope unchanged.
-- Done (slice 3): M10 KILLED by test_large_model_assist_cli_chain_all_four_placements_and_counts: 0.044056348856499616 J weighted/plain mismatch; all 20 tests execute, exactly one fails, exit 1, 79.315 s unittest / 80.401 s process. Log `/tmp/bat3f1/M10_battery_mean_unweighted.log`.
-- Done (slice 3): M18 KILLED by delayed forward-end assertion (0 vs 12.65003513402062 J); M20 KILLED by charging-aware nonzero count (3 vs 4). Each executes all 20 tests, exactly one failure, exit 1; 78.184/75.403 s unittest and 79.117/76.358 s process respectively. All three copies and TMPDIRs deleted; results `/tmp/bat3f1/mutations-remaining.jsonl`.
-- Done (slice 3): exact base/round1/final three-stage CLI and load_records comparison passes; 523,819 common scalar fields vs base exactly equal, zero scientific differences. Against ddcbafc4d, 1,316,507 common scalar fields exactly equal, with 160 blinded count objects changing to null and the prescribed added blinded diagnostics; three digest locations change. Details under BIT-IDENTITY; comparison JSON `/tmp/bat3f1/comparison-{base,round1}.json`. All three CLI chains exit 0; disposable TMPDIRs and campaign scratch deleted. Clone source never mutated.
-- Done (slice 3): Addendum7RegressionTests (13 tests), Q1WithheldCensusTests (4), RegisteredArithmeticTests (3) all pass, exit 0, no skips. Logs `/tmp/bat3f1/slice3-tests.test_bytes_analysis.*.log`.
-- Done (slice 3): tests.test_bytes_agreement complete: eight tests, seven pass / one expected defects failure, exit 1, 73.175 s unittest / 74.139 s process. All 238 above-bar fields and every affected stage/group are recorded under HAND-FORWARD FOR BY-TWIN-BAT; full rows `/tmp/bat3f1/agreement-all-fields.json`, log `/tmp/bat3f1/agreement-slice3.log`. Disposable TMPDIR deleted. Four other campaigns have zero above-bar fields.
-- Next: run exactly M3_marker_no_start_tau, M19_tau_one_refresh_plus_poll and M21_without_line_on_harvest_flag via `/tmp/bat3f1/mutate_remaining.py`, then remaining regression classes (Addendum4RegressionTests, ReviewerProbeTests, SubsetReleaseChainTests, Q1MissingFilesCLIChainTests, Q2CommitmentCLIChainTests and small H1/H2 classes). CI replaces the whole analysis-module run, including the long CampaignWordRates class, under the local-route override. Final report cleanup and director CI observation remain.
-- Done (slice 3): independently generated default no-assist campaigns at round1 and final trees on identical paths: manifests exactly equal and both raw meter-stream SHA-256 values exactly equal. Fresh TMPDIR per tree, both builds exit 0; scratch tree/TMPDIRs deleted. `/tmp/bat3f1/default-fixture-comparison.json`.
-- Open: remaining M3/M19/M21 mutation executions, remaining fixture/reducer regression classes, director-owned CI and final report cleanup. No commit/push attempted (.git read-only). Slice 3 is ready for director commit; task intentionally incomplete until remaining verification is executed. Do not mark COMPLETE yet.
+- Done: findings 1, 4 and 5 implemented in 998d0dc05; findings 2 and 3 in 552561b3f. Finding 6 rejected as directed; finding 7 handed forward verbatim. All edits stay within the exhaustive allowlist.
+- Done: corrected-source battery/meter classes pass 20 tests; instant and delayed real CLI chains, charging, weighted columns, blinded nulls, exact receive sorting and printed bounds/floors are verified.
+- Done: all nine mutants KILLED in disposable copies; 180 test executions complete with the expected assertion failures. Every mutant copy and disposable TMPDIR deleted. Clone source never mutated.
+- Done: exact three-stage CLI/load_records comparison against bda481d5a and ddcbafc4d; 523,819 / 1,316,507 common scalar fields unchanged apart from the prescribed 160 blinded count objects and provenance digests. Default no-assist manifests and both meter-stream byte hashes unchanged.
+- Done: all 85 bounded analysis test methods pass individually by class across slices 2–4, with no skips. The local route replaces the long CampaignWordRates/whole-module run with CI. Six support modules: 33 passes, one pre-existing NULL-versus-GO hazard failure reproduced at ddcbafc4d. Agreement: seven passes, one expected defects failure; all 238 fields recorded below. Refusal census: all five arrays empty, exit 0.
+- Done: slice 4 resumed clean director head a846ba997e307859cd625e034dfb53a22f64daf2; remaining M3/M19/M21 and all seven remaining classes complete. No implementation, fixture or test changes in this slice; only this report. Logs/results under /tmp/bat3f1/; all run TMPDIRs deleted.
+- Next: director commits this report, pushes the same head to lane/2026-10-22-bytes-battery-term and ci/2026-10-22-bytes-battery-term, records PR #544 CI, and hands parity requirements to BY-TWIN-BAT. BY-MERGE carries the listed hunks later; no other branch merged here.
+- Open external work: director-owned commit/push/CI observation and final review; BY-TWIN-BAT parity; the known baseline hazard-environment failure. No remaining local implementation or prescribed bounded verification; no NEEDS_SCOPE or NEEDS_RULING. No measurements, network actions or Git writes attempted.
+
+BAT-3-fix1 COMPLETE
 
 ## SUMMARY
 
-Findings 1–5 are implemented; three battery/meter classes pass all 20 tests.
-All 30 large-model delayed discharge placements pass, including post-end-only markers and both nonzero edges.
-Two retained charging runs have signed negative terms and no assist flags; delayed evidence now has 32 placements.
-Independent printed-column assertions pin the stratified mean and signed nonzero count.
-Blinded-stage decode counts and without-assisted numbers explicitly print null with the prescribed reason.
-Finding 4 checks exact flags, full meter dictionaries and NEG-8 inputs after reversal and shuffle.
-Finding 5 uses a shared SMC cadence/delay helper with unchanged arithmetic order.
-Default non-assisted inputs pass exact comparison: 523,819 common scalar fields vs base unchanged.
-Six of nine mutants are killed; agreement reproduces only the expected 238-entry defects failure.
-The remaining three mutants and regression checks continue in later slices.
-No hardware measurement, quiet-window task, commit, push or network action was run.
+Findings 1–5 are fixed; the three battery/meter classes pass all 20 tests.
+The delayed CLI world independently pins forward edge terms, post-end markers and the max-edge NR1 bound.
+All 30 delayed discharge placements and two signed charging runs pass; charging receives no assist flag.
+Printed battery means use registered stratum weights, and nonzero counts include charging.
+Blinded decode counts and without-assisted numbers print null with the prescribed reason; harvest counts remain evaluated.
+Receive-order checks require exact flags, full meter dictionaries and NEG-8 inputs; one cadence helper preserves arithmetic.
+All nine mutants are killed, and exact comparisons against both baselines pass with only prescribed blinded/provenance changes.
+All 85 bounded analysis methods pass locally; the long CampaignWordRates method and whole-module run belong to CI.
+Agreement has the expected 238-field twin defects failure; one unchanged local hazard test fails at both final and baseline.
 
 ## FIX LOG
 
@@ -58,11 +45,11 @@ All mutants run against disposable copies, with the three classes BatteryRulingW
 | M10_battery_mean_unweighted | SURVIVED | KILLED | test_large_model_assist_cli_chain_all_four_placements_and_counts: 0.044056348856499616 J mean mismatch; 20 tests, one failure, exit 1, 79.315 s unittest / 80.401 s process |
 | M18_v_end_backward_window | SURVIVED | KILLED | test_delayed_publications_pin_forward_edges_marker_and_offset_max: v_end 0 vs 12.65003513402062 J; 20 tests, one failure, exit 1, 78.184 s unittest / 79.117 s process |
 | M20_nonzero_count_off | SURVIVED | KILLED | test_large_model_assist_cli_chain_all_four_placements_and_counts: count 3 vs 4; 20 tests, one failure, exit 1, 75.403 s unittest / 76.358 s process |
-| M3_marker_no_start_tau | KILLED | pending | existing start/prefill assertion |
-| M19_tau_one_refresh_plus_poll | KILLED | pending | shared helper mutation: return T_SMC_S + poll_interval |
-| M21_without_line_on_harvest_flag | KILLED | pending | existing decode/harvest count distinction |
+| M3_marker_no_start_tau | KILLED | KILLED | test_bat2_qwen_check_r01_seven_nonzero_polls, delayed oracle marker and instant-world decode counts: 20 tests, 3 failures, exit 1, 64.848 s unittest / 65.727 s process |
+| M19_tau_one_refresh_plus_poll | KILLED | KILLED | test_bat2_qwen_check_r01_seven_nonzero_polls, delayed oracle marker and test_global_poll_gap_including_empty_poll_outside_selected_spans_sets_tau (1.6 vs 2.6 s): 20 tests, 3 failures, exit 1, 62.111 s unittest / 63.005 s process |
+| M21_without_line_on_harvest_flag | KILLED | KILLED | test_large_model_assist_cli_chain_all_four_placements_and_counts: decode-assisted counts 4 vs 2 repeats; 20 tests, one failure, exit 1, 58.115 s unittest / 58.907 s process |
 
-Slice 3 command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1/mutate_remaining.py M10_battery_mean_unweighted M18_v_end_backward_window M20_nonzero_count_off`. Next slice: pass exactly `M3_marker_no_start_tau M19_tau_one_refresh_plus_poll M21_without_line_on_harvest_flag`. Each copy and TMPDIR is deleted, logs are `/tmp/bat3f1/<mutant>.log`; remaining result rows append to `/tmp/bat3f1/mutations-remaining.jsonl`.
+Slice 3 command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1/mutate_remaining.py M10_battery_mean_unweighted M18_v_end_backward_window M20_nonzero_count_off`. Slice 4 command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1/mutate_remaining.py M3_marker_no_start_tau M19_tau_one_refresh_plus_poll M21_without_line_on_harvest_flag`. Both complete; each copy and TMPDIR is deleted, logs are `/tmp/bat3f1/<mutant>.log`; result rows are in `/tmp/bat3f1/mutations-remaining.jsonl`. All nine semantic mutants are KILLED after the fix, including all three previously killed mutants.
 
 ## DELAYED WORLD
 
@@ -143,6 +130,8 @@ Additional default-generation check: `/tmp/bat3f1/default_fixture_worker.py <tre
 
 ## HUNKS FOR BY-MERGE
 
+Final implementation is unchanged from 552561b3f (verified by empty path-specific diff); slices 3 and 4 only update this report. All hunks against ddcbafc4d are listed below.
+
 - Slice 2 joulewise/bytes_analysis.py load_records blinded branch: add decode_assist_evaluated=False per record; no new reduce_models argument.
 - Slice 2 reduce_models diagnostic branch: print null decode counts and labelled null diagnostic with reason when records say not evaluated; retain harvest counts and evaluated branch.
 - Slice 2 combine_passes diagnostic branch: preserve not_evaluated status/reason/label in combined output.
@@ -210,6 +199,22 @@ Every affected field by stage/group (no first-40 truncation):
 
 ## TESTS RUN
 
+Slice 4 exact command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1/run_classes_slice4.py tests.test_bytes_analysis.H1WorkedExamples tests.test_bytes_analysis.H2WorkedExamples tests.test_bytes_analysis.Addendum4RegressionTests tests.test_bytes_analysis.ReviewerProbeTests tests.test_bytes_analysis.SubsetReleaseChainTests tests.test_bytes_analysis.Q1MissingFilesCLIChainTests tests.test_bytes_analysis.Q2CommitmentCLIChainTests`. The runner invokes `/opt/homebrew/bin/python3.13 -B -m unittest <class>` individually, with clone cwd, synthetic-only/no-bytecode environment and a fresh TMPDIR per class, deleted in finally. All exit 0, no skips or environmental failures. Logs `/tmp/bat3f1/slice4-<class>.log`; result rows `/tmp/bat3f1/regressions-slice4.jsonl`.
+
+| class | tests | unittest seconds | process seconds | exit |
+|---|---:|---:|---:|---:|
+| H1WorkedExamples | 6 | 0.001 | 0.840 | 0 |
+| H2WorkedExamples | 4 | 0.001 | 0.852 | 0 |
+| Addendum4RegressionTests | 14 | 172.842 | 173.710 | 0 |
+| ReviewerProbeTests | 1 | 53.253 | 54.018 | 0 |
+| SubsetReleaseChainTests | 2 | 52.776 | 53.505 | 0 |
+| Q1MissingFilesCLIChainTests | 3 | 32.284 | 33.002 | 0 |
+| Q2CommitmentCLIChainTests | 1 | 18.319 | 19.039 | 0 |
+
+These 31 methods complete 85 locally executed analysis methods across the recorded class runs; only CampaignWordRates (one long method) is assigned to CI by the local route. The 400-draw p03 diagnostic completes all 36 registered report rows. No whole repository suite was run.
+
+Slice 4 mutation command/results are under MUTATION KILLS: M3/M19/M21 execute all 60 tests, expected exit 1; all copies and TMPDIRs deleted. No tests/source changed after the passing corrected-source class runs or bit-identity check. `git diff --check` passes; required baseline ancestry confirmed.
+
 Slice 3 agreement exact worker command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1/agreement_run.py`, launched via subprocess with clone cwd and a fresh disposable TMPDIR. The worker loads the complete tests.test_bytes_agreement suite with unittest.defaultTestLoader, runs every test, then writes all Recorder rows before returning the suite status. Eight tests, seven pass / one expected failure, exit 1, no skips or environmental failures; details and every above-bar field under HAND-FORWARD FOR BY-TWIN-BAT. Parent finally deletes TMPDIR.
 
 Slice 3 regression command: `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/bat3f1/run_classes.py tests.test_bytes_analysis.Addendum7RegressionTests tests.test_bytes_analysis.Q1WithheldCensusTests tests.test_bytes_analysis.RegisteredArithmeticTests`. The runner invokes `/opt/homebrew/bin/python3.13 -B -m unittest <class>` individually with clone cwd and a fresh TMPDIR, deleted in finally. Results: Addendum7RegressionTests 13 tests / 30.761 s unittest / 31.725 s process; Q1WithheldCensusTests 4 / 0.004 s / 0.902 s; RegisteredArithmeticTests 3 / 1.482 s / 2.315 s. All exit 0, no skips or environmental failures. Logs `/tmp/bat3f1/slice3-<class>.log`.
@@ -238,7 +243,7 @@ Hazard import-graph failure: `test_a_complete_arm_and_monitor_run_load_no_retire
 
 `/opt/homebrew/bin/python3.13 -B -m tests.hazards.refusal_census`: exit 0, unlisted=[], stale=[], miscounted=[], guard_changed=[], scope_gaps=[]; same environment/fresh-TMPDIR/cleanup wrapper. Log `/tmp/bat3f1/refusal-census-slice2.log`.
 
-In progress: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BatteryCampaignTests.test_delayed_publications_pin_forward_edges_marker_and_offset_max`, with JW_B5_SYNTHETIC_ONLY=1, PYTHONDONTWRITEBYTECODE=1 and fresh TMPDIR; output `/tmp/bat3f1/delayed-first.log`.
+Slice 1 initial attempts (superseded by the passing corrected-source runs): `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BatteryCampaignTests.test_delayed_publications_pin_forward_edges_marker_and_offset_max`, with JW_B5_SYNTHETIC_ONLY=1, PYTHONDONTWRITEBYTECODE=1 and fresh TMPDIR; output `/tmp/bat3f1/delayed-first.log`.
 Initial shell cleanup command was rejected by command guard (rm -rf disallowed); no test ran in that attempt. Switched to Python tempfile/subprocess/shutil cleanup, retaining all required environment controls.
 First delayed test: 1 test, 46.785 s, exit 1: fixed symmetric end bursts could publish before decode end in some phases. Tightened only delayed end-burst placement as described above.
 Second run adds BatteryRulingWorkedExamples and MeterWorkedExamples; output `/tmp/bat3f1/delayed-second.log`. During that run removed an erroneous test lookup for analysis_record.refusal_census (the census is a separate tool, not an analysis output field); if that already-loaded run reaches KeyError, rerun the corrected source. Run `-m tests.hazards.refusal_census` separately and record all five arrays.
@@ -246,16 +251,10 @@ Second run completed: 7 tests in 50.695 s, 6 passed, 1 error at the already-remo
 
 ## CI
 
-Slice 1 verification: `/opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis.BatteryCampaignTests tests.test_bytes_analysis.BatteryRulingWorkedExamples tests.test_bytes_analysis.MeterWorkedExamples`: 19 tests, 72.538 s, exit 0, no skips. Exact command was run via Python subprocess with JW_B5_SYNTHETIC_ONLY=1, PYTHONDONTWRITEBYTECODE=1 and tempfile.mkdtemp(prefix="jwtmp-bat3f1.", dir="/tmp") for TMPDIR, deleted via shutil.rmtree on completion. Log `/tmp/bat3f1/battery-classes-slice1.log`.
-
-`/opt/homebrew/bin/python3.13 -B -m tests.hazards.refusal_census`: exit 0, unlisted=[], stale=[], miscounted=[], guard_changed=[], scope_gaps=[], using the same fresh-TMPDIR/environment wrapper. Log `/tmp/bat3f1/refusal-census-slice1.log`.
-`git diff --check`: exit 0.
-
-Slice 2 continuation HEAD: 998d0dc05160baa740b493c33c51c461c6aa22c7 (director committed slice 1; clean starting tree). No unexpected baseline change.
-Lane: lane/2026-10-22-bytes-battery-term. Launch HEAD ddcbafc4dc53fb40c89b507d46a74cf6d9101c98.
-CI branch ci/2026-10-22-bytes-battery-term; existing draft PR #544.
-Director commits, pushes and records CI state under local route; no network/push performed here.
-Slice 3 continuation HEAD: 552561b3f4b76bb5d86d868cda736bcb99eab0a8 (director committed slice 2; clean starting tree). PR #544 state not queried; director owns push and CI observation. No new implementation hunk in this slice; only this report changes.
+Lane: `lane/2026-10-22-bytes-battery-term`; CI branch: `ci/2026-10-22-bytes-battery-term`; existing draft PR #544 (no new PR).
+Current director commit/source head: `a846ba997e307859cd625e034dfb53a22f64daf2`, clean at slice 4 intake, descended from required `ddcbafc4dc53fb40c89b507d46a74cf6d9101c98`. This final slice changes only the report; the director supplies its new commit hash after committing it.
+Implementation head: `552561b3f4b76bb5d86d868cda736bcb99eab0a8`; no implementation/test/fixture bytes changed since the exact baseline comparisons.
+State: not queried from this offline local seat; no network or Git write attempted. The director owns committing/pushing the same final head to both branches and recording CI. CI runs the whole analysis module; expected outstanding failures are twin agreement's defects campaign and gate-ledger. One required hazard import-graph test also fails locally, identically at unchanged ddcbafc4d, as documented under TESTS RUN.
 
 ## DECISIONS I MADE
 
@@ -269,7 +268,7 @@ Slice 3 continuation HEAD: 552561b3f4b76bb5d86d868cda736bcb99eab0a8 (director co
 
 ## OPEN ISSUES
 
-All requested implementation changes are complete; remaining verification is listed in PROGRESS. Bit identity passes against both baselines; six mutants are killed, three remain unexecuted in this round. One required hazard import-graph test locally returns NULL instead of GO; unchanged hazard code, no repair attempted, the identical failure reproduces at ddcbafc4d, so it predates this fix. No environment repair attempted. No baseline mismatch, out-of-scope write or ruling question encountered.
+All requested local implementation and bounded verification are complete. Bit identity passes against both baselines; all nine mutants are killed. CI replaces the whole analysis-module run under the local route and remains director-owned. One required hazard import-graph test locally returns NULL instead of GO; unchanged hazard code, no repair attempted, the identical failure reproduces at ddcbafc4d, so it predates this fix. No environment repair attempted. No baseline mismatch, out-of-scope write or ruling question encountered.
 
 ## NEEDS_RULING
 
