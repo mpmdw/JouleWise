@@ -71,10 +71,19 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def _opener(received: list[int]) -> urllib.request.OpenerDirector:
-    """Count status/header bytes too: a partial HTTP header forbids a retry."""
+def _opener(received: list[int], connected: list[bool]) -> urllib.request.OpenerDirector:
+    """Track successful connect and response bytes before urllib parses headers."""
     def connection(cls: type, *args: Any, **kwargs: Any) -> Any:
         conn = cls(*args, **kwargs)
+        connect = conn.connect
+
+        def tracked_connect() -> None:
+            connect()
+            # Once connected, request delivery is uncertain even before any
+            # response byte. Never replay a possible prefill after this point.
+            connected[0] = True
+
+        conn.connect = tracked_connect
         conn.response_class = lambda sock, **kw: http.client.HTTPResponse(
             _Socket(sock, received), **kw)
         return conn
@@ -126,7 +135,7 @@ class OpenAICompatEndpoint:
     """OpenAI chat/SSE and vLLM or llama.cpp tokenize, using urllib only.
 
     timeout_s and max_retries are operator-set transport budgets, not analysis
-    thresholds. Retries apply only to connection failures with zero bytes read.
+    thresholds. Retries apply only to failed connects with zero bytes read.
     No HTTP status, partial header or partial completion is ever retried.
     """
 
@@ -161,11 +170,15 @@ class OpenAICompatEndpoint:
         request = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"),
                                          headers=self._headers(flags), method="POST")
         for attempt in range(self.max_retries + 1):
-            received = [0]
+            received, connected = [0], [False]
             try:
-                return _opener(received).open(request, timeout=self.timeout_s)
+                return _opener(received, connected).open(request, timeout=self.timeout_s)
             except (OSError, http.client.HTTPException) as exc:
-                if received[0] or not _connection_failure(exc) or attempt == self.max_retries:
+                reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+                if isinstance(reason, TimeoutError):
+                    flags.append("request_timeout_after_connect" if connected[0] else "connect_timeout")
+                if (connected[0] or received[0] or not _connection_failure(exc)
+                        or attempt == self.max_retries):
                     raise
                 retry = {"attempt": attempt + 1, "error": type(exc).__name__, "received_bytes": 0}
                 retries.append(retry)
@@ -215,6 +228,7 @@ class OpenAICompatEndpoint:
         calls: dict[int, dict[str, str]] = {}
         usage: dict[str, Any] = {}
         done = False
+        finish_reason: str | None = None
         body = dict(self.extra_body)
         reserved = {"model", "messages", "tools", "stream", "max_tokens", "temperature", "seed", "n"}
         if reserved.intersection(body):
@@ -260,9 +274,18 @@ class OpenAICompatEndpoint:
                             if choice.get("index", 0) != 0:
                                 flags.append("extra_choice_ignored")
                                 continue
+                            if choice.get("finish_reason") is not None:
+                                finish_reason = choice["finish_reason"]
                             delta = choice.get("delta") or {}
-                            text, thought = delta.get("content"), delta.get("reasoning_content")
-                            if (text or thought) and first is None:
+                            text = delta.get("content")
+                            # vLLM currently emits reasoning; llama.cpp and older
+                            # vLLM parsers emit reasoning_content.
+                            thought = delta.get("reasoning_content") or delta.get("reasoning")
+                            generated_tool = any(
+                                (c.get("function") or {}).get("name")
+                                or (c.get("function") or {}).get("arguments")
+                                for c in delta.get("tool_calls") or ())
+                            if (text or thought or generated_tool) and first is None:
                                 first = time.monotonic_ns()
                             if isinstance(text, str):
                                 content.append(text)
@@ -271,10 +294,16 @@ class OpenAICompatEndpoint:
                             for call in delta.get("tool_calls") or ():
                                 slot = calls.setdefault(call.get("index", 0),
                                                         {"id": "", "name": "", "arguments": ""})
-                                if call.get("id"):
-                                    slot["id"] += call["id"]
                                 fn = call.get("function") or {}
-                                slot["name"] += fn.get("name") or ""
+                                # ID and function name are identifiers, unlike the
+                                # streamed arguments. Tolerate identical repeats.
+                                for key, value in (("id", call.get("id")),
+                                                   ("name", fn.get("name"))):
+                                    if value:
+                                        if not slot[key]:
+                                            slot[key] = value
+                                        elif slot[key] != value:
+                                            flags.append("tool_call_" + key + "_conflict")
                                 slot["arguments"] += fn.get("arguments") or ""
         except urllib.error.HTTPError as exc:
             flags.append(f"http_error:{exc.code}")
@@ -284,6 +313,8 @@ class OpenAICompatEndpoint:
             flags.append("transport_or_stream_error:" + type(exc).__name__)
         if not done:
             flags.append("stream_missing_done")
+        if finish_reason == "length":
+            flags.append("generation_cap_reached")
         timing = usage.get("timings") or {}
         if not isinstance(timing, Mapping):
             flags.append("invalid_timings")
@@ -324,7 +355,8 @@ class OpenAICompatEndpoint:
             request = ToolCallRequest(call["id"], call["name"], call["arguments"])
             requests.append(request)
             self._requests[request.call_id] = request
-        usage["joulewise"] = {"flags": list(dict.fromkeys(flags)), "retries": retries}
+        usage["joulewise"] = {"flags": list(dict.fromkeys(flags)), "retries": retries,
+                              "finish_reason": finish_reason}
         self.flags.extend(usage["joulewise"]["flags"])
         return ChatResult("".join(content), "".join(reasoning), tuple(requests), prompt, cached,
                           completion, hidden, start, first, time.monotonic_ns(), usage)
@@ -337,7 +369,9 @@ class OpenAICompatEndpoint:
         if not self._valid_url:
             self.flags.append("tokenize_invalid_base_url")
             return 0
-        bodies = ({"model": self.model, "prompt": text}, {"content": text})
+        # Both servers accept unknown fields. Including both text keys avoids
+        # llama.cpp's valid 200 {"tokens": []} response to a missing content key.
+        bodies = ({"model": self.model, "prompt": text, "content": text}, {"content": text})
         for index, body in enumerate(bodies):
             try:
                 with self._open(root + "/tokenize", body, flags, retries) as response:
@@ -350,6 +384,11 @@ class OpenAICompatEndpoint:
                 else:
                     flags.append("tokenize_unrecognized_shape")
                     continue
+                if text and result == 0 and index == 0:
+                    flags.append("tokenize_empty_response_retry")
+                    continue
+                flags.append("tokenize_shape:prompt_and_content" if index == 0
+                             else "tokenize_shape:content")
                 self.flags.extend(flags)
                 return result
             except urllib.error.HTTPError as exc:
@@ -373,6 +412,8 @@ class MockEndpoint:
     ChatResult entries are returned intact. Mapping entries use integer synthetic
     clocks and explicit counts when supplied; whitespace counts are labelled as
     synthetic. token_counts supplies exact text-to-count fixtures for tokenizers.
+    turn_interval_ns is an operator-set synthetic clock step (default one second),
+    not a model-latency estimate or an analysis threshold.
     """
 
     def __init__(self, script: Iterable[ChatResult | Mapping[str, Any]] = (), *,
@@ -423,10 +464,14 @@ class MockEndpoint:
         diagnostics["flags"] = list(dict.fromkeys(
             list(diagnostics.get("flags", ())) + self.flags[flag_start:]))
         diagnostics.setdefault("retries", [])
+        finish_reason = value.pop("finish_reason", diagnostics.get("finish_reason"))
+        diagnostics["finish_reason"] = finish_reason
+        if finish_reason == "length":
+            diagnostics["flags"].append("generation_cap_reached")
         raw_usage["joulewise"] = diagnostics
         return ChatResult(text, thought, requests, prompt, value.pop("cached_prompt_tokens", 0),
                           completion, value.pop("reasoning_tokens", 0), start,
-                          value.pop("first_token_ns", start if text or thought else None), end,
+                          value.pop("first_token_ns", start if text or thought or requests else None), end,
                           raw_usage)
 
 
