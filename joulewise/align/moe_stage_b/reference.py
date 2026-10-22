@@ -5,18 +5,23 @@ Implementation provenance:
 - Shared input contract: joulewise.align.records.RouterLog.
 - Each token/layer selection is one atomic request, in log.layers order.
 - Over-capacity requests stream every selected nonresident expert and leave
-  cache contents and recency unchanged. Prefill bypass has the same behavior.
+  cache contents and recency unchanged.
+- Prefill bypass streams each nonresident expert once per explicit batch,
+  charging its first occurrence without changing the dynamic cache. This
+  batch-union approximation does not model read-only cache reuse for large
+  upstream batches.
 - Synthetic calculations only; these functions are not hardware measurements.
 """
 
 from __future__ import annotations
 
+from cmath import exp
 from dataclasses import dataclass
-from math import fsum, inf, isfinite, sqrt
+from math import fsum, hypot, inf, isfinite, pi, sqrt
 from statistics import NormalDist
 from typing import Literal, Mapping, Protocol, Sequence
 
-from joulewise.align.records import RouterLog
+from joulewise.align.records import PowerTrace, RouterLog
 
 ExpertKey = tuple[int, int]
 TransferRectangle = tuple[int, int, float]  # start_ns, end_ns, energy_j
@@ -29,6 +34,7 @@ class ReferenceConfig(Protocol):
     cache_capacity_bytes: int
     cache_policy: Literal["none", "lru", "slru"]
     prefill_mode: Literal["bypass", "serial"]
+    prefill_batch_tokens: int
     joules_per_byte: float
     bandwidth_bytes_s: float
 
@@ -66,6 +72,11 @@ def reference_transfers(
     Resident weights occupy no space in this offload cache. An expert selected
     more than once within one request is fetched once. Bandwidth is validated
     for config compatibility; this function returns no timing prediction.
+
+    In bypass mode, contiguous prefill rows are partitioned into batches of
+    config.prefill_batch_tokens (default one). Their expert union is streamed
+    once per batch, assigned to each expert's first token occurrence. A phase
+    change starts a fresh batch. Dynamic cache state is preserved throughout.
     """
     capacity = _integer(config.cache_capacity_bytes, "cache_capacity_bytes")
     if capacity < 0:
@@ -74,6 +85,11 @@ def reference_transfers(
         raise ValueError("unknown cache_policy")
     if config.prefill_mode not in ("bypass", "serial"):
         raise ValueError("unknown prefill_mode")
+    batch_tokens = _integer(
+        getattr(config, "prefill_batch_tokens", 1), "prefill_batch_tokens"
+    )
+    if batch_tokens <= 0:
+        raise ValueError("prefill_batch_tokens must be positive")
     energy_rate = _finite(config.joules_per_byte, "joules_per_byte")
     bandwidth = _finite(config.bandwidth_bytes_s, "bandwidth_bytes_s")
     if energy_rate < 0 or bandwidth <= 0:
@@ -92,6 +108,8 @@ def reference_transfers(
     probation: list[ExpertKey] = []
     protected: list[ExpertKey] = []
     output: list[ReferenceTransfer] = []
+    prefill_position = 0
+    batch_seen: set[ExpertKey] = set()
 
     def size_of(keys: Sequence[ExpertKey]) -> int:
         return sum(sizes[key[0]] for key in keys)
@@ -99,6 +117,13 @@ def reference_transfers(
     for phase, token in zip(log.phase, log.experts):
         if phase not in ("prefill", "decode"):
             raise ValueError("unknown RouterLog phase")
+        if phase == "decode":
+            prefill_position = 0
+            batch_seen.clear()
+        else:
+            if prefill_position % batch_tokens == 0:
+                batch_seen.clear()
+            prefill_position += 1
         moved = 0
         for layer, experts in zip(log.layers, token):
             wanted_order = list(dict.fromkeys(
@@ -108,11 +133,11 @@ def reference_transfers(
             wanted = set(wanted_order)
             request_bytes = size_of(tuple(wanted))
             bypass = phase == "prefill" and config.prefill_mode == "bypass"
-            if (
-                bypass
-                or config.cache_policy == "none"
-                or request_bytes > capacity
-            ):
+            if bypass:
+                moved += size_of(tuple(wanted - batch_seen))
+                batch_seen.update(wanted)
+                continue
+            if config.cache_policy == "none" or request_bytes > capacity:
                 moved += request_bytes
                 continue
 
@@ -131,8 +156,8 @@ def reference_transfers(
                     probation.append(key)
                 else:
                     protected.append(key)
-                    # Compare integers: protected budget is capacity / 2 bytes.
-                    while 2 * size_of(protected) > capacity:
+                    # Protected byte budget is floor(capacity / 2).
+                    while size_of(protected) > capacity // 2:
                         probation.append(protected.pop(0))
 
             for key in misses:
@@ -319,3 +344,148 @@ def reference_required_correlation(
         / effect
     )
     return ReferenceCorrelationRequirement(minimum, minimum <= 1.0)
+
+
+
+def reference_interval_energies(
+    trace: PowerTrace,
+    windows: Sequence[tuple[int, int]],
+    baseline_w: float,
+) -> tuple[float, ...]:
+    """Integrate baseline-subtracted watts over sampled cells, in joules.
+
+    A cell ends at its sample time. Its start is the later of the preceding
+    sample time and one nominal interval before its end. The first cell uses
+    one nominal interval. Gaps longer than this interval remain uncovered;
+    sensor averaging windows do not extend these integration cells.
+    """
+    if trace.unit != "W":
+        raise ValueError("interval energies require a watts trace")
+    interval = _integer(trace.nominal_interval_ns, "nominal_interval_ns")
+    if interval <= 0:
+        raise ValueError("nominal_interval_ns must be positive")
+    baseline = _finite(baseline_w, "baseline_w")
+    if len(trace.t_ns) != len(trace.values):
+        raise ValueError("trace times and values must have equal lengths")
+    cells: list[tuple[int, int, float]] = []
+    previous: int | None = None
+    for timestamp, value in zip(trace.t_ns, trace.values):
+        _integer(timestamp, "trace timestamp")
+        watts = _finite(value, "trace watts")
+        if previous is not None and timestamp <= previous:
+            raise ValueError("trace timestamps must be strictly increasing")
+        start = timestamp - interval
+        if previous is not None:
+            start = max(start, previous)
+        cells.append((start, timestamp, watts - baseline))
+        previous = timestamp
+
+    results = []
+    for left, right in windows:
+        _integer(left, "window start")
+        _integer(right, "window end")
+        if right < left:
+            raise ValueError("window ends before its start")
+        results.append(fsum(
+            max(0, min(right, end) - max(left, start)) * watts / 1_000_000_000
+            for start, end, watts in cells
+        ))
+    return tuple(results)
+
+
+def reference_spectrum_amplitude(
+    times: Sequence[int],
+    values: Sequence[float],
+    weights: Sequence[float],
+    frequency_hz: float,
+    origin_ns: int,
+) -> float:
+    """Weighted, mean-centered Fourier amplitude at one supplied frequency.
+
+    Time-origin subtraction precedes conversion to seconds. Weights may be
+    zero but must be nonnegative with a positive total. This direct complex
+    sum imposes no evenly spaced sampling assumption.
+    """
+    if len(times) != len(values) or len(times) != len(weights) or not times:
+        raise ValueError("times, values, and weights require equal nonzero lengths")
+    frequency = _finite(frequency_hz, "frequency_hz")
+    _integer(origin_ns, "origin_ns")
+    for timestamp in times:
+        _integer(timestamp, "spectrum timestamp")
+    ys = tuple(_finite(value, "spectrum value") for value in values)
+    ws = tuple(_finite(weight, "spectrum weight") for weight in weights)
+    if any(weight < 0 for weight in ws):
+        raise ValueError("spectrum weights must be nonnegative")
+    total_weight = fsum(ws)
+    if total_weight <= 0:
+        raise ValueError("spectrum total weight must be positive")
+    mean = fsum(value * weight for value, weight in zip(ys, ws)) / total_weight
+    terms = [
+        (value - mean) * weight
+        * exp(2j * pi * frequency * ((timestamp - origin_ns) / 1_000_000_000))
+        for timestamp, value, weight in zip(times, ys, ws)
+    ]
+    coefficient = complex(
+        fsum(term.real for term in terms),
+        fsum(term.imag for term in terms),
+    )
+    return 2 * abs(coefficient) / total_weight
+
+
+@dataclass(frozen=True)
+class ReferenceDetectionForecast:
+    model_correlation: float | None
+    contrast_j: float
+    contrast_half_width_j: float
+
+
+def reference_detection_forecast(
+    sensor_noise_std_w: float,
+    interval_ns: int,
+    window_ns: int,
+    quantum_w: float,
+    routing_sd: float,
+    slope_j_per_token: float,
+    decode_tokens: int,
+    decode_duration_s: float,
+    phase_bias_std_j: float,
+    stage_a_effect_sd: float,
+    systematic_contrast_half_width_j: float,
+) -> ReferenceDetectionForecast:
+    """Return diagnostic correlation, group contrast, and systematic bound.
+
+    White sensor noise uses max(sample interval, averaging window) as its
+    effective correlation time. Independent phase-bias variance adds in
+    quadrature. The contrast assumes standardized linear attenuation. The
+    systematic half-width adds the supplied contrast bound and quantum*T.
+    Zero signal and zero noise produce undefined correlation (None).
+    """
+    sensor_sigma = _finite(sensor_noise_std_w, "sensor_noise_std_w")
+    _integer(interval_ns, "interval_ns")
+    _integer(window_ns, "window_ns")
+    quantum = _finite(quantum_w, "quantum_w")
+    routing = _finite(routing_sd, "routing_sd")
+    slope = _finite(slope_j_per_token, "slope_j_per_token")
+    _integer(decode_tokens, "decode_tokens")
+    duration = _finite(decode_duration_s, "decode_duration_s")
+    phase_sigma = _finite(phase_bias_std_j, "phase_bias_std_j")
+    effect = _finite(stage_a_effect_sd, "stage_a_effect_sd")
+    systematic = _finite(
+        systematic_contrast_half_width_j, "systematic_contrast_half_width_j"
+    )
+    if min(sensor_sigma, quantum, routing, phase_sigma, systematic) < 0:
+        raise ValueError("standard deviations, quantum, and bounds must be nonnegative")
+    if interval_ns <= 0 or window_ns < 0:
+        raise ValueError("interval must be positive and window nonnegative")
+    if decode_tokens <= 0 or duration <= 0:
+        raise ValueError("decode token count and duration must be positive")
+    signal = abs(slope) * routing
+    white_sigma_j = sensor_sigma * sqrt(
+        duration * (max(interval_ns, window_ns) / 1_000_000_000)
+    )
+    noise = hypot(white_sigma_j, phase_sigma) / decode_tokens
+    denominator = hypot(signal, noise)
+    correlation = signal / denominator if denominator else None
+    contrast = abs(effect) * signal * decode_tokens
+    bound = systematic + quantum * duration
+    return ReferenceDetectionForecast(correlation, contrast, bound)
