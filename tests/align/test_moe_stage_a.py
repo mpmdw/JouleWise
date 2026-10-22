@@ -7,13 +7,17 @@ import json
 import math
 import tempfile
 import unittest
+import weakref
+from unittest.mock import patch
 from contextlib import redirect_stdout
 from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 
 from joulewise.align.records import Episode, RouterLog, from_json, to_json, write_episodes
-from joulewise.align.moe.stage_a import analyze_stage_a, main, mann_whitney_auc
+from joulewise.align.moe.stage_a import (
+    _bootstrap_indices, _held_out_scores, analyze_stage_a, main, mann_whitney_auc,
+)
 from joulewise.align.moe.stats import episode_stats
 from joulewise.align.moe.synthetic import TopicWorld, expected_topic_statistics, topic_episodes
 from tests.align.test_moe_stats import assert_close
@@ -76,8 +80,10 @@ class StageAWorldTests(unittest.TestCase):
         benign = expected_topic_statistics(self.design.num_experts, self.design.top_k, 0.0)
         effect = expected["reuse_fraction"] - benign["reuse_fraction"]
         interval = self.result.statistics["decode_reuse_fraction"].interval
-        # This is a coverage check against an analytic generative expectation,
-        # using the report's conventional 95% grouped-bootstrap interval.
+        # Fixed-seed check against the analytic generative expectation.
+        # With 12--17 task groups, these nominal 95% percentile effect intervals
+        # covered zero in about 91% of the reviewer's independent-noise cells;
+        # this deterministic fixture assertion is not a calibration claim.
         self.assertLessEqual(interval[0], effect)
         self.assertGreaterEqual(interval[1], effect)
 
@@ -179,6 +185,19 @@ class StageAWorldTests(unittest.TestCase):
             else:
                 self.assertFalse(any("dropped_nonfinite" in flag for flag in stat.flags))
 
+    def test_episode_iterator_releases_router_logs_before_advancing(self):
+        def source():
+            for template in self.world:
+                episode = replace(template, router_log=replace(template.router_log))
+                reference = weakref.ref(episode.router_log)
+                yield episode
+                del episode
+                self.assertIsNone(reference())  # No accumulated Episode/log references.
+
+        result = analyze_stage_a(source(), n_bootstrap=16, seed=83)
+        self.assertEqual(result.episode_ids, self.result.episode_ids)
+        assert_close(self, result.auc_gain, self.result.auc_gain)
+
     def test_jsonl_cli_production_path(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "episodes.jsonl"
@@ -218,6 +237,29 @@ class ClassificationTests(unittest.TestCase):
             # Same code and identical training inputs must give bit-identical
             # predictions for the held-out task even when its labels change.
             self.assertEqual(first.predictions[name][:2], second.predictions[name][:2])
+
+    def test_gain_bootstrap_refits_with_original_group_identities(self):
+        # Small multi-turn fixture, independent routing noise and matched counts.
+        world = topic_episodes(0.0, design=TopicWorld(groups=4, turns=2),
+                               seed=42, independent_noise=True)
+        budget, seed = 16, 83  # Explicit bootstrap fixture parameters.
+        with patch("joulewise.align.moe.stage_a._held_out_scores",
+                   wraps=_held_out_scores) as fit:
+            result = analyze_stage_a(world, n_bootstrap=budget, seed=seed)
+        self.assertEqual(result.auc_gain_interval_method, "group_bootstrap_refit_percentile")
+        self.assertEqual(fit.call_count, 3 + 2 * budget)  # Three originals, two gain fits/draw.
+        draws = _bootstrap_indices([e.task_pair for e in world], budget, seed)
+        calls = fit.call_args_list[3:]
+        duplicated = False
+        for draw, metadata_call, combined_call in zip(draws, calls[::2], calls[1::2]):
+            expected_groups = tuple(world[i].task_pair for i in draw)
+            expected_labels = tuple(0 if world[i].condition == "benign" else 1 for i in draw)
+            for call in (metadata_call, combined_call):
+                self.assertEqual(call.args[1], expected_labels)
+                self.assertEqual(call.args[2], expected_groups)
+            duplicated |= len(draw) > len(set(draw))
+        self.assertTrue(duplicated)  # This seed exercises the leakage-prone case.
+        self.assertIn("auc_intervals_fixed_predictions_descriptive", result.flags)
 
     def test_counts_only_work_is_detected_by_metadata_baseline(self):
         # A second production-shaped control repeats benign decode work, adding
