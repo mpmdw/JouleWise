@@ -133,6 +133,7 @@ Exact verification commands submitted to exec_command from
     python3 -m unittest tests.align.test_endpoints tests.align.test_shade tests.align.test_shade_http -v
     python3 -m unittest discover -s tests/align -t .
     python3 -m unittest discover -s tests
+    python3 scripts/fixture_orphan_census.py --fail-on-orphans
     JOULEWISE_SHADE_CACHE=/workspace/.shade-cache TMPDIR=/workspace/JouleWise/.review2/tmp /workspace/.venv-shade/bin/python -m unittest discover -s /workspace/JouleWise/tests/align -t /workspace/JouleWise -k RealUpstream
     TMPDIR=/workspace/JouleWise/.review2/tmp /workspace/.venv-shade/bin/python -W ignore /workspace/JouleWise/.review2/e2e_world.py
     TMPDIR=/workspace/JouleWise/.review2/tmp python3 /workspace/JouleWise/.review2/edges2.py
@@ -162,8 +163,10 @@ brief; none are invented here.
 Environment evidence: wait_for_environment was started at intake and remained
 pending while GitHub work continued. Repeated environment_status checks
 reported starting/offline with failure=null; at 02:48:44 UTC on 2026-10-22 it
-reported pending/offline with failure=null. Diagnostics metadata contained no
-records. No local checkout, git commands, shell, interpreter or network-policy
+reported pending/offline with failure=null. The final check at 02:55:19 UTC
+reported starting/offline with failure=null, after another one-minute wait;
+both the align suite and fixture census were rejected before execution.
+Diagnostics metadata contained no records. No local checkout, git commands, shell, interpreter or network-policy
 file was accessible. There is no missing source-file blocker.
 
 Remote static verification is separate from execution: read the lane report
@@ -171,7 +174,10 @@ first, the three immutable contracts, applicable repository intake/orchestration
 instructions, pinned upstream verdict parser, and the fixture evaluator.
 The GitHub compare against 07c3d379c shows only allowed lane paths, with no
 shared-contract edits or registry additions. Commits fast-forward the existing
-branch, force=false. No syntax/import/runtime success is inferred.
+branch, force=false. At 02:53:34 UTC all eight changed files were fetched back
+and their exact text matched the intended edits; the comparison was five
+commits ahead, zero behind, and contained only those eight allowed paths.
+No syntax/import/runtime success is inferred.
 
 ## END-TO-END
 
@@ -368,7 +374,7 @@ numbers — fixed (NOT EXECUTED) — 09c175b09a38d4d262ce34e1c7c6fa9688063e00 �
 N1 — fixed (NOT EXECUTED) — efd431f831aa8ae66aa3f596a01e772d26e167b5 — missing cache counts are flagged per call; required vLLM serve flag and default-usage HTTP world added.
 N2 — fixed (NOT EXECUTED) — 44fef910882c32268e012b622a8abc98c218768b — native reasoning is dropped directly outside full and from judge conversations; quoted closing-tag regression added.
 N3 — fixed (NOT EXECUTED) — 074282bf902224c511bc58415468fce67e8b893a — last-tag strict rule retained; multiple tags flagged; all tag bodies and the upstream first-tag value or "unparseable" retained per call and documented.
-N4 — fixed (NOT EXECUTED) — 074282bf902224c511bc58415468fce67e8b893a — score returns plain MonitorVerdict; last_verdict/last_flags/last_valid reset per call; unchanged returns round-trip in authored unit/HTTP tests. No local probe copies exist because no VM started; required adaptations are v.flags to mon.last_flags, v.valid to mon.last_valid (snapshot for later lists), and v.shared_record() to v because returns are already base records; verdict_parse also prints last_flags and last_verdict.upstream_first_tag_value. No other probe changes are intended.
+N4 — fixed (NOT EXECUTED) — 074282bf902224c511bc58415468fce67e8b893a — plain score returns; reset last_verdict/last_flags/last_valid; unit/HTTP tests assert unchanged-return round-trips. No VM or probe copies: pending adaptations are v.flags to mon.last_flags, v.valid to mon.last_valid (snapshot for later lists), and v.shared_record() to v; verdict_parse prints last_flags and upstream_first_tag_value. No other probe changes.
 m-a — fixed (NOT EXECUTED) — 4204aa2c702529d0ac7b8af8408b18d853c860e4 — opt-in server-tokenized reasoning count is labelled only in raw_usage['joulewise']; default off avoids extra measured-server work and preserves printed counters.
 m-b — fixed (NOT EXECUTED) — efd431f831aa8ae66aa3f596a01e772d26e167b5 — combined/fallback tokenizer bodies explicitly disable both backends' special-token additions.
 m-c — fixed (NOT EXECUTED) — 44fef910882c32268e012b622a8abc98c218768b — malformed argument flags contain byte length and SHA256 prefix, are deduplicated, and preserve main-state scoring/history.
