@@ -173,6 +173,8 @@ class _Cache:
         self.config = config
         self.probation: OrderedDict[ExpertKey, int] = OrderedDict()
         self.protected: OrderedDict[ExpertKey, int] = OrderedDict()
+        self.used_bytes = 0
+        self.protected_bytes = 0
 
     def request(self, keys: Sequence[ExpertKey]) -> tuple[int, int, bool]:
         cap = self.config.cache_capacity_bytes
@@ -191,27 +193,34 @@ class _Cache:
                 value = self.probation.pop(key)
                 target = self.protected if self.config.cache_policy == "slru" else self.probation
                 target[key] = value
+                if self.config.cache_policy == "slru":
+                    self.protected_bytes += value
                 hits += 1
             if self.config.cache_policy == "slru":
                 # SLRU's protected segment owns half of the dynamic budget.
-                while sum(self.protected.values()) > cap // 2 and self.protected:
+                while self.protected_bytes > cap // 2 and self.protected:
                     old, value = self.protected.popitem(last=False)
+                    self.protected_bytes -= value
                     self.probation[old] = value
         selected = set(keys)
         for key in sorted(keys):
             if key in self.probation or key in self.protected:
                 continue
             size = sizes[key[0]]
-            while sum(self.probation.values()) + sum(self.protected.values()) + size > cap:
+            while self.used_bytes + size > cap:
                 for segment in (self.probation, self.protected):
                     victim = next((old for old in segment if old not in selected), None)
                     if victim is not None:
-                        del segment[victim]
+                        removed = segment.pop(victim)
+                        self.used_bytes -= removed
+                        if segment is self.protected:
+                            self.protected_bytes -= removed
                         break
                 else:
                     # Request-size check above guarantees a victim exists.
                     raise AssertionError("cache accounting invariant")
             self.probation[key] = size
+            self.used_bytes += size
         return hits, len(keys)-hits, False
 
 
