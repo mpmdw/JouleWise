@@ -1,188 +1,353 @@
-# NVML lane implementation report
+# NVML lane: fix round 1
 
 ## SUMMARY
 
-Implemented stdlib ctypes NVML power and cumulative-energy sampling.
-Fresh sampler cycles retain query brackets, sensor facts and raw counter discontinuities.
-Added duty-window pooling with coverage, quantum, timing and repeatability uncertainty.
-Added whole-GPU preflight, opt-in clock commands, owned load cleanup and JSON evidence.
-The connected driver/thread/record world recovered 1,161 J within its 0.103840 J half-width.
-The independent numerical twin passed; 95% duty intervals missed 52 of 1,000 seeds.
-Final CI executed 52 lane tests: 51 passed and one optional-pynvml test skipped.
-Build, wheel smoke, repository fences and the 212-module quick suite passed.
-The full suite failed an existing courier timeout; local commands remain blocked by Cloud startup.
-Shared contracts and the NVIDIA parser are unchanged; no hardware measurements were performed.
+Retained differing replay durations, clipping each sensor window to its own run.
+Made known sensor-window ends the shared PowerTrace.t_ns timestamps.
+Corrected known one-second output-average channels and retained unknown duty.
+Normalized native NVML scalars and added real-pynvml-body sampler/CLI coverage.
+Separated nominal repeatability intervals from the worst-case bias receipt.
+Added metadata, timestamp-slew, cleanup and fake-clock preflight regressions.
+Updated calibration bars and added four 400-seed, 16-replay jitter worlds.
+Kept the eight-replay minimum; four replays need an external repeatability model.
+Execution remains blocked by Cloud startup; the required acceptance runs are incomplete.
+All changes are scoped fast-forward commits; no hardware or paid service was used.
 
 ## FILES
 
-- `joulewise/align/power/__init__.py`: stdlib-only instrumentation package.
-- `joulewise/align/power/nvml.py`: NVML ABI binding, inventory and sampler.
-- `joulewise/align/power/duty.py`: phase plans and uncertainty-aware window pooling.
-- `joulewise/align/power/preflight.py`: inventory/load/clock CLI and predictive movement criterion.
-- `tests/align/test_power_nvml.py`: ctypes-shaped driver, sampling and failure paths.
-- `tests/align/test_power_duty.py`: multi-turn worlds, calibration and serialization.
-- `tests/align/test_power_duty_twin.py`: independently authored direct-grid numerical oracle.
-- `tests/align/test_power_preflight.py`: real executable/process paths and nominal false-alarm calibration.
-- `docs/align/nvidia_runbook.md`: first whole-GPU collection procedure.
-- `tests/test_shard_tests.py`: ONLY addition of the `align.` namespace to the shard census normalizer, under the brief's registry exception. CI run 39704268162 failed because the inventory named `tests.align.*` while unittest returned `align.*`; no timing weights or test coverage were weakened.
-- `.codex-report/align-nvml.md`: this report.
+This round modifies only these nine authorized paths:
+
+- joulewise/align/power/nvml.py: scalar normalization, structured sensor endpoints, per-sample unknown-age bounds, one-second output metadata and configurable wall-clock slew.
+- joulewise/align/power/duty.py: own-duration clipping, retained metadata-flagged runs, exact phase grouping, normalized phase variance with duration variability, and separate systematic-bias flags.
+- joulewise/align/power/preflight.py: contract timestamps, native version scalars, EPERM cleanup receipts and derived runbook defaults.
+- tests/align/test_power_nvml.py: four-device metadata and one-bad-timestamp regressions; real pynvml Python bodies over fake C functions, with fake nvidia-smi executables for CLI serialization.
+- tests/align/test_power_duty.py: metadata retention, +/-300 us duration replay regression, four-case production-shaped calibration and corrected four-SE bar.
+- tests/align/test_power_duty_twin.py: EXISTING in-scope lane oracle; F5 nominal-width rule, obsolete F8 run-drop cases removed, and N2-N4 agreement bars.
+- tests/align/test_power_preflight.py: observation-driven fake-clock load/control world, zombie-group EPERM receipt and four-SE false-alarm check.
+- docs/align/nvidia_runbook.md: corrected clocks/channels, duration and uncertainty semantics, sampling defaults and replay cost.
+- .codex-report/align-nvml.md: this report.
+
+A read-only end-of-work docs sweep (as requested by repository AGENTS.md)
+corrected the missing-bound/zero-area condition and separated sampler retention
+from estimator use of output-average channels.
+
+No new modules or registry additions in this round. The previous lane's
+tests/test_shard_tests.py namespace fix is unchanged. The protected
+PIPELINE.md, records.py, interfaces.py and NVIDIA CSV parser are unchanged.
+No .review1 file or fetched external twin file was committed.
 
 ## PUBLIC API
 
-- `NvmlSampler(device_indices: Sequence[int] | None = None, *, interval_ns: int = 10_000_000, clock_domain: str | None = None, nvml: Any | None = None, library: Any | None = None, power_bound_w: float | None = None, repeat_group: str | int | None = None, clock_ns: Callable[[], int] = time.monotonic_ns, wall_clock_ns: Callable[[], int] = time.time_ns, stop_timeout_s: float = 5.0)`
-- `NvmlSampler.start() -> None`
-- `NvmlSampler.stop() -> tuple[PowerTrace, ...]`
-- `CtypesNvml(library: Any | None = None)`: pynvml-shaped subset of the NVML API used by sampling/inventory.
-- `open_nvml(*, library: Any | None = None, prefer_pynvml: bool = False) -> Any`
-- `device_inventory(nvml: Any, index: int) -> dict[str, Any]`
-- `plan_offsets(period_ns: int, duty_fraction: float, repeats: int) -> list[int]`
-- `estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate`
-- `DutyEstimate(joules: float, half_width_j: float, coverage_fraction: float, flags: tuple[str, ...])`
-- `assess_power_movement(traces: Sequence[PowerTrace], idle_interval: tuple[int, int], load_interval: tuple[int, int], *, false_alarm_rate: float) -> dict[str, Any]`
-- `run_preflight(*, device_indices=None, idle_seconds=2.0, load_seconds=2.0, recovery_seconds=1.0, interval_ns=10_000_000, load_cmd=None, try_lock_clocks=False, graphics_clock_mhz=None, false_alarm_rate=0.01, matmul_size=2048, command_timeout_s=5.0, nvml=None, library=None) -> dict[str, Any]`
-- `main(argv: Sequence[str] | None = None) -> int`, exposed as `python3 -m joulewise.align.power.preflight --out report.json [--load-cmd ...]`.
+Preserved:
 
-NVML trace notes use JSON format `joulewise.align.nvml.v1`. They retain query half-widths, raw field timestamps, mapped window endpoints/uncertainty, support/failures, device facts, raw integer energy values, discontinuities and optional power bound/phase label. Unknown capabilities remain explicit.
+- plan_offsets(period_ns: int, duty_fraction: float, repeats: int) -> list[int]
+- estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
+- DutyEstimate(joules: float, half_width_j: float, coverage_fraction: float, flags: tuple[str, ...])
+- CtypesNvml(library: Any | None = None)
+- open_nvml(*, library: Any | None = None, prefer_pynvml: bool = False) -> Any
+- device_inventory(nvml: Any, index: int) -> dict[str, Any]
+- NvmlSampler.start() -> None
+- NvmlSampler.stop() -> tuple[PowerTrace, ...]
+
+Updated constructor (new final parameter):
+
+NvmlSampler(device_indices: Sequence[int] | None = None, *,
+interval_ns: int = 10_000_000, clock_domain: str | None = None,
+nvml: Any | None = None, library: Any | None = None,
+power_bound_w: float | None = None, repeat_group: str | int | None = None,
+clock_ns: Callable[[], int] = time.monotonic_ns,
+wall_clock_ns: Callable[[], int] = time.time_ns,
+stop_timeout_s: float = 5.0, wall_clock_slew_ppm: float = 500.0)
+
+Preflight:
+
+- assess_power_movement(traces: Sequence[PowerTrace], idle_interval: tuple[int, int], load_interval: tuple[int, int], *, false_alarm_rate: float) -> dict[str, Any]
+- run_preflight(*, device_indices=None, idle_seconds=10.0, load_seconds=10.0, recovery_seconds=2.0, interval_ns=10_000_000, load_cmd=None, try_lock_clocks=False, graphics_clock_mhz=None, false_alarm_rate=0.01, matmul_size=2048, command_timeout_s=5.0, nvml=None, library=None) -> dict[str, Any]
+- main(argv: Sequence[str] | None = None) -> int
+
+New/changed output spellings:
+
+- worst_case_bias_j=<repr(float)> carries the separate systematic bound; inf is a string inside the flag. When systematic mismatch/timing area is nonzero, missing B adds worst_case_bias_unbounded and does not itself make the nominal width infinite. Exact zero area needs no bound.
+- durations_differ, duration_spread_ns=<integer>, runs_retained=<integer>.
+- sensor_duty_unknown, sensor_resolution_unknown, invalid_power_samples:<integer>, mixed_channels, mixed_clock_domains.
+- Query notes: query_midpoint_ns and timing_half_width_ns.
+- Sensor notes: window_end_ns (None only for an unknown sample), window_timing_half_width_ns, sample_flags, unknown_sensor_age_bound_ns and wall_clock_slew_ppm. Known window_end_ns entries equal t_ns.
+- Trace flags: sensor_age_unknown and sensor_age_bound_unknown.
+- Cleanup receipt: presence_permission_denied, with optional term_permission_denied/kill_permission_denied text.
 
 ## TESTS RUN
 
-Final executed source: `023c9d29592626e92f8715cd2af3d1f77f2f0f5c`.
-CI: <https://github.com/mpmdw/JouleWise/actions/runs/39709783657>.
-Python 3.13, stdlib-only test jobs; build/fence/wheel jobs also used Python 3.11.
+The selected Cloud environment never became usable: environment_status continued
+to report starting/offline, and every exec_command attempt returned
+"No usable execution environment is available." Both startup waits remained
+pending. Therefore this is an execution-blocked handoff, not an acceptance pass.
 
-Exact commands and outcomes:
-- `python3 scripts/quick_suite.py --tier quick --workers 4`: 212 modules, 179 excluded by the existing quick tier, 0 failures, PASS (152.545 s).
-- `python -m compileall -q joulewise tests`: PASS in all twelve ordinary shards.
-- Ordinary CI jobs execute `python -` with SHARD_COUNT=12 and SHARD_INDEX=1..12. The exact stdin program is the "Unit tests (stdlib core only, per D-009/D-017)" here-doc in the [unchanged workflow](https://github.com/mpmdw/JouleWise/blob/023c9d29592626e92f8715cd2af3d1f77f2f0f5c/.github/workflows/ci.yml). It invokes `shard_tests.run_units(partitions[index - 1], count, index)`, using stdlib unittest loader/runner. It does not invoke the local discovery CLI.
+Required local commands: NOT RUN, zero executed tests, no claimed pass/skip count:
 
-| Lane module | Tests | Failures | Errors | Skips |
-|---|---:|---:|---:|---:|
-| tests.align.test_power_nvml | 17 | 0 | 0 | 1 |
-| tests.align.test_power_duty | 10 | 0 | 0 | 0 |
-| tests.align.test_power_duty_twin | 12 | 0 | 0 | 0 |
-| tests.align.test_power_preflight | 13 | 0 | 0 | 0 |
-| Total | 52 | 0 | 0 | 1 |
+```sh
+python3 -m unittest discover -s tests/align -t .
+python3 -m unittest tests.test_shard_tests
+python3 -m unittest tests.align.test_twin_nvml tests.align.twins.test_nvml_twin_selfcheck -v
+```
 
-The skip is `test_optional_pynvml_uses_the_same_sampler_path`: "optional nvidia-ml-py is not installed; ctypes path is tested". The existing records module's 4 tests also passed, so all 56 alignment tests completed (55 passed, 1 skipped), even though some enclosing repository jobs were later cancelled.
+The first two commands must each run once with external twin files present and
+once without them. Neither variant ran. No whole-repository suite was launched
+from this seat; existing CI is left to perform its configured jobs.
 
-- Completed ordinary-module groups across all final logs: 288 groups, 7,122 tests, 1 failure, 0 errors, 76 skips. These are exact completed-module counters, excluding interrupted modules; they are not a whole-suite pass count. The 76 include the one lane skip and 75 pre-existing-suite skips for unavailable Darwin/live-hardware probes, optional libraries, retained corpora/model mirrors, or registered proof/structural prerequisites. Their literal per-test reasons remain in the linked job logs.
-- Ordinary shard summaries: shard 8 PASS (827 tests, 13 skips), shard 12 PASS (917 tests, 5 skips), shard 2's runner PASS (479 tests, 11 skips, though its enclosing job was cancelled), shard 4 FAIL (843 tests, 1 failure, 9 skips). Other ordinary jobs were cancelled by matrix fail-fast after already executing the lane modules.
-- `python -m unittest -v tests.test_calibration_exits`: 48 tests, PASS, no skips (677.168 s).
-- Crash-matrix exclusive jobs execute `python -` with the exact "Exclusive calibration-writer crash-matrix module" here-doc in the same workflow: 1 + 19 = 20 tests, PASS, no skips.
-- `python -m unittest -v tests.test_docs_freshness`: 31 tests, PASS, no skips, as part of fences. Build (`python -m build`), installed-wheel smoke, state/pin/receipt fences and strict mock CLI flow also passed.
+Reviewer repro commands: all NOT RUN for the same missing-runtime reason:
 
-The full-suite failure is `tests.test_v5_s1_qualification.QualificationSubsetTests.test_delivered_courier_journal_assembles_with_observed_exit_and_timeout`, subtest `still_running=True`. Its existing helper at `tests/test_run_night.py:6572` measured 30.204094708999946 s against its <5 s assertion. Neither that helper, its caller, nor its threshold was changed. Root cause was not established from this seat. Fixing that failure would require work outside WRITE_SCOPE; no green full-suite claim is made.
+```sh
+python3 /workspace/JouleWise/.review1/probe1.py
+python3 /workspace/JouleWise/.review1/probe3_sampler.py
+python3 /workspace/JouleWise/.review1/probe4_channels.py
+python3 /workspace/JouleWise/.review1/probe5_calib.py 400
+python3 /workspace/JouleWise/.review1/probe7_edges.py
+/tmp/nvml-venv/bin/python /workspace/JouleWise/.review1/probe8_pynvml.py
+python3 /workspace/JouleWise/.review1/probe9_metadata_drops.py
+python3 /workspace/JouleWise/.review1/probe10_tns_contract.py
+python3 /workspace/JouleWise/.review1/torchfail.py
+python3 -c "import sys; sys.path.insert(0,'/workspace/JouleWise'); from joulewise.align.power.duty import plan_offsets; print(plan_offsets(100_000_000,0.25,6))"
+```
 
-Earlier CI evidence:
-- Run [39704268162](https://github.com/mpmdw/JouleWise/actions/runs/39704268162) failed the quick-suite shard census because unittest's `align.*` names did not match inventory `tests.align.*`. The sole registry exception corrected that namespace normalization.
-- Run [39705591969](https://github.com/mpmdw/JouleWise/actions/runs/39705591969), source `7fd8641d6dea558b2b0809d78c03bb473e5ace6e`, passed all then-existing 47 lane tests (46 pass, one optional skip), quick/build/fences/wheel and the exclusive jobs. Eleven completed ordinary shards ran 8,567 tests with 1 failure, 0 errors and 118 skips; the same courier helper measured 30.20556086700026 s against <5 s, and fail-fast cancelled shard 10.
+The appendix scripts could not be written into the unavailable workspace.
+The twin branch was read through GitHub, but not materialized locally.
+These setup commands were consequently NOT RUN:
 
-The final branch tip changes only this report after the tested source above; no additional implementation/test run is implied by that report-only commit.
+```sh
+git -C /workspace/JouleWise fetch origin lane/2026-10-21-align-nvml
+git -C /workspace/JouleWise checkout -B lane/2026-10-21-align-nvml origin/lane/2026-10-21-align-nvml
+git -C /workspace/JouleWise fetch origin lane/2026-10-21-align-nvml-twin
+python3 -m venv /tmp/nvml-venv
+/tmp/nvml-venv/bin/pip install nvidia-ml-py==13.615.71
+```
 
-The managed environment never provided a shell (observed revisions 3 through 15 remained pending/starting and offline). Every attempted shell command returned no usable execution environment. These exact required local commands were NOT RUN:
-- `python3 -m unittest discover -s tests/align -t .`
-- `python3 -m unittest discover -s tests`
-- `python3 scripts/fixture_orphan_census.py --fail-on-orphans`
+Extra-dependency run: NOT RUN. There was no shell in which to create the venv
+or install nvidia-ml-py. The guarded optional test now exercises real pynvml
+function bodies with only the native library/function-pointer boundary faked;
+it skips when pynvml is not importable. No optional-test execution is claimed.
+The six-of-six F7 run with one busy loop per CPU is also NOT RUN.
 
-No optional package could be installed from this seat, so the extra-dependent run was NOT RUN. The optional test is guarded with unittest.skipUnless, and the ctypes path executed without extras. No local checkout, local unittest result or real hardware measurement is claimed.
+Static test-method inventory, NOT an execution count: 19 NVML + 13 duty +
+12 existing lane-oracle + 14 preflight = 58 lane tests. No registry change was
+needed because no test module was added.
 
-Draft PR [524](https://github.com/mpmdw/JouleWise/pull/524) targets the spine solely for review/CI. Its gate ledger explicitly leaves executing independent review, current-main integration, final-head green CI and the cold Fable measurement pass NOT-RUN. Static review and independently authored tests are distinguished from those merge gates.
+Observed CI evidence at source d3bae44bbbe47c3f52b379afaa24690d7d72cdf4:
+https://github.com/mpmdw/JouleWise/actions/runs/39719330972
+
+- build PASS: python -m build produced wheel and sdist on Python 3.11.
+- installed-wheel PASS: installation without dependencies and configured CLI/layout smokes.
+- fences PASS, including python -m unittest -v tests.test_docs_freshness: 31 tests, zero failures/errors/skips, 0.818 s.
+- quick had started; no completed quick or lane-unit result was available at report preparation. Subsequent code commits supersede that source.
+- gate-ledger FAIL: rows 1-4 are still explicitly NOT-RUN (independent executing review, integrated-main whole suite, final-head green CI, cold Fable gate). No gate was falsely marked complete.
+
+At implementation source 301ddafa6201908dcc0f6c36abcaf014131b2769,
+CI run 39719804343 passed build, fences, installed-wheel and
+python3 scripts/quick_suite.py --tier quick --workers 4: 212 modules,
+179 excluded, zero failures, PASS in 186.127 s. The four lane modules were
+explicitly excluded for unknown timing weight. Ordinary lane-test shards were
+queued when observed. Subsequent timing-metadata/doc corrections are untested;
+the final report-only commit will obtain its own CI run. No final-head green
+claim is made.
+Final implementation source: dd5fce21e15aab0604cbf4b6584189c4ad64d5d4.
+The final branch commit after it changes only this report.
+
+Tests changed because review findings replace their old rule (not to weaken a bar):
+
+- NVML test_driver_timestamp_mapping_and_declared_repeat_label and test_nonincreasing_clock_is_flagged_without_invented_timestamps: F2 puts sensor ends in t_ns, with query midpoints in notes; F9 adds slew to bounds.
+- NVML test_optional_pynvml_uses_the_same_sampler_path: F4 replaces high-level function substitution with real binding bodies over a C-ABI fake.
+- Duty test_sensor_window_timing_and_call_timing_remain_distinct: F2 makes t_ns authoritative even when notes conflict.
+- Duty test_invalid_and_noncontributing_runs_do_not_change_valid_estimate: F8 keeps missing-resolution runs, so only genuinely unmodelled/noncontributing inputs remain in this zero-contribution check. A new metadata regression asserts retained runs and the required infinite width for unknown resolution.
+- Duty test_missing_coverage_needs_an_explicit_power_bound: F5 removes B from nominal width; it checks the separate unbounded systematic receipt and unidentified phase spread.
+- Existing oracle test_sparse_coverage_with_and_without_explicit_power_bound, test_partial_window_keeps_its_outside_support and test_timing_whole_window_shift_bound: F5 removes worst-case bias from nominal widths; independent rational-grid bias computation remains diagnostic.
+- Existing oracle test_invalid_runs_are_skipped_without_changing_valid_result: F1/F8 no longer authorize the former duration/duty/resolution/sample run-drop cases; the dedicated production regressions now require their retention.
+- Duty test_seed_coverage_matches_declared_nominal_level and preflight test_predictive_criterion_has_its_stated_nominal_false_alarm_rate: N1 replaces one SE with four SE.
+- Preflight test_load_and_no_load_control_use_real_sampler_and_executables: F7 uses fake-clock sensor updates with real worker threads, C pointers, programs and cleanup.
 
 ## END-TO-END
 
-Observed CI world output at `023c9d2` (also reproduced at `7fd8641`):
+No fixed-code world has an observed local output yet. Do not reuse the previous
+report's executed numbers as proof of this head. In particular, new nominal
+half-widths, their deltas, lane-twin joules differences, single-seed misses and
+the calibration runtime remain UNMEASURED until the commands above execute.
 
-| Repeats | Estimate J | Absolute error J | Coverage | Half-width J |
-|---|---:|---:|---:|---:|
-| 1 | 966 | 195 | 0.25 | infinity |
-| 2 | 1144.5 | 16.5 | 0.50 | infinity |
-| 4 | 1161 | 0 | 1 | infinity |
-| 8 | 1161 | 0 | 1 | 0.003 |
-| 16 | 1161 | 0 | 1 | 0.003 |
+Implemented production chains ready for execution:
 
-Infinity records unidentified within-phase repeatability when there is only one replica; it is not a refusal. Single-run error is visibly larger than the repeated estimate's own half-width.
+1. Existing six-turn Episode (4,608 prefill tokens, 240 decode tokens, six
+   tool calls, 6 s, analytic 1,161 J) -> fake C-ABI driver -> real NvmlSampler
+   worker -> contract PowerTrace -> estimate_energy -> Episode JSON round-trip.
+   The previous source's observed 1,160.999993675 J and 0.103839916627 J width
+   are historical. F5 removes the systematic term from the nominal width, so
+   that old width is not the new result.
+2. New one-turn world: 1,500 prompt tokens at about 8k tokens/s (187.500137 ms,
+   350 W), 135 decoded tokens at 45 tokens/s (3 s, 220 W with 15 W/7 Hz ripple
+   in 1 ms steps), then a 483.271299 ms/75 W tool wait, with 55 W idle.
+   Exact prefix integrals feed 25-of-100 ms sensor windows, 0.001 W rounding,
+   2 W Gaussian run shifts and 0.3 W reading noise -> real estimate_energy.
+   Each of four cases uses 400 seeds and 16 replays: aligned; 0-100 us starts;
+   0-2 ms starts; 0-2 ms starts plus +/-300 us durations.
+   The authorized four-SE bar is 4*sqrt(.05*.95/400)=0.0435889894; both zero
+   misses and 400 misses fail. Counts and runtime must be printed by the test.
+3. The preflight load and no-load controls use the real sampler and fake
+   executable processes on PATH. A fake clock advances one 100 ms physical
+   sensor period per driver update; each idle/load phase completes after
+   100 observations (10 s of sensor time), recovery after 20 (2 s).
+   The 250 versus 50 W load contrast is 1000 times the 0.2 W ripple. Wall time
+   is only a deadlock guard, not the phase boundary.
+4. The optional binding world runs real pynvml bodies over FakeNvmlLibrary
+   through start/stop and preflight.main JSON with fake nvidia-smi on PATH.
+5. A one-future-field-timestamp world retains all other mapped endpoints and
+   exercises estimate_energy with a bounded unknown-age sample.
 
-Declared multi-turn world: six 1 s turns, six local tool calls, 4,608 prefill tokens, 240 decode tokens and 48 hidden tokens. Each turn has a 75 ms 320 W prefill, 775 ms decode at 210 W with 20 W ripple, and a 150 ms 45 W tool wait. Exact 25 ms bin integration gives a 1,161 J target. A simulated 25-of-100 ms sensor runs at phase plans for 1/2/4/8/16 repeats through PowerTrace, estimate_energy and Episode JSON round-trip. The printed 0.001 W quantum gives a 0.003 J deterministic full-coverage half-width (6 s times q/2), so the 1% agreement bar is 0.00003 J and exceeds one million float ulps at this energy scale.
+F3 structured field changes, from source inspection (NOT probe4 output):
 
-Coverage calibration is predeclared at seeds 0..999, 64 repeats, independent Gaussian 2 W run shifts, and nominal 95%; the allowed miss-fraction deviation is one binomial standard error sqrt(0.05*0.95/1000). The executed miss count was 52/1,000 = 0.052 against nominal 0.05, within the predeclared standard error 0.006892024376045114. No outcomes were used to select seeds or sample count.
+| Device/channel | Before window ns / duty | After window ns / duty | Output span ns |
+|---|---|---|---|
+| A100 power_average | 25,000,000 / .25 | 1,000,000,000 / None | 1,000,000,000 |
+| H100 power_usage | 25,000,000 / .25 | 1,000,000,000 / None | 1,000,000,000 |
+| H100 power_average | 25,000,000 / .25 | 1,000,000,000 / None | 1,000,000,000 |
 
-The driver-connected variant ran the same waveform through real ctypes pointers, actual worker threads, monotonic call brackets, mapped driver timestamps, estimate_energy and Episode JSON round-trip. Eight runs retained 60 instantaneous samples each (480 observations). It returned 1160.999993675 J against 1161 J: absolute error approximately 0.000006325 J, half-width 0.10383991662699932 J and coverage 0.9999999916666666. The synthetic 100 ns clock-call increments and full driver microsecond rounding bound yield 1,050 ns window-timing bounds. The tiny uncovered boundary is retained, not rounded away. Re-estimating the serialized Episode reproduced the result bit-for-bit.
+Each span increases by 975,000,000 ns (=1 s - 25 ms). Instant channels retain
+25 ms/.25. A100 legacy remains 25 ms/.25; L4 and A10G structured window/duty
+remain None; energy fields remain None. Sample counts and actual probe output
+are unavailable. The four-device regression checks these same rows.
 
-Preflight worlds executed actual fake nvidia-smi/load programs on PATH through the production ctypes sampler and process-cleanup paths: 50 W idle, 250 W load, 0.2 W ripple and 5 ms polling. The retained instant channel had 5 idle and 3 load readings; its fake-sensor/thinning phase yielded idle mean 49.8 W, sigma 0 W and threshold 49.801 W. Load peak 249.8 W gave measurement_ready=True; the 49.8 W no-movement control gave False. A separate 1,000-seed Gaussian idle world (0.5 W sigma, 64 idle readings and one held-out reading) exercised nonzero-noise predictive thresholds: 54/1,000 = 0.054 exceeded against nominal 0.05, within binomial SE 0.006892024376045111. Seeds and counts were fixed before results.
+Probe7 whole before/after output: NOT AVAILABLE. The brief supplied the script,
+not its complete output; no interpreter could produce either run here.
+Probe1/3/10 single-world interval checks likewise remain unexecuted. F5 may
+leave deterministic waveform bias outside the nominal repeatability interval;
+the separate systematic receipt must be printed beside any such miss, and the
+required calibration must execute without retuning to those seeds.
 
-The independent oracle was authored by GPT-6-astra without viewing production duty.py. Commits `1e454773786b7de6882cbabb9ae2d35f2b24595c` and `22d85e54b54653f0a5ac8a142b128df660321a8b` preserve its authorship. It enumerates a rational interval grid rather than production's event sweep and independently inverts Student-t. It checks complete/sparse/overhanging windows, timing, unequal replica weights, 16 mixed seeded worlds and an analytic jitter fixture.
+The older 1,000-seed tests use alpha=.05 and now four SE:
+4*sqrt(.05*.95/1000)=0.0275680975 < .05. Thus neither a criterion that never
+fires nor one that always fires passes. The prior 52/1000 duty and 54/1000
+preflight counts are historical; no fresh counts are claimed.
 
 ## DECISIONS I MADE
 
-- Selected this explicitly assigned synthetic-only lane over unrelated queue work; scope overrides general repository bookkeeping. ACTIVE_STOP_CARD was NONE. No RUN_STATE/TASK_QUEUE/kernel or shared-contract edits were made.
-- Created the lane from the exact spine ref after confirming no earlier lane head existed. Preserved early work through GitHub commits while the local runtime was unavailable; every branch update was a fast-forward with no force.
-- Kept four separate channels per device: legacy power, field 186 instant, field 185 average, cumulative energy. Unsupported channels retain empty explanatory traces.
-- Used ctypes by default and lazy optional pynvml fallback/explicit selection. ABI details were checked against NVIDIA's public go-nvml nvml.h.
-- Restricted the supplied 25-of-100 ms assumption to A100/Ampere and H100/Hopper model matches, citing the shared records contract. Unknown architectures/models receive no guessed window/duty.
-- Retained one-second legacy/field output averages but flagged them as not a single physical slice; the estimator does not use that incompatible window model.
-- Kept query midpoint/bracket in the record, and separately mapped driver Unix-microsecond timestamps with a bracketed local wall-clock read. A full microsecond covers unspecified driver rounding. The physical window-end meaning remains a stated hardware assumption.
-- Preserved exact raw mJ integers and flagged all counter decreases. The half-uint64-range criterion identifies a shortest-modular-increment wrap candidate; it does not silently join a reset.
-- Cycled a minimal ceil(1/d) phase tiling to obtain actual replicas. Actual observed endpoints are never rounded to make replicas.
-- Used exact Fraction geometry for coverage and kernel mismatch, and a linear sum of quantum, systematic/timing and repeatability half-widths. Missing bounds or unidentified spread produce infinity plus flags.
-- Required a caller-justified instantaneous bound when coverage, smoothing or timing needs it. An enforced average power limit is not automatically that bound.
-- Used a declared 95% Gaussian-run-shift Welch interval. Planned repeat_group labels use normalized auxiliary weights and center-distance widening; varying geometry is explicitly provisional.
-- Rejected malformed/noncontributing runs with flags without allowing them to set another run's duration or uncertainty state.
-- Preflight refuses confirmed vGPU/MIG slices. Unknown isolation evidence and parent MIG mode remain flags; whole-device passthrough is allowed.
-- Derived the movement threshold from idle sigma, one quantum, predictive Student-t and Bonferroni alpha allocation. Retained support must fit inside the idle/load phase, and readiness requires movement for every selected board.
-- Clock locking is opt-in, using an explicit or advertised frequency. -rgc means driver defaults, not restoration of an unobservable prior lock; this policy is recorded.
-- Made samplers reusable across episode start/stop cycles with fresh immutable traces. A still-active old worker/cleanup owner produces flagged empty traces, preserving the old stop event so no old worker is revived. Balanced native ownership is tested through worker-start and cleanup-owner-start failure.
-- Preflight inspects actual live workers when cleanup-owner creation fails. It transfers outstanding native references to one finalizer, or explicitly retains them if no cleanup owner can start; it never shuts NVML down under a blocked call.
-- Owned load groups are terminated even after leader exit, with SIGKILL escalation. Optional CUDA runs in a killable subprocess with atomic readiness publication. Native NVML shutdown waits for outstanding calls.
-- Opened draft PR 524 against the spine solely to obtain existing CI execution; it remains unmerged and is not a main-branch merge request.
-- Applied the sole registry exception to the shard census's new align namespace. No timing or acceptance thresholds were loosened.
-- Independent static reviews found architecture-data loss, load-child leakage, unkillable CUDA threads, shutdown races, excess virtual-mode refusal, timing attribution, invalid-run contamination and readiness/fixture races; the corresponding bounded fixes/regressions were applied. A fresh read-only reviews of NVML commit `3b54f87147cb46ccaad3aa10cb46310e2eca0ee9` and preflight commit `dc530c51762ab2f8eb676c4b366d8ba4b08a1bfa` found no further defects in their bounded lifecycle deltas. Reviewer execution was not claimed.
+- Continued from the exact existing 95a37eef8 lane head, not the spine. Read its
+  report first, followed by governing contracts and NVIDIA parser. ACTIVE_STOP_CARD
+  was NONE. Exhaustive delegated scope overrides lead-owned queue/state edits.
+- The shell never started, so used connected GitHub reads and fast-forward
+  tree/commit/ref operations with an expected-head lease. No force push, main
+  update, local checkout, staging or local test run is implied.
+- F1: retain every contributing run on [0,max D_r], clip windows individually,
+  and include duration variation in the normalized phase run-to-run variance:
+  multiply a run's weighted mean by D_r/mean(D_g). This avoids an arbitrary
+  instantaneous bound dominating nominal width.
+- Exact phase-grid grouping ignores terminal sample count, so measured duration
+  differences do not destroy replicas. Jittered planned phases use explicit
+  repeat_group labels; no endpoints are rounded to merge phases.
+- F2: the code's PowerTrace contract wins over the earlier midpoint behavior.
+  Unknown-age samples use a flagged query-time proxy; the known period plus
+  polling interval supplies its stated age bound.
+- F3: represent the one-second output span and set duty=None because ten
+  disjoint slices cannot be represented as one physical duty window.
+- F4: recursively normalize native integer/tuple scalars and replace only the
+  native boundary in the optional test. Keep FakeNvmlLibrary constructor
+  architecture/name parameters and _put helper; accept real c_uint/c_int inputs.
+- F5: chose the explicitly authorized separate-bias option. Keep a nominal
+  Gaussian/Welch repeatability interval plus quantum and auxiliary-center
+  widening; report the worst-case kernel/timing bound only as
+  worst_case_bias_j=<value>. Missing power_bound_w cannot alone cause infinity.
+  This is conditional repeatability, not sensor accuracy or guaranteed waveform
+  bias coverage; its calibration remains a required open verification gate.
+- F6: EPERM means potentially present; reap the leader, retain presence/signal
+  receipts, and preserve surviving-group evidence.
+- F7: choose observation-driven fake clock phases rather than extending short
+  wall-clock sleeps. Processes and production sampler paths still execute.
+- F8: unknown resolution changes uncertainty only; missing duty does not enter
+  energy computation. Malformed timing metadata also keeps the energy and makes
+  its unidentified uncertainty infinite, rather than dropping the run. Drop/count individual invalid readings and flag mixed
+  channels/clocks without refusing the result.
+- F9: expose wall_clock_slew_ppm, default 500 ppm from Linux adjtimex MAXFREQ.
+  Add ceil(age_bound_ns*ppm/1e6) to the mapping bracket plus full 1 us quantum.
+  A bad field timestamp invalidates only its own endpoint.
+- F10: reject a model-free finite four-run interval. Eight runs provide two
+  replicas for each of four phases; the runbook states the cost and what
+  external repeatability information a four-run method would need.
+- N1: use four binomial SE. S=400 and S=1000 both exceed 304 for alpha=.05, so
+  m=0 fails; m=S also fails. No seeds or thresholds were selected from results.
+- N2-N4: use the lead's 1%-of-width joules bar, 1e-6-relative width bar and
+  1e-6-absolute coverage bar below one.
+- N5: 400 W is a synthetic diagnostic parameter above the deterministic 320 W
+  peak, not a proven bound on unbounded Gaussian shifts and not a nominal term.
+- N6: default 10 s idle/load contains 100 sensor or ten output-average periods;
+  2 s recovery contains two output-average periods. Retained counts determine
+  whether the predictive criterion is estimable.
+- An automatic approval review initially confused the existing
+  test_power_duty_twin.py with fetched external twin files. Supplied the
+  explicit N2-N4 instructions and base-file evidence; the subsequent commit
+  was approved. No unresolved automatic-review rejection remains.
 
 ## CONTRACT-CHANGE
 
-Request structured per-sample timing/flags/sensor-support metadata and separate query versus sensor-window endpoints in PowerTrace. Also request a representation of noncontiguous slices combined into a one-second NVML output average. The existing contract's slice assumption alone cannot describe that output. The lane uses JSON notes and explicit incompatible-output flags as its adapter; PIPELINE.md, records.py and interfaces.py remain byte-unchanged.
+No change needed to make t_ns obey the existing contract. Optional future
+improvement: structured per-sample endpoint uncertainty/flags and a representation
+of noncontiguous slices combined into a one-second output average. Current
+JSON notes and output_average_not_single_window remain the lane-local adapter.
+The three protected files were not edited.
 
 ## OPEN ISSUES
 
-- Local required commands, optional-package execution and fixture census are blocked by Cloud startup; CI execution is distinguished above.
-- Whole-repository CI remains red at the existing courier timeout assertion in `tests/test_run_night.py:6572`, called by `tests/test_v5_s1_qualification.py:132`. A follow-up there is outside this lane's WRITE_SCOPE; failure and cancelled coverage are retained above.
-- No real NVIDIA hardware, sensor age semantics, Gaussian idle assumptions, sensor accuracy or actual 25-of-100 ms behavior has been validated.
-- Declared-phase jitter uncertainty is approximate/provisional; independent arithmetic agreement does not establish hardware calibration.
-- Clock reset-to-default semantics are explicit; prior clock-lock policy cannot be queried/restored by the chosen NVML subset.
-- If both cleanup-owner threads cannot start, native references remain until process exit, explicitly flagged; no shutdown races an active native call.
-- Raw energy integers preserve precision near uint64 wrap that cumulative float joules cannot retain.
-- Draft PR merge gates (main integration, executing independent review and cold Fable claim/measurement review) remain explicitly NOT-RUN. No merge-readiness claim is made.
+- Acceptance is INCOMPLETE. All required local repros, paired discovery/shard
+  runs, optional nvidia-ml-py run, twin agreement and six loaded F7 repeats
+  remain blocked by unavailable Cloud runtime. F1-F9/N1-N6 dispositions below
+  describe implemented fixes, not passing repros.
+- F5's four-case 400-seed test and probe5 400 must run before calling the
+  statistical change calibrated. No miss count, runtime or new width is
+  invented. Report single-world misses beside calibration rather than tuning.
+- The external twin was read, not fetched into a working tree. The following
+  decorator-only diff is ready for the lead/local copy; it is not an executed
+  twin-test result. Existing resolution and one-phase spread identities are
+  unchanged by separating bias, so no other twin test change is proposed
+  absent actual failures.
+- F10: a finite four-replay interval requires an external within-phase
+  repeatability/noise model. Eight replays cost four extra workload durations
+  over four; at the reviewer's printed 26.7 s duration this is about 106.8 s
+  (=4*26.7 s) additional workload time, plus acquisition rolls/offset waits.
+- No real sensor timestamp semantics, duty behavior, calibration accuracy,
+  Gaussian model, GPU isolation or load response has been hardware-validated.
+- Existing draft PR merge gates remain open. The prior report's unrelated
+  courier timeout is historical, not a result of running the current suite.
+
+Twin-test diff (external files deliberately not committed):
+
+```diff
+--- a/tests/align/test_twin_nvml.py
++++ b/tests/align/test_twin_nvml.py
+@@ -247,7 +247,6 @@ class TwinAgreementTests(unittest.TestCase):
+                 self.assertLessEqual(abs(a.joules - b.joules), joules_bar(a, b))
+ 
+-    @unittest.expectedFailure
+     def test_jittered_durations_keep_every_run(self) -> None:
+         # Review finding: the lane drops every run whose measured duration
+         # differs from the first by any nanosecond ("duration_mismatch"), so a
+         # real replay set (durations jitter by microseconds) keeps one run.
+```
 
 ## NEEDS_RULING
 
 none
 
-## FIX ROUND 1 IN PROGRESS
+## FIX LOG
 
-The managed Cloud shell is still starting and unavailable. Read the lane report,
-shared contracts and NVIDIA parser through the connected GitHub plugin; changes
-are fast-forward GitHub commits on the existing lane. Local checkout, reviewer
-probes and optional package installation remain pending runtime availability.
+"Fixed" below means the implementation is committed. Execution-based acceptance
+is still blocked and is not claimed complete.
 
-First scoped fix normalizes ctypes scalar results and replaces the optional
-pynvml test's high-level mocks with a C-ABI resolver, exercising real pynvml
-function bodies through sampler and preflight CLI JSON serialization.
-
-Second scoped fix makes mapped window ends the structured timestamps, retains
-query midpoint/bracket notes, gives output-average channels the one-second span
-and unknown duty, and bounds wall-clock slew over measured sensor age. A bad field
-timestamp now affects only its own endpoint and gets a period-plus-poll age bound.
-F4 implementation commit: c05dfd6f2796a76689cee70210d994ad8ffc6424.
-
-Third scoped fix retains durations, clips each window to its own run, reads the
-shared t_ns field, and keeps resolution/duty/sample metadata conditions as flags.
-The nominal width now separates systematic worst-case bias into
-worst_case_bias_j=<value>; a missing physical bound cannot make it infinite.
-Added 400-seed/16-replay calibration for aligned, 100 us jitter, 2 ms jitter and
-2 ms plus +/-300 us duration jitter, with 2 W run shifts and .3 W reading noise.
-F2/F3/F9 implementation commit: 8e4f06316030214a6df2df9725c389eceeb71082.
-
-Fourth scoped fix handles zombie-group EPERM with a cleanup receipt and makes
-preflight defaults 10 s idle/10 s load/2 s recovery with sample-count derivations.
-The load/no-load regression now completes phases from fake-clock driver update
-counts while retaining real ctypes sampling, real executables and owned cleanup.
-F1/F5/F8/N2/N3/N4/N5 implementation commit: 1813efd72be981d354520c3f9cfeb0d33737ac73.
+F1 fixed with 1813efd72be981d354520c3f9cfeb0d33737ac73 and 301ddafa6201908dcc0f6c36abcaf014131b2769; all durations contribute and duration spread enters phase variance.
+F2 fixed with 8e4f06316030214a6df2df9725c389eceeb71082; known sensor window ends populate t_ns and query timing stays in notes.
+F3 fixed with 8e4f06316030214a6df2df9725c389eceeb71082; known output averages use a 1 s span and unknown duty.
+F4 fixed with c05dfd6f2796a76689cee70210d994ad8ffc6424 and 301ddafa6201908dcc0f6c36abcaf014131b2769; normalize native scalars and exercise real pynvml bodies over a C-ABI fake.
+F5 fixed with 1813efd72be981d354520c3f9cfeb0d33737ac73 and 301ddafa6201908dcc0f6c36abcaf014131b2769; separate worst_case_bias_j from nominal width; calibration execution remains blocked.
+F6 fixed with 4244d060836ccfdcb6f47209ab4df00e5f3fab71; EPERM presence probes retain a cleanup receipt and reap the leader.
+F7 fixed with 4244d060836ccfdcb6f47209ab4df00e5f3fab71 and cd377d6d2363ec0aae7a21f196b983c062a93a47; drive the real sampler/executable test phases by fake-clock update counts.
+F8 fixed with 1813efd72be981d354520c3f9cfeb0d33737ac73 and dd5fce21e15aab0604cbf4b6584189c4ad64d5d4; retain metadata-flagged runs, omit invalid samples individually, and flag mixed channels/clocks.
+F9 fixed with 8e4f06316030214a6df2df9725c389eceeb71082; parameterize slew and retain each unaffected sample's mapped endpoint.
+F10 rejected; one run per phase cannot identify within-phase replay variation without an external noise model; retain the documented eight-replay minimum.
+N1 fixed with 1813efd72be981d354520c3f9cfeb0d33737ac73 and 4244d060836ccfdcb6f47209ab4df00e5f3fab71; use four binomial SE and seed counts that reject never/always firing.
+N2 fixed with 1813efd72be981d354520c3f9cfeb0d33737ac73; joules agreement uses 1% of the smallest printed half-width.
+N3 fixed with 1813efd72be981d354520c3f9cfeb0d33737ac73; half-width agreement uses 1e-6 relative.
+N4 fixed with 1813efd72be981d354520c3f9cfeb0d33737ac73; coverage below one uses 1e-6 absolute.
+N5 fixed with 1813efd72be981d354520c3f9cfeb0d33737ac73; explain the synthetic bound and its exclusion from nominal width.
+N6 fixed with 4244d060836ccfdcb6f47209ab4df00e5f3fab71; defaults match the runbook's derived 10 s idle, 10 s load and 2 s recovery.
