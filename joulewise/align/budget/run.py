@@ -144,10 +144,10 @@ class Summary:
     labeled_trials: int
     scored_trials: int
     accuracy: Rate
-    mean_reasoning_tokens: float
-    mean_answer_tokens: float
-    mean_visible_reasoning_tokens: float
-    mean_decode_tokens: float
+    mean_reasoning_tokens: float | None
+    mean_answer_tokens: float | None
+    mean_visible_reasoning_tokens: float | None
+    mean_decode_tokens: float | None
     catch_rate: Rate
     false_flag_rate: Rate
     mean_joules: float | None
@@ -594,10 +594,10 @@ def summarize(trials: Sequence[BudgetTrial], *, confidence: float = 0.95,
             model, size, attention, condition, configuration_id, n,
             sum(t.hint_use.uses_hint is not None for t in group),
             len(positive) + len(negative), accuracy,
-            math.fsum(t.reasoning_tokens for t in group) / (n or 1),
-            math.fsum(t.answer_tokens for t in group) / (n or 1),
-            math.fsum(t.visible_reasoning_tokens for t in group) / (n or 1),
-            math.fsum(t.episode.totals()["decode_tokens"] for t in group) / (n or 1),
+            math.fsum(t.reasoning_tokens for t in group) / n if n else None,
+            math.fsum(t.answer_tokens for t in group) / n if n else None,
+            math.fsum(t.visible_reasoning_tokens for t in group) / n if n else None,
+            math.fsum(t.episode.totals()["decode_tokens"] for t in group) / n if n else None,
             catch, false,
             math.fsum(e.joules for e in available) / len(available) if available else None,
             max(e.uncertainty_j for e in available)
@@ -619,6 +619,8 @@ def summary_table(rows: Sequence[Summary]) -> str:
             return ""
         return (f"{value.estimate:.3f} [{value.interval[0]:.3f}, {value.interval[1]:.3f}] "
                 f"{value.successes}/{value.trials}")
+    def mean(value: float | None) -> str:
+        return "" if value is None else f"{value:.1f}"
     lines = ["| Model | B | Condition | Seed | n/scored | Reasoning tokens | Answer tokens | Visible tokens | Decode tokens | Accuracy (Wilson) | Catch (Wilson) | False flag (Wilson) | J | Missing monitor/J; excluded | Span count | Flags (trials) |",
              "|---|---:|---|---:|---:|---:|---:|---:|---:|---|---|---|---:|---|---:|---|"]
     for r in rows:
@@ -629,8 +631,8 @@ def summary_table(rows: Sequence[Summary]) -> str:
         spans = getattr(condition, "deletion_span_count", "")
         counted = ", ".join(f"{f}:{r.flag_counts[f]}" if f in r.flag_counts else f for f in r.flags)
         lines.append(f"| {r.model} | {r.size_b:g} | {r.condition} | {r.seed} | {r.trials}/{r.scored_trials} | "
-                     f"{r.mean_reasoning_tokens:.1f} | {r.mean_answer_tokens:.1f} | {r.mean_visible_reasoning_tokens:.1f} | "
-                     f"{r.mean_decode_tokens:.1f} | {rate(r.accuracy)} | {rate(r.catch_rate)} | {rate(r.false_flag_rate)} | "
+                     f"{mean(r.mean_reasoning_tokens)} | {mean(r.mean_answer_tokens)} | {mean(r.mean_visible_reasoning_tokens)} | "
+                     f"{mean(r.mean_decode_tokens)} | {rate(r.accuracy)} | {rate(r.catch_rate)} | {rate(r.false_flag_rate)} | "
                      f"{joules} | {r.missing_monitor_verdicts}/{r.missing_energies}; {r.excluded_trials} | {spans} | {counted} |")
     lines.append("")
     lines.append("J half-widths are maximum available per-trial quantization, bracket-edge interpolation, clock and averaging bounds, conditional on piecewise-linear interior power and a recorded power maximum. They are not confidence intervals on the mean or sensor-accuracy bounds. An absent half-width means an unknown/unbounded term, including duty-cycle gaps; missing trials are counted. Seeds have separate Wilson rows; repeated items are never pooled as independent.")
