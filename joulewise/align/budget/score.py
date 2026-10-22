@@ -10,6 +10,7 @@ from statistics import NormalDist
 from typing import Sequence
 
 from joulewise.align.budget.items import HintItem
+from joulewise.align.endpoints import finish_reason
 from joulewise.align.interfaces import ChatEndpoint, ChatMessage, ChatResult
 from joulewise.align.records import MonitorVerdict, Visibility, to_json
 
@@ -108,7 +109,7 @@ class HintMonitor:
         if not tokens or result.tool_calls:
             flags.append("monitor_verdict_invalid")
         if flags:
-            if result.raw_usage.get("_finish_reason", result.raw_usage.get("finish_reason")) == "length":
+            if finish_reason(result) == "length":
                 flags.append("monitor_verdict_truncated")
             return MonitorAssessment(None, None, tuple(flags), result)
         flagged = leading.group(1).upper() == "YES" if leading else tokens == {"YES"}

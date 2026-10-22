@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Coroutine, Mapping, Sequence
 
-from joulewise.align.endpoints import _coalesce_assistant_calls
+from joulewise.align.endpoints import _coalesce_assistant_calls, finish_reason
 from joulewise.align.interfaces import ChatEndpoint, ChatMessage
 from joulewise.align.shade.upstream import PinnedUpstream
 
@@ -115,7 +115,9 @@ class _Judge:
         if self.endpoint is None:
             self.flags.append("llm_judge_endpoint_missing")
             raise RuntimeError("judge endpoint unavailable")
-        self.flags.append("llm_judge:" + self.endpoint.identity)
+        identity_flag = "llm_judge:" + self.endpoint.identity
+        if identity_flag not in self.flags:
+            self.flags.append(identity_flag)
         converted = [ChatMessage(m["role"], m.get("content") or "", m.get("name"),
                                  m.get("tool_call_id")) for m in messages]
         # Endpoints are synchronous; upstream calendar gathers four judge calls.
@@ -124,13 +126,14 @@ class _Judge:
                                     temperature=self.temperature, seed=self.seed)
         diagnostics = result.raw_usage.get("joulewise", {})
         call_flags = list(diagnostics.get("flags", ()))
-        if diagnostics.get("finish_reason") == "length":
+        if finish_reason(result) == "length":
             call_flags.append("judge_generation_cap_reached")
         self.calls.append({"endpoint": self.endpoint.identity,
-                           "finish_reason": diagnostics.get("finish_reason"),
+                           "finish_reason": finish_reason(result),
                            "flags": list(dict.fromkeys(call_flags)), "content": result.content})
         self.flags.extend(call_flags)
-        self.flags.append("judge_reply_text_adapter")
+        if "judge_reply_text_adapter" not in self.flags:
+            self.flags.append("judge_reply_text_adapter")
         return _JudgeReply([{"role": "assistant", "content": result.content}])
 
 
@@ -176,16 +179,16 @@ class ShadeTask:
         self._schema = ()
         self._tool_history.clear()
         name = self.task_pair.removeprefix("shade/")
-        if not name.isidentifier():
-            self.flags.append("unknown_task_pair")
-            return
         try:
+            if not name.isidentifier():
+                self.flags.append("unknown_task_pair")
+                raise ValueError("invalid task pair")
             with self.upstream.activate() as root:
                 if root is None:
-                    return
+                    raise RuntimeError("pinned task source unavailable")
                 if self.task_pair not in list_task_pairs(self.upstream):
                     self.flags.append("unknown_task_pair")
-                    return
+                    raise ValueError("unknown task pair")
                 importlib.import_module("utils.path_utils").set_project_root(root)
                 definition_module = importlib.import_module(f"task_pairs.{name}.task_definition")
                 runtime_module = importlib.import_module("utils.functions_runtime")
@@ -210,12 +213,14 @@ class ShadeTask:
             self._definition = self._runtime = self._evaluation = None
             self._schema = ()
             self.flags.append("task_load_error:" + type(exc).__name__)
+            raise
         finally:
             self._source_flags()
 
     def _ready(self) -> bool:
         if self._definition is None:
-            self.flags.append("task_not_ready")
+            if "task_not_ready" not in self.flags:
+                self.flags.append("task_not_ready")
             return False
         return True
 
@@ -266,7 +271,8 @@ class ShadeTask:
                 self.flags.append(flag)
             return {}, False
         if not isinstance(arguments, dict):
-            self.flags.append("tool_arguments_not_object")
+            if "tool_arguments_not_object" not in self.flags:
+                self.flags.append("tool_arguments_not_object")
             return {}, False
         return arguments, True
 
@@ -355,10 +361,16 @@ class ShadeTask:
                 # flag it so the zero is distinguishable from an actual failure.
                 if (self.task_pair in {
                         "shade/api_key_calendar_agendas_2", "shade/expenditure_accounting"}
-                        and isinstance(result, str)
-                        and re.search(r"<score>.*?</score>", result,
-                                      flags=re.IGNORECASE | re.DOTALL) is None):
-                    self.flags.append("judge_score_tag_missing")
+                        and isinstance(result, str)):
+                    tag = re.search(r"<score>(.*?)</score>", result,
+                                    flags=re.IGNORECASE | re.DOTALL)
+                    if tag is None:
+                        self.flags.append("judge_score_tag_missing")
+                    else:
+                        try:
+                            float(tag.group(1))
+                        except ValueError:
+                            self.flags.append("judge_score_unparseable")
                 # Run the pinned normalizers with single-row apply/assignment
                 # and scalar comparisons. AA2 uses >; the others use >=.
                 # All comparisons are provided so the adapter matches that API.

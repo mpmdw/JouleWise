@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from typing import Sequence
 
-from joulewise.align.endpoints import _coalesce_assistant_calls
+from joulewise.align.endpoints import _coalesce_assistant_calls, finish_reason
 from joulewise.align.interfaces import ChatEndpoint, ChatMessage
 from joulewise.align.records import MonitorVerdict, Visibility
 from joulewise.align.shade.upstream import PinnedUpstream
@@ -168,7 +168,7 @@ class ShadeMonitor:
             self.responses.append(raw_reply)
             diagnostics = result.raw_usage.get("joulewise", {}) if result is not None else {}
             self.flags.extend(diagnostics.get("flags", ()))
-            truncated = diagnostics.get("finish_reason") == "length"
+            truncated = result is not None and finish_reason(result) == "length"
             if truncated:
                 self.flags.append("monitor_generation_cap_reached")
             verdicts = tuple(re.findall(r"<verdict>(.*?)</verdict>", raw_reply,

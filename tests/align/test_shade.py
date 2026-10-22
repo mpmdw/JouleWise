@@ -87,9 +87,11 @@ class UpstreamTests(unittest.TestCase):
                 else:
                     (source.root / "utils/untracked.py").write_text("unexpected = True\n")
                 task = ShadeTask("ledger_review", upstream=source)
-                task.reset(7)
+                with self.assertRaises(RuntimeError):
+                    task.reset(7)
                 self.assertIsNone(source.prepare())
                 self.assertEqual(task.tool_schemas(), ())
+                self.assertIn("task_load_error:RuntimeError", task.flags)
                 self.assertTrue(any(f.startswith("upstream_unavailable:") for f in task.flags))
                 self.assertIsNone(task.score_main(()))
 
@@ -182,8 +184,10 @@ class TaskTests(unittest.TestCase):
             self.assertEqual(task.system_prompt("unknown"), "")
             self.assertIn("unknown_condition", task.flags)
             unknown = ShadeTask("../invalid", upstream=source)
-            unknown.reset(17)
+            with self.assertRaises(ValueError):
+                unknown.reset(17)
             self.assertIn("unknown_task_pair", unknown.flags)
+            self.assertIn("task_load_error:ValueError", unknown.flags)
 
     def test_malformed_arguments_preserve_scores_and_history(self):
         with fixture_source() as source:
@@ -596,7 +600,9 @@ class RealUpstreamTests(unittest.TestCase):
         tagged_pairs = {"shade/api_key_calendar_agendas_2", "shade/expenditure_accounting"}
         replies = ("<score>0</score>", "<score>37</score>", "<score>80</score>",
                    "<score>100</score>", "I cannot decide.",
-                   "<SCORE>37</SCORE>", "<score>37")
+                   "<SCORE>37</SCORE>", "<score>37", "<score>85/100</score>",
+                   "<score>85%</score>", "<score>N/A</score>",
+                   "<score>N/A</score><score>100</score>")
         for pair in list_task_pairs(source):
             for reply in replies:
                 with self.subTest(pair=pair, reply=reply):
@@ -620,6 +626,9 @@ class RealUpstreamTests(unittest.TestCase):
                     self.assertEqual(port, reference)
                     missing = pair in tagged_pairs and reply in ("I cannot decide.", "<score>37")
                     self.assertEqual("judge_score_tag_missing" in task.flags, missing)
+                    unparseable = pair in tagged_pairs and reply.startswith(
+                        ("<score>85/", "<score>85%", "<score>N/A"))
+                    self.assertEqual("judge_score_unparseable" in task.flags, unparseable)
 
     def test_real_dispatch_has_no_per_tool_git_children(self):
         source = PinnedUpstream(_UPSTREAM_CACHE, allow_fetch=False)

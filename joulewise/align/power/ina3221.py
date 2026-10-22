@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from joulewise.align.records import PowerTrace
+from joulewise.align.records import ClockMapping, PowerTrace
 from joulewise.align.sensor_sim import _mean_period_ns
 
 
@@ -97,6 +97,7 @@ class Ina3221Sampler:
         self.settling_time_ns = settling_time_ns
         self._timing_metadata: dict[str, dict] = {}
         self.clock_domain = clock_domain
+        self.clock_mappings: tuple[ClockMapping, ...] = ()
         self._clock = clock
         self._read = read_text or (lambda path: path.read_text(encoding="utf-8").strip())
         self.flags: list[str] = []

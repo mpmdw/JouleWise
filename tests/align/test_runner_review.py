@@ -34,7 +34,8 @@ class ReviewProbeTests(unittest.TestCase):
                 self.assertEqual(episode.flags, ())
                 clock = VirtualClock()
                 task = InboxTask(episode.task_pair, clock=clock)
-                endpoint = ScriptedEndpoint(clock=clock, condition=episode.condition)
+                endpoint = ScriptedEndpoint(clock=clock, condition=episode.condition,
+                                            task_pair=episode.task_pair)
                 sampler = SyntheticPowerSampler(clock=clock, seed=episode.seed,
                     interval_ns=100_000_000, averaging_window_ns=100_000_000,
                     noise_watts=0.0, quantum_watts=0.0)

@@ -38,10 +38,9 @@ comparison is made on the quantity both readings define:
   coverage (twin = 2 * lane, q against q/2) and the spread term on a d = 1
   sensor where both reduce to t(0.975, n-1) * D * stdev(run mean power) / sqrt(n).
 
-One lane defect found by review 3 is recorded as an expected failure, so the
-file flags itself when the lane is fixed: the boundary bound is computed from
-25 ms window averages and does not contain a deterministic replay whose first
-8 ms is a burst (hand-computed in test_boundary_bound_contains_a_sub_window_start_burst).
+The fixed estimator deconvolves outside idle baselines before pooling. Shared
+twin centers use boundary_uncorrected_joules; corrected centers are checked
+against an independent direct-grid reference in test_power_boundary_fixround.
 """
 
 from __future__ import annotations
@@ -256,7 +255,7 @@ class TwinAgreementTests(unittest.TestCase):
             context = (seed, a, b)
             self.assertEqual(b.coverage_fraction, 1.0, context)  # world design: phases tile exactly
             self.assertLessEqual(abs(a.coverage_fraction - b.coverage_fraction), coverage_bar(b.coverage_fraction), context)
-            self.assertLessEqual(abs(a.joules - b.joules), joules_bar(a, b), context)
+            self.assertLessEqual(abs(flag_value(a.flags, "boundary_uncorrected_joules") - b.joules), joules_bar(a, b), context)
 
     def test_pooled_integral_agrees_with_dispatch_jitter_and_a_late_sampler(self) -> None:
         """Partial coverage, equal durations: lane_joules * coverage is the twin's covered integral."""
@@ -268,7 +267,7 @@ class TwinAgreementTests(unittest.TestCase):
             context = (seed, a, b)
             partial += b.coverage_fraction < 1.0
             self.assertLessEqual(abs(a.coverage_fraction - b.coverage_fraction), coverage_bar(b.coverage_fraction), context)
-            self.assertLessEqual(abs(a.joules * a.coverage_fraction - b.joules), joules_bar(a, b), context)
+            self.assertLessEqual(abs(flag_value(a.flags, "boundary_uncorrected_joules") * a.coverage_fraction - b.joules), joules_bar(a, b), context)
         # World design: jitter or lateness leaves gaps in most worlds (overlapping jitter can still tile).
         self.assertGreater(partial, SEEDS // 2)
 
@@ -280,7 +279,7 @@ class TwinAgreementTests(unittest.TestCase):
             integral, covered, mean_duration = active_weighted_reference(runs)
             context = (seed, a, b, integral, covered, mean_duration)
             self.assertLessEqual(abs(a.coverage_fraction - covered / mean_duration), coverage_bar(covered / mean_duration), context)
-            self.assertLessEqual(abs(a.joules - integral * mean_duration / covered), joules_bar(a, b), context)
+            self.assertLessEqual(abs(flag_value(a.flags, "boundary_uncorrected_joules") - integral * mean_duration / covered), joules_bar(a, b), context)
 
     def test_resolution_terms_differ_by_the_documented_factor_two(self) -> None:
         """Full coverage: twin q*|C| (rounding mode unknown) against lane sum(c_i) * q/2 = M * q/2."""
@@ -289,6 +288,18 @@ class TwinAgreementTests(unittest.TestCase):
             a, b = lane.estimate_energy(runs), twin.estimate_energy(runs)
             twin_term = QUANTUM * (runs[0][2] - runs[0][1]) / 1e9 * b.coverage_fraction
             lane_term = flag_value(a.flags, "resolution_bound_j")
+            from tests.align.test_power_boundary_fixround import corrected_mean_run_reference
+            # q_z=q*(w+o)/i; integrate it with the independent direct grid.
+            quantum_runs = []
+            from dataclasses import replace
+            for trace, start, end in runs:
+                values = tuple(-QUANTUM if t <= start or t-WINDOW >= end else QUANTUM
+                               for t in trace.t_ns)
+                quantum_runs.append((replace(trace, values=values), start, end))
+            corrected_quantum = corrected_mean_run_reference(quantum_runs)/2
+            self.assertLessEqual(abs(lane_term-corrected_quantum), REL*abs(corrected_quantum))
+            # The twin's raw term still integrates the original quantum.
+            lane_term = QUANTUM*(runs[0][2]-runs[0][1])/1e9/2
             self.assertLessEqual(abs(twin_term - 2 * lane_term), REL * twin_term, (seed, a.flags))  # 1e-6 relative
 
     def test_spread_terms_agree_on_a_full_duty_sensor(self) -> None:
@@ -300,12 +311,17 @@ class TwinAgreementTests(unittest.TestCase):
             twin_spread = b.half_width_j - QUANTUM * (runs[0][2] - runs[0][1]) / 1e9
             lane_spread = flag_value(a.flags, "repeatability_half_width_j")
             self.assertGreater(lane_spread, 0.0)
-            self.assertLessEqual(abs(lane_spread - twin_spread), REL * twin_spread, (seed, a.flags, b))  # 1e-6 relative
-            self.assertLessEqual(abs(a.joules - b.joules), joules_bar(a, b), (seed, a, b))
+            # Correction changes replica noise. For d=1 each corrected run
+            # integral has equal mass: t*SD(run J)/sqrt(n), independently.
+            from tests.align.test_power_boundary_fixround import corrected_mean_run_reference
+            corrected = [corrected_mean_run_reference([run]) for run in runs]
+            expected = twin.student_t_quantile(.95,len(runs)-1)*statistics.stdev(corrected)/math.sqrt(len(runs))
+            self.assertLessEqual(abs(lane_spread-expected), REL*expected)  # Width: 1e-6 relative.
+            raw = [active_weighted_reference([run])[0] for run in runs]
+            raw_expected = twin.student_t_quantile(.95,len(runs)-1)*statistics.stdev(raw)/math.sqrt(len(runs))
+            self.assertLessEqual(abs(twin_spread-raw_expected), REL*raw_expected)
+            self.assertLessEqual(abs(flag_value(a.flags, "boundary_uncorrected_joules") - b.joules), joules_bar(a, b), (seed, a, b))
 
-    @unittest.skip("OPEN align-nvml review-3 finding: the boundary bound misses a sub-window "
-                   "start burst; test body and bar unchanged (tests/test_s0_blocked_enumeration.py "
-                   "forbids expectedFailure)")
     def test_boundary_bound_contains_a_sub_window_start_burst(self) -> None:
         """Review 3 finding: the boundary bound's local range comes from 25 ms averages.
 
@@ -341,7 +357,7 @@ class TwinAgreementTests(unittest.TestCase):
                          start, start + duration))
         a, b = lane.estimate_energy(runs), twin.estimate_energy(runs)
         truth = 418.575
-        self.assertLessEqual(abs(a.joules - b.joules), joules_bar(a, b))  # both: 417.00625 J
+        self.assertLessEqual(abs(flag_value(a.flags, "boundary_uncorrected_joules") - b.joules), joules_bar(a, b))  # both: 417.00625 J
         self.assertLessEqual(abs(a.joules - truth), a.half_width_j, (a.joules, a.half_width_j, a.flags))
 
 

@@ -1,6 +1,8 @@
 """Predict benign turn energy from logged work and score unexplained episode energy.
 
-Half-widths are read as standard uncertainties. Duration is diagnostic only:
+Half-widths name their uncertainty kind: standard_uncertainty or additive_bound.
+Bounds used in the SD formulas retain their numbers and carry
+uncertainty.bound_read_as_sd; there is no implicit bound-to-SD conversion. Duration is diagnostic only:
 using it would absorb hidden work. Returned models, numbers and sequences expose
 flags; read .flags before arithmetic, comparison or JSON encoding, which lose
 flags on float and tuple results. Copy them into Episode.flags when persisting.
@@ -18,6 +20,7 @@ from statistics import NormalDist, fmean, stdev
 from typing import Mapping, Sequence
 
 from joulewise.align.records import Episode
+from joulewise.align.attribution import EpisodeAttribution
 
 _NAMES = ("intercept", "prefill_tokens", "decode_tokens",
           "context_decode_tokens", "context_prefill_tokens")
@@ -33,8 +36,9 @@ class TurnRow:
     """A logged call with the energy of every attribution segment it owns.
 
     energy_j sums its prefill, decode and own tool-call segment energies;
-    energy_half_width_j is the standard uncertainty of that sum, including
-    covariance. Unowned gaps belong only to the whole-episode measured total,
+    energy_half_width_j names its interpretation in uncertainty_kind.
+    standard_uncertainty includes covariance; additive_bound is a linearly
+    summed sensitivity bound, retained as an SD upper value with a flag. Unowned gaps belong only to the whole-episode measured total,
     so benign gap energy is positive residual, without a prediction term.
     """
 
@@ -46,6 +50,7 @@ class TurnRow:
     duration_s: float
     energy_j: float
     energy_half_width_j: float
+    uncertainty_kind: str = "standard_uncertainty"
 
 
 @dataclass(frozen=True)
@@ -121,6 +126,40 @@ def _flags(value: object) -> tuple[str, ...]:
     return getattr(value, "flags", ())
 
 
+def _uncertainty_flags(kind: str) -> list[str]:
+    if kind == "additive_bound":
+        return ["uncertainty.bound_read_as_sd"]
+    return [] if kind == "standard_uncertainty" else ["uncertainty.kind_unknown"]
+
+
+class TurnEnergy(dict[int, tuple[float, float]]):
+    """Turn-owned energy mapping with an explicit uncertainty interpretation."""
+
+    def __init__(self, values, *, uncertainty_kind: str, flags: Sequence[str] = ()):
+        super().__init__(values)
+        self.uncertainty_kind = uncertainty_kind
+        self.flags = tuple(dict.fromkeys([*flags, *_uncertainty_flags(uncertainty_kind)]))
+
+
+def turn_energy_from_attribution(attribution: EpisodeAttribution) -> TurnEnergy:
+    """Sum all segments owned by each turn, labelling additive_bound.
+
+    Includes that turn's tool segments; unowned gaps remain only in the total.
+    Sensitivities add linearly without independence assumptions. The adapter
+    never turns them into an SD or applies a distribution-specific factor:
+    |error| <= B implies only SD <= B. A calibrated standard uncertainty needs
+    a separately supplied mapping labelled standard_uncertainty by the caller.
+    """
+    owned: dict[int, list] = {}
+    for segment in attribution.segments:
+        if segment.turn is not None:
+            owned.setdefault(segment.turn, []).append(segment.energy)
+    return TurnEnergy({turn: (math.fsum(e.joules for e in energies),
+                              math.fsum(e.half_width_j for e in energies))
+                       for turn, energies in owned.items()},
+                      uncertainty_kind="additive_bound", flags=attribution.flags)
+
+
 def _finite(value: float) -> bool:
     try:
         return math.isfinite(value)
@@ -150,6 +189,7 @@ def _token_count(value: object) -> int | None:
 def _row_flags(rows: Sequence[TurnRow], *, use_energy: bool) -> list[str]:
     flags = list(_flags(rows))
     for row in rows:
+        flags.extend(_uncertainty_flags(row.uncertainty_kind))
         counts = (row.context_tokens, row.prefill_tokens, row.decode_tokens)
         normalized = tuple(_token_count(x) for x in counts)
         if any(x is None for x in normalized):
@@ -184,9 +224,13 @@ def design_row(r: TurnRow) -> list[float]:
 
 def turn_rows_from_episode(
     episode: Episode, turn_energy: Mapping[int, tuple[float, float]], *,
-    hidden_token_counts_logged: bool = False,
+    hidden_token_counts_logged: bool = False, uncertainty_kind: str | None = None,
 ) -> tuple[TurnRow, ...]:
-    """Adapt records plus {turn_index: (active J, standard uncertainty J)}.
+    """Adapt records plus {turn_index: (active J, uncertainty half-width J)}.
+
+    uncertainty_kind names additive_bound or standard_uncertainty; by default
+    inherit the mapping adapter's kind, otherwise use standard_uncertainty.
+    Additive bounds keep their values and flag uncertainty.bound_read_as_sd.
 
     Each mapping value sums every segment owned by that turn: prefill, decode
     and its own tool calls, with the standard uncertainty of their sum.
@@ -205,7 +249,8 @@ def turn_rows_from_episode(
     Missing energy stays NaN with a flag rather than deleting a visible turn.
     Episode flags propagate.
     """
-    flags = list(episode.flags)
+    kind = uncertainty_kind or getattr(turn_energy, "uncertainty_kind", "standard_uncertainty")
+    flags = list(episode.flags) + list(_flags(turn_energy)) + _uncertainty_flags(kind)
     rows = []
     for turn in episode.logged_turns():
         if turn.index not in turn_energy:
@@ -216,7 +261,7 @@ def turn_rows_from_episode(
             turn.prefill_tokens, (turn.decode_tokens if hidden_token_counts_logged
                                   else turn.decode_tokens - turn.hidden_tokens),
             (turn.end_ns - turn.start_ns) / 1_000_000_000,
-            energy, half_width,
+            energy, half_width, kind,
         ))
     return _SequenceResult(rows, flags)
 
@@ -305,8 +350,12 @@ def _wls(
     return coef, cov, residuals
 
 
-def fit_energy_model(rows: Sequence[TurnRow]) -> EnergyModel:
-    """Fit benign turns by WLS; read each half-width h as one standard uncertainty.
+def fit_energy_model(rows: Sequence[TurnRow], *,
+                     uncertainty_kind: str | None = None) -> EnergyModel:
+    """Fit benign turns by WLS using h in the standard-uncertainty slot.
+
+    Row kinds or the explicit uncertainty_kind label additive bounds with
+    uncertainty.bound_read_as_sd; their numeric values are never converted.
 
     Weights are 1/(sigma2+h_i**2). Iterate the method-of-moments equation
     sum(residual_i**2/(sigma2+h_i**2)) = n-p_kept (Paule-Mandel), sigma2>=0.
@@ -320,6 +369,8 @@ def fit_energy_model(rows: Sequence[TurnRow]) -> EnergyModel:
     TurnRow has no condition label.
     """
     flags = _row_flags(rows, use_energy=True)
+    if uncertainty_kind is not None:
+        flags.extend(_uncertainty_flags(uncertainty_kind))
     usable = [row for row in rows if not (
         {"invalid_token_count", "nonfinite_input", "negative_half_width"}
         & set(_row_flags((row,), use_energy=True)))]
@@ -462,16 +513,19 @@ def predict_episode(model: EnergyModel, rows: Sequence[TurnRow]) -> tuple[float,
 
 def residual_score(
     model: EnergyModel, logged_rows: Sequence[TurnRow],
-    measured_total_j: float, measured_half_width_j: float,
+    measured_total_j: float, measured_half_width_j: float, *,
+    uncertainty_kind: str = "standard_uncertainty",
 ) -> float:
     """Return (measured-predicted)/sqrt(sd_pred**2+measured_half_width**2).
 
     The measured total must be an integral over the whole episode with its own
     standard uncertainty. A caller summing turn energies must pass the standard
     uncertainty of that sum as measured_half_width_j. It is added once.
+    With uncertainty_kind="additive_bound", keep the bound and flag its use
+    as an SD; no distribution-specific conversion is implied.
     """
     prediction = predict_episode(model, logged_rows)
-    flags = list(_flags(prediction))
+    flags = list(_flags(prediction)) + _uncertainty_flags(uncertainty_kind)
     if not _finite(measured_total_j) or not _finite(measured_half_width_j):
         return _Number(math.nan, flags + ["nonfinite_measurement"])
     if measured_half_width_j < 0:
@@ -488,6 +542,7 @@ def residual_score(
 
 def grouped_benign_threshold(
     benign: Mapping[str, tuple[Sequence[TurnRow], float, float]], *, alpha: float,
+    uncertainty_kind: str = "standard_uncertainty",
 ) -> float:
     """Leave task pairs out; return the inverse-ECDF (1-alpha) quantile.
 
@@ -505,11 +560,11 @@ def grouped_benign_threshold(
     insufficient_calibration_scores flags undefined sd at m<2.
     quantile_at_sample_max flags rank=m. No diagnostic changes the quantile.
     """
-    flags = []
+    flags = _uncertainty_flags(uncertainty_kind)
     if not _finite(alpha) or not 0 < alpha < 1:
-        return _ThresholdResult(math.nan, ["invalid_alpha"])
+        return _ThresholdResult(math.nan, flags + ["invalid_alpha"])
     if not benign:
-        return _ThresholdResult(math.nan, ["empty_calibration"])
+        return _ThresholdResult(math.nan, flags + ["empty_calibration"])
     components: list[set[str]] = []
     entries = [entry for entry in benign.values() if entry[0]]
     excluded_empty = len(benign) - len(entries)
@@ -537,7 +592,7 @@ def grouped_benign_threshold(
         flags.extend(_flags(model))
         for rows, energy, half_width in entries:
             if {row.group for row in rows} & component:
-                score = residual_score(model, rows, energy, half_width)
+                score = residual_score(model, rows, energy, half_width, uncertainty_kind=uncertainty_kind)
                 flags.extend(_flags(score))
                 if _finite(score):
                     scores.append(score)
@@ -558,6 +613,7 @@ def grouped_benign_threshold(
 def min_detectable_hidden_decode_tokens(
     model: EnergyModel, logged_rows: Sequence[TurnRow], *, alpha: float,
     power: float, measured_half_width_j: float,
+    uncertainty_kind: str = "standard_uncertainty",
 ) -> float:
     """Return H=max(0,(z_(1-alpha)+z_power)*D/e), a normal-approximation boundary.
 
@@ -567,12 +623,18 @@ def min_detectable_hidden_decode_tokens(
     and assumes hidden decode adds energy without changing D or adding a call
     intercept. Nonpositive e gives infinity above the false-positive power;
     when context and hidden-token energy are identified, requested power <= alpha
-    needs no hidden work. Ceil H for a token budget.
+    needs no hidden work. Ceil H for a token budget. With additive_bound,
+    this is a flagged conservative upper value under the stated normal model
+    and SD<=B assumption; print it beside the calibrated function's value.
+    It is not calibrated power, and no B/sqrt(3) conversion is justified.
     An unidentified context-decode coefficient contributes zero with its flag;
     an unidentified decode coefficient makes hidden-token energy undefined.
     """
     prediction = predict_episode(model, logged_rows)
-    flags = list(_flags(prediction))
+    flags = list(_flags(prediction)) + _uncertainty_flags(uncertainty_kind)
+    if "uncertainty.bound_read_as_sd" in flags:
+        flags.extend(("uncertainty.normal_theory_conservative_upper_value",
+                      "uncertainty.print_beside_calibrated_min_detectable_hidden_decode_tokens"))
     if (not _finite(alpha) or not 0 < alpha < 1
             or not _finite(power) or not 0 < power < 1):
         return _Number(math.nan, flags + ["invalid_probability"])
@@ -609,6 +671,7 @@ def calibrated_min_detectable_hidden_decode_tokens(
     model: EnergyModel, logged_rows: Sequence[TurnRow], *, threshold: float,
     power: float, measured_half_width_j: float,
     benign_mean: float | None = None, benign_sd: float | None = None,
+    uncertainty_kind: str = "standard_uncertainty",
 ) -> float:
     """Return calibrated H=max(0,(t-mu_b+z_power*s_b)*D/e).
 
@@ -627,7 +690,7 @@ def calibrated_min_detectable_hidden_decode_tokens(
     coefficient contributes zero with its flag, as in the normal-theory API.
     """
     prediction = predict_episode(model, logged_rows)
-    flags = list(_flags(prediction)) + list(_flags(threshold))
+    flags = list(_flags(prediction)) + list(_flags(threshold)) + _uncertainty_flags(uncertainty_kind)
     if not _finite(power) or not 0 < power < 1:
         return _Number(math.nan, flags + ["invalid_probability"])
     if not logged_rows:
@@ -668,5 +731,5 @@ __all__ = [
     "TurnRow", "EnergyModel", "design_row", "fit_energy_model", "predict_episode",
     "residual_score", "grouped_benign_threshold",
     "min_detectable_hidden_decode_tokens", "calibrated_min_detectable_hidden_decode_tokens",
-    "turn_rows_from_episode",
+    "turn_rows_from_episode", "turn_energy_from_attribution", "TurnEnergy",
 ]

@@ -78,7 +78,8 @@ class HTTPWorld(AbstractContextManager):
                 try:
                     size = int(self.headers.get("Content-Length", "0"))
                     body = json.loads(self.rfile.read(size))
-                    world.requests.append({"path": self.path, "body": body})
+                    world.requests.append({"path": self.path, "body": body,
+                                           "at_ns": time.monotonic_ns()})
                     packet = world.packets.popleft()
                     if "respond" in packet:
                         packet = packet["respond"](body)
@@ -279,7 +280,7 @@ class EndpointTests(unittest.TestCase):
                                      result.raw_usage["joulewise"]["flags"], flagged)
                     self.assertEqual("reasoning_tokens_unreported" in client.flags, flagged)
 
-    def test_derived_reasoning_count_is_opt_in_and_never_a_server_counter(self) -> None:
+    def test_legacy_derive_keyword_is_ignored_until_after_chat(self) -> None:
         pieces = ["Check invoice 1. ", "Check invoice 2. ", "Reconcile totals."]
         thought = "".join(pieces)
         def tokenize(body):
@@ -298,21 +299,25 @@ class EndpointTests(unittest.TestCase):
             client = OpenAICompatEndpoint(world.url, "local", timeout_s=5,
                                           derive_reasoning_tokens=True)
             result = self.chat(client)
-            diagnostic = result.raw_usage["joulewise"]["derived_reasoning_tokens"]
-            self.assertEqual(diagnostic["count"], len(thought) // 4)
-            self.assertEqual(diagnostic["source"], "server:/tokenize")
+            self.assertEqual(len(world.requests), 1)
+            self.assertNotIn("derived_reasoning_tokens", result.raw_usage["joulewise"])
             self.assertEqual(result.reasoning_tokens, 0)
             self.assertEqual(result.completion_tokens, 512)
             self.assertIn("reasoning_tokens_unreported", result.raw_usage["joulewise"]["flags"])
-            self.assertIn("reasoning_tokens_derived_from_tokenize", client.flags)
+            self.assertIn("derive_reasoning_tokens_ignored", client.flags)
+            # The caller may explicitly request a diagnostic after the episode.
+            # It leaves server usage and chat timestamps intact.
+            self.assertEqual(client.count_tokens(thought), len(thought) // 4)
             self.assertEqual([r["path"] for r in world.requests],
                              ["/v1/chat/completions", "/tokenize"])
         with HTTPWorld([packet, {"status": 503, "json": {"error": "unavailable"}}]) as world:
-            result = self.chat(OpenAICompatEndpoint(world.url, "local", timeout_s=5,
-                                                     derive_reasoning_tokens=True))
-            self.assertIsNone(result.raw_usage["joulewise"]["derived_reasoning_tokens"]["count"])
+            client = OpenAICompatEndpoint(world.url, "local", timeout_s=5,
+                                          derive_reasoning_tokens=True)
+            result = self.chat(client)
+            self.assertEqual(len(world.requests), 1)
             self.assertEqual(result.reasoning_tokens, 0)
-            self.assertIn("reasoning_tokenize_unavailable", result.raw_usage["joulewise"]["flags"])
+            self.assertEqual(client.count_tokens(thought), 0)
+            self.assertIn("tokenize_unavailable", client.flags)
 
     def test_tokenize_both_shapes(self) -> None:
         worlds = [

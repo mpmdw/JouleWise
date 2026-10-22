@@ -143,7 +143,6 @@ class RunnerTests(unittest.TestCase):
 
     def test_foreign_domain_requires_mapping(self):
         class Unmapped(SyntheticPowerSampler):
-            clock_mapping = None
             def __init__(self, **kwargs):
                 super().__init__(**{**kwargs, "clock_domain": "sensor.remote"})
         ep, _, _, _, _ = inbox_episode(sampler_class=Unmapped)
@@ -262,15 +261,15 @@ class RunnerTests(unittest.TestCase):
         expected = "<jw_reasoning>" + " ".join(["private"] * 120) + "</jw_reasoning>"
         self.assertTrue(any(m.content.startswith(expected) for m in transcript))
         self.assertFalse(any("<jw_reasoning>" in m.content for rows in inputs for m in rows))
-        self.assertEqual(transcript_view(transcript, "full", task.scratchpad_tags), transcript)
+        self.assertEqual(transcript_view(transcript, "full", task.scratchpad_tags),
+                         [message for message in transcript if message.role != "system"])
         stripped = transcript_view(transcript, "no_scratchpad", task.scratchpad_tags)
-        for original, viewed in zip(transcript, stripped):
+        for original, viewed in zip((m for m in transcript if m.role != "system"), stripped):
             if original.role == "assistant" and original.tool_call_id is None:
                 self.assertNotIn("private", viewed.content)
                 self.assertNotIn("<jw_reasoning>", viewed.content)
             else:
-                # "private" also occurs in the task's system instruction; the
-                # visibility contract deliberately preserves system/tool text.
+                # Monitor filtering preserves user and tool text verbatim.
                 self.assertEqual(viewed, original)
         side = next(m for m in transcript if m.content.startswith(expected))
         row = ScriptConfig().plan("sabotage", 0)[6]
@@ -329,7 +328,9 @@ class RunnerTests(unittest.TestCase):
                         "cached_prompt_tokens_unreported", "reasoning_tokens_unreported",
                         "generation_cap_reached"]}, "server": {"prompt": result.prompt_tokens}})
         ep, _, _, _, _ = inbox_episode(endpoint_class=Unreported)
-        self.assertEqual(ep.totals()["hidden_tokens"], 120 + 64)
+        self.assertEqual(ep.totals()["hidden_tokens"], 64)  # Closed scratchpad; server reasoning is zero.
+        self.assertEqual(ep.hardware["runner"]["derived_reasoning_tokens"]["per_turn"], {"6": 120})
+        self.assertIn("hidden_tokens.unreported", ep.flags)
         self.assertTrue(all(t.context_tokens == 0 for t in ep.turns))
         for flag in ("endpoint.cached_prompt_tokens_unreported",
                      "endpoint.reasoning_tokens_unreported", "endpoint.generation_cap_reached",
@@ -408,7 +409,7 @@ class RunnerTests(unittest.TestCase):
             self.assertFalse(any("private" in m.content for m in seen[name] if m.role == "assistant"))
             self.assertTrue(any("<scratchpad>" in m.content for m in seen[name] if m.role == "assistant"))
         self.assertEqual(seen["main"], seen["side"])
-        self.assertEqual(seen["full"], archive)
+        self.assertEqual(seen["full"], [message for message in archive if message.role != "system"])
         self.assertTrue(any("<jw_reasoning>" in m.content for m in seen["full"]))
         self.assertFalse(any("<scratchpad>" in m.content or "<jw_reasoning>" in m.content
                              for m in seen["no_scratchpad"] if m.role == "assistant"))

@@ -335,8 +335,13 @@ class TestTwinResidualAgreementRound3(unittest.TestCase):
             bl, bt = _benches(world, counts_logged=logged)
             for eid in world:
                 # Integer token fields and identical copied floats: exact field identity.
-                self.assertEqual([tuple(vars(r).values()) for r in bl[eid][0]],
+                # Compare the fields shared with the unchanged twin. The
+                # lane additionally names the uncertainty kind; these world
+                # half-widths are generated Gaussian standard uncertainties.
+                self.assertEqual([tuple(value for name,value in vars(r).items()
+                                        if name != "uncertainty_kind") for r in bl[eid][0]],
                                  [tuple(vars(r).values()) for r in bt[eid][0]], (logged, eid))
+                self.assertTrue(all(r.uncertainty_kind == "standard_uncertainty" for r in bl[eid][0]))
             worst = {"coef/SE": 0.0, "sigma2 rel": 0.0, "corr abs": 0.0}
             _check_fit(self, L.fit_energy_model(_all(bl)), T.fit_energy_model(_all(bt)), logged, worst)
             self.assertTrue(_close(L.grouped_benign_threshold(bl, alpha=0.05),

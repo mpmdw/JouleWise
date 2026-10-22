@@ -18,6 +18,7 @@ from bisect import bisect_left, bisect_right
 from collections.abc import Sequence
 from dataclasses import dataclass
 import math
+import json
 from typing import overload
 
 from joulewise.align.records import ClockMapping, Episode, PowerTrace
@@ -130,16 +131,17 @@ def _flags(items: list[str]) -> tuple[str, ...]:
 class _Trace:
     """Lane-local, reusable reconstruction; prepare once for a whole episode."""
 
-    def __init__(self, trace: PowerTrace, mapping: ClockMapping | None) -> None:
+    def __init__(self, trace: PowerTrace, mapping: ClockMapping | None,
+                 episode_domain: str | None = None) -> None:
         self.trace = trace
         self.mapping = mapping
         self.flags: list[str] = []
         self.counter = trace.unit == "J_cumulative"
         self.method = "counter_J" if self.counter else "trapezoid_W"
         offset = mapping.offset_ns if mapping is not None else 0
-        if mapping is None:
+        if mapping is None and episode_domain is not None and trace.clock_domain != episode_domain:
             self.flags.append("clock.uncertainty_missing")
-        elif mapping.trace_domain != trace.clock_domain:
+        elif mapping is not None and mapping.trace_domain != trace.clock_domain:
             self.flags.append("clock.domain_mismatch")
         if trace.resolution is None:
             self.flags.append("resolution.missing")
@@ -150,6 +152,41 @@ class _Trace:
             self.flags.append("window.invalid")
             window = None
         self.window = window
+        try:
+            notes = json.loads(trace.notes)
+            notes = notes if isinstance(notes, dict) else {}
+        except (TypeError, ValueError):
+            notes = {}
+        timing_key = "window_timing_half_width_ns" if window is not None and not self.counter else "timing_half_width_ns"
+        sample_timing = notes.get(timing_key)
+        self.sample_timing = None
+        if timing_key not in notes:
+            self.flags.append("timing.sample_uncertainty_unreported")
+        elif (not isinstance(sample_timing, (list, tuple))
+              or len(sample_timing) != len(trace.t_ns)):
+            self.flags.append("timing.sample_uncertainty_invalid")
+            self.sample_timing = (None,)*len(trace.t_ns)
+        else:
+            self.sample_timing = tuple(
+                h if isinstance(h, (int, float)) and not isinstance(h, bool)
+                and math.isfinite(h) and h >= 0 else None
+                for h, value in zip(sample_timing, trace.values) if math.isfinite(value))
+        # NVML's counter read bracket measures the API call, not the age of
+        # the energy register. No characterized update-age bound exists.
+        # Retain its energy, but unknown age can move either endpoint by an
+        # unbounded amount, so its timing sensitivity is infinite.
+        self.counter_age_unknown = (self.counter and trace.source == "nvml_energy"
+                                    and notes.get("unknown_sensor_age_bound_ns") is None)
+        self.counter_age_ns = 0.0
+        if self.counter_age_unknown:
+            self.flags.append("timing.sensor_age_unknown")
+        elif self.counter and trace.source == "nvml_energy":
+            age = notes["unknown_sensor_age_bound_ns"]
+            if isinstance(age, (int,float)) and math.isfinite(age) and age >= 0:
+                self.counter_age_ns = age
+            else:
+                self.counter_age_unknown = True
+                self.flags.append("timing.sensor_age_unknown")
         self.times: Sequence[int]
         if not self.counter and window is None and all(map(math.isfinite, trace.values)):
             # Retain global nonfinite-sample semantics, but avoid allocating
@@ -254,35 +291,42 @@ class _Trace:
         if not self.spans:
             return 0.0
         if self.window is not None and not self.counter:
-            # "Partial sample interval" refers to the timestamp bracket.
-            # A constant window reconstruction can still straddle a true edge.
-            i = bisect_right(self.times, t) - 1
-            if i < 0 or i + 1 >= len(self.times):
-                return 0.0
-            span = _Span(self.times[i], self.times[i + 1],
-                         self.values[i], self.values[i + 1])
+            # Window interpolation compares raw timestamp brackets.
+            starts = self.times
+            count = len(self.times)-1
+            def span_at(index: int) -> _Span:
+                return _Span(self.times[index], self.times[index+1],
+                             self.values[index], self.values[index+1])
         else:
-            i = bisect_right(self.starts, t) - 1
-            if i < 0 or i >= len(self.spans):
-                return 0.0
-            span = self.spans[i]
-        if not span.start < t < span.end:
-            return 0.0
-        a, b = (t, min(t1, span.end)) if start else (max(t0, span.start), t)
-        linear = span.integral(a, b)
-        if self.counter:
-            # A left-held cumulative reading jumps by the full increment at
-            # the right sample. Include that jump when the partial interval
-            # reaches it; otherwise the held counter contributes no increment.
-            held = span.integral(span.start, span.end) if b == span.end else 0.0
-        else:
-            held = span.left * ((b - a) / _NS_PER_S)
-        # C1: use the full hold-versus-line difference. With at most one
-        # step dP at fraction u of a partial interval L, the point-sensor
-        # error is (1-u)*dP*L/2, bounded by (1+u)*dP*L/2 here.
-        # A counter's full held jump likewise bounds its linear allocation;
-        # halving the difference only bounds the point error for u >= 1/3.
-        return abs(linear - held)
+            starts, count = self.starts, len(self.spans)
+            def span_at(index: int) -> _Span:
+                return self.spans[index]
+        i = bisect_right(starts, t)-1
+        # At a knot, inspect BOTH touching spans. The query clips each one:
+        # the span on the owned side contributes its hold-versus-line area.
+        # Dropping equality previously erased a whole step's triangle.
+        indices = [i]
+        if i >= 0 and starts[i] == t:
+            indices.append(i-1)
+        terms = []
+        for index in indices:
+            if not 0 <= index < count:
+                continue
+            span = span_at(index)
+            if not span.start <= t <= span.end:
+                continue
+            a, b = max(t0, span.start), min(t1, span.end)
+            if b <= a:
+                continue
+            linear = span.integral(a, b)
+            if self.counter:
+                held = span.integral(span.start, span.end) if b == span.end else 0.0
+            else:
+                held = span.left*((b-a)/_NS_PER_S)
+            # One step dP within the bracket changes the line-vs-hold
+            # allocation by this full triangle/partial-triangle area.
+            terms.append(abs(linear-held))
+        return math.fsum(terms)
 
     def _window_uncertainty(self, t0: int, t1: int) -> float:
         if self.counter or self.window is None:
@@ -374,6 +418,27 @@ class _Trace:
             else:
                 bounds.append((self._adjacent_peak(t0) + self._adjacent_peak(t1))
                               * uncertainty / _NS_PER_S)
+        if self.counter_age_unknown:
+            bounds.append(math.inf)
+        elif self.counter_age_ns:
+            # API bracket and register age are additive timing bounds.
+            bounds.append((self._adjacent_peak(t0)+self._adjacent_peak(t1))
+                          * self.counter_age_ns/_NS_PER_S)
+        if self.sample_timing is not None:
+            for endpoint in (t0, t1):
+                k = bisect_left(self.times, endpoint)
+                lo = max(0, k-1)
+                hi = min(len(self.times), k+(2 if k < len(self.times) and self.times[k] == endpoint else 1))
+                adjacent = self.sample_timing[lo:hi]
+                if any(h is None for h in adjacent):
+                    bounds.append(math.inf)
+                    flags.append("timing.sample_uncertainty_unknown")
+                elif adjacent:
+                    # Moving the local reconstruction endpoint by at most
+                    # max adjacent timestamp half-width h moves <= peak*h
+                    # joules. Sum endpoints, just as for mapping uncertainty;
+                    # no independence or Gaussian timing law is assumed.
+                    bounds.append(self._adjacent_peak(endpoint)*max(adjacent)/_NS_PER_S)
         bounds.extend((self._interpolation(t0, t0, t1, start=True),
                        self._interpolation(t1, t0, t1, start=False),
                        self._window_uncertainty(t0, t1)))
@@ -426,7 +491,15 @@ def trace_energy(
     drop counts zero with counter.decrease. Both add the affected poll's
     observed-peak sensitivity; if no non-reset step sets a peak, it is infinite.
 
-    Endpoint hold-versus-line comparisons are clipped to the query itself.
+    Without a mapping the public query times are in the trace's own domain,
+    so clock-offset uncertainty is zero. Episode attribution flags a missing
+    uncertainty only for a different domain without a mapping. Per-sample
+    timestamp half-widths contribute adjacent peak times half-width at each
+    endpoint; unreported notes contribute zero with a flag, explicit unknown
+    entries contribute infinity. NVML counter update age is uncharacterized
+    and gives infinite timing sensitivity (timing.sensor_age_unknown).
+    Endpoint hold-versus-line comparisons include both spans at sample knots
+    and are clipped to the query itself.
     Windowed sensors compare raw sample brackets and add the C2 duty-gap
     and query-clipped within-window allocation sensitivities under a
     one-step assumption. Intervals shorter than nominal_interval_ns carry
@@ -563,7 +636,7 @@ def attribute_episode(
                     flags.append("clock.mapping_ambiguous")
             else:
                 flags.append("clock.mapping_missing")
-    reconstruction = _Trace(trace, mapping)
+    reconstruction = _Trace(trace, mapping, episode.clock_domain)
 
     def estimate(start: int, end: int) -> EnergyEstimate:
         energy = reconstruction.energy(start, end, idle_watts)

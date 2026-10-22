@@ -366,3 +366,23 @@ but the optional m1 unconditional 20/20 phase-count criterion is not claimed.
 Remaining errors also include powermetrics extra decode labels and missing
 prefills; those have not all been established to be unobservable.
 Power remains blind to reasoning that fits within the same forward pass.
+
+## Sampler clock and attribution bounds
+
+Ina3221Sampler exposes clock_mappings=(): acquired timestamps already use its
+declared clock_domain, supplied by the episode registry. Same-domain
+attribution has zero clock-offset uncertainty. A different trace domain
+without a mapping carries clock.mapping_missing and clock.uncertainty_missing.
+Per-sample timing notes, when supplied, add adjacent peak power times the
+largest touching timestamp half-width at each segment endpoint. An explicit
+unknown entry gives an infinite term with timing.sample_uncertainty_unknown;
+absent timing notes give zero and timing.sample_uncertainty_unreported. A read
+bracket alone does not characterize ADC/register age. Live conversion timing
+and age remain PROVISIONAL pending the board characterization.
+
+At a phase edge exactly on a sample timestamp, attribution checks both
+adjacent spans and clips each to the owned interval. The hold-versus-linear
+triangle is retained at the knot, avoiding a false zero interpolation bound.
+Attribution half-widths remain additive sensitivity bounds. The residual
+adapter labels them additive_bound and flags their use in SD formulas. They
+cannot establish a negative frontier divergence gate; that result is None.

@@ -61,6 +61,14 @@ Everything lives under `joulewise/align/`, tests under `tests/align/`.
   uncertainty exists, 1e-6 relative.
 - Conditions that are not physical hazards are recorded as `Episode.flags`,
   never refusals.
+- Samplers expose plural `clock_mappings` after `stop()`. Foreign traces that
+  cannot attach remain recoverable with their samples and mapping offers in
+  `hardware.runner.unattached_traces`; non-finite samples are counted and flagged.
+- Runner tokenizer diagnostics run after all samplers stop. Server-reported
+  reasoning counts remain in `Turn.hidden_tokens`; tokenizer estimates of
+  separated reasoning are labelled separately in episode hardware metadata.
+- Monitor views exclude system messages and hide only closed scratchpad pairs.
+  Task flags and per-call monitor diagnostics propagate into the episode.
 - Synthetic test worlds are built so that the effect each rule is meant to
   catch is larger than the test's bar (a hidden-token count that clears the
   floor, a routing shift above the permutation noise), and so that its
