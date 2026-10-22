@@ -1,0 +1,419 @@
+"""Stage A comparison of routing, logged counts, and their combination.
+
+Task groups define both label exchangeability and held-out classifier folds.
+All episodes remain in the report; unavailable measurements are flagged.
+This is an offline screening analysis, not a registered decision or power claim.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import random
+from dataclasses import asdict, dataclass, replace
+from pathlib import Path
+from typing import Iterable, Iterator, Sequence
+
+from joulewise.align.records import Episode, from_json
+from joulewise.align.moe.stats import METRICS, PHASES, episode_stats, grouped_permutation_test, routing_flags
+
+METADATA_FEATURES = ("prefill_tokens", "visible_decode_tokens", "turns", "tool_calls")
+
+
+@dataclass(frozen=True)
+class StatisticResult:
+    """Raw difference and standardized difference, each with a cluster-bootstrap CI."""
+
+    effect: float
+    interval: tuple[float, float]
+    standardized_effect: float
+    standardized_interval: tuple[float, float]
+    p_value: float
+    p_holm: float
+    n_perm_used: int
+    n_bootstrap_valid: int
+    flags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class StageAResult:
+    """Episode-aligned evidence and counts-versus-routing held-out comparison."""
+
+    episode_ids: tuple[str, ...]
+    labels: tuple[int, ...]
+    groups: tuple[str, ...]
+    episode_features: tuple[dict[str, float], ...]
+    statistics: dict[str, StatisticResult]
+    aucs: dict[str, float]
+    auc_intervals: dict[str, tuple[float, float]]
+    predictions: dict[str, tuple[float, ...]]
+    auc_gain: float
+    auc_gain_interval: tuple[float, float]
+    auc_gain_fixed_prediction_interval: tuple[float, float]
+    auc_gain_interval_method: str
+    n_auc_gain_bootstrap_valid: int
+    n_bootstrap: int
+    confidence: float
+    seed: int
+    flags: tuple[str, ...]
+
+
+def _mean(values: Sequence[float]) -> float:
+    return math.fsum(values) / len(values) if values else math.nan
+
+
+def _difference(values: Sequence[float], labels: Sequence[int]) -> float:
+    if any(not math.isfinite(value) for value in values) or any(y not in (0, 1) for y in labels):
+        return math.nan
+    return _mean([x for x, y in zip(values, labels) if y == 1]) - _mean(
+        [x for x, y in zip(values, labels) if y == 0])
+
+
+def _standardized(values: Sequence[float], labels: Sequence[int]) -> float:
+    if any(y not in (0, 1) for y in labels):
+        return math.nan
+    classes = [[x for x, y in zip(values, labels) if y == label] for label in (0, 1)]
+    if any(len(part) < 2 for part in classes) or any(not math.isfinite(x) for x in values):
+        return math.nan
+    means = [_mean(part) for part in classes]
+    variance = math.fsum(math.fsum((x - mean)**2 for x in part)
+                         for part, mean in zip(classes, means)) / (len(values) - 2)
+    effect = means[1] - means[0]
+    if variance == 0:
+        return 0.0 if effect == 0 else math.nan
+    return effect / math.sqrt(variance)
+
+
+def mann_whitney_auc(scores: Sequence[float], labels: Sequence[int]) -> float:
+    """AUC = P(score_sabotage > score_benign) + half the tie probability.
+
+    The spine has no stats-lane AUC implementation, so this local rank-sum
+    implementation is used. It is O(n log n), with exact tie ranks.
+    """
+    if (len(scores) != len(labels) or any(y not in (0, 1) for y in labels)
+            or any(not math.isfinite(x) for x in scores)):
+        return math.nan
+    n1 = sum(labels)
+    n0 = len(labels) - n1
+    if not n0 or not n1:
+        return math.nan
+    ordered = sorted(zip(scores, labels))
+    twice_positive_ranks = 0
+    start = 0
+    while start < len(ordered):
+        end = start + 1
+        while end < len(ordered) and ordered[end][0] == ordered[start][0]:
+            end += 1
+        twice_rank = (start + 1) + end
+        twice_positive_ranks += twice_rank * sum(y for _, y in ordered[start:end])
+        start = end
+    return (twice_positive_ranks - n1 * (n1 + 1)) / (2 * n0 * n1)
+
+
+def _quantile(values: Sequence[float], probability: float) -> float:
+    ordered = sorted(values)
+    if not ordered:
+        return math.nan
+    position = (len(ordered) - 1) * probability
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    return ordered[lower] + (position - lower) * (ordered[upper] - ordered[lower])
+
+
+def _interval(values: Sequence[float], confidence: float) -> tuple[float, float]:
+    finite = [x for x in values if math.isfinite(x)]
+    if not 0 < confidence < 1:
+        return math.nan, math.nan
+    alpha = (1 - confidence) / 2
+    return _quantile(finite, alpha), _quantile(finite, 1 - alpha)
+
+
+def _bootstrap_indices(groups: Sequence[str], count: int, seed: int) -> list[tuple[int, ...]]:
+    blocks: dict[str, list[int]] = {}
+    for index, group in enumerate(groups):
+        blocks.setdefault(group, []).append(index)
+    choices = list(blocks.values())
+    if not choices or count <= 0:
+        return []
+    rng = random.Random(seed)
+    return [tuple(index for _ in choices for index in rng.choice(choices)) for _ in range(count)]
+
+
+def _held_out_scores(features: Sequence[Sequence[float]], labels: Sequence[int],
+                     groups: Sequence[str]) -> tuple[tuple[float, ...], tuple[str, ...]]:
+    """Leave-one-task-group-out standardized nearest-centroid classifier.
+
+    Means, missing-value imputation, population standard deviations, and class
+    centroids use training rows only. Constant columns receive zero weight.
+    There is no tuning, feature selection, or access to held-out labels.
+    """
+    flags = []
+    scores = [math.nan] * len(features)
+    for group in dict.fromkeys(groups):
+        train = [i for i, value in enumerate(groups) if value != group]
+        test = [i for i, value in enumerate(groups) if value == group]
+        if not train or set(labels[i] for i in train) != {0, 1}:
+            flags.append("held_out_training_class_or_group_missing")
+            continue
+        dimensions = len(features[0])
+        columns = [[features[i][j] for i in train] for j in range(dimensions)]
+        centers = [_mean([x for x in column if math.isfinite(x)]) for column in columns]
+        centers = [x if math.isfinite(x) else 0.0 for x in centers]
+        columns = [[x if math.isfinite(x) else center for x in column]
+                   for column, center in zip(columns, centers)]
+        scales = [math.sqrt(_mean([(x - center)**2 for x in column]))
+                  for column, center in zip(columns, centers)]
+        weights = []
+        for column, scale in zip(columns, scales):
+            difference = _difference(column, [labels[i] for i in train])
+            weights.append(difference / scale if scale else 0.0)
+        # Difference of squared distances to the two class centroids has the
+        # same ordering as this centered linear discriminant.
+        class_midpoints = []
+        for column in columns:
+            class_midpoints.append((_mean([x for x, i in zip(column, train) if labels[i] == 1])
+                                    + _mean([x for x, i in zip(column, train) if labels[i] == 0])) / 2)
+        for i in test:
+            terms = []
+            for x, center, midpoint, scale, weight in zip(
+                    features[i], centers, class_midpoints, scales, weights):
+                if not math.isfinite(x):
+                    x = center
+                    flags.append("nonfinite_classifier_feature_imputed_from_training")
+                terms.append((x - midpoint) / scale * weight if scale else 0.0)
+            scores[i] = math.fsum(terms) / dimensions if dimensions else 0.0
+    if any(not math.isfinite(x) for row in features for x in row):
+        flags.append("nonfinite_classifier_feature_imputed_from_training")
+    return tuple(scores), tuple(dict.fromkeys(flags))
+
+
+def analyze_stage_a(episodes: Iterable[Episode], *, n_bootstrap: int,
+                    confidence: float = 0.95, n_perm: int | None = None,
+                    seed: int = 0) -> StageAResult:
+    """Compute all 12 routing tests, Holm adjustment, effect CIs and held-out AUCs.
+
+    Resample whole task groups with replacement, preserving every episode in a
+    chosen group. Percentile intervals use the caller's bootstrap budget.
+    The gain interval refits both classifiers in every group-bootstrap draw.
+    Every copy of an original task group is held out together. Individual AUC
+    intervals and the separately named fixed-prediction gain interval remain
+    descriptive, conditional on the original fits. Confidence defaults to the
+    brief's conventional 95%; no data-dependent significance level is chosen.
+    Both undefined and valid bootstrap replicate counts are disclosed.
+    """
+    episode_ids, labels, groups = [], [], []
+    models = set()
+    flags = []
+    if not isinstance(n_bootstrap, int) or n_bootstrap <= 0:
+        flags.append("invalid_bootstrap_budget")
+        n_bootstrap = 0
+    if not 0 < confidence < 1:
+        flags.append("invalid_interval_confidence")
+    features = []
+    keys = tuple(f"{phase}_{name}" for phase in PHASES for name in METRICS)
+    # Do not retain Episodes/RouterLogs: a JSONL iterator can release a large
+    # capture before the next record is parsed. Only scalar features survive.
+    for episode in episodes:
+        episode_ids.append(episode.episode_id)
+        labels.append({"benign": 0, "sabotage": 1}.get(episode.condition, -1))
+        groups.append(episode.task_pair)
+        models.add(episode.agent_model)
+        if episode.router_log is None:
+            routing = dict.fromkeys(keys, math.nan)
+            flags.append(f"{episode.episode_id}:router_log_missing")
+        else:
+            routing = episode_stats(episode.router_log)
+            flags.extend(f"{episode.episode_id}:{flag}" for flag in routing_flags(episode.router_log))
+        totals = episode.totals(logged_only=True)
+        # hidden_tokens are part of decode_tokens in the shared records contract.
+        visible_decode = sum(t.decode_tokens - t.hidden_tokens for t in episode.logged_turns())
+        metadata = dict(zip(METADATA_FEATURES,
+                            map(float, (totals["prefill_tokens"], visible_decode,
+                                        totals["turns"], totals["tool_calls"]))))
+        features.append({**routing, **metadata})
+        flags.extend(f"{episode.episode_id}:episode_flag:{flag}" for flag in episode.flags)
+        del episode
+    labels, groups = tuple(labels), tuple(groups)
+    if len(set(episode_ids)) != len(episode_ids):
+        flags.append("duplicate_episode_ids")
+    if len(models) > 1:
+        flags.append("mixed_agent_models_may_confound_routing")
+    if not episode_ids:
+        flags.append("no_episodes")
+    if set(labels) != {0, 1}:
+        flags.append("both_conditions_required_for_inference")
+    if len(set(groups)) < 2:
+        flags.append("fewer_than_two_task_groups")
+    for group in dict.fromkeys(groups):
+        if len({y for y, g in zip(labels, groups) if g == group}) < 2:
+            flags.append(f"group_has_no_label_exchangeability:{group}")
+    bootstrap = _bootstrap_indices(groups, n_bootstrap, seed)
+    raw = {}
+    for name in keys:
+        # Capture gaps are excluded separately for each metric, before both
+        # randomization and resampling. Retain episode-aligned features above.
+        kept = [i for i, row in enumerate(features) if math.isfinite(row[name])]
+        dropped = [i for i, row in enumerate(features) if not math.isfinite(row[name])]
+        local_flags = []
+        if dropped:
+            local_flags.append(f"dropped_nonfinite_episodes:{len(dropped)}")
+            local_flags.extend(f"dropped_nonfinite_episode:{episode_ids[i]}" for i in dropped)
+        group_labels: dict[str, set[int]] = {}
+        for i in kept:
+            group_labels.setdefault(groups[i], set()).add(labels[i])
+        no_contrast = {group for group, conditions in group_labels.items()
+                       if conditions != {0, 1}}
+        local_flags.extend(f"group_has_no_label_exchangeability:{group}"
+                           for group in group_labels if group in no_contrast)
+        # After this metric's capture drops, single-condition tasks have no
+        # exchangeable contrast. Exclude them from every effect/test/bootstrap
+        # input so their task baseline cannot shift the pooled mean difference.
+        kept = [i for i in kept if groups[i] not in no_contrast]
+        values = tuple(features[i][name] for i in kept)
+        local_labels = tuple(labels[i] for i in kept)
+        local_groups = tuple(groups[i] for i in kept)
+        effect, p, used = grouped_permutation_test(
+            values, local_labels, local_groups, n_perm=n_perm, seed=seed)
+        local_bootstrap = _bootstrap_indices(local_groups, n_bootstrap, seed)
+        draws = [_difference([values[i] for i in indices], [local_labels[i] for i in indices])
+                 for indices in local_bootstrap]
+        standardized = [_standardized([values[i] for i in indices],
+                                      [local_labels[i] for i in indices])
+                        for indices in local_bootstrap]
+        valid = sum(math.isfinite(x) for x in draws)
+        if not math.isfinite(p):
+            local_flags.append("statistic_not_estimable")
+        if valid != n_bootstrap:
+            local_flags.append(f"undefined_effect_bootstrap_replicates:{n_bootstrap - valid}")
+        invalid_standardized = sum(not math.isfinite(x) for x in standardized)
+        if invalid_standardized:
+            local_flags.append(f"undefined_standardized_bootstrap_replicates:{invalid_standardized}")
+        raw[name] = StatisticResult(effect, _interval(draws, confidence), _standardized(values, local_labels),
+                                    _interval(standardized, confidence), p, math.nan, used, valid,
+                                    tuple(local_flags))
+    # The family always contains all 12 planned tests, even when a phase is
+    # unavailable. This prevents missing capture from reducing multiplicity.
+    adjusted = {}
+    running = 0.0
+    ordered = sorted((name for name in keys if math.isfinite(raw[name].p_value)),
+                     key=lambda name: raw[name].p_value)
+    for rank, name in enumerate(ordered):
+        running = max(running, min(1.0, (len(keys) - rank) * raw[name].p_value))
+        adjusted[name] = running
+    statistics = {name: StatisticResult(**{**asdict(result), "p_holm": adjusted.get(name, math.nan)})
+                  for name, result in raw.items()}
+    predictions = {}
+    matrices = {}
+    aucs = {}
+    intervals = {}
+    flags.append("auc_intervals_fixed_predictions_descriptive")
+    for name, columns in (("metadata", METADATA_FEATURES), ("routing", keys),
+                          ("combined", METADATA_FEATURES + keys)):
+        matrix = [tuple(row[column] for column in columns) for row in features]
+        matrices[name] = matrix
+        scores, local_flags = _held_out_scores(matrix, labels, groups)
+        flags.extend(f"{name}:{flag}" for flag in local_flags)
+        predictions[name] = scores
+        aucs[name] = mann_whitney_auc(scores, labels)
+        draws = [mann_whitney_auc([scores[i] for i in indices], [labels[i] for i in indices])
+                 for indices in bootstrap]
+        intervals[name] = _interval(draws, confidence)
+        undefined = sum(not math.isfinite(x) for x in draws)
+        if undefined:
+            flags.append(f"{name}:undefined_auc_bootstrap_replicates:{undefined}")
+    gains = [mann_whitney_auc([predictions["combined"][i] for i in indices],
+                              [labels[i] for i in indices])
+             - mann_whitney_auc([predictions["metadata"][i] for i in indices],
+                               [labels[i] for i in indices]) for indices in bootstrap]
+    refitted_gains = []
+    for indices in bootstrap:
+        draw_labels = tuple(labels[i] for i in indices)
+        # Use original group identities, never a draw/copy index: otherwise
+        # duplicated tasks could leak into both training and evaluation folds.
+        draw_groups = tuple(groups[i] for i in indices)
+        draw_aucs = {}
+        for name in ("metadata", "combined"):
+            draw_scores, _ = _held_out_scores(
+                [matrices[name][i] for i in indices], draw_labels, draw_groups)
+            draw_aucs[name] = mann_whitney_auc(draw_scores, draw_labels)
+        refitted_gains.append(draw_aucs["combined"] - draw_aucs["metadata"])
+    n_valid = sum(math.isfinite(x) for x in refitted_gains)
+    if n_valid != n_bootstrap:
+        flags.append(f"undefined_refit_gain_bootstrap_replicates:{n_bootstrap - n_valid}")
+    return StageAResult(
+        episode_ids=tuple(episode_ids), labels=labels, groups=groups,
+        episode_features=tuple(features), statistics=statistics, aucs=aucs,
+        auc_intervals=intervals, predictions=predictions,
+        auc_gain=aucs["combined"] - aucs["metadata"],
+        auc_gain_interval=_interval(refitted_gains, confidence),
+        auc_gain_fixed_prediction_interval=_interval(gains, confidence),
+        auc_gain_interval_method="group_bootstrap_refit_percentile",
+        n_auc_gain_bootstrap_valid=n_valid, n_bootstrap=n_bootstrap,
+        confidence=confidence, seed=seed, flags=tuple(dict.fromkeys(flags)))
+
+
+def _json_safe(value):
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
+def iter_episodes(path: Path, *, flags: list[str] | None = None) -> Iterator[Episode]:
+    """Stream readable shared records, recording each unreadable physical line.
+
+    Binary iteration isolates invalid UTF-8 to its own line. The optional flag
+    sink also records an opening failure; without a sink that OSError propagates.
+    No Episode is retained across yields.
+    """
+    try:
+        handle = Path(path).open("rb")
+    except OSError as exc:
+        if flags is None:
+            raise
+        flags.append(f"episode_input_unreadable:{type(exc).__name__}")
+        return
+    with handle:
+        for lineno, raw_line in enumerate(handle, start=1):
+            try:
+                line = raw_line.decode("utf-8")
+                if not line.strip():
+                    continue
+                episode = from_json(Episode, line)
+            except ValueError as exc:
+                # RecordError, JSONDecodeError and UnicodeDecodeError inherit
+                # ValueError. A damaged capture must not discard other records.
+                if flags is not None:
+                    flags.append(f"episode_input_line_unreadable:{lineno}:{type(exc).__name__}")
+                continue
+            yield episode
+            del episode
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Read shared Episode JSONL and print a finite JSON analysis report."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("episodes", type=Path)
+    parser.add_argument("--n-bootstrap", type=int, required=True)
+    parser.add_argument("--confidence", type=float, default=0.95)
+    parser.add_argument("--n-perm", type=int)
+    parser.add_argument("--seed", type=int, default=0)
+    args = parser.parse_args(argv)
+    input_flags: list[str] = []
+    result = analyze_stage_a(iter_episodes(args.episodes, flags=input_flags),
+                             n_bootstrap=args.n_bootstrap, confidence=args.confidence,
+                             n_perm=args.n_perm, seed=args.seed)
+    result = replace(result, flags=result.flags + tuple(input_flags))
+    print(json.dumps(_json_safe(asdict(result)), sort_keys=True, allow_nan=False))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+
+__all__ = ["METADATA_FEATURES", "StatisticResult", "StageAResult", "mann_whitney_auc", "analyze_stage_a", "iter_episodes"]

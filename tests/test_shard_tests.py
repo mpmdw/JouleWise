@@ -5,6 +5,7 @@ import io
 import os
 from pathlib import Path
 import sys
+import tempfile
 import types
 import unittest
 from unittest import mock
@@ -43,7 +44,13 @@ def _unittest_discover_module_set() -> set[str]:
         sys.path[:] = old_path
     if loader.errors:
         raise AssertionError(f"unittest discovery errors: {loader.errors}")
-    return _suite_modules(suite)
+    return _qualified(_suite_modules(suite))
+
+
+def _qualified(modules) -> set[str]:
+    """``discover -s tests`` names modules relative to tests/, including any
+    nested package; the shard manifest names all of them relative to ROOT."""
+    return {m if m.startswith("tests.") else f"tests.{m}" for m in modules}
 
 
 class ShardPartitionInvariantTests(unittest.TestCase):
@@ -99,6 +106,81 @@ class ShardPartitionInvariantTests(unittest.TestCase):
         with self.subTest(case="more shards than modules"):
             with self.assertRaisesRegex(ValueError, "refusing to create empty shards"):
                 shard_tests.partition_modules(("tests.test_only",), {}, 2)
+
+
+class NestedPackageDiscoveryTests(unittest.TestCase):
+    def test_nested_modules_match_discovery_and_execute_once_in_shards(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            tests_dir = root / "tests"
+            nested = tests_dir / "shard_nested_fixture"
+            deeper = nested / "deeper"
+            deeper.mkdir(parents=True)
+            for package in (nested, deeper):
+                (package / "__init__.py").touch()
+            execution_log = root / "executed.txt"
+            relative_files = (
+                "test_shard_top_fixture.py",
+                "shard_nested_fixture/test_child.py",
+                "shard_nested_fixture/deeper/test_grandchild.py",
+            )
+            for relative in relative_files:
+                (tests_dir / relative).write_text(
+                    "from pathlib import Path\n"
+                    "import unittest\n"
+                    "class FixtureTests(unittest.TestCase):\n"
+                    "    def test_once(self):\n"
+                    f"        with Path({str(execution_log)!r}).open('a') as log:\n"
+                    "            log.write(__name__ + '\\n')\n",
+                    encoding="utf-8",
+                )
+            expected_imports = {
+                "test_shard_top_fixture",
+                "shard_nested_fixture.test_child",
+                "shard_nested_fixture.deeper.test_grandchild",
+            }
+            expected_modules = {f"tests.{name}" for name in expected_imports}
+            with (
+                mock.patch.dict(sys.modules),
+                mock.patch.object(sys, "path", list(sys.path)),
+                mock.patch.object(shard_tests, "ROOT", root),
+                mock.patch.object(shard_tests, "DEFAULT_TESTS_DIR", tests_dir),
+            ):
+                loader = unittest.TestLoader()
+                suite = loader.discover(os.fspath(tests_dir))
+                self.assertEqual(loader.errors, [])
+                self.assertEqual(suite.countTestCases(), len(expected_modules))
+                self.assertEqual(_qualified(_suite_modules(suite)), expected_modules)
+                modules = shard_tests.discover_test_modules(tests_dir, root=root)
+                self.assertEqual(set(modules), expected_modules)
+                self.assertEqual(len(modules), len(expected_modules))
+                timings = dict.fromkeys(modules, 1.0)
+                for shard_count in (1, 2, 3):
+                    with self.subTest(shards=shard_count):
+                        execution_log.write_text("", encoding="utf-8")
+                        partitions = shard_tests.partition_modules(
+                            modules, timings, shard_count
+                        )
+                        for index, partition in enumerate(partitions, 1):
+                            with redirect_stdout(io.StringIO()):
+                                exit_code = shard_tests.run_shard(
+                                    partition, shard_count, index
+                                )
+                            self.assertEqual(exit_code, 0)
+                        executed = execution_log.read_text(
+                            encoding="utf-8"
+                        ).splitlines()
+                        self.assertEqual(set(executed), expected_imports)
+                        self.assertEqual(len(executed), len(expected_imports))
+
+    def test_already_qualified_module_names_are_preserved(self):
+        case = type(
+            "FixtureTests", (unittest.TestCase,),
+            {"__module__": "tests.align.test_fixture"},
+        )
+        self.assertEqual(
+            _suite_modules(unittest.TestSuite([case()])), {"tests.align.test_fixture"}
+        )
 
 
 class ShardExitStatusTests(unittest.TestCase):
