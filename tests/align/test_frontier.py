@@ -217,6 +217,10 @@ class DivergenceTests(unittest.TestCase):
                                              n_boot=n_boot, seed=seed)["diverges"]
                        for seed in range(seeds))
         self.assertLessEqual(openings, maximum)
+        # No positive lower bound is justified with 40 null worlds:
+        # P(Binomial(40,.025)=0) = .975**40 ~= .363, above the .01 tail.
+        # The separate 8 J source and production record chain test that the
+        # implementation can open, without rejecting a valid null outcome.
 
     def test_independent_energy_source_above_floor(self):
         # Extra source SD=8 J is eight times the stated 1 J attribution
