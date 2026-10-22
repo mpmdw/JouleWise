@@ -1,33 +1,37 @@
-# align-gpukit — FIX ROUND 1
+# align-gpukit — FIX ROUND 1, continuation fix1c
 
 ## SUMMARY
 
-Continued lane/2026-10-21-align-gpukit from 280866c8d3f0ccd74877d354559aaf5fc15b5401.
-Implemented GK-1 through GK-15 and GK-S; GK-16 is informational and untouched.
-Preflight report verdicts now gate model startup, and completeness checks coordinates, turns, failures and physical trace coverage.
-Monitor/judge placement is explicit and off measured devices; runner timeouts kill the full process group.
-Budget follows 58750718f: 200 items, 36,000 fresh Episodes and 26,400 off-box monitor calls, with multi-GPU precision layouts.
-Unsourced volumes/allowances are null; cost output is unavailable until supported, with a partial measured calibration projection.
-Added supply/power-cap snapshots, corrected decode weights, schema validation and decimal display, and parameterized bootstrap checks.
-The lane contains 36 authored offline tests; no shell command, Python test, repro, package install or hardware run executed in this seat.
-All changes were committed and fast-forward pushed through GitHub; PR #521 remains draft and is not merge-ready.
+Continued lane/2026-10-21-align-gpukit from bed93a0950c9da1a699173609ddfe60d65084d72.
+C1 recomputes missing efficiency/token-volume flags from the current estimate inputs instead of replaying stale template labels.
+C2 applies amended R4: measurement_ready must be the JSON boolean true before any model starts.
+Unready, absent, null or non-boolean readiness now refuses with nvml_measurement_not_ready and preserves the sealed report/bundle.
+Kept the original failing arithmetic test unchanged; added one input-flag regression and expanded report/CLI refusal worlds.
+Updated the runbook with strict readiness and the custom preflight --out/--device report contract.
+The source inventory is 37 offline test methods; no shell/Python command, test, repro or package installation executed in this seat.
+The director's supplied bed93a095 results are recorded separately; final-head tests and integrated repros remain NOT RUN.
+Both code steps were fast-forward pushed through GitHub; PR #521 remains draft, with no merge, rental or hardware run.
 
 ## FILES
 
-Round changes (all within WRITE_SCOPE):
+Continuation changes from bed93a095 (all within WRITE_SCOPE):
+cost.py (C1 flags), session.py (C2 gate), test_gpukit.py (regressions),
+gpukit.md (runbook), and this report. No config or public signature changed.
+
+Full lane inventory (retained from the previous round):
 
 - configs/align/shade.json: five-pair/two-agent baseline, per-model layouts, cited hardware/model inputs, null production volumes/allowances/bounds.
 - configs/align/moe_stage_a.json: corresponding MoE-only repeat with the same source/null conventions.
 - configs/align/budget.json: 200-item protocol at 58750718f, Qwen3-Next replacing Phi, off-box gpt-oss monitor, fresh/trial/monitor counts, BF16/FP8 alternatives.
 - joulewise/align/gpukit/bootstrap.sh: order-independent wrapper flags, required probe timeout/device settings, preinstall isolation, pinned install and repeat-venv path.
-- joulewise/align/gpukit/session.py: report-based preflight, measured pool/TP, explicit monitor placement, nonce, process groups, complete-output checks, throttle snapshots and sealed receipts.
+- joulewise/align/gpukit/session.py: strict boolean measurement-ready gate (C2), report-based preflight, measured pool/TP, explicit monitor placement, nonce, process groups, complete-output checks, throttle snapshots and sealed receipts.
 - joulewise/align/gpukit/runner_adapter.py: only requested config placeholders, outer task_pair, optional clock/domain, off-box monitor/judge bindings and per-session matrix IDs.
 - joulewise/align/gpukit/matrix.py: null planning inputs, numerical provenance walk, records-derived conditions/visibilities and per-model layout validation.
 - joulewise/align/gpukit/matrix.schema.json: matching nullable inputs, condition/visibility enums, sourced efficiency constraint and cited example-price rows.
 - joulewise/align/gpukit/throughput.py: input-lookup-excluded decode weight reads and decimal two-digit display.
-- joulewise/align/gpukit/cost.py: fresh Episode accounting, agent-only token cost, one load/model, TP memory arithmetic, both layout alternatives, extra monitor-GPU line and calibration input.
+- joulewise/align/gpukit/cost.py: current-input cost flags (C1), fresh Episode accounting, agent-only token cost, one load/model, TP memory arithmetic, both layout alternatives, extra monitor-GPU line and calibration input.
 - joulewise/align/gpukit/throttle.py: old/current clock-event XML fields, raw DTD/XML capture, power limits, cumulative-counter deltas and hardware flags.
-- tests/align/test_gpukit.py: original 17 methods retained and updated for the rulings; 19 added methods, including complete/defective worlds, preflight, placement, TP, child cleanup, calibration and throttle paths.
+- tests/align/test_gpukit.py: 37 methods (original 17 retained, 20 added across the fix round); C1 leaves test_independent_hand_arithmetic byte-identical to bed93a095 and adds test_static_missing_input_flags_are_recomputed. C2 expands existing preflight/CLI tests for unready, missing, null, numeric and string readiness, absent runner marker/model directories, retained flags/report and sealed manifests. Other complete/defective, placement, TP, cleanup, calibration and throttle worlds remain.
 - docs/align/gpukit.md: revised runbook, approval inputs, count/weight derivations, explicit settings, completeness and supply hazards, pending verification and calibration limitations.
 - .codex-report/align-gpukit.md: this handoff and FIX LOG.
 
@@ -38,6 +42,8 @@ joulewise/align/gpukit/__init__.py remains as it was before this round.
 ## PUBLIC API
 
 All modules are under joulewise.align.gpukit; private helpers are omitted.
+C1/C2 change no public signature. run_session now refuses unless the preflight
+report demonstrates measurement_ready is the JSON boolean true.
 
 - matrix.Run(model: str, task_pair: str, condition: str, seed: int)
 - matrix.expand(matrix: Mapping[str, Any]) -> tuple[Run, ...]
@@ -76,42 +82,89 @@ is optional. Default runner remains python -m joulewise.align run --matrix
 
 ## TESTS RUN
 
-No shell or Python process launched. Initial, intermediate and final attempts of:
+This continuation executed **no shell or Python process**. Initial and final
+attempts of pwd and python3 --version failed before launch with
+"No usable execution environment is available." The environment wait remained
+pending; the runtime tool reported observations_current=true, observed_phase=pending
+and connectivity=offline. No local checkout, git command, .review1 file, integrated
+tree, pip install, test or repro could be materialized/executed. All writes used
+the explicitly authorized connected-GitHub fallback with non-forced expected-head
+updates. This is an execution-environment failure, not an approval rejection.
 
-    pwd
-    python3 --version
+Own checks actually performed through GitHub tools and JavaScript (not Python tests):
 
-were rejected before execution with "No usable execution environment is available."
-The environment wait never yielded a usable executor; runtime status continued to
-report starting/pending and offline. No local checkout, git fetch/checkout, .review1
-materialization, scratch integrated tree, pip installation or test execution was
-possible. The brief explicitly permits the GitHub fallback; all changes used
-connected GitHub tools with expected-head, non-forced fast-forward updates.
+- Read the pushed report first, then shared contracts, AGENTS/M0/intake and
+  orchestration; TASK_QUEUE.md is empty, no active stop card, explicit user lane
+  direction selects this task. No local status or network-policy file could be read.
+- GitHub head was bed93a0950c9da1a699173609ddfe60d65084d72; C1 and C2 have
+  exactly one preceding parent each and were fast-forward pushed.
+- Read back all four changed code/test/runbook files at 18d3beb196989397b415c6945b2356f3531bb359:
+  exact equality with authored contents.
+- Source inventory: 36 old and 37 current test methods, no old method removed;
+  test_independent_hand_arithmetic is byte-identical to bed93a095.
+- Compared bed93a095..18d3beb1: two commits ahead, zero behind, only
+  docs/align/gpukit.md, joulewise/align/gpukit/{cost,session}.py and
+  tests/align/test_gpukit.py changed before the report commit.
+- PR #521 was open, draft and unmerged. No claim of final-head green CI.
 
-The following are **NOT RUN**, with run counts, passes, failures and skips unknown.
-From /workspace/JouleWise, no installed repo and no external PYTHONPATH, the
-requested environment is TMPDIR=/tmp/gk-tmp JW_B5_SYNTHETIC_ONLY=1:
+Director-provided execution evidence, **at bed93a095, not this seat's results**:
+macOS Python 3.13, stdlib only, no PYTHONPATH, TMPDIR set,
+JW_B5_SYNTHETIC_ONLY=1.
+
+| Director command/run | Supplied result |
+|---|---|
+| python3 -m unittest tests.align.test_gpukit | Ran 36, one failure, two skips (both optional jsonschema) |
+| Same focused suite with jsonschema | Ran 36, one failure, no skips |
+| python3 -m unittest discover -s tests/align -t . | Ran 40, one failure, two skips (both optional jsonschema) |
+
+The sole reported failure was MatrixTests.test_independent_hand_arithmetic line
+122: throughput_efficiency_not_supplied was replayed from matrix.flags after
+efficiencies were supplied. C1 fixes the implementation; the test is unchanged.
+The director did not supply an extra-enabled discovery result or exact venv
+installation command, so neither is inferred.
+
+Director-provided repro evidence at bed93a095:
+
+- GK-1: session_probe modes ok/dup/short/onesample all false with mock-power,
+  coordinate, count and coverage reasons respectively; MODE=real positive world
+  true. Integrated zero-turn endpoint.error.AttributeError world false.
+- GK-7: runner mocks with explicit clock, external monitoring: 30 Episodes/model,
+  at least 12 Turns each, 90 verdicts/model, no factory.error.* or endpoint.error.*;
+  completeness false only for mock power.
+- GK-8 Pass-Through accepted; MIG, VGPU and Host VGPU refused.
+- GK-9 hang: zero live grandchildren, elapsed 5.5 s; readiness worker orphans zero.
+  MIG CLI exited 2 without preflight.
+- GK-12 typos each produced one schema error. GK-14 both bootstrap argument orders
+  exited 0; MIG stopped before venv/pip.
+- GK-5 all three cost CLIs printed unavailable with named missing inputs;
+  budget counts were 36,000 generation Episodes and 26,400 monitor calls.
+- GK-13 decimal output was 0.47, 1.9, 0.57.
+- GK-2 real NVML preflight, without NVML: argv included --out and --device 0;
+  no usage error, exit 0, refused=false, measurement_ready=false, flag
+  "preflight_incomplete: NVML library unavailable; optional pynvml is not installed".
+  Both agent models then ran. C2 deliberately changes that outcome to refusal;
+  its final-head integrated repro remains NOT RUN.
+
+The following exact final-head commands are **NOT RUN**. Counts, pass/failure
+results and actual skips are unknown. The source inventory of 37 is not a run count.
+From /workspace/JouleWise, without installing the repository or setting PYTHONPATH,
+set TMPDIR=/tmp/gk-tmp and JW_B5_SYNTHETIC_ONLY=1:
 
     python3 -m unittest tests.align.test_gpukit -v
     python3 -m unittest discover -s tests/align -t .
 
-The extra-dependent setup and same runs are also **NOT RUN**:
+Extra-dependent setup/reruns, also **NOT RUN**:
 
     python3 -m venv /tmp/gpukit-jsonschema
     /tmp/gpukit-jsonschema/bin/pip install jsonschema
     /tmp/gpukit-jsonschema/bin/python -m unittest tests.align.test_gpukit -v
     /tmp/gpukit-jsonschema/bin/python -m unittest discover -s tests/align -t .
 
-Source inventory is 36 authored test methods, not an observed test-run count.
-The original optional-jsonschema test keeps its existing skipUnless and reason
-"optional jsonschema is not installed". The new schema test uses that same optional
-dependency guard. Existing Bash skipUnless is unchanged. No existing test received
-a new skip or a widened numerical agreement bar. Existing assertions were updated
-for mandated budget counts, corrected decode arithmetic, preflight refusal semantics
-and the explicit bootstrap argv; assertions on failure evidence, bounds, complete
-positive output, energy, custody and subprocess cleanup remain.
+No skip guard was added to an existing test; the two jsonschema guards and
+Bash guard remain unchanged. C2 changes the false-readiness expected outcome
+because the owner amended R4, not to make a failing implementation pass.
 
-Every supplied reviewer repro is **NOT RUN**:
+Every supplied final-head reviewer repro is **NOT RUN**:
 
     python3 -I /workspace/JouleWise/.review1/session_probe.py /workspace/JouleWise /workspace/JouleWise/.review1
     python3 -I /workspace/JouleWise/.review1/gpu_probe.py /workspace/JouleWise /workspace/JouleWise/.review1/bin
@@ -121,48 +174,36 @@ Every supplied reviewer repro is **NOT RUN**:
     python3 -I /workspace/JouleWise/.review1/bounds_noembed.py /workspace/JouleWise
     python3 -I /workspace/JouleWise/.review1/bounds.py /workspace/JouleWise
 
-Integrated cases, each **NOT RUN**, with the required added policy options shown:
+Use the director's authorized harness adaptations listed in FIX LOG. Build the
+integrated scratch tree per the brief (runner/NVML lane heads must be recorded).
+Patch the runner SyntaxError only in scratch if the fetched head still has it.
+Integrated commands, all **NOT RUN** (ports are harness policy, not observed free ports):
 
     python3 -I /workspace/JouleWise/.review1/run_session.py /tmp/gk-integ /tmp/gk-integ -- configs/align/shade.json --output /tmp/gk-e2e/gk-shade --runner-settings /workspace/JouleWise/.review1/settings-gk.json --ready-timeout-s 20 --command-timeout-s 120 --runner-timeout-s 120 --monitor-placement none --poll-s 0.2 --port 18841 --preflight-command '["preflight-ok"]'
     python3 -I /workspace/JouleWise/.review1/run_session.py /tmp/gk-integ /tmp/gk-integ -- configs/align/shade.json --output /tmp/gk-e2e/default-preflight --runner-settings /workspace/JouleWise/.review1/settings-gk.json --ready-timeout-s 20 --command-timeout-s 120 --runner-timeout-s 120 --monitor-placement none --poll-s 0.2 --port 18842
     python3 -I /workspace/JouleWise/.review1/run_session.py /tmp/gk-integ /tmp/gk-integ -- configs/align/shade.json --output /tmp/gk-e2e/default-mock2 --runner-settings /workspace/JouleWise/.review1/settings-mock.json --ready-timeout-s 20 --command-timeout-s 120 --runner-timeout-s 120 --monitor-placement none --poll-s 0.2 --port 18843 --preflight-command '["preflight-ok"]'
 
-Those port values are suggested harness settings, not observed free ports.
-No actual default-preflight report exists from this seat: its verdict, flags,
-measurement readiness and log contents are unknown. The argv construction now
-includes --out and one --device per measured index by source inspection only.
-The runner scratch SyntaxError patch and all archive/extraction checks are NOT RUN.
-The repository-wide suite was not launched, as the brief explicitly directs.
-
-Static checks actually performed using connected tools/JavaScript, **not Python tests**:
-
-- Read report, AGENTS/M0/intake, shared contracts, runner docs/code and NVML main;
-  read budget run.py/conditions.py/doc at 58750718f, and SHADE judge documentation.
-- GitHub comparison from 280866c8d confirmed forward-only ancestry and that every
-  round code/config/test change stays within WRITE_SCOPE.
-- Read back all 13 changed code/config/test/runbook files at
-  ada1c7e86fef0c837f2a28bec679890b473028ad: exact equality with authored text.
-- A JavaScript implementation of the sibling-source/derivation walk on actual
-  old-head configs found 18 unsupported numeric leaves in EACH of shade/MoE/budget;
-  on the revised configs it found zero in EACH. This demonstrates the old-head
-  source failures without claiming numeric_provenance's Python test executed.
-- JavaScript source inventory confirmed all original 17 test method names remain,
-  with 19 added. Connected GitHub metadata confirmed PR #521 open, draft, unmerged.
-- Read public Qwen card mirrors, Qwen3-Next config-source registry, driver DTD/XML
-  mirrors and NVIDIA-authored NVML header. No model weights or packages fetched.
-
-Reviewer-supplied evidence on OLD 280866c8d is not this seat's verification:
-17 gpukit tests passed with/without jsonschema, and 21 alignment tests passed with
-one optional-jsonschema skip in the bare environment. No final-head pass, green
-CI, independent executing review, cross-model arithmetic comparison or cold final
-pass is claimed.
+Expected amended default-preflight outcome for the director's no-NVML report:
+status refused, nvml_measurement_not_ready, no model-* directories, bundled
+report and sealed archive, CLI exit 2. This is the ruling/implementation expectation,
+not an executed result. No repository-wide suite was run, per the brief.
 
 ## END-TO-END
 
-**NOT RUN.** There are no observed current-head Episode counts, Joules, durations,
-child-process counts, flags or archive-verification results.
+**NOT RUN by this continuation seat.** There are no observed final-head Episode
+counts, Joules, durations, child-process counts or archive-verification results.
 
-Authored production-path worlds (design numbers, not results):
+Director-provided bed93a095 observations: the fixture runner's non-mock-labeled
+positive control gave data_complete=true; its mock/duplicate/short/single-sample
+worlds gave false with specific flags. The integrated real runner with clocked mock
+factories produced 30 Episodes per model, at least 12 Turns per Episode and
+90 monitor verdicts per model under external placement, and was incomplete only
+for mock power. Hang cleanup left zero live grandchildren. These are synthetic
+integration observations at the old head, not physical GPU measurements or
+verification of this continuation's final head. The real preflight without NVML
+reported measurement_ready=false yet spent both models; C2 closes that gate.
+
+Authored production-path worlds (design numbers below, not results of this seat):
 
 - Bash bootstrap -> real session -> stub whole-GPU XML/report-writing preflight/
   vLLM process -> subprocess fixture writing shared Episodes -> read_episodes and
@@ -181,8 +222,10 @@ Authored production-path worlds (design numbers, not results):
   All must give false and the specific reason. A different-model world fails;
   an endpoint identity containing the correct model succeeds.
 - Preflight worlds write refused=true/exit 2, exit 2/no report, or refused=false/
-  measurement_ready=false. Tests check no model directories and absent runner
-  marker on refusal, sealed bundles, CLI exit 2, and retained false readiness.
+  measurement_ready=false, plus missing/null/string/numeric readiness. C2 now
+  requires every such unready world to refuse, with no model directories or runner
+  marker, sealed bundles, CLI exit 2, and retained report fields/flags. The existing
+  fully ready complete-world positive control still requires true completeness.
 - Placement world serves two agent processes on measured GPU 0 serially and one
   persistent monitor process on GPU 1. It inspects per-process CUDA_VISIBLE_DEVICES,
   translated monitor port, sampler device list and measured-only preflight argv.
@@ -216,10 +259,20 @@ GK-6 derived per-token weights, from source fields and arithmetic (not execution
   or expand the repository write scope.
 - Follow the cloud-runtime skill for status/network diagnosis while available.
   No credential values, secret files or environment dumps were read or printed.
-- R4 report semantics control refusal: a missing/unreadable/invalid-verdict report
-  means no demonstration of sampling and refuses; readable refused=false proceeds
-  even with false readiness or nonzero command status. Exit code alone is not a
-  verdict. All raw reports and verdict fields are preserved.
+- C2 explicitly amends R4: missing/unreadable/invalid-verdict reports refuse.
+  A readable refused=true report refuses; any measurement_ready value other than
+  JSON boolean true also refuses with nvml_measurement_not_ready. This is the
+  physical instrument-readiness gate, before both monitor and agent startup.
+  refused=false plus measurement_ready=true may proceed despite a nonzero command
+  exit, which remains a flag. Exit code alone is never a verdict; reports are kept.
+- C1 treats throughput_efficiency_not_supplied and workload_token_volumes_unavailable
+  as evaluated input flags, not permanent template context. The selected GPU's
+  agent-model efficiencies and current prefill/decode values determine them.
+  Other static context/provisional flags remain. The original arithmetic test is
+  unchanged; a new regression checks stale-token removal and partial efficiencies.
+- Use the user-authorized GitHub fallback because executor startup did not become
+  usable. Distinguish own static/readback checks from the director's executed
+  bed93a095 evidence and mark all own Python/shell tests/repros NOT RUN.
 - Inventory all measured TP indices plus an explicitly selected separate monitor
   device. Preflight/sampling use measured devices only. GPU count and precision
   are per-model; whole-box billing still includes allocated idle measured devices.
@@ -286,8 +339,9 @@ GK-6 derived per-token weights, from source fields and arithmetic (not execution
 - Retain existing failure/custody/energy assertions; update expected counts,
   corrected weight arithmetic and command arguments to the governing rulings.
   Added large defects plus complete positive worlds. Do not add skips to old tests.
-- Preserve draft PR #521 and report authored/unexecuted work plainly. The lead
-  still owns integrated execution, independent review, CI and merge gates.
+- Preserve draft PR #521 and report authored/unexecuted final-head work plainly.
+  The director's old-head evidence is retained without claiming a final-head pass.
+  The lead still owns final executing review, CI and merge gates.
 
 ## CONTRACT-CHANGE
 
@@ -306,25 +360,14 @@ the correct physical work without counting deletion views twice.
 
 ## OPEN ISSUES
 
-- Everything requiring a shell remains NOT RUN: both unittest commands, jsonschema
-  setup/reruns, every reviewer script, integrated cases, compilation and manifests.
-  No current-head pass or hardware readiness is established.
-- Required reviewer harness call adaptations were NOT WRITTEN because .review1
-  could not be materialized. Add runner_timeout_s and monitor_placement to
-  SessionOptions calls (hang uses 5 s); append corresponding CLI options to
-  ready_probe/main and integrated commands; supply bootstrap probe-timeout/device
-  settings. gkfix task now reads context.task_pair, without requiring that key in
-  config; settings-gk explicitly requests model/base_url and sampler interval
-  placeholders. Both settings files pass clock={"factory":"mock.clock"} and
-  clock_domain="mock.monotonic"; the obsolete gkfix time monkeypatch can be removed
-  when moving to that explicit clock. These are wiring-only adaptations; no world
-  or printed check needs weakening.
-- R4 conflicts with the supplied preflight-ok stub: it prints {"fixture":true} to
-  stdout and never writes --out. Under the required semantics this MUST refuse
-  with nvml_preflight_unavailable, so unchanged happy-path reviewer probes cannot
-  reach their runner worlds. The lead must reconcile that harness fixture to write
-  a readable refused=false report; this seat did not change that supplied stub or
-  add a production stdout bypass. Authored tests use a real report-writing stub.
+- Final-head shell/Python tests, jsonschema installation/reruns, every reviewer
+  repro, integrated tree and manifest checks are NOT RUN in this seat. Executor
+  calls still fail before launch; no final-head pass or hardware readiness is
+  established. The director's bed93a095 results are recorded in TESTS RUN.
+- Reviewer .review1 files were not materialized here. The director already
+  reconciled the preflight-ok fixture to write the NVML report format, and the
+  continuation explicitly authorizes the same harness wiring adaptations.
+  Use the list in FIX LOG; no production stdout bypass is needed or added.
 - bounds.py/bounds_noembed.py use stale budget/local-monitor counts and null token
   fields after R1/R2/R3. They are expected to fail as old planning-table repros,
   not regressions. They were not run and no exception/result is claimed.
@@ -373,14 +416,15 @@ ruling is requested.
 
 ## FIX LOG
 
-"fixed" below means implementation pushed, **not executed verification**.
-Later test/runbook commits supplement these implementation checkpoints.
+"fixed" below means implementation pushed; no Python/shell verification ran in
+this seat. Director-supplied execution at bed93a095 is separately recorded in
+TESTS RUN and does not establish a final-head pass. Earlier checkpoints remain:
 
 - GK-1: fixed eca533727ce543330aa6bfeacd2925d0cfbeb397 (follow-ups 0c402afe, ada1c7e8).
-- GK-2: fixed d9a2d7cc185d5684c58b30b0908aa0935a61658e.
+- GK-2: fixed d9a2d7cc185d5684c58b30b0908aa0935a61658e; C2 readiness amendment in 18d3beb196989397b415c6945b2356f3531bb359.
 - GK-3: fixed a4c9931ac52efdf4cb186c34ff9c00a6d959e738.
 - GK-4: fixed 2b1307dc8a6ec73e4f6deec9e981e34b0298169b.
-- GK-5: fixed a4c9931ac52efdf4cb186c34ff9c00a6d959e738 (partial calibration/final limitations 6fac9635).
+- GK-5: fixed a4c9931ac52efdf4cb186c34ff9c00a6d959e738 (partial calibration/final limitations 6fac9635; stale input-flag follow-up C1 in 746fc6f9cbf8788a9cefe0028aaef660e660d266).
 - GK-6: fixed 71190036ca3761e6b1d78470ee5081b1365ef2df; old bounds.py/bounds_noembed.py are expected incompatible with null volumes/new counts, NOT RUN.
 - GK-7: fixed 2b1307dc8a6ec73e4f6deec9e981e34b0298169b (explicit mock identity follow-up 6fac9635).
 - GK-8: fixed 71190036ca3761e6b1d78470ee5081b1365ef2df.
@@ -394,7 +438,30 @@ Later test/runbook commits supplement these implementation checkpoints.
 - GK-16: info, no change.
 - GK-S: fixed 1db023047da5e79c9f00334012845f9d487b873a (board-limit follow-up 16f5a8f7).
 
-Reviewer .review1 copy changes: none were materialized or executed. Pending
-call/settings adaptations and the R4 stub incompatibility are listed in OPEN ISSUES;
-no worlds, modes, printed checks or assertions were weakened. No out-of-scope
-registry or fixture-signature files were changed.
+- C1: fixed 746fc6f9cbf8788a9cefe0028aaef660e660d266. Recompute evaluated efficiency/token-volume flags, retain static context; original failing arithmetic test unchanged; add missing/supplied/partial-input regression. NOT RUN here.
+- C2: fixed 18d3beb196989397b415c6945b2356f3531bb359. Require measurement_ready is True; flag nvml_measurement_not_ready and refuse before all model starts otherwise. Expanded report/CLI refusal tests and runbook. The previous false-readiness-proceeds assertion was changed under the owner's explicit R4 amendment, not weakened to pass a test. NOT RUN here.
+- C3: execution unavailable; recorded the director's bed93a095 evidence separately and all own tests/repros NOT RUN. No result is claimed.
+
+Reviewer .review1 copy changes: none materialized in this continuation because
+the executor is unavailable. The director's authorized adaptations, to reuse:
+
+- SessionOptions calls: runner_timeout_s and monitor_placement="none"; hang uses
+  runner_timeout_s=5.0. ready_probe CLI adds --runner-timeout-s 5
+  --monitor-placement none. No mode/world/printed check changes.
+- boot_probe environment: JOULEWISE_PROBE_TIMEOUT_S=30, JOULEWISE_GPU_INDICES=0.
+- gkfix.py task factory: remove the obsolete config["task_pair"] assertion;
+  task identity comes through FactoryContext. settings-gk explicitly supplies
+  endpoint_config={"model":"{agent_model}","base_url":"{agent_base_url}"} and
+  sampler_config={"interval_ns":"{interval_ns}"}.
+- Runner mock settings: clock={"factory":"mock.clock"},
+  clock_domain="mock.monotonic", so ScriptedEndpoint advances the shared clock.
+- preflight-ok writes {"fixture":true,"refused":false,"measurement_ready":true,
+  "flags":[]} to the path after --out. This is the director-authorized harness
+  repair for R4; stdout-only original cannot satisfy the production contract.
+- Integrated command lines add the required runner-timeout and explicit monitor
+  placement. External placement in the director's mock control is identified in
+  TESTS RUN; do not infer that result for a new none-placement run.
+
+No worlds or printed checks were weakened, no existing skip added, and no
+out-of-scope registry or fixture-signature file changed. NEEDS_RULING is retained
+unchanged from bed93a095.
