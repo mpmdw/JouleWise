@@ -57,7 +57,7 @@ def cap_tokens(median_tokens: float, fraction: float) -> int:
 
 
 def shakedown_median_length(lengths: Sequence[int], censored: Sequence[bool]) -> tuple[float, tuple[str, ...]]:
-    """Return L, statistics.median of recorded shakedown thinking-on lengths.
+    """Return L, statistics.median of hinted thinking-on shakedown lengths only.
 
     The caller excludes generation failures. Output-cap-censored runs stay at
     their recorded length. Those lengths and the runner's substituted max_tokens

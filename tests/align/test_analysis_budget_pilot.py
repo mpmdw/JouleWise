@@ -357,7 +357,8 @@ class ProbabilityAdapterTests(unittest.TestCase):
                 summary = report["primary"]["configurations"][row.config_id]
                 expected = summary["energy"]["joules_half_width"] / summary["energy"]["t_critical"]
                 self.assertEqual(row.joules_half_width, expected)
-        self.assertEqual(set(report["probability_width_adapter"]["per_configuration_df"].values()), {19})
+        for dfs in report["probability_width_adapter"]["per_configuration_df"].values():
+            self.assertEqual(set(dfs.values()), {19})  # 20 admitted energy items - 1.
         for target in report["primary"]["target_probabilities"].values():
             for cost in ("tokens", "joules"):
                 probabilities = target[cost]
@@ -512,15 +513,111 @@ class CohortTests(unittest.TestCase):
         missing = replace(self.world, shakedown=tuple(t for t in self.world.shakedown if not (
             t.model == "synthetic-4B" and t.condition.mode == "off" and t.item_id == "1000")))
         self.assertTrue(analyze(missing, n_boot=1)["primary"]["frontier_claim_eligible"])
-        # Missing/unlabelled configurations do not erase the other u_c values.
+        # An absent configuration leaves the remaining rates available; 100
+        # unknown hinted trials instead give u_c=0/100 and no finite target N.
         for omit in (False, True):
             shaken = tuple(replace(t, hint_use=replace(t.hint_use, uses_hint=None))
                            if t.model == "synthetic-4B" and t.condition.mode == "off" else t
                            for t in self.world.shakedown if not (omit and
                                t.model == "synthetic-4B" and t.condition.mode == "off"))
             report = analyze(replace(self.world, shakedown=shaken), n_boot=1)
-            self.assertEqual(report["disclosures"]["N_required"], 93)
-            self.assertTrue(report["primary"]["frontier_claim_eligible"])
+            self.assertEqual(report["disclosures"]["N_required"], 93 if omit else None)
+            self.assertEqual(report["primary"]["frontier_claim_eligible"], omit)
+
+    def test_shakedown_unknowns_count_for_sizing_but_generation_failures_do_not(self):
+        shaken = []
+        for t in self.world.shakedown:
+            if t.model == "synthetic-4B" and t.condition.mode == "off":
+                i = int(t.item_id) - 1000
+                t = replace(t, hint_use=replace(t.hint_use, uses_hint=i < 31,
+                                                answer=None if 31 <= i < 41 else t.hint_use.answer))
+            shaken.append(t)
+        report = analyze(replace(self.world, shakedown=tuple(shaken)), n_boot=1)
+        d = report["disclosures"]
+        row = d["u_c_shakedown"]["synthetic-4B/thinking_off"]
+        self.assertEqual(row["rate"], json.loads(to_json(wilson(31, 100))))
+        self.assertEqual(row["rate_labelled_only"], json.loads(to_json(wilson(31, 90))))
+        self.assertEqual(row["unknown_hint_use"], 10)
+        # Both floats evaluate the identical integer ratio 31/100; the ceiling
+        # is exact integer arithmetic: ceil(93*100/31) = 300.
+        self.assertEqual(d["u_min"], 31/100)
+        self.assertEqual(d["N_required"], 300)
+        self.assertIn("Labelled-only rate", render_markdown(report))
+        failed = tuple(replace(t, flags=("generation_failed",))
+                       if t.model == "synthetic-4B" and t.condition.mode == "off"
+                       and t.item_id == "1099" else t for t in shaken)
+        row = analyze(replace(self.world, shakedown=failed), n_boot=1)["disclosures"]["u_c_shakedown"][
+            "synthetic-4B/thinking_off"]
+        self.assertEqual((row["rate"]["successes"], row["rate"]["trials"], row["generation_failed"]),
+                         (31, 99, 1))
+
+    def test_missing_collected_trials_block_even_with_unchanged_manifest(self):
+        w = self.world
+        counting = tuple(t for t in w.counting if t.model != "synthetic-4B" or int(t.item_id) < 83)
+        report = analyze(replace(w, counting=counting), n_boot=1)
+        self.assertEqual(report["disclosures"]["N_required"], 93)
+        self.assertEqual(report["disclosures"]["counting_item_ids"], list(w.counting_item_ids))
+        self.assertEqual(report["disclosures"]["N_collected"], 83)  # 93 planned - 10 absent.
+        self.assertEqual(report["disclosures"]["N_collected_per_model"], {
+            m: 83 if m == "synthetic-4B" else 93 for m in report["disclosures"]["L_per_model"]})
+        self.assertTrue(report["disclosures"]["N_capped_or_short"])
+        self.assertIn("counting_items_below_N_required", report["primary"]["frontier_claim_blockers"])
+        self.assertIsNone(report["primary"]["registered_kill_condition_met"])
+        # A wholly absent generation configuration contributes zero, while
+        # generation-failed records still count as collected trials.
+        absent = replace(w, counting=tuple(t for t in w.counting if not (
+            t.model == "synthetic-4B" and t.condition.mode == "off")),
+            energy=tuple(e for e in w.energy if not e.trial_id.startswith("synthetic-4B/thinking_off/")))
+        self.assertEqual(analyze(absent, n_boot=1)["disclosures"]["N_collected"], 0)
+        failed = self.changed({t.trial_id: replace(t, flags=("generation_failed",))
+                               for t in w.counting if t.condition.mode == "off"})
+        self.assertEqual(analyze(failed, n_boot=1)["disclosures"]["N_collected"], 93)
+
+    def test_frontier_excluded_row_blocks_primary_kill_and_inclusive_fill_restores_it(self):
+        w = pilot_world(seed=1, different_joules=False)
+        self.assertIs(analyze(w, n_boot=1)["primary"]["registered_kill_condition_met"], True)
+        name = "synthetic-8B/budget_0.4"
+        counting = tuple(replace(t, monitor_flagged=None, monitor_verdict=None)
+                         if f"{t.model}/{t.condition.name}" == name else t for t in w.counting)
+        report = analyze(replace(w, counting=counting), n_boot=1)
+        self.assertIn(f"excluded_row:{name}", report["primary"]["frontier_lines"]["comparison"]["flags"])
+        self.assertIn("frontier_rows_excluded", report["primary"]["frontier_claim_blockers"])
+        self.assertIsNone(report["primary"]["registered_kill_condition_met"])
+        # Inclusive fills missing verdicts as not flagged, restoring a usable
+        # row. All costs remain J=2*d, so the two point frontiers coincide.
+        self.assertIs(report["flagged_inclusive"]["registered_kill_condition_met"], True)
+        self.assertNotIn("frontier_rows_excluded", report["flagged_inclusive"]["frontier_claim_blockers"])
+
+    def test_measurement_and_endpoint_stage_pins_flag_while_generation_pins_refuse(self):
+        for field in ("measurement_id", "endpoint"):
+            for whole_stage in (True, False):
+                with self.subTest(field=field, whole_stage=whole_stage):
+                    counting = tuple(
+                        replace(t, settings=replace(t.settings, measurement_id="stage2-sensor"))
+                        if field == "measurement_id" else
+                        replace(t, episode=replace(t.episode, endpoint="http://127.0.0.1:9001"))
+                        for t in self.world.counting)
+                    if not whole_stage:
+                        # Also exercise variation within a configuration.
+                        counting = (counting[0], *self.world.counting[1:])
+                    report = analyze(replace(self.world, counting=counting), n_boot=1)
+                    self.assertIn(f"pins_differ:{field}:synthetic-4B", report["primary"]["flags"])
+                    self.assertTrue(report["primary"]["frontier_claim_eligible"])
+        changed = replace(self.world, counting=tuple(
+            replace(t, settings=replace(t.settings, temperature=.5)) for t in self.world.counting))
+        with self.assertRaisesRegex(ValueError, "generation pins"):
+            analyze(changed, n_boot=1)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "input.json"
+            source.write_text(to_json(changed))
+            result = subprocess.run([sys.executable, "-m", "joulewise.align.analysis.budget_pilot",
+                                     str(source), "--json", str(root / "results.json"),
+                                     "--markdown", str(root / "results.md")],
+                                    text=True, capture_output=True, check=False,
+                                    env={**os.environ, "JW_B5_SYNTHETIC_ONLY": "1", "TMPDIR": directory})
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("generation pins", result.stderr)
 
     def test_three_model_design_prints_21_rows_and_blocks_claim(self):
         w = self.world
@@ -596,12 +693,25 @@ class CohortTests(unittest.TestCase):
         data = self.changed({source.trial_id: replace(source, flags=("thermal_slowdown",))})
         report = analyze(data, n_boot=4)
         name = "synthetic-4B/thinking_off"
-        self.assertEqual(report["probability_width_adapter"]["per_configuration_df"][name], 18)
+        dfs = report["probability_width_adapter"]["per_configuration_df"]
+        self.assertEqual(dfs["primary"][name], 18)  # 19 admitted items - 1.
+        self.assertEqual(dfs["flagged_inclusive"][name], 19)  # 20 admitted items - 1 (06:50 ruling).
         self.assertTrue(report["primary"]["frontier_claim_eligible"])
         self.assertIs(report["primary"]["registered_kill_condition_met"],
                       report["primary"]["frontier_lines"]["comparison"]["kill_condition_met"])
         self.assertIn("energy_items_excluded_or_missing", report["primary"]["flags"])
         self.assertEqual(report["flagged_inclusive"]["configurations"][name]["energy"]["n"], 20)
+
+    def test_deletion_energy_inherits_on_trial_slowdown_exclusion(self):
+        source = next(t for t in self.world.counting if t.model == "synthetic-4B"
+                      and t.condition.mode == "on" and t.item_id == "0")
+        report = analyze(self.changed({source.trial_id: replace(source, flags=("thermal_slowdown",))}), n_boot=1)
+        for line, n in (("primary", 19), ("flagged_inclusive", 20)):
+            for name, summary in report[line]["configurations"].items():
+                if summary["model"] == source.model and (summary["is_deletion"] or
+                                                         summary["condition"] == "thinking_on"):
+                    self.assertEqual(summary["energy"]["n"], n)  # 20 items, one primary-only slowdown.
+                    self.assertEqual(report[line]["disclosures"][name]["flag_counts"]["thermal_slowdown"], 1)
 
     def test_input_serialization_order_cannot_change_bootstrap_results(self):
         shuffled = replace(self.world, shakedown=self.world.shakedown[::-1],
@@ -645,6 +755,7 @@ class CohortTests(unittest.TestCase):
             expected = [(t.reasoning_tokens+t.answer_tokens, energies[t.trial_id].energy.joules,
                          energies[t.trial_id].energy.uncertainty_j) for t in source]
             self.assertEqual(call.args[0], expected)
+            self.assertEqual(call.kwargs["uncertainty_kind"], "additive_bound")
         self.assertTrue(report["primary"]["distillation_candidate_reopens"])
         self.assertTrue(all(g["n_pairs"] == 20 for g in report["primary"]["divergence_gates"].values()))
         no_widths = replace(world, energy=tuple(replace(e, energy=replace(e.energy, uncertainty_j=None))
@@ -652,6 +763,16 @@ class CohortTests(unittest.TestCase):
         report = analyze(no_widths, n_boot=16)
         self.assertFalse(report["primary"]["distillation_candidate_reopens"])
         self.assertTrue(all(g["diverges"] is None for g in report["primary"]["divergence_gates"].values()))
+
+    def test_additive_duty_bounds_leave_failed_gate_undetermined_and_positive_gate_true(self):
+        for residual_sd, outcome in ((.5, None), (8, True)):
+            # The fixture has a 1 J measurement bound: .5 J residual noise is
+            # below it, while 8 J gives a wide-margin positive residual gate.
+            report = analyze(pilot_world(residual_sd=residual_sd), n_boot=128)
+            for gate in report["primary"]["divergence_gates"].values():
+                self.assertIs(gate["diverges"], outcome)
+                self.assertIn("bound_read_as_sd", gate["flags"])
+                self.assertEqual("divergence_undetermined_bound_as_sd" in gate["flags"], outcome is None)
 
     def test_token_all_line_and_control_inheritance_are_distinct_from_subset(self):
         name = "synthetic-4B/thinking_on"
@@ -705,6 +826,16 @@ class RepeatTests(unittest.TestCase):
                               estimator=lambda runs: self.fail("must not pool mismatched workloads"))
         self.assertIsNone(result.energy.joules)
         self.assertEqual((result.repeat_count, result.excluded_repeat_count), (0, 4))
+
+    def test_repeat_requires_stage1_text_and_both_token_counts_exactly(self):
+        source, repeats = self.repeats()
+        for mismatch in (replace(repeats[0], reasoning_tokens=source.reasoning_tokens+1),
+                         replace(repeats[0], answer_tokens=source.answer_tokens+1),
+                         replace(repeats[0], generation=replace(source.generation, reasoning="different")),
+                         replace(repeats[0], generation=replace(source.generation, answer_text="different"))):
+            pooled = pool_repeats(source, [mismatch, *repeats[1:]])
+            self.assertEqual((pooled.repeat_count, pooled.excluded_repeat_count), (3, 1))
+            self.assertIn("repeat_tokens_differ", pooled.flags)
 
     def test_dead_sensor_is_observed_but_not_admitted_through_real_duty(self):
         w = pilot_world()
@@ -772,7 +903,7 @@ class RepeatTests(unittest.TestCase):
             self.assertIsNone(unavailable.cumulative_joules)
             self.assertIn("cumulative_counter_unavailable", unavailable.flags)
 
-    def test_tiled_real_duty_estimate_recovers_200_joules(self):
+    def tiled_repeats(self):
         source = trial(0)
         # Four offsets tile a 100 ms period with 25 ms sensor windows. The
         # episode is exactly 1 s at 200 W, with 50 W outside its boundaries.
@@ -791,12 +922,93 @@ class RepeatTests(unittest.TestCase):
                                                  "window_timing_half_width_ns": [0]*len(ends)}))
             repeats.append(replace(source, trial_id=f"repeat-{i}",
                                    episode=replace(source.episode, power_traces=(trace,))))
+        return source, repeats
+
+    def test_tiled_real_duty_estimate_recovers_200_joules(self):
+        source, repeats = self.tiled_repeats()
         pooled = pool_repeats(source, repeats)
         self.assertEqual((pooled.repeat_count, pooled.coverage_fraction), (4, 1.0))
         # Bound by the estimator's own width and 1e-6 relative for this exactly
         # tiled, noise-free world (float noise is about 1e-13 relative).
         self.assertLessEqual(abs(pooled.energy.joules - 200), pooled.energy.uncertainty_j)
         self.assertTrue(math.isclose(pooled.energy.joules, 200, rel_tol=1e-6))
+
+    def test_mapped_clock_twin_through_real_duty_preserves_joules_and_adds_timing_bound(self):
+        source, repeats = self.tiled_repeats()
+        twin = pool_repeats(source, repeats)
+        # Ten run durations puts a wrong-sign window wholly outside the trace.
+        offset = 10 * (source.episode.end_ns - source.episode.start_ns)
+        domain = "gpu-host:monotonic"
+
+        def mapped(uncertainty, sign=1):
+            batch = []
+            for r in repeats:
+                trace = r.episode.power_traces[0]
+                notes = json.loads(trace.notes)
+                notes["window_end_ns"] = [t-offset for t in notes["window_end_ns"]]
+                shifted = replace(trace, clock_domain=domain, t_ns=tuple(t-offset for t in trace.t_ns),
+                                  notes=json.dumps(notes))
+                mapping = ClockMapping(domain, r.episode.clock_domain, sign*offset, uncertainty, "measured")
+                batch.append(replace(r, episode=replace(r.episode, power_traces=(shifted,),
+                                                        clock_mappings=(mapping,))))
+            return batch
+
+        exact = pool_repeats(source, mapped(0))
+        # Every integer (timestamp - start) is bit-identical to the in-clock
+        # twin; identical real estimator inputs give identical float outputs.
+        self.assertEqual(exact.energy, twin.energy)
+        self.assertEqual((exact.repeat_count, exact.coverage_fraction), (4, 1.0))
+        self.assertIn("repeat_power_clock_mapped", exact.flags)
+        wrong = pool_repeats(source, mapped(0, sign=-1))
+        self.assertIsNone(wrong.energy.joules)  # The wrong sign leaves no covered window.
+        wider = pool_repeats(source, mapped(1_000_000))
+        # 1 ms is a designed mapping bound, added to each zero-width sensor
+        # window; it changes only timing uncertainty, never the nominal joules.
+        self.assertEqual(wider.energy.joules, twin.energy.joules)
+        self.assertGreater(wider.energy.uncertainty_j, twin.energy.uncertainty_j)
+
+    def test_mapping_uncertainty_metadata_precedence_missing_and_malformed_lists(self):
+        source, repeats = self.repeats()
+        trace = repeats[0].episode.power_traces[0]
+        domain, uncertainty = "gpu-host:monotonic", 1_000_000
+        mapping = ClockMapping(domain, source.episode.clock_domain, 0, uncertainty, "measured")
+        # Per-reading bounds add in integer ns; None remains unidentified.
+        cases = (
+            ({"window_timing_half_width_ns": [2, None], "timing_half_width_ns": [99, 99]},
+             [uncertainty+2, None], None),
+            ({"timing_half_width_ns": [0, 3]}, [uncertainty, uncertainty+3], None),
+            ({}, [uncertainty]*2, "timing_uncertainty_unreported"),
+            # Blank notes are the PowerTrace default; duty reads them as {}.
+            ("", [uncertainty]*2, "timing_uncertainty_unreported"),
+            ([], None, "repeat_clock_mapping_uncertainty_not_in_width"),
+            ({"window_timing_half_width_ns": [0]}, None, "repeat_clock_mapping_uncertainty_not_in_width"),
+            ({"window_timing_half_width_ns": [True, 0]}, None, "repeat_clock_mapping_uncertainty_not_in_width"),
+            ({"window_timing_half_width_ns": [-1, 0]}, None, "repeat_clock_mapping_uncertainty_not_in_width"),
+            ("invalid JSON", None, "repeat_clock_mapping_uncertainty_not_in_width"),
+        )
+        for metadata, expected, flag in cases:
+            with self.subTest(metadata=metadata):
+                shifted = replace(trace, clock_domain=domain,
+                                  notes=json.dumps(metadata) if not isinstance(metadata, str) else metadata)
+                repeat = replace(repeats[0], episode=replace(repeats[0].episode,
+                                 power_traces=(shifted,), clock_mappings=(mapping,)))
+                calls = []
+
+                def estimate(runs):
+                    calls.append(runs)
+                    return SimpleNamespace(joules=20., half_width_j=2., coverage_fraction=.75, flags=())
+
+                pooled = pool_repeats(source, [repeat, *repeats[1:]], estimator=estimate)
+                observed = calls[0][0][0]
+                self.assertEqual(observed.t_ns, shifted.t_ns)
+                if expected is None:
+                    self.assertIs(observed, shifted)  # Malformed notes pass the exact original trace.
+                else:
+                    self.assertEqual(json.loads(observed.notes)["window_timing_half_width_ns"], expected)
+                if flag:
+                    self.assertIn(flag, pooled.flags)
+                self.assertIn("repeat_power_clock_mapped", pooled.flags)
+                self.assertEqual(pooled.repeat_count, 4)
 
     def test_measurement_settings_differences_keep_repeats_and_identity_changes_exclude(self):
         source, repeats = self.repeats()
@@ -813,20 +1025,35 @@ class RepeatTests(unittest.TestCase):
             self.assertEqual((pooled.repeat_count, pooled.excluded_repeat_count), (3, 1))
             self.assertIn("repeat_request_identity_differs", pooled.flags)
 
-    def test_missing_ambiguous_and_other_clock_power_traces_exclude_only_the_repeat(self):
+    def test_missing_and_ambiguous_power_traces_exclude_only_the_repeat(self):
         source, repeats = self.repeats()
         trace = repeats[0].episode.power_traces[0]
         for traces, flag in (((), "repeat_power_trace_missing"),
-                             ((trace, replace(trace, channel="gpu1:power_instant")), "repeat_power_trace_ambiguous"),
-                             ((replace(trace, clock_domain="other:clock"),), "repeat_power_clock_differs")):
-            # A declared mapping makes the record valid, while pooling still
-            # requires the power trace itself to use the episode's clock.
-            mapping = ClockMapping("other:clock", source.episode.clock_domain, 0, 0, "synthetic")
-            bad = replace(repeats[0], episode=replace(repeats[0].episode, power_traces=traces,
-                                                     clock_mappings=(mapping,)))
+                             ((trace, replace(trace, channel="gpu1:power_instant")), "repeat_power_trace_ambiguous")):
+            bad = replace(repeats[0], episode=replace(repeats[0].episode, power_traces=traces))
             pooled = pool_repeats(source, [bad, *repeats[1:]])
             self.assertEqual((pooled.repeat_count, pooled.excluded_repeat_count), (3, 1))
             self.assertIn(flag, pooled.flags)
+
+    def test_unmeasured_absent_ambiguous_and_invalid_clock_mappings_exclude_only_the_repeat(self):
+        source, repeats = self.repeats()
+        trace = replace(repeats[0].episode.power_traces[0], clock_domain="gpu-host:monotonic")
+        mapping = ClockMapping(trace.clock_domain, source.episode.clock_domain, 0, 0, "measured")
+        for mappings in ((), (replace(mapping, method="unmeasured"),),
+                         # Episode requires a domain declaration, but this
+                         # mapping has no match to the actual episode domain.
+                         (replace(mapping, episode_domain="unrelated:clock"),),
+                         (mapping, mapping), (replace(mapping, uncertainty_ns=-1),),
+                         (replace(mapping, uncertainty_ns=True),)):
+            # Episode itself refuses an undeclared domain. An attribute-only
+            # input also checks pool_repeats' defensive no-mapping path.
+            episode = (replace(repeats[0].episode, power_traces=(trace,), clock_mappings=mappings)
+                       if mappings else SimpleNamespace(**{**vars(repeats[0].episode),
+                           "power_traces": (trace,), "clock_mappings": ()}))
+            bad = replace(repeats[0], episode=episode)
+            pooled = pool_repeats(source, [bad, *repeats[1:]])
+            self.assertEqual((pooled.repeat_count, pooled.excluded_repeat_count), (3, 1))
+            self.assertIn("repeat_power_clock_differs", pooled.flags)
 
 
 class EndToEndTests(unittest.TestCase):

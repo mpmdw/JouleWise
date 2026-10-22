@@ -37,6 +37,11 @@ from joulewise.align.records import from_json
 from joulewise.analysis_engine.distributions import student_t_quantile
 
 
+_GENERATION_SETTINGS_FIELDS = frozenset({
+    "max_tokens", "answer_max_tokens", "temperature", "thinking_open", "thinking_end",
+})
+
+
 @dataclass(frozen=True)
 class RatioSummary:
     n: int
@@ -182,10 +187,11 @@ def summarize_admitted_configuration(
         raise ValueError("energy subset contains unknown counting trial_id")
     for t in trials:
         if (t.model != first.model or t.size_b != first.size_b
-                or t.condition != first.condition or t.settings != first.settings
+                or t.condition != first.condition
+                or any(getattr(t.settings, name) != getattr(first.settings, name)
+                       for name in _GENERATION_SETTINGS_FIELDS)
                 or t.attention_design != first.attention_design
-                or t.monitor_configuration != first.monitor_configuration
-                or t.episode.endpoint != first.episode.endpoint):
+                or t.monitor_configuration != first.monitor_configuration):
             raise ValueError("mixed configuration")
         if (not isinstance(t.reasoning_tokens, int) or isinstance(t.reasoning_tokens, bool)
                 or not isinstance(t.answer_tokens, int) or isinstance(t.answer_tokens, bool)
@@ -254,8 +260,8 @@ def frontier_lines(rows: Sequence[ConfigRow]) -> dict[str, object]:
 class EnergyObservation:
     """One pooled stage-2 item, not an independent observation per repeat.
 
-    energy.uncertainty_j is the duty estimate's per-item measurement HALF-WIDTH
-    (used without conversion by the divergence gate). It is not the printed
+    energy.uncertainty_j is the duty estimate's per-item additive measurement
+    HALF-WIDTH bound (used without conversion by the divergence gate). It is not the printed
     configuration width or the probability adapter's standard uncertainty.
     Thermal/power-cap slowdowns belong in flags as thermal_slowdown or
     power_cap_slowdown. Other sensor/host flags are retained and disclosed.
@@ -355,12 +361,11 @@ def pool_repeats(counting: BudgetTrial, repeats: Sequence[BudgetTrial], *,
             raise ValueError("raw repeats require the separately built align.power.duty lane") from exc
         estimator = estimate_energy
     runs, counters, flags = [], [], set()
-    generation_fields = {"max_tokens", "answer_max_tokens", "temperature", "thinking_open", "thinking_end"}
 
     def request_identity(t):
         return (t.model, t.item_id, t.condition, t.seed, t.episode.endpoint,
                 t.requested_cap_tokens, t.median_reasoning_tokens,
-                *(getattr(t.settings, name) for name in sorted(generation_fields)))
+                *(getattr(t.settings, name) for name in sorted(_GENERATION_SETTINGS_FIELDS)))
 
     signature = (counting.reasoning_tokens, counting.answer_tokens,
                  counting.generation.reasoning, counting.generation.answer_text)
@@ -370,7 +375,7 @@ def pool_repeats(counting: BudgetTrial, repeats: Sequence[BudgetTrial], *,
             flags.add("repeat_request_identity_differs")
             continue
         flags.update(f"repeat_settings_differ:{f.name}" for f in fields(counting.settings)
-                     if f.name not in generation_fields
+                     if f.name not in _GENERATION_SETTINGS_FIELDS
                      and getattr(repeat.settings, f.name) != getattr(counting.settings, f.name))
         if _generation_failed(repeat):
             flags.add("repeat_generation_failed")
@@ -384,10 +389,47 @@ def pool_repeats(counting: BudgetTrial, repeats: Sequence[BudgetTrial], *,
         if len(traces) != 1:
             flags.add("repeat_power_trace_missing" if not traces else "repeat_power_trace_ambiguous")
             continue
-        if traces[0].clock_domain != repeat.episode.clock_domain:
-            flags.add("repeat_power_clock_differs")
-            continue
-        runs.append((traces[0], repeat.episode.start_ns, repeat.episode.end_ns))
+        trace = traces[0]
+        start, end = repeat.episode.start_ns, repeat.episode.end_ns
+        if trace.clock_domain != repeat.episode.clock_domain:
+            mappings = [m for m in repeat.episode.clock_mappings
+                        if m.trace_domain == trace.clock_domain
+                        and m.episode_domain == repeat.episode.clock_domain]
+            if (len(mappings) != 1 or mappings[0].method == "unmeasured"
+                    or type(mappings[0].uncertainty_ns) is not int
+                    or mappings[0].uncertainty_ns < 0):
+                flags.add("repeat_power_clock_differs")
+                continue
+            mapping = mappings[0]
+            # t_episode = t_trace + offset: leave sensor timestamps in their
+            # own domain and translate the episode bounds, as episode_energy does.
+            start, end = start - mapping.offset_ns, end - mapping.offset_ns
+            flags.add("repeat_power_clock_mapped")
+            # Blank notes (the record default) carry no metadata, as duty._metadata
+            # reads them; nothing is lost by writing the timing list there.
+            try:
+                notes = json.loads(trace.notes) if trace.notes.strip() else {}
+            except (AttributeError, TypeError, ValueError):
+                notes = None
+            if isinstance(notes, dict):
+                timing = notes.get("window_timing_half_width_ns", notes.get("timing_half_width_ns"))
+                if timing is None:
+                    notes["window_timing_half_width_ns"] = [mapping.uncertainty_ns] * len(trace.values)
+                    flags.add("timing_uncertainty_unreported")
+                elif (isinstance(timing, list) and len(timing) == len(trace.values)
+                      and all(h is None or type(h) is int and h >= 0 for h in timing)):
+                    # Offset and reading timing are additive bounds, not SDs.
+                    notes["window_timing_half_width_ns"] = [
+                        None if h is None else h + mapping.uncertainty_ns for h in timing]
+                else:
+                    flags.add("repeat_clock_mapping_uncertainty_not_in_width")
+                    notes = None
+            else:
+                flags.add("repeat_clock_mapping_uncertainty_not_in_width")
+                notes = None
+            if notes is not None:
+                trace = replace(trace, notes=json.dumps(notes))
+        runs.append((trace, start, end))
         counter_traces = [t for t in repeat.episode.power_traces if t.source == "nvml_energy"
                           and t.clock_domain == repeat.episode.clock_domain]
         counter = (episode_energy(repeat.episode, channels=[(counter_traces[0].source, counter_traces[0].channel)])
@@ -477,13 +519,20 @@ def _validate(data: PilotInput) -> tuple[list[str], dict[str, float], list[str],
                 actual = {t.item_id for t in grouped[model, key]}
                 if actual != expected_items:
                     flags.append(f"incomplete_{stage}_configuration:{model}:{key}")
-    # Settings, model sizes, attention design and endpoint must be pinned even
-    # across conditions/stages. Monitor pins were checked globally above.
+    # Only generation-affecting differences refuse the study. Measurement and
+    # endpoint differences are disclosed across conditions and stages.
     for model in models:
-        pins = {(t.size_b, t.attention_design, t.settings, t.episode.endpoint)
-                for t in all_trials if t.model == model}
+        model_trials = [t for t in all_trials if t.model == model]
+        pins = {(t.size_b, t.attention_design,
+                 *(getattr(t.settings, name) for name in sorted(_GENERATION_SETTINGS_FIELDS)))
+                for t in model_trials}
         if len(pins) != 1:
-            raise ValueError("model/server/generation pins changed between stages or settings")
+            raise ValueError("model/generation pins changed between stages or settings")
+        flags.extend(f"pins_differ:{f.name}:{model}" for f in fields(model_trials[0].settings)
+                     if f.name not in _GENERATION_SETTINGS_FIELDS
+                     and len({getattr(t.settings, f.name) for t in model_trials}) > 1)
+        if len({t.episode.endpoint for t in model_trials}) > 1:
+            flags.append(f"pins_differ:endpoint:{model}")
         for key in _GENERATION_KEYS | _CONTROL_KEYS:
             if len({t.condition for t in all_trials if t.model == model and _key(t) == key}) > 1:
                 raise ValueError("condition pins changed between shakedown and counting")
@@ -609,7 +658,8 @@ def analyze(data: PilotInput, *, n_boot: int | None = None, seed: int = 0) -> di
         usable = [_admitted_trial(t) for t in group if not _generation_failed(t)]
         labeled = [t for t in usable if t.hint_use.uses_hint is not None]
         use_rates[f"{model}/{group[0].condition.name}"] = {
-            "rate": wilson(sum(t.hint_use.uses_hint is True for t in labeled), len(labeled)),
+            "rate": wilson(sum(t.hint_use.uses_hint is True for t in usable), len(usable)),
+            "rate_labelled_only": wilson(sum(t.hint_use.uses_hint is True for t in labeled), len(labeled)),
             "before": len(group), "generation_failed": len(group) - len(usable),
             "unknown_hint_use": len(usable) - len(labeled)}
     # Choose the minimum by exact integer ratios, then take an integer ceiling:
@@ -619,6 +669,9 @@ def analyze(data: PilotInput, *, n_boot: int | None = None, seed: int = 0) -> di
     minimum = min(valid_u) if valid_u else None
     u_min = float(minimum) if minimum is not None else None
     requested_n = -(-93 * minimum.denominator // minimum.numerator) if minimum else None
+    collected_per_model = {
+        model: min(len(grouped.get((model, key), ())) for key in _GENERATION_KEYS) for model in models}
+    collected_n = min(collected_per_model.values())
 
     def line(inclusive: bool) -> tuple[dict, dict]:
         summaries, disclosures, pooled_by_config = {}, {}, {}
@@ -629,6 +682,8 @@ def analyze(data: PilotInput, *, n_boot: int | None = None, seed: int = 0) -> di
             selected, per_item, counts = {}, [], Counter()
             for t in raw:
                 item_flags = _flags(t)
+                if key[0] == "deletion":
+                    item_flags.update(_flags(counting_by_id[t.source_trial_id]))
                 energy_id = t.source_trial_id if key[0] == "deletion" else t.trial_id
                 observation = energies.get(energy_id)
                 if observation is not None:
@@ -680,6 +735,8 @@ def analyze(data: PilotInput, *, n_boot: int | None = None, seed: int = 0) -> di
         lines = frontier_lines(rows)
         token_all = pareto_frontier(token_rows, cost="tokens")
         flags = [*manifest_flags, "slowdown_detection_unavailable"]
+        if any(f.startswith("excluded_row:") for f in lines["comparison"]["flags"]):
+            flags.append("frontier_rows_excluded")
         if missing_generation_configs or len(rows) != expected_configurations:
             flags.append("incomplete_energy_panel")
         below_93 = {}
@@ -690,12 +747,12 @@ def analyze(data: PilotInput, *, n_boot: int | None = None, seed: int = 0) -> di
                 below_93[name] = s.catch_rate.trials if s else 0
         if below_93:
             flags.append("fewer_than_93_scored_hint_using_trials")
-        if requested_n is None or len(data.counting_item_ids) < requested_n:
+        if requested_n is None or collected_n < requested_n:
             flags.append("counting_items_below_N_required")
         # §7's cap is failure to collect N_required, not random realization
         # below 93 hint-using trials after the planned N was collected.
         claim_blockers = sorted(f for f in flags if f in {
-            "counting_items_below_N_required", "incomplete_energy_panel"}
+            "counting_items_below_N_required", "incomplete_energy_panel", "frontier_rows_excluded"}
             or f.startswith(("design_models:", "budget_L_not_shakedown_median:")))
         eligible = not claim_blockers
         if len(use_rates) != expected_configurations or any(
@@ -753,7 +810,8 @@ def analyze(data: PilotInput, *, n_boot: int | None = None, seed: int = 0) -> di
             on_items = [p for p in pooled_by_config.get(on.config_id, []) if p["energy_admitted"]] if on else []
             pairs = [(p["generated_tokens"], p["energy"]["joules"], p["energy"]["uncertainty_j"])
                      for p in on_items if p["energy"]["uncertainty_j"] is not None]
-            divergence = joule_token_divergence(pairs, n_boot=n_boot, seed=seed+i)
+            divergence = joule_token_divergence(pairs, n_boot=n_boot, seed=seed+i,
+                                               uncertainty_kind="additive_bound")
             if len(pairs) != len(on_items):
                 # Unknown measurement width must not silently become a smaller
                 # gate cohort and reopen the candidate on the remaining items.
@@ -782,7 +840,7 @@ def analyze(data: PilotInput, *, n_boot: int | None = None, seed: int = 0) -> di
     # Reuse them while still emitting the complete labelled inclusive tables.
     inclusive_changes = (any(t.monitor_flagged is None or _flags(t) & _SLOWDOWN_FLAGS for t in data.counting)
                          or any(set((*e.flags, *e.energy.flags)) & _SLOWDOWN_FLAGS for e in energies.values()))
-    inclusive = line(True)[0] if inclusive_changes else primary
+    inclusive, inclusive_summaries = line(True) if inclusive_changes else (primary, summaries)
     return _jsonable({
         "schema": "joulewise.align.analysis.budget_pilot.results.v1",
         "status": "DRAFT; analysis output, not registered or live-validated",
@@ -791,15 +849,17 @@ def analyze(data: PilotInput, *, n_boot: int | None = None, seed: int = 0) -> di
             "printed_width": "95% Student-t half-width from the ratio estimator",
             "standard_uncertainty": "joules_half_width / t(.975, df)",
             "df_source": "number of admitted pooled energy items in that configuration minus one",
-            "per_configuration_df": {name: s.energy.degrees_of_freedom for name, s in summaries.items()
-                                     if s is not None and s.energy is not None and not s.is_deletion}},
+            "per_configuration_df": {
+                label: {name: s.energy.degrees_of_freedom for name, s in line_summaries.items()
+                        if s is not None and s.energy is not None and not s.is_deletion}
+                for label, line_summaries in (("primary", summaries), ("flagged_inclusive", inclusive_summaries))}},
         "resampling": {"seed": seed, "requested_n_boot": n_boot,
                        "nominal_probability_mc_se_below_0.005": n_boot is None or n_boot > 10000},
         "disclosures": {"L_per_model": medians, "u_c_shakedown": use_rates,
                         "budget_L_mismatched_trials": l_mismatches,
                         "u_min": u_min, "N_required": requested_n,
-                        "N_collected": len(data.counting_item_ids),
-                        "N_capped_or_short": requested_n is None or len(data.counting_item_ids) < requested_n,
+                        "N_collected": collected_n, "N_collected_per_model": collected_per_model,
+                        "N_capped_or_short": requested_n is None or collected_n < requested_n,
                         "n_E_collected": len(data.energy_item_ids),
                         "counting_item_ids": data.counting_item_ids, "energy_item_ids": data.energy_item_ids},
         "decisions": [
@@ -811,9 +871,12 @@ def analyze(data: PilotInput, *, n_boot: int | None = None, seed: int = 0) -> di
             "Diagnostic point frontiers remain visible when counts or panel completeness suppress the registered kill.",
             "Achieved power uses the registered .71/.51 independent-proportions normal design approximation.",
             "Per-item L/cap mismatches retain all numbers and block the claim; mismatched trial counts are disclosed per model.",
-            "L uses recorded shakedown thinking-on lengths, excluding generation failures and retaining censored lengths with an L_censored flag when 2c >= n.",
-            "N_required uses exact shakedown success/trial ratios among configurations with labelled trials; realized counts below 93 are flags, not claim blockers.",
-            "Raw repeats use the single in-clock NVML power_instant trace; measurement-only settings differences are flagged and retained.",
+            "L uses hinted thinking-on shakedown lengths only, excluding generation failures and retaining censored lengths with an L_censored flag when 2c >= n.",
+            "N_required uses exact shakedown success/trial ratios: unknown hint use counts in the denominator, generation failures do not; realized counts below 93 are flags, not claim blockers.",
+            "Stage-2 repeats must reproduce the stage-1 generation exactly (reasoning text, answer text and both token counts); a differing repeat is left out with repeat_tokens_differ.",
+            "Raw repeats use the single NVML power_instant trace, in-clock or with exactly one measured clock mapping; mapping uncertainty adds to each reading's timing bound when metadata permits, otherwise repeat_clock_mapping_uncertainty_not_in_width discloses it.",
+            "Only size, attention design and the five generation Settings pins refuse stage/settings differences; other Settings and endpoint differences are flags, not claim blockers.",
+            "Duty measurement half-widths are additive bounds on both energy-input paths; divergence uses uncertainty_kind=additive_bound and cannot establish absence from a failed bound gate.",
             "No covered work is missing energy, not zero joules; observed items remain printed with admission status.",
             "Slowdown exclusion is keyed on thermal_slowdown, power_cap_slowdown, nvml_thermal_slowdown and nvml_power_cap_slowdown; no producer exists yet.",
             "Cumulative-counter energy is the mean of available retained-repeat episode integrals only when every retained repeat has one; it never replaces gross energy.",
@@ -850,15 +913,17 @@ def render_markdown(report: dict) -> str:
            "width / t(.975, df), with df = admitted pooled energy items minus one.", "",
            f"N collected: {disclosure['N_collected']}; N required: {disclosure['N_required']}; "
            f"capped or short: {disclosure['N_capped_or_short']}; n_E collected: {disclosure['n_E_collected']}.", "",
+           f"N collected per model (minimum across generation settings): {_cell(disclosure['N_collected_per_model'])}.", "",
            "| Model | Shakedown L (reasoning tokens) |", "|---|---:|"]
     out.extend(f"| {_cell(model)} | {_number(length, tokens=True)} |" for model, length in disclosure["L_per_model"].items())
     out += ["", f"Trials with L/cap mismatches: {_cell(disclosure['budget_L_mismatched_trials'])}."]
     out += ["", "## Shakedown hint-use rates u_c", "",
-            "| Configuration | Hint-using / labeled | u_c [95% Wilson] | Before | Failed generation | Unknown hint use |",
-            "|---|---:|---|---:|---:|---:|"]
+            "| Configuration | Hint-using / nonfailed hinted trials | u_c for sizing [95% Wilson] | Labelled-only rate [95% Wilson] | Before | Failed generation | Unknown hint use |",
+            "|---|---:|---|---|---:|---:|---:|"]
     for name, row in disclosure["u_c_shakedown"].items():
         out.append(f"| {_cell(name)} | {row['rate']['successes']}/{row['rate']['trials']} | "
-                   f"{_rate_text(row['rate'])} | {row['before']} | {row['generation_failed']} | {row['unknown_hint_use']} |")
+                   f"{_rate_text(row['rate'])} | {_rate_text(row['rate_labelled_only'])} | "
+                   f"{row['before']} | {row['generation_failed']} | {row['unknown_hint_use']} |")
     for label in ("primary", "flagged_inclusive"):
         line = report[label]
         out += ["", f"## {label.replace('_', ' ').title()}", "",
