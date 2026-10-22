@@ -46,6 +46,29 @@ class RoutingRecovery:
     held_out_rmse: float | None
     predictions: tuple[tuple[str, float | None], ...]
     flags: tuple[str, ...] = ()
+    held_out_interval_95: tuple[float, float] | None = None
+    held_out_episodes: int = 0
+    held_out_effective_n: int = 0
+
+
+def fisher_interval_95(
+    correlation: float | None, episodes: int, *, fitted_means: int = 0,
+) -> tuple[float, float] | None:
+    """Requested 95% Fisher-z interval, with explicit centering degrees of freedom.
+
+    This is an approximate episode-level interval, not a grouped bootstrap or
+    proof of design power. Overlapping cross-validation fits can add dependence.
+    """
+    effective_n = episodes-fitted_means
+    if (correlation is None or not math.isfinite(correlation)
+            or abs(correlation) > 1 or effective_n <= 3):
+        return None
+    if abs(correlation) == 1:
+        return (correlation, correlation)  # Limits of tanh(z +/- width) at infinity.
+    # The lead specifies 1.96 for the two-sided normal 95% interval.
+    width = 1.96/math.sqrt(effective_n-3)
+    center = math.atanh(correlation)
+    return (math.tanh(center-width), math.tanh(center+width))
 
 
 @dataclass(frozen=True)
@@ -269,7 +292,9 @@ def recover_routing(
     rmse = (math.sqrt(statistics.fmean((a-b)**2 for a, b in zip(paired_truth, paired_prediction)))
             if paired_prediction else None)
     return RoutingRecovery(feature_name, observed, held_out, rmse,
-                           tuple(predictions), tuple(dict.fromkeys(flags)))
+                           tuple(predictions), tuple(dict.fromkeys(flags)),
+                           fisher_interval_95(held_out, len(paired_truth)),
+                           len(paired_truth), len(paired_truth))
 
 
 def required_correlation(

@@ -276,3 +276,6 @@ No shared contract file was modified. A future optional companion routing-timing
 
 ## NEEDS_RULING
 none
+
+## CONTINUATION r0c
+Work resumed from `0fc746f6d36aecb61716e821ce6318f40ab02c1a` under the lead’s three findings. Initial checkpoint adds episode-counted 95% Fisher-z intervals to raw held-out recovery. Variable timing, stall physics, centered intervals, revised verdicts, new execution evidence and tables are in progress; the r0 numbers above are historical until replaced below.
