@@ -142,6 +142,43 @@ class StageAWorldTests(unittest.TestCase):
         self.assertTrue(math.isnan(result.statistics["decode_usage_entropy"].p_value))
         self.assertTrue(any("router_log_missing" in flag for flag in result.flags))
 
+    def test_one_missing_log_uses_finite_rows_for_all_inference(self):
+        missing = list(self.world)
+        missing[0] = replace(missing[0], router_log=None)
+        result = analyze_stage_a(missing, n_bootstrap=32, seed=83)
+        finite = analyze_stage_a(missing[1:], n_bootstrap=32, seed=83)
+        self.assertEqual(result.episode_ids, self.result.episode_ids)
+        self.assertEqual(len(result.statistics), 12)  # The planned Holm family stays 4 x 3.
+        for name, stat in result.statistics.items():
+            expected = finite.statistics[name]
+            self.assertTrue(math.isfinite(stat.effect) and math.isfinite(stat.p_value))
+            assert_close(self, stat.effect, expected.effect)
+            assert_close(self, stat.p_value, expected.p_value)
+            assert_close(self, stat.standardized_effect, expected.standardized_effect)
+            # Identical retained inputs, algorithm and bootstrap seed must give
+            # identical draws; missing rows must not select a subset of draws.
+            self.assertEqual(stat.interval, expected.interval)
+            self.assertEqual(stat.n_bootstrap_valid, expected.n_bootstrap_valid)
+            self.assertIn("dropped_nonfinite_episodes:1", stat.flags)
+            self.assertIn(f"dropped_nonfinite_episode:{missing[0].episode_id}", stat.flags)
+            self.assertIn(f"group_has_no_label_exchangeability:{missing[0].task_pair}", stat.flags)
+
+    def test_empty_decode_capture_drops_rows_only_for_decode(self):
+        cut = list(self.world)
+        log = cut[0].router_log
+        keep = [i for i, phase in enumerate(log.phase) if phase == "prefill"]
+        cut[0] = replace(cut[0], router_log=replace(
+            log, phase=tuple(log.phase[i] for i in keep),
+            experts=tuple(log.experts[i] for i in keep)))
+        result = analyze_stage_a(cut, n_bootstrap=32, seed=83)
+        for name, stat in result.statistics.items():
+            self.assertTrue(math.isfinite(stat.effect) and math.isfinite(stat.p_value))
+            if name.startswith("decode_"):
+                self.assertIn("dropped_nonfinite_episodes:1", stat.flags)
+                self.assertIn(f"dropped_nonfinite_episode:{cut[0].episode_id}", stat.flags)
+            else:
+                self.assertFalse(any("dropped_nonfinite" in flag for flag in stat.flags))
+
     def test_jsonl_cli_production_path(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "episodes.jsonl"
