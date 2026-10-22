@@ -329,14 +329,121 @@ def disk_snapshot(root, *, statvfs=os.statvfs, capacity=important_capacity):
             'flags': [] if important is not None else ['disk.purgeable_unreadable']}
 
 
+def remainder_span(measurement, tree, measured_session):
+    """H wall-stamp sizing, separate from the registered disk allowances.
+
+    Shell endpoints denote [stamp, stamp+1), as in derive_sizing.py.
+    Collection residuals exclude members and registered settles. One shared
+    max/min spread over identical model/workload cohorts scales members only.
+    An unavailable record returns a flag and no allowance, never a refusal or
+    a silently substituted pilot span.
+    """
+    try:
+        root = Path(measured_session)
+        journal = root / 'custody/night/chain-stages.jsonl'
+        clocks = root / 'custody/collection/run_clock.jsonl'
+        stages = rows(journal)
+        stamps = rows(clocks)
+        original = read(Path(measurement) / KIT / 'plan_tree.json')
+        configs, stage_members = {}, {}
+        for dispatch in plan.resolve_stage_dispatches(original, Path(measurement)):
+            directory = Path(measurement) / dispatch.config_dir
+            members = read(directory / 'order_manifest.json')['executed_order']
+            stage_members[dispatch.stage_id] = [m['run_id'] for m in members]
+            for member in members:
+                cfg = read(directory / member['config'])
+                configs[member['run_id']] = json.dumps({k: cfg.get(k) for k in
+                    ('model', 'quantization', 'workload_profile', 'sampling', 'hardware_target')}, sort_keys=True)
+        pairs = defaultdict(dict)
+        for row in stamps:
+            pairs[row['run_id']][row['event']] = row['clock']['wall_s']
+        durations, groups = {}, defaultdict(list)
+        for rid, pair in pairs.items():
+            if {'start', 'end'} <= pair.keys() and pair['end'] > pair['start'] and rid in configs:
+                durations[rid] = pair['end'] - pair['start']
+                groups[configs[rid]].append(durations[rid])
+        margin = max(max(values) / min(values) - 1 for values in groups.values())
+        observed = {s['stage_id']: s for s in stages if s.get('rc') == 0}
+        residuals = []
+        for stage in stages:
+            if stage.get('kind') != 'campaign_collection' or stage.get('rc') != 0:
+                continue
+            ids = stage_members[stage['stage_id']]
+            member_s = sum(durations[rid] for rid in ids)
+            residuals.append({'stage_id': stage['stage_id'], 'seconds': max(0,
+                stage['ended_epoch_s'] - stage['started_epoch_s'] - member_s)})
+        overhead = max(residuals, key=lambda r: r['seconds'])
+        terms = []
+        for stage in tree['stage_graph']:
+            sid, kind = stage['stage_id'], stage['kind']
+            if kind in ('whole_window_verdict', 'backup'):
+                continue
+            source_id = sid
+            if sid.endswith('-end') and '-test7-' in sid:
+                source_id = sid[:-4] + '-start'
+            elif sid.endswith('-reference-end'):
+                source_id = PACK_ID + '-reference-start'
+            elif sid.endswith('-post-calibration'):
+                source_id = PACK_ID + '-pre-calibration'
+            member_s = 0
+            if source_id in observed:
+                selected = [s for s in stages if s['stage_id'] == source_id or
+                            s['stage_id'].startswith(source_id + '.')]
+                seconds = union_seconds([(s['started_epoch_s'], s['ended_epoch_s']) for s in selected])
+                sources = [s['stage_id'] for s in selected]
+                if kind == 'campaign_collection':
+                    member_s = sum(durations[rid] for rid in stage_members[source_id])
+                method = 'identical H stage' if sid == source_id else 'paired H stage'
+            else:
+                # Only the two incomplete soaks lack a corresponding stage.
+                ids = stage_members[sid]
+                if stage['expected_count'] == 1:
+                    ids = ids[-1:]
+                cohort_ids = [rid for rid in stage_members[sid] if rid in durations]
+                if not cohort_ids:
+                    cohort_ids = sorted(rid for rid in durations if configs[rid] in {configs[r] for r in ids})
+                member_s = len(ids) * sum(durations[rid] for rid in cohort_ids) / len(cohort_ids)
+                seconds = member_s + overhead['seconds']
+                sources = list(cohort_ids)
+                sources.append(overhead['stage_id'] + ': measured collection residual')
+                method = 'mean H identical-config cohort + max H collection residual'
+            terms.append({'stage_id': sid, 'kind': kind, 'base_seconds': seconds,
+                          'member_seconds': member_s, 'margin_seconds': member_s * margin,
+                          'seconds': seconds + member_s * margin, 'method': method, 'sources': sources})
+        reg = Path(measurement) / KIT / 'registration'
+        fixed = read(reg / 'sizing_b5.json')['packs'][PACK_ID]['breakdown']['fixed_s']
+        terms.append({'stage_ids': [PACK_ID + '-whole-window-verdict', PACK_ID + '-backup'],
+            'seconds': fixed, 'method': 'one aggregate B6 fixed-work envelope; no individual durations inferred',
+            'sources': [str(KIT / 'registration/sizing_b5.json') + '#/packs/' + PACK_ID + '/breakdown/fixed_s',
+                        str(KIT / 'registration/sizing_evidence.json')]})
+        collections = sum(s['kind'] == 'campaign_collection' for s in tree['stage_graph'])
+        settles = (collections + 1) * chain.SETTLE_S
+        terms.append({'seconds': settles, 'count': collections + 1, 'each_seconds': chain.SETTLE_S,
+                      'method': 'registered settle before pre-calibration and each collection',
+                      'sources': ['joulewise.b5.chain.SETTLE_S']})
+        span = sum(t['seconds'] for t in terms)
+        return {'programmed_span_s': span,
+                'window_max_s': plan_inputs.window_max_s({'programmed_span_s': {'seconds': span}}),
+                'measured_margin': margin, 'terms': terms, 'overheads': residuals,
+                'margin_derivation': 'max(max/min-1) over H member-wall durations grouped by identical model, quantization, workload, sampling and hardware; applied once to member seconds only',
+                'cohorts': [{'config_signature': key, 'member_seconds': values} for key, values in sorted(groups.items())],
+                'sources': [locator(journal), locator(clocks)], 'flags': []}
+    except (OSError, ValueError, KeyError, TypeError, ZeroDivisionError) as exc:
+        return {'programmed_span_s': None, 'window_max_s': None,
+                'flags': [{'kind': 'sizing.h_journal_unavailable', 'detail': str(exc)}]}
+
+
 def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time,
-            statvfs=os.statvfs, capacity=important_capacity):
+            statvfs=os.statvfs, capacity=important_capacity, remainder=False,
+            soak_70b='full', measured_session=None):
     measurement, session = Path(measurement_root).resolve(), Path(session_root).resolve()
     reg = measurement / KIT / 'registration'
     sized = registration.load_sizing(reg)['packs'][PACK_ID]
     pins = registration.load_identity_pins(reg)
     inventory = read(reg / 'model_artifact_inventory.json')['artifacts']
     for name, unit in pins['units'].items():
+        if remainder and name not in {'llama-70b', 'qwen35-122b', 'qwen3-next-80b', 'neg8_reference'}:
+            continue
         source = Path(unit['model_source'])
         if not source.is_dir() or any(not (source / f['path']).is_file() for f in inventory[name]['inventory']):
             raise PhysicalHazard('models missing: ' + str(source))
@@ -344,16 +451,29 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         raise ValueError('session root must be empty; preserve the existing session')
     session.mkdir(parents=True, exist_ok=True)
     clock = now()
-    session_id = 'bytes-h-' + dt.datetime.fromtimestamp(clock, dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    session_id = ('bytes-h2-' if remainder else 'bytes-h-') + dt.datetime.fromtimestamp(clock, dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     config = read(measurement / 'configs/b6/loop.json')
     lead = config.get('launch_lead_s', DEFAULT_LEAD_S)
     if not finite(lead) or lead < MIN_LEAD_S:
         raise ValueError("launch_lead_s must leave the installer's 300 seconds")
     t0 = 60 * math.ceil((clock + lead) / 60)
-    expected_max = plan_inputs.window_max_s({'programmed_span_s': {'seconds': sized['programmed_span_s']}})
+    span_receipt = None
+    view = pack = None
+    if remainder:
+        view, pack = measurement_view(measurement, session, remainder=True, soak_70b=soak_70b)
+        tree = read(pack / 'plan_tree.json')
+        sized = remainder_disk_sizing(measurement, tree)
+        span_receipt = remainder_span(measurement, tree, measured_session)
+        sized['programmed_span_s'] = span_receipt['programmed_span_s']
+        if sized['programmed_span_s'] is not None:
+            sized['disk_derivation']['window_max_s'] = span_receipt['window_max_s']
+        print('span_derivation: ' + json.dumps(span_receipt, sort_keys=True))
+    expected_max = (plan_inputs.window_max_s({'programmed_span_s': {'seconds': sized['programmed_span_s']}})
+                    if sized['programmed_span_s'] is not None else None)
     print('session_id: ' + session_id)
     print('candidate_t0: ' + dt.datetime.fromtimestamp(t0, dt.timezone.utc).isoformat())
-    print(f"maximum_duration_s: {expected_max}; programmed_span_s: {math.ceil(sized['programmed_span_s'])}")
+    print(f"maximum_duration_s: {expected_max}; programmed_span_s: " +
+          str(math.ceil(sized['programmed_span_s']) if sized['programmed_span_s'] is not None else None))
     snapshot = disk_snapshot(session, statvfs=statvfs, capacity=capacity)
     required = sized['estimated_footprint_bytes']
     # H-DISK-RULING addendum 1: the native arm budgets raw plus two
@@ -361,14 +481,14 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
     # one roster copy. Encode P in its existing integer caller fields.
     terms = sized['disk_derivation']
     native_copies = 3
-    per_member, remainder = divmod(terms['peak_copies'] * terms['B_bytes'],
+    per_member, rounding_remainder = divmod(terms['peak_copies'] * terms['B_bytes'],
                                  native_copies * sized['member_count'])
     native_budget = {
         'kind': 'budget encoding derived from P',
         'formula': 'q=floor(c*B/(native_copies*member_count)); headroom=(c*B-native_copies*member_count*q)+c*WAIT+fixed',
         'native_copies': native_copies, 'bytes_per_member': per_member,
-        'rounding_remainder_bytes': remainder,
-        'headroom_bytes': remainder + terms['extra_wait_peak_bytes'] + terms['fixed_retained_bytes']}
+        'rounding_remainder_bytes': rounding_remainder,
+        'headroom_bytes': rounding_remainder + terms['extra_wait_peak_bytes'] + terms['fixed_retained_bytes']}
     disk = {**snapshot, 'prepare_free_bytes': snapshot['free_bytes'],
             'estimated_footprint_bytes': required, 'required_free_bytes': required,
             'derivation': terms, 'member_count': sized['member_count'],
@@ -378,21 +498,33 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
     if snapshot['free_bytes'] < required:
         raise PhysicalHazard('not enough disk for the planned physical allocation P')
     for name in ('runs-parent', 'staging'):
-        (session / name).mkdir()
+        (session / name).mkdir(exist_ok=True)
     identities, notes = desk_identity.collect(measurement, session / 'staging/inputs', run=run)
     # Existing builder already exposes registration_dir. Only this caller's
     # kit path, bytes and registration locator differ from DriverLane inputs.
     inputs = plan_inputs.build(measurement, reg, PACK_ID, session_id, identities,
         custody_root=session / 'custody', runs_parent=session / 'runs-parent',
         claim_backup=session / 'backup-claim', bound_backup=session / 'backup-bound', run=run)
-    view, pack = measurement_view(measurement, session)
+    if view is None:
+        view, pack = measurement_view(measurement, session)
     inputs.update(measurement_root=str(view), pack_root=str(pack),
                   bytes_per_member=per_member)
     inputs['thresholds']['disk']['headroom_bytes'] = native_budget['headroom_bytes']
     inputs['t0_epoch_s'] = t0
+    if remainder:
+        # Keep the original registration immutable. The real writer hashes
+        # and resolves this derived allowance inside the disposable view.
+        receipt_path = pack / 'remainder-sizing.json'
+        write(receipt_path, {'packs': {PACK_ID: sized}, 'span_derivation': span_receipt})
+        for field in ('programmed_span_s', 'T_stream_max_s'):
+            inputs[field] = {'seconds': sized[field],
+                'source': {'path': receipt_path.relative_to(view).as_posix(), 'sha256': locator(receipt_path)['sha256']},
+                'source_pointer': '/packs/' + PACK_ID + '/' + field}
+        notes.extend(span_receipt['flags'])
     record = None
     try:
-        record = plan.write_window_plan(inputs, now=now)
+        if not remainder or span_receipt['programmed_span_s'] is not None:
+            record = plan.write_window_plan(inputs, now=now)
     except plan.WindowPlanError as exc:
         # A missing/stale calibration ledger or another record condition is a
         # printed preparation flag, not a new physical collection refusal. The
@@ -405,7 +537,8 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
     if status.returncode or status.stdout.strip():
         notes.append({'kind': 'measurement_checkout_dirty_or_unobserved', 'status': status.stdout.strip()})
     notes.extend({'kind': 'runtime_stack_unobserved', 'model_id': name} for name in pins['units'])
-    notes.append({'kind': 'sizing.planning_bound_interpolated', 'model_id': 'qwen3-8b-8bit'})
+    if not remainder:
+        notes.append({'kind': 'sizing.planning_bound_interpolated', 'model_id': 'qwen3-8b-8bit'})
     state = {'schema_version': 'joulewise.bytes_h_session.v1', 'non_claim': True,
         'session_id': session_id, 'source_measurement_root': str(measurement),
         'measurement_root': str(view), 'registration_dir': str(view / KIT / 'registration'),
@@ -413,10 +546,13 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         'plan_path': record['plan']['path'] if record else str(session / 'custody/night_plan.json'),
         'plan_sha256': record['plan']['sha256'] if record else None, 'inputs': inputs, 'disk': disk, 'flags': notes,
         'runs_roots': record['runs_roots'] if record else {}, 't0_epoch_s': t0,
-        'window_max_s': expected_max}
+        'window_max_s': expected_max,
+        **({'remainder': True, 'soak_70b': soak_70b, 'span_derivation': span_receipt} if remainder else {})}
     write(session / 'staging/plan-inputs.json', inputs)
     write(session / 'session.json', state)
     print('t0: ' + dt.datetime.fromtimestamp(state['t0_epoch_s'], dt.timezone.utc).isoformat())
+    for stage in read(pack / 'plan_tree.json')['stage_graph']:
+        print('stage: ' + json.dumps({k: stage[k] for k in ('stage_id', 'kind', 'expected_count')}, sort_keys=True))
     print('preparation_status: ' + state['preparation_status'])
     for flag in notes:
         print('flag: ' + json.dumps(flag, sort_keys=True))
@@ -907,12 +1043,16 @@ def main(argv=None):
     p = commands.add_parser('prepare')
     p.add_argument('--measurement-root', type=Path, required=True)
     p.add_argument('--session-root', type=Path, required=True)
+    p.add_argument('--remainder', action='store_true')
+    p.add_argument('--soak-70b', choices=('full', 'r12'), default='full')
+    p.add_argument('--measured-session', type=Path)
     for name in ('install', 'desk'):
         commands.add_parser(name).add_argument('--session-root', type=Path, required=True)
     args = parser.parse_args(argv)
     try:
         if args.command == 'prepare':
-            prepare(args.measurement_root, args.session_root)
+            prepare(args.measurement_root, args.session_root, remainder=args.remainder,
+                    soak_70b=args.soak_70b, measured_session=args.measured_session)
         elif args.command == 'install':
             install(args.session_root)
         else:

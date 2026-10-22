@@ -388,6 +388,108 @@ class SessionTests(unittest.TestCase):
             state['inputs']['T_stream_max_s']['seconds'], rel_tol=1e-6, abs_tol=1e-6))
         self.assertTrue(Path(state['plan_path']).is_file())
 
+    def test_remainder_prepare_real_writer_both_soaks_and_journal_math(self):
+        # Appendix millisecond member durations; shell intervals stay integer
+        # seconds. Synthetic stamps/paths exercise real parsing and writing.
+        durations = {
+            'bound-collection': [126.743,126.804,127.307,125.941,126.673,126.583,125.539,126.004,125.672,126.322,125.502,126.094,126.353,126.219,125.094,126.180,126.342,125.810],
+            'reference-start': [125.689,126.328,127.346],
+            'reference-midpoint': [127.715],
+            'test7-llama-70b-start': [264.030,126.492,263.643,127.208],
+            'test7-qwen35-122b-start': [187.149,127.515,180.460,127.900],
+            'test7-qwen3-next-80b-start': [160.821,127.893,155.222,127.479],
+            'check-qwen3-next-80b': [155.924,154.949,154.816,154.667,155.653],
+            'check-qwen35-122b': [186.467,181.768,183.730,182.647,182.221],
+            'soak-llama-70b': [267.565,262.315,262.680,262.687,263.279,263.816,262.931,263.623,261.055,262.292,264.893],
+        }
+        stage_seconds = {'bracket-reservation':1, 'pre-calibration':215,
+            'pre-calibration.screen':0, 'pre-calibration.window-calibration-verdict':12,
+            'bound-collection':2442, 'bound-derivation.corpus':356, 'bound-derivation':363,
+            'reference-start':397, 'test7-llama-70b-start':807,
+            'test7-qwen35-122b-start':649, 'test7-qwen3-next-80b-start':598,
+            'reference-midpoint':128, 'check-qwen3-next-80b':826, 'check-qwen35-122b':951}
+        measured = self.root / 'H'
+        tree = h.read(self.measurement / h.KIT / 'plan_tree.json')
+        dispatched = {d.stage_id: d for d in plan.resolve_stage_dispatches(tree, self.measurement)}
+        journal, clocks, epoch = [], [], 1792609658
+        for short, seconds in stage_seconds.items():
+            sid = h.PACK_ID + '-' + short
+            kind = next((s['kind'] for s in tree['stage_graph'] if s['stage_id'] == sid), 'nested')
+            journal.append(dict(stage_id=sid,kind=kind,rc=0,started_epoch_s=epoch,ended_epoch_s=epoch+seconds))
+            epoch += seconds
+        for short, values in durations.items():
+            dispatch = dispatched[h.PACK_ID + '-' + short]
+            members = h.read(self.measurement / dispatch.config_dir / 'order_manifest.json')['executed_order']
+            for member, seconds in zip(members, values):
+                for event, wall in [('start', epoch), ('end', epoch + seconds)]:
+                    clocks.append(dict(run_id=member['run_id'],event=event,clock={'wall_s':wall}))
+                epoch += seconds + 8
+        for relative, values in [('custody/night/chain-stages.jsonl',journal),
+                                 ('custody/collection/run_clock.jsonl',clocks)]:
+            path = measured / relative
+            path.parent.mkdir(parents=True,exist_ok=True)
+            path.write_text(''.join(json.dumps(r)+'\n' for r in values))
+        ledger = self.measurement / plan.DEFAULT_LEDGER_RELATIVE
+        before = hashlib.sha256(ledger.read_bytes()).hexdigest()
+        for mode, count in [('full',73),('r12',62)]:
+            with self.subTest(mode=mode):
+                output = io.StringIO()
+                session = self.root / mode
+                with patch.object(plan,'ledger_head_status',return_value={'blocking':[]}), redirect_stdout(output):
+                    state = h.prepare(self.measurement,session,remainder=True,soak_70b=mode,
+                        measured_session=measured,run=self.producer,now=lambda:1700000000,
+                        statvfs=lambda _:SimpleNamespace(f_bavail=10**12,f_frsize=1),capacity=lambda _:None)
+                self.assertEqual(state['preparation_status'],'STAGED')
+                self.assertTrue(state['session_id'].startswith('bytes-h2-'))
+                record = h.read(state['plan_path'])
+                self.assertEqual(record['hazard_window']['member_count'],count)
+                receipt = state['span_derivation']
+                margin = 160.821/154.667-1
+                soak70 = (12 if mode=='full' else 1)*sum(durations['soak-llama-70b'])/11
+                soak122 = 12*(sum(durations['check-qwen35-122b'])+187.149+180.460)/7
+                overhead = 2442-sum(durations['bound-collection'])
+                member = sum(durations['bound-collection'])+2*sum(durations['reference-start'])+127.715
+                member += 2*sum(sum(durations['test7-'+model+'-start']) for model in
+                                ('llama-70b','qwen35-122b','qwen3-next-80b'))+soak70+soak122
+                base = 1+227+719+2442+2*397+2*(807+649+598)+128+soak70+soak122+2*overhead+227+1191+13*60
+                # 1e-6 relative/absolute seconds follows the brief's precision
+                # rule and exceeds binary epoch-subtraction roundoff.
+                self.assertTrue(math.isclose(receipt['measured_margin'],margin,rel_tol=1e-6,abs_tol=1e-6))
+                self.assertTrue(math.isclose(receipt['programmed_span_s'],base+member*margin,rel_tol=1e-6,abs_tol=1e-6))
+                terms = {t['stage_id'].removeprefix(h.PACK_ID+'-'):t for t in receipt['terms'] if 'stage_id' in t}
+                for short, term in terms.items():
+                    source = short.replace('post-calibration','pre-calibration')
+                    if source.endswith('-end'):
+                        source = source[:-4]+'-start'
+                    if short == 'soak-llama-70b':
+                        expected_base, expected_member = soak70+overhead,soak70
+                    elif short == 'soak-qwen35-122b':
+                        expected_base, expected_member = soak122+overhead,soak122
+                    else:
+                        expected_base = {'pre-calibration':227,'bound-derivation':719}.get(source,stage_seconds[source])
+                        expected_member = sum(durations.get(source,[]))
+                    for key, expected in [('base_seconds',expected_base),('member_seconds',expected_member),
+                                          ('margin_seconds',expected_member*margin),
+                                          ('seconds',expected_base+expected_member*margin)]:
+                        self.assertTrue(math.isclose(term[key],expected,rel_tol=1e-6,abs_tol=1e-6),(short,key))
+                self.assertEqual(state['window_max_s'],60*math.ceil((math.ceil(base+member*margin)+
+                    plan.T0_STAGE_CAP_S+plan.PAUSE_LIMIT_S+plan.SESSION_WAIT_BUDGET_S)/60))
+                self.assertEqual(state['disk']['required_free_bytes'],63_878_576_237 if mode=='full' else 56_122_258_559)
+                self.assertEqual(output.getvalue().count('stage: '),18)
+                self.assertEqual(hashlib.sha256(ledger.read_bytes()).hexdigest(),before)
+
+    def test_remainder_missing_journals_flags_inputs_only_without_pilot_span(self):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            state = h.prepare(self.measurement,self.session,remainder=True,
+                measured_session=self.root/'missing-H',run=self.producer,now=lambda:1700000000,
+                statvfs=lambda _:SimpleNamespace(f_bavail=10**12,f_frsize=1),capacity=lambda _:None)
+        self.assertEqual(state['preparation_status'],'INPUTS_ONLY')
+        self.assertIsNone(state['window_max_s'])
+        self.assertIsNone(state['inputs']['programmed_span_s']['seconds'])
+        self.assertIn('sizing.h_journal_unavailable',{r['kind'] for r in state['flags']})
+        self.assertFalse(Path(state['plan_path']).exists())
+
     def test_prepare_and_native_arm_budget_the_same_peak_disk_bytes(self):
         from joulewise.b5 import driver
         state = self.prepared()
