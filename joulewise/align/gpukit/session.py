@@ -337,15 +337,31 @@ def run_session(options: SessionOptions, *,
             receipt["isolation_reason"] = str(exc)
             receipt["status"] = "refused"
             matrix_flags = (*matrix_flags, "isolation_refused")
-        preflight = options.preflight_command or (
-            sys.executable, "-m", "joulewise.align.power.preflight")
+        preflight_path = output / "preflight.json"
+        preflight = [*(options.preflight_command or (
+            sys.executable, "-m", "joulewise.align.power.preflight")),
+            "--out", str(preflight_path), "--device", str(options.gpu_index)]
+        receipt["preflight_argv"] = preflight
         if receipt["status"] != "refused":
             code = _command(preflight, output / "preflight.log",
                             timeout_s=options.command_timeout_s)
             receipt["preflight_returncode"] = code
-            if code:
-                flags.append("nvml_preflight_failed")
-        if matrix and not matrix_flags:
+            try:
+                report = json.loads(preflight_path.read_text(encoding="utf-8"))
+                if not isinstance(report, dict) or type(report.get("refused")) is not bool:
+                    raise ValueError("preflight verdict missing")
+                receipt["preflight"] = {k: report.get(k) for k in
+                                        ("refused", "measurement_ready", "flags")}
+                flags.extend(report.get("flags", ()))
+                if report["refused"]:
+                    flags.append("nvml_preflight_refused")
+                    receipt["status"] = "refused"
+                elif code:
+                    flags.append("nvml_preflight_command_failed_with_report")
+            except (OSError, ValueError, TypeError):
+                flags.append("nvml_preflight_unavailable")
+                receipt["status"] = "refused"
+        if matrix and not matrix_flags and receipt["status"] != "refused":
             for index, model in enumerate(matrix["models"]):
                 model_dir = output / f"model-{index}"
                 model_dir.mkdir()
@@ -431,7 +447,7 @@ def run_session(options: SessionOptions, *,
         if any(p.is_symlink() for p in output.rglob("*")):
             flags.append("output_symlink_omitted")
         receipt["data_complete"] = bool(
-            matrix and not matrix_flags and len(receipt["models"]) == len(matrix["models"])
+            matrix and receipt["status"] != "refused" and not matrix_flags and len(receipt["models"]) == len(matrix["models"])
             and all(not any(_incomplete_flag(f) for f in model["flags"])
                     for model in receipt["models"]))
         if receipt["status"] != "refused":
