@@ -47,6 +47,23 @@ Round 2 (review of lane head 5801e762e) adds:
   excluded row. The test checks the lane against that ruling, using the
   twin's identical.
 
+Round 3 (review of lane head f40e32c24) adds:
+- the round-2 fix path (R2-1): a row whose params_b is None, 0, NaN, inf or
+  negative stays in both frontiers and in tau. The twin never reads params_b,
+  so the lane on those rows is compared with the twin on the same rows; the
+  lane must flag invalid_params_b:<id>, add no exclusion flag, and keep the
+  kill False (the lead's fix-2 reading).
+- a third reference for cheapest_reaching: the exact probability, with no
+  Monte Carlo, against which the lane and the twin are each checked.
+  Joule cost: P_i = r_i * integral phi_i(c) * prod_{j != i} (1 - r_j Phi_j(c)) dc,
+  by composite Simpson; token cost (distinct token means, so one winner per
+  replicate): P_i = r_i * prod_{j cheaper} (1 - r_j). Here r_j = P(Binomial(n_j,
+  caught_j/n_j) / n_j >= target), summed exactly. With one winner per
+  replicate each id's win count is exactly Binomial(B, P_i), so the check uses
+  exact binomial tails at the false-alarm rate the 4-SE rule implies,
+  2 * (1 - Phi(4)), about 6.3e-5. That keeps the rule valid for small P_i,
+  where the normal approximation behind 4 SEs fails (B * P_i << 1).
+
 Set JW_TWIN_FRONTIER_WORLDS (default 12) and JW_TWIN_FRONTIER_CHAIN_WORLDS
 (default 1; each chain world is 1,600 simulated episodes, a few seconds) to
 run more seeded worlds than the default.
@@ -409,6 +426,103 @@ class IndexInt:
         return float(self.value)
 
 
+# ------------------------------------------------------- exact reference (round 3)
+
+def exact_world(seed: int) -> tuple[list[tuple], float]:
+    """contested_world with distinct token means (12 tokens, one per turn, apart).
+
+    Distinct token means give one winner per replicate under cost="tokens", so
+    each id's win count is Binomial(B, P_i) and the exact check below applies.
+    """
+    raw, target = contested_world(seed)
+    return [r[:7] + (r[7] + 12.0 * i,) for i, r in enumerate(raw)], target
+
+
+def exact_reach(trials: int, caught: int, target: float) -> float:
+    """P(Binomial(trials, caught/trials) / trials >= target), summed exactly.
+
+    The reach test k / trials >= target is the same float comparison both
+    implementations make.
+    """
+    p = caught / trials
+    return math.fsum(math.comb(trials, k) * p**k * (1 - p)**(trials - k)
+                     for k in range(trials + 1) if k / trials >= target)
+
+
+def _phi(x: float) -> float:
+    return math.exp(-0.5 * x * x) / math.sqrt(2 * math.pi)
+
+
+def _big_phi(x: float) -> float:
+    return 0.5 * math.erfc(-x / math.sqrt(2))
+
+
+def exact_cheapest_joules(raw, target: float, intervals: int = 2000) -> dict[str, float]:
+    """P_i = r_i * integral phi_i(c) prod_{j != i} (1 - r_j Phi_j(c)) dc (independent draws).
+
+    Composite Simpson over mean +/- 10 sd of config i (the normal mass outside
+    is below 2e-23). The step is 0.01 sd_i, and every sd_j is at least a
+    quarter of sd_i in these worlds (40-160 J), so the step is at most 0.04
+    sd_j and Simpson's h**4 error is far below the 1e-6 plain bar.
+    """
+    reach = {r[0]: exact_reach(r[3], r[4], target) for r in raw}
+    out = {}
+    for row in raw:
+        mu, sd = row[5], row[6]
+        lo, h = mu - 10 * sd, 20 * sd / intervals
+        others = [(reach[o[0]], o[5], o[6]) for o in raw if o[0] != row[0]]
+
+        def f(c):
+            value = _phi((c - mu) / sd) / sd
+            for r_j, mu_j, sd_j in others:
+                value *= 1 - r_j * _big_phi((c - mu_j) / sd_j)
+            return value
+        total = f(lo) + f(lo + intervals * h)
+        total += math.fsum((4 if k % 2 else 2) * f(lo + k * h) for k in range(1, intervals))
+        out[row[0]] = reach[row[0]] * total * h / 3
+    return out
+
+
+def exact_cheapest_tokens(raw, target: float) -> dict[str, float]:
+    """P_i = r_i * prod_{j: tokens_j < tokens_i} (1 - r_j); token means must be distinct."""
+    assert len({r[7] for r in raw}) == len(raw), "exact token formula needs distinct means"
+    reach = {r[0]: exact_reach(r[3], r[4], target) for r in raw}
+    return {r[0]: reach[r[0]] * math.prod(1 - reach[o[0]] for o in raw if o[7] < r[7])
+            for r in raw}
+
+
+def _binomial_log_pmf(k: int, b: int, p: float) -> float:
+    if p <= 0.0:
+        return 0.0 if k == 0 else -math.inf
+    if p >= 1.0:
+        return 0.0 if k == b else -math.inf
+    return (math.lgamma(b + 1) - math.lgamma(k + 1) - math.lgamma(b - k + 1)
+            + k * math.log(p) + (b - k) * math.log1p(-p))
+
+
+def binomial_consistent(wins: int, b: int, p: float, alpha: float) -> bool:
+    """Is ``wins`` consistent with Binomial(b, p) at two-sided false-alarm rate alpha?
+
+    Exact tails P(X >= wins) and P(X <= wins), summed from the observed count
+    outward; a tail stops, once past the mean, when a term falls below 1e-17
+    of its running sum (below double precision, 2**-53 ~ 1.1e-16, so the
+    dropped remainder cannot move the sum). p is clamped to [0, 1]; at exactly
+    0 or 1 only the matching count (0 or b) is consistent.
+    """
+    p = min(max(p, 0.0), 1.0)
+
+    def tail(direction):
+        total, k = 0.0, wins
+        while 0 <= k <= b:
+            term = math.exp(_binomial_log_pmf(k, b, p))
+            total += term
+            if term < 1e-17 * total and (k - b * p) * direction > 0:
+                break
+            k += direction
+        return total
+    return min(tail(+1), tail(-1)) >= alpha / 2
+
+
 # ------------------------------------------------------------------ tests
 
 @unittest.skipUnless(lane is not None, "lane module joulewise.align.frontier not on this branch")
@@ -708,6 +822,73 @@ class FrontierTwinAgreement(unittest.TestCase):
             self.compare_divergence(negative, 1000, index,
                                     flags=tuple(f"negative_joules_pair:{i}" for i in sorted(
                                         {5} | {i for i, p in enumerate(pairs) if p[1] < 0})))
+
+    # -------------------------------------------------------------- round 3
+
+    def test_unknown_size_rows_stay_in_both_frontiers(self):
+        """R2-1: an unknown params_b is flagged, never a reason to drop costs/counts."""
+        cases = [(("config", seed), config_world(seed)) for seed in range(min(WORLDS, 6))]
+        cases += [(("chain", p), chain_world(0, p)[0]) for p in (False, True)]
+        kill_worlds = 0
+        for label, raw in cases:
+            lane_rows, twin_rows = self.rows_for(raw)
+            # Put the unknown size on a joule-frontier member, so dropping it would show.
+            first = twin.pareto_frontier(twin_rows, cost="joules")[0]
+            k = next(i for i, r in enumerate(twin_rows) if r.config_id == first)
+            twin_kill = twin.frontier_agreement(twin_rows)["identical"]
+            kill_worlds += twin_kill
+            for size in (None, 0.0, math.nan, math.inf, -4.0):
+                unknown = list(lane_rows)
+                unknown[k] = replace(unknown[k], params_b=size)
+                # The twin never reads params_b: compare against it on the same rows.
+                self.compare_frontiers(unknown, twin_rows, (label, size))
+                a = lane.frontier_agreement(unknown)
+                self.compare_agreement(a, twin.frontier_agreement(twin_rows), (label, size))
+                self.assertIn(f"invalid_params_b:{first}", a["flags"])
+                self.assertFalse(any(f.startswith(("excluded_row:", "rows_used:"))
+                                     for f in a["flags"]), (label, size))
+                # The lead's fix-2 reading: an unknown size keeps the kill False,
+                # even where the frontiers are identical across >= 2 known sizes.
+                self.assertIs(a["kill_condition_met"], False, (label, size))
+            # cheapest_reaching does not read params_b: every id stays.
+            for cost in ("joules", "tokens"):
+                self.compare_probabilities(
+                    lane.cheapest_reaching(unknown, 0.6, cost=cost, n_boot=4000, seed=3),
+                    twin.cheapest_reaching(twin_rows, 0.6, cost=cost, n_boot=4000, seed=4),
+                    4000, (label, "unknown size", cost))
+        # Both kill outcomes must occur among the worlds (seed 4 and the
+        # proportional chain world have identical frontiers).
+        self.assertGreater(kill_worlds, 0)
+        self.assertLess(kill_worlds, len(cases))
+
+    def test_cheapest_reaching_against_exact_probability(self):
+        n_boot = 20_000
+        # Two-sided false-alarm rate the orchestrator's 4-SE rule implies.
+        alpha = 2 * (1 - statistics.NormalDist().cdf(MC_SIGMAS))
+        spread = 0
+        for seed in range(min(WORLDS, 6)):
+            raw, target = exact_world(seed)
+            lane_rows, twin_rows = self.rows_for(raw)
+            for cost, exact in (("joules", exact_cheapest_joules(raw, target)),
+                                ("tokens", exact_cheapest_tokens(raw, target))):
+                # Exact probabilities sum to P(some config reaches) <= 1; the
+                # Simpson sum has no printed uncertainty: plain bar.
+                self.assertLessEqual(math.fsum(exact.values()), 1.0 + plain_bar(1.0))
+                for name, result in (
+                        ("lane", lane.cheapest_reaching(lane_rows, target, cost=cost,
+                                                        n_boot=n_boot, seed=seed)),
+                        ("twin", twin.cheapest_reaching(twin_rows, target, cost=cost,
+                                                        n_boot=n_boot, seed=seed + 7919))):
+                    self.assertEqual(set(result), set(exact))
+                    for config_id, p in exact.items():
+                        wins = result[config_id] * n_boot
+                        # One winner per replicate: the win count is an integer.
+                        self.assertLessEqual(abs(wins - round(wins)), plain_bar(wins))
+                        self.assertTrue(binomial_consistent(round(wins), n_boot, p, alpha),
+                                        (seed, cost, name, config_id, round(wins), p * n_boot))
+                spread += sum(0.01 < p < 0.99 for p in exact.values())
+        # The worlds must spread probability over several ids, not return 0/1.
+        self.assertGreater(spread, min(WORLDS, 6))
 
 
 if __name__ == "__main__":
