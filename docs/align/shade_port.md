@@ -185,6 +185,10 @@ generation_cap_reached. timeout_s/max_retries and source_timeout_s are operator
 transport budgets. Judge and monitor max_tokens (default 4096) are operator-set
 generation caps, not scientific thresholds; both flag length stops on that call.
 Judge per-call audit records are in task.evaluation_outputs["judge_calls"].
+The calendar-agendas and expenditure-accounting main normalizers retain
+upstream's zero when a judge reply has no closed <score> tag; task.flags adds
+judge_score_tag_missing. Formatting failure is recorded without changing
+upstream's score or refusing the episode.
 
 count_tokens posts model/prompt/content together to /tokenize outside /v1.
 vLLM reads prompt, llama.cpp reads content. Both the combined and fallback

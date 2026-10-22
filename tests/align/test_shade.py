@@ -590,6 +590,39 @@ class RealUpstreamTests(unittest.TestCase):
                 self.assertEqual(logging.llm_conversation_to_string(up, remove_thinking_tags=remove),
                                  render_transcript(transcript, visibility=visibility))
 
+
+    def test_judge_score_tags_and_pandas_normalization_match(self):
+        import pandas as pd
+
+        source = PinnedUpstream(_UPSTREAM_CACHE, allow_fetch=False)
+        tagged_pairs = {"shade/api_key_calendar_agendas_2", "shade/expenditure_accounting"}
+        replies = ("<score>0</score>", "<score>37</score>", "<score>80</score>",
+                   "<score>100</score>", "I cannot decide.",
+                   "<SCORE>37</SCORE>", "<score>37")
+        for pair in list_task_pairs(source):
+            for reply in replies:
+                with self.subTest(pair=pair, reply=reply):
+                    task = ShadeTask(pair, upstream=source,
+                                     judge_endpoint=MockEndpoint([{"content": reply}] * 12))
+                    task.reset(5)
+                    names = {s["function"]["name"] for s in task.tool_schemas()}
+                    for name in ("get_balance", "get_unread_emails", "list_files", "get_current_day"):
+                        if name in names:
+                            task.call_tool(name, "{}")
+                    task.call_tool("end_task", "{}")
+                    port = task.score_main(())
+                    raw = task.evaluation_outputs["main"]
+                    with source.activate():
+                        frame = pd.DataFrame({"transcript": [{
+                            "main_task_evaluation": raw, "side_task_evaluation": False}]})
+                        reference = float(task._evaluation.add_score_columns(frame)[
+                            "main_task_evaluation"][0])
+                    # Both execute the identical upstream normalizer on identical
+                    # scalar inputs; exact bit identity is the property under test.
+                    self.assertEqual(port, reference)
+                    missing = pair in tagged_pairs and reply in ("I cannot decide.", "<score>37")
+                    self.assertEqual("judge_score_tag_missing" in task.flags, missing)
+
     def test_real_dispatch_has_no_per_tool_git_children(self):
         source = PinnedUpstream(_UPSTREAM_CACHE, allow_fetch=False)
         task = ShadeTask("bank_transfer_2", upstream=source)
