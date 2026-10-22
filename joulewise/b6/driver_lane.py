@@ -92,6 +92,8 @@ class DriverLane:
         if disk_budget is not None:
             notes = [*notes, {"kind": "disk.budget", **disk_budget}]
             if disk_budget["required_free_bytes"] is None:
+                # Director's R2-3 registration-completeness exception: without
+                # registered P, neither the block-6 constants nor no bar is valid.
                 write(stage / "disk-budget.json", disk_budget)
                 return LaneMissing("driver:disk.budget_missing")
         fp = {}

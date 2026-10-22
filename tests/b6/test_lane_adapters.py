@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from joulewise.b6 import compose, plan_inputs, session_paths
 from joulewise.b6.queue import Selection
@@ -27,6 +27,45 @@ class AdapterTests(DeskCase):
             target = self.measurement / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, target)
+
+    def test_bytes_missing_disk_derivation_holds_before_prepared_or_plan(self):
+        from joulewise.b6.driver_lane import DriverLane
+        from joulewise.b6.lanes import LaneMissing
+        for relative in ('configs/campaigns/v5_claim_25g83/registration_block5.md',
+                         'configs/b6/registration/sizing_b5.json',
+                         'configs/campaigns/bytes-s1-p1/plan_tree.json'):
+            target = self.measurement / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / relative, target)
+        sizing = self.measurement / 'configs/b6/registration/sizing_b5.json'
+        sized = json.loads(sizing.read_text())
+        identities = {name: {'path': str(self.root / name), 'sha256': 'a' * 64}
+                      for name in ('identity-epoch.json', 't1-bindings.json')}
+        for label, terms in (('absent', None), ('malformed', {'required_free_bytes': 1})):
+            with self.subTest(terms=label):
+                row = dict(pack_id='bytes-s1-p1', programmed_span_s=3600, T_stream_max_s=100)
+                if terms is not None:
+                    row['disk_derivation'] = terms
+                sized['packs']['BYTES'] = row
+                sizing.write_text(json.dumps(sized))
+                layout = SimpleNamespace(fixed_bytes=b'fixture', packs=('bytes-s1-p1',),
+                    campaign_id='bytes-s1-p1', session_id='missing-p-' + label)
+                stage = self.loop / 'staging' / layout.session_id
+                lane = DriverLane(self.measurement, self.loop,
+                    Mock(return_value=SimpleNamespace(stdout='a' * 40)), block_root=self.root)
+                with patch('joulewise.b6.driver_lane.desk_identity.collect', return_value=(identities, [])):
+                    result = lane.prepare_session(layout, None, smoke=False, keep={}, staging_root=stage)
+                self.assertIsInstance(result, LaneMissing)
+                self.assertEqual(result.name, 'driver:disk.budget_missing')
+                budget = json.loads((stage / 'disk-budget.json').read_text())
+                self.assertEqual(budget['flags'], ['disk.budget_missing'])
+                self.assertIsNone(budget['required_free_bytes'])
+                self.assertIn('disk_derivation', budget['detail'])
+                self.assertIn('register', budget['remedy'])
+                self.assertFalse((stage / 'prepared.json').exists())
+                self.assertFalse((stage / 'plan-inputs.json').exists())
+                self.assertEqual(list(self.root.rglob('plan.json')), [])
+                self.assertEqual(list(self.root.rglob('session.json')), [])
 
     def test_session_paths_never_overlap_checkout_and_have_one_copy_per_device(self):
         paths = session_paths.for_session(self.measurement, self.loop, 'r1-alpha')

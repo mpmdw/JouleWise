@@ -1,5 +1,10 @@
 ## PROGRESS
 
+- Part 2 (review of dcceb8480) started at 0a585bb8e.
+- Done (Part 2 slice 1): R2-3 deliberate missing-P hold comment and actionable disk-budget receipt; real DriverLane.prepare_session tests absent/malformed disk_derivation before any prepared pointer/plan. Registry checks every bytes-s sizing row (currently 0). /tmp/byc5f1/r2-3.log: 10 tests OK, exit 0.
+- Done (Part 2 slice 1): R2-2 hand-computed calculate test with science counts 2/3, reference count 1, margin 1; exact rational allowances, bases 2600/2467 B, B=2600, WAIT=360000, fixed=7, P=725207 B. /tmp/byc5f1/r2-2.log: 1 test OK, exit 0.
+- Done (Part 2 slice 1): all four M4/M8/M12/M13 mutants CAUGHT on /private/tmp/byc5f1/mut-tree; disposable copy removed afterward. Separate fresh-TMPDIR modules: gates 20, inputs 9, adapters 22, wrapper 6; all OK. Sealed 682-path diff empty; git diff --check passes.
+- Next (Part 2): R2-4 desk status, R2-5 labels, R2-6a decimal stdout, R2-1/R2-6b report audit and final FIX LOG/importer checks. Do not mark complete yet. Director owns commits/push/PR #547. Intake free=49 GiB; starting tree clean.
 - Done (slice 4): all twelve committed-fixed budgets match real native planner and precheck/arm integer boundaries; report R6, allowance sensitivity and committed-fixed tables refreshed.
 - Done (slice 1): finding 2 committed-fixed input/provenance, missing/malformed unavailable behavior, measured-unused disclosure; finding 7 exact measured_c assertion and imported WAIT constant.
 - Verified: 18 bytes_gates tests and 6 plan_inputs tests pass. Real augmented H main exits 2, writes /tmp/byc5f1/C5.json; all 12 P values exactly equal the director's committed-fixed targets. Reviewer re-derivation agrees. Sealed diff is empty.
@@ -35,6 +40,38 @@ Findings 3 and 7 are fixed; finding 1 implementation and synthetic boundary chec
 | 7 nit | Fixed: ReplayTests.test_nine_plus_h_replay_and_integer_boundaries uses exact int/int equality; plan_inputs imports SESSION_WAIT_BUDGET_S from sealed plan, unchanged. |
 | 8 nit | Thermal/completeness and committed-fixed report/R6/table corrections applied; final PROGRESS cleanup pending importer checks. Scope grant acknowledged for native raw-byte producer. |
 | BY-MERGE | No change needed in this lane; hand-forward recorded below. |
+| R2-2 minor | Fixed hand-computed terms coverage in GatesTests.test_hand_computed_p_includes_margin_reference_and_tree_counts (calculate, no helper re-derivation). All 20 module tests pass. M4/M12/M13 CAUGHT. M13 renames the reference key rather than dropping its numeric contribution, so the test explicitly pins the reference-labelled count/allowances too. |
+| R2-3 minor | Fixed: Director's registered-input exception kept deliberately in DriverLane.prepare_session; plan_inputs.encode_disk_budget receipt names missing disk_derivation and registration remedy. AdapterTests.test_bytes_missing_disk_derivation_holds_before_prepared_or_plan passes both absent/malformed rows through real build/prepare; registry test prints 0 rows checked. Refusal census does not scan driver_lane.py or recognize LaneMissing holds (rg produces no matching driver_lane/LaneMissing entries); no registry edit required by disposition 3d. Nine block-6 sessions and H never enter this BYTES driver branch; director replay remains 0 of 10. |
+
+## MUTANTS
+
+Copied current tree with `cp -R /Users/edr/code/JouleWise-by-c5 /private/tmp/byc5f1/mut-tree`. Each X in M4, M8, M12, M13 ran sequentially with:
+
+`JW_MUT_ROOT=/private/tmp/byc5f1/mut-tree JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -I -B /Users/edr/night-archive/forward-20261021/BY-C5/review-r2/mut.py X > /tmp/byc5f1/mut-X.log 2>&1`
+
+```text
+M4 no margin on stream allowance CAUGHT [('test_bytes_gates', 1, 'Ran 20 tests in 2.916s FAILED (failures=1)')]
+M8 missing P proceeds CAUGHT [('test_plan_inputs', 0, 'Ran 9 tests in 0.038s OK'), ('test_session_wrapper', 0, 'Ran 6 tests in 0.091s OK'), ('test_lane_adapters', 1, 'Ran 22 tests in 0.363s FAILED (failures=2)')]
+M12 count per model=50 fixed CAUGHT [('test_bytes_gates', 1, 'Ran 20 tests in 2.866s FAILED (failures=1)')]
+M13 reference allowance dropped CAUGHT [('test_bytes_gates', 1, 'Ran 20 tests in 2.862s FAILED (errors=1)')]
+```
+
+M13 first survived numerical assertions because its actual edit renames `reference` to `_unused`, and disk_terms still sums every value. Final assertions pin the required reference-labelled disclosure and exact allowances. Truly removing reference also changes the hand-computed bases. One premature M4 launch before copying finished produced FileNotFoundError; it touched neither source tree and was rerun after copy completion. The disposable tree was removed using shutil.rmtree after the shell rejected rm -rf; working clone was never mutated.
+
+## PART 2 SLICE 1 VERIFICATION
+
+Each run.py command below allocates and deletes its own /private/tmp/jwtmp-byc5f1.* TMPDIR. No skips or environmental failures. Final independent runs supersede initial combined-module checks sharing one TMPDIR.
+
+| Exact command | Tests | Exit |
+|---|---:|---:|
+| `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/r2-final-gates.log -m unittest tests.test_bytes_gates` | 20 | 0 |
+| `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/r2-final-inputs.log -m unittest tests.b6.test_plan_inputs` | 9 | 0 |
+| `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/r2-final-adapters.log -m unittest tests.b6.test_lane_adapters` | 22 | 0 |
+| `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3.13 -B /tmp/byc5f1/run.py /tmp/byc5f1/r2-final-wrapper.log -m unittest tests.b6.test_session_wrapper` | 6 | 0 |
+
+Sealed check: load `files` keys from configs/campaigns/v5_claim_25g83/sealed_inventory.json, pass all 682 paths to `git diff --name-only bda481d5a -- <paths>` (HEAD plus working edits). Empty output saved as /tmp/byc5f1/sealed-r2-slice1.log. `git diff --check`: exit 0, empty output.
+
+Applied R2-3 decision: hold for the missing registered physical-hazard input P instead of arming against inherited constants or no bar. Receipt/lineage/provenance remain flags. Registration row is the remedy; CI checks future rows before any loop hold. This is the director's explicit exception. Refusal census does not cover driver-lane holds; disposition 3d permits recording the decision in this report.
 
 ## PRECHECK END TO END
 

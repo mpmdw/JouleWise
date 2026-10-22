@@ -163,7 +163,9 @@ def encode_disk_budget(inputs, terms):
     """
     n = member_count(inputs)
     if not valid_disk_terms(terms) or n <= 0:
-        inputs["disk_budget"] = {"flags": ["disk.budget_missing"], "detail": "missing or malformed disk terms",
+        inputs["disk_budget"] = {"flags": ["disk.budget_missing"],
+                                 "detail": "pack sizing row lacks valid disk_derivation",
+                                 "remedy": "register valid disk_derivation (P and its terms) in the pack sizing row",
                                  "required_free_bytes": None, "member_count": n}
         return
     b, wait, fixed, required = (terms[k] for k in

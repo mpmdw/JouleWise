@@ -2,6 +2,7 @@
 from copy import deepcopy
 import csv
 from decimal import Decimal
+from fractions import Fraction
 import json
 import math
 from pathlib import Path
@@ -188,6 +189,58 @@ class World(unittest.TestCase):
 
 
 class GatesTests(World):
+    def test_hand_computed_p_includes_margin_reference_and_tree_counts(self):
+        measured = deepcopy(self.measured)
+        science = {m['run_id'] for m in self.plan['members'] if m['model_id'] != 'reference'}
+        for rid, receipt in measured['runs'].items():
+            receipt.update(request_s=1, stream_s=2, member_wall_s=3,
+                           raw_allocated_bytes=100, retained_bytes=200)
+        for model in measured['regimes']:
+            for purpose in ('check', 'soak', 'test'):
+                ids = [m['run_id'] for m in self.plan['members']
+                       if m['model_id'] == model and m['purpose'] == purpose]
+                for i, rid in enumerate(ids):
+                    request = 2 + 2 * (i % 2)
+                    measured['runs'][rid].update(request_s=request, stream_s=request + 2,
+                        member_wall_s=request + 4, raw_allocated_bytes=10, retained_bytes=20)
+        # Other science purposes must not set a higher rate than references.
+        for rid in science:
+            measured['runs'][rid]['raw_allocated_bytes'] = 10
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for path in (ROOT / 'configs/campaigns').glob('bytes-s*/plan_tree.json'):
+                tree = gates.read(path)
+                if path.parent.name == 'bytes-s1-p1':
+                    mids = tree['module_order']
+                    tree['science'] = ([{'module_id': mids[0]}] * 2 +
+                                       [{'module_id': mids[1]}] * 3)
+                    tree['stage_graph'] = [{'kind': 'campaign_collection', 'expected_count': 6}]
+                write(root / 'configs/campaigns' / path.parent.name / path.name, tree)
+            source = root / 'fixed.json'
+            write(source, {'packs': {'bytes-mac-check': {'disk_derivation': {'fixed_retained_bytes': 7}}}})
+            result = gates.calculate(deepcopy(self.rows), deepcopy(self.sidecar), measured,
+                deepcopy(self.plan), repo_root=root, committed_sizing=source)
+        terms = result['sessions']['bytes-s1-p1']['disk_derivation']
+        # Five checks have requests 2,4,2,4,2: mean=14/5; margin=4/2-1=1.
+        # Science stream=(14/5+2)*2=48/5; wall=(14/5+4)*2=68/5.
+        # Reference stream=(1+1)*2=4; wall=3*2=6; counts science=2,3; ref=1.
+        # Reference raw=100 gives r_s=100/2=50, r_w=100/3 (science rates lower).
+        # stream=ceil(50*(2*48/5+3*48/5+4))=2600;
+        # wall=ceil((100/3)*(2*68/5+3*68/5+6))=2467; B=2600.
+        # WAIT=ceil(50*7200)=360000; fixed=7; P=2*(2600+360000)+7=725207.
+        allowance = terms['allowances_by_model']['qwen3-1p7b']['stream_allowance_s']
+        self.assertEqual(Fraction(allowance['numerator'], allowance['denominator']), Fraction(48, 5))
+        reference = terms['allowances_by_model']['reference']
+        self.assertEqual(reference['count'], 1)
+        self.assertEqual(reference['stream_allowance_s'], {'numerator': 4, 'denominator': 1})
+        self.assertEqual(reference['member_allowance_s'], {'numerator': 6, 'denominator': 1})
+        self.assertEqual(terms['stream_basis_bytes'], 2600)
+        self.assertEqual(terms['wall_basis_bytes'], 2467)
+        self.assertEqual(terms['B_bytes'], 2600)
+        self.assertEqual(terms['extra_wait_raw_bytes'], 360000)
+        self.assertEqual(terms['fixed_retained_bytes'], 7)
+        self.assertEqual(terms['required_free_bytes'], 725207)
+
     def test_cli_runs_every_gate_from_native_nonclaim_harvest(self):
         out = self.root / "c5.json"
         result = subprocess.run([sys.executable, str(ROOT / "scripts/bytes_gates.py"),

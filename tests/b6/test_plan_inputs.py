@@ -41,6 +41,14 @@ class ClockThresholdTests(unittest.TestCase):
 
 
 class DiskBudgetTests(unittest.TestCase):
+    def test_registered_bytes_rows_have_valid_disk_terms(self):
+        sized = json.loads((ROOT / "configs/b6/registration/sizing_b5.json").read_text())
+        rows = [row for row in sized["packs"].values() if row["pack_id"].startswith("bytes-s")]
+        print(f"registered BYTES sizing rows checked: {len(rows)}")
+        for row in rows:
+            with self.subTest(pack=row["pack_id"]):
+                self.assertTrue(plan_inputs.valid_disk_terms(row.get("disk_derivation")))
+
     def test_precheck_all_twelve_p_and_retained_smoke_boundaries(self):
         # Synthetic integer bytes: exact P reconstruction is the property.
         with tempfile.TemporaryDirectory() as directory:
