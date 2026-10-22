@@ -13,15 +13,16 @@
       "layout_derivation": "One whole GPU for this baseline; tensor_parallel_size is an operator layout, memory_fit reports sourced weight arithmetic and requires explicit KV headroom.",
       "reasoning_parser": "qwen3",
       "reasoning_parser_source": {
-        "url": "https://huggingface.co/Qwen/Qwen3-30B-A3B/blob/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/README.md",
+        "url": "https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/README.md",
         "accessed": "2026-10-22",
-        "quote": "vllm serve Qwen/Qwen3-30B-A3B --enable-reasoning --reasoning-parser deepseek_r1",
-        "note": "fetched by the lead, quoted in the fix-2 brief; not fetched by this seat. The card's deepseek_r1 line is deliberately not followed: in vLLM v0.10.2 deepseek_r1 returns model_output,None without </think>; qwen3 returns None,model_output unless both tags exist, preserving hybrid thinking-off answers. --enable-reasoning is absent from v0.10.2 arg_utils.",
+        "quote": "vllm serve Qwen/Qwen3-8B --enable-reasoning --reasoning-parser deepseek_r1",
+        "note": "fetched by the lead, quoted in the fix-2 brief; not fetched by this seat. The card's deepseek_r1 line is deliberately not followed: in vLLM v0.10.2 deepseek_r1 returns model_output,None without </think>; qwen3 returns None,model_output unless both tags exist, preserving hybrid thinking-off answers. --enable-reasoning is absent from v0.10.2 arg_utils. The quote is the exact Qwen3-8B family example supplied in R6; model_card_url preserves this model's supplied pinned card, without inventing a model-specific command quotation.",
         "parser_code_urls": [
           "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/qwen3_reasoning_parser.py",
           "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/deepseek_r1_reasoning_parser.py",
           "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/engine/arg_utils.py"
-        ]
+        ],
+        "model_card_url": "https://huggingface.co/Qwen/Qwen3-30B-A3B/blob/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/README.md"
       },
       "tool_call_parser": "hermes",
       "enable_auto_tool_choice": true,
@@ -518,15 +519,16 @@
     "tensor_parallel_size": 1,
     "reasoning_parser": "qwen3",
     "reasoning_parser_source": {
-      "url": "https://huggingface.co/Qwen/Qwen3-4B/blob/1cfa9a7208912126459214e8b04321603b3df60c/README.md",
+      "url": "https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/README.md",
       "accessed": "2026-10-22",
-      "quote": "vllm serve Qwen/Qwen3-4B --enable-reasoning --reasoning-parser deepseek_r1",
-      "note": "fetched by the lead, quoted in the fix-2 brief; not fetched by this seat. The card's deepseek_r1 line is deliberately not followed: in vLLM v0.10.2 deepseek_r1 returns model_output,None without </think>; qwen3 returns None,model_output unless both tags exist, preserving hybrid thinking-off answers. --enable-reasoning is absent from v0.10.2 arg_utils.",
+      "quote": "vllm serve Qwen/Qwen3-8B --enable-reasoning --reasoning-parser deepseek_r1",
+      "note": "fetched by the lead, quoted in the fix-2 brief; not fetched by this seat. The card's deepseek_r1 line is deliberately not followed: in vLLM v0.10.2 deepseek_r1 returns model_output,None without </think>; qwen3 returns None,model_output unless both tags exist, preserving hybrid thinking-off answers. --enable-reasoning is absent from v0.10.2 arg_utils. The quote is the exact Qwen3-8B family example supplied in R6; model_card_url preserves this model's supplied pinned card, without inventing a model-specific command quotation.",
       "parser_code_urls": [
         "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/qwen3_reasoning_parser.py",
         "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/reasoning/deepseek_r1_reasoning_parser.py",
         "https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/engine/arg_utils.py"
-      ]
+      ],
+      "model_card_url": "https://huggingface.co/Qwen/Qwen3-4B/blob/1cfa9a7208912126459214e8b04321603b3df60c/README.md"
     },
     "tool_call_parser": null,
     "enable_auto_tool_choice": false,
