@@ -17,7 +17,10 @@ MODEL_LIBRARIES = (importlib.util.find_spec("torch") is not None
 class RouterHookTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        import torch
+        try:
+            import torch
+        except ImportError as exc:
+            raise unittest.SkipTest(f"optional torch cannot import: {exc}") from exc
         cls.torch = torch
         torch.set_num_threads(1)
         try:

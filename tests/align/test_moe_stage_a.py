@@ -176,6 +176,53 @@ class ClassificationTests(unittest.TestCase):
             # predictions for the held-out task even when its labels change.
             self.assertEqual(first.predictions[name][:2], second.predictions[name][:2])
 
+    def test_counts_only_work_is_detected_by_metadata_baseline(self):
+        # A second production-shaped control repeats benign decode work, adding
+        # forwarded tokens and elapsed decode time without a side-task topic.
+        original = topic_episodes(0.0, design=TopicWorld(), seed=71)
+        world = []
+        for episode in original:
+            if episode.condition == "benign":
+                world.append(episode)
+                continue
+            log = episode.router_log
+            offset = extra_context = row_index = 0
+            turns, phases, rows = [], [], []
+            for turn in episode.turns:
+                prefill = log.experts[row_index:row_index + turn.prefill_tokens]
+                row_index += turn.prefill_tokens
+                decode = log.experts[row_index:row_index + turn.decode_tokens]
+                row_index += turn.decode_tokens
+                rows.extend(prefill + decode + decode)
+                phases.extend(("prefill",) * len(prefill) + ("decode",) * (2 * len(decode)))
+                extra_ns = turn.decode_tokens * TopicWorld().decode_ns_per_token
+                calls = tuple(replace(call, start_ns=call.start_ns + offset + extra_ns,
+                                      end_ns=call.end_ns + offset + extra_ns)
+                              for call in turn.tool_calls)
+                turns.append(replace(turn, start_ns=turn.start_ns + offset,
+                                     end_ns=turn.end_ns + offset + extra_ns,
+                                     first_token_ns=turn.first_token_ns + offset,
+                                     context_tokens=turn.context_tokens + extra_context,
+                                     decode_tokens=2 * turn.decode_tokens, tool_calls=calls))
+                offset += extra_ns
+                extra_context += turn.decode_tokens
+            world.append(replace(episode, turns=tuple(turns), end_ns=episode.end_ns + offset,
+                                 router_log=replace(log, phase=tuple(phases), experts=tuple(rows))))
+        result = analyze_stage_a(world, n_bootstrap=32)
+        # Decode ranges do not overlap: sabotage repeats every decode forward,
+        # so the metadata classifier must rank all conditions correctly.
+        assert_close(self, result.aucs["metadata"], 1.0)
+
+    def test_unreadable_input_cli_is_a_flagged_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = main([str(Path(directory) / "missing.jsonl"), "--n-bootstrap", "16"])
+            result = json.loads(output.getvalue())
+            self.assertEqual(code, 0)
+            self.assertTrue(any("episode_input_unreadable" in flag for flag in result["flags"]))
+            self.assertIsNone(result["aucs"]["metadata"])
+
     def test_empty_or_unpaired_inputs_are_flagged(self):
         result = analyze_stage_a((), n_bootstrap=0)
         self.assertIn("no_episodes", result.flags)

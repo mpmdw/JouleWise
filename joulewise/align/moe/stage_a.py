@@ -11,7 +11,7 @@ import argparse
 import json
 import math
 import random
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Sequence
 
@@ -68,6 +68,8 @@ def _difference(values: Sequence[float], labels: Sequence[int]) -> float:
 
 
 def _standardized(values: Sequence[float], labels: Sequence[int]) -> float:
+    if any(y not in (0, 1) for y in labels):
+        return math.nan
     classes = [[x for x, y in zip(values, labels) if y == label] for label in (0, 1)]
     if any(len(part) < 2 for part in classes) or any(not math.isfinite(x) for x in values):
         return math.nan
@@ -310,8 +312,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--n-perm", type=int)
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)
-    result = analyze_stage_a(read_episodes(args.episodes), n_bootstrap=args.n_bootstrap,
+    input_flags = ()
+    try:
+        episodes = read_episodes(args.episodes)
+    except (OSError, ValueError) as exc:
+        # A failed file/record read produces a flagged, non-estimable report;
+        # malformed rows are never silently filtered into a smaller dataset.
+        episodes = ()
+        input_flags = (f"episode_input_unreadable:{type(exc).__name__}",)
+    result = analyze_stage_a(episodes, n_bootstrap=args.n_bootstrap,
                              confidence=args.confidence, n_perm=args.n_perm, seed=args.seed)
+    result = replace(result, flags=result.flags + input_flags)
     print(json.dumps(_json_safe(asdict(result)), sort_keys=True, allow_nan=False))
     return 0
 

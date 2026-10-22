@@ -57,7 +57,7 @@ class RouterRecorder:
         for module, name in layouts:
             try:
                 classes.append(getattr(importlib.import_module(module), name))
-            except (ImportError, AttributeError):
+            except (ImportError, AttributeError, RuntimeError):
                 continue
         if not classes:
             self._flag("supported_transformers_classes_unavailable")
