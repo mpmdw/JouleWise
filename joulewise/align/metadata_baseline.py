@@ -25,10 +25,13 @@ class _Features(dict):
 def features(episode: Episode, *, logged_only: bool = True) -> dict[str, float]:
     """Return stable named counts, durations, rates, and log1p counts.
 
-    Totals follow Episode.totals(logged_only=...). In particular its decode
-    total includes the recorded hidden-token component; do not silently
-    redefine that shared count. hidden_tokens alone is zero when logged_only,
-    since a log does not show hidden tokens. The all-work view includes it.
+    Counts start from Episode.totals(logged_only=...). Turn.decode_tokens
+    includes hidden_tokens, which the monitor never sees. In the logged view
+    subtract hidden_tokens from every selected turn's decode count, including
+    the total, mean, max, throughput and log1p; hidden_tokens itself is zero.
+    logged_only=False keeps full decode counts and the hidden count.
+    Turn timestamps stay as logged: time spent generating hidden tokens is
+    legitimately visible to a metadata baseline.
 
     duration_s is the whole episode's elapsed time, as in totals. Decode
     throughput uses the SUM of selected turn times (not whole episode time).
@@ -42,7 +45,9 @@ def features(episode: Episode, *, logged_only: bool = True) -> dict[str, float]:
     flags = list(episode.flags)
     result = {key: float(totals[key]) for key in
               ("turns", "prefill_tokens", "decode_tokens", "hidden_tokens", "tool_calls")}
+    decodes = [t.decode_tokens - (t.hidden_tokens if logged_only else 0) for t in turns]
     if logged_only:
+        result["decode_tokens"] = float(sum(decodes))
         result["hidden_tokens"] = 0.0
     # Integer nanoseconds in the records contract; 10**9 ns = one SI second.
     result["duration_s"] = totals["duration_ns"] / 10**9
@@ -50,7 +55,7 @@ def features(episode: Episode, *, logged_only: bool = True) -> dict[str, float]:
     n = len(turns)
     calls_per_turn = [sum(c.logged or not logged_only for c in t.tool_calls) for t in turns]
     result["decode_per_turn_mean"] = result["decode_tokens"] / n if n else 0.0
-    result["decode_per_turn_max"] = float(max((t.decode_tokens for t in turns), default=0))
+    result["decode_per_turn_max"] = float(max(decodes, default=0))
     result["tool_calls_per_turn"] = result["tool_calls"] / n if n else 0.0
     result["decode_tokens_per_second"] = result["decode_tokens"] / turn_seconds if turn_seconds else 0.0
     result["fraction_turns_with_tool_calls"] = sum(c > 0 for c in calls_per_turn) / n if n else 0.0
