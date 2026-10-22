@@ -26,6 +26,7 @@ from unittest.mock import patch
 from joulewise.b5_analysis import dry_run as d
 from joulewise.b5_analysis.windows import SealPins
 from tests.b5_analysis.fixtures_s10 import chain_fixture, FIXTURES
+from tests.git_fixture import init_git_fixture
 
 JOINED_SEAMS = (
     ('dry_run._test_repo_root', 'Scratch Git repository with identical sealed packs, supply map and tracked synthetic index.'),
@@ -193,7 +194,7 @@ class JoinedHarness:
         self.index = self.repo / custody._B5_WINDOW_INDEX_PATH
         self.index.parent.mkdir(parents=True, exist_ok=True)
         self.index.write_bytes(Path(index).read_bytes())
-        self.git('init', '-q')
+        init_git_fixture(self.repo, '-q')
         self.git('add', '--all')
         self.git('-c', 'user.name=S10 synthetic harness', '-c', 'user.email=s10@example.invalid',
                  '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'Synthetic joined inputs')
