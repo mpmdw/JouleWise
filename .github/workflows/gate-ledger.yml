@@ -4,7 +4,7 @@ name: gate-ledger
 # REQUIRED GATE-LEDGER CHECK on main since 2026-09-24, made required in
 # Ed's interactive session (T26 cold gate item 2, D-170; interactive
 # record 02a24110 §7).
-# Every fresh PR is red by construction because the template seeds an
+# Every fresh non-draft PR is red by construction because the template seeds an
 # unresolved Tier choice, TODO Impact lines and NOT-RUN rows; that
 # deliberate nudge keeps an incomplete ledger visible.
 #
@@ -47,6 +47,10 @@ permissions:
 
 jobs:
   gate-ledger:
+    # Draft PRs skip this check (Ed, 2026-10-22: lanes open drafts early to get CI and
+    # pushed ~50 red ledger emails a night). Drafts cannot merge; the check runs on
+    # ready_for_review and on every push or body edit after it, so merges stay gated.
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
