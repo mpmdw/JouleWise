@@ -357,6 +357,31 @@ def _serve_argv(options: SessionOptions, model: dict[str, Any], port: int) -> li
     return argv
 
 
+def session_layout(matrix: dict[str, Any], options: SessionOptions) -> dict[str, Any]:
+    """Share the exact measured/monitor pool between validation and execution."""
+    maximum = max(m.get("tensor_parallel_size", 1) for m in matrix["models"])
+    measured = list(options.gpu_indices or range(options.gpu_index, options.gpu_index + maximum))
+    flags = []
+    if (len(set(measured)) != len(measured) or len(measured) < maximum
+            or any(type(i) is not int or i < 0 for i in measured)
+            or (options.monitor_gpu_index is not None and options.monitor_gpu_index < 0)):
+        flags.append("runner_measured_gpu_layout_invalid")
+    return {"measured_gpu_indices": measured,
+            "monitor_gpu_index": options.monitor_gpu_index if options.monitor_placement == "gpu" else None,
+            "flags": flags}
+
+
+def validate_session(options: SessionOptions) -> dict[str, Any]:
+    """Validate executable inputs without creating files or calling hardware."""
+    matrix, flags = load_matrix(options.matrix)
+    structural = structural_flags(matrix) if matrix else flags
+    if structural:
+        return {"flags": list(flags), "structural_flags": list(structural)}
+    layout = session_layout(matrix, options)
+    return {**layout, "flags": sorted(set(flags) | set(layout["flags"])),
+            "structural_flags": layout["flags"]}
+
+
 def run_session(options: SessionOptions, *,
                 probe: Callable[[str, float], bool] = _healthy) -> dict[str, Any]:
     """Run serial agent models with an explicitly placed, unsampled monitor.
@@ -386,6 +411,10 @@ def run_session(options: SessionOptions, *,
             # R8: malformed inputs fail before inventory, preflight or serving.
             # This is a failed command, not a physical-isolation refusal.
             raise MatrixInputError("matrix is missing, unreadable or invalid")
+        layout = session_layout(matrix, options)
+        flags.extend(layout["flags"])
+        if layout["flags"]:
+            raise MatrixInputError("measured GPU layout is invalid")
         settings: dict[str, Any] = {}
         if options.runner_settings:
             try:
@@ -407,12 +436,8 @@ def run_session(options: SessionOptions, *,
         if matrix:
             _json(output / "matrix.json", matrix)
             flags.extend(matrix.get("flags", ()))
-        maximum = max((m.get("tensor_parallel_size", 1) for m in matrix.get("models", [])), default=1)
-        measured = list(options.gpu_indices or tuple(range(options.gpu_index, options.gpu_index + maximum)))
+        measured = layout["measured_gpu_indices"]
         receipt["measured_gpu_indices"] = measured
-        if len(set(measured)) != len(measured) or len(measured) < maximum:
-            flags.append("runner_measured_gpu_layout_invalid")
-            matrix_flags = (*matrix_flags, "runner_measured_gpu_layout_invalid")
         placement = options.monitor_placement
         monitor_endpoint = None
         judge_endpoint = None
@@ -625,6 +650,13 @@ def run_session(options: SessionOptions, *,
             receipt["monitor_server"]["returncode"] = monitor_process.returncode
         if monitor_log is not None:
             monitor_log.close()
+    if receipt["status"] != "refused":
+        if not any("runner_returncode" in m for m in receipt["models"]):
+            flags.append("session_ran_no_model")
+            receipt["status"] = "failed"
+            receipt["data_complete"] = False
+        else:
+            receipt["status"] = "completed_with_flags" if flags else "completed"
     receipt["end_ns"] = time.monotonic_ns()
     receipt["flags"] = sorted(set(flags))
     _json(output / "receipt.json", receipt)
@@ -644,9 +676,18 @@ def _argv(value: str) -> tuple[str, ...]:
     return tuple(data)
 
 
+class SessionParser(argparse.ArgumentParser):
+    """Exit 3 for argument failures; exit 2 is reserved for physical refusal."""
+
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        self.exit(3, f"{self.prog}: error: {message}\n")
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = SessionParser(description=__doc__)
     parser.add_argument("matrix", type=Path)
+    parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--runner-command", type=_argv, default=())
     parser.add_argument("--runner-settings", type=Path)
@@ -673,7 +714,12 @@ def main(argv: list[str] | None = None) -> int:
     if any(not (0 < x < float("inf")) for x in (
             args.ready_timeout_s, args.command_timeout_s, args.runner_timeout_s, args.poll_s)):
         parser.error("timeouts and poll cadence must be finite and positive")
+    validate_only = vars(args).pop("validate_only")
     options = SessionOptions(**vars(args))
+    if validate_only:
+        result = validate_session(options)
+        print(json.dumps(result, indent=2, allow_nan=False))
+        return 3 if result["structural_flags"] else 0
     result = run_session(options)
     print(json.dumps(result, indent=2, allow_nan=False))
     # Exit 3 distinguishes execution/input failure from physical refusal (2).

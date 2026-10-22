@@ -922,6 +922,34 @@ print("<nvidia_smi_log><gpu><mig_mode><current_mig>Disabled</current_mig></mig_m
         command.assert_not_called()
 
 
+    def test_budget_adapter_skip_is_failed_when_no_runner_started(self):
+        result = run_session(self._options("budget-skips", matrix=CONFIG / "budget.json",
+                                           runner_command=()))
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("budget_runner_adapter_required", result["flags"])
+        self.assertIn("session_ran_no_model", result["flags"])
+        self.assertFalse(any("runner_returncode" in m for m in result["models"]))
+
+    def test_argument_error_exits_three(self):
+        from joulewise.align.gpukit.session import main
+        with self.assertRaises(SystemExit) as raised:
+            main(["--bad-arg"])
+        self.assertEqual(raised.exception.code, 3)
+
+    def test_validate_only_has_no_output_or_hardware_calls(self):
+        from unittest.mock import patch
+        from joulewise.align.gpukit.session import validate_session
+        from joulewise.align.gpukit import session
+        options = self._options("validate-only")
+        with patch.object(session, "whole_gpu") as hardware, patch.object(session, "_command") as command:
+            result = validate_session(options)
+        self.assertEqual(result["structural_flags"], [])
+        self.assertEqual(result["measured_gpu_indices"], [0])
+        self.assertFalse(options.output.exists())
+        hardware.assert_not_called()
+        command.assert_not_called()
+
+
 class FixArithmeticTests(unittest.TestCase):
     def test_budget_protocol_counts_by_hand(self):
         matrix, flags = load_matrix(CONFIG / "budget.json")

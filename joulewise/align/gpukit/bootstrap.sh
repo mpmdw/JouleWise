@@ -30,6 +30,10 @@ if $skip_install && [[ -x "$venv_dir/bin/python" ]]; then
 fi
 cd -- "$repo_root"
 "$python_bin" -c 'import sys; assert sys.version_info >= (3, 11), "Python >=3.11 required"'
+# Parse/validate executable inputs before a venv or pip step (stdlib only).
+if ! $check_only; then
+  "$python_bin" -m joulewise.align.gpukit.session --validate-only "${session_args[@]}" > /dev/null
+fi
 # The same whole-GPU check runs before installation, in either flag order.
 "$python_bin" -c '
 import json, math, sys
