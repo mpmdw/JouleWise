@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -241,7 +242,8 @@ def _incomplete_flag(flag: str) -> bool:
 
 
 def _validate_output(path: Path, *, expected_count: int, router: bool, model: str,
-                     expected_coordinates: Sequence[tuple[str, str, int]] = ()) -> tuple[str, ...]:
+                     expected_coordinates: Sequence[tuple[str, str, int]] = (),
+                     measured_devices: Sequence[int] = ()) -> tuple[str, ...]:
     """Check coordinates, usable turns and non-mock power spanning each episode."""
     flags: list[str] = []
     try:
@@ -266,6 +268,10 @@ def _validate_output(path: Path, *, expected_count: int, router: bool, model: st
                 flags.append("episode_turns_missing")
             if not episode.power_traces:
                 flags.append("episode_power_missing")
+            for device in measured_devices:
+                if not any(re.match(r"^gpu" + str(device) + r"(?=$|[^0-9])", t.channel)
+                           and t.source != "mock" for t in episode.power_traces):
+                    flags.append("episode_measured_device_power_missing:" + str(device))
             for trace in episode.power_traces:
                 if trace.source == "mock":
                     flags.append("episode_power_mock")
@@ -488,7 +494,7 @@ def run_session(options: SessionOptions, *,
                     "model": model["id"], "flags": [], "measured_gpu_indices": devices}
                 receipt["models"].append(model_receipt)
                 runner_path = model_dir / "runner-matrix.json"
-                if not options.runner_command:
+                if settings or not options.runner_command:
                     adapter_flags = write_runner_matrix(
                         runner_path, matrix, model=model["id"], endpoint=endpoint,
                         output_dir=model_dir, settings=settings, session_id=receipt["session_id"],
@@ -541,7 +547,7 @@ def run_session(options: SessionOptions, *,
                             model_receipt["flags"].extend(_validate_output(
                                 model_dir / "episodes.jsonl", expected_count=expected,
                                 router=matrix["kind"] == "moe_stage_a", model=model["id"],
-                                expected_coordinates=[(r.task_pair, r.condition, r.seed)
+                                measured_devices=devices, expected_coordinates=[(r.task_pair, r.condition, r.seed)
                                                       for r in expand(matrix) if r.model == model["id"]]))
                 except (OSError, ValueError, KeyError) as exc:
                     model_receipt["flags"].append(f"model_run_failed:{type(exc).__name__}")
