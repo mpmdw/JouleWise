@@ -17,7 +17,7 @@ fi
 # an explicit control that changes state makes the guard fall through again.
 if [[ -f $loop_root/done.idle && -f $loop_root/state.json ]]; then
     while IFS= read -r line; do
-        if [[ $line =~ '^[[:space:]]*"state"[[:space:]]*:[[:space:]]*"DONE"[[:space:]]*,?[[:space:]]*$' ]]; then
+        if [[ $line =~ '^  "state"[[:space:]]*:[[:space:]]*"DONE"[[:space:]]*,?[[:space:]]*$' ]]; then
             exit 0
         fi
     done < $loop_root/state.json

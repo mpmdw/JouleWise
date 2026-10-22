@@ -6,7 +6,7 @@ from joulewise.b5 import plan
 from joulewise.b6.driver_lane import metadata_path, read, write
 from joulewise.b6.lanes import Done, Prepared, Refused, Running
 from joulewise.b6.loop import atomic_state
-from tests.b6.round_support import Round
+from tests.b6.round_support import Round, bytes_rehearsal
 from tests.b6.support import DeskCase
 from tests import test_harvest_b5_window as windows
 
@@ -17,6 +17,13 @@ def tearDownModule():
 
 
 class RoundTests(DeskCase):
+    def test_bytes_guard_shaped_rehearsal(self):
+        result = bytes_rehearsal(self.root)
+        self.assertEqual(result['transitions'], ['NEXT', 'PRECHECK', 'SMOKE_RUN', 'SMOKE_RUN'])
+        self.assertEqual(result['packs'], ['bytes-s1-p1'])
+        self.assertEqual(result['discovered'], 12)
+        self.assertEqual(result['fake_launchctl'], 'rehearsal-only r1-bytes-s1-p1-smoke-0\n')
+
     def test_stops_close_bracket_advance_pin_and_reach_next_smoke(self):
         for stop in ('night_stopped_disk_low', 'operative_bound_above_stop',
                      'pre_calibration_screen_failed', 'pre_calibration_capture_failed'):

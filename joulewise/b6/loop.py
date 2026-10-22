@@ -612,6 +612,7 @@ class Loop:
         if lock is None:
             return 0
         with lock:
+            (self.root / "done.idle").unlink(missing_ok=True)
             self.state = self.read_state()
             self._registrations()
             if command == "resume":

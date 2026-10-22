@@ -950,6 +950,34 @@ class LoopTests(unittest.TestCase):
         self.assertTrue(self.mailer.entry(key)["delivered"])
         self.assertTrue((self.root / "done.idle").exists())
 
+    def test_cli_selects_config_for_guard_loop_root(self):
+        repo = self.root / "config-repo"
+        directory = repo / "configs/b6"
+        directory.mkdir(parents=True)
+        values = {}
+        for name in ("loop", "loop_bytes"):
+            value = json.loads((ROOT / f"configs/b6/{name}.json").read_text())
+            value["loop_root"] = str(self.root / name)
+            value["flag_catalog"] = str(ROOT / value["flag_catalog"])
+            (directory / f"{name}.json").write_text(json.dumps(value))
+            values[name] = value
+        configs = []
+        def factory(repo, root, **kwargs):
+            configs.append(kwargs["config"])
+            return SimpleNamespace(tick=lambda: 0)
+        with patch.dict(os.environ):
+            os.environ.pop("JW_B6_LOOP_ROOT", None)
+            for name in ("loop_bytes", "loop", "unknown"):
+                self.assertEqual(main(["--repo-root", str(repo), "tick", "--loop-root",
+                                       str(self.root / name)], factory=factory), 0)
+            self.assertEqual(configs, [values["loop_bytes"], values["loop"], values["loop"]])
+            self.assertEqual(configs[0]["base_order"][0], "bytes-s1-p1")
+            self.assertIn("pack_ids", configs[0])
+            (directory / "loop_duplicate.json").write_text(json.dumps(values["loop_bytes"]))
+            with self.assertRaisesRegex(ValueError, "multiple loop configs"):
+                main(["--repo-root", str(repo), "tick", "--loop-root",
+                      values["loop_bytes"]["loop_root"]], factory=factory)
+
     def test_done_guard_skips_tick_and_resume_invalidates(self):
         marker = self.root / "python-started"
         environment = {**os.environ, "JW_B6_LOOP_ROOT": str(self.root),
@@ -964,9 +992,19 @@ class LoopTests(unittest.TestCase):
         guard()
         self.assertFalse(marker.exists())
         state["state"] = "NEXT"
+        state["last_exception"] = {"state": "DONE"}
         loop_module.atomic_state(self.root / "state.json", state)
         guard()
         self.assertTrue(marker.exists())
+
+    def test_resume_removes_done_idle_marker(self):
+        state = self.state()
+        state["state"] = "DONE"
+        loop_module.atomic_state(self.root / "state.json", state)
+        (self.root / "done.idle").touch()
+        self.loop.control("resume")
+        self.assertEqual(self.state()["state"], "NEXT")
+        self.assertFalse((self.root / "done.idle").exists())
 
     def test_cli_live_runner_timeout_returns_failure(self):
         argv = ["git", "status"]

@@ -631,7 +631,10 @@ def bytes_rehearsal(root):
         shutil.copytree(ROOT / directory, measurement / directory)
     config = read(ROOT / 'configs/b6/loop_bytes.json')
     config.update(loop_root=str(root / 'loop-bytes'), wake_argv=[])
-    write(root / 'loop.json', config)
+    write(measurement / 'configs/b6/loop_bytes.json', config)
+    replication = read(measurement / 'configs/b6/loop.json')
+    replication['loop_root'] = str(root / 'loop-replication')
+    write(measurement / 'configs/b6/loop.json', replication)
     for pack in config['pack_ids']:
         path = measurement / f'configs/b6/packs/{pack}/registration.json'
         value = read(path)
@@ -685,7 +688,7 @@ def bytes_rehearsal(root):
         loop.lanes.driver.launch = launch
         return loop
     argv = [str(ROOT / 'scripts/b6_loop.py'), '--repo-root', str(measurement),
-            '--config', str(root / 'loop.json'), 'tick']
+            'tick', '--loop-root', str(root / 'loop-bytes')]
     with mock.patch.dict(os.environ, {'PATH': str(fake.parent) + ':' + os.environ['PATH']}), \
             mock.patch.object(sys, 'argv', argv), mock.patch.object(loop_module, 'Loop', factory):
         os.environ.pop('JW_B6_LOOP_ROOT', None)
