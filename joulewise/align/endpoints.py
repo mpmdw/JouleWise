@@ -335,9 +335,15 @@ class OpenAICompatEndpoint:
         if not isinstance(completion_details, Mapping):
             flags.append("invalid_completion_tokens_details")
             completion_details = {}
-        cached = _integer(prompt_details.get(
-            "cached_tokens", usage.get("cached_tokens", timing.get("cache_n", 0))),
-            "cached_prompt_tokens", flags)
+        cached_value = next((value for value in (
+            prompt_details.get("cached_tokens"), usage.get("cached_tokens"),
+            timing.get("cache_n")) if value is not None), None)
+        if cached_value is None:
+            # vLLM omits this unless --enable-prompt-tokens-details is enabled,
+            # even when prefix caching reused KV. The contract's zero is unknown.
+            flags.append("cached_prompt_tokens_unreported")
+        cached = _integer(0 if cached_value is None else cached_value,
+                          "cached_prompt_tokens", flags)
         hidden = _integer(completion_details.get(
             "reasoning_tokens", 0), "reasoning_tokens", flags)
         if cached > prompt:
@@ -371,7 +377,11 @@ class OpenAICompatEndpoint:
             return 0
         # Both servers accept unknown fields. Including both text keys avoids
         # llama.cpp's valid 200 {"tokens": []} response to a missing content key.
-        bodies = ({"model": self.model, "prompt": text, "content": text}, {"content": text})
+        # Count text only on both backends: vLLM otherwise defaults to adding
+        # special tokens, while llama.cpp does not. Keep the fallback consistent.
+        special = {"add_special_tokens": False, "add_special": False}
+        bodies = ({"model": self.model, "prompt": text, "content": text, **special},
+                  {"content": text, **special})
         for index, body in enumerate(bodies):
             try:
                 with self._open(root + "/tokenize", body, flags, retries) as response:

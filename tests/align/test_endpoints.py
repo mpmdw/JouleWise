@@ -174,6 +174,60 @@ class EndpointTests(unittest.TestCase):
                 self.assertEqual([c["id"] for c in sent], ["call_read", "call_list"])
                 self.assertTrue(world.requests[0]["body"]["stream_options"]["include_usage"])
 
+    def test_vllm_default_cache_usage_is_unknown_on_every_turn(self) -> None:
+        # Growing 4K+ prompts with whole 16-token KV-block reuse model a
+        # multi-turn vLLM session. All counts are scripted integers; no
+        # measured/derived agreement bar is needed for exact accounting.
+        packets = []
+        truths = []
+        for turn in range(3):
+            prompt, cached = 4096 + 512 * turn, 3072 + 512 * turn
+            packet = stream_packets(prompt=prompt, cached=cached)
+            del packet["chunks"][-1]["usage"]["prompt_tokens_details"]
+            packets.append(packet)
+            truths.append((prompt, cached))
+        # A reported zero, usage-level count and timings count are all known.
+        explicit_zero = stream_packets(cached=0)
+        usage_level = stream_packets(cached=3072)
+        usage_level["chunks"][-1]["usage"].pop("prompt_tokens_details")
+        usage_level["chunks"][-1]["usage"]["cached_tokens"] = 3072
+        timing_level = stream_packets(flavour="llamacpp", cached=3072)
+        timing_level["chunks"][-1]["usage"].pop("prompt_tokens_details")
+        with HTTPWorld(packets + [explicit_zero, usage_level, timing_level]) as world:
+            client = OpenAICompatEndpoint(world.url, "local-8b", timeout_s=5)
+            messages = [ChatMessage("user", "Review the next ledger page.")]
+            for prompt, cached in truths:
+                result = self.chat(client, tuple(messages))
+                self.assertEqual(result.prompt_tokens, prompt)
+                self.assertEqual(result.cached_prompt_tokens, 0)
+                self.assertIn("cached_prompt_tokens_unreported",
+                              result.raw_usage["joulewise"]["flags"])
+                messages.append(assistant_message(result))
+                messages.append(ChatMessage("user", "Continue the review."))
+            self.assertIn("cached_prompt_tokens_unreported", client.flags)
+            for expected in (0, 3072, 3072):
+                result = self.chat(client)
+                self.assertEqual(result.cached_prompt_tokens, expected)
+                self.assertNotIn("cached_prompt_tokens_unreported",
+                                 result.raw_usage["joulewise"]["flags"])
+
+    def test_tokenize_has_the_same_special_token_rule_on_both_backends(self) -> None:
+        text = "one two three four five six seven eight nine ten"
+        for flavour in ("vllm", "llamacpp"):
+            def respond(body):
+                if flavour == "vllm":
+                    count = len(body["prompt"].split()) + int(body.get("add_special_tokens", True))
+                    return {"json": {"count": count}}
+                count = len(body["content"].split()) + int(body.get("add_special", False))
+                return {"json": {"tokens": list(range(count))}}
+            with self.subTest(flavour=flavour), HTTPWorld([{"respond": respond}]) as world:
+                client = OpenAICompatEndpoint(world.url, "local-bos-model", timeout_s=5)
+                # Synthetic tokenizer has exactly one token per word; BOS would
+                # add one. Exact equality detects that per-call backend bias.
+                self.assertEqual(client.count_tokens(text), len(text.split()))
+                self.assertIs(world.requests[0]["body"]["add_special_tokens"], False)
+                self.assertIs(world.requests[0]["body"]["add_special"], False)
+
     def test_first_token_tracks_reasoning_and_tool_generation(self) -> None:
         # This is the reviewer's timing world: 200 ms prefill, then six
         # reasoning deltas 100 ms apart. A 50 ms bar is half the smallest
@@ -244,7 +298,9 @@ class EndpointTests(unittest.TestCase):
                 self.assertEqual(world.requests[0]["body"]["content"], "invoice " * 120)
                 self.assertTrue(any(flag.startswith("tokenize_shape:") for flag in client.flags))
                 if count == 2:
-                    self.assertEqual(world.requests[-1]["body"], {"content": "invoice " * 120})
+                    self.assertEqual(world.requests[-1]["body"],
+                                     {"content": "invoice " * 120,
+                                      "add_special_tokens": False, "add_special": False})
 
     def test_retry_only_before_any_response_byte(self) -> None:
         cases = [

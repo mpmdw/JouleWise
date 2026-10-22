@@ -149,7 +149,13 @@ prompt is requested. The monitor never receives the secret side instruction.
 ## Endpoint and monitor wire contracts
 
 ChatResult reports server prompt, cached, completion and reasoning counts
-unchanged as integers. Current vLLM streams delta.reasoning; llama.cpp streams
+unchanged as integers. vLLM must be served with
+`--enable-prompt-tokens-details` to report prefix-cache reuse. Its default is
+off while prefix caching can still be on. If none of
+prompt_tokens_details.cached_tokens, usage.cached_tokens or timings.cache_n is
+reported, cached_prompt_tokens remains the shared contract's zero and
+cached_prompt_tokens_unreported flags that call. That zero is unknown; do not
+treat its context/prefill split as measured cache accounting. Current vLLM streams delta.reasoning; llama.cpp streams
 delta.reasoning_content. Both are accepted. llama.cpp reports no reasoning
 counter: separated reasoning remains in reasoning_text, reasoning_tokens stays
 zero and reasoning_tokens_unreported is recorded. Zero is an unknown counter in
@@ -172,7 +178,9 @@ generation caps, not scientific thresholds; both flag length stops on that call.
 Judge per-call audit records are in task.evaluation_outputs["judge_calls"].
 
 count_tokens posts model/prompt/content together to /tokenize outside /v1.
-vLLM reads prompt, llama.cpp reads content. An empty first token list for
+vLLM reads prompt, llama.cpp reads content. Both the combined and fallback
+bodies explicitly set add_special_tokens=false and add_special=false, counting
+only text on both servers (vLLM otherwise adds special tokens by default). An empty first token list for
 nonempty input triggers the content-only fallback, with a flag. Every successful
 call records tokenize_shape:prompt_and_content or tokenize_shape:content.
 Schema-status fallback remains supported. Missing service returns zero with
