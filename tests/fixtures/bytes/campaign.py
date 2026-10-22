@@ -17,7 +17,7 @@ def _write_json(path, value):
 def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release="all",
                      pass_duration_scales=(1.0, 2.0), clock_latency_ms=(-8.0, 3.0), sample_phase_ms=50,
                      edge_phase=True, min_receive_latency_ms=10.0,
-                     subpack_sessions=False, uncollected_sessions=()):
+                     subpack_sessions=False, uncollected_sessions=(), drop_8b_8bit=False):
     """1000 on-disk runs: real mock trace reducer -> harvest layout -> B6 export.
 
     No calibration hardware is claimed: the zero phase envelope is explicitly
@@ -51,6 +51,9 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
     from tests.test_reduce import BundleBuilder, load_config, DEFAULT_IDLE
     from joulewise.interfaces import PowerSample
     design = ba.read_json(FIXTURES / "campaign_design.json")
+    if drop_8b_8bit:
+        # Removed before registration: no run, reference identity or key uses this model.
+        design["models"] = [m for m in design["models"] if m["model"] != "Qwen3-8B-8bit"]
     for model in design["models"]:
         model["config_key"] = blinding.configuration_key({"model": {"name": model["model"]},
             "workload_profile": {"name": "bytes-synthetic", "output_tokens": 512}})
@@ -60,7 +63,6 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                     "sample_phase_ms": sample_phase_ms, "edge_phase": edge_phase,
                     "min_receive_latency_ms": min_receive_latency_ms}}
     reference_drift = design["reference_drift"]
-
     rng = random.Random(seed)
     phase_rng = random.Random(seed * 7919 + 1)   # own stream: energy draws of every seed unchanged
     source_state = _capture_source_state()
@@ -74,7 +76,7 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                 ("Llama-3.3-70B-Instruct-4bit",), ("Qwen3.5-122B-A10B-4bit",))
     by_name = {m["model"]: m for m in manifest["models"]}
     schedule = [(pass_id, index + 1, [by_name[name] for name in (
-                    indices if pass_id == 1 else tuple(reversed(indices)))])
+                    indices if pass_id == 1 else tuple(reversed(indices))) if name in by_name])
                 for pass_id in (1, 2)
                 for index, indices in (list(enumerate(subpacks)) if pass_id == 1 else
                                        list(reversed(list(enumerate(subpacks)))))] if subpack_sessions else [

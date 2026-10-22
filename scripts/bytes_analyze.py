@@ -126,7 +126,7 @@ def main(argv=None):
             _write(args.out, name, rows)
         _write(args.out, "analysis_record", {"stage": args.stage, "predictions_sha256": sha,
                 **commitment,
-                "manifest_sha256": ba.digest(manifest), "H1_checks": ba.H1_CHECKS,
+                "manifest_sha256": ba.digest(manifest), "H1_checks": frozen["H1_checks"],
                 "H2_intervals": [{k: row[k] for k in ("selection", "basis", "boundary", "n", "k")}
                                  for row in result["h2"] if not row["description_only"]],
                 "output_label": ba.OUTPUT_LABEL,
