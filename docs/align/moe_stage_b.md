@@ -22,6 +22,12 @@ work; it cannot identify reasoning performed within a fixed forward pass.
   remains testable with independently randomized phases/repetitions; synchronized
   bursts can be entirely invisible. Polling faster does not repair that gap.
 
+The executed default synthetic worlds do **not** clear the required held-out
+recovery at the example design below: INA3221's gapped acquisition and NVML's
+duty cycle lose too much of the within-condition signal. A separate contiguous
+INA3221 acquisition case is the positive control; it changes sensor coverage,
+not routing, transfer coefficients or the statistical requirement.
+
 These are conditional design decisions, not findings that sabotage is detectable.
 Stage A effect size, within-condition routing spread, transfer energy, sensor noise,
 systematic bounds, independent task count and required power are all parameters.
@@ -77,7 +83,7 @@ There is intentionally no universal interconnect energy constant.
 |---|---|---|
 | Discrete GPU host-to-device | [PCI-SIG Gen4 description](https://pcisig.com/what-bit-rate-pcie-40-specification-and-how-does-it-compare-prior-generations-pcie): 16 GT/s/lane. With 128/130 encoding, x16 has at most `16e9*16*128/130/8` B/s before packet overhead. | Sustained transfer bandwidth measured with the actual pinned/pageable buffer, sizes and cache path; do not substitute the link ceiling. |
 | Jetson shared DRAM | [NVIDIA developer-kit specification](https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/latest/index.html): up to 102 GB/s aggregate DRAM bandwidth in the Super configuration. | Effective CPU/GPU DRAM traffic bandwidth under this workload, including contention; this is not a PCIe link. |
-| Incremental energy | [Horowitz, ISSCC 2014](https://ieeexplore.ieee.org/document/6757323) provides historical memory-energy scale, not a modern GPU/Jetson calibration. The synthetic 160 pJ/B scenario is `640 pJ / 4 bytes`. | Fit extra measured joules against independently counted bytes on the **same sensor channel**; include uncertainty and baseline/compute controls. Keep J/B parameterized. |
+| Incremental energy | [Han et al., EIE, Table I](https://arxiv.org/abs/1602.01528) reports 640 pJ for a 32-bit off-chip DRAM access and cites [Horowitz, ISSCC 2014](https://ieeexplore.ieee.org/document/6757323). This historical LPDDR2/45 nm comparison supplies the illustrative `640 pJ / 4 bytes = 160 pJ/B`, not a modern GPU/Jetson calibration. | Fit extra measured joules against independently counted bytes on the **same sensor channel**; include uncertainty and baseline/compute controls. Keep J/B parameterized. |
 
 The synthetic 32 GB/s and 160 pJ/B are scenario inputs. Neither is advertised as
 a measured specification of either target. A GPU-only NVML channel does not measure
@@ -98,7 +104,10 @@ the adapter's interpolation is never represented as measured token timing.
 sensor acquisition -> shared Episode/PowerTrace. `simulate_trace` averages exact
 pulse/window overlaps, then adds local seeded noise and quantization. Baseline,
 prefill, decode and tool loads are explicit independent parameters. Episode-level
-bias is distinct from white sample noise.
+bias is distinct from white sample noise. The default 8 W baseline and load
+increments are Jetson-like scenario inputs. Both acquisition models sample that
+same power world to isolate sensor response; the NVML case is not an 8 W RTX
+hardware calibration.
 
 `ina3221_sensor` derives an effective conversion/averaging frame from enabled
 channels, shunt/bus conversion times, averaging count and poll interval.
@@ -184,7 +193,19 @@ contrast_J = |d_A| * signal_sd * decode_tokens
 systematic_contrast_bound_J = supplied_bound_J + quantum_W * decode_duration_s
 ```
 
-Both correlation and a contrast exceeding the systematic bound are required.
+This analytic forecast requires both its modeled correlation and a contrast
+exceeding the systematic bound. It omits routing-to-energy residual variation:
+adjacent reuse does not uniquely determine cache traffic. Its fitted slope and
+noise summary can therefore be optimistic.
+
+The synthetic world's final decision instead requires the predeclared primary
+energy feature's **within-condition held-out** correlation to clear the same
+required correlation, and its contrast to exceed the systematic bound. Variance
+and spectrum remain separately reported diagnostics. The analytic forecast never
+substitutes for this empirical recovery check; forecast optimism that fails the
+empirical test is flagged. Six or
+twelve synthetic task groups yield correlation point estimates, not validation
+of a proposed 50-group-per-condition power calculation.
 `phase_bias_std_j` must come from phase-swept repetitions, not duty fraction.
 Real thermal/DVFS effects, idle drift, CPU execution and compute energy correlated
 with route changes require measured nuisance bounds. All-resident routing gives
@@ -349,9 +370,36 @@ The CLI runs both sensors and both resident/offloaded configurations. Each
 default world has 12 task groups x 2 conditions, four turns, 1024 prefill tokens,
 512 decode tokens and four tool calls per episode. At 50 ms/decode token, decode
 lasts 25.6 s; four 4 s prefills and four 0.8 s tool gaps make each episode 44.8 s.
-The cache uses 256 Q4_0 experts and explicit 128-token prefill microbatches.
+The synthetic cache uses 256 Q4_0 experts:
+`256*3,538,944 / 2**20 = 864 MiB`, with explicit 128-token prefill
+microbatches. This scenario is distinct from the runbook's 512 MiB hardware
+trial; set the world cache from actual backend slot inventory for a matched run.
 Hot-expert probabilities and task variation are scenario parameters printed in
 the JSON; all routing, traffic, acquisition and recovery paths are real functions.
+
+The fixed planning example uses d_A=1, n=50 independent groups/condition,
+alpha=0.05, power=0.8 and three comparisons. The formula above gives required
+r=0.647120 (rounded here; full precision is retained in JSON).
+These choices are supplied design parameters, not estimates from the synthetic
+condition labels.
+
+Executed E2E results (six task groups/condition, three turns and 384 decode
+tokens/episode):
+
+| Sensor | Placement | Window / cadence (ms) | Episodes | Samples | Within-condition held-out energy r | Analytic forecast | Empirical verdict |
+|---|---|---:|---:|---:|---:|---|---|
+| ina3221 | offloaded | 6.6 / 6.6 | 12 | 61104 | 0.725190209 | yes | yes |
+| ina3221 | offloaded | 6.6 / 10 | 12 | 40332 | -0.005329643 | yes | no |
+| ina3221 | resident | 6.6 / 10 | 12 | 40332 | -0.436755449 | no | no |
+| nvml_100ms_25ms | offloaded | 25 / 100 | 12 | 4044 | 0.026436210 | no | no |
+
+For the default CLI's larger 12-group/condition, four-turn worlds, energy r was
+0.503039 for offloaded INA and 0.073316 for offloaded NVML; both empirical
+verdicts were negative. All-resident controls moved zero modelled bytes and had
+zero true incremental traffic energy. These are correlation point estimates
+from the synthetic cohorts, not hardware confidence intervals or proof of
+design power. The contiguous control changes sampling coverage while preserving
+the routes, transfer coefficients and required correlation.
 
 The tests also include a transfer wholly missed by NVML's blind phase, visible
 under a shifted phase; an all-resident zero-traffic control; realistic router
