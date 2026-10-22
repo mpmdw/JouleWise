@@ -109,22 +109,28 @@ class RouterRecorder:
             self._flag("single_sequence_capture_required")
             return
         length = inputs.shape[1]
+        cached = False
+        past = kwargs.get("past_key_values")
+        try:
+            if past is not None:
+                cached = (past.get_seq_length() > 0 if hasattr(past, "get_seq_length")
+                          else len(past) > 0 and past[0][0].shape[-2] > 0)
+        except (AttributeError, IndexError, TypeError):
+            self._flag("cache_phase_inference_unavailable")
+        # A position hint alone is not a KV cache: use_cache=False can forward
+        # the entire growing prefix at every generation step. Preserve actual
+        # forwards, but disclose that these are repeated work, not new tokens.
+        if self._experts and length > 1 and not cached:
+            self._flag("uncached_reforward")
         phase = self._phase
         if phase is None:
-            cached = False
-            past = kwargs.get("past_key_values")
-            try:
-                if past is not None:
-                    cached = (past.get_seq_length() > 0 if hasattr(past, "get_seq_length")
-                              else len(past) > 0 and past[0][0].shape[-2] > 0)
-                position = kwargs.get("cache_position")
-                if position is not None and position.numel():
-                    cached = cached or int(position.reshape(-1)[0]) > 0
-            except (AttributeError, IndexError, TypeError):
-                self._flag("cache_phase_inference_unavailable")
-            phase = "decode" if length == 1 and cached else "prefill"
-            if cached and length > 1:
-                self._flag("cached_multitoken_phase_inferred_prefill")
+            phase_cached = cached
+            position = kwargs.get("cache_position")
+            if position is not None and position.numel():
+                phase_cached = phase_cached or int(position.reshape(-1)[0]) > 0
+            phase = "decode" if length == 1 and phase_cached else "prefill"
+            # A cached multi-token tool result is ordinary prefill. Callers
+            # override the phase for speculative multi-token decode.
         if getattr(module, "training", False):
             self._flag("training_mode_capture")
         valid = list(range(length))
