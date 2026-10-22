@@ -2,7 +2,7 @@
 
 **Status: design and synthetic machinery; no hardware result.** Stage A must first
 show a routing-statistic difference on the **same model and workload**. Stage B
-asks whether a power feature preserves enough of that difference. Power can count
+asks what a power sensor adds beyond decode timing. Power can count
 work; it cannot identify reasoning performed within a fixed forward pass.
 
 ## Decision
@@ -11,8 +11,8 @@ work; it cannot identify reasoning performed within a fixed forward pass.
   in this model. Expert identity alone is not a proposed power detector.
 - **RTX 3080 Ti with a deliberately partial expert GPU cache:** a conditional
   Stage B pilot is technically plausible. Cache misses can upload expert weights.
-  Proceed scientifically only if measured, sensor-visible energy and phase-swept
-  noise meet the parameterized correlation and systematic-bound tests below.
+  Proceed scientifically only if the predeclared power increment clears the
+  required correlation after measured phase/noise/systematic calibration.
 - **Jetson Orin Nano Super:** an OLMoE-size quantized pilot fits a conservative
   memory budget; a positive Stage B result is uncertain. CPU and GPU share DRAM,
   so there is no discrete-GPU PCIe weight-transfer effect. Cache duplication,
@@ -22,7 +22,7 @@ work; it cannot identify reasoning performed within a fixed forward pass.
   remains testable with independently randomized phases/repetitions; synchronized
   bursts can be entirely invisible. Polling faster does not repair that gap.
 
-The registered Stage B criterion is **group-held-out energy recovery after
+The predeclared Stage B criterion is **group-held-out energy recovery after
 controlling for decode seconds per token**. Every world prints timing-only
 recovery, raw energy, mean decode power and the power increment with nominal
 Fisher intervals. A sensor reading a constant running level cannot give a
@@ -494,7 +494,7 @@ condition labels.
 The review port in tests/align/test_moe_stage_b_review.py runs all p1--p5 worlds:
 blind sensors, real/fine quantization, shunt/frame alternatives, one-sample
 deletion and the 24-episode dropped world. Its STAGEB_REVIEW lines retain raw
-energy, timing, mean power and the registered increment. Before/after values
+energy, timing, mean power and the primary increment. Before/after values
 are preserved in the lane report.
 
 The tests also include a transfer wholly missed by NVML's blind phase, visible
