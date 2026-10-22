@@ -305,22 +305,32 @@ def _episode_times(trace, mapping):
 
 
 def c2_terms(trace, mapping, a, b):
-    """Fix round 2's C2(a) duty-gap and C2(b) window-cut terms over [a, b] (episode ns)."""
+    """C2(a) duty-gap and C2(b) window-cut terms over [a, b] (episode ns).
+
+    Updated in review round 3 to fix round 2b (R2b-m1, R2b-m2): each cut window
+    counts once, clipped to min(w / 4, overlap of the query with that window);
+    overlapping windows give an infinite width.
+    """
     if trace.unit != "W" or not trace.averaging_window_ns or trace.averaging_window_ns <= 0:
         return 0.0
     w = trace.averaging_window_ns
     t = _episode_times(trace, mapping)
     p = trace.values
+    if any(t[k] - w < t[k - 1] for k in range(1, len(t))):
+        return math.inf
     terms = []
     for k in range(1, len(t)):
         overlap = min(b, t[k] - w) - max(a, t[k - 1])
         if t[k] - w > t[k - 1] and overlap > 0:
             terms.append(abs(p[k] - p[k - 1]) * (overlap / NS) / 2)
+    cut = set()
     for e in (a, b):
         k = bisect.bisect_left(t, e)
-        if k < len(t) and t[k] - w < e < t[k]:
+        if k < len(t) and t[k] - w < e < t[k] and k not in cut:
+            cut.add(k)
             neighbours = p[max(0, k - 1):k + 2]
-            terms.append((max(neighbours) - min(neighbours)) * (w / NS) / 4)
+            overlap = min(b, t[k]) - max(a, t[k] - w)
+            terms.append((max(neighbours) - min(neighbours)) * (min(w / 4, overlap) / NS))
     return math.fsum(terms)
 
 
@@ -389,8 +399,11 @@ class TwinAgreement(unittest.TestCase):
             if compare_hw:
                 expected = (te.half_width_j + twin_interpolation(trace, mapping, a, b)
                             + c2_terms(trace, mapping, a, b) + reset_term(trace, mapping, a, b))
-                self.assertLessEqual(abs(le.half_width_j - expected), no_uncertainty_bar(expected),
-                                     f"{label} half-width lane {le.half_width_j!r} expected {expected!r}")
+                if math.isinf(expected):
+                    self.assertTrue(math.isinf(le.half_width_j), f"{label} lane half-width finite")
+                else:
+                    self.assertLessEqual(abs(le.half_width_j - expected), no_uncertainty_bar(expected),
+                                         f"{label} half-width lane {le.half_width_j!r} expected {expected!r}")
                 fraction = twin.split_method(te.method)[1].get("duty.uncovered", 0.0)
                 self.assertLessEqual(abs(lane_fraction(le.method) - fraction), no_uncertainty_bar(fraction), label)
                 for flag in SHARED_FLAGS:
