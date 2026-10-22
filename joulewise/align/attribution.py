@@ -241,7 +241,9 @@ def trace_energy(
 
 
 def _segments(episode: Episode, flags: list[str]) -> list[tuple[int | None, str, int, int]]:
-    parts: list[tuple[int | None, str, int, int]] = []
+    # Construct model/gap support first, then overlay every recorded tool.
+    # Runner tools execute after their model call; ownership is not containment.
+    parts: list[tuple[int | None, str, int, int, int | None]] = []
     cursor = episode.start_ns
     turns = sorted(episode.turns, key=lambda turn: (turn.start_ns, turn.index))
     if tuple(turns) != episode.turns:
@@ -251,42 +253,67 @@ def _segments(episode: Episode, flags: list[str]) -> list[tuple[int | None, str,
         if turn.start_ns < cursor:
             flags.append("turn.overlap")
         if start > cursor:
-            parts.append((None, "gap", cursor, start))
+            parts.append((None, "gap", cursor, start, None))
         if end <= start:
             continue
         first = turn.first_token_ns
         if first is None:
             flags.append("turn.no_first_token")
-
-        def model_parts(a: int, b: int) -> None:
-            if first is not None and a < min(b, first):
-                parts.append((turn.index, "prefill", a, min(b, first)))
-                a = min(b, first)
-            if a < b:
-                parts.append((turn.index, "decode", a, b))
-
-        tool_cursor = start
-        for call in sorted(turn.tool_calls, key=lambda call: (call.start_ns, call.end_ns)):
-            a, b = max(start, call.start_ns), min(end, call.end_ns)
-            if call.start_ns < start or call.end_ns > end:
-                flags.append("tool.outside_turn")
-            if b <= a:
-                continue
-            if a < tool_cursor:
-                flags.append("tool.overlap")
-            a = max(a, tool_cursor)
-            if b <= a:
-                continue
-            if first is not None and a < first:
-                flags.append("tool.prefill_overlap")
-            model_parts(tool_cursor, a)
-            parts.append((turn.index, "tool", a, b))
-            tool_cursor = b
-        model_parts(tool_cursor, end)
+        elif start < min(end, first):
+            parts.append((turn.index, "prefill", start, min(end, first), None))
+            start = min(end, first)
+        if start < end:
+            parts.append((turn.index, "decode", start, end, None))
         cursor = end
     if cursor < episode.end_ns:
-        parts.append((None, "gap", cursor, episode.end_ns))
-    return parts
+        parts.append((None, "gap", cursor, episode.end_ns, None))
+
+    calls = sorted(((call.start_ns, call.end_ns, turn.index, position, turn, call)
+                    for turn in turns for position, call in enumerate(turn.tool_calls)),
+                   key=lambda item: item[:4])
+    tools = []
+    previous_end = episode.start_ns
+    for identity, (_, _, _, _, turn, call) in enumerate(calls):
+        a = max(episode.start_ns, call.start_ns)
+        b = min(episode.end_ns, call.end_ns)
+        if call.start_ns < episode.start_ns or call.end_ns > episode.end_ns:
+            flags.append("tool.outside_episode")
+        if b <= a:
+            continue
+        if a < previous_end:
+            flags.append("tool.overlap")
+        a = max(a, previous_end)
+        if b <= a:
+            continue
+        if turn.first_token_ns is not None and a < turn.first_token_ns:
+            flags.append("tool.prefill_overlap")
+        tools.append((turn.index, "tool", a, b, identity))
+        previous_end = b
+
+    for owner, kind, a, b, identity in tools:
+        overlaid = []
+        for turn, phase, start, end, call_id in parts:
+            if end <= a or start >= b:
+                overlaid.append((turn, phase, start, end, call_id))
+                continue
+            if start < a:
+                overlaid.append((turn, phase, start, a, call_id))
+            overlaid.append((owner, kind, max(start, a), min(end, b), identity))
+            if end > b:
+                overlaid.append((turn, phase, b, end, call_id))
+        parts = overlaid
+
+    # Coalesce tools crossing model/gap boundaries, retaining distinct calls
+    # even when two calls from the same turn are back-to-back.
+    merged: list[tuple[int | None, str, int, int, int | None]] = []
+    for turn, kind, start, end, identity in parts:
+        if (merged and merged[-1][0:2] == (turn, kind)
+                and merged[-1][3] == start and merged[-1][4] == identity):
+            previous = merged[-1]
+            merged[-1] = (turn, kind, previous[2], end, identity)
+        else:
+            merged.append((turn, kind, start, end, identity))
+    return [(turn, kind, start, end) for turn, kind, start, end, _ in merged]
 
 
 def attribute_episode(

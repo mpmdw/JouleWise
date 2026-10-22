@@ -204,6 +204,35 @@ class AttributionChecks(unittest.TestCase):
         self.assertIn("tamper.turn_deleted", result.flags)
         self.close(result.total.joules, 800.0, half_width=result.total.half_width_j)
 
+    def test_runner_tools_overlay_gaps_and_other_turns(self):
+        calls = (ToolCall("search", 4 * NS, 7 * NS, 128, 2048, logged=False),
+                 ToolCall("exec", 7 * NS, 8 * NS, 64, 1024))
+        record = episode((turn(end=4 * NS, calls=calls, logged=False),
+                          turn(index=1, start=6 * NS, end=9 * NS, first=7 * NS)))
+        result = attribute_episode(record, source="mock", channel="package")
+        self.tile(result, record)
+        self.assertEqual([(s.turn, s.kind, s.start_ns // NS, s.end_ns // NS)
+                          for s in result.segments],
+                         [(None, "gap", 0, 1), (0, "prefill", 1, 2),
+                          (0, "decode", 2, 4), (0, "tool", 4, 7),
+                          (0, "tool", 7, 8), (1, "decode", 8, 9),
+                          (None, "gap", 9, 10)])
+        # Four tool seconds at the fixture's constant 100 W.
+        self.close(math.fsum(s.energy.joules for s in result.segments if s.kind == "tool"),
+                   4 * 100.0, half_width=result.total.half_width_j)
+        self.assertNotIn("tool.outside_turn", result.flags)
+        self.assertNotIn("tool.outside_episode", result.flags)
+
+    def test_tool_clips_only_at_episode_edges(self):
+        calls = (ToolCall("early", -NS, NS, 64, 512),
+                 ToolCall("late", 9 * NS, 11 * NS, 64, 512))
+        record = episode((turn(calls=calls),))
+        result = attribute_episode(record, source="mock", channel="package")
+        self.tile(result, record)
+        self.assertEqual([(s.start_ns, s.end_ns) for s in result.segments if s.kind == "tool"],
+                         [(0, NS), (9 * NS, 10 * NS)])
+        self.assertIn("tool.outside_episode", result.flags)
+
     def test_unknown_first_token_still_carves_tools(self):
         record = episode((turn(first=None, calls=(ToolCall("local", 3 * NS, 4 * NS, 64, 512),)),))
         result = attribute_episode(record, source="mock", channel="package")
@@ -224,7 +253,7 @@ class AttributionChecks(unittest.TestCase):
         record = episode((turn(calls=calls), turn(index=1, start=7 * NS, end=10 * NS, first=8 * NS)))
         result = attribute_episode(record, source="mock", channel="package")
         self.tile(result, record)
-        for flag in ("tool.outside_turn", "tool.prefill_overlap", "tool.overlap", "turn.overlap"):
+        for flag in ("tool.prefill_overlap", "tool.overlap", "turn.overlap"):
             self.assertIn(flag, result.flags)
 
     def test_selection_flags_and_episode_clock_mapping(self):
