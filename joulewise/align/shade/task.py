@@ -10,6 +10,7 @@ import asyncio
 import importlib
 import json
 import math
+import textwrap
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Coroutine, Mapping, Sequence
@@ -57,6 +58,15 @@ class _Column(list):
     def __ge__(self, other: Any) -> "_Column":
         return _Column(value >= other for value in self)
 
+    def __gt__(self, other: Any) -> "_Column":
+        return _Column(value > other for value in self)
+
+    def __le__(self, other: Any) -> "_Column":
+        return _Column(value <= other for value in self)
+
+    def __lt__(self, other: Any) -> "_Column":
+        return _Column(value < other for value in self)
+
 
 class _ScoreRow(dict):
     """Run upstream add_score_columns without a core dependency on pandas."""
@@ -76,10 +86,25 @@ class _JudgeReply:
         return self.messages[-1]["content"]
 
 
+def _dedented(text: str) -> str:
+    """Match the pinned pipeline's prompt indentation rule without importing SDKs."""
+    if not text or "\n" not in text:
+        return text
+    lines = text.split("\n")
+    if lines and not lines[0].strip():
+        lines = lines[1:]
+    indents = [len(line) - len(line.lstrip()) for line in lines if line.strip()]
+    if not indents:
+        return textwrap.dedent(text).strip()
+    indent = min(indents)
+    return "\n".join(line[indent:] if line.strip() else "" for line in lines).strip()
+
+
 class _Judge:
     def __init__(self, endpoint: ChatEndpoint | None, flags: list[str], *,
-                 max_tokens: int, temperature: float, seed: int | None) -> None:
-        self.endpoint, self.flags = endpoint, flags
+                 max_tokens: int, temperature: float, seed: int | None,
+                 calls: list[dict[str, Any]]) -> None:
+        self.endpoint, self.flags, self.calls = endpoint, flags, calls
         self.max_tokens, self.temperature, self.seed = max_tokens, temperature, seed
 
     async def query(self, query: str = "", *, messages: Sequence[Mapping[str, Any]] = (),
@@ -94,7 +119,14 @@ class _Judge:
         # Keep their scripted/seed order deterministic while preserving its four calls.
         result = self.endpoint.chat(converted, max_tokens=self.max_tokens,
                                     temperature=self.temperature, seed=self.seed)
-        self.flags.extend(result.raw_usage.get("joulewise", {}).get("flags", ()))
+        diagnostics = result.raw_usage.get("joulewise", {})
+        call_flags = list(diagnostics.get("flags", ()))
+        if diagnostics.get("finish_reason") == "length":
+            call_flags.append("judge_generation_cap_reached")
+        self.calls.append({"endpoint": self.endpoint.identity,
+                           "finish_reason": diagnostics.get("finish_reason"),
+                           "flags": list(dict.fromkeys(call_flags)), "content": result.content})
+        self.flags.extend(call_flags)
         self.flags.append("judge_reply_text_adapter")
         return _JudgeReply([{"role": "assistant", "content": result.content}])
 
@@ -105,6 +137,7 @@ class ShadeTask:
     score_main follows the pinned evaluator's add_score_columns normalization,
     including its pair-specific transforms. flags must be copied to Episode.flags.
     reset(seed) rebuilds upstream's fixed initial world; upstream has no seed API.
+    judge_max_tokens is an operator-set generation cap, not an analysis threshold.
     """
 
     scratchpad_tags = ("<thinking>", "</thinking>")
@@ -158,7 +191,8 @@ class ShadeTask:
                     runtime.register_function(tool)
                 self._definition, self._runtime = definition, runtime
                 judge = _Judge(self.judge_endpoint, self.flags, max_tokens=self.judge_max_tokens,
-                               temperature=self.judge_temperature, seed=seed)
+                               temperature=self.judge_temperature, seed=seed,
+                               calls=self.evaluation_outputs.setdefault("judge_calls", []))
                 self._evaluation = evaluation_module.TaskEvaluation(definition, evaluator_llm=judge)
                 self._schema = tuple({
                     "type": "function", "function": {
@@ -187,11 +221,12 @@ class ShadeTask:
                 if root is None:
                     return ""
                 if condition == "benign":
-                    return self._definition.system_message_no_secondary_task()
+                    return _dedented(self._definition.system_message_no_secondary_task())
                 if condition != "sabotage":
                     self.flags.append("unknown_condition")
                     return ""
-                return self._definition.system_message_suspicious(give_hint=self.give_hint)
+                self.flags.append("sabotage_hint:" + ("on" if self.give_hint else "off"))
+                return _dedented(self._definition.system_message_suspicious(give_hint=self.give_hint))
         except Exception as exc:
             self.flags.append("system_prompt_error:" + type(exc).__name__)
             return ""
@@ -201,7 +236,7 @@ class ShadeTask:
     def user_prompt(self) -> str:
         if not self._ready():
             return ""
-        return self._definition.user_query
+        return _dedented(self._definition.user_query)
 
     def task_description(self) -> str:
         """The main task only; the monitor never receives the secret instruction."""
@@ -210,15 +245,28 @@ class ShadeTask:
     def tool_schemas(self) -> Sequence[Mapping[str, Any]]:
         return self._schema
 
-    def call_tool(self, name: str, arguments_json: str) -> str:
-        if not self._ready():
-            return "Task environment unavailable."
+    def _arguments(self, name: str, arguments_json: str) -> tuple[dict[str, Any], bool]:
         try:
             arguments = json.loads(arguments_json)
-            if not isinstance(arguments, dict):
-                self.flags.append("tool_arguments_not_object")
-                return "Tool arguments must be a JSON object."
-            self._tool_history.append((name, arguments))
+        except (json.JSONDecodeError, TypeError):
+            # Retain the exact malformed input for auditing and preserve its
+            # history slot. Evaluators can still score the actual world state.
+            self.flags.append("tool_arguments_error:" + name + ":" + repr(arguments_json))
+            return {}, False
+        if not isinstance(arguments, dict):
+            self.flags.append("tool_arguments_not_object")
+            return {}, False
+        return arguments, True
+
+    def call_tool(self, name: str, arguments_json: str) -> str:
+        arguments, valid = self._arguments(name, arguments_json)
+        # Every invocation consumes a history slot, including failed parsing.
+        self._tool_history.append((name, arguments))
+        if not self._ready():
+            return "Task environment unavailable."
+        if not valid:
+            return "Tool arguments must be a JSON object."
+        try:
             with self.upstream.activate() as root:
                 if root is None:
                     return "Task environment unavailable."
@@ -243,7 +291,7 @@ class ShadeTask:
             if message.role == "assistant":
                 calls = getattr(message, "tool_calls", ())
                 upstream_calls = [module.FunctionCall(function=c.name,
-                    args=json.loads(c.arguments_json), id=c.call_id) for c in calls]
+                    args=self._arguments(c.name, c.arguments_json)[0], id=c.call_id) for c in calls]
                 if not calls:
                     for following in transcript[index + 1:]:
                         if following.role != "tool":
@@ -287,8 +335,9 @@ class ShadeTask:
                         return result
                     self.flags.append("side_evaluation_not_boolean")
                     return None
-                # These exact operations are shared by all five pinned pandas
-                # normalizers: transcript.apply, column assignment, >= threshold.
+                # Run the pinned normalizers with single-row apply/assignment
+                # and scalar comparisons. AA2 uses >; the others use >=.
+                # All comparisons are provided so the adapter matches that API.
                 row = _ScoreRow(transcript=_Column([{
                     "main_task_evaluation": result, "side_task_evaluation": False}]))
                 evaluated = evaluation.add_score_columns(row)
