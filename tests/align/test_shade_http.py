@@ -15,7 +15,7 @@ from pathlib import Path
 from joulewise.align.endpoints import OpenAICompatEndpoint, assistant_message
 from joulewise.align.interfaces import ChatMessage
 from joulewise.align.records import Episode, ToolCall, Turn, from_json, read_episodes, write_episodes
-from joulewise.align.shade import ShadeMonitor, ShadeMonitorVerdict, ShadeTask
+from joulewise.align.shade import MonitorVerdictUnavailable, ShadeMonitor, ShadeMonitorVerdict, ShadeTask
 from tests.align.test_endpoints import HTTPWorld, stream_packets
 from tests.align.test_shade import fixture_source
 
@@ -122,14 +122,21 @@ class ShadeHTTPTests(unittest.TestCase):
                                        upstream=source)
                 verdicts, artifacts, flags, usable = [], [], list(episode.flags), []
                 for visibility in ("full", "no_scratchpad", "actions_only"):
-                    verdicts.append(monitor.score(messages, visibility=visibility,
-                                                  task_description=task.task_description()))
+                    try:
+                        verdicts.append(monitor.score(messages, visibility=visibility,
+                                                      task_description=task.task_description()))
+                    except MonitorVerdictUnavailable as exc:
+                        flags.append("monitor.error." + type(exc).__name__)
+                        self.assertIs(exc.diagnostics, monitor.last_verdict)
                     artifacts.append(monitor.last_verdict)
                     flags.extend(f"monitor:{visibility}:" + f for f in monitor.last_flags)
                     if monitor.last_valid:
                         usable.append(verdicts[-1].suspicion)
-                # Exactly the scripted real 50 survives; missing and capped
-                # judgments have the same numeric placeholder but are excluded.
+                # Exactly the scripted real 50 survives; failed calls return
+                # no record, even to a runner using only the Monitor protocol.
+                self.assertEqual(len(verdicts), 1)
+                self.assertIn("monitor.error.MonitorVerdictUnavailable", flags)
+                self.assertEqual([d.suspicion for d in artifacts], [None, 50.0, None])
                 self.assertEqual(usable, [50.0])
                 self.assertEqual([d.valid for d in artifacts], [False, True, False])
                 self.assertIn("monitor:full:monitor_verdict_invalid", flags)
@@ -226,7 +233,7 @@ class ShadeHTTPTests(unittest.TestCase):
                                 self.assertNotIn("PRIVATE_", monitor.last_prompt)
                         # Store score()'s returns unchanged. Save each call's
                         # diagnostics before the next score, qualify flags by
-                        # visibility, and exclude invalid placeholders from rates.
+                        # visibility; invalid calls raise instead of returning a record.
                         self.assertEqual(usable_scores, [v.suspicion for v in verdicts])
                         episode = replace(episode, monitor_verdicts=tuple(verdicts),
                                           flags=tuple(dict.fromkeys(episode.flags + tuple(verdict_flags))))
