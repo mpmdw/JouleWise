@@ -393,6 +393,14 @@ def match_tool_calls(segments: list[Segment], episode: Episode) -> ToolCallMatch
         if segment.boundary_uncertainty_ns:
             indeterminate.append(segment)
             flags.add("tool_wait_indeterminate_read_gap")
+        elif segment.label == "idle":
+            # Edge-low runs were admitted only because a visible call overlaps
+            # them. A trace cut inside that run has an unobserved endpoint;
+            # failing its full-run timing test is not evidence of a hidden call.
+            indeterminate.append(replace(
+                segment, flags=tuple(sorted(set(segment.flags) |
+                                            {"boundary_indeterminate_trace_edge"}))))
+            flags.add("tool_wait_indeterminate_trace_edge")
         else:
             unlogged.append(segment)
     if not logged:
