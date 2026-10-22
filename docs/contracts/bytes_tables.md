@@ -15,9 +15,18 @@ The frozen model manifest has ten distinct `models`, each with `model`, `role`
 (Block 6 `configuration_key`). There are three fit models, three MoEs and six Qwen3 4-bit tier
 models. GB means decimal 10^9 bytes. Sessions have `session_id`, `archive`,
 `pass_id`, a `released_key_dir` locator and prospective `test7_passed` status.
+The merge command derives the registered model name, fit/held-out role, MoE and
+tier labels, and harvest condition-family cell ID from the registered roster;
+it cross-checks the header records' integer k and E for the three MoEs. The
+frozen models block reproduces from the committed header and KV records. Every
+model requires a non-empty string `config_key` at analysis-input validation.
+A collected `sessions` list must still be supplied separately.
 Legacy `drift_allowance_j` and `drift_reference` numbers are ignored.
 
-`--export DIR` reads native `*.runs.csv` files. `--records PATH ...` accepts
+`--export DIR [DIR ...]` reads native `*.runs.csv` files in each supplied directory,
+including one directory per production session. Each sidecar and its relative
+withheld store path are read in place; do not flatten session exports. Duplicate
+(session_id, run_id) inputs refuse. `--records PATH ...` accepts
 archives or their `withheld/member-assessments.json` locators, and requires the
 matching export at `<archive-parent>/export/bytes/<session_id>.runs.csv`.
 The export supplies NEG-8 energies and configuration identities; released
@@ -57,7 +66,10 @@ it includes the blinded held-out store and emits missing-file placeholders.
 
 A missing withheld pass cell has `status="missing"`, `bytes.withheld_missing`,
 `withheld_row_count` (the sidecar's session total) and
-`withheld_config_row_count` (that model's count in its digest mapping). The flag
+`withheld_config_row_count` (that model's count in its digest mapping).
+Placeholder records and missing pass rows also carry `withheld_path_checked`,
+the absolute store path the census looked for, so relocated exports disclose
+which store did not resolve. The flag
 is disclose-only in `configs/b6/flag_catalog_b6.json`. A surviving pass remains
 the `one_pass` primary point with the union of all pass/point disclosures.
 Both missing passes give a `missing` model with no numerical point: H1 emits

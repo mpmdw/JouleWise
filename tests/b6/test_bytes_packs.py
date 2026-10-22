@@ -184,7 +184,8 @@ class BytesPackTests(unittest.TestCase):
                     for stage in chain.stage_plan(tree):
                         chain.stage_argv(stage, bindings, tree, ROOT)
                     self.assertNotIn('d117_floor_qwen3-8b_v5/calibration_plan.json', json.dumps(tree))
-                    self.assertNotIn('downstream_contract', tree)
+                    self.assertEqual(tree['downstream_contract']['extraction_spec']['sha256'], hashlib.sha256(
+                        (ROOT / Path(path).parent / 'extraction_spec.json').read_bytes()).hexdigest())
 
     def test_pass_two_reverses_subpack_order_without_changing_replication_order(self):
         order = read(ROOT / configs.PACK / 'pass_order.json')
@@ -238,3 +239,57 @@ class BytesPackTests(unittest.TestCase):
                         plan_inputs.build(ROOT, ROOT / 'configs/b6/registration', p, layout.session_id, {},
                                           custody_root='/x', runs_parent='/x', claim_backup='/x',
                                           bound_backup='/x', head='deadbeef')
+
+
+class BytesHarvestAcceptanceTests(unittest.TestCase):
+    def test_all_pass_rosters_and_registered_stratum_minimum(self):
+        from collections import Counter
+        from dataclasses import replace
+        from joulewise.b5.harvest import build_roster, l4_exclusion_inputs
+        from joulewise.b6.acceptance import ACCEPTANCE
+        from joulewise.b6 import precheck
+        from tests.b6.support import IDENTITY
+        for n in range(1, 7):
+            for p in (1, 2):
+                pack = ROOT / f'configs/campaigns/bytes-s{n}-p{p}'
+                with self.subTest(pack=pack.name):
+                    roster = build_roster(pack, ROOT)
+                    census = Counter(m['role'] for m in roster['members'])
+                    models = len(plans.GROUPS[n - 1])
+                    self.assertEqual(census, {'absolute_repeat': 10 * models,
+                        'comparative_abba_member': 40 * models, 'neg8_bound': 18,
+                        'start_reference': 3, 'midpoint_reference': 1, 'end_reference': 3})
+                    l4, _ = l4_exclusion_inputs(roster, {}, plan_id=None, attempt=None)
+                    self.assertEqual(len(l4['cells']), models)
+                    for cell in l4['cells']:
+                        self.assertEqual(cell['strata'], ['quad', 'repeat'])
+                        for stratum in cell['strata']:
+                            units = {u['unit_id'] for m in l4['members'] for u in m['units']
+                                     if u['cell_id'] == cell['cell_id'] and u['stratum'] == stratum}
+                            self.assertEqual(len(units), 10)  # registration §6: ten planned units per stratum
+                    print(pack.name, dict(census), l4['cells'], '10 repeat + 10 quad units per model')
+                    prepared = ACCEPTANCE.prepare(ledger_path=Path('/nonexistent-synthetic-ledger'),
+                        plan_tree=read(pack / 'plan_tree.json'), registration_dir=ROOT / 'configs/b6/registration',
+                        code_identity={'repo_root': str(ROOT)}, pack_root=pack, ledger_rows=[])
+                    rows = [{'disposition': 'valid', 'sequence': i, 'exact_bound_lexeme_s':
+                             prepared.registration['calibration']['acceptance_corpus'][0]} for i in range(24)]
+                    runtime = {**IDENTITY, 'packages': prepared.expected_model['runtime_versions']['packages']}
+                    evidence = precheck.synthetic_session(pack, ROOT, rows, runtime)
+                    nominal = ACCEPTANCE.evaluate(prepared, evidence)
+                    self.assertEqual(nominal.verdict, 'ACCEPT')
+                    quads = [m for m in roster['members'] if m['role'] == 'comparative_abba_member']
+                    first = quads[0]
+                    model = first['run_id'].split('-null-')[0]
+                    block_ids = list(dict.fromkeys(m['block_id'] for m in quads if m['run_id'].startswith(model + '-null-')))
+                    for lost, verdict in (({first['run_id']}, 'ACCEPT'),
+                        ({m['run_id'] for m in quads if m['run_id'].startswith(model + '-null-')
+                          and m['block_id'] in block_ids[:6]}, 'EXCLUDE')):
+                        altered = replace(evidence, stages=tuple(replace(s, members=tuple(
+                            replace(m, status='failed') if m.run_id in lost else m for m in s.members))
+                            for s in evidence.stages))
+                        result = ACCEPTANCE.evaluate(prepared, altered)
+                        self.assertEqual(result.verdict, verdict)
+                        self.assertEqual(result.counting, verdict == 'ACCEPT')
+                        if verdict == 'EXCLUDE':
+                            self.assertIn('cell.below_minimum', result.reasons)
+                        print(pack.name, 'lost members', len(lost), result.verdict, result.counting, result.reasons)

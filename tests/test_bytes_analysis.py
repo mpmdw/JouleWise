@@ -2087,3 +2087,97 @@ class Q2CommitmentCLIChainTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewInputTests(unittest.TestCase):
+    def test_manifest_requires_public_config_key(self):
+        manifest = ba.read_json(FIXTURES / 'campaign_design.json')
+        for value in (None, '', '  ', 7):
+            changed = copy.deepcopy(manifest)
+            for model in changed['models']:
+                model['config_key'] = 'public-' + model['model']
+            if value is None:
+                changed['models'][0].pop('config_key')
+            else:
+                changed['models'][0]['config_key'] = value
+            with self.subTest(value=value), self.assertRaisesRegex(ba.AnalysisError, 'config_key'):
+                ba.validate_manifest(changed)
+
+    def test_missing_store_records_and_pass_rows_disclose_checked_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model = {**ba.read_json(FIXTURES / 'campaign_design.json')['models'][3], 'config_key': 'public-key'}
+            session = {'session_id': 'copied', 'pass_id': 1}
+            manifest = {'models': [model], 'sessions': [session]}
+            info = {'path': '../absent/store.csv', 'row_count': 50, 'config_key_sha256': {
+                hashlib.sha256(model['config_key'].encode()).hexdigest(): 50}}
+            _write_json(root / 'copied.session.json', {'blinding': {'withheld': info}})
+            (root / 'copied.runs.csv').write_text('run_id,cell_ids\n')
+            rows = ba.load_records(root, manifest, stage='blinded', stage1_commit='a' * 40)
+            expected = str((root / info['path']).resolve())
+            self.assertEqual({r['withheld_path_checked'] for r in rows}, {expected})
+            passes = ba.reduce_models(rows, manifest, boundaries=('rails',))
+            self.assertEqual({r['status'] for r in passes}, {'missing'})
+            self.assertEqual({r['withheld_path_checked'] for r in passes}, {expected})
+
+    def test_twelve_in_place_session_exports_match_single_directory_cli(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('review_campaign', FIXTURES / 'campaign.py')
+        fixture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixture)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = fixture.archive_campaign(root, subpack_sessions=True)
+            manifest_path = root / 'manifest.json'
+            _write_json(manifest_path, manifest)
+            def analyze(exports, out):
+                command = [sys.executable, '-B', 'scripts/bytes_analyze.py', '--manifest', str(manifest_path),
+                           '--export', *map(str, exports), '--stage', 'all', '--out', str(out)]
+                result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            analyze([root / 'export'], root / 'single')
+            exports = []
+            for session in manifest['sessions']:
+                sid = session['session_id']
+                source = next((root / 'export').rglob(sid + '.runs.csv')).parent
+                target = root / 'sessions' / sid / 'export'
+                target.mkdir(parents=True)
+                sidecar = source / (sid + '.session.json')
+                info = ba.read_json(sidecar)['blinding']['withheld']
+                store = (source / info['path']).resolve()
+                relocated = (target / info['path']).resolve()
+                relocated.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(store, relocated)
+                for suffix in ('.runs.csv', '.session.json'):
+                    shutil.copyfile(source / (sid + suffix), target / (sid + suffix))
+                exports.append(target)
+            self.assertEqual(len(exports), 12)  # six registered sub-packs in two passes
+            analyze(exports, root / 'multiple')
+            for name in ('model_estimates', 'h1', 'h2', 'moe'):
+                self.assertEqual((root / 'single' / (name + '.json')).read_bytes(),
+                                 (root / 'multiple' / (name + '.json')).read_bytes(), name)
+            # Copy a real session export without relocating its relative store.
+            original = next(p for p in exports if p.parent.name == 'bytes-s2-p1')
+            copied = root / 'copied-export'
+            copied.mkdir()
+            for source in original.iterdir():
+                if source.name.endswith(('.runs.csv', '.session.json')):
+                    shutil.copyfile(source, copied / source.name)
+            supplied = [copied if p == original else p for p in exports]
+            command = [sys.executable, '-B', 'scripts/bytes_analyze.py', '--manifest', str(manifest_path),
+                       '--export', *map(str, supplied), '--stage', 'blinded', '--stage1-commit', 'a' * 40,
+                       '--out', str(root / 'copied-analysis')]
+            result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            info = ba.read_json(copied / 'bytes-s2-p1.session.json')['blinding']['withheld']
+            checked = str((copied / info['path']).resolve())
+            records = ba.load_records(supplied, manifest, stage='blinded', stage1_commit='a' * 40)
+            missing = [r for r in records if 'bytes.withheld_missing' in r['flags']]
+            self.assertEqual(len(missing), info['row_count'])  # exact sidecar census
+            self.assertEqual({r['withheld_path_checked'] for r in missing}, {checked})
+            points = ba.read_json(root / 'copied-analysis/model_estimates.json')
+            passes = [p for point in points for p in point['passes'] if p['status'] == 'missing']
+            self.assertTrue(passes)
+            self.assertEqual({p['withheld_path_checked'] for p in passes}, {checked})
+            with self.assertRaisesRegex(ba.AnalysisError, 'duplicate records across inputs'):
+                ba.load_records([exports[0], exports[0]], manifest, stage='blinded')
