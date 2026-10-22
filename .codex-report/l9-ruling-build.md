@@ -265,7 +265,7 @@ A dash means not run or not supplied, never zero. Mac rows are only the three re
 | tests.b5_analysis.test_chain_fixture | — | — | — | — | — | — | cloud: pending | — |
 | tests.b5_analysis.test_joined_probes | — | — | — | — | — | — | cloud: pending | — |
 | tests.test_authentication_io | 22 | 0 | 0 | 0 | 0 | 1.741 | Codex Cloud | `bda28342ccfd126129b4511adc2ba21aae15babcee64de44b9ae72ad2805480d` |
-| tests.test_docs_freshness | — | — | — | — | — | — | cloud: pending | — |
+| tests.test_docs_freshness | 31 | 0 | 0 | 0 | 0 | 0.871 | Codex Cloud | `48217008f62462f5a0ad09fb5f8471eccb750fabd16617cf332435591e20c080` |
 | tests.b5_analysis.test_sensitivity_guard | — | — | — | — | — | — | cloud: pending | — |
 | tests.b5_analysis.test_mint_kept_units | — | — | — | — | — | — | cloud: pending | — |
 | tests.b5_analysis.test_s10_chain_defects | — | — | — | — | — | — | cloud: pending | — |
@@ -279,3 +279,4 @@ The supplied Mac d165 result has no remaining errors. Mac skips and exits were n
 Completed cloud logs and test failures:
 
 - `tests.test_authentication_io` at `c413e6f0459e5865a71c90999d11666bdc7497ec`: 22 tests, 0 failures, 0 errors, 0 skips, exit 0, 1.741 s. Log `/tmp/l9-1/checks-1/logs/tests_test_authentication_io.log`, SHA-256 `bda28342ccfd126129b4511adc2ba21aae15babcee64de44b9ae72ad2805480d`.
+- `tests.test_docs_freshness` at `cd4a6168286e791ead72479252cd344227a95b2d`: 31 tests, 0 failures, 0 errors, 0 skips, exit 0, 0.871 s. Log `/tmp/l9-1/checks-2/logs/tests_test_docs_freshness.log`, SHA-256 `48217008f62462f5a0ad09fb5f8471eccb750fabd16617cf332435591e20c080`.
