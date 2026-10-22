@@ -77,6 +77,9 @@ class Loop:
         else:
             self.regs = {}
             self.state["pack_not_open"] = {"runner": ["registration_runner_missing"]}
+        # A dedicated queue admits only its explicitly configured pack family.
+        if "pack_ids" in self.config:
+            self.regs = {p: r for p, r in self.regs.items() if p in self.config["pack_ids"]}
         session = self.state.get("session")
         if session and self.state["state"] not in {"NEXT", "DONE"}:
             for p, r in session["registrations"].items():
@@ -117,6 +120,19 @@ class Loop:
                 io_failed = not self._io("waker.bootstrap_deferred", self.waker.bootstrap_deferred) or io_failed
             if io_failed:
                 atomic_state(self.root / "state.json", self.state)
+            # Publish dormancy only after the close notice and wake were flushed.
+            dormant = self.root / "done.idle"
+            pending_mail = False
+            if self.state["state"] == "DONE" and not io_failed:
+                for path in (self.root / "outbox").glob("*.json"):
+                    entry = json.loads(path.read_text())
+                    if not entry.get("withdrawn") and (not entry.get("delivered") or entry.get("close_pending")):
+                        pending_mail = True
+                        break
+            if self.state["state"] == "DONE" and not io_failed and not pending_mail:
+                dormant.touch()
+            else:
+                dormant.unlink(missing_ok=True)
         return 0
 
     def _io(self, operation, action):

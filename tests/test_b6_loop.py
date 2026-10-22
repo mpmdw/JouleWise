@@ -902,6 +902,72 @@ class LoopTests(unittest.TestCase):
         self.assertTrue(any(argv[0] == "gh" for argv in calls))
         self.assertTrue(any("ls-remote" in argv for argv in calls))
 
+    def test_dedicated_bytes_config_limits_discovery_and_starts_next(self):
+        config = json.loads((ROOT / "configs/b6/loop_bytes.json").read_text())
+        expected = [f"bytes-s{n}-p1" for n in range(1, 7)] + [f"bytes-s{n}-p2" for n in range(6, 0, -1)]
+        self.assertEqual(config["base_order"], expected)
+        self.assertEqual(config["pack_ids"], expected)
+        self.assertNotEqual(config["loop_root"], loop_module.DEFAULT_LOOP_ROOT)
+        self.loop.config = config
+        self.assertEqual(self.state()["state"], "NEXT")
+        # Use one real registration plus the replication family to prove the
+        # filter acts on discovered packs, independently of queue order.
+        from joulewise.b6.pack_registration import load
+        reg = load(ROOT / "configs/b6/packs/bytes-s1-p1/registration.json")
+        with patch.object(loop_module, "open_packs", return_value=[*self.regs.values(), reg]):
+            self.loop.regs_source = None
+            self.loop.tick()
+        self.assertEqual(set(self.loop.regs), {"bytes-s1-p1"})
+        self.assertEqual(self.state()["session"]["packs"], ["bytes-s1-p1"])
+        self.assertEqual(self.state()["state"], "PRECHECK")
+
+    def test_cli_config_root_and_explicit_override(self):
+        roots = []
+        def factory(repo, root, **kwargs):
+            roots.append(root)
+            return SimpleNamespace(read_state=lambda: {})
+        config = self.root / "loop-config.json"
+        value = json.loads((ROOT / "configs/b6/loop_bytes.json").read_text())
+        value["loop_root"] = str(self.root / "bytes")
+        config.write_text(json.dumps(value))
+        with patch.dict(os.environ), patch("builtins.print"):
+            os.environ.pop("JW_B6_LOOP_ROOT", None)
+            self.assertEqual(main(["--config", str(config), "status"], factory=factory), 0)
+            self.assertEqual(main(["--config", str(config), "status", "--loop-root", str(self.root)], factory=factory), 0)
+        self.assertEqual(roots, [value["loop_root"], str(self.root)])
+
+    def test_done_dormancy_waits_for_outbox_retry(self):
+        state = self.state()
+        state["state"] = "DONE"
+        loop_module.atomic_state(self.root / "state.json", state)
+        key = self.mailer.enqueue("loop_hold", "prior", None, {"state": "HOLD_LOOP"})
+        self.transport.fail = True
+        self.loop.tick()
+        self.assertFalse((self.root / "done.idle").exists())
+        self.transport.fail = False
+        self.clock.advance(300)
+        self.loop.tick()
+        self.assertTrue(self.mailer.entry(key)["delivered"])
+        self.assertTrue((self.root / "done.idle").exists())
+
+    def test_done_guard_skips_tick_and_resume_invalidates(self):
+        marker = self.root / "python-started"
+        environment = {**os.environ, "JW_B6_LOOP_ROOT": str(self.root),
+                       "JW_B6_LOOP_TICK": f"/usr/bin/touch {marker}"}
+        state = self.state()
+        state["state"] = "DONE"
+        loop_module.atomic_state(self.root / "state.json", state)
+        (self.root / "done.idle").touch()
+        def guard():
+            subprocess.run(["/bin/zsh", str(ROOT / "scripts/b6_loop_guard.zsh")],
+                           env=environment, check=True, capture_output=True, timeout=2)
+        guard()
+        self.assertFalse(marker.exists())
+        state["state"] = "NEXT"
+        loop_module.atomic_state(self.root / "state.json", state)
+        guard()
+        self.assertTrue(marker.exists())
+
     def test_cli_live_runner_timeout_returns_failure(self):
         argv = ["git", "status"]
         with patch.object(cli_module.subprocess, "run", side_effect=subprocess.TimeoutExpired(argv, 120)) as run:
