@@ -529,10 +529,14 @@ class HazardWindowCallSiteTests(_SentinelMixin, unittest.TestCase):
             return real_validate(stripped)
 
         with patch.object(analysis_inputs, "validate_floor_artifact", validate_without_carrier_schema):
-            with self.assertRaisesRegex(analysis_inputs.AnalysisInputError, "launch_lifecycle_incomplete"):
-                analysis_inputs.authenticate_floor_artifact_bytes(raw)
+            # L9 ruling Q-LINEAGE (docs/process_traces/2026-10-20-magistrate-4b350f47/L9-RULING.md):
+            # a carrier whose launch lifecycle cannot be re-confirmed is the limitation
+            # floor_launch_lineage_unauthenticated:<scope>, not a raise.
+            incomplete = analysis_inputs.authenticate_floor_artifact_bytes(raw)
             write_night_records(self.w)
             admitted = analysis_inputs.authenticate_floor_artifact_bytes(raw)
+        self.assertEqual(incomplete.limitations, ("floor_launch_lineage_unauthenticated:aggregate",))
+        self.assertEqual(admitted.limitations, ())
         self.assertEqual(admitted.value["provenance"]["launch_lineage"], self.lineage)
 
     # validate_powermetrics_fiducial.py:984
