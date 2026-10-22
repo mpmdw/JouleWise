@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
+from joulewise.align.gpukit.identity import model_identity_matches
 from joulewise.align.gpukit.matrix import load_matrix, validate
 from joulewise.align.gpukit.throughput import ceilings, display_number
 from joulewise.align.records import read_episodes
@@ -101,7 +102,7 @@ def _calibration(path: Path, counts: Mapping[str, tuple[int, int]]) -> tuple[dic
         paths = sorted(path.glob("model-*/episodes.jsonl")) if path.is_dir() else [path]
         episodes = [e for file in paths for e in read_episodes(file)]
         for model, (count, _) in counts.items():
-            rows = [e for e in episodes if e.agent_model == model]
+            rows = [e for e in episodes if model_identity_matches(e.agent_model, model)]
             if not rows:
                 flags.append("calibration_model_missing:" + model)
                 continue

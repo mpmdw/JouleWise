@@ -239,3 +239,35 @@ class ExitTests(unittest.TestCase):
             self.assertEqual(receipt["status"], "failed")
             self.assertIn("session_failed:RuntimeError", receipt["flags"])
             self.assertFalse(receipt["data_complete"])
+
+
+class IdentityTests(unittest.TestCase):
+    def test_shared_model_identity_and_calibration_path(self):
+        from joulewise.align.gpukit.identity import model_identity_matches
+        from joulewise.align.gpukit.cost import estimate
+        root = Path(__file__).resolve().parents[2]
+        matrix = json.loads((root / "configs/align/shade.json").read_text())
+        world = CoverageTests()
+        episode = world.episode([world.trace()])
+        with tempfile.TemporaryDirectory() as directory:
+            for i, spec in enumerate(matrix["models"]):
+                model = spec["id"]
+                identity = "vllm:" + model + "@http://127.0.0.1:18761/v1"
+                self.assertTrue(model_identity_matches(model, model))
+                self.assertTrue(model_identity_matches(identity, model))
+                self.assertFalse(model_identity_matches("vllm:another/model@http://local/v1", model))
+                self.assertFalse(model_identity_matches(model + "-FP8", model))
+                row = replace(episode, agent_model=identity, endpoint=identity)
+                model_dir = Path(directory) / ("model-" + str(i))
+                model_dir.mkdir()
+                path = model_dir / "episodes.jsonl"
+                write_episodes(path, [row])
+                flags = _validate_output(path, expected_count=1, router=False, model=model)
+                self.assertNotIn("runner_episode_model_mismatch", flags)
+            result = estimate(matrix, "H100-SXM-80GB", calibration=Path(directory))
+            self.assertFalse(any(f.startswith("calibration_model_missing:") for f in result.flags))
+            self.assertEqual(set(result.calibration_basis), {m["id"] for m in matrix["models"]})
+            for basis in result.calibration_basis.values():
+                self.assertEqual(basis["observed_episodes"], 1)
+                # Same episode brackets; default 1e-6 relative arithmetic bar.
+                self.assertTrue(math.isclose(basis["mean_episode_seconds"], 2.0, rel_tol=1e-6))

@@ -11,7 +11,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import shutil
 import signal
 import subprocess
@@ -29,6 +28,7 @@ from urllib.request import urlopen
 from urllib.parse import urlsplit
 
 from joulewise.align.gpukit.coverage import power_coverage
+from joulewise.align.gpukit.identity import model_identity_matches
 from joulewise.align.gpukit.matrix import expand, load_matrix
 from joulewise.align.gpukit.cost import calibration_slice
 from joulewise.align.gpukit.throttle import snapshot, compare
@@ -279,10 +279,8 @@ def _validate_output(path: Path, *, expected_count: int, router: bool, model: st
             # evidence. Do not add a second model failure to that declared world.
             declared_mock = (episode.endpoint.startswith("mock/") and episode.power_traces
                              and all(t.source == "mock" for t in episode.power_traces))
-            if not declared_mock and identity != model and not any(
-                    model + separator in identity for separator in ("@", ":", "|", " ")):
-                if not identity.endswith(model):
-                    flags.append("runner_episode_model_mismatch")
+            if not declared_mock and not model_identity_matches(identity, model):
+                flags.append("runner_episode_model_mismatch")
             flags.extend(episode.flags)
             if not episode.turns:
                 flags.append("episode_turns_missing")
