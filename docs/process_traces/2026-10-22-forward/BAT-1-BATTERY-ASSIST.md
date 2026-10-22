@@ -1,4 +1,4 @@
-# BAT-1: battery assist when the workload outruns the MagSafe adapter (2026-10-21, 19:25 PDT; revised 22:35 PDT and 2026-10-22 03:45 PDT)
+# BAT-1: battery assist when the workload outruns the MagSafe adapter (2026-10-21, 19:25 PDT; revised 22:35 PDT, 2026-10-22 03:45 PDT and 08:20 PDT)
 
 Item BAT-1 of the forward-work workflow (interactive session 2dc9c377), answering Ed's request of 2026-10-21:
 "also iirc, there was a problem when the workload exceeded the consumption the magsafe power supply is providing
@@ -7,7 +7,8 @@ and you operate off battery, make sure that's remidied, if it was indeed even a 
 Seat: one Opus 5.5 agent, local (the block-6 flag files are blinded data). Analysis only; no code changed. Scripts and
 outputs: `/Users/edr/night-archive/forward-20261021/BAT-1/` (untracked). Non-claim per-run tables: JouleWise-data
 branch `analysis/battery-assist-20261022` (0cb3eb6 at 19:25; e48774b adds the re-dispatch checks; a3e3456 and f0a5db9
-add the third dispatch's cross-check of the BAT-3 code and the per-model peaks), directory `battery-assist-20261022/`.
+add the third dispatch's cross-check of the BAT-3 code and the per-model peaks; d4f9cd2 adds the fourth dispatch's
+`tables/fourth_dispatch_checks.txt`), directory `battery-assist-20261022/`.
 
 Revision of 22:35 PDT (same item, re-dispatched): every script was re-run, and every output reproduces (section
 "Re-dispatch checks", which also adds three checks). The paragraph for Ed, the boundary table and the notes
@@ -19,6 +20,13 @@ Revision of 2026-10-22 03:45 PDT (third dispatch): the measured numbers are unch
 `lane/2026-10-22-bytes-battery-term` (BAT-3, ddcbafc4d, draft CI PR #544) but not merged. H re-reduced through that
 code gives the same battery term as this audit on all 95 runs. The paragraph for Ed, the boundary table and the notes
 for the lead say so.
+
+Revision of 2026-10-22 08:20 PDT (fourth dispatch): the measured numbers are unchanged and reproduce again (section
+"Fourth-dispatch checks"). The BYTES battery term has since had its executing review (Opus 5.5, blind, verdict
+ACCEPT_WITH_FIXES: the code's numbers right, its synthetic tests too weak). Fix round 1 is at a846ba997 and not
+finished. H re-reduced through a846ba997 equals the ddcbafc4d output on all 95 runs. The twin's battery patch
+(BY-TWIN-BAT) still has no branch. The paragraph for Ed, the boundary table, the ops:battery check and the notes for the
+lead are updated to match.
 
 ## For Ed
 
@@ -35,8 +43,10 @@ BYTES's whole-machine energy over the stretch where the model writes its answer,
 the processor" energy. On 122B these can read up to 1.15 J per run low (about 0.1 %): the Mac reports battery current
 once a second, late, so part of the prompt's battery energy is recorded in the answer stretch. On 70B they are exact
 in 17 of 18 runs. The fix, which adds the battery's measured energy, is now written. Run over the check session, it
-adds exactly the joules measured here. It still needs its independent checks and reviews, and it must merge before
-BYTES is registered.
+adds exactly the joules measured here. A different model reviewed it by running it against the raw readings and found
+its numbers right; it asked for stronger tests, which are being added, and the revised code gives the same joules. It
+still needs a separately written second analysis program to agree with it and two final reviews, and it must merge
+before BYTES is registered.
 
 ### The longer answer
 
@@ -66,9 +76,13 @@ stretch. The fix adds the battery's measured energy over the same stretch and pr
 adds to the printed uncertainty all the battery energy reported in the first 2.3 s of the stretch and in the 2.3 s
 after it, the longest the reading can lag, so the printed range covers both readings. That fix is now written, on a
 branch of its own. Run over the check session, it adds exactly the battery joules measured here, run by run, and
-leaves the cable meter's own numbers unchanged. Before it merges, a second analysis program written separately must
-agree with it, a different model must review it by running it, and it needs two independent final reviews. It has to
-merge before BYTES is registered, because the registration records the exact analysis code. If the model list
+leaves the cable meter's own numbers unchanged. A different model has reviewed it by running it. The code's numbers
+were right, but its synthetic test data reported the battery current at once, never a second late as the real Mac
+does, so the tests could not catch an error in the late-reading allowance. The review asked for test data with the
+real delay and four smaller changes. Those are being made, and they leave every number from the check session
+unchanged. Before it merges, a second analysis program written separately must agree with it, and it needs two
+independent final reviews. It has to merge before BYTES is registered, because the registration records the exact
+analysis code. If the model list
 changes, any model whose power peaks reach what the adapter can deliver, about 135 W, even for a fraction of a
 second, will lean on the battery too. In this session every run that reached it did, and Qwen3-32B, which peaked at
 134.8 W, did not. The fix measures the battery instead of assuming it idle, so the number stays right, but
@@ -222,6 +236,49 @@ stream parser. The ddcbafc4d output equals the lead's 8fc5fad63 output in all 95
 | qwen3-4b | 5 | 114.9 | 0 | 0 | 0 | 0 |
 | qwen3-1p7b | 5 | 111.9 | 0 | 0 | 0 | 0 |
 
+### Fourth-dispatch checks (2026-10-22, 07:55 to 08:20 PDT)
+
+Output: `out/fourth_dispatch_checks.txt` and `tmp/rerun4/`.
+
+- **Re-run.** `batt_by_stage.py` is still byte-identical to the lead's scratchpad copy, and its output is
+  byte-identical to `out/batt_by_stage.txt`. A separate ten-line reader of `battery.jsonl` counts the same 18,708 SMC
+  reads, 204 below −200 mA and a minimum of −497 mA. `h_battery_runs.py` (JSON and CSV) and `b6_battery_counts.py`
+  reproduce `out/` byte for byte.
+- **Nothing new to read.** No file under any block-6 `archive/derived` is newer than the 19:12 counts. No BYTES or
+  block-6 session has run since H (windows paused; `ops/stop-pause` at dac3b7e62). `km003c_parse.py` on origin/main
+  81db9f355 has the same SHA-256 as the copy used here (e8fc584a…); it last changed at 7f3dde5db. The harvest's call
+  to `delta_machine_energy` is still at `joulewise/b5/harvest.py` line 6220 on main.
+- **Registrations.** Every pass-1 module still has `run_count` 50 on `lane/2026-10-22-bytes-c4-pins` (917d6151d),
+  `lane/2026-10-22-bytes-pass1` (da27be7b9), `lane/2026-10-22-bytes-pass1-review-fixes` (478873066) and
+  `lane/2026-10-22-bytes-battery-term` (a846ba997). The charging projection stands.
+- **The review of the BAT-3 code.** An executing blind review (Opus 5.5) of ddcbafc4d returned ACCEPT_WITH_FIXES
+  (quoted in `mpath/briefs/BAT-3.fix1.md`). Its own program agreed with the code on all 95 H runs to 1.1e-16 J, and on
+  150 runs of a synthetic world it built in which the SMC publishes once a second, a second late. The defects it found
+  were in the tests:
+  - Finding 1 (major, test coverage): the synthetic campaign reports battery current with no delay. So four
+    mutations that touch printed numbers survived: the marker without its d1 + τ extension, v_end forced to 0, the
+    v_end window placed before d1, and C_j summing the two edge terms instead of taking their maximum. On H v_end is 0
+    in all 95 runs, so real data does not exercise it either.
+  - Finding 2: two printed battery columns (the stratified mean and the nonzero count) were unpinned.
+  - Finding 3 (flag, not refuse): the blinded stage printed decode-assisted counts of 0 that it never evaluated.
+  - Findings 4 to 7: two nits, one robustness note rejected with a reason (production writes `rx` on every poll), and
+    one hand-forward to BY-TWIN-BAT.
+- **Fix round 1** (Sol 6.1 xhigh, on the Mac) is at a846ba997 (slices 998d0dc05, 552561b3f, a846ba997). Findings 1
+  to 5 are fixed: a delayed-publication campaign mode with 30 placements, a charging run, and null with reason at the
+  blinded stage. Six of nine mutants are killed. Its report (`.codex-report/BAT-3-fix1.md`) says M3, M19, M21 and some
+  regression classes remain, and the round is not complete.
+- **H through a846ba997.** `joulewise/` and `configs/` at a846ba997 were exported into `tmp/tree-a846ba997`, and H was
+  re-reduced with the lead's `rereduce_h.py`: 95 runs, 0 errors. The runs, streams and skipped entries equal the
+  ddcbafc4d output exactly; only the recorded source path differs. `compare_h.py` on it prints a file byte-identical
+  to `out/bat3_crosscheck.txt`. This is expected: in `meter_decode` the round only names τ's 2 × 1.0 s as
+  `_battery_delay_s`, with the arithmetic order unchanged.
+- **CI.** PR #544 still tracks `ci/2026-10-22-bytes-battery-term` at 998d0dc05 (slice 1), so slices 2 and 3 have
+  not been through CI. Its run 39795449158 was in progress at 08:00. Shard 11 fails only
+  `test_bytes_agreement.AgreementTests.test_defects_campaign`, the expected twin disagreement. `gate-ledger` fails
+  (draft). Shards 5 and 9 were pending, and every other job passed.
+- **Twin.** BY-TWIN-BAT has no branch on origin. `scripts/bytes_twin.py` on `lane/2026-10-22-bytes-twin-parity`
+  (1881e0c9f, PR #543) reads only the `battery.assist` flag (lines 977 and 1126) and has no battery term.
+
 ### Per-run table (BYTES H, full-length runs of the three models that saw any discharge)
 
 These are the full-length runs: a 2,048-token prompt and 512 decoded tokens. The short test-7 runs and every other
@@ -336,11 +393,11 @@ printed.
 | Boundary | Does adapter overload change the number? | By how much (H; block 6) | Remedied? |
 |---|---|---|---|
 | Rails (powermetrics CPU + GPU + ANE) | No. The rails are regulated downstream of the supply. The reopen tests show no lower power, frequency or speed in assisted seconds. | 0 J | Nothing to fix (2026-10-06 ruling stands) |
-| Block-5/6 whole machine (`withheld/meter.json` dE_machine) | Yes, by the battery's joules; the code adds them back | H: battery term 0 to 27 J per request, re-derived exactly. Block 6: 0 J (no assisted member, no nonzero poll in any request) | **Yes.** `km003c_parse.delta_machine_energy` adds dE_battery = −B0AC × B0AV / 10⁶ W over the same window. It is called by `joulewise/b5/harvest.py` `_Harvest.meter_joins`, which block 6's harvest runs to write `withheld/meter.json` (origin/main bfab7c950 line 6220; `lane/2026-10-17-b6-packs-registered` line 6252; `lane/2026-10-20-l9-ruling-build` line 6889). L9's `disclosures.MACHINE_BOUNDARY` reads "whole-machine DC input plus the battery term" |
-| BYTES DC input (decode span, `bytes_analysis.meter_decode`) | Yes, in principle. It integrates only the meter's samples, and `_filtered_stream` drops the SMC blocks | 70B: 0 J in 17 of 18 runs, 0.40 J in r11, which the harvest excludes (≤ 0.006 %). 122B: 0.56 to 1.15 J per run on the 0.2 s path (0.06 to 0.13 %), all in the first 2 s of decode and most likely the prefill's, so meter-only is low by between 0 and that amount. Next-80B: 0.11 J once. Every other model: 0 | **Built, not merged** (03:45 PDT 10-22). BAT-2 ruling §2 and §3 (20:45 PDT): DC input = meter + signed battery term over the decode span, printed as its own column, with the edge term v (on H, v equals the 122B term, so the printed bound covers both readings). BAT-3 built it on `lane/2026-10-22-bytes-battery-term` (ddcbafc4d; `meter_decode` returns `gross_j` = meter + battery, `battery_gross_j`, `battery_v_start_j`, `battery_v_end_j`, `decode_battery_assist`). On H it reproduces this audit's decode term on all 95 runs (third-dispatch checks). Still open: the twin's battery patch (BY-TWIN-BAT, no branch yet; until then `test_bytes_agreement.test_defects_campaign` fails on PR #544, as BAT-3 expected), an executing review, both cold passes, merge. Backlog item 9; claim-path |
-| BYTES rest (DC input − rails, decode span, about line 672) | Yes, in principle. The battery joules belong in rest | 122B: 0.10 to 0.20 % of rest (about 577 J), with the same caveat. 70B: 0 in 17 of 18 runs | **Built, not merged** (BAT-2 §5; BAT-3 forms rest from the corrected DC input, `bytes_analysis.py` line 773 at ddcbafc4d; item 9) |
-| BYTES "without assisted runs" line (draft registration `bytes_pack_v1.md` §6, on `docs/2026-10-20-bytes-registration`) | It changes which units the line keeps. `battery.assist` is decided over the whole request, prefill included | In H, all 18 full 70B runs and all 7 full 122B runs carry it, so s5's and s6's lines would print "below the registered minimum of 5 units" | **Built, not merged.** BAT-2 §4, built by BAT-3 (`bytes_analysis.py` lines 1221 to 1243 at ddcbafc4d; `bytes_pack_v1.md` §6 updated on the same branch): the line keys on `bytes.decode_battery_assist`, a discharging poll received in [d0 + τ, d1 + τ). On H it marks 1 run of 95 (soak-70b-r11, already excluded), so s5 keeps its 13 kept runs and s6 keeps 7 of 7. The request flag is printed as a count and selects nothing. (Superseded: the 19:25 text said a decode-scoped marker would keep 0 of 7 for s6; that marker had no reporting delay.) |
-| DIFFICULTY `wall` (`difficulty_pack_v2.md` §2, line 53) | In principle; meter only, flagged `battery_assist` | Models are Qwen3 1.7B, 4B and 8B. H read 0 J for every dense model up to 32B and for 30B-A3B | **Ruled, queued, not built.** BAT-2 §6: `wall` = meter + battery over the request. DIFF-1 (`lane/2026-10-22-difficulty-queue`, now c400061a3, draft PR #540) queues it for DIFFICULTY's next registration revision. No adapter exists yet. Expected 0 J |
+| Block-5/6 whole machine (`withheld/meter.json` dE_machine) | Yes, by the battery's joules; the code adds them back | H: battery term 0 to 27 J per request, re-derived exactly. Block 6: 0 J (no assisted member, no nonzero poll in any request) | **Yes.** `km003c_parse.delta_machine_energy` adds dE_battery = −B0AC × B0AV / 10⁶ W over the same window. It is called by `joulewise/b5/harvest.py` `_Harvest.meter_joins`, which block 6's harvest runs to write `withheld/meter.json` (origin/main 81db9f355 line 6220; `lane/2026-10-17-b6-packs-registered` line 6252; `lane/2026-10-20-l9-ruling-build` line 6889). L9's `disclosures.MACHINE_BOUNDARY` reads "whole-machine DC input plus the battery term" |
+| BYTES DC input (decode span, `bytes_analysis.meter_decode`) | Yes, in principle. It integrates only the meter's samples, and `_filtered_stream` drops the SMC blocks | 70B: 0 J in 17 of 18 runs, 0.40 J in r11, which the harvest excludes (≤ 0.006 %). 122B: 0.56 to 1.15 J per run on the 0.2 s path (0.06 to 0.13 %), all in the first 2 s of decode and most likely the prefill's, so meter-only is low by between 0 and that amount. Next-80B: 0.11 J once. Every other model: 0 | **Built, not merged** (03:45 PDT 10-22). BAT-2 ruling §2 and §3 (20:45 PDT): DC input = meter + signed battery term over the decode span, printed as its own column, with the edge term v (on H, v equals the 122B term, so the printed bound covers both readings). BAT-3 built it on `lane/2026-10-22-bytes-battery-term` (ddcbafc4d; `meter_decode` returns `gross_j` = meter + battery, `battery_gross_j`, `battery_v_start_j`, `battery_v_end_j`, `decode_battery_assist`). On H it reproduces this audit's decode term on all 95 runs (third-dispatch checks). Executing review done (08:20 PDT): ACCEPT_WITH_FIXES, the code's numbers right and its synthetic tests too weak. Fix round 1 is at a846ba997, not finished, and gives the same H output (fourth-dispatch checks). Still open: finishing fix round 1 and putting its head through CI; the twin's battery patch (BY-TWIN-BAT, no branch yet; until then `test_bytes_agreement.test_defects_campaign` fails on PR #544, as BAT-3 expected); both cold passes; merge. Backlog item 9; claim-path |
+| BYTES rest (DC input − rails, decode span, about line 672) | Yes, in principle. The battery joules belong in rest | 122B: 0.10 to 0.20 % of rest (about 577 J), with the same caveat. 70B: 0 in 17 of 18 runs | **Built, not merged** (BAT-2 §5; BAT-3 forms rest from the corrected DC input, `bytes_analysis.py` line 773 at ddcbafc4d; item 9; same open steps as DC input) |
+| BYTES "without assisted runs" line (draft registration `bytes_pack_v1.md` §6, on `docs/2026-10-20-bytes-registration`) | It changes which units the line keeps. `battery.assist` is decided over the whole request, prefill included | In H, all 18 full 70B runs and all 7 full 122B runs carry it, so s5's and s6's lines would print "below the registered minimum of 5 units" | **Built, not merged.** BAT-2 §4, built by BAT-3 (`bytes_analysis.py` lines 1221 to 1243 at ddcbafc4d; `bytes_pack_v1.md` §6 updated on the same branch): the line keys on `bytes.decode_battery_assist`, a discharging poll received in [d0 + τ, d1 + τ). On H it marks 1 run of 95 (soak-70b-r11, already excluded), so s5 keeps its 13 kept runs and s6 keeps 7 of 7. The request flag is printed as a count and selects nothing. Fix round 1 (552561b3f) prints this line's numbers as null, "not evaluated at the blinded stage", because the blinded stage reads no meter stream (review finding 3). (Superseded: the 19:25 text said a decode-scoped marker would keep 0 of 7 for s6; that marker had no reporting delay.) |
+| DIFFICULTY `wall` (`difficulty_pack_v2.md` §2, line 53) | In principle; meter only, flagged `battery_assist` | Models are Qwen3 1.7B, 4B and 8B. H read 0 J for every dense model up to 32B and for 30B-A3B | **Ruled, queued, not built.** BAT-2 §6: `wall` = meter + battery over the request. DIFF-1 (`lane/2026-10-22-difficulty-queue`, now aaae90e60, draft PR #540) queues it for DIFFICULTY's next registration revision. No adapter exists yet. Expected 0 J |
 
 The arm refusal at idle stands: ExternalConnected No, IsCharging Yes, or |B0AC| > 200 mA on an idle machine
 (`joulewise/hazards/battery.py`, module docstring line 48). The discharged energy goes to `withheld/` as ruled.
@@ -393,8 +450,8 @@ proposed: the hazard is already measured and already excludes the right members 
 
 ## The ops:battery branch
 
-`lane/2026-10-21-battery-inrun` is absent on origin and locally (checked 19:24 PDT, at 22:2x PDT, and at 03:2x PDT
-10-22 with `git ls-remote`). The battery branches on origin are three from 09-29 to 10-06, this lane, and BAT-3's
+`lane/2026-10-21-battery-inrun` is absent on origin and locally (checked 19:24 PDT, at 22:2x PDT, at 03:2x PDT and
+at 08:0x PDT 10-22 with `git ls-remote`; no branch on origin matches `*inrun*`). The battery branches on origin are three from 09-29 to 10-06, this lane, and BAT-3's
 `lane/2026-10-22-bytes-battery-term` with its CI copy `ci/2026-10-22-bytes-battery-term`. The ops:battery
 brief made the branch conditional on the battery not being sampled during runs. It is sampled: the hazard monitor
 reads B0AC/B0AV about once a second, and every 0.2 s KM003C poll carries them. The seat's own report, in workflow
@@ -410,10 +467,14 @@ nothing to disposition.
    test, `test_bytes_agreement.AgreementTests.test_defects_campaign`, the disagreement BAT-3 expected until the twin
    gets its battery patch. On H the built term equals this audit's decode term on all 95 runs: 0.56 to 1.15 J per 122B
    decode (0.06 to 0.13 % of DC input, 0.10 to 0.20 % of rest), bounded by v of the same size, and 0 on 70B decode
-   except r11. Still to do, claim-path: BY-TWIN-BAT (no branch on origin at 03:2x PDT), an executing review, both cold
-   passes and the merge. It should land before the BYTES registration pins `bytes_analysis.py`. For the twin and
-   review seats, H's per-run `meter_decode` output through ddcbafc4d is on JouleWise-data (a3e3456),
-   `battery-assist-20261022/tables/h_meter_decode_bat3_ddcbafc4d.json` (non-claim).
+   except r11. Update at 08:20 PDT: the executing review is done (ACCEPT_WITH_FIXES), and fix round 1 is at
+   a846ba997 with M3, M19, M21 and some regression classes still to run. Still to do, claim-path: finish fix round 1
+   and move PR #544's CI branch to its head (CI has seen only slice 1, 998d0dc05); BY-TWIN-BAT (no branch on origin
+   at 08:0x PDT), which must also mirror finding 3's null-with-reason line and re-plant finding 7's defect so the run's
+   DC input is unchanged; both cold passes; the merge. It should land before the BYTES registration pins
+   `bytes_analysis.py`. For the twin and cold-pass seats, H's per-run `meter_decode` output through ddcbafc4d is on
+   JouleWise-data (a3e3456), `battery-assist-20261022/tables/h_meter_decode_bat3_ddcbafc4d.json` (non-claim). It
+   also stands for a846ba997, whose output is the same on every run.
 2. **Superseded at 22:35:** the 19:25 note that the without-assisted line would be empty for s6. BAT-2's marker allows
    for the reporting delay and marks none of H's 122B runs.
 3. **PR #536 CI.** At head fc7548a17 `ci` passes: the lead's `## Executed evidence` section in `BAT-RULING.md` cleared
@@ -438,7 +499,7 @@ nothing to disposition.
 These commands run from any directory. `KP` is `joulewise/external/km003c_parse.py` at origin/main (ef520743c at
 19:25, bfab7c950 at 22:35; the file is the same), byte-identical to H's checkout c10b6895f. The registrations come
 from `lane/2026-10-22-bytes-c4-pins`. The four lines after `charge_resume_scan.py` are the re-dispatch checks; the
-lines after them are the third-dispatch checks.
+lines after them are the third-dispatch checks, and the last four lines are the fourth-dispatch checks.
 
 ```
 H=/Users/edr/night-bytes/h-20261021T185555Z; B=/Users/edr/night-archive/forward-20261021/BAT-1; export TMPDIR=$B/tmp
@@ -466,4 +527,8 @@ B3=/Users/edr/night-archive/forward-20261021/BAT-3
 /opt/homebrew/bin/python3.13 -I -B $B3/rereduce_h.py $H $T $B/out/h_meter_decode_bat3_ddcbafc4d.json
 /opt/homebrew/bin/python3.13 -I -B $B/scripts/peaks_by_model.py $H $KP $B/out/h_battery_runs.json
 /opt/homebrew/bin/python3.13 -I -B $B3/compare_h.py $B3/out/h_base_bda481d5a.json $B/out/h_meter_decode_bat3_ddcbafc4d.json $B/out/h_battery_runs.json $H/export/bytes-mac-check/bytes-h-20261021T185555335572Z-calibration.runs.csv
+T4=$B/tmp/tree-a846ba997; mkdir -p $T4 $B/tmp/rerun4; git -C $R archive a846ba997e307859cd625e034dfb53a22f64daf2 joulewise configs | tar -x -C $T4
+/opt/homebrew/bin/python3.13 -I -B $B3/rereduce_h.py $H $T4 $B/tmp/rerun4/h_meter_decode_bat3_a846ba997.json
+/opt/homebrew/bin/python3.13 -I -B $B3/compare_h.py $B3/out/h_base_bda481d5a.json $B/tmp/rerun4/h_meter_decode_bat3_a846ba997.json $B/out/h_battery_runs.json $H/export/bytes-mac-check/bytes-h-20261021T185555335572Z-calibration.runs.csv | cmp - $B/out/bat3_crosscheck.txt
+for br in bytes-c4-pins bytes-pass1 bytes-pass1-review-fixes bytes-battery-term; do for s in 1 2 3 4 5 6; do mkdir -p "$B/tmp/regs4/${br}/bytes-s${s}-p1"; git -C $R show "origin/lane/2026-10-22-${br}:configs/b6/packs/bytes-s${s}-p1/registration.json" > "$B/tmp/regs4/${br}/bytes-s${s}-p1/registration.json"; done; done; /opt/homebrew/bin/python3.13 -I $B/scripts/reg_run_counts.py $B/tmp/regs4
 ```
