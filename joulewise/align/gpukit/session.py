@@ -28,6 +28,7 @@ from urllib.request import urlopen
 
 from joulewise.align.gpukit.matrix import expand, load_matrix
 from joulewise.align.gpukit.cost import calibration_slice
+from joulewise.align.gpukit.throttle import snapshot, compare
 from joulewise.align.gpukit.runner_adapter import write_runner_matrix
 from joulewise.align.records import read_episodes
 
@@ -426,6 +427,11 @@ def run_session(options: SessionOptions, *,
             flags.append("whole_gpu_required")
             receipt.update(status="refused", isolation_reason=str(exc))
         receipt["hardware"] = inventory
+        receipt["throttle_start"] = [snapshot(gpu_index=i, directory=output,
+                                              label="session-start", timeout_s=options.command_timeout_s)
+                                     for i in measured]
+        for row in receipt["throttle_start"]:
+            flags.extend(row["flags"])
         preflight_path = output / "preflight.json"
         preflight = [*(options.preflight_command or (
             sys.executable, "-m", "joulewise.align.power.preflight")), "--out", str(preflight_path)]
@@ -492,6 +498,9 @@ def run_session(options: SessionOptions, *,
                     if any(f != "runner_adapter_provisional" for f in adapter_flags):
                         flags.extend(model_receipt["flags"])
                         continue
+                before = [snapshot(gpu_index=i, directory=model_dir, label="before",
+                                   timeout_s=options.command_timeout_s) for i in devices]
+                model_receipt["throttle_before"] = before
                 argv = _serve_argv(options, model, options.port)
                 model_receipt["server_argv"] = argv
                 if not model.get("revision"):
@@ -540,6 +549,12 @@ def run_session(options: SessionOptions, *,
                     if process is not None:
                         _stop_group(process, grace_s=options.poll_s)
                         model_receipt["server_returncode"] = process.returncode
+                after = [snapshot(gpu_index=i, directory=model_dir, label="after",
+                                  timeout_s=options.command_timeout_s) for i in devices]
+                model_receipt["throttle_after"] = after
+                model_receipt["throttle_changes"] = [compare(a, b) for a, b in zip(before, after)]
+                for change in model_receipt["throttle_changes"]:
+                    model_receipt["flags"].extend(change["flags"])
                 flags.extend(model_receipt["flags"])
         elif receipt["status"] != "refused":
             flags.append("matrix_not_executable")
