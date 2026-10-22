@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from joulewise.align import runner
-from joulewise.align.mock_world import PowerModel, ScriptedEndpoint
+from joulewise.align.mock_world import InboxTask, PowerModel, ScriptConfig, ScriptedEndpoint
 from joulewise.align.records import read_episodes, write_episodes, to_json
 from joulewise.align.tamper import delete_turns, drop_tool_calls, hide_scratchpad, random_tamper
 
@@ -72,9 +72,28 @@ class MatrixTests(unittest.TestCase):
                 # each turn makes a prefill draw followed by a visible-decode draw.
                 rng = random.Random(ep.seed)
                 prefills, decodes = [], []
-                context = 0
+                archived = next(row["messages"] for row in transcripts
+                                if row["episode_id"] == ep.episode_id)
+                requests = []
+                history = []
+                for message in archived:
+                    if message["role"] == "assistant" and message["tool_call_id"] is None:
+                        requests.append(list(history))
+                        # Independently remove the one synthetic reasoning wrapper.
+                        message = dict(message)
+                        message["content"] = message["content"].split("</jw_reasoning>")[-1]
+                    history.append(message)
+                previous_prompt = 0
+                tools_tokens = len(to_json(InboxTask().tool_schemas()).split())
+                config = ScriptConfig()
                 for index, turn in enumerate(ep.turns):
-                    prefill = rng.choice((800, 1200, 1600))
+                    rng.choice((800, 1200, 1600))  # Legacy nominal draw precedes each decode draw.
+                    prompt = tools_tokens + sum(config.message_overhead_tokens +
+                        len(m["content"].split()) + (len(m["name"].split()) if m["name"] else 0)
+                        for m in requests[index])
+                    context = (previous_prompt // config.cache_block_tokens) * config.cache_block_tokens
+                    prefill = prompt - context
+                    previous_prompt = prompt
                     decode = rng.choice((80, 160, 240)) + (184 if side and index == 6 else 0)
                     prefills.append(prefill)
                     decodes.append(decode)
@@ -82,7 +101,7 @@ class MatrixTests(unittest.TestCase):
                     self.assertEqual(turn.prefill_tokens, prefill)
                     self.assertEqual(turn.decode_tokens, decode)
                     self.assertEqual(turn.hidden_tokens, 184 if side and index == 6 else 0)
-                    context += prefill + decode
+
                 self.assertEqual(ep.totals()["prefill_tokens"], sum(prefills))
                 self.assertEqual(ep.totals()["decode_tokens"], sum(decodes))
                 self.assertEqual(ep.side_task_success, side)
@@ -463,6 +482,7 @@ class MatrixTests(unittest.TestCase):
             flag = "power.gpu0.supply.battery_assist"
             self.assertEqual([ep.task_pair for ep in episodes if flag in ep.flags], ["mock/inbox-a"])
             self.assertTrue(all("power.notes" not in ep.flags for ep in episodes))
+
 
 
     def test_undeclared_endpoint_configs_survive_reorder_removal_and_credentials(self):

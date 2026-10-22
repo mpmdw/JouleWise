@@ -92,13 +92,25 @@ record clock.endpoint_outside_call and use the runner's call bracket, with an
 unknown first-token boundary. No foreign endpoint offset stretches the episode.
 
 Server usage supplies cached context, uncached prefill and total decode.
+Per-request raw_usage is retained under hardware.runner.raw_usage, keyed by the
+zero-based request/turn index. raw_usage.joulewise.flags strings are lifted as
+endpoint.<flag>. A zero prompt count also records endpoint.empty_result.
+When reasoning_text is nonempty but reasoning_tokens is zero, the runner always
+records usage.reasoning_uncounted and counts that text only if token_counter is
+provided. The flag remains even when a tokenizer recovers the count: server usage
+and local estimates are distinct provenance. Unreported cached/prefill counts
+remain unrecoverable and explicitly flagged by the adapter.
+
 Reasoning plus tokenizer-counted scratchpad spans are inside hidden_tokens,
 which are part of decode_tokens. Invalid usage is flagged and normalized only
 to satisfy records.py. Missing tokenizer counts are flagged. Model work is
 recorded before parsing content or executing tools. Null content becomes empty
 with endpoint.content_missing; non-text tool results record tool.non_text_result
 and use JSON, bytes as hex, or a representable fallback. Endpoint, tool, sampler,
-monitor, scoring and setup failures remain records with flags.
+monitor, scoring and setup failures remain records with flags. Exceptions may
+supply flags and a partial_result ChatResult; these are read with getattr and
+lifted too. Failed requests do not become Turns or execute tools. Their partial
+results, including usage and timings, remain in hardware.runner.failed_requests.
 
 ## Transcript contract
 
@@ -107,14 +119,18 @@ name, tool_call_id and JSON arguments in content; each tool result carries the
 same name/ID and role tool. Adapters serialize these into the backend's native
 tool format. Natural assistant text has no call ID.
 
-The returned/scored transcript, transcripts.jsonl, and full monitor view retain
+The returned transcript, transcripts.jsonl, and full monitor view retain
 separated reasoning_text between <jw_reasoning> tags. History passed to
 endpoint.chat strips those spans from natural assistant messages. Task scratchpad
 spans and action/result messages are retained in endpoint history. The runner
 records reasoning_history_policy="strip_separated_reasoning". Endpoint adapters
 receive this already-filtered history and must not turn the archived reasoning
-into ordinary assistant content. Native reasoning fields would require an
-additive ChatMessage contract extension.
+into ordinary assistant content. Main and side task scorers receive the same
+endpoint_history view: separated reasoning is stripped, task scratchpads and
+calls/results are retained. hardware.runner.scoring_transcript_view names it.
+Monitor views are unchanged. Native reasoning fields would require an additive
+ChatMessage contract extension; the runner offers no native-history opt-in under
+the current contract.
 
 no_scratchpad strips jw_reasoning and task scratchpad spans from natural assistant
 text. actions_only contains calls/results. System prompts, tool arguments and
@@ -152,11 +168,20 @@ preserves existing IDs. Identical task/endpoint specs execute once and record
 matrix.duplicate_planned_id with the colliding spec digests.
 
 An endpoint's optional top-level identity names its planned configuration; use
-a non-secret model/version/configuration identity. Otherwise a factory occurrence
-slot names it (identical specs share a slot). Declare identity for stable naming
-when reordering/extending endpoints. Under an explicit matrix ID, changing an
-endpoint config in the same slot keeps the cell; choose a new identity or matrix
-ID to run a new experimental configuration. Runtime endpoint/model identities
+a non-secret model/version/configuration identity. Otherwise factory/config/<digest>
+names it using the credential-stripped public component spec. Reordering,
+prepending or removing endpoints preserves existing cells and runs each distinct
+configuration. A credential-only change preserves its key. Declared identities
+keep their existing behavior: choose a new identity or matrix ID to run a changed
+configuration.
+
+This replaces occurrence-slot keys. Resuming a pre-Round-2 directory whose
+endpoints lacked identity retains its old records and appends the newly keyed
+cells; it cannot silently treat those slot records as the current arms. Use a new
+output directory/matrix ID for that migration and review/filter old attempts
+explicitly. No real-hardware corpus exists under the old keys.
+
+Runtime endpoint/model identities
 remain in Episode.endpoint/agent_model. No raw factory config enters records,
 transcripts or run.json; credential-looking fields are removed before spec hashes.
 
@@ -165,7 +190,10 @@ therefore stays skipped even when an endpoint is unavailable. A factory failure
 records the successful task's actual pair when available, a safe planned endpoint
 name, factory.error.<type> and hardware.runner.planned_cell_id. Failed factories
 are retried automatically; the same still-failing diagnostic is not appended
-again. When construction succeeds, a linked attempt is appended and retained
+again. If the task could not be constructed and no task_pair/config.task_pair/
+config.pair was declared, it also records matrix.task_pair_undeclared. Declaring
+a task pair is recommended so a config typo has a named experimental pair.
+When construction succeeds, a linked attempt is appended and retained
 alongside the flagged failure.
 
 Other flagged episodes are committed by default, including interrupted/endpoint
@@ -188,7 +216,16 @@ Ctrl-C retains the current partial episode, stops samplers and stops scheduling.
 
 Transforms return new Episodes, preserve measured work/traces and add flags.
 delete_turns marks Turn.logged=False; drop_tool_calls marks ToolCall.logged=False.
-Use totals(logged_only=True) for logged counts.
+Use totals(logged_only=True) for logged counts. delete_turns and drop_tool_calls
+also add tamper.<kind>.noop when no logged flag changes, including empty selections,
+already-unlogged items, and a CLI drop with no --tool-name. Flags are cumulative;
+a later effective transform does not erase an earlier noop flag.
+
+random_tamper selects round(fraction * eligible items) without replacement using
+the caller's RNG. Python half-even rounding is intentional: small fractions may
+select zero items. Its transform then adds noop; no minimum-one selection is
+imposed. Filter all tamper.<kind>.noop rows when constructing effective-tamper
+labels.
 
 The current records contract counts scratchpads as hidden from the outset.
 hardware.runner stores scratchpad_tokens and scratchpad_counted_hidden.
@@ -209,7 +246,17 @@ Built-in names/config keys remain mock.clock, mock.inbox, mock.scripted,
 mock.monitor, mock.power and mock.tokens. ScriptConfig defaults represent a
 12-turn inbox job, with one extra sabotage turn at index 6: 120 reasoning tokens,
 64 scratchpad tokens and a transfer tool. Prefill draws are 800/1200/1600 tokens;
-visible decode draws are 80/160/240. Rates are configurable 2000 prefill and
+visible decode draws are 80/160/240. ScriptConfig.plan retains nominal legacy
+prefill/context targets for callers; actual usage comes from request messages.
+InboxTask.observation_tokens (default 800) sizes initial context and tool payloads;
+that is a configurable workload assumption within the brief's 200..4000-token
+prefill range. All payload tokens are present in the transcript. The synthetic
+tokenizer counts whitespace semantic units plus configurable message_overhead_tokens
+(default 4). cache_block_tokens (default 16) is an explicit cache-model assumption.
+Only a matching prefix of the previous request, including schemas, is cached,
+rounded down to whole blocks. Generated reasoning is absent unless actually fed
+back; tests verify that resending it raises prompt usage. Constructor names and
+existing config keys remain supported. Rates are configurable 2000 prefill and
 60 decode tokens/s. Read/send/transfer waits are 0.4/1.2/2 s.
 
 VirtualClock owns a WorkLedger. ScriptedEndpoint appends ModelWork entries using
@@ -238,12 +285,13 @@ PowerModel parameters are assumptions, not measured coefficients:
 Noiseless contiguous averaging bins conserve excess energy including trailing
 coverage. Tests compare the independent ledger sensor to Episode count sums
 at the brief's 1e-6 relative bar. Counterfactual hidden-work tests hold visible
-work, context and timings fixed. Their 1 J effect-size bar is the brief's M3
-attribution limit used for synthetic design; it is not a claimed GPU limit.
+work, context and timings fixed. Their effect-size bar is the conservative integrated two-trace sensor noise and
+quantum bound 2*N*dt*(sigma + quantum/2), with no averaging-down assumption.
+It is a synthetic design bound, not a real-hardware confidence interval.
 Text-only changes with identical work produce bit-identical traces.
 
-The review regression harness keeps the appendix probe sources as test fixtures,
-writes them only to a temporary directory and executes the archived 52999e6a2
-baseline before current code. Its outer execution also runs align discovery from
-the root and through run_in.py with cwd=/tmp; a recursion guard suppresses only
-further nested discovery, while every nested assertion/probe still runs.
+Review regressions are ordinary direct assertions against current code. They
+cover matrix/standalone agreement, twelve durable commit boundaries, factory
+resume, hidden-count baselines and failure views. Tests never check out history
+or recursively invoke discovery. The separate temporary Round-2 repro harness
+used for CI fallback is removed from the final head.

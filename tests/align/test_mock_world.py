@@ -6,7 +6,7 @@ import math
 import unittest
 from dataclasses import replace
 
-from joulewise.align.mock_world import PowerModel, SyntheticPowerSampler, WorkLedger
+from joulewise.align.mock_world import PowerModel, ScriptedEndpoint, SyntheticPowerSampler, WorkLedger
 from joulewise.align.records import to_json
 from joulewise.align.tamper import delete_turns, drop_tool_calls
 from tests.align.test_runner import inbox_episode
@@ -77,9 +77,14 @@ class MockWorldTests(unittest.TestCase):
         expected = sampler.model.context_joules_per_token_squared * 8192 * ep.totals()["decode_tokens"]
         contrast = sampled_gross(shifted, changed, sampler.model.idle_watts) - sampled_gross(
             ep, original, sampler.model.idle_watts)
-        # About 1 J is the stated M3 attribution limit; the designed synthetic
-        # contrast must exceed it. No hardware detectability is inferred here.
-        self.assertGreater(expected, 1.0)
+        # Conservative sensor-design bar for a difference of integrated traces:
+        # sum absolute per-sample 1-sigma noise and half-quantum over BOTH traces.
+        # This intentionally assumes no averaging down: 2*N*dt*(sigma + quantum/2).
+        # It is a configurable synthetic effect-size check, not a confidence bound.
+        sensor = SyntheticPowerSampler()
+        sensor_bar = (2 * len(original.t_ns) * sensor.interval_ns / _NS *
+                      (sensor.noise_watts + sensor.quantum_watts / 2))
+        self.assertGreater(expected, sensor_bar)
         # No printed uncertainty: use the brief's 1e-6 relative agreement rule.
         self.assertTrue(math.isclose(contrast, expected, rel_tol=1e-6))
         # Isolate hidden decode at the same timings/context/visible workload.
@@ -96,11 +101,10 @@ class MockWorldTests(unittest.TestCase):
             without_hidden, without_hidden_trace, sampler.model.idle_watts)
         hidden_energy = (sampler.model.decode_joules_per_token +
                         sampler.model.context_joules_per_token_squared * side.context_tokens) * side.hidden_tokens
-        # The 1 J bar is the brief's M3 attribution limit, used here only as a
-        # designed synthetic effect size; it is not the GPU sensor's limit.
-        self.assertGreater(hidden_energy, 1.0)
-        # Same 1 J synthetic effect-size bar, now applied to the measured contrast.
-        self.assertGreater(isolated, 1.0)
+        # Same two-trace sensor-derived bound; the isolated physical effect and
+        # sampled contrast must each clear it, so absent hidden work fails.
+        self.assertGreater(hidden_energy, sensor_bar)
+        self.assertGreater(isolated, sensor_bar)
         # No measurement uncertainty: brief's 1e-6 relative conservation rule.
         self.assertTrue(math.isclose(isolated, hidden_energy, rel_tol=1e-6))
         print("ISOLATED_HIDDEN_JOULES", isolated, "CONTEXT_SHIFT_JOULES", contrast)
@@ -189,6 +193,50 @@ class MockWorldTests(unittest.TestCase):
         trace = sampler.stop()[0]
         self.assertEqual(trace.t_ns, ())
         self.assertTrue(trace.notes)
+
+
+    def test_prompt_usage_counts_received_messages_and_matching_cache_prefix(self):
+        captured = []
+        class Capture(ScriptedEndpoint):
+            def chat(self, messages, **kwargs):
+                result = super().chat(messages, **kwargs)
+                captured.append((list(messages), result))
+                return result
+        ep, _, task, endpoint, _ = inbox_episode(endpoint_class=Capture)
+        prior = None
+        schema_tokens = len(to_json(list(task.tool_schemas())).split())
+        for messages, result in captured:
+            # Independent whitespace-token arithmetic, with explicitly configured
+            # role-envelope and cache-block assumptions. Integers compare exactly.
+            token_sizes = [endpoint.config.message_overhead_tokens + len(m.content.split()) +
+                           (len(m.name.split()) if m.name else 0) for m in messages]
+            prompt = schema_tokens + sum(token_sizes)
+            common = 0
+            if prior is not None:
+                common = schema_tokens
+                for old, new, size in zip(prior, messages, token_sizes):
+                    if old != new:
+                        break
+                    common += size
+            cached = min(prompt - 1, common // endpoint.config.cache_block_tokens *
+                         endpoint.config.cache_block_tokens)
+            self.assertEqual(result.prompt_tokens, prompt)
+            self.assertEqual(result.cached_prompt_tokens, cached)
+            prior = messages
+        # Re-send generated reasoning as the old history regression did. The mock
+        # must measure its actual prompt impact, while normal history excludes it.
+        messages, correct = captured[7]  # First request after the scripted side turn.
+        wrong_history = list(messages)
+        from joulewise.align.interfaces import ChatMessage
+        position = next(i for i, m in enumerate(wrong_history)
+                        if m.role == "assistant" and "<scratchpad>" in m.content)
+        message = wrong_history[position]
+        reasoning = " ".join(["private"] * endpoint.config.reasoning_tokens)
+        wrong_history[position] = replace(message, content=reasoning + " " + message.content)
+        wrong = ScriptedEndpoint(config=endpoint.config).chat(wrong_history, tools=task.tool_schemas(),
+                      max_tokens=600, temperature=0.0, seed=0)
+        self.assertEqual(wrong.prompt_tokens - correct.prompt_tokens, endpoint.config.reasoning_tokens)
+        self.assertFalse(any("<jw_reasoning>" in m.content for messages, _ in captured for m in messages))
 
 
 if __name__ == "__main__":
