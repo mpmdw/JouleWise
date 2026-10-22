@@ -916,6 +916,15 @@ class FixArithmeticTests(unittest.TestCase):
         second, _ = runner_matrix(matrix, **kwargs)
         self.assertEqual(flags, ("runner_adapter_provisional",))
         self.assertNotEqual(first["matrix_id"], second["matrix_id"])
+        # Runner protocol hashes exactly these coordinates and matrix ID. Compare
+        # integer identities/hashes exactly, not with a numerical tolerance.
+        from joulewise.align.records import to_json
+        def ids(spec):
+            return {hashlib.sha256(to_json([task["task_pair"], condition,
+                                           "same-endpoint", seed, spec["matrix_id"]]).encode()).hexdigest()
+                    for task in spec["task_pairs"] for condition in spec["conditions"]
+                    for seed in spec["seeds"]}
+        self.assertTrue(ids(first).isdisjoint(ids(second)))
         self.assertEqual(first["endpoints"][0]["config"], {})
         self.assertEqual(first["samplers"][0]["config"], {})
         self.assertEqual(first["task_pairs"][0]["config"], {})

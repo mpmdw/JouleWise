@@ -38,6 +38,7 @@ class Estimate:
     generation_wall_seconds: float | None = None
     calibration_basis: dict[str, Any] = field(default_factory=dict)
     layouts: tuple[dict[str, Any], ...] = ()
+    layout_alternatives: tuple[dict[str, Any], ...] = ()
 
 
 def work_counts(matrix: Mapping[str, Any]) -> dict[str, tuple[int, int]]:
@@ -140,6 +141,11 @@ def estimate(matrix: Mapping[str, Any], gpu_class: str, *,
     gpu, work = matrix["gpu_classes"][gpu_class], matrix["workload"]
     counts = work_counts(matrix)
     layouts = tuple(memory_fit(matrix, gpu_class, m) for m in matrix["models"])
+    alternatives = tuple(
+        {**memory_fit(matrix, gpu_class, {**model, **option}),
+         "checkpoint": option.get("checkpoint", model["id"]),
+         "derivation": option.get("derivation", "")}
+        for model in matrix["models"] for option in model.get("layout_options", ()))
     for layout in layouts:
         if layout["remaining_bytes"] is not None and layout["remaining_bytes"] < 0:
             flags.append("model_bf16_weights_exceed_device_memory:" + layout["model"])
@@ -221,7 +227,7 @@ def estimate(matrix: Mapping[str, Any], gpu_class: str, *,
                     lh * price if lh is not None and price is not None else None,
                     seconds, hours, price, hours * price if hours is not None and price is not None else None,
                     tuple(sorted(set(flags))), len(counts), monitor_hours, monitor_total,
-                    generation_seconds, basis, layouts)
+                    generation_seconds, basis, layouts, alternatives)
 
 
 def printable(result: Estimate) -> dict[str, Any]:
@@ -239,6 +245,7 @@ def printable(result: Estimate) -> dict[str, Any]:
         return display_number(value) if type(value) is float else value
     output["calibration_basis"] = rounded(output["calibration_basis"])
     output["layouts"] = rounded(output["layouts"])
+    output["layout_alternatives"] = rounded(output["layout_alternatives"])
     output["lower_bound_status"] = "available" if result.lower_bound_wall_seconds is not None else "unavailable"
     output["plan_status"] = "available" if result.wall_seconds is not None else "unavailable"
     output["rounding"] = "Two significant digits; lower bounds downward; integer counts/bytes exact."
