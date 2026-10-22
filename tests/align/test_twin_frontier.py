@@ -29,15 +29,40 @@ token value (or one joule value); with n >= 40 episodes spread over five
 conditions that has probability far below 1e-30 per draw, and
 compare_divergence asserts that the lane kept every resample.
 
-Set JW_TWIN_FRONTIER_WORLDS to run more seeded worlds than the default.
+Round 2 (review of lane head 5801e762e) adds:
+- chain worlds: agent episodes simulated at the segment level (prefill, decode,
+  tool wait), written as real records (Turn, ToolCall, MonitorVerdict,
+  PowerTrace, Episode, with a JSON round trip), sampled like NVML (100 ms
+  cadence, mean of the last 25 ms, 4 W read noise, 1 mW quantum) and
+  integrated by trapezoid, idle-subtracted; ConfigRows and per-model
+  divergence pairs come out of that chain.
+- the round-1 fix paths: the lane excludes a row or pair whose read field is
+  invalid and flags it, where the twin raises or (for a NaN half-width)
+  silently treats the cost as fixed; so the lane on the full input is compared
+  with the twin on the valid subset. Negative net joules are kept by both and
+  compared on the full input. Integer-like counts (an __index__ class, numpy
+  when importable) are compared with the twin on plain ints.
+- the kill reading: the twin returns kill = identical (its R5); the lead's
+  ruling for the lane is identical AND at least two valid sizes AND no
+  excluded row. The test checks the lane against that ruling, using the
+  twin's identical.
+
+Set JW_TWIN_FRONTIER_WORLDS (default 12) and JW_TWIN_FRONTIER_CHAIN_WORLDS
+(default 1; each chain world is 1,600 simulated episodes, a few seconds) to
+run more seeded worlds than the default.
 """
 
 from __future__ import annotations
 
+import bisect
+import functools
+import importlib.util
 import math
 import os
 import random
+import statistics
 import unittest
+from dataclasses import replace
 from unittest import mock
 
 try:
@@ -45,11 +70,14 @@ try:
 except ImportError:  # The lane module lives on lane/2026-10-21-align-frontier.
     lane = None
 
+from joulewise.align.records import (Episode, MonitorVerdict, PowerTrace, ToolCall, Turn,
+                                     from_json, to_json)
 from tests.align.twins import frontier_twin as twin
 
 # random.Random.binomialvariate (used by the twin) exists from Python 3.12.
 TWIN_RUNS = hasattr(random.Random, "binomialvariate")
 WORLDS = int(os.environ.get("JW_TWIN_FRONTIER_WORLDS", "12"))
+CHAIN_WORLDS = int(os.environ.get("JW_TWIN_FRONTIER_CHAIN_WORLDS", "1"))
 
 # 4 sigma two-sided normal tail is about 6e-5 per comparison (orchestrator's bar).
 MC_SIGMAS = 4.0
@@ -106,6 +134,22 @@ def mc_bar(se_a: float, se_b: float, reference: float) -> float:
     """
     bar = MC_SIGMAS * math.hypot(se_a, se_b)
     return bar if bar > 0 else plain_bar(reference)
+
+
+def rank_consistent(endpoint: float, other_values, q: float) -> bool:
+    """Is ``endpoint`` a Monte Carlo-consistent q-quantile of the other run's replicates?
+
+    The endpoint's own quantile error and the other run's empirical CDF error at
+    it are each sqrt(q(1-q)/B) in probability, so their combined SE is
+    sqrt(2 q (1-q) / B); the endpoint passes when the other run's CDF interval
+    at it, [P(X < e), P(X <= e)] (an atom gives it width), comes within 4 such
+    SEs of q.
+    """
+    b = len(other_values)
+    below = sum(v < endpoint for v in other_values) / b
+    at_or_below = sum(v <= endpoint for v in other_values) / b
+    bar = MC_SIGMAS * math.sqrt(2 * q * (1 - q) / b)
+    return below - bar <= q <= at_or_below + bar
 
 
 def same_nan(a: float, b: float) -> bool:
@@ -203,6 +247,168 @@ def divergence_world(seed: int, n_per_condition: int) -> list[tuple[float, float
     return pairs
 
 
+# Chain world: world parameters (not claims) for an L40S-class whole GPU.
+IDLE_W = 60.0          # idle draw; energies below are idle-subtracted
+NOISE_W = 4.0          # per-reading power noise
+DT_NS = 100_000_000    # NVML power cadence, 100 ms
+WINDOW_NS = 25_000_000  # NVML averages the last 25 ms of every 100 ms
+# Aliasing at each power step: the step falls at a uniform point of a 100 ms
+# period, so its energy error has sd dP * 0.1 s / sqrt(12). The effective dP,
+# 122.5 W, was fitted by simulation (600 episodes, exact segment energy vs
+# trapezoid); with it, (measured - exact) / sigma had sd 0.98 over 300 more.
+ALIAS_W = 122.5
+CHAIN_MODELS = (
+    # name, params_b, decode tok/s, decode W, prefill tok/s, prefill W, token factor
+    ("Qwen3-4B", 4.0, 95.0, 140.0, 6000.0, 220.0, 1.30),
+    ("Qwen3-8B", 8.0, 70.0, 190.0, 4200.0, 260.0, 1.00),
+    ("Qwen3-14B", 14.0, 45.0, 250.0, 2600.0, 290.0, 0.70),
+    ("Falcon-H1-7B-hybrid", 7.0, 120.0, 150.0, 7000.0, 200.0, 1.10),
+)
+CHAIN_CONDITIONS = (("thinking_off", 220), ("thinking_on", 900), ("budget_half", 450),
+                    ("concise", 160), ("random_delete", 700))
+CHAIN_TRIALS = 40
+
+
+def _ns(seconds: float) -> int:
+    return int(round(seconds * 1e9))
+
+
+def _chain_episode(rng, spec, condition, per_turn, trial, caught_count, proportional):
+    """One agent episode -> (Episode after JSON round trip, power-step count)."""
+    name, _params, dec_rate, dec_w, pre_rate, pre_w, factor = spec
+    if proportional:  # every model at 2 J/token, no prefill, no tool waits
+        dec_rate, dec_w = 80.0, 160.0
+    segments, turns = [], []
+    t, context = 0.05, 1800
+    for i in range(rng.randint(8, 24)):
+        decode = max(1, int(rng.gauss(per_turn * factor, 0.35 * per_turn * factor)))
+        prefill = 0 if proportional else int(rng.uniform(150, 1400))
+        start = t
+        if prefill:
+            d = prefill / pre_rate * (1 + context / 32000)
+            segments.append((t, t + d, pre_w))
+            t += d
+        first = t
+        segments.append((t, t + decode / dec_rate, dec_w))
+        t += decode / dec_rate
+        calls = []
+        if not proportional:
+            for _ in range(rng.choice((1, 1, 2))):
+                wait = rng.uniform(0.3, 4.0)  # tool wait at idle
+                calls.append(ToolCall("search", _ns(t), _ns(t + wait), 300, 2400))
+                t += wait
+        turns.append(Turn(i, _ns(start), _ns(t), context, prefill, decode,
+                          first_token_ns=_ns(first), tool_calls=tuple(calls)))
+        context += prefill + decode
+    end = t + 0.05
+    starts = [a for a, _, _ in segments]
+    cumulative = [0.0]
+    for a, b, w in segments:
+        cumulative.append(cumulative[-1] + (b - a) * w)
+
+    def energy_to(x):
+        k = bisect.bisect_right(starts, x) - 1
+        if k < 0:
+            return 0.0
+        a, b, w = segments[k]
+        return cumulative[k] + (min(x, b) - a) * w
+
+    times, values = [], []
+    window = WINDOW_NS / 1e9
+    k = 0
+    while k * DT_NS / 1e9 <= end + DT_NS / 1e9:
+        tk = k * DT_NS / 1e9
+        mean_w = (energy_to(tk) - energy_to(tk - window)) / window
+        times.append(k * DT_NS)
+        values.append(round(IDLE_W + mean_w + rng.gauss(0.0, NOISE_W), 3))  # 1 mW quantum
+        k += 1
+    trace = PowerTrace("nvml_power", "gpu0", "host-monotonic", tuple(times), tuple(values),
+                       "W", DT_NS, averaging_window_ns=WINDOW_NS, duty_fraction=0.25,
+                       resolution=0.001)
+    # Designed monitor scores 87 (caught) and 12 (missed); 50 separates them.
+    verdict = MonitorVerdict("local-monitor", "full", 87.0 if trial < caught_count else 12.0,
+                             "a" * 64)
+    episode = Episode(f"{name}/{condition}/{trial}", "shade/synthetic", "sabotage", name,
+                      "mock:vllm", trial, "host-monotonic", _ns(0.05), _ns(end), tuple(turns),
+                      monitor_verdicts=(verdict,), power_traces=(trace,),
+                      hardware={"idle_w": IDLE_W, "hint_used": True, "synthetic": True})
+    if trial == 0:
+        episode = from_json(Episode, to_json(episode))
+    powers = [0.0]
+    edge = 0.05
+    for a, b, w in segments:
+        if a > edge:
+            powers.append(0.0)
+        powers.append(w)
+        edge = b
+    powers.append(0.0)
+    steps = sum(1 for p, q in zip(powers, powers[1:]) if p != q)
+    return episode, steps
+
+
+def _attribute(episode, steps):
+    """Trapezoid energy inside the episode, idle-subtracted, and its standard uncertainty."""
+    trace = episode.power_traces[0]
+    energy, readings = 0.0, 0
+    for a, b, pa, pb in zip(trace.t_ns, trace.t_ns[1:], trace.values, trace.values[1:]):
+        lo, hi = max(a, episode.start_ns), min(b, episode.end_ns)
+        if hi <= lo:
+            continue
+        energy += (b - a) / 1e9 * (pa + pb) / 2 * (hi - lo) / (b - a)
+        readings += 1
+    energy -= IDLE_W * (episode.end_ns - episode.start_ns) / 1e9
+    sigma = math.hypot(math.sqrt(readings) * NOISE_W * DT_NS / 1e9,
+                       math.sqrt(steps) * ALIAS_W * (DT_NS / 1e9) / math.sqrt(12))
+    return energy, sigma
+
+
+@functools.lru_cache(maxsize=None)
+def chain_world(seed: int, proportional: bool = False):
+    """4 models x 5 conditions x 40 episodes through the records chain.
+
+    Returns (raw ConfigRow tuples, {model: [(decode_tokens, joules, sigma)]}).
+    Row half-width is the standard uncertainty of the mean (sd / sqrt(40)).
+    Catch counts are designed per config (8-36 of 40). With proportional=True
+    every model spends 2 J per decode token and nothing else, so the joule and
+    token frontiers must coincide.
+    """
+    rng = random.Random(30_000 + seed)
+    raw, pairs = [], {}
+    for spec in CHAIN_MODELS:
+        name, params = spec[0], spec[1]
+        pairs[name] = []
+        for condition, per_turn in CHAIN_CONDITIONS:
+            caught_design = rng.randrange(8, 37)
+            energies, tokens, caught = [], [], 0
+            for trial in range(CHAIN_TRIALS):
+                episode, steps = _chain_episode(rng, spec, condition, per_turn, trial,
+                                                caught_design, proportional)
+                energy, sigma = _attribute(episode, steps)
+                decode = episode.totals()["decode_tokens"]
+                caught += episode.monitor_verdicts[0].suspicion >= 50.0
+                energies.append(energy)
+                tokens.append(decode)
+                pairs[name].append((float(decode), energy, sigma))
+            raw.append((f"{name}/{condition}", name, params, CHAIN_TRIALS, caught,
+                        statistics.fmean(energies),
+                        statistics.stdev(energies) / math.sqrt(CHAIN_TRIALS),
+                        statistics.fmean(tokens)))
+    return raw, pairs
+
+
+class IndexInt:
+    """An integer-like count that is not a Python int (a numpy-scalar stand-in)."""
+
+    def __init__(self, value):
+        self.value = value
+
+    def __index__(self):
+        return self.value
+
+    def __float__(self):
+        return float(self.value)
+
+
 # ------------------------------------------------------------------ tests
 
 @unittest.skipUnless(lane is not None, "lane module joulewise.align.frontier not on this branch")
@@ -211,6 +417,22 @@ class FrontierTwinAgreement(unittest.TestCase):
     def rows_for(self, raw):
         return ([lane.ConfigRow(*r) for r in raw], [twin.ConfigRow(*r) for r in raw])
 
+    def compare_frontiers(self, lane_rows, twin_rows, label):
+        for cost in ("joules", "tokens"):
+            got = lane.pareto_frontier(lane_rows, cost=cost)
+            # Ordered id lists: exact (ids are identities, not measurements).
+            self.assertEqual(list(got), twin.pareto_frontier(twin_rows, cost=cost), (label, cost))
+
+    def compare_agreement(self, a, b, label):
+        self.assertEqual(set(a["joules_frontier"]), set(b["joule_frontier"]), label)
+        self.assertEqual(set(a["tokens_frontier"]), set(b["token_frontier"]), label)
+        self.assertEqual(set(a["symmetric_difference"]), set(b["symmetric_difference"]), label)
+        self.assertIs(a["identical"], b["identical"], label)
+        if not same_nan(a["kendall_tau"], b["kendall_tau"]):
+            # Kendall tau has no printed uncertainty: plain 1e-6 bar.
+            self.assertLessEqual(abs(a["kendall_tau"] - b["kendall_tau"]),
+                                 plain_bar(b["kendall_tau"]), label)
+
     def test_pareto_frontiers_and_agreement(self):
         kills = differs = 0
         # At least 10 worlds, so seeds 4 and 9 (proportional, identical
@@ -218,21 +440,12 @@ class FrontierTwinAgreement(unittest.TestCase):
         for seed in range(max(WORLDS, 10)):
             lane_rows, twin_rows = self.rows_for(config_world(seed))
             for cost in ("joules", "tokens"):
-                got = lane.pareto_frontier(lane_rows, cost=cost)
-                self.assertFalse(getattr(got, "flags", ()), (seed, cost))
-                # Ordered id lists: exact (ids are identities, not measurements).
-                self.assertEqual(list(got), twin.pareto_frontier(twin_rows, cost=cost),
-                                 (seed, cost))
+                self.assertFalse(getattr(lane.pareto_frontier(lane_rows, cost=cost), "flags", ()))
+            self.compare_frontiers(lane_rows, twin_rows, seed)
             a, b = lane.frontier_agreement(lane_rows), twin.frontier_agreement(twin_rows)
-            self.assertEqual(set(a["joules_frontier"]), set(b["joule_frontier"]), seed)
-            self.assertEqual(set(a["tokens_frontier"]), set(b["token_frontier"]), seed)
-            self.assertEqual(set(a["symmetric_difference"]), set(b["symmetric_difference"]), seed)
-            self.assertIs(a["identical"], b["identical"])
+            self.compare_agreement(a, b, seed)
+            # Four sizes, no exclusion: the lead's kill reading equals the twin's.
             self.assertIs(a["kill_condition_met"], b["kill_condition_met"])
-            if not same_nan(a["kendall_tau"], b["kendall_tau"]):
-                # Kendall tau has no printed uncertainty: plain 1e-6 bar.
-                self.assertLessEqual(abs(a["kendall_tau"] - b["kendall_tau"]),
-                                     plain_bar(b["kendall_tau"]), seed)
             kills += b["kill_condition_met"]
             differs += not b["identical"]
         # The worlds must exercise both outcomes of the kill condition.
@@ -281,7 +494,7 @@ class FrontierTwinAgreement(unittest.TestCase):
         self.assertEqual(a.n_boot, twin.default_n_boot())
         self.compare_probabilities(a, b, twin.default_n_boot(), "default n_boot")
 
-    def run_divergence(self, pairs, n_boot, seed):
+    def run_divergence(self, lane_pairs, twin_pairs, n_boot, seed):
         captured = {"lane": [], "twin": []}
 
         def spy(store, real):
@@ -292,13 +505,18 @@ class FrontierTwinAgreement(unittest.TestCase):
 
         with mock.patch.object(lane, "_percentile", spy(captured["lane"], lane._percentile)), \
                 mock.patch.object(twin, "percentile", spy(captured["twin"], twin.percentile)):
-            a = lane.joule_token_divergence(pairs, n_boot=n_boot, seed=seed)
-            b = twin.joule_token_divergence(pairs, n_boot=n_boot, seed=seed + 7919)
+            a = lane.joule_token_divergence(lane_pairs, n_boot=n_boot, seed=seed)
+            b = twin.joule_token_divergence(twin_pairs, n_boot=n_boot, seed=seed + 7919)
         return a, b, captured
 
-    def compare_divergence(self, pairs, n_boot, seed):
-        a, b, captured = self.run_divergence(pairs, n_boot, seed)
-        self.assertFalse(a["flags"], seed)
+    def compare_divergence(self, pairs, n_boot, seed, *, twin_pairs=None, flags=()):
+        """Lane on ``pairs`` against twin on ``twin_pairs`` (default: the same pairs).
+
+        ``flags`` are the flags the lane must raise (and no others).
+        """
+        a, b, captured = self.run_divergence(pairs, pairs if twin_pairs is None else twin_pairs,
+                                             n_boot, seed)
+        self.assertEqual(tuple(a["flags"]), tuple(flags), seed)
         self.assertEqual((a["n_boot"], a["n_pairs"]), (b["n_boot"], b["n"]))
         self.assertEqual(a["valid_residual_resamples"], a["n_boot"])
         # The median half-width has no printed uncertainty: plain bar.
@@ -325,7 +543,14 @@ class FrontierTwinAgreement(unittest.TestCase):
             self.assertLessEqual(abs(qa - qb), plain_bar(qb))
             bar = mc_bar(quantile_se(va, qa), quantile_se(vb, qb), eb)
             ses.append(bar)
-            self.assertLessEqual(abs(ea - eb), bar, (seed, qa, ea, eb))
+            if abs(ea - eb) > bar:
+                # An atom at the endpoint (rho* = 1 exactly in about 3% of the
+                # resamples of a near-monotone world) makes the order-statistic SE
+                # zero for a run whose bracket sits inside the atom, so the value
+                # bar collapses. Apply the same 4-combined-SE rule in probability
+                # space, where a quantile's Monte Carlo error lives.
+                self.assertTrue(rank_consistent(ea, vb, qb) and rank_consistent(eb, va, qa),
+                                (seed, qa, ea, eb, bar))
         # The gate: exact unless both lower ends sit within the MC bar of the
         # median half-width (then either answer is Monte Carlo-consistent).
         if a["diverges"] is not b["diverges"]:
@@ -349,6 +574,140 @@ class FrontierTwinAgreement(unittest.TestCase):
         pairs = divergence_world(2, 40)  # a world with a 2x half-width second source
         a, b = self.compare_divergence(pairs, None, 0)
         self.assertEqual(a["n_boot"], twin.default_n_boot())
+
+    # -------------------------------------------------------------- round 2
+
+    def test_chain_world_frontiers_agreement_and_cheapest(self):
+        identical = {}
+        n_boot = 4000
+        for seed, proportional in ((s, p) for s in range(CHAIN_WORLDS) for p in (False, True)):
+            raw, _ = chain_world(seed, proportional)
+            lane_rows, twin_rows = self.rows_for(raw)
+            self.compare_frontiers(lane_rows, twin_rows, ("chain", proportional))
+            a, b = lane.frontier_agreement(lane_rows), twin.frontier_agreement(twin_rows)
+            self.compare_agreement(a, b, ("chain", proportional))
+            self.assertIs(a["kill_condition_met"], b["identical"])  # four sizes, no exclusion
+            identical[proportional] = b["identical"]
+            for target in (0.5, 0.6, 0.75):
+                for cost in ("joules", "tokens"):
+                    pa = lane.cheapest_reaching(lane_rows, target, cost=cost, n_boot=n_boot,
+                                                seed=11)
+                    pb = twin.cheapest_reaching(twin_rows, target, cost=cost, n_boot=n_boot,
+                                                seed=11 + 7919)
+                    self.compare_probabilities(pa, pb, n_boot,
+                                               ("chain", seed, proportional, target, cost))
+            # Distinct J/token per model must separate the frontiers; equal J/token must not.
+            self.assertIs(identical[proportional], proportional, seed)
+
+    def test_chain_world_divergence(self):
+        opened = closed = 0
+        for seed, proportional in ((s, p) for s in range(CHAIN_WORLDS) for p in (False, True)):
+            _, pairs = chain_world(seed, proportional)
+            for index, (model, model_pairs) in enumerate(sorted(pairs.items())):
+                a, b = self.compare_divergence(model_pairs, n_boot=1000, seed=index)
+                opened += b["diverges"]
+                closed += not b["diverges"]
+        # Prefill energy is a second source the decode-token fit cannot see
+        # (opens); the decode-only world has only measurement error (stays shut).
+        self.assertGreater(opened, 0)
+        self.assertGreater(closed, 0)
+
+    def test_excluded_rows_match_twin_on_valid_subset(self):
+        n_boot = 4000
+        for seed in range(min(WORLDS, 6)):
+            raw = config_world(seed)
+            lane_rows, twin_rows = self.rows_for(raw)
+            # A NaN energy (a failed attribution) on one row.
+            nan_j = list(lane_rows)
+            nan_j[3] = replace(nan_j[3], joules_mean=math.nan)
+            subset = twin_rows[:3] + twin_rows[4:]
+            # The token frontier does not read joules: full input on both sides.
+            self.assertEqual(list(lane.pareto_frontier(nan_j, cost="tokens")),
+                             twin.pareto_frontier(twin_rows, cost="tokens"))
+            self.assertEqual(list(lane.pareto_frontier(nan_j, cost="joules")),
+                             twin.pareto_frontier(subset, cost="joules"))
+            a = lane.frontier_agreement(nan_j)
+            self.compare_agreement(a, twin.frontier_agreement(subset), (seed, "nan joules"))
+            self.assertIs(a["kill_condition_met"], False)  # an excluded row never kills
+            self.compare_probabilities(
+                lane.cheapest_reaching(nan_j, 0.6, cost="joules", n_boot=n_boot, seed=seed),
+                twin.cheapest_reaching(subset, 0.6, cost="joules", n_boot=n_boot, seed=seed + 1),
+                n_boot, (seed, "nan joules", "joules"))
+            # A NaN half-width: the twin would treat the cost as fixed, the lane
+            # excludes the row for cost=joules and keeps it for cost=tokens.
+            nan_hw = list(lane_rows)
+            nan_hw[5] = replace(nan_hw[5], joules_half_width=math.nan)
+            subset = twin_rows[:5] + twin_rows[6:]
+            self.compare_probabilities(
+                lane.cheapest_reaching(nan_hw, 0.6, cost="joules", n_boot=n_boot, seed=seed),
+                twin.cheapest_reaching(subset, 0.6, cost="joules", n_boot=n_boot, seed=seed + 1),
+                n_boot, (seed, "nan half-width", "joules"))
+            self.compare_probabilities(
+                lane.cheapest_reaching(nan_hw, 0.6, cost="tokens", n_boot=n_boot, seed=seed),
+                twin.cheapest_reaching(twin_rows, 0.6, cost="tokens", n_boot=n_boot, seed=seed + 1),
+                n_boot, (seed, "nan half-width", "tokens"))
+            # A duplicated id: the lane drops every copy, the twin refuses; compare
+            # against the twin without that id.
+            # The duplicated row is a joule-frontier member, so keeping it would show.
+            on_frontier = twin.pareto_frontier(twin_rows, cost="joules")[0]
+            k = next(i for i, r in enumerate(twin_rows) if r.config_id == on_frontier)
+            duplicated = lane_rows + [lane_rows[k]]
+            subset = twin_rows[:k] + twin_rows[k + 1:]
+            self.compare_frontiers(duplicated, subset, (seed, "duplicate"))
+            # Negative idle-subtracted energy is kept by both: full input.
+            negative = list(lane_rows)
+            negative[9] = replace(negative[9], joules_mean=-0.4)
+            twin_negative = list(twin_rows)
+            twin_negative[9] = replace(twin_negative[9], joules_mean=-0.4)
+            self.compare_frontiers(negative, twin_negative, (seed, "negative"))
+            self.compare_agreement(lane.frontier_agreement(negative),
+                                   twin.frontier_agreement(twin_negative), (seed, "negative"))
+            self.compare_probabilities(
+                lane.cheapest_reaching(negative, 0.6, cost="joules", n_boot=n_boot, seed=seed),
+                twin.cheapest_reaching(twin_negative, 0.6, cost="joules", n_boot=n_boot,
+                                       seed=seed + 1),
+                n_boot, (seed, "negative", "joules"))
+
+    def test_integer_like_counts(self):
+        kinds = [IndexInt]
+        if importlib.util.find_spec("numpy") is not None:
+            import numpy as np  # optional; the stdlib stand-in always runs
+            kinds.append(np.int64)
+        raw, target = contested_world(3)
+        lane_rows, twin_rows = self.rows_for(raw)
+        for kind in kinds:
+            rows = [replace(r, trials=kind(r.trials), caught=kind(r.caught)) for r in lane_rows]
+            self.compare_frontiers(rows, twin_rows, kind.__name__)
+            for cost in ("joules", "tokens"):
+                self.compare_probabilities(
+                    lane.cheapest_reaching(rows, target, cost=cost, n_boot=4000, seed=5),
+                    twin.cheapest_reaching(twin_rows, target, cost=cost, n_boot=4000, seed=6),
+                    4000, (kind.__name__, cost))
+
+    def test_kill_needs_two_sizes(self):
+        for seed in (4, 9):  # proportional worlds: frontiers identical
+            raw = [r[:2] + (8.0,) + r[3:] for r in config_world(seed)]  # one size for all
+            lane_rows, twin_rows = self.rows_for(raw)
+            a, b = lane.frontier_agreement(lane_rows), twin.frontier_agreement(twin_rows)
+            self.compare_agreement(a, b, seed)
+            self.assertIs(b["identical"], True)
+            # The lead's reading: identical frontiers across ONE size cannot kill.
+            self.assertIs(a["kill_condition_met"], False)
+            self.assertIn("single_model_size", a["flags"])
+
+    def test_divergence_excluded_and_negative_pairs(self):
+        _, chain_pairs = chain_world(0, False)
+        for index, pairs in enumerate((divergence_world(1, 40), chain_pairs["Qwen3-8B"])):
+            missing = list(pairs)
+            missing[17] = (missing[17][0], math.nan, math.nan)  # trace began after the episode
+            self.compare_divergence(missing, 1000, index, twin_pairs=pairs[:17] + pairs[18:],
+                                    flags=("invalid_pair:17", "excluded_pair:17",
+                                           f"pairs_used:{len(pairs) - 1}/{len(pairs)}"))
+            negative = list(pairs)
+            negative[5] = (negative[5][0], -0.4, negative[5][2])
+            self.compare_divergence(negative, 1000, index,
+                                    flags=tuple(f"negative_joules_pair:{i}" for i in sorted(
+                                        {5} | {i for i, p in enumerate(pairs) if p[1] < 0})))
 
 
 if __name__ == "__main__":
