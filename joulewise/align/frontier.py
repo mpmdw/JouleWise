@@ -383,7 +383,7 @@ def _percentile(values: Sequence[float], fraction: float) -> float:
 def joule_token_divergence(
     pairs: Sequence[tuple[float, float, float]], *, level: float = 0.95,
     n_boot: int | None = None, seed: int = 0,
-    uncertainty_kind: str = "standard_uncertainty",
+    uncertainty_kind: str,
 ) -> dict[str, object]:
     """Fixed-model Spearman interval and OLS residual-energy reopening gate.
 
@@ -392,8 +392,8 @@ def joule_token_divergence(
     Residual SD = sqrt(SSE/(n-2)), from an OLS slope plus intercept.
     Both intervals are equal-tailed percentile intervals at requested level.
     The gate is strictly residual_sd_ci[0] > median_half_width, in joules;
-    rho is a diagnostic, not an additional threshold. uncertainty_kind defaults
-    to standard_uncertainty. For additive_bound, B_i >= SD_i implies
+    rho is a diagnostic, not an additional threshold. uncertainty_kind is a
+    required keyword-only argument. For additive_bound, B_i >= SD_i implies
     median(B) >= median(SD): a positive gate still establishes divergence and
     carries bound_read_as_sd. A failed bound gate cannot establish absence:
     return None with divergence_undetermined_bound_as_sd. There is no silent

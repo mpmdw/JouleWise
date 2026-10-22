@@ -399,12 +399,27 @@ class TwinAgreement(unittest.TestCase):
             self.assertEqual(le.method.split(";")[0], te.method.split(";")[0], label)
             if compare_hw:
                 from tests.align.test_twin_attribution import knot_interpolation_bound
-                expected = (te.half_width_j + knot_interpolation_bound(trace,mapping,a,b) + twin_interpolation(trace, mapping, a, b)
-                            + c2_terms(trace, mapping, a, b) + reset_term(trace, mapping, a, b))
-                if trace.source == "powermetrics":
-                    # D-078 clause 11: attribution limit about 1 J; apply the minimum
-                    # after summing, as the lane and budget.energy do.
-                    expected = max(1.0, expected)
+                # Rebuild each single-query width independently. The twin's
+                # total now includes tile bounds, so start from its public
+                # single-query primitive rather than widening that total twice.
+                def query_width(start, end):
+                    base = twin.trace_energy(trace, start, end, mapping=mapping,
+                                             idle_watts=idle)
+                    width = (base.half_width_j
+                            + knot_interpolation_bound(trace, mapping, start, end)
+                            + twin_interpolation(trace, mapping, start, end)
+                            + c2_terms(trace, mapping, start, end)
+                            + reset_term(trace, mapping, start, end))
+                    if trace.source == "powermetrics":
+                        # D-078 clause 11: attribution limit about 1 J; the lane
+                        # applies it to every query on this head.
+                        width = max(1.0, width)
+                    return width
+
+                expected = query_width(a, b)
+                if le is mine.total and trace.unit == "W" and trace.averaging_window_ns is None:
+                    expected = max(expected, math.fsum(query_width(s.start_ns, s.end_ns)
+                                                      for s in other.segments))
                 if math.isinf(expected):
                     self.assertTrue(math.isinf(le.half_width_j), f"{label} lane half-width finite")
                 else:

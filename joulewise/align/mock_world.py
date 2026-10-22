@@ -464,6 +464,7 @@ class SyntheticPowerSampler:
                            self.interval_ns, window, min(1.0, window / self.interval_ns),
                            self.quantum_watts, to_json({
                                "flags": ["supply.battery_assist"] if self.supply_limit else [],
+                               "window_timing_half_width_ns": [0] * len(times),
                                "notes": notes,
                            })),)
 

@@ -624,8 +624,11 @@ def min_detectable_hidden_decode_tokens(
     intercept. Nonpositive e gives infinity above the false-positive power;
     when context and hidden-token energy are identified, requested power <= alpha
     needs no hidden work. Ceil H for a token budget. With additive_bound,
-    this is a flagged conservative upper value under the stated normal model
-    and SD<=B assumption; print it beside the calibrated function's value.
+    reading turn bounds as SDs inflates fitted measurement variance and makes
+    Paule-Mandel sigma2 too small. Replay detection at target 0.80 was 0.8705
+    with an episode bound equal to the linear sum of turn bounds, but 0.6975
+    and 0.7665 with an independent 2 J episode bound. This is uncalibrated,
+    not a guaranteed upper value; print it beside H_cal.
     It is not calibrated power, and no B/sqrt(3) conversion is justified.
     An unidentified context-decode coefficient contributes zero with its flag;
     an unidentified decode coefficient makes hidden-token energy undefined.
@@ -633,7 +636,7 @@ def min_detectable_hidden_decode_tokens(
     prediction = predict_episode(model, logged_rows)
     flags = list(_flags(prediction)) + _uncertainty_flags(uncertainty_kind)
     if "uncertainty.bound_read_as_sd" in flags:
-        flags.extend(("uncertainty.normal_theory_conservative_upper_value",
+        flags.extend(("uncertainty.normal_theory_uncalibrated",
                       "uncertainty.print_beside_calibrated_min_detectable_hidden_decode_tokens"))
     if (not _finite(alpha) or not 0 < alpha < 1
             or not _finite(power) or not 0 < power < 1):

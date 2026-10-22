@@ -201,6 +201,13 @@ def divergence_world(seed, *, extra_sd=0.0, n=160, half_width=1.0):
 
 
 class DivergenceTests(unittest.TestCase):
+    def test_uncertainty_kind_is_required_keyword_only(self):
+        pairs = [(1., 1., 1.), (2., 2., 1.), (3., 3., 1.)]
+        with self.assertRaises(TypeError):
+            joule_token_divergence(pairs)
+        with self.assertRaises(TypeError):
+            joule_token_divergence(pairs, "standard_uncertainty")
+
     def test_measurement_noise_at_nominal_rate_across_seeds(self):
         seeds, level, n_boot = 40, 0.95, 399
         # The gate uses the lower tail of a central 95% interval: nominal
@@ -214,7 +221,7 @@ class DivergenceTests(unittest.TestCase):
                 maximum = k
                 break
         openings = sum(joule_token_divergence(divergence_world(seed), level=level,
-                                             n_boot=n_boot, seed=seed)["diverges"]
+                                             n_boot=n_boot, seed=seed, uncertainty_kind="standard_uncertainty")["diverges"]
                        for seed in range(seeds))
         self.assertLessEqual(openings, maximum)
         # No positive lower bound is justified with 40 null worlds:
@@ -226,18 +233,18 @@ class DivergenceTests(unittest.TestCase):
         # Extra source SD=8 J is eight times the stated 1 J attribution
         # floor: sqrt(1^2+8^2) is far outside the noise-only interval.
         pairs = divergence_world(12, extra_sd=8.0)
-        result = joule_token_divergence(pairs, n_boot=999, seed=5)
+        result = joule_token_divergence(pairs, n_boot=999, seed=5, uncertainty_kind="standard_uncertainty")
         self.assertTrue(result["diverges"])
         self.assertGreater(result["residual_sd_ci"][0], result["median_half_width"])
         self.assertLess(result["residual_sd_ci"][0], result["residual_sd"])
         self.assertGreater(result["residual_sd_ci"][1], result["residual_sd"])
         self.assertLessEqual(result["spearman_ci"][0], result["spearman_rho"])
         self.assertGreaterEqual(result["spearman_ci"][1], result["spearman_rho"])
-        self.assertEqual(result, joule_token_divergence(pairs, n_boot=999, seed=5))
+        self.assertEqual(result, joule_token_divergence(pairs, n_boot=999, seed=5, uncertainty_kind="standard_uncertainty"))
 
     def test_exact_linear_and_default_bootstrap_size(self):
         pairs = [(float(k * 128), float(400 + k * 192), 1.0) for k in range(1, 13)]
-        result = joule_token_divergence(pairs)
+        result = joule_token_divergence(pairs, uncertainty_kind="standard_uncertainty")
         self.assertFalse(result["diverges"])
         self.assertEqual(result["n_boot"], 10001)
         # Agreement bar=.001 J (0.1% of the 1 J floor), above 1e6 ulps
@@ -250,7 +257,7 @@ class DivergenceTests(unittest.TestCase):
         # Centered x=(-1,0,1), centered y=(1,-2,1): slope=0,
         # SSE=6 and n-2=1, so residual SD=sqrt(6).
         pairs = [(100.0, 12.0, 1.0), (200.0, 9.0, 1.0), (300.0, 12.0, 1.0)]
-        result = joule_token_divergence(pairs, n_boot=99)
+        result = joule_token_divergence(pairs, n_boot=99, uncertainty_kind="standard_uncertainty")
         # .001 J is 0.1% of the 1 J width, between round-off and 1%.
         self.assertLess(abs(result["residual_sd"] - math.sqrt(6)), 0.001)
         # Tied energy ranks (2.5,1,2.5) are orthogonal to (1,2,3).
@@ -264,11 +271,11 @@ class DivergenceTests(unittest.TestCase):
                               ([(1, 2, 1)] * 3, {"level": 1.0}),
                               ([(1, 2, 1)] * 3, {"n_boot": 0})):
             result = joule_token_divergence(pairs, n_boot=kwargs.get("n_boot", 10),
-                                           level=kwargs.get("level", 0.95))
+                                           level=kwargs.get("level", 0.95), uncertainty_kind="standard_uncertainty")
             self.assertTrue(result["flags"])
             self.assertIsNone(result["diverges"])
         result = joule_token_divergence([(1000, 1000 + i, 1) for i in range(20)],
-                                       n_boot=99)
+                                       n_boot=99, uncertainty_kind="standard_uncertainty")
         self.assertIn("unidentified_ols", result["flags"])
         self.assertIsNone(result["diverges"])
 
@@ -367,7 +374,7 @@ class ProductionWorldTests(unittest.TestCase):
         self.assertTrue(math.isclose(math.fsum(probabilities.values())
                                      + probabilities.no_reach_probability, 1.0, rel_tol=1e-6))
         for model, values in pairs.items():
-            gate = joule_token_divergence(values, n_boot=199, seed=7)
+            gate = joule_token_divergence(values, n_boot=199, seed=7, uncertainty_kind="standard_uncertainty")
             self.assertEqual(gate["diverges"], model == "Jamba-12B-hybrid-attention")
             if model == "Jamba-12B-hybrid-attention":
                 self.assertGreater(gate["residual_sd_ci"][0], gate["median_half_width"])
@@ -390,7 +397,7 @@ class ProductionWorldTests(unittest.TestCase):
         probabilities = cheapest_reaching(rows, 0.75, cost="tokens", n_boot=999, seed=11)
         self.assertIn("token_cost_uncertainty_unavailable", probabilities.flags)
         for values in pairs.values():
-            self.assertFalse(joule_token_divergence(values, n_boot=199, seed=7)["diverges"])
+            self.assertFalse(joule_token_divergence(values, n_boot=199, seed=7, uncertainty_kind="standard_uncertainty")["diverges"])
 
 
 if __name__ == "__main__":

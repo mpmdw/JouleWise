@@ -300,8 +300,11 @@ class ProductionWorldsTest(unittest.TestCase):
                     self.assertGreater(clearance, 0.0)
             exact_total = truth.integral(0, record.end_ns - ORIGIN)
             total_inside += abs(result.total.joules - exact_total) <= result.total.half_width_j
+            # Historical single-query readings must not inherit the new
+            # episode-only sum of point-segment bounds.
+            single_query = reconstruction.energy(record.start_ns, record.end_ns, 0.0)
             for name, half_width in reading_widths(
-                    reconstruction, result.total, record.start_ns, record.end_ns).items():
+                    reconstruction, single_query, record.start_ns, record.end_ns).items():
                 reading_totals[name] += abs(result.total.joules - exact_total) <= half_width
                 total_widths[name].append(half_width)
             values = [s.energy.joules for s in result.segments]
@@ -474,8 +477,14 @@ class ProductionWorldsTest(unittest.TestCase):
                 for a, b, prepared in intervals:
                     queried = trace_energy(record.power_traces[0], a, b, mapping=clock)
                     for reference in (prepared, eager.energy(a, b, 0.0)):
+                        query_width = queried.half_width_j
+                        if (reference is result.total and sensor.source != "nvml_energy"
+                                and sensor.window_ns is None):
+                            query_width = max(query_width, math.fsum(trace_energy(
+                                record.power_traces[0], s.start_ns, s.end_ns, mapping=clock
+                            ).half_width_j for s in result.segments))
                         for actual, expected in ((queried.joules, reference.joules),
-                                                 (queried.half_width_j, reference.half_width_j)):
+                                                 (query_width, reference.half_width_j)):
                             # Agreement is 1e-6 relative, capped at 1% of the
                             # smallest printed width, with a million-ulp floor.
                             scale = max(abs(actual), abs(expected))

@@ -616,6 +616,8 @@ def attribute_episode(
     Missing or ambiguous trace/mapping selection is flagged. For malformed
     overlapping turns/calls, earlier-starting intervals own shared time, with
     tools taking precedence over model phases; no time is counted twice.
+    Point W totals use the larger of the single-query bound and summed
+    segment bounds; windowed W and counter totals keep their own query bound.
     """
     flags = list(episode.flags)
     traces = [trace for trace in episode.power_traces
@@ -657,6 +659,12 @@ def attribute_episode(
     total = estimate(episode.start_ns, episode.end_ns)
     segments = tuple(SegmentEnergy(turn, kind, start, end, estimate(start, end))
                      for turn, kind, start, end in _segments(episode, flags))
+    if not reconstruction.counter and reconstruction.window is None:
+        # Point W reconstruction (including a flagged invalid window).
+        # Interior phase edges can hide point-sample trapezoid error even
+        # when the episode endpoints have no hold-versus-line sensitivity.
+        total = EnergyEstimate(total.joules, max(total.half_width_j, math.fsum(
+            segment.energy.half_width_j for segment in segments)), total.method, total.flags)
     flags.extend(total.flags)
     for segment in segments:
         flags.extend(segment.energy.flags)

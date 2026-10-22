@@ -375,8 +375,15 @@ def twin_estimate_energy(
             near = within[:2]+beyond[-1:] if edge == 0 else within[-2:]+beyond[:1]
             selected.extend(item[2] for item in near)
         edge_ranges.append(max(selected)-min(selected) if selected else reading_range)
-    boundary_bound = math.fsum(float(weight)*item.boundary_error
-                               for weight,item in zip(auxiliary,readings))
+    deconvolution_bound = math.fsum(float(weight)*item.boundary_error
+                                   for weight,item in zip(auxiliary,readings))
+    observed_boundary_bound = math.fsum(
+        float(weight) * (1 - Fraction(min(item.right, duration)-max(item.left, 0),
+                                     item.right-item.left)) * max(
+            edge_ranges[0] if item.left < 0 else 0.0,
+            edge_ranges[1] if item.right > duration else 0.0)
+        for weight, item in zip(auxiliary, readings))
+    boundary_bound = max(deconvolution_bound, observed_boundary_bound)
     timing_bound = timing_area*reading_range
     return TwinEstimate(
         energy, spread + quantum + center_shift + coverage_bound + boundary_bound
@@ -528,7 +535,10 @@ class DutyIndependentTwinTests(unittest.TestCase):
         # The end window reads 67 W: 15 ms inside at 75 W, 10 outside at
         # 55 W. Deconvolution recovers 75 W; outside range is zero.
         # Rounding bound: q/2*(D + 2*outside) = .001/2*(.190+.020).
-        expected_width = .001/2*(.190+.020)
+        # The max rule also retains the near-edge 75-55 W contrast over
+        # coefficient .015 s * outside fraction .010/.025 = .006 s.
+        # This .12 J term excludes the unrelated 350 W prefill.
+        expected_width = .001/2*(.190+.020) + .015*(.010/.025)*(75-55)
         self.assertAlmostEqual(estimate.half_width_j, expected_width,
                                delta=1e-6*expected_width)  # Width has no own uncertainty.
         self.assertLessEqual(abs(estimate.joules-(350*.100+75*.090)), estimate.half_width_j)

@@ -65,6 +65,23 @@ class Wave:
         return self._inside(0, self.duration) / 1e9
 
 
+class TailWave(Wave):
+    """Unmeasured board-tail scenario: monotone exponential decay after work."""
+
+    def __init__(self, base: Wave, amplitude_w: float, tau_ns: int) -> None:
+        super().__init__(base.edges, base.watts, base.idle)
+        self.amplitude_w, self.tau_ns = amplitude_w, tau_ns
+
+    def integral_w_ns(self, a: int, b: int, shift_w: float = 0.0) -> float:
+        total = super().integral_w_ns(a, b, shift_w)
+        lo = max(a, self.duration)
+        if b > lo:
+            total += self.amplitude_w*self.tau_ns*(
+                math.exp(-(lo-self.duration)/self.tau_ns)
+                - math.exp(-(b-self.duration)/self.tau_ns))
+        return total
+
+
 def make_script(rng: random.Random, turns: int, *, short_first: bool = False,
                 short_decode: bool = False) -> dict:
     """A deterministic agent episode (what each replay repeats), small model on an A100-class board.
@@ -212,6 +229,41 @@ def corrected_mean_run_reference(runs):
 
 
 class BoundaryFixRoundTests(unittest.TestCase):
+    def test_post_run_monotone_tails_meet_the_one_sided_coverage_bar(self):
+        seeds = 80
+        # Same generator/seed stream as the cold pass: sensor phase, per-run
+        # dispatch jitter, Gaussian read noise and short prefix-cached prefill.
+        for amplitude in (40., 80.):
+            misses = 0
+            for seed in range(seeds):
+                rng = random.Random(9200+seed)
+                script = make_script(rng, 1, short_first=True)
+                phi = rng.randrange(PERIOD)
+                runs = []
+                for index, offset in enumerate(plan(16)):
+                    wave = TailWave(realize(script, rng), amplitude, 30*MS)
+                    start = EPOCH+(index+10)*37*PERIOD+offset+rng.randint(0, MS)
+                    runs.append(sampled_run(wave, start, phi, rng, label=f"phase-{offset}"))
+                estimate = lane.estimate_energy(runs)
+                truth = realize(script, None).truth_j()
+                misses += abs(estimate.joules-truth) > estimate.half_width_j
+                terms = {f.split("=", 1)[0]: float(f.split("=", 1)[1])
+                         for f in estimate.flags if f.startswith((
+                             "boundary_bound_j=", "boundary_deconvolution_bound_j=",
+                             "boundary_observed_range_bound_j="))}
+                # Identical printed inputs to max: exact equality is required.
+                self.assertEqual(terms["boundary_bound_j"], max(
+                    terms["boundary_deconvolution_bound_j"],
+                    terms["boundary_observed_range_bound_j"]))
+                self.assertIn("boundary_monotone_transition_assumed", estimate.flags)
+            ceiling = one_sided_ceiling(seeds)
+            print(f"TAIL {amplitude:g} W/30 ms: misses {misses}/{seeds}; ceiling {ceiling*seeds:.1f}")
+            # Bounds-dominated interval: nominal 5% + four binomial SEs,
+            # as derived by this file's one_sided_ceiling, not a chosen count.
+            self.assertLessEqual(misses/seeds, ceiling,
+                f"A={amplitude:g} W: {misses}/{seeds}; ceiling = 5% + 4 binomial SE "
+                f"= {ceiling*seeds:.1f} misses at {seeds} seeds")
+
     def test_lane_half_width_contains_truth_when_a_short_prefill_starts_the_workload(self) -> None:
         # Review-3 finding, exact world (no noise, no jitter, no shift): idle
         # 55 W; 10 ms prefill at 350 W, then 200 W decode to D = 1.2345 s;
@@ -313,7 +365,7 @@ class BoundaryFixRoundTests(unittest.TestCase):
                            (40.0,60.0,(5*60+10*300+10*80)/25,80.0,100.0),
                            "W",25*MS,25*MS,1.0,0.001)
         estimate = lane.estimate_energy([(trace,0,10*MS)]*2)
-        term = float(next(f.split("=",1)[1] for f in estimate.flags if f.startswith("boundary_bound_j=")))
+        term = float(next(f.split("=",1)[1] for f in estimate.flags if f.startswith("boundary_deconvolution_bound_j=")))
         # d/i=1, total outside .015 s, edge range 20 W => .3 J.
         self.assertAlmostEqual(term,.015*20,delta=1e-6)  # Below 1: 1e-6 J absolute.
         self.assertLessEqual(abs(estimate.joules-3),.01*estimate.half_width_j)
