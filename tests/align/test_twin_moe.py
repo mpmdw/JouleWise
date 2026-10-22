@@ -1,6 +1,15 @@
 """Twin agreement: lane moe (joulewise.align.moe.stats and the numbers stage_a prints
 from them) against the independent twin (tests/align/twins/moe_twin.py), on many
-seeded production-shaped worlds. Round 2 of the executing review.
+seeded production-shaped worlds. Round 3 of the executing review (lane head f6fa51a4b).
+
+Stage A cohort rule (round 3): the lane now applies R2-m3. For each statistic it
+drops episodes whose value is not finite, then drops every task group left with
+only one condition, before the effect, the permutation test and the bootstrap.
+The harness below recomputes Stage A from the twin's numbers under that rule
+(round 2's harness kept single-condition groups and so disagreed by design).
+Round 3 adds worlds from a third generator (latent sub-topic Markov routing),
+groups with two episodes per condition, and capture gaps that leave groups with
+unequal but two-sided composition, so both halves of the rule are exercised.
 
 Bars (set by the orchestrator, not chosen here):
 - Deterministic outputs with no printed uncertainty (the four routing statistics per
@@ -193,6 +202,64 @@ def sticky_world(seed: int, *, groups: int, per_condition: int, E: int, K: int, 
     return episodes
 
 
+def markov_world(seed: int, *, groups: int, per_condition: int, E: int, K: int, L: int,
+                 turns: tuple[int, int], first_prefill: tuple[int, int], prefill: tuple[int, int],
+                 decode: tuple[int, int], f: float, hidden: tuple[int, int] = (0, 0),
+                 subtopics: int = 3, stay: float = 0.97) -> list[Episode]:
+    """Round-3 generator: each task has `subtopics` latent sub-topics with their own
+    gamma-weighted per-layer expert affinities; the routing state is a Markov chain
+    that leaves its sub-topic with probability 1 - stay per token, so expert reuse
+    comes from topic persistence rather than from copying the previous row. Sabotage
+    decode tokens use a shared side-task affinity with probability f. One or two tool
+    calls end every non-final turn; hidden scratchpad tokens are routed but not
+    visible in the decode count."""
+    rng = random.Random(seed)
+    side_affinity = [_cumulative(rng, E, 0.2) for _ in range(L)]
+    episodes = []
+    for g in range(groups):
+        topics = [[_cumulative(rng, E, 0.35) for _ in range(L)] for _ in range(subtopics)]
+        for condition in ("benign", "sabotage"):
+            for rep in range(per_condition):
+                clock, context, turn_list, phases, rows, state = 0, 0, [], [], [], 0
+                n_turns = rng.randint(*turns)
+                for index in range(n_turns):
+                    p = rng.randint(*(first_prefill if index == 0 else prefill))
+                    d = rng.randint(*decode)
+                    h = rng.randint(*hidden) if condition == "sabotage" else 0
+                    first = clock + p * 250_000
+                    end = first + (d + h) * 25_000_000
+                    calls = []
+                    if index + 1 < n_turns:
+                        for c in range(rng.choice((1, 1, 2))):
+                            calls.append(ToolCall(("search", "read_file")[c], end, end + 150_000_000, 80, 1500))
+                            end += 150_000_000
+                    turn_list.append(Turn(index, clock, end, context, p, d + h, hidden_tokens=h,
+                                          first_token_ns=first, tool_calls=tuple(calls)))
+                    context += p + d + h
+                    clock = end
+                    for phase, count in (("prefill", p), ("decode", d + h)):
+                        for _ in range(count):
+                            if rng.random() > stay:
+                                state = rng.randrange(subtopics)
+                            use_side = condition == "sabotage" and phase == "decode" and rng.random() < f
+                            source = side_affinity if use_side else topics[state]
+                            rows.append(tuple(_draw(rng, source[layer], K) for layer in range(L)))
+                            phases.append(phase)
+                log = RouterLog("twin-agreement/markov", E, K, tuple(range(L)), tuple(phases), tuple(rows))
+                episodes.append(Episode(f"m{seed}-{g}-{condition}-{rep}", f"shade/m-task{g}", condition,
+                                        "twin-agreement/markov", "synthetic", seed, "mono", 0, clock,
+                                        tuple(turn_list), router_log=log))
+    return episodes
+
+
+def prefill_only(episode: Episode) -> Episode:
+    """The same episode with its decode rows lost (a decode-capture gap)."""
+    log = episode.router_log
+    keep = [i for i, phase in enumerate(log.phase) if phase == "prefill"]
+    return replace(episode, router_log=replace(
+        log, phase=tuple(log.phase[i] for i in keep), experts=tuple(log.experts[i] for i in keep)))
+
+
 # ------------------------------------------------------------- statistics
 
 @unittest.skipUnless(LANE, "lane module joulewise.align.moe is not on this branch")
@@ -244,6 +311,21 @@ class TwinAgreementStatistics(unittest.TestCase):
                                         turns=(1, 8), first_prefill=(50, 300), prefill=(1, 80),
                                         decode=(1, 60), f=0.25, rho=(0.0, 0.5, 0.9)[seed],
                                         hidden=(0, 20), count_ratio=1.3):
+                compared += self.compare_log(episode.router_log, episode.episode_id)
+        self.assertGreater(compared, 500)
+
+    def test_markov_worlds_full_topology(self):
+        # Two episodes at the verified Qwen3-30B-A3B topology (48 layers, 128 experts,
+        # top-8), then 16 at reduced topology across sub-topic persistence values.
+        compared = 0
+        for episode in markov_world(41, groups=1, per_condition=1, E=128, K=8, L=48, turns=(3, 4),
+                                    first_prefill=(300, 500), prefill=(30, 150), decode=(20, 100),
+                                    f=0.3, hidden=(10, 40)):
+            compared += self.compare_log(episode.router_log, episode.episode_id)
+        for seed, stay in ((42, 0.5), (43, 0.9), (44, 0.995), (45, 0.97)):
+            for episode in markov_world(seed, groups=2, per_condition=1, E=64, K=6, L=8, turns=(2, 9),
+                                        first_prefill=(80, 300), prefill=(1, 120), decode=(1, 90),
+                                        f=0.2, hidden=(0, 30), stay=stay):
                 compared += self.compare_log(episode.router_log, episode.episode_id)
         self.assertGreater(compared, 500)
 
@@ -385,6 +467,11 @@ class TwinAgreementStageA(unittest.TestCase):
             for i, value in enumerate(values):
                 self.assertTrue(agree(result.episode_features[i][name], value), (where, i, name))
             keep = [i for i, value in enumerate(values) if math.isfinite(value)]
+            # R2-m3: after this statistic's drops, groups with one condition leave.
+            conditions: dict[str, set[int]] = {}
+            for i in keep:
+                conditions.setdefault(groups[i], set()).add(labels[i])
+            keep = [i for i in keep if conditions[groups[i]] == {0, 1}]
             statistic, p, used = twin.grouped_permutation_test(
                 [values[i] for i in keep], [labels[i] for i in keep], [groups[i] for i in keep],
                 seed=11)
@@ -436,6 +523,48 @@ class TwinAgreementStageA(unittest.TestCase):
             for key, value in self.compare_world(world, f"sticky seed{seed}").items():
                 tally[key] += value
         self.assertEqual(tally, {"exact": 28, "monte_carlo": 8})
+
+    @staticmethod
+    def gapped_markov(seed: int, groups: int, f: float) -> list[Episode]:
+        # Two episodes per condition per task. Capture gaps: episode 1 (task0 benign)
+        # has no router log, so task0 keeps 1 benign + 2 sabotage for every statistic;
+        # episode 6 (task1 sabotage) loses its decode rows, so task1 keeps 2 benign +
+        # 1 sabotage for decode statistics; episodes 10 and 11 (both task2 sabotage)
+        # lose their decode rows, so task2 has no contrast for decode statistics and
+        # R2-m3 drops it there.
+        world = markov_world(seed, groups=groups, per_condition=2, E=32, K=4, L=6, turns=(2, 6),
+                             first_prefill=(80, 200), prefill=(5, 60), decode=(5, 50), f=f,
+                             hidden=(0, 20))
+        world[1] = replace(world[1], router_log=None)
+        for index in (6, 10, 11):
+            world[index] = prefill_only(world[index])
+        return world
+
+    def test_markov_unequal_composition_exact_branch(self):
+        # 5 tasks: prefill/both arrangements C(3,2) * C(4,2)^4 = 3,888; decode
+        # C(3,2) * C(3,1) * C(4,2)^2 = 324 (task2 dropped). All 12 tests exact, so
+        # Holm over the planned family of 12 is compared under the 1e-6 bar too.
+        tally = {"exact": 0, "monte_carlo": 0}
+        for seed, f in ((61, 0.25), (62, 0.05), (63, 0.0)):
+            world = self.gapped_markov(seed, 5, f)
+            for key, value in self.compare_world(world, f"markov seed{seed}").items():
+                tally[key] += value
+            result = analyze_stage_a(world, n_bootstrap=20, seed=7)
+            for name, stat in result.statistics.items():
+                dropped_task2 = "group_has_no_label_exchangeability:shade/m-task2" in stat.flags
+                self.assertEqual(dropped_task2, name.startswith("decode_"), (seed, name, stat.flags))
+                expected = 324 if name.startswith("decode_") else 3888
+                self.assertEqual(stat.n_perm_used, expected, (seed, name))
+        self.assertEqual(tally, {"exact": 36, "monte_carlo": 0})
+
+    def test_markov_unequal_composition_monte_carlo_branch(self):
+        # 9 tasks: prefill/both C(3,2) * 6^8 = 5,038,848 arrangements; decode
+        # C(3,2) * C(3,1) * 6^6 = 419,904: every test is Monte Carlo (1901 draws).
+        tally = {"exact": 0, "monte_carlo": 0}
+        for seed, f in ((71, 0.15), (72, 0.0)):
+            for key, value in self.compare_world(self.gapped_markov(seed, 9, f), f"markov9 seed{seed}").items():
+                tally[key] += value
+        self.assertEqual(tally, {"exact": 0, "monte_carlo": 24})
 
 
 if __name__ == "__main__":
