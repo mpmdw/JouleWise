@@ -316,7 +316,8 @@ class EndpointTests(unittest.TestCase):
             result = self.chat(client)
             self.assertEqual(len(world.requests), 1)
             self.assertEqual(result.reasoning_tokens, 0)
-            self.assertEqual(client.count_tokens(thought), 0)
+            with self.assertRaises(RuntimeError):
+                client.count_tokens(thought)
             self.assertIn("tokenize_unavailable", client.flags)
 
     def test_tokenize_both_shapes(self) -> None:
@@ -430,7 +431,8 @@ class EndpointTests(unittest.TestCase):
         with self.assertRaises(EndpointRequestFailed) as caught:
             self.chat(client)
         self.assertIn("invalid_base_url", caught.exception.flags)
-        self.assertEqual(client.count_tokens("anything"), 0)
+        with self.assertRaises(RuntimeError):
+            client.count_tokens("anything")
 
     def test_llamacpp_timings_fallback_preserves_accounting(self) -> None:
         timings = {"prompt_n": 1024, "cache_n": 3072, "predicted_n": 768}

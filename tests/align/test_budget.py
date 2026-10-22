@@ -336,10 +336,14 @@ class BudgetRunTests(OfflineTest):
 
     def test_generation_failure_and_invalid_condition_remain_records(self):
         with patch.object(ScriptedModel, "chat", side_effect=OSError("synthetic endpoint failure")):
-            result, _ = self.world(count=2, conditions=(Condition("bad", "budget", -0.5),))
+            result, _ = self.world(count=2, conditions=(Condition("thinking_on"),))
+            invalid, _ = self.world(count=2, conditions=(Condition("bad", "budget", -0.5),))
         self.assertEqual(len(result.trials), 2)
         self.assertTrue(all(t.hint_use.uses_hint is None for t in result.trials))
         self.assertTrue(all("generation_error:OSError" in t.flags for t in result.trials))
+        self.assertTrue(all("condition_fraction_invalid" in t.flags for t in invalid.trials))
+        self.assertTrue(all("generation_skipped" in t.flags and not t.generation.calls
+                            for t in invalid.trials))
 
 
 class BudgetEnergyTests(OfflineTest):

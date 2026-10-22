@@ -8,6 +8,8 @@ the synthetic sampler):
   cell's task pair), ``upstream`` (``PinnedUpstream`` keyword arguments),
   ``judge_endpoint`` (``OpenAICompatEndpoint`` keyword arguments) and the
   remaining ``ShadeTask`` keyword arguments.
+- monitor ``shade``: ``ShadeMonitor`` over the nested ``endpoint`` config;
+  remaining keys configure the monitor (including optional ``upstream``).
 - endpoint ``openai_compat``: ``OpenAICompatEndpoint(**config)``.
 - token counter ``openai_compat``: the endpoint's ``count_tokens``, raising
   when the endpoint flags an unavailable tokenizer rather than accepting zero.
@@ -25,7 +27,7 @@ from typing import Any, Mapping
 
 from joulewise.align.runner import (
     FactoryContext, register_endpoint_factory, register_sampler_factory, register_task_factory,
-    register_token_counter_factory,
+    register_token_counter_factory, register_monitor_factory,
 )
 
 
@@ -47,7 +49,7 @@ def _shade_task(config: Mapping[str, Any], context: FactoryContext) -> Any:
 
 
 class _OpenAICompatTokenCounter:
-    """Turn the endpoint's flagged tokenizer zero into a counting failure."""
+    """Expose the served tokenizer, preserving explicit counting failures."""
 
     def __init__(self, endpoint: Any) -> None:
         self.endpoint = endpoint
@@ -67,6 +69,16 @@ class _OpenAICompatTokenCounter:
 
 def _openai_tokens(config: Mapping[str, Any], context: FactoryContext) -> Any:
     return _OpenAICompatTokenCounter(_openai_compat(config, context))
+
+
+def _shade_monitor(config: Mapping[str, Any], context: FactoryContext) -> Any:
+    from joulewise.align.shade import ShadeMonitor, PinnedUpstream
+    parameters = dict(config)
+    endpoint = _openai_compat(parameters.pop("endpoint"))
+    upstream = parameters.pop("upstream", None)
+    if upstream is not None:
+        parameters["upstream"] = PinnedUpstream(**upstream)
+    return ShadeMonitor(endpoint, **parameters)
 
 
 def _episode_clock(config: Mapping[str, Any], context: FactoryContext,
@@ -93,6 +105,7 @@ def register_defaults() -> None:
     from joulewise.align.mock_world import register_mock_factories
     register_mock_factories()
     register_task_factory("shade", _shade_task)
+    register_monitor_factory("shade", _shade_monitor)
     register_endpoint_factory("openai_compat", _openai_compat)
     register_token_counter_factory("openai_compat", _openai_tokens)
     register_sampler_factory("nvml", _nvml)

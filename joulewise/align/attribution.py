@@ -413,7 +413,10 @@ class _Trace:
                 flags.append("coverage.peak_missing")
         if self.mapping is not None:
             uncertainty = self.mapping.uncertainty_ns
-            if uncertainty < 0:
+            if self.mapping.method == "unmeasured":
+                flags.append("clock.unmeasured")
+                bounds.append(math.inf)
+            elif uncertainty < 0:
                 flags.append("clock.uncertainty_invalid")
             else:
                 bounds.append((self._adjacent_peak(t0) + self._adjacent_peak(t1))
@@ -469,7 +472,13 @@ class _Trace:
         energy = math.fsum(energies) - idle_watts * duration
         if energy < 0:
             flags.append("energy.negative")
-        return EnergyEstimate(energy, math.fsum(bounds), method, _flags(flags))
+        half_width = math.fsum(bounds)
+        if self.trace.source == "powermetrics":
+            # D-078: the M3 Max instrument is attribution-limited at about 1 J.
+            # Match budget.energy; this is an additive bound, never an SD.
+            half_width = max(1.0, half_width)
+            flags.append("powermetrics.attribution_floor")
+        return EnergyEstimate(energy, half_width, method, _flags(flags))
 
 
 # A single active immutable trace is retained for repeated public queries.

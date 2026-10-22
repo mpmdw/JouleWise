@@ -173,6 +173,9 @@ def _capture_usage(result: ChatResult, flags: list[str]) -> Any:
         diagnostics = usage.get("joulewise", {})
         if isinstance(diagnostics, Mapping):
             _endpoint_flags(diagnostics.get("flags", ()), flags)
+        # Read preserved Apple/budget records as well as the canonical envelope.
+        _endpoint_flags(usage.get("flags", ()), flags)
+        _endpoint_flags(usage.get("_budget_flags", ()), flags)
     if result.prompt_tokens == 0:
         flags.append("endpoint.empty_result")
     return usage
@@ -354,6 +357,10 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                 if interrupted or "episode.interrupted" in flags:
                     break
                 if not result.tool_calls:
+                    diagnostics = result.raw_usage.get("joulewise", {})
+                    finish = diagnostics.get("finish_reason") if isinstance(diagnostics, Mapping) else None
+                    if finish in ("length", "max_tokens", "max_new_tokens") or decode >= max_tokens:
+                        flags.append(f"episode.turn_token_budget_reached:{index}")
                     break
             else:
                 flags.append("episode.max_turns")
@@ -526,7 +533,11 @@ def run_episode(task: AgentTask, condition: str, endpoint: ChatEndpoint, *,
                 flags.append("episode.interrupted" if isinstance(exc, KeyboardInterrupt) else
                              "monitor.error." + type(exc).__name__)
                 diagnostics = getattr(exc, "diagnostics", None)
+                flags.extend(f"monitor.{visibility}." + flag for flag in getattr(exc, "flags", ())
+                             if isinstance(flag, str))
             if diagnostics is not None:
+                flags.extend(f"monitor.{visibility}." + flag for flag in getattr(diagnostics, "flags", ())
+                             if isinstance(flag, str))
                 flags.extend("monitor." + flag for flag in getattr(diagnostics, "flags", ())
                              if isinstance(flag, str))
                 runner.setdefault("monitor_diagnostics", []).append({

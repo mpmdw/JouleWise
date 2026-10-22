@@ -490,7 +490,7 @@ class OpenAICompatEndpoint:
         return result
 
     def count_tokens(self, text: str) -> int:
-        """Ask the server tokenizer; zero plus a flag if neither shape works."""
+        """Ask the server tokenizer; raise when no valid count is available."""
         self.flags.clear()
         self.retries.clear()
         flags: list[str] = []
@@ -498,7 +498,7 @@ class OpenAICompatEndpoint:
         root = self.base_url.removesuffix("/v1")
         if not self._valid_url:
             self.flags.append("tokenize_invalid_base_url")
-            return 0
+            raise RuntimeError("server tokenizer invalid base URL")
         # Both servers accept unknown fields. Including both text keys avoids
         # llama.cpp's valid 200 {"tokens": []} response to a missing content key.
         # Count text only on both backends: vLLM otherwise defaults to adding
@@ -537,7 +537,7 @@ class OpenAICompatEndpoint:
                 flags.append("tokenize_error:" + type(exc).__name__)
                 break
         self.flags.extend(flags + ["tokenize_unavailable"])
-        return 0
+        raise RuntimeError("server tokenizer unavailable")
 
 
 class MockEndpoint:
