@@ -1,62 +1,58 @@
-# Alignment budget lane — fix round 1
+# Alignment budget lane — fix1c continuation
 
 ## SUMMARY
-Continued lane/2026-10-21-align-budget from 58750718f; never restarted from spine.
-Implemented sampler tail waiting, explicit CLI energy channels and linear reduction.
-Added counter-edge enclosures and parameterized power-edge uncertainty.
-Summaries retain partial rates/J, measured/missing counts and per-flag trial counts.
-Replaced token shredding with recorded contiguous spans and a 13-token disclosure.
-Separated seed rows and added seeded subject-stratified rosters with fingerprint metadata.
-Added streamed, content-addressed trace storage and ordinary-Episode hydration readers.
-The source now contains 37 test methods, including 12 review regressions.
-VERIFICATION BLOCKED: the executor stayed unavailable/offline; zero Python tests ran.
-Changes were saved by sequential fast-forward GitHub commits; protected contracts are unchanged.
+Continued lane/2026-10-21-align-budget from pushed head 0480271fa.
+Fixed the 10 ms gap diagnostic by measuring completed sampling cycles, including acquisition.
+Kept cadence selection and energy reduction linear in sample count.
+Preserved the five-by-200 world and its rate checks; moved interval separation to 2000 items.
+Decorrelated disclosure-position and deletion seeds in the 4000-transcript sensitivity test.
+Empty/excluded budget rows now leave all four token means empty.
+Retained the earlier fixes, compact storage, explicit channels and counted sampler flags.
+All source/doc changes are pushed; the three protected contracts are unchanged.
+Current-head execution is blocked: the managed executor never became usable.
+The lead's measured 0480271fa evidence is recorded below, separately from this seat's zero runs.
 
 ## FILES
-Changed this round:
-- joulewise/align/budget/conditions.py: recorded deletion_span_count; contiguous-span
-  and explicit legacy-token deletion; nullable serving fields; finish reasons.
-- joulewise/align/budget/score.py: first YES/NO-token parsing, truncated-verdict flag,
-  configurable monitor token ceiling including its reasoning.
-- joulewise/align/budget/energy.py: O(n) integration; counter edge enclosures;
-  prospective power envelope; jitter-aware gap diagnostic; structured sampler flags.
-- joulewise/align/budget/items.py: subject preservation, equal-allocation seeded
-  stratified_roster and selected-row/seed/allocation metadata.
-- joulewise/align/budget/run.py: tail waiting outside Episode brackets, continuation
-  fallback, partial summaries/counts, one row per seed, exclusion counts for
-  uncalibrated budget trials, fingerprint metadata and streamed checkpoint reads.
-- joulewise/align/budget/synthetic.py: intact 13-token disclosure, a sampler with
-  positive acquisition jitter and no closing sample, exact design-survival formula,
-  optional conditions keyword for sensitivity runs.
-- joulewise/align/budget/storage.py: streaming JSON and content-addressed trace
-  sidecars; checkpoint support; hydrated result/Episode readers.
-- joulewise/align/budget/__main__.py: explicit energy reducer config, stratified
-  roster, compact streamed exports and nonzero total-failure exit.
-- tests/align/test_budget.py: existing independent-seed coverage retained; independent
-  integrator clips to the actual Episode rather than counting the new sampler tail;
-  disclosure assertions now require the complete sentence; coverage bar justified.
-- tests/align/test_budget_review.py: 12 review regression methods covering jittered
-  sampling at both intervals, partial evidence, parser/truncation, edge physics,
-  deletion sensitivities, clustered seeds, the subject roster, missing calibration,
-  nullable responses, continuation fallback, compact storage/resume and CLI behavior.
-- docs/align/budget_pilot.md: revised provisional internal protocol, controls,
-  sensor limits, flag counts, storage/readers and frontier kill condition.
-- .codex-report/align-budget.md: current report and finding dispositions.
+Changed in fix1c:
+- joulewise/align/budget/energy.py: median observed acquisition cadence, derived
+  missed-cycle bar, linear-time median selection and existing linear integration.
+- joulewise/align/budget/run.py: optional token means and empty table cells when n=0.
+- tests/align/test_budget.py: retains five configurations x 200 items; checks
+  scripted probabilities against Wilson intervals and resolves the unchanged
+  interval-separation assertion on an additional 2000-item world.
+- tests/align/test_budget_review.py: independent position/deletion streams over
+  4000 transcripts, missing-poll negative controls at both intervals, empty means.
+- docs/align/budget_pilot.md: revised cadence physics and test-world interpretation.
+- .codex-report/align-budget.md: current handoff, lead evidence and fix dispositions.
 
-Inherited fixture.py and __init__.py remain unchanged. No registry exception was
-used. No NVML-lane file, protected contract, repository status file or other
-out-of-scope path was modified. The appendix scripts could not be written to
-/workspace/JouleWise/.review1 because no filesystem command could launch; they
-are not committed or silently reconstructed elsewhere.
+Inherited lane files:
+- joulewise/align/budget/items.py: authored/pluggable items, pinned verified MMLU
+  loading, subject preservation and seeded equal-allocation stratified rosters.
+- joulewise/align/budget/conditions.py: thinking controls, budget caps, recorded
+  contiguous deletion spans, tokenizer and nullable local serving adapter.
+- joulewise/align/budget/score.py: paired hint-use judgment, robust first YES/NO
+  parsing, missing/truncated monitor flags and Wilson intervals.
+- joulewise/align/budget/synthetic.py: scripted model/monitor, thirteen-token
+  disclosure, jittered sampler without a closing sample, survival probabilities.
+- joulewise/align/budget/storage.py: streamed result/checkpoint I/O, unique
+  content-addressed trace sidecars and ordinary-Episode hydration readers.
+- joulewise/align/budget/__main__.py: CLI, explicit energy channel configuration,
+  roster metadata/fingerprint, compact exports and nonzero failure status.
+- joulewise/align/budget/fixture.py: authored multiple-choice fixture.
+- joulewise/align/budget/__init__.py: package entry.
+
+No registry exception was used. No NVML-lane file was copied or edited.
+No shared contract, repository status file or other out-of-scope path was changed.
+The appendix files could not be written to /workspace/JouleWise/.review1:
+no filesystem process could launch. Nothing under .review1 is committed.
 
 ## PUBLIC API
-Existing reviewer names and positional call shapes are retained. Principal APIs:
+Existing reviewer names and positional call shapes remain available.
 
     HintItem(..., provenance="authored-fixture", flags=(), subject="unspecified")
     ItemBatch(items, flags=(), metadata={})
     ItemSource.load() -> ItemBatch
-    HubMMLUSource(timeout_s, pin=<existing pinned MMLU bytes>, seed=0,
-                  fetch=_download).load() -> ItemBatch
+    HubMMLUSource(timeout_s, pin=<pinned MMLU bytes>, seed=0, fetch=_download).load() -> ItemBatch
     hint_suite(rows, *, seed=0, provenance="authored-fixture") -> ItemBatch
     stratified_roster(batch: ItemBatch, count: int | None, *, seed: int = 0) -> ItemBatch
 
@@ -97,58 +93,73 @@ Existing reviewer names and positional call shapes are retained. Principal APIs:
     deletion_survival_probability(total, removed, phrase_length, span_count=4) -> float
     main(argv=None) -> int
 
-BudgetTrial, ModelSpec, Generation, Calibration, Rate, ScriptedModel.chat,
+BudgetTrial retains its shared Episode and recorded Condition/Settings, including
+span count. ModelSpec, Generation, Calibration, Rate, ScriptedModel.chat,
 ScriptedMonitor, ScriptedSampler, SyntheticClock, WordCodec and synthetic.HintMonitor
-remain available with compatible existing calls. BudgetTrial's existing Episode
-and serialization conventions are retained in memory. New Condition/Settings
-fields carry the span and sampler parameters into trial records.
+retain their existing call shapes.
 
-Summary adds seed, flag_counts, missing_monitor_verdicts, missing_energies,
-measured_trials, excluded_trials and configuration. Existing catch_rate,
-false_flag_rate, mean_joules, mean_reasoning_tokens and flags remain available.
-MatrixResult adds metadata containing the roster and requested analysis settings.
+Summary retains condition, catch_rate, false_flag_rate, mean_joules, flags,
+seed, flag_counts, missing_monitor_verdicts, missing_energies, measured_trials,
+excluded_trials and configuration. Its four mean_*tokens fields are now
+float | None: an empty group has no measured mean. Rate keeps estimate,
+successes, trials and interval. MatrixResult.metadata carries roster and analysis
+settings into the fingerprint.
 
-On disk, result/Episode views and checkpoints reference SHA-256-addressed
-PowerTrace records in sibling JSONL sidecars. Use the hydration readers above
-before passing an exported Episode to another lane. Shared records.to_json(trial)
-still deliberately produces a fully materialized legacy compatibility view.
+Disk result/Episode/checkpoint views reference unique SHA-256-addressed
+PowerTrace records in sibling JSONL sidecars. Hydration readers above return
+ordinary shared Episodes for attribution. Shared records.to_json(trial) remains
+the fully materialized compatibility view; it intentionally is not the compact writer.
 
 ## TESTS RUN
-**Current-head Python tests executed: 0. Runtime pass/failure/skip counts: unknown.**
-Source inventory: 25 inherited methods plus 12 new methods = 37. One inherited
-method is guarded by skipUnless(pyarrow importable); no current-head skip actually
-occurred because Python never launched.
+Current-head Python tests executed by this seat: 0.
+Current-head pass/failure/skip counts: unavailable; the interpreter never launched.
+Source inventory remains 37 test methods (25 inherited + 12 review regressions).
+The pyarrow decoder remains guarded by skipUnless; no current-head skip occurred.
 
-Repeated attempts at the following exact command from /workspace/JouleWise were
-rejected before shell/process creation:
+These exact commands were submitted from /workspace/JouleWise and rejected
+before shell/process creation:
 
     python3 -m unittest discover -s tests/align -t .
+    python3 -m unittest discover -s tests/align -t . -p 'test_budget*.py'
+    python3 scripts/fixture_orphan_census.py --fail-on-orphans
 
-The same execution-tool error also blocked pwd and git status --short --branch:
+The execution tool also rejected python3 --version and
+git -C /workspace/JouleWise status --short --branch with:
 
     No usable execution environment is available. Wait for an environment to become available before using this tool.
 
-wait_for_environment was started at intake and repeatedly awaited while work
-continued through the connector. environment_status continued to report
-observed_phase=starting, then pending at the final check, with connectivity=offline
-and failure=null. Thus local checkout,
-fetch, compiler/import checks, git diff --check, fixture census, the appendix
-scripts and the extra-dependency installation could not run. No network call was
-made by a test. No full repository suite was requested or run.
+wait_for_environment was started twice and repeatedly awaited. The supported
+status tool alternated pending/starting, connectivity=offline, failure=null.
+No usable filesystem or Python process was obtained. No package was installed,
+no appendix script was created or executed, and no whole-repository suite ran.
 
-The reviewer's baseline is external evidence supplied in the brief, not a run
-by this seat: at 58750718f, Python 3.13 ran 25 tests, OK, one pyarrow skip, in 35 s.
+External evidence from the lead's run at 0480271fa (Python 3.13), supplied in the
+continuation brief; these are NOT this seat's runs:
 
-Commands still required once the executor exists (do not substitute the inventory
-above for their real results):
+- python3 -m unittest discover -s tests/align -t . -p 'test_budget*.py':
+  37 tests, 2 failures, 1 skip (pyarrow absent). Failures were the marginal
+  Wilson separation assertion and the 10 ms acquisition/gap diagnostic.
+- With pyarrow installed, the optional decoder test passed.
+- Every appendix probe ran; measured outcomes are in END-TO-END.
+- Real pinned-file count=200 CLI roster: all 57 subjects, 29 with four items
+  and 28 with three; roster_seed=0, allocation and 200 selected IDs recorded.
+  The individual subject-name/count map was not supplied; it cannot be
+  reconstructed honestly without loading the pinned bytes.
+- The supplied three-size synthetic CLI smoke wrote result.json 62.4 MB,
+  result.traces.jsonl 48.7 MB (6600 unique traces), checkpoint 63.0 MB and
+  checkpoint trace sidecar 48.7 MB.
+
+Commands required on a usable executor (all paths and world parameters unchanged):
 
     git -C /workspace/JouleWise fetch origin lane/2026-10-21-align-budget
     git -C /workspace/JouleWise checkout -B lane/2026-10-21-align-budget origin/lane/2026-10-21-align-budget
     python3 -m unittest discover -s tests/align -t .
-    python3 -m unittest tests.align.test_budget_review -v
+    python3 -m unittest discover -s tests/align -t . -p 'test_budget*.py'
     git diff --check
+    python3 scripts/fixture_orphan_census.py --fail-on-orphans
 
-Write the provided appendix verbatim to .review1 first, then:
+Write every appendix script verbatim under .review1 (including build_combined.sh,
+mmlu_roster.py and independent_counts.py), then run:
 
     git -C /workspace/JouleWise fetch origin lane/2026-10-21-align-nvml:refs/remotes/origin/lane/2026-10-21-align-nvml
     sh /workspace/JouleWise/.review1/build_combined.sh /tmp/budget-combined
@@ -163,14 +174,14 @@ Write the provided appendix verbatim to .review1 first, then:
     python3 -I /workspace/JouleWise/.review1/world_record_size.py /tmp/budget-combined
     python3 -I /workspace/JouleWise/.review1/independent_counts.py
 
-No script, world parameter or assertion was altered in a .review1 copy: no copy
-could be created. The legacy size probe calls shared to_json(trial), which remains
-a materialized view; it does not measure the new compact writer. The new storage
-regression measures unique trace records in actual result/checkpoint sidecars,
-round-trips the records, and resumes sampled trials without another model call.
+CLI failure repro (must exit nonzero):
 
-No extra was installed. Both the ordinary and extra-dependent runs remain
-required; even the synthetic 14042-row roster test could not execute:
+    mkdir -p /tmp/x
+    echo '{"models": []}' > /tmp/x/bad.json
+    python3 -I -c "import sys; sys.path.insert(0,'/workspace/JouleWise'); from joulewise.align.budget.__main__ import main; sys.exit(main(sys.argv[1:]))" --config /tmp/x/bad.json --output /tmp/x/out
+    echo $?
+
+Extra-dependency and roster commands, not run by this seat:
 
     python3 -m venv /tmp/pa
     /tmp/pa/bin/pip install pyarrow
@@ -180,228 +191,214 @@ required; even the synthetic 14042-row roster test could not execute:
     curl -sSL -o /tmp/mmlu/test.parquet https://huggingface.co/datasets/cais/mmlu/resolve/c30699e8356da336a370243923dbaf21066bb9fe/all/test-00000-of-00001.parquet
     /tmp/pa/bin/python -I /workspace/JouleWise/.review1/mmlu_roster.py /tmp/mmlu/test.parquet
 
-Actual pinned-file CLI roster subject counts: NOT RUN. The authored synthetic
-test expects 57 subjects, with 29 counts of four and 28 counts of three; this is
-an allocation identity (200=29*4+28*3), not an observed roster. Real subject names,
-selected row IDs and counts will be in result.metadata.roster.
+After loading those bytes, also print Counter(i.subject for i in
+stratified_roster(batch, 200, seed=0).items); the appendix prints raw first-N order,
+which is intentionally unchanged.
 
-Required explicit-channel CLI verification, not yet executed:
-write a valid local/mock transport config with
-energy={"channels":[["nvml_energy","gpu0:energy"]]}, then run
+Explicit-channel CLI verification remains pending. The existing offline CLI
+regression injects a sampled matrix and checks propagation of energy.channels
+through the real reducer/writer; it was not run at this head. A production-shaped
+mock-config run with energy={"channels":[["nvml_energy","gpu0:energy"]]} must be
+recorded when execution exists. No live endpoint or hardware was contacted.
 
-    python3 -m joulewise.align.budget --config /tmp/budget-counter.json --seeds 0 --output /tmp/budget-counter
-
-The offline regression exercises CLI channel propagation using injected endpoints
-and the real reducer/exporter. The exact external NVML CLI run still needs the
-combined tree and a valid configured endpoint; no live endpoint was contacted.
-
-Read-only checks actually completed through tools:
-- Every saved changed source/doc file through code commit 63b8e31 was fetched
-  back and matched the authored text; subsequent storage/test updates were saved.
-- GitHub compare from 58750718f through fa1fef273eeaa9191dfdd20e80c99af9e2fc514c
-  showed only the twelve allowed changed lane/report files. Final updated storage,
-  test and report texts were fetched back and matched as well.
-- Final protected blobs remained PIPELINE.md 829c944bb26e2ced2f5e260f8f799ac4626a62f7,
-  records.py ca3523d5fce7abd97e0ca985ecf7d0e768da4c20,
-  interfaces.py b0468f41721add4ee3b95edf68edeea0e7e2ff98.
-- A V8 lexical scan found balanced strings/delimiters and no trailing whitespace
-  in the ten changed Python source/test texts at that point. This is NOT a Python
-  parser, import check, test run or second-model numerical implementation.
-- Commits were sequential children of the previous lane head; branch updates
-  used expected-head checks and force=false. No other branch was changed.
+Read-only verification actually completed:
+- Fetched all five fix1c source/test/doc files back from 93eed44a and checked
+  exact text identity against the saved edits.
+- GitHub compare 0480271fa...93eed44a reports ahead_by=6, behind_by=0,
+  only the five allowed source/test/doc paths, before this report update.
+- Source inventory remains 37 methods. This is not a Python parse or test result.
+- Updates used the contents API on the named lane branch with current blob SHAs;
+  every write created a descendant commit. No force push or other-branch write.
 
 ## END-TO-END
-**Implemented but not executed in this round. No new measured counts/J/runtime
-are claimed.**
+No current-head world ran in this seat. The following measured numbers are
+explicitly the lead's observations at 0480271fa from the continuation brief.
 
-The actual production chain remains:
-authored/pinned items -> per-item uncapped calibration -> hinted/no-hint calls ->
-forced continuation -> optional post-hoc contiguous deletion -> fixed local
-ChatEndpoint monitor -> BudgetTrial/shared Episode -> summary -> energy reducer.
+The real production chain is authored/pinned items -> per-item calibration ->
+paired hinted/no-hint model calls -> forced continuation -> optional post-hoc
+deletion -> fixed ChatEndpoint monitor -> BudgetTrial/shared Episode ->
+summaries -> selected-channel energy reduction -> compact export.
 
-The five-configuration 200-item world remains thinking_on, budget_0.6,
-budget_0.4, budget_0.3 and deletion_0.6. It now uses a complete 13-token disclosure
-and the positive-jitter/no-closing-sample sampler, so missing tail waiting,
-token shredding and fragment-only monitoring are detectable on the real path.
-Budgets still floor 1024-token medians to 614/409/307. The pre-existing independent
-80-seed coverage test remains and uses the exact new span-survival probability.
-A separate 60-world test reproduces item-clustered draws for seeds (0,) and
-(0,1,2), prints each coverage count and demands >=53/60. Binomial(60,.95) gives
-P(<=52)=.0098, the review's derived one-in-100 false-failure bar.
+Five configurations x 200 items, seed 0, scripted 1024-token reasoning:
+- 144 hint-using and 56 non-hint-using trials.
+- thinking_on catch 144/144; budget_0.6 50/144; budget_0.4 21/144;
+  budget_0.3 14/144; deletion_0.6 69/144.
+- False flags 3/56 except deletion_0.6 2/56.
+- Caps 614/409/307; disclosure probability on positives p(f)=f^2.
+- Default deletion's observed 69/144=0.4792 has Wilson lower 0.3991789623;
+  budget_0.6's upper is 0.4280371306. Their overlap explains the old
+  assertion failure; it does not invalidate each interval's coverage.
+- A single missing energy leaves budget_0.6 mean 1017.752 J over 199/200.
+  Complete per-configuration J rows were not supplied and are not invented.
 
-Additional real-path tests run five configurations x 200 items under legacy
-token deletion, one contiguous span and four contiguous spans, including both
-deletion_0.6 and deletion_0.3; they print numerator, denominator, rate and Wilson
-interval for each reading. A 2000-transcript world independently contrasts the
-intact sentence under those readings and requires interval separation.
-A six-item/two-condition world exercises bracketing at 100 ms and 10 ms polling,
-with a fixed +10 ms acquisition delay, and a zero-tail negative control.
+Fix1c preserves that five-by-200 world and explicitly checks each scripted
+probability inside its Wilson interval. An additional three-configuration
+2000-item world applies the original nonoverlapping-Wilson assertion.
+With approximately 1500 positives, the sum of worst-case marginal 95% widths
+is z/sqrt(1500), about 0.051, smaller than half the designed 0.190 catch gap.
+Its actual counts, intervals, runtimes and J remain unexecuted.
 
-Analytical design probabilities only (not production-run catch measurements):
-- deletion_0.6: legacy token deletion 0.00123015; one span 0.583255; four spans
-  0.549668. Budget disclosure probability is (614/1024)^2 = 0.359531.
-- deletion_0.3: legacy 0.000000131900; one span 0.280145; four spans 0.248462.
-- These follow combinatorial counts of intact windows, not fitted thresholds.
+Delta re-review ledger (58750718f -> lead's 0480271fa, then fix1c intent):
+- B1: explicit counter channel 0/12 ->12/12 measurable at both intervals.
+  Lead's 100 ms summary: 12.923 +/-11.010 J and 15.947 +/-11.008 J;
+  10 ms: 12.800 +/-1.750 J and 15.902 +/-1.513 J. Last samples follow
+  Episode.end by 102–184 ms /14–29 ms respectively. Default multi-channel
+  reduction still flags energy_channels_unspecified by design.
+- B2: punctuation no longer blanks a row. Budget catches 50/21/14 of 144
+  agree with independent_counts.py, with false flags 3/56. A genuinely empty
+  verdict has separate regression coverage and uses remaining scored trials.
+  One missing energy changed blank J to 1017.752 J over 199; versus the old
+  reviewer's available-trial 1017.774 J, difference -0.022 J (jittered grid).
+- M1: estimates remain power 4995 J (-5 J error), counter 4990 J (-10 J).
+  Power half-width 0.010 J ->unknown/infinite without a supplied maximum;
+  counter 0.001 J ->30.001 J, an increase of 30 J from edge enclosures.
+  With the step world's prospective 250 W maximum, derived power width
+  is 25.010 J; that is a parameterized sensitivity, not a default.
+- M2: unchanged reviewer script gives 1224/2000=0.612 intact versus old
+  2/2000=0.001, a +0.611 change. Its shared phrase/deletion seed is correlated.
+  Lead's independently seeded 4000-transcript runs gave one span 0.5853,
+  four spans 0.5545, matching design 0.5833/0.5497. The old lane test's
+  shared-seed one-span count 479/2000 was misleading. Fix1c uses a separate
+  position namespace and prints all readings; its new empirical counts are pending.
+- M3: repeated-item coverage 48/60 ->57/60 (+9 covered worlds); single seed
+  remains 57/60. Summaries split seeds rather than pool repeated items.
+- M4: first-N count=200 roster had 2/57 subjects ->equal stratified 57/57
+  (+55 subjects), 29 counts of four and 28 counts of three. Raw order unchanged.
+- m1: uncalibrated budget trials no longer enter budget numbers; fix1c also
+  changes the empty row's misleading 0.0 token means to None/blank.
+- m2: invalid config prints pilot_error:ValueError and exits 1 (previously 0).
+- m3: lead confirmed no false gap at 100 ms, but 12/12 false gaps at 10 ms.
+  Fix1c compares to observed wait+acquisition cadence, with a retained test
+  that removing an interior poll is flagged. Current-head counts are pending.
+- m4: lead's 21000 samples reduce in 0.01 s versus original 8.74 s.
+  The other two timing values were not supplied. Fix1c's cadence selection
+  uses linear median-of-five selection, so sorting does not restore n log n
+  work. There is no wall-clock assertion.
+- m5: tool_calls=null returns content. Existing regression also covers
+  cached_tokens=null and reasoning-only continuation fallback.
+- m6: legacy to_json(trial) still displays three trace copies intentionally.
+  Actual CLI disk files are 62.4+48.7=111.1 MB versus 150 MB (38.9 MB less);
+  checkpoint plus sidecar 63.0+48.7=111.7 MB versus 151 MB (39.3 MB less).
+  The sidecar has 6600 unique traces. These are lead-measured file sizes,
+  not sizes of a current-head run.
 
-Delta re-review ledger; new measured deltas are blocked by the executor:
-- B1: reviewer 0/12 measurable at each interval -> new result NOT RUN. The
-  explicit counter channel now reaches the CLI reducer; no automatic channel
-  default was added.
-- B2: reviewer one malformed verdict blanked budget_0.6 catch, and one missing
-  trace blanked J despite 199 measured trials (reviewer mean 1017.774 J) ->
-  new result NOT RUN. The new denominators explicitly retain scored/available
-  trials and counts. Punctuation alone is now scored; a genuinely empty reply
-  is covered separately.
-- M1: reviewer power 4995 +/-0.010 J and counter 4990 +/-0.001 J against truth
-  5000 J -> new execution NOT RUN. Algebraically, the counter's two 15 J edge
-  enclosures give 30.001 J; a prospective 250 W envelope gives a power width
-  25.010 J. Without any power envelope, the honest bound is unbounded, with
-  energy_power_max_missing; the finite J estimate is still retained.
-- M2: reviewer default shredded the sentence (2/2000 intact) versus its four-span
-  comparison (1095/2000) -> new measured outcomes NOT RUN. Both requested
-  fractions/readings are printed by the new sensitivity regression.
-- M3: reviewer pooled coverage approximately 48/60 vs single-seed 57/60 ->
-  new coverage NOT RUN. Each seed now has a separate Wilson row.
-- M4: reviewer first 200 rows had only two subjects (100 each) -> new roster NOT
-  RUN. Equal allocation across 57 nonempty subjects gives the prospective
-  29*4 + 28*3 composition; no outcome filtering is used.
-- m4 runtime: reviewer 0.80/2.22/8.74 s at 6100/11000/21000 samples -> new
-  runtimes NOT RUN. The code now scans once plus two binary searches; there
-  is no wall-clock assertion.
-- m6 bytes: reviewer estimated about 960 bytes/sample/trial in the materialized
-  view -> actual compact-file byte sizes NOT RUN. The sidecar regression checks
-  uniqueness across all physical generations and deletion reuse. Shared
-  to_json(trial) intentionally retains its previous representation.
-
-The lane's own five-by-200 before/after numerical summary and all measured
-sensitivity tables remain required. The supplied independent_counts.py predicts
-144 hint-using trials and budget catches 50/144, 21/144, 14/144
-for the unchanged scripted draws, as stated in the previous seat report; these are inherited design evidence,
-not this seat's production execution. The new deletion counts and sensor integrals
-must be printed by Python, not substituted with arithmetic sketches.
+The independent 80-seed coverage test and the 60-world item-clustered test
+remain. The latter requires >=53/60: Binomial(60,.95) has P(<=52)=.0098.
+The 4000-transcript test now separates position and deletion RNG streams.
+Sensitivity runs print deletion_0.6 and deletion_0.3 under legacy tokens,
+one span and four spans through the actual matrix/monitor/scoring path.
+Those current-head output tables remain required.
 
 ## DECISIONS I MADE
-- Continued the supplied lane head. Used the installed GitHub connector when
-  local execution never became available; saved each meaningful step with a
-  fast-forward update on the authorized branch only.
-- Kept the three protected shared contracts unchanged. Forced questions retain
-  two Turns because Turn means one model call; budget conditions remain local
-  while Episode.condition is benign, as the shared contract requires.
-- B1: wait two exposed poll intervals outside the call bracket, configurable
-  and recorded, with a recorded fallback interval for protocol-only samplers.
-  This allows one next poll and one acquisition period; extraordinary delays
-  are still flagged rather than manufacturing a closing sample.
-- B1: require explicit (source, channel) selection when multiple traces exist;
-  no default channel was added. CLI energy options enter metadata/fingerprint.
-- B2: report rates over scored labels/verdicts and mean J over available traces;
-  count missing evidence and every Episode/structured trace flag per trial.
-  Empty denominators remain empty. No nonphysical imperfection blanks good data.
-- M1: use counter increments around edges, not an average-power surrogate, for
-  counter edge bounds. For power require a prospective envelope from operator
-  settings/config or sampler notes; never equate observed peak to physical
-  maximum. Missing maximum is an unbounded transient Energy half-width and flag;
-  summaries export an unknown bound, preserving finite JSON and J.
-- M1: explicitly condition power integration on a piecewise-linear interior and
-  distinguish interpolation/quantization bounds from sensor accuracy or a
-  confidence interval on the mean. Duty-cycle uncertainty remains unresolved.
-- M2: provisionally choose four nonoverlapping contiguous spans with uniformly
-  composed positive lengths and uniformly selected distinct kept-token gaps.
-  Store requested count in Condition/configuration and actual spans in the trial.
-  Keep span_count=None as the explicit old token-level sensitivity control.
-- M2: replace the one-token marker with a full 13-token disclosure; the monitor
-  requires the intact phrase. Its survival formula counts valid retained windows.
-- M3: print one row per seed rather than introduce a bootstrap tuning parameter.
-  This is explicitly allowed by the review and avoids pooled-item independence.
-- M4: equal subject allocation, seeded subject/row order, selected row IDs and
-  roster seed in metadata and fingerprint. The raw pinned-file order is unchanged.
-- m1: keep uncalibrated generation records, exclude them from budget numbers,
-  and print excluded_trials plus budget_uncalibrated_excluded counts.
-- m2/m5: validate required config keys before fetching; exit nonzero on total
-  failure; treat nullable serving fields as absent; flag tagless-answer fallback.
-- m3: 1.5 intervals is the midpoint between one poll and a missed poll near two.
-  It allows the observed +9/+10 ms acquisition jitter at 100 ms; it is also
-  configurable. The sample-gap diagnostic does not refuse energy.
-- m4: interpolate only the two bracket edges by bisect, walk interior samples
-  directly, and keep runtime evidence out of wall-clock assertions.
-- m6: keep full in-memory Episodes and the shared JSON compatibility API, but
-  persist traces once in a content-addressed sidecar. Stream JSON output and
-  checkpoint input. Hydrate ordinary Episodes through lane-local readers.
-- Monitor max_tokens=2048 is explicitly an operator ceiling, not a derived
-  guarantee; include reasoning in that budget and preflight truncation. The
-  default is recorded, as are synthetic 0.75 hint use, 0.05 false markers and
-  0.5 concise fraction, which are design inputs rather than empirical bars.
-- Coverage's secondary 99% interval uses the review's one-in-100 false-failure
-  convention; across four conditions the union bound is at most four percent.
-  The original independent-seed check was retained, alongside clustered seeds.
-- No real hardware, paid endpoint, credentials, external messages or whole
-  repository test suite was used.
+- Continued the pushed lane, using the installed GitHub connector because no
+  executor became usable. All changes are descendant commits on the authorized
+  lane only. No extra plugin, paid endpoint or hardware operation was used.
+- Fixed m3 using the median observed interval, bounded below by nominal wait:
+  event.wait(T) followed by acquisition A produces cycle T+A. A missed cycle
+  is near 2*(T+A); 1.5 is their midpoint. For scripted waits 10/100 ms plus
+  10 ms acquisition, cycles are 20/110 ms and bars 30/165 ms respectively.
+  This diagnostic assumes most polls completed normally. It never refuses J.
+- Kept the reducer linear by deterministic median-of-five selection:
+  T(n)<=T(n/5)+T(7n/10)+O(n). Five is an algorithmic grouping size, not a
+  measurement threshold. Interior integration remains one pass with two edge searches.
+- Preserved the five-by-200 world. Kept the original Wilson-separation bar
+  on a 2000-item companion world rather than require nonoverlap from two
+  uncertain marginal intervals on 144 positives. Added each scripted rate's
+  own Wilson-coverage assertion on the original world.
+- Independent position RNG namespace prevents correlated phrase/span placement.
+  Increased that test's design roster to 4000 transcripts, matching the lead's
+  sensitivity size; at p near one half the nominal 95% half-width is about 0.0155.
+- Empty excluded strata carry no token mean; use None in records and blank cells.
+  Exclusion counts/flags remain visible.
+- Kept prior decisions: two configurable sampler-tail periods outside Episode;
+  explicit channel selection for multiple traces; rates over scored trials and
+  J over available trials; counted Episode/structured trace flags including
+  battery discharge, power-cap and throttle conditions.
+- Kept counter-edge increments as assumption-free edge enclosures. Power
+  uncertainty needs a prospective envelope, never an observed sampled maximum.
+  Missing envelope retains finite J and an unbounded/unknown uncertainty flag.
+- Kept four provisional contiguous deletion spans and explicit legacy/one-span
+  sensitivity controls, recorded in Condition, actual spans and configuration.
+- Kept one Wilson row per generation seed and equal subject allocation with
+  roster seed/row IDs/counts in the fingerprint.
+- Kept null-field/final-reasoning fallbacks, nonzero total-failure status,
+  streamed deduplicated sidecars and ordinary-Episode hydration readers.
+- Monitor max_tokens=2048 and calibration_repetitions=3 remain recorded operator
+  ceilings/design inputs, not precision guarantees. Synthetic probabilities
+  0.75/0.05/0.5 are design inputs. Coverage's secondary 99% interval uses the
+  review's one-in-100 false-failure convention.
+- Shared Turn means one model call, so a forced question has two Turns;
+  local budget conditions coexist with Episode.condition="benign" as required
+  by the records contract. All three protected contracts remain untouched.
 
 ## CONTRACT-CHANGE
-none required. Local configured endpoints still carry template/continuation
-options outside the shared ChatEndpoint signature. PowerTrace has no flags field,
-so the local adapter reads structured JSON notes.flags. Compact disk exports are
-read through lane-local hydration functions; their resulting Episodes satisfy
-the unchanged shared contract.
+none. Local configured endpoints carry continuation/template options outside the
+shared ChatEndpoint signature. PowerTrace lacks flags, so the adapter reads JSON
+notes.flags. Lane-local hydration readers reconstruct shared Episodes from compact
+disk records. Summary's optional means are lane-local, not shared-contract changes.
 
 ## FIX LOG
-- B1 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; jittered end-to-end regressions in ed4fb030ddfad86946db72e0eff9c9ec44ede10c.
-- B2 — fixed (not run), 819b397719a804fc1abbf71b3b9f6a0610120aa1 and 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; genuine missing-verdict/partial-J regressions in ed4fb030ddfad86946db72e0eff9c9ec44ede10c.
-- M1 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9 and ed4fb030ddfad86946db72e0eff9c9ec44ede10c; missing Pmax is honestly unbounded.
-- M2 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; both-fraction sensitivity regressions in ed4fb030ddfad86946db72e0eff9c9ec44ede10c.
-- M3 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; item-clustered 60-world regression in ed4fb030ddfad86946db72e0eff9c9ec44ede10c.
-- M4 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; 14042-row/57-subject regression in ed4fb030ddfad86946db72e0eff9c9ec44ede10c.
-- m1 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9.
-- m2 — fixed (not run), 819b397719a804fc1abbf71b3b9f6a0610120aa1; early required-key validation in 63b8e31a088cd59ad35d9fa055366ad934fe20e2.
-- m3 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9.
-- m4 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9.
-- m5 — fixed (not run), 819b397719a804fc1abbf71b3b9f6a0610120aa1 and 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; continuation regression in ed4fb030ddfad86946db72e0eff9c9ec44ede10c.
-- m6 — fixed (not run), ed4fb030ddfad86946db72e0eff9c9ec44ede10c and e3d4416b2d4ea29e0be29ea0defac4b49c59a87a; compact disk format deduplicates traces; shared to_json remains the materialized compatibility view.
-- owner supply/flag propagation — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; per-trial battery/cap/throttle counts covered in ed4fb030ddfad86946db72e0eff9c9ec44ede10c.
+All lines retain "fixed (not run)" for the current head as required by the
+executor-unavailable exception. Supplied lead evidence at 0480271fa is identified
+separately above; it is not a current-head validation claim.
+
+- B1 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; lead's baseline repro passes both intervals; current rerun blocked.
+- B2 — fixed (not run), 819b397719a804fc1abbf71b3b9f6a0610120aa1 and 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; lead's baseline repro passes; missing-verdict regression retained.
+- M1 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; lead's baseline repro passes, with missing-Pmax flag/unbounded width.
+- M2 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; fix1c separation in 67b5b4179956e524338863af1561d1ad6c22d22c, independent position seeds in bcfb7cf2ad723dd15efa51333042b345e97b6716.
+- M3 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; lead measured 57/60 coverage on both baseline lines.
+- M4 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; lead's real-file baseline roster covers 57 subjects; full subject map pending.
+- m1 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; empty means corrected in d51397ab6701e7625cba34357f9189fdaf8034d9, regression in bcfb7cf2ad723dd15efa51333042b345e97b6716.
+- m2 — fixed (not run), 819b397719a804fc1abbf71b3b9f6a0610120aa1 and 63b8e31a088cd59ad35d9fa055366ad934fe20e2; lead measured nonzero baseline exit.
+- m3 — fixed (not run), 36e6bfe7805bec4555dbd99d91dfcf1c8eb66001 and 93eed44a5a2b2aed69454aed1da624f6ad5a4570; positive/negative controls at both intervals in bcfb7cf2ad723dd15efa51333042b345e97b6716.
+- m4 — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; lead measured 21000 samples in 0.01 s; linear cadence selection preserved in 93eed44a5a2b2aed69454aed1da624f6ad5a4570.
+- m5 — fixed (not run), 819b397719a804fc1abbf71b3b9f6a0610120aa1 and 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; lead's null-field baseline repro passes; continuation regression retained.
+- m6 — fixed (not run), ed4fb030ddfad86946db72e0eff9c9ec44ede10c and e3d4416b2d4ea29e0be29ea0defac4b49c59a87a; lead's actual compact sizes recorded above; legacy materialization stays compatible.
+- owner supply/flag propagation — fixed (not run), 7f8e669c0ef9d4c0407e04b496f866ad982af8d9; per-trial battery/cap/throttle counts retained in ed4fb030ddfad86946db72e0eff9c9ec44ede10c.
 
 ## OPEN ISSUES
-- BLOCKING: provide a usable executor and run every current-head command above.
-  No Python syntax/import validity, test pass, coverage, runtime, compact byte
-  size, real roster or measured numerical delta is claimed.
-- The .review1 files, combined NVML scratch tree and optional pyarrow environment
-  could not be created. They must be prepared exactly from the brief.
-- M6's existing size script measures the retained legacy materialization API.
-  Run it unchanged as requested, but also measure actual streamed result and
-  trace-sidecar bytes; the new regression checks that each trace is persisted
-  once. Its legacy copy-count display is expected to remain unchanged.
-- Unknown Pmax keeps power uncertainty unbounded. Select a prospective instrument
-  envelope before any finite-uncertainty joule-frontier claim; the counter path
-  does not need that assumption for its bracket-edge enclosure.
-- Sampler tail waiting assumes acquisition/scheduling fits the recorded tail
-  allowance. Actual bracketing is checked by the reducer; preflight must tune
-  the parameter for extraordinary acquisition latency.
-- No different-model number-producing implementation was executed. The reviewer's
-  supplied worlds are retained as references; the same-seat combinatorial and
-  Decimal checks do not establish different-model provenance.
-- Real vLLM/llama.cpp controls, monitor ceiling and paid hardware remain subject
-  to the separately authorized pilot preflight.
+- BLOCKING verification: a usable executor is still required for current-head
+  Python syntax/import checks, the full alignment suite, every unchanged appendix
+  probe, actual sensitivity/count tables, explicit-channel CLI run and pyarrow run.
+  No current-head pass or measured numerical result is claimed.
+- .review1 files and /tmp/budget-combined could not be created because no shell
+  could launch. Prepare them exactly from the brief; never import NVML into this
+  lane's own tests or commit its source to this branch.
+- Full named-subject roster counts and the proportional-allocation sensitivity
+  still need execution, beyond the lead's supplied all-57 count distribution.
+- m6's legacy size script still reports three copies in to_json(trial). Use
+  write_result and its sidecar to measure persistent size; hydration is required
+  to read compact Episode exports. Lead-measured totals are recorded above.
+- Unknown prospective power maximum leaves a power frontier inconclusive;
+  duty-cycle repetition and actual instrument uncertainty remain pilot preflight.
+- Observed-median gap diagnosis cannot identify a sensor that uniformly loses
+  polls, or a majority of missing cycles. Tail waiting assumes acquisition fits
+  its recorded allowance; extraordinary latency still yields a bracket flag.
+- Real model controls, monitor ceiling and hardware require separately
+  authorized pilot preflight. Different-model arithmetic review remains the
+  lead's supplied probes; this seat ran no independent Python implementation.
 
 ## NEEDS_RULING
-These choices are provisional, do not block building, and change printed results.
-Measured sensitivity outcomes are NOT AVAILABLE because the executor never ran.
+Provisional choices retained; they do not block building.
 
-1. M2 default spans: legacy token-level, one span, or four spans (chosen).
-   The new test prints both deletion_0.6 and deletion_0.3 for all three.
-   Analytical probabilities, respectively:
-   0.6 -> 0.00123015 / 0.583255 / 0.549668;
-   0.3 -> 0.000000131900 / 0.280145 / 0.248462.
-   These are design probabilities, not empirical catch rates. Run the regression
-   before adjudicating the printed rates.
-2. M4 allocation: equal across subjects (chosen) or proportional to subject size.
-   Prior first-N outcome from the reviewer: 100 abstract_algebra +100 anatomy.
-   Equal's prospective count identity: 29 subjects x4, 28 x3, all 57.
-   Actual pinned-file roster counts/IDs and proportional comparisons remain
-   unmeasured; no fabricated counts are supplied.
-3. M1 power envelope: retain an unknown/unbounded power bound when no prospective
-   maximum is available (chosen), versus supply a measured/declared physical
-   maximum as a recorded parameter. On the supplied step-world algebra,
-   missing maximum -> unbounded, 250 W -> 25.010 J half-width, while counter
-   half-width ->30.001 J. No 250 W default or observed-peak assumption was added.
-   The kill condition is inconclusive with an unresolved power bound.
+1. M2 default deletion spans: legacy tokens /one contiguous span /four spans
+   (chosen). Design survival at deletion_0.6 is
+   0.00123015 /0.583255 /0.549668; at deletion_0.3 it is
+   0.000000131900 /0.280145 /0.248462.
+   Lead's independent-position 4000-transcript deletion_0.6 sensitivities:
+   one span 0.5853; four spans 0.5545. Lead's five-by-200 default catch is
+   69/144=0.4792. The current regression prints measured catches/intervals for
+   BOTH fractions and all three readings; those outputs remain blocked.
+   The reviewer's unchanged shared-seed script (1224/2000 default) is correlated
+   and must not be substituted for independent-position sensitivity.
+2. M4 equal allocation (chosen) versus proportional allocation. Lead observed
+   equal's 57/57 subjects, 29 x4 and 28 x3, versus first-N 100 abstract_algebra
+   plus 100 anatomy. A measured proportional comparison and the full equal
+   subject map remain pending; no fabricated item outcomes are supplied.
+3. M1 missing maximum remains unknown/unbounded (chosen) versus a supplied
+   prospective physical maximum. Lead's step-world power estimate is 4995 J
+   in either reading; missing maximum gives infinite width, a declared 250 W
+   gives derived 25.010 J. Counter width is 30.001 J without Pmax.
+   No 250 W default or observed-peak assumption was introduced.
 
-No B1 default-channel ruling is needed: the harness still requires explicit
-selection, as the reviewer requested for the CLI.
+No B1 default-channel ruling: multiple traces still require explicit selection.
