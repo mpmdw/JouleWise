@@ -73,7 +73,7 @@ def sampled_runs(episode: Episode, powers: tuple[float, ...], repeats: int, *,
             if end >= TICK_NS:
                 timestamps.append(episode.start_ns+end)
                 # Aligned offsets and W=25 ms give exactly one waveform bin.
-                readings.append(powers[end//TICK_NS-1]+shift)
+                readings.append(round((powers[end//TICK_NS-1]+shift)/0.001)*0.001)
             end += PERIOD_NS
         notes = {"timing_half_width_ns": [0]*len(readings)}
         if power_bound_w is not None:
@@ -109,6 +109,13 @@ class DutyWorldTests(unittest.TestCase):
                 self.assertLessEqual(abs(result.joules-truth), tolerance_j)
                 self.assertEqual(result.coverage_fraction, 1.0)
                 self.assertTrue(math.isfinite(result.half_width_j))
+        print("NVML DUTY WORLD", json.dumps({
+            "truth_j": truth, "turns": 6, "tool_calls": 6, "prefill_tokens": 4608,
+            "decode_tokens": 240, "duration_s": 6,
+            "estimates": [{"repeats": n, "joules": result.joules,
+                           "half_width_j": str(result.half_width_j),
+                           "coverage": result.coverage_fraction}
+                          for n, result in zip((1, 2, 4, 8, 16), results)]}))
         single_error = abs(results[0].joules-truth)
         repeated_error = abs(results[-1].joules-truth)
         # The comparison bar comes from the repeated estimate's own finite
@@ -138,6 +145,9 @@ class DutyWorldTests(unittest.TestCase):
         # The requested one-binomial-standard-error calibration bar. Seeds
         # 0..999 and 64 repeats are declared before inspecting any result.
         bar = math.sqrt(alpha*(1-alpha)/seed_count)
+        print("NVML DUTY CALIBRATION", json.dumps({
+            "seeds": seed_count, "repeats": repeats, "outside": outside,
+            "outside_fraction": fraction, "nominal_alpha": alpha, "binomial_se": bar}))
         self.assertLessEqual(abs(fraction-alpha), bar,
                              (outside, seed_count, fraction, alpha, bar))
 
@@ -195,6 +205,22 @@ class DutyWorldTests(unittest.TestCase):
         result = estimate_energy([(averaged, start, end)])
         self.assertIn("output_average_not_single_window", result.flags)
         self.assertIn("no_covered_work", result.flags)
+
+    def test_invalid_and_noncontributing_runs_do_not_change_valid_estimate(self) -> None:
+        episode, powers, _ = agent_world()
+        runs = sampled_runs(episode, powers, 8, seed=0)
+        expected = estimate_energy(runs)
+        trace, start, end = runs[0]
+        invalid = PowerTrace(**{**trace.__dict__, "resolution": None})
+        outside = PowerTrace(**{
+            **trace.__dict__, "t_ns": tuple(t-2*(end-start) for t in trace.t_ns),
+            "notes": json.dumps({"flags": ["sensor_update_phase_unreported"]})})
+        for prefix in ([(invalid, start, end+1)], [(outside, start, end+1)]):
+            actual = estimate_energy(prefix+runs)
+            # Same contributing samples and identical code must be bit
+            # identical; rejected/nonoverlapping inputs have zero weight.
+            self.assertEqual((actual.joules, actual.half_width_j, actual.coverage_fraction),
+                             (expected.joules, expected.half_width_j, expected.coverage_fraction))
 
     def test_student_quantile_has_independent_closed_form_checks(self) -> None:
         for probability in (0.95, 0.975, 0.995):

@@ -151,6 +151,17 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
       means whose windows straddle the workload boundaries without pretending
       the clipped mean was measured.
 
+    Optional JSON notes repeat_group labels planned sensor phases under scheduler
+    jitter. Actual endpoints and the requested E stay unchanged. Let h_r=sum c
+    for run r and H_g=sum h in a declared group of n runs. An auxiliary estimate
+    uses d_ri=(H_g/n)*c_ri/h_r, so every normalized run contribution has the same
+    Gaussian run-shift noise scale. Its variance is H_g**2*var(z_r/h_r)/n.
+    Compute all quantum/kernel/timing bounds with d and widen by abs(E-E_aux).
+    Triangle inequality transfers that interval to the requested E. Unequal
+    deterministic means inflate the residual spread; Welch remains approximate,
+    and this optional path is explicitly provisional. A label is never inferred
+    by rounding observed timestamps or changing the integration geometry.
+
     Without B, nonzero uncovered/smoothing/timing bias has unbounded half-width.
     Unknown resolution, unreplicated phases and unknown sensor age also produce
     infinite width plus a flag, never a refusal. Bounds cover sensor quantum,
@@ -160,10 +171,10 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
              "sensor_accuracy_not_included"}
     windows: list[_Window] = []
     signatures: dict[int, tuple[tuple[int, int], ...]] = {}
+    labels: dict[int, str | int] = {}
     bounds: list[float] = []
     duration: int | None = None
     unknown_timing = False
-    unknown_resolution = False
     for run_index, item in enumerate(runs):
         try:
             trace, start, end = item
@@ -181,9 +192,8 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
             if any(not math.isfinite(value) or value < 0 for value in trace.values):
                 flags.add("invalid_power_run")
                 continue
-            if duration is None:
-                duration = end - start
-            if end - start != duration:
+            run_duration = end - start
+            if duration is not None and run_duration != duration:
                 flags.add("duration_mismatch")
                 continue
             quantum = trace.resolution
@@ -201,17 +211,18 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
                     or any(not isinstance(x, int) for x in endpoints)):
                 flags.add("invalid_window_timing")
                 continue
+            run_unknown_timing = False
             if any(flag in metadata.get("flags", ()) for flag in
                    ("sensor_update_phase_unreported", "driver_field_timestamp_is_wall_clock")):
                 if "window_end_ns" not in metadata:
-                    unknown_timing = True
+                    run_unknown_timing = True
                     flags.add("sensor_window_time_unknown")
             run_windows = [
                 _Window(run_index, timestamp - start - trace.averaging_window_ns,
                         timestamp - start, value, quantum, bracket)
                 for timestamp, value, bracket in zip(endpoints, trace.values, timing)
                 if timestamp - start > 0
-                and timestamp - start - trace.averaging_window_ns < duration
+                and timestamp - start - trace.averaging_window_ns < run_duration
             ]
             if not run_windows:
                 flags.add("run_without_coverage")
@@ -221,9 +232,14 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
                 bounds.append(float(candidate))
                 if any(window.watts > candidate for window in run_windows):
                     flags.add("power_bound_violated")
-                    unknown_timing = True
+                    run_unknown_timing = True
             else:
                 bounds.append(math.inf)
+            duration = run_duration
+            unknown_timing |= run_unknown_timing
+            label = metadata.get("repeat_group")
+            if isinstance(label, (str, int)) and not isinstance(label, bool):
+                labels[run_index] = label
             signatures[run_index] = tuple((window.left, window.right) for window in run_windows)
             windows.extend(run_windows)
         except (TypeError, ValueError, AttributeError, OverflowError):
@@ -260,10 +276,45 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
         flags.add("partial_coverage")
     seconds = [float(weight / _NS_PER_S) for weight in coefficients]
     joules = math.fsum(weight * window.watts for weight, window in zip(seconds, windows))
+    interval_coefficients = coefficients
+    center_widening = 0.0
+    declared_groups: dict[Any, list[int]] = defaultdict(list)
+    auxiliary_variances: list[tuple[float, int]] = []
+    if labels:
+        flags.add("declared_phase_groups_auxiliary_interval")
+        flags.add("repeatability_interval_provisional")
+        for run_index, signature in signatures.items():
+            key = ("label", type(labels[run_index]).__name__, labels[run_index]) if run_index in labels else (
+                "geometry", signature)
+            declared_groups[key].append(run_index)
+        run_weights: dict[int, Fraction] = defaultdict(Fraction)
+        run_contributions: dict[int, list[float]] = defaultdict(list)
+        for coefficient, weight, window in zip(coefficients, seconds, windows):
+            run_weights[window.run] += coefficient
+            run_contributions[window.run].append(weight*window.watts)
+        interval_coefficients = list(coefficients)
+        for members in declared_groups.values():
+            total = sum((run_weights[index] for index in members), Fraction())
+            normalized = [
+                math.fsum(run_contributions[index])/float(run_weights[index]/_NS_PER_S)
+                for index in members]
+            if len({signatures[index] for index in members}) > 1:
+                flags.add("phase_geometry_varies")
+            for index, window in enumerate(windows):
+                if window.run in members:
+                    interval_coefficients[index] *= total/(len(members)*run_weights[window.run])
+            if len(members) >= 2:
+                auxiliary_variances.append((
+                    float(total/_NS_PER_S)**2/len(members)*statistics.variance(normalized),
+                    len(members)-1))
+        interval_seconds = [float(weight/_NS_PER_S) for weight in interval_coefficients]
+        auxiliary_energy = math.fsum(
+            weight*window.watts for weight, window in zip(interval_seconds, windows))
+        center_widening = abs(joules-auxiliary_energy)
+    else:
+        interval_seconds = seconds
     quantization = math.fsum(weight * window.resolution / 2
-                             for weight, window in zip(seconds, windows))
-    if unknown_resolution:
-        quantization = math.inf
+                             for weight, window in zip(interval_seconds, windows))
 
     # Original, unclipped windows matter: boundary-straddling means contain
     # power from outside the workload, which cannot be removed by clipping.
@@ -271,7 +322,7 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
     kernel_events[0] -= 1
     kernel_events[duration] += 1
     timing_area = Fraction()
-    for coefficient, window in zip(coefficients, windows):
+    for coefficient, window in zip(interval_coefficients, windows):
         kernel_weight = coefficient / (window.right - window.left)
         kernel_events[window.left] += kernel_weight
         kernel_events[window.right] -= kernel_weight
@@ -296,27 +347,33 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
     if unknown_timing:
         bias = math.inf
 
-    contributions: dict[int, list[float]] = defaultdict(list)
-    for weight, window in zip(seconds, windows):
-        contributions[window.run].append(weight * window.watts)
-    groups: dict[tuple[tuple[int, int], ...], list[float]] = defaultdict(list)
-    for index, signature in signatures.items():
-        groups[signature].append(math.fsum(contributions[index]))
     variances: list[tuple[float, int]] = []
     spread = 0.0
-    for values in groups.values():
-        if len(values) < 2:
+    if labels:
+        variances = auxiliary_variances
+        if any(len(members) < 2 for members in declared_groups.values()):
             flags.add("phase_without_replicates")
             spread = math.inf
-        else:
-            variances.append((len(values) * statistics.variance(values), len(values) - 1))
+    else:
+        contributions: dict[int, list[float]] = defaultdict(list)
+        for weight, window in zip(seconds, windows):
+            contributions[window.run].append(weight*window.watts)
+        groups: dict[tuple[tuple[int, int], ...], list[float]] = defaultdict(list)
+        for index, signature in signatures.items():
+            groups[signature].append(math.fsum(contributions[index]))
+        for values in groups.values():
+            if len(values) < 2:
+                flags.add("phase_without_replicates")
+                spread = math.inf
+            else:
+                variances.append((len(values)*statistics.variance(values), len(values)-1))
     if math.isfinite(spread):
         variance = math.fsum(value for value, _ in variances)
         if variance > 0:
             denominator = math.fsum(value*value / df for value, df in variances)
             degrees = variance*variance / denominator
             spread = _student_quantile((1 + DUTY_CONFIDENCE) / 2, degrees) * math.sqrt(variance)
-    return DutyEstimate(joules, quantization + bias + spread, covered / duration,
+    return DutyEstimate(joules, quantization + bias + spread + center_widening, covered / duration,
                         tuple(sorted(flags)))
 
 

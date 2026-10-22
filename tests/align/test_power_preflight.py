@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
 import math
 import os
 import random
 import signal
 import statistics
+import subprocess
+import time
 import sys
 import tempfile
 import unittest
@@ -221,6 +224,97 @@ class PreflightTests(unittest.TestCase):
         self.assertFalse(report["refused"])
         self.assertFalse(report["measurement_ready"])
         self.assertTrue(any("driver absent" in flag for flag in report["flags"]))
+
+    def test_unknown_virtualization_text_is_a_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            executables = FakeExecutables(directory, virtualization="Unknown future mode")
+            with mock.patch.dict(os.environ, {"PATH": str(directory)+os.pathsep+os.defpath}), \
+                    mock.patch.object(preflight.importlib.util, "find_spec", return_value=None):
+                report = preflight.run_preflight(
+                    library=FakeNvmlLibrary(), idle_seconds=0, load_seconds=0, recovery_seconds=0)
+            self.assertFalse(report["refused"])
+            self.assertIn("virtualization_evidence_unknown", report["devices"][0]["flags"])
+
+    def test_default_torch_load_runs_in_a_killable_owned_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            executables = FakeExecutables(directory)
+            # This tiny CUDA-shaped module exercises the actual child load
+            # command without importing torch or touching hardware.
+            (directory/"torch.py").write_text(
+                "from contextlib import nullcontext\n"
+                "from pathlib import Path\n"
+                "import time\n"
+                "class CUDA:\n"
+                " def is_available(self): return True\n"
+                " def device(self,index): return nullcontext()\n"
+                " def synchronize(self): pass\n"
+                "cuda=CUDA()\n"
+                "def randn(*args,**kwargs): return object()\n"
+                "def no_grad(): return nullcontext()\n"
+                f"def mm(a,b): Path({str(executables.state)!r}).touch(); time.sleep(0.005)\n",
+                encoding="utf-8")
+            env = {"PATH": str(directory)+os.pathsep+os.defpath, "PYTHONPATH": str(directory)}
+            with mock.patch.dict(os.environ, env), \
+                    mock.patch.object(preflight.importlib.util, "find_spec", return_value=object()):
+                report = preflight.run_preflight(
+                    library=FakeNvmlLibrary(state_file=executables.state),
+                    idle_seconds=0.45, load_seconds=0.25, recovery_seconds=0,
+                    interval_ns=5_000_000)
+            self.assertTrue(report["load"]["available"], report["load"])
+            self.assertEqual(report["load"]["kind"], "torch_cuda_matmul")
+            self.assertTrue(report["measurement_ready"], report.get("movement"))
+            self.assertIn("cleanup", report["load"])
+
+    @unittest.skipUnless(os.name == "posix" and Path("/proc").is_dir(),
+                         "owned-process-group orphan regression uses Linux subreaper support")
+    def test_owned_group_cleanup_reaps_a_term_resistant_child_after_leader_exit(self) -> None:
+        # Linux prctl.h: PR_SET_CHILD_SUBREAPER=36, PR_GET_CHILD_SUBREAPER=37.
+        # Temporarily adopt this test's orphan so the regression itself leaves
+        # neither active work nor a zombie waiting on a container's PID 1.
+        libc = ctypes.CDLL(None)
+        old = ctypes.c_int()
+        self.assertEqual(libc.prctl(37, ctypes.byref(old), 0, 0, 0), 0)
+        self.assertEqual(libc.prctl(36, 1, 0, 0, 0), 0)
+        process = None
+        child_pid = None
+        try:
+            with tempfile.TemporaryDirectory() as temp:
+                ready = Path(temp)/"child-ready"
+                child = (
+                    "import os,signal,time;from pathlib import Path;"
+                    "signal.signal(signal.SIGTERM,signal.SIG_IGN);"
+                    f"Path({str(ready)!r}).write_text(str(os.getpid()));"
+                    "time.sleep(60)")
+                leader = (
+                    "import subprocess,sys,time;from pathlib import Path;"
+                    f"subprocess.Popen([sys.executable,'-c',{child!r}]);"
+                    f"ready=Path({str(ready)!r});"
+                    "exec('while not ready.exists(): time.sleep(0.001)')")
+                process = subprocess.Popen([sys.executable, "-c", leader], start_new_session=True)
+                process.wait(timeout=2)
+                child_pid = int(ready.read_text())
+                receipt = preflight._terminate_load(process, timeout_s=0.05)
+                self.assertTrue(receipt["kill_escalated"])
+                waited, status = os.waitpid(child_pid, 0)
+                self.assertEqual(waited, child_pid)
+                self.assertTrue(os.WIFSIGNALED(status))
+                self.assertEqual(os.WTERMSIG(status), signal.SIGKILL)
+                child_pid = None
+        finally:
+            if process is not None:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait(timeout=2)
+            if child_pid is not None:
+                try:
+                    os.waitpid(child_pid, 0)
+                except ChildProcessError:
+                    pass
+            libc.prctl(36, old.value, 0, 0, 0)
 
     def test_predictive_criterion_has_its_stated_nominal_false_alarm_rate(self) -> None:
         seed_count, alpha = 1000, 0.05

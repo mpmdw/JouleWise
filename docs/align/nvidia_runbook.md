@@ -136,7 +136,8 @@ import time
 from joulewise.align.power.nvml import NvmlSampler
 
 sampler = NvmlSampler([0], interval_ns=10_000_000,
-                      clock_domain="measurement-host:monotonic")
+                      clock_domain="measurement-host:monotonic",
+                      repeat_group="planned-phase-0")
 sampler.start()
 try:
     workload_start_ns = time.monotonic_ns()
@@ -171,9 +172,14 @@ The first four offsets tile the period at quarter periods; subsequent offsets
 replicate those phases. Fewer than four phases leave gaps. Four phases can
 recover the point integral but do not estimate within-phase repeatability;
 use at least two replicas per phase for a finite spread term. Repeats need
-the same workload duration and aligned phase geometry; scheduling jitter is
-visible and may prevent exact replicas. Inspect these flags rather than
-rounding timestamps until runs look identical.
+the same workload duration. Pass each planned offset as the sampler's
+repeat_group label when collecting real runs; this identifies intended phase
+replicas while preserving actual, jittered endpoints. Without labels, the
+estimator requires exact geometry replicas. Never round observed timestamps
+until runs look identical. For declared groups it normalizes per-run weights,
+derives an auxiliary interval, and widens by its distance from the requested
+point estimate. Variable geometry and the approximate Welch interval are
+explicitly provisional; the first hardware session must validate that model.
 
 Check replayed token counts, tool order/results and workload identity.
 A seed alone does not establish deterministic CUDA execution or deterministic
@@ -185,7 +191,8 @@ The estimator aligns windows on workload start, pools covered intervals and
 integrates them; it does not join sparse points with straight lines. It
 reports coverage fraction and sums quantum, repeatability and
 coverage/smoothing/timing half-widths. The nominal 95% spread interval assumes
-independent Gaussian run shifts. Boundary-straddling windows retain their
+independent Gaussian run shifts (equal normalized shift scale within each
+declared phase). Boundary-straddling windows retain their
 original support, so outside-workload power is accounted for in the bound.
 
 Incomplete coverage, smoothed support or nonzero timing uncertainty needs an

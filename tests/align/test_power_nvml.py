@@ -311,6 +311,56 @@ class NvmlSamplerTests(unittest.TestCase):
             self.assertEqual(trace.t_ns, (100,))
             self.assertIn("nonincreasing_call_clock", json.loads(trace.notes)["flags"])
 
+    def test_missing_architecture_entry_point_preserves_collected_channels(self) -> None:
+        library = FakeNvmlLibrary()
+        library.nvmlDeviceGetArchitecture = None
+        traces = collect(library)
+        self.assertEqual(len(traces), 4)
+        self.assertTrue(all(trace.values for trace in traces))
+        self.assertTrue(all("sensor_averaging_unknown" in json.loads(trace.notes)["flags"]
+                            for trace in traces))
+
+    def test_driver_timestamp_mapping_and_declared_repeat_label(self) -> None:
+        library = FakeNvmlLibrary()
+        library.constant_field_timestamp = time.time_ns()//1000-300_000
+        traces = collect(library, repeat_group="phase-zero")
+        for trace in traces:
+            notes = json.loads(trace.notes)
+            self.assertEqual(notes["repeat_group"], "phase-zero")
+            if trace.channel.endswith((":power_instant", ":power_average")):
+                self.assertEqual(len(notes["window_end_ns"]), len(trace.values))
+                # The declared 300 ms sensor age exceeds one 100 ms period,
+                # and must remain visible rather than becoming query latency.
+                self.assertLess(notes["window_end_ns"][0], trace.t_ns[0]-100_000_000)
+                self.assertGreaterEqual(notes["window_timing_half_width_ns"][0], 1000)
+
+    def test_native_worker_timeout_defers_shutdown_until_call_returns(self) -> None:
+        class BlockingLibrary(FakeNvmlLibrary):
+            def __init__(self) -> None:
+                super().__init__()
+                self.entered, self.release = threading.Event(), threading.Event()
+
+            def nvmlDeviceGetPowerUsage(self, handle: object, output: object) -> int:
+                if self.power_calls:
+                    self.entered.set()
+                    self.release.wait()
+                return super().nvmlDeviceGetPowerUsage(handle, output)
+
+        library = BlockingLibrary()
+        sampler = NvmlSampler(library=library, interval_ns=1_000_000, stop_timeout_s=0)
+        try:
+            sampler.start()
+            self.assertTrue(library.entered.wait(timeout=2))
+            traces = sampler.stop()
+            self.assertEqual(library.shutdown_calls, 0)
+            self.assertTrue(any("shutdown_deferred_worker_active" in json.loads(trace.notes)["flags"]
+                                for trace in traces))
+        finally:
+            library.release.set()
+            if sampler._cleanup_thread is not None:
+                sampler._cleanup_thread.join(timeout=2)
+        self.assertEqual(library.shutdown_calls, 1)
+
     @unittest.skipUnless(importlib.util.find_spec("pynvml") is not None,
                          "optional nvidia-ml-py is not installed; ctypes path is tested")
     def test_optional_pynvml_uses_the_same_sampler_path(self) -> None:

@@ -278,7 +278,7 @@ class NvmlSampler:
     def __init__(self, device_indices: Sequence[int] | None = None, *,
                  interval_ns: int = 10_000_000, clock_domain: str | None = None,
                  nvml: Any | None = None, library: Any | None = None,
-                 power_bound_w: float | None = None,
+                 power_bound_w: float | None = None, repeat_group: str | int | None = None,
                  clock_ns: Callable[[], int] = time.monotonic_ns,
                  wall_clock_ns: Callable[[], int] = time.time_ns,
                  stop_timeout_s: float = 5.0) -> None:
@@ -288,6 +288,7 @@ class NvmlSampler:
         self._nvml = nvml
         self._library = library
         self.power_bound_w = power_bound_w
+        self.repeat_group = repeat_group
         self._clock = clock_ns
         self._wall_clock = wall_clock_ns
         self._cleanup_thread: threading.Thread | None = None
@@ -321,6 +322,10 @@ class NvmlSampler:
                     not math.isfinite(self.power_bound_w) or self.power_bound_w <= 0):
                 self._flags.append("invalid_power_bound_ignored")
                 self.power_bound_w = None
+            if self.repeat_group is not None and (isinstance(self.repeat_group, bool) or
+                    not isinstance(self.repeat_group, (str, int))):
+                self._flags.append("invalid_repeat_group_ignored")
+                self.repeat_group = None
             if self._nvml is None:
                 self._nvml = open_nvml(library=self._library)
             self._nvml.nvmlInit()
@@ -474,6 +479,7 @@ class NvmlSampler:
             "counter_discontinuities": list(channel.discontinuities),
             "raw_energy_mj": list(channel.raw_mj) if not is_power else None,
             "power_bound_w": self.power_bound_w,
+            "repeat_group": self.repeat_group,
             "device": device.inventory,
         }
         if channel.window_ends and all(value is not None for value in channel.window_ends):

@@ -234,26 +234,30 @@ def _torch_command(device_index: int, matmul_size: int, ready_path: Path) -> lis
     # CUDA initialization and allocations occur in a killable owned process,
     # never in an unkillable thread in the preflight controller.
     code = """
-import json, sys
+import json, os, sys
 from pathlib import Path
 ready = Path(sys.argv[1])
+def publish(value):
+    pending = ready.with_suffix(".pending")
+    pending.write_text(json.dumps(value))
+    os.replace(pending, ready)
 try:
     import torch
     if not torch.cuda.is_available():
-        ready.write_text(json.dumps({"available": False, "reason": "torch has no CUDA device"}))
+        publish({"available": False, "reason": "torch has no CUDA device"})
         raise SystemExit(0)
     with torch.cuda.device(int(sys.argv[2])):
         size = int(sys.argv[3])
         a = torch.randn((size, size), device="cuda")
         b = torch.randn((size, size), device="cuda")
         torch.cuda.synchronize()
-        ready.write_text(json.dumps({"available": True}))
+        publish({"available": True})
         with torch.no_grad():
             while True:
                 torch.mm(a, b)
                 torch.cuda.synchronize()
 except Exception as exc:
-    ready.write_text(json.dumps({"available": False, "reason": str(exc)}))
+    publish({"available": False, "reason": str(exc)})
 """
     return [sys.executable, "-c", code, str(ready_path), str(device_index), str(matmul_size)]
 
@@ -319,6 +323,8 @@ def run_preflight(*, device_indices: Sequence[int] | None = None,
             smi = _smi_inventory(index, command_timeout_s)
             device["nvidia_smi"] = smi
             smi_mode = str(smi.get("virtualization_mode") or "").lower()
+            if device.get("virtualization_mode") not in (None, 0, 1, 2, 3, 4):
+                device["flags"].append("virtualization_mode_unknown")
             if smi_mode and smi_mode not in (
                     "none", "pass through", "passthrough", "n/a", "not supported") and "vgpu" not in smi_mode:
                 device["flags"].append("virtualization_evidence_unknown")
@@ -422,10 +428,24 @@ def run_preflight(*, device_indices: Sequence[int] | None = None,
             if restore["returncode"] != 0:
                 report["flags"].append(f"gpu{index}_clock_restore_failed")
         if initialized:
-            try:
-                backend.nvmlShutdown()
-            except Exception as exc:
-                report["flags"].append(f"nvml_shutdown_failed: {exc}")
+            cleanup = sampler._cleanup_thread if sampler is not None else None
+            if cleanup is not None and cleanup.is_alive():
+                report["flags"].append("preflight_shutdown_deferred_worker_active")
+
+                def finish_shutdown() -> None:
+                    cleanup.join()
+                    try:
+                        backend.nvmlShutdown()
+                    except Exception as exc:
+                        report["flags"].append(f"deferred_nvml_shutdown_failed: {exc}")
+
+                threading.Thread(target=finish_shutdown, daemon=True,
+                                 name="joulewise-preflight-nvml-cleanup").start()
+            else:
+                try:
+                    backend.nvmlShutdown()
+                except Exception as exc:
+                    report["flags"].append(f"nvml_shutdown_failed: {exc}")
         report["traces"] = to_jsonable(traces)
         report["capabilities"] = [{
             "channel": trace.channel, "source": trace.source,
