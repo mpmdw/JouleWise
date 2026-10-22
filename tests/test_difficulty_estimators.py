@@ -96,50 +96,61 @@ def cli_run(bench, energy, config, selections):
         return read_outputs(path / "out")
 
 
-class AcceptanceTests(unittest.TestCase):
+class FloatAssertions(unittest.TestCase):
+    def assertFloatClose(self, actual, expected):
+        # COMMON/revision 2.3: 1e-6 relative, or 1e-6 in the column unit near
+        # zero, for a numerical re-derivation. Both exceed 1e6 * double noise
+        # (2.2e-16 * 1e6 = 2.2e-10 relative); no decimal-place rounding bar.
+        self.assertTrue(math.isclose(actual, expected, rel_tol=1e-6, abs_tol=1e-6),
+                        f"{actual!r} != {expected!r}")
+
+
+class AcceptanceTests(FloatAssertions):
     def test_A_wilson(self):
         p, lo, hi = est.wilson(15, 20)
-        self.assertEqual(p, .75)
-        self.assertAlmostEqual(lo, .531299, places=6)
-        self.assertAlmostEqual(hi, .888138, places=6)
-        self.assertAlmostEqual(est.wilson(20, 20)[1], .838875, places=6)
-        self.assertEqual(est.wilson(20, 20)[2], 1)
-        self.assertEqual(est.wilson(0, 20)[1], 0)
-        self.assertAlmostEqual(est.wilson(0, 20)[2], .161125, places=6)
+        self.assertFloatClose(p, .75)
+        self.assertFloatClose(lo, .531299)
+        self.assertFloatClose(hi, .888138)
+        self.assertFloatClose(est.wilson(20, 20)[1], .838875)
+        self.assertFloatClose(est.wilson(20, 20)[2], 1)
+        self.assertFloatClose(est.wilson(0, 20)[1], 0)
+        self.assertFloatClose(est.wilson(0, 20)[2], .161125)
 
     def test_B_mean_energy(self):
         avg, lo, hi = est.mean_interval(ENERGIES)
-        self.assertEqual(avg, 140)
-        self.assertAlmostEqual(lo, 100.7351, places=4)
-        self.assertAlmostEqual(hi, 179.2649, places=4)
+        self.assertFloatClose(avg, 140)
+        self.assertFloatClose(lo, 100.7351)
+        self.assertFloatClose(hi, 179.2649)
 
     def test_C_energy_per_correct(self):
+        # §6 MOVER pins re-derived from t(.975,4)=2.7764451051977987 and
+        # Wilson(.95); six decimals avoid the old three-decimal rounding gaps.
         result = est.energy_per_correct(15, 20, ENERGIES)
         self.assertEqual(result["epc_status"], "ok")
-        self.assertAlmostEqual(result["epc_j"], 186.6667, places=4)
-        self.assertAlmostEqual(result["epc_lo_j"], 128.934, places=3)
-        self.assertAlmostEqual(result["epc_hi_j"], 285.303, places=3)
+        self.assertFloatClose(result["epc_j"], 186.6667)
+        self.assertFloatClose(result["epc_lo_j"], 128.934010)
+        self.assertFloatClose(result["epc_hi_j"], 285.303377)
         result = est.energy_per_correct(20, 20, ENERGIES)
-        self.assertEqual(result["epc_j"], 140)
-        self.assertAlmostEqual(result["epc_lo_j"], 100.735, places=3)
-        self.assertAlmostEqual(result["epc_hi_j"], 189.604, places=3)
+        self.assertFloatClose(result["epc_j"], 140)
+        self.assertFloatClose(result["epc_lo_j"], 100.735137)
+        self.assertFloatClose(result["epc_hi_j"], 189.603682)
 
     def test_D_joules_per_token(self):
         ratio, lo, hi = est.joules_per_token(ENERGIES, TOKENS)
-        self.assertEqual(ratio, 1.75)
-        self.assertAlmostEqual(lo, 1.610097, places=6)
-        self.assertAlmostEqual(hi, 1.889903, places=6)
+        self.assertFloatClose(ratio, 1.75)
+        self.assertFloatClose(lo, 1.610097)
+        self.assertFloatClose(hi, 1.889903)
 
     def test_E_exact_decomposition(self):
         fit, residuals = est.decomposition(ols_rows())
         self.assertEqual(fit["status"], "ok")
         for key, expected in (("a_j", 10), ("b_prompt_j_per_tok", .5), ("b_gen_j_per_tok", 1.5), ("r2", 1)):
-            self.assertAlmostEqual(fit[key], expected, places=12)
-        self.assertAlmostEqual(fit["gen_share"], .641860, places=6)
-        self.assertAlmostEqual(fit["r2_gen_only"], .910222, places=6)
-        self.assertEqual(residuals[0]["mean_residual_j"], 0)
-        self.assertEqual(residuals[0]["lo_j"], 0)
-        self.assertEqual(residuals[0]["hi_j"], 0)
+            self.assertFloatClose(fit[key], expected)
+        self.assertFloatClose(fit["gen_share"], .641860)
+        self.assertFloatClose(fit["r2_gen_only"], .910222)
+        self.assertFloatClose(residuals[0]["mean_residual_j"], 0)
+        self.assertFloatClose(residuals[0]["lo_j"], 0)
+        self.assertFloatClose(residuals[0]["hi_j"], 0)
         self.assertEqual(residuals[0]["contains_zero"], 1)
 
     def test_F_noisy_decomposition(self):
@@ -148,23 +159,23 @@ class AcceptanceTests(unittest.TestCase):
         for key, expected in (("a_j", 13.980831), ("a_se", 3.137012),
                               ("b_prompt_j_per_tok", .465176), ("b_prompt_se", .027441),
                               ("b_gen_j_per_tok", 1.497284), ("b_gen_se", .031545), ("r2", .999164)):
-            self.assertAlmostEqual(fit[key], expected, places=6)
+            self.assertFloatClose(fit[key], expected)
         residual = [row["energy_j"] - (fit["a_j"] + fit["b_prompt_j_per_tok"]*row["prompt_tokens"]
                     + fit["b_gen_j_per_tok"]*row["generated_tokens"]) for row in rows]
-        self.assertAlmostEqual(sum(value*value for value in residual), 6.060703, places=6)
+        self.assertFloatClose(sum(value*value for value in residual), 6.060703)
         avg = sum(row["energy_j"] for row in rows)/6
-        self.assertAlmostEqual(sum((row["energy_j"]-avg)**2 for row in rows), 7250.833, places=3)
-        self.assertAlmostEqual(est.student_t_quantile(.975, 3), 3.182446, places=6)
+        self.assertFloatClose(sum((row["energy_j"]-avg)**2 for row in rows), 7250.833)
+        self.assertFloatClose(est.student_t_quantile(.975, 3), 3.182446)
         self.assertEqual(residuals[0]["contains_zero"], 1)
         half = est.student_t_quantile(.975, 5) * math.sqrt(sum(v*v for v in residual) / (5*6))
-        self.assertAlmostEqual(residuals[0]["hi_j"], half, places=12)
+        self.assertFloatClose(residuals[0]["hi_j"], half)
 
     def test_F_prime_coefficient_intervals(self):
         fit, _ = est.decomposition(ols_rows([2, -1, 0, -2, 1, 0]))
         for key, expected in (("a_lo_j", 3.997459), ("a_hi_j", 23.964202),
                               ("b_prompt_lo", .377846), ("b_prompt_hi", .552506),
                               ("b_gen_lo", 1.396896), ("b_gen_hi", 1.597673)):
-            self.assertAlmostEqual(fit[key], expected, delta=1e-6)
+            self.assertFloatClose(fit[key], expected)
         for rows in (ols_rows()[:3], [energy_row(i) for i in range(4)]):
             fit, _ = est.decomposition(rows)
             self.assertIsNone(fit["a_lo_j"])
@@ -174,10 +185,10 @@ class AcceptanceTests(unittest.TestCase):
         for df, expected in ((3, 3.182446305), (4, 2.776445105), (9, 2.262157163),
                              (19, 2.093024054), (29, 2.045229642)):
             with self.subTest(df=df):
-                self.assertAlmostEqual(est.student_t_quantile(.975, df), expected, delta=1e-9)
-        self.assertEqual(est.student_t_quantile(.5, 4), 0)
-        self.assertAlmostEqual(est.student_t_quantile(.025, 4), -2.776445105, delta=1e-9)
-        self.assertAlmostEqual(est.student_t_quantile(.75, 1), 1, delta=1e-12)
+                self.assertFloatClose(est.student_t_quantile(.975, df), expected)
+        self.assertFloatClose(est.student_t_quantile(.5, 4), 0)
+        self.assertFloatClose(est.student_t_quantile(.025, 4), -2.776445105)
+        self.assertFloatClose(est.student_t_quantile(.75, 1), 1)
 
     def test_nonestimable_and_nonpositive_lower(self):
         self.assertEqual(est.energy_per_correct(0, 20, ENERGIES)["epc_status"], "not_estimable_zero_correct")
@@ -187,7 +198,8 @@ class AcceptanceTests(unittest.TestCase):
         self.assertIsNone(few["mean_energy_j"])
         result = est.energy_per_correct(15, 20, [1, 100])
         self.assertEqual(result["epc_status"], "energy_lower_nonpositive")
-        self.assertEqual(result["epc_lo_j"], 0)
+        self.assertFloatClose(result["epc_lo_j"], 0)
+        # A nonzero energy spread makes the registered MOVER upper bound exceed its point.
         self.assertGreater(result["epc_hi_j"], result["epc_j"])
         self.assertEqual(est.joules_per_token([100], [20]), (None, None, None))
         self.assertEqual(est.joules_per_token([100, 120], [0, 0]), (None, None, None))
@@ -200,15 +212,16 @@ class AcceptanceTests(unittest.TestCase):
             row["level"] = index % 5 + 1
         _, residuals = est.decomposition(singleton_levels)
         self.assertEqual(residuals[1]["m"], 1)
-        self.assertEqual(residuals[1]["mean_residual_j"], 0)
+        self.assertFloatClose(residuals[1]["mean_residual_j"], 0)
         self.assertIsNone(residuals[1]["lo_j"])
         self.assertIsNone(residuals[1]["contains_zero"])
         small_k = est.energy_per_correct(1, 20, ENERGIES)
         self.assertEqual(small_k["epc_status"], "ok")
+        # Positive energy/accuracy uncertainty gives an upper bound above the point.
         self.assertGreater(small_k["epc_hi_j"], small_k["epc_j"])
 
 
-class V2AcceptanceTests(unittest.TestCase):
+class V2AcceptanceTests(FloatAssertions):
     def test_I_holdout_through_cli(self):
         ids = [f"i{i:02}" for i in range(1, 26)]
         config, selections = design({1: ids}, {1: ids[:5]})
@@ -216,20 +229,23 @@ class V2AcceptanceTests(unittest.TestCase):
         energy = [energy_row(i, item_id=item, energy_j=value) for i, (item, value) in enumerate(zip(ids, ENERGIES), 1)]
         tables = cli_run(bench, energy, config, selections)
         row = cell(tables)
-        self.assertEqual((row["n_bench"], row["k_correct"], row["accuracy"], row["n_holdout"], row["k_holdout"]), (25, 16, .64, 20, 15))
+        self.assertEqual((row["n_bench"], row["k_correct"], row["n_holdout"], row["k_holdout"]), (25, 16, 20, 15))
+        self.assertFloatClose(row["accuracy"], .64)
         # SPEC-v2 case I says "keeps its numbers", but 8.9 requires bootstrap primary bounds.
         # Its old [128.934, 285.303] pins therefore belong to the secondary MOVER columns.
         # For this seed (tests), B=200, 8.9 supports the primary bounds pinned below.
-        for key, expected, delta in (("epc_direct_j", 186.6667, .00005), ("epc_direct_lo_j", 128.934, .0005),
-                                      ("epc_direct_hi_j", 285.303, .0005)):
-            self.assertAlmostEqual(row[key], expected, delta=delta)
+        for key, expected in (("epc_direct_j", 186.6667), ("epc_direct_lo_j", 128.934010),
+                              ("epc_direct_hi_j", 285.303377)):
+            self.assertFloatClose(row[key], expected)
         self.assertEqual(row["primary_source"], "direct")
         self.assertEqual(row["primary_reason"], "model_fit_singular")
+        # These columns copy the same computed point: bit identity is required.
         self.assertEqual(row["epc_j"], row["epc_direct_j"])
-        self.assertAlmostEqual(row["epc_lo_j"], 138.94736842105263, delta=1e-12)
-        self.assertAlmostEqual(row["epc_hi_j"], 258.46153846153845, delta=1e-12)
+        self.assertFloatClose(row["epc_lo_j"], 138.94736842105263)
+        self.assertFloatClose(row["epc_hi_j"], 258.46153846153845)
         primary = next(r for r in tables["primary"] if r["variant"] == "primary" and r["level"] == 1)
         self.assertEqual(primary["status"], "unresolved_incomplete")
+        # The comparison table copies this exact cell point without re-deriving it.
         self.assertEqual(primary["epc_a_j"], row["epc_j"])
         self.assertEqual(primary["reason"], "Y/off:not_measured")
 
@@ -245,10 +261,10 @@ class V2AcceptanceTests(unittest.TestCase):
         for h, mu, epc, direct in ((h1, 165, 220, 213.333333333333), (h2, 245, 490, 396.666666666667)):
             result = est.model_epc(fit, h, 3)
             self.assertEqual(result["epc_model_status"], "ok")
-            self.assertAlmostEqual(result["model_energy_j"], mu, places=12)
-            self.assertAlmostEqual(result["epc_model_j"], epc, places=12)
+            self.assertFloatClose(result["model_energy_j"], mu)
+            self.assertFloatClose(result["epc_model_j"], epc)
             en = rows[:3] if h is h1 else rows[3:]
-            self.assertAlmostEqual(est.energy_per_correct(sum(r["correct"] for r in h), len(h), [r["energy_j"] for r in en])["epc_j"], direct, places=10)
+            self.assertFloatClose(est.energy_per_correct(sum(r["correct"] for r in h), len(h), [r["energy_j"] for r in en])["epc_j"], direct)
 
     def test_M_misfit_through_cli(self):
         ps = [100,120,80,110, 105,125,85,115, 95,115,90,120, 110,100,85,125, 90,130,100,105]
@@ -265,22 +281,23 @@ class V2AcceptanceTests(unittest.TestCase):
         tables = cli_run(bench, energy, config, selections)
         fit = next(r for r in tables["decomposition"] if r["variant"] == "primary")
         for key, expected in (("a_j", 33.503039), ("b_prompt_j_per_tok", .271248), ("b_gen_j_per_tok", 1.542626)):
-            self.assertAlmostEqual(fit[key], expected, delta=1e-6)
+            self.assertFloatClose(fit[key], expected)
         pins = [(-5.748090, .946453), (-4.415225, 1.460235), (5.579092, 11.109952), (-6.475269, 2.171315), (-5.407524, .914395)]
         residuals = [r for r in tables["level_residuals"] if r["variant"] == "primary"]
         for r, (lo, hi) in zip(residuals, pins):
-            self.assertAlmostEqual(r["boot_lo_j"], lo, delta=1e-6)
-            self.assertAlmostEqual(r["boot_hi_j"], hi, delta=1e-6)
+            self.assertFloatClose(r["boot_lo_j"], lo)
+            self.assertFloatClose(r["boot_hi_j"], hi)
             self.assertEqual(r["misfit"], int(r["level"] == 3))
         for l in range(1, 6):
             r = cell(tables, "m", l)
-            self.assertAlmostEqual(r["model_energy_j"], 175.858766, delta=1e-6)
-            self.assertAlmostEqual(r["epc_model_j"], 211.030519, delta=1e-6)
+            self.assertFloatClose(r["model_energy_j"], 175.858766)
+            self.assertFloatClose(r["epc_model_j"], 211.030519)
             self.assertEqual(r["primary_source"], "direct" if l == 3 else "model")
         r = cell(tables, "m", 3)
         self.assertEqual(r["primary_reason"], "misfit")
-        self.assertAlmostEqual(r["epc_j"], 210.9, delta=1e-10)
-        self.assertEqual((r["epc_lo_j"], r["epc_hi_j"]), (162.25, 518.25))
+        self.assertFloatClose(r["epc_j"], 210.9)
+        self.assertFloatClose(r["epc_lo_j"], 162.25)
+        self.assertFloatClose(r["epc_hi_j"], 518.25)
         self.assertEqual(tables["summary"]["variants"]["primary"]["rails"]["misfit_cells"], ["m/off:3"])
 
     def test_N_primary_through_cli(self):
@@ -311,20 +328,20 @@ class V2AcceptanceTests(unittest.TestCase):
             self.assertEqual((r["cell_status"], r["primary_source"], r["epc_model_status"]), ("complete", "model", "ok"))
             for key, expected in (("model_energy_j", mu), ("epc_model_j", point), ("epc_model_lo_j", lo),
                                   ("epc_model_hi_j", hi), ("epc_direct_j", direct)):
-                self.assertAlmostEqual(r[key], expected, delta=1e-6)
+                self.assertFloatClose(r[key], expected)
         residual_pins = {models[0]: [(-1.459451, 1.241493), (-1.241493, 1.459451)],
                          models[1]: [(-2.730711, 2.264987), (-2.264987, 2.730711)]}
         for r in tables["level_residuals"]:
             if r["variant"] == "primary":
                 lo, hi = residual_pins[r["model"]][int(r["level"])-1]
-                self.assertAlmostEqual(r["boot_lo_j"], lo, delta=1e-6)
-                self.assertAlmostEqual(r["boot_hi_j"], hi, delta=1e-6)
+                self.assertFloatClose(r["boot_lo_j"], lo)
+                self.assertFloatClose(r["boot_hi_j"], hi)
                 self.assertEqual(r["misfit"], 0)
         comparison_pins = [(-.606136, -.963820, -.239224, -1.037935, -.101456, "resolved"),
                            (-.470004, -.945010, .045545, -1.002726, .507957, "unresolved")]
         for r, pins in zip([r for r in tables["primary"] if r["variant"] == "primary" and r["level"] <= 2], comparison_pins):
             for key, expected in zip(("log_ratio", "desc_lo", "desc_hi", "dec_lo", "dec_hi"), pins[:5]):
-                self.assertAlmostEqual(r[key], expected, delta=1e-6)
+                self.assertFloatClose(r[key], expected)
             self.assertEqual(r["status"], pins[5])
         self.assertEqual(tables["summary"]["variants"]["primary"]["rails"]["primary_question"]["verdict"], "no_resolved_change")
 
@@ -332,7 +349,7 @@ class V2AcceptanceTests(unittest.TestCase):
         values = [b/100-.03 for b in range(1, 201)]
         r = est.compare_replicates(.975, values, .95, .99)
         for key, expected in (("desc_lo", .02), ("desc_hi", 1.93), ("dec_lo", -.02), ("dec_hi", 1.97)):
-            self.assertAlmostEqual(r[key], expected, delta=1e-12)
+            self.assertFloatClose(r[key], expected)
         self.assertEqual(r["status"], "unresolved")
         self.assertEqual(est.percentile(list(range(1, 41)), .95), (1,40))
         self.assertEqual(est.percentile(list(range(1, 41)), .5), (10,31))
@@ -399,12 +416,14 @@ class V2AcceptanceTests(unittest.TestCase):
         config["sizes"]["on"] = copy.deepcopy(config["sizes"]["off"])
         selections["selections"]["on"] = copy.deepcopy(selections["selections"]["off"])
         absent = est.estimate_tables(bench, energy, config, selections)
+        # Same code, inputs and seeded streams: an absent party must be bit-identical.
         self.assertEqual(absent["cells"], before["cells"])
         self.assertEqual(absent["primary"], before["primary"])
         self.assertEqual(absent["summary"]["roster"]["qwen3-8b/on"], "not_measured")
         self.assertFalse(any(r["rival"] == "qwen3-8b/on" for r in absent["rivals"]))
         bench.append(bench_row(model="qwen3-8b", mode="on", level=1, item_id=ids[1][0]))
         present = est.estimate_tables(bench, energy, config, selections)
+        # Optional-party activation must leave the existing parties' seeded streams identical.
         self.assertEqual(present["primary"], before["primary"])
         self.assertEqual(present["summary"]["roster"]["qwen3-8b/on"], "optional")
         for r in present["crossover"]:
@@ -419,16 +438,20 @@ class V2AcceptanceTests(unittest.TestCase):
         bench = [bench_row(i) for i in range(10)]
         energy = [energy_row(i, energy_j=1000 if i == 4 else 10, flags="contention_above_level" if i == 4 else "") for i in range(5)]
         tables = est.estimate_tables(bench, energy, config, selections)
-        self.assertEqual((cell(tables)["m_energy"], cell(tables)["mean_energy_j"], cell(tables)["cell_status"]), (4,10,"short"))
-        self.assertEqual((cell(tables, variant="flagged_inclusive")["m_energy"], cell(tables, variant="flagged_inclusive")["mean_energy_j"]), (5,208))
+        self.assertEqual((cell(tables)["m_energy"], cell(tables)["cell_status"]), (4,"short"))
+        self.assertFloatClose(cell(tables)["mean_energy_j"], 10)
+        self.assertEqual(cell(tables, variant="flagged_inclusive")["m_energy"], 5)
+        self.assertFloatClose(cell(tables, variant="flagged_inclusive")["mean_energy_j"], 208)
         energy.append(energy_row(4, attempt=2, energy_j=12))
         tables = est.estimate_tables(bench, energy, config, selections)
         r = cell(tables)
-        self.assertEqual((r["m_energy"], r["mean_energy_j"], r["replaced_rows"], r["cell_status"]), (5,10.4,1,"complete"))
-        self.assertEqual(cell(tables, variant="flagged_inclusive")["mean_energy_j"], 208)
+        self.assertEqual((r["m_energy"], r["replaced_rows"], r["cell_status"]), (5,1,"complete"))
+        self.assertFloatClose(r["mean_energy_j"], 10.4)
+        self.assertFloatClose(cell(tables, variant="flagged_inclusive")["mean_energy_j"], 208)
         energy[4]["flags"] = "contention"
         tables = est.estimate_tables(bench, energy[:5], config, selections)
-        self.assertEqual([cell(tables, variant=v)["mean_energy_j"] for v in est.VARIANTS], [208,208])
+        for variant in est.VARIANTS:
+            self.assertFloatClose(cell(tables, variant=variant)["mean_energy_j"], 208)
         # A physical flag on a bench attempt also uses the first inclusive attempt.
         bench[7]["flags"] = "sleep"
         bench.append(bench_row(7, attempt=2, correct=0))
@@ -436,7 +459,7 @@ class V2AcceptanceTests(unittest.TestCase):
         self.assertEqual((cell(tables)["k_holdout"], cell(tables, variant="flagged_inclusive")["k_holdout"]), (4,5))
 
 
-class TableTests(unittest.TestCase):
+class TableTests(FloatAssertions):
     def setUp(self):
         self.config, self.selections = design({1: [f"i{i}" for i in range(8)]}, {1: [f"i{i}" for i in range(5)]}, b=20)
 
@@ -491,7 +514,8 @@ class TableTests(unittest.TestCase):
         tables = est.estimate_tables(bench, energy, self.config, self.selections)
         r = cell(tables)
         self.assertEqual((r["m_energy"], r["token_mismatch_count"], r["rows_not_used"]), (3,1,4))
-        self.assertEqual((r["loop_rate_bench"], r["cap_hit_rate_bench"]), (1/8,1/8))
+        self.assertFloatClose(r["loop_rate_bench"], 1/8)
+        self.assertFloatClose(r["cap_hit_rate_bench"], 1/8)
         self.assertEqual(tables["summary"]["flag_counts"]["energy"]["duplicate"], 3)
         self.assertEqual(tables["decomposition"][-1]["N"], 3)
 
@@ -501,6 +525,7 @@ class TableTests(unittest.TestCase):
         config = copy.deepcopy(self.config)
         config["bootstrap"] = {"seed":"invalid", "replicates":200}
         reps = est.bootstrap({1: er}, {1:h}, config, "primary", "rails", "X", "off")
+        # Invalid-replicate counts are integers: at least one exercises the invalid path.
         self.assertGreater(reps[1]["invalid"], 0)
         self.assertIn(math.inf, reps[1]["direct"])
         fit, _ = est.decomposition(er)
@@ -512,6 +537,7 @@ class TableTests(unittest.TestCase):
         self.assertEqual(est.log_ratio_replicates([math.inf, math.inf, 1], [math.inf, 1, math.inf]), [0,math.inf,-math.inf])
         self.assertEqual(est.percentile([1]*19+[math.inf], .95), (1,math.inf))
         other = est.bootstrap({1:list(reversed(er))}, {1:list(reversed(h))}, config, "primary", "rails", "X", "off")
+        # Sorting restores identical inputs to the same code and seeded stream.
         self.assertEqual(reps, other)
 
     def test_cli_outputs_data_errors_usage_config_and_unreadable_inputs(self):
@@ -537,6 +563,7 @@ class TableTests(unittest.TestCase):
                 self.assertNotIn(b"\r", data)
                 self.assertEqual(data.decode().splitlines()[0], ','.join(columns))
             summary = read_outputs(path/"out")["summary"]
+            # Untransformed config copies must preserve their exact input bits.
             self.assertEqual((summary["descriptive_confidence"], summary["decision_confidence"]), (.95,.99))
             self.assertEqual(summary["flag_counts"]["bench"]["bad_level"], 1)
             self.assertEqual(summary["flag_counts"]["energy"]["bad_number"], 1)

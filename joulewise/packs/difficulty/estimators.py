@@ -40,6 +40,9 @@ VARIANTS = ("primary", "flagged_inclusive")
 
 def _beta_fraction(a, b, x):
     """Lentz continued fraction for the regularized incomplete beta."""
+    # Numerical guards: 1e-300 avoids zero divisors with finite reciprocals;
+    # 2e-15 (~9 double epsilons) stops the continued fraction well below the
+    # registered 1e-6 agreement scale. Neither constant is an agreement bar.
     tiny, eps = 1e-300, 2e-15
     qab, qap, qam = a + b, a + 1, a - 1
     c, d = 1.0, 1 - qab * x / qap
@@ -84,6 +87,8 @@ def student_t_quantile(probability, df):
         return 0.5 * _regularized_beta(df / (df + t*t), df / 2, 0.5)
     while tail(hi) > target:
         hi *= 2
+    # Numerical stop width: dimensionless t width 1e-13 is seven orders below
+    # the 1e-6 agreement bar; the midpoint identity check stops float stagnation.
     while hi - lo > 1e-13:
         mid = (lo + hi) / 2
         if mid == lo or mid == hi:
@@ -200,6 +205,9 @@ def percentile(values, confidence):
     if not values:
         return None, None
     values = sorted(values)
+    # Registered §8.7 rounding guard: 1e-9 of one order-statistic rank prevents
+    # a float just below an integer from selecting the preceding rank. It is
+    # far below one rank and does not round a printed numerical output.
     k = max(1, math.floor(len(values) * (1 - confidence) / 2 + 1e-9))
     return values[k - 1], values[len(values) - k]
 
@@ -569,6 +577,9 @@ def estimate_tables(bench_rows, energy_rows, config, selections):
                 fit, residuals = decomposition(pooled, cd)
                 tables["decomposition"].append({**identity, **fit})
                 boot = bootstrap(e, h, config, variant, boundary, model, mode)
+                # Registered §8.8 arithmetic: tau=1e-9*max(1 J, pooled mean J).
+                # No physical/printed-precision derivation is registered; retain
+                # this source-switch threshold for the next registration revision.
                 tolerance = 1e-9 * max(1, mean(row["energy_j"] for row in pooled) if pooled else 1)
                 residual_by_level = {row["level"]: row for row in residuals}
                 for level in range(1, 6):
@@ -662,6 +673,8 @@ def estimate_tables(bench_rows, energy_rows, config, selections):
                       for row in tables["cells"] if row["primary_reason"] == "misfit")
     summary["method_note"] = (
         "Primary EPC uses a pooled model per configuration and holdout token means; direct EPC is secondary. "
+        # Description of §8.8's registered threshold above, not an agreement bar;
+        # its physical/printed-precision derivation is owed at the next revision.
         "A descriptive bootstrap residual interval excluding zero beyond 1e-9*max(1, pooled mean energy) "
         "selects direct EPC at misfit levels. Switched cells (variant/boundary/configuration:level): "
         + (", ".join(switched) if switched else "none") + ". "
