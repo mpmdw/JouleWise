@@ -22,6 +22,7 @@ from unittest.mock import patch
 from joulewise import bytes_analysis as ba
 from joulewise.external import km003c_parse as kp
 from scripts import bytes_analyze
+from tests.git_fixture import init_git_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests/fixtures/bytes"
@@ -1788,7 +1789,7 @@ with patch.object(export_runs, "export", side_effect=grouped):
                     self.assertEqual((root / "stage1" / name).read_bytes(), (root / "legacy-fit" / name).read_bytes())
                 commitment = (root / "stage1/predictions.json").read_bytes()
                 release("heldout", all_keys, "uncommitted-keys", expected=1)
-                self.command("git", "init", "-q", root / "stage1")
+                init_git_fixture(root / "stage1", "-q")
                 self.command("git", "add", ".", cwd=root / "stage1")
                 self.command("git", "-c", "user.name=BYTES Synthetic", "-c", "user.email=synthetic@example.invalid",
                              "commit", "-qm", "Freeze synthetic stage-1 predictions", cwd=root / "stage1")
@@ -1937,7 +1938,7 @@ manifest = f.archive_campaign(root, non_claim=False, release="none", subpack_ses
             analyze("fit", "fit", keys="fit-keys")
             predictions = root / "fit/predictions.json"
             frozen_bytes = predictions.read_bytes()
-            self.command("git", "init", "-q", root / "fit")
+            init_git_fixture(root / "fit", "-q")
             self.command("git", "add", ".", cwd=root / "fit")
             self.command("git", "-c", "user.name=BYTES Synthetic", "-c", "user.email=synthetic@example.invalid",
                          "commit", "-qm", "Commit synthetic Q1 predictions", cwd=root / "fit")

@@ -158,6 +158,17 @@ Latest observation while local work was still running, 2026-10-22 03:05:06 UTC, 
 
 ## OPEN ISSUES
 
+- CI run `39715668140`, shard 7, git-fixture guard defect FOUND AND FIXED: `tests.test_git_fixture_maintenance.GitFixtureMaintenanceTests.test_every_test_module_routes_git_initialization_through_shared_helper` reported direct initialization at original `tests/test_bytes_analysis.py` lines 1791 and 1940, inherited from B4 (`lane/2026-10-20-b6-blinding-group`). Per `docs/process_traces/2026-08-26-t26-ci-reliability/README.md`, imported `tests.git_fixture.init_git_fixture` and replaced only those calls with `init_git_fixture(root / "stage1", "-q")` in `SubsetReleaseChainTests` and `init_git_fixture(root / "fit", "-q")` in `Q1MissingFilesCLIChainTests`, disabling detached auto-maintenance before fixture commits. Add, commit, rev-parse, assertions and every existing number are unchanged.
+
+  All commands below ran from `/Users/edr/code/jw-wt/by-int-verify` with `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1` prepended. Each test command additionally had `TMPDIR="$(/usr/bin/mktemp -d /private/tmp/LABEL.XXXXXX)"` prepended, with its distinct LABEL below; every temporary directory was fresh and outside the worktree. The import check ran first. No whole suite ran and no final-CI result is claimed.
+
+  | LABEL | Command | Exit | Result |
+  | --- | --- | ---: | --- |
+  | import (no TMPDIR override) | `/opt/homebrew/bin/python3.13 -B -c "import joulewise; print(joulewise.__file__)"` | 0 | `/Users/edr/code/jw-wt/by-int-verify/joulewise/__init__.py` |
+  | `by-int-git-guard` | `/opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_git_fixture_maintenance` | 0 | 5 tests, OK |
+  | `by-int-git-subset` | `/opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_bytes_analysis.SubsetReleaseChainTests` | 0 | 2 tests, OK |
+  | `by-int-git-q1` | `/opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_bytes_analysis.Q1MissingFilesCLIChainTests` | 0 | 3 tests, OK |
+  | `by-int-git-q2` | `/opt/homebrew/bin/python3.13 -B -m unittest -v tests.test_bytes_analysis.Q2CommitmentCLIChainTests` | 0 | 1 test, both cases, OK |
 - Scope blocker RESOLVED by the lead's exact-file grant for `scripts/build_b6_flag_catalog.py`. Added `bytes.withheld_missing`, `bytes.module_changed_after_commitment`, and `bytes.commitment_not_rebuilt` to `NEW_CODES`, copying the catalog's family, klass, effect, blinding and note exactly. B6-RULING.md Q1/Q2 determine that all three stay `DISCLOSE`; no refusal, arithmetic, tolerance or threshold changed. The catalog file is unchanged, SHA-256 `4cd222c4fd7cc43e1e2625f9afae6f6cc742b40876241fb5cc5864d8ee7eaa4f`, matching registration Appendix A. This resolves the builder check and catalog-test blocker; it makes no final-CI claim.
 
   All commands below ran from `/Users/edr/code/jw-wt/by-int-verify`. Each had `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 TMPDIR="$(/usr/bin/mktemp -d /Users/edr/code/jw-wt/by-int-verify/.tmp-byint/LABEL.XXXXXX)"` prepended, using its distinct LABEL shown below and a fresh directory. `.tmp-byint/` remains uncommitted. No whole suite ran.
