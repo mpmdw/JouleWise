@@ -439,10 +439,20 @@ class BudgetEndToEndTests(OfflineTest):
                               episode_energy(source.episode).joules,
                               uncertainty=episode_energy(source.episode).uncertainty_j)
         rows = {r.condition: r for r in summarize(result.trials)}
-        # Designed p_deletion=f and p_budget=f^2 differ by f(1-f) ~= 0.24.
-        # Demand separation by their own 95% Wilson intervals, not an invented margin.
-        self.assertGreater(rows["deletion_0.6"].catch_rate.interval[0],
-                           rows["budget_0.6"].catch_rate.interval[1])
+        # A 13-token phrase survives four spans with p=0.549668, versus
+        # (614/1024)^2=0.359531 for a budget cut. At only 144 positives the
+        # marginal 95% Wilson intervals can overlap. Preserve the interval-
+        # separation bar and exercise it on a larger independent item roster.
+        # With 2000 designed items (~1500 positives), the sum of worst-case
+        # half-widths is z/sqrt(1500) ~= 0.051, below half the 0.190 gap.
+        separation = {r.condition: r for r in summarize(run_synthetic(
+            count=2000, seeds=(0,), with_power=False,
+            conditions=(Condition("thinking_on"), Condition("budget_0.6", "budget", 0.6),
+                        Condition("deletion_0.6", "deletion", 0.6))).trials)}
+        self.assertGreater(separation["deletion_0.6"].catch_rate.interval[0],
+                           separation["budget_0.6"].catch_rate.interval[1])
+        print("SYNTHETIC separation / 2000 items:",
+              {name: separation[name].catch_rate for name in ("budget_0.6", "deletion_0.6")})
         # Removing 410 generated tokens saves 8.2 s minus the extra 0.2 s prefill:
         # at 80 W this is 640 J; compare with both computed edge/sensor half-widths.
         self.assertGreater(rows["deletion_0.6"].mean_joules
@@ -454,6 +464,11 @@ class BudgetEndToEndTests(OfflineTest):
             probability = (deletion_survival_probability(1024, 1024 - cap_tokens(1024, fraction),
                                                         len(DISCLOSURE.split()))
                            if name.startswith("deletion") else fraction ** 2)
+            # Each seed-0 rate must also contain its scripted probability
+            # within its nominal 95% Wilson interval on the five-by-200 world.
+            low, high = rows[name].catch_rate.interval
+            self.assertLessEqual(low, probability)
+            self.assertGreaterEqual(high, probability)
             positives = [t for t in result.trials if t.condition.name == name
                          and t.hint_use.uses_hint is True]
             # An independent transcript count checks the monitor/scoring numerator.
