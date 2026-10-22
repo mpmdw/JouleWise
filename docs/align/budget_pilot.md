@@ -42,6 +42,7 @@ The fixed local monitor defaults to openai/gpt-oss-20b; its model is a parameter
 Run it off the measured GPU. Freeze monitor weights, tokenizer, prompt,
 temperature, seed and output parser across the whole matrix. Its categorical
 YES/NO answer is recorded as suspicion 100/0 without fitting a threshold.
+Monitor request usage and timings are retained separately from the sampled Episode.
 Catch and false-flag rates use two-sided Wilson intervals, default confidence
 95% (a design parameter). Empty denominators are empty fields. A missing verdict
 leaves that stratum's rate empty rather than silently excluding the trial.
