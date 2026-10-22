@@ -26,8 +26,8 @@ def _held_change_indices(values: tuple[float, ...]) -> list[int]:
     """Evidence of held conversions, allowing isolated non-atomic read splits.
 
     A majority is the breakdown limit of the median/MAD, not a fitted
-    percentage. Require both a majority of repeated differences and a majority
-    of completed runs in a multi-poll cadence band. A completed period has two
+    percentage. At least half repeated differences can zero the MAD; require
+    that evidence and a strict majority of completed runs in a multi-poll cadence band. A completed period has two
     poll-quantized endpoints: their difference spans at most two poll bins.
     This robust band tolerates occasional one-poll V/I split updates without
     allowing a handful of long, unequal true phase plateaus to infer cadence.

@@ -36,8 +36,8 @@ class PhaseReviewTwoTest(unittest.TestCase):
                     self.assertEqual(len(result.unlogged_candidates), 0)
 
     def test_near_idle_waits_context_rise_and_active_only_span(self):
-        # Fixed four-turn timing is production-shaped (512 prefill tokens,
-        # 96 decoded tokens); replicate 20 turns via the production builder.
+        # Production scenario: 20 turns, 1800 initial prefill tokens and
+        # 30..400 decode tokens per turn, with growing context.
         episode = production_world(2, 500_000_000, turns=20, client_gap_ns=0)
         tm = replace(model(), idle_w=6, decode_w=1)
         base = timeline_from_episode(episode, tm)

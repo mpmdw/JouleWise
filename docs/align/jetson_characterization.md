@@ -81,8 +81,10 @@ precision, explicitly flagged, not a calibrated ADC resolution. A sample
 may average over a conversion/averaging window; timestamp it at the end and
 preserve that window. Do not invent a known window when it is unavailable.
 
-For tool-call matching, widen boundary comparisons by sampling interval plus
-averaging window plus the half-width of the trace-to-episode clock offset.
+For tool-call matching, widen boundary comparisons by effective sampling
+cadence plus averaging window plus the half-width of the trace-to-episode
+clock offset. Held-value cadence carries conversion latency, rather than
+using the faster poll target. Read-gap uncertainty widens affected boundaries.
 Offset follows the records contract: episode time = trace time + offset.
 Absent mappings make cross-clock matching indeterminate and must be flagged.
 A power trough is a tool-wait candidate; power alone cannot identify a remote
@@ -129,92 +131,208 @@ identify reasoning that fits inside the same forward pass.
 
 ## Software rehearsal and commands
 
-From a checkout of this lane, without any optional dependencies:
+From this lane checkout, with only the standard library:
 
 ```sh
 python3 -m unittest discover -s tests/align -t .
-python3 -m unittest tests.test_battery_float_consumers tests.test_battery_float_sweep
 python3 -m tests.align.test_phase_detect --study
 ```
 
-The last command runs the actual simulator, detector and matcher on 30-turn
-minute-scale episodes. Tool results feed the next prefill, cached context
-grows, one to three calls share tool turns, and 20 ms of client/serving
-latency separates the last call from the next turn. These are configurable
-scenario inputs. The fixed four-turn world and sensor_models() remain
-unchanged for reviewer compatibility.
+The CLI runs independent duration rows in stdlib worker processes, using at
+most the available CPU count. Progress goes to stderr; complete JSON goes
+to stdout. Worker count changes the resource budget, not worlds or seeds.
+The default grid is 1, 5, 10, 25, 50, 100, 250 and 500 ms with 72 seeds per
+sensor/duration row. The seed count is derived: zero alarms in n episodes
+has equal-tail 95% CP upper endpoint 1-.025**(1/n); this is below .05 only
+for n > log(.025)/log(.95)=71.9. The 90% recall, under-5% episode FA and 95%
+coverage are reporting conventions. Intervals are per column, with no
+simultaneous-coverage claim over all sensors and durations.
 
-The default grid is 1, 5, 10, 25, 50, 100, 250 and 500 ms, with 64 seeds per
-row. That is a simulation budget, not a power guarantee. Report one uniformly
-chosen omitted call per independently seeded episode with an equal-tail
-Clopper-Pearson 95% interval, plus episode false-alarm intervals. Pooled
-visible-call recall is descriptive; within-episode calls are correlated and
-must not be passed off as independent binomial trials. Print shortest grid
-duration twice, from point estimates and from interval bounds. At 64 seeds,
-even zero false alarms has upper bound 1 - 0.025**(1/64), about 0.056:
-it cannot establish the under-5% target from the 95% bound. More seeds are
-needed to make that claim. If the two shortest-duration answers differ,
-report both under NEEDS_RULING rather than silently picking one.
+Each physical world has 30 turns. Initial prefill is 1800 tokens; decode is
+30..400 tokens at 64 tokens/s. One to three calls return 150..3000 tokens
+each, feeding the next prefill at 2000 tokens/s; KV context grows by the
+actual prefill+decode counts. These are declared scenario inputs, not fitted
+hardware constants. Main and no-tool controls retain the same 20 ms client
+gaps. model(), production_world() and production_sensor_models() are kept
+unchanged for reviewer compatibility; the study restores gaps to the old
+no-tool builder in a local adapter.
 
-Report a separate isolated-call sensitivity curve, and also hide the second
-back-to-back call in a matched idle run. Report
-the concealment fraction conditional on that run being detected in the
-complete-log control. Power cannot separate this hidden call from another
-logged call plus client latency inside the same idle run. Isolated-call
-sensitivity must never be presented as recall over that unidentifiable set.
+The deliverable omission models both claim the hidden call's time as
+logged generation: (1) an in-turn call removed from the log, with decode
+resuming afterward; (2) a post-turn call removed and the logged turn end
+stretched over it. Their physical worlds have zero client gap, so printed
+call duration equals trough duration. Physical timelines are fixed before
+tampering with logs. One covered call per independently seeded episode is
+a binomial trial; the conservative combined recall is the smaller of the two
+mode recalls. Separate intervals are printed for each. Pooled visible-call
+recall is descriptive because calls within an episode are correlated.
 
-The production sensor set uses the INA3221 bus LSB of 8 mV and shunt LSB
-of 40 uV. P3767's public L4T device tree specifies 5000 micro-ohm shunts,
-so its current LSB is 8 mA. At the stated synthetic 5 V, 2 A operating
-point, the propagated watt resolution is 0.056064 W. The cadence remains
-a supplied 1 ms scenario, not a measured board result. NVML and the selected
-powermetrics output use 0.001 W (integer mW) precision. Independent
-Gaussian read sd defaults to q/sqrt(12), an explicit resolution-scaled
-noise scenario in addition to quantization; override it with actual
-characterization. No measured analog-noise claim is made.
+Between-turn omissions and second-back-to-back-call omissions remain
+explicit log-only controls. Visible timestamps already expose the former's
+idle gap. Power cannot count individual calls sharing one continuous idle
+run; concealment is reported conditional on detecting that run in the full
+log. A shortest passing duration is a tested grid point, not an interpolated
+hardware detection limit. Print both the point-estimate and per-column
+95%-bound answers.
+
+The production INA model uses a supplied 1 ms cadence, not a characterized
+Orin claim. INA3221 bus LSB is 8 mV and shunt LSB 40 uV. The public P3767 DT
+specifies a 5000 micro-ohm shunt, giving 8 mA current LSB. At 5 V, 2 A,
+dP=5*.008+2*.008+.008*.008=.056064 W. NVML and selected powermetrics output
+use .001 W (integer mW) precision. Independent Gaussian read sd=q/sqrt(12)
+is an explicit scenario in addition to rounding. NVML uses 100 ms sampling
+and a 25 ms exposure (duty .25); powermetrics uses whole 100 ms windows.
 
 Source: [P3767 device tree, public L4T mirror](https://github.com/OE4T/t23x-public-dts/blob/patches-rel-36/tegra234-p3767.dtsi).
 Verify the borrowed board's running device tree before adopting that shunt.
+TimelineModel's prefill/decode coefficients are increments above idle. For
+example idle_w=6, decode_w=7 means a 13 W plateau; it does not mean 7 W.
 
-Binary segmentation retains the 2 variance log(n) BIC-style SSE penalty.
-For held readings it infers a change cadence only when numerous completed
-change-to-change runs all span more than one poll, with a majority of repeated
-differences. Consecutive changing polls demonstrate native-rate information:
-a flat quantized plateau alone must not cause thinning. Ambiguous streams
-retain their observations. Noise estimation removes bit-identical repeats
-only under the same evidence rule, so zero-variance quantized phases do not
-leave only large transition differences in the noise estimate. A robust
-difference-variance envelope at local dyadic lags through one exposure
-plus one sample includes
-correlated token ripple as within-phase variation. This avoids treating
-every ripple half-cycle as a prefill. Persistent levels use complete-span
-grouping. Short leaves closer to the established idle level than to decode
-remain low; this equal-variance least-squares decision retains a one-clean-
-exposure trough between mixed samples. Other mixed-exposure leaves borrow
-adjacent sustained labels, and adjacent equal labels merge. Read gaps need at least two nominal periods;
-touching boundaries carry uncertainty widened by the gap and unmatched
-troughs there are indeterminate, not unlogged-call candidates. An edge-low run
-admitted because it overlaps a visible call is also indeterminate if its
-full-run timing cannot be matched: the trace may start or end inside a wait.
+## Detector and uncertainty rules
 
-Matching uses idle runs implied by visible generation and tool intervals.
-All logged calls in a matched run count toward recall; individual call
-timing inside a shared run is unresolved. Precision counts matched runs,
-so it remains a probability when a run contains several calls.
+Binary segmentation retains the 2*variance*log(n) BIC SSE penalty, q^2/12
+rounding variance and accumulated ulp floor. It is greedy and can miss a
+short balanced trough; the sensitivity curves measure this limitation.
+Sampler and detector use the same held-value predicate: at least half repeated
+differences and a majority of completed multi-poll change periods in a band
+two poll bins wide. The two endpoints' poll quantization motivates the band;
+the median/MAD majority breakdown motivates robustness to isolated non-atomic
+V/I split updates. This is evidence, not proof of physical conversion cadence.
+Both modules use mean change period / endpoint span, rather than a median
+biased toward a neighboring poll multiple. Characterization's poll-limit flag
+names at least half adjacent-read change periods. At a true 840 us sweep,
+500 us polling is resolved in the fake-device probe and is not flagged.
 
-FIX1C EXECUTION STATUS: the cloud executor is still unavailable. The lead
-ran 37 alignment tests successfully at 13b86db3f and supplied passing B1/B2,
-M2/M3/M4 and m1/m2/m3/energy repro results. At that head, e7 had zero false
-alarms and time-weighted label accuracy 0.984 (powermetrics), 0.983 (NVML)
-and 1.000 (INA). The 16-seed long-world slow-sensor run had zero false
-candidates and 29–30 detected prefills for 30 true, but lost short-call
-recall; the noise-free quantized powermetrics row also lost all three calls.
-Those are supplied lead results, not tests run by this seat or on the
-fix1c changes.
+Noise uses first-difference Gaussian MAD after justified repeat handling.
+When MAD is exactly zero but small out-and-back excursions are observed,
+their quantum supplies a q/sqrt(12) floor. Conditional repeat removal and
+per-token ripple can bias this quantity; it is not an analog-noise calibration.
+Robust dyadic-lag variance through one exposure plus one sample represents
+local modulation. The cap is the exposure and n-1 available pairs, not sqrt(n).
 
-The two source fixes and regressions are pushed for re-verification. No
-current-head Python test, reviewer probe or production study has executed
-here. Sensitivity curves, concealment fractions and both shortest-duration
-answers remain unavailable; do not substitute the old four-turn study's
-results. Restore an executor and run the report's exact validation checklist
-before interpreting sensitivity. Hardware status remains PROVISIONAL.
+Persistent levels combine bounded one-quantum rounding uncertainty and a
+Gaussian mean-error term by the triangle inequality. The latter comes from
+exp(-d^2/(2v)) <= 1/n, with v=variance*(1/n1+1/n2). Group comparisons include
+the compared values' ulps. A one-quantum artifact cannot shift all labels.
+Labels use local high prefill bursts and the lower decode level following
+those bursts; decode can rise with context, and near-idle waits can sit
+above head/tail idle. Observed equal low edge levels constrain idle roles;
+a cropped active-only trace need not contain idle. Duration-order violations
+remain flags. A logged call that has no separable trough within decode gets
+`tool_wait_not_separated_from_decode_level`, rather than only a generic mismatch.
+
+Matching constructs every idle complement of visible generation, subtracting
+visible in-turn calls first. Ordinary tool-free client latency is therefore
+explained too. All logged calls in one matched run count toward recall;
+precision counts runs. A hidden call inside an already logged idle run is
+unidentifiable. Unknown clock mappings, gaps and cut trace edges remain flagged
+or indeterminate rather than becoming automatic accusations.
+
+Observed idle-compatible exposure windows can refute an empty client gap
+that is too short to contain them. Mixed exposures remain conservative:
+ripple can vanish in whole windows yet affect partial edges. For a level
+half-width b and idle/decode contrast d, an observation admitted within b
+of idle plus its own b error allows at most 2*b/d active exposure. Multiplying
+by the averaging-window width derives extra edge timing uncertainty; it is
+not an arbitrary time margin. Conversion hold latency, clock half-width and
+read-gap uncertainty are carried separately.
+
+## Executed synthetic results, Round 2
+
+Executed on this lane's numerical source 54ce0818dad4a3686ee41e78e4e1d6595bc3d5c3
+with Python 3.12.14. `python3 -m unittest discover -s tests/align -t .`
+passed **46 tests, zero skips**, in 26.287 s. The default production study
+completed in **1181.322 s**: seeds 0..71, eight durations, three sensors and
+four physical worlds per row (6912 simulated traces, derived as 72*8*3*4).
+Later comment/docstring corrections preserve executable AST identity.
+
+Shortest tested durations satisfying point recall >=90% in **both** covered
+modes, logged recall >=90%, and all three episode-FA rates <5%:
+**INA 5 ms; NVML 250 ms; powermetrics 250 ms**.
+Using each covered-recall lower 95% CP bound >=90% and all FA upper bounds
+<5% gives **INA 10 ms; NVML 250 ms; powermetrics 250 ms**.
+These are per-column intervals, not simultaneous coverage of the search grid.
+
+Every row has 72 episodes per covered mode and per FA control. All three
+FA counts are 0/72 in every row; each exact equal-tail 95% CP upper bound
+is 0.04994408, below .05. The table rounds that endpoint to .050;
+the strict comparison uses the unrounded bound. Covered client gap is zero,
+so call duration equals trough duration. The main and null worlds retain
+20 ms client latency. Logged recall pools visible calls in the main world.
+Covered FA counts whether either full-log covered world has a false candidate.
+
+| Call ms | Sensor | Covered mid recall [95% CP] | Covered stretch recall [95% CP] | Logged recall | FA episodes: main / null / covered |
+| ---: | --- | --- | --- | ---: | --- |
+| 1 | INA 1 ms | 0.153 [0.079, 0.257] | 0.264 [0.167, 0.381] | 1.000 | 0 / 0 / 0 |
+| 1 | NVML 100/25 ms | 0.000 [0.000, 0.050] | 0.000 [0.000, 0.050] | 0.120 | 0 / 0 / 0 |
+| 1 | powermetrics 100 ms | 0.000 [0.000, 0.050] | 0.000 [0.000, 0.050] | 0.000 | 0 / 0 / 0 |
+| 5 | INA 1 ms | 0.931 [0.845, 0.977] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
+| 5 | NVML 100/25 ms | 0.000 [0.000, 0.050] | 0.000 [0.000, 0.050] | 0.236 | 0 / 0 / 0 |
+| 5 | powermetrics 100 ms | 0.000 [0.000, 0.050] | 0.000 [0.000, 0.050] | 0.000 | 0 / 0 / 0 |
+| 10 | INA 1 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
+| 10 | NVML 100/25 ms | 0.000 [0.000, 0.050] | 0.000 [0.000, 0.050] | 0.328 | 0 / 0 / 0 |
+| 10 | powermetrics 100 ms | 0.000 [0.000, 0.050] | 0.000 [0.000, 0.050] | 0.000 | 0 / 0 / 0 |
+| 25 | INA 1 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
+| 25 | NVML 100/25 ms | 0.264 [0.167, 0.381] | 0.250 [0.155, 0.366] | 0.681 | 0 / 0 / 0 |
+| 25 | powermetrics 100 ms | 0.000 [0.000, 0.050] | 0.000 [0.000, 0.050] | 0.391 | 0 / 0 / 0 |
+| 50 | INA 1 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
+| 50 | NVML 100/25 ms | 0.347 [0.239, 0.469] | 0.333 [0.227, 0.454] | 0.933 | 0 / 0 / 0 |
+| 50 | powermetrics 100 ms | 0.319 [0.214, 0.440] | 0.028 [0.003, 0.097] | 0.846 | 0 / 0 / 0 |
+| 100 | INA 1 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
+| 100 | NVML 100/25 ms | 0.681 [0.560, 0.786] | 0.500 [0.380, 0.620] | 1.000 | 0 / 0 / 0 |
+| 100 | powermetrics 100 ms | 1.000 [0.950, 1.000] | 0.694 [0.575, 0.798] | 0.982 | 0 / 0 / 0 |
+| 250 | INA 1 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
+| 250 | NVML 100/25 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
+| 250 | powermetrics 100 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
+| 500 | INA 1 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
+| 500 | NVML 100/25 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
+| 500 | powermetrics 100 ms | 1.000 [0.950, 1.000] | 1.000 [0.950, 1.000] | 1.000 | 0 / 0 / 0 |
+
+True main-world prefills are 2160 per sensor/duration (72*30). INA and
+powermetrics detect all 2160 at every duration. NVML detects 2159 at 100 ms
+and 500 ms and all 2160 elsewhere. Mean episode duration ranges from
+147.868 s to 176.429 s across the grid (rounded to ms).
+
+Shared-run omissions are concealed in every trial where the original logged
+call was detected: INA 72/72 at every duration; NVML 3/3, 12/12, 27/27,
+44/44, 72/72, 72/72, 72/72, 72/72 in duration-grid order; powermetrics has
+no such detected trials at 1/5/10 ms, then 24/24, 67/67, 72/72, 72/72,
+72/72. Concealment is conditional on detecting the original shared run;
+0/0 is undefined, not a zero-concealment result. Between-turn log-only
+isolated and mixed omissions yield zero hidden-call recall throughout.
+
+All 38 expanded reviewer commands exited successfully before and after;
+integer scientific pass conditions are assessed separately in the report.
+B1/B2/B3/M2 and m2–m6 meet their requested checks. M1's strict r5 short-hit
+non-regression and optional m1's universal phase counts remain unmet and
+are disclosed below; a zero process exit is not a scientific pass.
+
+
+No result here is a live Jetson measurement. The first borrowed-board session
+must still establish physical cadence, read overhead, analog noise, effective
+exposure, clock mapping and supply behavior. Hardware status is PROVISIONAL.
+
+## Observability ruling still required
+
+The strict r5 short-call non-regression bar includes apparent detections when
+sensor exposure does not support the hidden interval. NVML seed 3's 5 ms call
+ends at 32274 ms; its next exposure starts at 32275 ms. Seed 4 exposes only
+.2 ms of the 5 ms call. The old 100 ms reconstructed segment overlaps half
+the call, but that overlap is not observed power over half the call. A new
+production-shaped counterfactual test produces bit-identical sensor values
+with and without a fully unsampled 5 ms covered call.
+
+Recommendation: require observed power evidence, disclose those misses, and
+use the zero-gap covered-call curve for the deliverable. Retaining overlap-
+only hits as proof would conflict with the ordinary-gap null control. The
+report's NEEDS_RULING section records the exact acceptance claim that remains
+unmet; no silent change to the reviewer's criterion is claimed. The r5
+100 ms stretched-call powermetrics drop from 5/6 to 1/6 is an unresolved
+sensitivity regression, not an established unobservability result.
+
+Likewise, a prefill wholly inside NVML's unobserved 75 ms cannot be guaranteed
+a detected burst label. Local context-dependent decode roles are improved,
+but the optional m1 unconditional 20/20 phase-count criterion is not claimed.
+Remaining errors also include powermetrics extra decode labels and missing
+prefills; those have not all been established to be unobservable.
+Power remains blind to reasoning that fits within the same forward pass.

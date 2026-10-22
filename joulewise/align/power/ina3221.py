@@ -430,8 +430,8 @@ class Ina3221Sampler:
             flags = [] if len(changes) >= 2 else ["insufficient_distinct_changes"]
             periods = tuple(b - a for a, b in zip(changes, changes[1:]))
             polls = [b[0] - a[0] for a, b in zip(rows, rows[1:])]
-            # If a majority of completed changes occur on adjacent reads,
-            # the median is poll-limited. Periods of one OR two polls resolve
+            # At least half adjacent-read changes place the central observed
+            # period at the polling boundary. Periods of one OR two polls resolve
             # a slower conversion; their mean is not poll-limited merely
             # because it lies below two polls.
             indices = [i for i in range(1, len(rows)) if rows[i][1] != rows[i - 1][1]]
