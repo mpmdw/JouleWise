@@ -1,9 +1,11 @@
 """scripts/km003c_monitor.py and joulewise.external.km003c_usb: the protocol helpers,
 the absent path (exit 0, an "absent" header and a trailer), and a real-device
-smoke run that is skipped unless the meter is plugged in."""
+smoke run requiring JW_REAL_METER_SMOKE=1 and a plugged-in meter. Synthetic-only
+runs always skip the real-device smoke test."""
 from __future__ import annotations
 
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -206,8 +208,17 @@ class AbsentMeterTests(unittest.TestCase):
         self.assertEqual(existing.read_text(), "keep\n")
 
 
-@unittest.skipUnless(meter_enumerated(), "POWER-Z KM003C not on the USB bus")
 class RealMeterSmokeTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        if os.environ.get("JW_B5_SYNTHETIC_ONLY") == "1":
+            raise unittest.SkipTest("JW_B5_SYNTHETIC_ONLY=1 forbids real-meter smoke tests")
+        if os.environ.get("JW_REAL_METER_SMOKE") != "1":
+            raise unittest.SkipTest("real-meter smoke tests require JW_REAL_METER_SMOKE=1")
+        if not meter_enumerated():
+            raise unittest.SkipTest("POWER-Z KM003C not on the USB bus")
+
     def test_streams_then_stops_cleanly_on_sigterm(self):
         with tempfile.TemporaryDirectory() as directory:
             out = Path(directory) / "stream.jsonl"
@@ -235,6 +246,68 @@ class RealMeterSmokeTests(unittest.TestCase):
             self.assertIsNotNone(offset)
             self.assertLess(abs(offset - (time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW) - time.monotonic_ns())),
                             1_000_000)
+
+
+class RealMeterOptInTests(unittest.TestCase):
+    def run_smoke_case(self, environment, *, meter_present=True):
+        from unittest import mock
+
+        # Run the actual class setup and skip machinery, replacing the live
+        # body so even the explicitly enabled control cannot touch hardware.
+        with mock.patch.dict(os.environ, environment, clear=True), \
+                mock.patch(__name__ + ".meter_enumerated", return_value=meter_present) as enumerated, \
+                mock.patch.object(RealMeterSmokeTests, "test_streams_then_stops_cleanly_on_sigterm",
+                                  return_value=None) as body, \
+                mock.patch.object(subprocess, "Popen") as popen:
+            result = unittest.TestResult()
+            unittest.defaultTestLoader.loadTestsFromTestCase(RealMeterSmokeTests).run(result)
+        self.assertEqual(result.errors, [])
+        self.assertEqual(result.failures, [])
+        popen.assert_not_called()
+        return result, enumerated, body
+
+    def test_real_meter_requires_exact_opt_in_before_device_discovery(self):
+        for opt_in in (None, "", "0", "true", "yes", "01"):
+            for synthetic in (None, "0", "1"):
+                with self.subTest(opt_in=opt_in, synthetic=synthetic):
+                    env = {}
+                    if opt_in is not None:
+                        env["JW_REAL_METER_SMOKE"] = opt_in
+                    if synthetic is not None:
+                        env["JW_B5_SYNTHETIC_ONLY"] = synthetic
+                    result, enumerated, body = self.run_smoke_case(env)
+                    self.assertEqual(len(result.skipped), 1)
+                    enumerated.assert_not_called()
+                    body.assert_not_called()
+
+    def test_synthetic_only_overrides_explicit_real_meter_opt_in(self):
+        result, enumerated, body = self.run_smoke_case({
+            "JW_REAL_METER_SMOKE": "1", "JW_B5_SYNTHETIC_ONLY": "1",
+        })
+        self.assertEqual(len(result.skipped), 1)
+        self.assertIn("JW_B5_SYNTHETIC_ONLY=1", result.skipped[0][1])
+        enumerated.assert_not_called()
+        body.assert_not_called()
+
+    def test_explicit_opt_in_still_requires_an_attached_meter(self):
+        result, enumerated, body = self.run_smoke_case(
+            {"JW_REAL_METER_SMOKE": "1"}, meter_present=False,
+        )
+        self.assertEqual(len(result.skipped), 1)
+        enumerated.assert_called_once_with()
+        body.assert_not_called()
+
+    def test_explicit_opt_in_allows_the_mocked_smoke_body(self):
+        for synthetic in (None, "0"):
+            with self.subTest(synthetic=synthetic):
+                env = {"JW_REAL_METER_SMOKE": "1"}
+                if synthetic is not None:
+                    env["JW_B5_SYNTHETIC_ONLY"] = synthetic
+                result, enumerated, body = self.run_smoke_case(env)
+                self.assertEqual(result.testsRun, 1)
+                self.assertEqual(result.skipped, [])
+                enumerated.assert_called_once_with()
+                body.assert_called_once_with()
 
 
 if __name__ == "__main__":
