@@ -1,13 +1,14 @@
 # Realsmoke: execution blocked
 
-Status at the initial checkpoint on 2026-10-22: **NOT EXECUTED**.
-The managed environment is still pending/offline and shell commands are rejected
-before a process starts. See [the lane report](../../.codex-report/align-realsmoke.md)
-for the final status of this attempt.
+Status on 2026-10-22: **NOT EXECUTED**.
+The managed environment did not become usable during this attempt. Shell commands
+were rejected before a process could start, including the align suite attempt at
+14:16 UTC. See [the lane report](../../.codex-report/align-realsmoke.md) for the
+command counts and handoff.
 
 ## What ran
 
-Only connected GitHub reads and a lane-only report commit have completed.
+Only connected GitHub reads and lane-only documentation commits completed.
 No CPU model, model server, tokenizer request, SHADE episode, power sampler,
 attribution calculation, residual detector or metadata baseline has run.
 
@@ -23,8 +24,10 @@ The shell tool returns:
 
 > No usable execution environment is available. Wait for an environment to become available before using this tool.
 
-The managed runtime reports desired_phase=running, observed_phase=pending and
-connectivity=offline. The startup wait has not yet completed at this checkpoint.
+The managed runtime repeatedly reported desired_phase=running and
+connectivity=offline, alternating observed_phase between pending and starting.
+The startup wait did not yield a usable executor; shell retries continued through
+14:16 UTC.
 The diagnostic index returns history_status=not_found with no retained records.
 These observations do not establish the cause of the startup failure.
 
