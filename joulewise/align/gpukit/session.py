@@ -38,6 +38,10 @@ from joulewise.align.records import read_episodes
 VLLM_VERSION = "0.10.2"  # Operator-selected reproducibility pin; no hardware compatibility claim.
 
 
+class MatrixInputError(ValueError):
+    """The campaign cannot be read/validated; no hardware command has run."""
+
+
 class IsolationError(RuntimeError):
     """MIG/vGPU is explicitly excluded by the campaign brief."""
 
@@ -375,6 +379,10 @@ def run_session(options: SessionOptions, *,
             matrix = calibration_slice(matrix)
             receipt["calibration_slice"] = "All models and task/condition strata, first seed; no throughput assumption."
         flags.extend(matrix_flags)
+        if not matrix or matrix_flags:
+            # R8: malformed inputs fail before inventory, preflight or serving.
+            # This is a failed command, not a physical-isolation refusal.
+            raise MatrixInputError("matrix is missing, unreadable or invalid")
         settings: dict[str, Any] = {}
         if options.runner_settings:
             try:
@@ -603,6 +611,8 @@ def run_session(options: SessionOptions, *,
             receipt["status"] = "completed_with_flags" if flags else "completed"
     except Exception as exc:
         flags.append(f"session_failed:{type(exc).__name__}")
+        receipt["status"] = "failed"
+        receipt["data_complete"] = False
     finally:
         if monitor_process is not None:
             _stop_group(monitor_process, grace_s=options.poll_s)
@@ -660,7 +670,8 @@ def main(argv: list[str] | None = None) -> int:
     options = SessionOptions(**vars(args))
     result = run_session(options)
     print(json.dumps(result, indent=2, allow_nan=False))
-    return 2 if result["status"] == "refused" else 0
+    # Exit 3 distinguishes execution/input failure from physical refusal (2).
+    return {"refused": 2, "failed": 3}.get(result["status"], 0)
 
 
 if __name__ == "__main__":

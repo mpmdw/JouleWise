@@ -178,3 +178,64 @@ class ServeTests(unittest.TestCase):
         schema = json.loads((root / "joulewise/align/gpukit/matrix.schema.json").read_text())
         del matrix["models"][0]["reasoning_parser"]
         self.assertGreaterEqual(len(list(jsonschema.Draft202012Validator(schema).iter_errors(matrix))), 1)
+
+
+class ExitTests(unittest.TestCase):
+    def test_invalid_matrix_fails_before_any_hardware_or_child_command(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from joulewise.align.gpukit import session
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            invalid = base / "invalid.json"
+            invalid.write_text("[]")
+            unreadable = base / "directory.json"
+            unreadable.mkdir()
+            malformed = base / "malformed.json"
+            malformed.write_text("{")
+            for i, matrix in enumerate((base / "missing.json", invalid, unreadable, malformed)):
+                with patch.object(session, "whole_gpu") as inventory, \
+                     patch.object(session, "snapshot") as snapshot, \
+                     patch.object(session, "_command") as command, \
+                     patch.object(session.subprocess, "Popen") as child:
+                    stdout = io.StringIO()
+                    output = base / ("run-" + str(i))
+                    with contextlib.redirect_stdout(stdout):
+                        code = session.main([
+                            str(matrix), "--output", str(output),
+                            "--ready-timeout-s", "20", "--command-timeout-s", "120",
+                            "--runner-timeout-s", "500", "--poll-s", "0.2",
+                            "--monitor-placement", "none"])
+                    receipt = json.loads(stdout.getvalue())
+                    self.assertEqual(code, 3)
+                    self.assertEqual(receipt["status"], "failed")
+                    self.assertFalse(receipt["data_complete"])
+                    self.assertTrue(any(f.startswith("matrix_") for f in receipt["flags"]))
+                    inventory.assert_not_called()
+                    snapshot.assert_not_called()
+                    command.assert_not_called()
+                    child.assert_not_called()
+                    self.assertEqual(session.verify_manifest(output), ())
+
+    def test_unexpected_session_exception_exits_three(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from joulewise.align.gpukit import session
+        root = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(session, "_command", side_effect=RuntimeError("fixture")):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    code = session.main([
+                        str(root / "configs/align/shade.json"), "--output", directory + "/run",
+                        "--runner-command", '["true"]',
+                        "--ready-timeout-s", "20", "--command-timeout-s", "120",
+                        "--runner-timeout-s", "500", "--poll-s", "0.2",
+                        "--monitor-placement", "none"])
+            receipt = json.loads(stdout.getvalue())
+            self.assertEqual(code, 3)
+            self.assertEqual(receipt["status"], "failed")
+            self.assertIn("session_failed:RuntimeError", receipt["flags"])
+            self.assertFalse(receipt["data_complete"])

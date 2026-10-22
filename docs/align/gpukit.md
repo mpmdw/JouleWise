@@ -353,3 +353,11 @@ with tool_call_parser_source_not_fetched; monitors call no tools and use null.
 Budget driver OPEN ISSUE: hybrid output truncated by max_tokens before </think>
 comes back as content beginning with <think> under qwen3; check content for that
 prefix before reporting reasoning counts.
+
+### CLI outcomes (R8)
+
+The matrix is read and validated before inventory, NVML preflight or vLLM.
+Missing, unreadable or invalid matrices and session_failed:* exceptions seal a
+receipt with status failed, data_complete=false and exit 3. Physical isolation or
+instrument-readiness refusal keeps status refused and exit 2. completed and
+completed_with_flags exit 0; inspect data_complete and flags as well as the exit.
