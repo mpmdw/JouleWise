@@ -1,6 +1,6 @@
 ---
 name: codex
-description: Run OpenAI Codex (gpt-6-sol on the exec route; gpt-5.6-sol on the pinned MCP server) inside Claude Code with difficulty-matched effort and JouleWise bridge safety.
+description: Run OpenAI Codex (gpt-6.1-sol on the exec route; gpt-5.6-sol on the pinned MCP server) inside Claude Code with difficulty-matched effort and JouleWise bridge safety.
 ---
 
 # Sol bridge for Claude Code
@@ -53,7 +53,7 @@ Apply contract §4's t3 applicability and preferred-presentation-plane rule.
    project tool `codex` with the
    Git-root `cwd`, model `gpt-5.6-sol` (the MCP server runs the pinned
    0.153.3 CLI, the last release that ships `mcp-server`; that CLI cannot use
-   the 6.0 models, so Sol 6.0 = `gpt-6-sol` runs only on the exec route via
+   the 6.0 models, so Sol 6.1 = `gpt-6.1-sol` runs only on the exec route via
    `codex-run-v3` or `scripts/codex-bridge` on the current CLI), config
    `{"model_reasoning_effort":"<selected-effort>","mcp_servers":{"claude":{"enabled":false}}}`,
    `on-request` approvals, and the narrowest sandbox. Put the contract's origin

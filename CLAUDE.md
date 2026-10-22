@@ -1,8 +1,9 @@
 # Claude Code Notes
 
 This repository has a project-local Codex MCP server plus an audited script
-bridge. On Ed's configured desktop, the script bridge is also the native
-pet-visible background route.
+bridge. The script bridge was also the native pet-visible background route
+while the Codex desktop app was installed; it is not installed on the
+measurement Mac (checked 2026-10-21), so the bridge runs the CLI transport.
 
 ## MCP Path (pinned legacy CLI): Codex MCP
 
@@ -65,10 +66,10 @@ pet. Set `CODEX_APP_BRIDGE=off` only to require standalone `codex exec`.
 
 The current orchestration wrapper is `~/.local/bin/codex-run-v3` (personal
 tooling, not tracked here). It supplies the audited report and D-064 evidence
-path described by the contract. Current model: gpt-6-sol (exec route, CLI
-0.156.1+). The MCP server in `.mcp.json` is pinned to CLI 0.153.3 with
+path described by the contract. Current model: gpt-6.1-sol (exec route, CLI
+0.163.0, checked 2026-10-21). The MCP server in `.mcp.json` is pinned to CLI 0.153.3 with
 gpt-5.6-sol because `codex mcp-server` is absent from CLI 0.154.0, 0.155.0 and
-0.156.1 (checked 2026-09-23) and the 0.153.3 client cannot use the 6.0 models.
+0.156.1 (checked 2026-09-23) and from 0.163.0 (checked 2026-10-21) and the 0.153.3 client cannot use the 6.0 models.
 The exec route is therefore the primary route for Sol 6.0 work.
 `scripts/codex-run` remains the older
 hardened, timeout-bounded single-call protocol.
