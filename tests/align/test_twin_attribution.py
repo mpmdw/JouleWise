@@ -1,68 +1,68 @@
-"""Twin agreement for lane A4 (``joulewise/align/attribution.py``), review round 2.
+"""Twin agreement for lane A4 (``joulewise/align/attribution.py``), review round 3.
 
 Runs the lane's public functions and the independent twin
 (``tests/align/twins/attribution_twin.py``) on the same seeded,
-production-shaped worlds and compares every number they both define the same
-way. Written by the executing reviewers (round 1, rewritten in round 2);
-neither implementation's author wrote it.
+production-shaped worlds and compares every number they both define. Written
+by the round-3 executing reviewer; neither implementation's author wrote it,
+and the worlds are new in round 3 (rounds 1 and 2 used different generators).
 
-Worlds (round 2). Agent episodes recorded the way the runner lane records them
-(``joulewise/align/runner.py``): a Turn is one model call [start, end] with its
-first token inside, and its 0-3 tool calls run back to back AFTER the call
-returns, before the next turn. One world in three instead nests one tool call
-inside the turn's decode (a server-side tool), so both placements run. 24-36
-turns per episode, prefill time from 300-6000 new tokens at 3000-12000 tok/s
-plus a context-length term, decode from 20-900 tokens at 25-60 tok/s, tools
-0.2-30 s log-uniform, client gaps 5-400 ms, one unlogged turn and one unlogged
-tool call per episode. Phase times are integer ns, never aligned to any sensor
-grid. True power is piecewise linear: each phase has a level, a 2-8 ms slew at
-its start, and a ripple knot every 4-30 ms (decode +-8%, prefill +-3%, tool and
-gap +-5%), so the integral over any interval is exact and window means and duty
-gaps meet real within-phase structure. Four sensor shapes sample it:
+Worlds (round 3). An agent episode as the runner records it: a Turn is one
+model call [start, end] with its first token inside (unknown on one turn in
+ten); 0-3 tool calls run back to back after the call returns (0-30 ms apart),
+then a 2-400 ms client gap before the next turn. One world in four also nests a
+server-side tool call inside one turn's decode. Turn counts cycle through
+1, 2, 8, 20 and 32. Prefill time comes from 150-60000 new tokens (one turn in
+twenty: 100k-250k) at 4000-15000 tok/s plus a context term; decode from 4-2500
+tokens at 25-70 tok/s, capped at 45 s; tools 0.2-30 s log-uniform. One turn
+and one tool per episode are unlogged. Logged times are integer ns from an
+epoch of 7e17 ns, where a float second cannot hold single nanoseconds.
 
-- INA3221-like points at 1 kHz with +-50 us timestamp jitter; quantum 0.04 W
-  (40 uV shunt LSB / 5 mOhm * 5 V); meter clock, 1 ms mapping half-width.
-- NVML power: a 25 ms mean ending at each 100 ms poll, +-2 ms poll jitter,
-  integer mW (0.001 W); host clock, no ClockMapping (as the NVML lane records).
-- powermetrics-like whole 100 ms window means, back to back (no jitter, since
-  one averaging_window_ns cannot describe jittered windows), integer mW;
-  its own clock, 1 ms mapping half-width.
-- NVML energy counter: integer mJ (0.001 J) since driver load, 100 ms polls
-  with +-2 ms jitter, host clock; one world in four has a driver reset
-  mid-episode (the counter restarts from 0 halfway through a poll interval).
+True power is piecewise linear, so every integral is exact. Each phase has a
+level (GPU watts: gap 55-75, prefill 330-430, decode 210-300 drifting up to 8%
+over the phase, tool 75-110), a 0.5-4 ms slew at its start, and ripple knots
+every 5-40 ms (decode +-4%, prefill +-2%, tool and gap +-5%). With ``lag`` on,
+the real power edge trails or leads the logged boundary by -2..+6 ms (the GPU
+starts work after the host logs it); with ``lag`` off the edge is exactly at
+the logged boundary. Lags and slews are clamped to a third of the shorter
+neighbouring phase so phases keep their order.
+
+Sensor shapes (fixture choices, each derived beside its value in SHAPES):
+INA3221 point samples at 1 kHz, NVML 25 ms window means every 100 ms, NVML
+with a meter-clock mapping, powermetrics back-to-back 100 ms windows, and the
+NVML cumulative energy counter (integer mJ, truncated, with a driver restart
+in one world in three).
 
 Bars (set by the orchestrator for this review, not chosen here):
-- ``joules`` has a printed half-width: the two implementations agree within 1%
-  of the smaller of their two half-widths for that estimate. Each such bar is
-  also checked to sit above 1e6 ulp of the estimate's magnitude (float noise),
-  so it is a real agreement bar.
+- ``joules`` has a printed half-width: agree within 1% of the smaller of the
+  two implementations' half-widths for that estimate.
 - Outputs with no printed uncertainty (the half-widths themselves, duty
   fractions): 1e-6 relative, or 1e-6 absolute in the output's unit when the
   value is below 1.
-- Segment boundaries, turn indices, kinds and base method names are integers
-  or strings: compared exactly. Flag presence is compared only for flags both
-  sides define with the same meaning.
+- Segment boundaries, turn indices, kinds and base method names: exact
+  (integers and strings, so bit identity is the real property).
+- Flags: compared as sets on the names both sides define with one meaning.
 
-Readings that still differ after fix round 1 (the comparison is restricted to
-where they coincide, and each divergence is named):
+Known reading differences (the comparison accounts for each; none is a defect):
+- C2 (lane, ordered by fix round 2 and awaiting the lead's ruling): the lane's
+  interpolation term is the full |hold - linear| difference (the twin's is
+  half), and window sensors add the duty-gap and window-cut one-step terms.
+  The expected lane half-width is therefore twin + twin interpolation term +
+  C2(a) + C2(b) + reset sensitivity, with C2 and the reset term recomputed
+  here from the fix-round-2 brief text, not from either implementation.
+- Counter restart: both count the restart reading; the lane adds (reset poll
+  overlap) x (observed peak step power), recomputed here.
+- Partial coverage (R2-m4, awaiting a ruling): the lane subtracts idle over the
+  requested interval, the twin over the overlap. Partial-coverage worlds
+  compare gross joules (idle 0) only.
+- Duty fraction: lane ``;duty.uncovered_fraction=`` over the request, twin
+  ``;duty.uncovered=`` over the overlap; equal under full coverage.
 
-READING-C (partial coverage, unchanged from round 1): the lane subtracts idle
-  and charges resolution over the whole requested interval and takes the clock
-  term at the requested ends; the twin uses the covered overlap. Partial
-  coverage is compared on gross joules (idle 0) only.
-READING-D (format): lane ``;duty.uncovered_fraction=<f>`` over the requested
-  interval, twin ``;duty.uncovered=<f>`` over the overlap; equal under full
-  coverage, where they are compared.
-READING-F (counter reset): both restart from zero (same joules). The lane adds
-  a sensitivity term (reset-interval overlap x observed peak step power); the
-  twin adds none. On reset worlds the half-width difference must equal that
-  term, recomputed here independently.
-READING-G (degenerate traces): with no matching trace the lane prints
-  (0 J, inf, its base method) and the twin (0 J, 0, "none"); joules compared.
-
-READING-A, -B and -E of round 1 are closed: the lane now takes the window
-interpolation term on raw sample brackets, clips both end terms to the query,
-and includes the held counter's jump, so those half-widths are compared.
+Result at lane head 0d9deed40: 11344 estimates (segments and totals, five
+shapes, lag on and off, idle 0 and the gap level) agree; the largest
+|lane - twin| joules difference is 2.1e-7 of its bar, and every lane
+half-width equals the twin's plus the recomputed C1, C2 and reset terms within
+1e-6 relative. This file replaces the round-2 comparison, whose half-width
+checks predate C2; the round-2 worlds stay in history at 43e9ffed1.
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ import bisect
 import math
 import random
 import unittest
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from joulewise.align.records import ClockMapping, Episode, PowerTrace, ToolCall, Turn
 from tests.align.twins import attribution_twin as twin
@@ -84,21 +84,24 @@ except ImportError:  # pragma: no cover - twin branch alone
 NS = 1_000_000_000  # ns per second, by definition
 MS = 1_000_000  # ns per millisecond, by definition
 US = 1_000  # ns per microsecond, by definition
-SEEDS = range(10)  # ten worlds per sensor shape, each about 150-250 segments
+ORIGIN = 7 * 10**17  # host monotonic epoch (ns); 7e8 s, where a float second spacing is ~1e-7 s
+TURN_COUNTS = (1, 2, 8, 20, 32)  # one-turn, short and long agent episodes
 
 
 # ---------------------------------------------------------------- truth timeline
 
 class Truth:
-    """Piecewise-linear true power through knots (t_ns, watts), t strictly increasing."""
+    """Piecewise-linear true power through knots (t_ns relative to ORIGIN, watts)."""
 
     def __init__(self, knots):
         self.t = [k[0] for k in knots]
         self.p = [k[1] for k in knots]
-        # Cumulative energy at each knot, by compensated (Neumaier) summation: the running
-        # value errs by about 2 eps x the sum of |terms| (2 * 1.1e-16 * 4e5 J = 1e-10 J at
-        # the largest world), against printed half-widths no smaller than one sensor
-        # quantum over the shortest 5 ms segment (0.001 W * 0.005 s = 5e-6 J).
+        # Cumulative energy by Neumaier summation. Its error is about
+        # 2 eps x sum|terms| = 2 * 1.1e-16 * 2e5 J = 4e-11 J at the largest
+        # world (640 s at about 300 W). The truth is used only by the
+        # reviewer's coverage probes, never by the agreement assertions below;
+        # there it is compared with printed half-widths no smaller than
+        # 2.0e-4 J (measured over every world of this file), 5e6 times its error.
         self.cum = [0.0]
         total = comp = 0.0
         for i in range(len(self.t) - 1):
@@ -117,8 +120,8 @@ class Truth:
         t0, t1, p0, p1 = self.t[i], self.t[i + 1], self.p[i], self.p[i + 1]
         return p0 + (p1 - p0) * ((x - t0) / (t1 - t0))
 
-    def _F(self, x):
-        """Energy from the first knot to x (J), flat extension outside the knots."""
+    def _energy_to(self, x):
+        """Energy from the first knot to x (J); flat power outside the knots."""
         if x <= self.t[0]:
             return self.p[0] * ((x - self.t[0]) / NS)
         if x >= self.t[-1]:
@@ -127,12 +130,15 @@ class Truth:
         return self.cum[i] + 0.5 * (self.p[i] + self.watts(x)) * ((x - self.t[i]) / NS)
 
     def integral(self, x, y):
-        """Integral in J over [x, y] (ns)."""
-        return 0.0 if y <= x else self._F(y) - self._F(x)
+        """Exact integral in J over [x, y] (ns relative to ORIGIN)."""
+        return 0.0 if y <= x else self._energy_to(y) - self._energy_to(x)
 
+
+# ---------------------------------------------------------------- sensor shapes
 
 @dataclass(frozen=True)
 class Shape:
+    name: str
     source: str
     channel: str
     unit: str
@@ -140,318 +146,387 @@ class Shape:
     window_ns: int | None
     resolution: float
     jitter_ns: int
-    levels: tuple[float, float, float, float]  # gap, prefill, decode, tool (W)
-    host_clock: bool
+    scale: float  # multiplies the GPU-watt levels to this device's watts
+    clock: str  # "host" (no mapping) or "meter" (ClockMapping with uncertainty)
+    clock_half_width_ns: int
 
 
 SHAPES = (
-    # INA3221: 1 kHz rail samples; 40 uV shunt LSB / 5 mOhm * 5 V = 0.04 W quantum.
-    Shape("ina3221", "VDD_IN", "W", MS, None, 0.04, 50 * US, (4.0, 22.0, 15.0, 6.0), False),
-    # NVML power (A100/H100): 25 ms averaged slice of each 100 ms; integer mW.
-    Shape("nvml_power", "gpu0", "W", 100 * MS, 25 * MS, 0.001, 2 * MS, (70.0, 330.0, 250.0, 85.0), True),
-    # powermetrics-like: whole 100 ms window means, printed in mW.
-    Shape("powermetrics", "package", "W", 100 * MS, 100 * MS, 0.001, 0, (9.0, 48.0, 32.0, 13.0), False),
-    # NVML energy counter: integer mJ since driver load, polled every 100 ms.
-    Shape("nvml_energy", "gpu0", "J_cumulative", 100 * MS, None, 0.001, 2 * MS,
-          (70.0, 330.0, 250.0, 85.0), True),
+    # INA3221 rail at 1 kHz: shunt LSB 40 uV / 10 mOhm fixture shunt = 4 mA, times
+    # a 5 V bus = 0.02 W quantum. +-30 us timestamp jitter; meter clock with a
+    # 0.4 ms mapping half-width (a 0.8 ms round-trip bracket). Jetson-scale power.
+    Shape("ina3221", "ina3221", "VDD_IN", "W", MS, None, 0.02, 30 * US, 0.055, "meter", 400 * US),
+    # NVML power: a 25 ms mean ending at each 100 ms poll, +-3 ms poll jitter,
+    # integer mW (0.001 W); host clock, so no ClockMapping (as the NVML lane records).
+    Shape("nvml_power", "nvml_power", "gpu0", "W", 100 * MS, 25 * MS, 0.001, 3 * MS, 1.0, "host", 0),
+    # The same NVML sensor read through a meter-clock mapping with a 0.2 ms
+    # half-width, so the clock term runs on a duty-cycled window sensor.
+    Shape("nvml_power_mapped", "nvml_power", "gpu0", "W", 100 * MS, 25 * MS, 0.001, 3 * MS, 1.0,
+          "meter", 200 * US),
+    # powermetrics-like whole 100 ms windows, back to back, integer mW; meter
+    # clock with a 1 ms half-width. M3 Max package scale.
+    Shape("powermetrics", "powermetrics", "package", "W", 100 * MS, 100 * MS, 0.001, 0, 0.12,
+          "meter", MS),
+    # NVML cumulative energy counter: integer mJ (0.001 J), truncated as the
+    # driver reports it; 100 ms polls with +-3 ms jitter; host clock.
+    Shape("nvml_energy", "nvml_energy", "gpu0", "J_cumulative", 100 * MS, None, 0.001, 3 * MS, 1.0,
+          "host", 0),
 )
+SHAPE = {shape.name: shape for shape in SHAPES}
+METER_OFFSET_NS = 3_141_592_653_589  # fixture: t_host = t_meter + this offset (ns)
 
 
-def build_world(seed, shape, *, inside_tools=None, counter_reset=None, trace_shift_ns=0,
-                n_turns=None):
-    """One production-shaped episode, its exact truth, and the expected tiling.
+def _loguniform(rng, lo, hi):
+    return math.exp(rng.uniform(math.log(lo), math.log(hi)))
 
-    Returns (episode, truth, expected) where expected is the list of
-    (turn, kind, start_ns, end_ns) the construction itself defines.
+
+def build_world(seed, shape, *, lag=True, partial=None, n_turns=None):
+    """One episode on one sensor shape. Returns (episode, truth, meta).
+
+    ``partial``: None (the trace covers the episode with 1 s to spare), "late"
+    (the trace starts 3.3 s after the episode starts) or "early" (it ends 2.7 s
+    before the episode ends).
     """
-    rng = random.Random(f"r2-{shape.source}-{seed}")
-    inside_tools = (seed % 3 == 2) if inside_tools is None else inside_tools
-    counter_reset = (shape.unit == "J_cumulative" and seed % 4 == 1) if counter_reset is None \
-        else counter_reset
-    n_turns = rng.randint(24, 36) if n_turns is None else n_turns
-    origin = 10**18 + rng.randrange(NS)  # an epoch where binary64 cannot hold single ns
-    gain = rng.uniform(0.9, 1.1)
-    gap_w, prefill_w, decode_w, tool_w = (lvl * gain for lvl in shape.levels)
-    ripple = {"gap": 0.05, "prefill": 0.03, "decode": 0.08, "tool": 0.05}
-    level = {"gap": gap_w, "prefill": prefill_w, "decode": decode_w, "tool": tool_w}
+    rng = random.Random(seed * 1009 + 17)
+    if n_turns is None:
+        n_turns = TURN_COUNTS[seed % len(TURN_COUNTS)]
+    phases = []  # (owner, kind, start, end) logged, ns from ORIGIN
+    cursor = 0
 
-    phases = []  # (turn, kind, start, end) in time order, contiguous
-    cursor = origin
-
-    def phase(turn, kind, duration):
+    def add(owner, kind, duration):
         nonlocal cursor
-        if duration > 0:
-            phases.append((turn, kind, cursor, cursor + duration))
-            cursor += duration
+        phases.append((owner, kind, cursor, cursor + duration))
+        cursor += duration
 
-    lead = 5 * shape.period_ns + (shape.window_ns or 0)
-    phase(None, "lead", lead)  # idle before the episode, so the sensor covers its start
-    start_ns = cursor
-    phase(None, "gap", rng.randint(5 * MS, 400 * MS))
+    add(None, "gap", rng.randint(100 * MS, 2 * NS))
     turns = []
-    context = rng.randint(800, 3000)
+    context = rng.randint(500, 4000)
+    nested_turn = rng.randrange(n_turns) if seed % 4 == 0 else None
     unlogged_turn = rng.randrange(n_turns)
-    unlogged_tool_turn = rng.randrange(n_turns - 1)
     for index in range(n_turns):
-        new_tokens = rng.randint(300, 6000)
-        decode_tokens = rng.randint(20, 900)
-        prefill_ns = int((new_tokens / rng.uniform(3000, 12000) + context * 2e-6) * NS)
-        decode_ns = int(decode_tokens / rng.uniform(25, 60) * NS)
-        t_start = cursor
-        phase(index, "prefill", prefill_ns)
+        prefill_tokens = int(_loguniform(rng, 150, 60000))
+        if rng.random() < 0.05:
+            prefill_tokens = rng.randint(100_000, 250_000)
+        prefill_ns = int((prefill_tokens / rng.uniform(4000, 15000) + context * 1e-7) * NS)
+        prefill_ns += rng.randint(MS, 5 * MS)
+        decode_tokens = int(_loguniform(rng, 4, 2500))
+        decode_ns = min(45 * NS, max(2 * MS, int(decode_tokens / rng.uniform(25, 70) * NS)))
+        start = cursor
+        add(index, "prefill", prefill_ns)
         first = cursor
-        last = index == n_turns - 1
-        n_calls = 0 if last else rng.choice((1, 1, 1, 2, 2, 3))
         calls = []
-        if inside_tools and n_calls:
-            split = int(decode_ns * rng.uniform(0.2, 0.8))
-            phase(index, "decode", split)
-            c0 = cursor
-            phase(index, "tool", int(math.exp(rng.uniform(math.log(0.2), math.log(30.0))) * NS))
-            calls.append((c0, cursor))
-            phase(index, "decode", decode_ns - split)
-            t_end = cursor
+        if index == nested_turn and decode_ns > 3 * NS:
+            before = rng.randint(NS // 2, decode_ns // 2)
+            tool_ns = int(_loguniform(rng, 0.2, 3.0) * NS)
+            add(index, "decode", before)
+            calls.append(ToolCall("server_search", ORIGIN + cursor, ORIGIN + cursor + tool_ns,
+                                  rng.randint(64, 512), rng.randint(512, 8192)))
+            add(index, "tool", tool_ns)
+            add(index, "decode", decode_ns - before)
         else:
-            phase(index, "decode", decode_ns)
-            t_end = cursor
-            for k in range(n_calls):
-                # dispatch latency after the call returns, then back-to-back calls
-                phase(None, "gap", rng.randint(0, 3 * MS) if k == 0 else rng.randint(0, MS))
-                c0 = cursor
-                phase(index, "tool", int(math.exp(rng.uniform(math.log(0.2), math.log(30.0))) * NS))
-                calls.append((c0, cursor))
-        tool_calls = tuple(
-            ToolCall("search" if (index + k) % 2 else "exec", c0, c1, rng.randint(64, 1024),
-                     rng.randint(256, 16384), logged=not (index == unlogged_tool_turn and k == 0))
-            for k, (c0, c1) in enumerate(calls))
-        hidden = rng.randint(0, decode_tokens // 2)
-        turns.append(Turn(index, t_start, t_end, context, new_tokens, decode_tokens,
-                          hidden_tokens=hidden, first_token_ns=first, tool_calls=tool_calls,
-                          logged=index != unlogged_turn))
-        context += new_tokens + decode_tokens
-        if not last:
-            phase(None, "gap", rng.randint(5 * MS, 400 * MS))
-    phase(None, "gap", rng.randint(5 * MS, 400 * MS))
-    end_ns = cursor
-    phase(None, "lead", 6 * shape.period_ns)
+            add(index, "decode", decode_ns)
+        end = cursor
+        for position in range(rng.choice((0, 1, 1, 2, 3))):
+            if position:
+                add(None, "gap", rng.randint(0, 30 * MS))
+            tool_ns = int(_loguniform(rng, 0.2, 30.0) * NS)
+            calls.append(ToolCall(rng.choice(("bash", "search", "read_file", "send_email")),
+                                  ORIGIN + cursor, ORIGIN + cursor + tool_ns,
+                                  rng.randint(64, 4096), rng.randint(256, 65536)))
+            add(index, "tool", tool_ns)
+        hidden = rng.randint(0, decode_tokens)
+        turns.append(dict(index=index, start_ns=ORIGIN + start, end_ns=ORIGIN + end,
+                          context_tokens=context, prefill_tokens=prefill_tokens,
+                          decode_tokens=decode_tokens, hidden_tokens=hidden,
+                          first_token_ns=None if rng.random() < 0.1 else ORIGIN + first,
+                          tool_calls=calls, logged=index != unlogged_turn))
+        context += prefill_tokens + decode_tokens
+        add(None, "gap", rng.randint(2 * MS, 400 * MS))
+    add(None, "gap", rng.randint(50 * MS, NS))
+    # One unlogged tool call per episode (tamper simulation), when any exists.
+    tool_turns = [t for t in turns if t["tool_calls"]]
+    if tool_turns:
+        victim = rng.choice(tool_turns)
+        k = rng.randrange(len(victim["tool_calls"]))
+        c = victim["tool_calls"][k]
+        victim["tool_calls"][k] = ToolCall(c.name, c.start_ns, c.end_ns, c.args_bytes, c.result_bytes,
+                                           logged=False)
+    # A turn without a first token is one "decode" segment in both readings; the
+    # truth below keys on the logged phase list, which is unchanged by that.
 
-    # True power knots: a 2-8 ms slew at each phase start, then ripple knots.
-    knots = [(phases[0][2], gap_w)]
-    for _, kind, a, b in phases:
-        base = level["gap" if kind == "lead" else kind]
-        amp = ripple["gap" if kind == "lead" else kind]
-        t = a + min(rng.randint(2 * MS, 8 * MS), (b - a) // 2)
-        while t < b:
-            if t > knots[-1][0]:
-                knots.append((t, base * (1 + rng.uniform(-amp, amp))))
-            t += rng.randint(4 * MS, 30 * MS)
+    # ---- true power
+    base = {"gap": rng.uniform(55, 75), "tool": rng.uniform(75, 110)}
+    ripple = {"gap": 0.05, "tool": 0.05, "prefill": 0.02, "decode": 0.04}
+    bounds = [p[2] for p in phases] + [phases[-1][3]]
+    lengths = [b - a for a, b in zip(bounds, bounds[1:])]
+    actual = [bounds[0]]
+    for i in range(1, len(bounds) - 1):
+        room = min(lengths[i - 1], lengths[i]) // 3
+        shift = rng.randint(-2 * MS, 6 * MS) if lag else 0
+        actual.append(bounds[i] + max(-room, min(room, shift)))
+    actual.append(bounds[-1])
+    knots = [(-30 * NS, base["gap"] * shape.scale)]
+    previous_level = base["gap"]
+    for i, (owner, kind, _, _) in enumerate(phases):
+        a, b = actual[i], actual[i + 1]
+        if kind == "prefill":
+            level0 = rng.uniform(330, 430)
+            level1 = level0
+        elif kind == "decode":
+            level0 = rng.uniform(210, 300)
+            level1 = level0 * (1 + rng.uniform(0, 0.08) * min(1.0, (b - a) / (20 * NS)))
+        else:
+            level0 = level1 = base[kind] * rng.uniform(0.97, 1.03)
+        slew = min(rng.randint(MS // 2, 4 * MS), (b - a) // 3)
+        if a > knots[-1][0]:
+            knots.append((a, previous_level * shape.scale))
+        if slew > 0 and a + slew < b:
+            knots.append((a + slew, level0 * shape.scale))
+        x = a + slew
+        while True:
+            x += rng.randint(5 * MS, 40 * MS)
+            if x >= b - MS:
+                break
+            frac = (x - a) / (b - a)
+            level = (level0 + (level1 - level0) * frac) * (1 + rng.uniform(-1, 1) * ripple[kind])
+            knots.append((x, level * shape.scale))
         if b > knots[-1][0]:
-            knots.append((b, base * (1 + rng.uniform(-amp, amp))))
+            knots.append((b, level1 * shape.scale))
+        previous_level = level1
+    knots.append((cursor + 30 * NS, base["gap"] * shape.scale))
     truth = Truth(knots)
 
-    expected = []
-    for turn, kind, a, b in phases:
-        if kind == "lead":
-            continue
-        label = (None if kind == "gap" else turn, kind)
-        if expected and expected[-1][:2] == label and expected[-1][3] == a and kind == "gap":
-            expected[-1] = (label[0], kind, expected[-1][2], b)
-        else:
-            expected.append((label[0], kind, a, b))
-
-    # Sample grid: random phase, poll jitter (much less than a period, so times stay increasing).
-    first_t = start_ns - 3 * shape.period_ns + rng.randrange(shape.period_ns) + trace_shift_ns
-    times, t = [], first_t
-    while t < end_ns + 3 * shape.period_ns:
-        times.append(t + (rng.randint(-shape.jitter_ns, shape.jitter_ns) if shape.jitter_ns else 0))
-        t += shape.period_ns
+    # ---- sensor samples, in the trace's own clock
+    period, jitter = shape.period_ns, shape.jitter_ns
+    phase0 = rng.randint(0, period - 1)  # grid phase independent of every boundary
+    lo = -NS if partial != "late" else 3_300 * MS
+    hi = cursor + NS if partial != "early" else cursor - 2_700 * MS
+    grid = range(lo + phase0, hi, period)
+    times = sorted({t + (rng.randint(-jitter, jitter) if jitter else 0) for t in grid})
+    if shape.window_ns is not None:
+        # The first window must start no earlier than ``lo`` for the coverage reading.
+        times = [t for t in times if t - shape.window_ns >= lo - period]
     values = []
-    base = rng.uniform(1e5, 5e7)  # an energy counter running since driver load (J)
-    reset_at = len(times) // 2 if counter_reset else None
-    reset_t = None
-    for k, tk in enumerate(times):
+    reset_at = None
+    if shape.unit == "J_cumulative" and seed % 3 == 1:
+        k = len(times) // 2
+        reset_at = rng.randint(times[k - 1] + 1, times[k] - 1)
+    q = shape.resolution
+    for t in times:
         if shape.unit == "J_cumulative":
-            if reset_at is not None and k >= reset_at:
-                reset_t = times[reset_at - 1] + (times[reset_at] - times[reset_at - 1]) // 2
-                value = truth.integral(reset_t, tk)
+            if reset_at is not None and t > reset_at:
+                value = truth.integral(reset_at, t)
             else:
-                value = base + truth.integral(knots[0][0], tk)
-            values.append(math.floor(value / shape.resolution) * shape.resolution)
+                value = 3_200_000.0 + truth.integral(times[0], t)  # driver baseline
+            # Integer mJ, truncated (the driver reports whole mJ).
+            values.append(math.floor(value / q) * q)
             continue
         if shape.window_ns is None:
-            value = truth.watts(tk)
+            value = truth.watts(t)
         else:
-            value = truth.integral(tk - shape.window_ns, tk) / (shape.window_ns / NS)
-        value += rng.uniform(-shape.resolution / 2, shape.resolution / 2)
-        values.append(round(value / shape.resolution) * shape.resolution)
-    offset = 0 if shape.host_clock else rng.randint(-10**12, 10**12)
-    domain = "host" if shape.host_clock else "meter"
-    trace = PowerTrace(shape.source, shape.channel, domain, tuple(tk - offset for tk in times),
-                       tuple(values), shape.unit, shape.period_ns,
+            value = truth.integral(t - shape.window_ns, t) / (shape.window_ns / NS)
+        # Analogue noise of half a quantum, then rounding to the quantum: at most
+        # one quantum of error per reading, which is what the resolution term charges.
+        noisy = value + rng.uniform(-q / 2, q / 2)
+        values.append(round(noisy / q) * q)
+    offset = METER_OFFSET_NS if shape.clock == "meter" else 0
+    domain = "meter" if shape.clock == "meter" else "host"
+    trace = PowerTrace(shape.source, shape.channel, domain,
+                       tuple(ORIGIN + t - offset for t in times), tuple(values), shape.unit, period,
                        averaging_window_ns=shape.window_ns,
-                       duty_fraction=None if shape.window_ns is None else shape.window_ns / shape.period_ns,
+                       duty_fraction=None if shape.window_ns is None else shape.window_ns / period,
                        resolution=shape.resolution)
-    mappings = () if shape.host_clock else (
-        ClockMapping("meter", "host", offset, MS, "synthetic sync bracket"),)
-    episode = Episode(f"r2-{shape.source}-{seed}", "shade/synthetic", "sabotage", "local-8b",
-                      "mock:vllm", seed, "host", start_ns, end_ns, tuple(turns),
-                      power_traces=(trace,), clock_mappings=mappings, flags=("synthetic",))
-    return episode, truth, expected
+    mappings = ()
+    if shape.clock == "meter":
+        mappings = (ClockMapping("meter", "host", offset, shape.clock_half_width_ns,
+                                 "synthetic round-trip bracket"),)
+    episode = Episode(f"r3-{shape.name}-{seed}", "shade/synthetic", "sabotage", "local-open-weight",
+                      "mock:local-vllm", seed, "host", ORIGIN, ORIGIN + cursor,
+                      tuple(Turn(tool_calls=tuple(t.pop("tool_calls")), **t) for t in turns),
+                      power_traces=(trace,), clock_mappings=mappings,
+                      flags=("synthetic.round3",))
+    meta = dict(phases=phases, reset_at=reset_at, offset=offset, n_turns=n_turns)
+    return episode, truth, meta
 
 
-# ---------------------------------------------------------------- comparison helpers
+# ---------------------------------------------------------------- independent C2 + reset terms
 
-def no_uncertainty_bar(x, y):
-    """1e-6 relative, or 1e-6 absolute in the unit when the value is below 1."""
-    scale = max(abs(x), abs(y))
-    return 1e-6 * scale if scale >= 1 else 1e-6
+def _trace_domain(episode):
+    trace = episode.power_traces[0]
+    offset = episode.clock_mappings[0].offset_ns if episode.clock_mappings else 0
+    return trace, offset
+
+
+def c2_extra(trace, offset, a, b):
+    """Fix round 2's C2 window terms, from the brief text, in the trace's clock.
+
+    (a) every duty gap [t_(k-1), t_k - w] overlapping [a, b] adds
+        |P_k - P_(k-1)| x (gap length inside [a, b]) / 2;
+    (b) every end strictly inside a window (t_k - w < end < t_k) adds
+        (max - min of the means P_(k-1), P_k, P_(k+1) that exist) x w / 4.
+    """
+    w = trace.averaging_window_ns
+    if trace.unit != "W" or not w or w <= 0:
+        return 0.0
+    t, p = trace.t_ns, trace.values
+    a, b = a - offset, b - offset
+    terms = []
+    for k in range(1, len(t)):
+        g0, g1 = t[k - 1], t[k] - w
+        inside = min(b, g1) - max(a, g0)
+        if g1 > g0 and inside > 0:
+            terms.append(abs(p[k] - p[k - 1]) * (inside / NS) / 2)
+    for end in (a, b):
+        for k in range(len(t)):
+            if t[k] - w < end < t[k]:
+                near = [p[j] for j in (k - 1, k, k + 1) if 0 <= j < len(p)]
+                terms.append((max(near) - min(near)) * (w / NS) / 4)
+                break
+    return math.fsum(terms)
+
+
+def twin_interpolation(trace, offset, a, b):
+    """The twin's own interpolation term (half the hold-vs-line difference) on [a, b]."""
+    if trace.unit == "J_cumulative":
+        series, _ = twin._unwrapped(trace.values)
+        return twin._interpolation_term(trace.t_ns, series, a - offset, b - offset, cumulative=True)
+    return twin._interpolation_term(trace.t_ns, trace.values, a - offset, b - offset, cumulative=False)
+
+
+def reset_extra(trace, offset, a, b):
+    """Lane's counter-restart sensitivity, recomputed: for each poll whose reading
+    decreased, (overlap of that poll with [a, b]) x (peak step power of the trace)."""
+    if trace.unit != "J_cumulative":
+        return 0.0
+    t, v = trace.t_ns, trace.values
+    series, _ = twin._unwrapped(v)
+    peak = max(abs(series[k + 1] - series[k]) / ((t[k + 1] - t[k]) / NS) for k in range(len(t) - 1))
+    a, b = a - offset, b - offset
+    terms = []
+    for k in range(len(t) - 1):
+        if v[k + 1] < v[k]:
+            overlap = min(b, t[k + 1]) - max(a, t[k])
+            if overlap > 0:
+                terms.append(overlap / NS * peak)
+    return math.fsum(terms)
+
+
+SHARED_FLAGS = {  # lane name -> twin name, for flags both define with one meaning
+    "trace.partial_coverage": "trace.partial_coverage",
+    "duty.uncovered": "duty.uncovered",
+    "counter.wrap": "counter.wrap",
+    "clock.uncertainty_missing": "half_width.missing.clock",
+    "resolution.missing": "half_width.missing.resolution",
+}
+SHARED_EPISODE_FLAGS = {
+    "trace.ambiguous": "trace.ambiguous",
+    "trace.missing": "trace.missing",
+    "tool.overlap": "tool.overlap",
+    "tool.outside_episode": "tool.outside_episode",
+    "turn.overlap": "turn.overlap",
+    "turn.no_first_token": "turn.no_first_token",
+}
 
 
 def duty_fraction(method):
-    base, *fields = method.split(";")
-    for item in fields:
-        name, value = item.split("=", 1)
-        if name in ("duty.uncovered", "duty.uncovered_fraction"):
-            return base, float(value)
-    return base, 0.0
+    base, _, companion = method.partition(";")
+    if not companion:
+        return base, 0.0
+    return base, float(companion.split("=", 1)[1])
 
 
-def reset_term(trace, mapping, a, b):
-    """READING-F: the lane's reset sensitivity term, recomputed from the record."""
-    off = mapping.offset_ns if mapping is not None else 0
-    t = [x + off for x in trace.t_ns]
-    v = trace.values
-    steps = []
-    resets = []
-    for k in range(len(t) - 1):
-        inc = v[k + 1] if v[k + 1] < v[k] else v[k + 1] - v[k]
-        steps.append(abs(inc) / ((t[k + 1] - t[k]) / NS))
-        if v[k + 1] < v[k]:
-            resets.append((t[k], t[k + 1]))
-    peak = max(steps)
-    return math.fsum(max(0, min(b, y) - max(a, x)) / NS * peak for x, y in resets)
+@unittest.skipIf(lane is None, "lane A4 module not on this branch")
+class TwinAgreementRound3(unittest.TestCase):
+    """Lane and twin on the same round-3 worlds, under the orchestrator's bars."""
 
-
-def segments_of(result):
-    return [(s.turn, s.kind, s.start_ns, s.end_ns) for s in result.segments]
-
-
-@unittest.skipUnless(lane is not None, "joulewise.align.attribution (lane A4) is not on this branch")
-class TwinAgreement(unittest.TestCase):
-
-    def compare(self, lane_e, twin_e, *, where, hw_offset=0.0, compare_hw=True, compare_fraction=True,
-                idle_j=0.0):
-        bar = 0.01 * min(lane_e.half_width_j, twin_e.half_width_j)
-        if bar == 0.0 or math.isinf(bar):
-            bar = no_uncertainty_bar(lane_e.joules, twin_e.joules)
+    def assert_joules(self, lane_e, twin_e, label):
+        widths = [w for w in (lane_e.half_width_j, twin_e.half_width_j) if 0 < w < math.inf]
+        if len(widths) == 2:
+            bar = 0.01 * min(widths)  # orchestrator: 1% of the smaller printed half-width
         else:
-            # The 1%-of-half-width bar must clear float noise by 1e6 ulp to mean anything. The
-            # noise scale is the gross energy (net joules plus the idle energy subtracted).
-            gross = max(abs(lane_e.joules), abs(twin_e.joules)) + abs(idle_j)
-            self.assertGreaterEqual(bar, 1e6 * math.ulp(gross),
-                                    f"{where}: half-width {bar * 100!r} J is below float noise")
+            scale = max(abs(lane_e.joules), abs(twin_e.joules))
+            bar = 1e-6 * scale if scale >= 1 else 1e-6  # orchestrator: no printed width
         self.assertLessEqual(abs(lane_e.joules - twin_e.joules), bar,
-                             f"{where}: joules lane {lane_e.joules!r} twin {twin_e.joules!r}")
-        lane_base, lane_f = duty_fraction(lane_e.method)
-        twin_base, twin_f = duty_fraction(twin_e.method)
-        self.assertEqual(lane_base, twin_base, where)
-        if compare_fraction:  # READING-D: the denominators differ only under partial coverage
-            self.assertLessEqual(abs(lane_f - twin_f), no_uncertainty_bar(lane_f, twin_f), where)
-        for flag in ("duty.uncovered", "trace.partial_coverage", "counter.wrap"):
-            self.assertEqual(flag in lane_e.flags, flag in twin_e.flags, f"{where}: {flag}")
-        if compare_hw:
-            lane_hw = lane_e.half_width_j - hw_offset
-            self.assertLessEqual(abs(lane_hw - twin_e.half_width_j),
-                                 no_uncertainty_bar(lane_hw, twin_e.half_width_j),
-                                 f"{where}: half-width lane {lane_e.half_width_j!r} (-{hw_offset!r}) "
-                                 f"twin {twin_e.half_width_j!r}")
+                             f"{label}: joules lane {lane_e.joules!r} twin {twin_e.joules!r}")
 
-    def run_world(self, shape, seed, *, idle_watts=0.0, **world_kw):
-        episode, _, expected = build_world(seed, shape, **world_kw)
-        lane_r = lane.attribute_episode(episode, source=shape.source, channel=shape.channel,
-                                        idle_watts=idle_watts)
-        twin_r = twin.attribute_episode(episode, source=shape.source, channel=shape.channel,
-                                        idle_watts=idle_watts)
-        # Tiling is integer: exact against the construction and against the twin.
-        self.assertEqual(segments_of(lane_r), expected, f"{shape.source} seed {seed}")
-        self.assertEqual(segments_of(lane_r), segments_of(twin_r))
-        trace = episode.power_traces[0]
-        mapping = episode.clock_mappings[0] if episode.clock_mappings else None
-        pairs = [(lane_r.total, twin_r.total, episode.start_ns, episode.end_ns, "total")]
-        pairs += [(ls.energy, ts.energy, ls.start_ns, ls.end_ns, f"segment {i} {ls.kind}")
+    def assert_rel(self, actual, expected, label):
+        scale = max(abs(actual), abs(expected))
+        bar = 1e-6 * scale if scale >= 1 else 1e-6  # orchestrator: no printed width
+        self.assertLessEqual(abs(actual - expected), bar, f"{label}: {actual!r} vs {expected!r}")
+
+    def compare_world(self, episode, idle):
+        source, channel = episode.power_traces[0].source, episode.power_traces[0].channel
+        lane_r = lane.attribute_episode(episode, source=source, channel=channel, idle_watts=idle)
+        twin_r = twin.attribute_episode(episode, source=source, channel=channel, idle_watts=idle)
+        tag = f"{episode.episode_id} idle {idle}"
+        self.assertEqual([(s.turn, s.kind, s.start_ns, s.end_ns) for s in lane_r.segments],
+                         [(s.turn, s.kind, s.start_ns, s.end_ns) for s in twin_r.segments], tag)
+        want = {SHARED_EPISODE_FLAGS[f] for f in lane_r.flags if f in SHARED_EPISODE_FLAGS}
+        got = {f for f in twin_r.flags if f in SHARED_EPISODE_FLAGS.values()}
+        self.assertEqual(want, got, tag + " episode flags")
+        trace, offset = _trace_domain(episode)
+        pairs = [("total", episode.start_ns, episode.end_ns, lane_r.total, twin_r.total)]
+        pairs += [(f"segment {i} {ls.kind}", ls.start_ns, ls.end_ns, ls.energy, ts.energy)
                   for i, (ls, ts) in enumerate(zip(lane_r.segments, twin_r.segments))]
-        for lane_e, twin_e, a, b, label in pairs:
-            offset = reset_term(trace, mapping, a, b) if "counter.wrap" in lane_e.flags else 0.0
-            self.compare(lane_e, twin_e, hw_offset=offset, idle_j=idle_watts * (b - a) / NS,
-                         where=f"{shape.source} seed {seed} idle {idle_watts} {label}")
-        self.assertNotIn("trace.partial_coverage", lane_r.total.flags)
+        for label, a, b, le, te in pairs:
+            label = f"{tag} {label}"
+            self.assert_joules(le, te, label)
+            expected_hw = (te.half_width_j + twin_interpolation(trace, offset, a, b)
+                           + c2_extra(trace, offset, a, b) + reset_extra(trace, offset, a, b))
+            self.assert_rel(le.half_width_j, expected_hw, label + " half-width")
+            lane_base, lane_f = duty_fraction(le.method)
+            twin_base, twin_f = duty_fraction(te.method)
+            self.assertEqual(lane_base, twin_base, label)
+            self.assert_rel(lane_f, twin_f, label + " duty fraction")
+            self.assertEqual({SHARED_FLAGS[f] for f in le.flags if f in SHARED_FLAGS},
+                             {f for f in te.flags if f in SHARED_FLAGS.values()}, label + " flags")
         return len(pairs)
 
     def test_full_coverage_worlds_agree(self):
+        compared = 0
         for shape in SHAPES:
-            compared = 0
-            # 1 kHz worlds hold about 1e6 samples each; three seeds keep the run short.
-            for seed in (SEEDS if shape.period_ns >= 100 * MS else range(3)):
-                for idle in (0.0, shape.levels[0]):
-                    with self.subTest(sensor=shape.source, seed=seed, idle=idle):
-                        compared += self.run_world(shape, seed, idle_watts=idle)
-            print(f"twin agreement r2 {shape.source}: {compared} estimates compared on joules "
-                  f"and half-width")
+            seeds = range(5) if shape.name == "ina3221" else range(10)  # 1 kHz worlds are slow
+            for seed in seeds:
+                for lag in (True, False):
+                    episode, truth, _ = build_world(seed, shape, lag=lag)
+                    gap_watts = truth.p[0]
+                    for idle in (0.0, gap_watts):
+                        with self.subTest(shape=shape.name, seed=seed, lag=lag, idle=idle):
+                            compared += self.compare_world(episode, idle)
+        self.assertGreater(compared, 1000)
 
-    def test_partial_coverage_gross_agrees(self):
-        # READING-C: the sensor starts 20 s after the episode does; gross joules (idle 0).
+    def test_partial_coverage_gross_joules_agree(self):
         for shape in SHAPES:
             for seed in range(3):
-                with self.subTest(sensor=shape.source, seed=seed):
-                    episode, _, _ = build_world(seed, shape, trace_shift_ns=20 * NS, counter_reset=False)
-                    lane_r = lane.attribute_episode(episode, source=shape.source, channel=shape.channel)
-                    twin_r = twin.attribute_episode(episode, source=shape.source, channel=shape.channel)
-                    self.assertEqual(segments_of(lane_r), segments_of(twin_r))
-                    self.assertIn("trace.partial_coverage", lane_r.total.flags)
-                    for ls, ts in zip((lane_r.total,) + tuple(s.energy for s in lane_r.segments),
-                                      (twin_r.total,) + tuple(s.energy for s in twin_r.segments)):
-                        self.compare(ls, ts, compare_hw=False, compare_fraction=False,
-                                     where=f"{shape.source} seed {seed} late")
+                for partial in ("late", "early"):
+                    episode, _, _ = build_world(seed + 100, shape, partial=partial)
+                    source, channel = shape.source, shape.channel
+                    lane_r = lane.attribute_episode(episode, source=source, channel=channel)
+                    twin_r = twin.attribute_episode(episode, source=source, channel=channel)
+                    with self.subTest(shape=shape.name, seed=seed, partial=partial):
+                        self.assertEqual([(s.kind, s.start_ns, s.end_ns) for s in lane_r.segments],
+                                         [(s.kind, s.start_ns, s.end_ns) for s in twin_r.segments])
+                        for ls, ts in zip((lane_r.total, *[s.energy for s in lane_r.segments]),
+                                          (twin_r.total, *[s.energy for s in twin_r.segments])):
+                            self.assert_joules(ls, ts, f"{episode.episode_id} {partial}")
+                            self.assertEqual("trace.partial_coverage" in ls.flags,
+                                             "trace.partial_coverage" in ts.flags)
 
-    def test_missing_trace_joules_agree(self):
-        # READING-G: no trace matches the requested channel.
-        episode, _, _ = build_world(0, SHAPES[1])
-        lane_r = lane.attribute_episode(episode, source="nvml_power", channel="gpu7", idle_watts=70.0)
-        twin_r = twin.attribute_episode(episode, source="nvml_power", channel="gpu7", idle_watts=70.0)
-        self.assertEqual(segments_of(lane_r), segments_of(twin_r))
-        self.assertIn("trace.missing", lane_r.flags)
-        for ls, ts in zip((lane_r.total,) + tuple(s.energy for s in lane_r.segments),
-                          (twin_r.total,) + tuple(s.energy for s in twin_r.segments)):
-            self.assertEqual((ls.joules, ts.joules), (0.0, 0.0))  # both define it as exactly zero
-            self.assertTrue(math.isinf(ls.half_width_j))
-
-
-@unittest.skipUnless(lane is not None, "joulewise.align.attribution (lane A4) is not on this branch")
-class RoundOneRegressions(unittest.TestCase):
-    """Round-1 findings that changed a number (B1, M1); fixed in e3db70aeb, kept as regressions."""
-
-    def test_runner_recorded_tool_calls_get_tool_segments(self):
-        # Runner-recorded calls lie after their Turn ends; each must be its own "tool" segment
-        # with the owning turn's index (brief: "each tool call as tool").
-        for shape in SHAPES[:2]:
-            episode, _, _ = build_world(0, shape, inside_tools=False)
-            lane_r = lane.attribute_episode(episode, source=shape.source, channel=shape.channel)
-            calls = sorted((c.start_ns, c.end_ns, t.index) for t in episode.turns for c in t.tool_calls)
-            tools = [(s.start_ns, s.end_ns, s.turn) for s in lane_r.segments if s.kind == "tool"]
-            self.assertEqual(tools, calls)
-
-    def test_counter_reset_energy_within_its_half_width_of_truth(self):
-        shape = SHAPES[3]
-        for seed in range(4):
-            episode, truth, _ = build_world(seed, shape, counter_reset=True)
-            lane_r = lane.attribute_episode(episode, source=shape.source, channel=shape.channel)
-            exact = truth.integral(episode.start_ns, episode.end_ns)
-            self.assertIn("counter.wrap", lane_r.flags)
-            self.assertTrue(all(s.energy.joules >= 0 for s in lane_r.segments))
-            # The restart loses the pre-reset part of one poll step; the reset sensitivity term
-            # (one poll at the observed peak) must cover it plus the ordinary end terms.
-            self.assertLessEqual(abs(lane_r.total.joules - exact), lane_r.total.half_width_j,
-                                 f"seed {seed}: lane total {lane_r.total.joules!r} truth {exact!r}")
+    def test_public_trace_energy_agrees_on_random_intervals(self):
+        # Random sub-intervals, including ones that start or end outside the trace,
+        # through the public trace_energy of each (gross joules, idle 0).
+        for shape in SHAPES:
+            episode, _, _ = build_world(7, shape, n_turns=4)
+            trace = episode.power_traces[0]
+            mapping = episode.clock_mappings[0] if episode.clock_mappings else None
+            rng = random.Random(99)
+            for _ in range(200):
+                a = episode.start_ns + rng.randint(-2 * NS, episode.end_ns - episode.start_ns)
+                b = a + rng.choice((rng.randint(0, 10 * MS), rng.randint(0, 5 * NS)))
+                le = lane.trace_energy(trace, a, b, mapping=mapping)
+                te = twin.trace_energy(trace, a, b, mapping=mapping)
+                with self.subTest(shape=shape.name, a=a, b=b):
+                    self.assert_joules(le, te, f"{shape.name} [{a}, {b}]")
 
 
 if __name__ == "__main__":
