@@ -14,6 +14,11 @@ from statistics import NormalDist
 from typing import Sequence
 
 
+# Automatic computation budget, configurable by callers with very large group
+# sets. Statistical target is unchanged; budget exhaustion is an explicit flag.
+AUTO_BOOTSTRAP_MAX_REPLICATES = 2 ** 20
+
+
 class _Float(float):
     def __new__(cls, value: float, flags: Sequence[str] = ()) -> _Float:
         result = super().__new__(cls, value)
@@ -217,7 +222,11 @@ def fit_logistic(X: Sequence[Sequence[float]], y: Sequence[int], *, l2: float) -
         damping = 1.0
         while True:
             candidate = [a - damping * b for a, b in zip(coefficients, step)]
-            if loss(candidate) <= current:
+            # Sum/dot roundoff scales with rows and coefficient count. Permit
+            # that arithmetic uncertainty so near-optimum Newton steps are not
+            # rejected merely because two objective values round differently.
+            roundoff = sys.float_info.epsilon * len(design) * (d + 1) * max(1.0, abs(current))
+            if loss(candidate) <= current + roundoff:
                 coefficients = candidate
                 break
             damping /= 2
@@ -254,7 +263,9 @@ def cluster_bootstrap_auc_ci(scores: Sequence[float], labels: Sequence[int], gro
     At atoms use the quantile range across one binomial rank SE instead.
     Start at ceil(1 / tail_probability²), then double until satisfied.
     This is an empirical plug-in precision estimate, not a finite-sample
-    guarantee. A point-mass distribution stops with a degeneracy flag.
+    guarantee. A point-mass distribution stops with a degeneracy flag. The
+    configurable AUTO_BOOTSTRAP_MAX_REPLICATES compute budget bounds automatic
+    work; an unmet precision target is returned with a flag, never concealed.
 
     Each draw contains G groups with replacement, keeping all their episodes.
     Single-class draws have undefined AUC: count them in flags and redraw;
@@ -280,6 +291,8 @@ def cluster_bootstrap_auc_ci(scores: Sequence[float], labels: Sequence[int], gro
                    for s in positives[i]) for j in range(g)] for i in range(g)]
     p = (1 - level) / 2
     target = n_boot if n_boot is not None else math.ceil(1 / p ** 2)
+    if n_boot is None:
+        target = min(target, AUTO_BOOTSTRAP_MAX_REPLICATES)
     rng = random.Random(seed)
     draws = []
     invalid = 0
@@ -293,8 +306,9 @@ def cluster_bootstrap_auc_ci(scores: Sequence[float], labels: Sequence[int], gro
             if not npos or not nneg:
                 invalid += 1
                 continue
-            numerator = math.fsum(weights[i] * weights[j] * u[i][j]
-                                  for i in range(g) for j in range(g))
+            active = [(i, w) for i, w in enumerate(weights) if w]
+            numerator = math.fsum(wi * wj * u[i][j]
+                                  for i, wi in active for j, wj in active)
             draws.append(numerator / (npos * nneg))
         ordered = sorted(draws)
         lo, hi = _quantile(ordered, p), _quantile(ordered, 1 - p)
@@ -321,7 +335,10 @@ def cluster_bootstrap_auc_ci(scores: Sequence[float], labels: Sequence[int], gro
         if half_width == 0 and max(errors) == 0:
             flags.append("degenerate_percentile_interval")
             break
-        target *= 2
+        if target >= AUTO_BOOTSTRAP_MAX_REPLICATES:
+            flags.append("bootstrap_precision_target_not_met")
+            break
+        target = min(target * 2, AUTO_BOOTSTRAP_MAX_REPLICATES)
     if invalid:
         flags.append(f"single_class_resamples:{invalid}")
     if g < 2:

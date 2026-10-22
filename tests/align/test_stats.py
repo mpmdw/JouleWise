@@ -222,7 +222,9 @@ def coverage_counts(worlds=200, n_boot=399):
 class CoverageTests(unittest.TestCase):
     def test_seeded_interval_coverage(self):
         worlds = 200
-        _, counts = coverage_counts(worlds)
+        truth, counts = coverage_counts(worlds)
+        print(f"INTERVAL COVERAGE truth={truth:.9f} worlds={worlds} "
+              f"delong_hits={counts[0]} bootstrap_hits={counts[1]}")
         # One binomial SE around nominal 95% coverage, as requested in brief.
         tolerance = math.sqrt(0.95 * 0.05 / worlds)
         for name, count in zip(("DeLong", "cluster bootstrap"), counts):
