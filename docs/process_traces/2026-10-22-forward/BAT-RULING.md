@@ -9,6 +9,16 @@ Written by the Claude side (Opus 5.5, the item agent acting for the lead). Claim
 boundary. BYTES is not registered and has no data, so its arithmetic may change now. Nothing here is blinded: every
 number is from the non-claim BYTES check session H (`bytes-h-20261021T185555335572Z`).
 
+Revision of 2026-10-22, 09:30 PDT (third dispatch of BAT-2; no council reconvened, no number changed). Every script
+re-ran and reproduced byte for byte ("Executed evidence", third dispatch). Three additions by the lead's delegate:
+
+- §8 now places the amendment of Addendum 1 item 2 in the registration text. The first text stated the amendment in
+  §1 but gave no registration placement for it, and B6-1 (`b3b8f5b9d`, draft PR #537) proposes a meter-only fill
+  for S-15.
+- §4 and §8 state what the blinded stage prints for the decode marker. That is the build's choice (BAT-3 review
+  finding 3), which this ruling had left open.
+- §4 records what lies in the window after decode on H.
+
 ## Who sat
 
 - **Opus 5.5**, Claude cloud `session_016JB6H21N3PeACguhEyyh1L`. Report: JouleWise-data `claude/bat-council-opus`
@@ -88,7 +98,11 @@ Block 6 gave two reasons for a meter-only per-phase line:
    95 decode spans holds at least 4 polls, and the shortest full-length decode (1.7B, 2.32 s) holds 11.
 
 **Amendment to Addendum 1 item 2** (this ruling): BYTES' DC input includes the battery term whatever S-15's fill
-says. The clause's last sentence still governs the meter's own phase-edge and clock treatment.
+says. The clause's last sentence still governs the meter's own phase-edge and clock treatment. §8 places this
+amendment in the registration's Authority paragraph and in §7 (added on the third dispatch). S-15 is still open on
+main (`block6_replication_DRAFT.md` line 1037), and B6-1's third pass (`b3b8f5b9d` §7.1) keeps block 6's per-phase
+value meter-only and says that BYTES no longer takes S-15's fill. Without the placement, the registration would still
+list Addendum 1 as an authority with the old sentence in force.
 
 ## 2. Q1: the formula
 
@@ -240,6 +254,32 @@ the primary value.
 (0.115 J) straddles a decode start that comes 2.02 s after its prefill start, and it is unmarked. Its energy is inside
 the term and inside v.
 
+**The window after decode** (added on the third dispatch; `gap_check.py`, Executed evidence). The marker and v_end
+read polls up to τ after the decode end. On H that window holds nothing but the run's own quiet after its request:
+
+- every request ends at its decode end (0.6 to 3.3 ms later);
+- every idle baseline lies before its request;
+- the next run's first span starts at least 45.0 s after the previous decode end (0 of 94 gaps below τ);
+- all 1,102 polls received in [d1, d1 + τ) over the 95 runs read 0 mA.
+
+A later schedule might start a run within τ of the previous decode end. Then that run's discharge would raise the
+earlier run's v_end and could mark it. That makes the bound larger and the without-assisted line shorter. It cannot
+move E_b, which counts only polls received in [d0, d1).
+
+**Decodes no longer than τ.** Every full-length decode on H is longer than τ; the shortest is 1.7B's 2.324 s. The
+22 NEG-8 reference decodes and six one-second `test7-*-start` runs of the 70B, Next-80B and 122B models last 0.99 to
+1.01 s. The references take the term over their request spans (§2). For a decode no longer than τ, the marker's
+window lies wholly after decode. A reading received there at time t describes energy in [t − τ, t), which is the
+decode or the quiet after it and never the prefill. So the marker is still right when it fires. An assist reported
+before d0 + τ goes unmarked, which is the accepted cost above.
+
+**At the blinded stage** (added on the third dispatch; BAT-3 review finding 3, built at `552561b3f`). The marker is
+read from the meter stream, and the blinded stage reads no meter stream. There, the count of decode-assisted runs
+and the without-assisted line's numbers print as null, labelled "not evaluated at the blinded stage". Printing 0
+would claim a count that was never taken. The count of runs carrying `battery.assist` comes from the harvest's
+flags and prints at every stage. This changes no number. Every stage that reads the meter stream evaluates the
+marker as above.
+
 ## 5. Q4: rest
 
 Yes. Rest = (E_meter + E_b) − E_rails per run, before any averaging, on both bases. Every battery joule is machine
@@ -276,8 +316,19 @@ Yes, as a revision of DIFFICULTY v2 §2 before any DIFFICULTY energy exists (DIF
 
 ## 8. Registration text (for `docs/registrations/bytes_pack_v1.md`)
 
-Base text: `91b20d7c2`. The registration's editor places these and adds a §20 row "BAT-2 ruling → §1, §6, §7, §9, §15,
-§16". Every term below is built before it is used.
+Base text: `91b20d7c2`. The registration's editor places these and adds a §20 row "BAT-2 ruling → Authority, §1, §6,
+§7, §9, §15, §16". Every term below is built before it is used.
+
+Three placements were added on the third dispatch: the Authority insertion, the last paragraph of §6 and the
+"Per-phase definitions registered elsewhere" paragraph of §7. BAT-3 placed this section's original text verbatim
+on `lane/2026-10-22-bytes-battery-term` (`a846ba997`). These three are still to be placed there, and the §20 row
+there gains "Authority".
+
+**Authority paragraph, one insertion** (third dispatch). After "In order:", insert:
+
+> the BAT-2 ruling (2026-10-21; `docs/process_traces/2026-10-22-forward/BAT-RULING.md`) on the battery term, its
+> edge term v and the decode-assisted marker (§6, §7, §9), where it amends Addendum 1 item 2, Addendum 4 item 11 and
+> Addendum 9's C_j; then
 
 **§1, the DC-input bullet, replaced:**
 
@@ -302,6 +353,11 @@ Base text: `91b20d7c2`. The registration's editor places these and adds a §20 r
 > with it, per stratum, are the count of decode-assisted runs and the count of runs carrying the harvest's
 > request-level `battery.assist`. Below 5 units the line prints its counts and "below the registered minimum of 5
 > units".
+>
+> The marker is read from the meter stream, so only the stages that read that stream evaluate it. A stage that
+> reads no meter stream (the blinded stage, §11) prints the count of decode-assisted runs and this line's numbers as
+> null, labelled "not evaluated at the blinded stage", never as 0. The count of runs carrying `battery.assist`,
+> which comes from the harvest's flags, is printed at every stage.
 >
 > *Expected, from the non-claim check session H (2026-10-21):*
 > - Llama-3.3-70B: 1 decode-assisted run of 18 (0.40 J, a run the harvest excluded for an agent's presence).
@@ -344,6 +400,11 @@ below (Addendum 1 item 2; BAT-2 ruling)". The rest cell becomes "rails anchor-sh
 >
 > *Missing readings.* A run whose decode or idle span holds no poll with both readings has no DC-input value
 > (`bytes.meter_decode_unavailable`, reason "battery reading missing").
+>
+> *Per-phase definitions registered elsewhere* (third dispatch). This amends the last sentence of Addendum 1 item 2.
+> Block 5 or block 6 may later register a per-phase whole-machine energy (block-6 slot S-15). If one is registered
+> before this registration, BYTES adopts its treatment of the meter's phase edges and clock, as that sentence says.
+> BYTES' DC input and rest keep the battery term as defined here, whatever that definition says about the battery.
 
 **§9, NR1's labelled alternative:** C_j's per-run term becomes max(P_start,i, P_end,i) × (r_max,i + Δt) +
 max(v_start,i, v_end,i). The text adds one sentence: "The battery reading's delay is one-signed, like δ, so it also
@@ -478,8 +539,11 @@ a two-sided window, and the edge's largest power × 1.2 s (`lead_table.py`, colu
 flag. The only removal rule is the existing missing-reading rule, applied to the battery reading, and it removes 0 of
 95 H runs.
 
-**Reopen if:** a later stream shows battery readings arriving later than its own τ after a power step, or a decode
-battery term large against u (on H the largest v / u is 0.19).
+**Reopen if:**
+
+- a later stream shows battery readings arriving later than its own τ after a power step;
+- a decode battery term is large against u (on H the largest v / u is 0.19);
+- a schedule starts a run's first span within τ of the previous run's decode end (H: at least 45.0 s, §4).
 
 ## 11. Re-running it
 
@@ -513,6 +577,12 @@ the real `meter_decode` at `0743a7b90`.
   The prefill-only burst checks that a prefill burst moves neither the term nor the marker beyond v.
 - The flag catalog gains `bytes.decode_battery_assist`.
 - This is claim-path code: an executing review and both cold passes, as for any BYTES analysis change.
+- Added on the third dispatch:
+  - The blinded-stage print of §4 is what the build already does (`552561b3f`, and its sentence in
+    `docs/contracts/bytes_tables.md`). The twin mirrors it (BY-TWIN-BAT).
+  - The three new §8 placements are text only. They go into `docs/registrations/bytes_pack_v1.md` on
+    `lane/2026-10-22-bytes-battery-term`, or at BY-MERGE: the Authority insertion, the last paragraph of §6, and the
+    last paragraph of §7. No code changes with them.
 
 ## Executed evidence
 
@@ -571,3 +641,53 @@ Acceptance checks made at the same time:
 - The packet's copy of `RULING_battery_assist_2026-10-06.md` is byte-identical to
   `/Users/edr/night-archive/wallmeter-probe/verify/RULING_battery_assist_2026-10-06.md`. It holds no block-5 or
   block-6 claim value; its only measured numbers are the 10-06 probe's 8B tokens/s and battery currents.
+
+### Third dispatch (2026-10-22, 09:00 to 09:30 PDT)
+
+BAT-2 was dispatched a third time with the original brief. The council had already sat and the ruling stood, so no
+seat or judge was reconvened. The lead's delegate re-ran everything and added the three text items in the revision
+note at the top.
+
+Inputs:
+
+- `$P` is `analysis/bat-council-20261022` @ `c17fdca`, and BAT-1's tables are at `d4f9cd2`; both were exported with
+  `git archive`.
+- `$K` is `km003c_parse.py` from origin/main `81db9f355` (sha256 `e8fc584a…`). It is byte-identical to the copy at
+  `0743a7b90`. The file is also unchanged on `lane/2026-10-20-l9-ruling-build`, compared against `bfab7c950` (empty
+  diff).
+- `$J` is `joulewise/` at `0743a7b90`.
+- `$H` is H's session root, read only.
+- Outputs are in `/Users/edr/night-archive/forward-20261021/BAT-2/lead-rerun/third-dispatch/out/`.
+
+```text
+$ python3.13 -I -B $P/worked_example.py $P/data/h_decode_extract.json        exit 0, identical to the 22:31 output
+$ python3.13 -I -B $P/ruling_table.py $P/data/h_decode_extract.json          exit 0, identical
+$ python3.13 -I -B $P/lead/lead_check2.py $P/data/h_decode_extract.json      exit 0, identical
+$ python3.13 -I -B $P/lead/lead_table.py $P/data/h_decode_extract.json <BAT-1 h_battery_runs.json> $K/km003c_parse.py
+                                                                             exit 0, identical
+$ python3.13 -I -B $L/lead_rerun.py $H $J                                    exit 0, identical
+$ python3.13 -I -B $L/lead_counts.py $H $J                                   exit 0, identical
+$ python3.13 -I -B $L/third-dispatch/gap_check.py $P/data/h_decode_extract.json   exit 0 (new; sha256 5dac0ae3…)
+```
+
+"Identical" means byte for byte against `$L/out/` from 22:31 PDT. Item 3 of the list above (the raw-stream re-run
+through the real `km003c_parse` and `meter_decode`) still gives a largest difference of 4.6e-7 J from the printed
+values, against the bar of 1e-5 J.
+
+`gap_check.py` orders integer nanosecond stamps and counts polls, so it needs no bar. It found:
+
+- τ = 2.302440875 s;
+- 95 of 95 idle baselines lie before their requests;
+- request end minus decode end ranges from 0.000596 to 0.003278 s;
+- the smallest gap from a decode end to the next run's first span is 45.029 s (`neg8-refcorpus-r15` to `-r16`),
+  and 0 of 94 gaps are below τ;
+- 1,102 polls were received in [d1, d1 + τ), with 0 nonzero B0AC;
+- the shortest full-length decode is 2.324 s (qwen3-1p7b);
+- 28 decodes are no longer than τ: the 22 NEG-8 references (0.990 to 1.006 s) and six `test7-*-start` runs.
+
+State of the other parts at this dispatch, recorded only:
+
+- Both seat branches and the judge's branch are on JouleWise-data's origin at the commits named in "Who sat".
+- The build (BAT-3, PR #544) is at fix round 1 `a846ba997`. BAT-1's fourth dispatch found that it gives the same H
+  output.
+- PR #536's CI on `c220c6e78` was pending when this revision was written.
