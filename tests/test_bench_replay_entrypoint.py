@@ -77,6 +77,8 @@ class BenchReplayEntrypointTests(unittest.TestCase):
                     report = bench.execute_bench(args)
                     self.assertEqual(report["returncode"], 2)
                     self.assertEqual(report["kind"], "smoke")
+                    self.assertEqual(report["network_time_control_argv"], list(expected_argv))
+                    self.assertNotIn("network_time_restored", report)
                 else:
                     with self.assertRaises(type(error)) as caught:
                         bench.execute_bench(args)
