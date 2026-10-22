@@ -285,7 +285,19 @@ class SyntheticPowerSampler:
         """Piecewise excess watts; logged flags never change the measured work."""
         result = []
         for turn in episode.turns:
-            first = turn.first_token_ns if turn.first_token_ns is not None else turn.start_ns
+            if turn.first_token_ns is None:
+                # The phase boundary is unknown, but total model-call energy
+                # still follows the configured count model. Spread its total
+                # over the observed call instead of silently losing prefill.
+                duration = turn.end_ns - turn.start_ns
+                if duration > 0:
+                    joules = (self.model.prefill_joules_per_token * turn.prefill_tokens +
+                        (self.model.decode_joules_per_token +
+                         self.model.context_joules_per_token_squared * turn.context_tokens) *
+                        turn.decode_tokens)
+                    result.append((turn.start_ns, turn.end_ns, joules * _NS / duration))
+                continue
+            first = turn.first_token_ns
             for left, right, joules in (
                 (turn.start_ns, first, self.model.prefill_joules_per_token * turn.prefill_tokens),
                 (first, turn.end_ns, (self.model.decode_joules_per_token +
@@ -310,6 +322,12 @@ class SyntheticPowerSampler:
             return (PowerTrace("mock", "gpu0", self.clock_domain, (), (), "W",
                                self.interval_ns, notes="synthetic sampler has no episode or invalid cadence"),)
         segments = self.segments(episode)
+        notes = ["synthetic power model; no hardware measured"]
+        if any(t.first_token_ns is None for t in episode.turns):
+            notes.append("prefill boundary unknown; model-call aggregate retained")
+        if any(t.start_ns == t.end_ns and (t.prefill_tokens or t.decode_tokens)
+               for t in episode.turns):
+            notes.append("zero-duration work cannot be represented by a power phase")
         window = self.averaging_window_ns
         # Include one trailing averaging window so a consumer can crop to any
         # episode/phase boundary without silently losing the trailing average.
@@ -328,7 +346,7 @@ class SyntheticPowerSampler:
         return (PowerTrace("mock", "gpu0", self.clock_domain,
                            tuple(t - self.offset_ns for t in times), tuple(values), "W",
                            self.interval_ns, window, min(1.0, window / self.interval_ns),
-                           self.quantum_watts, "synthetic power model; no hardware measured"),)
+                           self.quantum_watts, "; ".join(notes)),)
 
 
 def register_mock_factories() -> None:
