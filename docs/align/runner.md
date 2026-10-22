@@ -83,6 +83,11 @@ omit clock and use time.monotonic_ns. The built-in mock factories are registered
 locally. run_episode also accepts monitor objects (full visibility) or
 (monitor, visibilities) pairs.
 
+The lane components have default factories in joulewise.align.registry_defaults
+(list it under imports): task shade, endpoint openai_compat, samplers nvml and
+ina3221; the synthetic sampler is the mock world's mock.power. A hardware sampler
+without its own clock_domain uses the episode clock and clock domain.
+
 Sampling brackets model/tool work and stops before scoring and monitors.
 A Turn covers one model call; its ToolCalls cover subsequent serial tool waits.
 Endpoint timestamps must satisfy call_start <= start <= first_token <= end <=
