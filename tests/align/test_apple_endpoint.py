@@ -79,3 +79,64 @@ class AppleEndpointTests(unittest.TestCase):
         self.assertEqual(content, text)
         self.assertEqual(calls, ())
         self.assertTrue(any(flag.startswith("malformed_tool_call:") for flag in flags))
+
+    def test_generated_align_pack_identity_pins_use_real_mlx_projection(self) -> None:
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from joulewise.align.apple.campaign import generate_campaign
+        from joulewise.identity_pins import _runtime_probe_metadata, derive_model_runtime_config_from_metadata
+        from joulewise.schemas import BenchmarkConfig
+        from tests.align.test_apple_campaign import episode_spec
+        import json
+
+        def stream_generate(model, tokenizer, prompt, *, max_tokens, sampler):
+            yield from ()  # projection never generates; retain the real native API signature
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mirror = root / "model"
+            mirror.mkdir()
+            (mirror / "weights.safetensors").write_bytes(b"synthetic-local-weight")
+            native = SimpleNamespace(
+                __version__="synthetic-native", load=lambda *args, **kwargs: (object(), Tokenizer(), {}),
+                stream_generate=stream_generate, make_sampler=lambda temp: object(),
+            )
+            base = base_config()
+            base = replace(base, model=replace(base.model, source=str(mirror), revision="synthetic-pinned"),
+                           hardware_target=replace(base.hardware_target, runtime_backend=RuntimeBackend.MLX))
+            members = generate_campaign(
+                base, (episode_spec(hidden=False), episode_spec(hidden=True)), root / "pack", model_tag="apple"
+            )
+            for member in members:
+                config = BenchmarkConfig.from_mapping(json.loads(member.read_text()))
+                # Inject only the native MLX library. Registry resolution,
+                # prepare, wrapper forwarding and identity derivation are real.
+                with patch.object(MlxRuntimeAdapter, "_import_mlx_lm", return_value=native), patch(
+                    "joulewise.adapters.mlx_runtime._distribution_version", return_value="synthetic-native"
+                ):
+                    metadata = _runtime_probe_metadata(config)
+                stack, pins = derive_model_runtime_config_from_metadata(config.to_dict(), metadata)
+                self.assertEqual(stack["runtime_version"]["name"], "mlx")
+                self.assertEqual(set(pins), {"model_artifact_sha256", "runtime_identity_sha256", "config_set_sha256"})
+                self.assertTrue(all(len(value) == 64 and int(value, 16) >= 0 for value in pins.values()))
+
+    def test_non_align_registry_resolution_does_not_import_alignment(self) -> None:
+        import os
+        import subprocess
+        import sys
+        from tests.align.test_apple_campaign import ROOT
+
+        code = (
+            "import sys; from joulewise.adapters import resolve_runtime; "
+            "from joulewise.clock import FakeClock; "
+            "from joulewise.schemas import BenchmarkConfig; import json; "
+            "c=BenchmarkConfig.from_mapping(json.load(open('configs/examples/mock_local.json'))); "
+            "r,f=resolve_runtime(c,FakeClock()); assert r is not None and f is None; "
+            "assert not any(n.startswith('joulewise.align') for n in sys.modules)"
+        )
+        result = subprocess.run(
+            [sys.executable, "-B", "-c", code], cwd=ROOT,
+            env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"), text=True, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

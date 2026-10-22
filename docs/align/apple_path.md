@@ -1,219 +1,248 @@
 # Apple alignment path (internal, provisional)
 
-This lane supplies code and a prospective D1 plan. It has not measured the M3
-Max, registered a campaign, installed a job, started a sampler or loaded a model.
-The cloud executor was unavailable during this build; the lane report states
-the outstanding execution checks. Treat the implementation as an unverified
-draft until those checks pass.
+This is code and a prospective D1 plan for RQ-ALIGN-ENERGY-RESIDUAL.
+Nothing is registered, armed, installed or measured here. The cloud executor
+never became usable in the fix seat; all new checks remain NOT EXECUTED.
+The lane report distinguishes source changes from observed results.
 
-The electrical question remains RQ-ALIGN-ENERGY-RESIDUAL: does work omitted from
-the visible log leave energy beyond a benign token/context prediction? SoC
-power can count extra inference work. It cannot identify reasoning that fits
-inside the same forward passes.
+Energy can count inference work omitted from a visible log. It cannot identify
+reasoning that fits inside the same forward passes.
 
 ## Execution and records
 
-Use workload_profile.name = "align_episode". Its prompt_text contains the
-canonical EpisodeSpec JSON, not a prompt for the model. The runtime registry
-wraps the selected existing runtime. Each member has repetitions = 1, one task
-factory, condition and seed. Replicate by generating another member, preserving
-the episode as the unit. The factory is an installed local module:callable that
-returns the shared AgentTask protocol. If it declares a clock parameter, the
-factory receives the controller's injected clock; this makes tools and model
-calls share simulated time in tests.
+Use workload_profile.name = "align_episode". prompt_text holds canonical
+EpisodeSpec JSON: one local AgentTask factory, condition and seed per member,
+with repetitions = 1. Seed replication means another episode specification.
+A factory declaring clock receives the controller's injected clock, so tools
+and model calls share the production or simulated timeline.
 
-MLX runs in process through MlxRuntimeAdapter._generate. Existing suite
-workloads already use that helper, including natural EOS. Reusing it preserves
-the model load, sampler pin, stream generation, detokenizer and phase-marker
-path. A separate mlx_lm.server would introduce another process and dispatch
-boundary without improving this instrument path. Identity includes model,
-local source, revision, artifact identity, mlx and mlx-lm versions. MLX remains
-a lazy optional dependency. Episode preparation requires an existing local
-model directory and records an unavailable flag instead of downloading weights. The runtime's greedy sampler remains authoritative;
-a nonzero requested temperature is a recorded mismatch. No KV prefix is claimed:
-each chat call sends its full rendered prompt and cached_prompt_tokens is zero.
+The registry imports align code only on this workload branch. Supported
+runtimes are mock and MLX. Missing tasks, bad specs, unsupported backends and
+MLX without a local model mirror return RUNTIME_UNAVAILABLE during prepare,
+before idle admission or warmup. The controller maps that reason to status
+"unsupported"; it does not create a fictional benign episode. These are
+unmeasurable configurations, not hazard refusals or discarded observations.
 
-The endpoint uses the model tokenizer's chat template, with tools, then encodes
-without adding special tokens a second time. Explicit Qwen-style <tool_call>
-envelopes become tool requests. Other formats remain visible text. Thinking
-spans are preserved in the full transcript; retokenized reasoning counts carry
-a flag because delimiter token boundaries can differ from the stream.
+MLX uses the existing in-process MlxRuntimeAdapter._generate helper, as current
+suite workloads do. This preserves model load, tokenizer, greedy sampler,
+stream generation, detokenizer and phase events. A separate mlx_lm.server
+would add another process and dispatch boundary. Identity records model,
+local source, revision, artifact identity, mlx and mlx-lm versions; the wrapper
+forwards the runtime's readiness identity projection. Heavy libraries remain
+lazy optional imports. No implicit weight download is permitted.
+
+The model's chat template receives messages and tools; encoding adds no
+duplicate special tokens. Explicit Qwen-style <tool_call> envelopes become
+calls; unknown formats remain text with flags. Retokenized reasoning counts,
+nonzero temperature against the pinned greedy sampler, tool faults and budget
+exhaustion are flags. Every prompt is rendered in full; cached_prompt_tokens
+is zero.
 
 The existing controller owns idle admission, warmup, sampling, hazard bindings,
-post-window dwell, cleanup, raw custody and reduction. This lane adds no
-campaign launcher or alternate admission policy. generate_campaign calls the
-existing scripts.generate_matrix.build_config and shared campaign-generator
-render/write-boundary functions. Its members are inputs to scripts/run_campaign.py.
-A HAZARD_PACK launch supplies the same authenticated lineage and policy as any
-other workload. The draft generator does not create or impersonate that lineage.
+post-window dwell, custody and reduction. generate_campaign uses
+scripts.generate_matrix.build_config and the shared renderer/write-boundary
+checks. It emits align_pack.json and members/*.json, including
+members/order_manifest.json in scripts/run_campaign.py's executed_order schema.
+Task/seed/control-matched pairs alternate AB and BA, giving ABBA over two pairs.
+Unmatched cells remain present with a pack flag. A caller can explicitly retain
+its own order with counterbalance=False. The persisted pack UUID makes run ids
+unique across packs sharing a model_tag, while regeneration preserves bytes.
+Episode ordinal tags say episodeN, without the matrix generator's repN/2m tags.
 
-Each bundle contains outputs/align_episode.json, align_transcript.jsonl and
-align_turns.jsonl, plus the ordinary power_trace.csv, raw telemetry, metadata,
-events and summary. The episode written by the runtime points to the power
-join in that bundle, because the controller stops telemetry after runtime return.
-read_episode_bundle joins those immutable inputs in memory and returns an
-Episode with power_traces and clock_mappings. It never rewrites a finalized
-bundle. Standard prompt provenance hashes the actual concatenation of all
-turn prompt token IDs; turn provenance retains the individual IDs and counts.
+A bundle contains outputs/align_episode.json, align_transcript.jsonl and
+align_turns.jsonl, plus the usual raw telemetry, power_trace.csv, events,
+metadata and summary_metrics.json. The runtime's episode precedes telemetry
+stop; read_episode_bundle joins the immutable episode and trace in memory.
+It never rewrites a finalized bundle.
 
-Turn.start_ns/end_ns delimit the model call, as records.py specifies. ToolCall
-intervals follow their model call and are grouped under that turn. Episode end
-includes the tools, but precedes task scoring and serialization. The controller
-measured window also contains that harness tail; register which interval the
-residual analysis integrates. Ordinary prefill/decode phase pairs are repeated
-per turn with align_turn_index metadata. Additional align_turn_N and
-align_tool_N_M phase pairs expose each call and tool separately.
-BundleReader.phase_windows returns the repeated pairs; phase_boundary_envelope
-can receive an adjacent prefill/decode pair from the chosen turn.
+Turn intervals delimit model calls. first_token_ns is the prefill-end event
+specified by records.Turn, before the first decode step. Following tool waits
+remain grouped under their originating turn. The episode ends before scoring
+and serialization; register whether the residual integrates that interval or
+the controller's slightly longer measured window.
 
-## Clock and power
+Prefill/decode events carry align_turn_index; align_turns.jsonl and Episode
+expose the individual turn timing. There are no enclosing align_turn_N phase
+pairs: those would overlap the inner phases on the same power source and make
+reduction fail. align_tool_N_M pairs occupy the intervening tool waits.
+BundleReader.phase_windows returns the repeated inner phase pairs.
 
-ApplePowerSampler delegates to PowermetricsTelemetryAdapter.start_sampling and
-stop_sampling_with_evidence. Native parsing and rate-aware set-membership
-anchoring remain in the existing adapter and uncertainty_evidence modules.
-There is no second plist parser and no spawn-midpoint anchor.
+The generic single-request summary fields ttft_s, decode_latency_s and
+energy_token_j are not printed for align members: they respectively describe
+the first turn only, a span crossing later prefills/tools, and an episode-wide
+denominator including tool energy. Episode.flags and align_episode.json name
+all three in single_request_summary_fields_not_episode_metrics. Use the
+registered episode residual and per-turn/phase attribution for align reporting;
+the unchanged reducer still stores its generic fields.
 
-The adapter already reconstructs sample endpoints in controller epoch seconds.
-The lane converts them to integer epoch nanoseconds in a named trace domain,
-then maps them onto the episode's monotonic domain using the paired ClockStamp
-envelope. Mapping uncertainty carries the complete effective native-anchor
-bound, the additional bridge envelope and float-to-integer representation.
-Unresolved anchors retain traces with clock_anchor_unresolved. Such a flag
-records missing attribution evidence; it does not fabricate a zero error bar.
+## Clock and standalone sampling
 
-Read powermetrics_fiducial.py, kernel_clock.py and load_transition_alignment.py
-as complementary evidence: a fitted fiducial bound prices dispatch/fence and
-load-transition mismatch; the kernel-frequency gate prices the correction-rate
-residual; the transition artifact remains provisional until adjudicated.
-This bridge replaces none of those calibrations, gate identities or transfer
-assumptions. The ~1 J attribution limit is not the ~0.3 J repeatability noise,
-and repeated episodes do not average away a common attribution bound.
+ApplePowerSampler delegates capture, parsing and anchoring to
+PowermetricsTelemetryAdapter. There is no second parser or invented anchor.
+Sample endpoints already use the adapter's current rate-aware native-second
+anchor. The bridge uses existing paired ClockStamp observations to map epoch
+nanoseconds onto episode monotonic nanoseconds.
 
-Each native sample has interval-average support. records.v1 provides only one
-averaging_window_ns per trace; varying supports therefore remain as integer
-intervals in trace.notes and carry a flag, with the ordinary CSV/raw evidence
-remaining authoritative for existing integration and phase-share tools. Do not
-feed such a trace to a consumer that silently assumes instantaneous readings.
-The mW-to-W conversion does not establish a sensor quantum; resolution is unknown.
+Mapping uncertainty carries the complete effective anchor bound. That bound
+already includes the full wall-minus-monotonic span: only observations outside
+the anchor envelope add bridge extent. Unbounded mappings instead carry their
+observed bracket and clock resolutions, with clock_anchor_unresolved.
+Each seconds-to-nanoseconds product is priced at math.ulp(x * 1e9) / 2
+(128 ns near an epoch of 1.8e18 ns), plus integer rounding when the spacing is
+sub-ns. Serialized stamp restoration also carries quotient rounding.
+joulewise/clock.py is unchanged.
 
-## Prospective D1 pack and capacity
+powermetrics_fiducial.py, kernel_clock.py and load_transition_alignment.py own
+the existing calibration, dispatch/fence, frequency-residual and provisional
+transition evidence. The bridge replaces none of them. The approximately 1 J
+attribution limit is distinct from approximately 0.3 J repeatability noise;
+common attribution bounds do not average away.
 
-A prospective output directory contains align_pack.json and members/*.json.
-Before measurement it also needs registered task assets, upstream revision pins,
-analysis/extraction definitions, model/tokenizer receipts, the campaign policy,
-calibration and bracket references, the authenticated plan tree and launch
-bindings. Those prospective objects are not generated as registered evidence by
-this lane. Existing sealed block-5 packs and their bytes remain untouched.
+Native readings are interval averages. PowerTrace has a single averaging
+width, so variable supports remain as integer intervals in trace.notes with a
+flag. The existing raw/CSV intervals remain authoritative. mW-to-W conversion
+does not establish sensor quantization.
 
-Candidates that can plausibly fit a 128 GB unified-memory machine include:
+The standalone sampler used outside the campaign controller has no battery,
+AC, thermal or contention judgment. Every returned trace, even an empty one,
+carries hazard.unjudged:battery,ac,thermal,contention in notes.flags; sampler.flags
+also carries it. Its stop marker precedes a one-second post-window dwell,
+matching quiet_mac_exploratory.json:post_window_sampling_dwell_s, and the adapter
+receives that required tail. This collects right-edge support without adding
+dwell to the measured episode. It adds no hazard enforcement and does not turn
+standalone numbers into hazard-gated measurements.
 
-| Candidate | Weight lower bound at 4 bits/parameter | Qualification |
-|---|---:|---|
-| Qwen3-8B | 4.0 GB | small-model pilot; BF16 weight lower bound is 16.0 GB |
-| Qwen3-32B | 16.0 GB | larger dense comparison |
-| Qwen3-30B-A3B | approximately 15.0 GB | all experts must reside, not only the active parameters |
-| Llama-3.3-70B | 35.0 GB | larger optional comparison; establish performance before scheduling |
+## Battery assist and the 140 W adapter
 
-These are parameter_count * bits / 8 in decimal GB, not measured resident sets.
-Quantization scales, tokenizer, activations, scratch allocation and KV cache add
-memory. Derive KV bytes from the pinned config as
+The remedy already lives in joulewise/hazards/battery.py:span_findings and
+smc_span_findings under the 2026-10-06 battery-assist ruling. B0AC is sampled
+once a second. Discharge on AC while not charging is battery.assist (DISCLOSE):
+counted and flagged, with no data lost. Processor rails are regulated downstream
+of the supply, so battery assistance does not invalidate their energy.
+Charging above +200 mA, IsCharging, AC loss and missing evidence retain the
+existing exclusion rules. Arm-time idle admission is unchanged.
+
+The repository observed B0AC bursts to -865 mA during inference on the 140 W
+adapter (tests/hazards/test_battery.py, the minus-865 mA burst control;
+battery.py documents the ruling). Heavier models may raise the disclosure more
+often. Even a decode average below adapter capacity does not exclude transient
+assist, so do not predict the flag from the adapter label alone.
+
+There is no matched decode whole-machine measurement for these D1 candidates
+in this lane. Expected draw is therefore an explicit pilot input for each:
+
+| Candidate | Expected decode whole-machine draw | Comparison to 140 W / assist expectation |
+|---|---|---|
+| Qwen3-8B | P_8 W, to measure | P_8 - 140 W headroom; assist possible, frequency unknown |
+| Qwen3-32B | P_32 W, to measure | P_32 - 140 W; sustained deficit predicts assistance |
+| Qwen3-30B-A3B | P_30A3 W, to measure | P_30A3 - 140 W; active experts alone do not determine machine draw |
+| Llama-3.3-70B | P_70 W, to measure | P_70 - 140 W; heavier decode may increase assist frequency |
+
+These P values must include the whole machine at a supply-comparable boundary,
+including conversion losses where applicable, rather than just SoC rails.
+battery.py's archived evidence identifies SystemPowerIn as mW and
+SystemLoad = SystemPowerIn - BatteryPower; neither is silently assigned to a
+new model. Inspect those readings beside B0AC during the pilot. No current
+inclusion gap was found by source inspection; the real-bundle regression is
+still unexecuted.
+
+## Prospective D1 layout and capacity
+
+A draft pack needs task assets and SHADE revision/environment pins, registered
+analysis/extraction definitions, model/tokenizer receipts, policy, calibration
+bookends, authenticated plan tree and launch bindings before measurement.
+The generator creates none of that authority. Existing sealed packs stay
+immutable. configs/gates/hazard_refusals.json marks the prospective workload
+as outside the current registered-pack census; extend that census before D1
+registration.
+
+Candidate 4-bit weight lower bounds on a 128 GB machine are 4.0 GB (Qwen3-8B),
+16.0 GB (Qwen3-32B), approximately 15.0 GB (Qwen3-30B-A3B, all experts resident)
+and 35.0 GB (Llama-3.3-70B). Each is parameter_count * 4 / 8 in decimal GB.
+Scales, tokenizer, activations, scratch and KV allocation add memory.
+For the pinned config, KV bytes =
 2 * layers * kv_heads * head_dim * context_tokens * bytes_per_element.
-Check the local Metal working-set limit and observed peak RSS before selecting
-a model/context. A fitting weight file alone is not a successful admission.
+Check the Metal working-set limit and peak RSS before selecting context.
 
 window_duration_margins.py is an authenticated margin calculator, not a
-scheduler. It prints D_min - 2*B_operative, D_min/(2*B_operative), overlapping
-interval counts, sample-count margin and reducer cadence ratio for registered
-comparative cells. It imports MIN_PHASE_SAMPLES = 3 and
-SHORT_WINDOW_CADENCE_RATIO_MIN = 2.0 from the reducer. D1 must use authenticated
-bounds and membership, then inspect these same quantities for the intended
-turn phases. Do not turn a missing registration into a passing receipt.
-The existing extraction inventory is ABBA/contrast shaped; register the D1
-cell/design mapping before requesting an authenticated margin receipt.
+scheduler: it supplies D_min - 2*B_operative, D_min/(2*B_operative), interval
+counts, sample margin and reducer cadence ratio. It uses the reducer's
+MIN_PHASE_SAMPLES = 3 and SHORT_WINDOW_CADENCE_RATIO_MIN = 2.0. Register D1's
+mapping into the comparative-cell inventory before requesting its receipt.
 
-Capacity must be a separate, explicit planning calculation:
+Capacity separately includes per-member cooldown:
 
-    member_seconds = episode_seconds + prepare_and_warmup_seconds
-                     + idle_seconds + dwell_seconds
-    pair_capacity = floor(floor((window_seconds - reserve_seconds)
-                                / member_seconds) / 2)
+    member_s = episode_s + prepare_warmup_s + idle_s + dwell_s + cooldown_s
+    pairs = floor(floor((window_s - reserve_s) / member_s) / 2)
 
-For an illustrative planning parameter set, take a six-hour window,
-reserve_seconds = 3600 for calibration/references/cooldown/cleanup,
-episode_seconds = 180, prepare_and_warmup_seconds = 20, idle_seconds = 30
-and dwell_seconds = 1. The last value is the existing minimum powermetrics
-post-window dwell; the other durations are planning inputs to replace with
-pilot observations. This gives 231 seconds/member, 77 member slots and
-38 complete benign/sabotage pairs (76 episodes) per window. The spare slot
-does not manufacture a pair. More cooldown, model load or slower episodes
-reduce that capacity. Margin evidence can further constrain viable turn
-durations; it cannot supply scheduling overhead that it never measured.
+Illustrative inputs are window_s = 21600 (six hours), reserve_s = 3600 for
+calibration/references/cleanup, episode_s = 180, prepare_warmup_s = 20,
+idle_s = 30 and dwell_s = 1. All except the policy dwell are planning parameters,
+not measured D1 throughput. quiet_mac_exploratory.json:cooldown.sustained_window_s
+requires 30 s of recovered idle and cooldown.cap_s is 300 s:
 
-## Detection-power scenario and quiet time
+| Per-member cooldown scenario | Member seconds | Member slots | Complete pairs / episodes |
+|---|---:|---:|---:|
+| 30 s recovered-idle window | 261 | 68 | 34 / 68 |
+| 300 s cap budget | 531 | 33 | 16 / 32 |
 
-Use windows as independent units when episodes share a calibration/drift
-environment. Let e be the pilot joules per hidden token, h the hidden-token
-effect, sigma_window the standard deviation of the paired window residual,
-B the non-averaging decision-bound charge, alpha the two-sided false-alarm
-probability and power the target detection probability. The normal planning
-approximation is:
+The cap is a scheduling allowance, not a guarantee of admission. Extra model
+load, retries or slower episodes reduce capacity. The reserve does not double
+count the cooldown shown here.
+
+## Detection power and quiet time
+
+Let h be hidden tokens, e joules per hidden token, sigma_window the standard
+deviation of a paired window residual, B a non-averaging decision-bound charge,
+alpha the two-sided false-alarm probability and power the target probability:
 
     delta = h * e
-    N_windows = ceil(((z_(1-alpha/2) + z_power) * sigma_window
-                      / (delta - B)) ** 2), when delta > B
+    N = ceil(((z_(1-alpha/2) + z_power) * sigma_window / (delta-B))**2)
 
-When delta <= B, retain and report that the stipulated effect cannot clear
-this bound by repetition. Include residual-model fitting uncertainty in
-sigma_window or a separately registered bound. Do not divide B by sqrt(N).
+This applies when delta > B. Otherwise retain the finding that repetition
+cannot clear the bound. Register fitting uncertainty and shared-window
+dependence; do not divide B by sqrt(N).
 
-One stated scenario uses planning parameters h = 128 tokens, e = 0.05 J/token,
-sigma_window = 5 J, alpha = 0.05 and power = 0.80. Assign B = 2 J as the
-illustrative sum of two 1 J per-run attribution bounds. These are scenario
-parameters, not measured MLX performance or a replacement for the operative
-registered bound. Then delta = 6.4 J, delta-B = 4.4 J and
-ceil((2.801585218 * 5 / 4.4)^2) = 11 science windows per model.
-The quantile sum is z_0.975 + z_0.80. Hold that systematic charge fixed.
+Repo evidence provides approximately 0.0998 J/decode-token for Qwen2.5-1.5B
+on this Mac: docs/legacy/strategy/2026-08-07-paper-portfolio/
+SYNTHESIS-IMPACT-FIRST.md:5952 reconstructs (192.386 - 141.29) / 512.
+That is historical evidence, not a D1-model estimate. Print sensitivity at
+e = 0.05 and e = 0.1 J/token as explicit parameters. sigma_window is also
+unmeasured for D1; the following is the stated scenario sigma_window = 5 J,
+not an inferred noise figure.
 
-At the 38-pair capacity, two models need 22 science windows, or 132 quiet
-machine hours. If one additional six-hour benign fitting/pilot window per model
-is sufficient (another planning input), the total is 24 windows, 144 hours,
-and at most 1824 episode slots at 76/window. One fitting window is not asserted
-to establish sigma_window or validate the normal model; increase that allowance
-if the pilot cannot support them. A 256-token scenario with all other inputs
-fixed gives ceil((2.801585218 * 5 / 10.8)^2) = 2 science windows/model, illustrating
-how strongly the cost depends on the hypothesized hidden-work effect.
+With h = 128, alpha = 0.05, power = 0.80 and illustrative B = 2 J
+(two approximately 1 J per-run attribution charges), the quantile sum
+z_0.975 + z_0.80 = 2.801585218 gives:
 
-## Register and verify before a real run
+| e (J/token), planning input | delta (J) | Science windows/model | Two models' science hours | Plus one 6 h pilot/model |
+|---|---:|---:|---:|---:|
+| 0.05 | 6.4 | 11 | 132 | 144 h / 24 windows |
+| 0.10 | 12.8 | 2 | 24 | 36 h / 6 windows |
 
-Register the RQ, task-pair roster, SHADE code/environment pins, conditions, seeds,
-model revisions, tokenizer/chat-template hashes, greedy sampling controls,
-turn/output budgets, tool behavior and monitor visibility. Pin every source of
-the full and visible token counts, reasoning-count approximation and tamper
-transform. Record flags without silently removing episodes.
+These numbers follow the formula: ceil((2.801585218*5/4.4)^2) and
+ceil((2.801585218*5/10.8)^2). Replace B with the operative registered bound;
+replace sigma_window and e with pilot-supported inputs. A single pilot window
+per model is an allowance, not asserted sufficient evidence. At the capacity
+scenarios above, 24 windows provide 768–1632 episode slots; six provide
+192–408. Do not turn these conditional calculations into registered power.
 
-Register the fitting split and grouped evaluation, gross SoC energy interval,
-harness-tail treatment, idle subtraction if any, phase/tool boundaries,
-calibration transfer assumptions, operative bound, window grouping, multiplicity,
-power target and the independent implementation used to check the analysis.
-Bind the capacity inputs, references, calibration slots, hazard policy and
-authenticated launch lineage. No registration, loading or arming is performed
-by generating this draft pack.
+## Registration and synthetic checks
 
-The synthetic tests contain a six-turn, five-tool episode with 27,648 uncached
-prompt tokens, 4,608 output tokens and 8.3 seconds in local tools. D-019's
-1 ms/prompt-token and 10 ms/output-token mock runtime predicts 82.028 seconds
-and 615.21 J at the existing 7.5 W mock power. Adding 256 hidden final-turn
-tokens predicts 2.56 seconds and 19.2 J extra while visible decode counts stay
-equal. A separate 61-second native plist world has a 100 ms cadence and
-0.2 W rail oscillations. These are proposed test worlds, not executed results.
+Register the RQ, task/condition/seed roster, model revisions, templates,
+sampling controls, tool behavior, visibility/tamper transform, all count sources,
+fitting split, grouping, energy interval, harness-tail treatment, operative
+bound, multiplicity, power target and independent analysis implementation.
+Bind references, timing allowances, policy and authenticated launch lineage.
+Merging joulewise/adapters/__init__.py changes measurement-path code, so existing
+registered packs carry code.changed_since_registration; the lead controls
+merge timing.
 
-Run from the repository root, with a fresh external TMPDIR and
-JW_B5_SYNTHETIC_ONLY=1:
-
-    python3 -m unittest discover -s tests/align -t .
-    python3 -m unittest discover -s tests
-
-The first command must exercise the actual campaign subprocess and strict
-bundle validation. The full suite must also determine whether new module/test
-names need minimal additions to timing, import-fence or inventory registries.
-No optional dependency has been installed in this seat.
+The six-turn/five-tool synthetic world specifies 27,648 prompt and 4,608 base
+output tokens, plus 8.3 s in tools. D-019's 1 ms/prompt-token and
+10 ms/output-token mock parameters at 7.5 W predict 82.028 s / 615.21 J;
+256 hidden tokens predict +2.56 s / +19.2 J. These are analytic predictions,
+not results observed by this seat. The native-plist world exercises the real
+parser/anchor at 100 ms cadence; the HAZARD fixture tests an actual bundle
+span against the real battery judge. See the lane report for execution status
+and exact required test commands. Never run the whole suite from this brief.

@@ -165,7 +165,7 @@ class AppleCampaignTests(unittest.TestCase):
             for member in members:
                 config = BenchmarkConfig.from_mapping(json.loads(member.read_text()))
                 bundle = root / "runs" / config.run_id
-                summary = json.loads((bundle / "summary.json").read_text())
+                summary = json.loads((bundle / "summary_metrics.json").read_text())
                 self.assertEqual(summary["status"], "succeeded", summary)
                 self.assertIsNotNone(summary["gross_energy_j"])
                 self.assertIsNotNone(summary["phase_energy_j"])
@@ -254,3 +254,119 @@ class AppleCampaignTests(unittest.TestCase):
                     event.get("phase") == "measured_run"
                     for event in (json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines())
                 ))
+
+    def test_flag_paths_succeed_with_measured_energy(self) -> None:
+        base = episode_spec(hidden=False)
+        malformed = list(base.mock_turns)
+        malformed[0] = {**malformed[0], "content": "<tool_call>{broken}</tool_call>"}
+        reasoning = list(base.mock_turns)
+        reasoning[-1] = {**reasoning[-1], "reasoning_tokens": 99999}
+        # 99,999 is a deliberately impossible usage fixture, above this
+        # world's largest completion count (1,024), not an acceptance bar.
+        cases = (
+            (replace(base, max_turns=3), "turn_budget_reached", 3),
+            (replace(base, mock_turns=tuple(malformed)), "malformed_tool_call:", 1),
+            (replace(base, mock_turns=tuple(reasoning)), "mock_reasoning_count_outside_completion", 6),
+        )
+        for index, (spec, flag, turn_count) in enumerate(cases):
+            with self.subTest(flag=flag), tempfile.TemporaryDirectory() as directory:
+                bundle, summary = run_benchmark(
+                    as_config(spec, f"apple-flag-{index}"), Path(directory), FakeClock()
+                )
+                self.assertEqual(summary.status.value, "succeeded", summary)
+                self.assertIsNotNone(summary.gross_energy_j)
+                self.assertIsNotNone(summary.phase_energy_j)
+                episode = read_episode_bundle(bundle)
+                self.assertEqual(len(episode.turns), turn_count)
+                self.assertTrue(any(value.startswith(flag) for value in episode.flags), episode.flags)
+                summary_flag = "single_request_summary_fields_not_episode_metrics:ttft_s,decode_latency_s,energy_token_j"
+                self.assertIn(summary_flag, episode.flags)
+                raw = json.loads((bundle / "outputs/align_episode.json").read_text())
+                self.assertIn(summary_flag, raw["flags"])
+
+    def test_order_manifest_counterbalances_cells_and_pack_ids_do_not_collide(self) -> None:
+        from scripts.run_campaign import apply_order_manifest, load_order_entries
+
+        benign = episode_spec(hidden=False)
+        sabotage = episode_spec(hidden=True)
+        specs = (benign, replace(benign, seed=20), sabotage, replace(sabotage, seed=20))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            members = generate_campaign(base_config(), specs, root / "one", model_tag="apple")
+            entries, warning = load_order_entries(root / "one/members")
+            self.assertIsNone(warning)
+            ordered = apply_order_manifest(list(reversed(members)), entries)
+            self.assertEqual(tuple(ordered), members)  # explicit order, not sorted fallback
+            configs = [BenchmarkConfig.from_mapping(json.loads(path.read_text())) for path in ordered]
+            self.assertEqual([
+                EpisodeSpec.from_text(config.workload_profile.prompt_text).condition for config in configs
+            ], ["benign", "sabotage", "sabotage", "benign"])
+            for ordinal, config in enumerate(configs, 1):
+                tags = config.to_dict()["run_metadata"]["tags"]
+                self.assertIn(f"episode{ordinal}", tags)
+                self.assertNotIn(f"rep{ordinal}", tags)
+                self.assertNotIn("2m", tags)
+            other = generate_campaign(base_config(), specs, root / "two", model_tag="apple")
+            other_ids = {json.loads(path.read_text())["run_id"] for path in other}
+            self.assertTrue({config.run_id for config in configs}.isdisjoint(other_ids))
+            self.assertEqual(members, generate_campaign(base_config(), specs, root / "one", model_tag="apple"))
+
+    def test_real_hazard_bundle_battery_assist_covers_late_tool_wait(self) -> None:
+        from unittest.mock import patch
+        from joulewise.hazards import battery
+        from tests.hazards.test_battery import SpanRig
+        import tests.test_window_lineage as lineage
+
+        original = lineage._member_config
+        def align_member(run_id, *, tagged):
+            config = original(run_id, tagged=tagged)
+            return replace(config, workload_profile=replace(
+                config.workload_profile, name="align_episode",
+                prompt_text=episode_spec(hidden=True).to_text(),
+                prompt_tokens=None, output_tokens=None, prompt_token_expectation=None,
+            ))
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            lineage, "_member_config", side_effect=align_member
+        ), patch.object(lineage.window_lineage, "current_boot_session_id", return_value=lineage.STAND_IN_BOOT):
+            window = lineage.build_window(Path(directory))
+            bundle, summary = lineage.run_member(window, window.member_path)
+            self.assertEqual(summary.status.value, "succeeded", summary)
+            self.assertIsNotNone(summary.gross_energy_j)
+            self.assertIsNotNone(summary.phase_energy_j)
+            episode = read_episode_bundle(bundle)
+            measured = BundleReader(bundle).measured_window()
+            # The fixture uses FakeClock: its epoch and monotonic domains
+            # are identical. These are the real bundle's sampling markers.
+            span = {"monotonic_ns": [round(measured.start_s * 1e9), round(measured.end_s * 1e9)]}
+            self.assertLessEqual(span["monotonic_ns"][0], episode.start_ns)
+            self.assertGreaterEqual(span["monotonic_ns"][1], episode.end_ns)
+            for turn in episode.turns:
+                self.assertLessEqual(span["monotonic_ns"][0], turn.start_ns)
+                self.assertGreaterEqual(span["monotonic_ns"][1], turn.end_ns)
+                for tool in turn.tool_calls:
+                    self.assertLessEqual(span["monotonic_ns"][0], tool.start_ns)
+                    self.assertGreaterEqual(span["monotonic_ns"][1], tool.end_ns)
+            rig = SpanRig()
+            rig.setUp()
+            rig.mono0 = (span["monotonic_ns"][0] // 10**9 - 2) * 10**9
+            stop_s = math.ceil((span["monotonic_ns"][1] - rig.mono0) / 1e9)
+            publications = rig.series(stop_s // 60 + 2)  # real 60 s gauge, with both end brackets
+            clean = publications + rig.smc_lines(stop_s + 1)
+            self.assertEqual(battery.span_findings(clean, span, request=span), [])
+            tool = episode.turns[-2].tool_calls[0]
+            late = math.ceil((tool.start_ns - rig.mono0) / 1e9)
+            self.assertLess(rig.mono0 + late * 10**9, tool.end_ns)  # burst is inside the late wait
+            # The ruling's 200 mA limit is crossed by the observed -865 mA
+            # inference burst (665 mA beyond it); positive +865 tests charging.
+            assisted = publications + rig.smc_lines(stop_s + 1, current={late: -865})
+            found = battery.span_findings(assisted, span, request=span)
+            self.assertEqual([item["code"] for item in found], ["battery.assist"])
+            self.assertTrue(found[0]["observed"]["request_assist"])
+            turn = episode.turns[-1]
+            charging = math.ceil((turn.start_ns - rig.mono0) / 1e9)
+            self.assertLess(rig.mono0 + charging * 10**9, turn.end_ns)
+            charged = publications + rig.smc_lines(stop_s + 1, current={charging: 865})
+            found = battery.span_findings(charged, span, request=span)
+            self.assertIn("battery.member_span", [item["code"] for item in found])
+            self.assertNotIn("battery.assist", [item["code"] for item in found])
