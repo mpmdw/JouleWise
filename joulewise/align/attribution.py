@@ -141,9 +141,14 @@ class _Trace:
 
     def _adjacent_peak(self, t: int) -> float:
         if self.counter:
-            i = bisect_left(self.starts, t)
-            adjacent = self.spans[max(0, i - 1):i + 1]
-            return max((max(abs(s.left), abs(s.right)) for s in adjacent), default=0.0)
+            i = bisect_right(self.starts, t) - 1
+            i = max(0, min(i, len(self.spans) - 1))
+            if not self.spans:
+                return 0.0
+            adjacent = [self.spans[i]]
+            if t == self.spans[i].start and i:
+                adjacent.append(self.spans[i - 1])
+            return max(max(abs(s.left), abs(s.right)) for s in adjacent)
         i = bisect_left(self.times, t)
         # At a knot both touching intervals matter; elsewhere use the bracket.
         lo = max(0, i - 1)
