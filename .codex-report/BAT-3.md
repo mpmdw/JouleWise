@@ -1,208 +1,247 @@
-# BAT-3: BYTES battery term — build in progress
+# BAT-3: BYTES battery term
 
 ## PROGRESS
 
-- **Implementation checkpoint:** signed battery energy on both bases; v_start/v_end and stream-wide tau; u + v and NR1 max-edge addition; current-based decode marker, including rails disclosure when voltage is missing; per-run and per-cell battery columns; both assist counts; optional assisted campaign and worked/fault/real-CLI tests are written. Registration §8 placements and contract text are updated. All are unexecuted pending the interpreter-path answer.
-- **Generators pending:** builder source contains the new disclose-only code; the catalog, BYTES registration/plan-tree regeneration and registration SHA line have not yet been updated. Run the real generators, do not hand-generate them. No unrelated pack was changed.
-- **Static check:** git diff --check passes. No Python execution is claimed. CI is being opened on the implementation checkpoint so compilation and independent suite feedback can proceed while local execution remains blocked by the exact interpreter-path requirement.
-- **RECOVERED:** workspace became running/connected after the initial report checkpoint. Local checkout now follows this lane; BY-INT still equals the required base. Fetch and seat setup ran. The remaining sections below describe the initial checkpoint and will be replaced with executed build evidence before completion.
-- **Done now:** filtered stream retains every poll's rx/SMC and processes sampled batches in rx order; fixture polls now carry B0AV = 12774 mV as well as B0AC = 0. Exact-base worktree and packet export are preserved under /tmp/bat3-base and /tmp/bat3-packet.
-- **Next now:** signed battery integration, u + v and C_j, decode marker and disclosures; registration/catalog; worked/fault/CLI tests and exact no-assist comparison.
-- **Open now:** seat setup could not create /opt/homebrew/bin/python3.13 (unwritable /opt, no sudo). Asked for authorization to use its intended target /usr/bin/python3.13 (3.13.5); test execution awaits that answer.
-- **Done:** Read the complete BAT-2 ruling at `fc7548a17` through connected GitHub access. Inspected the BY-INT source, registration, design R1–R8, root agent instructions and preflight, and the packet's worked-example and delay-check scripts at `c17fdca`. Retrieved the packet extract by its Git blob.
-- **Done:** Confirmed remotely that `lane/2026-10-22-bytes-pass1` is exactly `bda481d5af510b29dde4976f172a20170a42c955`. BAT-3 did not already exist. Created the authorized BAT-3 lane at that exact base through the connected GitHub API.
-- **Next:** Obtain a working execution environment, fetch and check out this lane, run seat setup, preserve the baseline comparison, then implement the ruling and run all requested checks. Follow the original brief's exhaustive scope.
-- **Open:** Implementation has not started. No analysis, fixture, registration, catalog, generated pack, or test file has changed. This report is the only change.
-- **Blocker:** The selected cloud workspace never became usable during intake. The startup wait yielded repeatedly; a direct shell request failed with “No usable execution environment is available. Wait for an environment to become available before using this tool.” Status then changed from `starting` to `pending`, still `offline`, with `capabilities: []`, current observations and no reported failure cause. Latest recorded observation: 2026-10-22 07:36 UTC.
-- **Recovery:** A restart or a ready workspace is needed. No science ruling or scope expansion is requested. Remote reads and this report do not substitute for the required Python executions.
+- **Done:** exact BY-INT base preserved; full BAT-2 ruling and packet read; ordered SMC retention and B0AV fixture checkpoint pushed; ruled integration, bounds, marker, disclosures, registration placements and tests written and pushed.
+- **Current implementation checkpoint:** `bba4b2695c2af6334f085932a973db55db9913de`. Draft CI PR [#544](https://github.com/mpmdw/JouleWise/pull/544), from `ci/2026-10-22-bytes-battery-term` against main.
+- **Next:** run the real catalog and BYTES generators, update the registration catalog SHA, execute the worked/fault/CLI tests, exact baseline comparison and required modules, repair actual failures, update this report and push both authorized branches.
+- **Open blocker:** the required `/opt/homebrew/bin/python3.13` does not exist. Seat setup cannot create its link because /opt is unwritable and sudo is unavailable. The intended target is `/usr/bin/python3.13`, Python 3.13.5. Asked the user whether that exact installed target may be used; no answer has arrived. Python execution awaits that answer or provisioning of the required path.
+- **Generated outputs pending:** only the catalog builder source has the new code so far. The actual catalog and embedded BYTES maps are not regenerated. Do not treat this checkpoint as a completed BAT-3 build.
+- **Preserved scratch:** exact base worktree `/tmp/bat3-base`; packet export `/tmp/bat3-packet/bat-council-20261022`.
+- The startup outage was resolved during this turn; shell access and Git fetch/checkout now work. No startup-infrastructure approval is still needed.
 
 ## SUMMARY
 
-BAT-3 is incomplete because the selected cloud execution environment is unavailable.
-The authorized lane starts at the exact BY-INT head, which has not moved.
-The full ruling and the relevant existing source were read through connected GitHub access.
-The filtered stream discards SMC values, and synthetic polls omit B0AV, as the brief reported.
-The current without-assisted selection uses the harvest flag and must change to the ruled decode marker.
-Packet arithmetic independently reproduces the three worked-example battery terms, but meter_decode was not executed.
-Only this resume report is committed; no implementation or acceptance check is claimed.
-A working workspace is required for seat setup, baseline preservation, generators, tests, and the real synthetic CLI chain.
+Implemented BAT-2's signed decode battery term and own-idle subtraction in meter_decode.
+The filtered stream retains all SMC polls in receive order and derives tau from the global maximum gap.
+DC input/rest carry u + v; NR1 adds the larger battery edge; the sensitivity remains meter-only.
+The decode-scoped marker selects the description; the harvest flag supplies a separate stratum count.
+Per-run meter/battery/sum and per-cell battery columns are added, with the ruled boundary sentence.
+Added an assisted synthetic mode and 15 worked-example, fault, reference and CLI-chain tests.
+Updated every BAT-2 §8 registration placement and the contract; the flag builder has the new disclose-only code.
+The implementation is pushed, but generators, local tests and bit-identity evidence remain blocked by the interpreter path.
+CI PR #544 is draft; the last observed implementation-head build, installed-wheel and fences passed, quick was running.
+BAT-3 is incomplete; no acceptance, twin parity, real-H re-reduction or green final-head CI is claimed.
 
 ## WHAT CHANGED
 
-- `.codex-report/BAT-3.md`: records the blocked intake and the resume instructions. Implements the brief's persistent PROGRESS/report requirement.
-- All number-bearing source and all generated outputs remain at BY-INT's base. The BAT-2 §2–§5, §7, §8 and §12 implementation remains outstanding.
+- `joulewise/bytes_analysis.py` — BAT-2 §2–§5 and §12: retain every poll's rx/SMC, including n=0 polls; sort by rx before clock unwrapping and selected meter decoding. Use Stream.battery_watts and integrate for signed gross/secondary energy; retain separate meter/battery/sum and v_start/v_end/tau/counts. Use u + v in the existing phase-edge path, which feeds B and floors; add max(v_start, v_end) to offset_bound_j. NEG-8's existing whole-request meter_decode join receives the correction. Prepare immutable battery input arrays once per archive reduction, without caching mutable direct-call streams. Select without-assisted descriptions on the decode marker and print both counts. Add per-run/per-cell battery disclosures and the ruled boundary sentence.
+- `tests/test_bytes_analysis.py` — §9 and §12: add the two nonzero worked examples, signed charging/idle arithmetic, missing-current/voltage cases, all-missing decode, a surviving single incomplete poll in both spans, a current-only marker with missing voltage, out-of-order batches, an outside-span n=0 poll setting global tau, a battery-bearing NEG-8 reference, and the assisted real CLI chain. Adapt old hand-built streams/records to complete zero-assist SMC readings and the new marker. Static count: 69 existing test methods plus 15 new ones; none has been executed locally.
+- `tests/fixtures/bytes/campaign.py` — §2 and §12: B0AV=12774 mV accompanies every baseline poll. Optional battery_assist=True supplies 5 Hz polls, four large-model placements and request-scoped harvest flags. Default no-assist batching, random draws, schedule and meter inputs are preserved for the exact comparison.
+- `tests/fixtures/bytes/campaign_design.json` — §12: name the large models, placements, -1000 mA current and 12774 mV voltage, with the attribution-scale derivation.
+- `docs/contracts/bytes_tables.md` — §2–§5: replace the old harvest-only/meter-only rule; document the signed term, global delay, bounds, marker, counts, column fields and boundary wording; amend NR1's per-run support.
+- `docs/registrations/bytes_pack_v1.md` — §8: install all specified placements, verbatim for the three quoted replacements; amend NR1 and printed/dependency/mapping text; update intended catalog counts to 263/203 and list the fourth BYTES disclose-only code. Catalog SHA remains the old SHA until generation runs.
+- `scripts/build_b6_flag_catalog.py` — §7/§12: add bytes.decode_battery_assist as RECORDS / REPRESENTATION / DISCLOSE.
+- `tests/b6/test_catalog.py` and `tests/flags/test_flags_catalog.py` — assert that B6's generated code has the ruled classification.
+- `.codex-report/BAT-3.md` — persistent progress and incomplete-build evidence.
 
-Confirmed source locations at the base:
-
-- `joulewise/bytes_analysis.py::_filtered_stream` retains neither `poll_ns` nor `smc`, processes batches in file order, and reconstructs only selected meter samples. Retain all poll receive times and SMC metadata, or enough widened by tau plus the global maximum poll interval; order batches by rx before clock unwrapping and decoding.
-- `meter_decode` returns meter-only gross/secondary energy, u and the meter-only offset bound.
-- `neg8_inputs` already calls `meter_decode` for whole-request DC/rest reference energy, so correcting that function propagates the boundary once the stream preserves reference battery polls.
-- `archive_records` catches `AnalysisError` from the meter join and adds the existing `bytes.meter_decode_unavailable` without discarding rails. The new missing-reading case belongs in that existing path.
-- `_phase_cell` consumes `phase_edge_j` for the DC/rest bound and floor; the implementation must carry u + v consistently and retain separate per-run meter/battery disclosures.
-- `reduce_models` currently selects `battery.assist` for the without-assisted description. Replace that selection with `bytes.decode_battery_assist` and print both counts per stratum.
-- `tests/fixtures/bytes/campaign.py` currently writes `{"B0AC": 0}` only. Add realistic B0AV on every poll before integrating the battery term.
+No twin, external parser, CLI, hazard-refusal registry, graph list or battery-float lexeme reader changed.
+No new import dependency requires a graph-list amendment; no new battery-float lexeme reader exists.
+The generated catalog/pack files remain pending rather than hand-edited. No alpha, beta or gamma pack changed.
 
 ## WORKED EXAMPLE
 
-No unit test has been added or executed. Read-only preparation used the packet's actual poll numbers from
-`JouleWise-data@c17fdca:bat-council-20261022/data/h_decode_extract.json`, blob
-`867bd81054eb35e6c91528d7580e32676133da1f`. Arithmetic was evaluated in JavaScript in the tool orchestrator;
-it was not a Python, km003c_parse or meter_decode execution.
+Tests written: BatteryRulingWorkedExamples.test_bat2_qwen_check_r01_seven_nonzero_polls and
+test_bat2_soak_r11_middle_of_decode. These call meter_decode; their meter power is an explicitly synthetic constant,
+and their battery timestamps/current/voltage and span lengths are copied from the packet with a source comment.
+They do not pretend to reconstruct H's unavailable full raw meter interior.
 
-The extract's global maximum poll interval is 0.302440875 s over 93,533 polls, giving tau = 2.302440875 s.
+Read-only packet preparation, evaluated in JavaScript before local setup became available, gives:
 
-| Run | T (s) | Decode battery polls | E_b (J) | v_start (J) | v_end (J) | Marker |
+| Run | T (s) | n | E_b (J) | v_start (J) | v_end (J) | Marker |
 |---|---:|---:|---:|---:|---:|---|
 | check-llama-70b-r01 | 56.018812894 | 280 | 0 | 0 | 0 | no |
 | check-qwen35-122b-r01 | 11.017812967 | 56 | 0.7765771682061066 | 0.7765771682061066 | 0 | no |
 | soak-llama-70b-r11 | 57.436307192 | 287 | 0.3961203994441993 | 0 | 0 | yes |
 
-Qwen's seven nonzero polls, as nanoseconds after decode start on the raw clock, are:
+The global maximum poll gap is 0.302440875 s over 93,533 polls, so tau=2.302440875 s.
+Qwen's added C_j per-run term is 0.7765771682061066 J; soak's is 0 J.
 
-```text
-5151255     -37  12773
-205211213   -37  12773
-405189838   -47  12774
-605216297   -47  12774
-805253338   -47  12774
-1005212505  -47  12774
-1205201088  -47  12774
-```
-
-Soak's five nonzero polls are:
-
-```text
-45721732798 -31 12770
-45921723714 -31 12770
-46119268381 -31 12770
-46320625006 -31 12770
-46521773923 -31 12770
-```
-
-Resume by copying only required numbers into the scoped unit test with a source comment, never by adding
-JouleWise-data files. Use the ruling's 1e-5 J printed-value bar: above 1e6 times float64 noise at 6,424 J
+The tests use BAT-2's 1e-5 J printed-value bar: above 1e6 times float64 noise at 6,424 J
 (1.4e-6 J) and six-decimal rounding (5e-7 J), below 1% of the smallest printed bound (1.1e-3 J).
-The same-input program comparison bar is 1e-6 J. These are the ruling's bars, not new thresholds.
+Same-input program comparisons use 1e-6 J. Counts, flags and integer-clock identity use equality.
+The tests are unexecuted: this table is packet arithmetic, not meter_decode acceptance evidence.
+
+Source: JouleWise-data@c17fdca:bat-council-20261022/data/h_decode_extract.json,
+blob 867bd81054eb35e6c91528d7580e32676133da1f. No data-repository file was copied into this repository.
 
 ## FAULT INJECTIONS
 
-Not implemented or run. Still required, each as a test:
+Written, not executed:
 
-- B0AC without B0AV, in decode and idle.
-- B0AV without B0AC, in decode and idle.
-- An entire decode with no complete battery reading.
-- Charging (B0AC > 0), retaining the negative signed term.
-- Batch lines out of rx order, giving the same battery term as ordered lines.
+- Missing B0AC throughout decode: existing bytes.meter_decode_unavailable, reason battery reading missing; rails survive.
+- Missing B0AV throughout decode: same.
+- Missing B0AC throughout idle: same.
+- Missing B0AV throughout idle: same.
+- Whole decode with no battery readings: same.
+- One incomplete poll among complete readings, in decode and idle, with either key absent: ignore that poll, reduce the complete-read count, keep the value.
+- Positive B0AC charging poll: signed negative battery energy; no decode-assist marker from that positive current.
+- Signed idle battery power: subtract its own mean times decode length.
+- Reverse batch-line order: compare term, DC energies, v, C_j bound and exact flags/counts with ordered data, at the ruled 1e-6 J same-input bar.
+- An n=0 poll outside selected spans introduces a three-poll (3 × 0.2 s) gap: global tau must retain that gap.
+- A negative current with missing voltage: the integral becomes unavailable if no complete pair remains, but §4's current-defined marker still discloses assistance on rails.
 
-The ruled missing-span result is `bytes.meter_decode_unavailable`, reason `battery reading missing`;
-only DC-input and rest values become unavailable. It is never a refusal. Refusal-census arrays have not
-been executed or inspected by this seat, and no refusal site has been added.
+The tests assert boundary-only removal and successful rails records. No new refusal site was added.
+Refusal census has not been run, so empty census arrays are not claimed.
 
 ## BIT-IDENTITY
 
-Not run. There is no before/after output, comparison command result, field count, or new field list yet.
+Not run. No fields-compared count or successful comparison is claimed.
 
-Before editing analysis code, preserve the current campaign and reduce it under the exact base
-`bda481d5af510b29dde4976f172a20170a42c955`. Compare with the new code on a no-assist campaign whose only
-SMC change is adding B0AV. Every common output field must be exactly equal, except code-provenance hashes
-whose underlying file actually changes; disclose such hashes explicitly rather than silently dropping them.
-Record the actual comparison scope and result. New fields must be listed separately. Exact equality is
-appropriate for the intended bit-identity property; do not replace it with a numerical tolerance.
+The exact original tree is preserved in /tmp/bat3-base. Run the old fixture and old analysis there; then run the
+new analysis on the same synthetic campaign after adding B0AV only, with battery_assist=False. Preserve the
+same paths/manifest and compare every common numerical/data field by equality. List new fields separately.
+
+Code-provenance and commitment hashes necessarily change when the module and commitment schema change.
+Record those explicitly; do not silently omit them or claim literal file identity. The brief's literal
+“every field” cannot include an unchanged hash of changed source/commitment bytes. This is a provenance
+disclosure, not a choice of which runs count or a changed numerical comparison bar.
+
+New source fields that need disclosure/comparison coverage:
+
+- Per run: meter_gross_j, meter_secondary_j, meter_idle_power_w, meter_phase_edge_j;
+  battery_gross_j, battery_secondary_j, battery_idle_power_w, battery_phase_edge_j,
+  battery_v_start_j, battery_v_end_j, battery_tau_s, battery_poll_interval_max_s,
+  battery_n, battery_n_idle, decode_battery_assist.
+- Per DC/rest cell/point: boundary_description, battery_term_mean_j, battery_term_max_j,
+  battery_nonzero_run_count, battery_phase_edge_max_j; per cell meter_run_terms.
+- Per cell: decode_assisted_member_counts and harvest_assisted_member_counts.
+- Existing gross_j, secondary_j and idle_power_w become corrected DC values; phase_edge_j becomes u+v;
+  offset_bound_j includes the ruled maximum battery edge. On zero-battery inputs their original arithmetic is retained plus zero.
 
 ## SYNTHETIC ASSIST
 
-Not implemented or executed. The four required large-model placements are inside decode, across decode
-start, across decode end, and prefill only. Each burst must supply at least 1 J, from the ruled attribution
-scale. Record actual burst joules, E_b, v, marker, and without-assisted counts after the real CLI stage chain.
-The prefill-only burst must not move the term or marker beyond v. Non-assisted production-shaped polls
-must carry both B0AC and B0AV. No new agreement or selection bar is authorized.
+Written as an optional assisted campaign mode, not executed. Models: Llama-3.3-70B,
+Qwen3-Next-80B and Qwen3.5-122B, both passes. Repeat ordinals 0–3 receive these placements:
+
+| Placement | Planted received-reading span | Power and nominal burst energy | Intended term/v/marker check |
+|---|---|---|---|
+| inside decode | centered at decode midpoint, 1 s | 12.774 W, 12.774 J | positive term, zero edge term, marker yes |
+| across decode start | start −0.5 to start +0.5 s | 12.774 W, 12.774 J | term covered by v_start, marker no |
+| across decode end | end −0.5 to end +0.5 s | 12.774 W, 12.774 J | term plus post-end v_end, marker yes |
+| prefill only | decode start −0.9 to −0.1 s | 12.774 W, 10.2192 J | term 0, v 0, marker no |
+
+These are fixture inputs and expected checks, not measured outputs. Actual terms and v depend on poll membership
+and T/n and must be recorded after execution. Each burst exceeds the ruled approximately 1 J attribution limit.
+The test additionally checks it against the actual cell's 1% of (h+B) agreement bar.
+
+The new class runs export → blinded CLI → fit-key release → fit CLI → held-out release → heldout CLI,
+then load_records and the real table outputs. It checks intended per-stratum decode/request counts
+repeat 2/4 and quad 0/0, and without-assisted n_r=8/n_b=10, at every boundary and basis.
+The real CLI path is implemented in the test but has not run; none of those counts is execution evidence.
 
 ## REGISTRATION
 
-No registration text has changed. Every BAT-2 §8 placement remains outstanding, verbatim:
+BAT-2 §8 placements installed:
 
-- §1: replace the DC-input bullet.
-- §6: replace Battery assist, including the delay-aware marker, description line, both counts and H expectations.
-- §7: amend both phase-edge table cells; insert “Battery term and its edge term v” after meter u.
-- §9: amend NR1's per-run C_j term and add the one-signed-delay sentence; retain meter-only dβ/dδ.
-- §15: add the battery-column quantities and largest v.
-- §16: replace the harvest-flag dependency with native meter battery readings and counted-only request flag.
-- §20: add the BAT-2 ruling mapping row.
-- Also update §6's disclose-code counts/list and Appendix A's catalog digest after generating the new catalog.
+| Placement | Destination |
+|---|---|
+| DC-input bullet | §1 |
+| Battery assist replacement, delay marker, description/counts and H expectations | §6 |
+| DC/rest phase-edge table cells | §7 |
+| Battery term and its edge term v, copied verbatim after meter u | §7 |
+| Per-run C_j max-edge battery addition and one-signed-delay sentence | §9 |
+| Battery column and largest v | §15 |
+| Native battery-reading dependency, request flag counted only | §16 |
+| BAT-2 ruling mapping row | §20 |
 
-Catalog SHA before: `4cd222c4fd7cc43e1e2625f9afae6f6cc742b40876241fb5cc5864d8ee7eaa4f`
-(as recorded in BY-INT's report; not rehashed locally by this seat).
-Catalog SHA after: unchanged, because no catalog change was made.
+The old meter-u paragraph is adjusted to describe meter energy and the combined u+v floor consistently.
+The §6 flags sentence names the fourth BYTES disclose-only code and intended totals 263 codes / 203 disclosures.
+The actual generated catalog still has 262 codes / 202 disclosures until the generator runs.
 
-Add only `bytes.decode_battery_assist` through `scripts/build_b6_flag_catalog.py`, then regenerate only the
-twelve BYTES registrations and twelve BYTES plan trees through `scripts/bytes_plan_trees.py`.
-Do not regenerate alpha, beta or gamma.
+Catalog SHA before: 4cd222c4fd7cc43e1e2625f9afae6f6cc742b40876241fb5cc5864d8ee7eaa4f.
+Catalog SHA after: still the same; generation and the registration SHA-line update are outstanding.
+Only the twelve BYTES registrations and twelve BYTES plan trees may acquire the new map, through the
+real bytes_plan_trees generator. Generate to scratch and copy only authorized changed paths if the generator
+also emits unchanged out-of-scope files; verify all its outputs byte for byte and leave other packs untouched.
 
 ## TESTS RUN
 
-No Python tests or CLI campaign were run. No test pass, failure, count or skip is claimed.
+- git diff --check: exit 0 before both source checkpoints; no whitespace errors.
+- No local Python test, generator, Python CLI campaign or refusal census ran. No test counts, skips or failures are claimed.
+- Static source test-method count: 69 before, 84 after; this is not a test-run count.
 
-The attempted shell-access command was:
-
-```text
-pwd && ls -ld /workspace /workspace/JouleWise /workspace/JouleWise-data
-```
-
-The tool rejected it before a process could start: “No usable execution environment is available. Wait for an
-environment to become available before using this tool.” There is no process exit code. Git fetch, checkout,
-seat_setup.sh and /tmp/jw-seat.env sourcing could not execute. The initial wait for the selected environment
-was stopped only to inspect readiness directly; it did not produce readiness or a startup-failure cause.
-The diagnostic metadata endpoint returned no retained records. No diagnostic logs or credential values were read.
-
-Required commands after recovery (one fresh TMPDIR per module, no whole suite locally):
+Executed setup command (after workspace recovery):
 
 ```bash
+git -C /workspace/JouleWise fetch origin '+refs/heads/*:refs/remotes/origin/*'
+git -C /workspace/JouleWise checkout -B lane/2026-10-22-bytes-battery-term origin/lane/2026-10-22-bytes-battery-term
+git -C /workspace/JouleWise rev-parse origin/lane/2026-10-22-bytes-pass1
 bash /workspace/JouleWise-data/tools/cloud/seat_setup.sh /workspace/JouleWise
 source /tmp/jw-seat.env
+git -C /workspace/JouleWise-data fetch origin '+refs/heads/analysis/bat-council-20261022:refs/remotes/origin/analysis/bat-council-20261022'
+```
+
+The combined shell command exited 0. BY-INT printed bda481d5af510b29dde4976f172a20170a42c955.
+Seat setup printed “mkdir: cannot create directory ‘/opt/homebrew’: Permission denied” but continued to
+“SETUP: ok”; it exported JW_B5_SYNTHETIC_ONLY=1 and PYTHONDONTWRITEBYTECODE=1 and created /tmp/jwtmp.
+Its Python target was /usr/bin/python3.13, reporting Python 3.13.5. /opt is owned by nobody, is not writable
+by uid 1000, and sudo is absent. No auto-review rejection occurred; this is an operating-system permission failure.
+
+Initial startup: wait_for_environment never produced readiness before it was stopped to inspect status;
+a shell request was rejected before launch with “No usable execution environment is available.”
+Status later became running/connected and shell access recovered. No diagnostic logs or credentials were read.
+
+Still required, one fresh TMPDIR per module and JW_B5_SYNTHETIC_ONLY=1 throughout:
+
+```bash
 TMPDIR=$(mktemp -d /tmp/jwtmp/test_bytes_analysis.XXXX) JW_B5_SYNTHETIC_ONLY=1 /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_analysis
 TMPDIR=$(mktemp -d /tmp/jwtmp/test_bytes_packs.XXXX) JW_B5_SYNTHETIC_ONLY=1 /opt/homebrew/bin/python3.13 -B -m unittest tests.b6.test_bytes_packs
 TMPDIR=$(mktemp -d /tmp/jwtmp/test_bytes_agreement.XXXX) JW_B5_SYNTHETIC_ONLY=1 /opt/homebrew/bin/python3.13 -B -m unittest tests.test_bytes_agreement
 ```
 
-Also run the scoped catalog, import-graph and battery-reader modules listed in the brief if those files change.
-Environmental failures named in seat setup must be listed, not chased. None were observed because no test started.
+Also run tests.b6.test_catalog, tests.flags.test_flags_catalog, tests.hazards.test_import_graph,
+tests.flags.test_flags_import_graph and tests.test_battery_float_sweep, with separate TMPDIRs.
+Do not run the whole suite locally. List the seat notes' environmental failures rather than chasing them.
 
-`tests.test_bytes_agreement` was not run. No actual failing field names are available yet. The twin remains
-untouched, as required. Its future divergences must be recorded by their actual names after the implementation,
-rather than inferred as executed failures here.
+tests.test_bytes_agreement has not run. Actual failing field names cannot be listed yet.
+The old comparer omits the new battery-column fields, and its harvest-flag-based description is expected
+to diverge from the new marker. Record actual named failures after execution; BY-TWIN-BAT owns the twin.
 
 ## CI
 
-The requested CI branch and draft PR are to be created from the report head using connected GitHub access.
-This is a report-only checkpoint, not a BAT-3 implementation or green-acceptance claim.
-The PR body records the startup blocker. Check the PR and its actual head for the current run state.
+- Branch: ci/2026-10-22-bytes-battery-term.
+- Draft PR: [#544](https://github.com/mpmdw/JouleWise/pull/544), title “CI only: BYTES battery term (BAT-3)”.
+- Last observed implementation head: bba4b2695c2af6334f085932a973db55db9913de.
+- [CI run 39745041911](https://github.com/mpmdw/JouleWise/actions/runs/39745041911): changes, build,
+  installed-wheel and fences passed; quick was in progress. This is not a green whole-suite claim.
+- [Gate-ledger run 39745041940](https://github.com/mpmdw/JouleWise/actions/runs/39745041940): failed as expected.
+- Catalog assertions and reproducibility checks cannot be considered complete while generated outputs are pending.
+- The report update will push the same new head to both authorized branches and start fresh CI.
+  No final-head green result is claimed and no waiting on CI beyond other work is intended.
 
 ## DECISIONS I MADE
 
-- The BAT-2 ruling governs all arithmetic, marker selection, printing and registration placements.
-- The 55–60 J whole-member number is not the decode correction.
-- Preserve signed charging energy; do not clip or suppress sub-1 J terms.
-- Use the stream-wide maximum poll gap, not a run-local gap, for tau.
-- Use u + v in DC-input B/floor and rails anchor + u + v in rest; add max(v_start, v_end) to NR1's per-run bound.
-- Keep dβ/dδ meter-only.
-- Select the description with `bytes.decode_battery_assist`; count `battery.assist` without selecting on it.
-- Print the battery column and no separate meter-only estimate line.
-- Missing battery coverage follows the existing per-boundary flag path, never a refusal.
-- Preserve all scope fences, including the twin and external parser.
-- Do not claim a source implementation, a test execution or a generated-output check that did not occur.
+- BAT-2 governs the arithmetic, selection, printing and all §8 placements, ahead of the earlier design text.
+- Use the ruled decode-span term, not the corrected brief's obsolete whole-member 55–60 J number.
+- Retain signed charging energy and sub-1 J terms; no clipping, rounding-to-zero or new threshold.
+- Retain all SMC poll metadata to preserve both the global maximum gap and forward edge windows;
+  sort batches by rx before unwrapping, as the native parser does.
+- Keep original no-assist meter batching/random inputs; make the large-model assist campaign explicit through a fixture parameter.
+- Use u+v in DC/rest B and floors and max(v_start,v_end) in NR1; keep dβ/dδ meter-only.
+- Interpret §4's current-defined marker literally: a known negative B0AC can disclose assistance even
+  if B0AV is missing. Missing energy coverage still removes only DC/rest, so preserve that marker on rails.
+- A partial poll does not trigger the missing-span flag if other complete polls remain, as §2 specifies.
+- The largest battery column value is the signed maximum, consistent with the ruled signed term.
+- Count the request flag without selecting on it, and print no separate meter-only estimate line.
+- Keep the existing flag-only missing-reading path. Add no hazard refusal.
+- Do not infer approval to substitute the interpreter while the explicit path question is pending.
+- Do not represent written tests, packet arithmetic or CI build checks as executed local acceptance evidence.
 
 ## OPEN ISSUES
 
-- Provision/restart a usable cloud workspace and complete every implementation and acceptance item in the brief.
-- Re-run the original setup against this lane head; the remote report was created without a local checkout.
-- Complete the baseline bit-identity comparison before analysis edits.
-- Add the worked-example and fault-injection tests, large-model episodes, catalog registration and generated BYTES outputs.
-- Run the required production-shaped CLI chain and module checks; list actual twin differences for BY-TWIN-BAT.
-- The director must re-reduce H on the Mac without JW_B5_SYNTHETIC_ONLY, with TMPDIR under
-  /Users/edr/night-archive/forward-20261021/BAT-3/tmp: check-llama-70b-r01 adds 0 J,
-  soak-llama-70b-r11 adds 0.396120 J, and check-qwen35-122b-r01 adds 0.776577 J, each with the ruled bound.
-- Executing review and cold gates are not claimed by this seat.
+1. Provide the required interpreter path or authorize its installed /usr/bin/python3.13 target.
+2. Run the catalog builder and --check; regenerate only authorized BYTES maps with the real plan generator;
+   check byte-for-byte reproduction and unchanged alpha/beta/gamma outputs. Update registration SHA.
+3. Run all specified modules and the assisted process-level CLI chain; fix actual defects within scope.
+4. Execute the exact zero-assist baseline comparison, list common compared fields/new fields/hash changes,
+   and commit the actual output summary.
+5. Record actual agreement failures by field for BY-TWIN-BAT. Do not edit the twin or agreement test.
+6. The director must re-reduce H on the Mac without JW_B5_SYNTHETIC_ONLY, with TMPDIR under
+   /Users/edr/night-archive/forward-20261021/BAT-3/tmp: check-llama-70b-r01 adds 0 J,
+   soak-llama-70b-r11 adds 0.396120 J, check-qwen35-122b-r01 adds 0.776577 J, with the ruled bounds.
+7. Executing review and cold gates remain lead-owned; no merge to main or physical collection occurred.
 
 ## NEEDS_RULING
 
-none. The current blocker is execution infrastructure, not an undecided scientific choice.
+none. The current blocker is the interpreter-path constraint, not an undecided scientific choice.
