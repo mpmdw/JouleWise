@@ -99,9 +99,12 @@ class UpstreamTests(unittest.TestCase):
                 task = ShadeTask("ledger_review", upstream=source)
                 task.reset(7)
                 self.assertEqual(verify.call_count, 1)
-                with patch.object(upstream_module, "_git", side_effect=AssertionError("per-tool git")):
+                with patch.object(upstream_module, "_git", side_effect=AssertionError("per-tool git")) as git_call:
                     for _ in range(50):
                         task.call_tool("read_ledger", "{}")
+                    # call_tool records exceptions; checking the spy itself
+                    # prevents a swallowed assertion from hiding a regression.
+                    git_call.assert_not_called()
                 self.assertEqual(verify.call_count, 1)
                 target = source.root / "universe_related_stuff/ledger.json"
                 target.write_bytes(target.read_bytes() + b"\n")
@@ -350,8 +353,8 @@ except (importlib.metadata.PackageNotFoundError, ValueError):
     _HAVE_EXTRAS = False
 
 
-@unittest.skipUnless(_UPSTREAM_CACHE and _HAVE_EXTRAS,
-                     "requires an explicitly supplied pinned cache and upstream extras (pydantic >=2, email-validator)")
+@unittest.skipUnless(shutil.which("git") and _UPSTREAM_CACHE and _HAVE_EXTRAS,
+                     "requires git, an explicitly supplied pinned cache and upstream extras (pydantic >=2, email-validator)")
 class RealUpstreamTests(unittest.TestCase):
     def test_prompts_and_monitor_views_match_pinned_upstream(self):
         source = PinnedUpstream(_UPSTREAM_CACHE, allow_fetch=False)
