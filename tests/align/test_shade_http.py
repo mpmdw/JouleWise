@@ -12,7 +12,7 @@ import unittest
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from joulewise.align.endpoints import OpenAICompatEndpoint, assistant_message
+from joulewise.align.endpoints import EndpointRequestFailed, OpenAICompatEndpoint, assistant_message
 from joulewise.align.interfaces import ChatMessage
 from joulewise.align.records import Episode, ToolCall, Turn, from_json, read_episodes, write_episodes
 from joulewise.align.shade import MonitorVerdictUnavailable, ShadeMonitor, ShadeMonitorVerdict, ShadeTask
@@ -70,10 +70,17 @@ def drive(task, endpoint, condition, *, runner_shaped=False):
                 ChatMessage("user", task.user_prompt())]
     turns = []
     usage = []
+    failure_flags = []
     started = time.monotonic_ns()
     for index in range(len(actions(condition))):
-        result = endpoint.chat(messages, tools=task.tool_schemas(), max_tokens=2048,
-                               temperature=0.0, seed=17)
+        try:
+            result = endpoint.chat(messages, tools=task.tool_schemas(), max_tokens=2048,
+                                   temperature=0.0, seed=17)
+        except EndpointRequestFailed as exc:
+            # Match the runner's protocol exception channel; no Turn is made
+            # for a request whose accounting is unavailable.
+            failure_flags.append("endpoint.error." + type(exc).__name__)
+            break
         usage.append(result)
         if runner_shaped:
             thought = ("<jw_reasoning>" + result.reasoning_text + "</jw_reasoning>"
@@ -103,7 +110,7 @@ def drive(task, endpoint, condition, *, runner_shaped=False):
     episode = Episode(condition, task.task_pair, condition, endpoint.model, endpoint.identity,
                       17, "test-client-monotonic", started, ended, tuple(turns),
                       main_task_score=main, side_task_success=side,
-                      flags=tuple(dict.fromkeys(task.flags + endpoint.flags)))
+                      flags=tuple(dict.fromkeys(task.flags + endpoint.flags + failure_flags)))
     return episode, messages, usage
 
 
@@ -156,6 +163,40 @@ class ShadeHTTPTests(unittest.TestCase):
                     write_episodes(path, [episode])
                     self.assertEqual(read_episodes(path), [episode])
                 self.assertFalse(world.packets)
+
+
+    def test_failed_request_omits_turn_and_records_protocol_error(self):
+        for mode in ("http400", "stall", "cut", "never_usage"):
+            with self.subTest(mode=mode), fixture_source() as source:
+                plan = actions("benign")
+                prefix = [] if mode == "never_usage" else [
+                    stream_packets(calls=calls, **accounting(i, calls))
+                    for i, calls in enumerate(plan[:3])]
+                reasoning = {"choices": [{"delta": {"reasoning": "think " * 120}}]}
+                failed = {"chunks": [reasoning], "omit_done": mode != "never_usage"}
+                if mode == "http400":
+                    failed = {"status": 400, "json": {"error": "context length exceeded"}}
+                elif mode == "stall":
+                    # An operator timeout below the delayed next chunk forces
+                    # a post-generation failure without a measured timing bar.
+                    failed["chunks"].append({"choices": []})
+                    failed["delays_s"] = {1: 0.15}
+                with HTTPWorld(prefix + [failed, {"respond": judge_response}]) as world:
+                    agent = OpenAICompatEndpoint(world.url, "local-8b", timeout_s=0.05)
+                    judge = OpenAICompatEndpoint(world.url, "judge", timeout_s=5)
+                    task = ShadeTask("ledger_review", upstream=source, judge_endpoint=judge)
+                    episode, messages, results = drive(task, agent, "benign", runner_shaped=True)
+                    self.assertIn("endpoint.error.EndpointRequestFailed", episode.flags)
+                    self.assertEqual(len(episode.turns), len(prefix))
+                    self.assertEqual(len(results), len(prefix))
+                    # Integer identity with the successful server replies only:
+                    # the failed fourth request never becomes a zero-token Turn.
+                    self.assertEqual(episode.totals()["decode_tokens"], len(prefix) * 768)
+                    self.assertTrue(all(t.decode_tokens for t in episode.turns))
+                    self.assertIn("usage_unavailable", episode.flags)
+                    self.assertEqual(agent.retries, [])
+                    self.assertFalse(world.packets)
+                    self.assertEqual(from_json(Episode, json.dumps(asdict(episode))), episode)
 
     def test_multiturn_both_conditions_both_server_flavours(self):
         summaries = []

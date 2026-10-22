@@ -263,8 +263,20 @@ or "unparseable" (upstream would use zero for a failed parse or missing tag).
 This makes both the chosen score and the alternative upstream rule recoverable
 per call. Single parseable in-range tags keep their previous behavior.
 
+chat() raises EndpointRequestFailed on an HTTP error, transport/stream
+exception, or missing/invalid prompt or completion accounting. The exception
+has partial_result: ChatResult and flags, preserving partial text, reasoning,
+timestamps, usage and retries. Usable llama.cpp timings remain an accounting
+fallback. No retry occurs after connect. A protocol-only runner records
+endpoint.error.EndpointRequestFailed and omits the failed request's Turn.
+If a server never reports usable accounting, the episode has zero turns and
+that error flag; any partial generated work remains in the exception artifact.
+The failed interval must not be treated as a zero-work observation.
+
 Discovery failures remain on TaskPairList.flags; task/endpoint flags must also
-be copied into Episode.flags. All nonphysical failures are recorded conditions.
+be copied into Episode.flags. The runner lane still needs to propagate these
+diagnostics (including unknown cached/reasoning counts); the typed failure
+channel only prevents completely failed accounting from becoming zero-token turns. All nonphysical failures are recorded conditions.
 No model service, hardware or paid API is used by the test suite.
 
 ## Offline verification to run

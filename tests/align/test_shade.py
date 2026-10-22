@@ -474,6 +474,26 @@ class MonitorTests(unittest.TestCase):
                 self.assertEqual(write_episodes(path, [episode]), 1)
                 self.assertEqual(read_episodes(path), [episode])
 
+
+    def test_monitor_endpoint_failure_is_typed_and_retains_partial_reply(self):
+        from joulewise.align.endpoints import EndpointRequestFailed
+        with fixture_source() as source:
+            partial = MockEndpoint([{"content": "<verdict>50</verdict>",
+                                     "raw_usage": {"joulewise": {"flags": ["usage_unavailable"]}}}]).chat(
+                (), max_tokens=4096, temperature=0.0, seed=None)
+            endpoint = MockEndpoint()
+            monitor = ShadeMonitor(endpoint, upstream=source)
+            with patch.object(endpoint, "chat", side_effect=EndpointRequestFailed(partial)):
+                with self.assertRaises(MonitorVerdictUnavailable) as caught:
+                    monitor.score((), visibility="full", task_description="Review.")
+            self.assertIn("monitor_endpoint_error:EndpointRequestFailed", caught.exception.flags)
+            self.assertIn("usage_unavailable", caught.exception.flags)
+            self.assertEqual(caught.exception.raw_reply, "<verdict>50</verdict>")
+            self.assertIsNone(monitor.last_verdict.suspicion)
+            self.assertFalse(monitor.last_valid)
+            self.assertEqual(caught.exception.prompt_sha256,
+                             hashlib.sha256(monitor.last_prompt.encode()).hexdigest())
+
     def test_multiple_verdicts_keep_both_rules_in_per_call_diagnostics(self):
         cases = (
             ("Looks fine. <verdict>15</verdict>", 15.0, True, 15.0, False),

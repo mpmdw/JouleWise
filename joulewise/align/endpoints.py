@@ -1,8 +1,10 @@
 """Stdlib OpenAI streaming client and deterministic endpoints for alignment runs.
 
 Server counts are authoritative. Missing accounting and incomplete streams are
-flags, never estimates. Diagnostics live in raw_usage["joulewise"] and flags;
-runners should copy these flags into Episode.flags.
+flags, never estimates. Failed requests raise EndpointRequestFailed with a
+partial ChatResult attached, so protocol-only runners record an endpoint error
+without inventing a zero-token turn. Other diagnostics live in
+raw_usage["joulewise"] and flags; runners should copy them into Episode.flags.
 """
 
 from __future__ import annotations
@@ -161,6 +163,15 @@ def _integer(value: Any, name: str, flags: list[str]) -> int:
         return value
     flags.append("missing_or_invalid_" + name)
     return 0
+
+
+class EndpointRequestFailed(RuntimeError):
+    """An HTTP, transport or accounting failure with the partial completion."""
+
+    def __init__(self, partial_result: ChatResult) -> None:
+        self.partial_result = partial_result
+        self.flags = tuple(partial_result.raw_usage.get("joulewise", {}).get("flags", ()))
+        super().__init__("Endpoint request failed: " + ", ".join(self.flags))
 
 
 class OpenAICompatEndpoint:
@@ -399,8 +410,16 @@ class OpenAICompatEndpoint:
             request = ToolCallRequest(call["id"], call["name"], call["arguments"])
             requests.append(request)
             self._requests[request.call_id] = request
+        # Only prompt/completion totals are mandatory accounting. Cached and
+        # reasoning counters retain the shared contract's flagged unknown zero.
+        missing_usage = any(flag in flags for flag in (
+            "missing_or_invalid_prompt_tokens", "missing_or_invalid_completion_tokens"))
+        if missing_usage:
+            flags.append("usage_unavailable")
+        failed = missing_usage or any(flag.startswith((
+            "http_error:", "transport_or_stream_error:")) for flag in flags)
         derived = None
-        if self.derive_reasoning_tokens and any(reasoning) and not hidden:
+        if self.derive_reasoning_tokens and any(reasoning) and not hidden and not failed:
             before_flags, before_retries = len(self.flags), len(self.retries)
             count = self.count_tokens("".join(reasoning))
             token_flags = self.flags[before_flags:]
@@ -416,8 +435,11 @@ class OpenAICompatEndpoint:
         if derived is not None:
             usage["joulewise"]["derived_reasoning_tokens"] = derived
         self.flags.extend(usage["joulewise"]["flags"])
-        return ChatResult("".join(content), "".join(reasoning), tuple(requests), prompt, cached,
-                          completion, hidden, start, first, time.monotonic_ns(), usage)
+        result = ChatResult("".join(content), "".join(reasoning), tuple(requests), prompt, cached,
+                            completion, hidden, start, first, time.monotonic_ns(), usage)
+        if failed:
+            raise EndpointRequestFailed(result)
+        return result
 
     def count_tokens(self, text: str) -> int:
         """Ask the server tokenizer; zero plus a flag if neither shape works."""
@@ -537,4 +559,4 @@ class MockEndpoint:
                           raw_usage)
 
 
-__all__ = ["AssistantMessage", "assistant_message", "OpenAICompatEndpoint", "MockEndpoint"]
+__all__ = ["EndpointRequestFailed", "AssistantMessage", "assistant_message", "OpenAICompatEndpoint", "MockEndpoint"]
