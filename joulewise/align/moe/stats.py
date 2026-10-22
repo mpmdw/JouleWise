@@ -64,7 +64,10 @@ def usage_entropy(log: RouterLog, *, phase: str | None = None,
     A one-expert router is assigned zero diversity (Shannon entropy is zero). Unselected experts
     contribute zero. Phase filtering precedes all sequence calculations.
     """
-    rows = _rows(log, phase)
+    return _usage_entropy(log, _rows(log, phase), per_layer=per_layer)
+
+
+def _usage_entropy(log: RouterLog, rows: Sequence, *, per_layer: bool = False) -> float | list[float]:
     if not rows:
         values = [math.nan] * len(log.layers)
     else:
@@ -82,7 +85,10 @@ def usage_entropy(log: RouterLog, *, phase: str | None = None,
 
 def load_imbalance(log: RouterLog, *, phase: str | None = None) -> float:
     """Mean population coefficient of variation over all experts at each layer."""
-    rows = _rows(log, phase)
+    return _load_imbalance(log, _rows(log, phase))
+
+
+def _load_imbalance(log: RouterLog, rows: Sequence) -> float:
     if not rows:
         return math.nan
     values = []
@@ -101,7 +107,10 @@ def reuse_fraction(log: RouterLog, *, phase: str | None = None) -> float:
     RouterLog has no turn boundaries: adjacent rows, including a phase/turn
     boundary when both phases are selected, are treated as adjacent tokens.
     """
-    rows = _rows(log, phase)
+    return _reuse_fraction(log, _rows(log, phase))
+
+
+def _reuse_fraction(log: RouterLog, rows: Sequence) -> float:
     if len(rows) < 2:
         return math.nan
     overlap = sum(len(set(a[layer]).intersection(b[layer]))
@@ -115,7 +124,10 @@ def mean_reuse_distance(log: RouterLog, *, phase: str | None = None) -> float:
     Distances use indices in the filtered sequence, independently at each layer.
     Each recurrent expert selection contributes one observation.
     """
-    rows = _rows(log, phase)
+    return _mean_reuse_distance(log, _rows(log, phase))
+
+
+def _mean_reuse_distance(log: RouterLog, rows: Sequence) -> float:
     if not rows:
         return math.nan
     distance = count = 0
@@ -131,10 +143,21 @@ def mean_reuse_distance(log: RouterLog, *, phase: str | None = None) -> float:
 
 
 def episode_stats(log: RouterLog) -> dict[str, float]:
-    """Return 12 metrics named '<phase>_<metric>'; both means all log rows."""
-    functions = (usage_entropy, load_imbalance, reuse_fraction, mean_reuse_distance)
-    return {f"{phase}_{name}": function(log, phase=None if phase == "both" else phase)
-            for phase in PHASES for name, function in zip(METRICS, functions)}
+    """Return 12 metrics named '<phase>_<metric>'; validate the log once.
+
+    Individual public metric calls still validate independently. The episode
+    path shares validation and phase-filtered row views without copying IDs.
+    """
+    if routing_flags(log):
+        return {f"{phase}_{name}": math.nan for phase in PHASES for name in METRICS}
+    functions = (_usage_entropy, _load_imbalance, _reuse_fraction, _mean_reuse_distance)
+    result = {}
+    for phase in PHASES:
+        rows = (log.experts if phase == "both" else
+                [row for row, p in zip(log.experts, log.phase) if p == phase])
+        result.update({f"{phase}_{name}": function(log, rows)
+                       for name, function in zip(METRICS, functions)})
+    return result
 
 
 def grouped_permutation_test(values: Sequence[float], labels: Sequence[int],
