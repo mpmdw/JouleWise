@@ -18,7 +18,8 @@ code at `lane/2026-10-17-b6-packs-registered` `1706257c4` (`joulewise/b6/accepta
 bindings, `joulewise/external/km003c_parse.py`, `joulewise/analysis_engine/inputs.py`,
 `joulewise/paper_reported_energy_issuer.py`); the independent recompute at
 `lane/2026-10-14-independent-recompute` `76f45da3e` (its meter functions only); RUN_STATE items 53, 59 and 65, and
-the record of activation c634f6f3 (item 53), which carry structure only (counting, rounds, flag codes).
+the record of activation c634f6f3 (item 53), which carry structure only (counting, rounds, flag codes). One blind
+consult round (§19) checked the draft by execution on synthetic inputs.
 
 ---
 
@@ -28,7 +29,7 @@ the record of activation c634f6f3 (item 53), which carry structure only (countin
    numbers. L9 hard-binds block 5's seal pins, pack ids, flag catalog, harvest pins and the rule "the analysed
    attempt is the first claim-usable one". Item 53 is one face of this: r2-gamma would be refused at four places
    (§4.4). The additions therefore start with a **binding seam**: one value, `AnalysisBlock`, collects every
-   block-5 binding, with block 5's as the default, and block 6 supplies its own (§4).
+   block-5 binding, constants and policies alike, with block 5's as the default, and block 6 supplies its own (§4).
 2. **Counting comes from the loop and the session's acceptance, never from `claim_usable`** (§4.5, §4.6, §12). The kept
    units are recomputed with the sealed exclusion function under the block-6 rule (no GAMMA midpoint reason,
    REG §8.2), then the desk graphics exclusion of REG §8.3 item 3 is applied; a session whose target stratum then
@@ -43,6 +44,9 @@ the record of activation c634f6f3 (item 53), which carry structure only (countin
    gives the definition, and §15 says how the lead fills the slot.
 6. **Battery assist** (the MagSafe question in RUN_STATE item 65): the problem was real and was ruled on
    2026-10-06. The rail numbers are unaffected. The whole-machine line was the remaining gap. §7 closes it.
+7. **The block-6 harvest stored its brackets with block 5's acceptance** (by the code at `f31aca19f`; found by the
+   consult, §19 F2). Counting is unaffected; the analysis builds the registered block-6 bracket and keeps the stored
+   one out of every number (§4.8).
 
 ---
 
@@ -88,6 +92,8 @@ those five additions are needed:
 | `analysis_engine/inputs.py` `require_contrast_attempt_keeps_midpoint` | GAMMA carries no `neg8.midpoint_lost` | REG §8.2: on GAMMA a lost midpoint is disclosed, not removing |
 | `bracket.evaluate_window_bracket` | block 5's acceptance (s_bracket 14.531 ms) | block 6's acceptance (s_bracket 10.818 ms, REG §3.3) |
 | `bracket.block_b_max_for_archives`, `dry_run` steps 4, 10, 11 | exactly three archives, one per pack | floor sessions that serve no GAMMA session (ALPHA r4) |
+| `whole_window` admission, `floor_extraction` and mint allowance acquisition | a passing stored or survivor NEG-8 decision under block 5's rules | REG §1.8's allowance from the b6 screen; block 5's 0.05 J bracket bar fails every session by construction (REG §9.5 item 7) |
+| the archive's stored bracket | (L9 reads it) | computed with block 5's acceptance, s_bracket 14.531 ms (§4.8) |
 | `disclosures._machine_lines` | request-level ΔE and ρ only | REG §9.5 item 5 asks for per-phase energy (S-15) |
 | `joulewise/b6/analysis_lane.py` | "No registered-estimator precision entry point exists in stage 1" | correct and stays so: REG §5.3 says no precision stopping applies to the replication packs |
 
@@ -172,17 +178,20 @@ asserts that no `b6_analysis` module opens a path under `export`.
 | `usable(record)` | `claim_usable` true, `reasons == []` | analysis counting true (§4.6) |
 | `kept_units(archive)` | `derived/exclusions.json` | the block-6 exclusions document from restricted custody, by digest (§4.5) |
 | `allowance(archive, family)` | `whole_window.harvest_neg8_allowance_bracket` | REG §1.8 from `withheld/b6-neg8.json` (§4.7) |
-| `window_bracket(archive)` | `bracket.evaluate_window_bracket` (block 5's acceptance) | block 6's acceptance, checked against the acceptance record (§4.8) |
+| `screen_admission(row)` | the stored or survivor NEG-8 decision must have passed (`whole_window` admission and source replay) | the acceptance verdict and the b6 survivor screen (§4.7, §4.9) |
+| `window_bracket(archive)` | `bracket.evaluate_window_bracket` (block 5's acceptance: corpus 24, cutoff 376) | block 6's acceptance from the session's two captures, issued fresh into consumption provenance (§4.8) |
 | `gamma_midpoint_refuses` | true (B5-PLAN §2.4) | false (REG §8.2) |
-| `verdict_row_answers` | as L9 (`dry_run._step_results`) | block 5's session-removing conditions and `neg8_bracket_*` answered as disclosed (§4.9) |
+| `verdict_row_answers` | as L9 (`dry_run._step_results`) | block 5's session-removing conditions and `neg8_bracket_*` answered as disclosed, once admission itself is the block's (§4.9) |
 | `refusal_classes` | `configs/analysis/b5/dry_run_refusal_classes.json` | `configs/analysis/b6/dry_run_refusal_classes.json` |
 | `custody_open` | true (D-173 opens in steps 9b and 10) | false (§18 D9) |
 | `results_fill` | true | false (§18 D9) |
 
 **Binding sites.** Every call that reads one of these values goes through the block of the index it was given. The
-sites at L9 `1ab888a68` (a grep for `SealPins.load(`, `sealed_pack_table(`, `CATALOG_PATH`, `v5_claim_25g83`,
-`configs/analysis/b5`, `first_claim_usable`, `select_analysed_attempts(`, `governing_pin(` outside `joulewise/b5/`,
-plus the midpoint check and the bracket evaluator) are, with counts:
+seam is a policy seam, not only a constant table: screen admission, allowance acquisition and bracket evaluation are
+behaviour, and the block supplies each as a function. The sites at L9 `1ab888a68` found by a grep (`SealPins.load(`,
+`sealed_pack_table(`, `CATALOG_PATH`, `v5_claim_25g83`, `configs/analysis/b5`, `first_claim_usable`,
+`select_analysed_attempts(`, `governing_pin(` outside `joulewise/b5/`, plus the midpoint check and the bracket
+evaluator) are, with counts:
 
 `joulewise/b5_analysis/windows.py` (14), `archive.py` (1), `kept_units.py` (2), `context.py` (2), `disclosures.py`
 (3), `dry_run.py` (5), `bracket.py` (`evaluate_window_bracket`, `block_b_max_for_archives`),
@@ -190,6 +199,16 @@ plus the midpoint check and the bracket evaluator) are, with counts:
 `joulewise/paper_reported_energy_issuer.py` (3), `scripts/extract_detection_floors.py` (3),
 `scripts/mint_floor_artifact_generalized.py` (3), `scripts/build_results_fill_input.py` (2),
 `scripts/produce_b5_disclosures.py` (2).
+
+The consult (§19, F1) executed the paths a block-6 archive takes and found the policy sites the grep misses, all at
+L9 `1ab888a68`: `joulewise/whole_window.py` lines 263, 333, 385, 414, 8056 and 8226 (screen admission, answered
+conditions, source replay, allowance consumption); `joulewise/floor_extraction.py` line 3293 (allowance acquisition);
+`joulewise/floor_mint_estimator.py` line 370 (a direct read of the stored bracket during lineage authentication);
+`joulewise/b5_analysis/context.py` lines 30, 168, 211, 227 and 328 (stored screen, survivor descriptor, exclusions and
+their digest); `joulewise/b5_analysis/bracket.py` lines 321 and 355 (block 5's acceptance corpus of 24 and cutoff
+376); `scripts/mint_floor_artifact_generalized.py` line 2475 (the issued acceptance's allowance projection); and
+`joulewise/b5_analysis/disclosures.py` line 705 (it iterates all three packs and reads GAMMA). Each routes through the
+block. The builder re-runs the census on the merged base, where line numbers may move, and lists every site it binds.
 
 Not bound, because block 6 does not run them: `joulewise/paper_custody.py`, `scripts/run_b5_analysis.py`,
 `scripts/rehearse_b5_real.py`, `scripts/size_b5_window.py`, `scripts/write_b5_identity_pins.py`,
@@ -199,9 +218,13 @@ Not bound, because block 6 does not run them: `joulewise/paper_custody.py`, `scr
 
 1. *Binding census* (a test): after the seam, the grep above finds the block-5 constants only in `block.py`.
 2. *Equivalence replay* (a test, exact): L9's own production-shaped synthetic block-5 chain (the S10 fixture,
-   `tests/b5_analysis/fixtures_s10.py`) runs at L9's release tag and at the analysis commit. Every output digest
-   in the two dry-run records is equal. Bit identity is the property here, because the inputs are identical and the
-   seam only moves constants. This is what "L9 at its release tag" means once the seam exists.
+   `tests/b5_analysis/fixtures_s10.py`) runs at L9's release tag and at the analysis commit. Whole-file digests
+   cannot match, because L9 writes the analysis commit into the mint (`dry_run.py` 729, 735; minted cells record it,
+   `mint_floor_artifact_generalized.py` 3229; issuance requires it to equal HEAD, 4508). So the test compares every
+   output after a closed projection removes the provenance fields (the analysis and project commit and the paths
+   derived from it), requires the rest to be equal (exact: identical inputs through identical arithmetic), and checks
+   separately that each run's provenance names its own HEAD. The projection's field list is in the test and is
+   reviewed with it. This is what "L9 at its release tag" means once the seam exists.
 
 Block 5's own dry run and release run from L9's release tag, never from the block-6 analysis commit (§18 D2). Its
 `release_difference` check compares analysis commits, so mixing the two would refuse block 5's release.
@@ -209,7 +232,10 @@ Block 5's own dry run and release run from L9's release tag, never from the bloc
 ### 4.3 Units
 
 - **Floor unit**: one counting ALPHA or BETA session. Steps: L9 `0`, `1`, `2`, `3`, `3b`, `4` (that pack only),
-  `10` (issue only, no custody open), then the block-6 floor lines (§6). L9's `RunState` assumes all three packs in
+  `10` (issue only, no custody open), then `11f`: the floor pack's disclosures through L9's per-pack line functions
+  (kept units, battery-assist and load-correlated lines, battery, thermal, contention and clock counts, reference drift,
+  monitor cost) plus the block-6 floor lines (§6). L9's `disclosures.py` iterates all three packs and reads GAMMA
+  (line 705); making that iteration follow the unit's packs is one of its binding sites (§4.2). L9's `RunState` assumes all three packs in
   `prepare_brackets` (`block_b_max_for_archives`), `kept_bundles` (it iterates `PACKS`) and steps 4, 10 and 11, so
   the floor unit uses a subclass in `driver.py` that overrides exactly those, with no change to L9's step functions.
 - **GAMMA unit**: one counting GAMMA session `g` with its pairing (§5). It runs L9's step functions unchanged over the
@@ -221,8 +247,8 @@ Block 5's own dry run and release run from L9's release tag, never from the bloc
 - **Equalities between units (exact).** A floor session that appears in a GAMMA unit produces, in that unit, step-4
   and step-10 outputs byte-identical to its floor unit's. Each floor session's four dominance ratios R per model
   (REG §9.3) come from its floor unit, through `joulewise.dominance_closeout.dominance_ratio` on the extraction
-  report's corner-widened and point unguarded floors; in each GAMMA unit, the close-out's R for that session equals
-  them. Identical code on identical inputs, so bit identity is the property.
+  report's `floor.corner_widened_unguarded_floor_j` over `point_floor_diagnostic.unguarded_floor_j` (the `ratio` of
+  the returned record); in each GAMMA unit, the close-out's R for that session equals them. Identical code on identical inputs, so bit identity is the property.
 
 Order: floor units first, then GAMMA units, then the cross-block step (§14). The driver does not call L9's `run()`:
 it builds one `RunState` (or the floor subclass) per unit in its own restricted directory, calls the step functions in
@@ -235,14 +261,19 @@ record.
 into the repository). Its entries use L9's `IndexEntry` fields: `pack`, `pack_id`, `attempt` (1; see below),
 `plan_id` (= session id), `t0_epoch_s` (from the loop record), `seal` (`"b6"`), `entry_kind`
 `"harvested"`, `archive_root`, `harvest_record_sha256`, the four roots (from the plan), `harvest_pin` (the commit `harvest.json` names, §4.9),
-`verdict` (from `harvest.json`), `claim_usable` (**analysis counting**, not the harvest's field), `cause_key` null.
+`verdict` (from `harvest.json`), `claim_usable` (the value the archive's harvest record holds, unchanged: L9 checks
+the index against the archive, `archive.py` line 174, and refuses `window_index_disagrees_with_archive` when they
+differ), `cause_key` null, and one block-6 field, `analysis_counting`, which `BLOCK6.select` and `BLOCK6.usable` read.
 L9's `_complete_history` requires attempts 1..n without gaps: the index lists only the unit's sessions, each as
 attempt 1 of its pack, so the history check is trivially met, and the pack's full attempt history is printed from
 the loop record (§6, B5-PLAN §8.1 history line).
 
 Item 53 would have stopped r2-gamma at four places, all now behind the binding: `select_analysed_attempts`
-(`first_claim_usable`), `open_archive` (`attempt_not_claim_usable`), `load_kept_units` (`exclusions_schema_invalid`)
-and `require_contrast_attempt_keeps_midpoint` (`analysed_attempt_carries_midpoint_lost`).
+(`first_claim_usable`; with no usable GAMMA attempt, `block_incomplete`, `windows.py` line 289), `open_archive`
+(`attempt_not_claim_usable`), `load_kept_units` (`exclusions_schema_invalid`) and
+`require_contrast_attempt_keeps_midpoint` (`analysed_attempt_carries_midpoint_lost`). Writing counting into the index's
+`claim_usable` would have added a fifth, `window_index_disagrees_with_archive`; the consult (§19, F3) reproduced all
+five on synthetic records, which is why counting travels in its own field.
 
 ### 4.5 Kept units: the block-6 exclusions document (the item-53 fix)
 
@@ -255,7 +286,10 @@ document still says `claim_usable: false`.
 
 1. Build the acceptance's inputs exactly as `joulewise.b6.session.accept_archive` does
    (`acceptance.evidence_from_archive`, `archive.ordered_roster`, the internal flags and spans), and add the flags in
-   `derived/b6-flags.jsonl`.
+   `derived/b6-flags.jsonl`. Rebuild the roster projection the acceptance hands to `compute`, not the archive's raw
+   roster: one entry per run id in plan order, units from the blueprint where a member carries none, and
+   `member.bytes_ambiguous` for a duplicated run id (`joulewise/b6/acceptance.py` `evaluate`, the `roster_members` and
+   duplicate blocks).
 2. Call the sealed `joulewise.flags.exclusions.compute(flags, roster, spans, b6_catalog)` with the roster's
    `pack_id` key removed. With no pack id, `PACK_SCOPED_WINDOW_REASONS` adds nothing, which is REG §8.2's rule. This
    needs no keyword that the frozen file lacks, so the analysis runs whichever version of `exclusions.py` the base
@@ -315,33 +349,54 @@ and end means and the bound terms, but not the allowance itself.
 *Rule.* `binding.allowance(archive, family)` = max(spread, bound_j), where bound_j is the screen's recorded
 `bound_terms.bound_j` for that family and spread is the largest minus the smallest of the start mean, the midpoint mean
 and the end mean, or |end mean − start mean| when the midpoint is lost (REG §1.8). Each run carries half of it, as in
-block 5. Consumers take the family they take for block 5 (the allowance wire is per family).
+block 5. The screen's family keys `gross` and `idle_subtracted` map to L9's `gross_energy` and
+`idle_subtracted_energy`. Registered phase floors, rail cells and contrasts take `gross_energy`; request-energy
+metrics take `idle_subtracted_energy` (`whole_window.py` line 2596), as in block 5.
 
 *Check.* When the block-5 harvest's NEG-8 record is defined and its corpus and reference run-id sets equal the b6
 screen's (`corpus_run_ids`, `reference_run_ids`), both allowances come from the same functions on the same energies,
-so they must be equal (exact, float hex). When the sets differ, the b6 value governs and the structure record says
+so they must be equal (exact, float hex). A check against the block-5 harvest's allowance is possible only when
+that one is defined at all: L9's loader returns a failed stored bracket and its admission then rejects it, and it
+rejects a failed survivor bracket itself (§19, consult), so on many block-6 sessions there is nothing to compare and
+the record says `b5_allowance_absent`. When the sets differ, the b6 value governs and the structure record says
 `allowance_sources_differ` (a structure word, no number). An undefined b6 screen is REG §8.2 N2: the session does not
 count, and the acceptance already says so.
 
 ### 4.8 The operative timing bound
 
-b_op for a block-6 session is max(opening, closing) + max(|closing − opening|, 10.818 ms) (REG §1.7, §3.3), from the
-session's own two captures. `binding.window_bracket(archive)` evaluates it with block 6's acceptance
-(`configs/b6/registration/acceptance.json`) through the same function the acceptance used
-(`joulewise.b6.calibration`). It must equal the acceptance record's `calibration` b_op (exact decimal string), and
-L9's `require_member_bound_is_window_bracket` then requires each member's recorded operative bound to equal it, as
-in block 5. A difference is a tooling refusal. *Worked example (synthetic, REG §1.7 with block 6's s_bracket):*
-opening 40.0 ms, closing 30.0 ms: b_op = 40.0 + max(10.0, 10.818) = 50.818 ms.
+*Forcing problem* (§19, F2). REG §1.7 and §3.3 give block 6 its own b_op: max(opening, closing) + max(|closing −
+opening|, 10.818 ms), from the session's own two captures. The block-6 harvest did not compute that bracket:
+`scripts/harvest_b6_session.py` overrides only the catalog and the identity pins, the block-6 plans name no
+`acceptance_path`, and so `_Harvest._acceptance_path` (`joulewise/b5/harvest.py` line 3820, the same at `f31aca19f`)
+falls back to block 5's acceptance: by the code, the archive's stored bracket carries s_bracket 14.531 ms. (Read from
+the code; no archive was opened. The dry run confirms it per session, below.) The acceptance, which decided counting, evaluated the bracket with block 6's
+registration (`joulewise.b6.calibration`), so counting and the P3 stop line are unaffected; but a consumer that takes
+the stored bracket would print block 5's larger b_op. *Worked example (synthetic, the consult's probe):* both
+captures 28.0 ms: stored bracket 28.0 + 14.531 = 42.531 ms; registered b_op 28.0 + 10.818 = 38.818 ms. A second example
+(REG §1.7 with block 6's s_bracket): opening 40.0 ms, closing 30.0 ms gives 40.0 + max(10.0, 10.818) = 50.818 ms.
+
+*Rule.* `BLOCK6.window_bracket(archive)` builds the block-6 bracket from the session's two refitted captures
+(`joulewise.b6.calibration.read_own_capture`) and block 6's acceptance (`configs/b6/registration/acceptance.json`), as
+the acceptance did, and represents it as L9's complete `WindowBracket` (bound, both captures, the bracket screen, its
+evaluation record). Its value must equal the acceptance record's `calibration` b_op (exact decimal string; a difference
+is a tooling refusal). L9 issues each member's consumption provenance fresh from the context's bracket
+(`whole_window.py` lines 1193, 1260, 1468), so `require_member_bound_is_window_bracket` passes once the context holds the
+block-6 bracket; the stored bracket enters no number. The mint's lineage authentication (`floor_mint_estimator.py`
+line 370) and the J6 b_max (§18 D10) read the same block-6 bracket. The structure record carries
+`harvest_bracket_block5_acceptance`, true when the digest of the archive's `sources/inputs/acceptance.json` equals
+block 5's acceptance file, so the difference is visible without a number.
 
 ### 4.9 The stored whole-window verdict row and the harvest commit
 
 L9's consumers read the whole-window verdict row the harvest stored (`analysis_engine.inputs.archived_verdict_row`,
-`whole_window.validate_whole_window_verdict_row`) and admit it only when every condition it carries is answered
-(`dry_run._step_results`, `answered_by`). In block 6 the row's NEG-8 bracket decision and its `neg8_bracket_*`
-conditions are disclosed only (REG §9.5 item 7: block 5's 0.05 J bar fails every session by construction), and block
-5's other session-removing codes are flags (REG §8.2). So `BLOCK6` answers each such condition as `disclosed (REG
-§8.2, §9.5 item 7)`, and the row is admitted on the block-6 conditions: the acceptance's verdict, the b6 screen and
-the b_op check. The builder confirms on the fixtures which conditions the real harvest writes, and lists them.
+`whole_window.validate_whole_window_verdict_row`) and admit it only if its NEG-8 decision passed and every condition it
+carries is answered (`whole_window.py` admission and source replay; `dry_run._step_results`, `answered_by`). In block 6
+the row's NEG-8 bracket decision and its `neg8_bracket_*` conditions are disclosed only (REG §9.5 item 7: block 5's
+0.05 J bar fails every session by construction), and block 5's other session-removing codes are flags (REG §8.2).
+Answering the conditions with text does not cure the admission (§19, consult), so the block supplies admission itself:
+`BLOCK6.screen_admission(row)` admits the row when the acceptance verdict counts the session and the b6 survivor screen
+passed, and then answers each block-5 condition as `disclosed (REG §8.2, §9.5 item 7)`. The builder confirms on the
+fixtures which conditions the real harvest writes, and lists them.
 
 The harvest commit each session's `harvest.json` names is the S-1 commit `f31aca19f` unless the session was
 harvested again (REG §4: a harvest fault is fixed and re-run on the same bytes). A different commit is recorded in the
@@ -469,7 +524,10 @@ reads low by the battery's share. The registration flags such phases but defines
    counted beside it.
 2. REG §9.5 item 2 applies to "each estimate", so the whole-machine per-phase value is printed twice, like every rail
    cell: over all kept units, and over the kept units with no assisted run, with the count of assisted runs per
-   stratum (`lines.machine_without_assist()`). The second value is the one with no battery gap.
+   stratum (`lines.machine_without_assist()`). The second value is free of the gap for every run whose battery state
+   was observed. A run whose request held no battery observation (`meter_battery_unavailable`, or no SMC read) cannot be
+   called unassisted: it stays in both values as the registered membership has it, and the count of such runs per
+   stratum is printed beside, so a reader sees how much of "without assisted runs" rests on missing observations.
 3. Each run's request-level ΔE_machine with the battery term (block 5's definition) is printed beside, with the
    count of runs whose battery term was unavailable.
 4. The boundary sentence is printed as registered ("DC input at the USB-C port; the adapter's AC-to-DC loss is not
@@ -513,7 +571,12 @@ values.
    fitted envelope (the meter's clock-fit residual). The cell mean is recomputed with every run's start edge moved by
    ±δ and end edge by ±δ, four corners, the same sign for all runs in a corner; the largest |change| of m is printed as
    "edge-shift sensitivity (b_op + clock-fit residual)". It is a sensitivity printed beside m ± h, not a term added to
-   the interval.
+   the interval. Three rules, as the recompute has them (`independent_recompute_b5.py` lines 1815, 1821, 1827): a
+   shifted run is integrated on the stream that carried its unshifted value; a corner whose shift changes the cell's
+   unit counts (an edge moved out of coverage) has no change, so that the sensitivity never compares different units;
+   and the sensitivity is printed only when all four corners have a change, otherwise "not computed". *Why the second
+   rule:* in the consult's synthetic probe, a lost repeat moved the mean from 42.120 to 42.121 J by dropping a unit,
+   not by shifting an edge.
 5. **Battery.** §7 items 1 to 4.
 
 *Worked example (synthetic).* A prefill phase of 0.620 s holds 31 meter samples with mean 68.0 W: E_meter = 42.16 J.
@@ -632,10 +695,19 @@ example of §10 plus a session removed by its drift screen that read 59.10 J: n 
 **Printed precision** (`configs/analysis/b6/printed_precision.json`; §18 D15): energies in joules to 5 decimals, as
 L9's disclosure lines print cells; ratios (R, ρ, the energy ratio, the scaling factor) to 4 decimals; per-token
 energies to 8 decimals (÷ 512 or ÷ 2,048 moves a value down about three decimal places); counts as integers. This fixes
-REG §12.3 item 4's "half a unit of its last printed digit": 5 × 10⁻⁶ J, 5 × 10⁻⁵ and 5 × 10⁻⁹ J. *Derivation:* each
-lies above 10⁶ times float noise (2.2 × 10⁻⁷ J at 1,000 J) and below 1% of the smallest printed half-width (about
-10⁻⁴ J and up for these cells), the window the project's agreement rule sets. Block 5's renderer prints floors as exact
-decimals; in the block-6 tables they print to 5 decimals, so the half-unit bar is not float noise.
+REG §12.3 item 4's "half a unit of its last printed digit": 5 × 10⁻⁶ J, 5 × 10⁻⁵ and 5 × 10⁻⁹ J. *Derivation.* The
+project's agreement rule puts a bar between 10⁶ times float noise and 1% of the smallest printed half-width. Float
+noise: 10⁶ × 2.2 × 10⁻¹⁶ × 1,000 J = 2.2 × 10⁻⁷ J for the largest energies. Smallest half-width: with 10 repeats and 10
+quads, estimator 1 gives V = 0.04 s²/10 + 0.64 (s/2)²/10 = 0.020 s² for a run-to-run standard deviation s (a quad mean
+of four runs has s/2), so h = 2.262 × √0.020 × s = 0.32 s. The smallest s in the non-claim rehearsals is 0.083 J (REG
+§9.5 item 4, the single-step reconstruction; the ordinary assignment gives 0.379 J), so h ≥ 0.027 J and 1% of it is
+2.7 × 10⁻⁴ J. 5 × 10⁻⁶ J lies inside [2.2 × 10⁻⁷, 2.7 × 10⁻⁴] J, and stays inside as long as the smallest printed
+half-width exceeds 5 × 10⁻⁴ J (s above 0.0016 J). Per-token: the smallest per-token half-width is 0.027 J / 2,048 =
+1.3 × 10⁻⁵ J, 1% of it 1.3 × 10⁻⁷ J, and 5 × 10⁻⁹ J lies above its float noise (10⁶ × 2.2 × 10⁻¹⁶ × 0.6 J = 1.3 ×
+10⁻¹⁰ J). Ratios carry no interval; a ratio of two floors printed to 5 decimals of joules (floors of about 0.3 J and
+up) is known to about 2 × 1.7 × 10⁻⁵ = 3.3 × 10⁻⁵ relative, 1.0 × 10⁻⁴ at R = 3, so 4 decimals print what the inputs resolve. Block 5's
+renderer prints floors as exact decimals; in the block-6 tables they print to 5 decimals, so the half-unit bar is not
+float noise. If the release-time check finds a smallest half-width below 5 × 10⁻⁴ J, the energy decimals move to 6.
 
 ---
 
@@ -646,8 +718,9 @@ cell of the aggregate floor artifact is claim-ready (`eligibility.claim_usable`)
 
 | Reader | Which field | Block-6 behaviour |
 |---|---|---|
-| `joulewise/flags/exclusions.py` | window: `compute` writes `claim_usable = not window_reasons`; with the default `pack_scoped=True` a GAMMA `neg8.midpoint_lost` adds `neg8.midpoint_lost_primary`. `first_claim_usable` picks the first usable attempt | The harvest at `f31aca19f` writes `derived/exclusions.json` with block 5's meaning (item 53). The acceptance calls `compute(..., pack_scoped=False)`. The analysis calls `compute` with no pack id (same result, §4.5), never reads the file's `claim_usable` or `reasons`, never calls `first_claim_usable`. Not edited |
-| `joulewise/session_structure.py` (block-6 line only) | window: reads `harvest.json` `claim_usable` only when `derived/b6-acceptance.json` is absent; otherwise counting comes from the acceptance; records `b5_harvest_claim_usable` | All nine counting sessions have an acceptance record, so `counting_source` is `b6_acceptance`. The analysis requires that (§4.6) and prints `b5_harvest_claim_usable` in item 7 (§6). Not edited |
+| `joulewise/flags/exclusions.py` | window: `compute` writes `claim_usable = not window_reasons`; with the default `pack_scoped=True` a GAMMA `neg8.midpoint_lost` adds `neg8.midpoint_lost_primary`. `first_claim_usable` picks the first usable attempt | The harvest at `f31aca19f` writes `derived/exclusions.json` with block 5's meaning (item 53). The acceptance calls `compute(..., pack_scoped=False)`. The analysis calls `compute` with no pack id (same result, §4.5), never uses the file's `claim_usable` or `reasons` for block-6 eligibility (it reads them only to print them, §6 item 7 and the r2-gamma fields below), never calls `first_claim_usable`. Not edited |
+| `joulewise/b5/harvest.py` (line 7460) | window: forms `harvest.json`'s `claim_usable` = the exclusions document's value and verdict COLLECTED | Written at harvest with block 5's meaning; the analysis keeps it in the index unchanged (§4.4) and never uses it for eligibility. Not edited (sealed) |
+| `joulewise/session_structure.py` (block-6 line only) | window: reads `harvest.json` `claim_usable` into its counting reasons (line 252), then, when `derived/b6-acceptance.json` exists, discards those reasons and counts from the acceptance (line 266); records `b5_harvest_claim_usable` | All nine counting sessions have an acceptance record, so `counting_source` is `b6_acceptance`. The analysis requires that (§4.6) and prints `b5_harvest_claim_usable` in item 7 (§6). Not edited |
 | `joulewise/analysis_manifest_v3.py` (block-6 line, line 3498) | cell: finalization selects aggregate-floor cells whose `eligibility.claim_usable` is true | Unchanged meaning, per GAMMA unit, on the aggregate floor minted from the paired floor sessions. Not touched by item 53 |
 | `joulewise/detection_floor.py` | cell: the validator requires `eligibility.claim_usable` boolean and equal to `status == claim_ready` | Unchanged, per floor cell |
 | `joulewise/dominance_closeout.py` (block-6 line, line 1909) | cell: a floor cell resolves only if `eligibility.claim_usable` is true | Unchanged, per GAMMA unit |
@@ -655,7 +728,7 @@ cell of the aggregate floor artifact is claim-ready (`eligibility.claim_usable`)
 | `scripts/mint_floor_artifact.py` | cell: writes `claim_usable: true` (v1 mint) | Not used: L9 mints with the generalized mint |
 | `scripts/mint_floor_artifact_generalized.py` | cell: writes `claim_usable: true` on claim-ready cells | Used per GAMMA unit (L9 step 5); cell-level |
 | `scripts/render_results_fills.py` | cell: requires the mint cell `claim_ready` and `claim_usable` | Not run by the block-6 analysis (§18 D9); when block-6 tables are rendered later, cell-level only |
-| L9 `windows.select_analysed_attempts`, `archive.open_attempt_record` and `open_archive`, `kept_units.load_kept_units`, `analysis_engine/inputs.require_contrast_attempt_keeps_midpoint` (not in the item's list, but where item 53 bites) | window | Behind the binding: selection by analysis counting, usable = analysis counting, kept units from §4.5, midpoint check off (§4.2, §4.4) |
+| L9 `windows.select_analysed_attempts`, `archive.open_attempt_record` and `open_archive`, `kept_units.load_kept_units`, `analysis_engine/inputs.require_contrast_attempt_keeps_midpoint` (not in the item's list, but where item 53 bites) | window | Behind the binding: the index keeps the archived `claim_usable` so the index-against-archive check passes; selection and `usable` read `analysis_counting`; kept units from §4.5; midpoint check off (§4.2, §4.4) |
 
 On L9's branch, `analysis_manifest_v3.py` and `dominance_closeout.py` no longer carry the cell-level check at the lines
 above (it moved with L9's changes); the base of §15 step 3 decides which version runs, and the meaning stays cell-level
@@ -729,7 +802,8 @@ six fields.
 The record (`joulewise.b6_blind_dry_run.v1`) holds: mode; analysis commit; digests of the loop record, of every
 session's `harvest.json` and acceptance record, of `registered_constants.json`, the catalog and the acceptance file;
 per session: id, pack, round, t0 (integer epoch seconds), loop status, acceptance counting, analysis counting and its
-cause, `analysed` (whether a unit analysed it), the harvest commit, `b5_exclusions_claim_usable`, `b5_reasons`, `b6_exclusions_claim_usable`, kept units per cell and stratum
+cause, `analysed` (whether a unit analysed it), the harvest commit, `harvest_bracket_block5_acceptance`,
+`b5_allowance_absent`, `b5_exclusions_claim_usable`, `b5_reasons`, `b6_exclusions_claim_usable`, kept units per cell and stratum
 (integers), desk-excluded run count, `battery.assist` run count per cell, allowance check word, b_op check word; the
 pairing table (session ids and rule words); per unit, L9's step records (step, status, exit status, refusal token,
 output names and digests); the block-6 step records; `cross_block` status (`ok`, or `not_run` with
@@ -867,7 +941,7 @@ derivation in a comment beside it. You do not choose a bar; use these:
 
 | Bar | Value | Derivation |
 |---|---|---|
-| B1 exact | equality (`==`, float hex for floats) | where bit identity is the property: integers, run-id and code sets, digests, words; the equivalence replay (identical inputs, the seam only moves constants); one floor session's outputs in two units; per-session R against the close-out's R; the issuer against `_project_cell` on a complete cell; the two allowances when the survivor sets are equal; b_op against the acceptance record |
+| B1 exact | equality (`==`, float hex for floats) | where bit identity is the property: integers, run-id and code sets, digests, words; the equivalence replay (identical inputs through identical arithmetic, provenance fields projected out, §4.2); one floor session's outputs in two units; per-session R against the close-out's R; the issuer against `_project_cell` on a complete cell; the two allowances when the survivor sets are equal; b_op against the acceptance record |
 | B2 worked examples | half a unit of the last digit printed in this file's or the registration's example | the expected value is known only to that precision |
 | B3 analysis against the test oracle on synthetic archives | 1% of the cell's smallest printed half-width h for an energy with a half-width; otherwise 10⁻⁶ relative | the project's agreement rule: between 10⁶ × float noise (2.2 × 10⁻⁷ J at 1,000 J) and 1% of the smallest printed uncertainty |
 | B4 release comparison (`compare.py`) | each run's phase energy within 1 mJ; every printed quantity, unrounded, within half a unit of its last printed digit (§11: 5 × 10⁻⁶ J, 5 × 10⁻⁵, 5 × 10⁻⁹ J) | REG §12.3 item 4, S-13 (registered); the observed agreement is printed beside and never used as the bar |
@@ -879,11 +953,13 @@ derivation in a comment beside it. You do not choose a bar; use these:
   other conflict: stop and report.
 - **B1, binding seam.** `joulewise/b5_analysis/block.py`; every binding site of §4.2 reads through
   `block_for_index`; `tests/b6_analysis/test_binding_census.py`; `tests/b6_analysis/test_block5_equivalence.py` (L9's
-  S10 chain at L9's release tag and at your head: equal digests, bar B1). Done when both pass and the L9 tests that
+  S10 chain at L9's release tag and at your head: equal outputs after the provenance projection of §4.2, bar B1). Done
+  when both pass and the L9 tests that
   import an edited file pass unchanged (CI runs all of `tests/b5_analysis/` on the draft PR).
 - **B2, fixtures.** The generator of §16 and the eleven archives plus the block-5 stub, cached; `PROVENANCE.md`.
   Report the wall time of a cold build.
-- **B3, sessions and binding.** `sessions.py`, `binding.py` (§4.4 to §4.9), floor units in `driver.py`;
+- **B3, sessions and binding.** `sessions.py`, `binding.py` (§4.4 to §4.9), floor units in `driver.py` with their
+  step `11f`;
   `configs/analysis/b6/*.json`. Done when the six floor units and N1's flagged-inclusive unit run on the fixtures with
   no tooling refusal and every §4.5 and §4.8 check holds.
 - **B4, GAMMA units and lines.** GAMMA units (§4.3), `lines.py`, `machine.py`. Done when the three GAMMA units run,
@@ -898,10 +974,13 @@ derivation in a comment beside it. You do not choose a bar; use these:
   `driver.py`, `lines.py`, `machine.py`, `crossblock.py`, `compare.py`; `scripts/b6_analyze.py`.
 - New configuration: `configs/analysis/b6/seal_pins.json`, `registered_constants.json` (T_phase null unless the lead
   has filled S-11), `dry_run_refusal_classes.json`, `printed_precision.json`.
-- Binding sites (edits that route a block-5 constant through `block_for_index`, and nothing else):
+- Binding sites (edits that route a block-5 binding, a constant or a policy such as screen admission, allowance
+  acquisition, bracket evaluation, usability or pack iteration, through the block object, and nothing else; with the
+  block-5 binding every output must stay as it was, which the equivalence replay checks):
   `joulewise/b5_analysis/windows.py`, `archive.py`, `kept_units.py`, `context.py`, `disclosures.py`, `dry_run.py`,
   `bracket.py`; `joulewise/analysis_engine/inputs.py`; `joulewise/paper_reported_energy_issuer.py`;
-  `scripts/extract_detection_floors.py`, `scripts/mint_floor_artifact_generalized.py`,
+  `joulewise/whole_window.py`, `joulewise/floor_extraction.py`, `joulewise/floor_mint_estimator.py` (the policy sites
+  of §4.2); `scripts/extract_detection_floors.py`, `scripts/mint_floor_artifact_generalized.py`,
   `scripts/build_results_fill_input.py`, `scripts/produce_b5_disclosures.py`.
 - Tests: `tests/b6_analysis/**` (new); `tests/fixtures/b6_analysis/**` (new, generated); `tests/b5_analysis/test_frozen_files.py`
   only for the §15 step 3 amendment and only in stage B0.
@@ -913,8 +992,8 @@ derivation in a comment beside it. You do not choose a bar; use these:
   `tests/hazards/test_import_graph.py`; `tests/flags/test_flags_import_graph.py`; `tests/b6/test_catalog.py` (expect no
   change: the catalog file is pinned); `tests/test_fixture_orphan_census.py`; `tests/test_digest_pin_census.py`;
   `tests/test_schemas.py` (expect no change).
-- In stage B0 only: `joulewise/whole_window.py`, `configs/gates/hazard_refusals.json`, `configs/pins/registry.json`,
-  for the merge resolution of §15 step 3.
+- In stage B0 only: `configs/pins/registry.json`, and `joulewise/whole_window.py` and `configs/gates/hazard_refusals.json`
+  for the merge resolution of §15 step 3 (both are also in scope later, for the seam and its census rows).
 
 **Never edit:** any `joulewise/b5/*.py` listed in `configs/campaigns/v5_claim_25g83/sealed_inventory.json`;
 `configs/b6/flag_catalog_b6.json`; `configs/b6/registration/*`; `configs/b6/packs/*` (the lead corrects GAMMA's
@@ -937,7 +1016,9 @@ decisions I made; NEEDS_RULING (or "none"); every L9 or block-6 defect found, wi
 ## 18. Decisions made by the author
 
 - **D1.** One seam (`AnalysisBlock`) instead of a block-6 copy of L9's driver: two copies would drift, the defect the
-  project removed from `flags/exclusions.py` on 2026-10-06. The equivalence replay is the price.
+  project removed from `flags/exclusions.py` on 2026-10-06. The seam carries policy as well as constants (screen
+  admission, allowance, bracket, usability, pack iteration), because the consult showed constants alone cannot open a
+  block-6 archive (§19, F1). The equivalence replay is the price.
 - **D2.** Block 5's dry run and release run from L9's release tag; block 6's from the S-14 commit. L9's
   `release_difference` compares analysis commits, so the two blocks cannot share a run.
 - **D3.** Units: a floor unit per counting ALPHA or BETA session, a GAMMA unit per counting GAMMA session (§4.3). A
@@ -945,9 +1026,11 @@ decisions I made; NEEDS_RULING (or "none"); every L9 or block-6 defect found, wi
 - **D4.** Kept units from the sealed `compute` with no pack id (§4.5). It reproduces REG §8.2 without the `pack_scoped`
   keyword, so the result does not depend on which `exclusions.py` the base carries.
 - **D5.** Counting is the loop's, confirmed by the acceptance, re-tested for N3 after the desk exclusion (§4.6).
-- **D6.** The allowance is REG §1.8's from the b6 screen record; the block-5 harvest's allowance is a cross-check
+- **D6.** The allowance is REG §1.8's from the b6 screen record, delivered to every L9 consumer through the block
+  (extraction, mint, claim gate, issuer, admission); the block-5 harvest's allowance is a cross-check where it exists
   (§4.7).
-- **D7.** b_op from block 6's acceptance, checked against the acceptance record (§4.8).
+- **D7.** b_op from block 6's acceptance and the session's own captures, built as a complete bracket and issued into
+  consumption provenance; the harvest's stored bracket, computed with block 5's acceptance, enters no number (§4.8).
 - **D8.** The GAMMA midpoint refusal is off for block 6 and the fixed sentence printed (REG §8.2).
 - **D9.** The paper-custody opens (L9 step 9b, the open half of step 10) and the results-fill input are not run for
   block 6. They admit paper inputs for block 5's placements; block 6's tables have no placement yet (placement is the
@@ -963,12 +1046,50 @@ decisions I made; NEEDS_RULING (or "none"); every L9 or block-6 defect found, wi
   REG §10 has its n.
 - **D14.** The background-priority outside-processor line (w = 0.0862) is not printed: REG says "may", and the table
   already carries the registered alternative.
-- **D15.** Printed precision as in §11; it is a printing choice, and it is what makes S-13's half-unit bar a real
-  number instead of float noise.
+- **D15.** Printed precision as in §11, with its derivation there; it is a printing choice, and it is what makes
+  S-13's half-unit bar a real number instead of float noise.
 - **D16.** Pairing ties go to the earlier t0.
 - **D17.** A non-counting GAMMA session in the flagged-inclusive line pairs only with analysis-counting floor
   sessions.
 - **D18.** The release-gating dry run includes the cross-block phase and so runs after block 5's release.
+- **D19.** The session index keeps the archived `claim_usable` and carries counting in its own field (§4.4, §19 F3).
+- **D20.** The equivalence replay compares outputs with provenance projected out, and checks provenance on its own
+  (§4.2, §19 F4).
 
-**For the lead.** S-15 (§15 step 7) changes no registered number, but it fills a slot by adopting a definition that no
-block-5 analysis commit holds, so it is the lead's call with a REG §17 entry. Nothing else here needs a ruling.
+**For the lead.** Two things. (1) S-15 (§15 step 7) changes no registered number, but it fills a slot by adopting a
+definition that no block-5 analysis commit holds, so it is the lead's call with a REG §17 entry. (2) By the code at
+`f31aca19f`, the block-6 harvest stored each session's bracket with block 5's acceptance (s_bracket 14.531 ms, not the
+registered 10.818 ms; §4.8). Counting is unaffected, because the acceptance evaluated b_op with block 6's registration,
+and the design keeps the stored bracket out of every number; the dry run's structure record confirms it per session.
+Nothing else here needs a ruling.
+
+---
+
+## 19. Consult round
+
+One round with a blind Sol 6.1 xhigh seat, as the item allows. Codex Cloud could not provision an environment
+(`snapshot_materialization_failed`, `gateway_unavailable`), so the seat ran locally through `codex-run-v3` on the idle
+Mac, read-only, told that real blinded data exists on the machine and forbidden every `/Users/edr/night-*` path. It
+read the design at `1185ad470`, ran 174 existing tests (62 block-6, 112 L9) and synthetic probes, reproduced the trial
+merge, and re-derived every worked example (all correct at their printed precision). Its findings and what this file
+did with each:
+
+| # | Finding (seat's verdict) | Disposition |
+|---|---|---|
+| F1 | blocker, confirmed: the grep census is right but the seam also needs policy sites in `whole_window.py`, `floor_extraction.py`, `floor_mint_estimator.py`, `context.py`, `bracket.py`, the mint and `disclosures.py`; "constants and nothing else" cannot implement the behaviour | adopted: §4.2 lists the sites, the seam carries policy, the WRITE_SCOPE adds the three library files (D1) |
+| F2 | blocker, confirmed: the block-6 harvest stored its bracket with block 5's acceptance; a synthetic probe gives 42.531 ms against the registered 38.818 ms; L9 issues consumption provenance fresh, so a correct context can pass | adopted: §4.8 rewritten (D7), and the lead is told |
+| F3 | blocker, confirmed: writing counting into the index's `claim_usable` adds a fifth refusal, `window_index_disagrees_with_archive` | adopted: §4.4 keeps the archived value and adds `analysis_counting` (D19) |
+| F4 | should fix, confirmed: the analysis commit is written into the mint and checked against HEAD, so whole-file digests cannot match across commits | adopted: the replay compares projected outputs and checks provenance separately (§4.2, D20) |
+| F5 | should fix, confirmed: three recompute rules for the edge-shift sensitivity were missing; "without assisted runs" is "without recorded assist" | adopted: §8 item 4, §7 item 2 |
+| F6 | should fix, confirmed: floor units had no disclosure route; L9's producer reads GAMMA | adopted: step `11f`, `disclosures.py` pack iteration bound (§4.3) |
+| F7 | should fix, confirmed: the precision derivation used a wrong smallest half-width | adopted: §11 derives the smallest half-width (0.027 J) and shows the bars inside the window (D15) |
+| F8 | nit, confirmed: `session_structure.py` reads the harvest field before the acceptance overrides it; `b5/harvest.py` line 7460 forms it; "never reads" should be "never uses for eligibility" | adopted: §12 |
+
+Also confirmed by the seat and folded in: removing the roster's `pack_id` reproduces REG §8.2 with the sealed
+function, and a synthetic replay reproduced the acceptance's member codes and cell counts exactly (§4.5, with the
+roster projection it named); the b6 screen record suffices for the allowance, with the family-key mapping now in §4.7;
+the dominance ratio's fields are `floor.corner_widened_unguarded_floor_j` over
+`point_floor_diagnostic.unguarded_floor_j` (`floor_extraction.py` lines 1430, 1493), and `dominance_ratio` returns a
+record whose `ratio` is the value; L9 commits only the request-level whole-machine line. Not run by the seat: the
+full-size joined S10 chain.
+
