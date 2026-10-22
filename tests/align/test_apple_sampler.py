@@ -10,7 +10,10 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
-from joulewise.align.apple.sampler import ApplePowerSampler, power_records
+from joulewise.align.apple.sampler import (
+    ApplePowerSampler, HAZARD_UNJUDGED, POST_WINDOW_DWELL_S, power_records,
+    stamp_mapping, _conversion_error_ns, _stamp_record, _restore_stamp,
+)
 from joulewise.align.interfaces import PowerSampler
 from joulewise.clock import ClockStamp
 from joulewise.interfaces import AdapterResult, PowerSample
@@ -29,6 +32,9 @@ class CaptureClock:
 
     def stamp(self) -> ClockStamp:
         return self.stamps.pop(0)
+
+    def sleep(self, seconds: float) -> None:
+        self.dwell_s = seconds
 
 
 def native_stream(*, delta: bool = True) -> bytes:
@@ -83,6 +89,9 @@ class AppleSamplerTests(unittest.TestCase):
         sampler, traces = self.capture()
         self.assertIsInstance(sampler, PowerSampler)
         self.assertEqual(len(traces), 3)
+        self.assertEqual(sampler.clock.dwell_s, POST_WINDOW_DWELL_S)  # exact requested policy constant
+        for trace in traces:
+            self.assertIn(HAZARD_UNJUDGED, json.loads(trace.notes)["flags"])
         self.assertEqual({trace.channel for trace in traces}, {"cpu_power", "gpu_power", "ane_power"})
         self.assertEqual({len(trace.t_ns) for trace in traces}, {601})
         anchor = sampler.uncertainty_evidence["clock_anchor"]
@@ -100,9 +109,12 @@ class AppleSamplerTests(unittest.TestCase):
             math.ceil(anchor["effective_clock_anchor_bound_s"] * 1e9),
         )  # never drop any term of the adapter's physical bound.
         supports = json.loads(traces[0].notes)["sample_support_ns"]
-        # Two float epoch endpoints each cost at most an ulp plus ns rounding.
-        # This representation bar is below 1% of the millisecond anchor bound.
-        representation_ns = 2 * math.ceil(math.ulp(traces[0].t_ns[1] / 1e9) * 1e9) + 2
+        # Support width subtracts two epoch conversions; each input also
+        # costs half an ulp in seconds. This is below 1% of the anchor bound.
+        epoch_s = traces[0].t_ns[1] / 1e9
+        representation_ns = math.ceil(2 * (
+            _conversion_error_ns(epoch_s) + math.ulp(epoch_s) * 1e9 / 2
+        ))
         self.assertLessEqual(abs(supports[1][1] - supports[1][0] - 100_000_000), representation_ns)
         self.assertIsNone(traces[0].averaging_window_ns)  # first native support is 999 ms
         self.assertIn("variable_averaging_support:cpu_power", sampler.flags)
@@ -128,6 +140,7 @@ class AppleSamplerTests(unittest.TestCase):
         self.assertEqual(len(traces), 1)
         self.assertEqual(traces[0].t_ns, ())
         self.assertIn("synthetic denial", traces[0].notes)
+        self.assertIn(HAZARD_UNJUDGED, json.loads(traces[0].notes)["flags"])
 
     def test_bad_sample_is_flagged_without_removing_other_channels(self) -> None:
         traces, flags = power_records([
@@ -139,3 +152,30 @@ class AppleSamplerTests(unittest.TestCase):
         self.assertIn("nonfinite_power:cpu_power", flags)
         self.assertEqual(len(traces), 2)
         self.assertEqual(len(traces[0].values), 2)
+
+    def test_epoch_conversion_pricing_and_bounded_span_is_not_counted_twice(self) -> None:
+        # Near 1.8e18 ns the product spacing is 256 ns, so its half-width
+        # must be 128 ns rather than the old unphysical 1 ns.
+        stamp = ClockStamp(1_800_000_000.125, 1000.0, 1000.002, 1e-9, 1e-9)
+        self.assertEqual(_conversion_error_ns(stamp.epoch_s),
+                         math.ulp(stamp.epoch_s * 1e9) / 2)
+        restored = _restore_stamp(_stamp_record(stamp))
+        self.assertGreaterEqual(restored.wall_resolution_s * 1e9,
+                                _conversion_error_ns(stamp.epoch_s))
+        bracket, _ = stamp_mapping((stamp,), episode_domain="test")
+        self.assertGreaterEqual(
+            bracket.uncertainty_ns,
+            _conversion_error_ns(stamp.epoch_s) + _conversion_error_ns(-stamp.epoch_s),
+        )  # trace and epoch-scale offset both undergo ns-product rounding.
+        lower = stamp.epoch_s - stamp.monotonic_after_s
+        upper = stamp.epoch_s - stamp.monotonic_before_s
+        bound_s = 0.010  # world parameter: 10 ms calibrated bound containing a 2 ms bridge.
+        mapping, _ = stamp_mapping((stamp,), episode_domain="test", evidence={"clock_anchor": {
+            "status": "bounded", "method": "synthetic",
+            "wall_minus_monotonic_lower_s": lower,
+            "wall_minus_monotonic_upper_s": upper,
+            "effective_clock_anchor_bound_s": bound_s,
+        }})
+        self.assertGreaterEqual(mapping.uncertainty_ns, math.ceil(bound_s * 1e9))
+        self.assertLess(mapping.uncertainty_ns, math.ceil((bound_s + (upper-lower)/2) * 1e9))
+        # Adding half the already-covered 2 ms span would violate this bar.

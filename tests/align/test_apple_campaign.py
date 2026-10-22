@@ -245,7 +245,7 @@ class AppleCampaignTests(unittest.TestCase):
             with self.subTest(run_id=config.run_id), tempfile.TemporaryDirectory() as directory:
                 clock = FakeClock()
                 bundle, summary = run_benchmark(config, Path(directory), clock)
-                self.assertEqual(summary.status.value, "failed", summary)
+                self.assertEqual(summary.status.value, "unsupported", summary)
                 self.assertEqual(summary.failure_reason, FailureReason.RUNTIME_UNAVAILABLE)
                 self.assertTrue(summary.failure_message)
                 self.assertIsNone(summary.gross_energy_j)

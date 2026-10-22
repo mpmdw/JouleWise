@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 from collections import defaultdict
 from typing import Any, Mapping, Sequence
 
@@ -20,6 +21,17 @@ from joulewise.schemas import BenchmarkConfig
 
 NS_PER_SECOND = 1_000_000_000
 TRACE_DOMAIN = "joulewise.controller.epoch_ns"
+HAZARD_UNJUDGED = "hazard.unjudged:battery,ac,thermal,contention"
+# quiet_mac_exploratory.json: post_window_sampling_dwell_s, the 1 s minimum.
+POST_WINDOW_DWELL_S = 1.0
+
+
+def _conversion_error_ns(seconds: float) -> float:
+    # Multiplication rounds by <= half the spacing of the ns product:
+    # 128 ns at an epoch near 1.8e18 ns. round() then costs <= 0.5 ns;
+    # the latter vanishes for epoch products already spaced by integer ns.
+    product_spacing = math.ulp(seconds * NS_PER_SECOND)
+    return product_spacing / 2 + (0.5 if product_spacing < 1 else 0.0)
 
 
 def seconds_ns(seconds: float) -> int:
@@ -39,14 +51,21 @@ def _stamp_record(stamp: ClockStamp) -> dict[str, int]:
 
 
 def _restore_stamp(record: Mapping[str, int]) -> ClockStamp:
-    # A second integer/float conversion contributes at most 1 ns rounding,
-    # in addition to the float epoch ulp priced by stamp_mapping.
+    # Integer-ns serialization and division back to seconds each round.
+    # Add the original ns-product conversion and half an ulp of the restored
+    # quotient to the corresponding clock resolution; never assume 1 ns.
+    epoch_s = record["epoch_ns"] / NS_PER_SECOND
+    before_s = record["monotonic_before_ns"] / NS_PER_SECOND
+    after_s = record["monotonic_after_ns"] / NS_PER_SECOND
+
+    def serialization_error_s(value: float) -> float:
+        return _conversion_error_ns(value) / NS_PER_SECOND + math.ulp(value) / 2
+
     return ClockStamp(
-        epoch_s=record["epoch_ns"] / NS_PER_SECOND,
-        monotonic_before_s=record["monotonic_before_ns"] / NS_PER_SECOND,
-        monotonic_after_s=record["monotonic_after_ns"] / NS_PER_SECOND,
-        wall_resolution_s=(record["wall_resolution_ns"] + 1) / NS_PER_SECOND,
-        monotonic_resolution_s=(record["monotonic_resolution_ns"] + 1) / NS_PER_SECOND,
+        epoch_s=epoch_s, monotonic_before_s=before_s, monotonic_after_s=after_s,
+        wall_resolution_s=record["wall_resolution_ns"] / NS_PER_SECOND + serialization_error_s(epoch_s),
+        monotonic_resolution_s=record["monotonic_resolution_ns"] / NS_PER_SECOND
+        + max(serialization_error_s(before_s), serialization_error_s(after_s)),
     )
 
 
@@ -76,33 +95,51 @@ def stamp_mapping(
     flags: list[str] = []
     anchor = (evidence or {}).get("clock_anchor", {})
     if anchor.get("status") == "bounded":
-        lower = min(lower, anchor["wall_minus_monotonic_lower_s"])
-        upper = max(upper, anchor["wall_minus_monotonic_upper_s"])
-        bound_s = float(anchor["effective_clock_anchor_bound_s"])
+        anchor_lower = float(anchor["wall_minus_monotonic_lower_s"])
+        anchor_upper = float(anchor["wall_minus_monotonic_upper_s"])
+        # The adapter's effective bound already includes the FULL anchor
+        # wall-minus-monotonic span. Charge only observations outside it,
+        # rather than adding half that span again.
+        outside_s = max(0.0, anchor_lower - lower, upper - anchor_upper)
+        lower = min(lower, anchor_lower)
+        upper = max(upper, anchor_upper)
+        bound_s = float(anchor["effective_clock_anchor_bound_s"]) + outside_s
         method = str(anchor["method"])
     else:
-        bound_s = max(s.wall_resolution_s + s.monotonic_resolution_s for s in stamps)
+        bound_s = (
+            max(s.wall_resolution_s + s.monotonic_resolution_s for s in stamps)
+            + (upper - lower) / 2
+        )
         method = "paired_clock_bracket_only"
         if evidence is not None:
             flags.append("clock_anchor_unresolved")
-    # Float seconds are the existing adapter contract. Include a full ulp of
-    # every wall and monotonic value and 1 ns for rounding into integer records.
-    representation_s = max(
-        math.ulp(value)
-        for stamp in stamps
-        for value in (
-            stamp.epoch_s, stamp.monotonic_before_s, stamp.monotonic_after_s
-        )
+    offset_s = -(lower + (upper - lower) / 2)
+    # Paired clock input representation and subtraction/midpoint arithmetic:
+    # each floating operation/read costs at most half its value's ulp.
+    representation_ns = max(
+        (math.ulp(s.epoch_s) + math.ulp(s.monotonic_before_s)
+         + math.ulp(s.monotonic_after_s)) * NS_PER_SECOND / 2
+        for s in stamps
     )
+    arithmetic_ns = sum(
+        math.ulp(value) * NS_PER_SECOND / 2
+        for value in (lower, upper, upper - lower, offset_s)
+    )
+    # Price a trace epoch conversion, a turn monotonic conversion and the
+    # offset conversion separately, using spacing at each ns product.
+    conversion_ns = max(
+        _conversion_error_ns(s.epoch_s)
+        + _conversion_error_ns(s.monotonic_before_s
+                               + (s.monotonic_after_s - s.monotonic_before_s) / 2)
+        for s in stamps
+    ) + _conversion_error_ns(offset_s)
     uncertainty_ns = math.ceil(
-        (bound_s + (upper - lower) / 2 + representation_s) * NS_PER_SECOND
-    ) + 1
+        bound_s * NS_PER_SECOND + representation_ns + arithmetic_ns + conversion_ns
+    )
     return ClockMapping(
-        trace_domain=TRACE_DOMAIN,
-        episode_domain=episode_domain,
-        offset_ns=seconds_ns(-(lower + (upper - lower) / 2)),
-        uncertainty_ns=uncertainty_ns,
-        method=f"{method}; paired wall/monotonic envelope; outward ns conversion",
+        trace_domain=TRACE_DOMAIN, episode_domain=episode_domain,
+        offset_ns=seconds_ns(offset_s), uncertainty_ns=uncertainty_ns,
+        method=f"{method}; paired wall/monotonic envelope; half-ulp ns-product conversions",
     ), tuple(flags)
 
 
@@ -187,7 +224,7 @@ class ApplePowerSampler:
         self.episode_domain = episode_domain
         self.clock_domain = TRACE_DOMAIN
         self.adapter = adapter if adapter is not None else PowermetricsTelemetryAdapter(clock)
-        self.flags: tuple[str, ...] = ()
+        self.flags: tuple[str, ...] = (HAZARD_UNJUDGED,)
         self.clock_mappings: tuple[ClockMapping, ...] = ()
         self.uncertainty_evidence: dict[str, Any] = {}
         self._start: ClockStamp | None = None
@@ -197,7 +234,7 @@ class ApplePowerSampler:
         if self._active:
             self.flags += ("sampler_already_started",)
             return
-        self.flags = ()
+        self.flags = (HAZARD_UNJUDGED,)
         self.clock_mappings = ()
         self.uncertainty_evidence = {}
         try:
@@ -215,9 +252,13 @@ class ApplePowerSampler:
         samples: list[PowerSample] = []
         if self._active:
             try:
+                # Keep the measured stop marker fixed while collecting the
+                # policy's 1 s right-edge support; dwell is outside the episode.
+                self.clock.sleep(POST_WINDOW_DWELL_S)
                 result = self.adapter.stop_sampling_with_evidence(
                     self.config, self.context,
                     sampling_started=start, sampling_stopped=stop,
+                    required_post_window_tail_s=POST_WINDOW_DWELL_S,
                 )
                 samples = result.samples
                 self.uncertainty_evidence = result.uncertainty_evidence
@@ -246,4 +287,11 @@ class ApplePowerSampler:
                 nominal_interval_ns=round(NS_PER_SECOND / self.config.sampling.power_hz),
                 notes=json.dumps({"flags": self.flags, "paired_stamps_ns": [_stamp_record(start), _stamp_record(stop)]}),
             ),)
-        return traces
+        # Every trace (including unavailable/empty traces) carries the absence
+        # of hazard judgment. A caller need not know this sampler's properties.
+        noted = []
+        for trace in traces:
+            notes = json.loads(trace.notes)
+            notes["flags"] = list(dict.fromkeys([*notes.get("flags", ()), *self.flags]))
+            noted.append(replace(trace, notes=json.dumps(notes, sort_keys=True)))
+        return tuple(noted)
