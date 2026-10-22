@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 import statistics
+import warnings
 from collections import defaultdict
 from dataclasses import dataclass
 from fractions import Fraction
@@ -45,7 +46,10 @@ def plan_offsets(period_ns: int, duty_fraction: float, repeats: int) -> list[int
     """Tile the period, then repeat those phases to measure repeatability.
 
     ceil(1/d) phases suffice to cover a period with d*period-wide windows.
-    Fewer requested repeats spread the available phases evenly. Integer floor
+    At least ceil(1/d) repeats are needed to tile (four for 25-of-100 ms).
+    Fewer repeats emit RuntimeWarning and spread the available phases evenly;
+    estimate_energy retains their data with partial_coverage and a bound.
+    Two replicas per phase identify within-phase repeatability. Integer floor
     division places each phase within one nanosecond of its ideal location.
     Invalid plans return an empty list, since this signature has no flags field.
     """
@@ -53,7 +57,11 @@ def plan_offsets(period_ns: int, duty_fraction: float, repeats: int) -> list[int
             or not isinstance(repeats, int) or isinstance(repeats, bool) or repeats <= 0
             or not math.isfinite(duty_fraction) or not 0 < duty_fraction <= 1):
         return []
-    phases = repeats if duty_fraction*repeats <= 1 else math.ceil(1 / duty_fraction)
+    minimum = math.ceil(1 / duty_fraction)
+    if repeats < minimum:
+        warnings.warn(f"{repeats} repeats cannot tile the period; need at least {minimum}",
+                      RuntimeWarning, stacklevel=2)
+    phases = min(repeats, minimum)
     return [(index % phases) * period_ns // phases for index in range(repeats)]
 
 
@@ -130,43 +138,56 @@ def _metadata(notes: str) -> dict[str, Any]:
 
 
 def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate:
-    """Pool sensor windows aligned on workload start; keep differing durations.
+    """Estimate the mean run's energy from aligned sensor windows.
 
-    Integrate the mean of active readings over the union inside [0, max D_r],
-    clipping each window to its own run's [0, D_r]. Extrapolate by the covered
-    fraction C, giving coefficients c_i in seconds and E=sum(c_i*y_i).
+    Let A(u)=count{r:D_r>u}/n be the fraction of retained runs still active.
+    Integrate A(u) times the mean of readings covering u; each window is
+    clipped to its own [0,D_r]. M=integral A=mean(D_r), C=integral_covered A.
+    Multiply by M/C: E=sum(c_i*y_i), sum(c_i)=M seconds. This targets the
+    mean run, including duration-varying tails, rather than the longest run.
 
-    half_width_j is a nominal 95% Gaussian repeatability interval, conditional
-    on the observed phase coverage and deterministic-workload model, plus the
-    sensor quantum bound sum(|d_i|*q_i/2). Phase groups use exact observed phase
-    geometry or an explicit repeat_group label. If h_r=sum(c_i) for run r and
-    H_g=sum(h_r), the auxiliary coefficients are d_i=(H_g/n_g)*c_i/h_r.
-    Normalize each run's weighted mean to this common group weight before
-    estimating its variance. For
-    differing durations, multiply that mean by D_r/mean(D_g), so duration
-    variability enters the same run-to-run variance instead of discarding runs.
-    Welch-Satterthwaite degrees of freedom combine independent phase variances.
-    The center difference of the normalized auxiliary estimator is added by
-    triangle inequality. Scheduler-jitter groups remain a model assumption.
+    The statistical term is the existing two-sided 95% Gaussian/Welch
+    repeatability interval. Phase groups use exact geometry or repeat_group.
+    If h_r=sum(c_i) for run r and H_g=sum(h_r), auxiliary coefficients are
+    d_i=(H_g/n_g)*c_i/h_r. Normalize each run's weighted mean, multiply by
+    D_r/mean(D_g) to include duration spread, and combine independent group
+    variances with Welch-Satterthwaite degrees of freedom. Add the center
+    displacement |sum(c_i*y_i)-sum(d_i*y_i)| by triangle inequality.
+    Quantum contributes sum(|d_i|*q_i/2), assuming rounding to the quantum.
 
-    Coverage, boundary smoothing and timestamp error are systematic rather
-    than repeatability. If a physical instantaneous bound B is supplied in
-    notes, report B*max(integral(K-1)_+, integral(1-K)_+) plus the timing area
-    as flag worst_case_bias_j=<value>, where K is the pooling kernel on the
-    ORIGINAL windows. This worst-case bound never sizes the nominal interval.
-    Missing B gives worst_case_bias_unbounded, not an infinite nominal width.
-    Neither interval includes sensor calibration accuracy. The empirical
-    calibration worlds test the nominal interval, including waveform edges.
+    Add these systematic BOUNDS linearly, not in quadrature. R is the range
+    of valid readings from retained traces, INCLUDING pre/post-roll:
+    * Coverage: (M-C)*R. Extrapolation error is missing time times the
+      difference of missing and covered mean powers. Assumption: power over
+      uncovered time stays in the observed range.
+    * Boundary: sum(|d_i|*(1-l_i/w_i)*R), w_i the original window width
+      and l_i its inside length. A whole-window mean differs from its
+      inside mean by outside_fraction*(outside_mean-inside_mean).
+    * Known timing: sum(|d_i|*min(h_i/w_i,1)*R), since translating a
+      w_i-wide mean by at most h_i replaces at most min(h_i,w_i) of it.
+      Boundary/timing assume the underlying inside/outside power contrast
+      stays within R; window averages cannot establish that assumption.
+    * An unreplicated phase cannot identify its variance. Its group mass
+      times R is a finite center-error envelope under the additional
+      unreplicated_phase_observed_range_assumed assumption. It is flagged,
+      not an identified Gaussian variance; use two replicas per phase.
 
-    Unknown resolution keeps all readings and gives infinite width plus a
-    flag. Unknown duty with a known window does not enter the computation.
-    Invalid readings are counted and dropped individually. Unknown sensor age
-    is finite only when a period-plus-poll timing bound was recorded. Fewer
-    than two replicas in a phase cannot identify its repeatability: infinity
-    plus a flag, never a refusal. Channels/clocks are flagged if mixed.
+    Numeric flags expose each term and the range assumption is explicit.
+    power_bound_w is NEVER required for these terms. The independent
+    worst_case_bias_j=<value> diagnostic still uses a supplied instantaneous
+    bound B times the original-window kernel mismatch plus timing area; a
+    missing B can make that diagnostic infinite without changing the width.
+
+    Unknown sensor age is not a known endpoint bracket: a contributing
+    legacy poll-time proxy gives infinite width, even if notes bound its
+    maximum age. Unknown resolution/timing also keeps the energy and gives
+    infinite width. Unknown duty with a known window is only a flag.
+    Invalid readings are counted and omitted individually. Mixed channels
+    or clocks are flagged. Sensor calibration accuracy is not included.
     """
-    flags = {"deterministic_workload_assumed", "nominal_95pct_gaussian_repeatability",
-             "sensor_accuracy_not_included"}
+    flags = {"deterministic_workload_assumed",
+             "nominal_95pct_gaussian_repeatability_plus_observed_range_bounds",
+             "observed_range_bounds_assumed", "sensor_accuracy_not_included"}
     windows: list[_Window] = []
     signatures: dict[int, tuple[tuple[int, int], ...]] = {}
     labels: dict[int, str | int] = {}
@@ -178,6 +199,7 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
     channels: set[str] = set()
     clocks: set[str] = set()
     invalid_samples = 0
+    observed: list[float] = []
     for run_index, item in enumerate(runs):
         try:
             trace, start, end = item
@@ -219,12 +241,20 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
                 flags.add("invalid_window_endpoints")
                 continue
             run_unknown_timing = any(x is None for x in timing)
-            if any(flag in metadata.get("flags", ()) for flag in
+            reported_flags = metadata.get("flags", ())
+            if "sensor_age_unknown" in reported_flags:
+                # A maximum age is not a measured sensor window endpoint.
+                run_unknown_timing = True
+            if any(flag in reported_flags for flag in
                    ("sensor_update_phase_unreported", "driver_field_timestamp_is_wall_clock")):
-                if ("window_end_ns" not in metadata and
-                        not isinstance(metadata.get("unknown_sensor_age_bound_ns"), int)):
+                if "window_end_ns" not in metadata:
                     run_unknown_timing = True
-                    flags.add("sensor_window_time_unknown")
+            window_ends = metadata.get("window_end_ns")
+            if isinstance(window_ends, (list, tuple)):
+                run_unknown_timing |= any(
+                    endpoint is None and timestamp-start > 0
+                    and timestamp-start-trace.averaging_window_ns < run_duration
+                    for timestamp, endpoint in zip(endpoints, window_ends))
             valid_readings = [math.isfinite(value) and value >= 0 for value in trace.values]
             invalid_samples += sum(not valid for valid in valid_readings)
             run_windows = [
@@ -245,6 +275,7 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
                     bounds[-1] = math.inf  # Invalid bound only voids the systematic receipt.
             else:
                 bounds.append(math.inf)
+            observed.extend(value for value, valid in zip(trace.values, valid_readings) if valid)
             durations[run_index] = run_duration
             duration = max(durations.values())
             unknown_resolution |= run_unknown_resolution
@@ -284,24 +315,33 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
         events[max(0, window.left)].append((index, 1))
         events[min(durations[window.run], window.right)].append((index, -1))
     coefficients = [Fraction() for _ in windows]  # nanoseconds
+    run_count = len(durations)
+    mean_duration = Fraction(sum(durations.values()), run_count)
+    ending_runs: dict[int, int] = defaultdict(int)
+    for run_duration in durations.values():
+        ending_runs[run_duration] += 1
+        events[run_duration]  # Split tails even at an endpoint without a window.
+    remaining = run_count
     active: set[int] = set()
-    covered = 0
+    covered = Fraction()
     previous = 0
     for boundary in sorted(events):
         if active and boundary > previous:
             span = boundary - previous
-            covered += span
-            weight = Fraction(span, len(active))
+            mass = Fraction(span * remaining, run_count)
+            covered += mass
+            weight = mass / len(active)
             for index in active:
                 coefficients[index] += weight
         for index, sign in events[boundary]:
             active.add(index) if sign == 1 else active.discard(index)
+        remaining -= ending_runs[boundary]
         previous = boundary
     if covered == 0:
         flags.add("no_covered_work")
         return DutyEstimate(0.0, math.inf, 0.0, tuple(sorted(flags)))
-    coefficients = [weight * Fraction(duration, covered) for weight in coefficients]
-    if covered < duration:
+    coefficients = [weight * mean_duration / covered for weight in coefficients]
+    if covered < mean_duration:
         flags.add("partial_coverage")
     seconds = [float(weight / _NS_PER_S) for weight in coefficients]
     joules = math.fsum(weight * window.watts for weight, window in zip(seconds, windows))
@@ -325,10 +365,10 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
         interval_coefficients = list(coefficients)
         for members in declared_groups.values():
             total = sum((run_weights[index] for index in members), Fraction())
-            mean_duration = statistics.mean(durations[index] for index in members)
+            group_duration = statistics.mean(durations[index] for index in members)
             normalized = [
                 math.fsum(run_contributions[index])/float(run_weights[index]/_NS_PER_S)
-                * durations[index]/mean_duration
+                * durations[index]/group_duration
                 for index in members]
             if len({signatures[index] for index in members}) > 1:
                 flags.add("phase_geometry_varies")
@@ -352,7 +392,8 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
     # power from outside the workload, which cannot be removed by clipping.
     kernel_events: dict[int, Fraction] = defaultdict(Fraction)
     kernel_events[0] -= 1
-    kernel_events[duration] += 1
+    for run_duration in durations.values():
+        kernel_events[run_duration] += Fraction(1, run_count)
     timing_area = Fraction()
     for coefficient, window in zip(interval_coefficients, windows):
         kernel_weight = coefficient / (window.right - window.left)
@@ -381,21 +422,43 @@ def estimate_energy(runs: Sequence[tuple[PowerTrace, int, int]]) -> DutyEstimate
         bias = math.inf
     flags.add(f"worst_case_bias_j={bias!r}")
 
-    variances = auxiliary_variances
-    spread = 0.0
+    reading_range = max(observed)-min(observed)
+    flags.add(f"observed_reading_range_w={reading_range!r}")
+    coverage_bound = float((mean_duration-covered)/_NS_PER_S)*reading_range
+    boundary_bound = math.fsum(
+        weight * (1-Fraction(min(window.right, durations[window.run])-max(window.left, 0),
+                            window.right-window.left)) * reading_range
+        for weight, window in zip(interval_seconds, windows))
+    timing_bound = float(timing_area/_NS_PER_S)*reading_range
+    unreplicated_bound = 0.0
     if any(len(members) < 2 for members in declared_groups.values()):
         flags.add("phase_without_replicates")
-        spread = math.inf
+        flags.add("unreplicated_phase_observed_range_assumed")
+        unreplicated_bound = math.fsum(
+            float(sum((run_weights[index] for index in members), Fraction())/_NS_PER_S)
+            * reading_range for members in declared_groups.values() if len(members) < 2)
+
+    variances = auxiliary_variances
+    spread = 0.0
     if math.isfinite(spread):
         variance = math.fsum(value for value, _ in variances)
         if variance > 0:
             denominator = math.fsum(value*value / df for value, df in variances)
             degrees = variance*variance / denominator
             spread = _student_quantile((1 + DUTY_CONFIDENCE) / 2, degrees) * math.sqrt(variance)
-    half_width = quantization + spread + center_widening
+    for name, value in (("coverage_bound_j", coverage_bound),
+                        ("boundary_bound_j", boundary_bound),
+                        ("timing_bound_j", timing_bound),
+                        ("unreplicated_phase_bound_j", unreplicated_bound),
+                        ("repeatability_half_width_j", spread),
+                        ("resolution_bound_j", quantization),
+                        ("auxiliary_center_bound_j", center_widening)):
+        flags.add(f"{name}={value!r}")
+    half_width = (quantization + spread + center_widening + coverage_bound
+                  + boundary_bound + timing_bound + unreplicated_bound)
     if unknown_resolution or unknown_timing:
         half_width = math.inf
-    return DutyEstimate(joules, half_width, covered / duration,
+    return DutyEstimate(joules, half_width, float(covered / mean_duration),
                         tuple(sorted(flags)))
 
 

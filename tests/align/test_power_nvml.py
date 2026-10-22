@@ -151,6 +151,7 @@ class FakeNvmlLibrary:
 
     def nvmlDeviceGetFieldValues(self, handle: object, count: int, values: object) -> int:
         count = int(getattr(count, "value", count))  # Real pynvml passes c_int.
+        values = getattr(values, "_obj", values)  # Real pynvml passes byref(array).
         with self._lock:
             self.field_calls += 1
             for index in range(count):
